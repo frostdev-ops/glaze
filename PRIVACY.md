@@ -1,12 +1,12 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-17_
+_Last updated: 2026-10-20_
 
 ## User-installed mods
 
 Chrome can run JavaScript from mod bundles you choose to install, including author-signed channel updates.
 Glaze does not fetch mod code to run automatically from us. Code runs in an isolated sandbox without extension APIs;
-Firefox and Safari use declarative parts only. Courses, to-dos and grades require declared and granted permissions,
+Firefox and Safari use declarative parts only. Courses, to-dos, grades and the navigation model require declared and granted permissions,
 are scoped to the requesting school's origin, and reach only a DOM-less Worker. Brokered network requests require
 a declared and granted exact HTTPS host, omit cookies and referrers, and refuse redirects. A mod granted both data
 and network access can send that data to its granted hosts. A mod without data access may have a frame UI that can
@@ -18,6 +18,17 @@ extension storage. The optional mod-development tools also keep your author sign
 key backups. Removing a mod removes its installed bundle and editor settings. Per-mod storage and its private-data classification remain
 on this device for a reinstall; its author/version trust pin remains until you explicitly clear it. Channel traffic and the optional signed blocklist are described below. Glaze adds no analytics
 or default notifications for mods.
+
+With **nav.read**, a mod can read Glaze's visible navigation items and course menu: ids, labels (including course
+names and names you typed), icons, unread badges, groups, the active item and bar placement, plus events when the bar
+changes, you navigate, expand or collapse it, or open or close its phone sheet. The model omits link addresses.
+Glaze treats this as personal data, like courses, to-dos and grades: it reaches only the mod's Worker, disables its
+frame UI, and keeps the private-data classification locally for a reinstall. A separately granted network host can
+receive it. **nav.items** lets a mod add, update or remove up to eight items of its own, with labels, icons and badges;
+links must stay on the school site's origin, or an item can send the mod an action when clicked. **nav.layout** lets
+it propose a bar layout while it runs, without saving over yours. **Use my own** keeps that mod's layouts off in
+device-local `modNavLayout:<id>` until you allow them again. `glaze.nav.go` lets an enabled replacement navigation
+open an existing bar item, only from its Worker within a second of a click in its own navigation controls.
 
 ## Expanded habitats and local pet learning
 
@@ -94,6 +105,51 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   next due, focus timer, pet; off until you turn them on) use the same timer, planner readers and pet progress as the
   rail widgets below and record nothing more. Mods' navigation widgets show in the bar with only the permissions you
   granted those mods.
+- **The sidebar** (Canvas and Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only:
+  one record per LMS, school site's origin and signed-in account (`sidebar:<lms>:<origin>/<uid>`). It keeps the width
+  you dragged, desktop open state, folded page/widgets sections per kind of page, whether To Do follows this course
+  or shows all courses, and the dock's widget ids, order, folds and heights. It also keeps each widget's destination
+  (dock, board, floating or off), where Move back returns it, removed-widget entries, revision/migration markers,
+  whether you chose a width or scope here, and whether you dismissed the offer to dock To Do. The account id comes
+  from the page's shared `GZ_CTX.account()` reader: Canvas's profile id (`/api/v1/users/self/profile`) or Ultra's
+  me id (`/learn/api/v1/users/me`), using your existing school session. The worker checks the sending document's site
+  and account before saving. The sidebar record is not uploaded; the starter-removal sync keys below are an exception
+  to keeping the account id on this device. **Reset sidebar for this account** clears its own width/To Do scope choices,
+  opens it and unfolds its sections/widgets, and clears widget heights; destinations, dock order, migration markers
+  and widget data stay.
+  Its general settings sync in `sidebar`: the title you type (up to 40 characters), style, starting open state and
+  width, section order, page content/header/jump choices, surface, blur, opacity, corners, density, room for content,
+  Canvas/Ultra and page-kind switches, To Do scope and whether native panels appear in the sidebar. Look codes carry
+  only its style, surface and corners. Glaze reads the LMS's own side column and shows it in place; Ultra's assignment
+  Grades / Attempts and submission Rubric are positioned visually, with their native controls still in place. The
+  sidebar keeps none of those panels' text, grades, attempts or rubric content in extension storage and adds no
+  request for them. Course-tab pictures below can include visible panels. Docked notes, To Do, timers and pets use
+  their existing records below; moving or removing a widget keeps its data.
+- **Document review** (Canvas and Blackboard Ultra): Glaze reads the submitted-work page's structure, title, grade,
+  feedback/rubric elements and the embedded viewer's address to recognize a supported read-only view. It changes
+  their presentation in place, without copying or saving the submission, grade, feedback, rubric or document bytes.
+  Compact review, Full screen, Focus document, hiding Glaze bars and remembering focus are settings in
+  `chrome.storage.sync` (`docreview`). Remember focus is off by default; when on, it keeps only `1` or `0` under
+  `gz-review:<page path>` in that school site's tab session storage, until the tab closes. That key includes the
+  submission page path and is readable by the school page. Other review state stays in page memory. Between a
+  course-tab frame and the surrounding page, the review relay carries only a hide/show-bars boolean and a
+  bars-shown notification, never document or grade content. It checks the school origin and sending window; the
+  surrounding page also checks that the frame is the current visible document for the same account and that it is
+  showing a supported review. Full screen uses the browser's own Fullscreen API on the existing viewer frame or
+  its container. Review makes no request to the viewer's origin or your school, and does not read inside the
+  external viewer. The separate annotation and course-tab picture features below keep their existing data.
+- **Fresh-install defaults**, in `chrome.storage.local`: `freshDefaults` records whether this was a new install and
+  whether setup is pending, with the first sidebar account key and whether its settings tile was added;
+  `freshDefaultAccount` keeps that first key too. `widgetLayout` keeps the starter layout and its starter/migration
+  markers. Edits made before setup finishes can wait locally in `earlyWidgetEdits` (widget/course ids, layout,
+  sizes, order, widths and music link). A new install starts with pet, timer, notes and quote tiles on both Dashboards,
+  course cards added once their list arrives, and To Do and Glaze settings in the first account's sidebar. Notes and
+  pet switches start on locally unless a saved preference says otherwise; updates keep existing choices, including
+  empty layouts. The initial settings item in navigation is also a local fallback. Edited feature switches and
+  navigation choices sync normally. Separate `starterOff:*` booleans sync removals and re-additions so defaults do not
+  return: board/widget choices, empty-board and course-card choices. Course-card keys include the school origin and
+  course id; sidebar To Do/settings keys (`starterOff:sidebar:<lms>:<origin>/<uid>:<widget>`) include the origin and
+  account id. These identifiers can therefore follow browser sync; the sidebar records and starter layout do not.
 - **Blackboard navigation:** drawer layout and expansion are local presentation only and add no storage or requests. Precise size/spacing, label overflow, item style/background, active indicator, logo size/alignment, footer visibility and hover-expansion choices sync in `nav`; up to eight custom link names,
   http/https URLs, built-in icon choices, new-tab preferences, native-item order/hidden choices and rail-widget
   switches/order/position sync in the separate capped `navItems` item. A link is contacted only when you click it;
@@ -111,7 +167,7 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   reads existing progress for a fresh cached same-origin account without fetching a profile or awarding XP.
   These widgets record no extra activity.
 
-- **Pet habitat** (off by default), in `chrome.storage.local`, per site and confirmed signed-in account (`pet:<origin>/<uid>`): settled XP contributions for rewarded work/plan ids, existing source-cache timestamps, the provider hand-in timestamp saved when work credit settles, credited streak day numbers, the selected buddy look and decoration positions. The broker reads existing Better To Do, planner-cache, Insights and W11 streak records, plus the existing To Do/Streak switches; it adds no assignment requests or activity tracking. The ordinary shared identity helper may read the signed-in profile once for the page. Saved W11 `[streak.start, min(today, streak.asOf))` is the only source of streak days while Streak is on, including free restores; no days are guessed from its all-time best. With Streak off, no saved streak, or no valid saved calculation day (`asOf`), no new streak XP is awarded and existing XP stays. Missing/cleared caches and deleting finished task or plan history preserve settled rewards. With Canvas tick sync on, historical hand-ins and kept plans can receive first rewards without a planner row. A missing row preserves settled work/plan values; work credit can update if a fresh existing source proves a hand-in newer than the saved provider hand-in timestamp. A refreshed source timestamp alone cannot override a native untick. Ultra always follows local ticks. Visible unticks (local or synced), manual done mode and newer submission corrections revoke the associated work/plan XP; a still-present plan moved to a future day or with a known missed completion also loses plan credit. Contribution, version and provider-baseline collections are capped at 65,536 entries each; the credited-day collection is capped at 32,768. An unreadable, oversized or full record is left untouched and the view explains that its update was refused; existing earned history is never silently truncated or reset. No focus timer rewards, analytics, remote game service, notifications or missed-day penalties. Progress is not synced; removing the extension or clearing its local storage deletes it. Moodle has no supported stored account-scoped completion source yet, so no game is shown there.
+- **Pet habitat** (on for fresh installs unless a saved preference says otherwise; otherwise off by default), in `chrome.storage.local`, per site and confirmed signed-in account (`pet:<origin>/<uid>`): settled XP contributions for rewarded work/plan ids, existing source-cache timestamps, the provider hand-in timestamp saved when work credit settles, credited streak day numbers, the selected buddy look and decoration positions. The broker reads existing Better To Do, planner-cache, Insights and W11 streak records, plus the existing To Do/Streak switches; it adds no assignment requests or activity tracking. The ordinary shared identity helper may read the signed-in profile once for the page. Saved W11 `[streak.start, min(today, streak.asOf))` is the only source of streak days while Streak is on, including free restores; no days are guessed from its all-time best. With Streak off, no saved streak, or no valid saved calculation day (`asOf`), no new streak XP is awarded and existing XP stays. Missing/cleared caches and deleting finished task or plan history preserve settled rewards. With Canvas tick sync on, historical hand-ins and kept plans can receive first rewards without a planner row. A missing row preserves settled work/plan values; work credit can update if a fresh existing source proves a hand-in newer than the saved provider hand-in timestamp. A refreshed source timestamp alone cannot override a native untick. Ultra always follows local ticks. Visible unticks (local or synced), manual done mode and newer submission corrections revoke the associated work/plan XP; a still-present plan moved to a future day or with a known missed completion also loses plan credit. Contribution, version and provider-baseline collections are capped at 65,536 entries each; the credited-day collection is capped at 32,768. An unreadable, oversized or full record is left untouched and the view explains that its update was refused; existing earned history is never silently truncated or reset. No focus timer rewards, analytics, remote game service, notifications or missed-day penalties. Progress is not synced; removing the extension or clearing its local storage deletes it. Moodle has no supported stored account-scoped completion source yet, so no game is shown there.
 
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
   background, motion, light/dark schedule, course colour and extras choices, and what you set for a course in its course menu:
@@ -127,6 +183,13 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   recolour or tint. On Canvas this includes the site's address, course id, name, code and native color; on Moodle,
   the site's address (with its folder, if Moodle is in one), course id, full and short name, and the colour Moodle
   gives the course.
+- **Canvas's course-list snapshot**, in your Canvas site's tab session storage (`gz-canvas-courses`): the signed-in
+  user id, fetch time, course-list and course-color answers, including course names, codes, terms, enrollments and
+  current scores returned by Canvas. It is reused for less than a minute, after the profile reader confirms the
+  account, and replaced after a successful fresh read; saving a Canvas nickname or color removes it. The minute is
+  its reuse window, not a deletion deadline: the stored copy can remain until the tab closes. The school page's own
+  code can read this storage. It is not put in browser sync or sent elsewhere. The existing `gz-settings` session
+  copy of presentation settings also includes the sidebar title and review preferences; course nicknames are omitted.
 - **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
 - **Which course items you've seen**, in `chrome.storage.local`, on this device only: for each course
@@ -192,6 +255,13 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   excused, and whether Blackboard sent its calendar whole) and, for teachers, the work waiting to be graded with its counts. Two
   minutes is how long that copy counts as fresh, not how long it is kept: it stays until the next fetch replaces it,
   or until Glaze is removed.
+  An unfinished add/edit task form in the sidebar can also be kept locally as `draft:todo:<origin>/<uid>` when the
+  page is hidden, left or the widget unmounted, while **Back up what you type** is on. This holds the typed title,
+  course, date, time and notes, plus the edited task's id and existing timestamps/completion state. It is removed when
+  taken up in a supported sidebar form, or swept after 14 days or when backup is switched off, by the same draft
+  cleanup as the editor copies above. Without backup, the unfinished form stays only in that document's memory.
+  Where the browser cannot list storage keys, `draftsSwept` keeps the last cleanup time locally to limit the full
+  draft sweep to once a day.
 - **Export calendar (.ics)** (Canvas): no data of its own. Which parts go in the file and how far ahead are settings
   (`chrome.storage.sync`, like the others). The file itself is made on the page and handed to your browser's own
   download: Glaze keeps no copy and sends it nowhere. It holds what you chose of your Canvas deadlines, your own tasks,
@@ -220,7 +290,7 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   shows only on the Canvas or Blackboard site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
   for it.
-- **Dashboard notes and widgets** (Canvas and Blackboard Ultra; widgets on by default with none added, notes off by default), in `chrome.storage.local`, on this device only: your notes
+- **Dashboard notes and widgets** (Canvas and Blackboard Ultra; widgets on by default, with the fresh-install starter layout above; notes on for fresh installs unless a saved preference says otherwise), in `chrome.storage.local`, on this device only: your notes
   (at most 20,000 characters) per site and signed-in user id, with when you last typed them, so a note typed later
   in another tab wins; an emptied note keeps only the time it was emptied, so an older copy can't bring it back. The widgets' layout (which are on, their order and size, where a
   floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
@@ -235,7 +305,13 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   the tab does), so it happens once in a tab; the school's site sees nothing of it. The claim accepts only a top-frame
   page on a recorded Ultra site while the master, Dashboard and landing switches are on; failed session-storage reads or
   writes leave the page where it is.
-- **Notes** (Canvas and Blackboard Ultra, the notes app; the Notes switch, off by default), on this device only, per site and signed-in user id. The
+  Course-card widgets keep the school origin and course id, term label and placement/size/fold choices in
+  `widgetLayout`, up to 48 cards per board. They draw names, codes, terms, colors, native pictures and action links,
+  unread counts, grades and progress from the page and its existing readers, and tasks from the existing planner
+  cache when enabled. Canvas's native card picture address is retained in page memory across card replacement;
+  drawing it can load that image from its host as the native card does. There is no separate stored copy of grades,
+  tasks or page content for these cards; the existing badge, course and planner records still apply.
+- **Notes** (Canvas and Blackboard Ultra, the notes app; the Notes switch on for fresh installs unless a saved preference says otherwise, otherwise off by default), on this device only, per site and signed-in user id. The
   library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name the site showed),
   when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'
   names, courses and order. Each note's text and the pictures and attachments you add are in the extension's own
@@ -316,12 +392,21 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   opened course page can reopen, including a test, attempt, discussion or message. Glaze does not press controls there.
   Closing a tab removes its entry and live frame. The surrounding page owns list writes; live frames report only their
   own place so a late frame save cannot overwrite another tab's pin, order or closure.
-  **Live pages** run as ordinary same-origin Canvas or Blackboard frames, up to four frames alongside the surrounding page, with their scripts, form values and native
+  **Live pages** run as ordinary same-origin Canvas or Blackboard frames, up to four course frames alongside the surrounding page, with their scripts, form values and native
   requests still active while hidden. Edited pages are excluded from automatic eviction after trusted input, change
   or submit events; if all four are protected, another page waits until you explicitly close one. Protection is
   conservative until closure and does not identify every native operation. Closing, reloading, signing out or disabling
   tabs can discard unsaved native work. A clean older frame can stop to make room; reopening restores its URL and saved
   scroll, not arbitrary native state. These frames are not isolated from the surrounding school page.
+  Canvas also keeps one frame for pages outside a course (Dashboard, Calendar or Inbox), earlier pages of each frame
+  (up to three per frame and eight in all), and replacement pages while loading. Earlier pages keep their DOM and
+  form values in memory, without a content copy in extension storage; their scripts and native requests can still run.
+  Media is paused and recognized external players stopped until shown again. Returning can reload a clean page from
+  your school under the retained one; edited pages, pages with embedded frames and submission/quiz/tool-action paths
+  are excluded from this automatic reload. Edited earlier pages are protected from eviction too; navigation waits
+  when no protected-page space is left. Back/Forward entries keep the frame/course id and page URL in browser history
+  state. A page can start loading when you press its link, before the click completes; Glaze does not load unchosen
+  courses in advance.
   **Pictures for first load** are JPEG captures of the visible Canvas or Blackboard browser tab, kept only in page memory and
   `chrome.storage.session` (the browser's in-memory extension storage), or worker memory where that API is unavailable.
   Captures can include visible form text, media, Glaze tools and other content on that tab; they are blurred while shown.
@@ -359,8 +444,10 @@ you import) are bundled. It makes requests in these cases:
   stops when you close the tab, sign out, or turn the tabs or Glaze off. While a tab's page first loads, a blurred
   picture of how it last looked covers it: Glaze's worker takes pictures of the Canvas or Blackboard tab on screen (checking
   before and after that it still is), keeps them in memory (storage.session, never on disk) and they go when the
-  browser closes, on sign-out, or when the tabs or Glaze are turned off. Showing one makes no requests. Glaze never
-  prefetches a course. Frames load your school’s own pages with your existing session; nothing new leaves the device.
+  browser closes, on sign-out, or when the tabs or Glaze are turned off. Showing one makes no requests. On Canvas,
+  a page in an already-running frame can start loading on a link press before the click completes, and returning
+  to a retained clean page can reload it from your school. Glaze does not load unchosen courses in advance.
+  Frames load your school’s own pages with your existing session; their native scripts and embeds make their own requests.
 - **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
   Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
   asks for, with your existing session, and keeps it as above. Picking an item in the command palette
@@ -429,7 +516,9 @@ you import) are bundled. It makes requests in these cases:
   asks for your active courses with their current scores and, inside a course, that course's navigation
   tabs. Extras also read native course colors, assignments and submission status, module completion
   requirements and items, folder and file metadata, and the server-rendered Grades page's unread dots.
-  The course list includes each course's term (for the GPA and to search this term's courses first).
+  The course list includes each course's term (for the GPA and to search this term's courses first); Glaze follows
+  Canvas's next-page links only on this site's API, up to twenty pages. The course-list/color snapshot described
+  above is kept in the school tab's session storage, including returned scores and enrollments.
   **Search in your courses** (on by default, under the command palette): once you have typed two characters
   in the command palette and paused, Glaze sends what you typed to your own Canvas site, and only there, asking
   each of your active courses for pages, assignments, discussions, announcements, modules and files whose titles
@@ -447,15 +536,16 @@ you import) are bundled. It makes requests in these cases:
   course's assignment groups with your submissions, and its grading periods where it has them. These never follow a
   redirect, and the next page is asked for only on your own Canvas site.
   Glaze never writes grades or what-if scores to Canvas.
-  These requests are read-only GETs to your own Canvas site with your existing session (Better To Do's opt-in tick, below, is the one write). Only the due
-  list, course details and badge records described above are stored; other answers stay in memory.
+  These requests are read-only GETs to your own Canvas site with your existing session; opt-in planner ticks and
+  nickname/color edits are described below. The due list, course details, course-list snapshot, badge records and
+  saved feature summaries described above are kept; search and calculator source answers stay in page memory.
   For supported Inbox draft recovery, Glaze reads your profile id and, when offering a copy or checking
   a send, your sent conversations and matching conversation details without marking mail read. It
   sends no messages. When you click Download all, Canvas supplies signed links for accessible module
   files. The extension's background worker fetches them from your school's file host without cookies.
   Links and file bytes stay in memory while Glaze makes the zip; they are not saved in extension storage.
   The resulting zip is saved to your device.
-- **Better To Do** (Canvas, off by default). On the Dashboard and a course's home page, Glaze asks your own Canvas
+- **Better To Do** (Canvas, on by default). On the Dashboard, a course's home page, or wherever its sidebar widget is shown, Glaze asks your own Canvas
   site for your profile (for your user id and time zone), your planner items from a week back (longer if you choose
   to keep past-due work longer) to the end of your timeframe, and your active courses. If you teach or assist a
   course, it also asks for your To Do list's grading items and, with grading progress on, each listed assignment's
@@ -571,15 +661,15 @@ you import) are bundled. It makes requests in these cases:
   `/api/v1/users/self/course_nicknames/<course>`; `PUT /api/v1/users/self/colors/course_<course>` with the color) and
   the page's own CSRF token. These and the ticks above are the only changes Glaze makes to any site. To show the
   nickname, the menu reads the course list Canvas's Dashboard already asks for.
-- **Dashboard notes and widgets** (Canvas; widgets on by default with none added, notes off by default). An empty panel asks for nothing; the notes and the widgets you add ask your own Canvas site for your profile (user id
+- **Dashboard notes and widgets** (Canvas; widgets on by default, with the fresh-install starter layout above). The notes and widgets that need your account ask your own Canvas site for your profile (user id
   and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
   items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one
   day's planner items, a read-only GET, at most every two minutes per day you look at. Nothing is written to Canvas.
-  On Blackboard Ultra they sit in a panel on the Courses page and ask your own Ultra site for who is signed in
+  On Blackboard Ultra they can sit on the Dashboard, Courses page, float or dock in the sidebar and ask your own Ultra site for who is signed in
   (`/users/me`, shared with the other extras) and, for a day the agenda shows, that day's To Do and calendar items with
   your submissions for the courses that have something due (read-only GETs through Glaze's Ultra reader, never
   following a redirect), at most every two minutes per day. Nothing is written to Blackboard.
-- **Notes** (Canvas, off by default). Glaze uses your profile and course list (as the other extras do). When you choose
+- **Notes** (Canvas; on for fresh installs unless a saved preference says otherwise, otherwise off by default). Glaze uses your profile and course list (as the other extras do). When you choose
   **Canvas link** in a note, it lists one course's files, pages or modules with their items from your own Canvas site:
   read-only GETs with your existing session, the next page asked for only on your own site, never following a redirect,
   and stopped when you close the picker or the view. Only the link and title you pick go in the note. Opening a note
