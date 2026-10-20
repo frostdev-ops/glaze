@@ -8,6 +8,9 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const G = require('../defaults.js');
+const I = require('../lib/i18n.js');
+const W = require('../lib/widgets.js');
+const text = async (root, key) => I.t(key, {}, await root.locator('html').getAttribute('lang'));
 const src = path.resolve(__dirname, '..');
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'glaze-sidebar-tabs-evidence'));
 const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
@@ -87,7 +90,7 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     opts = await ctx.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
     page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
     const localGet = (k) => opts.evaluate((k) => chrome.storage.local.get(k), k);
-    await opts.evaluate(async (s) => { await chrome.storage.sync.set(s); await chrome.storage.local.clear(); }, settings());
+    await opts.evaluate(async ([s, lay]) => { await chrome.storage.sync.set(s); await chrome.storage.local.clear(); await chrome.storage.local.set({ widgetLayout: lay }); }, [settings(), W.layout()]);
     const credentials = Object.fromEntries(fs.readFileSync(credentialsFile, 'utf8').split(/\n/).filter((l) => /^[A-Z_]+=/.test(l)).map((l) => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1).replace(/^['"]|['"]$/g, '')]; }));
     console.log('local login: student');
     await page.goto(local + '/login/canvas');
@@ -137,7 +140,7 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     const f = frameOf(A);
     const before = await record();
     await f.locator('.gz-sb-add').click();
-    await f.locator('#gz-sb-adding .gz-sb-row', { hasText: 'Focus timer' }).locator('button').click();
+    await f.locator('#gz-sb-adding .gz-sb-row', { hasText: await text(f, 'Focus timer') }).locator('button').click();
     const after = await wait(record, (r) => r?.dest?.timer === 'dock', 'the frame\'s change stored');
     ok(after.rev > before.rev, 'the frame\'s placement committed through the page around it');
     await wait(async () => (await docs()).find((d) => d.name === `gz-ctab:${A}`)?.tiles || [], (t) => t.includes('timer'), 'the timer in the frame\'s dock');
@@ -182,7 +185,7 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     await page.waitForTimeout(1200);
     const covered = (await hiddenCounts()).top;
     probe(covered.hidden && covered.n === 0, `the covered page: no sidebar changes (${covered.n}${covered.what.length ? ': ' + covered.what.join(', ') : ''})`);
-    await f.locator('[data-tile="timer"] button', { hasText: 'Reset' }).click();
+    await f.locator('[data-tile="timer"] button', { hasText: await text(f, 'Reset') }).click();
 
     // Rapid switching: several picks before anything settles.
     for (let i = 0; i < 3; i++) { await tab(B).click(); await tab(A).click(); }
