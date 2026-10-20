@@ -70,6 +70,22 @@ const failures = [], results = []; let browser, held = false;
         results.push({ label, pass, pixels }); if (!pass) failures.push(`${label}: ${JSON.stringify(pixels)}`);
         if (out && width===1440 && dir==='ltr' && !scrolled && ['outline','gradebook','submission'].includes(family)) { fs.mkdirSync(out,{recursive:true}); fs.writeFileSync(path.join(out,`${family}.png`),png); }
       }
+      if (family === 'retained-course') {
+        await page.evaluate(() => {
+          const canvas = document.getElementById('gz-scene');
+          GZ_SCENE_HOST.clear(canvas); canvas.remove();
+          document.documentElement.style.setProperty('--gz-bg-grad', 'linear-gradient(#184080,#184080)');
+        });
+        const png = await page.screenshot();
+        const pixel = await decoder.evaluate(async png => {
+          const im = new Image(); im.src = `data:image/png;base64,${png}`; await im.decode();
+          const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+          const ctx = c.getContext('2d'); ctx.drawImage(im, 0, 0); return [...ctx.getImageData(2, 4, 1, 1).data].slice(0, 3);
+        }, png.toString('base64'));
+        const label = `${width} ${dir} retained-course fallback`;
+        const pass = pixel.every((v, i) => Math.abs(v - [24, 64, 128][i]) <= 2);
+        results.push({ label, pass, pixels: [pixel] }); if (!pass) failures.push(`${label}: ${JSON.stringify(pixel)}`);
+      }
     }
   } finally { await browser?.close(); if (held) fs.rmSync(lock,{recursive:true}); }
   if (out) { fs.mkdirSync(out,{recursive:true}); fs.writeFileSync(path.join(out,'results.json'),JSON.stringify(results,null,2)); }

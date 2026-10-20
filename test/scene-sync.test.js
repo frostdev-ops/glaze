@@ -14,20 +14,22 @@ assert.ok(a > 0 && b > a, 'markers');
 const block = source.slice(a, b).replace(/import\((chrome\.runtime\.getURL\((?:file|`\$\{file\}[^`]*`)\)(?: \+ `[^`]*`)?)\)/, 'importScene($1, file)');
 assert.ok(block.includes('importScene('));
 
+const background = source.match(/background: (\(el\) => \{.*\}),\n/)[1];
+const loader = source.slice(source.indexOf('  const loading = new Map();'), source.indexOf("  // Moodle's extras"));
 const settle = () => new Promise(setImmediate);
-const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0 } = {}) => {
+const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, hostFails = null } = {}) => {
   const log = { starts: [], updates: [], needs: [], stops: 0, removed: 0, imports: 0, files: [], urls: [], listeners: new Map() };
   const timers = new Map(); let nextTimer = 0;
   let failScene = null;
   const canvas = (tag) => ({ tag, remove() { log.removed++; }, setAttribute() {}, parentNode: null });
   const ctx = vm.createContext({
-    solo, ultra: false, docId: 'fixture-document', location: { protocol: 'https:' },
+    solo, ultra: false, isPreview: false, loading: new Map(), docId: 'fixture-document', location: { protocol: 'https:' },
     settings: { enabled }, links: [1], hid: () => false, palette: { '--gz-surface-2': '#202030', '--gz-accent': '#abcdef' },
     html: { hasAttribute: () => false, getAttribute: () => 'normal' },
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
     document: { body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
-    chrome: { runtime: { id: 'glaze', getURL: (f) => f } },
+    chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async () => { log.needs.push('lib/scene-host.js'); if (hostFails-- > 0) throw new Error('temporary injection failure'); ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; return { ok: true }; } } },
     importScene: (url, file) => { log.imports++; log.files.push(file); log.urls.push(url); if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure')); return Promise.resolve({ start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); if (startFails-- > 0) throw new Error('temporary WebGL context failure'); return { update: (o) => log.updates.push(o), draw() {}, stop() { log.stops++; } }; } }); },
     need: (file, ready) => { if (file === 'lib/scene-host.js') { ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; return Promise.resolve(); } log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
     applySettings: () => ctx.api.syncScene(), // the settings paint finishes by syncing the scene
@@ -35,8 +37,8 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     parts, GZ_GLSL: glsl ? {} : undefined,
     JSON, Promise, setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: (id) => timers.delete(id),
   });
-  vm.runInContext(`${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
-  return { api: ctx.api, log, ctx, timers, retry: async () => { const [id, timer] = timers.entries().next().value || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
+  vm.runInContext(`${hostFails === null ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
+  return { api: ctx.api, log, ctx, timers, retry: async () => { const [id, timer] = [...timers].find(([, timer]) => timer.ms < 60000) || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
 };
 const SHADER = { bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(1.); }' } } };
 const LAYERS = { bg: { layers: [{ k: 'noise' }] } };
@@ -49,6 +51,44 @@ test('a temporary animation module failure recovers without reloading the page',
   assert.equal(r.log.imports, 2, 'discard the rejected module promise');
   assert.equal(r.log.updates.length, 1, 'the animation starts after the transient failure');
   assert.equal(r.api.state().sceneFailed, false);
+});
+
+test('a temporary scene-host injection failure recovers within the startup retry budget', async () => {
+  const r = rig({ hostFails: 1 });
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.starts.length, 0);
+  await r.retry();
+  assert.equal(r.log.needs.length, 2, 'the recovery asks the broker again instead of reusing its rejected promise');
+  assert.equal(r.log.updates.length, 1);
+  assert.equal(r.api.state().sceneFailed, false);
+});
+
+test('a mod background retries a temporary scene-host failure and bounds persistent failures', async () => {
+  for (const hostFails of [1, 3]) {
+    const r = rig({ hostFails });
+    r.api.background({}); await settle();
+    await r.retry();
+    if (hostFails === 3) await r.retry();
+    assert.equal(r.log.needs.length, hostFails === 1 ? 2 : 3);
+    assert.equal(r.api.state().sceneFailed, hostFails === 3);
+    assert.equal(r.log.imports, 0, 'a mod background does not load the built-in renderer');
+    r.api.syncScene(); await settle();
+    assert.equal(r.log.needs.length, hostFails === 1 ? 2 : 3, 'a persistent failure stays bounded');
+  }
+});
+
+test('mod handoffs cancel pending built-in startup and restore the built-in scene on removal', async () => {
+  const r = rig(); let removed = 0;
+  const mod = { remove() { removed++; } };
+  r.api.syncScene();
+  r.api.background(mod); await settle();
+  assert.equal(r.log.starts.length, 0, 'the pending built-in cannot mount over the mod');
+  r.api.background(null); await settle();
+  assert.equal(removed, 1);
+  assert.equal(r.log.starts.length, 1);
+  r.api.background(mod); await settle();
+  assert.equal(r.log.stops, 1, 'a running built-in releases its renderer when a mod takes over');
+  assert.equal(r.log.imports, 1, 'handoffs retain the successfully loaded module');
 });
 
 test('temporary WebGL startup failures retry with the already loaded scene module', async () => {

@@ -9,6 +9,8 @@ All notable changes to Glaze are documented here. The format follows
 ### Fixed
 
 - Keep scene backgrounds continuous behind the floating navbar and sidebar on Blackboard course content, tool pages and item panels, including retained course tabs.
+- Recover animated and mod backgrounds after temporary startup failures.
+- Keep fallback backgrounds behind the shared navbar while viewing retained Blackboard course tabs.
 
 ## [3.3.1] — 2026-10-20
 
