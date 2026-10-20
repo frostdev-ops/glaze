@@ -41,7 +41,7 @@ function world({ at = '/courses/12/modules', showing = '12' } = {}) {
     split: (url) => { const i = url.indexOf('?'); return i < 0 ? [url, ''] : [url.slice(0, i), url.slice(i + 1)]; },
     shown: (e) => !!e, loading: () => false, pageable: (path) => !/^\/(?:login|logout|api)(?:\/|$)/.test(path),
     frameEl: (cid, url) => Object.assign(mkEl(blank()), { name: `gz-ctab:${cid}`, src: origin + url }),
-    save: () => calls.push(['save']), keepPage() {}, later() {}, globalThis: {}, say: (s) => calls.push(['say', s]), t: (s) => s,
+    save: () => calls.push(['save']), keepPage() {}, later() {}, waiting: '', wait: (cid) => calls.push(['wait', cid]), globalThis: {}, say: (s) => calls.push(['say', s]), t: (s) => s,
     show: (cid) => calls.push(['show', cid]), reveal: (cid) => calls.push(['reveal', cid]),
     openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
     load: (cid, f, url) => { calls.push(['load', cid, url]); return true; }, guardFrame() {}, watch: () => calls.push(['watch']),
@@ -561,4 +561,31 @@ test('a press loads ahead only for a plain press with the main button, never a t
 test('Glaze\'s bar keeps an open shadow root: a press or click in it is found through the event\'s path', () => {
   const navbar = fs.readFileSync(require.resolve('../features/navbar.js'), 'utf8');
   assert.match(navbar, /attachShadow\(\{ mode: 'open' \}\)/, 'a closed root would hide its links from course tabs (anchorOf)');
+});
+
+test('a link without a fragment finds its kept page at any fragment of its own (the calendar\'s month)', () => {
+  const w = world({ at: '/calendar#view_name=month', showing: 'page' });
+  w.c.frames.set('page', w.c.frames.get('12')); w.c.frames.delete('12');
+  w.fn('turnTo')('page', '/conversations');
+  w.fn('next').get('page').el.contentDocument = docAt('/conversations#filter=type=inbox');
+  w.wait(40);
+  w.fn('turnTo')('page', '/calendar');
+  assert.equal(w.c.frames.get('page'), w.first, 'the kept calendar, at once');
+  w.fn('turnTo')('page', '/calendar');
+  assert.equal(w.c.frames.get('page'), w.first, 'the calendar again is the page on screen: nothing loads');
+  assert.equal(w.fn('next').get('page')?.go, undefined);
+});
+
+test('a frame not on screen shows its new page only once drawn, never first the page it had', () => {
+  const w = world({ showing: '' });
+  const g = w.fn('turnTo')('12', '/courses/12/grades');
+  assert.equal(w.fn('awaitDrawn')('12', g), true, 'held back');
+  assert.deepEqual(w.calls.filter(([k]) => k === 'reveal'), []);
+  assert.deepEqual(w.calls.filter(([k]) => k === 'wait'), [['wait', '12']], 'its tab marked as loading meanwhile');
+  g.el.contentDocument = docAt('/courses/12/grades');
+  w.wait(40);
+  assert.equal(w.c.frames.get('12'), g);
+  assert.deepEqual(w.calls.filter(([k]) => k === 'reveal'), [['reveal', '12']], 'shown as drawn');
+  const on = world();
+  assert.equal(on.fn('awaitDrawn')('12', on.fn('turnTo')('12', '/courses/12/grades')), false, 'a frame on screen keeps its page until then anyway');
 });

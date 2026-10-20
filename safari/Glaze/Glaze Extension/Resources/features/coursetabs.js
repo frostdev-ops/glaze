@@ -483,6 +483,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const spare = new Map(); // cid (or PAGE) → [frame], its earlier pages, oldest first
   const next = new Map(); // cid (or PAGE) → the frame loading to take its place: { go (shown when drawn), refresh (of a spare) }
   let popping = false; // Back or Forward is taking this page there: no new history entry
+  // A page at `url`: a link without a fragment is that page at any of its own (the calendar's month, the Inbox's filter).
+  const same = (path, url) => path === url || (!url.includes('#') && path.split('#')[0] === url);
   const pathOf = (f) => { try { const d = f?.el.contentDocument; return d && d.location.origin === location.origin && d.location.href !== 'about:blank' ? d.location.pathname + d.location.search + (ctx.site === 'canvas' ? d.location.hash || '' : '') : ''; } catch { return ''; } };
   const canvasContent = (d) => {
     const el = d.querySelector('#content, #main');
@@ -528,7 +530,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (waiting === cid) { ++showTurn; wait(''); }
     if (showing === cid && !replacing) show('');
   };
-  const dropNext = (cid) => { const g = next.get(cid); if (!g) return; clearTimeout(g.cool); clearTimeout(g.tick); g.clean?.(); g.el.remove(); next.delete(cid); turning(); };
+  const dropNext = (cid) => { const g = next.get(cid); if (!g) return; clearTimeout(g.cool); clearTimeout(g.tick); g.clean?.(); g.el.remove(); next.delete(cid); turning(); if (g.reveal && waiting === cid) wait(''); };
   // Canvas loads a whole page for each link, which here would end every tab's frame; Ultra routes in place, so its frames
   // live on. With a frame running, a plain click on a link to a course page opens it in that course's frame instead (made
   // if new), and in a tab's frame a link to another course goes to that course's frame: the page around never reloads.
@@ -585,7 +587,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     let u; try { u = new URL(String(href), location.href); } catch { return; }
     if (u.origin !== location.origin || /\/files\/\d+\/download/.test(u.pathname) || !pageable(u.pathname) || acts(u.pathname)) return;
     const page = L.safe(u.pathname, u.search) || L.outside(u.pathname, u.search), url = page && page + u.hash, cid = u.pathname.match(/^\/courses\/(\d+)/)?.[1] || PAGE;
-    if (!url || page === (framed ? location.pathname + location.search : pathOf(frames.get(cid)).split('#')[0])) return;
+    // Not the page on screen, nor this page itself (shown as it is: openPage).
+    if (!url || page === (framed ? location.pathname + location.search : pathOf(frames.get(cid)).split('#')[0]) || (!framed && page === location.pathname + location.search)) return;
     if (framed) { if (cid === framed) toTop('warm', { url }); }
     else if (frames.get(cid)?.ready) turnTo(cid, url, true);
   };
@@ -597,14 +600,19 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!x) return;
     x.at = Date.now();
     let f = frames.get(cid);
-    if (ctx.site === 'canvas' && f && !f.away && url === (f.ready ? pathOf(f) : f.url)) {
+    if (ctx.site === 'canvas' && f && !f.away && same(f.ready ? pathOf(f) : f.url, url)) {
       if (f.ready) turnTo(cid, url);
       save();
       return reveal(cid);
     }
     // Canvas, a frame that runs: turned to that page, this one kept (with any unsaved work in it).
     const turn = ctx.site === 'canvas' && !!f?.ready && !f.away;
-    if (turn) { if (turnTo(cid, url) === false) return; }
+    if (turn) {
+      const r = turnTo(cid, url);
+      if (r === false) return;
+      // A frame not on screen shows once its new page is drawn: never first the page it had.
+      if (awaitDrawn(cid, r)) { x.path = url; x.top = 0; save(); return; }
+    }
     else if (f?.dirty) say(t('{name} has unsaved work, so it stays where it was.', { name: labelFor(cid, x.name || t('Course'), x.code) }));
     else if (f) { stamp(cid, url); if (!load(cid, f, url)) return; }
     else {
@@ -622,11 +630,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const openPage = (url) => {
     if (url === location.pathname + location.search) { if (showing) stamp('', url); return reveal(''); }
     let f = frames.get(PAGE);
-    if (ctx.site === 'canvas' && f && !f.away && url === (f.ready ? pathOf(f) : f.url)) {
+    if (ctx.site === 'canvas' && f && !f.away && same(f.ready ? pathOf(f) : f.url, url)) {
       if (f.ready) turnTo(PAGE, url);
       return reveal(PAGE);
     }
-    if (ctx.site === 'canvas' && f?.ready && !f.away) { if (turnTo(PAGE, url) === false) return; }
+    if (ctx.site === 'canvas' && f?.ready && !f.away) { const r = turnTo(PAGE, url); if (r === false || awaitDrawn(PAGE, r)) return; }
     else if (f?.dirty) say(t('This page has unsaved work, so it stays where it was.'));
     else if (f) { stamp(PAGE, url); if (!load(PAGE, f, url)) return; }
     else {
@@ -692,10 +700,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const turnTo = (cid, url, warm = false, push = true) => {
     const f = frames.get(cid);
     if (!f || !host) return;
-    const kept = (spare.get(cid) || []).find((s) => pathOf(s) === url);
+    const kept = (spare.get(cid) || []).find((s) => same(pathOf(s), url));
     let g = next.get(cid);
     if (warm) { if (kept || g?.go || (g?.url === url && !g.refresh)) return; }
-    else if (url === pathOf(f)) { if (!g?.refresh) dropNext(cid); if (push && !popping) stamp(cid, url); return; }
+    else if (same(pathOf(f), url)) { if (!g?.refresh) dropNext(cid); if (push && !popping) stamp(cid, url); return; }
     else if (kept) { dropNext(cid); swap(cid, kept, push && !popping); fresh(cid, kept); return; }
     if (!warm && !canKeep(cid)) return false;
     if (g && (g.url !== url || g.refresh)) { dropNext(cid); g = null; }
@@ -712,6 +720,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     g.go = true;
     turning();
     if (g.drawn) landed(cid, g);
+    return g;
+  };
+  const awaitDrawn = (cid, g) => {
+    if (showing === cid || !g?.go || next.get(cid) !== g) return false;
+    g.reveal = true;
+    wait(cid);
+    return true;
   };
   const turning = () => host?.toggleAttribute('data-turning', [...next.values()].some((g) => g.go));
   // Drawn: its content laid out, Glaze's look on it (content.js, at document start), any scroll it puts back done. A fresh
@@ -782,6 +797,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // Its entry, made on the click, gets the address it ended at (a redirect).
     if (path && path !== g.url && (g.key || turnHere() === g.turn)) restamp(cid, path, g.key);
     swap(cid, g, false);
+    if (g.reveal && frames.get(cid) === g) reveal(cid);
   };
   // `g` takes its frame's place: the page before it kept (or gone, for a fresh copy of it), and on screen if its frame is.
   const swap = (cid, g, push, keepOld = true) => {
