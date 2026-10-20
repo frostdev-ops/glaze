@@ -14,13 +14,24 @@ Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/jmm
 
 ## Firefox
 
-Glaze for Firefox needs Firefox 140 or newer. Until it is listed on Firefox Add-ons, try it from a build:
-run `sh scripts/package-firefox.sh`, open `about:debugging#/runtime/this-firefox`, click **Load Temporary
-Add-on…** and pick `dist/glaze-v<version>-firefox.zip`. A temporary add-on is removed when Firefox quits.
+Install Glaze from [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/glaze/).
+Version 3.3.0 is available for desktop Firefox 140 or newer and Firefox for Android 142 or newer.
 
-The Firefox package is the Chrome package with a rewritten manifest: Firefox has no extension service
-worker, so the background runs as an event page that loads every script the worker imports. Google
-Calendar sync needs Chrome's sign-in and isn't in the Firefox build; the calendar export is.
+1. Open the listing in Firefox and choose **Add to Firefox**.
+2. Review and confirm Firefox's installation prompt, then open Glaze from the Extensions menu.
+3. Open your Blackboard Ultra, Canvas or Moodle site and reload. Check Glaze's site access if it does not appear.
+
+The store installation stays installed after Firefox restarts and receives updates through Firefox.
+Before replacing a temporary development copy, save **Export settings** and Notes **Export all**,
+then import both backups into the store copy. Keep backups private: they include share keys.
+Google Calendar sign-in sync is not included in Firefox; calendar-file (.ics) export is available.
+Firefox supports declarative mod parts and does not run code mods.
+
+### Temporary installation (development)
+
+From the Firefox compatibility branch, run `sh scripts/package-firefox.sh`, open
+`about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick
+`dist/glaze-v<version>-firefox.zip`. A temporary add-on is removed when Firefox quits.
 
 For the dedicated Firefox for Android emulator, launcher and validation checklist, see
 [Firefox for Android testing](firefox-android.md).
