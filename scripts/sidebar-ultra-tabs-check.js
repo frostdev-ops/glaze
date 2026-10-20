@@ -99,17 +99,27 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     const tab = (cid) => ({
       click: async () => {
-        const on = (await onScreen())[0];
-        const root = on && on.name !== 'top' ? page.frameLocator(`#gz-ctabs-frames > iframe[name="${on.name}"]`) : page;
-        const b = await root.locator(`#gz-ctabs [data-course-id="${cid}"]`).first().boundingBox({ timeout: 8000 });
-        await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+        const end = Date.now() + 20000;
+        let pressed = false;
+        while (!pressed && Date.now() < end) {
+          const on = (await onScreen())[0];
+          if (!on) { await page.waitForTimeout(100); continue; }
+          const root = on.name !== 'top' ? page.frameLocator(`#gz-ctabs-frames > iframe[name="${on.name}"]`) : page;
+          try { await root.locator(`#gz-ctabs [data-course-id="${cid}"]`).first().click({ timeout: 1000 }); pressed = true; }
+          catch (e) { if ((await onScreen())[0]?.name === on.name) throw e; }
+        }
+        if (!pressed) throw Error('the document on screen did not settle for a tab press');
+        // The frame's pick crosses postMessage. Wait for ownership, so the next press is measured in the document
+        // actually on screen, rather than the outgoing frame just covered by this pick.
+        const topCourse = await page.evaluate(() => location.pathname.match(/\/ultra\/courses\/(_\d+_\d+)\//)?.[1]);
+        const name = topCourse === cid ? 'top' : `gz-ctab:${cid}`;
+        await wait(onScreen, (ds) => ds.length === 1 && ds[0].name === name, `the tab pick shows ${name}`);
       },
     });
     const frame = (cid) => page.frameLocator(`#gz-ctabs-frames > iframe[name="gz-ctab:${cid}"]`);
 
     await page.goto(`${site}/ultra/courses/_101_1/outline`);
     await page.locator('#gz-ctabs [data-course-id="_102_1"]').waitFor();
-    await page.waitForTimeout(800); // the strip takes picks once its page settles
     await oneDock('the course page itself', 'top');
     await tab('_102_1').click();
     await oneDock('a course frame', 'gz-ctab:_102_1');
@@ -118,7 +128,6 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     await frame('_102_1').locator('#gz-sb-adding .gz-sb-row', { hasText: 'Focus timer' }).locator('button').click();
     const after = await wait(record, (r) => r?.dest?.timer === 'dock', 'the frame\'s change stored');
     ok(after.rev > before.rev, 'the frame\'s placement committed through the page around it');
-    await page.waitForTimeout(800);
     await tab('_101_1').click();
     await oneDock('back to the page', 'top');
     probe((await docs()).find((d) => d.name === 'top').tiles.includes('timer'), 'the page\'s dock shows the frame\'s placement');
@@ -127,12 +136,10 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     probe((await docs()).find((d) => d.name === 'gz-ctab:_103_1').tiles.includes('timer'), 'a new frame\'s dock shows it too');
     await page.reload();
     await oneDock('after a refresh');
-    await page.waitForTimeout(800);
     ok((await record()).dest.timer === 'dock', 'the placement survives a refresh');
     // Hidden documents do no sidebar work through resizes.
     await tab('_102_1').click();
     await oneDock('frame on screen', 'gz-ctab:_102_1');
-    await page.waitForTimeout(800);
     await watchHidden();
     await page.setViewportSize({ width: 1200, height: 900 }); await page.waitForTimeout(2000);
     await page.setViewportSize({ width: 1600, height: 1000 }); await page.waitForTimeout(1200);
@@ -144,7 +151,7 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     await oneDock('rapid switching', 'top');
     // Back and Forward: two loads of the page make the history, a course frame over the second.
     await page.goto(`${site}/ultra/courses/_103_1/outline`);
-    await page.locator('#gz-ctabs [data-course-id="_102_1"]').waitFor(); await page.waitForTimeout(800);
+    await page.locator('#gz-ctabs [data-course-id="_102_1"]').waitFor();
     await tab('_102_1').click();
     await oneDock('a frame before Back', 'gz-ctab:_102_1');
     for (const [go, label] of [['back', 'Back'], ['forward', 'Forward'], ['back', 'Back again'], ['forward', 'Forward again']]) {
