@@ -34,10 +34,11 @@ const pageContext = (site, origin, account, reads) => {
   return page;
 };
 
-const worker = ({ local = {}, production = false, manualTimers = false } = {}) => {
+const worker = ({ local = {}, state = null, production = false, manualTimers = false } = {}) => {
   const m = require('../manifest.json');
-  const store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [ULTRA, ULTRA2], ...local }, session: {} };
-  const fail = { set: 0 }, slow = { get: 0, script: false, ultra: false }, registrations = [];
+  const store = state || { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [ULTRA, ULTRA2], ...local }, session: {} };
+  const changed = [], startup = [];
+  const fail = { set: 0, layout: 0 }, slow = { get: 0, script: false, ultra: false }, registrations = [];
   const accounts = { [CANVAS]: '42', [CANVAS2]: '42', [ULTRA]: '_9_1', [ULTRA2]: '_9_1' };
   const pages = new Map(), probes = [], reads = [], scripts = [], timers = new Map();
   let timerId = 0;
@@ -46,7 +47,7 @@ const worker = ({ local = {}, production = false, manualTimers = false } = {}) =
       for (let i = 0; i < (name === 'local' ? slow.get : 0); i++) await new Promise(setImmediate);
       return structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])));
     },
-    set: async (v) => { if (name === 'local' && Object.hasOwn(v, 'ultra') && slow.ultra) await new Promise((res) => registrations.push(res)); if (name === 'local' && fail.set && fail.set--) throw Error('quota'); Object.assign(s, structuredClone(v)); },
+    set: async (v) => { if (name === 'local' && Object.hasOwn(v, 'ultra') && slow.ultra) await new Promise((res) => registrations.push(res)); if (name === 'local' && ((fail.set && fail.set--) || (v.widgetLayout && fail.layout && fail.layout--))) throw Error('quota'); Object.assign(s, structuredClone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete s[x]; },
   });
   const listeners = [], installed = [];
@@ -58,10 +59,10 @@ const worker = ({ local = {}, production = false, manualTimers = false } = {}) =
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
-        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
+        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener: (f) => startup.push(f) }, onConnect: { addListener() {} },
       },
       tabs: { onRemoved: { addListener() {} } },
-      storage: { session: area(store.session, 'session'), local: area(store.local, 'local'), sync: area(store.sync, 'sync'), onChanged: { addListener() {} } },
+      storage: { session: area(store.session, 'session'), local: area(store.local, 'local'), sync: area(store.sync, 'sync'), onChanged: { addListener: (f) => changed.push(f) } },
       scripting: {
         getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {},
         executeScript: async (o) => {
@@ -86,7 +87,7 @@ const worker = ({ local = {}, production = false, manualTimers = false } = {}) =
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
     if (!kept) res('ignored');
   });
-  return { store, send, installed, fail, slow, accounts, pages, probes, reads, scripts, timers, registrations };
+  return { store, send, installed, fail, slow, accounts, pages, probes, reads, scripts, timers, registrations, changed, startup };
 };
 // A tab's frame: Canvas's pages anywhere on the site, Ultra's under /ultra.
 const at = (url, frameId = 0, tab = url) => ({ id: 'glaze', url, frameId, tab: { id: 1, url: tab } });
@@ -302,8 +303,10 @@ test('a new install marks its layout fresh, an update does not, and the mark giv
   assert.equal(fresh.store.local.widgetLayout.sidebarFresh, true, 'kept by later updates');
   const r = await fresh.send(sb(uKey(), [{ op: 'migrate' }]), UP);
   assert.deepEqual(S.docked(r.rec).map((x) => x.id), ['todo', 'settings']); // owner, 2026-10-20
-  assert.equal(fresh.store.sync.enhance.notes, true);
-  assert.equal(fresh.store.sync.enhance.pet, true);
+  const settings = require('../defaults.js').GZ_SANITIZE(fresh.store.sync, fresh.store.local.freshDefaults.fresh);
+  assert.equal(settings.enhance.notes, true);
+  assert.equal(settings.enhance.pet, true);
+  assert.deepEqual(fresh.store.sync.enhance, {}, 'initial feature choices are not uploaded over pending sync');
   // A layout change keeps the mark (lib/widgets.js layout passes it through).
   await fresh.send({ type: 'glaze:widgetLayout', ops: [{ s: 'cdash', id: 'notes', set: { on: true } }] }, CP);
   assert.equal(fresh.store.local.widgetLayout.sidebarFresh, true);
@@ -349,7 +352,8 @@ test('a first Ultra assessment waits for its pending site registration before mi
 test('fresh installs add navbar settings once while saved navigation and updates stay untouched', async () => {
   const w = worker();
   w.installed[0]({ reason: 'install' }); await settle();
-  assert.deepEqual(w.store.sync.navbarItems, { glaze: ['settings'] });
+  assert.equal(w.store.sync.navbarItems, undefined, 'fresh navigation is a device-local fallback');
+  assert.equal(w.store.local.freshDefaults.fresh, true);
   w.store.sync.navbarItems = { glaze: [] };
   w.installed[0]({ reason: 'update' }); await settle();
   assert.deepEqual(w.store.sync.navbarItems, { glaze: [] }, 'a removed default stays removed');
@@ -362,4 +366,133 @@ test('fresh installs add navbar settings once while saved navigation and updates
   }
   const old = worker(); old.installed[0]({ reason: 'update' }); await settle();
   assert.equal(old.store.sync.navbarItems, undefined, 'updates never opt existing users in');
+});
+
+test('install seeding preserves explicit synced feature switches', async () => {
+  const w = worker();
+  w.store.sync.enhance = { notes: false, pet: false, todo: false, widgets: false };
+  w.installed[0]({ reason: 'install' }); await settle();
+  assert.deepEqual(w.store.sync.enhance, { notes: false, pet: false, todo: false, widgets: false });
+});
+
+test('content writes and account migration before onInstalled do not lose the fresh settings defaults', async () => {
+  for (const [sender, key] of [[CP, cKey()], [UP, uKey()]]) {
+    const w = worker();
+    await w.send(sb(key, [{ op: 'migrate' }]), sender);
+    await w.send({ type: 'glaze:widgetLayout', ops: [{ s: sender === CP ? 'cdash' : 'dash', id: 'quotes', set: { on: false } }] }, sender);
+    const before = structuredClone(w.store.local.widgetLayout);
+    w.installed[0]({ reason: 'install' }); await settle();
+    assert.equal(w.store.local[key].dest.settings, 'dock', 'repair the migration that preceded installation');
+    const board = sender === CP ? 'cdash' : 'dash';
+    assert.equal(w.store.local.widgetLayout.boards[board].find((t) => t.id === 'quotes').on, before.boards[board].find((t) => t.id === 'quotes').on, 'preserve the early board edit');
+    assert.equal(w.store.local.widgetLayout.boards[board].find((t) => t.id === 'pet').on, true, 'seed the untouched starter widgets');
+    assert.equal(w.store.local.freshDefaults.fresh, true, 'navbar fallback is recorded independently of the board');
+    assert.equal(w.store.sync.navbarItems, undefined, 'never upload a guessed navigation preference before sync arrives');
+  }
+});
+
+test('a durable install resumes after a failed seed and worker restart', async () => {
+  const w = worker();
+  w.fail.layout = 1;
+  w.installed[0]({ reason: 'install' }); await settle();
+  const resumed = worker({ state: w.store });
+  const r = await resumed.send(sb(cKey(), [{ op: 'migrate' }]), CP);
+  assert.equal(r.rec.dest.settings, 'dock');
+  assert.equal(resumed.store.local.widgetLayout.starter, true);
+  assert.equal(resumed.store.local.freshDefaults.pending, false);
+});
+
+test('fresh dock defaults belong to the first authenticated account only', async () => {
+  const w = worker(); w.installed[0]({ reason: 'install' }); await settle();
+  await Promise.all([w.send(sb(cKey(), [{ op: 'migrate' }]), CP), w.send(sb(cKey(), [{ op: 'migrate' }]), CP)]);
+  await w.send(sb(cKey(), [{ op: 'remove', id: 'settings' }]), CP);
+  for (const [key, sender] of [[cKey(CANVAS2), at(`${CANVAS2}/courses/1`)], [uKey(), UP]]) {
+    assert.equal((await w.send(sb(key, [{ op: 'migrate' }]), sender)).rec.dest.settings, undefined);
+  }
+  w.accounts[CANVAS] = '77';
+  assert.equal((await w.send(sb(cKey(CANVAS, '77'), [{ op: 'migrate' }]), CP)).rec.dest.settings, undefined);
+  w.accounts[CANVAS] = '42';
+  const restarted = worker({ state: w.store });
+  assert.equal((await restarted.send(sb(cKey(), [{ op: 'migrate' }]), CP)).rec.dest.settings, 'off');
+});
+
+test('removing fresh defaults is respected on another device, including sync arriving after its seed', async () => {
+  const first = worker(); first.installed[0]({ reason: 'install' }); await settle();
+  await first.send(sb(cKey(), [{ op: 'remove', id: 'settings' }]), CP);
+  await first.send({ type: 'glaze:widgetLayout', ops: W.layout().boards.cdash.map(({ id }) => ({ s: 'cdash', id, set: { on: false } })) }, CP);
+  const second = worker(); second.installed[0]({ reason: 'install' }); await settle();
+  await second.send(sb(cKey(), [{ op: 'migrate' }]), CP);
+  await second.send({ type: 'glaze:widgetLayout', fill: 'cdash', ops: [{ s: 'cdash', id: `course:${CANVAS}/1`, set: { on: true } }] }, CP);
+  assert.ok(second.store.local.widgetLayout.boards.cdash.some((t) => W.course(t.id) && t.on), 'the other device may already have filled its cards');
+  const changes = Object.fromEntries(Object.entries(first.store.sync).map(([k, newValue]) => [k, { newValue }]));
+  Object.assign(second.store.sync, structuredClone(first.store.sync));
+  for (const fn of second.changed) fn(changes, 'sync');
+  await settle();
+  assert.equal(second.store.local[cKey()].dest.settings, 'off');
+  assert.ok(!second.store.local.widgetLayout.boards.cdash.some((x) => x.on));
+  assert.ok(second.store.local.widgetLayout.filled.includes('cdash'));
+});
+
+test('an update arriving after a content write preserves the legacy defaults and the early edit', async () => {
+  const w = worker();
+  await w.send({ type: 'glaze:widgetLayout', ops: [{ s: 'dash', id: 'timer', set: { on: false } }] }, UP);
+  w.installed[0]({ reason: 'update' }); await settle();
+  const expected = W.apply(W.kept(undefined), { ops: [{ s: 'dash', id: 'timer', set: { on: false } }] });
+  assert.deepEqual(w.store.local.widgetLayout, expected, 'a pre-install broker write cannot turn an update into a fresh layout');
+});
+
+test('backup restore consumes any unclaimed default dock and later installation events do not seed it', async () => {
+  const w = worker(); w.installed[0]({ reason: 'install' }); await settle();
+  const settings = { version: 2, enabled: true, enhance: { notes: false, pet: false }, navItems: { hidden: ['course'] }, navbarItems: { glaze: [] } };
+  const r = await w.send({ type: 'glaze:todo', restore: { tasks: {}, folders: {}, settings } }, { id: 'glaze', url: 'chrome-extension://x/options.html', frameId: 0, tab: { id: 3, url: 'chrome-extension://x/options.html' } });
+  assert.equal(r.ok, true);
+  w.installed[0]({ reason: 'install' }); await settle();
+  assert.equal((await w.send(sb(cKey(), [{ op: 'migrate' }]), CP)).rec.dest.settings, undefined);
+  assert.deepEqual(w.store.sync.enhance, settings.enhance);
+  assert.deepEqual(w.store.sync.navbarItems, settings.navbarItems);
+});
+
+test('startup on an existing device without layout storage keeps the legacy baseline', async () => {
+  const w = worker(), sync = structuredClone(w.store.sync);
+  for (const fn of w.startup) fn(); await settle();
+  assert.deepEqual(w.store.local.widgetLayout, W.kept(undefined));
+  assert.notEqual(w.store.local.freshDefaults?.fresh, true);
+  assert.deepEqual(w.store.sync, sync);
+});
+
+test('duplicate install events and two simultaneous tabs seed once and preserve a removal', async () => {
+  const w = worker(); w.slow.get = 2;
+  w.installed[0]({ reason: 'install' }); w.installed[0]({ reason: 'install' });
+  const second = { ...CP, tab: { id: 2, url: CP.url } };
+  const replies = await Promise.all([w.send(sb(cKey(), [{ op: 'migrate' }]), CP), w.send(sb(cKey(), [{ op: 'migrate' }]), second)]);
+  assert.ok(replies.every((r) => r.ok));
+  assert.equal(S.docked(w.store.local[cKey()]).filter((t) => t.id === 'settings').length, 1);
+  await w.send(sb(cKey(), [{ op: 'remove', id: 'settings' }]), second);
+  const before = structuredClone(w.store.local);
+  w.installed[0]({ reason: 'install' }); await settle();
+  assert.deepEqual(w.store.local, before);
+});
+
+test('synced removals also reach starter layouts installed before the defaults transaction existed', async () => {
+  const lay = W.fresh ? W.fresh() : { ...W.layout(), sidebarFresh: true };
+  const rec = S.migrate(lay, null, { lms: 'canvas' });
+  const w = worker({ local: { widgetLayout: lay, [cKey()]: rec } });
+  w.installed[0]({ reason: 'update' }); await settle();
+  const sync = { [`starterOff:${cKey()}:settings`]: true, 'starterOff:cdash:quotes': true, [`starterOff:${cKey(CANVAS2)}:todo`]: true };
+  Object.assign(w.store.sync, sync);
+  for (const fn of w.changed) fn(Object.fromEntries(Object.entries(sync).map(([k, newValue]) => [k, { newValue }])), 'sync');
+  await settle();
+  assert.equal(w.store.local[cKey()].dest.settings, 'off');
+  assert.equal(w.store.local.widgetLayout.boards.cdash.find((t) => t.id === 'quotes').on, false);
+  assert.equal(w.store.local.freshDefaults.fresh, false, 'an update gains no new seeding authority');
+  const other = await w.send(sb(cKey(CANVAS2), [{ op: 'migrate' }]), at(`${CANVAS2}/courses/1`));
+  assert.equal(other.rec.dest.todo, 'off', 'a removal can sync before this device first creates its account record');
+});
+
+test('startup queued before the first install event cannot classify the new device as an update', async () => {
+  const w = worker();
+  for (const fn of w.startup) fn();
+  w.installed[0]({ reason: 'install' }); await settle();
+  assert.equal(w.store.local.freshDefaults.fresh, true);
+  assert.deepEqual(w.store.local.widgetLayout, W.fresh());
 });

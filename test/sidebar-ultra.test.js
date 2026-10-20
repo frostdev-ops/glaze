@@ -23,7 +23,7 @@ const CARD = `course:${O}/_101_1`;
 
 // at: 'courses' | 'outline' | 'detail' | 'stream' (no column); width: the window; stored: storage.local; enhance;
 // widgets: run features/widgets.js too; todo: a stand-in Better To Do (features/todo.js) that mounts a list.
-const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets = false, todo = false } = {}) => {
+const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets = false, todo = false, registration = null } = {}) => {
   const doc = { activeElement: null };
   const make = (t) => new El(t, doc);
   const el = (tag, cls, ...kids) => { const e = make(tag); e.className = cls; e.append(...kids); return e; };
@@ -74,7 +74,11 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '3' }), sendMessage: (m, cb) => {
         sent.push(structuredClone(m));
-        const run = () => (m.type === 'glaze:sidebar' ? S.change(structuredClone(m), area, sync) : m.type === 'glaze:widgetLayout' ? W.change(structuredClone(m), area) : { ok: true, timer: W.IDLE });
+        const run = () => {
+          if (registration && m.type === 'glaze:ultra') registration.ready = true;
+          if (registration && !registration.ready && m.type === 'glaze:sidebar') return { ok: false };
+          return m.type === 'glaze:sidebar' ? S.change(structuredClone(m), area, sync) : m.type === 'glaze:widgetLayout' ? W.change(structuredClone(m), area) : { ok: true, timer: W.IDLE };
+        };
         queue = queue.then(run).then((r) => cb?.(structuredClone(r)), () => cb?.({ ok: false }));
       } },
       storage: { local: { get: (ks, cb) => area.get(ks).then(cb), set: (v, cb) => { area.set(v).then(() => cb?.()); }, remove: (k, cb) => { for (const x of [k].flat()) delete store[x]; cb?.(); } },
@@ -582,7 +586,7 @@ test('a failed write waiting on another callback cannot show its error after nav
   const p = page({ stored: record() });
   await p.pass();
   const held = [];
-  p.c.chrome.runtime.sendMessage = (m, cb) => held.push(cb);
+  p.c.chrome.runtime.sendMessage = (m, cb) => { if (m.type === 'glaze:sidebar') held.push(cb); else cb?.({ ok: true }); };
   const a = p.side.op([{ op: 'open', v: false }]);
   const b = p.side.op([{ op: 'width', px: 400 }]);
   held.shift()({ ok: false });
@@ -633,4 +637,14 @@ test("a pinned column's height is its top and bottom's, whatever height the site
     assert.match(r, /bottom: var\(--gz-sb-end\)/, head);
     assert.match(r, /height: auto !important/, head);
   }
+});
+
+test('an Ultra document can recover registration lost during a worker restart without reloading', async () => {
+  const registration = { ready: false }, p = page({ at: 'detail', registration });
+  await p.pass();
+  assert.equal(p.side.rec().mig, 1, 'the first assessment migrates even if the bootstrap report was lost');
+  registration.ready = false;
+  assert.equal(await p.side.op([{ op: 'width', px: 420 }]), true);
+  await settle();
+  assert.equal(p.store[KEY].width, 420, 'a restarted worker can accept an existing document again');
 });

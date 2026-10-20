@@ -1104,17 +1104,18 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
   const escape = (e) => { if (e.key === 'Escape' && editing && board) { setEditing(false); bar?.querySelector('.gz-dash-edit')?.focus(); } };
   let loadingCourses = null, nativeShown = false, courseSpace = null;
+  const coursesChanged = () => { draw(); fillCourses(); };
   const loadCourses = () => {
     if (globalThis.GZ_COURSE_CARDS || loadingCourses) return;
     loadingCourses = ctx.need('features/coursecards.js', () => globalThis.GZ_COURSE_CARDS).then(() => {
       loadingCourses = null;
-      if (on && board && globalThis.GZ_COURSE_CARDS) { GZ_COURSE_CARDS.sync(draw); draw(); fillCourses(); }
+      if (on && board && globalThis.GZ_COURSE_CARDS) { GZ_COURSE_CARDS.sync(coursesChanged); coursesChanged(); }
     }, () => { loadingCourses = null; });
   };
   // Both Dashboards get their first course cards once (owner, 2026-10-20). The stored filled marker protects edits,
   // emptied boards and removed defaults; starter utilities share the board with its cards.
   const fillCourses = () => {
-    if (!['cdash', 'dash'].includes(board) || !on || !lay || lay.filled.includes(board) || editing || flying) return;
+    if (!['cdash', 'dash'].includes(board) || !on || !lay?.starter || lay.filled.includes(board) || editing || flying) return;
     const C = globalThis.GZ_COURSE_CARDS;
     if (!C) { loadCourses(); return; }
     const cards = ultra ? C.list() : C.shown();
@@ -1418,9 +1419,22 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (c) courseArea = { left: Math.max(0, Math.round(c.left - r.left)), top: Math.max(0, Math.round(c.top - r.top)), width: c.width };
 
     }
-    const card = ctx.settings().card;
+    const card = location.pathname.endsWith('/preview.html') ? ctx.settings().card : cardPrefs || ctx.settings().card;
     const cards = { width: card?.width || 262, gap: card?.gap >= 0 ? card.gap : W.GAP };
-    const res = W.arrange(list, dims, width, { col, courseArea, w0: lay.widths[board], ordered: board === 'cdash', cards: lay.starter || list.some((x) => W.course(x.id)) ? cards : null });
+    const opts = { col, courseArea, w0: lay.widths[board], ordered: board === 'cdash', cards: lay.starter || list.some((x) => W.course(x.id)) ? cards : null, rtl: document.documentElement?.dir === 'rtl' };
+    let res = W.arrange(list, dims, width, opts);
+    if (side && !res.stack) {
+      // Measure at the final row width before positioning the next row, so wrapped content cannot overlap it at first paint.
+      for (const id of res.order) {
+        const el = tiles.get(id).el, w = `${res.at[id].w}px`;
+        if (el.style.width !== w) el.style.width = w;
+      }
+      for (const id of res.order) {
+        const h = tiles.get(id).el.offsetHeight;
+        if (h) { dims[id].h = h; heights.set(id, h); }
+      }
+      res = W.arrange(list, dims, width, opts);
+    }
     lastAt = res.at;
     lastW = width;
     stacked = !side || res.stack;
@@ -1589,10 +1603,17 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
 
   // ---- starting and stopping ------------------------------------------------------------------------------------
-  const readPrefs = () => get('sync', 'widgets').then((r) => { o = GZ_SANITIZE({ widgets: r.widgets }).widgets; });
+  let cardPrefs = null, prefsRead = 0;
+  const readPrefs = async () => {
+    const n = ++prefsRead, r = await get('sync', ['widgets', 'card']);
+    if (r.card !== undefined && !globalThis.GZ_CARDS) await ctx.need('lib/cards.js', () => globalThis.GZ_CARDS).catch(() => {});
+    if (n !== prefsRead) return;
+    o = GZ_SANITIZE({ widgets: r.widgets }).widgets;
+    cardPrefs = globalThis.GZ_CARDS?.settings(r.card) || ctx.settings().card || null;
+  };
   const onStore = (ch, a) => {
     if (a === 'sync' && ch.widgets) readPrefs().then(() => { for (const x of tiles.values()) if (shown(x.el)) x.update?.(); });
-    if (a === 'sync' && ch.card) { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board && !asleep) layoutBoard(); }); }
+    if (a === 'sync' && ch.card) readPrefs().then(() => { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board && !asleep) layoutBoard(); }); });
     // Another tab's change (this tab's own come back as the worker's answer).
     if (a === 'local' && ch.widgetLayout) { layoutRead++; if (!flying && lay) adopt(ch.widgetLayout.newValue); }
   };
@@ -1663,12 +1684,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       GZ_SIDEBAR_UI.on('change', again);
       GZ_SIDEBAR_UI.on('context', contextChanged);
     }
-    if (!starting) starting = start().then(draw, () => {
+    if (!starting) starting = start().then(() => { draw(); fillCourses(); }, () => {
       if (on && board === 'dash') document.documentElement.setAttribute('data-gz-dash', 'ip');
       setTimeout(() => { starting = null; }, 60000);
     });
     else if (W && lay) {
-      if (board) { globalThis.GZ_COURSE_CARDS?.sync(draw); fillCourses(); }
+      if (board) { globalThis.GZ_COURSE_CARDS?.sync(coursesChanged); fillCourses(); }
       // A pass: draw only when something changed (a switch let a tile in or out, Canvas redrew the Dashboard), so the
       // page's observer isn't fed changes of Glaze's own.
       const h = home();

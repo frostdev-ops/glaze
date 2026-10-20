@@ -313,7 +313,7 @@ const GZ_COURSE_LOOK = (s, cid) => {
 const GZ_PRESET = (name, custom) => GZ_ALL_PRESETS(custom).find(([n]) => n === name)?.[1] || null;
 const GZ_MATCH_PRESET = (colors, custom) => GZ_ALL_PRESETS(custom).find(([, c]) => sameColors(c, colors))?.[0] || null;
 
-const GZ_SANITIZE = (raw) => {
+const GZ_SANITIZE = (raw, fresh = false) => {
   raw = isObj(raw) ? raw : {};
   const out = { version: 2, enabled: typeof raw.enabled === 'boolean' ? raw.enabled : GZ_DEFAULTS.enabled };
   out.colors = cleanColors(raw.colors);
@@ -321,6 +321,8 @@ const GZ_SANITIZE = (raw) => {
     const src = isObj(raw[g]) ? raw[g] : {};
     out[g] = Object.fromEntries(Object.entries(keys).map(([k, [d, rule]]) => [k, cleanValue(src[k], d, rule)]));
   }
+  // Initial feature choices stay local until edited; saved switches, including late sync, always win.
+  if (fresh === true) for (const id of ['notes', 'pet']) if (typeof raw.enhance?.[id] !== 'boolean') out.enhance[id] = true;
   // 2.2's darkDocs inverted.
   if (isObj(raw.enhance) && raw.enhance.docPages === undefined && raw.enhance.darkDocs === true) out.enhance.docPages = 'dark';
   // 1.0 had only the three motion switches: all off meant "no motion".

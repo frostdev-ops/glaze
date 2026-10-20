@@ -87,7 +87,7 @@ test('Use my own also removes manifest navigation parts, leaving other parts int
 
 test('the page refreshes installed parts when a navigation layout opt-out changes', () => {
   const fs = require('node:fs'), vm = require('node:vm'), source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
-  const from = source.indexOf('    if (changes.lookX && area'), to = source.indexOf("    if (area !== 'sync'", from);
+  const from = source.indexOf('    if (changes.lookX && area'), to = source.indexOf('    if (isPreview ||', from);
   let reads = 0;
   const changed = vm.runInNewContext(`(changes, area) => { ${source.slice(from, to)} }`, { modsIn: () => reads++, partsIn() {} });
   changed({ [`modNavLayout:${ID}`]: { newValue: false } }, 'local');

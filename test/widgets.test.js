@@ -90,7 +90,7 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   const fresh = W.layout(undefined);
   assert.deepEqual(fresh.tiles.map((t) => t.id), W.TILES);
   assert.deepEqual(fresh.tiles.filter((t) => t.on).map((t) => t.id), [], 'a first layout has no widget on');
-  assert.deepEqual(Object.fromEntries(W.BOARDS.map((b) => [b, fresh.boards[b].filter((t) => t.on).map((t) => t.id)])), { courses: ['todo'], dash: ['pet', 'timer', 'notes', 'quotes', 'todo'], cdash: ['pet', 'timer', 'notes', 'quotes', 'todo'] }, 'owner 2026-10-20: starter Dashboards supersede the empty default');
+  assert.deepEqual(Object.fromEntries(W.BOARDS.map((b) => [b, fresh.boards[b].filter((t) => t.on).map((t) => t.id)])), { courses: ['todo'], dash: ['todo'], cdash: ['todo'] }, 'absent storage alone never authorizes starter widgets');
   // A layout stored before then: a tile kept without its on/off reads as it did.
   assert.deepEqual(W.layout({ tiles: [{ id: 'agenda' }, { id: 'music' }] }).tiles.filter((t) => t.on).map((t) => t.id), ['agenda', 'notes', 'timer', 'quotes']);
   const kept = W.layout({ tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: 2 }, { id: 'music' }, { id: 'evil' }, { id: 'timer', size: 'xl' }, null], music: 'javascript:x' });
@@ -558,7 +558,7 @@ test("Canvas course tiles: Canvas's numeric ids, on Canvas's Dashboard board onl
 });
 
 test('filled: a board given its first tiles is marked once, so one emptied since stays empty', () => {
-  const fresh = W.layout(undefined);
+  const fresh = W.fresh();
   assert.deepEqual(fresh.filled, []);
   const key = 'course:https://canvas.test/27';
   const l = W.apply(fresh, { fill: 'cdash', ops: [{ s: 'cdash', id: key, set: { on: true } }] });

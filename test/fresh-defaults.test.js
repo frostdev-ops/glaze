@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const W = require('../lib/widgets.js');
 const S = require('../lib/sidebar.js');
 const starter = ['pet', 'timer', 'notes', 'quotes'];
-const fresh = () => ({ ...W.layout(), sidebarFresh: true });
+const fresh = () => W.fresh();
 const cards = (lms) => Array.from({ length: 6 }, (_, i) => `course:https://school.test/${lms === 'canvas' ? i + 1 : `_${i + 1}_1`}`);
 const fill = (lms) => ({ fill: lms === 'canvas' ? 'cdash' : 'dash', ops: cards(lms).map((id) => ({ s: lms === 'canvas' ? 'cdash' : 'dash', id, set: { on: true, term: 'Fall', size: 's' } })) });
 for (const [lms, board] of [['canvas', 'cdash'], ['ultra', 'dash']]) {
@@ -68,4 +68,82 @@ test('responsive card rows fill the available room, align below starters and ret
   assert.equal(res.at[courses[2].id].left + res.at[courses[2].id].w, area.left + area.width);
   const placed = list.map((x, i) => ({ ...x, x: i * 16, y: i * 32 }));
   assert.deepEqual(W.arrange(placed, dims, 1400, { cards: { width: 262, gap: 16 } }), W.arrange(placed, dims, 1400));
+});
+
+test('fresh navigation yields to saved navigation arriving later without writing sync', () => {
+  const N = require('../lib/navbar.js');
+  assert.deepEqual(N.initial(undefined, undefined, true).glaze, ['settings']);
+  assert.deepEqual(N.initial(undefined, { hidden: ['course'] }, true).glaze, []);
+  assert.deepEqual(N.initial({ glaze: [] }, undefined, true).glaze, []);
+  assert.deepEqual(N.initial(undefined, undefined, false).glaze, []);
+});
+
+test('responsive rows respect a card resized before placement and never allocate rows to absent renderers', () => {
+  const list = cards('canvas').map((id) => ({ id, x: null, w: 420 }));
+  const dims = Object.fromEntries(list.map((x) => [x.id, { w: x.w, h: 300 }]));
+  const res = W.arrange(list, dims, 1200, { cards: { width: 262, gap: 16 } });
+  assert.equal(res.at[list[0].id].w, 420, 'saved per-card width wins over automatic sizing');
+  const unavailable = [...starter.map((id) => ({ id, x: null })), ...list.map(({ id }) => ({ id, x: null }))];
+  const shown = W.arrange(unavailable, dims, 1200, { cards: { width: 262, gap: 16 } });
+  assert.equal(shown.at[list[0].id].top, 0, 'unavailable utilities reserve no empty rows');
+});
+
+test('automatic card rows begin at the reading edge in RTL', () => {
+  const list = cards('canvas').map((id) => ({ id, x: null }));
+  const dims = Object.fromEntries(list.map((x) => [x.id, { w: 262, h: 300 }]));
+  const res = W.arrange(list, dims, 1000, { cards: { width: 262, gap: 16 }, rtl: true });
+  assert.equal(res.at[list[0].id].left + res.at[list[0].id].w, 1000);
+  assert.ok(res.at[list[1].id].left < res.at[list[0].id].left);
+});
+
+test('initial feature choices are local fallbacks and saved switches arriving through sync win', () => {
+  const D = require('../defaults.js'), raw = { enhance: { todo: false } };
+  const before = structuredClone(raw);
+  const initial = D.GZ_SANITIZE(raw, true);
+  assert.equal(initial.enhance.notes, true);
+  assert.equal(initial.enhance.pet, true);
+  assert.deepEqual(raw, before, 'reading defaults never writes a synced preference');
+  assert.equal(initial.enhance.todo, false);
+  const synced = D.GZ_SANITIZE({ enhance: { notes: false, pet: false } }, true);
+  assert.equal(synced.enhance.notes, false);
+  assert.equal(synced.enhance.pet, false);
+  assert.equal(D.GZ_SANITIZE(raw).enhance.notes, false, 'an existing install keeps its original default');
+  assert.ok(!W.layout().boards.dash.some((t) => t.id === 'pet' && t.on), 'missing layout storage does not authorize a seed');
+});
+
+test('an explicitly empty saved board stays empty when normalized, without requiring off entries for every widget', () => {
+  const saved = { tiles: [], boards: { courses: [], dash: [], cdash: [] }, todo: true, canvasTodo: true, filled: ['dash', 'cdash'] };
+  const read = W.layout(saved);
+  assert.ok(!read.tiles.some((t) => t.on));
+  for (const board of W.BOARDS) assert.ok(!read.boards[board].some((t) => t.on), board);
+  assert.deepEqual(W.apply(read, fill('canvas')), read);
+  assert.deepEqual(W.apply(read, fill('ultra')), read);
+  assert.deepEqual(W.layout({ tiles: [], todo: true, canvasTodo: true }).boards.dash.filter((t) => t.on).map((t) => t.id),
+    ['notes', 'agenda', 'timer', 'quotes', 'todo'], 'an unspecified legacy Dashboard keeps its historical defaults');
+});
+
+test('a stale automatic fill cannot add cards to an existing unfilled board without install authority', () => {
+  const saved = { todo: true, canvasTodo: true, filled: [], tiles: W.TILES.map((id) => ({ id, on: false })),
+    boards: Object.fromEntries(W.BOARDS.map((b) => [b, W.TILES.map((id) => ({ id, on: false }))])) };
+  const lay = W.layout(saved);
+  assert.deepEqual(W.apply(lay, fill('canvas')), lay);
+  assert.deepEqual(W.apply(lay, fill('ultra')), lay);
+});
+
+test('a delayed settings read cannot replace a newer install or sync snapshot', async () => {
+  const fs = require('node:fs'), vm = require('node:vm'), D = require('../defaults.js');
+  const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+  const part = source.slice(source.indexOf('  let lookX;'), source.indexOf('  // The previous palette covers storage latency'));
+  for (const initial of [false, true]) {
+    const sync = [], local = [];
+    const load = vm.runInNewContext(`${part}\nload;`, { GZ_DEFAULTS: D.GZ_DEFAULTS, GZ_SANITIZE: D.GZ_SANITIZE, sessionStorage: { setItem() {} },
+      chrome: { runtime: {}, storage: { sync: { get: (_, cb) => sync.push(cb) }, local: { get: (_, cb) => local.push(cb) } } } });
+    const older = load(), newer = load();
+    sync[1](initial ? {} : { enhance: { notes: false } }); local[1]?.({ freshDefaults: { fresh: true } });
+    const latest = await newer;
+    sync[0](initial ? {} : { enhance: { notes: true } }); local[0]?.({});
+    const late = await older;
+    assert.equal(late.enhance.notes, latest.enhance.notes, 'the last completed callback cannot revive an older preference');
+    assert.equal(late.enhance.notes, initial);
+  }
 });

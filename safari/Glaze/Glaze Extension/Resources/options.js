@@ -1029,7 +1029,7 @@ GZ_UI.load().then((s) => {
     if (area === 'local' && changes.seenCourses) renderCourses(changes.seenCourses.newValue);
     if (area === 'local' && (changes.gradescope || changes.seenCourses)) gsLoad();
     if (area === 'sync' && changes.cards) renderCardSet(changes.cards.newValue);
-    if (area === 'sync') syncSettings();
+    if (area === 'sync' || (area === 'local' && changes.freshDefaults)) syncSettings();
   });
 
   // ---- share: a theme code is the palette, look and background, checked by lib/share.js ----
@@ -1273,6 +1273,8 @@ GZ_UI.load().then((s) => {
       const keys = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'exportKeys' });
       if (!keys?.ok || !Array.isArray(keys.keys)) throw new Error('keys');
       const r = await chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks', 'navItems', 'navbarItems']);
+      const fresh = (await chrome.storage.local.get('freshDefaults')).freshDefaults?.fresh === true;
+      r.navbarItems = GZ_NAVBAR.initial(r.navbarItems, r.navItems, fresh);
       const all = await chrome.storage.local.get(null);
       const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
       const pets = GZ_PET.backup(Object.fromEntries(Object.entries(all).filter(([k]) => GZ_PET.KEY.test(k))));

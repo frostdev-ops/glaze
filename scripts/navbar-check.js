@@ -34,6 +34,8 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     page.on('pageerror', (e) => errors.push(String(e)));
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
     await page.goto(`chrome-extension://${extensionId(src)}/preview.html?site=ultra`);
+    // Exercise the native items with an explicit preference, independent of fresh-install navigation defaults.
+    await page.evaluate(() => chrome.storage.sync.set({ navbarItems: { glaze: [] } }));
     await page.waitForFunction(() => globalThis.GZ_CTX);
     const send = (navbar, extra = {}) => page.evaluate((s) => window.postMessage({ gzPreview: s }, location.origin), G.GZ_SANITIZE({ navbar, enhance: { dashboard: true }, motion: { level: 'subtle' }, ...extra }));
     const bar = (fn, arg) => page.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gz-navbar')?.shadowRoot, a), [String(fn), arg]);

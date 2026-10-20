@@ -1497,14 +1497,23 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
 
   // Independent card/widget stores aren't theme settings; don't transfer them on every page load.
   let lookX;
-  const load = () => new Promise((res) => {
-    try { chrome.storage.sync.get([...Object.keys(GZ_DEFAULTS), 'lookX'], (raw) => { lookX = chrome.runtime.lastError ? undefined : raw?.lookX; res(GZ_SANITIZE(chrome.runtime.lastError ? {} : raw)); }); }
-    catch { res(GZ_SANITIZE()); }
-  }).then((s) => {
-    // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
-    try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
-    return s;
-  });
+  let settingsRead = 0, settingsPending;
+  const load = () => {
+    const n = ++settingsRead;
+    return (settingsPending = Promise.all([new Promise((res) => {
+      try { chrome.storage.sync.get([...Object.keys(GZ_DEFAULTS), 'lookX'], (raw) => res(chrome.runtime.lastError ? {} : raw)); }
+      catch { res({}); }
+    }), new Promise((res) => {
+      try { chrome.storage.local.get('freshDefaults', (r) => res(r?.freshDefaults?.fresh === true)); } catch { res(false); }
+    })]).then(([raw, fresh]) => {
+      if (n !== settingsRead) return settingsPending;
+      lookX = raw?.lookX;
+      const s = GZ_SANITIZE(raw, fresh);
+      // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
+      try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
+      return s;
+    }));
+  };
   // The previous palette covers storage latency, avoiding a dark flash with a light look.
   const KEPT = 'gz-settings';
   try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
@@ -1557,7 +1566,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       courseList = changes.seenCourses.newValue || {};
       reapply();
     }
-    if (area !== 'sync' || isPreview || !Object.keys(changes).some((k) => k in settings || k in GZ_SPEC)) return;
+    if (isPreview || !(area === 'local' && changes.freshDefaults) && (area !== 'sync' || !Object.keys(changes).some((k) => k in settings || k in GZ_SPEC))) return;
     load().then((s) => {
       const was = settings.enabled && links.length > 0;
       settings = s;

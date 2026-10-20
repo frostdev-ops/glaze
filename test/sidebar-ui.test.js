@@ -572,3 +572,18 @@ test('Canvas reserves the footer height before it scrolls into view, without mea
   p.side.sync(false);
   assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-foot'), '', 'teardown restores the page');
 });
+
+test('a late site registration or cleared test-copy storage retries an unfinished migration', async () => {
+  const p = page(); p.net.failType = 'glaze:sidebar';
+  await p.pass();
+  assert.equal(p.side.rec().mig, 0);
+  p.net.failType = '';
+  for (const fn of [...p.storeListeners]) fn({ ultra: { newValue: ['https://school.test'] } }, 'local');
+  await settle();
+  assert.equal(p.side.rec().mig, 1, 'registration finishing after the first migration request recovers without a reload');
+  delete p.store[KEY];
+  for (const fn of [...p.storeListeners]) fn({ [KEY]: { newValue: undefined } }, 'local');
+  for (const fn of [...p.storeListeners]) fn({ freshDefaults: { newValue: { fresh: true, pending: false } } }, 'local');
+  await settle();
+  assert.equal(p.store[KEY].mig, 1, 'the localhost clear/install sequence recreates the current account record');
+});

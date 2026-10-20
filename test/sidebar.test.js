@@ -154,7 +154,7 @@ const yes = { lms: 'canvas', todo: true };
 // A board listing every built-in tile, off unless given.
 const all = (on = {}) => [...Object.entries(on).map(([id, v]) => ({ id, ...v })), ...W.TILES.filter((id) => !(id in on)).map((id) => ({ id, on: false }))];
 test('migration: a new install gets To Do then Glaze settings on both sites', () => {
-  const fresh = { ...W.layout(), sidebarFresh: true };
+  const fresh = W.fresh();
   for (const lms of ['canvas', 'ultra']) {
     const r = S.migrate(fresh, null, { lms, todo: true });
     // Owner 2026-10-20: settings joins To Do; starter widgets stay on the Dashboard.
@@ -221,7 +221,7 @@ test('migration runs once: repeated, it changes nothing; a choice already made i
 });
 
 test('a fresh-install marker never overrides a later To Do removal or Ultra board disagreement', () => {
-  const fresh = { ...W.layout(), sidebarFresh: true };
+  const fresh = W.fresh();
   const canvas = W.apply(fresh, { ops: [{ s: 'cdash', id: 'todo', set: { on: false } }] });
   const ultra = W.apply(fresh, { ops: ['courses', 'dash'].map((s) => ({ s, id: 'todo', set: { on: false } })) });
   for (const [lms, lay] of [['canvas', canvas], ['ultra', ultra]]) {

@@ -152,7 +152,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (seenRoute !== path) { seenRoute = path; gen++; }
     return `${DOC}.${gen}`;
   };
-  const post = (k, ops) => (framed ? globalThis.GZ_CTABS?.sidebar?.(k, ops, genOf()) || Promise.resolve(null) : send({ type: 'glaze:sidebar', key: k, ops }));
+  const post = (k, ops) => {
+    if (framed) return globalThis.GZ_CTABS?.sidebar?.(k, ops, genOf()) || Promise.resolve(null);
+    // The worker may have restarted before persisting the bootstrap's site report.
+    if (ultra) send({ type: 'glaze:ultra' });
+    return send({ type: 'glaze:sidebar', key: k, ops });
+  };
   // A change that finishes after the page moved on still counts (what is stored is adopted), but says nothing here.
   const op = (ops) => {
     if (!active || asleep || !rec || !S?.ops(ops)) return Promise.resolve(false);
@@ -174,7 +179,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       return ok;
     });
   };
-  const onStore = (ch, a) => { if (a === 'local' && key && ch[key]) { reads++; if (!flying && rec) adopt(ch[key].newValue); } };
+  const onStore = (ch, a) => {
+    if (a !== 'local' || !key) return;
+    if (ch[key]) { reads++; if (!flying && rec) adopt(ch[key].newValue); }
+    // Registration and the localhost copy's clear/install can finish after the first request. Retry from stored state.
+    if (active && rec && !rec.mig && (ch.ultra || ch.freshDefaults || ch[key])) op([{ op: 'migrate' }]);
+  };
 
   // Who is signed in: the page's account reader (content.js GZ_CTX.account), the uid the worker checks the key against.
   const account = async () => String((await ctx.account()) ?? '');

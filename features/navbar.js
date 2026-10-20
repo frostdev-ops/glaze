@@ -39,6 +39,16 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     svg.append(path); return svg;
   };
   const get = (keys) => new Promise((res) => { try { chrome.storage.sync.get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
+  let itemRead = 0;
+  const readItems = () => {
+    const n = ++itemRead;
+    return Promise.all([get(['navbarItems', 'navItems']), new Promise((res) => {
+      try { chrome.storage.local.get('freshDefaults', (r) => res(r?.freshDefaults?.fresh === true)); } catch { res(false); }
+    })]).then(([r, fresh]) => {
+      if (n !== itemRead) return;
+      prefs = M.initial(r.navbarItems, r.navItems, fresh); legacy = r.navItems ? N.clean(r.navItems) : null; sig = ''; sync();
+    });
+  };
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const plain = (e) => !e.button && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
   const wide = () => matchMedia('(min-width: 900px)').matches;
@@ -829,7 +839,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Orphaned (orphaned() above): the bar stays as it is drawn, rather than leave the page without any navigation.
     if (host && !chrome.runtime?.id) return;
     if (!on()) { stop(); return; }
-    if (!read) { read = true; get(['navbarItems', 'navItems']).then((r) => { prefs = M.clean(r.navbarItems); legacy = r.navItems ? N.clean(r.navItems) : null; sig = ''; sync(); }); }
+    if (!read) { read = true; readItems(); }
     if (applied !== settings()) { rail = null; peekTo(false); applied = settings(); }
     if (rail && rail === settings().rail) rail = null;
     if (host && !host.isConnected) stop();
@@ -879,11 +889,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   };
   const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };
   chrome.storage.onChanged.addListener((c, area) => {
+    if ((area === 'local' && c.freshDefaults) || (area === 'sync' && (c.navbarItems || c.navItems))) readItems();
     if (area === 'local' && logo.id && c[`navLogo:${logo.id}`]) { clearLogo(); sig = ''; if (host) sync(); }
     if (area !== 'sync' || !chrome.runtime?.id) return;
-    if (c.navbarItems) prefs = M.clean(c.navbarItems.newValue);
-    if (c.navItems) legacy = c.navItems.newValue ? N.clean(c.navItems.newValue) : null;
-    if (c.navbarItems || c.navItems) { sig = ''; if (host) sync(); }
   });
   addEventListener('resize', () => { if (!host) return; measured = ''; tip(null); menuTo('', false); placePanel(); if (!wide()) peekTo(false); else sheetTo(false); sync(); });
   addEventListener('popstate', () => { if (host) { panelTo('', null, false); queue(); } });

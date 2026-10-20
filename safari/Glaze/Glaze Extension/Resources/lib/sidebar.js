@@ -281,16 +281,16 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
 
   // New installs dock the existing settings editor after To Do (owner, 2026-10-20). Migrated accounts and explicit
   // destinations, including removals, stay as saved.
-  const migrate = (raw, rec, opts) => {
+  const migrate = (raw, rec, opts = {}) => {
     const before = clean(rec), r = migrateBase(raw, before, opts);
-    return !before.mig && raw?.sidebarFresh === true && raw?.starter === true && !own(before.dest, 'settings')
+    return opts.settings !== false && !before.mig && raw?.sidebarFresh === true && raw?.starter === true && !own(before.dest, 'settings')
       ? one(r, { op: 'dock', id: 'settings' }) : r;
   };
 
   // The worker's side ('glaze:sidebar'): m { key, ops } on what is stored now, migrating first if this account hasn't
   // been, so the move is written before it takes effect. sync (optional) gives enhance.todo. → { ok, rec } (what is
   // stored after), or { ok: false, error } with the record left as stored. Nothing changed, nothing written.
-  const change = async (m, local, sync) => {
+  const change = async (m, local, sync, opts = {}) => {
     const at = parse(m?.key);
     if (!at || !ops(m.ops)) return { ok: false, error: 'bad' };
     const got = await local.get([m.key, 'widgetLayout']);
@@ -298,7 +298,7 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
     let r = before;
     if (!r.mig) {
       const enhance = sync ? (await sync.get('enhance')).enhance : null;
-      r = migrate(got.widgetLayout, r, { lms: at.lms, todo: enhance?.todo !== false });
+      r = migrate(got.widgetLayout, r, { lms: at.lms, todo: enhance?.todo !== false, ...opts });
     }
     r = apply(r, m.ops, { lms: at.lms, lay: got.widgetLayout });
     if (JSON.stringify(r) === JSON.stringify(before) && own(got, m.key)) return { ok: true, rec: before };

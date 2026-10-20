@@ -98,18 +98,18 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     const ids = [...TILES, ...Object.keys(more).filter((id) => MORE_ID.test(id) && !TILES.includes(id))];
     const fresh = !raw || typeof raw !== 'object' || !Object.keys(raw).length;
     const starts = fresh ? [] : STARTED;
-    const tiles = each(raw?.tiles, ids, (x) => tile(x, more, starts));
+    const tiles = each(raw?.tiles, ids, (x) => tile(x, more, Array.isArray(raw?.tiles) && !raw.tiles.length ? [] : starts));
     const start = { cdash: tiles.map((x) => ({ id: x.id, on: x.on && !x.float, size: x.size })), courses: tiles.map((x) => ({ id: x.id, on: x.on, size: 's' })), dash: TILES.map((id) => ({ id, on: starts.includes(id) || id === 'todo' })) };
     const boards = Object.fromEntries(BOARDS.map((b) => {
-      const list = Array.isArray(raw?.boards?.[b]) ? raw.boards[b] : fresh && b !== 'courses'
-        ? [...STARTER.map((id) => ({ id, on: true, size: 's', h: id === 'pet' ? 330 : 220 })), { id: 'todo', on: true }] : start[b];
+      const list = Array.isArray(raw?.boards?.[b]) ? raw.boards[b] : start[b];
       const courses = [], counts = new Map();
       for (const x of list) {
         const c = course(x?.id);
         if (!c || c.canvas !== (b === 'cdash') || courses.includes(x.id) || courses.length >= COURSE_TOTAL || (counts.get(c.origin) || 0) >= COURSE_MAX) continue;
         courses.push(x.id); counts.set(c.origin, (counts.get(c.origin) || 0) + 1);
       }
-      return [b, each(list, [...ids, ...courses], (x) => btile(x, more, starts))];
+      const empty = Array.isArray(raw?.boards?.[b]) && !raw.boards[b].length;
+      return [b, each(list, [...ids, ...courses], (x) => btile(x, more, empty ? [] : starts))];
     }));
     // The Courses page's To Do became a tile (owner, 2026-10-15). Before, it couldn't be on that board, so an "off"
     // kept there was never the student's choice: a layout without the mark (todo) gets it on, small, unplaced (the
@@ -131,8 +131,13 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     // starter records the initial seed; it never enables a removed widget.
     // sidebarFresh: this device's layout began with a new install (lib/background.js keepWidgets), for the sidebar's
     // one-time move of To Do (lib/sidebar.js migrate). Kept as it is; nothing here reads it.
-    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled: BOARDS.filter((b) => filled.includes(b)), ...((fresh || raw?.starter === true) && { starter: true }), ...(raw?.sidebarFresh === true && { sidebarFresh: true }) };
+    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled: BOARDS.filter((b) => filled.includes(b)), ...(raw?.starter === true && { starter: true }), ...(raw?.sidebarFresh === true && { sidebarFresh: true }) };
   };
+  // Only onInstalled authorizes the starter layout. Missing storage on an update, restore or another page is not proof.
+  const fresh = () => layout({ starter: true, sidebarFresh: true, todo: true, canvasTodo: true, filled: [],
+    tiles: TILES.map((id) => ({ id, on: false })), boards: Object.fromEntries(BOARDS.map((b) => [b,
+      [...(b === 'courses' ? [] : STARTER.map((id) => ({ id, on: true, size: 's', h: id === 'pet' ? 330 : 220 }))),
+        ...TILES.filter((id) => b === 'courses' || !STARTER.includes(id)).map((id) => ({ id, on: id === 'todo' }))]])) });
   // What an update keeps on a device with no layout stored: the tiles it showed when a new layout started with four. Its
   // notes box (the notes' own switch) and Ultra's Dashboard (shown whatever the widgets' switch) as they were, and the
   // other three where the widgets' switch was turned on (widgets): off where it was off or never set, since that switch
@@ -216,20 +221,23 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   // other on purpose stay so.
   // → { at: { id: { left, top, w, h, r } }, order (reading order), stack, bottom }.
   // ponytail: free room is found by a scan of grid cells, fine for a dozen tiles.
-  const arrange = (tiles, dims, W, { col = null, w0 = 0, courseArea = null, ordered = false, cards = null } = {}) => {
+  const arrange = (tiles, dims, W, { col = null, w0 = 0, courseArea = null, ordered = false, cards = null, rtl = false } = {}) => {
     const at = {}, rects = [];
     // Unplaced Dashboard tiles flow in aligned rows: utilities first, course cards below. Once moved, the student's
     // free layout wins. Width is the board's actual room, after the sidebar and navigation have taken theirs.
-    if (cards && (!col || (courseArea && tiles.every((t) => course(t.id)))) && tiles.every((t) => t.x === null)) {
+    if (cards && (!col || (courseArea && tiles.every((t) => course(t.id))))
+      && tiles.every((t) => t.x === null && !t.w && !(course(t.id) && t.size && t.size !== 's'))) {
       let top = courseArea?.top || 0;
       const left = courseArea?.left || 0, room = courseArea ? Math.max(0, Math.min(W - left, courseArea.width)) : W;
       const rows = (items, min, gap, even = false) => {
+        items = items.filter((t) => dims[t.id]);
+        if (!items.length) return;
         const count = Math.max(1, Math.min(items.length, Math.floor((room + gap) / (min + gap))));
         const cols = even && items.length === 4 && count === 3 ? 2 : count, w = (room - gap * (cols - 1)) / cols;
         for (let i = 0; i < items.length; i += cols) {
           const row = items.slice(i, i + cols).filter((t) => dims[t.id]);
           const h = Math.max(0, ...row.map((t) => dims[t.id].h));
-          row.forEach((t, j) => { at[t.id] = { left: left + j * (w + gap), top, w, h: dims[t.id].h, r: false }; });
+          row.forEach((t, j) => { at[t.id] = { left: left + (rtl ? room - w - j * (w + gap) : j * (w + gap)), top, w, h: dims[t.id].h, r: false }; });
           top += h + gap;
         }
       };
@@ -346,7 +354,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     // Check auto-fill against the layout in the worker's queue, not the tab's earlier snapshot. A second fill cannot
     // restore removed cards or reset their size; an edit made while the request waited also takes precedence.
     if (BOARDS.includes(m?.fill)) {
-      if (l.filled.includes(m.fill)) return l;
+      if (!l.starter || l.filled.includes(m.fill)) return l;
       l = { ...l, filled: [...l.filled, m.fill] };
       if (l.boards[m.fill].some((x) => x.on && x.id !== 'todo' && !(l.starter && STARTER.includes(x.id)))) return l;
     }
@@ -596,7 +604,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     return `${REPO}/issues/new?${new URLSearchParams({ labels: 'bug', body })}`;
   };
 
-  return { SPEC, TILES, SIZES, course, COURSE_MAX, COURSE_TOTAL, mood, ticks, layout, kept, move, set, place, spot, EDGE, SNAP, BOARDS, WIDTH, MIN_W, MIN_H, GRID, GAP, snap, stretch, arrange, spotOf, reserve, front, bset, floating, corner, apply, change, DASH, landing, music, IDLE, cleanTimer, len, left, start, pause, advance, clock, breath, quoteAt, NOTES_MAX, notesKey, NOTES_KEY, cleanNote, saveNote, links, agenda, browser, feedback };
+  return { SPEC, TILES, SIZES, course, COURSE_MAX, COURSE_TOTAL, mood, ticks, layout, fresh, kept, move, set, place, spot, EDGE, SNAP, BOARDS, WIDTH, MIN_W, MIN_H, GRID, GAP, snap, stretch, arrange, spotOf, reserve, front, bset, floating, corner, apply, change, DASH, landing, music, IDLE, cleanTimer, len, left, start, pause, advance, clock, breath, quoteAt, NOTES_MAX, notesKey, NOTES_KEY, cleanNote, saveNote, links, agenda, browser, feedback };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WIDGETS; else GZ_WIDGETS;

@@ -184,16 +184,17 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
     });
     const load = () => {
       const at = revision;
-      return chrome.storage.sync.get(['navbarItems', 'navItems']).then((r) => {
+      return Promise.all([chrome.storage.sync.get(['navbarItems', 'navItems']), chrome.storage.local?.get('freshDefaults') || {}]).then(([r, local]) => {
         if (writing || at !== revision) return;
-        prefs = saved = M().clean(r.navbarItems); written = JSON.stringify(prefs); legacy = r.navItems ? NI().clean(r.navItems) : null; render();
+        prefs = saved = M().initial(r.navbarItems, r.navItems, local.freshDefaults?.fresh === true); written = JSON.stringify(prefs); legacy = r.navItems ? NI().clean(r.navItems) : null; render();
       }, () => {});
     };
     chrome.storage.onChanged.addListener((c, area) => {
+      if (area === 'local' && c.freshDefaults) { load(); return; }
       if (area !== 'sync') return;
       if (c.navItems) legacy = c.navItems.newValue ? NI().clean(c.navItems.newValue) : null;
       if (c.navbarItems && !writing && JSON.stringify(M().clean(c.navbarItems.newValue)) !== written) { load(); return; }
-      if (c.navItems || c.navbarItems) render();
+      if (c.navItems || c.navbarItems) load();
     });
     // Mods that may arrange the bar (nav.layout granted, or told "Use my own" in the bar): each one's switch, storage.local
     // modNavLayout:<id> (false: its layouts stay off).

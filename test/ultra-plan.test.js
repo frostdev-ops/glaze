@@ -166,7 +166,7 @@ test('a fresh install keeps its starter layout on later updates, while an older 
   const fresh = worker();
   fresh.installed[0]({ reason: 'install' }); await settle();
   fresh.installed[0]({ reason: 'update' }); await settle();
-  assert.deepEqual(W.layout(fresh.store.local.widgetLayout), { ...W.layout(), sidebarFresh: true }, 'owner 2026-10-20: starter defaults are installed once');
+  assert.deepEqual(W.layout(fresh.store.local.widgetLayout), W.fresh(), 'owner 2026-10-20: starter defaults are installed once');
   const old = worker(); old.store.sync.enhance.widgets = true;
   old.installed[0]({ reason: 'update' }); await settle();
   assert.deepEqual(W.layout(old.store.local.widgetLayout), W.kept(true));

@@ -102,6 +102,22 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
       const cards = document.getElementById('DashboardCard_Container').getBoundingClientRect(), grid = document.querySelector('.gz-dash-grid').getBoundingClientRect();
       return [...document.querySelectorAll('#gz-dash .gz-w')].every((e) => e.getBoundingClientRect().bottom <= cards.top + 1) && grid.bottom <= cards.top + 1;
     });
+    const nativeGrid = async () => {
+      for (const dir of ['ltr', 'rtl']) for (const width of [1600, 1280, 768, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate((dir) => { document.documentElement.dir = dir; }, dir);
+        const rows = await page.evaluate(() => {
+          const host = document.querySelector('#DashboardCard_Container .ic-DashboardCard__box__container'), r = host.getBoundingClientRect();
+          const cards = [...host.querySelectorAll('.ic-DashboardCard')].map((e) => { const a = e.getBoundingClientRect(); return { left: a.left - r.left, top: a.top, width: a.width }; });
+          return { width: r.width, row: cards.filter((c) => Math.abs(c.top - cards[0].top) < 1).sort((a, b) => a.left - b.left) };
+        });
+        ok(Math.abs(rows.row[0].left) < 1 && Math.abs(rows.row.at(-1).left + rows.row.at(-1).width - rows.width) < 1,
+          `native grid ${dir} ${width}: card borders stay inside their tracks`);
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.evaluate(() => { document.documentElement.dir = 'ltr'; });
+      await stable();
+    };
     const notes = { [`notes:${O}/3`]: { text: 'Read chapter 4. Office hours Tuesday at 2pm.', at: Date.now() } };
     if (local) {
       const credentialsFile = process.env.CANVAS_CREDENTIALS || path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
@@ -113,6 +129,7 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
       const courses = await page.evaluate(() => fetch('/api/v1/courses', { headers: { accept: 'application/json' } }).then((r) => r.text()).then((s) => JSON.parse(s.replace(/^while\(1\);/, ''))));
       await store(settings('Paper'), { widgetLayout: old });
       await open();
+      await nativeGrid();
       ok(JSON.stringify((await rects()).map((x) => x.id)) === JSON.stringify(['timer', 'quotes', 'notes', 'todo']), 'local: legacy board migrates in reading order');
       ok(await page.locator(tile('timer')).count() === 1 && await page.locator(tile('music')).count() === 1, 'local: one instance per destination');
       ok(await cardsClear(), 'local: board reserves room above native course cards');
@@ -149,6 +166,8 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
     }
     await store(settings('Paper'), { widgetLayout: old, ...notes });
     await open();
+    await nativeGrid();
+    if (process.env.CANVAS_GRID_ONLY === '1') return;
     ok(JSON.stringify((await rects()).map((x) => x.id)) === JSON.stringify(['timer', 'quotes', 'notes', 'todo']), 'old grid reading order migrates with the To Do widget');
     ok((await rects()).find((x) => x.id === 'notes').w === 512, 'old large size is its default width');
     ok(await page.locator('#gz-float section[data-tile="music"]').count() === 1, 'legacy float stays global, once');
