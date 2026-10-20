@@ -1482,6 +1482,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   // The helpers a file loaded by need() may use (features/*.js): this frame's, through one name. The part's are asked
   // of it when called, so a part that comes late still answers.
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, moment, gradeMoment, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
+    account: () => (site === 'canvas' ? X.ctx.profile().then((p) => String(p.id)) : X.ctx.me()),
     // The palette, the keys, the course menu, the previews and Download all (W0c).
     site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf,
     nickOf: (cid) => X.nickOf(cid), courseList: () => courseList, courseColors, varText, cardUI,

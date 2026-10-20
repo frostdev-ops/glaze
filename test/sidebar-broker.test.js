@@ -13,12 +13,34 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const CANVAS = 'https://school.instructure.com', CANVAS2 = 'https://other.instructure.com', ULTRA = 'https://bb.example.edu', ULTRA2 = 'https://bb.other.edu';
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 
-const worker = ({ local = {} } = {}) => {
+// Evaluate the shipped context and adapter exports, with their actual cached identity readers. Other helpers are idle.
+const pageContext = (site, origin, account, reads) => {
+  const part = read(`content-${site}.js`);
+  const adapter = /ctx: (\{[^\n]+\}),\n/.exec(part)[1];
+  const core = read('content.js');
+  const context = core.slice(core.indexOf('globalThis.GZ_CTX = Object.freeze({'), core.indexOf('\n\n  // Independent card/widget stores'));
+  const readers = site === 'canvas' ? part.slice(part.indexOf('  let mine = null;'), part.indexOf('  // Who is signed in'))
+    : part.slice(part.indexOf('  let meId = null;'), part.indexOf('  const covered ='));
+  const api = async (path) => { reads.push(path); return { id: account() }; };
+  const page = vm.createContext({ location: { origin }, capi: api, api });
+  vm.runInContext(`${readers}
+    const idle = () => {};
+    const scope = new Proxy({ Object, String, globalThis, site: ${JSON.stringify(site)}, X: { ctx: {} }, observer: {}, chrome: { runtime: { id: 'glaze' } },
+      ${site === 'canvas' ? 'profile' : 'me'} }, {
+      has: () => true, get: (o, k) => k === Symbol.unscopables ? undefined : k in o ? o[k] : idle,
+    });
+    with (scope) { X.ctx = (${adapter}); ${context} }
+  `, page);
+  return page;
+};
+
+const worker = ({ local = {}, production = false, manualTimers = false } = {}) => {
   const m = require('../manifest.json');
   const store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [ULTRA, ULTRA2], ...local }, session: {} };
-  const fail = { set: 0 }, slow = { get: 0 };
+  const fail = { set: 0 }, slow = { get: 0, script: false };
   const accounts = { [CANVAS]: '42', [CANVAS2]: '42', [ULTRA]: '_9_1', [ULTRA2]: '_9_1' };
-  const pages = new Map(), probes = [];
+  const pages = new Map(), probes = [], reads = [], scripts = [], timers = new Map();
+  let timerId = 0;
   const area = (s, name) => ({
     get: async (k) => {
       for (let i = 0; i < (name === 'local' ? slow.get : 0); i++) await new Promise(setImmediate);
@@ -29,7 +51,9 @@ const worker = ({ local = {} } = {}) => {
   });
   const listeners = [], installed = [];
   const context = vm.createContext({
-    URL, console, TextEncoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto,
+    URL, console, TextEncoder, structuredClone, Promise, Date, Intl,
+    setTimeout: manualTimers ? (fn, ms) => { const id = ++timerId; timers.set(id, { fn, ms }); return id; } : setTimeout,
+    clearTimeout: manualTimers ? (id) => timers.delete(id) : clearTimeout, crypto: globalThis.crypto,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
       runtime: {
@@ -42,11 +66,13 @@ const worker = ({ local = {} } = {}) => {
         getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {},
         executeScript: async (o) => {
           probes.push(JSON.parse(JSON.stringify(o.target)));
+          if (slow.script) await new Promise((res) => scripts.push(res));
           const s = pages.get(o.target.documentIds?.[0] || `${o.target.tabId}:${o.target.frameIds[0]}`);
           if (!s) throw Error('document gone');
           const origin = new URL(s.url === 'about:blank' ? s.tab.url : s.url).origin;
-          const page = vm.createContext({ location: { origin }, GZ_CTX: {
-            site: origin.includes('instructure') ? 'canvas' : 'ultra', on: () => true, me: async () => accounts[origin],
+          const page = production ? pageContext(origin.includes('instructure') ? 'canvas' : 'ultra', origin, () => accounts[origin], reads)
+            : vm.createContext({ location: { origin }, GZ_CTX: {
+            site: origin.includes('instructure') ? 'canvas' : 'ultra', on: () => true, account: async () => accounts[origin],
           } });
           return [{ result: await vm.runInContext(`(${o.func})(...${JSON.stringify(o.args || [])})`, page) }];
         },
@@ -60,13 +86,49 @@ const worker = ({ local = {} } = {}) => {
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
     if (!kept) res('ignored');
   });
-  return { store, send, installed, fail, slow, accounts, pages, probes };
+  return { store, send, installed, fail, slow, accounts, pages, probes, reads, scripts, timers };
 };
 // A tab's frame: Canvas's pages anywhere on the site, Ultra's under /ultra.
 const at = (url, frameId = 0, tab = url) => ({ id: 'glaze', url, frameId, tab: { id: 1, url: tab } });
 const cKey = (o = CANVAS, uid = '42') => S.key('canvas', o, uid), uKey = (o = ULTRA, uid = '_9_1') => S.key('ultra', o, uid);
 const sb = (key, ops) => ({ type: 'glaze:sidebar', key, ops });
 const CP = at(`${CANVAS}/courses/1`), UP = at(`${ULTRA}/ultra/course`);
+
+test('the broker identity reader exists on the real frozen page context and uses each adapter cache', async () => {
+  for (const [sender, key, site, origin] of [[CP, cKey(), 'canvas', CANVAS], [UP, uKey(), 'ultra', ULTRA]]) {
+    const reads = [], page = pageContext(site, origin, () => site === 'canvas' ? '42' : '_9_1', reads);
+    const called = /String\(await c\.(\w+)\(\)\)/.exec(read('lib/background.js'))[1];
+    assert.equal(vm.runInContext('Object.isFrozen(GZ_CTX)', page), true);
+    assert.equal(typeof page.GZ_CTX[called], 'function', `${site}: the broker's reader is exported`);
+    assert.equal(await page.GZ_CTX[called](), site === 'canvas' ? '42' : '_9_1');
+    assert.equal(await page.GZ_CTX[called](), site === 'canvas' ? '42' : '_9_1');
+    assert.deepEqual(reads, [site === 'canvas' ? '/users/self/profile' : '/users/me']);
+    const w = worker({ production: true, manualTimers: true });
+    assert.equal((await w.send(sb(key, [{ op: 'width', px: 410 }]), sender)).ok, true);
+    assert.equal(w.timers.size, 0, 'successful checks clear their deadline');
+  }
+});
+
+test('a stalled identity round trip releases the shared queue and its late result cannot write', async () => {
+  const w = worker({ manualTimers: true });
+  w.slow.script = true;
+  const pending = w.send(sb(cKey(), [{ op: 'width', px: 410 }]), CP);
+  await settle();
+  let finished = false;
+  const other = w.send({ type: 'glaze:widgetLayout', ops: [{ s: 'cdash', id: 'notes', set: { on: true } }] }, CP).then((r) => { finished = true; return r; });
+  await settle();
+  assert.equal(finished, false, 'the identity check holds the shared queue');
+  assert.equal(w.timers.size, 1, 'the round trip has a deadline');
+  const deadline = [...w.timers.values()][0];
+  assert.ok(deadline.ms > 0 && deadline.ms <= 2000, 'release the queue within two seconds');
+  deadline.fn();
+  assert.deepEqual(await pending, { ok: false, error: 'sender' });
+  assert.equal((await other).ok, true, 'another broker write proceeds after the deadline');
+  assert.equal(w.timers.size, 0);
+  w.scripts[0]();
+  await settle();
+  assert.ok(!(cKey() in w.store.local), 'late identity success must not migrate or edit');
+});
 
 test("a Canvas or Ultra page writes its account's record; any other sender, frame or shape is refused", async () => {
   const w = worker();
