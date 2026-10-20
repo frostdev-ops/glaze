@@ -159,12 +159,12 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const due = ms(row?.column?.dueDate);
     // [M] IN_PROGRESS is a saved draft, not a submission. [M] attemptDate is the submission time (equal to the
     // receipt's whenever there is one, and there often isn't).
-    const draft = a?.status === 'IN_PROGRESS';
-    const at = (!draft && ms(a?.attemptDate)) || null;
+    const draft = a?.status === 'IN_PROGRESS' || row?.status === 'IN_PROGRESS';
+    const handed = P.submitted(row);
+    const at = (handed && !draft && ms(a?.attemptDate)) || null;
     const graded = row?.status === 'GRADED' || s === 'GRADED';
-    // Handed in with no date to go by: a submitted status, a row waiting for a grade, or an earlier attempt behind
-    // a draft [I].
-    const handed = !!at || s === 'SUBMITTED' || row?.status === 'NEEDS_GRADING' || (draft && !!row.firstAttemptId && row.firstAttemptId !== row.lastAttemptId);
+    // Attempt ids and dates alone cannot prove a hand-in. An earlier submission behind a new draft needs Ultra's
+    // explicit SUBMITTED status; the draft's date cannot tell when that earlier submission was handed in.
     const out = (state) => ({ state, submitted: handed, graded, draft, at, due });
     // [M] isExempt (none seen exempt); [D] EXEMPT.
     if (row?.isExempt === true || s === 'EXEMPT') return out('excused');
@@ -176,7 +176,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     if (handed || graded) return out('unknown');
     // Nothing handed in: Ultra says so, or the row has no attempt and no grade at all ([M]: a row with nothing yet
     // carries no status). [I] missing once the due date has passed.
-    const nothing = s ? NOTHING.has(s) : !row?.status && (!row?.lastAttemptId || draft);
+    const nothing = draft || (s ? NOTHING.has(s) : !row?.status && !row?.lastAttemptId);
     if (!nothing) return out('unknown');
     if (!due || due > now) return out('open');
     return out(excepted ? 'unknown' : 'missing');

@@ -178,6 +178,33 @@ test('where work stands: a table of measured and synthetic rows ([I] rules, unkn
   assert.equal(U.standing(noReceipt, NOW).at, Date.parse(late.lastAttempt.attemptDate));
 });
 
+test('saved drafts stay open in Better To Do despite attempt dates or multiple attempt ids', () => {
+  const T = require('../lib/todo.js');
+  const column = { dueDate: '2026-10-20T12:00:00Z', contentId: '_703_1' };
+  const base = { columnId: '_603_1', column, firstAttemptId: '_810_1', lastAttemptId: '_813_1', lastAttempt: { status: 'IN_PROGRESS', attemptDate: '2026-10-21T12:00:00Z' } };
+  const cases = [
+    base,
+    { ...base, status: 'NEEDS_GRADING' },
+    { ...base, submissionStatus: { status: 'NOT_SUBMITTED' } },
+    { ...base, status: 'IN_PROGRESS', lastAttempt: { attemptDate: base.lastAttempt.attemptDate } },
+    { ...base, lastAttempt: { attemptDate: base.lastAttempt.attemptDate } },
+  ];
+  for (const row of cases) {
+    const st = U.standing(row, LATER);
+    assert.equal(st.submitted, false, JSON.stringify(row));
+    assert.equal(st.at, null, 'an attempt date is not a submission time');
+    assert.equal(st.state, st.draft ? 'missing' : 'unknown');
+    if (st.draft) {
+      assert.equal(U.standing(row, NOW).state, 'open');
+      assert.equal(U.standing(row, LATER, true).state, 'unknown');
+    }
+    const [item] = U.due({ todo: [{ overdueItems: [{ title: 'Draft', dueDate: column.dueDate, column: { id: row.columnId, courseId: '_101_1' } }] }], rows: { _101_1: [row] }, now: LATER });
+    assert.equal(T.isDone(item, 'auto'), false, 'the planner cannot auto-complete a saved draft');
+  }
+  const prior = U.standing({ ...base, submissionStatus: { status: 'SUBMITTED' } }, LATER);
+  assert.deepEqual([prior.state, prior.submitted, prior.draft, prior.at], ['unknown', true, true, null]);
+});
+
 test('due items: To Do and the calendar as planner items, twins deduped, joined by column id only', () => {
   const calendar = clone(load('calendar-items').results);
   // An item no gradebook row has: a calendar entry with no grade state. Titled like a real column, it still joins nothing.

@@ -181,6 +181,45 @@ test('the gradebook by content item, and what counts as done', () => {
   assert.ok(!P.isDone('mixed', {}));
 });
 
+test('saved Ultra drafts and attempt metadata do not prove submission or completion', () => {
+  const attemptDate = '2026-10-10T12:00:00Z';
+  const rows = [
+    { status: 'NEEDS_GRADING', lastAttempt: { status: 'IN_PROGRESS', attemptDate } },
+    { status: 'IN_PROGRESS', lastAttempt: { attemptDate } },
+    { lastAttempt: { attemptDate }, firstAttemptId: '_1_1', lastAttemptId: '_2_1' },
+    { status: 'NEEDS_GRADING', submissionStatus: { status: 'NOT_SUBMITTED' }, lastAttempt: { status: 'COMPLETED', attemptDate } },
+    { submissionStatus: { status: 'UNOPENED' }, lastAttempt: { attemptDate } },
+  ];
+  for (const g of rows) {
+    assert.equal(P.submitted(g), false, JSON.stringify(g));
+    assert.equal(P.isDone(null, g), false);
+    // A saved draft or explicit unsubmitted status overrides even a stale completed circle.
+    if (g.status === 'IN_PROGRESS' || g.lastAttempt.status === 'IN_PROGRESS' || g.submissionStatus) assert.equal(P.isDone('true', g), false);
+    assert.deepEqual(P.status('Due: 10/4/26 11:59 PM', null, g, now, true), { label: 'Past due · Not submitted', tone: 'overdue' });
+  }
+});
+
+test('explicit submission survives a newer draft, and projected Canvas submissions still work', () => {
+  const g = { submissionStatus: { status: 'SUBMITTED' }, lastAttempt: { status: 'IN_PROGRESS', attemptDate: '2026-10-10T12:00:00Z' } };
+  assert.equal(P.submitted(g), true);
+  assert.equal(P.isDone('mixed', g), true);
+  assert.deepEqual(P.status('Due: 10/4/26 11:59 PM', 'mixed', g, now), { label: 'Submitted', tone: 'done' });
+  assert.equal(P.submitted(P.canvasGrade({ submission: { submitted_at: '2026-10-10T12:00:00Z' } })), true);
+  assert.equal(P.submitted({ submissionStatus: { status: 'GRADED' }, lastAttempt: { status: 'COMPLETED', attemptDate: '2026-10-10T12:00:00Z' } }), true);
+  assert.equal(P.submitted({ lastAttempt: { status: 'COMPLETED', attemptDate: '2026-10-10T12:00:00Z' } }), true);
+  assert.equal(P.submitted(undefined), false);
+});
+
+test('neutral NO_STATUS preserves native completion without claiming an external-tool submission', () => {
+  const g = { submissionStatus: { status: 'NO_STATUS' } };
+  assert.equal(P.submitted(g), false);
+  assert.equal(P.isDone('true', g), true);
+  assert.equal(P.isDone('mixed', g), false);
+  assert.deepEqual(P.status('Due: 10/4/26 11:59 PM', 'true', g, now, true), { label: 'Done', tone: 'done' });
+  assert.equal(P.isDone('true', { ...g, lastAttempt: { status: 'IN_PROGRESS' } }), false);
+  assert.equal(P.isDone('true', { ...g, status: 'IN_PROGRESS' }), false);
+});
+
 test('command palette matching: in order, word starts and runs first', () => {
   const rank = (q, list) => list.map((t) => [t, P.fuzzy(q, t)]).filter(([, s]) => s >= 0).sort((a, b) => b[1] - a[1]).map(([t]) => t);
   assert.deepEqual(rank('cal', ['Calendar', 'Local files', 'Course calendar', 'Grades']), ['Calendar', 'Course calendar', 'Local files']);
