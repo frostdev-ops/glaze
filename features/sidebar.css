@@ -7,6 +7,9 @@
   /* Where the column and the edge buttons end: above Glaze's footer (--gz-sb-foot, from features/sidebar.js) and the
      navigation's bottom bar on narrow screens (--gz-sb-bottom), whichever reaches higher. */
   :root { --gz-sb-end: max(var(--gz-sb-bottom, 0px), var(--gz-sb-foot, 0px)); }
+  /* Canvas's nested discussion drawer can exhaust before the outer app drawer. Keep the wheel in the app rather than
+     chaining into the document's in-flow footer and changing the sidebar's viewport offsets. */
+  html[data-gz-sidebar] :is(#drawer-layout-content, #discussion-drawer-layout) { overscroll-behavior-y: contain; }
   /* Beside the content, the whole window wide: the column ends at the window's edge, not halfway across. The content's
      own reading width still holds its prose. */
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #wrapper { max-width: none; }

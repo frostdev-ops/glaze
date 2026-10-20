@@ -158,16 +158,20 @@ const layoutOk = async (name, width) => {
     const wheelScroll = async (root, label) => {
       const behind = root === page ? null : await page.evaluate(() => [scrollY, document.getElementById('drawer-layout-content')?.scrollTop || 0]);
       await root.waitForSelector('[data-gz-sidebar-host]', { state: 'attached' });
+      // Canvas can mount its app drawer after the sidebar is ready, changing which element owns the page scroll.
+      await root.waitForLoadState('networkidle');
       await root.waitForFunction(() => document.documentElement.dataset.gzSidebar && !document.documentElement.hasAttribute('data-gz-ctab-framed') && !document.documentElement.hasAttribute('data-gz-placing'));
+      if (/\/discussion_topics\/\d+/.test(new URL(root.url()).pathname)) await root.waitForSelector('#discussion-drawer-layout [data-testid="discussion-topic-container"]');
       await root.evaluate(() => {
         const content = document.getElementById('content');
-        let main = content;
+        const discussion = document.getElementById('discussion-drawer-layout');
+        let main = discussion || content;
         while (main && main !== document.body && !/^(auto|scroll|overlay)$/.test(getComputedStyle(main).overflowY)) main = main.parentElement;
         if (!main || main === document.body) main = document.scrollingElement;
         const host = document.querySelector('[data-gz-sidebar-host]');
         const tail = document.createElement('div'); tail.id = 'sidebar-check-tail';
-        if (main.scrollHeight < main.clientHeight + 200) { tail.style.height = `${innerHeight * 2}px`; content.append(tail); }
-        globalThis.__gzSbScrollCheck = { main, host, tail, content };
+        if (main.scrollHeight < main.clientHeight + 200) { tail.style.height = `${innerHeight * 2}px`; (discussion?.querySelector('#module_sequence_footer_container') || content).append(tail); }
+        globalThis.__gzSbScrollCheck = { main, host, tail, content, discussion };
         main.scrollTop = 0; host.scrollTop = 0;
       });
       try {
@@ -175,8 +179,9 @@ const layoutOk = async (name, width) => {
         const offset = root === page ? { x: 0, y: 0 } : await (await root.frameElement()).boundingBox();
         const wheel = async (side, delta, down) => {
           const point = await root.evaluate((side) => {
-            const { main, host, content } = __gzSbScrollCheck, r = (side ? host : content).getBoundingClientRect();
-            const x = side ? r.right - 20 : Math.max(20, Math.min(r.left + r.width / 2, innerWidth - 20));
+            const { main, host, content, discussion } = __gzSbScrollCheck, r = (side ? host : discussion || content).getBoundingClientRect();
+            // The discussion's gutter stays outside its RCE iframe and reply controls.
+            const x = side ? r.right - 20 : discussion ? r.left + 12 : Math.max(20, Math.min(r.left + r.width / 2, innerWidth - 20));
             const y = side ? r.top + r.height / 2 : Math.min(innerHeight - 120, Math.max(140, r.top + 60));
             const sc = side ? host : main;
             return { x, y, before: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight, hit: (side ? host : content).contains(document.elementFromPoint(x, y)) };
@@ -184,7 +189,12 @@ const layoutOk = async (name, width) => {
           ok(point.hit, `${label}: ${side ? 'sidebar' : 'main'} receives pointer input`);
           await page.mouse.move(offset.x + point.x, offset.y + point.y); await page.mouse.wheel(0, delta);
           const target = Math.max(0, Math.min(point.max, point.before + delta));
-          await root.waitForFunction(({ side, target }) => Math.abs(__gzSbScrollCheck[side ? 'host' : 'main'].scrollTop - target) <= 1, { side, target }, { timeout: 10000 });
+          await root.waitForFunction(({ side, before, delta }) => {
+            const sc = __gzSbScrollCheck[side ? 'host' : 'main'];
+            // Native sidebar blocks can finish loading during the gesture and extend its scroll range.
+            return Math.abs(sc.scrollTop - Math.max(0, Math.min(sc.scrollHeight - sc.clientHeight, before + delta))) <= 1;
+          }, { side, before: point.before, delta }, { timeout: 10000 });
+          if (target === point.before) await page.waitForTimeout(100);
           ok(true, `${label}: ${side ? 'sidebar' : 'main'} wheels ${down ? 'down' : 'up'}`);
         };
         await wheel(false, 400, true); await wheel(false, -400, false);
@@ -194,15 +204,31 @@ const layoutOk = async (name, width) => {
         await root.waitForFunction(() => { const { host } = __gzSbScrollCheck; return host.getClientRects().length && host.scrollHeight > host.clientHeight + 200; });
         await wheel(true, 400, true); await wheel(true, -400, false);
         ok(await root.evaluate(() => __gzSbScrollCheck.main.scrollTop <= 1), `${label}: sidebar wheels leave the main content in place`);
-        if (behind) ok(JSON.stringify(behind) === JSON.stringify(await page.evaluate(() => [scrollY, document.getElementById('drawer-layout-content')?.scrollTop || 0])), `${label}: wheels never chain to the covered document`);
+        // Exhaust both scrollers, then wheel again: a middle-of-page gesture cannot expose scroll chaining.
+        await wheel(true, 100000, true); await wheel(true, 400, true); await wheel(true, -100000, false);
         if (drawer) { await page.keyboard.press('Escape'); await root.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-sidebar-open')); }
+        const discussion = await root.evaluate(() => !!__gzSbScrollCheck.discussion);
+        const outside = discussion && await root.evaluate(() => [scrollY, document.getElementById('drawer-layout-content').scrollTop]);
+        await wheel(false, 100000, true); await wheel(false, 400, true); await wheel(false, -100000, false);
+        if (discussion) {
+          ok(JSON.stringify(outside) === JSON.stringify(await root.evaluate(() => [scrollY, document.getElementById('drawer-layout-content').scrollTop])), `${label}: discussion boundaries leave the outer document and drawer in place`);
+          // Open the existing reply form and inspect/focus its empty RCE. Never type, post, or submit.
+          await root.locator('[data-testid="discussion-topic-reply"]').click();
+          await root.waitForFunction(() => document.querySelector('iframe.tox-edit-area__iframe')?.contentDocument?.body?.isContentEditable);
+          ok(await root.locator('iframe.tox-edit-area__iframe').evaluate((e) => {
+            __gzSbScrollCheck.editor = e; e.contentDocument.body.focus({ preventScroll: true });
+            return document.activeElement === e && e.contentDocument.activeElement === e.contentDocument.body;
+          }), `${label}: the native reply editor accepts focus`);
+          await wheel(false, 400, true); await wheel(false, -400, false);
+          ok(await root.evaluate(() => { const e = __gzSbScrollCheck.editor; return e.isConnected && e === document.querySelector('iframe.tox-edit-area__iframe') && e.contentDocument.body.isContentEditable; }), `${label}: discussion scrolling preserves the native RCE iframe`);
+        }
+        if (behind) ok(JSON.stringify(behind) === JSON.stringify(await page.evaluate(() => [scrollY, document.getElementById('drawer-layout-content')?.scrollTop || 0])), `${label}: wheels never chain to the covered document`);
       } finally {
         await root.evaluate(() => { __gzSbScrollCheck.tail.remove(); delete globalThis.__gzSbScrollCheck; });
       }
     };
-    // The discussion topic's wheel check fails on the reviewed base too (its React page's own scroller): left out here
-    // until the scroll work covers it; SIDEBAR_SCROLL_PAGES=discussion runs it alone.
-    const scrollPages = [...PAGES.filter(([n]) => n !== 'discussion' || process.env.SIDEBAR_SCROLL_PAGES), ...(take ? [['quiz-take', `/courses/${hist.id}/quizzes/${take.id}/take`]] : [])];
+    const scrollPages = [...PAGES, ...(take ? [['quiz-take', `/courses/${hist.id}/quizzes/${take.id}/take`]] : [])];
+    const wheelStart = checks;
     const recordKey = `sidebar:canvas:${local}/${me.id}`;
     for (const tabs of [false, true]) {
       const s = settings(true, true); s.enhance.tabs = tabs; s.navbar.tabs = false;
@@ -210,11 +236,11 @@ const layoutOk = async (name, width) => {
         dock: [{ id: 'todo' }, { id: 'notes', h: 1800 }], dest: { todo: 'dock', notes: 'dock' } } });
       for (const [name, at] of scrollPages.filter(([n]) => !process.env.SIDEBAR_SCROLL_PAGES || process.env.SIDEBAR_SCROLL_PAGES.split(',').includes(n))) for (const width of [1440, 1024, 768, 390]) {
         console.log(`wheel ${name} ${width} ${tabs ? 'course tabs' : 'direct'}`);
+        // Each viewport starts without a prior page's scroll gesture or same-URL history restoration.
+        await page.close(); page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
         await page.setViewportSize({ width, height: 900 });
         let root = page;
         if (tabs) {
-          await page.close(); page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
-          await page.setViewportSize({ width, height: 900 });
           // A real owned frame, reached through the same link interception as native LMS navigation.
           const other = courses.find((c) => String(c.id) !== at.match(/^\/courses\/(\d+)/)?.[1]);
           await page.goto(`${local}/courses/${other.id}`);
@@ -234,10 +260,17 @@ const layoutOk = async (name, width) => {
           }
         } else await page.goto(local + at);
         await wheelScroll(root, `${name} ${width} ${tabs ? 'course tabs' : 'direct'}`);
+        if (tabs && name === 'discussion' && width === 1440) {
+          const cid = new URL(page.url()).pathname.match(/^\/courses\/(\d+)/)[1];
+          await root.locator(`#gz-ctabs .gz-ctab[data-course-id="${cid}"] .gz-ctab-name`).click();
+          await page.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-ctab-framed'));
+          ok(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY !== 'hidden' && getComputedStyle(document.getElementById('drawer-layout-content')).overflowY === 'auto'), 'returning to the top course restores its native scrolling');
+        }
         if (tabs && name === 'course-home' && width === 1440) await shot('scroll-course-home-fixed');
       }
     }
-    if (process.env.SIDEBAR_SCROLL_ONLY) { console.log(`passed; ${checks} wheel checks`); return; }
+    console.log(`passed; ${checks - wheelStart} wheel checks`);
+    if (process.env.SIDEBAR_SCROLL_ONLY) return;
 
     // Real pointer gestures, modal keyboard behavior, and appearance under alternate browser settings.
     await page.setViewportSize({ width: 1600, height: 1000 });
