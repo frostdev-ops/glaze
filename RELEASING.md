@@ -13,6 +13,60 @@ Everything a release builds goes in `release/<version>/` (gitignored), one folde
 
 `release/appcast.xml` is the one file outside a version folder: the signed Mac update feed, holding every version.
 
+## Steps
+
+1. Bump `version` in `manifest.json`, add the `CHANGELOG.md` entry, commit.
+2. `sh scripts/release.sh` runs the tests and builds the Chrome zip. With `MAC=1` and notarization
+   credentials (`NOTARY_PROFILE`, or `ASC_KEY_PATH`/`ASC_KEY_ID`/`ASC_ISSUER_ID`) it also builds the notarized
+   Mac app and DMG.
+3. `sh scripts/safari-appcast.sh release/<v>/github/glaze-<v>-safari-macos.dmg /path/to/Sparkle/bin` signs the
+   update entry into `release/appcast.xml`.
+4. Tag `v<v>` and push it. CI (`.github/workflows/package.yml`) builds the Chrome zip into a draft GitHub release.
+   Merge the same main release commit into the permanent `dev/firefox` branch, retaining its compatibility fixes,
+   and require its tests and zero-warning Firefox lint to pass. Build the Firefox upload and reviewer source ZIPs
+   from that exact Firefox commit (`sh scripts/package-firefox.sh`, then `git archive --format=zip -o <source.zip> HEAD`).
+   Copy its Firefox package into `release/<v>/github/` and `release/<v>/firefox/`, with the source ZIP in `firefox/`.
+   Upload the Firefox package, notarized DMG, Mac zip and matching checksums, then publish the completed draft.
+   Never publish a Firefox package built from main alone. Do not rebase, force-push or delete `dev/firefox`.
+5. Publish the appcast on frostdev.io at `/projects/glaze/appcast.xml`, only after the DMG is on GitHub.
+6. Stores, each from its folder:
+   - Chrome Web Store: `sh scripts/publish-chrome.sh release/<v>/chrome-web-store/glaze-v<v>.zip`, or upload it in the dashboard.
+   - Firefox Add-ons: upload `release/<v>/firefox/glaze-v<v>-firefox.zip` at addons.mozilla.org. When it asks for source
+     code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js has fixed local imports and a compatibility
+     shim, three.js is a custom build, and lottie-web's player is the official light canvas build with one comment line on top. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh` and `scripts/vendor-lottie.sh`.
+   - App Store: `sh scripts/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh scripts/appstore-ios.sh`.
+
+## The mod blocklist
+
+Glaze stops mods that a list names, and only the owner can sign the list (`lib/blocklist.js`). The private
+key lives on the owner's own computer: never in the repo, on a server, or in a backup others can read.
+
+Once, before the first release that includes mods:
+
+1. `node scripts/blocklist-sign.mjs keygen ~/glaze-blocklist.key` (any path outside the repo). The file is made mode 600; an
+   existing file is never overwritten and a path inside the repo is refused. Back it up offline: with the key lost, only a
+   new release with a new key can block anything again.
+2. Paste the public key it prints over `PENDING_OWNER_KEY` in `lib/blocklist.js` (`OWNER_KEY`) and release that. Until
+   then the extension accepts no list at all. Release check: `grep PENDING_OWNER_KEY lib/blocklist.js` finds nothing.
+3. Put the same public key in `BLOCKLIST_KEY` in the gallery server's `/etc/glaze-gallery.env` and restart its container
+   (frostdev.io `docs/looks-gallery.md`, "Mod blocklist").
+
+To block something, and to renew (a list expires 30 days after it is signed):
+
+1. Keep the working list in a file outside the repo, say `~/blocklist.json`:
+   `{ "mods": [id], "bundles": [bundle hash], "authors": [author key], "reasons": { "<an entry above>": "why, in one plain line" } }`.
+   A mod's id, bundle hash and author key are in its `mod:<id>` record and the gallery listing. A reason is shown to the
+   student next to the stopped mod (at most 200 characters, one line, and only for something listed). Taking an entry out
+   unblocks that mod; it stays off until the student turns it on.
+2. `node scripts/blocklist-sign.mjs sign ~/glaze-blocklist.key ~/blocklist.json` writes `~/blocklist.signed.json` with
+   `seq` one higher than the working file's (and records it there), `issued` now and `expires` 30 days later. It refuses
+   a key other than the pinned one, a list the extension would reject, and a key file others can read.
+3. Publish it: copy the signed file into the glaze-gallery volume on loothing-vps and run
+   `docker exec glaze-gallery node gallery.mjs --blocklist /data/blocklist.signed.json`. The server checks the signature,
+   expiry and `seq` and says why if it refuses; `curl -i https://frostdev.io/glaze/mods/api/blocklist` shows what is served.
+4. Do 2 and 3 again before the 30 days are up, even with nothing new, or extensions treat the list as out of date: blocks it
+   made stay, but later blocks and unblocks reach no one. Extensions pick a new list up within a day of opening.
+
 ## Build and submit all three stores
 
 After updating the manifest/changelog and committing the release source, run:
@@ -104,57 +158,3 @@ check that the PID in `.lock` has stopped before removing that lock and resuming
 API references: [Chrome publishing](https://developer.chrome.com/docs/webstore/api/reference/rest/v2/publishers.items/publish),
 [AMO submissions](https://mozilla.github.io/addons-server/topics/api/addons.html),
 [Apple review submissions](https://developer.apple.com/documentation/appstoreconnectapi/review-submissions).
-
-## Steps
-
-1. Bump `version` in `manifest.json`, add the `CHANGELOG.md` entry, commit.
-2. `sh scripts/release.sh` runs the tests and builds the Chrome zip. With `MAC=1` and notarization
-   credentials (`NOTARY_PROFILE`, or `ASC_KEY_PATH`/`ASC_KEY_ID`/`ASC_ISSUER_ID`) it also builds the notarized
-   Mac app and DMG.
-3. `sh scripts/safari-appcast.sh release/<v>/github/glaze-<v>-safari-macos.dmg /path/to/Sparkle/bin` signs the
-   update entry into `release/appcast.xml`.
-4. Tag `v<v>` and push it. CI (`.github/workflows/package.yml`) builds the Chrome zip into a draft GitHub release.
-   Merge the same main release commit into the permanent `dev/firefox` branch, retaining its compatibility fixes,
-   and require its tests and zero-warning Firefox lint to pass. Build the Firefox upload and reviewer source ZIPs
-   from that exact Firefox commit (`sh scripts/package-firefox.sh`, then `git archive --format=zip -o <source.zip> HEAD`).
-   Copy its Firefox package into `release/<v>/github/` and `release/<v>/firefox/`, with the source ZIP in `firefox/`.
-   Upload the Firefox package, notarized DMG, Mac zip and matching checksums, then publish the completed draft.
-   Never publish a Firefox package built from main alone. Do not rebase, force-push or delete `dev/firefox`.
-5. Publish the appcast on frostdev.io at `/projects/glaze/appcast.xml`, only after the DMG is on GitHub.
-6. Stores, each from its folder:
-   - Chrome Web Store: `sh scripts/publish-chrome.sh release/<v>/chrome-web-store/glaze-v<v>.zip`, or upload it in the dashboard.
-   - Firefox Add-ons: upload `release/<v>/firefox/glaze-v<v>-firefox.zip` at addons.mozilla.org. When it asks for source
-     code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js has fixed local imports and a compatibility
-     shim, three.js is a custom build, and lottie-web's player is the official light canvas build with one comment line on top. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh` and `scripts/vendor-lottie.sh`.
-   - App Store: `sh scripts/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh scripts/appstore-ios.sh`.
-
-## The mod blocklist
-
-Glaze stops mods that a list names, and only the owner can sign the list (`lib/blocklist.js`). The private
-key lives on the owner's own computer: never in the repo, on a server, or in a backup others can read.
-
-Once, before the first release that includes mods:
-
-1. `node scripts/blocklist-sign.mjs keygen ~/glaze-blocklist.key` (any path outside the repo). The file is made mode 600; an
-   existing file is never overwritten and a path inside the repo is refused. Back it up offline: with the key lost, only a
-   new release with a new key can block anything again.
-2. Paste the public key it prints over `PENDING_OWNER_KEY` in `lib/blocklist.js` (`OWNER_KEY`) and release that. Until
-   then the extension accepts no list at all. Release check: `grep PENDING_OWNER_KEY lib/blocklist.js` finds nothing.
-3. Put the same public key in `BLOCKLIST_KEY` in the gallery server's `/etc/glaze-gallery.env` and restart its container
-   (frostdev.io `docs/looks-gallery.md`, "Mod blocklist").
-
-To block something, and to renew (a list expires 30 days after it is signed):
-
-1. Keep the working list in a file outside the repo, say `~/blocklist.json`:
-   `{ "mods": [id], "bundles": [bundle hash], "authors": [author key], "reasons": { "<an entry above>": "why, in one plain line" } }`.
-   A mod's id, bundle hash and author key are in its `mod:<id>` record and the gallery listing. A reason is shown to the
-   student next to the stopped mod (at most 200 characters, one line, and only for something listed). Taking an entry out
-   unblocks that mod; it stays off until the student turns it on.
-2. `node scripts/blocklist-sign.mjs sign ~/glaze-blocklist.key ~/blocklist.json` writes `~/blocklist.signed.json` with
-   `seq` one higher than the working file's (and records it there), `issued` now and `expires` 30 days later. It refuses
-   a key other than the pinned one, a list the extension would reject, and a key file others can read.
-3. Publish it: copy the signed file into the glaze-gallery volume on loothing-vps and run
-   `docker exec glaze-gallery node gallery.mjs --blocklist /data/blocklist.signed.json`. The server checks the signature,
-   expiry and `seq` and says why if it refuses; `curl -i https://frostdev.io/glaze/mods/api/blocklist` shows what is served.
-4. Do 2 and 3 again before the 30 days are up, even with nothing new, or extensions treat the list as out of date: blocks it
-   made stay, but later blocks and unblocks reach no one. Extensions pick a new list up within a day of opening.
