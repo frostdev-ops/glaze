@@ -101,7 +101,9 @@ const api = (u) => {
   return { results: [] };
 };
 
-const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, enhance: { ...G.GZ_DEFAULTS.enhance, notes: true, widgets: true }, ...extra });
+// This check exercises the legacy boards. Sidebar migration and geometry have their own check.
+const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, ...extra,
+  navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: { ...G.GZ_DEFAULTS.enhance, notes: true, widgets: true, ...extra.enhance, sidebar: false } });
 
 (async () => {
   fs.mkdirSync(out, { recursive: true });
@@ -172,7 +174,8 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         if (cycling) await page.evaluate(() => document.querySelector('section.gz-w[data-tile="quotes"] button[aria-pressed="true"]')?.click());
       }
     };
-    const notes = { [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
+    // These interaction cases need the old populated layout; fresh installs intentionally start empty.
+    const notes = { widgetLayout: require('../lib/widgets.js').layout({ todo: true }), [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
 
     if (!process.env.B10_ONLY) {
     // ---- light: both boards as they start, wide and narrow ---------------------------------------------------------
