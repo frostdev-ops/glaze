@@ -183,13 +183,23 @@ test('timer advance uses the shared model and emits done once for an observed de
   const W = require('../lib/widgets.js');
   let now = Date.now();
   const local = { widgetTimer: { phase: 'work', end: now + 1000, left: 0 } };
-  const { w, sent, moments } = harness({ timer: W, local, now: () => now, send: (_, cb) => cb({ ok: true, timer: W.advance(local.widgetTimer, now, { work: 25, rest: 5 }) }) });
+  const { w, sent, moments } = harness({ timer: W, local, now: () => now, send: (_, cb) => cb({ ok: true, timer: W.advance(local.widgetTimer, now, { work: 25, rest: 5 }), advanced: local.widgetTimer.end }) });
   w.set(['timer']); await settle();
   now += 1005; w.draw(); await settle(); w.draw();
   assert.deepEqual(plain(sent), [{ type: 'glaze:widgetTimer', op: 'advance' }]);
   assert.equal(moments.length, 1);
   assert.equal(moments[0][0], 'timer.done');
   assert.equal(w.nodes.get('timer').box.hasAttribute('data-running'), true, 'the break starts from the shared timer');
+});
+
+test('the nav timer waits for the shared deadline claim before announcing completion', async () => {
+  const W = require('../lib/widgets.js'); let now = Date.now(), reply;
+  const local = { widgetTimer: { phase: 'work', end: now + 1000, left: 0 } };
+  const { w, moments } = harness({ timer: W, local, now: () => now, send: (_, cb) => { reply = cb; } });
+  w.set(['timer']); await settle(); now += 1005; w.draw();
+  assert.equal(moments.length, 0, 'the dock may win the worker queue instead');
+  reply({ ok: true, timer: W.advance(local.widgetTimer, now, { work: 25, rest: 5 }) }); await settle();
+  assert.equal(moments.length, 0, 'a no-op advance does not announce the dock deadline again');
 });
 
 test('preview timer actions stay local and next due never requests site data', async () => {

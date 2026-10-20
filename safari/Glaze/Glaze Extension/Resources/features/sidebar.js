@@ -114,7 +114,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // page around it hides its own. Only the document on screen draws, watches or changes anything: a covered or hidden one
   // keeps its record up to date and waits (asleep), and its changes go through the page around it (GZ_CTABS.sidebar).
   const framed = !!ctx.tabFrame && globalThis.top !== globalThis.window;
-  const covered = () => { const c = globalThis.GZ_CTABS; return c?.visible ? !c.visible() : framed; };
+  const covered = () => { const c = globalThis.GZ_CTABS; return document.visibilityState === 'hidden' || (c?.visible ? !c.visible() : framed); };
   // A request's answer is for the page it was asked on: gen moves on with the route, the account and the document.
   const DOC = Math.random().toString(36).slice(2, 10);
 
@@ -122,7 +122,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let S = null; // lib/sidebar.js
   let on = false, starting = null, failed = false, active = false;
   let key = '', rec = null, flying = 0, reads = 0, lost = false, epoch = 0;
-  let family = '', course = '', gen = 0;
+  let family = '', course = '', gen = 0, route = '', seenRoute = '', nativeView = null;
   let host = null; // { el, page, own }: the column dressed now
   let kept = []; // the native column's own attributes before, as [name, value | null]
   let own = null, head = null, title = null, jump = null, more = null, toggle = null, grip = null, pageHead = null, pageBtn = null;
@@ -130,7 +130,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let mode = 'none', drawer = false, forced = false, opener = null, inerted = [], dragW = 0, modalAway = false;
   let modalObserver = null, backdrop = null, widthCancel = null, lifted = null;
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
-  let mo = null, frame = 0, noteTimer = 0, passFrame = 0, offer = null, asleep = false, movedAt = 0, movedTimer = 0;
+  let mo = null, frame = 0, noteTimer = 0, passFrame = 0, offer = null, asleep = false;
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
   const emit = (e, ...a) => { for (const f of subs[e]) { try { f(...a); } catch { /* one listener's fault stays its own */ } } };
   const on_ = (e, f) => { subs[e]?.add(f); return () => subs[e]?.delete(f); };
@@ -147,7 +147,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     paint();
     layout();
   };
-  const genOf = () => `${DOC}.${gen}`;
+  const genOf = () => {
+    const path = location.pathname + (location.search || '');
+    if (seenRoute !== path) { seenRoute = path; gen++; }
+    return `${DOC}.${gen}`;
+  };
   const post = (k, ops) => (framed ? globalThis.GZ_CTABS?.sidebar?.(k, ops, genOf()) || Promise.resolve(null) : send({ type: 'glaze:sidebar', key: k, ops }));
   // A change that finishes after the page moved on still counts (what is stored is adopted), but says nothing here.
   const op = (ops) => {
@@ -162,15 +166,15 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     return post(k, ops).then((r) => {
       const ok = r?.ok === true;
       if (g !== epoch) return ok;
-      if (!ok && asked === genOf()) lost = true;
+      if (!ok && asked === genOf()) lost = asked;
       if (--flying || k !== key) return ok;
       const n = ++reads;
       get(k).then((x) => { if (g === epoch && !flying && n === reads && k === key && active) adopt(x[k]); });
-      if (lost) { lost = false; if (!asleep) status(t("Couldn't save. Try again.")); }
+      if (lost) { if (!asleep && lost === genOf()) status(t("Couldn't save. Try again.")); lost = false; }
       return ok;
     });
   };
-  const onStore = (ch, a) => { if (a === 'local' && key && ch[key]) { reads++; if (!flying && active) adopt(ch[key].newValue); } };
+  const onStore = (ch, a) => { if (a === 'local' && key && ch[key]) { reads++; if (!flying && rec) adopt(ch[key].newValue); } };
 
   // Who is signed in: the page's account reader (content.js GZ_CTX.account), the uid the worker checks the key against.
   const account = async () => String((await ctx.account()) ?? '');
@@ -193,6 +197,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (key !== k) gen++;
     key = k;
     rec = next;
+    emit('context', context());
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
     return true;
   };
@@ -394,31 +399,40 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // A pass (the site's, or the column changed): the column found again, dressed if it isn't, laid out.
   // The page's kind and course move on only once its new view is there: an address alone (Ultra routes in place) doesn't
-  // relabel what still shows. Its column replaced, a page without one, or a details layer come or gone (the page's own
-  // DOM, not its address) is the new view; else at most a moment later.
-  const settled = (fam) => {
+  // relabel what still shows. A populated replacement column, changed native blocks, or a details layer come or gone
+  // establishes the new view. Elapsed time says nothing about a slow route's content.
+  const viewOf = (n) => {
+    if (!n) return null;
+    const nodes = [...n.page.children].filter((e) => !part(e) && !/^gz-/.test(e.id || '') && !/(^|\s)gz-/.test(e.className || ''));
+    const content = n.el.closest('.course-content-container')?.querySelector('.course-outline-content');
+    return { el: n.el, nodes, text: nodes.map((e) => e.textContent).join('\n'), content,
+      child: content?.querySelector('[class*="contentList-"]')?.lastElementChild || content?.lastElementChild,
+      cid: content?.closest('[bb-course-membership-markups]')?.getAttribute('bb-course-membership-markups') };
+  };
+  const busyView = (el) => !!el?.querySelector('.spinner, [aria-busy="true"], .MuiSkeleton-root, path[class*="makeStylesindeterminateSvg-"]');
+  const settled = (fam, cid, n) => {
     if (!ultra || !family || !host) return true;
-    const n = A.native();
-    if (family === 'detail' || fam === 'detail' || (n ? n.el !== host.el : fam === 'other')) return true;
-    movedAt ||= Date.now();
-    const left = 1200 - (Date.now() - movedAt);
-    if (left <= 0) return true;
-    clearTimeout(movedTimer);
-    movedTimer = setTimeout(() => { if (on && active && !asleep) place(); }, left + 20);
-    return false;
+    if (busyView(n?.el)) return false;
+    if (cid === course && (family === 'detail' || fam === 'detail')) return true;
+    if (!n) return !host.el.isConnected || host.own || !document.querySelector('aside.outline-actions, div.todo-panel');
+    const v = viewOf(n);
+    if (v.cid && cid && v.cid !== cid) return false;
+    const body = v.content && !busyView(v.content) && (v.content !== nativeView?.content || v.child !== nativeView?.child);
+    return body || (filled(n.page) && (!nativeView || n.el !== nativeView.el || v.text !== nativeView.text || v.nodes.length !== nativeView.nodes.length || v.nodes.some((e, i) => e !== nativeView.nodes[i])));
   };
   const place = () => {
     if (!on || !rec) return;
-    if (covered()) { asleep = true; return; }
+    if (covered()) { cover(); return; }
     asleep = false;
     build();
+    const path = location.pathname + (location.search || '');
+    if (route !== path) { route = path; genOf(); closeDrawer(false); }
     const fam = A.family(), cid = A.courseId();
     const moved = fam !== family || cid !== course;
-    if (moved && !settled(fam)) return;
-    movedAt = 0;
-    clearTimeout(movedTimer);
-    if (moved) { family = fam; course = cid; gen++; }
     const n = A.native();
+    if (moved && !settled(fam, cid, n)) return;
+    if (moved) { family = fam; course = cid; gen++; }
+    nativeView = viewOf(n);
     if (!host || !host.el.isConnected || (n ? host.el !== n.el || host.page !== n.page : !host.own)) attach(n);
     else {
       if (head.parentNode !== host.el) host.el.prepend(grip, head);
@@ -447,7 +461,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       closeDrawer(false);
       mo?.disconnect();
       for (const f of [frame, passFrame]) cancelAnimationFrame(f);
-      clearTimeout(movedTimer);
+      clearTimeout(noteTimer);
+      widthCancel?.();
       return;
     }
     if (on) { watch(); sync(true); }
@@ -537,6 +552,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const closeDrawer = (restore = true) => {
     const was = drawer;
     drawer = false;
+    lift(false);
     forced = false;
     modalAway = false;
     modalObserver?.disconnect();
@@ -650,8 +666,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     cancelAnimationFrame(frame);
     cancelAnimationFrame(passFrame);
     clearTimeout(noteTimer);
-    clearTimeout(movedTimer);
-    movedAt = 0;
+    nativeView = null; route = '';
     asleep = false;
     const h = html();
     if (h) {
@@ -660,6 +675,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       h.style?.removeProperty?.('--gz-sb-top');
     }
     removeEventListener('resize', onResize);
+    document.removeEventListener('visibilitychange', cover);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
     starting = null; rec = null; key = ''; flying = 0; lost = false;
     drawnCount = null;
@@ -668,10 +684,16 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const sync = (want) => {
     on = !!want;
     if (!on) { teardown(); return; }
-    ready().then((ok) => {
+    document.addEventListener('visibilitychange', cover);
+    ready().then(async (ok) => {
       if (!ok || !on) return;
-      if (covered()) { asleep = true; return; }
-      if (!active) { addEventListener('resize', onResize); try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ } }
+      const g = epoch;
+      let uid;
+      try { uid = await account(); } catch { if (g === epoch) teardown(); return; }
+      if (g !== epoch || !on) return;
+      if (S.key(LMS, location.origin, uid) !== key) { teardown(); sync(true); return; }
+      if (covered()) { cover(); return; }
+      if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ } }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
       if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
       else place();
@@ -682,9 +704,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // for (gen moves on with the page, the account or the document); on('change' | 'mode' | 'context', fn) → stop; drawn(n)
   // how many widgets it drew into the dock; asleep() while another document has the sidebar; cover() said by course tabs
   // when the document on screen changes.
-  const context = () => ({ site: ctx.site, family, courseId: course, gen: genOf() });
+  const context = () => ({ site: ctx.site, family, courseId: course, accountId: S?.parse(key)?.uid || '', gen: genOf() });
   const hostOf = () => (active && host && !asleep ? { el: host.el, widgets: list, page: host.page, mode, active: true } : null);
-  const drawn = (n) => { if (drawnCount !== n) { drawnCount = n; layout(); } };
+  const drawn = (n) => {
+    if (drawnCount !== n) { drawnCount = n; layout(); }
+    if (!asleep && adding && !adding.hidden) openAdd(true, false);
+  };
   return { sync, ready, cover, asleep: () => asleep, active: () => active, failed: () => failed, rec: () => rec, op, host: hostOf, context, on: on_, say, status, drawn, menu, add: () => { if (mode === 'none' || (mode === 'drawer' && !drawer)) { forced = mode === 'none'; openDrawer(document.activeElement); } openAdd(true); } };
 })();
 

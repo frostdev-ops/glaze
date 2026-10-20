@@ -52,7 +52,8 @@ const widgets = ({ frame = false, raw = only('notes'), where = '/', pet = false 
   doc.body.append(make('header', { id: 'dashboard_header_container' }));
   const loads = [], counts = { profile: 0, resume: 0 }, store = { widgetLayout: structuredClone(raw) };
   c.GZ_WIDGETS = W; c.GZ_I18N = { locale: () => 'en' }; c.GZ_PET_UI = { resume: () => counts.resume++ };
-  c.GZ_CTX = { site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v[n]), locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, pet } }),
+  c.GZ_CTABS = { visible: () => true };
+  c.GZ_CTX = { site: 'canvas', tabFrame: frame ? (where === '/' ? 'page' : '31') : '', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v[n]), locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, pet } }),
     profile: async () => { counts.profile++; return { id: '42', time_zone: 'UTC' }; }, need: async (f) => loads.push(f) };
   c.chrome = { runtime: { id: 'audit', sendMessage: (m, cb) => cb({ ok: true, timer: W.IDLE }) }, storage: {
     local: { get: (keys, cb) => cb(Object.fromEntries([keys].flat().map((k) => [k, store[k]]))) }, sync: { get: (keys, cb) => cb({}) }, onChanged: { addListener() {}, removeListener() {} },

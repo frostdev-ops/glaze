@@ -46,7 +46,7 @@ function world({ at = '/courses/12/modules', showing = '12' } = {}) {
     openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
     load: (cid, f, url) => { calls.push(['load', cid, url]); return true; }, guardFrame() {}, watch: () => calls.push(['watch']),
   });
-  vm.runInContext(part('  const canvasURL = ', '  // On the page itself') + part('  const KEEP = ', '  let showing = ') + part("  // ---- a frame's pages (Canvas)", '  // Canvas: a frame still loading')
+  vm.runInContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const canvasURL = ', '  // On the page itself') + part('  const KEEP = ', '  let showing = ') + part("  // ---- a frame's pages (Canvas)", '  // Canvas: a frame still loading')
     + part('  const dropNext = ', '  // Canvas loads a whole page'), c);
   // Time passes: due timers run, as many rounds as they reschedule.
   const wait = (ms) => {

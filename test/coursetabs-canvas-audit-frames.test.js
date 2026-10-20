@@ -96,7 +96,7 @@ function fixture({ nativePath = '/', saved = new Map(), stored, manualDecode = f
     local: (fn) => fn({ get: (k, cb) => cb({ key: { tabs: stored || tabs } }) }),
     save() {}, draw() {}, lay() {}, clearSlow() {}, slowFrame() {}, later() {},
   });
-  const api = vm.runInContext(part('  const KEEP = ', '  let showing = ')
+  const api = vm.runInContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const KEEP = ', '  let showing = ')
     + part('  const pageable = ', '  // A press on a link')
     + part('  const split = ', '  // What is on screen')
     + part('  const keep = ', '  let capTimer = ')

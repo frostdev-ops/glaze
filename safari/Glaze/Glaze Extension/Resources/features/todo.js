@@ -136,7 +136,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // and an older answer is dropped when it comes.
   const refresh = (force = false) => {
     const g = gen;
-    if (!who || dead) return null;
+    if (!who || dead || asleep || document.visibilityState === 'hidden') return null;
     if (fetching && fetchGen === g) return fetching;
     const done = (p) => { fetching = p; fetchGen = g; p.finally(() => { if (fetching === p) fetching = null; }); return p; };
     if (!force && covers(cache, Date.now())) {
@@ -549,6 +549,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!L || !who) return;
     if (area === 'sync' && changes.todo) readPrefs().then(() => { render(true); refresh(); });
     if (area === 'local' && changes[key]) { data = L.clean(changes[key].newValue); render(true); }
+    if (area === 'local' && !asleep && changes[draftKey()]) { takeDraft(changes[draftKey()].newValue); render(true); }
   };
 
   // ---- on the page -------------------------------------------------------------------------------------------------
@@ -629,7 +630,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!target || !c) return false;
     const was = mounted && JSON.stringify([mounted.courseId, mounted.scope]);
     if (!mounted && box) off(); // the site's own sidebar had it
-    asleep = false;
+    if (!mounted) asleep = false;
     mounted = { target, courseId: String(c.courseId || ''), scope: c.scope === 'all' ? 'all' : 'follow', setScope: c.setScope, rendered: c.rendered, failed: c.failed };
     boxIn();
     if (box.parentNode !== target) target.append(box);
@@ -652,36 +653,42 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   const draftKey = () => (who ? `draft:todo:${location.origin}/${who.uid}` : '');
   const keepDraft = () => {
+    if (asleep) return;
     captureForm();
     const k = draftKey();
     if (!k || !mounted) return;
     try {
-      if (form && ctx.settings().enhance.drafts) store().set({ [k]: { text: form.draft?.title || form.title || '', at: Date.now(), todo: form } });
+      if (form && ctx.settings().enhance.drafts) return put({ [k]: { text: form.draft?.title || form.title || '', at: Date.now(), todo: form } });
       else if (!form) store().remove(k);
     } catch { /* reloaded */ }
   };
   const takeDraft = (d) => {
-    if (form || !mounted || !ctx.settings().enhance.drafts || !d || !(Date.now() - d.at < 14 * 864e5) || !d.todo || typeof d.todo !== 'object') return;
+    if (asleep || form || !mounted || !ctx.settings().enhance.drafts || !d || !(Date.now() - d.at < 14 * 864e5) || !d.todo || typeof d.todo !== 'object') return;
     form = draftForm(d.todo);
     try { store().remove(draftKey()); } catch { /* reloaded */ }
   };
   // Another document takes the sidebar (a course tab's frame shown, or this one hidden; features/widgets.js): the open
   // form goes to the drafts store for whichever document shows next, this one too, and nothing draws or refreshes here
   // meanwhile. Without Back up what you type, it stays in this document's memory only.
-  let asleep = false;
+  let asleep = false, draftRead = 0;
   const suspend = () => {
     if (!mounted || asleep) return;
-    asleep = true;
+    draftRead++;
     captureForm();
-    if (form && who && ctx.settings().enhance.drafts) { keepDraft(); form = null; }
+    if (form && who && ctx.settings().enhance.drafts) {
+      const sent = form, account = formAccount, saved = keepDraft();
+      form = null;
+      Promise.resolve(saved).then((ok) => { if (!ok && !form && formAccount === account) { form = sent; if (!asleep) render(true); } });
+    }
+    asleep = true;
   };
   const resume = async () => {
     if (!asleep) return;
     asleep = false;
     if (!mounted || !who || !box) return;
-    const g = gen, k = draftKey();
+    const g = gen, k = draftKey(), n = ++draftRead;
     const r = await new Promise((res) => { try { store().get(k, res); } catch { res({}); } });
-    if (g !== gen || asleep || !mounted || draftKey() !== k) return;
+    if (g !== gen || n !== draftRead || asleep || !mounted || draftKey() !== k) return;
     takeDraft(r?.[k]);
     render(true);
     refresh();

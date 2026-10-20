@@ -58,7 +58,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
     }
   };
   // The timer is the worker's (glaze:widgetTimer), shared with the dashboard's; the editor's preview keeps its own.
-  const timerAction = async (op, node) => {
+  const timerAction = async (op, node, deadline = 0) => {
     if (!W || timerPending || !node.options) return;
     const pending = timerPending = {};
     const token = rev, read = reads;
@@ -68,7 +68,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
       let timer = W.advance(before, now, node.options);
       if (op === 'reset') timer = W.IDLE;
       if (op === 'toggle') timer = timer.end ? W.pause(timer, now) : W.start(timer, now, node.options);
-      r = { ok: true, timer };
+      r = { ok: true, timer, ...(op === 'advance' && timer !== before && { advanced: before.end }) };
     } else r = await send({ type: 'glaze:widgetTimer', op });
     if (timerPending !== pending) return;
     timerPending = false;
@@ -76,6 +76,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
     node.status.textContent = r?.ok ? '' : t('Not saved. Try again in a moment.');
     timerFailed = r?.ok ? '' : JSON.stringify(W.cleanTimer(local.widgetTimer));
     if (r?.ok) { local.widgetTimer = r.timer; if (op !== 'advance') advanced = ''; }
+    if (deadline && r?.advanced === deadline && document.visibilityState !== 'hidden' && Date.now() - deadline < 2000) X.moment?.('timer.done', null, `timer ${deadline}`);
     draw();
   };
   // A Canvas or Moodle item's address is a path on this site: anything that resolves elsewhere is dropped.
@@ -106,7 +107,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
         const before = W.cleanTimer(local.widgetTimer), state = timerFailed === JSON.stringify(before) ? before : W.advance(before, now, node.options);
         const ended = node.timerEnd === before.end;
         node.timerEnd = before.end > now ? before.end : 0;
-        if (state !== before && advanced !== JSON.stringify(before)) { advanced = JSON.stringify(before); timerAction('advance', node); if (ended && now - before.end < 2000) X.moment?.('timer.done', null, `timer ${before.end}`); }
+        if (state !== before && advanced !== JSON.stringify(before)) { advanced = JSON.stringify(before); timerAction('advance', node, ended && now - before.end < 2000 ? before.end : 0); }
         const left = W.clock(W.left(state, now, node.options)), go = t(state.end ? 'Pause' : 'Start');
         setText(node.time, left); setText(node.goLabel, go);
         if (node.goIcon.dataset.icon !== (state.end ? 'pause' : 'play')) { const svg = icon(state.end ? 'pause' : 'play'); svg.dataset.icon = state.end ? 'pause' : 'play'; node.goIcon.replaceWith(svg); node.goIcon = svg; }

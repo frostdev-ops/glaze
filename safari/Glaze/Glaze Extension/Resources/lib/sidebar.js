@@ -303,7 +303,11 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
     if (!obj(m) || !Number.isSafeInteger(m.n) || m.n < 1 || typeof m.gen !== 'string' || !m.gen || m.gen.length > 64 || !ops(m.ops)) return false;
     const at = parse(m.key);
     if (!at || at.lms !== lms || at.origin !== origin || at.uid !== String(uid ?? '')) return false;
-    try { return JSON.stringify(m.ops).length <= RELAY_MAX; } catch { return false; }
+    try {
+      let bytes = 0;
+      for (const c of JSON.stringify(m.ops)) { const n = c.codePointAt(0); bytes += n < 0x80 ? 1 : n < 0x800 ? 2 : n < 0x10000 ? 3 : 4; if (bytes > RELAY_MAX) return false; }
+      return true;
+    } catch { return false; }
   };
 
   return { KEY, key, parse, clean, relayable, WIDTH, MIN_WIDTH, MAX_WIDTH, GAP, MAIN, MAIN_GRADES, OPS, OPS_MAX, ops, apply, migrate, change, resolve, docked, mode };

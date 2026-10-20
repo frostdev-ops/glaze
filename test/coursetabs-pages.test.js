@@ -114,7 +114,7 @@ function pages({ saved = new Map(), shooting = null } = {}) {
     t: (s) => s, P: () => ({ place: true }), save() {}, draw() {}, lay() {}, unpicture() {}, picture() {}, clearSlow() {}, later() {},
     send: async () => null, say: (s) => notices.push(s),
   });
-  const api = vm.runInContext(part('  const pathOf = ', '  let showing = ') + part('  const drop = ', '  // Canvas loads a whole page')
+  const api = vm.runInContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const pathOf = ', '  let showing = ') + part('  const drop = ', '  // Canvas loads a whole page')
     + part('  const openPage = ', '  // Canvas: a frame still loading')
     + part("  let waiting = '', primed = '';", '  // A frame is shown once')
     + part('  const watch = ', '  // The picture over a frame')
@@ -260,7 +260,7 @@ test('a page URL that redirects off-site cannot repeatedly reload its own redire
     showing: 'page', waiting: '', showTurn: 0, host: { prepend() {} }, watch() {}, t: (s) => s,
     show: (cid) => shown.push(cid), wait() {}, say: (s) => notices.push(s),
   });
-  vm.runInContext(part('  const drop = ', '  // Canvas loads a whole page')
+  vm.runInContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const drop = ', '  // Canvas loads a whole page')
     + part('  const open = ', '  // The picture over a frame') + "\nopen(PAGE, '/external_tools/9');", c);
   handlers.load(); assert.ok(frames.has('page'), 'the initial blank document is handled by the bounded load watcher');
   window.location = { get href() { throw new Error('cross-origin frame'); } };
