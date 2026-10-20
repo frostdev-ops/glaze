@@ -11,8 +11,15 @@ All notable changes to Glaze are documented here. The format follows
 ### Added
 - Mods and Glaze navigation: new permissions `nav.read` (read the bar, Worker only, as personal data), `nav.items` (up to eight items of a mod's own, linking only to the school's site) and `nav.layout` (a layout proposed over yours, with "Arranged by" and Use my own in the bar and in Settings → Navigation items). A mod's navigation replacement now stands in for Glaze's bar, and may open its items with `glaze.nav.go` right after a click.
 
+- Canvas pages you've visited in a course stay live: Back, Forward and links back to them show them at once, as they were, while a fresh copy loads underneath. A link starts loading as you press it, the page on screen stays until the next one is drawn, and the page around the course tabs never reloads.
+
 ### Changed
 - Mods' older `glaze.nav.items` transform reads Glaze's bar. Items a mod adds to the bar link only to pages of the school's site.
+- Canvas pages kept for Back are quiet: their media pauses, other sites' players in them stop until you come back, and after a moment they aren't drawn at all.
+- Canvas loads lighter: course-tab frames get the Look before their first paint and reuse the page's course list and colors instead of asking Canvas again; dashboard grades cover more than 100 courses; course widgets keep their picture while Canvas redraws its cards; a course's colour edit is saved even when you leave at once.
+
+### Fixed
+- Canvas: a reload brings back a course tab whose course is the page's own; a link to a part of another page keeps its place; Glaze's bar keeps a same-site link of yours in the frames; the bar's course menu follows each page of a frame; module progress is asked again a minute after a failed request; Glaze's frames no longer keep pages they've left in memory.
 
 ## [3.2.0] — 2026-10-19
 
