@@ -124,7 +124,7 @@ test('a queued flush stays paused while hidden and rediscovers native roots on r
   assert.equal(tags[0][0], body);
 });
 
-test('draft cleanup reads only listed drafts and skips an unavailable or rejected key listing', async () => {
+test('draft cleanup reads only listed drafts; without a key listing it reads everything at most once a day', async () => {
   const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../content.js'), 'utf8');
   const start = core.indexOf('  const tidyDrafts = '), end = core.indexOf('  // ---- download all', start);
   for (const mode of ['keys', 'absent', 'rejected']) {
@@ -137,7 +137,8 @@ test('draft cleanup reads only listed drafts and skips an unavailable or rejecte
     const data = { 'draft:old': {}, 'other:large': {} };
     const area = {
       ...(mode !== 'absent' && { getKeys: () => mode === 'rejected' ? Promise.reject(new Error('unavailable')) : Promise.resolve(Object.keys(data)) }),
-      get: (keys, cb) => { read.push(keys); cb(keys === null ? data : Object.fromEntries(keys.map((k) => [k, data[k]]))); },
+      get: (keys, cb) => { read.push(keys); cb(keys === null ? data : Object.fromEntries([keys].flat().filter((k) => k in data).map((k) => [k, data[k]]))); },
+      set: (o) => Object.assign(data, o),
       remove: (keys) => removed.push(...keys),
     };
     const window = {};
@@ -149,7 +150,11 @@ test('draft cleanup reads only listed drafts and skips an unavailable or rejecte
     tidy();
     await new Promise(setImmediate);
     assert.equal(rejected.length, 0, mode + ': a failed key listing must not leak a rejected promise');
-    assert.deepEqual(JSON.parse(JSON.stringify(read)), mode === 'keys' ? [['draft:old']] : [], mode);
-    assert.deepEqual(removed, mode === 'keys' ? ['draft:old'] : [], mode);
+    assert.deepEqual(JSON.parse(JSON.stringify(read)), mode === 'keys' ? [['draft:old']] : ['draftsSwept', null], mode);
+    assert.deepEqual(removed, ['draft:old'], mode);
+    if (mode === 'keys') continue;
+    // The same day: no second read of everything.
+    read.length = 0; tidy(); await new Promise(setImmediate);
+    assert.deepEqual(read, ['draftsSwept'], `${mode}: once a day`);
   }
 });
