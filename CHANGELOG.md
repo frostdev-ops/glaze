@@ -4,6 +4,12 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] — 2026-10-20
+
+### Fixed
+- Sidebar headers and controls stay below Blackboard breadcrumbs, document and assessment headers, and Canvas course-tab rows, including when those headers resize.
+- Blackboard discussion participants render in the sidebar again. The column stays within the native discussion layout so participant loading and scrolling continue to work.
+
 ## [3.3.0] — 2026-10-20
 
 ### Added
