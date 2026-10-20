@@ -225,6 +225,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       { label: t('Add widgets'), run: () => openAdd(true) },
       ...(jump.hidden ? [] : [{ label: t('Jump to widgets'), run: jumpTo }]),
       ...(rec && rec.width !== S.WIDTH ? [{ label: t('Reset width'), run: () => { op([{ op: 'width', px: S.WIDTH }]); say(t('Sidebar width reset.')); } }] : []),
+      // The width, expanded, folded sections, To Do's scope and docked widgets' heights as new; placements stay.
+      { label: t('Reset sidebar for this account'), run: () => { op([{ op: 'reset' }]); say(t('Sidebar reset.')); } },
     ]), { className: 'gz-sb-icon gz-sb-more' }), t('Customize sidebar'));
     more.setAttribute('aria-haspopup', 'menu');
     more.setAttribute('aria-expanded', 'false');
@@ -361,6 +363,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // Ultra's adapter says where a fixed column starts (a course's top bar), else below the navigation.
     const top = A.top ? A.top() ?? navTop : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0));
     setVar('--gz-sb-top', `${top}px`);
+    foot();
     pageHead.hidden = pageEmpty;
     jump.hidden = pageEmpty || !docked || !(host.page.offsetHeight > innerHeight * 0.6);
     edge.hidden = next !== 'none';
@@ -435,6 +438,15 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     paint();
     layout();
   };
+  // Glaze's footer: fixed on Ultra, at the end of the page on Canvas. The column, the drawer and the buttons at the
+  // edge stop above it while it shows (features/sidebar.css takes the larger of this and the bottom bar's room).
+  const foot = () => {
+    const f = document.getElementById('gz-footer');
+    const r = f?.isConnected && f.getClientRects().length ? f.getBoundingClientRect() : null;
+    setVar('--gz-sb-foot', `${r && r.top < innerHeight ? Math.max(0, Math.round(innerHeight - r.top)) : 0}px`);
+  };
+  let footFrame = 0;
+  const onScroll = () => { if (asleep || !active || ultra) return; cancelAnimationFrame(footFrame); footFrame = requestAnimationFrame(foot); };
   const onResize = () => { if (asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
   // The document on screen changed (features/coursetabs.js): asleep, the drawer and menu close and nothing is watched;
   // awake again, the column is looked at as on a pass.
@@ -658,8 +670,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       for (const k of ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra']) h.removeAttribute(k);
       h.style?.removeProperty?.('--gz-sidebar-w');
       h.style?.removeProperty?.('--gz-sb-top');
+      h.style?.removeProperty?.('--gz-sb-foot');
     }
     removeEventListener('resize', onResize);
+    removeEventListener('scroll', onScroll);
+    cancelAnimationFrame(footFrame);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
     starting = null; rec = null; key = ''; flying = 0; lost = false;
     drawnCount = null;
@@ -671,7 +686,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     ready().then((ok) => {
       if (!ok || !on) return;
       if (covered()) { asleep = true; return; }
-      if (!active) { addEventListener('resize', onResize); try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ } }
+      if (!active) { addEventListener('resize', onResize); addEventListener('scroll', onScroll, { passive: true }); try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ } }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
       if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
       else place();

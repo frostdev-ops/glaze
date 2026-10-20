@@ -344,6 +344,21 @@ test('an override map at its bound cannot leave a new dock entry without its des
 });
 
 // ---- the layout's mode -----------------------------------------------------------------------------------------------
+test('reset: width, expanded, folds, To Do scope and docked heights as new; destinations, order and removals stay', () => {
+  let r = ops(S.clean({}), { op: 'dock', id: 'todo' }, { op: 'dock', id: 'timer' }, { op: 'dock', id: 'quote' }, { op: 'remove', id: 'quote' },
+    { op: 'width', px: 420 }, { op: 'open', v: false }, { op: 'section', family: 'dashboard', part: 'page', v: true },
+    { op: 'todoScope', v: 'all' }, { op: 'height', id: 'timer', h: 300 }, { op: 'fold', id: 'todo', v: true }, { op: 'move', id: 'timer', by: -1 });
+  r = ops(r, { op: 'reset' });
+  assert.equal(r.width, S.WIDTH);
+  assert.equal(r.open, true);
+  assert.deepEqual(r.fold, {});
+  assert.equal(r.todoScope, 'follow');
+  assert.deepEqual(docked(r), ['timer', 'todo']);
+  assert.deepEqual(r.dock, [{ id: 'timer' }, { id: 'todo' }, { id: 'quote', gone: true }]);
+  assert.equal(r.dest.quote, 'off');
+  assert.ok(S.ops([{ op: 'reset' }]));
+});
+
 test('mode: 352 by default within 288–480, a 16px gap, 720 (900 on grades) for the main column, nothing when empty', () => {
   assert.deepEqual(S.mode({ vw: 352 + 16 + 720 }), { mode: 'expanded', w: 352 });
   assert.deepEqual(S.mode({ vw: 352 + 16 + 719 }), { mode: 'drawer', w: 352 });

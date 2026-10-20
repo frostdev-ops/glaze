@@ -94,6 +94,25 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.waitForFunction(() => document.documentElement.dataset.gzSidebar === 'expanded');
     check(await page.evaluate(() => window.loads === 1) && await page.frames().find((f) => f.parentFrame()).evaluate((b) => window.birth === b && document.querySelector('textarea').value === 'retained draft', birth), 'opening and closing details preserves media and drafts');
     check(await page.locator('[data-gz-sidebar-host][popover]').count() === 0, 'closing the drawer restores native host attributes');
+    // Glaze's fixed footer (theme.css on Ultra), on and off: the column ends above it, and at the window's foot without it.
+    await setup('outline');
+    await page.evaluate(() => {
+      const f = document.createElement('footer'); f.id = 'gz-footer'; f.style.cssText = 'position:fixed;inset:auto 0 0 0;height:32px;z-index:2147483000';
+      document.body.append(f); document.documentElement.setAttribute('data-gz-footer', ''); dispatchEvent(new Event('resize'));
+    });
+    await page.waitForTimeout(150);
+    check(await page.evaluate(() => document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().bottom <= document.getElementById('gz-footer').getBoundingClientRect().top + 1), 'footer on: the column ends above the footer');
+    await shot('outline-footer-on');
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.evaluate(() => document.documentElement.setAttribute('data-gz-navbar', 'rail'));
+    await page.waitForTimeout(150);
+    await page.locator('#gz-sb-launch').click();
+    check(await page.evaluate(() => { const r = document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect(); return r.bottom <= innerHeight - 96 - 32 + 1; }), 'footer and bottom bar: the drawer ends above both');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { document.documentElement.removeAttribute('data-gz-navbar'); document.getElementById('gz-footer').remove(); document.documentElement.removeAttribute('data-gz-footer'); });
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.waitForTimeout(150);
+    check(await page.evaluate(() => Math.abs(document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().bottom - innerHeight) <= 1), 'footer off: the column reaches the window\'s foot');
     await setup('courses');
     await page.evaluate(() => document.documentElement.setAttribute('data-gz-sidebar-todo', ''));
     check(await page.locator('bb-todo').isHidden(), 'screen hides native To Do after replacement');

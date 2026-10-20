@@ -4,6 +4,9 @@
    drawer is open) and how wide (--gz-sidebar-w). All of it is for the screen: printed, the page is as the LMS lays it
    out, without Glaze's parts. Colors, borders, type and shadows are the Look's. */
 @media screen {
+  /* Where the column and the edge buttons end: above Glaze's footer (--gz-sb-foot, from features/sidebar.js) and the
+     navigation's bottom bar on narrow screens (--gz-sb-bottom), whichever reaches higher. */
+  :root { --gz-sb-end: max(var(--gz-sb-bottom, 0px), var(--gz-sb-foot, 0px)); }
   /* Beside the content, the whole window wide: the column ends at the window's edge, not halfway across. The content's
      own reading width still holds its prose. */
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #wrapper { max-width: none; }
@@ -19,11 +22,12 @@
   html[dir="rtl"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #not_right_side { padding-right: 0; padding-left: calc(var(--gz-sidebar-w) + 16px); }
   html[dir="rtl"][data-gz-sidebar="collapsed"] #not_right_side { padding-left: 64px; }
   html[dir="rtl"] [data-gz-sidebar-host] { direction: rtl; }
+  html[dir="rtl"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) [data-gz-sidebar-host] { padding-left: calc(1rem + env(safe-area-inset-left, 0px)) !important; padding-right: 1rem !important; }
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) [data-gz-sidebar-host] {
-    display: block !important; position: fixed !important; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-bottom, 0px); inset-inline-end: 0; inset-inline-start: auto;
+    display: block !important; position: fixed !important; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-end); inset-inline-end: 0; inset-inline-start: auto;
     flex: 0 0 var(--gz-sidebar-w) !important; width: var(--gz-sidebar-w) !important; min-width: 0; max-width: none !important; margin: 0 !important;
     max-height: none !important; overflow-y: auto; overscroll-behavior: contain;
-    padding: 0 1rem 1rem !important; color: var(--gz-ink); font-family: var(--gz-font);
+    padding: 0 calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) 1rem !important; color: var(--gz-ink); font-family: var(--gz-font);
     background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-paint, var(--gz-surface))) !important;
     border-inline-start: 1px solid var(--gz-border-line, var(--gz-line));
   }
@@ -35,7 +39,7 @@
   /* Narrow: a drawer over the page, at the window's right edge above any bottom bar, hidden until opened. */
   html[data-gz-sidebar="drawer"] [data-gz-sidebar-host] { display: none !important; }
   html[data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] {
-    display: block !important; position: fixed !important; z-index: 1300; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-bottom, 0px);
+    display: block !important; position: fixed !important; z-index: 1300; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-end);
     inset-inline-end: 0; inset-inline-start: auto; width: min(var(--gz-sidebar-w), calc(100vw - 16px)) !important; max-width: none !important; margin: 0 !important;
     height: auto; max-height: none; overflow-y: auto; overscroll-behavior: contain; padding: 0 calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) 1rem !important;
     color: var(--gz-ink); font-family: var(--gz-font);
@@ -59,7 +63,7 @@
   [data-gz-sb-overlay] > :not(.gz-sb-resize, .gz-sb-head, #gz-sb-widgets) { display: none !important; }
   [data-gz-sb-fold-page][data-gz-sb-self] > :not(.gz-sb-resize, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets) { display: none !important; }
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-sidebar.gz-sb-fixed {
-    position: fixed !important; z-index: 1000; top: var(--gz-sb-top, calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px))); bottom: var(--gz-sb-bottom, 0px);
+    position: fixed !important; z-index: 1000; top: var(--gz-sb-top, calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px))); bottom: var(--gz-sb-end);
     inset-inline-end: 0; inset-inline-start: auto; max-height: none;
   }
   html[data-gz-sb-ultra]:not([data-gz-sb-fixed])[data-gz-sidebar="expanded"] :is(.base-courses-content, .course-outline-content),
@@ -140,11 +144,13 @@
 
   /* The buttons at the window's edge: Add widgets with nothing to show, the drawer's opener when narrow. */
   .gz-sb-edge, .gz-sb-launch {
-    position: fixed; z-index: 1250; inset-inline-end: calc(0.75rem + env(safe-area-inset-right, 0px)); bottom: calc(var(--gz-sb-bottom, 0px) + 1rem + env(safe-area-inset-bottom, 0px));
+    position: fixed; z-index: 1250; inset-inline-end: calc(0.75rem + env(safe-area-inset-right, 0px)); bottom: calc(var(--gz-sb-end) + 1rem + env(safe-area-inset-bottom, 0px));
     max-width: calc(100vw - 1.5rem); padding: 0.45rem 0.95rem !important; color: var(--gz-accent-ink) !important; background: var(--gz-accent) !important; border-color: var(--gz-accent) !important; box-shadow: var(--gz-shadow);
   }
   @media (max-width: 899.98px) {
     html[data-gz-navbar]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: 96px; }
+    /* The bar sits above the footer. */
+    html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: calc(96px + var(--gz-footer-h, 2rem)); }
   }
 
   .gz-sb-menu {
@@ -168,6 +174,12 @@
   #gz-todo .gz-todo-scope [aria-pressed="true"] { outline: 2px solid Highlight; outline-offset: 1px; }
   .gz-sb-edge, .gz-sb-launch { border: 1px solid ButtonText !important; }
   .gz-sb-resize:focus-visible, .gz-sb-resize:hover { background: Highlight; }
+  .gz-sb-resize, .gz-w-vsize::after { forced-color-adjust: none; }
+  .gz-w-vsize::after { background: ButtonText; }
+  .gz-w-vsize:is(:hover, :focus-visible)::after { background: Highlight; }
+  .gz-sb-head { border-bottom-color: CanvasText; }
+  .gz-sb-menu .gz-sb-item:is(:hover, :focus-visible) { outline: 2px solid Highlight; outline-offset: -2px; }
+  .gz-sb-backdrop { background: rgb(0 0 0 / 0.5); }
 }
 @media print {
   .gz-sb-own, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets, .gz-sb-resize, .gz-sb-menu, .gz-sb-backdrop { display: none !important; }

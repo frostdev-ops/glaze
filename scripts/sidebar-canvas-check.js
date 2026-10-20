@@ -4,6 +4,8 @@
 // or submits a quiz, and only inspects an already started untimed attempt.
 // Hold /private/tmp/claude-501/glaze-heavy.lock and run under nice (as for the full test suite).
 // NODE_PATH=/path/to/node_modules nice -n 15 node scripts/sidebar-canvas-check.js [screenshots directory]
+// SIDEBAR_LANG=de runs it in another language (the longest labels); SIDEBAR_REVIEW_ONLY=1 stops after the gestures,
+// keyboard, footer and appearance checks.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const G = require('../defaults.js');
@@ -14,7 +16,8 @@ const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-
 const local = 'http://localhost:3000';
 const credentialsFile = process.env.CANVAS_CREDENTIALS || path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const settings = (sidebar, navbar = false) => G.GZ_SANITIZE({ enabled: true, navbar: { on: navbar }, motion: { level: 'off' },
+const LANG = process.env.SIDEBAR_LANG || 'en-US';
+const settings = (sidebar, navbar = false, more = {}) => G.GZ_SANITIZE({ enabled: true, navbar: { on: navbar }, motion: { level: 'off' }, ...more,
   enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), sidebar, todo: true, widgets: true, notes: true } });
 const WIDTHS = [1600, 1280, 1024, 768, 390];
 let checks = 0, ctx, opts, page, tmp, ext;
@@ -68,7 +71,7 @@ const layoutOk = async (name, width) => {
     for (const w of m.web_accessible_resources) w.matches.push('http://localhost/*');
     fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { executablePath: CHROME, headless: true, viewport: { width: 1600, height: 1000 }, locale: 'en-US', reducedMotion: 'reduce', args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { executablePath: CHROME, headless: true, viewport: { width: 1600, height: 1000 }, locale: LANG, reducedMotion: 'reduce', args: [`--lang=${LANG}`, `--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
     opts = await ctx.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
     page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
     const store = async (s, l) => { await opts.evaluate(async ([s, l]) => { await chrome.storage.sync.set(s); if (l) { await chrome.storage.local.clear(); await chrome.storage.local.set(l); } }, [s, l]); await page.waitForTimeout(250); };
@@ -108,6 +111,8 @@ const layoutOk = async (name, width) => {
     await page.waitForSelector('.gz-sb-dock [data-tile="notes"]');
     const drag = async (sel, dx, dy) => {
       const el = page.locator(sel); await el.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+      // The column ends above the footer as the page scrolls: measured once that has settled.
+      await page.waitForTimeout(150);
       const r = await el.boundingBox(), x = r.x + Math.min(4, r.width / 2), y = r.y + Math.min(20, r.height / 2);
       await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + dx, y + dy, { steps: 8 }); await page.mouse.up();
     };
@@ -192,6 +197,99 @@ const layoutOk = async (name, width) => {
     await page.locator('[data-gz-sidebar-host="native"]').evaluate((e) => { window.sidebarCheckOldHost = e; e.remove(); });
     await wait(state, (s) => s.host?.kind === 'glaze' && s.mode === 'drawer', 'lost native host recovery');
     probe(!(await state()).open && await page.evaluate(() => !window.sidebarCheckOldHost.hasAttribute('data-gz-sidebar-host') && !window.sidebarCheckOldHost.hasAttribute('aria-modal')), 'host loss restores the native attributes and leaves a closed standalone drawer');
+    // The keyboard's way for each gesture, each announced: a docked widget's order and height, the column's width.
+    await store(settings(true), { widgetLayout: lay });
+    await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, { ...dockRecord, width: 352, open: true }]);
+    await page.setViewportSize({ width: 1600, height: 1000 }); await page.goto(`${local}/courses/${calc.id}/modules`);
+    await page.waitForSelector('.gz-sb-dock [data-tile="timer"] .gz-w-handle');
+    const said = () => page.evaluate(() => [...document.querySelectorAll('[role="status"], [aria-live]')].map((e) => e.textContent.trim()).filter(Boolean).join(' | '));
+    const order0 = (await record()).dock.map((x) => x.id);
+    await page.locator('.gz-sb-dock [data-tile="notes"] .gz-w-handle').focus(); await page.keyboard.press('ArrowDown');
+    await wait(record, (r) => r.dock.map((x) => x.id).join() !== order0.join(), 'keyboard reorder saved');
+    probe(/3/.test(await said()), `keyboard reorder announced (${await said()})`);
+    probe(await page.evaluate(() => document.activeElement?.closest?.('[data-tile]')?.dataset.tile === 'notes'), 'keyboard reorder keeps the focus on the moved widget');
+    await page.locator('.gz-sb-dock [data-tile="timer"] .gz-w-vsize').focus(); await page.keyboard.press('ArrowDown');
+    await wait(record, (r) => r.dock.find((x) => x.id === 'timer').h != null, 'keyboard height saved');
+    probe(/px/.test(await said()), `keyboard height announced (${await said()})`);
+    await page.locator('.gz-sb-resize').focus(); await page.keyboard.press('ArrowLeft');
+    await wait(record, (r) => r.width === 368, 'keyboard width saved');
+    probe(/368/.test(await said()), `keyboard width announced (${await said()})`);
+    // Reset sidebar for this account: the column as new, the widgets where they were.
+    const docked0 = (await record()).dock.map((x) => x.id);
+    await page.click('.gz-sb-more');
+    probe(await page.locator('#gz-sb-menu').evaluate((m) => { const r = m.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 1 && [...m.children].every((b) => b.scrollWidth <= b.clientWidth + 1); }), 'the customization menu fits its labels and the window');
+    await page.locator('#gz-sb-menu .gz-sb-item').last().click();
+    await wait(record, (r) => r.width === 352 && r.dock.every((x) => x.h == null), 'reset saved');
+    probe((await record()).dock.map((x) => x.id).join() === docked0.join() && (await record()).open === true, 'reset keeps the docked widgets and their order');
+    await shot(`polish-reset-${LANG}-1600`);
+    // Long labels: the header and the dock's controls stay inside the narrowest column.
+    await page.locator('.gz-sb-resize').focus(); await page.keyboard.press('Home');
+    await wait(record, (r) => r.width === 288, 'narrowest width');
+    const spill = () => page.evaluate(() => {
+      const host = document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect();
+      return [...document.querySelectorAll('.gz-sb-head > *, .gz-sb-sec-btn, .gz-sb-add, .gz-sb-dock .gz-w-head, .gz-sb-dock .gz-w-tools > *')]
+        .filter((e) => e.getClientRects().length && !e.classList.contains('gz-sr'))
+        .filter((e) => { const r = e.getBoundingClientRect(); return r.left < host.left - 1 || r.right > host.right + 1 || e.scrollWidth > e.clientWidth + 2; })
+        .map((e) => e.className || e.tagName);
+    });
+    probe(!(await spill()).length, `long labels stay inside the column at 288px (${(await spill()).join(', ')})`);
+    await page.click('.gz-sb-more'); await page.locator('#gz-sb-menu .gz-sb-item').first().click();
+    await page.waitForSelector('#gz-sb-adding:not([hidden])');
+    probe(!(await spill()).length && await page.locator('#gz-sb-adding').evaluate((e) => e.scrollWidth <= e.clientWidth + 1), 'Add widgets fits the narrowest column');
+    await shot(`polish-long-labels-${LANG}-288`);
+    await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, { ...dockRecord, width: 352, open: true }]);
+
+    // Glaze's footer, on and off: the column, the drawer and the edge buttons end above it and the bottom bar.
+    for (const footer of [true, false]) for (const [w, navbar] of [[1600, false], [1600, true], [1024, true], [390, true], [390, false]]) {
+      await store(settings(true, navbar, { footer }), { widgetLayout: lay });
+      await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, { ...dockRecord, width: 352, open: true }]);
+      await page.setViewportSize({ width: w, height: 900 }); await page.goto(`${local}/courses/${calc.id}`);
+      await wait(() => page.evaluate(() => document.documentElement.dataset.gzSidebar || null), Boolean, `footer ${footer} ${w}: sidebar ready`);
+      await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await page.waitForTimeout(500);
+      const s = await layoutOk(`footer-${footer ? 'on' : 'off'}${navbar ? '-navbar' : ''}`, w);
+      // Covered by Glaze's column or buttons (an open drawer's backdrop covers the whole page, as a dialog's does).
+      const free = await page.evaluate(() => {
+        const f = document.getElementById('gz-footer'), link = f?.querySelector('a')?.getBoundingClientRect();
+        if (!link || !link.width || link.top >= innerHeight) return true;
+        const at = document.elementFromPoint(link.x + link.width / 2, link.y + link.height / 2);
+        return !at?.closest('[data-gz-sidebar-host], .gz-sb-own, .gz-sb-edge, .gz-sb-launch');
+      });
+      if (s.mode === 'drawer') await page.click('#gz-sb-launch');
+      const g = await page.evaluate(() => {
+        const f = document.getElementById('gz-footer'), host = document.querySelector('[data-gz-sidebar-host]');
+        const fr = f?.getClientRects().length ? f.getBoundingClientRect() : null, hr = host.getBoundingClientRect();
+        const bar = innerWidth < 900 && document.documentElement.matches('[data-gz-navbar]:not([data-gz-navbar~="none"])') ? 96 : 0;
+        const link = f?.querySelector('a')?.getBoundingClientRect();
+        return { footer: !!fr, hostBottom: Math.round(hr.bottom), limit: Math.round(Math.min(fr && fr.top < innerHeight ? fr.top : innerHeight, innerHeight - bar - (bar && fr ? fr.height : 0))),
+          linkFree: !link || !link.width || !!f.contains(document.elementFromPoint(link.x + link.width / 2, link.y + link.height / 2)) || link.top >= innerHeight };
+      });
+      probe(g.footer === footer, `footer ${footer} ${w}${navbar ? ' navbar' : ''}: the footer ${footer ? 'shows' : 'is off'}`);
+      probe(g.hostBottom <= g.limit + 1, `footer ${footer} ${w}${navbar ? ' navbar' : ''}: the column ends above the footer and bottom bar (${g.hostBottom} <= ${g.limit})`);
+      probe(free, `footer ${footer} ${w}${navbar ? ' navbar' : ''}: the footer is not covered`);
+      await shot(`polish-footer-${footer ? 'on' : 'off'}${navbar ? '-navbar' : ''}-${w}`);
+      if (s.mode === 'drawer') await page.keyboard.press('Escape');
+    }
+
+    // The Look's: a light and two dark presets, the column's surface and text from each; 640px (1280 at 200% zoom).
+    const bgs = {};
+    for (const name of ['Paper', 'Midnight', 'Ember']) {
+      await store(settings(true, false, { preset: name, colors: G.GZ_PRESETS.find(([n]) => n === name)[1] }), { widgetLayout: lay });
+      await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, { ...dockRecord, width: 352, open: true }]);
+      for (const w of [1600, 640]) {
+        await page.setViewportSize({ width: w, height: 900 }); await page.goto(local + '/');
+        await wait(() => page.evaluate(() => document.documentElement.dataset.gzSidebar || null), Boolean, `${name} ${w}: sidebar ready`);
+        await page.waitForTimeout(600);
+        const s = await layoutOk(`look-${name}`, w);
+        if (s.mode === 'drawer') await page.click('#gz-sb-launch');
+        const c = await page.evaluate(() => { const h = document.querySelector('[data-gz-sidebar-host]'), cs = getComputedStyle(h); return { bg: cs.backgroundColor, ink: getComputedStyle(h.querySelector('.gz-sb-title')).color }; });
+        if (w === 1600) bgs[name] = c;
+        await shot(`polish-look-${name}-${w}${s.mode === 'drawer' ? '-drawer' : ''}`);
+        if (s.mode === 'drawer') await page.keyboard.press('Escape');
+      }
+    }
+    probe(bgs.Paper.bg !== bgs.Midnight.bg && bgs.Paper.ink !== bgs.Midnight.ink && bgs.Midnight.bg !== bgs.Ember.bg, `the column follows the Look (${JSON.stringify(bgs)})`);
+    await store(settings(true), { widgetLayout: lay });
+
     if (process.env.SIDEBAR_REVIEW_ONLY) {
       console.log(`${failures.length ? 'FAILED' : 'passed'}; ${checks} checks, ${failures.length} layout failures`);
       if (failures.length) process.exitCode = 1;
