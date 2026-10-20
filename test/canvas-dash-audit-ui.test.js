@@ -183,3 +183,19 @@ test('Canvas color edits flush before a persisted pagehide freezes their debounc
   assert.equal(p.calls[0].options.keepalive, true);
   await p.runTimers(); assert.equal(p.calls.length, 1, 'the flushed debounce must not save again after restore');
 });
+
+test('successful Canvas nickname and color saves invalidate the session course snapshot', async () => {
+  for (const kind of ['nickname', 'color']) {
+    const p = menu(); await settle();
+    const snapshot = new Map([['gz-canvas-courses', 'old course names and colors']]);
+    p.c.sessionStorage = { removeItem: (key) => snapshot.delete(key) };
+    if (kind === 'color') {
+      p.custom().value = '#abcdef'; p.event(p.custom(), 'input'); await p.runTimers();
+    } else {
+      const nick = p.doc.getElementById('gz-cm-nick');
+      nick.value = 'Saved nickname'; p.event(nick, 'input'); p.event(nick, 'change'); await settle();
+    }
+    assert.equal(p.calls.length, 1);
+    assert.equal(snapshot.has('gz-canvas-courses'), false, `${kind}: a new document must not reuse the pre-save snapshot`);
+  }
+});

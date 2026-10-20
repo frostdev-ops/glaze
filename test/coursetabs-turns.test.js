@@ -41,7 +41,7 @@ function world({ at = '/courses/12/modules', showing = '12' } = {}) {
     split: (url) => { const i = url.indexOf('?'); return i < 0 ? [url, ''] : [url.slice(0, i), url.slice(i + 1)]; },
     shown: (e) => !!e, loading: () => false, pageable: (path) => !/^\/(?:login|logout|api)(?:\/|$)/.test(path),
     frameEl: (cid, url) => Object.assign(mkEl(blank()), { name: `gz-ctab:${cid}`, src: origin + url }),
-    save: () => calls.push(['save']), keepPage() {}, later() {}, waiting: '', wait: (cid) => calls.push(['wait', cid]), globalThis: {}, say: (s) => calls.push(['say', s]), t: (s) => s,
+    save: () => calls.push(['save']), keepPage() {}, later() {}, showTurn: 0, waiting: '', wait: (cid) => calls.push(['wait', cid]), globalThis: {}, say: (s) => calls.push(['say', s]), t: (s) => s,
     show: (cid) => calls.push(['show', cid]), reveal: (cid) => calls.push(['reveal', cid]),
     openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
     load: (cid, f, url) => { calls.push(['load', cid, url]); return true; }, guardFrame() {}, watch: () => calls.push(['watch']),
@@ -505,7 +505,7 @@ test('course-frame move messages refresh the Canvas navbar without changing Ultr
   }
 });
 
-test('a kept page is quiet: its media paused and other sites\' players stopped at once, then not drawn at all; shown again, as it was', () => {
+test('a kept page pauses its media and preserves embedded documents, then rests and restores its scroll', () => {
   const w = world();
   const video = { paused: false, pause() { this.paused = true; } };
   const attrs = {};
@@ -516,7 +516,7 @@ test('a kept page is quiet: its media paused and other sites\' players stopped a
   w.fn('next').get('12').el.contentDocument = docAt('/courses/12/assignments');
   w.wait(40);
   assert.equal(video.paused, true, 'its video paused');
-  assert.equal(embed.src, 'about:blank', 'another site\'s player stopped');
+  assert.equal(embed.src, 'https://player.example/v/1', 'embedded documents must stay live');
   assert.notEqual(w.first.el.style.display, 'none', 'still drawn for a moment');
   w.wait(3000);
   assert.equal(w.first.el.style.display, 'none', 'then not drawn at all');
@@ -525,7 +525,7 @@ test('a kept page is quiet: its media paused and other sites\' players stopped a
   assert.equal(w.c.frames.get('12'), w.first);
   assert.equal(w.first.el.style.display, '', 'drawn again');
   assert.equal(w.first.el.contentDocument.scrollingElement.scrollTop, 640, 'at its scroll');
-  assert.equal(embed.src, 'https://player.example/v/1', 'its player back');
+  assert.equal(embed.src, 'https://player.example/v/1', 'its embedded document is unchanged');
   assert.equal(embed.hasAttribute('data-gz-rest'), false);
 });
 
@@ -588,4 +588,23 @@ test('a frame not on screen shows its new page only once drawn, never first the 
   assert.deepEqual(w.calls.filter(([k]) => k === 'reveal'), [['reveal', '12']], 'shown as drawn');
   const on = world();
   assert.equal(on.fn('awaitDrawn')('12', on.fn('turnTo')('12', '/courses/12/grades')), false, 'a frame on screen keeps its page until then anyway');
+});
+
+test('retaining a Canvas page never navigates an embedded tool or discards its unsaved work', () => {
+  const w = world();
+  let draft = 'Unsaved tool answer', src = 'https://tool.example/editor';
+  const attrs = {};
+  const tool = { contentWindow: { get location() { throw new Error('cross-origin'); } },
+    get src() { return src; }, set src(value) { src = value; draft = ''; },
+    hasAttribute: (k) => k in attrs, setAttribute: (k, v) => { attrs[k] = v; }, getAttribute: (k) => attrs[k], removeAttribute: (k) => { delete attrs[k]; } };
+  w.first.el.contentDocument = docAt('/courses/12/assignments/4', { frames: [tool] });
+  w.fn('turnTo')('12', '/courses/12/modules');
+  w.fn('next').get('12').el.contentDocument = docAt('/courses/12/modules'); w.wait(40);
+  assert.equal(draft, 'Unsaved tool answer', 'cross-origin editing cannot bubble a dirty event to Canvas');
+  assert.equal(tool.src, 'https://tool.example/editor');
+  w.wait(3000);
+  w.fn('turnTo')('12', '/courses/12/assignments/4');
+  assert.equal(w.c.frames.get('12'), w.first);
+  assert.equal(draft, 'Unsaved tool answer', 'returning keeps the same embedded document');
+  assert.equal(w.fn('next').has('12'), false, 'automatic refresh must also preserve opaque embedded work');
 });

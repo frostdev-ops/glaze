@@ -691,7 +691,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     popping = true;
     try {
       if (!s.cid) show('');
-      else if (frames.get(s.cid)?.ready) { if (url && url !== pathOf(frames.get(s.cid))) turnTo(s.cid, url); reveal(s.cid); }
+      else if (frames.get(s.cid)?.ready) {
+        const g = url && url !== pathOf(frames.get(s.cid)) ? turnTo(s.cid, url) : null;
+        if (g !== false && !awaitDrawn(s.cid, g)) reveal(s.cid);
+      }
       else if (url) { if (s.cid === PAGE) openPage(url); else openAt(s.cid, url); }
     } finally { popping = false; }
   };
@@ -724,7 +727,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const awaitDrawn = (cid, g) => {
     if (showing === cid || !g?.go || next.get(cid) !== g) return false;
-    g.reveal = true;
+    g.reveal = ++showTurn; // a later selection, even of the page already on screen, cancels this reveal
     wait(cid);
     return true;
   };
@@ -797,7 +800,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // Its entry, made on the click, gets the address it ended at (a redirect).
     if (path && path !== g.url && (g.key || turnHere() === g.turn)) restamp(cid, path, g.key);
     swap(cid, g, false);
-    if (g.reveal && frames.get(cid) === g) reveal(cid);
+    if (g.reveal === showTurn && frames.get(cid) === g) reveal(cid);
   };
   // `g` takes its frame's place: the page before it kept (or gone, for a fresh copy of it), and on screen if its frame is.
   const swap = (cid, g, push, keepOld = true) => {
@@ -834,7 +837,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // An earlier page shown again: loaded afresh under it (a submission, a module item viewed since), taking its place at
   // the same scroll unless the student has begun using it.
   const fresh = (cid, s) => {
-    if (s.dirty || acts(pathOf(s))) return;
+    // Embedded editors don't bubble their input events to Canvas, so even a "clean" page may hold their unsaved work.
+    if (s.dirty || acts(pathOf(s)) || s.el.contentDocument?.querySelectorAll('iframe').length) return;
     s.touched = false;
     try {
       const d = s.el.contentDocument, events = ['pointerdown', 'keydown', 'focusin', 'input', 'change', 'submit'], touch = () => { s.touched = true; };
@@ -845,18 +849,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // Pages that do something as they load (a quiz attempt, a tool launched, a submission): never loaded ahead or again
   // unasked.
   const acts = (path) => /\/(?:quizzes\/\d+\/take|external_tools|lti|sessionless_launch|submissions)(?:[/?#]|$)/.test(path);
-  // A kept page is quiet as a page left behind: its media paused and other sites' players in it (a video, a tool)
-  // stopped at once, put back as it shows again; after a moment it isn't drawn at all (no style, layout, paint or
+  // A kept page is quiet as a page left behind: its media paused; embedded documents stay live, since a tool may hold
+  // unsaved work we can't observe. After a moment it isn't drawn at all (no style, layout, paint or
   // animation frames, about half of what a hidden Canvas page costs while idle), its scroll noted to put back.
   const rest = (f) => {
     clearTimeout(f.resting);
     try {
       const d = f.el.contentDocument;
       for (const m of d.querySelectorAll('video, audio')) if (!m.paused) m.pause();
-      for (const e of d.querySelectorAll('iframe[src]')) {
-        let other = true; try { other = e.contentWindow.location.origin !== location.origin; } catch { /* another site */ }
-        if (other && !e.hasAttribute('data-gz-rest')) { e.setAttribute('data-gz-rest', e.src); e.src = 'about:blank'; }
-      }
     } catch { /* gone */ }
     f.resting = setTimeout(() => {
       if (![...spare.values()].some((a) => a.includes(f))) return;
@@ -872,7 +872,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         const sc = f.el.contentDocument.scrollingElement;
         if (f.scroll) [sc.scrollTop, sc.scrollLeft] = f.scroll;
       }
-      for (const e of f.el.contentDocument.querySelectorAll('iframe[data-gz-rest]')) { e.src = e.getAttribute('data-gz-rest'); e.removeAttribute('data-gz-rest'); }
     } catch { /* gone */ }
   };
   // Dirty pages cannot be evicted to enforce the cache bounds. Keep the student on their current page when full.
@@ -1128,9 +1127,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     save();
     const f = frames.get(cid);
     if (ctx.site === 'canvas' && f?.away) return openAt(cid, L.target(x, P().place));
+    const g = ctx.site === 'canvas' && next.get(cid);
+    if (g?.go) {
+      stamp(cid, g.url);
+      g.key = entry(); g.turn = turnHere();
+      if (!awaitDrawn(cid, g)) reveal(cid);
+      return;
+    }
     if (cid === showing && f?.slow && !f.ready && !f.dirty && !(spare.get(cid) || []).some((s) => s.dirty) && !next.get(cid)?.dirty) { drop(cid, true); showing = ''; }
     const target = cid === ctx.courseId() && !(ctx.site === 'canvas' && frames.has(cid)) ? '' : cid;
-    if (ctx.site === 'canvas' && target !== showing) stamp(target, target ? pathOf(f) || L.target(x, P().place) : location.pathname + location.search);
+    if (ctx.site === 'canvas') stamp(target, target ? pathOf(f) || L.target(x, P().place) : location.pathname + location.search);
     reveal(target);
   };
   if (!framed && !preview) addEventListener('message', (e) => {

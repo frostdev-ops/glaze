@@ -431,3 +431,63 @@ test('Canvas frame pagehide must detach its observer from the surviving parent d
   handlers.dispatch('pagehide', { persisted: false });
   assert.equal(observers[1].target, null);
 });
+
+test('a deferred Canvas landing cannot replace a newer course or underlying-page selection', () => {
+  for (const destination of ['13', '']) {
+    const p = fixture(); p.api.openAt('12', '/courses/12'); p.ready('12');
+    p.api.openAt('13', '/courses/13'); p.ready('13');
+    p.api.openAt('12', '/courses/12/grades');
+    const pending = p.api.next.get('12');
+    assert.equal(p.api.waiting(), '12');
+    p.api.visit(destination || '13');
+    if (!destination) p.api.openPage('/');
+    const focused = p.document.activeElement;
+    p.ready('12', '/courses/12/grades', pending);
+    assert.equal(p.c.showing, destination, 'the last selection owns the screen');
+    assert.equal(p.document.activeElement, focused, 'a stale landing must not steal focus');
+    for (const frame of [pending, ...p.api.spare.get('12')]) {
+      assert.equal(frame.el.style.visibility, 'hidden'); assert.equal(frame.el.inert, true);
+    }
+    assert.equal(p.api.turns.get(p.c.navigation.currentEntry.key).cid, destination, 'screen and current history entry agree');
+  }
+});
+
+test('Back to an evicted Canvas page keeps another course visible until the destination is drawn', () => {
+  const p = fixture(); p.api.openAt('12', '/courses/12'); p.ready('12');
+  p.api.openAt('13', '/courses/13'); p.ready('13');
+  const focused = p.document.activeElement;
+  p.api.turns.set('back-entry', { cid: '12', url: '/courses/12/pages/evicted' });
+  p.c.navigation = { currentEntry: { key: 'back-entry' } };
+  p.api.onPop();
+  const pending = p.api.next.get('12');
+  assert.ok(pending);
+  assert.equal(p.c.showing, '13', 'Back must not briefly expose the wrong retained page');
+  assert.equal(p.frames.get('12').el.style.visibility, 'hidden');
+  assert.equal(p.frames.get('12').el.inert, true);
+  assert.equal(p.document.activeElement, focused);
+  p.ready('12', '/courses/12/pages/evicted', pending);
+  assert.equal(p.c.showing, '12'); assert.equal(p.frames.get('12'), pending);
+  assert.equal(p.api.turns.size, 4, 'traversal creates no new history entry');
+});
+
+test('reselecting the visible Canvas course records cancellation of a pending history destination', () => {
+  const p = fixture(); p.api.openAt('12', '/courses/12'); p.ready('12');
+  p.api.openAt('13', '/courses/13'); p.ready('13');
+  p.api.openAt('12', '/courses/12/grades');
+  p.api.visit('13');
+  assert.equal(p.c.showing, '13');
+  assert.equal(p.api.turns.get(p.c.navigation.currentEntry.key).cid, '13', 'a click on the visible course supersedes the pending entry');
+});
+
+test('selecting a Canvas tab with a pending page keeps that destination in history and waits for it', () => {
+  for (const visible of [true, false]) {
+    const p = fixture(); p.api.openAt('12', '/courses/12'); p.ready('12');
+    if (!visible) { p.api.openAt('13', '/courses/13'); p.ready('13'); }
+    p.api.openAt('12', '/courses/12/grades'); const pending = p.api.next.get('12');
+    p.api.visit('12');
+    assert.equal(p.api.turns.get(p.c.navigation.currentEntry.key).url, '/courses/12/grades', 'the tab selects its pending destination, not the outgoing document');
+    assert.equal(p.c.showing, visible ? '12' : '13');
+    p.ready('12', '/courses/12/grades', pending);
+    assert.equal(p.c.showing, '12'); assert.equal(p.frames.get('12'), pending);
+  }
+});

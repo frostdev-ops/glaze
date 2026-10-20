@@ -15,11 +15,12 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Changed
 - Mods' older `glaze.nav.items` transform reads Glaze's bar. Items a mod adds to the bar link only to pages of the school's site.
-- Canvas pages kept for Back are quiet: their media pauses, other sites' players in them stop until you come back, and after a moment they aren't drawn at all.
+- Canvas pages kept for Back are quiet: their media pauses, and after a moment they aren't drawn at all. Embedded documents stay live to preserve tool and editor state.
 - Canvas loads lighter: course-tab frames get the Look before their first paint and reuse the page's course list and colors instead of asking Canvas again; dashboard grades cover more than 100 courses; course widgets keep their picture while Canvas redraws its cards; a course's colour edit is saved even when you leave at once.
 
 ### Fixed
 - Canvas: a reload brings back a course tab whose course is the page's own; a link to a part of another page keeps its place; Glaze's bar keeps a same-site link of yours in the frames; the bar's course menu follows each page of a frame; module progress is asked again a minute after a failed request; Glaze's frames no longer keep pages they've left in memory.
+- Canvas: delayed pages respect later selections; Back waits for an evicted page to draw; tab selections keep their history destination; saved course nicknames and colors invalidate the previous session snapshot. Retained embedded tools and editors keep their documents and skip automatic refresh.
 
 ## [3.2.0] — 2026-10-19
 
