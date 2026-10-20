@@ -203,7 +203,17 @@ export async function submitApple(env, manifest, receipt, save) {
       if (!locales.data.length) throw new Error(`Apple ${platform}: no listing localization. Complete metadata and screenshots in App Store Connect, then rerun submit.`);
       for (const locale of locales.data) {
         // Change only English release notes; retain the other languages and all existing listing content.
-        if (locale.attributes.locale.startsWith('en-')) await apple(env, `/appStoreVersionLocalizations/${locale.id}`, 'PATCH', document('appStoreVersionLocalizations', { whatsNew: manifest.notes }, {}, locale.id));
+        if (locale.attributes.locale.startsWith('en-')) {
+          try {
+            await apple(env, `/appStoreVersionLocalizations/${locale.id}`, 'PATCH', document('appStoreVersionLocalizations', { whatsNew: manifest.notes }, {}, locale.id));
+          } catch (error) {
+            if (error.status !== 409 || !error.message.includes("Attribute 'whatsNew' cannot be edited at this time")) throw error;
+            // Apple has no What's New field for a platform's first release. Keep all other metadata errors fatal.
+            const history = await apple(env, `/apps/${app}/appStoreVersions?filter[platform]=${platform}&limit=2`);
+            if (history.links?.next || history.data.length !== 1 || history.data[0].id !== version.id) throw error;
+            console.log(`Apple ${platform}: first platform release; no What's New field.`);
+          }
+        }
       }
       // Reuse an empty draft left by an interrupted create/item response, without submitting unrelated items.
       if (state.submissionId) {

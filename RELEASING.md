@@ -107,7 +107,8 @@ with `~/`, or be relative to the config file. Never paste private keys or tokens
 
 Existing store listings, privacy answers, review contact/demo access, screenshots, agreements and export
 compliance must already be complete. Apple reuses the existing listing; English What's New is taken from
-the current changelog entry. To supply shorter or separately prepared notes (Apple's limit is 4,000
+the current changelog entry for updates. Apple does not allow that field for a platform's first release.
+To supply shorter or separately prepared notes (Apple's limit is 4,000
 characters), pass `--notes /path/to/notes.txt` on the first build. Other localizations stay unchanged.
 The store APIs report any missing submission requirements; they cannot bypass store review.
 
