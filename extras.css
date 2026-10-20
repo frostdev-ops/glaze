@@ -69,9 +69,14 @@ html[data-gz-motion="expressive"][data-gz-bg="aurora"] :is(.panel-wrap, .bb-offc
   100% { transform: translate3d(-2%, 5%, 0) rotate(-2deg) scale(1.02); }
 }
 
-/* Scene: content.js puts one three.js canvas in the topmost full-screen layer (the page, or the
-   open course or item panel), above that layer's ::before and below its content. Until it draws,
+/* Scene: content.js puts one three.js canvas in the topmost full-screen shell (the page, or the
+   open course or item panel), above that shell's ::before and below its content. Until it draws,
    or without WebGL, the ::before shows the gradient. The canvas is drawn small and stretched. */
+[data-gz-scene-host] { isolation: isolate; }
+html[data-gz-bg]:not([data-gz-bg="solid"]) .course-content-container > .panel-wrap[data-gz-scene-host] { clip-path: none; }
+/* A narrower/shorter scroller must not paint a second fallback over the shell's scene. Its
+   content still clips normally; partial-width sheets retain their own opaque backgrounds. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) [data-gz-scene-host] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { content: none; }
 #gz-scene {
   position: fixed;
   left: calc(var(--gz-bg-blur, 0px) * -2);
@@ -528,9 +533,8 @@ html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:ha
 #gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
 /* Native panel headers pull into their scroller's padding; after a tab row that would cover the subtitle. */
 #gz-ctabs[data-at="nested"] + :is(.panel-header, header) { margin-block-start: 0 !important; }
-/* Nor is the page itself drawn, its background layer and scene included: the frame covers it, and every glass panel and
-   layer under it is GPU memory. Hidden, not removed: it keeps its layout, scroll and state. The ground shows until the
-   frame paints. */
-html[data-gz-ctab-framed]::before, html[data-gz-ctab-framed] :is(#site-wrap, #gz-scene) { visibility: hidden !important; }
+/* The covered app keeps its layout, scroll and state without drawing its glass panels. The
+   scene moves outside it and freezes, so the shared navbar's gutters retain their background. */
+html[data-gz-ctab-framed]::before, html[data-gz-ctab-framed] #site-wrap { visibility: hidden !important; }
 /* Native dialogs and notices can live inside the covered app and still sit above the frame. */
 html[data-gz-ctab-framed] #site-wrap :is(#gz-ctabs, #gz-footer, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"], .MuiModal-root, .MuiPopover-root, .MuiSnackbar-root):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *) { visibility: visible; }

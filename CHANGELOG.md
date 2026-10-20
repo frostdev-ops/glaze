@@ -4,6 +4,12 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.2] — Unreleased
+
+### Fixed
+
+- Keep scene backgrounds continuous behind the floating navbar and sidebar on Blackboard course content, tool pages and item panels, including retained course tabs.
+
 ## [3.3.1] — 2026-10-20
 
 ### Fixed

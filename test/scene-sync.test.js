@@ -26,10 +26,10 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     html: { hasAttribute: () => false, getAttribute: () => 'normal' },
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
-    document: { body: { append() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
+    document: { body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
     chrome: { runtime: { id: 'glaze', getURL: (f) => f } },
     importScene: (url, file) => { log.imports++; log.files.push(file); log.urls.push(url); if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure')); return Promise.resolve({ start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); if (startFails-- > 0) throw new Error('temporary WebGL context failure'); return { update: (o) => log.updates.push(o), draw() {}, stop() { log.stops++; } }; } }); },
-    need: (file, ready) => { log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
+    need: (file, ready) => { if (file === 'lib/scene-host.js') { ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; return Promise.resolve(); } log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
     applySettings: () => ctx.api.syncScene(), // the settings paint finishes by syncing the scene
     GZ_CTX: { parts: () => ctx.parts },
     parts, GZ_GLSL: glsl ? {} : undefined,
