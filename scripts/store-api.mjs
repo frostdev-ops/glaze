@@ -85,7 +85,8 @@ export async function submitChrome(env, manifest, receipt, save) {
       return;
     }
   }
-  if (status.submittedItemRevisionStatus) throw new Error('Chrome has another submission. Resolve it in the dashboard before replacing it.');
+  // fetchStatus also retains cancelled/rejected submissions; those do not occupy the review slot.
+  if (status.submittedItemRevisionStatus && !['CANCELLED', 'REJECTED'].includes(status.submittedItemRevisionStatus.state)) throw new Error('Chrome has another submission. Resolve it in the dashboard before replacing it.');
   const api = `https://chromewebstore.googleapis.com/v2/${chromePath(env)}`;
   if (!receipt.uploaded) {
     const uploaded = await request(`https://chromewebstore.googleapis.com/upload/v2/${chromePath(env)}:upload`, chromeToken(env), 'POST', readFileSync(manifest.files.chrome.path), { 'Content-Type': 'application/zip' });
