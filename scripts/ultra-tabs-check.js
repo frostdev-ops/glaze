@@ -69,7 +69,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
     const settings = (o = {}) => opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); },
-      { ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === (o.preset || 'Frost'))[1], preset: o.preset || 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, ...o.enhance }, tabs: { ...G.GZ_SANITIZE({}).tabs, ...o.tabs }, nav: { ...G.GZ_DEFAULTS.nav, ...o.nav } });
+      { ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === (o.preset || 'Frost'))[1], preset: o.preset || 'Frost', navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: { ...G.GZ_DEFAULTS.enhance, sidebar: false, ...o.enhance }, tabs: { ...G.GZ_SANITIZE({}).tabs, ...o.tabs }, nav: { ...G.GZ_DEFAULTS.nav, ...o.nav } });
     const session = () => opts.evaluate(() => chrome.storage.session.get(null));
     const pictured = (cid, route) => opts.evaluate(async ({ cid, route }) => {
       const until = performance.now() + 10000;
@@ -634,7 +634,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     // ---- the editor: its section, and the strip on the preview's Ultra mock, live ----
     await settings({ tabs: { at: 'between', color: 'tint', shape: 'pill' } });
     await opts.setViewportSize({ width: 1280, height: 900 });
-    await opts.goto(`chrome-extension://${extensionId(ext)}/options.html#tabs`);
+    await opts.goto(`chrome-extension://${extensionId(ext)}/options.html#navigation/tabs`);
+    await opts.selectOption('#preview-page', 'tabs');
     const pv = opts.frameLocator('#preview');
     await pv.locator('#gz-ctabs[data-at="between"] [role="tab"]').first().waitFor({ timeout: 8000 });
     ok(await pv.locator('#gz-ctabs [role="tab"]').count() === 3, 'the editor\'s preview shows the strip, between the mock bar\'s rows');
