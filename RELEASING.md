@@ -77,7 +77,7 @@ node scripts/store-release.mjs release
 
 This runs the Node suites, builds the Chrome and Firefox packages plus the Mac and iPhone/iPad App Store
 packages, and submits the exact checksummed artifacts to all three stores. It uses the store APIs directly;
-Fastlane is not required. Run it on a Mac with Node.js 22+, full Xcode selected, Python 3, Git 2.29+,
+Fastlane is not required. Run it on a Mac with Node.js 26+ (matching CI and the validation suite), full Xcode selected, Python 3, Git 2.29+,
 zip/unzip, and Google Cloud CLI. Firefox lint downloads pinned `web-ext@10.8.0` through npx.
 
 Chrome is submitted with staged publication, and Apple versions use manual release after approval.

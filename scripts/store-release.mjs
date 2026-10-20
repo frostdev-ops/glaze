@@ -213,7 +213,7 @@ async function uploadApple(env, manifest, receipt, save, out) {
 export async function main(args = process.argv.slice(2)) {
   const opt = options(args);
   if (opt.help) { console.log(usage); return; }
-  if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Node.js 22 or newer is required.');
+  if (Number(process.versions.node.split('.')[0]) < 26) throw new Error('Node.js 26 or newer is required, matching CI and the release validation suite.');
   const env = environment(opt);
   if (opt.command === 'doctor') { if (!await doctor(opt, env)) process.exitCode = 1; return; }
   const commit = git(['rev-parse', '--verify', `${opt.sourceRef}^{commit}`]);
