@@ -1,6 +1,22 @@
 // Dutch for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports (DECISIONS.md).
 (globalThis.GZ_LANGS ||= {}).nl = {
+  "Document review": "Documenten bekijken",
+  "Compact submission header": "Compacte inleveringskop",
+  "Full-screen document button": "Knop voor document op volledig scherm",
+  "Focus document button": "Knop voor documentfocus",
+  "Hide Glaze bars in focus": "Glaze-balken verbergen tijdens focus",
+  "Remember document focus for this session": "Documentfocus voor deze sessie onthouden",
+  "Full screen": "Volledig scherm",
+  "Focus document": "Document focussen",
+  "Grade and feedback": "Cijfer en feedback",
+  "Exit focus": "Focus verlaten",
+  "Document focus ended": "Documentfocus beëindigd",
+  "Document focus": "Documentfocus",
+  "Full screen is unavailable here": "Volledig scherm is hier niet beschikbaar",
+  "Show Glaze bars": "Glaze-balken tonen",
+  "Show feedback": "Feedback tonen",
+  "Hide feedback": "Feedback verbergen",
   'Glaze settings': 'Glaze-instellingen',
   'Palette': 'Palet',
   'Look': 'Uiterlijk',

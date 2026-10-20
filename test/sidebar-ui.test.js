@@ -319,6 +319,16 @@ test('losing an open drawer host restores the page before using a replacement ho
   assert.equal(p.$('#content-wrapper').inert, false);
 });
 
+test('document focus suspends an open drawer and releases its inert locks before restoring the sidebar', async () => {
+  const p = page({ width: 1000, left: 84 }); await p.pass();
+  p.fire(p.$('#gz-sb-launch'), 'click'); assert.equal(p.$('#content-wrapper').inert, true);
+  p.doc.root.setAttribute('data-gz-review-focus', ''); p.side.cover();
+  assert.equal(p.side.asleep(), true); assert.equal(p.doc.root.hasAttribute('data-gz-sidebar-open'), false);
+  assert.equal(p.$('#content-wrapper').inert, false); assert.equal(p.doc.getElementById('header').inert, false);
+  p.doc.root.removeAttribute('data-gz-review-focus'); p.side.cover(); await settle();
+  assert.equal(p.side.asleep(), false); p.fire(p.$('#gz-sb-launch'), 'click'); assert.equal(p.$('#content-wrapper').inert, true);
+});
+
 test('a native dialog in an existing portal stays reachable while the drawer is open', async () => {
   const p = page({ width: 1000, left: 84 });
   const portal = p.doc.createElement('div'); p.doc.body.append(portal);

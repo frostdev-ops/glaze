@@ -1,6 +1,22 @@
 // Portuguese (Brazil) for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports (DECISIONS.md).
 (globalThis.GZ_LANGS ||= {})['pt-BR'] = {
+  "Document review": "Revisão de documentos",
+  "Compact submission header": "Cabeçalho compacto da entrega",
+  "Full-screen document button": "Botão de documento em tela cheia",
+  "Focus document button": "Botão de foco no documento",
+  "Hide Glaze bars in focus": "Ocultar barras do Glaze durante o foco",
+  "Remember document focus for this session": "Lembrar o foco no documento nesta sessão",
+  "Full screen": "Tela cheia",
+  "Focus document": "Focar documento",
+  "Grade and feedback": "Nota e comentários",
+  "Exit focus": "Sair do foco",
+  "Document focus ended": "Foco no documento encerrado",
+  "Document focus": "Foco no documento",
+  "Full screen is unavailable here": "A tela cheia não está disponível aqui",
+  "Show Glaze bars": "Mostrar barras do Glaze",
+  "Show feedback": "Mostrar comentários",
+  "Hide feedback": "Ocultar comentários",
   'Glaze settings': 'Configurações do Glaze',
   'Palette': 'Paleta',
   'Look': 'Aparência',
