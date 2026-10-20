@@ -608,3 +608,23 @@ test('retaining a Canvas page never navigates an embedded tool or discards its u
   assert.equal(draft, 'Unsaved tool answer', 'returning keeps the same embedded document');
   assert.equal(w.fn('next').has('12'), false, 'automatic refresh must also preserve opaque embedded work');
 });
+
+test('a kept page stops another site\'s video player (put back on return) and media in its own frames, never a tool', () => {
+  const w = world();
+  const embed = (url) => {
+    const attrs = {}; let src = url;
+    return { get src() { return src; }, set src(v) { src = v; }, hasAttribute: (k) => k in attrs, setAttribute: (k, v) => { attrs[k] = v; }, getAttribute: (k) => attrs[k], removeAttribute: (k) => { delete attrs[k]; } };
+  };
+  const video = embed('https://www.youtube-nocookie.com/embed/abc'), studio = embed('https://school.instructuremedia.com/embed/1'), tool = embed('https://tool.example/editor');
+  const comment = { paused: false, pause() { this.paused = true; } };
+  const own = Object.assign(embed(`${origin}/media_objects_iframe/m-1`), { contentDocument: docAt('/media_objects_iframe/m-1', { media: [comment] }) });
+  w.first.el.contentDocument = docAt('/courses/12/pages/week-1', { frames: [video, studio, tool, own] });
+  w.fn('turnTo')('12', '/courses/12/modules');
+  w.fn('next').get('12').el.contentDocument = docAt('/courses/12/modules'); w.wait(40);
+  assert.deepEqual([video.src, studio.src], ['about:blank', 'about:blank'], 'players stop as the page is left');
+  assert.equal(tool.src, 'https://tool.example/editor', 'a tool may hold work: untouched');
+  assert.equal(comment.paused, true, 'media in its own frames paused');
+  w.pop({ gzTurn: { cid: '12', url: '/courses/12/pages/week-1' } });
+  assert.deepEqual([video.src, studio.src], ['https://www.youtube-nocookie.com/embed/abc', 'https://school.instructuremedia.com/embed/1'], 'back as the page shows again');
+  assert.equal(video.hasAttribute('data-gz-rest'), false);
+});

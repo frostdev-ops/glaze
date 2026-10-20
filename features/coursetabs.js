@@ -854,10 +854,17 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // animation frames, about half of what a hidden Canvas page costs while idle), its scroll noted to put back.
   const rest = (f) => {
     clearTimeout(f.resting);
-    try {
-      const d = f.el.contentDocument;
+    // Its media paused, in its own frames too (Canvas's media comments); another site's video or audio player stopped,
+    // put back as it shows again. Other embeds (a tool, an editor) may hold work: they stay as they are.
+    const quiet = (d, n) => {
       for (const m of d.querySelectorAll('video, audio')) if (!m.paused) m.pause();
-    } catch { /* gone */ }
+      for (const e of d.querySelectorAll('iframe')) {
+        let inner = null; try { inner = e.contentDocument; } catch { /* another site */ }
+        if (inner) { if (n < 2) quiet(inner, n + 1); }
+        else if (PLAYER.test(e.src) && !e.hasAttribute('data-gz-rest')) { e.setAttribute('data-gz-rest', e.src); e.src = 'about:blank'; }
+      }
+    };
+    try { quiet(f.el.contentDocument, 0); } catch { /* gone */ }
     f.resting = setTimeout(() => {
       if (![...spare.values()].some((a) => a.includes(f))) return;
       try { const sc = f.el.contentDocument.scrollingElement; f.scroll = [sc.scrollTop, sc.scrollLeft]; } catch { /* gone */ }
@@ -872,8 +879,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         const sc = f.el.contentDocument.scrollingElement;
         if (f.scroll) [sc.scrollTop, sc.scrollLeft] = f.scroll;
       }
+      for (const e of f.el.contentDocument.querySelectorAll('iframe[data-gz-rest]')) { e.src = e.getAttribute('data-gz-rest'); e.removeAttribute('data-gz-rest'); }
     } catch { /* gone */ }
   };
+  const PLAYER = /^https:\/\/([\w-]+\.)*(youtube(-nocookie)?\.com|vimeo\.com|kaltura\.com|instructuremedia\.com|panopto\.(com|eu)|vidgrid\.com|wistia\.(com|net)|loom\.com|echo360\.(org|net)|yuja\.com|brightcove\.net|mediasite\.com|dailymotion\.com|soundcloud\.com|spotify\.com)\//;
   // Dirty pages cannot be evicted to enforce the cache bounds. Keep the student on their current page when full.
   const canKeep = (cid, replacing) => {
     const f = frames.get(cid);
