@@ -244,6 +244,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     if (!m) return true;
     if (teardown) menu = null; // no dialog to keep when its card or the extra has gone
     if ((!commitNick(m) || !saveEdits()) && !teardown) return false;
+    if (canvas) colored.get(numOf(m.cid))?.save?.();
     menu = null;
     m.box.remove();
     m.btn.setAttribute('aria-expanded', 'false');
@@ -289,7 +290,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const custom = make('input', { type: 'color', className: 'gz-cm-custom' });
     custom.setAttribute('aria-label', t('Colour for {name}', { name }));
     custom.addEventListener('input', (e) => { const hex = custom.value; if (canvas) { if (e.isTrusted) canvasColor(menu, hex, true); } else editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, ctx.courseList()), true); });
-    custom.addEventListener('change', saveEdits);
+    custom.addEventListener('change', () => { if (canvas) colored.get(numOf(cid))?.save?.(); else saveEdits(); });
     const grid = group('gz-cm-colors', ...sw, custom);
     grid.className = 'gz-cm-grid';
     const reset = make('button', { type: 'button', className: 'gz-cm-reset', textContent: t('Reset') });
@@ -332,7 +333,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick, note,
         cap(t('Colors'), 'gz-cm-colors'), grid,
         make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid,
-        make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }),
+        make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid, btn)) }),
         ...(own ? [make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Move or hide in Canvas’s menu'), onclick: () => {
           if (!closeMenu(false)) return;
           // A board card proxies its original too; show Canvas's cards so its popover has a visible anchor.
@@ -340,7 +341,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
           own.click();
         } })] : []));
     }
-    if (ultra) box.append(make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }));
+    if (ultra) box.append(make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid, btn)) }));
     document.body.append(box);
     menu = { box, btn, cid, nick, edited: false, note, custom, reset, tint, grid, sw, looks };
     btn.setAttribute('aria-expanded', 'true');
@@ -403,7 +404,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     // The popover goes with its card: gone, hidden, or the extra switched off.
     sync: (on) => {
       if (menu && !menu.btn.isConnected) {
-        const again = [...document.querySelectorAll('.gz-cm-btn')].find((b) => b.dataset.cid === menu.cid && b.getClientRects().length); // a visible replacement of the card
+        const again = document.getElementById(menu.btn.id); // the same card, drawn again
         if (again) menu.btn = again; else closeMenu(false, true);
       }
       if (menu && (!on || !menu.btn.getClientRects().length)) closeMenu(false, true);

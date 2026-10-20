@@ -1127,7 +1127,7 @@
         // its events, below.
         b = docButton('paint', label, () => {});
         b.className = 'gz-cm-btn';
-        b.id = `gz-cm-${cid}`; // gz- ids are skipped by the sweep
+        b.id = `gz-${card.hasAttribute('data-gz-tile-card') ? 'w-' : ''}cm-${cid}`; // gz- ids are skipped by the sweep
         b.dataset.cid = cid;
         b.setAttribute('aria-haspopup', 'dialog');
         b.setAttribute('aria-expanded', String(globalThis.GZ_COURSE_MENU?.cid() === cid));
