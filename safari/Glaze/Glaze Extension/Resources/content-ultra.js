@@ -51,12 +51,10 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
 
-  // Submitted late: the latest attempt against the due date, for work waiting to be graded. An
-  // attempt's date never changes, so each is asked once. Nothing is called late in a course that
-  // gives this student due-date exceptions, or for an item with one of its own.
-  const attempts = new Map();
+  // Only submitted attempts have a hand-in date. A newer draft leaves earlier submission timing unknown.
+  // Course and item due-date exceptions suppress lateness.
   const lateIn = (cid, results) => {
-    const waiting = GZ_GRADES.awaiting(results);
+    const waiting = GZ_GRADES.awaiting(results).filter(GZ_PAGE.submitted);
     if (!waiting.length || !I.settings.enhance.inline) return Promise.resolve(new Set());
     const excepted = myCourses().then((ms) => {
       const m = ms.find((x) => x.courseId === cid);
@@ -64,11 +62,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       return api(`/courses/${cid}/gradebook/memberships/${m.id}/exceptions?columnId=${waiting.map((g) => g.columnId).join(',')}`)
         .then((j) => { const text = JSON.stringify(j.results || []); return (col) => text.includes(col); }, () => () => true);
     });
-    const dates = waiting.map((g) => {
-      if (!attempts.has(g.lastAttemptId)) attempts.set(g.lastAttemptId, api(`/courses/${cid}/gradebook/attempts/${g.lastAttemptId}?columnId=${g.columnId}`).then((a) => a.attemptDate, () => null));
-      return attempts.get(g.lastAttemptId);
-    });
-    return Promise.all([excepted, ...dates]).then(([exc, ...when]) => new Set(waiting.filter((g, i) => !exc(g.columnId) && GZ_GRADES.late(when[i], g.column.dueDate)).map((g) => g.columnId)));
+    return excepted.then((exc) => new Set(waiting.filter((g) => !exc(g.columnId) && g.lastAttempt?.status !== 'IN_PROGRESS'
+      && GZ_GRADES.late(g.lastAttempt?.attemptDate, g.column.dueDate)).map((g) => g.columnId)));
   };
   // Per-course gradebook cache. Only due-date chips ask for lateness; changed answers re-tag the page.
   const books = new Map();
@@ -78,11 +73,11 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       b = { key: '', ...b, at: Date.now(), pending: true };
       books.set(cid, b);
       // One page (200 grades); calculators reject an incomplete answer.
-      me().then((id) => api(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column`))
+      me().then((id) => api(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column,lastAttempt,submissionStatus`))
         .then((j) => (late || b.late ? lateIn(cid, j.results) : Promise.resolve(undefined)).then((lateCols) => {
           b.pending = false;
           const complete = !j.paging?.nextPage;
-          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...(lateCols || [])], complete]);
+          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade, g.submissionStatus?.status, g.lastAttempt?.status, g.lastAttempt?.attemptDate]), [...(lateCols || [])], complete]);
           b.late = lateCols;
           b.results = covered(j.results, complete);
           if (key === b.key) return;

@@ -4,8 +4,6 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
 ## [3.3.0] — 2026-10-20
 
 ### Added
@@ -24,6 +22,7 @@ All notable changes to Glaze are documented here. The format follows
 - Canvas loads lighter: course-tab frames get the Look before their first paint and reuse the page's course list and colors instead of asking Canvas again; dashboard grades cover more than 100 courses; course widgets keep their picture while Canvas redraws its cards; a course's colour edit is saved even when you leave at once.
 
 ### Fixed
+- Blackboard saved assignment drafts stay unsubmitted in due-date badges and Better To Do. Attempt dates and multiple saved attempts no longer count as proof of submission. Completed external-tool items keep their native completion status when Blackboard reports `NO_STATUS`.
 - Ultra submission reviews keep Rubric integration when Glaze's course-tab strip is beside the native review wrapper.
 - Fresh defaults recover when a page starts before installation or Ultra registration, and after an interrupted install. Saved feature switches, later accounts, restored backups and synced removals keep their choices. Responsive widget rows respect saved card widths, right-to-left order and wrapped content heights.
 - Canvas: a reload brings back a course tab whose course is the page's own; a link to a part of another page keeps its place; Glaze's bar keeps a same-site link of yours in the frames; the bar's course menu follows each page of a frame; module progress is asked again a minute after a failed request; Glaze's frames no longer keep pages they've left in memory.

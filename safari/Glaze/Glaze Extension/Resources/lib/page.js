@@ -180,8 +180,7 @@ const GZ_PAGE = (() => {
     return { title, sub, rel, past };
   };
 
-  // The gradebook's record for each content item, from Ultra's gradebook/grades?expand=column. Columns
-  // with no content item (external tools, totals) are left out.
+  // Expanded Ultra gradebook rows by content item; external tools and totals without content are left out.
   const gradesByContent = (results) => new Map((results || []).filter((g) => g.column?.contentId).map((g) => [g.column.contentId, g]));
 
   // The course's overall grade, from the same answer: the column marked as the course's external grade,
@@ -211,16 +210,23 @@ const GZ_PAGE = (() => {
     return sc && label ? [[String(c.id), { label, tone: `graded-${sc.band}` }]] : [];
   }));
 
-  // Done: graded, submitted (needs grading), exempt, or Ultra's progress circle full.
-  const isDone = (circle, grade) => circle === 'true' || !!grade?.isExempt || grade?.status === 'GRADED' || grade?.status === 'NEEDS_GRADING';
+  // Submission status overrides attempts; Canvas projects NEEDS_GRADING.
+  const submitted = (g) => {
+    const s = g?.submissionStatus?.status, a = g?.lastAttempt;
+    if (s === 'SUBMITTED') return true;
+    if (s && s !== 'GRADED') return false;
+    if (a?.status === 'IN_PROGRESS' || g?.status === 'IN_PROGRESS') return false;
+    return g?.status === 'NEEDS_GRADING' || a?.status === 'NEEDS_GRADING'
+      || !!a?.attemptDate && (s === 'GRADED' || a.status === 'COMPLETED');
+  };
+  const isDone = (circle, g) => {
+    const s = g?.submissionStatus?.status;
+    return !!g?.isExempt || g?.status === 'GRADED' || submitted(g)
+      || circle === 'true' && (!s || s === 'NO_STATUS') && g?.lastAttempt?.status !== 'IN_PROGRESS' && g?.status !== 'IN_PROGRESS';
+  };
 
-  // The chip beside a due date in course content: where the work stands, then when it's due.
-  // circle: Ultra's progress circle ('false' empty, 'mixed' half, 'true' full), or null where the course
-  // doesn't track progress. grade: the gradebook's record, null if the item has no column, undefined while
-  // unknown. late: handed in after the due date (lib/grades.js). Returns { label, tone }, or null when
-  // there's nothing reassuring or useful to say: a past date whose status is unknown is left alone
-  // rather than shown as "2 weeks ago". date: the due date, as Ultra's text or a Date. Words in Ultra's
-  // language.
+  // Due-date chip: circle false/mixed/true/null; grade null (no column) or undefined (unknown).
+  // Unknown past dates get no chip. date: text or Date.
   const status = (date, circle, grade, now = new Date(), late = false, locale) => {
     const w = when(date, now, locale, true);
     if (!w) return null;
@@ -234,9 +240,9 @@ const GZ_PAGE = (() => {
       const mark = d.text || (sc ? `${n(d.score)}/${n(grade.pointsPossible)}` : '');
       return { label: mark ? t('Graded · {mark}', { mark }) : t('Graded'), tone: sc ? `graded-${sc.band}` : 'done' };
     }
-    if (grade?.status === 'NEEDS_GRADING' && late) return { label: t('Submitted late'), tone: 'late' };
+    if (submitted(grade) && late) return { label: t('Submitted late'), tone: 'late' };
     if (isDone(circle, grade)) {
-      const label = t(grade?.status === 'NEEDS_GRADING' ? 'Submitted' : 'Done');
+      const label = t(submitted(grade) ? 'Submitted' : 'Done');
       return { label: past ? label : t('{status} · due {when}', { status: label, when: w.rel }), tone: 'done' };
     }
     const where = circle === 'mixed' ? t('Opened') : circle === 'false' ? t('Unopened') : grade ? t('Not submitted') : '';
@@ -394,7 +400,7 @@ const GZ_PAGE = (() => {
   // Only audited reading/global pages: discussions own g/c; Files, quizzes and gradebooks have their own keys.
   const canvasKeys = (path) => /^(?:\/(?:courses|calendar|conversations|grades)?\/?|\/courses\/\d+(?:\/?|\/(?:pages\/[^/]+|assignments\/\d+)\/?))$/.test(path) && !/\/pages\/(?:new|edit)$/.test(path);
 
-  return { due, score, read, when, describe, gradesByContent, overall, canvasOverall, canvasProgress, isDone, status, canvasDate, canvasScore, canvasGrade, canvasStatus, uncut, fuzzy, files, readMinutes, readShare, completion, place, canvasKeys };
+  return { due, score, read, when, describe, gradesByContent, overall, canvasOverall, canvasProgress, submitted, isDone, status, canvasDate, canvasScore, canvasGrade, canvasStatus, uncut, fuzzy, files, readMinutes, readShare, completion, place, canvasKeys };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_PAGE;
