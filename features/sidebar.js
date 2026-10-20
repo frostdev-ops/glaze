@@ -442,7 +442,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Unrecognized attempt shells keep Ultra's presentation. Verified current shells use their native column as host.
   let absorbed = [], absorbSheet = null, absorbRO = null, absorbMO = null, absorbRootMO = null, absorbBox = null, absorbBlocked = new WeakMap(), absorbGen = 0, rubricNative = null;
   const OVERVIEW = 'section.assessment-overview-modern-panel.routed-page.route-view-container > learning-module-panel-view.routed-page-body > div.table-of-contents-disabled > div.panel-content-body > div.root-learning-module-panel > div#learningModulePanelContainerId.content-item-container > div.content-item-container-children > content-body > div.base-body > div.content-root > div.standard-content-body > div.assessment-overview-grid';
-  const PANEL = `${OVERVIEW} > div.overview-section.overview-attempts-section.overview-attempts-section-container:nth-child(3):has(> h2#grades-attempts-header.section-label)`;
+  const PANEL = `${OVERVIEW} > div.overview-section.overview-attempts-section.overview-attempts-section-container:has(> h2#grades-attempts-header.section-label)`;
   const REVIEW = 'div.bb-offcanvas-panel.screen.student-view-submission-panel';
   const RUBRIC = `${REVIEW} > div.bb-offcanvas-panel-wrap main > aside:has(.rubric-inline-container)`;
   const absorbKey = () => JSON.stringify([location.pathname, location.search, innerWidth, innerHeight, cfg(), rec?.width, isOpen()]);
@@ -479,17 +479,22 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const grids = [...document.querySelectorAll('div.assessment-overview-grid')];
     if (grids.length !== 1) return null;
     const grid = grids[0], kids = [...grid.children].filter((e) => e !== backdrop);
-    const classes = ['overview-description-section', 'overview-due-date-section', 'overview-attempts-section', 'assessment-details-section'];
-    if (kids.length !== 4 || kids.some((e, i) => e.tagName !== 'DIV' || !has(e, 'overview-section') || !has(e, classes[i]) || (i !== 2 && !has(e, 'main-section-container')))) return null;
+    // Ultra omits Description/Assessment Details when absent; submitted work also drops js-multiple from its
+    // action link. Validate the remaining ordered native sections and stable action class, without fixed positions.
+    const classes = ['overview-due-date-section', 'overview-attempts-section'];
+    if (has(kids[0], 'overview-description-section')) classes.unshift('overview-description-section');
+    if (has(kids[kids.length - 1], 'assessment-details-section')) classes.push('assessment-details-section');
+    const attempts = classes.indexOf('overview-attempts-section');
+    if (kids.length !== classes.length || kids.some((e, i) => e.tagName !== 'DIV' || !has(e, 'overview-section') || !has(e, classes[i]) || (i !== attempts && !has(e, 'main-section-container')))) return null;
     // Check direct parents ourselves, rather than accepting a descendant selector's partial match.
     const chain = ['div.standard-content-body', 'div.content-root', 'div.base-body', 'content-body', 'div.content-item-container-children',
       'div#learningModulePanelContainerId.content-item-container', 'div.root-learning-module-panel', 'div.panel-content-body',
       'div.table-of-contents-disabled, div.table-of-contents-enabled', 'learning-module-panel-view.routed-page-body', 'section.assessment-overview-modern-panel.routed-page.route-view-container'];
     let parent = grid.parentElement;
     for (const sel of chain) { if (!parent || parent.closest(sel) !== parent) return null; parent = parent.parentElement; }
-    const e = kids[2], heads = [...e.children].filter((n) => n.tagName === 'H2' && has(n, 'section-label'));
+    const e = kids[attempts], heads = [...e.children].filter((n) => n.tagName === 'H2' && has(n, 'section-label'));
     if (!has(e, 'overview-attempts-section-container') || heads.length !== 1 || heads[0].id !== 'grades-attempts-header'
-      || document.querySelectorAll('#grades-attempts-header').length !== 1 || !e.querySelector('a.button.button-attempt.js-multiple')
+      || document.querySelectorAll('#grades-attempts-header').length !== 1 || !e.querySelector('a.button.button-attempt')
       || !readOnlyPanel(e) || !e.isConnected || e.closest('[hidden], [aria-hidden="true"]')) return null;
     return { el: e, grid };
   };
@@ -654,7 +659,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
           padding:calc(var(--gz-sb-pad, 1rem) * .75)!important; border:1px solid var(--gz-border-line, var(--gz-line))!important;
           border-radius:var(--gz-sb-ir, 8px)!important; background:var(--gz-surface)!important; box-shadow:none!important;
         } html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} { grid-template-columns:minmax(0,1fr)!important; }
-        html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} > :not(:nth-child(3)) { grid-column:1 / -1!important; } }`;
+        html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} > :not(.overview-attempts-section) { grid-column:1 / -1!important; } }`;
         document.body.append(absorbSheet);
         pv(slot, 'height', `${e.getBoundingClientRect().height}px`);
       }

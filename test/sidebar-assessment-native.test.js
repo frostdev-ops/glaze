@@ -59,6 +59,35 @@ test('current Ultra Grades / Attempts is the native sidebar host even with a tal
   }
 });
 
+for (const description of [true, false]) for (const details of [true, false]) for (const submitted of [true, false]) {
+  test(`current assessment overview supports description=${description}, details=${details}, submitted=${submitted}`, async () => {
+    const p = overview('disabled'), section = p.$('.overview-attempts-section');
+    if (!description) p.$('.overview-description-section').remove();
+    if (!details) p.$('.assessment-details-section').remove();
+    const action = section.querySelector('a.button-attempt');
+    if (submitted) {
+      action.className = 'button button-attempt';
+      action.textContent = 'View submission';
+      const submission = p.el('a', 'has-link js-attempt-submitted', 'Submitted work');
+      const grade = p.el('a', 'grade-rubric-detail disable-click', '--');
+      submission.setAttribute('href', 'javascript:void(0);'); grade.setAttribute('href', 'javascript:void(0);');
+      section.append(submission, grade);
+    }
+    const before = natives(p);
+    let clicks = 0; action.addEventListener('click', () => clicks++);
+    await p.pass();
+    assert.ok(p.host() === section, 'the native Grades / Attempts column owns the sidebar');
+    assert.ok(section.contains(p.$('#gz-sb-widgets')));
+    p.fire(action, 'click'); assert.equal(clicks, 1);
+    await p.pass();
+    assert.ok(p.host() === section, 'the host stays recognized on the next pass');
+    unmoved(p, before, 'overview variant');
+    p.side.sync(false);
+    assert.equal(section.hasAttribute('data-gz-sidebar-host'), false);
+    unmoved(p, before, 'overview variant off');
+  });
+}
+
 test('current assessment host supports folding and disabling absorption without moving its native controls', async () => {
   const p = overview(), section = p.$('.overview-attempts-section'), before = natives(p);
   await p.pass();
