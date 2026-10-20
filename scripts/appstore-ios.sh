@@ -24,18 +24,17 @@ sh scripts/safari-manifest.sh "$resources/manifest.json"
 # The app bundles only what the Xcode project lists: stop before building if the package has something it doesn't.
 node scripts/safari-resources.js "$resources"
 
-auth=""
+set --
 if [ -n "${ASC_KEY_PATH:-}" ]; then
   : "${ASC_KEY_ID:?ASC_KEY_ID is required with ASC_KEY_PATH}" "${ASC_ISSUER_ID:?ASC_ISSUER_ID is required with ASC_KEY_PATH}"
-  auth="-allowProvisioningUpdates -authenticationKeyPath $ASC_KEY_PATH -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+  set -- -allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 fi
 out=release/$version
 mkdir -p "$out/build/logs" "$out/app-store"
 # The archive is left unsigned and the export signs it for the App Store (cloud signing through the API key):
 # signing the archive itself needs a development profile, which Apple only makes once the team has a device.
-# shellcheck disable=SC2086
 if ! xcodebuild archive -project "$stage/Glaze/Glaze.xcodeproj" -scheme "Glaze iOS" -configuration Release \
-  -archivePath "$stage/Glaze-iOS.xcarchive" -destination 'generic/platform=iOS' $auth \
+  -archivePath "$stage/Glaze-iOS.xcarchive" -destination 'generic/platform=iOS' "$@" \
   CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$team" CODE_SIGNING_ALLOWED=NO \
   MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build" > $out/build/logs/ios-build.log 2>&1; then
   tail -n 60 $out/build/logs/ios-build.log >&2
@@ -59,9 +58,8 @@ cat > "$stage/ExportOptions.plist" <<EOF
 </dict>
 </plist>
 EOF
-# shellcheck disable=SC2086
 if ! xcodebuild -exportArchive -archivePath "$stage/Glaze-iOS.xcarchive" \
-  -exportOptionsPlist "$stage/ExportOptions.plist" -exportPath "$stage/export" $auth \
+  -exportOptionsPlist "$stage/ExportOptions.plist" -exportPath "$stage/export" "$@" \
   >> $out/build/logs/ios-build.log 2>&1; then
   tail -n 40 $out/build/logs/ios-build.log >&2
   echo "Archived $out/build/Glaze-iOS.xcarchive (build $build), but the App Store export failed; see $out/build/logs/ios-build.log." >&2

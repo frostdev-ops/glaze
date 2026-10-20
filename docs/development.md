@@ -54,6 +54,10 @@ only routed synthetic sites in a temporary browser profile.
 
 ### Publishing to the Chrome Web Store
 
+For one command that builds and submits Chrome, Firefox, Mac and iPhone/iPad releases, use
+`node scripts/store-release.mjs release`. Credential setup, build-only mode and resumable submission
+are documented in [Releasing Glaze](../RELEASING.md#build-and-submit-all-three-stores).
+
 ```sh
 sh scripts/publish-chrome.sh
 ```
