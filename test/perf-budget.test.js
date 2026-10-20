@@ -86,6 +86,10 @@ const AUDIT_REVIEW = { ultra: 258, canvas: 329, moodle: 234 };
 // The sidebar's switch (owner-approved raise, 2026-10-19): defaults.js's enhance.sidebar, 107 bytes on every site. The
 // sidebar's state, its worker writes and everything else load on demand. Measured against 7860886e.
 const SIDEBAR = { ultra: 107, canvas: 107, moodle: 107 };
+// The sidebar on Canvas (owner-approved raise, 2026-10-19): content.js's stylesheet for it (features/sidebar.css, 24 bytes on
+// every site) and content-canvas.js's hook that loads features/sidebar.js on the top page, with Better To Do and the widgets
+// following it (683 bytes on Canvas). The sidebar, its layout and the dock load on demand. Measured against 3fdb8735.
+const SIDEBAR_UI = { ultra: 24, canvas: 24 + 683, moodle: 24 };
 // The sidebar broker's account reader reuses each site's cached identity (owner-approved raise). Measured against
 // af936dcf: content.js's GZ_CTX.account adds 97 shared bytes; identity checks and their deadline stay in the worker.
 const SIDEBAR_ACCOUNT = { ultra: 97, canvas: 97, moodle: 97 };
@@ -97,7 +101,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site], budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site], budget = Math.round(baseline * 1.02);
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -243,7 +247,7 @@ test('the scans see the code they are meant to', () => {
 // the whole page (measured: 95 ms of style per press on a 9,400-element outline; 0.2 ms without those rules). Ultra's sheets:
 // no class tests or descendant `*` in a :has(), and a :has() before a combinator sits on a class, id or attribute, or a tag
 // that is not a page container.
-const ULTRA_SHEETS = ['features/coursetabs.css', 'theme.css', 'extras.css', 'motion.css', 'features/apps.css', 'features/surfaces.css', 'features/rules.css', 'features/navlayout.css'];
+const ULTRA_SHEETS = ['features/coursetabs.css', 'theme.css', 'extras.css', 'motion.css', 'features/apps.css', 'features/surfaces.css', 'features/rules.css', 'features/navlayout.css', 'features/sidebar.css'];
 // The containers a page is built of: flagged, one may hold the whole page.
 const BROAD = new Set(['', '*', 'html', 'body', 'div', 'span', 'section', 'main']);
 const hasRules = (css) => {

@@ -182,7 +182,7 @@ test('Canvas paints the cached light palette and render-blocking sheets before s
   assert.equal(p.html.style.getPropertyValue('--gz-surface'), saved.colors['--gz-surface']);
   assert.equal(p.html.style.getPropertyValue('color-scheme'), 'light');
   assert.equal(p.html.hasAttribute('data-gz-dark-theme'), false);
-  assert.deepEqual(p.sheets().map((l) => l.href.split('/').pop()), ['canvas.css', 'motion.css', 'apps.css', 'coursetabs.css', 'surfaces.css']);
+  assert.deepEqual(p.sheets().map((l) => l.href.split('/').pop()), ['canvas.css', 'motion.css', 'apps.css', 'coursetabs.css', 'sidebar.css', 'surfaces.css']);
   assert.ok(p.sheets().every((l) => l.getAttribute('blocking') === 'render'));
   assert.equal(p.storage.filter((r) => r.area === 'sync').length, 1);
   assert.equal(p.sweep(), undefined); assert.deepEqual(p.requests, []);
@@ -195,7 +195,7 @@ test('Canvas site detection disconnects its document observer when the head mark
   assert.equal(p.sheets().length, 0); assert.equal(p.storage.length, 0);
   const detector = p.observers.find((o) => o.target === p.doc); assert.equal(detector.active, true);
   p.detect(); await settle();
-  assert.equal(detector.disconnected, true); assert.equal(p.sheets().length, 5);
+  assert.equal(detector.disconnected, true); assert.equal(p.sheets().length, 6);
   await p.answer(); await p.loaded();
 });
 
@@ -306,8 +306,8 @@ test('Canvas course-tab themes and render blockers are installed before DOMConte
   p.addBody(); await settle(); // A parser-created body may paint before DOMContentLoaded.
   const earlySheets = p.sheets().length, earlySurface = p.html.style.getPropertyValue('--gz-surface');
   await p.loaded(); await p.answer();
-  assert.equal(p.sheets().length, 5, 'the same fixture does eventually theme');
-  assert.equal(earlySheets, 5, `only ${earlySheets} sheets before DOMContentLoaded: native Canvas can paint first`);
+  assert.equal(p.sheets().length, 6, 'the same fixture does eventually theme');
+  assert.equal(earlySheets, 6, `only ${earlySheets} sheets before DOMContentLoaded: native Canvas can paint first`);
   assert.ok(earlySurface, 'cached palette must be present while parsing');
 });
 

@@ -72,7 +72,13 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // The boards: which one this page is ('courses', 'dash', 'cdash' or null), the one drawn, and the Courses page's layer the
   // tiles float in (the Dashboard's tiles are in its own room, the grid).
   let board = null, drawn = null, room = null;
-  const tiles = new Map(); // id -> { el, body, wake?, stop?, update? }
+  const tiles = new Map(); // id -> { el, body, wake?, stop?, update?, context? }
+  // The sidebar (features/sidebar.js) while it is on this page: then each widget has one destination for this account
+  // (lib/sidebar.js resolve), the dock, this page's board, floating or nowhere, and the layout keeps every spot it had.
+  // placedAt: each widget's, as last resolved; dockIds: the dock's tiles as drawn, in order.
+  let side = null, sideWas = null, heard = false, placedAt = new Map(), dockIds = [];
+  const sideNow = () => (!ultra && ctx.settings().enhance.sidebar && globalThis.GZ_SIDEBAR_UI?.active?.() ? GZ_SIDEBAR_UI : null);
+  const dockable = (id) => !W?.course(id);
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
   const button = (text, run, props = {}) => { const b = make('button', { type: 'button', className: 'gz-w-btn', textContent: text, ...props }); b.addEventListener('click', run); return b; };
@@ -113,7 +119,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const allowed = (id) => {
     if (W?.course(id)) return !!board && W.course(id).origin === location.origin && W.course(id).canvas === !ultra;
     const e = ctx.settings().enhance;
-    return id === 'todo' ? !!board && e.todo : id === 'pet' ? e.pet : id === 'notes' ? e.notes : e.widgets || (ultra && (board === 'dash' || (e.dashboard && fl(id))));
+    return id === 'todo' ? (!!board || !!side) && e.todo : id === 'pet' ? e.pet : id === 'notes' ? e.notes : e.widgets || (ultra && (board === 'dash' || (e.dashboard && fl(id))));
   };
   // A change to the layout (lib/widgets.js apply): shown here at once, and sent to the worker, which applies it to what
   // is stored then, so another tab's change made since is kept. While changes are on their way, the stored layout that
@@ -463,9 +469,15 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     },
 
     // The place features/todo.js puts its list. The tile holds the existing list and all its account-scoped state.
+    // Without the sidebar, a spot Better To Do finds (features/todo.js anchor); with it, the list mounted here, following
+    // the page's course or showing all of them (the record's todoScope).
     todo(body) {
-      body.append(make('div', { className: 'gz-w-todo-spot' }));
-      return {};
+      if (!side) { body.append(make('div', { className: 'gz-w-todo-spot' })); return {}; }
+      let alive = true;
+      const scope = () => (side ? { courseId: side.context().courseId, scope: side.rec()?.todoScope || 'follow', setScope: (v) => side?.op([{ op: 'todoScope', v }]), failed: () => todoIn() } : null);
+      const mount = () => { if (alive && side && globalThis.GZ_TODO_UI?.mount) { GZ_TODO_UI.mount(body, scope()); todoIn(); } };
+      ctx.need('features/todo.js', () => globalThis.GZ_TODO_UI).then(mount, () => {});
+      return { context: mount, stop: () => { alive = false; globalThis.GZ_TODO_UI?.unmount?.(body); } };
     },
 
     // Every pet surface uses this character, account record and the same timer/task reactions.
@@ -632,7 +644,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Floats use their site's surface, once, instead of this page's board (which keeps its own spot).
   const pageTiles = () => (ultra ? lay.boards.pages : lay.tiles.filter((x) => x.float));
   const fl = (id) => pageTiles().some((x) => x.id === id && x.on);
-  const cur = (id) => (fl(id) ? pageTiles() : lay.boards[board] || []).find((x) => x.id === id);
+  // A docked tile (or one off this page's board) has its size from the site's tiles.
+  const cur = (id) => (fl(id) ? pageTiles() : lay.boards[board] || []).find((x) => x.id === id) || lay.tiles.find((x) => x.id === id);
   const widthOf = (x) => x.w || W.WIDTH[x.size];
   // A tile starts floating from the room's bottom right corner, clear of the others; its resized size goes with it.
   const floatOut = (id) => {
@@ -654,12 +667,136 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     change({ ops: [{ s: pages, id, set: ultra ? { on: false } : { float: false } }, { s: b, id, set: { on: true } }] });
     say(t(board ? '{name} is back on this page.' : b !== 'courses' ? '{name} is back on the Dashboard.' : '{name} is back on the Courses page.', { name: t(nameOf(id)) }));
   };
+  // With the sidebar, where a widget can go from where it is (the destination menu): the dock (not a course card), the
+  // Dashboard's board, floating (not To Do), or nowhere. Moving keeps the other places' spots (lib/sidebar.js).
+  const dests = (id, where, tile) => [
+    where !== 'dock' && dockable(id) && { label: t('Move to sidebar'), run: () => toDock(id) },
+    where !== 'board' && dockable(id) && { label: t('Move to Dashboard'), run: () => toBoard(id) },
+    where !== 'float' && atTop && dockable(id) && id !== 'todo' && { label: t('Float'), run: () => toFloat(id, where) },
+    where === 'dock' && tile.h && { label: t('Auto height'), run: () => { side.op([{ op: 'height', id, h: null }]); say(t('{name} is its own height again.', { name: t(nameOf(id)) })); } },
+    { label: t('Remove'), run: () => toOff(id) },
+  ].filter(Boolean);
+  const toDock = (id) => { side.op([{ op: 'dock', id }]); say(t('{name} is in the sidebar.', { name: t(nameOf(id)) })); };
+  const toBoard = (id) => {
+    change({ ops: [{ s: 'cdash', id, set: { on: true } }, ...(fl(id) ? [{ s: pages, id, set: ultra ? { on: false } : { float: false } }] : [])] });
+    side.op([{ op: 'undock', id, to: 'board', board: 'cdash' }]);
+    say(t(board ? '{name} is back on this page.' : '{name} is on the Dashboard.', { name: t(nameOf(id)) }));
+  };
+  // Floating where it floated before, if it did; else from the room's corner (floatOut).
+  const toFloat = (id, where) => {
+    const was = ultra ? lay.boards.pages.find((x) => x.id === id) : lay.tiles.find((x) => x.id === id);
+    if (where === 'board' || !Number.isFinite(was?.x)) floatOut(id);
+    else { change({ ops: [{ s: pages, id, set: { on: true, ...(!ultra && { float: true }) }, front: true }] }); say(t(ultra ? '{name} floats on every Blackboard page.' : '{name} floats on every Canvas page.', { name: t(nameOf(id)) })); }
+    if (side.rec()?.dest[id] !== undefined) side.op([{ op: 'undock', id, to: 'float' }]);
+  };
+  // Removed from wherever it shows; its data, and its spots, fold and height, stay for when it comes back.
+  const toOff = (id) => {
+    if (W.course(id)) change({ ops: [{ s: board, id, remove: true }] });
+    else side.op([{ op: 'remove', id }]);
+    say(t('{name} is removed. Add widgets brings it back.', { name: t(nameOf(id)) }));
+  };
+  // The dock's order: a step up or down (the buttons, the handle's arrow keys), or dragged by the handle.
+  const dockMove = (id, by, sel) => {
+    const i = dockIds.indexOf(id), j = i + by;
+    if (i < 0 || j < 0 || j >= dockIds.length) return;
+    side.op([{ op: 'move', id, by }]);
+    say(t('{name} moved to {n} of {all}.', { name: t(nameOf(id)), n: j + 1, all: dockIds.length }));
+    tiles.get(id)?.tools.querySelector(sel)?.focus();
+  };
+  const dockDrag = (id, handle) => {
+    handle.addEventListener('pointerdown', (e) => {
+      const home = side?.host()?.widgets, x = tiles.get(id);
+      if (e.button !== 0 || gesture || !home || !x) return;
+      e.preventDefault();
+      const el = x.el, list = () => [...home.children].filter((c) => c.dataset?.tile);
+      const from = list().indexOf(el);
+      const move = (ev) => {
+        const next = list().find((c) => { if (c === el) return false; const r = c.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; }) || null;
+        if (next ? el.nextElementSibling !== next : home.lastElementChild !== el) { if (next) next.before(el); else home.append(el); }
+      };
+      const up = (ev) => {
+        for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) handle.removeEventListener(k, f);
+        delete el.dataset.dragging;
+        gesture = null;
+        if (!ev) return;
+        const to = list().indexOf(el);
+        if (ev.type !== 'pointerup' || to === from || to < 0) { draw(); return; }
+        side.op(Array.from({ length: Math.abs(to - from) }, () => ({ op: 'move', id, by: to > from ? 1 : -1 })));
+        say(t('{name} moved to {n} of {all}.', { name: t(nameOf(id)), n: to + 1, all: dockIds.length }));
+      };
+      gesture = { id, cancel: up };
+      el.dataset.dragging = '';
+      handle.setPointerCapture?.(e.pointerId);
+      for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) handle.addEventListener(k, f);
+    });
+    handle.addEventListener('keydown', (e) => {
+      const by = { ArrowUp: -1, ArrowDown: 1 }[e.key];
+      if (!by) return;
+      e.preventDefault();
+      dockMove(id, by, '.gz-w-handle');
+    });
+  };
+  // A docked tile's height, by the edge under it (the arrow keys too; a double-click, or Auto height in its menu, gives
+  // it its own again). Its width is the sidebar's.
+  const vsize = (x, id) => {
+    const h = make('div', { className: 'gz-w-vsize', tabIndex: 0 });
+    const name = t(nameOf(id));
+    h.setAttribute('role', 'separator');
+    h.setAttribute('aria-orientation', 'horizontal');
+    h.setAttribute('aria-label', t('Height of {name}: arrow keys', { name }));
+    h.title = t('Drag to resize, or use the arrow keys. Double-click for its own height.');
+    const keep = (px) => { const v = Math.max(W.MIN_H, Math.min(3000, Math.round(px))); side?.op([{ op: 'height', id, h: v }]); say(t('Resized {name}: {h} px tall', { name, h: v })); };
+    h.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || gesture) return;
+      e.preventDefault();
+      const y0 = e.clientY, h0 = x.body.offsetHeight;
+      let got = null;
+      const move = (ev) => { got = Math.max(W.MIN_H, Math.min(3000, h0 + ev.clientY - y0)); x.body.style.height = `${got}px`; };
+      const up = (ev) => {
+        for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) h.removeEventListener(k, f);
+        gesture = null;
+        if (!ev) return;
+        if (ev.type === 'pointerup' && got !== null) keep(got); else draw();
+      };
+      gesture = { id, cancel: up };
+      h.setPointerCapture?.(e.pointerId);
+      for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) h.addEventListener(k, f);
+    });
+    h.addEventListener('keydown', (e) => {
+      const by = { ArrowUp: -1, ArrowDown: 1 }[e.key];
+      if (!by) return;
+      e.preventDefault();
+      keep(x.body.offsetHeight + by * W.GRID * (e.shiftKey ? 4 : 1));
+      h.focus();
+    });
+    h.addEventListener('dblclick', () => { side?.op([{ op: 'height', id, h: null }]); say(t('{name} is its own height again.', { name })); });
+    return h;
+  };
   // Fold at any time; floating, its way back; on a board while editing, Float and Remove, all in the heading row.
-  // A control redrawn by its own click keeps the focus.
+  // With the sidebar, the destination menu takes Float and Remove's place, and a docked tile has its handle and Move up
+  // and down too. A control redrawn by its own click keeps the focus.
   const toolsFor = (x, tile) => {
     const name = t(nameOf(tile.id));
     const label = (b, text) => { b.setAttribute('aria-label', text); b.title = text; return b; };
     const again = (sel, run) => () => { run(); x.tools.querySelector(sel)?.focus(); };
+    if (side) {
+      const where = tile.dock ? 'dock' : tile.float ? 'float' : 'board';
+      const m = label(button('⋯', () => side?.menu(m, dests(tile.id, where, tile)), { className: 'gz-w-icon gz-w-dest' }), t('Move {name}', { name }));
+      m.setAttribute('aria-haspopup', 'menu');
+      m.setAttribute('aria-expanded', 'false');
+      const folded = !!tile.fold;
+      const fold = label(button(folded ? '▸' : '▾', again('.gz-w-fold', () => (tile.dock ? side.op([{ op: 'fold', id: tile.id, v: !folded }]) : change({ ops: [{ s: tile.float ? pages : board, id: tile.id, set: { fold: !folded } }] }))), { className: 'gz-w-icon gz-w-fold' }), t(folded ? 'Unfold {name}' : 'Fold {name}', { name }));
+      fold.setAttribute('aria-expanded', String(!folded));
+      x.body.hidden = folded;
+      if (!tile.dock) { x.tools.replaceChildren(...(tile.float || editing ? [m] : []), fold); return; }
+      const i = dockIds.indexOf(tile.id);
+      const handle = label(button('⠿', () => {}, { className: 'gz-w-icon gz-w-handle' }), t('Reorder {name}: drag, or use the arrow keys', { name }));
+      dockDrag(tile.id, handle);
+      const up = label(button('↑', () => dockMove(tile.id, -1, '.gz-w-up'), { className: 'gz-w-icon gz-w-up', disabled: i <= 0 }), t('Move {name} up', { name }));
+      const down = label(button('↓', () => dockMove(tile.id, 1, '.gz-w-down'), { className: 'gz-w-icon gz-w-down', disabled: i < 0 || i >= dockIds.length - 1 }), t('Move {name} down', { name }));
+      x.tools.replaceChildren(handle, up, down, m, fold);
+      return;
+    }
     const where = tile.float ? pages : board;
     const fold = label(button(tile.fold ? '▸' : '▾', again('.gz-w-fold', () => change({ ops: [{ s: where, id: tile.id, set: { fold: !tile.fold } }] })), { className: 'gz-w-icon gz-w-fold' }), t(tile.fold ? 'Unfold {name}' : 'Fold {name}', { name }));
     fold.setAttribute('aria-expanded', String(!tile.fold));
@@ -671,6 +808,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // What is said to a screen reader (a status line in the bar, or the floating layer's).
   let live = null;
   const say = (text) => {
+    if (!grid && side) { side.say(text); return; }
     const at = grid || floats;
     if (!at) return;
     if (live?.parentNode !== at) { live = make('p', { className: 'gz-sr' }); live.setAttribute('role', 'status'); at.append(live); }
@@ -696,7 +834,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   let floatsStacked = false; // Floating tiles, stacked at the window's edge (floating)
   let gesture = null; // the tile being dragged or resized, and how to release it if it goes away
   const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-  const movable = (id) => (fl(id) ? !floatsStacked : board ? editing && !stacked : false);
+  const movable = (id) => (dockIds.includes(id) ? false : fl(id) ? !floatsStacked : board ? editing && !stacked : false);
   const roomEl = () => (board === 'courses' ? room : grid?.querySelector('.gz-dash-grid'));
   // The room a floating tile has: on Ultra, the window right of the nav, below a course's top bar (B8's course tabs, or
   // anything else marked data-gz-keep-clear, too) and above Glaze's own footer, so it never covers them; on Canvas, the
@@ -713,6 +851,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         else if (r.top < innerHeight / 2 && r.bottom > 0) top = Math.max(top, r.bottom);
         else if (r.top > innerHeight / 2) bottom = Math.min(bottom, r.top);
       }
+    }
+    // The sidebar, expanded beside the content: floats keep clear of it.
+    const sb = document.documentElement?.getAttribute('data-gz-sidebar') === 'expanded' && globalThis.GZ_SIDEBAR_UI?.host?.()?.el;
+    if (sb) {
+      const r = sb.getBoundingClientRect();
+      if (r.width) { if (document.documentElement.dir === 'rtl') left = Math.max(left, r.right); else right = Math.min(right, r.left); edges.push(sb); }
     }
     return { left, right, top, bottom, W: Math.max(0, right - left), H: Math.max(0, bottom - top), edges };
   };
@@ -1065,6 +1209,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     globalThis.GZ_COURSE_CARDS?.picker.close(false);
     document.documentElement?.removeAttribute('data-gz-todo-tile');
     document.documentElement?.removeAttribute('data-gz-canvas-todo');
+    document.documentElement?.removeAttribute('data-gz-sidebar-todo');
+    dockIds = [];
     clearCourses();
     for (const e of [grid, panel, room, bar, all && floats]) e?.remove?.();
     grid = panel = room = bar = null;
@@ -1074,7 +1220,17 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     stacked = false;
   };
   // On Canvas's Dashboard the board owns To Do, including an intentional removal. Course-home lists stay native.
+  // With the sidebar, Better To Do drawn here (docked, or on this board) owns it, and so does removing it on purpose; a
+  // list that couldn't load (features/todo.js) gives Canvas's back.
   const todoIn = () => {
+    const root = document.documentElement;
+    if (side) {
+      root?.removeAttribute('data-gz-canvas-todo');
+      const owns = ctx.settings().enhance.todo && (!!tiles.get('todo')?.body.querySelector('#gz-todo') || side.rec()?.dest.todo === 'off');
+      root?.toggleAttribute('data-gz-sidebar-todo', !!owns);
+      return;
+    }
+    root?.removeAttribute('data-gz-sidebar-todo');
     const owns = !ultra && board === 'cdash' && !!grid?.isConnected && ctx.settings().enhance.todo;
     if (owns) globalThis.GZ_TODO_UI?.sync(true);
     // Keep the native list visible if the selected widget's feature has not loaded. Removing the widget is deliberate.
@@ -1084,8 +1240,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (!on || !lay) return;
     if (drawn !== board) teardown(false);
     drawn = board;
+    side = sideNow();
+    // The sidebar came or went: To Do's tile is filled the other way (a spot, or the list mounted in it).
+    if (!!side !== sideWas) { sideWas = !!side; const x = tiles.get('todo'); if (x) { x.stop?.(); x.el.remove(); tiles.delete('todo'); } }
     const hasGrid = placeGrid();
     const want = wanted(hasGrid);
+    dockIds = want.filter((x) => x.dock).map((x) => x.id);
     if (want.some((x) => x.float) && !floats?.isConnected) { floats = make('div', { id: 'gz-float' }); document.body.append(floats); }
     // A board is laid out again when its room's width or a tile's height changes (the nav folding, what a tile shows),
     // once a frame at most.
@@ -1113,14 +1273,19 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       // Its body as tall as it was resized to (else its content), scrolling inside. While a board is edited, its tiles
       // are things to move (their content waits), each in the Tab order for the arrow keys; a floating one always is.
       if (!gesture) { const h = tile.h ? `${tile.h}px` : ''; if (x.body.style.height !== h) x.body.style.height = h; }
-      const edit = editing && !tile.float;
+      const edit = editing && !tile.float && !tile.dock;
       if (x.body.inert !== edit) x.body.inert = edit;
       if (tile.float || edit) { x.el.setAttribute('tabindex', '0'); x.el.setAttribute('aria-description', t('Drag to move, or use the arrow keys')); }
       else { x.el.removeAttribute('tabindex'); x.el.removeAttribute('aria-description'); }
+      x.el.toggleAttribute('data-dock', !!tile.dock);
+      if (tile.dock && !x.vsize) { x.vsize = vsize(x, tile.id); x.el.append(x.vsize); }
+      if (x.vsize) x.vsize.hidden = !tile.dock || !!tile.fold;
       toolsFor(x, tile);
-      if (board && !tile.float) continue; // laid out below, in reading order
+      x.context?.();
+      if (board && !tile.float && !tile.dock) continue; // laid out below, in reading order
       // In order, moving only what is out of place: a moved element loses focus (a note being typed).
-      const home = tile.float ? floats : grid.querySelector('.gz-dash-grid');
+      const home = tile.float ? floats : tile.dock ? side.host()?.widgets : grid.querySelector('.gz-dash-grid');
+      if (!home) continue;
       const prev = last.get(home);
       if (x.el.parentNode !== home || x.el.previousElementSibling !== (prev || null)) { if (prev) prev.after(x.el); else home.prepend(x.el); }
       last.set(home, x.el);
@@ -1141,14 +1306,19 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       grid.toggleAttribute('data-editing', editing);
       room?.toggleAttribute('data-editing', editing);
       const add = grid.querySelector('.gz-dash-add');
-      const off = (board ? lay.boards[board] : lay.tiles).filter((x) => !W.course(x.id) && !x.on && allowed(x.id) && !fl(x.id));
+      // With the sidebar, a widget shown nowhere (one shown elsewhere moves by its own menu).
+      const off = (board ? lay.boards[board] : lay.tiles).filter((x) => !W.course(x.id) && (side ? placedAt.get(x.id)?.where === 'off' : !x.on && !fl(x.id)) && allowed(x.id));
       // A Dashboard with every widget off is still the Dashboard: it says how to fill it.
-      const empty = board && board !== 'courses' && !editing && !want.some((x) => !x.float);
+      const empty = board && board !== 'courses' && !editing && !want.some((x) => !x.float && !x.dock);
       add.replaceChildren(...(editing && off.length ? [make('span', { className: 'gz-w-faint', textContent: t('Add:') }),
-        ...off.map((x) => button(`+ ${t(nameOf(x.id))}`, () => change({ ops: [{ s: board || 'canvas', id: x.id, set: board ? { on: true, x: null, y: null } : { on: true } }] }), { className: 'gz-w-small' }))]
+        ...off.map((x) => button(`+ ${t(nameOf(x.id))}`, () => {
+          change({ ops: [{ s: board || 'canvas', id: x.id, set: board ? { on: true, x: null, y: null } : { on: true } }] });
+          if (side && board && side.rec()?.dest[x.id] !== undefined) side.op([{ op: 'undock', id: x.id, to: 'board', board }]);
+        }, { className: 'gz-w-small' }))]
         : empty ? [make('p', { className: 'gz-w-faint', textContent: t('Nothing here yet. Edit layout adds widgets.') })] : []));
       if (board && editing) { loadCourses(); coursePicker(add); }
     }
+    side?.drawn(dockIds.length);
     todoIn();
   };
 
@@ -1161,7 +1331,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const area = grid?.querySelector('.gz-dash-grid');
     const host = roomEl();
     if (gesture || !board || !area || !host?.isConnected || (board === 'courses' && hidden && !editing)) return;
-    const list = wanted(true).filter((x) => !x.float && tiles.has(x.id));
+    const list = wanted(true).filter((x) => !x.float && !x.dock && tiles.has(x.id));
     const dims = {};
     for (const x of list) {
       const { el } = tiles.get(x.id);
@@ -1209,10 +1379,20 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
 
   // This board's allowed tiles and this site's floats, each once. Declared tiles wait for their file to register. In the
   // frame Canvas's pages outside a course open in (the Dashboard over a course page), the page around has the floats.
-  const wanted = (hasGrid) => [
+  // With the sidebar, each in its one destination (lib/sidebar.js resolve), and the dock's in the dock's order.
+  const placement = () => (placedAt = side ? GZ_SIDEBAR.resolve(lay, side.rec(), { site: ctx.site, board, enabled: true, allowed, dockable }) : new Map());
+  const wanted = (hasGrid) => (side ? (() => {
+    const at = placement();
+    return [
+      ...(board && hasGrid ? lay.boards[board].filter((x) => at.get(x.id)?.where === 'board') : []),
+      ...(atTop ? pageTiles().filter((x) => at.get(x.id)?.where === 'float').map((x) => ({ ...x, float: true })) : []),
+      ...GZ_SIDEBAR.docked(side.rec()).filter((e) => at.get(e.id)?.where === 'dock')
+        .map((e) => ({ id: e.id, on: true, size: cur(e.id)?.size || MORE[e.id]?.size || 's', dock: true, fold: !!e.fold, ...(e.h && { h: e.h }) })),
+    ];
+  })() : [
     ...(board && hasGrid ? lay.boards[board].filter((x) => !fl(x.id)) : []),
     ...(atTop ? pageTiles().filter((x) => x.on).map((x) => ({ ...x, float: true })) : []),
-  ].filter((x) => {
+  ]).filter((x) => {
     if (!x.on || !allowed(x.id)) return false;
     if (W.course(x.id)) { loadCourses(); return !!globalThis.GZ_COURSE_CARDS; }
     if (WIDGETS[x.id] || added.has(x.id)) return true;
@@ -1224,7 +1404,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   });
   // What a tile from another file is given besides its body.
   const account = () => who().then(() => ({ ...me }));
-  const api = (id) => ({ id, term: () => cur(id)?.term || '', who: account, site: ctx.site, size: () => cur(id)?.size || 's' });
+  // surface(): where it shows now ('dock', 'float' or 'board'): no page, account or LMS data with it, so mods get it too.
+  const api = (id) => ({ id, term: () => cur(id)?.term || '', who: account, site: ctx.site, size: () => cur(id)?.size || 's', surface: () => (dockIds.includes(id) ? 'dock' : fl(id) ? 'float' : 'board') });
   // Floating tiles (lib/widgets.js floating): each at its place in the room the window leaves right of the nav
   // and below a course's top bar, on top in the order they were moved; stacked at the window's edge (data-stack) when
   // the window is too narrow for where they were placed. Their width is as resized, else their size's, as on the boards.
@@ -1355,6 +1536,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     declare(globalThis.GZ_MODWIDGETS?.tiles() || {}, 'plain');
     lay = W.layout(r.widgetLayout, MORE);
     hidden = r.widgetsHidden === true;
+    // With the sidebar on, its record first, so a docked widget never shows on a board first.
+    if (!ultra && atTop && ctx.settings().enhance.sidebar) await ctx.need('features/sidebar.js', () => globalThis.GZ_SIDEBAR_UI).then(() => GZ_SIDEBAR_UI.ready()).catch(() => {});
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
     document.addEventListener('visibilitychange', onShow);
     addEventListener('resize', onResize);
@@ -1371,6 +1554,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       ctx.need('features/pet.js', () => globalThis.GZ_PET_UI).then(() => { petResumeReady = true; loadingMore.delete('pet'); globalThis.GZ_PET_UI?.resume?.(); }, () => loadingMore.set('pet', Date.now() + 60000));
     }
     if (!on) { teardown(true); drawn = null; return; }
+    if (globalThis.GZ_SIDEBAR_UI && !heard) {
+      heard = true;
+      const again = () => { if (on && W && lay) draw(); };
+      GZ_SIDEBAR_UI.on('change', again);
+      GZ_SIDEBAR_UI.on('context', again);
+    }
     if (!starting) starting = start().then(draw, () => {
       if (on && board === 'dash') document.documentElement.setAttribute('data-gz-dash', 'ip');
       setTimeout(() => { starting = null; }, 60000);
@@ -1381,6 +1570,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       // page's observer isn't fed changes of Glaze's own.
       const h = home();
       const want = wanted(!!h);
+      if (sideNow() !== side) { draw(); return; }
       if (drawn !== board || want.map((x) => x.id).sort().join() !== [...tiles.keys()].sort().join() || (h ? !grid || !placed(h) : grid?.isConnected)
         || (!board && want.some((x) => x.float) && !floats?.isConnected)) draw();
       else {
@@ -1432,7 +1622,13 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }).catch(() => {});
     return { wake: () => { sleeping = false; live?.wake(); }, sleep: () => { sleeping = true; live?.sleep(); }, play: (state, direction) => { pose = [state, direction]; live?.play(state, direction); }, stop: () => { alive = false; live?.stop(); } };
   };
-  return { sync, hub: open, register, declare, who: account, avatar };
+  // For the sidebar's Add widgets: each widget that can dock here, with where it is now.
+  const catalog = () => {
+    if (!W || !lay || !side) return [];
+    const at = placement();
+    return [...new Set([...W.TILES, ...Object.keys(MORE)])].filter((id) => dockable(id) && allowed(id)).map((id) => ({ id, name: t(nameOf(id)), where: at.get(id)?.where || 'off' }));
+  };
+  return { sync, hub: open, register, declare, who: account, avatar, catalog };
 })();
 
 GZ_WIDGETS_UI;

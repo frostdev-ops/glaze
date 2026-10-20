@@ -246,6 +246,8 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 /* Better To Do in its tile on the Courses page: Ultra's own To Do steps aside (features/widgets.js sets the mark). */
 html[data-gz-todo-tile] div.todo-panel > bb-todo { display: none !important; }
 html[data-gz-canvas-todo] #right-side :is(.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list) { display: none !important; }
+/* With the sidebar (features/sidebar.js), Better To Do drawn in the dock or on the board, or removed on purpose (features/widgets.js todoIn). */
+html[data-gz-sidebar-todo] #right-side :is(.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list) { display: none !important; }
 /* The Courses page's toolbar, in Ultra's header tools beside the page's title. */
 #gz-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.4rem; font-family: var(--gz-font); font-size: 0.875rem; line-height: 1.4; color: var(--gz-ink); }
 #gz-toolbar :is(button, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }

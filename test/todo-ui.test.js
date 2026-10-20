@@ -49,6 +49,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
     GZ_TODO: T, GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_CANVAS_DUE_WEEK: () => [],
     GZ_CTX: {
       t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', canvasCourseId: () => '', celebrate() {}, need: async () => {},
+      settings: () => ({ enhance: { drafts: true } }),
       profile() { return this.capi('/users/self/profile'); },
       canvasCourses: async () => [{ id: '25', name: 'Biology', enrollments: [{ type: 'teacher' }] }],
       capi: async (url) => {
@@ -88,6 +89,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
             if (defer && Object.keys(v).some((k) => k.startsWith('todo:'))) waiting.push(answer); else answer();
           },
           get: (k, cb) => cb(JSON.parse(JSON.stringify(Object.fromEntries([k].flat().filter((x) => x in store).map((x) => [x, store[x]]))))),
+          remove: (k, cb) => { for (const x of [k].flat()) delete store[x]; cb?.(); },
         },
         sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {}, removeListener() {} },
       },
@@ -101,8 +103,8 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
     },
   };
   c.globalThis = c;
-  const src = read('features/todo.js').replace('  return { sync, add, cmds };', `  return { sync, add, cmds, probe: {
-    refresh, onChange, onShow, onSubmit, form: (x) => { form = x; }, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
+  const src = read('features/todo.js').replace('  return { sync, add, cmds, mount, unmount };', `  return { sync, add, cmds, mount, unmount, probe: {
+    refresh, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
     seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
       box = new E('section'); head = new E(); line = new E('p'); body = new E(); },
@@ -126,7 +128,7 @@ test('a late sharing loader for an old To Do mount cannot leave a port after tea
 });
 
 test('a module that arrives after the list was turned off stays off', async () => {
-  const decls = read('content-canvas.js').match(/ {2}const todoHere = .*\n {2}const syncTodo = .*\n/)[0];
+  const decls = read('content-canvas.js').match(/ {2}const sidebarHere = .*\n(?: {2}const \w+ = .*\n)*? {2}const syncTodo = .*\n/)[0];
   let arrive;
   const ctx = { I: { links: [1], settings: { enhance: { todo: true } } }, location: { pathname: '/' }, need: () => new Promise((r) => { arrive = r; }) };
   vm.createContext(ctx);
@@ -384,4 +386,63 @@ test("the worker takes To Do writes from a Canvas page for its own site's accoun
   assert.deepEqual([a.ok, b.ok], [false, true]);
   assert.deepEqual(store.local[KEY(3)].tasks.map((x) => x.title), ['B']);
   assert.equal(store.sync.colors, 'fine');
+});
+
+// ---- mounted by its widget in the sidebar's dock --------------------------------------------------------------------
+const course = (f) => { const asked = []; f.c.GZ_TODO = { ...T, build: (x) => { asked.push(x.course); return T.build(x); } }; return asked; };
+
+test('in the dock: Follow page shows this course, All courses every course, and the choice goes to the record', async () => {
+  const f = feature();
+  const asked = course(f);
+  const target = new E(), chosen = [];
+  const ui = f.c.GZ_TODO_UI;
+  ui.mount(target, { courseId: '25', scope: 'follow', setScope: (v) => chosen.push(v) });
+  await settle(); await settle();
+  assert.equal(asked.at(-1), '25', 'this course');
+  const box = f.p.get().box;
+  assert.ok(target.children.includes(box));
+  const head = box.children[0]; // the head, with its two buttons
+  const btns = head.children.find((x) => x?.className === 'gz-todo-scope').children;
+  assert.deepEqual(btns.map((b) => [b.dataset.v, b.attrs['aria-pressed']]), [['follow', 'true'], ['all', 'false']]);
+  f.p.onClick({ target: { closest: () => btns[1] } });
+  assert.deepEqual(chosen, ['all']);
+  ui.mount(target, { courseId: '25', scope: 'all', setScope: (v) => chosen.push(v) });
+  assert.equal(asked.at(-1), '', 'every course');
+  // The site's own sidebar pass can't take it from its widget.
+  ui.sync(false);
+  assert.equal(f.p.get().box, box);
+});
+
+test('an open task form survives the list going and coming back, and another page through the drafts store', async () => {
+  const f = feature();
+  const target = new E();
+  const ui = f.c.GZ_TODO_UI;
+  ui.mount(target, { courseId: '', scope: 'follow', setScope() {} });
+  await settle(); await settle();
+  f.p.form({ cid: '25', draft: { title: 'Essay outline', notes: 'Three sources' } });
+  ui.unmount(target);
+  assert.equal(f.p.get().box, null);
+  const kept = f.store['draft:todo:https://canvas.test/3'];
+  assert.equal(kept.todo.draft.title, 'Essay outline');
+  ui.mount(target, { courseId: '', scope: 'follow', setScope() {} });
+  assert.equal(f.p.formNow().draft.title, 'Essay outline', 'kept in this document');
+  // Another page: the stored draft opens once, and leaves the store.
+  const g = feature({ stored: { 'draft:todo:https://canvas.test/3': kept } });
+  g.c.GZ_TODO_UI.mount(new E(), { courseId: '', scope: 'follow', setScope() {} });
+  await settle(); await settle();
+  assert.deepEqual({ ...g.p.formNow().draft }, { title: 'Essay outline', notes: 'Three sources' });
+  assert.equal(g.p.formNow().draft.title, 'Essay outline');
+  assert.equal(g.p.formNow().cid, '25');
+  assert.equal('draft:todo:https://canvas.test/3' in g.store, false);
+});
+
+test('a list that cannot load in the dock says so, so Canvas\'s own comes back', async () => {
+  const f = feature({ profile: async () => { throw new Error('signed out'); } });
+  let failed = 0;
+  f.c.GZ_TODO_UI.mount(new E(), { courseId: '', scope: 'follow', setScope() {}, failed: () => failed++ });
+  await settle(); await settle();
+  assert.equal(failed, 1);
+  assert.equal(f.p.get().box, null);
+  assert.equal(f.c.GZ_TODO_UI.mount(new E(), { courseId: '', scope: 'follow', failed: () => failed++ }), false);
+  assert.equal(failed, 2);
 });

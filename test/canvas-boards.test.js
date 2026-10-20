@@ -12,7 +12,7 @@ const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setI
 const only = (...ids) => ({ tiles: W.TILES.map((id) => ({ id, on: ids.includes(id) })) });
 const px = (s) => parseFloat(s) || 0;
 
-const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/' } = {}) => {
+const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/', enhance = {}, sidebar = null } = {}) => {
   const doc = { activeElement: null }, make = (tag) => new El(tag, doc);
   doc.root = make('html'); doc.body = make('body'); doc.root.append(doc.body);
   const header = make('header'); header.id = 'dashboard_header_container';
@@ -29,7 +29,7 @@ const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/' } = {}) 
     innerWidth: width, innerHeight: 900, location: { origin: 'https://board.instructure.com', pathname: where },
     document: doc, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} }, requestAnimationFrame: () => 0, cancelAnimationFrame() {},
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W,
-    GZ_CTX: { site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v[n]), locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true } }),
+    GZ_CTX: { site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v[n]), locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, ...enhance } }),
       profile: async () => ({ id: '3', time_zone: 'UTC' }), need: async (f) => { loads.push(f); } },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, sendMessage: (m, cb) => { sent.push(m); queue = queue.then(() => m.type === 'glaze:widgetLayout' ? W.change(m, area) : { ok: true, timer: W.IDLE }); queue.then(cb); } },
@@ -48,6 +48,7 @@ const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/' } = {}) 
   doc.fire = (target, type) => { for (let e = target; e; e = e.parentNode) e.dispatchEvent({ type, target, preventDefault() {}, stopPropagation() {} }); };
   Object.assign(doc, { documentElement: doc.root, visibilityState: 'visible', createElement: make, createTextNode: (textContent) => ({ textContent }),
     querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), getElementById: (id) => doc.root.all().find((e) => e.id === id), addEventListener() {}, removeEventListener() {} });
+  if (sidebar) c.GZ_SIDEBAR_UI = sidebar;
   c.globalThis = c; vm.createContext(c);
   const ui = vm.runInContext(read('features/widgets.js'), c);
   const tile = (id) => doc.querySelector(`section[data-tile="${id}"]`);
@@ -247,4 +248,15 @@ test('Canvas edit controls stay below the room and reserve the toolbar width', a
   p.edit();
   assert.equal(edit.style.minWidth, '104.5px');
   assert.match(read('features/apps.css'), /\.gz-dash-reset\[hidden\]\s*\{[^}]*visibility:\s*hidden[^}]*display:\s*inline-flex\s*!important/, 'Reset keeps its space without remaining interactive');
+});
+
+test('with the sidebar switched off, the Dashboard board is as it was, even with the sidebar\'s code in the page', async () => {
+  const sidebar = { active: () => true, failed: () => false, ready: async () => true, on() {}, rec: () => ({ dest: { notes: 'dock' }, dock: [{ id: 'notes' }], fold: {}, ret: {} }), host: () => null, drawn() {}, op() { throw new Error('no sidebar op'); } };
+  const p = page({ enhance: { sidebar: false }, sidebar });
+  await settle();
+  assert.deepEqual(p.grid().children.map((x) => x.dataset.tile), ['notes', 'timer', 'todo'], 'the docked note stays on the board');
+  p.edit();
+  assert.ok(p.tool('notes', 'Float Notes over every page') && p.tool('notes', 'Remove Notes'), 'the board\'s own Float and Remove');
+  assert.equal(p.tile('notes').querySelector('.gz-w-dest'), null, 'no destination menu');
+  assert.equal(p.doc.root.hasAttribute('data-gz-sidebar-todo'), false);
 });

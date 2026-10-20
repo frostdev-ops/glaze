@@ -1,0 +1,411 @@
+// The sidebar on Canvas pages (features/sidebar.js, with features/widgets.js for the dock), on the captured Canvas pages
+// (test/fixtures/canvas-*.html) as stand-in DOM: the column each kind of page has, Canvas's own nodes never moved or
+// copied, late content, the modes by width, the drawer, section folds, and widgets moving between the dock, the board and
+// floating through the worker's real changes (lib/sidebar.js, lib/widgets.js). Geometry and transport are supplied.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const D = require('../defaults.js');
+const W = require('../lib/widgets.js');
+const S = require('../lib/sidebar.js');
+const { El } = require('./stand-in-dom.js');
+const { parse } = require('./fixture-dom.js');
+const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
+const O = 'https://board.instructure.com';
+const KEY = S.key('canvas', O, '3');
+
+// opts: fixture, path, width (the window), left (where Canvas's #main starts), stored (storage.local), enhance, widgets
+// (run features/widgets.js too), tall (the page's own column is long).
+const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', width = 1440, left = 276, stored = {}, enhance = {}, widgets = false, tall = false } = {}) => {
+  const doc = { activeElement: null };
+  doc.root = new El('html', doc);
+  doc.body = parse(read(`test/fixtures/${fixture}`), doc);
+  const store = structuredClone(stored), sent = [], loads = [], storeListeners = [], keyListeners = [], winListeners = [], observers = [];
+  const net = { fail: false };
+  let queue = Promise.resolve();
+  const fire = (v, old) => { for (const f of [...storeListeners]) f(Object.fromEntries(Object.keys(v).map((k) => [k, { newValue: structuredClone(v[k]), oldValue: old[k] }])), 'local'); };
+  const area = {
+    get: async (ks) => Object.fromEntries([ks].flat().filter((k) => k in store).map((k) => [k, structuredClone(store[k])])),
+    set: async (v) => { if (net.fail) return false; const old = structuredClone(store); Object.assign(store, structuredClone(v)); setImmediate(() => fire(v, old)); return true; },
+  };
+  const settings = () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, todo: true, sidebar: true, ...enhance } });
+  const sync = { get: async () => ({ enhance: settings().enhance }) };
+  const c = {
+    console, URL, Intl, Date, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, structuredClone,
+    setTimeout: () => 0, clearTimeout() {}, setImmediate,
+    addEventListener: (type, f) => winListeners.push({ type, f }), removeEventListener: (type, f) => { const i = winListeners.findIndex((l) => l.type === type && l.f === f); if (i >= 0) winListeners.splice(i, 1); },
+    innerWidth: width, innerHeight: 900, location: { origin: O, pathname: where },
+    document: doc, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+    MutationObserver: class { constructor(f) { this.f = f; observers.push(this); } observe(target) { this.target = target; this.on = true; } disconnect() { this.on = false; } },
+    requestAnimationFrame: (f) => { f(); return 1; }, cancelAnimationFrame() {},
+    GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W, GZ_SIDEBAR: S,
+    GZ_CTX: {
+      site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n]), locale: () => 'en', settings,
+      account: async () => '3', profile: async () => ({ id: '3', time_zone: 'UTC' }), canvasCourseId: () => where.match(/^\/courses\/(\d+)/)?.[1] || '',
+      need: async (f) => { loads.push(f); },
+    },
+    chrome: {
+      runtime: { id: 'glaze', lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '3' }), sendMessage: (m, cb) => {
+        sent.push(structuredClone(m));
+        const run = () => (m.type === 'glaze:sidebar' ? S.change(structuredClone(m), area, sync) : m.type === 'glaze:widgetLayout' ? W.change(structuredClone(m), area) : { ok: true, timer: W.IDLE });
+        queue = queue.then(run).then((r) => cb?.(structuredClone(r)), () => cb?.({ ok: false }));
+      } },
+      storage: { local: { get: (ks, cb) => area.get(ks).then(cb), set: (v, cb) => { area.set(v).then(() => cb?.()); }, remove: (k, cb) => { for (const x of [k].flat()) delete store[x]; cb?.(); } },
+        sync: { get: (k, cb) => cb({}) }, onChanged: { addListener: (f) => storeListeners.push(f), removeListener: (f) => { const i = storeListeners.indexOf(f); if (i >= 0) storeListeners.splice(i, 1); } } },
+    },
+  };
+  doc.boxOf = (e) => {
+    if (e.id === 'main' || e.id === 'wrapper') return { left, top: 0, width: width - left, height: 900 };
+    if (e.id === 'right-side') return { left: width - 352, top: 0, width: 300, height: tall ? 2000 : 300 };
+    if (e.dataset?.gzSidebarHost) return { left: width - 352, top: 0, width: 352, height: 900 };
+    return null;
+  };
+  doc.fire = (target, type, extra = {}) => { const ev = { type, target, key: extra.key, shiftKey: !!extra.shiftKey, button: 0, pointerId: 1, clientX: extra.clientX || 0, clientY: extra.clientY || 0, isTrusted: true, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} };
+    for (let e = target; e; e = e.parentNode) e.dispatchEvent(ev);
+    if (type === 'keydown') for (const f of [...keyListeners]) f(ev);
+    return ev; };
+  Object.assign(doc, {
+    documentElement: doc.root, visibilityState: 'visible', createElement: (tag) => new El(tag, doc), createTextNode: (textContent) => ({ textContent }),
+    querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), getElementById: (id) => doc.root.all().find((e) => e.id === id) || null,
+    addEventListener: (type, f) => { if (type === 'keydown') keyListeners.push(f); }, removeEventListener: (type, f) => { if (type === 'keydown') { const i = keyListeners.indexOf(f); if (i >= 0) keyListeners.splice(i, 1); } },
+  });
+  c.globalThis = c; vm.createContext(c);
+  const side = vm.runInContext(read('features/sidebar.js'), c);
+  const ui = widgets ? vm.runInContext(read('features/widgets.js'), c) : null;
+  const pass = async () => { side.sync(true); await settle(); ui?.sync(true); await settle(); };
+  const resize = async (w) => { c.innerWidth = width = w; for (const l of winListeners.filter((x) => x.type === 'resize')) l.f(); await settle(); };
+  const $ = (s) => doc.querySelector(s);
+  const mode = () => doc.root.dataset.gzSidebar;
+  const host = () => doc.root.all().find((e) => e.dataset?.gzSidebarHost);
+  const ours = (e) => { for (let p = e; p && p.tagName; p = p.parentNode) if (/^gz-/.test(p.id) || /(^|\s)gz-/.test(String(p.className))) return true; return false; };
+  return { c, doc, side, ui, store, sent, loads, net, observers, pass, resize, $, mode, host, ours, fire: doc.fire };
+};
+const record = (x = {}) => ({ [KEY]: { ...S.clean({ mig: 1, ...x }) } });
+
+const FAMILIES = [
+  ['canvas-dashboard-cards.html', '/', 'dashboard', 'native'],
+  ['canvas-course-home.html', '/courses/25', 'course-home', 'native'],
+  ['canvas-assignment-submit.html', '/courses/26/assignments/9', 'assignment', 'native'],
+  ['canvas-course-grades.html', '/courses/25/grades', 'grades', 'native'],
+  ['canvas-calendar.html', '/calendar', 'calendar', 'native'],
+  ['canvas-syllabus.html', '/courses/25/assignments/syllabus', 'syllabus', 'native'],
+  ['canvas-quiz-take.html', '/courses/25/quizzes/4/take', 'quiz', 'native'],
+  ['canvas-quiz-results.html', '/courses/25/quizzes/4', 'quiz', 'native'],
+  ['canvas-dashboard-planner.html', '/', 'dashboard', 'glaze'], // the planner Dashboard hides Canvas's column inline
+  ['canvas-modules.html', '/courses/25/modules', 'other', 'glaze'], // no column on this page
+];
+
+test('each kind of Canvas page: its own column dressed in place, or Glaze\'s beside the content where it has none', async () => {
+  for (const [fixture, where, family, kind] of FAMILIES) {
+    const p = page({ fixture, where, width: 1700, left: 84, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    const nativeEls = p.doc.body.all().map((e) => [e, e.parentNode]);
+    await p.pass();
+    assert.equal(p.side.context().family, family, fixture);
+    const h = p.host();
+    assert.equal(h.dataset.gzSidebarHost, kind, fixture);
+    if (kind === 'native') {
+      assert.equal(h.id, 'right-side-wrapper', fixture);
+      assert.ok(h.children[0].className === 'gz-sb-resize' && h.children[1].className === 'gz-sb-head', `${fixture}: Glaze's header first`);
+      assert.equal(h.lastElementChild.id, 'gz-sb-widgets', `${fixture}: the widgets last`);
+      assert.equal(p.$('#right-side').previousElementSibling.className, 'gz-sb-sec gz-sb-pagehead', `${fixture}: This page right before the column's content`);
+      assert.equal(h.getAttribute('role'), 'complementary');
+      assert.equal(h.getAttribute('aria-labelledby'), 'gz-sb-title');
+    } else {
+      assert.equal(h.id, 'gz-sidebar', fixture);
+      assert.equal(h.parentNode.id, 'not_right_side', `${fixture}: beside the content, where Canvas's column would be`);
+      assert.equal(p.$('#right-side-wrapper').dataset.gzSidebarHost, undefined, `${fixture}: Canvas's own hidden column is left alone`);
+    }
+    // Canvas's own nodes: every one where it was, none copied.
+    for (const [e, parent] of nativeEls) assert.equal(e.parentNode, parent, `${fixture}: ${e.tagName}#${e.id} moved`);
+    assert.equal(p.doc.body.all().filter((e) => !p.ours(e)).length, nativeEls.length, `${fixture}: no copies of Canvas's nodes`);
+  }
+});
+
+test('quiz, grades and calendar controls stay where Canvas put them, in its column', async () => {
+  for (const [fixture, where, ids] of [['canvas-quiz-take.html', '/courses/25/quizzes/4/take', ['question_list', 'quiz-time-elapsed']], ['canvas-course-grades.html', '/courses/25/grades', ['student-grades-whatif']], ['canvas-calendar.html', '/calendar', ['minical']]]) {
+    const p = page({ fixture, where });
+    const before = ids.map((id) => [p.doc.getElementById(id), p.doc.getElementById(id).parentNode]);
+    await p.pass();
+    for (const [e, parent] of before) { assert.equal(e.parentNode, parent); assert.ok(p.$('#right-side').contains(e), `${e.id} in the column`); }
+  }
+});
+
+test('an empty page with nothing docked keeps no room, only the edge button; a late section shows the column without rebuilding the dock', async () => {
+  const p = page({ fixture: 'canvas-course-home.html', stored: record() });
+  const rs = p.$('#right-side');
+  rs.replaceChildren();
+  await p.pass();
+  assert.equal(p.mode(), 'none');
+  const edge = p.$('#gz-sb-edge');
+  assert.equal(edge.hidden, false);
+  assert.equal(edge.parentNode, p.doc.body);
+  const dock = p.$('#gz-sb-widgets'), list = p.$('.gz-sb-dock');
+  // Canvas fills its column later (its Dashboard does): looked at again, not rebuilt.
+  const late = p.doc.createElement('div'); late.append('Recent feedback'); rs.append(late);
+  for (const o of p.observers.filter((x) => x.on && x.target === rs)) o.f([]);
+  assert.equal(p.mode(), 'expanded');
+  assert.equal(edge.hidden, true);
+  assert.ok(p.$('#gz-sb-widgets') === dock && p.$('.gz-sb-dock') === list, 'the same dock');
+  assert.equal(late.parentNode, rs);
+});
+
+test('a column Glaze doesn\'t recognize is left as Canvas has it; one that goes away gets its attributes back', async () => {
+  const p = page({ fixture: 'canvas-course-home.html' });
+  const wrap = p.$('#right-side-wrapper'), rs = p.$('#right-side');
+  wrap.setAttribute('role', 'region');
+  p.doc.getElementById('content').append(rs); // its content elsewhere: not a column Glaze knows
+  await p.pass();
+  assert.equal(p.host().id, 'gz-sidebar');
+  assert.equal(wrap.dataset.gzSidebarHost, undefined);
+  assert.ok(!wrap.all().some(p.ours), 'nothing of Glaze\'s inside it');
+  assert.equal(wrap.getAttribute('role'), 'region');
+
+  const q = page({ fixture: 'canvas-course-home.html' });
+  const w2 = q.$('#right-side-wrapper');
+  await q.pass();
+  assert.equal(w2.getAttribute('role'), 'complementary');
+  w2.remove(); // Canvas replaced its page
+  await q.pass();
+  assert.equal(q.host().id, 'gz-sidebar');
+  assert.equal(w2.getAttribute('role'), null, 'its own attributes back');
+  assert.equal(w2.dataset.gzSidebarHost, undefined);
+});
+
+test('switching the sidebar off takes every Glaze part away and gives Canvas its column back', async () => {
+  const p = page({ stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), widgets: true });
+  const nativeEls = p.doc.body.all().map((e) => [e, e.parentNode]);
+  await p.pass();
+  assert.ok(p.$('#gz-sb-widgets section[data-tile="notes"]'), 'the docked note');
+  p.side.sync(false); p.ui.sync(true); await settle();
+  assert.equal(p.doc.root.all().filter(p.ours).length, 0, 'no Glaze node left');
+  assert.equal(p.mode(), undefined);
+  assert.equal(p.$('#right-side-wrapper').getAttribute('role'), null);
+  for (const [e, parent] of nativeEls) assert.equal(e.parentNode, parent);
+});
+
+test('the mode follows the room: expanded, collapsed by choice, a drawer when narrow, grades keep 900px', async () => {
+  const p = page({ width: 1440, left: 276 });
+  await p.pass();
+  assert.equal(p.mode(), 'expanded');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sidebar-w'), '352px');
+  await p.resize(1280); // 1004 left for the content and the column: under 720 + 16 + 352
+  assert.equal(p.mode(), 'drawer');
+  assert.equal(p.$('#gz-sb-launch').hidden, false);
+  await p.resize(1600);
+  assert.equal(p.mode(), 'expanded');
+  p.fire(p.$('.gz-sb-toggle'), 'click'); await settle();
+  assert.equal(p.mode(), 'collapsed');
+  assert.equal(p.store[KEY].open, false, 'the desktop preference is kept');
+  await p.resize(1000); await p.resize(1600);
+  assert.equal(p.mode(), 'collapsed', 'the drawer never changed it');
+  // Grades: the same width keeps 900px for Canvas's table.
+  const g = page({ fixture: 'canvas-course-grades.html', where: '/courses/25/grades', width: 1440, left: 276 });
+  await g.pass();
+  assert.equal(g.mode(), 'drawer');
+  const h = page({ fixture: 'canvas-course-home.html', width: 1440, left: 276 });
+  await h.pass();
+  assert.equal(h.mode(), 'expanded');
+});
+
+test('the width: the inner edge by keys, clamped and saved; responsive clamping never writes it', async () => {
+  const p = page({ width: 1700, left: 84 });
+  await p.pass();
+  const grip = p.$('.gz-sb-resize');
+  assert.equal(grip.getAttribute('role'), 'separator');
+  p.fire(grip, 'keydown', { key: 'ArrowLeft' }); await settle();
+  assert.equal(p.store[KEY].width, 368);
+  p.fire(grip, 'keydown', { key: 'End' }); await settle();
+  assert.equal(p.store[KEY].width, 480);
+  await p.resize(1200);
+  assert.equal(p.mode(), 'drawer');
+  assert.equal(p.store[KEY].width, 480, 'narrow windows show less, but keep the choice');
+});
+
+test('the drawer is a dialog: the page behind it inert, Escape closes it, the focus comes back', async () => {
+  const p = page({ width: 1000, left: 84 });
+  await p.pass();
+  assert.equal(p.mode(), 'drawer');
+  const launch = p.$('#gz-sb-launch'), h = p.host();
+  launch.focus();
+  p.fire(launch, 'click'); await settle();
+  assert.equal(p.doc.root.dataset.gzSidebarOpen, '');
+  assert.equal(h.getAttribute('role'), 'dialog');
+  assert.equal(h.getAttribute('aria-modal'), 'true');
+  assert.equal(p.$('#content-wrapper').inert, true, 'the content beside it');
+  assert.equal(p.doc.getElementById('header').inert, true);
+  assert.notEqual(h.inert, true);
+  assert.equal(p.doc.activeElement, p.$('.gz-sb-toggle'));
+  // An LMS dialog opened from inside it after it opened stays reachable.
+  const dialog = p.doc.createElement('div'); dialog.setAttribute('role', 'dialog'); p.doc.body.append(dialog);
+  assert.notEqual(dialog.inert, true);
+  p.fire(p.$('.gz-sb-title'), 'keydown', { key: 'Escape' }); await settle();
+  assert.equal(p.doc.root.dataset.gzSidebarOpen, undefined);
+  assert.equal(p.$('#content-wrapper').inert, false);
+  assert.equal(p.doc.activeElement, launch);
+  assert.equal(launch.hidden, false);
+});
+
+test('This page and My widgets fold per kind of page, and Jump to widgets reaches the dock', async () => {
+  const stored = record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } });
+  const p = page({ stored, widgets: true, tall: true });
+  await p.pass();
+  const jump = p.$('.gz-sb-jump');
+  assert.equal(jump.hidden, false, 'long page content and docked widgets');
+  p.fire(jump, 'click');
+  assert.equal(p.doc.activeElement, p.$('#gz-sb-wh'));
+  const btn = p.$('.gz-sb-pagehead button');
+  p.fire(btn, 'click'); await settle();
+  assert.equal(p.host().dataset.gzSbFoldPage, '');
+  assert.equal(btn.getAttribute('aria-expanded'), 'false');
+  assert.deepEqual(p.store[KEY].fold, { 'course-home': { page: true } });
+  p.fire(p.$('#gz-sb-wh'), 'click'); await settle();
+  assert.equal(p.$('.gz-sb-dock').hidden, true);
+  // Another kind of page keeps its own.
+  const q = page({ fixture: 'canvas-syllabus.html', where: '/courses/25/assignments/syllabus', stored: structuredClone(p.store), widgets: true });
+  await q.pass();
+  assert.equal(q.host().dataset.gzSbFoldPage, undefined);
+  assert.equal(q.$('.gz-sb-dock').hidden, false);
+});
+
+test('a change that couldn\'t be saved is put back as stored, and said so briefly', async () => {
+  const p = page({ stored: record() });
+  await p.pass();
+  p.net.fail = true;
+  p.fire(p.$('.gz-sb-pagehead button'), 'click'); await settle();
+  assert.equal(p.host().dataset.gzSbFoldPage, undefined, 'back as stored');
+  assert.equal(p.$('.gz-sb-note').textContent, "Couldn't save. Try again.");
+});
+
+test('the first visit migrates To Do into the dock before showing it; the native list steps aside only once Better To Do is there', async () => {
+  const p = page({ stored: { widgetLayout: { tiles: W.TILES.map((id) => ({ id, on: false })), canvasTodo: true, boards: { cdash: [{ id: 'todo', on: true }] } } }, widgets: true });
+  await p.pass();
+  assert.equal(p.store[KEY].mig, 1);
+  assert.equal(p.store[KEY].dest.todo, 'dock');
+  const tile = p.$('#gz-sb-widgets section[data-tile="todo"]');
+  assert.ok(tile, 'To Do docked');
+  assert.ok(p.loads.includes('features/todo.js'));
+  // features/todo.js isn't in this stand-in: until its list is there, Canvas's own stays.
+  assert.equal(p.doc.root.dataset.gzSidebarTodo, undefined);
+});
+
+// ---- the dock and the other places --------------------------------------------------------------------------------
+const dash = (x = {}) => page({ fixture: 'canvas-dashboard-cards.html', where: '/', widgets: true, width: 1600, left: 84, ...x });
+const lay0 = () => ({ tiles: W.TILES.map((id) => ({ id, on: id === 'notes', size: id === 'notes' ? 'l' : 's' })), canvasTodo: true, filled: ['cdash'],
+  boards: { cdash: W.TILES.map((id) => ({ id, on: id === 'notes', size: 'l', ...(id === 'notes' && { x: 40, y: 80, w: 420, h: 220 }) })) } });
+const menuItem = (p, id, label) => {
+  p.fire(p.$(`section[data-tile="${id}"] .gz-w-dest`), 'click');
+  const item = p.$('#gz-sb-menu').children.find((b) => b.textContent === label);
+  assert.ok(item, `${id}: ${label} in ${p.$('#gz-sb-menu').children.map((b) => b.textContent)}`);
+  p.fire(item, 'click');
+};
+
+test('board → dock → float → board: one instance throughout, and the board and float spots kept', async () => {
+  const p = dash({ stored: { widgetLayout: lay0(), ...record() } });
+  await p.pass();
+  const on = () => p.doc.querySelectorAll('section[data-tile="notes"]');
+  assert.equal(on().length, 1);
+  const el = on()[0];
+  assert.ok(p.$('#gz-dash').contains(el), 'on the board');
+  p.fire(p.$('#gz-dash .gz-dash-edit'), 'click');
+  menuItem(p, 'notes', 'Move to sidebar'); await settle();
+  assert.equal(on().length, 1);
+  assert.equal(on()[0], el, 'the same tile, moved');
+  assert.ok(p.$('.gz-sb-dock').contains(el), 'docked');
+  const kept = W.layout(p.store.widgetLayout).boards.cdash.find((x) => x.id === 'notes');
+  assert.deepEqual([kept.on, kept.x, kept.y, kept.w, kept.h], [true, 40, 80, 420, 220], 'the board spot stays in the layout');
+  assert.equal(p.store[KEY].dest.notes, 'dock');
+  menuItem(p, 'notes', 'Float'); await settle();
+  assert.equal(on().length, 1);
+  assert.ok(p.$('#gz-float').contains(on()[0]), 'floating');
+  assert.equal(p.store[KEY].dest.notes, 'float');
+  const floated = W.layout(p.store.widgetLayout).tiles.find((x) => x.id === 'notes');
+  assert.ok(floated.float && floated.on);
+  menuItem(p, 'notes', 'Move to Dashboard'); await settle();
+  assert.equal(on().length, 1);
+  assert.ok(p.$('#gz-dash').contains(on()[0]), 'back on the board');
+  const back = W.layout(p.store.widgetLayout).boards.cdash.find((x) => x.id === 'notes');
+  assert.deepEqual([back.x, back.y, back.w, back.h], [40, 80, 420, 220], 'at its old spot and size');
+  // A refresh shows the same.
+  const q = dash({ stored: structuredClone(p.store) });
+  await q.pass();
+  assert.equal(q.doc.querySelectorAll('section[data-tile="notes"]').length, 1);
+  assert.ok(q.$('#gz-dash').contains(q.$('section[data-tile="notes"]')));
+});
+
+test('in the dock: reorder by buttons and handle keys, fold, height and Auto height; remove then re-add restores them', async () => {
+  const stored = { widgetLayout: lay0(), ...record({ dock: [{ id: 'timer' }, { id: 'quotes' }, { id: 'notes' }], dest: { timer: 'dock', quotes: 'dock', notes: 'dock' } }) };
+  const p = page({ stored, widgets: true });
+  await p.pass();
+  const order = () => p.$('.gz-sb-dock').children.map((e) => e.dataset.tile);
+  assert.deepEqual(order(), ['timer', 'quotes', 'notes']);
+  const t = (id) => p.$(`section[data-tile="${id}"]`);
+  assert.equal(t('timer').querySelector('.gz-w-up').disabled, true);
+  p.fire(t('notes').querySelector('.gz-w-up'), 'click'); await settle();
+  assert.deepEqual(order(), ['timer', 'notes', 'quotes']);
+  assert.match(p.$('#gz-sb-title').parentNode.querySelector('.gz-sr').textContent, /Notes moved to 2 of 3/);
+  p.fire(t('timer').querySelector('.gz-w-handle'), 'keydown', { key: 'ArrowDown' }); await settle();
+  assert.deepEqual(order(), ['notes', 'timer', 'quotes']);
+  assert.deepEqual(p.store[KEY].dock.map((x) => x.id), ['notes', 'timer', 'quotes']);
+  p.fire(t('quotes').querySelector('.gz-w-fold'), 'click'); await settle();
+  assert.equal(t('quotes').querySelector('.gz-w-body').hidden, true);
+  p.fire(t('notes').querySelector('.gz-w-vsize'), 'keydown', { key: 'ArrowDown', shiftKey: true }); await settle();
+  const h = p.store[KEY].dock.find((x) => x.id === 'notes').h;
+  assert.ok(Number.isInteger(h) && h >= W.MIN_H, `a height kept: ${h}`);
+  assert.equal(t('notes').querySelector('.gz-w-body').style.height, `${h}px`);
+  menuItem(p, 'notes', 'Auto height'); await settle();
+  assert.equal(p.store[KEY].dock.find((x) => x.id === 'notes').h, undefined);
+  assert.equal(t('notes').querySelector('.gz-w-body').style.height, '');
+  menuItem(p, 'quotes', 'Remove'); await settle();
+  assert.equal(t('quotes'), null);
+  assert.equal(p.store[KEY].dest.quotes, 'off');
+  // Re-added from Add widgets: back with its fold, in its old place.
+  p.fire(p.$('.gz-sb-add'), 'click');
+  const row = p.$('.gz-sb-adding').querySelectorAll('li').find((li) => li.children[0].textContent === 'Quote');
+  assert.equal(row.children[1].textContent, 'Not shown');
+  p.fire(row.children[2], 'click'); await settle();
+  assert.deepEqual(order(), ['notes', 'timer', 'quotes']);
+  assert.equal(t('quotes').querySelector('.gz-w-body').hidden, true, 'still folded');
+});
+
+test('resizing a removed widget never brings it back; course cards never dock', async () => {
+  const p = page({ stored: { widgetLayout: lay0(), ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) }, widgets: true });
+  await p.pass();
+  p.side.op([{ op: 'remove', id: 'notes' }, { op: 'height', id: 'notes', h: 300 }]); await settle();
+  assert.equal(p.$('section[data-tile="notes"]'), null);
+  assert.equal(p.store[KEY].dest.notes, 'off');
+  assert.ok(!p.ui.catalog().some((x) => W.course(x.id)));
+});
+
+test('floats keep clear of the expanded sidebar', async () => {
+  const lay = lay0();
+  lay.tiles.find((x) => x.id === 'timer').on = true; lay.tiles.find((x) => x.id === 'timer').float = true;
+  const p = page({ stored: { widgetLayout: lay, ...record() }, widgets: true, width: 1600, left: 84 });
+  await p.pass();
+  assert.equal(p.mode(), 'expanded');
+  assert.equal(p.$('#gz-float').style.getPropertyValue('--gz-float-right'), `${352 + W.EDGE}px`);
+});
+
+test('a failed dock move is rolled back to what is stored', async () => {
+  const p = dash({ stored: { widgetLayout: lay0(), ...record() } });
+  await p.pass();
+  p.net.fail = true;
+  p.fire(p.$('#gz-dash .gz-dash-edit'), 'click');
+  menuItem(p, 'notes', 'Move to sidebar'); await settle();
+  assert.ok(p.$('#gz-dash').contains(p.$('section[data-tile="notes"]')), 'back on the board');
+  assert.equal(p.$('.gz-sb-note').textContent, "Couldn't save. Try again.");
+});
+
+test('mods get where their widget shows, and nothing of the page', async () => {
+  const p = page({ stored: { widgetLayout: lay0(), ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) }, widgets: true });
+  let api = null;
+  await p.pass();
+  p.ui.declare({ mabcdefghijklmn0: { name: 'Mod', size: 's', fill: (body, a) => { api = a; return {}; } } });
+  p.side.op([{ op: 'dock', id: 'mabcdefghijklmn0' }]); await settle();
+  p.ui.sync(true); await settle();
+  assert.ok(api, 'drawn in the dock');
+  assert.equal(api.surface(), 'dock');
+  assert.deepEqual(Object.keys(api).sort(), ['id', 'site', 'size', 'surface', 'term', 'who']);
+});

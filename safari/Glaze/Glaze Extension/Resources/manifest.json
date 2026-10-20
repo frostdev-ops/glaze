@@ -149,6 +149,7 @@
         "features/apps.css",
         "features/surfaces.css",
         "features/coursetabs.css",
+        "features/sidebar.css",
         "assets/logo.svg",
         "assets/logo-dark.svg",
         "icons/icon.svg"

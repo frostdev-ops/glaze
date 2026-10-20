@@ -1,0 +1,133 @@
+/* The sidebar (features/sidebar.js): the page's own column, or Glaze's (#gz-sidebar) where a page has none, at the
+   window's right edge with the docked widgets under the page's content. The column is marked data-gz-sidebar-host; the
+   page's <html> says how it shows (data-gz-sidebar: expanded, collapsed, drawer or none; data-gz-sidebar-open while the
+   drawer is open) and how wide (--gz-sidebar-w). All of it is for the screen: printed, the page is as the LMS lays it
+   out, without Glaze's parts. Colors, borders, type and shadows are the Look's. */
+@media screen {
+  /* Beside the content, the whole window wide: the column ends at the window's edge, not halfway across. The content's
+     own reading width still holds its prose. */
+  html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #wrapper { max-width: none; }
+  [data-gz-sidebar-host] { position: relative; box-sizing: border-box; }
+  [data-gz-sidebar-host] > #right-side { width: auto !important; }
+  html:not([data-gz-sidebar]) #gz-sidebar, html[data-gz-sidebar="none"] #gz-sidebar { display: none !important; }
+  html[data-gz-sidebar="none"] :is(.gz-sb-resize, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets) { display: none !important; }
+
+  /* Expanded and collapsed keep their room, below the navigation, and scroll as one. */
+  html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) [data-gz-sidebar-host] {
+    display: block !important; position: sticky !important; top: calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px)); align-self: flex-start;
+    flex: 0 0 var(--gz-sidebar-w) !important; width: var(--gz-sidebar-w) !important; min-width: 0; max-width: none !important; margin: 0 !important;
+    max-height: calc(100vh - var(--gz-navbar-top, 0px) - var(--gz-ctabs-row, 0px)); overflow-y: auto; overscroll-behavior: contain;
+    padding: 0 1rem 1rem; color: var(--gz-ink); font-family: var(--gz-font);
+    background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-paint, var(--gz-surface)));
+    border-inline-start: 1px solid var(--gz-border-line, var(--gz-line));
+  }
+  html[data-gz-sidebar="collapsed"] [data-gz-sidebar-host] { flex-basis: 3rem !important; width: 3rem !important; padding: 0 0.25rem; overflow: hidden; }
+  html[data-gz-sidebar="collapsed"] [data-gz-sidebar-host] > :not(.gz-sb-head) { display: none !important; }
+  html[data-gz-sidebar="collapsed"] .gz-sb-head > :not(.gz-sb-toggle) { display: none !important; }
+  html[data-gz-sidebar="collapsed"] .gz-sb-head { justify-content: center; margin: 0; padding-inline: 0; border: 0; }
+
+  /* Narrow: a drawer over the page, at the window's right edge above any bottom bar, hidden until opened. */
+  html[data-gz-sidebar="drawer"] [data-gz-sidebar-host] { display: none !important; }
+  html[data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] {
+    display: block !important; position: fixed !important; z-index: 1300; top: calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px)); bottom: var(--gz-sb-bottom, 0px);
+    inset-inline-end: 0; inset-inline-start: auto; width: min(var(--gz-sidebar-w), calc(100vw - 16px)) !important; max-width: none !important; margin: 0 !important;
+    overflow-y: auto; overscroll-behavior: contain; padding: 0 calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) 1rem;
+    color: var(--gz-ink); font-family: var(--gz-font);
+    background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); box-shadow: var(--gz-shadow);
+    border-inline-start: 1px solid var(--gz-border-strong, var(--gz-line-strong));
+  }
+  html[data-gz-sidebar="drawer"][data-gz-sidebar-open] body::after { content: ""; position: fixed; inset: 0; z-index: 1299; background: rgb(0 0 0 / 0.32); }
+  [data-gz-sb-fold-page] > #right-side { display: none !important; }
+
+  /* The header: the title, Jump to widgets, the menu and collapse, staying at the top while the column scrolls. */
+  .gz-sb-head {
+    position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem;
+    margin: 0 -1rem 0.5rem; padding: 0.6rem 1rem 0.5rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
+    background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-paint, var(--gz-surface)));
+  }
+  html[data-gz-sidebar-open] .gz-sb-head { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
+  .gz-sb-title { flex: 1 1 6rem; min-width: 0; margin: 0; padding: 0; border: 0; font: 600 0.95rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); overflow-wrap: anywhere; text-transform: none; letter-spacing: 0; }
+  :is(.gz-sb-head, #gz-sb-widgets, .gz-sb-own, .gz-sb-menu) .gz-sb-btn, .gz-sb-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; padding: 0.2rem 0.75rem; font: 600 0.8rem/1.4 var(--gz-font); color: var(--gz-ink);
+    background: none; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; cursor: pointer; text-decoration: none; white-space: normal; text-align: center;
+  }
+  .gz-sb-btn:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
+  .gz-sb-btn[hidden], .gz-sb-own[hidden] { display: none !important; }
+  .gz-sb-icon { min-width: 2rem; min-height: 2rem; padding: 0 0.3rem; font-size: 1rem; border-color: transparent; border-radius: 0.5rem; color: var(--gz-ink-muted); }
+  .gz-sb-small { padding: 0.1rem 0.6rem; font-size: 0.75rem; }
+  :is(.gz-sb-head, .gz-sb-sec, #gz-sb-widgets, .gz-sb-menu, .gz-sb-own, .gz-sb-resize) :focus-visible, .gz-sb-own:focus-visible, .gz-sb-resize:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+
+  /* The inner edge, for the width. */
+  .gz-sb-resize { position: absolute; top: 0; bottom: 0; inset-inline-start: 0; z-index: 3; width: 8px; cursor: col-resize; touch-action: none; }
+  .gz-sb-resize:hover, .gz-sb-resize:focus-visible { background: color-mix(in srgb, var(--gz-accent) 35%, transparent); }
+  .gz-sb-resize[hidden] { display: none; }
+
+  /* This page and My widgets: each a heading that folds its section. */
+  .gz-sb-sec { margin: 0.75rem 0 0.4rem; padding: 0; border: 0; font-size: 0.75rem; }
+  .gz-sb-sec-btn {
+    display: flex; align-items: center; gap: 0.35rem; width: 100%; margin: 0; padding: 0.25rem 0; border: 0; background: none; cursor: pointer; text-align: start;
+    font: 700 0.72rem/1.4 var(--gz-font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted);
+  }
+  .gz-sb-sec-btn::before { content: "▾"; letter-spacing: 0; }
+  .gz-sb-sec-btn[aria-expanded="false"]::before { content: "▸"; }
+  .gz-sb-pagehead[hidden] { display: none; }
+
+  /* The dock: the widgets as wide as the column, one under another, each its own height. */
+  #gz-sb-widgets { margin-top: 0.25rem; }
+  .gz-sb-dock { display: grid; gap: 0.75rem; }
+  .gz-sb-dock[hidden] { display: none; }
+  .gz-sb-dock > .gz-w { position: relative !important; inset: auto !important; width: auto !important; z-index: auto !important; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 0.25rem; font-family: var(--gz-font); line-height: 1.4; }
+  .gz-sb-dock > .gz-w > :not(.gz-w-head, .gz-w-tools) { grid-column: 1 / -1; }
+  .gz-sb-dock > .gz-w > .gz-w-head { padding-inline-end: 0; }
+  .gz-sb-dock .gz-w-head h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); overflow-wrap: anywhere; border: 0; padding: 0; }
+  .gz-sb-dock > .gz-w > .gz-w-tools { position: static; flex-wrap: wrap; justify-content: flex-end; }
+  .gz-sb-dock > .gz-w > .gz-w-resize { display: none; }
+  .gz-sb-dock > .gz-w[data-dragging] { opacity: 0.85; box-shadow: var(--gz-shadow); }
+  .gz-sb-dock .gz-w-handle { cursor: grab; touch-action: none; }
+  .gz-sb-dock .gz-w-icon:disabled { opacity: 0.35; cursor: default; }
+  .gz-w-vsize { justify-self: center; width: 3rem; height: 10px; margin: 0.1rem 0 -0.45rem; border-radius: 999px; cursor: row-resize; touch-action: none; }
+  .gz-w-vsize::after { content: ""; display: block; height: 3px; margin-top: 3px; border-radius: 999px; background: var(--gz-border-strong, var(--gz-line-strong)); }
+  .gz-w-vsize:hover::after, .gz-w-vsize:focus-visible::after { background: var(--gz-accent); }
+  .gz-w-vsize:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+  .gz-sb-note { margin: 0.4rem 0 0; font-size: 0.8rem; color: var(--gz-err); }
+  .gz-sb-note:empty { display: none; }
+  .gz-sb-add { margin-top: 0.6rem; }
+  .gz-sb-adding { margin-top: 0.5rem; padding: 0.6rem 0.75rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); }
+  .gz-sb-adding[hidden] { display: none; }
+  .gz-sb-sub { margin: 0 0 0.4rem; padding: 0; border: 0; font: 600 0.85rem/1.3 var(--gz-font); color: var(--gz-ink); text-transform: none; letter-spacing: 0; }
+  .gz-sb-rows { display: grid; gap: 0.4rem; margin: 0 0 0.6rem; padding: 0; list-style: none; }
+  .gz-sb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; margin: 0; font-size: 0.85rem; }
+  .gz-sb-name { flex: 1 1 7rem; min-width: 0; overflow-wrap: anywhere; }
+  .gz-sb-faint { margin: 0; font-size: 0.75rem; color: var(--gz-ink-muted); }
+
+  /* The buttons at the window's edge: Add widgets with nothing to show, the drawer's opener when narrow. */
+  .gz-sb-edge, .gz-sb-launch {
+    position: fixed; z-index: 1250; inset-inline-end: calc(0.75rem + env(safe-area-inset-right, 0px)); bottom: calc(var(--gz-sb-bottom, 0px) + 1rem + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 1.5rem); padding: 0.45rem 0.95rem !important; color: var(--gz-accent-ink) !important; background: var(--gz-accent) !important; border-color: var(--gz-accent) !important; box-shadow: var(--gz-shadow);
+  }
+  @media (max-width: 899.98px) {
+    html[data-gz-navbar]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: 96px; }
+  }
+
+  .gz-sb-menu {
+    position: fixed; z-index: 1400; display: grid; min-width: 12rem; max-width: calc(100vw - 16px); padding: 0.25rem; box-sizing: border-box;
+    font: 0.85rem/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
+    border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  }
+  .gz-sb-menu .gz-sb-item { padding: 0.45rem 0.75rem; border: 0; border-radius: 0.4rem; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+  .gz-sb-menu .gz-sb-item:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-ink); }
+
+  html[data-gz-focus] :is(#gz-sidebar, .gz-sb-edge, .gz-sb-launch) { display: none !important; }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  html[data-gz-sidebar-open] [data-gz-sidebar-host] { animation: gz-sb-in 160ms ease-out; }
+  @keyframes gz-sb-in { from { opacity: 0; } to { opacity: 1; } }
+}
+@media screen and (forced-colors: active) {
+  [data-gz-sidebar-host], .gz-sb-menu, .gz-sb-adding { border: 1px solid CanvasText; }
+  .gz-sb-edge, .gz-sb-launch { border: 1px solid ButtonText !important; }
+  .gz-sb-resize:focus-visible, .gz-sb-resize:hover { background: Highlight; }
+}
+@media print {
+  .gz-sb-own, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets, .gz-sb-resize, .gz-sb-menu { display: none !important; }
+}

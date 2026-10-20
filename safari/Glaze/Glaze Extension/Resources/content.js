@@ -56,7 +56,7 @@
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
   // Each site's theme, shared motion and surfaces; Canvas and Ultra also share tabs and apps.
-  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css', 'features/coursetabs.css'], 'features/surfaces.css'];
+  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css', 'features/coursetabs.css', 'features/sidebar.css'], 'features/surfaces.css'];
   // What only one site does: its part puts its own over these (the site's part, below). Moodle's: nothing.
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, stop: no, renderProgress: no,

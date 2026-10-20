@@ -103,7 +103,7 @@ test('the shared strip stylesheet is shipped and available to both Canvas and Ul
   const manifest = require('../manifest.json');
   assert.ok(manifest.web_accessible_resources.some((r) => r.resources.includes('features/coursetabs.css')));
   const core = fs.readFileSync(path.join(__dirname, '../content.js'), 'utf8');
-  assert.match(core, /moodle \? \[\] : \['features\/apps.css', 'features\/coursetabs.css'\]/);
+  assert.match(core, /moodle \? \[\] : \['features\/apps.css', 'features\/coursetabs.css'/);
 });
 
 

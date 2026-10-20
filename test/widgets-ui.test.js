@@ -81,7 +81,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
     vm.runInContext(read('lib/ultra.js'), c);
   }
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('features/widgets.js').replace('  return { sync, hub: open, register, declare, who: account, avatar };', '  return { sync, hub: open, register, declare, who: account, avatar, probe: { WIDGETS, tileEl, added, tiles, set: (w, s, m) => { W = w; o = s; me = m; } } };');
+  const src = read('features/widgets.js').replace('  return { sync, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, set: (w, s, m) => { W = w; o = s; me = m; } } };');
   assert.notEqual(src, read('features/widgets.js'));
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
