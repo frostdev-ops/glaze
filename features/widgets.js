@@ -138,11 +138,13 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     lay = W.apply(lay, m, MORE);
     draw();
     flying++;
-    send({ type: 'glaze:widgetLayout', more: declared(), ...m }).then(() => {
-      if (--flying) return;
+    return send({ type: 'glaze:widgetLayout', more: declared(), ...m }).then((r) => {
+      const ok = r?.ok === true;
+      if (--flying) return ok;
       // Callbacks can arrive backwards; reread storage instead of adopting the last callback's older snapshot.
       const n = ++layoutRead;
       get('local', 'widgetLayout', null).then((x) => { if (x && !flying && n === layoutRead) adopt(x.widgetLayout); });
+      return ok;
     });
   };
   // Who's signed in (their id names their notes; their Canvas time zone counts the agenda's days), asked only when a
@@ -479,7 +481,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     todo(body) {
       if (!side) { body.append(make('div', { className: 'gz-w-todo-spot' })); return {}; }
       let alive = true;
-      const scope = () => (side ? { courseId: side.context().courseId, scope: side.rec()?.todoScope || 'follow', setScope: (v) => side?.op([{ op: 'todoScope', v }]), failed: () => todoIn() } : null);
+      const scope = () => (side ? { courseId: side.context().courseId, scope: side.rec()?.todoScope || 'follow', setScope: (v) => side?.op([{ op: 'todoScope', v }]), rendered: () => todoIn(), failed: () => todoIn() } : null);
       const mount = () => { if (alive && side && globalThis.GZ_TODO_UI?.mount) { GZ_TODO_UI.mount(body, scope()); todoIn(); } };
       ctx.need('features/todo.js', () => globalThis.GZ_TODO_UI).then(mount, () => {});
       return { context: mount, stop: () => { alive = false; globalThis.GZ_TODO_UI?.unmount?.(body); } };
@@ -659,9 +661,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const w = widthOf(x), h = tiles.get(id)?.el.offsetHeight || 200;
     const c = W.corner(others, w, h, r.W, r.H);
     const p = W.place(c.left, c.top, w, h, r.W, r.H, true);
-    change({ ops: [{ s: pages, id, set: { on: true, ...(!ultra && { float: true }), size: x.size, fold: x.fold, x: p.x, y: p.y, w: x.w ?? null, h: x.h ?? null }, front: true }], widths: { [pages]: Math.round(r.W) } });
+    const saved = change({ ops: [{ s: pages, id, set: { on: true, ...(!ultra && { float: true }), size: x.size, fold: x.fold, x: p.x, y: p.y, w: x.w ?? null, h: x.h ?? null }, front: true }], widths: { [pages]: Math.round(r.W) } });
     tiles.get(id)?.el.focus();
     say(t(ultra ? '{name} floats on every Blackboard page.' : '{name} floats on every Canvas page.', { name: t(nameOf(id)) }));
+    return saved;
   };
   const backBoard = () => {
     const e = ctx.settings().enhance;
@@ -677,24 +680,34 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const dests = (id, where, tile) => [
     where !== 'dock' && dockable(id) && { label: t('Move to sidebar'), run: () => toDock(id) },
     where !== 'board' && dockable(id) && homeBoard() && { label: t('Move to Dashboard'), run: () => toBoard(id) },
-    where !== 'float' && atTop && dockable(id) && id !== 'todo' && { label: t('Float'), run: () => toFloat(id, where) },
+    where !== 'float' && atTop && dockable(id) && id !== 'todo' && { label: t('Float'), run: () => toFloat(id) },
     where === 'dock' && tile.h && { label: t('Auto height'), run: () => { side.op([{ op: 'height', id, h: null }]); say(t('{name} is its own height again.', { name: t(nameOf(id)) })); } },
     { label: t('Remove'), run: () => toOff(id) },
   ].filter(Boolean);
   const toDock = (id) => { side.op([{ op: 'dock', id }]); say(t('{name} is in the sidebar.', { name: t(nameOf(id)) })); };
-  const toBoard = (id) => {
+  const toBoard = async (id) => {
     const to = homeBoard();
     if (!to) return;
-    change({ ops: [{ s: to, id, set: { on: true } }, ...(fl(id) ? [{ s: pages, id, set: ultra ? { on: false } : { float: false } }] : [])] });
-    side.op([{ op: 'undock', id, to: 'board', board: to }]);
+    const owner = side, generation = owner.context().gen;
+    const ok = await change({ ops: [{ s: to, id, set: { on: true } }] });
+    if (owner !== side || !owner?.active() || owner.context().gen !== generation) return;
+    if (!ok) { owner.status(t("Couldn't save. Try again.")); return; }
+    if (!await owner.op([{ op: 'undock', id, to: 'board', board: to }])) return;
+    if (owner !== side || !owner.active() || owner.context().gen !== generation) return;
+    // The override now owns the board. Only then retire the old float, so a refused destination keeps it reachable.
+    if (fl(id) && !await change({ ops: [{ s: pages, id, set: ultra ? { on: false } : { float: false } }] })) owner.status(t("Couldn't save. Try again."));
+    if (owner !== side || !owner.active() || owner.context().gen !== generation) return;
     say(t(board ? '{name} is back on this page.' : '{name} is on the Dashboard.', { name: t(nameOf(id)) }));
   };
   // Floating where it floated before, if it did; else from the room's corner (floatOut).
-  const toFloat = (id, where) => {
+  const toFloat = async (id) => {
+    const owner = side, generation = owner.context().gen;
     const was = ultra ? lay.boards.pages.find((x) => x.id === id) : lay.tiles.find((x) => x.id === id);
-    if (where === 'board' || !Number.isFinite(was?.x)) floatOut(id);
-    else { change({ ops: [{ s: pages, id, set: { on: true, ...(!ultra && { float: true }) }, front: true }] }); say(t(ultra ? '{name} floats on every Blackboard page.' : '{name} floats on every Canvas page.', { name: t(nameOf(id)) })); }
-    if (side.rec()?.dest[id] !== undefined) side.op([{ op: 'undock', id, to: 'float' }]);
+    const ok = await (!Number.isFinite(was?.x) ? floatOut(id) : change({ ops: [{ s: pages, id, set: { on: true, ...(!ultra && { float: true }) }, front: true }] }));
+    if (owner !== side || !owner?.active() || owner.context().gen !== generation) return;
+    if (!ok) { owner.status(t("Couldn't save. Try again.")); return; }
+    if (owner.rec()?.dest[id] !== undefined) owner.op([{ op: 'undock', id, to: 'float' }]);
+    say(t(ultra ? '{name} floats on every Blackboard page.' : '{name} floats on every Canvas page.', { name: t(nameOf(id)) }));
   };
   // Removed from wherever it shows; its data, and its spots, fold and height, stay for when it comes back.
   const toOff = (id) => {
@@ -722,7 +735,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (next ? el.nextElementSibling !== next : home.lastElementChild !== el) { if (next) next.before(el); else home.append(el); }
       };
       const up = (ev) => {
-        for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) handle.removeEventListener(k, f);
+        for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) document.removeEventListener(k, f);
         delete el.dataset.dragging;
         gesture = null;
         if (!ev) return;
@@ -733,8 +746,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       };
       gesture = { id, cancel: up };
       el.dataset.dragging = '';
-      handle.setPointerCapture?.(e.pointerId);
-      for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) handle.addEventListener(k, f);
+      // Moving a node releases its pointer capture. Listen on the document until release so the reorder can finish.
+      for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) document.addEventListener(k, f);
     });
     handle.addEventListener('keydown', (e) => {
       const by = { ArrowUp: -1, ArrowDown: 1 }[e.key];
@@ -751,6 +764,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     h.setAttribute('role', 'separator');
     h.setAttribute('aria-orientation', 'horizontal');
     h.setAttribute('aria-label', t('Height of {name}: arrow keys', { name }));
+    h.setAttribute('aria-valuemin', String(W.MIN_H));
+    h.setAttribute('aria-valuemax', '3000');
     h.title = t('Drag to resize, or use the arrow keys. Double-click for its own height.');
     const keep = (px) => { const v = Math.max(W.MIN_H, Math.min(3000, Math.round(px))); side?.op([{ op: 'height', id, h: v }]); say(t('Resized {name}: {h} px tall', { name, h: v })); };
     h.addEventListener('pointerdown', (e) => {
@@ -783,6 +798,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // With the sidebar, the destination menu takes Float and Remove's place, and a docked tile has its handle and Move up
   // and down too. A control redrawn by its own click keeps the focus.
   const toolsFor = (x, tile) => {
+    const signature = JSON.stringify([!!side, editing, tile.dock, tile.float, tile.fold, tile.h, dockIds.indexOf(tile.id), dockIds.length]);
+    if (x.toolsKey === signature) return;
+    x.toolsKey = signature;
     const name = t(nameOf(tile.id));
     const label = (b, text) => { b.setAttribute('aria-label', text); b.title = text; return b; };
     const again = (sel, run) => () => { run(); x.tools.querySelector(sel)?.focus(); };
@@ -903,7 +921,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       return s;
     };
     const keep = (s, f) => {
-      if (!f.float) return settle(id, W.spotOf({ left: s.left, top: s.top, w: el.offsetWidth }, f.W));
+      if (!f.float) { settle(id, W.spotOf({ left: s.left, top: s.top, w: el.offsetWidth }, f.W)); return s; }
       const p = W.place(s.left, s.top, el.offsetWidth, el.offsetHeight, f.W, f.H, true);
       change({ ops: [{ s: pages, id, set: { x: p.x, y: p.y }, front: true }], widths: { [pages]: Math.round(f.W) } });
       return p;
@@ -1233,7 +1251,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const root = document.documentElement;
     if (side) {
       root?.removeAttribute('data-gz-canvas-todo');
-      const owns = ctx.settings().enhance.todo && (!!tiles.get('todo')?.body.querySelector('#gz-todo') || side.rec()?.dest.todo === 'off');
+      const owns = ctx.settings().enhance.todo && (!!tiles.get('todo')?.body.querySelector('#gz-todo[data-ready]') || side.rec()?.dest.todo === 'off');
       root?.toggleAttribute('data-gz-sidebar-todo', !!owns);
       return;
     }
@@ -1286,7 +1304,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       else { x.el.removeAttribute('tabindex'); x.el.removeAttribute('aria-description'); }
       x.el.toggleAttribute('data-dock', !!tile.dock);
       if (tile.dock && !x.vsize) { x.vsize = vsize(x, tile.id); x.el.append(x.vsize); }
-      if (x.vsize) x.vsize.hidden = !tile.dock || !!tile.fold;
+      if (x.vsize) { x.vsize.hidden = !tile.dock || !!tile.fold; x.vsize.setAttribute('aria-valuenow', String(tile.h || Math.max(W.MIN_H, x.body.offsetHeight))); }
       toolsFor(x, tile);
       x.context?.();
       if (board && !tile.float && !tile.dock) continue; // laid out below, in reading order

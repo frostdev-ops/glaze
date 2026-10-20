@@ -446,3 +446,51 @@ test('a list that cannot load in the dock says so, so Canvas\'s own comes back',
   assert.equal(f.c.GZ_TODO_UI.mount(new E(), { courseId: '', scope: 'follow', failed: () => failed++ }), false);
   assert.equal(failed, 2);
 });
+
+test('a legacy list cannot consume a draft saved for a later dock mount', async () => {
+  const key = 'draft:todo:https://canvas.test/3';
+  const saved = { text: 'Essay outline', at: Date.now(), todo: { cid: '25', draft: { title: 'Essay outline' } } };
+  const f = feature({ stored: { [key]: saved } });
+  f.c.GZ_TODO_UI.sync(true);
+  await settle(); await settle();
+  assert.deepEqual(f.store[key], saved, 'only a dock mount may claim the draft');
+  f.c.GZ_TODO_UI.sync(false);
+  f.c.GZ_TODO_UI.mount(new E(), { courseId: '', scope: 'follow' });
+  await settle(); await settle();
+  assert.equal(f.p.formNow().draft.title, 'Essay outline');
+});
+
+test('draft backup disabled leaves no cross-document draft to restore', async () => {
+  const key = 'draft:todo:https://canvas.test/3';
+  const f = feature({ stored: { [key]: { at: Date.now(), todo: { draft: { title: 'Old draft' } } } } });
+  f.c.GZ_CTX.settings = () => ({ enhance: { drafts: false } });
+  f.c.GZ_TODO_UI.mount(new E(), { courseId: '', scope: 'follow' });
+  await settle(); await settle();
+  assert.equal(f.p.formNow(), null);
+});
+
+test('the native fallback is owned only after the mounted list has data to render', async () => {
+  const f = feature({ holdPlanner: true });
+  let ready = 0;
+  f.c.GZ_TODO_UI.mount(new E(), { courseId: '', scope: 'follow', rendered: () => ready++ });
+  await settle(); await settle();
+  assert.equal(ready, 0, 'the loading shell does not own the fallback');
+  assert.equal(f.p.get().box.hidden, true, 'the pending replacement cannot duplicate native To Do');
+  for (const release of f.held.splice(0)) release();
+  await settle(); await settle();
+  assert.ok(ready > 0, 'a rendered list claims the fallback');
+  assert.equal(f.p.get().box.hidden, false);
+});
+
+test('a retained task draft never follows a different signed-in account', async () => {
+  let account = '3';
+  const f = feature({ profile: async () => ({ id: account, time_zone: 'UTC' }) });
+  const ui = f.c.GZ_TODO_UI, target = new E();
+  ui.mount(target, { courseId: '', scope: 'follow' }); await settle(); await settle();
+  f.p.form({ cid: '25', draft: { title: 'Private outline' } });
+  ui.unmount(target);
+  account = '4';
+  ui.mount(target, { courseId: '', scope: 'follow' }); await settle(); await settle();
+  assert.equal(f.p.formNow(), null);
+  assert.equal(f.store['draft:todo:https://canvas.test/3'].todo.draft.title, 'Private outline');
+});

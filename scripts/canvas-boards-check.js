@@ -1,6 +1,7 @@
 // Canvas's board, headless: the real extension on the saved Dashboard DOM under an invented school origin. The page's
 // frame CSS and API answers are synthetic; all other requests abort and DNS resolves nowhere. No server or LMS needed.
 //   NODE_PATH=/path/to/node_modules nice node scripts/canvas-boards-check.js [screenshots directory]
+// CANVAS_LOCAL=1 uses the seeded Canvas at localhost:3000 with a temporary extension/profile instead.
 const { chromium } = require('playwright');
 const { isDeepStrictEqual } = require('node:util');
 const fs = require('fs');
@@ -9,10 +10,11 @@ const os = require('os');
 const crypto = require('crypto');
 const G = require('../defaults.js');
 const W = require('../lib/widgets.js');
-const ext = process.env.EXT || path.join(__dirname, '..');
+let ext = process.env.EXT || path.join(__dirname, '..');
+const local = process.env.CANVAS_LOCAL === '1';
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-canvas-boards-'));
 const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
-const O = 'https://board.school.instructure.com';
+const O = local ? 'http://localhost:3000' : 'https://board.school.instructure.com';
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const fixture = (name) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', name), 'utf8');
 const frame = `<style>
@@ -51,11 +53,21 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'canvas-boards-profile-'));
   let ctx;
   try {
+    if (local) {
+      const src = ext; ext = path.join(tmp, 'extension'); fs.mkdirSync(ext);
+      for (const e of fs.readdirSync(src, { withFileTypes: true })) if (/\.(js|css|html)$/.test(e.name) || ['lib', 'features', 'i18n', '_locales', 'assets', 'fonts', 'icons', 'mods', 'sharing'].includes(e.name)) fs.cpSync(path.join(src, e.name), path.join(ext, e.name), { recursive: true });
+      const manifest = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json')));
+      manifest.host_permissions.push('http://localhost/*');
+      manifest.content_scripts.find((s) => s.matches.includes('https://*.instructure.com/*')).matches.push('http://localhost/*');
+      for (const w of manifest.web_accessible_resources) w.matches.push('http://localhost/*');
+      fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(manifest));
+      ext = fs.realpathSync(ext);
+    }
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { executablePath: CHROME, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
-      args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
+      args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, ...(!local ? ['--host-resolver-rules=MAP * ~NOTFOUND'] : [])],
     });
-    await ctx.route('**/*', (route) => {
+    if (!local) await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
       if (u.origin !== O || route.request().method() !== 'GET') return route.abort();
@@ -91,6 +103,50 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
       return [...document.querySelectorAll('#gz-dash .gz-w')].every((e) => e.getBoundingClientRect().bottom <= cards.top + 1) && grid.bottom <= cards.top + 1;
     });
     const notes = { [`notes:${O}/3`]: { text: 'Read chapter 4. Office hours Tuesday at 2pm.', at: Date.now() } };
+    if (local) {
+      const credentialsFile = process.env.CANVAS_CREDENTIALS || path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
+      const credentials = Object.fromEntries(fs.readFileSync(credentialsFile, 'utf8').split(/\n/).filter((l) => /^[A-Z_]+=/.test(l)).map((l) => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1).replace(/^['"]|['"]$/g, '')]; }));
+      await page.goto(O + '/login/canvas');
+      await page.locator('#pseudonym_session_unique_id').fill(credentials.STUDENT_EMAIL);
+      await page.locator('#pseudonym_session_password').fill(credentials.STUDENT_PASSWORD || credentials.PASSWORD);
+      await Promise.all([page.waitForURL((u) => !u.pathname.startsWith('/login')), page.locator('button[type="submit"], input[type="submit"]').first().click()]);
+      const courses = await page.evaluate(() => fetch('/api/v1/courses', { headers: { accept: 'application/json' } }).then((r) => r.text()).then((s) => JSON.parse(s.replace(/^while\(1\);/, ''))));
+      await store(settings('Paper'), { widgetLayout: old });
+      await open();
+      ok(JSON.stringify((await rects()).map((x) => x.id)) === JSON.stringify(['timer', 'quotes', 'notes', 'todo']), 'local: legacy board migrates in reading order');
+      ok(await page.locator(tile('timer')).count() === 1 && await page.locator(tile('music')).count() === 1, 'local: one instance per destination');
+      ok(await cardsClear(), 'local: board reserves room above native course cards');
+      await page.click(`${tile('music')} button[aria-label="Put Music back on this page"]`); await stable();
+      await edit(); await press('timer', true, 32, 48, true);
+      const moved = (await layout()).boards.cdash.find((x) => x.id === 'timer');
+      ok(moved.x !== null && moved.y !== null, 'local: pointer board drag saves its spot');
+      await page.locator(tile('timer')).focus(); await page.keyboard.press('Shift+ArrowDown');
+      await until(layout, (l) => l.boards.cdash.find((x) => x.id === 'timer').y === moved.y + 64, 'local key move not saved');
+      ok(true, 'local: keyboard board move saves a grid step');
+      const width = (await page.locator(tile('timer')).boundingBox()).width;
+      await page.locator(`${tile('timer')} .gz-w-resize`).focus(); await page.keyboard.press('ArrowRight');
+      await until(layout, (l) => l.boards.cdash.find((x) => x.id === 'timer').w === width + 16, 'local resize not saved');
+      ok(true, 'local: keyboard resize saves width');
+      await edit(); await stable(); const saved = await rects();
+      await page.reload(); await page.waitForSelector(tile('timer')); await stable();
+      ok(isDeepStrictEqual(await rects(), saved), 'local: board geometry survives reload');
+      await edit(); await page.click(`${tile('timer')} button[aria-label="Float Focus timer over every page"]`);
+      await until(layout, (l) => l.tiles.find((x) => x.id === 'timer').float, 'local float not saved');
+      await open(`/courses/${courses[0].id}`);
+      ok(await page.locator(`#gz-float ${tile('timer')}`).count() === 1 && await page.locator(tile('timer')).count() === 1, 'local: floating follows the course page once');
+      await press('timer', false, -32, -32, true);
+      const floated = (await layout()).tiles.find((x) => x.id === 'timer');
+      await page.reload(); await page.waitForSelector(tile('timer'));
+      ok(isDeepStrictEqual((await layout()).tiles.find((x) => x.id === 'timer'), floated), 'local: floating geometry survives reload');
+      await page.click(`${tile('timer')} button[aria-label="Put Focus timer back on the Dashboard"]`); await open();
+      ok(await page.locator(`#gz-dash ${tile('timer')}`).count() === 1 && !await page.locator(`#gz-float ${tile('timer')}`).count(), 'local: float returns to its board without a duplicate');
+      await page.setViewportSize({ width: 390, height: 1000 }); await stable();
+      ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'local: phone layout has no horizontal overflow');
+      await page.screenshot({ path: path.join(out, 'canvas-board-local-phone.png') });
+      ok(!errors.length, `local: no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
+      console.log(`passed; ${checks} checks on local Canvas; screenshots in ${out}`);
+      return;
+    }
     await store(settings('Paper'), { widgetLayout: old, ...notes });
     await open();
     ok(JSON.stringify((await rects()).map((x) => x.id)) === JSON.stringify(['timer', 'quotes', 'notes', 'todo']), 'old grid reading order migrates with the To Do widget');

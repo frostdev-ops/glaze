@@ -202,8 +202,10 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 const STYLE_READS = [
   ['features/mods.js', 'getComputedStyle(x.canvas)', 1], // one mounted mod canvas per slot while checking whether its Worker should pause
   ['features/navbar-canvas.js', 'getComputedStyle(el)', 1], // school logo background, one header mark per replacement
-  ['features/coursetabs.js', 'getComputedStyle(parent.document.documentElement)', 1],
-  ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out // a Canvas tab's frame: the bar's two room variables on the page around, when the bar or the window changes
+  ['features/coursetabs.js', 'getComputedStyle(parent.document.documentElement)', 1], // a Canvas tab's frame: the bar's two room variables on the page around, when the bar or the window changes
+  ['features/sidebar.js', 'getComputedStyle(html())', 1], // the root's navigation offsets in a batched sidebar layout pass
+  ['features/sidebar.js', 'getComputedStyle(x)', 1], // only the drawer's focusable controls, on Tab or a focus escape
+  ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.

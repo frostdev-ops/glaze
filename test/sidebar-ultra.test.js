@@ -107,7 +107,7 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
   if (todo) {
     let box = null;
     c.GZ_TODO_UI = {
-      mount: (target, x) => { todoCalls.push(['mount', x.courseId, x.scope]); box ||= Object.assign(make('section'), { id: 'gz-todo' }); target.append(box); return true; },
+      mount: (target, x) => { todoCalls.push(['mount', x.courseId, x.scope]); if (!box) { box = Object.assign(make('section'), { id: 'gz-todo' }); box.setAttribute('data-ready', ''); } target.append(box); return true; },
       unmount: () => { todoCalls.push(['unmount']); box?.remove(); },
       sync: (on) => todoCalls.push(['sync', on]),
     };
@@ -185,16 +185,16 @@ test('a discussion\'s details layer stays as Ultra has it: the sidebar is a draw
 
 test('offsets: Ultra\'s nav and Glaze\'s bar from the page\'s start, a course\'s top bar for the fixed column', async () => {
   const p = page({ at: 'stream', width: 1300, stored: record() });
-  p.c.getComputedStyle = (e) => ({ paddingInlineStart: e.id === 'main-content-inner' ? '0px' : '0px' });
+  p.c.getComputedStyle = () => ({ paddingInlineStart: '0px', getPropertyValue: () => '' });
   await p.pass();
   // 1300 - 200 (nav) = 1100 >= 352 + 16 + 720: expanded
   assert.equal(p.mode(), 'none', 'nothing to show: no room kept');
   const q = page({ at: 'stream', width: 1300, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
-  q.c.getComputedStyle = () => ({ paddingInlineStart: '0px' });
+  q.c.getComputedStyle = () => ({ paddingInlineStart: '0px', getPropertyValue: () => '' });
   await q.pass();
   assert.equal(q.mode(), 'expanded');
   // Glaze's bar adds its room as #main-content-inner's start padding: 1300 - 200 - 96 = 1004 < 1088.
-  q.c.getComputedStyle = () => ({ paddingInlineStart: '96px' });
+  q.c.getComputedStyle = () => ({ paddingInlineStart: '96px', getPropertyValue: () => '' });
   await q.resize(1300);
   assert.equal(q.mode(), 'drawer');
   // A course's top bar: the fixed column starts under it.

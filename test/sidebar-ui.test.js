@@ -50,7 +50,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '3' }), sendMessage: (m, cb) => {
         sent.push(structuredClone(m));
-        const run = () => (m.type === 'glaze:sidebar' ? S.change(structuredClone(m), area, sync) : m.type === 'glaze:widgetLayout' ? W.change(structuredClone(m), area) : { ok: true, timer: W.IDLE });
+        const run = () => (net.failType === m.type ? { ok: false } : m.type === 'glaze:sidebar' ? S.change(structuredClone(m), area, sync) : m.type === 'glaze:widgetLayout' ? W.change(structuredClone(m), area) : { ok: true, timer: W.IDLE });
         queue = queue.then(run).then((r) => cb?.(structuredClone(r)), () => cb?.({ ok: false }));
       } },
       storage: { local: { get: (ks, cb) => area.get(ks).then(cb), set: (v, cb) => { area.set(v).then(() => cb?.()); }, remove: (k, cb) => { for (const x of [k].flat()) delete store[x]; cb?.(); } },
@@ -81,7 +81,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
   const mode = () => doc.root.dataset.gzSidebar;
   const host = () => doc.root.all().find((e) => e.dataset?.gzSidebarHost);
   const ours = (e) => { for (let p = e; p && p.tagName; p = p.parentNode) if (/^gz-/.test(p.id) || /(^|\s)gz-/.test(String(p.className))) return true; return false; };
-  return { c, doc, side, ui, store, sent, loads, net, observers, pass, resize, $, mode, host, ours, fire: doc.fire };
+  return { c, doc, side, ui, store, sent, loads, net, observers, storeListeners, pass, resize, $, mode, host, ours, fire: doc.fire };
 };
 const record = (x = {}) => ({ [KEY]: { ...S.clean({ mig: 1, ...x }) } });
 
@@ -159,6 +159,7 @@ test('a column Glaze doesn\'t recognize is left as Canvas has it; one that goes 
   p.doc.getElementById('content').append(rs); // its content elsewhere: not a column Glaze knows
   await p.pass();
   assert.equal(p.host().id, 'gz-sidebar');
+  assert.equal(p.mode(), 'drawer', 'unsupported native columns keep their layout beside a standalone drawer');
   assert.equal(wrap.dataset.gzSidebarHost, undefined);
   assert.ok(!wrap.all().some(p.ours), 'nothing of Glaze\'s inside it');
   assert.equal(wrap.getAttribute('role'), 'region');
@@ -170,6 +171,7 @@ test('a column Glaze doesn\'t recognize is left as Canvas has it; one that goes 
   w2.remove(); // Canvas replaced its page
   await q.pass();
   assert.equal(q.host().id, 'gz-sidebar');
+  assert.equal(q.mode(), 'drawer', 'host loss uses the standalone drawer');
   assert.equal(w2.getAttribute('role'), null, 'its own attributes back');
   assert.equal(w2.dataset.gzSidebarHost, undefined);
 });
@@ -184,6 +186,20 @@ test('switching the sidebar off takes every Glaze part away and gives Canvas its
   assert.equal(p.mode(), undefined);
   assert.equal(p.$('#right-side-wrapper').getAttribute('role'), null);
   for (const [e, parent] of nativeEls) assert.equal(e.parentNode, parent);
+});
+
+test('turning off during startup cannot leave a storage listener or reactivate the sidebar', async () => {
+  const p = page();
+  let release;
+  p.c.GZ_CTX.need = () => new Promise((r) => { release = r; });
+  p.side.sync(true);
+  p.side.sync(false);
+  release(); await settle();
+  // A later loader must not be awaited after teardown either.
+  release(); await settle();
+  assert.equal(p.storeListeners.length, 0);
+  assert.equal(p.side.active(), false);
+  assert.equal(p.side.rec(), null);
 });
 
 test('the mode follows the room: expanded, collapsed by choice, a drawer when narrow, grades keep 900px', async () => {
@@ -222,6 +238,21 @@ test('the width: the inner edge by keys, clamped and saved; responsive clamping 
   await p.resize(1200);
   assert.equal(p.mode(), 'drawer');
   assert.equal(p.store[KEY].width, 480, 'narrow windows show less, but keep the choice');
+});
+
+test('teardown cancels an unfinished width drag without changing the saved width', async () => {
+  const p = page({ width: 1700, left: 84, stored: record() });
+  await p.pass();
+  const grip = p.$('.gz-sb-resize');
+  p.fire(grip, 'pointerdown', { clientX: 100 });
+  p.fire(grip, 'pointermove', { clientX: 50 });
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sidebar-w'), '402px');
+  p.side.sync(false);
+  await p.pass();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sidebar-w'), '352px');
+  assert.equal(p.store[KEY].width, 352);
+  p.fire(grip, 'pointermove', { clientX: 10 });
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sidebar-w'), '352px');
 });
 
 test('the drawer is a dialog: the page behind it inert, Escape closes it, the focus comes back', async () => {
@@ -270,6 +301,41 @@ test('This page and My widgets fold per kind of page, and Jump to widgets reache
   assert.equal(q.$('.gz-sb-dock').hidden, false);
 });
 
+test('losing an open drawer host restores the page before using a replacement host', async () => {
+  const p = page({ width: 1000, left: 84 });
+  await p.pass();
+  p.fire(p.$('#gz-sb-launch'), 'click');
+  const old = p.host();
+  old.remove();
+  await p.pass();
+  assert.equal(p.doc.root.dataset.gzSidebarOpen, undefined);
+  assert.equal(p.$('#content-wrapper').inert, false);
+  assert.equal(p.doc.getElementById('header').inert, false);
+  assert.equal(old.getAttribute('aria-modal'), null);
+  p.fire(p.$('#gz-sb-launch'), 'click');
+  assert.equal(p.host().getAttribute('role'), 'dialog');
+  p.side.sync(false);
+  assert.equal(p.$('#content-wrapper').inert, false);
+});
+
+test('a native dialog in an existing portal stays reachable while the drawer is open', async () => {
+  const p = page({ width: 1000, left: 84 });
+  const portal = p.doc.createElement('div'); p.doc.body.append(portal);
+  await p.pass();
+  p.fire(p.$('#gz-sb-launch'), 'click');
+  assert.equal(portal.inert, true);
+  const dialog = p.doc.createElement('div'); dialog.setAttribute('role', 'dialog'); portal.append(dialog);
+  for (const o of p.observers.filter((x) => x.on && x.target === p.doc.body)) o.f([]);
+  assert.equal(portal.inert, false, 'the native modal owns focus and inertness now');
+  assert.notEqual(p.host().getAttribute('aria-modal'), 'true');
+  dialog.remove();
+  for (const o of p.observers.filter((x) => x.on && x.target === p.doc.body)) o.f([]);
+  assert.equal(portal.inert, true);
+  assert.equal(p.host().getAttribute('aria-modal'), 'true');
+  p.side.sync(false);
+  assert.equal(portal.inert, false);
+});
+
 test('a change that couldn\'t be saved is put back as stored, and said so briefly', async () => {
   const p = page({ stored: record() });
   await p.pass();
@@ -301,6 +367,31 @@ const menuItem = (p, id, label) => {
   assert.ok(item, `${id}: ${label} in ${p.$('#gz-sb-menu').children.map((b) => b.textContent)}`);
   p.fire(item, 'click');
 };
+
+test('an incidental dock redraw preserves a focused control and its node', async () => {
+  const p = dash({ stored: { widgetLayout: lay0(), ...record({ dock: [{ id: 'notes' }, { id: 'timer' }], dest: { notes: 'dock', timer: 'dock' } }) } });
+  await p.pass();
+  const handle = p.$('section[data-tile="notes"] .gz-w-handle');
+  handle.focus();
+  await p.side.op([{ op: 'fold', id: 'timer', v: true }]); await settle();
+  assert.ok(p.$('section[data-tile="notes"] .gz-w-handle') === handle, 'the focused handle is kept');
+  assert.ok(handle.isConnected);
+  assert.equal(p.doc.activeElement, handle);
+});
+
+test('a saved floating spot survives returning to the board and floating again', async () => {
+  const lay = lay0();
+  Object.assign(lay.tiles.find((x) => x.id === 'notes'), { float: true, x: 0.2, y: 0.3, w: 333, h: 177 });
+  const p = dash({ stored: { widgetLayout: lay, ...record({ dest: { notes: 'float' } }) } });
+  await p.pass();
+  const spot = () => W.layout(p.store.widgetLayout).tiles.find((x) => x.id === 'notes');
+  const before = spot();
+  menuItem(p, 'notes', 'Move to Dashboard'); await settle();
+  p.fire(p.$('#gz-dash .gz-dash-edit'), 'click');
+  menuItem(p, 'notes', 'Float'); await settle();
+  const after = spot();
+  assert.deepEqual([after.x, after.y, after.w, after.h], [before.x, before.y, before.w, before.h]);
+});
 
 test('board → dock → float → board: one instance throughout, and the board and float spots kept', async () => {
   const p = dash({ stored: { widgetLayout: lay0(), ...record() } });
@@ -355,6 +446,7 @@ test('in the dock: reorder by buttons and handle keys, fold, height and Auto hei
   const h = p.store[KEY].dock.find((x) => x.id === 'notes').h;
   assert.ok(Number.isInteger(h) && h >= W.MIN_H, `a height kept: ${h}`);
   assert.equal(t('notes').querySelector('.gz-w-body').style.height, `${h}px`);
+  assert.equal(t('notes').querySelector('.gz-w-vsize').getAttribute('aria-valuenow'), String(h));
   menuItem(p, 'notes', 'Auto height'); await settle();
   assert.equal(p.store[KEY].dock.find((x) => x.id === 'notes').h, undefined);
   assert.equal(t('notes').querySelector('.gz-w-body').style.height, '');
@@ -395,6 +487,32 @@ test('a failed dock move is rolled back to what is stored', async () => {
   p.fire(p.$('#gz-dash .gz-dash-edit'), 'click');
   menuItem(p, 'notes', 'Move to sidebar'); await settle();
   assert.ok(p.$('#gz-dash').contains(p.$('section[data-tile="notes"]')), 'back on the board');
+  assert.equal(p.$('.gz-sb-note').textContent, "Couldn't save. Try again.");
+});
+
+test('a failed destination preparation keeps the widget docked and offers retry', async () => {
+  for (const label of ['Move to Dashboard', 'Float']) {
+    const lay = lay0();
+    lay.boards.cdash.find((x) => x.id === 'notes').on = false;
+    const p = dash({ stored: { widgetLayout: lay, ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) } });
+    await p.pass();
+    p.net.failType = 'glaze:widgetLayout';
+    menuItem(p, 'notes', label); await settle();
+    assert.equal(p.store[KEY].dest.notes, 'dock');
+    assert.ok(p.$('.gz-sb-dock section[data-tile="notes"]'), 'still docked');
+    assert.equal(p.$('.gz-sb-note').textContent, "Couldn't save. Try again.");
+  }
+});
+
+test('a refused sidebar destination write leaves the existing float reachable', async () => {
+  const lay = lay0();
+  Object.assign(lay.tiles.find((x) => x.id === 'notes'), { float: true, x: 0.2, y: 0.3 });
+  const p = dash({ stored: { widgetLayout: lay, ...record({ dest: { notes: 'float' } }) } });
+  await p.pass();
+  p.net.failType = 'glaze:sidebar';
+  menuItem(p, 'notes', 'Move to Dashboard'); await settle();
+  assert.equal(p.store[KEY].dest.notes, 'float');
+  assert.ok(p.$('#gz-float section[data-tile="notes"]'), 'the last committed float stays reachable');
   assert.equal(p.$('.gz-sb-note').textContent, "Couldn't save. Try again.");
 });
 

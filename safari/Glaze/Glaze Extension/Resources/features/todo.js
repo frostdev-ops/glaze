@@ -37,7 +37,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let shown = new Map(); // key -> row, for every row the list drew
   const open = new Set(); // rows with their details open, and "show more" groups
   const shut = new Set(['done', 'graded', 'read']); // sections closed until opened
-  let form = null; // the add/edit form's task: { id?, cid, … } or null; kept when the list goes and comes back
+  let form = null, formAccount = ''; // the add/edit form's task: { id?, cid, … } or null; kept for this account across mounts
   // Mounted by its widget (mount): { target, courseId, scope: 'follow' | 'all', setScope?(v), failed?() }; null when the
   // site's own sidebar is where it goes (sync, anchor).
   let mounted = null;
@@ -422,6 +422,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       }));
     }
     body.replaceChildren(...parts.filter(Boolean));
+    if (cache) { box.hidden = false; box.setAttribute('data-ready', ''); mounted?.rendered?.(); }
     if (!was) return;
     const seen = (v) => { const e = box.querySelector(`[data-focus="${CSS.escape(v)}"]`); return e?.checkVisibility() ? e : null; };
     (seen(was) || order.slice(order.indexOf(was) + 1).map(seen).find(Boolean) || seen('add'))?.focus({ preventScroll: true });
@@ -559,6 +560,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
       if (g !== gen) return;
       if (!L.ID.test(String(p?.id))) throw new Error('no profile');
+      if (formAccount && formAccount !== String(p.id)) form = null;
+      formAccount = String(p.id);
       who = { uid: String(p.id), tz: L.zone(p.time_zone) };
       coursesIn(list);
       key = L.storeKey(location.origin, who.uid);
@@ -566,8 +569,10 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (g !== gen) return;
       // A form left open on another page (keepDraft) opens again here, once.
       const d = r?.[draftKey()];
-      if (d) { try { store().remove(draftKey()); } catch { /* reloaded */ } }
-      if (!form && mounted && d && Date.now() - d.at < 14 * 864e5 && d.todo && typeof d.todo === 'object') form = draftForm(d.todo);
+      if (!form && mounted && ctx.settings().enhance.drafts && d && Date.now() - d.at < 14 * 864e5 && d.todo && typeof d.todo === 'object') {
+        form = draftForm(d.todo);
+        try { store().remove(draftKey()); } catch { /* reloaded */ }
+      }
       data = L.clean(r?.[key]);
       cache = r?.[CACHE]?.key === key ? r[CACHE] : null;
       if (!box) return;
@@ -604,7 +609,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       head = make('div', { className: 'gz-todo-head' });
       line = make('p', { className: 'gz-todo-say', role: 'status' });
       body = make('div', { className: 'gz-todo-body' });
-      box = make('section', { id: 'gz-todo', className: 'gz-todo' }, head, line, body);
+      box = make('section', { id: 'gz-todo', className: 'gz-todo', hidden: !!mounted }, head, line, body);
       box.setAttribute('aria-labelledby', 'gz-todo-title');
       box.addEventListener('click', onClick);
       box.addEventListener('change', onChange);
@@ -627,7 +632,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!target || !c) return false;
     const was = mounted && JSON.stringify([mounted.courseId, mounted.scope]);
     if (!mounted && box) off(); // the site's own sidebar had it
-    mounted = { target, courseId: String(c.courseId || ''), scope: c.scope === 'all' ? 'all' : 'follow', setScope: c.setScope, failed: c.failed };
+    mounted = { target, courseId: String(c.courseId || ''), scope: c.scope === 'all' ? 'all' : 'follow', setScope: c.setScope, rendered: c.rendered, failed: c.failed };
     boxIn();
     if (box.parentNode !== target) target.append(box);
     if (!started) started = start();
@@ -669,6 +674,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!box) return;
     box.remove();
     box = null;
+    who = null;
     started = null;
     drawn = '';
     document.removeEventListener('visibilitychange', onShow);
