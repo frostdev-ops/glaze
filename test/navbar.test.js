@@ -163,6 +163,11 @@ test('where the bar is: the placement, the course state, the style and the room 
   for (const rule of ['#main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }', '#main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }',
     '.inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
     '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
+  // A course is padded for the bar inside its own height (and is itself a .route-view-container on Ultra), so its cap
+  // leaves the bar's room in, footer or not: taken twice, the page stopped a bar's height above the footer.
+  for (const rule of ['html[data-gz-navbar][data-gz-footer] .inner-wrap > :is(section.course, .routed-page) {\n  max-height: calc(100vh - var(--gz-footer-h)) !important;',
+    'html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :is(section.course, .routed-page) { max-height: 100vh !important; }']) assert.ok(css.includes(rule), rule);
+  assert.ok(css.indexOf('html[data-gz-navbar][data-gz-footer] .inner-wrap >') > css.indexOf('html[data-gz-footer] .route-view-container'), 'after the general cap, so it wins');
 });
 
 test("Ultra's first paint words the bar as the model does, for each setting, in and out of a course", () => {
