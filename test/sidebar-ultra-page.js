@@ -80,7 +80,7 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
     inner.append(el('div', 'course-content-container', el('div', 'panel-wrap', el('div', 'bb-course-navigation', 'Course'), el('section', 'course-outline-content', 'Week 1'), el('aside', 'outline-actions', faculty, details, sched))));
     if (at === 'detail') inner.append(el('div', 'layer-content', 'A discussion'), el('div', 'layer-details', el('div', 'discussion-settings', 'Details & Information'), el('div', 'discussion-participants', 'Participation')));
   }
-  const store = structuredClone(stored), sent = [], loads = [], storeListeners = [], winListeners = [], observers = [], todoCalls = [];
+  const store = structuredClone(stored), sent = [], loads = [], storeListeners = [], winListeners = [], observers = [], sizes = [], docListeners = [], todoCalls = [];
   let queue = Promise.resolve();
   const fire = (v, old) => { for (const f of [...storeListeners]) f(Object.fromEntries(Object.keys(v).map((k) => [k, { newValue: structuredClone(v[k]), oldValue: old[k] }])), 'local'); };
   const area = {
@@ -94,7 +94,7 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
     setTimeout: () => 0, clearTimeout() {}, setImmediate,
     addEventListener: (type, f) => winListeners.push({ type, f }), removeEventListener: (type, f) => { const i = winListeners.findIndex((l) => l.type === type && l.f === f); if (i >= 0) winListeners.splice(i, 1); },
     innerWidth: width, innerHeight: 900, location: { origin: O, pathname: where, href: `${O}${where}` },
-    document: doc, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+    document: doc, ResizeObserver: class { constructor(f) { this.f = f; this.targets = []; sizes.push(this); } observe(e) { this.targets.push(e); } disconnect() { this.targets = []; } },
     MutationObserver: class { constructor(f) { this.f = f; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); this.on = true; } disconnect() { this.on = false; this.targets = []; } },
     requestAnimationFrame: (f) => { f(); return 1; }, cancelAnimationFrame() {},
     performance: { getEntriesByType: () => [{ type: 'navigate' }] }, history: { length: 1 },
@@ -133,8 +133,30 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
   Object.assign(doc, {
     documentElement: doc.root, visibilityState: 'visible', createElement: make, createTextNode: (textContent) => ({ textContent }),
     querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), getElementById: (id) => doc.root.all().find((x) => x.id === id) || null,
-    addEventListener() {}, removeEventListener() {},
+    addEventListener(type, f) { if (!docListeners.some((l) => l.type === type && l.f === f)) docListeners.push({ type, f }); },
+    removeEventListener(type, f) { const i = docListeners.findIndex((l) => l.type === type && l.f === f); if (i >= 0) docListeners.splice(i, 1); },
   });
+  // Geometry used only by absorption's conservative checks. The browser check supplies real layout and hit-testing.
+  const nativeBox = doc.boxOf;
+  doc.boxOf = (e) => {
+    const x = c.innerWidth - 336;
+    if (e.className === 'gz-sb-slot') return { left: x, top: 160, width: 320, height: parseFloat(e.style.getPropertyValue('height')) || 0 };
+    if (e.className === 'gz-sb-head') return { left: x, top: 60, width: 320, height: 50 };
+    if (e.className.includes('gz-sb-pagehead')) return { left: x, top: 120, width: 320, height: 30 };
+    if (e.id === 'gz-sb-widgets') return { left: x, top: 380, width: 320, height: 100 };
+    if (e.className === 'gz-sb-resize') return { left: x - 16, top: 60, width: 8, height: 800 };
+    if (e.className.includes('overview-attempts-section')) return { left: doc.getElementById('gz-sb-absorb') ? x : 900, top: 160, width: 320, height: 200 };
+    if (e.className.includes('button-attempt')) return { left: doc.getElementById('gz-sb-absorb') ? x + 10 : 910, top: 290, width: 290, height: 40 };
+    return nativeBox(e);
+  };
+  c.getComputedStyle = (e) => ({ display: e.className === 'assessment-overview-grid' ? 'grid' : 'block', visibility: 'visible',
+    gridTemplateColumns: '600px 0px 392px', gridColumnStart: '3', gridColumnEnd: 'span 1', gridRowStart: '1', gridRowEnd: 'span 2',
+    transform: 'none', perspective: 'none', filter: 'none', backdropFilter: 'none', clipPath: 'none', opacity: '1', isolation: 'auto',
+    contain: 'none', containerType: 'normal', willChange: 'auto', position: 'static', zIndex: 'auto', getPropertyValue: () => '' });
+  doc.elementFromPoint = (x, y) => {
+    const sec = doc.querySelector('.overview-attempts-section'), view = sec?.querySelector('a');
+    return view && y > 290 && y < 330 ? view : sec;
+  };
   c.globalThis = c; c.window = c; c.top = c;
   // Better To Do, as far as the dock needs it: mount puts its one list in the tile, unmount takes it away; sync is the
   // legacy path (the site's own places), which must not run while the dock has it.
@@ -159,7 +181,8 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
   const host = () => doc.root.all().find((x) => x.dataset?.gzSidebarHost);
   const ours = (x) => { for (let p = x; p && p.tagName; p = p.parentNode) if (/^gz-/.test(p.id) || /(^|\s)gz-/.test(String(p.className))) return true; return false; };
   const mutate = (target, change = {}) => { for (const o of observers.filter((x) => x.on && x.targets.includes(target))) o.f([{ target, addedNodes: [], removedNodes: [], ...change }]); };
-  return { c, doc, side, ui, store, sent, loads, observers, todoCalls, pass, resize, $, mode, host, ours, mutate, el, fire: doc.fire };
+  const event = (type, extra = {}) => { for (const l of [...docListeners, ...winListeners].filter((l) => l.type === type)) l.f({ type, ...extra }); };
+  return { c, doc, side, ui, store, sent, loads, observers, sizes, docListeners, winListeners, event, todoCalls, pass, resize, $, mode, host, ours, mutate, el, fire: doc.fire };
 };
 const record = (x = {}) => ({ [KEY]: S.clean({ mig: 1, ...x }) });
 const natives = (p) => p.doc.body.all().filter((x) => !p.ours(x)).map((x) => [x, x.parentNode, x.parentNode.children.filter((k) => !p.ours(k)).indexOf(x)]);

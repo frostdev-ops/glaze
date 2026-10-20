@@ -131,7 +131,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     check(await page.locator('bb-todo').isVisible(), 'printing restores native Ultra To Do');
     // ---- Phase 6: pages as Ultra builds them live (2026-10-20), both styles, dark and light Looks ----------------------
     // A discussion's details column in its grid; an assignment's overview (Grades / Attempts absorbed into This page);
-    // an attempt (its Details & Information absorbed, Save and Close and Submit never covered: stubs whose clicks are
+    // an unverified attempt (kept native, Save and Close and Submit never covered: stubs whose clicks are
     // counted, nothing is submitted); a page that does not match (nothing absorbed); the Gradebook's absolute tool panel.
     // Ultra's Courses page: its header and Glaze's toolbar in it, the list and the pager all end short of the expanded
     // column and its gap, at three widths and the widest column.
@@ -161,7 +161,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       gradebook: `<section class="course route-view-container"><div class="course-content-container"><div class="panel-wrap hide-in-background grades"><main class="course-main-content"><div class="course-tool-content"><section class="guidance-wrapper gradebook-panel route-view-container"><table id="course-student-grades-sortable-table"><tr><th>Item</th><th>Due</th><th>Status</th><th id="grade-col">Grade</th></tr><tr><td>Essay</td><td>Oct 25</td><td>Graded</td><td>5/5</td></tr></table></section></div></main></div></div></section>`,
     };
     const PATHS = { discussion: 'courses/_101_1/discussion/_9_1', assessment: 'courses/_101_1/assessment/_7_1/overview', mismatch: 'courses/_101_1/assessment/_7_1/overview', attempt: 'courses/_101_1/assessment/_7_1/attempt', gradebook: 'courses/_101_1/grades' };
-    const live = async (kind, { style = 'float', look = 'dark', width = 1600, w = 352 } = {}) => {
+    const live = async (kind, { style = 'float', look = 'dark', width = 1600, w = 352, action = 'View instructions' } = {}) => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`https://bb.school.test/ultra/${PATHS[kind]}`);
       await page.setContent(`<style>
@@ -183,17 +183,20 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       </style><div id="site-wrap"><div id="main-content-inner">${LIVEHTML[kind]}</div></div>`);
       for (const file of ['features/apps.css', 'features/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
       for (const file of ['lib/widgets.js', 'lib/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
-      await page.evaluate(({ style, w }) => {
+      await page.evaluate(({ style, w, action }) => {
         const rec = GZ_SIDEBAR.clean({ mig: 1, width: w, chose: { width: true }, dock: [{ id: 'notes' }], dest: { notes: 'dock' } });
         window.chrome = { storage: { local: { get: (key, cb) => cb({ [key]: rec }) }, onChanged: { addListener() {}, removeListener() {} } }, runtime: {} };
+        const actionLink = document.getElementById('view');
+        if (actionLink) actionLink.textContent = action;
         window.clicks = {};
         for (const id of ['view', 'rubric', 'save', 'submit']) document.getElementById(id)?.addEventListener('click', (e) => { e.preventDefault(); clicks[id] = (clicks[id] || 0) + 1; });
         const set = { enhance: { sidebar: true, notes: true, todo: true }, sidebar: { style }, navbar: { style: 'float' } };
         window.SET = set;
         window.GZ_CTX = { site: 'ultra', t: (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => v?.[k] ?? ''), need: async () => {}, account: async () => '_42_1', courseId: () => '_101_1', settings: () => set };
         // The structure, before: each node's parent and index.
+        window.nativeHTML = document.getElementById('site-wrap').outerHTML;
         window.before = [...document.querySelectorAll('#site-wrap *')].map((e) => [e, e.parentNode, [...e.parentNode.children].indexOf(e)]);
-      }, { style, w });
+      }, { style, w, action });
       await page.addScriptTag({ path: path.join(root, 'features/sidebar.js') });
       await page.evaluate(async () => { GZ_SIDEBAR_UI.sync(true); await GZ_SIDEBAR_UI.ready(); });
       await page.waitForSelector('[data-gz-sidebar-host]', { state: 'attached' });
@@ -212,7 +215,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       const a = await page.evaluate(() => {
         const sec = document.querySelector('.overview-attempts-section'), h = document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect(), r = sec.getBoundingClientRect(), v = document.getElementById('view').getBoundingClientRect();
         const main = document.querySelector('.assessment-details-section').getBoundingClientRect();
-        return { absorbed: sec.hasAttribute('data-gz-sb-absorbed'), inside: r.left >= h.left - 1 && r.right <= h.right + 1, hit: document.elementFromPoint(v.left + v.width / 2, v.top + v.height / 2)?.id, clear: main.right <= h.left - 15 };
+        return { absorbed: sec.hasAttribute('data-gz-sb-absorbed') || !!document.getElementById('gz-sb-absorb'), inside: r.left >= h.left - 1 && r.right <= h.right + 1, hit: document.elementFromPoint(v.left + v.width / 2, v.top + v.height / 2)?.id, clear: main.right <= h.left - 15 };
       });
       check(a.absorbed && a.inside, `assessment ${tag}: Grades / Attempts shows in This page`);
       check(a.hit === 'view', `assessment ${tag}: View instructions is on top and reachable (${a.hit})`);
@@ -220,6 +223,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       await page.click('#view');
       check(await page.evaluate(() => clicks.view === 1), `assessment ${tag}: its own click handler still runs`);
       check(await unmovedLive(), `assessment ${tag}: no node moved`);
+      check(await page.evaluate(() => nativeHTML === document.getElementById('site-wrap').outerHTML), `assessment ${tag}: native subtree bytes unchanged while absorbed`);
       await shot(`p6-ultra-assessment-${style}-${look}`);
     }
     await live('assessment');
@@ -229,21 +233,100 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     // Collapsed (the settings start each page collapsed; this stand-in has no worker for the account's own toggle).
     await page.evaluate(() => { SET.sidebar.open = 'collapsed'; GZ_SIDEBAR_UI.sync(true); });
     await page.waitForTimeout(150);
-    const back = await page.evaluate(() => ({ mode: document.documentElement.dataset.gzSidebar, marked: !!document.querySelector('[data-gz-sb-absorbed]'), style: document.querySelector('.overview-attempts-section').getAttribute('style') }));
+    const back = await page.evaluate(() => ({ mode: document.documentElement.dataset.gzSidebar, marked: !!document.querySelector('[data-gz-sb-absorbed], #gz-sb-absorb'), style: document.querySelector('.overview-attempts-section').getAttribute('style') }));
     check(back.mode === 'collapsed' && !back.marked && !back.style, `assessment collapsed: the panel back in the page, no style left (${JSON.stringify(back)})`);
     await live('attempt');
     const t = await page.evaluate(() => {
       const d = document.querySelector('[class*="makeStylesdetails-"]'), hit = (id) => { const r = document.getElementById(id).getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.id; };
       return { absorbed: d.hasAttribute('data-gz-sb-absorbed'), save: hit('save'), submit: hit('submit'), footer: !document.querySelector('.makeStylesfooter-2 [data-gz-sb-absorbed], .makeStylesfooter-2[data-gz-sb-absorbed]') };
     });
-    check(t.absorbed, 'attempt: Details & Information shows in This page');
+    check(!t.absorbed && await page.locator('#gz-sb-absorb').count() === 0, 'attempt: unverified Details & Information keeps native layout');
     check(t.save === 'save' && t.submit === 'submit' && t.footer, `attempt: Save and Close and Submit are never covered (${t.save}, ${t.submit})`);
     await page.click('#save'); await page.click('#submit'); await page.click('#rubric');
     check(await page.evaluate(() => clicks.save === 1 && clicks.submit === 1 && clicks.rubric === 1), 'attempt: the stub buttons and the rubric link still take their clicks');
     check(await unmovedLive(), 'attempt: no node moved');
     await shot('p6-ultra-attempt');
     await live('mismatch');
-    check(await page.evaluate(() => !document.querySelector('[data-gz-sb-absorbed]')), 'a structure that does not match: nothing absorbed');
+    check(await page.evaluate(() => !document.querySelector('[data-gz-sb-absorbed], #gz-sb-absorb')), 'a structure that does not match: nothing absorbed');
+    // Projection safety uses real hit-testing and browser focus, including failure and restore paths.
+    const isProjected = () => page.evaluate(() => !!document.querySelector('[data-gz-sb-absorbed], #gz-sb-absorb'));
+    for (const style of ['float', 'embed']) {
+      await live('assessment', { style });
+      check(await isProjected(), `safety ${style}: starts projected`);
+      for (const control of ['.gz-sb-more', '.gz-sb-toggle', '.gz-sb-pagehead button']) {
+        check(await page.locator(control).evaluate((e) => { const r = e.getBoundingClientRect(); return e.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)); }), `safety ${style}: ${control} is not covered`);
+      }
+      await page.locator('.gz-sb-more').click();
+      check(await page.locator('#gz-sb-menu').isVisible(), `safety ${style}: customization menu is reachable`);
+      await page.keyboard.press('Escape');
+      await live('assessment', { style });
+      check(await isProjected(), `safety ${style}: keyboard check starts projected`);
+      await page.focus('#view');
+      check(await isProjected(), `safety ${style}: native focus remains visible in the projection`);
+      await page.keyboard.press('Enter');
+      check(await page.evaluate(() => clicks.view === 1 && document.activeElement.id === 'view'), `safety ${style}: keyboard activation keeps native focus and handler`);
+      await page.keyboard.press('Tab');
+      check(await page.evaluate(() => document.activeElement.id === 'main-end'), `safety ${style}: native Tab order remains intact`);
+      check(await isProjected(), `safety ${style}: scroll check starts projected`);
+      // A sidebar scroll must restore in the same event, rather than leaving native focus outside that scroller.
+      await page.evaluate(() => {
+        const pad = document.createElement('div'); pad.style.height = '2000px'; document.querySelector('.gz-sb-dock').append(pad);
+        document.querySelector('[data-gz-sidebar-host]').scrollTop = 600;
+      });
+      await page.waitForTimeout(100);
+      check(!await isProjected(), `safety ${style}: sidebar scrolling restores instead of clipping native controls`);
+      await page.focus('#view');
+      check(await page.locator('#view').evaluate((e) => { const r = e.getBoundingClientRect(); return e.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)); }), `safety ${style}: keyboard can still reach the real View instructions`);
+      await page.evaluate(() => GZ_SIDEBAR_UI.sync(true));
+      await page.waitForTimeout(80);
+      check(!await isProjected(), `safety ${style}: subsequent passes do not restart a scroll loop`);
+      await page.evaluate(() => GZ_SIDEBAR_UI.sync(false));
+      check(await page.evaluate(() => nativeHTML === document.getElementById('site-wrap').outerHTML), `safety ${style}: full absorb/restore cycle is byte-identical`);
+    }
+    await live('assessment', { action: 'Start attempt' });
+    check(await isProjected(), 'Start attempt: verified overview is projected without relying on English button text');
+    await page.locator('#view').click();
+    check(await page.evaluate(() => clicks.view === 1), 'Start attempt: only the fixture handler runs at its visual position');
+    const ax = await page.context().newCDPSession(page);
+    const tree = (await ax.send('Accessibility.getFullAXTree')).nodes;
+    check(tree.some((n) => !n.ignored && n.role?.value === 'heading' && n.name?.value === 'Grades / Attempts')
+      && tree.some((n) => !n.ignored && n.role?.value === 'link' && n.name?.value === 'Start attempt'), 'accessibility: original heading and action stay in the reading tree');
+    check(tree.some((n) => !n.ignored && n.role?.value === 'complementary' && n.name?.value === 'Sidebar')
+      && tree.some((n) => !n.ignored && n.role?.value === 'heading' && n.name?.value === 'This page'), `accessibility: Sidebar landmark and This page heading have their correct labels (${tree.filter((n) => !n.ignored && ['complementary', 'heading'].includes(n.role?.value)).map((n) => n.name?.value).join(', ')})`);
+    check(await page.locator('.gz-sb-slot').getAttribute('aria-hidden') === 'true'
+      && await page.locator('#gz-sidebar').getAttribute('aria-owns') === null
+      && await page.locator('.gz-sb-pagehead button').getAttribute('aria-describedby') === 'grades-attempts-header', 'accessibility: the visual slot adds no duplicate content or reading-order reassignment');
+    await ax.detach();
+    for (const how of ['stack', 'transform', 'grid', 'heading', 'ancestor', 'focus', 'route', 'setting', 'drawer', 'print', 'long']) {
+      await live('assessment');
+      await page.evaluate((how) => {
+        const sec = document.querySelector('.overview-attempts-section');
+        if (how === 'stack') { document.getElementById('main-content-inner').style.zIndex = '20'; }
+        if (how === 'transform') { document.getElementById('main-content-inner').style.transform = 'translateZ(0)'; }
+        if (how === 'grid') { document.querySelector('.assessment-overview-grid').style.gridTemplateColumns = '1fr'; }
+        if (how === 'heading') { document.getElementById('grades-attempts-header').id = 'unknown-heading'; }
+        if (how === 'ancestor') { document.querySelector('.root-learning-module-panel').className = 'unknown'; }
+        if (how === 'focus') { document.documentElement.setAttribute('data-gz-focus', ''); }
+        if (how === 'route') { history.pushState({}, '', '/ultra/courses/_101_1/assessment/_8_1/attempt'); }
+        if (how === 'setting') { SET.sidebar.absorb = false; }
+        if (how === 'drawer') { SET.sidebar.open = 'drawer'; }
+        if (how === 'print') { dispatchEvent(new Event('beforeprint')); }
+        if (how === 'long') { const text = document.createElement('p'); text.textContent = 'Long description. '.repeat(500); sec.append(text); }
+        GZ_SIDEBAR_UI.sync(true);
+      }, how);
+      await page.waitForTimeout(150);
+      check(!await isProjected(), `safety ${how}: mismatch restores native flow`);
+      if (how === 'focus' || how === 'setting' || how === 'drawer' || how === 'print') {
+        check(await page.evaluate(() => nativeHTML === document.getElementById('site-wrap').outerHTML), `safety ${how}: no native attributes or styles left`);
+      }
+    }
+    await live('assessment');
+    const nativeStyles = await page.evaluate(() => { GZ_SIDEBAR_UI.sync(false); const c = getComputedStyle(document.querySelector('.overview-attempts-section')); return [c.position, c.padding, c.margin, c.zIndex, c.clipPath]; });
+    await page.evaluate(() => GZ_SIDEBAR_UI.sync(true));
+    await page.waitForTimeout(150);
+    await page.emulateMedia({ media: 'print' });
+    check(await page.evaluate((before) => { const c = getComputedStyle(document.querySelector('.overview-attempts-section')); return JSON.stringify(before) === JSON.stringify([c.position, c.padding, c.margin, c.zIndex, c.clipPath]); }, nativeStyles), 'printing restores native computed styles');
+    await page.emulateMedia({ media: 'screen' });
     for (const style of ['float', 'embed']) for (const width of [1800, 1440, 1280]) for (const w of [352, 480]) {
       await live('gradebook', { style, width, w });
       const g = await page.evaluate(() => { const h = document.querySelector('[data-gz-sidebar-host]'), r = h.getBoundingClientRect(), tb = document.getElementById('course-student-grades-sortable-table').getBoundingClientRect(); return { mode: document.documentElement.dataset.gzSidebar, family: document.documentElement.dataset.gzSbFamily, hostLeft: r.left, tableRight: tb.right }; });

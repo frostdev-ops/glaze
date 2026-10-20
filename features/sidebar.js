@@ -281,8 +281,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     grip.setAttribute('aria-valuemax', String(S.MAX_WIDTH));
     grip.title = t('Drag to resize, or use the arrow keys.');
     resizer(grip);
-    pageBtn = button(t('This page'), () => fold('page'), { className: 'gz-sb-sec-btn' });
+    pageBtn = button(t('This page'), () => fold('page'), { className: 'gz-sb-sec-btn', id: 'gz-sb-ph' });
+    pageBtn.setAttribute('aria-label', t('This page'));
     pageHead = make('h2', { className: 'gz-sb-sec gz-sb-pagehead' }, pageBtn);
+    pageHead.setAttribute('aria-labelledby', 'gz-sb-ph');
     // Room in Glaze's own column for the page's side panels shown in This page (project).
     slot = make('div', { className: 'gz-sb-slot' });
     slot.setAttribute('aria-hidden', 'true');
@@ -328,6 +330,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     widthCancel?.();
     mo?.disconnect();
     absorb([]);
+    absorbBlocked = new WeakMap();
     for (const e of [grip, head, pageHead, slot, dock]) e?.remove();
     if (host.own) host.el.remove();
     else {
@@ -378,95 +381,130 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     && (c.textContent.trim() || c.querySelector('a, button, input, select, textarea, img, svg, canvas, iframe')));
 
   // ---- absorbing an assignment's side panels into This page ---------------------------------------------------------
-  // Ultra keeps an assignment's Grades / Attempts (overview) or Details & Information (attempt) in its own page. While the
-  // sidebar is expanded beside it, and the setting allows (sidebar.absorb), each is shown over a slot Glaze keeps for it in
-  // This page. Invariants, each kept by absorb / syncAbsorbed / restoreAbsorbed and nothing else:
-  //  - The panels are never moved, copied or rebuilt: no node of theirs or of their ancestors is inserted, removed or
-  //    cloned. What changes is one attribute on each (data-gz-sb-absorbed), one on the overview's grid (data-gz-sb-grid)
-  //    and four custom properties in each panel's inline style; features/sidebar.css positions them from those.
-  //  - Nothing interactive changes: no listener goes on a panel, nothing is intercepted. They stay in the page's DOM,
-  //    reading and Tab order (after the page's own sections); pointer events still reach them where they show.
-  //  - Only the exact structure recognized (absorbable) is absorbed. A panel that goes away, is replaced, no longer matches,
-  //    is an unexpected size, or any error, puts every panel back as Ultra had it at once (restoreAbsorbed): the attribute
-  //    and the custom properties gone, nothing else touched. An attempt's footer (Save and Close, Submit) is never part
-  //    of what is absorbed, and the main column keeps its whole width short of the sidebar, so it is never covered.
-  //  - Collapsed, a drawer, This page folded or hidden, the sidebar off or asleep: nothing is absorbed.
-  let absorbed = [], absorbedGrids = [], absorbRO = null, absorbFrame = 0;
-  const ABSORB_PROPS = ['--gz-sb-px-y', '--gz-sb-px-x', '--gz-sb-px-w', '--gz-sb-px-clip'];
-  const FOOTER = 'button, input[type="submit"], [role="button"]';
-  // The overview's: its grid's Grades / Attempts section, titled, in Ultra's assignment panel. An attempt's: the details
-  // panel of its authoring panel, titled first, with links only: no form controls or buttons, so never the attempt's own
-  // answers or its footer. Its description is inside that panel and comes with it (it can't be split without moving nodes). Anything else: nothing.
+  // The overview's verified side column can be dressed over a slot using a Glaze-owned stylesheet. No attributes,
+  // inline styles, listeners or nodes of Ultra's are changed. Its heading and controls keep their native reading order.
+  // Independent scrollers cannot safely share keyboard scrolling: only a fully visible, non-scrolling slot qualifies.
+  // Any scroll, re-render, obstruction or changed geometry restores native flow, without trying again on every pass.
+  // Attempt details have no verified structure yet; they always keep Ultra's presentation, even with the setting on.
+  let absorbed = [], absorbSheet = null, absorbRO = null, absorbMO = null, absorbRootMO = null, absorbBox = null, absorbBlocked = new WeakMap(), absorbGen = 0;
+  const OVERVIEW = 'section.assessment-overview-modern-panel.routed-page.route-view-container > learning-module-panel-view.routed-page-body > div.table-of-contents-disabled > div.panel-content-body > div.root-learning-module-panel > div#learningModulePanelContainerId.content-item-container > div.content-item-container-children > content-body > div.base-body > div.content-root > div.standard-content-body > div.assessment-overview-grid';
+  const PANEL = `${OVERVIEW} > div.overview-section.overview-attempts-section.overview-attempts-section-container:nth-child(3):has(> h2#grades-attempts-header.section-label)`;
+  const absorbKey = () => JSON.stringify([location.pathname, location.search, innerWidth, innerHeight, cfg(), rec?.width, isOpen()]);
   const absorbable = () => {
-    if (!ultra || cfg().absorb === false) return [];
-    const kids = (e, test) => [...e.children].filter(test);
-    const over = [...document.querySelectorAll('div.assessment-overview-grid > div.overview-section.overview-attempts-section')].filter((e) =>
-      has(e.parentElement, 'assessment-overview-grid') && has(e.parentElement.parentElement, 'standard-content-body') && !!e.closest('#learningModulePanelContainerId')
-      && kids(e, (k) => k.tagName === 'H2' && has(k, 'section-label')).length === 1);
-    const attempt = [...document.querySelectorAll('bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"]')].filter((e, _, all) => {
-      if (all.some((o) => o !== e && o.contains(e))) return false;
-      const heads = [...e.querySelectorAll('h1, h2, h3, h4, h5, h6')];
-      return heads.length > 0 && ['H2', 'H3'].includes(heads[0].tagName) && !e.querySelector(FOOTER)
-        && ![...e.querySelectorAll('input, select, textarea, iframe, [contenteditable="true"]')].some((x) => x.type !== 'hidden');
-    });
-    const list = over.length === 1 ? over : !over.length && attempt.length === 1 ? attempt : [];
-    return list.filter((e) => e.isConnected && !e.closest('[hidden]') && !e.closest('[aria-hidden="true"]'));
+    if (!ultra || cfg().absorb === false) { absorbBlocked = new WeakMap(); return []; }
+    if (!/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/overview\/?$/.test(location.pathname) || html().hasAttribute('data-gz-focus')) return [];
+    const grids = [...document.querySelectorAll('div.assessment-overview-grid')];
+    if (grids.length !== 1) return [];
+    const grid = grids[0], kids = [...grid.children];
+    const classes = ['overview-description-section', 'overview-due-date-section', 'overview-attempts-section', 'assessment-details-section'];
+    if (kids.length !== 4 || kids.some((e, i) => e.tagName !== 'DIV' || !has(e, 'overview-section') || !has(e, classes[i]) || (i !== 2 && !has(e, 'main-section-container')))) return [];
+    // Check direct parents ourselves, rather than accepting a descendant selector's partial match.
+    const chain = ['div.standard-content-body', 'div.content-root', 'div.base-body', 'content-body', 'div.content-item-container-children',
+      'div#learningModulePanelContainerId.content-item-container', 'div.root-learning-module-panel', 'div.panel-content-body',
+      'div.table-of-contents-disabled', 'learning-module-panel-view.routed-page-body', 'section.assessment-overview-modern-panel.routed-page.route-view-container'];
+    let parent = grid.parentElement;
+    for (const sel of chain) { if (!parent || parent.closest(sel) !== parent) return []; parent = parent.parentElement; }
+    const e = kids[2], heads = [...e.children].filter((n) => n.tagName === 'H2' && has(n, 'section-label'));
+    if (!has(e, 'overview-attempts-section-container') || heads.length !== 1 || heads[0].id !== 'grades-attempts-header'
+      || document.querySelectorAll('#grades-attempts-header').length !== 1 || !e.querySelector('a.button.button-attempt.js-multiple')
+      || e.querySelector('form, input, select, textarea, iframe, [contenteditable="true"], button, [role="button"]')
+      || !e.isConnected || e.closest('[hidden], [aria-hidden="true"]')) return [];
+    return absorbBlocked.get(e) === absorbKey() ? [] : [e];
   };
   const pv = (e, k, v) => { if (e.style.getPropertyValue(k) !== v) e.style.setProperty(k, v); };
   const restoreAbsorbed = () => {
-    for (const e of absorbed) {
-      e.removeAttribute('data-gz-sb-absorbed');
-      for (const k of ABSORB_PROPS) e.style.removeProperty(k);
-      if (e.getAttribute('style') === '') e.removeAttribute('style');
-    }
-    for (const g of absorbedGrids) g.removeAttribute('data-gz-sb-grid');
-    absorbRO?.disconnect();
-    cancelAnimationFrame(absorbFrame);
-    host?.el.removeEventListener('scroll', absorbSoon);
-    document.removeEventListener('scroll', absorbSoon, true);
-    absorbed = []; absorbedGrids = [];
+    absorbGen++;
+    absorbRO?.disconnect(); absorbMO?.disconnect(); absorbRootMO?.disconnect();
+    absorbRO = absorbMO = absorbRootMO = null;
+    absorbSheet?.remove(); absorbSheet = null;
+    document.removeEventListener('scroll', absorbInvalid, true);
+    removeEventListener('beforeprint', absorbInvalid);
+    removeEventListener('popstate', absorbInvalid);
+    removeEventListener('hashchange', absorbInvalid);
+    absorbed = []; absorbBox = null;
+    pageBtn?.removeAttribute('aria-describedby');
     slot?.style.removeProperty('height');
     if (slot && slot.getAttribute('style') === '') slot.removeAttribute('style');
   };
+  const absorbInvalid = () => {
+    if (!absorbed.length) return;
+    absorbBlocked.set(absorbed[0], absorbKey());
+    restoreAbsorbed();
+    if (host?.own) pageHead.hidden = true;
+  };
+  const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
   const syncAbsorbed = () => {
     if (!absorbed.length) return;
     try {
-      const now = absorbable();
-      if (!slot?.isConnected || !host || now.length !== absorbed.length || now.some((e, i) => e !== absorbed[i])) { restoreAbsorbed(); layout(); return; }
-      const sr = slot.getBoundingClientRect(), hr = host.el.getBoundingClientRect(), under = head.getBoundingClientRect().bottom;
-      const gap = (typeof getComputedStyle === 'function' && parseFloat(getComputedStyle(host.el).getPropertyValue('--gz-sb-gap'))) || 12;
-      let y = sr.top;
-      for (const e of absorbed) {
-        // Where it shows now, less where it was put: its containing block's origin (an ancestor may make one).
-        const r = e.getBoundingClientRect();
-        if (r.width < 1 && r.height < 1) throw new Error('gone');
-        if (r.height > innerHeight * 4) throw new Error('size');
-        const oy = r.top - (parseFloat(e.style.getPropertyValue('--gz-sb-px-y')) || 0), ox = r.left - (parseFloat(e.style.getPropertyValue('--gz-sb-px-x')) || 0);
-        pv(e, '--gz-sb-px-y', `${Math.round(y - oy)}px`);
-        pv(e, '--gz-sb-px-x', `${Math.round(sr.left - ox)}px`);
-        pv(e, '--gz-sb-px-w', `${Math.round(sr.width)}px`);
-        pv(e, '--gz-sb-px-clip', `inset(${Math.max(0, Math.round(under - y))}px 0 ${Math.max(0, Math.round(y + r.height - hr.bottom))}px 0)`);
-        y += r.height + gap;
+      const e = absorbed[0], now = absorbable(), r = e.getBoundingClientRect(), sr = slot.getBoundingClientRect(), hr = host.el.getBoundingClientRect();
+      if (!on || !active || asleep || covered() || mode !== 'expanded' || cfg().page === 'hidden' || pageFolded()
+        || now.length !== 1 || now[0] !== e || !slot.isConnected || host.el.scrollTop || host.el.scrollHeight > hr.height + 1
+        || r.width < 1 || r.height < 1 || r.left < hr.left || r.right > hr.right || r.top < pageHead.getBoundingClientRect().bottom
+        || r.bottom > hr.bottom - 4 || Math.abs(r.top - sr.top) > 1 || Math.abs(r.left - sr.left) > 1
+        || (absorbBox && ['left', 'top', 'width', 'height'].some((k) => Math.abs(r[k] - absorbBox[k]) > 1))) throw Error('geometry');
+      for (const own of [head, pageHead, dock, grip]) if (overlaps(r, own.getBoundingClientRect())) throw Error('controls');
+      // Test the real painted controls, not synthetic dispatchEvent: another stacking context must fail closed.
+      for (const x of [e, ...e.querySelectorAll('a[href]')]) {
+        const b = x.getBoundingClientRect();
+        if (b.width < 1 || b.height < 1 || b.left < r.left || b.right > r.right || b.top < r.top || b.bottom > r.bottom) throw Error('control');
+        const points = x === e ? [[b.left + b.width / 2, b.top + 2], [b.left + b.width / 2, b.bottom - 2]] : [[b.left + b.width / 2, b.top + b.height / 2]];
+        for (const [x0, y0] of points) if (!x.contains(document.elementFromPoint(x0, y0))) throw Error('covered');
       }
-      pv(slot, 'height', `${Math.max(0, Math.round(y - sr.top - gap))}px`);
-    } catch { restoreAbsorbed(); }
+      absorbBox = r;
+    } catch { absorbInvalid(); }
   };
-  const absorbSoon = () => { cancelAnimationFrame(absorbFrame); absorbFrame = requestAnimationFrame(syncAbsorbed); };
   const absorb = (list) => {
-    // The same panels still marked: kept, measured again. A mark Ultra reset (a re-render): put back, then again.
-    if (list.length === absorbed.length && list.every((e, i) => e === absorbed[i] && e.hasAttribute('data-gz-sb-absorbed'))) { if (list.length) absorbSoon(); return; }
+    if (list.length === absorbed.length && list.every((e, i) => e === absorbed[i])) { if (list.length) syncAbsorbed(); return; }
     restoreAbsorbed();
-    if (!list.length || !slot?.isConnected || !host) return;
+    if (!list.length || !slot?.isConnected || !host?.own || typeof getComputedStyle !== 'function' || typeof document.elementFromPoint !== 'function') return;
+    const e = list[0];
     try {
+      const css = (node) => getComputedStyle(node);
+      const grid = css(e.parentElement), native = css(e);
+      const columns = grid.gridTemplateColumns.split(/\s+/).map(parseFloat);
+      if (grid.display !== 'grid' || columns.length !== 3 || columns.some((v) => !Number.isFinite(v)) || columns[0] < 1 || columns[1] !== 0 || columns[2] < 200
+        || native.gridColumnStart !== '3' || native.gridColumnEnd !== 'span 1' || native.gridRowStart !== '1' || native.gridRowEnd !== 'span 2') return;
+      // A transformed, clipped or independently stacked ancestor cannot project into the sidebar's viewport layer.
+      let count = 0;
+      for (let p = e; p; p = p.parentElement) {
+        if (++count > 30) return;
+        const c = css(p);
+        if (c.display === 'none' || c.visibility !== 'visible' || c.transform !== 'none' || c.perspective !== 'none' || c.filter !== 'none'
+          || c.backdropFilter !== 'none' || c.clipPath !== 'none' || c.opacity !== '1' || c.isolation !== 'auto'
+          || !['none', ''].includes(c.contain) || !['normal', ''].includes(c.containerType) || c.willChange !== 'auto'
+          || (c.position !== 'static' && c.zIndex !== 'auto')) return;
+      }
+      if (host.el.scrollTop || host.el.scrollHeight > host.el.getBoundingClientRect().height + 1) return;
       absorbed = list;
-      for (const e of list) e.setAttribute('data-gz-sb-absorbed', '');
-      absorbedGrids = [...new Set(list.map((e) => e.parentElement).filter((g) => g && has(g, 'assessment-overview-grid')))];
-      for (const g of absorbedGrids) g.setAttribute('data-gz-sb-grid', '');
-      if (typeof ResizeObserver === 'function') { absorbRO ||= new ResizeObserver(absorbSoon); for (const e of list) absorbRO.observe(e); absorbRO.observe(host.el); }
-      host.el.addEventListener('scroll', absorbSoon, { passive: true });
-      document.addEventListener('scroll', absorbSoon, { capture: true, passive: true });
+      absorbSheet = make('style', { id: 'gz-sb-absorb' });
+      pv(slot, 'height', '1px');
+      const sr = slot.getBoundingClientRect();
+      absorbSheet.textContent = `@media screen { html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${PANEL} {
+        position:fixed!important; z-index:1001!important; top:${sr.top}px!important; left:${sr.left}px!important; right:auto!important; bottom:auto!important;
+        width:${sr.width}px!important; max-width:none!important; min-width:0!important; margin:0!important; box-sizing:border-box;
+        padding:calc(var(--gz-sb-pad, 1rem) * .75)!important; border:1px solid var(--gz-border-line, var(--gz-line))!important;
+        border-radius:var(--gz-sb-ir, 8px)!important; background:var(--gz-surface)!important; box-shadow:none!important;
+      } html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} { grid-template-columns:minmax(0,1fr)!important; }
+      html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} > :not(:nth-child(3)) { grid-column:1 / -1!important; } }`;
+      document.body.append(absorbSheet);
+      pv(slot, 'height', `${e.getBoundingClientRect().height}px`);
       syncAbsorbed();
-    } catch { restoreAbsorbed(); }
+      if (!absorbed.length) return;
+      pageBtn.setAttribute('aria-describedby', 'grades-attempts-header');
+      const g = absorbGen;
+      const changed = () => { if (g === absorbGen) absorbInvalid(); };
+      if (typeof ResizeObserver === 'function') { absorbRO = new ResizeObserver(() => { if (g === absorbGen) syncAbsorbed(); }); for (const x of [e, host.el, head, pageHead, slot, dock]) absorbRO.observe(x); }
+      absorbMO = new MutationObserver(changed);
+      // Watch only this overview and its ancestor attributes, never a whole-page mutation sweep.
+      absorbMO.observe(e.parentElement.parentElement, { childList: true, subtree: true, attributes: true, characterData: true });
+      for (let p = e.parentElement.parentElement.parentElement; p && p !== html(); p = p.parentElement) absorbMO.observe(p, { attributes: true, childList: true });
+      absorbRootMO = new MutationObserver(changed);
+      absorbRootMO.observe(html(), { attributes: true, attributeFilter: ['data-gz-focus', 'dir', 'class', 'style'] });
+      document.addEventListener('scroll', absorbInvalid, { capture: true, passive: true });
+      addEventListener('beforeprint', absorbInvalid);
+      addEventListener('popstate', absorbInvalid);
+      addEventListener('hashchange', absorbInvalid);
+    } catch { absorbInvalid(); }
   };
 
   // ---- the layout ---------------------------------------------------------------------------------------------------
@@ -539,6 +577,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setAttr(grip, 'aria-valuenow', String(w));
     if (next !== mode) { mode = next; emit('mode', mode); }
     absorb(next === 'expanded' && !hidePage && !pageFolded() ? shownPanels : []);
+    if (host.own) pageHead.hidden = !absorbed.length;
   };
   const paint = () => {
     if (!active || !host || asleep) return;
@@ -583,7 +622,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     asleep = false;
     build();
     const path = location.pathname + (location.search || '');
-    if (route !== path) { route = path; genOf(); closeDrawer(false); }
+    if (route !== path) { absorbInvalid(); route = path; genOf(); closeDrawer(false); }
     const fam = A.family(), cid = A.courseId();
     // A kind of page the sidebar is off on (sidebar.off): the page as the LMS has it, no dock, until a page it is on.
     if (offOn(fam)) {
@@ -622,7 +661,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const r = f?.isConnected && f.getClientRects().length ? f.getBoundingClientRect() : null;
     setVar('--gz-sb-foot', `${r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0}px`);
   };
-  const onResize = () => { if (asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
+  const onResize = () => { absorbInvalid(); if (asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
   // The document on screen changed (features/coursetabs.js): asleep, the drawer and menu close and nothing is watched;
   // awake again, the column is looked at as on a pass.
   const cover = () => {

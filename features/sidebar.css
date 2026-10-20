@@ -87,17 +87,8 @@
     grid-template-columns: minmax(0, 1fr) !important; padding-inline-end: var(--gz-sb-room) !important; box-sizing: border-box;
   }
   html[data-gz-sb-family="discussion"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-main-container:has(> [data-gz-sidebar-host]) > :not([data-gz-sidebar-host]) { grid-column: 1 / -1 !important; }
-  /* An assignment's side panels shown in This page (features/sidebar.js absorb): fixed over the column's slot, the
-     page's grid one column without them. */
-  [data-gz-sb-absorbed] {
-    position: fixed !important; z-index: 1001 !important; top: var(--gz-sb-px-y, 0px) !important; left: var(--gz-sb-px-x, 0px) !important; right: auto !important; bottom: auto !important;
-    width: var(--gz-sb-px-w, 300px) !important; max-width: none !important; min-width: 0 !important; margin: 0 !important; box-sizing: border-box; clip-path: var(--gz-sb-px-clip, none);
-    padding: calc(var(--gz-sb-pad, 1rem) * 0.75) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-sb-ir, 8px) !important;
-    background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-sb-paint, var(--gz-surface)) 70%, transparent) !important; box-shadow: none !important;
-  }
-  .assessment-overview-grid[data-gz-sb-grid] { grid-template-columns: minmax(0, 1fr) !important; }
-  .assessment-overview-grid[data-gz-sb-grid] > :not([data-gz-sb-absorbed]) { grid-column: 1 / -1 !important; }
-  .gz-sb-slot { display: block; }
+  /* The overview's projection is a Glaze-owned, screen-only sheet; native nodes carry no markers or inline styles. */
+  .gz-sb-slot { display: block; pointer-events: none; }
   html:not([data-gz-sidebar="expanded"]) .gz-sb-slot, .gz-sb-slot:not([style*="height"]) { display: none; }
   html[data-gz-sb-ultra][data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] { z-index: 2100; }
   html[data-gz-sb-ultra] .gz-sb-backdrop { z-index: 2099; }
