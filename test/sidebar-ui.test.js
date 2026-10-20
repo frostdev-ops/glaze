@@ -31,7 +31,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
     get: async (ks) => Object.fromEntries([ks].flat().filter((k) => k in store).map((k) => [k, structuredClone(store[k])])),
     set: async (v) => { if (net.fail) return false; const old = structuredClone(store); Object.assign(store, structuredClone(v)); setImmediate(() => fire(v, old)); return true; },
   };
-  const settings = () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, todo: true, sidebar: true, ...enhance } });
+  const settings = () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, todo: true, sidebar: true, ...enhance }, sidebar: c.sidebarSettings || {}, navbar: c.navbarSettings || {} });
   const sync = { get: async () => ({ enhance: settings().enhance }) };
   const c = {
     console, URL, Intl, Date, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, structuredClone,
@@ -526,4 +526,129 @@ test('mods get where their widget shows, and nothing of the page', async () => {
   assert.ok(api, 'drawn in the dock');
   assert.equal(api.surface(), 'dock');
   assert.deepEqual(Object.keys(api).sort(), ['id', 'site', 'size', 'surface', 'term', 'who']);
+});
+
+// ---- Phase 6: settings, styles, the switch -------------------------------------------------------------------------
+const rootMarks = (p) => Object.keys(p.doc.root.dataset).filter((k) => /^gzS(idebar|b)/.test(k));
+
+test('off returns exactly to before (Canvas\'s column, the Dashboard\'s To Do tile and its hiding rule), the dock record kept; on again restores the dock', async () => {
+  const lay = W.layout({ canvasTodo: true, boards: { cdash: [{ id: 'todo', on: true }] } });
+  const stored = { widgetLayout: lay, ...record({ dock: [{ id: 'todo' }, { id: 'notes' }], dest: { todo: 'dock', notes: 'dock' } }) };
+  const sw = {};
+  const p = page({ fixture: 'canvas-dashboard-cards.html', where: '/', width: 1700, left: 84, stored, enhance: sw, widgets: true });
+  p.c.GZ_TODO = require('../lib/todo.js');
+  p.c.GZ_TODO_UI = { mount: (target) => { target.append(Object.assign(p.doc.createElement('section'), { id: 'gz-todo' })); return true; }, unmount() {}, sync() {} };
+  const wrapper = p.$('#right-side-wrapper'), attrs = { ...wrapper.attrs }, data = { ...wrapper.dataset };
+  // Before the sidebar: the legacy page, as with the switch off from the start.
+  sw.sidebar = false;
+  p.ui.sync(true); await settle();
+  const legacy = { canvasTodo: p.doc.root.hasAttribute('data-gz-canvas-todo'), board: !!p.$('#gz-dash section[data-tile="todo"]') };
+  assert.ok(legacy.board, 'the Dashboard\'s To Do tile');
+  // On: docked.
+  sw.sidebar = true;
+  await p.pass();
+  assert.ok(p.$('#gz-sb-widgets section[data-tile="todo"]'), 'To Do in the dock');
+  assert.ok(!p.$('#gz-dash section[data-tile="todo"]'), 'not on the board too');
+  // Off: as the site's part does it (content-canvas.js syncSidebar, then the widgets).
+  sw.sidebar = false;
+  p.side.sync(false); p.ui.sync(true); await settle();
+  assert.deepEqual(rootMarks(p), [], 'no sidebar attribute on <html>');
+  for (const k of ['--gz-sidebar-w', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha']) assert.equal(p.doc.root.style.getPropertyValue(k), '', k);
+  assert.deepEqual({ ...wrapper.attrs }, attrs, 'Canvas\'s column as it was');
+  assert.deepEqual({ ...wrapper.dataset }, data);
+  assert.deepEqual({ canvasTodo: p.doc.root.hasAttribute('data-gz-canvas-todo'), board: !!p.$('#gz-dash section[data-tile="todo"]') }, legacy, 'the legacy To Do and its hiding rule back');
+  assert.ok(!p.$('#gz-sidebar') && !p.$('.gz-sb-head'), 'no Glaze column');
+  assert.deepEqual(S.clean(p.store[KEY]).dock.map((x) => x.id), ['todo', 'notes'], 'the dock record survives');
+  // The CSS hooks the legacy page relies on are still there.
+  assert.match(read('features/apps.css'), /html\[data-gz-canvas-todo\] #right-side :is\(\.Sidebar__TodoListContainer, \.todo-list-header, ul\.to-do-list\) \{ display: none !important; \}/);
+  // On again: the same dock.
+  sw.sidebar = true;
+  await p.pass();
+  assert.deepEqual(p.$('#gz-sb-widgets .gz-sb-dock').children.filter((e) => e.dataset?.tile).map((e) => e.dataset.tile), ['todo', 'notes']);
+});
+
+test('style: float or embed on <html>, following Glaze\'s navigation unless chosen; surface, corners, density, order and the header from the settings', async () => {
+  const p = page({ stored: record() });
+  await p.pass();
+  const r = p.doc.root.dataset;
+  assert.equal(r.gzSbStyle, 'float', 'the navigation\'s default');
+  assert.equal(r.gzSbSurface, 'glass');
+  assert.equal(r.gzSbRadius, undefined, 'the Look\'s corners');
+  p.c.navbarSettings = { style: 'embed' };
+  await p.pass();
+  assert.equal(r.gzSbStyle, 'embed', 'follows the navigation');
+  p.c.sidebarSettings = { style: 'float', surface: 'solid', radius: 'large', density: 'compact', order: 'widgets', heading: false, blur: 30, opacity: 60, title: 'My stuff' };
+  await p.pass();
+  assert.deepEqual([r.gzSbStyle, r.gzSbSurface, r.gzSbRadius, r.gzSbDensity, r.gzSbOrder, r.gzSbNotitle], ['float', 'solid', 'large', 'compact', 'widgets', '']);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-blur'), '30px');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-alpha'), '60%');
+  assert.equal(p.$('#gz-sb-title').textContent, 'My stuff', 'the name the student gave it, still the landmark\'s label');
+  assert.equal(p.host().getAttribute('aria-labelledby'), 'gz-sb-title');
+  assert.equal(p.$('#gz-sb-launch').textContent, 'My stuff');
+  p.side.sync(false);
+  assert.deepEqual(rootMarks(p), [], 'all gone when off');
+  // The sheet has a rule set for each style and surface.
+  const css = read('features/sidebar.css');
+  for (const sel of ['html[data-gz-sb-style="float"]', 'html[data-gz-sb-style="embed"]', 'html[data-gz-sb-surface="solid"]', 'html[data-gz-sb-surface="clear"]', 'html[data-gz-sb-order="widgets"]', '[data-gz-sb-page-hidden]'])
+    assert.ok(css.includes(sel), sel);
+  // Canvas's ground rule (an id) never wins over the column's surface: the column's selectors carry the ids too.
+  assert.match(css, /:is\(#right-side-wrapper, #gz-sidebar, \[data-gz-sidebar-host\]\)\[data-gz-sidebar-host\] \{\s*background: var\(--gz-surface-grain, none\), var\(--gz-sb-fill\) !important/);
+  assert.match(css, /html\[data-gz-sidebar\] #right-side-wrapper\[data-gz-sidebar-host\] > #right-side \{\s*background: none !important; border: 0 !important; border-radius: 0 !important/);
+});
+
+test('open behaviour, width, room for the page, This page and Jump to widgets follow the settings', async () => {
+  const p = page({ stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), width: 1440, tall: true });
+  p.c.sidebarSettings = { open: 'collapsed', width: 400 };
+  await p.pass();
+  assert.equal(p.mode(), 'collapsed', 'starts collapsed');
+  p.$('.gz-sb-toggle').click(); await settle();
+  assert.equal(p.mode(), 'expanded', 'expanded on this page');
+  assert.equal(S.clean(p.store[KEY]).open, true, 'the account\'s own preference untouched');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sidebar-w'), '400px', 'the settings\' width until one is dragged');
+  p.c.sidebarSettings = { open: 'drawer' };
+  await p.pass();
+  assert.equal(p.mode(), 'drawer', 'drawer only');
+  p.c.sidebarSettings = { min: 1200 };
+  await p.pass();
+  assert.equal(p.mode(), 'drawer', '1440 - 276 - 352 - 16 < 1200');
+  p.c.sidebarSettings = { page: 'hidden' };
+  await p.pass();
+  assert.equal(p.host().dataset.gzSbPageHidden, '');
+  assert.equal(p.$('.gz-sb-pagehead').hidden, true);
+  p.c.sidebarSettings = { page: 'folded' };
+  await p.pass();
+  assert.equal(p.host().dataset.gzSbPageHidden, undefined);
+  assert.equal(p.host().dataset.gzSbFoldPage, '', 'folded at first');
+  p.$('.gz-sb-pagehead button').click(); await settle();
+  assert.equal(p.host().dataset.gzSbFoldPage, undefined, 'unfolded: kept for this kind of page');
+  p.c.sidebarSettings = { jump: false };
+  await p.pass();
+  assert.equal(p.$('.gz-sb-jump').hidden, true);
+});
+
+test('a kind of page turned off shows the page as Canvas has it, with no dock; others keep the sidebar', async () => {
+  const p = page({ stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const wrapper = p.$('#right-side-wrapper'), attrs = { ...wrapper.attrs };
+  p.c.sidebarSettings = { off: ['course'] };
+  await p.pass();
+  assert.deepEqual(rootMarks(p), []);
+  assert.equal(p.side.host(), null);
+  assert.deepEqual({ ...wrapper.attrs }, attrs);
+  assert.equal(wrapper.dataset.gzSidebarHost, undefined);
+  p.c.sidebarSettings = { off: ['quiz'] };
+  await p.pass();
+  assert.equal(p.mode(), 'expanded');
+  assert.equal(wrapper.dataset.gzSidebarHost, 'native');
+});
+
+test('Canvas discussion topics and assignment pages each get their family', async () => {
+  for (const [fixture, where, family, kind] of [['canvas-discussion-topic.html', '/courses/2/discussion_topics/5', 'discussion', 'glaze'], ['canvas-assignment.html', '/courses/2/assignments/7', 'assignment', 'native'], ['canvas-submission.html', '/courses/2/assignments/7/submissions/3', 'assignment', 'native']]) {
+    if (!fs.existsSync(path.join(__dirname, 'fixtures', fixture))) continue;
+    const p = page({ fixture, where, width: 1700, left: 84, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    const nativeEls = p.doc.body.all().map((e) => [e, e.parentNode]);
+    await p.pass();
+    assert.equal(p.side.context().family, family, fixture);
+    assert.equal(p.host().dataset.gzSidebarHost, kind, fixture);
+    for (const [e, parent] of nativeEls) assert.equal(e.parentNode, parent, `${fixture}: ${e.tagName}#${e.id} moved`);
+  }
 });

@@ -20,6 +20,12 @@
   .makeStylesnavigation-preview svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; }
   html[data-gz-nav-collapsed] #site-wrap { grid-template-columns: 80px minmax(0, 1fr); }
   html[data-gz-nav-place] #site-wrap { grid-template-columns: 0 minmax(0, 1fr); } /* a Look's nav as a bar or dock (features/navlayout.css) */
+  /* The sidebar's still preview (lib/editor-preview.js sidebar): the mock Canvas page keeps its room. */
+  html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #application { padding-inline-end: var(--gz-sb-room); box-sizing: border-box; }
+  #gz-sidebar .gz-sb-preview-block { height: 72px; margin-bottom: var(--gz-sb-gap); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-sb-ir); background: color-mix(in srgb, var(--gz-sb-paint) 70%, transparent); }
+  html[data-gz-sb-order="widgets"] #gz-sidebar[data-gz-sidebar-host] { display: flex !important; flex-direction: column; }
+  html[data-gz-sb-order="widgets"] #gz-sidebar > #gz-sb-widgets { order: -1; }
+  html[data-gz-sb-order="widgets"] #gz-sidebar > .gz-sb-head { order: -2; }
   @media (min-width: 900px) { html[data-gz-navbar] #site-wrap { grid-template-columns: var(--gz-navbar-left) minmax(0, 1fr); padding-top: var(--gz-navbar-top); box-sizing: border-box; } } /* Glaze's own bar (features/navbar.js) */
   html[data-gz-nav-collapsed] .MuiDrawer-root { position: relative; }
   html[data-gz-nav-collapsed] .MuiDrawer-paper { width: 80px; }

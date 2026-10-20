@@ -81,6 +81,7 @@ const used = new Set([
   ...['lib/petsprites.js', 'lib/petlibrary.js'].flatMap((f) => [...read(f).matchAll(/(?:Error|error)\('([^']+)'\)/g)].map((m) => m[1])),
   ...D.GZ_COLORS.map(([, label]) => label),
   ...D.GZ_TABS.map(([, label]) => label),
+  ...D.GZ_SIDEBAR_KINDS.map(([, label]) => label),
   ...D.GZ_CONTRAST(D.GZ_DEFAULTS.colors).map((r) => r.label),
   ...Object.values(N.NOTES).flat(),
 ]);

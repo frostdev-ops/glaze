@@ -101,6 +101,10 @@ const SIDEBAR_ULTRA = { ultra: 503, canvas: 0, moodle: 0 };
 // also load it in a tab's frame, with only the dock's widgets there (238 bytes on Ultra, 128 on Canvas). Which document
 // works it, the relay through the page around the frame and pausing the others load on demand. Measured against b6dd6f62.
 const SIDEBAR_FRAMES = { ultra: 238, canvas: 128, moodle: 0 };
+// The sidebar's settings (owner-approved raise, 2026-10-19; Phase 6 settings, 2026-10-20): defaults.js's synced sidebar group
+// with its two rules (a typed title, the page kinds), 1915 bytes on every site, and each site part's per-site switch in its
+// hook (39 bytes on Ultra, 40 on Canvas). The style, layout and appearance they set apply on demand. Measured against 7769ec18.
+const SIDEBAR_SETTINGS = { ultra: 1915 + 39, canvas: 1915 + 40, moodle: 1915 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -109,7 +113,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site], budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site], budget = Math.round(baseline * 1.02);
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -209,6 +213,7 @@ const STYLE_READS = [
   ['features/coursetabs.js', 'getComputedStyle(parent.document.documentElement)', 1], // a Canvas tab's frame: the bar's two room variables on the page around, when the bar or the window changes
   ['features/sidebar.js', 'getComputedStyle(html())', 1], // the root's navigation offsets in a batched sidebar layout pass
   ['features/sidebar.js', 'getComputedStyle(x)', 1], // only the drawer's focusable controls, on Tab or a focus escape
+  ['features/sidebar.js', 'getComputedStyle(host.el)', 1], // the column's one gap variable, once a frame while an assignment's panels are absorbed
   ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later

@@ -28,7 +28,7 @@ test('keys name a site and an account: Canvas or Ultra, https or local Canvas, n
 
 test('clean gives a whole v1 record from anything, each field in its bounds and unknown ones dropped', () => {
   const d = S.clean(undefined);
-  assert.deepEqual(d, { v: 1, rev: 0, mig: 0, on: true, width: 352, open: true, fold: {}, todoScope: 'follow', dock: [], dest: {}, ret: {}, offer: {} });
+  assert.deepEqual(d, { v: 1, rev: 0, mig: 0, on: true, width: 352, open: true, fold: {}, todoScope: 'follow', dock: [], dest: {}, ret: {}, offer: {}, chose: {} });
   assert.deepEqual(S.clean('x'), d);
   assert.deepEqual(S.clean([]), d);
   const r = S.clean({
@@ -387,9 +387,31 @@ test('a shared Look carries neither the widgets layout nor any sidebar record or
   const settings = { ...s, widgetLayout: lay, [`sidebar:canvas:${CANVAS}/42`]: rec, sidebar: rec };
   const code = await share.encode(settings, {});
   const back = await share.decode(code);
-  const text = JSON.stringify(back);
+  assert.deepEqual(back.sidebar, {});
+  const text = JSON.stringify({ ...back, sidebar: undefined });
   for (const word of ['widgetLayout', 'sidebar', 'dock', 'canvasTodo', '401', 'enhance']) assert.ok(!text.includes(word), word);
-  assert.deepEqual(Object.keys(back).sort(), ['bg', 'card', 'cards', 'colors', 'look', 'nav', 'navbar', 'parts']);
+  assert.deepEqual(Object.keys(back).sort(), ['bg', 'card', 'cards', 'colors', 'look', 'nav', 'navbar', 'parts', 'sidebar']);
+});
+
+test("a shared Look carries the sidebar's style, surface and corners, never its layout, switches or an account's record", async () => {
+  const s = G.GZ_SANITIZE({ sidebar: { style: 'embed', surface: 'solid', radius: 'large', title: 'Mine', width: 420, open: 'drawer', order: 'widgets', page: 'hidden',
+    min: 900, off: ['quiz'], canvas: false, todo: 'all', absorb: false, density: 'compact', blur: 30, opacity: 50 } });
+  const rec = S.apply(null, [{ op: 'dock', id: 'notes' }, { op: 'width', px: 401 }]);
+  const back = await share.decode(await share.encode({ ...s, widgetLayout: W.layout(), [`sidebar:canvas:${CANVAS}/42`]: rec }, {}));
+  assert.deepEqual(back.sidebar, { style: 'embed', surface: 'solid', radius: 'large' });
+  const text = JSON.stringify(back);
+  for (const word of ['Mine', '420', '401', 'drawer', 'widgets', 'hidden', 'quiz', 'compact', 'dock', 'widgetLayout', 'absorb']) assert.ok(!text.includes(word), word);
+});
+
+test('a code whose sidebar part has anything but its appearance, or a value Glaze would change, is refused', async () => {
+  for (const bad of [{ width: 400 }, { style: 'sideways' }, { title: 'x' }]) {
+    const L = require('../lib/lookparts.js');
+    const code = await share.encode(G.GZ_SANITIZE({}), {});
+    const raw = JSON.parse(new TextDecoder().decode(await L.inflate(L.unb64(code.slice(7)), 8192)));
+    raw.s = bad;
+    const forged = `glaze1:${L.b64(await L.deflate(new TextEncoder().encode(JSON.stringify(raw))))}`;
+    await assert.rejects(share.decode(forged), /setting Glaze can't use/);
+  }
 });
 
 test("migration on Ultra: the Courses column's widgets dock in board order with their fold; course cards, floats and the Dashboard stay", () => {
@@ -418,4 +440,62 @@ test("migration on Ultra: the Courses column's widgets dock in board order with 
   assert.deepEqual(docked(S.apply(o, [{ op: 'dock', id: 'todo', at: 0 }])), ['todo', 'timer', 'notes', 'mabcdefghijklmn0']);
   // Better To Do off: the column still docks, To Do doesn't.
   assert.deepEqual(docked(S.migrate(lay, null, { lms: 'ultra', todo: false })), ['timer', 'notes', 'mabcdefghijklmn0']);
+});
+
+test('the width and To Do scope chosen in the page win over the sidebar settings; until then the settings hold', () => {
+  const cfg = { width: 400, todo: 'all' };
+  assert.deepEqual(S.shown(S.clean({}), cfg), { width: 400, todoScope: 'all' });
+  assert.deepEqual(S.shown(S.clean({}), {}), { width: 352, todoScope: 'follow' });
+  let r = S.apply(S.clean({}), [{ op: 'width', px: 300 }, { op: 'todoScope', v: 'follow' }]);
+  assert.deepEqual(r.chose, { width: true, scope: true });
+  assert.deepEqual(S.shown(r, cfg), { width: 300, todoScope: 'follow' });
+  // Even a choice of the default width counts once made; reset hands both back to the settings.
+  r = S.apply(r, [{ op: 'width', px: 352 }]);
+  assert.equal(S.shown(r, cfg).width, 352);
+  r = S.apply(r, [{ op: 'reset' }]);
+  assert.deepEqual(r.chose, {});
+  assert.deepEqual(S.shown(r, cfg), { width: 400, todoScope: 'all' });
+  // A record from before chose: a width or scope away from the defaults was chosen.
+  assert.deepEqual(S.clean({ width: 420, todoScope: 'all' }).chose, { width: true, scope: true });
+  assert.deepEqual(S.clean({ width: 352 }).chose, {});
+  assert.deepEqual(S.clean({ chose: { width: 'yes', x: true } }).chose, {});
+});
+
+test('mode keeps the room the settings give the main column', () => {
+  assert.equal(S.mode({ vw: 1200, width: 352, min: 900 }).mode, 'drawer');
+  assert.equal(S.mode({ vw: 1200, width: 352, min: 720 }).mode, 'expanded');
+  assert.equal(S.mode({ vw: 1000, width: 352, grades: true, min: 600 }).mode, 'expanded');
+});
+
+// ---- the editor's Sidebar section ---------------------------------------------------------------------------------
+test('the editor has one control for each sidebar setting, offering exactly what the settings accept, in the Sidebar section', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'options.html'), 'utf8');
+  const sec = html.slice(html.indexOf('<section id="side-panel" data-editor-section="navigation/sidebar"'), html.indexOf('</section>', html.indexOf('id="side-panel"')));
+  assert.ok(sec.length > 100, 'the section');
+  assert.match(sec, /<label class="check nb-master"><input type="checkbox" data-key="enhance.sidebar">/, 'the switch, first and prominent');
+  assert.ok(sec.indexOf('data-key="enhance.sidebar"') < sec.indexOf('data-sidebar>'), 'before everything it hides');
+  for (const [k, [d, rule]] of Object.entries(G.GZ_SPEC.sidebar)) {
+    if (k === 'off') { assert.match(sec, /id="sidebar-off"/); continue; }
+    if (Array.isArray(rule) && typeof rule[0] === 'string') {
+      const radios = [...sec.matchAll(new RegExp(`name="sidebar\\.${k}" value="([^"]+)"`, 'g'))].map((m) => m[1]);
+      const select = sec.match(new RegExp(`<select data-key="sidebar\\.${k}">([\\s\\S]*?)</select>`));
+      const offered = radios.length ? radios : [...(select?.[1] || '').matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
+      assert.deepEqual(offered, rule, `sidebar.${k}`);
+      assert.ok(offered.includes(d), `sidebar.${k}: its default offered`);
+    } else if (Array.isArray(rule)) {
+      const m = sec.match(new RegExp(`<input type="range" data-key="sidebar\\.${k}" min="(\\d+)" max="(\\d+)"`));
+      assert.deepEqual(m && [+m[1], +m[2]], rule, `sidebar.${k}`);
+    } else if (rule === 'bool') assert.match(sec, new RegExp(`<input type="checkbox" data-key="sidebar\\.${k}">`), `sidebar.${k}`);
+    else if (rule === 'label') assert.match(sec, new RegExp(`<input type="text" data-key="sidebar\\.${k}" maxlength="40"`), `sidebar.${k}`);
+  }
+  // Each choice card has its picture.
+  for (const k of ['style', 'open']) for (const v of G.GZ_SPEC.sidebar[k][1]) assert.match(sec, new RegExp(`name="sidebar\\.${k}" value="${v}"><svg class="nb-thumb"`), `${k}=${v}`);
+  // Saved and read back whole: every value the editor can set survives the settings' cleaning.
+  const all = { title: 'Desk', style: 'embed', open: 'drawer', width: 480, order: 'widgets', page: 'folded', heading: false, jump: false, surface: 'clear', blur: 0, opacity: 40,
+    radius: 'none', density: 'comfortable', min: 1200, grades: 600, canvas: false, ultra: false, off: G.GZ_SIDEBAR_KINDS.map(([s]) => s), todo: 'all', absorb: false };
+  assert.deepEqual(G.GZ_SANITIZE({ sidebar: all }).sidebar, all);
+  assert.deepEqual(G.GZ_SANITIZE({ sidebar: { width: 999, min: 10, style: 'x', off: 'quiz', title: 42 } }).sidebar, G.GZ_DEFAULTS.sidebar);
+  // enhance.sidebar stays the switch: a stored one is kept as it is, beside the new group's defaults.
+  assert.equal(G.GZ_SANITIZE({ enhance: { sidebar: false } }).enhance.sidebar, false);
+  assert.equal(G.GZ_SANITIZE({}).enhance.sidebar, true);
 });

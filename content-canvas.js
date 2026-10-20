@@ -77,7 +77,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // The sidebar (features/sidebar.js): the page's column, with Better To Do and the docked widgets in it, on the page or in
   // a course tab's frame (only the one on screen works it). Better To Do takes the site's sidebar itself only without it
   // (or while it can't start).
-  const sidebarHere = () => I.links.length && I.settings.enhance.sidebar && (window.top === window || !!I.tabFrame) && !/^\/log(in|out)\b/.test(location.pathname);
+  const sidebarHere = () => I.links.length && I.settings.enhance.sidebar && I.settings.sidebar?.canvas !== false && (window.top === window || !!I.tabFrame) && !/^\/log(in|out)\b/.test(location.pathname);
   const syncSidebar = () => (sidebarHere() ? need('features/sidebar.js', () => globalThis.GZ_SIDEBAR_UI).then(() => GZ_SIDEBAR_UI.sync(sidebarHere()), () => {}) : globalThis.GZ_SIDEBAR_UI?.sync(false));
   const todoHere = () => I.links.length && I.settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
   const todoSide = () => todoHere() && !(sidebarHere() && !globalThis.GZ_SIDEBAR_UI?.failed());

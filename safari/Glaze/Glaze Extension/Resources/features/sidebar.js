@@ -41,6 +41,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         if (/^\/courses\/\d+\/grades\b/.test(p)) return 'grades';
         if (/^\/courses\/\d+\/quizzes\/\d+/.test(p)) return 'quiz';
         if (/^\/courses\/\d+\/assignments\/\d+/.test(p)) return 'assignment';
+        if (/^\/courses\/\d+\/discussion_topics\/\d+/.test(p)) return 'discussion';
         if (/^\/courses\/\d+\/?$/.test(p) || has(b, 'home')) return 'course-home';
         return 'other';
       },
@@ -66,29 +67,39 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // Blackboard Ultra. Its columns are flex columns of blocks with no wrapper of their own, so the column is its own
     // content (page === el): Glaze's header goes first in it, This page right after, the widgets last, and every block
     // between stays where Ultra (or Glaze's outline helpers: Course notes, the syllabus) put it. The Courses page's column
-    // holds Ultra's To Do; a course outline's (aside.outline-actions) Faculty, Details & Actions and the schedule. A
-    // content item's or a discussion's details column is in a layer over the page, where keeping room is wrong: Ultra's is
-    // left as it is, and the existing dock opens as a drawer (overlay). Elsewhere, Glaze's own column, fixed at
-    // the window's edge (own) with the page's content kept clear of it (features/sidebar.css).
+    // holds Ultra's To Do; a course outline's (aside.outline-actions) Faculty, Details & Actions and the schedule; a
+    // discussion's (.layer-details, a column of its grid beside the thread) its details and participants. A content
+    // item's details column is in a layer over the page, where keeping room is wrong: Ultra's is left as it is, and the
+    // existing dock opens as a drawer (overlay). An assignment's overview or attempt keeps its details in its own page
+    // (they scroll with it): Glaze's own column shows them in This page (panels(), projected in place, never moved).
+    // Elsewhere, Glaze's own column, fixed at the window's edge (own) with the page's content kept clear of it
+    // (features/sidebar.css).
     ultra: {
       family() {
         const p = location.pathname;
+        if (ADAPTERS.ultra.discussion()) return 'discussion';
         if (document.querySelector('.layer-details')) return 'detail';
         if (/^\/ultra\/course\/?$/.test(p)) return 'courses';
         if (/^\/ultra\/courses\/_\d+_\d+\/outline/.test(p)) return 'outline';
+        // The Gradebook: a table, so the content keeps more room (sidebar.grades).
+        if (/^\/ultra\/courses\/_\d+_\d+\/grades/.test(p) || document.querySelector('.course-content-container > .panel-wrap.grades')) return 'grades';
+        if (/^\/ultra\/courses\/_\d+_\d+\/assessment\//.test(p) || document.getElementById('learningModulePanelContainerId')) return 'assessment';
         return 'other';
       },
-      // Follow page: the course whose outline (or an item opened over it) this is; all courses elsewhere.
-      courseId: () => (/^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname) && ctx.courseId?.()) || '',
+      // A discussion's details column: in the page's grid beside the thread, not a layer over it.
+      discussion: () => document.querySelector('.course-main-container > .layer-details'),
+      // Follow page: the course this page is in (its outline, a discussion or an assignment in it); all courses elsewhere.
+      courseId: () => (/^\/ultra\/courses\/_\d+_\d+\//.test(location.pathname) && ctx.courseId?.()) || '',
       native() {
         // A details layer covers the outline; it does not replace its column or the live widgets in it.
         const f = /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname) ? 'outline' : ADAPTERS.ultra.family();
-        const el = f === 'courses' ? document.querySelector('div.todo-panel') : f === 'outline' ? document.querySelector('aside.outline-actions') : null;
+        const el = f === 'courses' ? document.querySelector('div.todo-panel') : f === 'outline' ? document.querySelector('aside.outline-actions')
+          : f === 'discussion' ? ADAPTERS.ultra.discussion() : null;
         return el ? { el, page: el } : null;
       },
       boundary: () => document.body,
       own: 'gz-sb-fixed',
-      overlay: () => !!document.querySelector('.layer-details'),
+      overlay: () => !!document.querySelector('.layer-details') && !ADAPTERS.ultra.discussion(),
       // Where the page's content starts: a course's panel, else the page (#main-content-inner, whose start padding is
       // Glaze's bar's room), right of Ultra's own nav.
       left() {
@@ -108,6 +119,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     },
   };
   const A = ADAPTERS[LMS] || ADAPTERS.canvas;
+  // The sidebar settings (defaults.js sidebar), one for every account: title ('' is "Sidebar"); style float | embed, or
+  // auto as Glaze's navigation's; open auto (the account's expanded or collapsed), expanded or collapsed at the start of
+  // each page, or drawer always; width until the account drags one (lib/sidebar.js shown); order This page or My widgets
+  // first; page This page shown, folded at first or hidden; heading and jump the header's name and Jump to widgets;
+  // surface glass (blur px, opacity %), solid or clear; radius and density, auto for the Look's; min and grades the room
+  // the content keeps, else a drawer; canvas and ultra per site (the site's part); off the kinds of page
+  // (GZ_SIDEBAR_KINDS, from the page families here) it stays off on; todo To Do's scope until the account picks one.
+  const cfg = () => ctx.settings().sidebar || {};
+  const styleOf = () => { const c = cfg().style; return c === 'float' || c === 'embed' ? c : ctx.settings().navbar?.style === 'embed' ? 'embed' : 'float'; };
+  const KIND = { dashboard: 'dashboard', courses: 'dashboard', 'course-home': 'course', outline: 'course', discussion: 'discussion', assignment: 'assignment', assessment: 'assignment', grades: 'grades', calendar: 'calendar', syllabus: 'calendar', quiz: 'quiz' };
+  const offOn = (fam) => (cfg().off || []).includes(KIND[fam] || 'other');
+  const name = () => cfg().title || t('Sidebar');
   // Native To Do lists Better To Do can take the place of (features/apps.css hides them while data-gz-sidebar-todo is set).
   const NATIVE_TODO = '.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list, bb-todo';
   // In a course tab's frame (features/coursetabs.js), the sidebar is the frame's while the frame is on screen, and the
@@ -125,12 +148,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let family = '', course = '', gen = 0, route = '', seenRoute = '', nativeView = null;
   let host = null; // { el, page, own }: the column dressed now
   let kept = []; // the native column's own attributes before, as [name, value | null]
-  let own = null, head = null, title = null, jump = null, more = null, toggle = null, grip = null, pageHead = null, pageBtn = null;
+  let slot = null, own = null, head = null, title = null, jump = null, more = null, toggle = null, grip = null, pageHead = null, pageBtn = null;
   let dock = null, dockBtn = null, list = null, note = null, addBtn = null, adding = null, live = null, edge = null, launch = null;
   let mode = 'none', drawer = false, forced = false, opener = null, inerted = [], dragW = 0, modalAway = false;
   let modalObserver = null, backdrop = null, widthCancel = null, lifted = null;
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
   let mo = null, frame = 0, noteTimer = 0, passFrame = 0, offer = null, asleep = false;
+  let openHere = null; // expanded or collapsed on this page, when the settings start each page one way
+  const isOpen = () => (['expanded', 'collapsed'].includes(cfg().open) ? openHere ?? cfg().open === 'expanded' : rec.open);
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
   const emit = (e, ...a) => { for (const f of subs[e]) { try { f(...a); } catch { /* one listener's fault stays its own */ } } };
   const on_ = (e, f) => { subs[e]?.add(f); return () => subs[e]?.delete(f); };
@@ -237,7 +262,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     more.setAttribute('aria-expanded', 'false');
     toggle = button('', () => {
       if (mode === 'drawer') closeDrawer();
-      else { const v = !rec.open; op([{ op: 'open', v }]); say(t(v ? 'Sidebar expanded.' : 'Sidebar collapsed.')); toggle.focus(); }
+      else {
+        const v = !isOpen();
+        // Set to start each page expanded or collapsed (sidebar.open), the choice holds on this page only.
+        if (['expanded', 'collapsed'].includes(cfg().open)) { openHere = v; layout(); } else op([{ op: 'open', v }]);
+        say(t(v ? 'Sidebar expanded.' : 'Sidebar collapsed.')); toggle.focus();
+      }
     }, { className: 'gz-sb-icon gz-sb-toggle' });
     live = make('p', { className: 'gz-sr', textContent: live0 || '' });
     live.setAttribute('role', 'status');
@@ -253,6 +283,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     resizer(grip);
     pageBtn = button(t('This page'), () => fold('page'), { className: 'gz-sb-sec-btn' });
     pageHead = make('h2', { className: 'gz-sb-sec gz-sb-pagehead' }, pageBtn);
+    // Room in Glaze's own column for the page's side panels shown in This page (project).
+    slot = make('div', { className: 'gz-sb-slot' });
+    slot.setAttribute('aria-hidden', 'true');
     dockBtn = button(t('My widgets'), () => fold('widgets'), { className: 'gz-sb-sec-btn', id: 'gz-sb-wh' });
     list = make('div', { className: 'gz-sb-dock' });
     note = make('p', { className: 'gz-sb-note' });
@@ -269,14 +302,15 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     dock = make('section', { id: 'gz-sb-widgets', className: 'gz-sb-widgets' }, make('h2', { className: 'gz-sb-sec' }, dockBtn), offer, list, note, addBtn, adding);
     dock.setAttribute('aria-labelledby', 'gz-sb-wh');
     edge = button(`+ ${t('Add widgets')}`, () => { forced = true; openDrawer(edge); openAdd(true); }, { id: 'gz-sb-edge', className: 'gz-sb-btn gz-sb-edge gz-sb-own', hidden: true });
-    launch = label(button(t('Sidebar'), () => openDrawer(launch), { id: 'gz-sb-launch', className: 'gz-sb-btn gz-sb-launch gz-sb-own', hidden: true }), t('Open the sidebar'));
+    launch = label(button(name(), () => openDrawer(launch), { id: 'gz-sb-launch', className: 'gz-sb-btn gz-sb-launch gz-sb-own', hidden: true }), t('Open {name}', { name: name() }));
     launch.setAttribute('aria-haspopup', 'dialog');
     backdrop = make('div', { className: 'gz-sb-backdrop', hidden: true });
     backdrop.setAttribute('aria-hidden', 'true');
     backdrop.addEventListener('pointerdown', () => closeDrawer());
   };
+  const pageFolded = () => (rec.fold[family] || {}).page ?? cfg().page === 'folded';
   const fold = (part) => {
-    const v = !(rec.fold[family] || {})[part];
+    const v = !((rec.fold[family] || {})[part] ?? (part === 'page' && cfg().page === 'folded'));
     op([{ op: 'section', family, part, v }]);
     (part === 'page' ? pageBtn : dockBtn).focus();
   };
@@ -293,11 +327,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     lift(false);
     widthCancel?.();
     mo?.disconnect();
-    for (const e of [grip, head, pageHead, dock]) e?.remove();
+    absorb([]);
+    for (const e of [grip, head, pageHead, slot, dock]) e?.remove();
     if (host.own) host.el.remove();
     else {
       for (const [k, v] of kept) { if (v === null) host.el.removeAttribute(k); else host.el.setAttribute(k, v); }
-      for (const k of ['data-gz-sidebar-host', 'data-gz-sb-fold-page', 'data-gz-sb-self', 'data-gz-sb-overlay']) host.el.removeAttribute(k);
+      for (const k of ['data-gz-sidebar-host', 'data-gz-sb-fold-page', 'data-gz-sb-self', 'data-gz-sb-overlay', 'data-gz-sb-page-hidden']) host.el.removeAttribute(k);
     }
     kept = [];
     host = null;
@@ -317,6 +352,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     host.el.prepend(grip, head);
     if (self()) { host.el.setAttribute('data-gz-sb-self', ''); head.after(pageHead); }
     else if (host.page) host.page.before(pageHead);
+    else { head.after(pageHead); pageHead.after(slot); }
     host.el.append(dock);
     watch();
   };
@@ -333,31 +369,144 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Ultra's columns are their own content (ADAPTERS.ultra).
   const self = () => !!host && host.page === host.el;
   // A change only to Glaze's own parts of the column (a docked widget redrawing, the header) says nothing of the page's.
-  const part = (n) => n === grip || n === head || n === pageHead || n === dock;
-  const mine = (r) => [grip, head, pageHead, dock].some((e) => e && e !== r.target && e.contains?.(r.target)) || part(r.target)
+  const part = (n) => n === grip || n === head || n === pageHead || n === slot || n === dock;
+  const mine = (r) => [grip, head, pageHead, slot, dock].some((e) => e && e !== r.target && e.contains?.(r.target)) || part(r.target)
     || ([...(r.addedNodes || []), ...(r.removedNodes || [])].length > 0 && [...(r.addedNodes || []), ...(r.removedNodes || [])].every((e) => part(e) && e.parentNode === host?.el));
   // Content: a child with words or a control, not one Glaze hides (the native To Do it replaces).
   const filled = (el) => [...el.children].some((c) => c.tagName && !part(c) && !['SCRIPT', 'STYLE', 'TEMPLATE', 'LINK'].includes(c.tagName) && !c.hidden
     && !(html().hasAttribute('data-gz-sidebar-todo') && c.closest(NATIVE_TODO) === c)
     && (c.textContent.trim() || c.querySelector('a, button, input, select, textarea, img, svg, canvas, iframe')));
 
+  // ---- absorbing an assignment's side panels into This page ---------------------------------------------------------
+  // Ultra keeps an assignment's Grades / Attempts (overview) or Details & Information (attempt) in its own page. While the
+  // sidebar is expanded beside it, and the setting allows (sidebar.absorb), each is shown over a slot Glaze keeps for it in
+  // This page. Invariants, each kept by absorb / syncAbsorbed / restoreAbsorbed and nothing else:
+  //  - The panels are never moved, copied or rebuilt: no node of theirs or of their ancestors is inserted, removed or
+  //    cloned. What changes is one attribute on each (data-gz-sb-absorbed), one on the overview's grid (data-gz-sb-grid)
+  //    and four custom properties in each panel's inline style; features/sidebar.css positions them from those.
+  //  - Nothing interactive changes: no listener goes on a panel, nothing is intercepted. They stay in the page's DOM,
+  //    reading and Tab order (after the page's own sections); pointer events still reach them where they show.
+  //  - Only the exact structure recognized (absorbable) is absorbed. A panel that goes away, is replaced, no longer matches,
+  //    is an unexpected size, or any error, puts every panel back as Ultra had it at once (restoreAbsorbed): the attribute
+  //    and the custom properties gone, nothing else touched. An attempt's footer (Save and Close, Submit) is never part
+  //    of what is absorbed, and the main column keeps its whole width short of the sidebar, so it is never covered.
+  //  - Collapsed, a drawer, This page folded or hidden, the sidebar off or asleep: nothing is absorbed.
+  let absorbed = [], absorbedGrids = [], absorbRO = null, absorbFrame = 0;
+  const ABSORB_PROPS = ['--gz-sb-px-y', '--gz-sb-px-x', '--gz-sb-px-w', '--gz-sb-px-clip'];
+  const FOOTER = 'button, input[type="submit"], [role="button"]';
+  // The overview's: its grid's Grades / Attempts section, titled, in Ultra's assignment panel. An attempt's: the details
+  // panel of its authoring panel, titled first, with links only: no form controls or buttons, so never the attempt's own
+  // answers or its footer. Its description is inside that panel and comes with it (it can't be split without moving nodes). Anything else: nothing.
+  const absorbable = () => {
+    if (!ultra || cfg().absorb === false) return [];
+    const kids = (e, test) => [...e.children].filter(test);
+    const over = [...document.querySelectorAll('div.assessment-overview-grid > div.overview-section.overview-attempts-section')].filter((e) =>
+      has(e.parentElement, 'assessment-overview-grid') && has(e.parentElement.parentElement, 'standard-content-body') && !!e.closest('#learningModulePanelContainerId')
+      && kids(e, (k) => k.tagName === 'H2' && has(k, 'section-label')).length === 1);
+    const attempt = [...document.querySelectorAll('bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"]')].filter((e, _, all) => {
+      if (all.some((o) => o !== e && o.contains(e))) return false;
+      const heads = [...e.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+      return heads.length > 0 && ['H2', 'H3'].includes(heads[0].tagName) && !e.querySelector(FOOTER)
+        && ![...e.querySelectorAll('input, select, textarea, iframe, [contenteditable="true"]')].some((x) => x.type !== 'hidden');
+    });
+    const list = over.length === 1 ? over : !over.length && attempt.length === 1 ? attempt : [];
+    return list.filter((e) => e.isConnected && !e.closest('[hidden]') && !e.closest('[aria-hidden="true"]'));
+  };
+  const pv = (e, k, v) => { if (e.style.getPropertyValue(k) !== v) e.style.setProperty(k, v); };
+  const restoreAbsorbed = () => {
+    for (const e of absorbed) {
+      e.removeAttribute('data-gz-sb-absorbed');
+      for (const k of ABSORB_PROPS) e.style.removeProperty(k);
+      if (e.getAttribute('style') === '') e.removeAttribute('style');
+    }
+    for (const g of absorbedGrids) g.removeAttribute('data-gz-sb-grid');
+    absorbRO?.disconnect();
+    cancelAnimationFrame(absorbFrame);
+    host?.el.removeEventListener('scroll', absorbSoon);
+    document.removeEventListener('scroll', absorbSoon, true);
+    absorbed = []; absorbedGrids = [];
+    slot?.style.removeProperty('height');
+    if (slot && slot.getAttribute('style') === '') slot.removeAttribute('style');
+  };
+  const syncAbsorbed = () => {
+    if (!absorbed.length) return;
+    try {
+      const now = absorbable();
+      if (!slot?.isConnected || !host || now.length !== absorbed.length || now.some((e, i) => e !== absorbed[i])) { restoreAbsorbed(); layout(); return; }
+      const sr = slot.getBoundingClientRect(), hr = host.el.getBoundingClientRect(), under = head.getBoundingClientRect().bottom;
+      const gap = (typeof getComputedStyle === 'function' && parseFloat(getComputedStyle(host.el).getPropertyValue('--gz-sb-gap'))) || 12;
+      let y = sr.top;
+      for (const e of absorbed) {
+        // Where it shows now, less where it was put: its containing block's origin (an ancestor may make one).
+        const r = e.getBoundingClientRect();
+        if (r.width < 1 && r.height < 1) throw new Error('gone');
+        if (r.height > innerHeight * 4) throw new Error('size');
+        const oy = r.top - (parseFloat(e.style.getPropertyValue('--gz-sb-px-y')) || 0), ox = r.left - (parseFloat(e.style.getPropertyValue('--gz-sb-px-x')) || 0);
+        pv(e, '--gz-sb-px-y', `${Math.round(y - oy)}px`);
+        pv(e, '--gz-sb-px-x', `${Math.round(sr.left - ox)}px`);
+        pv(e, '--gz-sb-px-w', `${Math.round(sr.width)}px`);
+        pv(e, '--gz-sb-px-clip', `inset(${Math.max(0, Math.round(under - y))}px 0 ${Math.max(0, Math.round(y + r.height - hr.bottom))}px 0)`);
+        y += r.height + gap;
+      }
+      pv(slot, 'height', `${Math.max(0, Math.round(y - sr.top - gap))}px`);
+    } catch { restoreAbsorbed(); }
+  };
+  const absorbSoon = () => { cancelAnimationFrame(absorbFrame); absorbFrame = requestAnimationFrame(syncAbsorbed); };
+  const absorb = (list) => {
+    // The same panels still marked: kept, measured again. A mark Ultra reset (a re-render): put back, then again.
+    if (list.length === absorbed.length && list.every((e, i) => e === absorbed[i] && e.hasAttribute('data-gz-sb-absorbed'))) { if (list.length) absorbSoon(); return; }
+    restoreAbsorbed();
+    if (!list.length || !slot?.isConnected || !host) return;
+    try {
+      absorbed = list;
+      for (const e of list) e.setAttribute('data-gz-sb-absorbed', '');
+      absorbedGrids = [...new Set(list.map((e) => e.parentElement).filter((g) => g && has(g, 'assessment-overview-grid')))];
+      for (const g of absorbedGrids) g.setAttribute('data-gz-sb-grid', '');
+      if (typeof ResizeObserver === 'function') { absorbRO ||= new ResizeObserver(absorbSoon); for (const e of list) absorbRO.observe(e); absorbRO.observe(host.el); }
+      host.el.addEventListener('scroll', absorbSoon, { passive: true });
+      document.addEventListener('scroll', absorbSoon, { capture: true, passive: true });
+      syncAbsorbed();
+    } catch { restoreAbsorbed(); }
+  };
+
   // ---- the layout ---------------------------------------------------------------------------------------------------
   const widgetsOn = () => { const e = ctx.settings().enhance; return e.widgets || e.notes || e.pet || e.todo; };
   const setVar = (k, v) => { const s = html().style; if (s.getPropertyValue(k) !== v) s.setProperty(k, v); };
   const setAttr = (el, k, v) => { if (v === false || v == null) { if (el.hasAttribute(k)) el.removeAttribute(k); } else if (el.getAttribute(k) !== v) el.setAttribute(k, v); };
-  const roomFor = () => Math.min(S.MAX_WIDTH, innerWidth - A.left() - S.GAP - (family === 'grades' ? S.MAIN_GRADES : S.MAIN));
+  const minMain = () => { const c = cfg(); return family === 'grades' ? c.grades ?? S.MAIN_GRADES : c.min ?? S.MAIN; };
+  const roomFor = () => Math.min(S.MAX_WIDTH, innerWidth - A.left() - S.GAP - minMain());
+  // How the sidebar looks (the settings): on <html>, for features/sidebar.css.
+  const dress = () => {
+    const c = cfg(), h = html();
+    setAttr(h, 'data-gz-sb-style', styleOf());
+    setAttr(h, 'data-gz-sb-surface', ['glass', 'solid', 'clear'].includes(c.surface) ? c.surface : 'glass');
+    setAttr(h, 'data-gz-sb-radius', c.radius && c.radius !== 'auto' ? c.radius : false);
+    setAttr(h, 'data-gz-sb-density', c.density && c.density !== 'auto' ? c.density : false);
+    setAttr(h, 'data-gz-sb-order', c.order === 'widgets' ? 'widgets' : false);
+    setAttr(h, 'data-gz-sb-notitle', c.heading === false ? '' : false);
+    setVar('--gz-sb-blur', `${Number.isFinite(c.blur) ? c.blur : 16}px`);
+    setVar('--gz-sb-alpha', `${Number.isFinite(c.opacity) ? c.opacity : 88}%`);
+    if (title.textContent !== name()) title.textContent = name();
+    if (launch.textContent !== name()) { launch.textContent = name(); label(launch, t('Open {name}', { name: name() })); }
+  };
   const layout = () => {
     if (!active || !host || asleep) return;
-    const pageEmpty = !host.page || (ultra && A.overlay()) || !filled(host.page);
+    dress();
+    const hidePage = cfg().page === 'hidden';
+    const shownPanels = family === 'assessment' && host.own ? absorbable() : [];
+    const pageEmpty = hidePage || ((!host.page || (ultra && A.overlay()) || !filled(host.page)) && !shownPanels.length);
     const docked = drawnCount ?? (widgetsOn() ? S.docked(rec).length : 0);
-    const m = S.mode({ vw: innerWidth, left: A.left(), width: dragW || rec.width, grades: family === 'grades', empty: pageEmpty && !docked && !forced, open: rec.open });
-    // Over a layer (A.overlay: Ultra's details column), or as a standalone fallback, with anything to show, a drawer.
-    const next = (forced || ((host.fallback || A.overlay?.()) && m.mode !== 'none')) && m.mode !== 'drawer' ? 'drawer' : m.mode;
+    const width = S.shown(rec, cfg()).width;
+    const m = S.mode({ vw: innerWidth, left: A.left(), width: dragW || width, min: minMain(), empty: pageEmpty && !docked && !forced, open: isOpen() });
+    // Over a layer (A.overlay: Ultra's details column), as a standalone fallback, or set to (sidebar.open), with anything
+    // to show, a drawer.
+    const next = (forced || ((host.fallback || A.overlay?.() || cfg().open === 'drawer') && m.mode !== 'none')) && m.mode !== 'drawer' ? 'drawer' : m.mode;
     if (next !== 'drawer' && drawer) closeDrawer(false);
-    const w = next === 'drawer' ? Math.min(m.w || rec.width, rec.width) : m.w;
+    const w = next === 'drawer' ? Math.min(m.w || width, width) : m.w;
     // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
     setAttr(html(), 'data-gz-sb-fixed', host.own && A.own ? '' : false);
     setAttr(html(), 'data-gz-sb-ultra', ultra ? '' : false);
+    setAttr(html(), 'data-gz-sb-family', family || false);
     setAttr(host.el, 'data-gz-sb-overlay', ultra && A.overlay() ? '' : false);
     setAttr(html(), 'data-gz-sidebar', next);
     setAttr(html(), 'data-gz-sidebar-open', next === 'drawer' && drawer ? '' : false);
@@ -370,7 +519,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setVar('--gz-sb-top', `${top}px`);
     foot();
     pageHead.hidden = pageEmpty;
-    jump.hidden = pageEmpty || !docked || !(host.page.offsetHeight > innerHeight * 0.6);
+    setAttr(host.el, 'data-gz-sb-page-hidden', hidePage ? '' : false);
+    jump.hidden = cfg().jump === false || pageEmpty || !docked || !((host.page?.offsetHeight || slot?.offsetHeight || 0) > innerHeight * 0.6);
     edge.hidden = next !== 'none';
     launch.hidden = next !== 'drawer' || drawer;
     backdrop.hidden = next !== 'drawer' || !drawer || modalAway;
@@ -381,16 +531,19 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setAttr(host.el, 'role', next === 'none' || (next === 'drawer' && !drawer) ? false : dialog ? 'dialog' : 'complementary');
     setAttr(host.el, 'aria-labelledby', next === 'none' ? false : 'gz-sb-title');
     setAttr(host.el, 'aria-modal', dialog && !modalAway ? 'true' : false);
-    const text = t(next === 'drawer' ? 'Close sidebar' : rec.open ? 'Collapse sidebar' : 'Expand sidebar');
-    if (toggle.getAttribute('aria-label') !== text) { label(toggle, text); toggle.textContent = next === 'drawer' ? '×' : (rec.open !== rtl() ? '⇥' : '⇤'); }
-    setAttr(toggle, 'aria-expanded', next === 'drawer' ? false : String(rec.open));
+    const text = t(next === 'drawer' ? 'Close sidebar' : isOpen() ? 'Collapse sidebar' : 'Expand sidebar');
+    if (toggle.getAttribute('aria-label') !== text) { label(toggle, text); toggle.textContent = next === 'drawer' ? '×' : (isOpen() !== rtl() ? '⇥' : '⇤'); }
+    setAttr(toggle, 'aria-expanded', next === 'drawer' ? false : String(isOpen()));
     grip.hidden = next !== 'expanded';
     setAttr(grip, 'aria-valuenow', String(w));
     if (next !== mode) { mode = next; emit('mode', mode); }
+    absorb(next === 'expanded' && !hidePage && !pageFolded() ? shownPanels : []);
   };
   const paint = () => {
     if (!active || !host || asleep) return;
-    const f = rec.fold[family] || {};
+    const f = { ...rec.fold[family] };
+    // This page folded at first (sidebar.page), until it is unfolded on a page of this kind.
+    f.page ??= cfg().page === 'folded';
     pageBtn.setAttribute('aria-expanded', String(!f.page));
     setAttr(host.el, 'data-gz-sb-fold-page', f.page && host.page ? '' : false);
     dockBtn.setAttribute('aria-expanded', String(!f.widgets));
@@ -416,7 +569,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const settled = (fam, cid, n) => {
     if (!ultra || !family || !host) return true;
     if (busyView(n?.el)) return false;
-    if (cid === course && (family === 'detail' || fam === 'detail')) return true;
+    if (cid === course && ['detail', 'discussion'].some((f) => family === f || fam === f)) return true;
     if (!n) return !host.el.isConnected || host.own || !document.querySelector('aside.outline-actions, div.todo-panel');
     const v = viewOf(n);
     if (v.cid && cid && v.cid !== cid) return false;
@@ -431,6 +584,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const path = location.pathname + (location.search || '');
     if (route !== path) { route = path; genOf(); closeDrawer(false); }
     const fam = A.family(), cid = A.courseId();
+    // A kind of page the sidebar is off on (sidebar.off): the page as the LMS has it, no dock, until a page it is on.
+    if (offOn(fam)) {
+      if (fam !== family || cid !== course) { family = fam; course = cid; gen++; }
+      closeDrawer(false); detach(); bare();
+      for (const b of [edge, launch, backdrop]) b?.remove();
+      if (active) { active = false; mode = 'none'; emit('change'); }
+      return;
+    }
     const moved = fam !== family || cid !== course;
     const n = A.native();
     if (moved && !settled(fam, cid, n)) return;
@@ -441,6 +602,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (head.parentNode !== host.el) host.el.prepend(grip, head);
       if (self()) { if (pageHead.previousElementSibling !== head) head.after(pageHead); }
       else if (host.page && pageHead.nextElementSibling !== host.page) host.page.before(pageHead);
+      else if (!host.page && (pageHead.previousElementSibling !== head || slot.previousElementSibling !== pageHead)) { head.after(pageHead); pageHead.after(slot); }
       if (dock.parentNode !== host.el) host.el.append(dock);
       // Ultra's late blocks stay before the dock visually through flex order, without reinserting live media.
     }
@@ -475,6 +637,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       for (const f of [frame, passFrame, footFrame]) cancelAnimationFrame(f);
       clearTimeout(noteTimer);
       widthCancel?.();
+      absorb([]);
       return;
     }
     if (on) { watch(); sync(true); }
@@ -680,13 +843,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     clearTimeout(noteTimer);
     nativeView = null; route = '';
     asleep = false;
-    const h = html();
-    if (h) {
-      for (const k of ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra']) h.removeAttribute(k);
-      h.style?.removeProperty?.('--gz-sidebar-w');
-      h.style?.removeProperty?.('--gz-sb-top');
-      h.style?.removeProperty?.('--gz-sb-foot');
-    }
+    bare();
+    openHere = null;
     removeEventListener('resize', onResize);
     removeEventListener('scroll', onScroll);
     cancelAnimationFrame(footFrame);
@@ -695,6 +853,15 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     starting = null; rec = null; key = ''; flying = 0; lost = false;
     drawnCount = null;
     mode = 'none';
+  };
+  // <html> as before the sidebar: its attributes and variables gone.
+  const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family',
+    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle'];
+  const bare = () => {
+    const h = html();
+    if (!h) return;
+    for (const k of SB_ATTRS) h.removeAttribute(k);
+    for (const k of ['--gz-sidebar-w', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha']) h.style?.removeProperty?.(k);
   };
   const sync = (want) => {
     on = !!want;
@@ -725,7 +892,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (drawnCount !== n) { drawnCount = n; layout(); }
     if (!asleep && adding && !adding.hidden) openAdd(true, false);
   };
-  return { sync, ready, cover, asleep: () => asleep, active: () => active, failed: () => failed, rec: () => rec, op, host: hostOf, context, on: on_, say, status, drawn, menu, add: () => { if (mode === 'none' || (mode === 'drawer' && !drawer)) { forced = mode === 'none'; openDrawer(document.activeElement); } openAdd(true); } };
+  // To Do's scope here: the account's choice, else the settings' (lib/sidebar.js shown).
+  const scope = () => (rec && S ? S.shown(rec, cfg()).todoScope : 'follow');
+  return { scope, sync, ready, cover, asleep: () => asleep, active: () => active, failed: () => failed, rec: () => rec, op, host: hostOf, context, on: on_, say, status, drawn, menu, add: () => { if (mode === 'none' || (mode === 'drawer' && !drawer)) { forced = mode === 'none'; openDrawer(document.activeElement); } openAdd(true); } };
 })();
 
 GZ_SIDEBAR_UI;

@@ -44,7 +44,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // The sidebar (features/sidebar.js): the page's right column, with Better To Do and the docked widgets in it, on the page
   // or in a course tab's frame (only the one on screen works it). Better To Do takes Ultra's places itself only without
   // it (or while it can't start).
-  const sidebarHere = () => !!top()?.sidebar && /^\/ultra(\/|$)/.test(location.pathname);
+  const sidebarHere = () => !!top()?.sidebar && I.settings.sidebar?.ultra !== false && /^\/ultra(\/|$)/.test(location.pathname);
   const syncSidebar = () => load(sidebarHere, 'features/sidebar.js', 'GZ_SIDEBAR_UI');
   const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarHere() && !globalThis.GZ_SIDEBAR_UI?.failed()), 'features/todo.js', 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');

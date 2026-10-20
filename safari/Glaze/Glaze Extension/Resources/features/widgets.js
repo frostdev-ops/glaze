@@ -499,7 +499,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     todo(body) {
       if (!side) { body.append(make('div', { className: 'gz-w-todo-spot' })); return {}; }
       let alive = true;
-      const scope = () => (side ? { courseId: side.context().courseId, scope: side.rec()?.todoScope || 'follow', setScope: (v) => side?.op([{ op: 'todoScope', v }]), rendered: () => todoIn(), failed: () => todoIn() } : null);
+      const scope = () => (side ? { courseId: side.context().courseId, scope: side.scope?.() || side.rec()?.todoScope || 'follow', setScope: (v) => side?.op([{ op: 'todoScope', v }]), rendered: () => todoIn(), failed: () => todoIn() } : null);
       const mount = () => { if (alive && side && globalThis.GZ_TODO_UI?.mount) { GZ_TODO_UI.mount(body, scope()); todoIn(); } };
       ctx.need('features/todo.js', () => globalThis.GZ_TODO_UI).then(mount, () => {});
       return { context: mount, suspend: () => globalThis.GZ_TODO_UI?.suspend?.(), resume: () => globalThis.GZ_TODO_UI?.resume?.(), stop: () => { alive = false; globalThis.GZ_TODO_UI?.unmount?.(body); } };

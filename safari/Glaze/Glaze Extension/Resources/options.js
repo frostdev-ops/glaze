@@ -197,6 +197,7 @@ GZ_UI.load().then((s) => {
     else if (route.startsWith('moodle/')) { site = 'moodle'; page = 'courses'; }
     else if (route === 'look/courses') { site = 'ultra'; page = 'outline'; }
     else if (/\/(cards|palette|background)$/.test(route)) page = 'courses';
+    else if (route === 'navigation/sidebar') { if (site === 'moodle') site = 'canvas'; page = 'courses'; }
     else if (route === 'study/widgets' || route === 'study/todo' || route === 'study/grades') { if (site === 'moodle') site = 'ultra'; page = 'dashboard'; }
     contextPreview(site, page);
   };
@@ -393,6 +394,7 @@ GZ_UI.load().then((s) => {
     for (const r of $$('.seg input[type="radio"]:not([data-local])')) r.checked = String(r.name === 'card.pet' && get(r.name) !== 'none' ? 'selected' : get(r.name)) === r.value;
     $('#bg-image').value = s.bg.image;
     for (const [slug, box] of tabBoxes) box.checked = s.declutter.tabs.includes(slug);
+    for (const [slug, box] of sidebarBoxes) box.checked = !s.sidebar.off.includes(slug);
     renderFonts();
     renderCourses();
     renderNavItems();
@@ -673,6 +675,9 @@ GZ_UI.load().then((s) => {
     $('#navbar [data-navbar]').hidden = !s.navbar.on;
     $('#navbar [data-navbar-rail]').hidden = s.navbar.place !== 'rail' && s.navbar.course !== 'icons';
     $('#sidebar [data-navbar-note]').hidden = !s.navbar.on;
+    // The sidebar's controls while it is on; blur and opacity only for glass.
+    $('#side-panel [data-sidebar]').hidden = !s.enhance.sidebar;
+    $('#side-panel [data-sidebar-glass]').hidden = s.sidebar.surface !== 'glass';
     $('#tabs [data-tabs-nav-note]').hidden = s.tabs.at !== 'nav' || (s.navbar.on && s.navbar.tabs);
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
@@ -731,6 +736,20 @@ GZ_UI.load().then((s) => {
     Object.assign(s.nav, { u: u ? u.href : '', i: '', k: 'image' });
     for (const k of ['u', 'i', 'k']) pendingNav.add(k);
     fill(); save(['nav']);
+  });
+
+  // ---- the sidebar's pages: the kinds it stays off on (sidebar.off), a box ticked for each it shows on ----
+  const sidebarBoxes = GZ_SIDEBAR_KINDS.map(([slug, label]) => {
+    const row = document.createElement('label');
+    const box = Object.assign(document.createElement('input'), { type: 'checkbox' });
+    box.addEventListener('change', () => {
+      s.sidebar.off = box.checked ? s.sidebar.off.filter((k) => k !== slug) : [...s.sidebar.off, slug];
+      refresh();
+      save(['sidebar']);
+    });
+    row.append(box, t(label));
+    $('#sidebar-off').append(row);
+    return [slug, box];
   });
 
   // ---- declutter tabs: a list of slugs, so one checkbox each ----
@@ -1060,14 +1079,14 @@ GZ_UI.load().then((s) => {
     let got;
     try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
     from = gallery;
-    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav), navbar: { ...s.navbar, ...got.navbar || {} } });
+    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav), navbar: { ...s.navbar, ...got.navbar || {} }, sidebar: { ...s.sidebar, ...got.sidebar || {} } });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
     offer.auto = { ...s.auto, on: false };
     offer.card = GZ_CARDS.settings({ ...s.card, ...got.card });
     offer.cardSet = got.cards;
     offer.code = code;
     // Every code brings its own parts or clears the previous Look's parts.
-    const paletteOnly = !Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !Object.keys(got.navbar || {}).length && !got.cards.length && !got.parts;
+    const paletteOnly = !Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !Object.keys(got.navbar || {}).length && !Object.keys(got.sidebar || {}).length && !got.cards.length && !got.parts;
     offer.parts = got.parts;
     const palette = offer.preset ? t('The {name} palette', { name: offer.preset }) : t('A custom palette');
     const what = $('#share-what');
@@ -1109,6 +1128,9 @@ GZ_UI.load().then((s) => {
     for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
     s.card = offer.card;
     s.nav = offer.nav;
+    // The sidebar's appearance a Look brings (lib/share.js): its style, surface and corners only.
+    const sidebarLook = ['style', 'surface', 'radius'].some((k) => s.sidebar[k] !== offer.sidebar[k]);
+    if (sidebarLook) for (const k of ['style', 'surface', 'radius']) s.sidebar[k] = offer.sidebar[k];
     pendingNav.clear();
     // A theme's card styles take turns on the cards without their own (lib/cards.js).
     const set = offer.cardSet;
@@ -1116,7 +1138,7 @@ GZ_UI.load().then((s) => {
     $('#share-code').value = '';
     endOffer();
     fill();
-    save([...GZ_HISTORY.KEYS, 'card', 'nav']);
+    save([...GZ_HISTORY.KEYS, 'card', 'nav', ...sidebarLook ? ['sidebar'] : []]);
     hint(t('Theme applied.'));
   });
 

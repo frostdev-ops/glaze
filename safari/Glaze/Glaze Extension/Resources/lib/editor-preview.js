@@ -63,9 +63,39 @@
     document.getElementById('preview-menu').remove();
     const template = document.getElementById(`mock-${site}`); document.querySelector('#site-wrap').replaceWith(template.content.cloneNode(true));
     if (site === 'moodle') { document.body.id = 'page-my-index'; document.body.className = 'pagelayout-mydashboard'; }
-    const sheets = [`${site}.css`, 'motion.css', 'features/surfaces.css', ...(site === 'canvas' ? ['features/coursetabs.css', 'features/apps.css'] : [])].map((href) => {
+    const sheets = [`${site}.css`, 'motion.css', 'features/surfaces.css', ...(site === 'canvas' ? ['features/coursetabs.css', 'features/apps.css', 'features/sidebar.css'] : [])].map((href) => {
       const link = Object.assign(document.createElement('link'), { rel: 'stylesheet', href }); document.head.append(link); return link;
     });
+    // The sidebar as the settings dress it (features/sidebar.css): a still Glaze column at the right edge, with This page
+    // and My widgets, the mock page kept clear of it. Nothing of an account's (where widgets sit) is shown here.
+    const sidebar = (s) => {
+      let aside = document.getElementById('gz-sidebar');
+      const c = s.sidebar, on = s.enabled && s.enhance.sidebar && c.canvas;
+      const marks = { 'data-gz-sidebar': on && (c.open === 'collapsed' ? 'collapsed' : 'expanded'), 'data-gz-sb-style': on && (c.style === 'auto' ? s.navbar.style : c.style), 'data-gz-sb-surface': on && c.surface,
+        'data-gz-sb-radius': on && c.radius !== 'auto' && c.radius, 'data-gz-sb-density': on && c.density !== 'auto' && c.density, 'data-gz-sb-order': on && c.order === 'widgets' && 'widgets', 'data-gz-sb-notitle': on && !c.heading };
+      for (const [key, value] of Object.entries(marks)) attr(key, value);
+      if (!on) { aside?.remove(); return; }
+      if (!aside) {
+        const el = (tag, cls, text = '') => Object.assign(document.createElement(tag), { className: cls, textContent: text });
+        aside = Object.assign(document.createElement('aside'), { id: 'gz-sidebar', className: 'gz-sb-own' });
+        aside.setAttribute('data-gz-sidebar-host', 'glaze');
+        aside.setAttribute('aria-hidden', 'true');
+        const head = el('div', 'gz-sb-head');
+        head.append(Object.assign(el('h2', 'gz-sb-title'), { id: 'gz-sb-title' }), el('span', 'gz-sb-icon', '⇥'));
+        const page = el('div', 'gz-sb-preview-page');
+        page.append(el('h2', 'gz-sb-sec gz-sb-pagehead'), el('div', 'gz-sb-preview-block'));
+        const dock = Object.assign(el('section', 'gz-sb-widgets'), { id: 'gz-sb-widgets' });
+        dock.append(el('h2', 'gz-sb-sec'), el('div', 'gz-sb-preview-block'));
+        aside.append(head, page, dock);
+        document.body.append(aside);
+      }
+      aside.querySelector('.gz-sb-title').textContent = c.title || GZ_I18N.t('Sidebar', {}, settings.lang === 'auto' ? navigator.language : settings.lang);
+      const [pageHead, dockHead] = aside.querySelectorAll('.gz-sb-sec');
+      pageHead.textContent = GZ_I18N.t('This page', {}, settings.lang === 'auto' ? navigator.language : settings.lang);
+      dockHead.textContent = GZ_I18N.t('My widgets', {}, settings.lang === 'auto' ? navigator.language : settings.lang);
+      aside.querySelector('.gz-sb-preview-page').hidden = c.page === 'hidden';
+      variable('--gz-sidebar-w', `${c.width}px`); variable('--gz-sb-top', '0px'); variable('--gz-sb-blur', `${c.blur}px`); variable('--gz-sb-alpha', `${c.opacity}%`);
+    };
     const picture = async (id, url = '') => id ? (await chrome.storage.local.get(`cardImg:${id}`))[`cardImg:${id}`] || '' : url;
     const paint = async () => {
       globalThis.GZ_RULES?.sync();
@@ -98,6 +128,7 @@
       const cards = GZ_CARDS.page(GZ_CARDS.settings(s.card));
       for (const [key, value] of Object.entries(cards.vars)) variable(key, value);
       for (const [key, value] of Object.entries(cards.attrs)) attr(`data-gz-card-${key}`, value);
+      if (site === 'canvas') sidebar(s);
       samples(s);
       globalThis.GZ_MOTIONX?.sync();
       if (s.enabled && drawn && sig !== sceneBad) {
