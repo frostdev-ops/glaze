@@ -567,6 +567,18 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         && !!(from === PAGE ? pageable(doc.location.pathname) && L.outside(doc.location.pathname, doc.location.search) : L.owns(doc.location.pathname, from));
     } catch { return false; }
   };
+  // Document review may hide Glaze chrome only for the owned, authenticated document currently on screen.
+  const relayReview = (from, src, e) => {
+    const d = e.data;
+    if (typeof d.on !== 'boolean' || Object.keys(d).length !== 2 || !currentFrame(from, src)) return;
+    const doc = src.el.contentDocument;
+    ctx.need('features/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => {
+      const current = () => currentFrame(from, src) && src.el.contentDocument === doc;
+      if (!GZ_DOCREVIEW.relayable(e, location.origin, src.el.contentWindow, current())) return;
+      if (d.on && (!doc.documentElement.hasAttribute('data-gz-review-focus') || !doc.documentElement.hasAttribute('data-gz-review'))) return;
+      GZ_DOCREVIEW.chrome(d.on, { el: src.el, current });
+    }, () => {});
+  };
   const relayTimer = (from, src, d) => {
     if (!Number.isSafeInteger(d.n) || d.n < 1 || typeof d.gen !== 'string' || !d.gen || d.gen.length > 64 || !['toggle', 'reset', 'advance'].includes(d.op)) return;
     const doc = src.el.contentDocument;
@@ -881,6 +893,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const swap = (cid, g, push, keepOld = true) => {
     const f = frames.get(cid);
     if (keepOld && !canKeep(cid, g)) { g.el.remove(); if (g.key ? entry() === g.key : turnHere() === g.turn) restamp(cid, pathOf(f)); return false; }
+    if (showing === cid) globalThis.GZ_DOCREVIEW?.restoreChrome();
     const focused = !!f && document.activeElement === f.el;
     if (drawerFrom === f) drawerOff();
     wake(g);
@@ -1184,6 +1197,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (cid && !f) { if (ctx.site === 'canvas') wait(''); return; }
     if (ctx.site === 'canvas') wait('');
     drawerOff();
+    globalThis.GZ_DOCREVIEW?.restoreChrome();
     showing = cid;
     shownFrom = location.pathname + location.search;
     for (const [k, g] of [...frames]) if (g.away && k !== cid) drop(k, true);
@@ -1200,7 +1214,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     primed = '';
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
     ctx.scene();
-    for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI']) globalThis[n]?.cover?.();
+    for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI', 'GZ_DOCREVIEW']) globalThis[n]?.cover?.();
     globalThis.GZ_PET_WORLD?.refresh();
     try { if (cid) sessionStorage.setItem('gz-ctabs-shown', cid); else sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
     keepPage();
@@ -1254,6 +1268,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       }
       return;
     }
+    if (op === 'review') { relayReview(from, src, e); return; }
     if (op === 'sidebar') { relay(from, src, e.data); return; }
     if (op === 'timer') { relayTimer(from, src, e.data); return; }
     if (op === 'drawer') { if (e.data.on === true && from === showing) drawerOn(src); else if (drawerFrom === src) drawerOff(); return; }
@@ -1331,7 +1346,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (e.data?.gzCtab === 'visible' && typeof e.data.on === 'boolean') {
         told = e.data.on;
         html.toggleAttribute('data-gz-ctab-framed', !e.data.on); ctx.scene();
-        for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI']) globalThis[n]?.cover?.();
+        for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI', 'GZ_DOCREVIEW']) globalThis[n]?.cover?.();
         // A hidden page may have left its course while its navigation request was ignored.
         if (e.data.on) { awayFrom = ''; pass(); }
       }
@@ -1611,6 +1626,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       keepClear(null);
       measureRow(null);
       if (!on) return;
+      globalThis.GZ_DOCREVIEW?.restoreChrome();
       on = false;
       listen(false);
       clearTimeout(capTimer);

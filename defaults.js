@@ -27,10 +27,8 @@ const GZ_COLORS = [
 // doesn't depend on the language Ultra is shown in).
 const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], ['engagement', 'Discussions'], ['grades', 'Gradebook'], ['messages', 'Messages'], ['groups', 'Groups'], ['achievements', 'Achievements']];
 
-// Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
-// range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
-// 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
-// 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM"). GZ_SANITIZE walks this.
+// Defaults as [value, rule], walked by GZ_SANITIZE. Rules: enums, numeric ranges, bool, url, name, tabs,
+// hexes, font, font-auto, or local HH:MM time. Named rules are validated below.
 const GZ_SPEC = {
   auto: { on: [false, 'bool'], mode: ['device', ['device', 'schedule']], from: ['20:00', 'time'], to: ['08:00', 'time'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
   look: {
@@ -91,6 +89,7 @@ const GZ_SPEC = {
     // Syllabus import on a course's home and Syllabus page (features/syllabus.js).
     syllabus: [false, 'bool'],
   },
+  docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
   // features/lookx.js. cursor 'own': a picture kept on this device.
   extras: { cursor: ['off', ['off', 'aqua', 'lilac', 'pearl', 'own']], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },

@@ -153,3 +153,5 @@ their on-demand module arrives. A collapsed rail expands over the page on hover 
 control; leaving it or tapping outside closes that temporary overlay without changing the saved collapsed preference.
 The native fixed drawer keeps main content at the top, including with custom nav backgrounds; the expand control also centers in right-to-left layouts.
 Narrow modal drawers keep Ultra's native width.
+
+- **Document review**: compact submitted-work headers, expandable feedback, full screen and document focus (F / Esc) on recognized Blackboard Ultra review pages. Focus keeps the native rubric, grade and feedback reachable, and can hide Glaze bars. Canvas carries these controls to verified canvadocs submission previews; pages with comment, resubmit or grading controls offer only full screen and retain their native layout. The document iframe is resized in place.
