@@ -879,7 +879,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         const sc = f.el.contentDocument.scrollingElement;
         if (f.scroll) [sc.scrollTop, sc.scrollLeft] = f.scroll;
       }
-      for (const e of f.el.contentDocument.querySelectorAll('iframe[data-gz-rest]')) { e.src = e.getAttribute('data-gz-rest'); e.removeAttribute('data-gz-rest'); }
+      const back = (d, n) => {
+        for (const e of d.querySelectorAll('iframe')) {
+          if (e.hasAttribute('data-gz-rest')) { e.src = e.getAttribute('data-gz-rest'); e.removeAttribute('data-gz-rest'); continue; }
+          let inner = null; try { inner = e.contentDocument; } catch { /* another site */ }
+          if (inner && n < 2) back(inner, n + 1);
+        }
+      };
+      back(f.el.contentDocument, 0);
     } catch { /* gone */ }
   };
   const PLAYER = /^https:\/\/([\w-]+\.)*(youtube(-nocookie)?\.com|vimeo\.com|kaltura\.com|instructuremedia\.com|panopto\.(com|eu)|vidgrid\.com|wistia\.(com|net)|loom\.com|echo360\.(org|net)|yuja\.com|brightcove\.net|mediasite\.com|dailymotion\.com|soundcloud\.com|spotify\.com)\//;

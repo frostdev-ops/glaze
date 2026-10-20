@@ -628,3 +628,19 @@ test('a kept page stops another site\'s video player (put back on return) and me
   assert.deepEqual([video.src, studio.src], ['https://www.youtube-nocookie.com/embed/abc', 'https://school.instructuremedia.com/embed/1'], 'back as the page shows again');
   assert.equal(video.hasAttribute('data-gz-rest'), false);
 });
+
+test('a player inside the page\'s own frame is put back too as the kept page shows again', () => {
+  const w = world();
+  const attrs = {}; let src = 'https://www.youtube.com/embed/xyz';
+  const player = { get src() { return src; }, set src(v) { src = v; }, hasAttribute: (k) => k in attrs, setAttribute: (k, v) => { attrs[k] = v; }, getAttribute: (k) => attrs[k], removeAttribute: (k) => { delete attrs[k]; } };
+  const wrapAttrs = {};
+  const wrapper = { src: `${origin}/courses/12/external_content/1`, contentDocument: docAt('/courses/12/external_content/1', { frames: [player] }),
+    hasAttribute: (k) => k in wrapAttrs, setAttribute: (k, v) => { wrapAttrs[k] = v; }, getAttribute: (k) => wrapAttrs[k], removeAttribute: (k) => { delete wrapAttrs[k]; } };
+  w.first.el.contentDocument = docAt('/courses/12/pages/week-2', { frames: [wrapper] });
+  w.fn('turnTo')('12', '/courses/12/modules');
+  w.fn('next').get('12').el.contentDocument = docAt('/courses/12/modules'); w.wait(40);
+  assert.equal(player.src, 'about:blank');
+  w.pop({ gzTurn: { cid: '12', url: '/courses/12/pages/week-2' } });
+  assert.equal(player.src, 'https://www.youtube.com/embed/xyz', 'restored at the depth it was stopped');
+  assert.equal(player.hasAttribute('data-gz-rest'), false);
+});
