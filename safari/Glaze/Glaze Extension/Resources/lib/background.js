@@ -44,8 +44,13 @@ const ultraAt = (s) => {
 // A course tab's live frame (features/coursetabs.js) is an Ultra page of its own: a frame of a tab whose page is on the
 // same Ultra site counts as that page.
 const ultraPage = (s) => s.frameId === 0 || (s.frameId > 0 && !!ultraAt(s) && !!s.tab?.url?.startsWith(`${ultraAt(s)}/`));
+// A first page can ask for its dock before the site's registration finishes. Wait for that validated report rather
+// than rejecting its migration and leaving the page with an empty, unmigrated record.
+const ultraReports = new Map();
+let ultraTurn = null;
 const fromUltra = async (s) => {
   const o = ultraAt(s);
+  if (o && ultraReports.has(o)) await ultraReports.get(o);
   return o && (await chrome.storage.local.get('ultra').then(({ ultra = [] }) => ultra.includes(o), () => false)) ? o : null;
 };
 // A registered Moodle's top frame may pin its navigation, through the same narrow broker edit as Ultra.
@@ -802,21 +807,27 @@ chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' &&
 // In the broker's queue, so a page's layout change ('glaze:widgetLayout') is never written over.
 const keepWidgets = async (fresh) => {
   if ((await chrome.storage.local.get('widgetLayout')).widgetLayout) return;
-  const { enhance } = await chrome.storage.sync.get('enhance');
-  if (fresh) await chrome.storage.sync.set({ enhance: { ...enhance, notes: true, pet: true } });
+  const { enhance, navbarItems, navItems } = await chrome.storage.sync.get(['enhance', 'navbarItems', 'navItems']);
+  if (fresh) await chrome.storage.sync.set({ enhance: { ...enhance, notes: true, pet: true },
+    ...(navbarItems === undefined && navItems === undefined && { navbarItems: { glaze: ['settings'] } }) });
   await chrome.storage.local.set({ widgetLayout: fresh ? { ...GZ_WIDGETS.layout(), sidebarFresh: true } : GZ_WIDGETS.kept(enhance?.widgets) });
 };
 chrome.runtime.onInstalled.addListener((d) => {
   // Mark fresh installs too: a later update must not mistake their untouched starter layout for a pre-change device.
-  if (['install', 'update'].includes(d?.reason)) (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(d.reason === 'install')).catch(() => {});
-  serial(async () => { await chrome.scripting.unregisterContentScripts(); await ensure(); });
+  const seeded = ['install', 'update'].includes(d?.reason)
+    ? (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(d.reason === 'install')).catch(() => {}) : Promise.resolve();
+  serial(async () => { await seeded; await chrome.scripting.unregisterContentScripts(); await ensure(); });
 });
 chrome.runtime.onStartup.addListener(() => serial(ensure));
 // An Ultra site found (content-ultra.js, once Glaze has started on a page it found to be Ultra): its top frame's origin is
 // kept, so its pages may write their own site's data (fromUltra).
 chrome.runtime.onMessage.addListener((m, s) => {
   const o = m?.type === 'glaze:ultra' && s.frameId === 0 && ultraAt(s);
-  if (o) serial(async () => { const { ultra = [] } = await chrome.storage.local.get('ultra'); if (!ultra.includes(o)) await chrome.storage.local.set({ ultra: [...ultra, o] }); });
+  if (o && !ultraReports.has(o)) {
+    const registered = (ultraTurn ||= GZ_CARDS.queue())(async () => { const { ultra = [] } = await chrome.storage.local.get('ultra'); if (!ultra.includes(o)) await chrome.storage.local.set({ ultra: [...ultra, o] }); });
+    ultraReports.set(o, registered);
+    registered.catch(() => {}).finally(() => { if (ultraReports.get(o) === registered) ultraReports.delete(o); });
+  }
 });
 chrome.runtime.onMessage.addListener((m, { tab, frameId, url }) => {
   if ((m !== 'canvas' && m !== 'moodle') || frameId !== 0 || !tab) return;

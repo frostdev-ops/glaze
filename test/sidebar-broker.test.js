@@ -37,7 +37,7 @@ const pageContext = (site, origin, account, reads) => {
 const worker = ({ local = {}, production = false, manualTimers = false } = {}) => {
   const m = require('../manifest.json');
   const store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [ULTRA, ULTRA2], ...local }, session: {} };
-  const fail = { set: 0 }, slow = { get: 0, script: false };
+  const fail = { set: 0 }, slow = { get: 0, script: false, ultra: false }, registrations = [];
   const accounts = { [CANVAS]: '42', [CANVAS2]: '42', [ULTRA]: '_9_1', [ULTRA2]: '_9_1' };
   const pages = new Map(), probes = [], reads = [], scripts = [], timers = new Map();
   let timerId = 0;
@@ -46,7 +46,7 @@ const worker = ({ local = {}, production = false, manualTimers = false } = {}) =
       for (let i = 0; i < (name === 'local' ? slow.get : 0); i++) await new Promise(setImmediate);
       return structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])));
     },
-    set: async (v) => { if (name === 'local' && fail.set && fail.set--) throw Error('quota'); Object.assign(s, structuredClone(v)); },
+    set: async (v) => { if (name === 'local' && Object.hasOwn(v, 'ultra') && slow.ultra) await new Promise((res) => registrations.push(res)); if (name === 'local' && fail.set && fail.set--) throw Error('quota'); Object.assign(s, structuredClone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete s[x]; },
   });
   const listeners = [], installed = [];
@@ -86,7 +86,7 @@ const worker = ({ local = {}, production = false, manualTimers = false } = {}) =
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
     if (!kept) res('ignored');
   });
-  return { store, send, installed, fail, slow, accounts, pages, probes, reads, scripts, timers };
+  return { store, send, installed, fail, slow, accounts, pages, probes, reads, scripts, timers, registrations };
 };
 // A tab's frame: Canvas's pages anywhere on the site, Ultra's under /ultra.
 const at = (url, frameId = 0, tab = url) => ({ id: 'glaze', url, frameId, tab: { id: 1, url: tab } });
@@ -326,4 +326,40 @@ test('fresh Dashboard auto-fill commits through the worker on each site, with si
     await w.send(msg, sender);
     assert.ok(!w.store.local.widgetLayout.boards[board].some((x) => x.id === key), 'a later fill never resurrects a removed card');
   }
+});
+
+
+test('a first Ultra assessment waits for its pending site registration before migrating the fresh dock', async () => {
+  const w = worker({ local: { ultra: [] } });
+  w.installed[0]({ reason: 'install' }); await settle();
+  const sender = at(`${ULTRA}/ultra/courses/_1_1/outline/assessment/_2_1/overview`);
+  w.slow.ultra = true;
+  await w.send({ type: 'glaze:ultra' }, sender); await settle();
+  assert.equal(w.registrations.length, 1);
+  let ended = false;
+  const pending = w.send(sb(uKey(), [{ op: 'migrate' }]), sender).then((r) => { ended = true; return r; });
+  await settle();
+  assert.equal(ended, false, 'migration waits for the validated Ultra report, rather than returning an empty dock');
+  w.slow.ultra = false; w.registrations.shift()();
+  const r = await pending;
+  assert.equal(r.ok, true);
+  assert.deepEqual(S.docked(r.rec).map((x) => x.id), ['todo', 'settings']);
+});
+
+test('fresh installs add navbar settings once while saved navigation and updates stay untouched', async () => {
+  const w = worker();
+  w.installed[0]({ reason: 'install' }); await settle();
+  assert.deepEqual(w.store.sync.navbarItems, { glaze: ['settings'] });
+  w.store.sync.navbarItems = { glaze: [] };
+  w.installed[0]({ reason: 'update' }); await settle();
+  assert.deepEqual(w.store.sync.navbarItems, { glaze: [] }, 'a removed default stays removed');
+  for (const key of ['navItems', 'navbarItems']) {
+    const saved = worker(); const choice = { hidden: ['glaze'], glaze: ['notes'], groups: [{ items: ['course'] }] };
+    saved.store.sync[key] = structuredClone(choice);
+    saved.installed[0]({ reason: 'install' }); await settle();
+    assert.deepEqual(saved.store.sync[key], choice, 'a synced layout is preserved on a new device');
+    if (key === 'navItems') assert.equal(saved.store.sync.navbarItems, undefined);
+  }
+  const old = worker(); old.installed[0]({ reason: 'update' }); await settle();
+  assert.equal(old.store.sync.navbarItems, undefined, 'updates never opt existing users in');
 });

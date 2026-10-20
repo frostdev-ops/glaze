@@ -9,7 +9,7 @@ All notable changes to Glaze are documented here. The format follows
 ## 3.2.1 (unreleased)
 
 ### Added
-- Fresh installs: Glaze settings after To Do in the sidebar, and a Dashboard starter layout with pet habitat, focus timer, notes, quotes and course cards on Canvas and Ultra. Saved layouts and removals stay as chosen. Course cards fill even responsive rows beside the sidebar, following card size and gap settings.
+- Fresh installs: Glaze settings in the navigation bar and after To Do in the sidebar, and a Dashboard starter layout with pet habitat, focus timer, notes, quotes and course cards on Canvas and Ultra. Saved layouts and removals stay as chosen. Course cards fill even responsive rows beside the sidebar, following card size and gap settings.
 - Mods and Glaze navigation: new permissions `nav.read` (read the bar, Worker only, as personal data), `nav.items` (up to eight items of a mod's own, linking only to the school's site) and `nav.layout` (a layout proposed over yours, with "Arranged by" and Use my own in the bar and in Settings → Navigation items). A mod's navigation replacement now stands in for Glaze's bar, and may open its items with `glaze.nav.go` right after a click.
 
 - A sidebar on Canvas and Blackboard Ultra: the page's own sidebar and the widgets you dock under it, in one column at the right edge on wide windows and a drawer on narrow ones. Better To Do follows the page's course, or all courses; existing removals stay removed. Compatible widgets can move between the sidebar, the Dashboard and floating. Keyboard reorder and resize, Reset sidebar for this account, and the column stays above Glaze's footer and bottom bar.
