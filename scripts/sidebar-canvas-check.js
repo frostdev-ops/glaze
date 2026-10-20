@@ -102,10 +102,85 @@ const layoutOk = async (name, width) => {
     const lay = { ...W.layout({ tiles: W.TILES.map((id) => ({ id, on: id === 'notes', size: 'l' })) }), filled: ['cdash'] };
     lay.boards.cdash = lay.boards.cdash.map((x) => ({ ...x, on: x.id === 'notes' || x.id === 'todo' }));
 
+    // Wheel the real LMS scroller (Canvas course pages use DrawerLayout, not scrollY) and the dock independently.
+    // Short pages get a temporary tail in their existing content flow; the LMS's layout and overflow rules stay intact.
+    const wheelScroll = async (root, label) => {
+      const behind = root === page ? null : await page.evaluate(() => [scrollY, document.getElementById('drawer-layout-content')?.scrollTop || 0]);
+      await root.waitForSelector('[data-gz-sidebar-host]', { state: 'attached' });
+      await root.waitForFunction(() => document.documentElement.dataset.gzSidebar && !document.documentElement.hasAttribute('data-gz-ctab-framed') && !document.documentElement.hasAttribute('data-gz-placing'));
+      await root.evaluate(() => {
+        const content = document.getElementById('content');
+        let main = content;
+        while (main && main !== document.body && !/^(auto|scroll|overlay)$/.test(getComputedStyle(main).overflowY)) main = main.parentElement;
+        if (!main || main === document.body) main = document.scrollingElement;
+        const host = document.querySelector('[data-gz-sidebar-host]');
+        const tail = document.createElement('div'); tail.id = 'sidebar-check-tail';
+        if (main.scrollHeight < main.clientHeight + 200) { tail.style.height = `${innerHeight * 2}px`; content.append(tail); }
+        globalThis.__gzSbScrollCheck = { main, host, tail, content };
+        main.scrollTop = 0; host.scrollTop = 0;
+      });
+      try {
+        await root.waitForFunction(() => { const { main } = __gzSbScrollCheck; return main.scrollHeight > main.clientHeight + 200 && main.scrollTop === 0; });
+        const offset = root === page ? { x: 0, y: 0 } : await (await root.frameElement()).boundingBox();
+        const wheel = async (side, delta, down) => {
+          const point = await root.evaluate((side) => {
+            const { main, host, content } = __gzSbScrollCheck, r = (side ? host : content).getBoundingClientRect();
+            const x = side ? r.right - 20 : Math.max(20, Math.min(r.left + r.width / 2, innerWidth - 20));
+            const y = side ? r.top + r.height / 2 : Math.min(innerHeight - 120, Math.max(140, r.top + 60));
+            const sc = side ? host : main;
+            return { x, y, before: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight, hit: (side ? host : content).contains(document.elementFromPoint(x, y)) };
+          }, side);
+          ok(point.hit, `${label}: ${side ? 'sidebar' : 'main'} receives pointer input`);
+          await page.mouse.move(offset.x + point.x, offset.y + point.y); await page.mouse.wheel(0, delta);
+          const target = Math.max(0, Math.min(point.max, point.before + delta));
+          await root.waitForFunction(({ side, target }) => Math.abs(__gzSbScrollCheck[side ? 'host' : 'main'].scrollTop - target) <= 1, { side, target }, { timeout: 10000 });
+          ok(true, `${label}: ${side ? 'sidebar' : 'main'} wheels ${down ? 'down' : 'up'}`);
+        };
+        await wheel(false, 400, true); await wheel(false, -400, false);
+        ok(await root.evaluate(() => __gzSbScrollCheck.host.scrollTop === 0), `${label}: main wheels leave the sidebar in place`);
+        const drawer = await root.locator('html').getAttribute('data-gz-sidebar') === 'drawer';
+        if (drawer) await root.locator('#gz-sb-launch').click();
+        await root.waitForFunction(() => { const { host } = __gzSbScrollCheck; return host.getClientRects().length && host.scrollHeight > host.clientHeight + 200; });
+        await wheel(true, 400, true); await wheel(true, -400, false);
+        ok(await root.evaluate(() => __gzSbScrollCheck.main.scrollTop <= 1), `${label}: sidebar wheels leave the main content in place`);
+        if (behind) ok(JSON.stringify(behind) === JSON.stringify(await page.evaluate(() => [scrollY, document.getElementById('drawer-layout-content')?.scrollTop || 0])), `${label}: wheels never chain to the covered document`);
+        if (drawer) { await page.keyboard.press('Escape'); await root.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-sidebar-open')); }
+      } finally {
+        await root.evaluate(() => { __gzSbScrollCheck.tail.remove(); delete globalThis.__gzSbScrollCheck; });
+      }
+    };
+    const scrollPages = [...PAGES, ...(take ? [['quiz-take', `/courses/${hist.id}/quizzes/${take.id}/take`]] : [])];
+    const recordKey = `sidebar:canvas:${local}/${me.id}`;
+    for (const tabs of [false, true]) {
+      const s = settings(true, true); s.enhance.tabs = tabs; s.navbar.tabs = false;
+      await store(s, { widgetLayout: lay, [recordKey]: { v: 1, rev: 1, mig: 1, open: true, width: 352,
+        dock: [{ id: 'todo' }, { id: 'notes', h: 1800 }], dest: { todo: 'dock', notes: 'dock' } } });
+      for (const [name, at] of scrollPages) for (const width of [1440, 1024, 768, 390]) {
+        console.log(`wheel ${name} ${width} ${tabs ? 'course tabs' : 'direct'}`);
+        await page.setViewportSize({ width, height: 900 });
+        let root = page;
+        if (tabs) {
+          await page.close(); page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
+          await page.setViewportSize({ width, height: 900 });
+          // A real owned frame, reached through the same link interception as native LMS navigation.
+          const other = courses.find((c) => String(c.id) !== at.match(/^\/courses\/(\d+)/)?.[1]);
+          await page.goto(`${local}/courses/${other.id}`);
+          await page.waitForSelector('#gz-ctabs', { state: 'attached' });
+          await page.waitForFunction(() => document.querySelector('#gz-ctabs .gz-ctab'));
+          await page.locator('#content').evaluate((e, at) => { const a = document.createElement('a'); a.id = 'sidebar-check-link'; a.href = at; a.textContent = 'Open'; e.prepend(a); }, at);
+          await page.locator('#sidebar-check-link').click();
+          const cid = at.match(/^\/courses\/(\d+)/)?.[1] || 'page';
+          await page.waitForSelector(`#gz-ctabs-frames[data-on] > iframe[name="gz-ctab:${cid}"]:not([inert])`);
+          root = page.frame({ name: `gz-ctab:${cid}` });
+        } else await page.goto(local + at);
+        await wheelScroll(root, `${name} ${width} ${tabs ? 'course tabs' : 'direct'}`);
+      }
+    }
+    if (process.env.SIDEBAR_SCROLL_ONLY) { console.log(`passed; ${checks} wheel checks`); return; }
+
     // Real pointer gestures, modal keyboard behavior, and appearance under alternate browser settings.
     await store(settings(true), { widgetLayout: lay });
     await page.goto(local + '/'); await page.waitForSelector('.gz-sb-dock #gz-todo');
-    const recordKey = `sidebar:canvas:${local}/${me.id}`;
     const record = async () => (await localGet(recordKey))[recordKey];
     const dockRecord = { ...await record(), dock: [{ id: 'notes' }, { id: 'timer' }, { id: 'todo' }], dest: { notes: 'dock', timer: 'dock', todo: 'dock' } };
     await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, dockRecord]);
