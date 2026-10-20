@@ -158,6 +158,9 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
 
     // No sidebar work in hidden documents: start the timer where it shows, then go elsewhere and watch the hidden ones.
     await page.goto(`${local}/courses/${B}`);
+    await settled();
+    // Reloading the surrounding course can restore its selected frame. Pick the course itself before asserting it.
+    await tab(B).click();
     await oneDock('page again', 'top');
     await tab(A).click();
     await oneDock('frame again', `gz-ctab:${A}`);
