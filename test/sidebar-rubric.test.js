@@ -118,3 +118,13 @@ test('review styles never inset or narrow the full-window layer', () => {
   assert.doesNotMatch(css, /\.bb-offcanvas-panel[^{}]*\{[^}]*inset-inline-end: var\(--gz-sb-room\)/);
   assert.match(read('features/sidebar.js'), /const RUBRIC = .*main > aside:has\(\.rubric-inline-container\)/);
 });
+
+test('release documentation describes visual Rubric absorption and the native attempt fallback', () => {
+  for (const file of ['docs/features.md', 'CHANGELOG.md']) {
+    const text = read(file);
+    assert.match(text, /attempt panels stay native/i, file);
+    assert.match(text, /Rubric[^.]*visually/i, file);
+    assert.match(text, /document review/i, file);
+  }
+  assert.match(read('CHANGELOG.md'), /## 3\.2\.1 \(unreleased\)/);
+});
