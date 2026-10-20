@@ -416,3 +416,24 @@ test('the strip check in the mutation callback reads no layout until the bar, th
   assert.equal(placed, 3, 'a new bar: checked at once');
   assert.deepEqual(ro.seen.map((e) => e.name), ['new bar']);
 });
+
+test('Canvas frames reserve the footer height while its native document lays out or scrolls', () => {
+  for (const site of ['canvas', 'ultra']) {
+    const host = { style: {} };
+    let top = 900, height = 32, visible = true;
+    const foot = { getBoundingClientRect: () => ({ top, height }) };
+    const lay = vm.runInNewContext(part('  const lay = ', '  const drop = ') + '\nlay;', {
+      host, ctx: { site }, innerHeight: 900, document: { getElementById: () => foot }, shown: () => visible,
+    });
+    if (site === 'canvas') {
+      for (top of [0, 900, 880, -400]) {
+        lay();
+        assert.equal(host.style.bottom, '32px', `footer top ${top} cannot collapse or resize the course frame`);
+      }
+      height = 48; lay(); assert.equal(host.style.bottom, '48px');
+    } else {
+      top = 868; lay(); assert.equal(host.style.bottom, '32px', 'Ultra keeps its fixed-footer clearance');
+    }
+    visible = false; lay(); assert.equal(host.style.bottom, '0px');
+  }
+});

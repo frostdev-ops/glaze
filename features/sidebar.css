@@ -23,10 +23,12 @@
   html[dir="rtl"][data-gz-sidebar="collapsed"] #not_right_side { padding-left: 64px; }
   html[dir="rtl"] [data-gz-sidebar-host] { direction: rtl; }
   html[dir="rtl"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) [data-gz-sidebar-host] { padding-left: calc(var(--gz-sb-pad) + env(safe-area-inset-left, 0px)) !important; padding-right: var(--gz-sb-pad) !important; }
+  /* Pinned between --gz-sb-top and --gz-sb-end, so its height is theirs: Ultra gives a course outline's column a height of
+     its own, which left the column taller than the window and nothing in it to scroll. */
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) [data-gz-sidebar-host] {
     display: block !important; position: fixed !important; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-end); inset-inline-end: 0; inset-inline-start: auto;
     flex: 0 0 var(--gz-sidebar-w) !important; width: var(--gz-sidebar-w) !important; min-width: 0; max-width: none !important; margin: 0 !important;
-    max-height: none !important; overflow-y: auto; overscroll-behavior: contain;
+    height: auto !important; max-height: none !important; overflow-y: auto; overscroll-behavior: contain;
     padding: 0 calc(var(--gz-sb-pad) + env(safe-area-inset-right, 0px)) calc(var(--gz-sb-pad) + env(safe-area-inset-bottom, 0px)) var(--gz-sb-pad) !important; color: var(--gz-ink); font-family: var(--gz-font);
   }
   html[data-gz-sidebar="collapsed"] [data-gz-sidebar-host] { flex-basis: 3rem !important; width: 3rem !important; padding: 0 0.25rem !important; overflow: hidden; }
@@ -39,7 +41,7 @@
   html[data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] {
     display: block !important; position: fixed !important; z-index: 1300; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-end);
     inset-inline-end: 0; inset-inline-start: auto; width: min(var(--gz-sidebar-w), calc(100vw - 16px)) !important; max-width: none !important; margin: 0 !important;
-    height: auto; max-height: none; overflow-y: auto; overscroll-behavior: contain; padding: 0 calc(var(--gz-sb-pad) + env(safe-area-inset-right, 0px)) calc(var(--gz-sb-pad) + env(safe-area-inset-bottom, 0px)) var(--gz-sb-pad) !important;
+    height: auto !important; max-height: none; overflow-y: auto; overscroll-behavior: contain; padding: 0 calc(var(--gz-sb-pad) + env(safe-area-inset-right, 0px)) calc(var(--gz-sb-pad) + env(safe-area-inset-bottom, 0px)) var(--gz-sb-pad) !important;
     color: var(--gz-ink); font-family: var(--gz-font);
   }
   html[data-gz-sidebar-open] #main { z-index: auto !important; }
@@ -60,7 +62,7 @@
   [data-gz-sb-fold-page][data-gz-sb-self] > :not(.gz-sb-resize, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets) { display: none !important; }
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-sidebar.gz-sb-fixed {
     position: fixed !important; z-index: 1000; top: var(--gz-sb-top, calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px))); bottom: var(--gz-sb-end);
-    inset-inline-end: 0; inset-inline-start: auto; max-height: none;
+    inset-inline-end: 0; inset-inline-start: auto; height: auto !important; max-height: none;
   }
   /* The room the page keeps beside the column: its width, the gap, and a floating card's inset. */
   html[data-gz-sidebar="expanded"] { --gz-sb-room: calc(var(--gz-sidebar-w) + 16px + var(--gz-sb-inset, 0px)); }
@@ -171,14 +173,16 @@
     position: fixed; z-index: 1250; inset-inline-end: calc(0.75rem + env(safe-area-inset-right, 0px)); bottom: calc(var(--gz-sb-end) + 1rem + env(safe-area-inset-bottom, 0px));
     max-width: calc(100vw - 1.5rem); padding: 0.45rem 0.95rem !important; color: var(--gz-accent-ink) !important; background: var(--gz-accent) !important; border-color: var(--gz-accent) !important; box-shadow: var(--gz-shadow);
   }
+  html[dir="rtl"] :is(.gz-sb-edge, .gz-sb-launch) { inset-inline-end: calc(0.75rem + env(safe-area-inset-left, 0px)); }
   @media (max-width: 899.98px) {
-    html[data-gz-navbar]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: 96px; }
+    html[data-gz-navbar]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
     /* The bar sits above the footer. */
-    html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: calc(96px + var(--gz-footer-h, 2rem)); }
+    html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: calc(96px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)); }
   }
 
   .gz-sb-menu {
     position: fixed; z-index: 1400; display: grid; min-width: 12rem; max-width: calc(100vw - 16px); padding: 0.25rem; box-sizing: border-box;
+    max-height: calc(100vh - 16px); overflow-y: auto;
     font: 0.85rem/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
     border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
   }

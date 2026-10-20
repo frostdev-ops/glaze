@@ -180,6 +180,27 @@ test('two schools and two accounts on one site each keep their own record; none 
   assert.ok(!L[uKey(ULTRA, '_1_1')].dest.quotes);
 });
 
+test('reset goes through the broker account check and keeps placements and widget data on both sites', async () => {
+  for (const [sender, key, other] of [[CP, cKey(), cKey(CANVAS, '99')], [UP, uKey(), uKey(ULTRA, '_99_1')]]) {
+    const rec = S.clean({ mig: 1, width: 420, open: false, todoScope: 'all', fold: { grades: { page: true } },
+      dock: [{ id: 'timer', fold: true, h: 240 }, { id: 'notes', gone: true, h: 300 }],
+      dest: { timer: 'dock', notes: 'off', music: 'float' }, ret: { notes: { to: 'board', board: key === cKey() ? 'cdash' : 'dash' } } });
+    const layout = W.layout(), note = { text: 'keep this' };
+    const w = worker({ local: { [key]: rec, [other]: rec, widgetLayout: layout, widgetNotes: note } });
+    assert.deepEqual(await w.send(sb(other, [{ op: 'reset' }]), sender), { ok: false, error: 'sender' });
+    const reply = await w.send(sb(key, [{ op: 'reset' }]), sender);
+    assert.equal(reply.ok, true);
+    assert.equal(reply.rec.width, S.WIDTH);
+    assert.equal(reply.rec.todoScope, 'follow');
+    assert.deepEqual(reply.rec.dock, [{ id: 'timer' }, { id: 'notes', gone: true }]);
+    assert.deepEqual(reply.rec.dest, rec.dest);
+    assert.deepEqual(reply.rec.ret, rec.ret);
+    assert.deepEqual(w.store.local[other], rec);
+    assert.deepEqual(w.store.local.widgetLayout, layout);
+    assert.deepEqual(w.store.local.widgetNotes, note);
+  }
+});
+
 test('sidebar writes match the authenticated account in the exact sending document, including sign-out', async () => {
   const w = worker();
   for (const [sender, key, origin, uid] of [[CP, cKey(), CANVAS, '42'], [UP, uKey(), ULTRA, '_9_1']]) {

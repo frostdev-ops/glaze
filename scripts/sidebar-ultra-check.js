@@ -108,6 +108,15 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.waitForTimeout(150);
     await page.locator('#gz-sb-launch').click();
     check(await page.evaluate(() => { const r = document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect(); return r.bottom <= innerHeight - 96 - 32 + 1; }), 'footer and bottom bar: the drawer ends above both');
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { bottom: 34, left: 44, right: 0 } });
+    check(await page.evaluate(() => document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().bottom <= innerHeight - 96 - 32 - 34 + 1), 'the drawer clears the bottom bar with a nonzero safe area');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { document.documentElement.dir = 'rtl'; });
+    check(await page.locator('#gz-sb-launch').evaluate((e) => e.getBoundingClientRect().left >= 44 + 12 - 1), 'the RTL launcher clears the left safe area');
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: {} });
+    await cdp.detach();
+    await page.evaluate(() => { document.documentElement.dir = 'ltr'; });
     await page.keyboard.press('Escape');
     await page.evaluate(() => { document.documentElement.removeAttribute('data-gz-navbar'); document.getElementById('gz-footer').remove(); document.documentElement.removeAttribute('data-gz-footer'); });
     await page.setViewportSize({ width: 1600, height: 900 });

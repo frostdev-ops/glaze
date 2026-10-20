@@ -81,7 +81,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
   const mode = () => doc.root.dataset.gzSidebar;
   const host = () => doc.root.all().find((e) => e.dataset?.gzSidebarHost);
   const ours = (e) => { for (let p = e; p && p.tagName; p = p.parentNode) if (/^gz-/.test(p.id) || /(^|\s)gz-/.test(String(p.className))) return true; return false; };
-  return { c, doc, side, ui, store, sent, loads, net, observers, storeListeners, pass, resize, $, mode, host, ours, fire: doc.fire };
+  return { c, doc, side, ui, store, sent, loads, net, observers, storeListeners, winListeners, pass, resize, $, mode, host, ours, fire: doc.fire };
 };
 const record = (x = {}) => ({ [KEY]: { ...S.clean({ mig: 1, ...x }) } });
 
@@ -650,4 +650,49 @@ test('Canvas discussion topics and assignment pages each get their family', asyn
     assert.equal(p.host().dataset.gzSidebarHost, kind, fixture);
     for (const [e, parent] of nativeEls) assert.equal(e.parentNode, parent, `${fixture}: ${e.tagName}#${e.id} moved`);
   }
+});
+
+test('Add widgets opened before the renderer loads receives its catalog without another click', async () => {
+  const p = page({ widgets: true, stored: record() });
+  p.side.sync(true); await settle();
+  p.$('.gz-sb-add').click();
+  assert.equal(p.$('.gz-sb-row'), null, 'the renderer has not loaded yet');
+  p.ui.sync(true); await settle();
+  const row = p.$('#gz-sb-adding').querySelectorAll('.gz-sb-row').find((x) => x.textContent.includes('Focus timer'));
+  assert.ok(row?.querySelector('button'), 'the open chooser receives the timer when the renderer is ready');
+  row.querySelector('button').click(); await settle();
+  assert.equal(p.store[KEY].dest.timer, 'dock');
+});
+
+test('destination menus near the window edges remain reachable, including in RTL', async () => {
+  const p = page(); await p.pass();
+  const boxOf = p.doc.boxOf;
+  p.doc.boxOf = (e) => e.id === 'gz-sb-menu' ? { left: 0, top: 0, width: 240, height: 160 } : boxOf(e);
+  const btn = p.$('.gz-sb-more');
+  for (const dir of ['ltr', 'rtl']) {
+    p.doc.root.dir = dir;
+    btn.box = { left: 0, top: 870, width: 32, height: 30 };
+    p.side.menu(btn, [{ label: 'Move to sidebar', run() {} }]);
+    const menu = p.$('#gz-sb-menu');
+    assert.ok(parseFloat(menu.style.top) + 160 <= p.c.innerHeight - 8, 'the menu fits above the bottom edge');
+    const edge = parseFloat(menu.style[dir === 'rtl' ? 'left' : 'right']);
+    assert.ok(edge >= 8 && edge + 240 <= p.c.innerWidth - 8, 'the menu fits horizontally');
+    p.fire(menu.children[0], 'keydown', { key: 'Escape' });
+  }
+});
+
+test('Canvas reserves the footer height before it scrolls into view, without measuring on scroll', async () => {
+  const p = page();
+  const footer = p.doc.createElement('footer'); footer.id = 'gz-footer';
+  footer.box = { left: 0, top: 1000, width: 1440, height: 32 };
+  footer.getClientRects = () => [footer.getBoundingClientRect()];
+  p.doc.body.append(footer);
+  await p.pass();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-foot'), '32px', 'reserve space before the footer enters the window');
+  footer.box.top = 868;
+  await p.resize(1440);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-foot'), '32px', 'scrolling the page cannot shrink the column under the pointer');
+  assert.equal(p.winListeners.some((x) => x.type === 'scroll'), false, 'no per-scroll layout reads');
+  p.side.sync(false);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-foot'), '', 'teardown restores the page');
 });

@@ -615,15 +615,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     paint();
     layout();
   };
-  // Glaze's footer: fixed on Ultra, at the end of the page on Canvas. The column, the drawer and the buttons at the
-  // edge stop above it while it shows (features/sidebar.css takes the larger of this and the bottom bar's room).
+  // Glaze's footer: fixed on Ultra, at the end of the page on Canvas. Reserve Canvas's footer height even below the
+  // fold, so scrolling it into view never shrinks the column under the pointer or needs another layout measurement.
   const foot = () => {
     const f = document.getElementById('gz-footer');
     const r = f?.isConnected && f.getClientRects().length ? f.getBoundingClientRect() : null;
-    setVar('--gz-sb-foot', `${r && r.top < innerHeight ? Math.max(0, Math.round(innerHeight - r.top)) : 0}px`);
+    setVar('--gz-sb-foot', `${r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0}px`);
   };
-  let footFrame = 0;
-  const onScroll = () => { if (asleep || !active || ultra) return; cancelAnimationFrame(footFrame); footFrame = requestAnimationFrame(foot); };
   const onResize = () => { if (asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
   // The document on screen changed (features/coursetabs.js): asleep, the drawer and menu close and nothing is watched;
   // awake again, the column is looked at as on a pass.
@@ -635,7 +633,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       closeMenu();
       closeDrawer(false);
       mo?.disconnect();
-      for (const f of [frame, passFrame, footFrame]) cancelAnimationFrame(f);
+      for (const f of [frame, passFrame]) cancelAnimationFrame(f);
       clearTimeout(noteTimer);
       widthCancel?.();
       absorb([]);
@@ -792,6 +790,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       else if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation?.(); closeMenu(true); }
     });
     (ultra && drawer ? dock : document.body).append(menuEl);
+    const box = menuEl.getBoundingClientRect();
+    const clamp = (v, size, room) => Math.max(8, Math.min(v, room - size - 8));
+    Object.assign(menuEl.style, { top: `${clamp(r.bottom + 4, box.height, innerHeight)}px`,
+      ...(rtl() ? { left: `${clamp(r.left, box.width, innerWidth)}px` } : { right: `${clamp(innerWidth - r.right, box.width, innerWidth)}px` }) });
     btn.setAttribute('aria-expanded', 'true');
     document.addEventListener('pointerdown', outside, true);
     rows[0].focus();
@@ -801,6 +803,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Every widget that can dock here (features/widgets.js catalog), where it is now, and a button to bring it into the
   // dock: a widget elsewhere moves, it isn't copied.
   const WHERE = { dock: 'In the sidebar', board: 'On the Dashboard', float: 'Floating', off: 'Not shown' };
+  let addSig = '';
   const openAdd = (show, focus = true) => {
     if (!active) return;
     if (show && rec.fold[family]?.widgets) op([{ op: 'section', family, part: 'widgets', v: false }]);
@@ -808,6 +811,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     addBtn.setAttribute('aria-expanded', String(!!show));
     if (!show) return;
     const all = globalThis.GZ_WIDGETS_UI?.catalog?.() || [];
+    const sig = JSON.stringify(all);
+    if (sig === addSig && adding.children.length) { if (focus) adding.querySelector('button')?.focus(); return; }
+    addSig = sig;
     const rows = all.map((x) => make('li', { className: 'gz-sb-row' },
       make('span', { className: 'gz-sb-name', textContent: x.name }), make('span', { className: 'gz-sb-faint', textContent: t(WHERE[x.where] || WHERE.off) }),
       x.where === 'dock' ? null : button(t(x.where === 'off' ? 'Add' : 'Move here'), () => {
@@ -847,8 +853,6 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     bare();
     openHere = null;
     removeEventListener('resize', onResize);
-    removeEventListener('scroll', onScroll);
-    cancelAnimationFrame(footFrame);
     document.removeEventListener('visibilitychange', cover);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
     starting = null; rec = null; key = ''; flying = 0; lost = false;
@@ -876,7 +880,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (g !== epoch || !on) return;
       if (S.key(LMS, location.origin, uid) !== key) { teardown(); sync(true); return; }
       if (covered()) { cover(); return; }
-      if (!active) { addEventListener('resize', onResize); addEventListener('scroll', onScroll, { passive: true }); document.addEventListener('visibilitychange', cover); try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ } }
+      if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ } }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
       if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
       else place();

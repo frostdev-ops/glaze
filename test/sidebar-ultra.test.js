@@ -544,3 +544,18 @@ test('an assignment overview gets the assignment family and Glaze\'s own column;
   assert.match(css, /html\[data-gz-sb-fixed\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*inset-inline-end: var\(--gz-sb-room\) !important/);
   assert.match(css, /html\[data-gz-sidebar="expanded"\] \{ --gz-sb-room: calc\(var\(--gz-sidebar-w\) \+ 16px \+ var\(--gz-sb-inset, 0px\)\); \}/);
 });
+
+test("a pinned column's height is its top and bottom's, whatever height the site gives it", () => {
+  // Ultra gives a course outline's column a height of its own (in sheets the page can't read): left alone, the pinned
+  // column ran past the window's bottom with nothing to scroll. Expanded, the drawer and Glaze's own column alike.
+  const css = read('features/sidebar.css');
+  const rule = (head) => { const i = css.indexOf(head); assert.ok(i >= 0, head); return css.slice(i, css.indexOf('}', i)); };
+  for (const head of ['html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) [data-gz-sidebar-host] {',
+    'html[data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] {',
+    'html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-sidebar.gz-sb-fixed {']) {
+    const r = rule(head);
+    assert.match(r, /position: fixed !important; [^}]*top: var\(--gz-sb-top/, head);
+    assert.match(r, /bottom: var\(--gz-sb-end\)/, head);
+    assert.match(r, /height: auto !important/, head);
+  }
+});
