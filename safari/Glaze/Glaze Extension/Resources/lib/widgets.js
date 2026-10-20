@@ -22,8 +22,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   // ---- the layout (storage.local widgetLayout: this device's screen, so not synced) ------------------------------
   // The old Canvas tiles in their order, each on or off, small/medium/large, in the Dashboard or floating (x, y: where in the
   // room the screen leaves, 0–1, so a smaller window still shows it). The music link too.
-  // todo: Better To Do (features/todo.js) as a tile on Ultra's boards (on Canvas it has its own place): on the Dashboard
-  // from the start, as Canvas's Dashboard has it, and on the Courses page from the start too, in the column it had.
+  // todo: Better To Do (features/todo.js) as a tile on both sites' boards, on from the start where the list was.
   const TILES = ['notes', 'agenda', 'timer', 'quotes', 'music', 'breathe', 'buddy', 'todo'];
   // Widgets are on by default, with no widget added: a device's first layout starts empty, and Edit layout adds them
   // (owner, 2026-10-19). A layout stored before then started with these four, and a tile it kept without its on/off
@@ -114,6 +113,9 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     // kept there was never the student's choice: a layout without the mark (todo) gets it on, small, unplaced (the
     // column, where it was); one saved since keeps what the student did.
     if (raw?.todo !== true) boards.courses = boards.courses.map((x) => (x.id === 'todo' ? { ...x, on: true, size: 's', x: null, y: null, r: false } : x));
+    // Canvas's Dashboard list used to live outside the board, so its old off value was never a widget choice.
+    // Migrate it once; layouts saved since keep a deliberate removal, size and position.
+    if (raw?.canvasTodo !== true) boards.cdash = boards.cdash.map((x) => (x.id === 'todo' ? { ...x, on: true, x: null, y: null, r: false } : x));
     boards.pages = each(Array.isArray(raw?.boards?.pages) ? raw.boards.pages : tiles.map((x) => ({ ...x, on: x.on && x.float })), ids, (x) => ptile(x, more));
     // The room's width each board (and the floating tiles) was last arranged in (arrange's and floating's w0).
     const widths = Object.fromEntries([...BOARDS, 'pages', 'canvas'].map((b) => [b, px(raw?.widths?.[b]) || 0]));
@@ -122,7 +124,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     const filled = BOARDS.filter((b) => Array.isArray(raw?.filled) && raw.filled.includes(b));
     // Layouts kept before auto-fill had no marker. Their board, including an intentionally empty one, stays as it was.
     if (raw && Object.keys(raw).length && !Array.isArray(raw.filled)) filled.push('cdash');
-    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, filled };
+    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled };
   };
   // What an update keeps on a device with no layout stored: the tiles it showed when a new layout started with four. Its
   // notes box (the notes' own switch) and Ultra's Dashboard (shown whatever the widgets' switch) as they were, and the
@@ -318,7 +320,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     if (BOARDS.includes(m?.fill)) {
       if (l.filled.includes(m.fill)) return l;
       l = { ...l, filled: [...l.filled, m.fill] };
-      if (l.boards[m.fill].some((x) => x.on)) return l;
+      if (l.boards[m.fill].some((x) => x.on && !(m.fill === 'cdash' && x.id === 'todo'))) return l;
     }
     const ops = Array.isArray(m?.ops) ? m.ops.slice(0, 64) : [];
     // A deliberate edit of an unfilled Canvas board also opts out, even if that edit empties it.

@@ -90,7 +90,7 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   const fresh = W.layout(undefined);
   assert.deepEqual(fresh.tiles.map((t) => t.id), W.TILES);
   assert.deepEqual(fresh.tiles.filter((t) => t.on).map((t) => t.id), [], 'a first layout has no widget on');
-  assert.deepEqual(Object.fromEntries(W.BOARDS.map((b) => [b, fresh.boards[b].filter((t) => t.on).map((t) => t.id)])), { courses: ['todo'], dash: ['todo'], cdash: [] }, 'only Better To Do, where it was');
+  assert.deepEqual(Object.fromEntries(W.BOARDS.map((b) => [b, fresh.boards[b].filter((t) => t.on).map((t) => t.id)])), { courses: ['todo'], dash: ['todo'], cdash: ['todo'] }, 'only Better To Do, in each board');
   // A layout stored before then: a tile kept without its on/off reads as it did.
   assert.deepEqual(W.layout({ tiles: [{ id: 'agenda' }, { id: 'music' }] }).tiles.filter((t) => t.on).map((t) => t.id), ['agenda', 'notes', 'timer', 'quotes']);
   const kept = W.layout({ tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: 2 }, { id: 'music' }, { id: 'evil' }, { id: 'timer', size: 'xl' }, null], music: 'javascript:x' });
@@ -232,7 +232,7 @@ test('boards: each its own layout; the Courses page starts from the tiles in its
   assert.ok(c.every((t) => t.size === 's' && t.x === null && t.y === null && t.z === 0 && !t.fold), "small enough for Ultra's column, placed where the panel was");
   const d = lay.boards.dash;
   assert.deepEqual(d.filter((t) => t.on).map((t) => [t.id, t.size]), [['notes', 'm'], ['agenda', 'm'], ['timer', 's'], ['quotes', 'm'], ['todo', 'm']], "Canvas's Dashboard defaults, Better To Do with them (Codex B7b 5)");
-  assert.equal(lay.tiles.find((t) => t.id === 'todo').on, false, 'not a tile on Canvas, where it has its own place');
+  assert.equal(lay.tiles.find((t) => t.id === 'todo').on, false, 'To Do belongs to the board, never the global floats');
   // Kept boards come back as they were; what isn't a spot, a size or a z is dropped, and a spot needs both x and y.
   const kept = W.layout({ ...lay, boards: { courses: [{ id: 'notes', on: true, size: 'l', x: 40, y: 64, r: true, z: 3, fold: true }, { id: 'timer', x: 5 }, { id: 'evil', x: 1, y: 1 }, { id: 'agenda', x: -4, y: 2.5, z: 1e6 }], dash: 'nope' } });
   assert.deepEqual(kept.boards.courses.slice(0, 3), [
@@ -497,7 +497,7 @@ test('Canvas board: an old grid migrates once, in order, at its sizes, with its 
   };
   const more = { pet: { size: 'm' } }, l = W.layout(old, more), b = l.boards.cdash;
   assert.deepEqual(b.map((x) => x.id), l.tiles.map((x) => x.id));
-  assert.deepEqual(b.filter((x) => x.on).map((x) => [x.id, x.size]), [['quotes', 'l'], ['timer', 's'], ['pet', 'm'], ['agenda', 'm']]);
+  assert.deepEqual(b.filter((x) => x.on).map((x) => [x.id, x.size]), [['quotes', 'l'], ['timer', 's'], ['pet', 'm'], ['agenda', 'm'], ['todo', 'm']]);
   assert.ok(b.every((x) => x.x === null && x.y === null && x.r === false));
   assert.deepEqual([l.tiles[2].float, l.tiles[2].x, l.tiles[2].y], [true, 0.25, 0.75]);
   assert.equal(l.music, old.music);
@@ -575,9 +575,9 @@ test('kept: an update keeps what a device without a stored layout showed, and ad
   const on = (l, b) => (b ? l.boards[b] : l.tiles).filter((t) => t.on).map((t) => t.id);
   const four = ['notes', 'agenda', 'timer', 'quotes'];
   const was = W.kept(true);
-  assert.deepEqual([on(was), on(was, 'cdash'), on(was, 'courses'), on(was, 'dash')], [four, four, [...four, 'todo'], [...four, 'todo']]);
+  assert.deepEqual([on(was), on(was, 'cdash'), on(was, 'courses'), on(was, 'dash')], [four, [...four, 'todo'], [...four, 'todo'], [...four, 'todo']]);
   for (const l of [W.kept(undefined), W.kept(false)]) {
-    assert.deepEqual([on(l), on(l, 'cdash'), on(l, 'courses')], [['notes'], ['notes'], ['notes', 'todo']], 'the notes box (its own switch) as it was; no widget');
+    assert.deepEqual([on(l), on(l, 'cdash'), on(l, 'courses')], [['notes'], ['notes', 'todo'], ['notes', 'todo']], 'the notes box and existing To Do; no extra widget');
     assert.deepEqual(on(l, 'dash'), [...four, 'todo'], "Ultra's Dashboard showed these whatever the widgets' switch");
   }
   assert.deepEqual(W.layout(was), was, 'stored, it reads back the same');

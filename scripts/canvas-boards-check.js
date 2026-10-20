@@ -36,7 +36,7 @@ const api = (u) => {
   if (u.pathname === '/api/v1/courses') return courses;
   return [];
 };
-const settings = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] },
+const settings = (preset, extra = {}) => G.GZ_SANITIZE({ preset, navbar: { on: false }, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] },
   enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), notes: true, widgets: true, todo: true, gpa: true, ...extra } });
 const old = { tiles: [
   { id: 'timer', on: true, size: 's' }, { id: 'quotes', on: true, size: 'm' }, { id: 'notes', on: true, size: 'l' },
@@ -93,12 +93,12 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
     const notes = { [`notes:${O}/3`]: { text: 'Read chapter 4. Office hours Tuesday at 2pm.', at: Date.now() } };
     await store(settings('Paper'), { widgetLayout: old, ...notes });
     await open();
-    ok(JSON.stringify((await rects()).map((x) => x.id)) === JSON.stringify(['timer', 'quotes', 'notes']), 'old grid reading order migrates');
+    ok(JSON.stringify((await rects()).map((x) => x.id)) === JSON.stringify(['timer', 'quotes', 'notes', 'todo']), 'old grid reading order migrates with the To Do widget');
     ok((await rects()).find((x) => x.id === 'notes').w === 512, 'old large size is its default width');
     ok(await page.locator('#gz-float section[data-tile="music"]').count() === 1, 'legacy float stays global, once');
     ok(await page.locator(tile('music')).evaluate((e) => { const r = e.getBoundingClientRect(); return Math.abs(r.left - 12) < 1 && Math.abs(r.top - 12) < 1; }), 'legacy normalized float spot is kept');
     await page.waitForSelector('#gz-gpa'); await page.waitForSelector('#gz-todo');
-    ok(await page.evaluate(() => document.getElementById('dashboard_header_container').nextElementSibling.id === 'gz-dash' && document.getElementById('DashboardCard_Container').previousElementSibling.id === 'gz-gpa' && !document.querySelector('#gz-dash #gz-todo')), 'board, GPA, course cards and Better To Do keep their places');
+    ok(await page.evaluate(() => document.getElementById('dashboard_header_container').nextElementSibling.id === 'gz-dash' && document.getElementById('DashboardCard_Container').previousElementSibling.id === 'gz-gpa' && document.querySelector('#gz-dash .gz-w[data-tile="todo"] #gz-todo') && !document.querySelector('#right-side #gz-todo')), 'Better To Do lives in its widget; GPA and native course cards keep their places');
     ok(await cardsClear(), 'board reserves height above the course cards');
     // Restore the old float to the board so it cannot intercept board gestures.
     await page.click(`${tile('music')} button[aria-label="Put Music back on this page"]`); await stable();

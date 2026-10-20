@@ -1,7 +1,5 @@
-// Glaze — Canvas's part of the first content script: what only Canvas does, so Ultra and Moodle don't parse it. Listed
-// before content.js for *.instructure.com and schools' own Canvas hosts (lib/background.js); content.js calls it with its
-// helpers and live state (I) and puts what it returns over its defaults (X). A second copy keeps the first; it ends on
-// its value (loadable).
+// Canvas-only helpers for content.js, loaded before it on Canvas hosts (lib/background.js) or on demand.
+// Receives the core's live state (I); reinjection keeps the first copy and returns it.
 var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const { C, html, isPreview, need, t, locale, capi, canvasCourseKey, canvasCourseId, celebrate, markDue, drawProgress, cardBadge, KIND, cardsInView, inView, tagExtras, setVar, setAttr } = I;
 
@@ -80,7 +78,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
   const cardsHere = () => I.links.length && I.settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
-  const widgetsHere = () => I.links.length && (window.top === window || I.tabFrame === 'page') && (I.settings.enhance.widgets || I.settings.enhance.notes || I.settings.enhance.pet);
+  const widgetsHere = () => { const e = I.settings.enhance; return I.links.length && (window.top === window || I.tabFrame === 'page') && (e.widgets || e.notes || e.pet || (e.todo && location.pathname === '/')); };
   const syncWidgets = () => (widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
   const remindHere = () => I.links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => I.settings.enhance[k]);
   const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));

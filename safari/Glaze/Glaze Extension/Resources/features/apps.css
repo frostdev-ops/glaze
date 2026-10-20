@@ -245,6 +245,7 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 :is(#gz-room, #gz-float, #gz-panel, #gz-toolbar)[hidden], :is(#gz-room, #gz-dash) .gz-w[hidden] { display: none !important; }
 /* Better To Do in its tile on the Courses page: Ultra's own To Do steps aside (features/widgets.js sets the mark). */
 html[data-gz-todo-tile] div.todo-panel > bb-todo { display: none !important; }
+html[data-gz-canvas-todo] #right-side :is(.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list) { display: none !important; }
 /* The Courses page's toolbar, in Ultra's header tools beside the page's title. */
 #gz-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.4rem; font-family: var(--gz-font); font-size: 0.875rem; line-height: 1.4; color: var(--gz-ink); }
 #gz-toolbar :is(button, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
@@ -281,7 +282,7 @@ html[data-gz-todo-tile] div.todo-panel > bb-todo { display: none !important; }
 #gz-float .gz-w { max-width: var(--gz-float-width, calc(100vw - 24px)); max-height: var(--gz-float-height, calc(100vh - 24px)); }
 #gz-float[data-stack] { position: fixed; z-index: 999; top: var(--gz-float-top, 12px); right: var(--gz-float-right, 12px); bottom: var(--gz-float-bottom, 12px); width: min(288px, var(--gz-float-width, calc(100vw - 24px))); display: flex; flex-direction: column; gap: 12px; overflow: auto; overscroll-behavior: contain; }
 #gz-float[data-stack] .gz-w { position: static; flex: none; width: auto; max-height: none; }
-/* Better To Do's tile (both boards): headed as every tile is, so folded it still says what it is; the list's own
+/* Better To Do's tile (Canvas and Ultra boards): headed as every tile is, so folded it still says what it is; the list's own
    heading stays for screen readers only, its counts and buttons under the tile's. */
 .gz-w[data-tile="todo"] #gz-todo .gz-todo-head h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .gz-w[data-tile="todo"] #gz-todo { margin: 0; }
@@ -366,7 +367,7 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 #gz-todo:not(:first-child) { margin-top: 1rem; }
 #gz-todo :is(button, input, select, textarea) { font: inherit; }
 #gz-todo .gz-todo-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); padding-bottom: 0.5rem; }
-:is(#right-side, #site-wrap) #gz-todo .gz-todo-head h2 { flex: 1 0 auto; margin: 0; padding: 0; border: 0; }
+:is(#right-side, #site-wrap, .gz-w) #gz-todo .gz-todo-head h2 { flex: 1 0 auto; margin: 0; padding: 0; border: 0; }
 #site-wrap #gz-todo .gz-todo-head h2 { font: 600 1.125rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
 #gz-todo .gz-todo-head > * { white-space: nowrap; }
 #gz-todo .gz-todo-count { font-size: 0.75rem; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; }
@@ -379,7 +380,7 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 #application .ic-DashboardCard > .gz-ct-ask, #site-wrap article[id^="course-list-course-"] > .gz-ct-ask { margin: 0; padding: 0.4rem 0.6rem 0; }
 #gz-todo .gz-todo-empty { margin: 0.75rem 0; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-group { margin-top: calc(0.9rem * var(--gz-space)); }
-:is(#right-side, #site-wrap) #gz-todo :is(h3, summary) {
+:is(#right-side, #site-wrap, .gz-w) #gz-todo :is(h3, summary) {
   display: flex; align-items: baseline; gap: 0.4rem; margin: 0 0 0.25rem; padding: 0; border: 0;
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted);
 }

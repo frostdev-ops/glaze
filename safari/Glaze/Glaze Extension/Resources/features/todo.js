@@ -1,8 +1,8 @@
-// Better To Do: Glaze's own To Do list, on by default (enhance.todo). On Canvas it takes the place of Canvas's sidebar
-// list on the Dashboard and a course's home page; on Blackboard Ultra, of Ultra's own To Do on the Courses page, and on a
+// Better To Do: Glaze's own To Do list, on by default (enhance.todo). On Canvas it lives in a Dashboard widget and takes
+// the place of the sidebar list on a course's home page; on Blackboard Ultra, of Ultra's own To Do on the Courses page, and on a
 // course's outline it's a block of its own in the right column (that course only). The site's part loads this (need) and
 // calls sync(on) from content.js's passes; the logic is lib/todo.js, loaded from here. The site's own list is hidden by
-// features/apps.css only while this one is on the page, right before it (#gz-todo ~ …), so if anything here fails, it comes back.
+// features/apps.css while this list replaces it; the Dashboard board also hides it when its widget is deliberately removed.
 //
 // What it asks Canvas for, with the student's session: their profile (id, time zone), their planner items (Link
 // paging), and, for a teacher, /users/self/todo and each listed assignment's submission summary. On Ultra: the student,
@@ -557,19 +557,20 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (g === gen) fail();
     }
   };
-  // Where the list goes: right before this. Canvas: its list, the React one, or (a teacher's, server-drawn) a heading and
-  // a list. Ultra: the To Do tile's spot on either board (features/widgets.js), or else its own To Do on the Courses page
+  // Where the list goes: right before this. Canvas: the Dashboard's widget, or its native list on course homes (and if
+  // the board cannot load). Ultra: the To Do tile's spot on either board, or else its own To Do on the Courses page
   // (anything Glaze puts first in that column stays above), or, on a course's outline, the right column's Details &
   // Actions block.
   const anchor = () => {
     if (ultra) return here() ? document.querySelector('aside.outline-actions > .js-details-and-actions') : document.querySelector(':is(#gz-dash, #gz-room) .gz-w-todo-spot') || document.querySelector('div.todo-panel > bb-todo');
+    if (location.pathname === '/' && document.querySelector('#gz-dash')) return document.querySelector('#gz-dash .gz-w-todo-spot');
     const native = document.querySelector('#right-side .Sidebar__TodoListContainer') || document.querySelector('#right-side ul.to-do-list');
     return native?.previousElementSibling?.matches('.todo-list-header') ? native.previousElementSibling : native;
   };
   const sync = (on) => {
     if (!on || dead) return off();
     const native = anchor();
-    if (!native) return;
+    if (!native) return off();
     if (!box) {
       head = make('div', { className: 'gz-todo-head' });
       line = make('p', { className: 'gz-todo-say', role: 'status' });

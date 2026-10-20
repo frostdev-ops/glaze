@@ -61,13 +61,13 @@ const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/' } = {}) 
   return { ui, c, doc, store, sent, loads, tile, tool, ev, board, float, edit, grid, header, gpa, cards, todo };
 };
 
-test('Canvas migration: ordered board in flow after the heading, before GPA/cards; Better To Do stays separate', async () => {
+test('Canvas migration: ordered board after the heading, before GPA/cards, with a Better To Do slot', async () => {
   const p = page({ raw: { tiles: [{ id: 'timer', on: true, size: 's' }, { id: 'notes', on: true, size: 'l' }, ...only().tiles.filter((x) => !['timer', 'notes'].includes(x.id))] } });
   await settle();
   assert.equal(p.header.nextElementSibling.id, 'gz-dash');
-  assert.ok(p.cards.previousElementSibling === p.gpa && p.todo.parentNode === p.doc.body);
+  assert.ok(p.cards.previousElementSibling === p.gpa && p.tile('todo').querySelector('.gz-w-todo-spot'));
   assert.equal(p.doc.querySelector('#gz-dash').dataset.board, 'cdash');
-  assert.deepEqual(p.grid().children.map((x) => x.dataset.tile), ['timer', 'notes']);
+  assert.deepEqual(p.grid().children.map((x) => x.dataset.tile), ['timer', 'notes', 'todo']);
   assert.equal(p.tile('notes').style.width, '512px');
   assert.ok(px(p.grid().style.height) >= px(p.tile('notes').style.top) + 200 + W.GAP);
   assert.equal(p.doc.querySelector('#gz-room'), null);
@@ -79,7 +79,7 @@ test('Canvas migration: ordered board in flow after the heading, before GPA/card
   for (const x of raw.tiles) if (['notes', 'quotes'].includes(x.id)) x.size = 'l';
   raw.tiles = ['notes', 'quotes', 'timer'].map((id) => raw.tiles.find((x) => x.id === id)).concat(raw.tiles.filter((x) => !['notes', 'quotes', 'timer'].includes(x.id)));
   const q = page({ raw, width: 948 }); await settle();
-  assert.deepEqual(q.grid().children.map((x) => x.dataset.tile), ['notes', 'quotes', 'timer'], 'migration follows the old stored order, including a later small tile');
+  assert.deepEqual(q.grid().children.map((x) => x.dataset.tile), ['notes', 'quotes', 'timer', 'todo'], 'migration follows the old stored order, including a later small tile');
 });
 
 test('Canvas Edit layout: body drag, threshold, guides, Alt, arrow keys, focus and every spot saved together', async () => {

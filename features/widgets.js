@@ -108,12 +108,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
   const placed = (h) => (board === 'courses' ? h.firstElementChild === panel && panel.contains(grid) && roomHost(h).firstElementChild === room
     : board === 'dash' ? grid.parentNode === h && (!grid.nextElementSibling || grid.nextElementSibling.tagName === 'INSTITUTION-PAGE-HOME') : h.nextElementSibling === grid);
-  // Better To Do's tile: on Ultra's Dashboard only, with its switch (it has its own place everywhere else: one copy).
+  // Better To Do's tile: on either site's boards, with its own switch and one copy of the list.
   // The Dashboard is its own switch: its widgets need no other, but the notes and the pet keep theirs.
   const allowed = (id) => {
     if (W?.course(id)) return !!board && W.course(id).origin === location.origin && W.course(id).canvas === !ultra;
     const e = ctx.settings().enhance;
-    return id === 'todo' ? ultra && !!board && e.todo : id === 'pet' ? e.pet : id === 'notes' ? e.notes : e.widgets || (ultra && (board === 'dash' || (e.dashboard && fl(id))));
+    return id === 'todo' ? !!board && e.todo : id === 'pet' ? e.pet : id === 'notes' ? e.notes : e.widgets || (ultra && (board === 'dash' || (e.dashboard && fl(id))));
   };
   // A change to the layout (lib/widgets.js apply): shown here at once, and sent to the worker, which applies it to what
   // is stored then, so another tab's change made since is kept. While changes are on their way, the stored layout that
@@ -462,8 +462,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       return { wake: () => { if (!shown() && t0) stop(); }, stop: () => clearTimeout(wait) };
     },
 
-    // Better To Do on Ultra's Dashboard: the place features/todo.js puts its list (right before this spot), as it does
-    // before Ultra's own To Do on the Courses page. The list is its own; the tile only holds it.
+    // The place features/todo.js puts its list. The tile holds the existing list and all its account-scoped state.
     todo(body) {
       body.append(make('div', { className: 'gz-w-todo-spot' }));
       return {};
@@ -930,7 +929,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (!C) { loadCourses(); return; }
     const cards = C.shown();
     if (!cards.length) return; // its list view, or not drawn yet: when its cards are
-    const empty = !lay.boards.cdash.some((x) => x.on && allowed(x.id));
+    const empty = !lay.boards.cdash.some((x) => x.id !== 'todo' && x.on && allowed(x.id));
     change({ fill: 'cdash', ops: empty ? cards.slice(0, W.COURSE_MAX).map((c) => ({ s: 'cdash', id: c.key, set: { on: true, size: 's', term: c.term || '' } })) : [] });
   };
   // The board's Course cards button: its dialog (features/coursecards.js) ticks courses on and off this board, each
@@ -1065,6 +1064,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     globalThis.GZ_DASH_UI?.tabs(null);
     globalThis.GZ_COURSE_CARDS?.picker.close(false);
     document.documentElement?.removeAttribute('data-gz-todo-tile');
+    document.documentElement?.removeAttribute('data-gz-canvas-todo');
     clearCourses();
     for (const e of [grid, panel, room, bar, all && floats]) e?.remove?.();
     grid = panel = room = bar = null;
@@ -1072,6 +1072,13 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     editing = false;
     lastAt = {};
     stacked = false;
+  };
+  // On Canvas's Dashboard the board owns To Do, including an intentional removal. Course-home lists stay native.
+  const todoIn = () => {
+    const owns = !ultra && board === 'cdash' && !!grid?.isConnected && ctx.settings().enhance.todo;
+    if (owns) globalThis.GZ_TODO_UI?.sync(true);
+    // Keep the native list visible if the selected widget's feature has not loaded. Removing the widget is deliberate.
+    document.documentElement?.toggleAttribute('data-gz-canvas-todo', !!owns && (!tiles.has('todo') || !!grid.querySelector('#gz-todo')));
   };
   const draw = () => {
     if (!on || !lay) return;
@@ -1142,6 +1149,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         : empty ? [make('p', { className: 'gz-w-faint', textContent: t('Nothing here yet. Edit layout adds widgets.') })] : []));
       if (board && editing) { loadCourses(); coursePicker(add); }
     }
+    todoIn();
   };
 
   // Where a board's tiles show (lib/widgets.js arrange): at their spots, or one under another when the window is too
@@ -1377,6 +1385,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         || (!board && want.some((x) => x.float) && !floats?.isConnected)) draw();
       else {
         remindIn();
+        todoIn();
         placeFloats();
         // Ultra draws its page's header again as it likes: the Dashboard's tabs go back in.
         if (board === 'dash') globalThis.GZ_DASH_UI?.tabs(grid);
