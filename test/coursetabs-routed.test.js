@@ -63,6 +63,34 @@ test('routed scrollers use the nearest content overflow ancestor, then the docum
   outer.overflowY = 'visible'; assert.equal(scrollerOf(main, true), doc.scrollingElement);
 });
 
+test('Canvas discussion scroll is saved and restored in its nested drawer, not the course row or an editor', () => {
+  const discussion = { scrollTop: 430 }, outer = { scrollTop: 0 }, strip = {}, editor = { scrollTop: 25 };
+  let site = 'canvas', present = true;
+  const pageScroller = vm.runInNewContext(part('  const pageScroller = ', '  let restored = ') + '\npageScroller;', {
+    ctx: { get site() { return site; } }, strip,
+    document: { getElementById: (id) => id === 'discussion-drawer-layout' && present ? discussion : null, activeElement: editor },
+    routed: () => null, routedMain: () => null, scrollerOf: () => outer,
+  });
+  assert.equal(pageScroller(), discussion);
+  const tab = { cid: '30', path: '/courses/30/discussion_topics/71', top: 0 };
+  vm.runInNewContext(part('  const onScroll = ', '  // ---- pictures') + '\nonScroll({ target: discussion });', {
+    showing: '', framed: '30', ctx: { courseId: () => '30' }, document: {}, tabs: [tab], discussion,
+    pageScroller, safePath: () => tab.path, observeView() {}, atView: () => true, notePlace() {}, save() {},
+  });
+  assert.equal(tab.top, 430, 'the course tab keeps the discussion position');
+  const timers = [], html = { setAttribute() {}, removeAttribute() {} };
+  const scrollBack = vm.runInNewContext(part('  const scrollBack = ', '  // ---- closing, pinning, moving') + '\nscrollBack;', {
+    location: { pathname: tab.path }, ctx: { on: () => true, acted: () => 0 }, html, Date, pageScroller,
+    setTimeout: (fn) => timers.push(fn),
+  });
+  discussion.scrollTop = 0; scrollBack(tab.top);
+  assert.equal(discussion.scrollTop, 430);
+  assert.equal(editor.scrollTop, 25, 'restoration never scrolls the focused RCE document');
+  assert.equal(outer.scrollTop, 0);
+  present = false; assert.equal(pageScroller(), outer, 'other Canvas pages retain their native scroller');
+  present = true; site = 'ultra'; assert.equal(pageScroller(), outer, 'the discussion drawer is Canvas only');
+});
+
 test('disabled tabs never scan native routes or place a strip from the mutation hook', () => {
   let scans = 0, writes = 0;
   const held = vm.runInNewContext(part('  const held = ', '  // The first paint') + '\nheld;', {

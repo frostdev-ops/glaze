@@ -1360,6 +1360,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     return document.scrollingElement;
   };
   const pageScroller = () => {
+    // Canvas discussions own a second drawer inside #content; the course row belongs to the outer drawer.
+    const discussion = ctx.site === 'canvas' && document.getElementById('discussion-drawer-layout');
+    if (discussion) return discussion;
     const main = routedMain(routed());
     return main ? scrollerOf(main, true) : scrollerOf(strip);
   };
