@@ -251,6 +251,10 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     if (refocus && m.btn.isConnected) m.btn.focus({ preventScroll: true });
     return true;
   };
+  const editCard = () => {
+    const { cid, btn } = menu; // sync may have replaced the original opener
+    if (closeMenu(false)) cardUI((m) => m.open(cid, btn));
+  };
   const openMenu = (btn) => {
     const cid = btn.dataset.cid;
     const real = ctx.courseList()[cid]?.name;
@@ -333,7 +337,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick, note,
         cap(t('Colors'), 'gz-cm-colors'), grid,
         make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid,
-        make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid, btn)) }),
+        make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: editCard }),
         ...(own ? [make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Move or hide in Canvas’s menu'), onclick: () => {
           if (!closeMenu(false)) return;
           // A board card proxies its original too; show Canvas's cards so its popover has a visible anchor.
@@ -341,7 +345,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
           own.click();
         } })] : []));
     }
-    if (ultra) box.append(make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid, btn)) }));
+    if (ultra) box.append(make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: editCard }));
     document.body.append(box);
     menu = { box, btn, cid, nick, edited: false, note, custom, reset, tint, grid, sw, looks };
     btn.setAttribute('aria-expanded', 'true');

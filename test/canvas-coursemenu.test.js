@@ -134,6 +134,16 @@ test('menu sync follows the same card replacement and restores focus to it', asy
   assert.equal(p.doc.activeElement, again);
 });
 
+test('the card style dialog opens from the replacement menu button after a redraw', async () => {
+  const p = page(); await p.open(p.cards[1]);
+  const before = p.cards[1].querySelector(':scope > .gz-cm-btn'), again = p.doc.createElement('button');
+  again.id = before.id; again.dataset.cid = before.dataset.cid;
+  before.remove(); p.cards[1].append(again);
+  p.ui.sync(true);
+  p.doc.fire(p.doc.querySelectorAll('.gz-cm-more').find((b) => b.textContent === 'Card style and bookmarks'), 'click');
+  assert.equal(p.editors[0][1], again, 'the editor rejects a disconnected opener');
+});
+
 test('removing a board menu button closes its menu instead of anchoring to the native card', async () => {
   const p = page(); await p.open(p.cards[1]);
   p.cards[1].querySelector(':scope > .gz-cm-btn').remove();
