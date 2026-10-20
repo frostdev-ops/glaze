@@ -45,6 +45,18 @@ can show the standard updater interface. An installation previously prepared thr
 may still show its existing progress window when a background check finishes it. The Mac App Store
 and iPhone/iPad apps use App Store updates and include no Sparkle updater.
 
+Open Glaze to see its installed version and update source. In the downloaded Mac app, **Updates**
+lets you check now, choose automatic checks, and choose automatic downloads and installation.
+Turning off automatic checks also stops check requests from Safari from starting a check. Update
+approvals, when needed, come from macOS and Sparkle during installation. App Store builds instead
+offer **Open App Store**; automatic App Store updates are controlled by the system's app-update settings.
+
+The setup app does not need to stay open, launch at login, or use iOS Background App Refresh.
+Safari manages the extension's background work. The guide checks extension status only while it is
+active and refreshes when you return from Settings. An enabled extension still needs access to your
+school's website, in each Safari profile where you use it; private browsing has its own permission.
+**Next steps and permissions** explains these controls and how to open the editor's sample page.
+
 ## iPhone and iPad
 
 Glaze for Safari on iPhone and iPad needs iOS or iPadOS 18 or newer. It comes from the same App Store

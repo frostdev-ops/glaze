@@ -1,4 +1,4 @@
-// The app calls these: showInstall(installed) outside Applications, showGuide(update) inside, then show(enabled) every second.
+// Native code supplies app details and refreshes extension status while this guide is active.
 // The iOS app calls only show(enabled), and only on iOS 26.2 or later.
 let installLabel = 'Install Glaze';
 
@@ -30,7 +30,7 @@ function showGuide(update) {
   document.body.classList.add('updated');
   document.querySelector('.guide h1').textContent = `Glaze is updated to ${update.to}`;
   document.querySelector('.guide header .note').textContent =
-    `Updated from ${update.from}. Reload your Blackboard and Canvas tabs to get the new version.`;
+    `Updated from ${update.from}. Reload your Blackboard Ultra, Canvas and Moodle tabs to get the new version.`;
 }
 
 function useSettingsName() {
@@ -40,24 +40,55 @@ function useSettingsName() {
 
 function show(enabled) {
   document.body.classList.toggle('state-on', enabled === true);
+  document.body.classList.toggle('state-unknown', enabled === null);
+  const status = document.querySelector('.status');
+  if (status) status.textContent = enabled === true ? '✓ Glaze is on in Safari'
+    : enabled === false ? 'Glaze is off in Safari'
+      : 'Safari’s extension status is unavailable. Check it in Settings.';
+}
+
+function configureApp(info) {
+  document.body.dataset.channel = info.channel;
+  document.querySelector('.app-version').textContent = `Glaze ${info.version}`;
+  const updates = document.querySelector('.updates');
+  updates.hidden = false;
+  if (info.channel === 'dmg') {
+    document.querySelector('.automatic-checks').checked = info.automaticChecks === true;
+    document.querySelector('.automatic-downloads').checked = info.automaticDownloads === true;
+    document.querySelector('.automatic-downloads').disabled = info.automaticChecks !== true;
+    document.querySelector('.check-updates').disabled = info.canCheck !== true;
+    document.querySelector('.update-status').textContent = info.updateStatus || '';
+  }
+}
+
+function setupCopied() {
+  document.querySelector('.copy-status').textContent = 'Copied version, system and extension status. No school or coursework data is included.';
 }
 
 window.showError = function (message) {
   document.querySelector('.error').textContent = message;
-  for (const button of document.querySelectorAll('button')) button.disabled = false;
-  document.querySelector('.install-button').textContent = installLabel;
+  const button = document.querySelector('.install-button');
+  if (button) { button.disabled = false; button.textContent = installLabel; }
 };
 
 for (const el of document.querySelectorAll('.settings-name')) el.textContent = 'Preferences';
 
 // The iOS app's page (Glaze iOS/Resources/Main.html) has no installer.
 document.querySelector('.install-button')?.addEventListener('click', (event) => {
+  if (!event.isTrusted) return;
   const open = document.body.dataset.install === 'open';
   event.target.disabled = true;
   event.target.textContent = open ? 'Opening…' : installLabel === 'Update Glaze' ? 'Updating…' : 'Installing…';
   webkit.messageHandlers.controller.postMessage(open ? 'open-installed' : 'install');
 });
 
-document.querySelector('.open-preferences').addEventListener('click', () => {
-  webkit.messageHandlers.controller.postMessage('open-preferences');
-});
+for (const button of document.querySelectorAll('[data-action]')) {
+  button.addEventListener('click', (event) => {
+    if (event.isTrusted) webkit.messageHandlers.controller.postMessage(button.dataset.action);
+  });
+}
+for (const input of document.querySelectorAll('.update-preference')) {
+  input.addEventListener('change', (event) => {
+    if (event.isTrusted) webkit.messageHandlers.controller.postMessage({ action: input.dataset.preference, enabled: input.checked });
+  });
+}

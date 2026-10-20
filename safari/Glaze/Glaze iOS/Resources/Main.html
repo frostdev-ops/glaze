@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
@@ -17,7 +17,7 @@
             <img src="Icon.png" width="56" height="56" alt="">
             <div>
                 <h1>Turn on Glaze in Safari</h1>
-                <p class="note">Two steps and Blackboard Ultra or Canvas wears your colors.</p>
+                <p class="note">Your colors on Blackboard Ultra, Canvas and Moodle.</p>
             </div>
         </header>
 
@@ -26,8 +26,8 @@
                 <div class="step-text">
                     <h2><span class="badge">1</span> Turn Glaze on in Settings</h2>
                     <p>Open <b>Settings</b> › <b>Apps</b> › <b>Safari</b> › <b>Extensions</b>, tap <b>Glaze</b> and turn on <b>Allow Extension</b>.</p>
-                    <p class="status"><span class="status-off">Glaze is off</span><span class="status-on">✓ Glaze is on</span></p>
-                    <button class="primary open-preferences">Open Settings</button>
+                    <p class="status" role="status" aria-live="polite">Checking Safari…</p>
+                    <button class="primary open-preferences" data-action="open-preferences">Open Settings</button>
                 </div>
                 <div class="mock mock-settings" aria-hidden="true">
                     <div class="mock-bar"><span>Glaze</span></div>
@@ -40,8 +40,8 @@
 
             <li class="step">
                 <div class="step-text">
-                    <h2><span class="badge">2</span> Allow it on Blackboard or Canvas</h2>
-                    <p>In Safari, open your Blackboard Ultra or Canvas site and tap the extensions button in the address bar: the puzzle piece, or on iPhone the page menu at the left. Tap <b>Glaze</b>, then <b>Always Allow…</b> and <b>Always Allow on This Website</b>. Then reload the page.</p>
+                    <h2><span class="badge">2</span> Allow it on your school’s website</h2>
+                    <p>In Safari, open Blackboard Ultra, Canvas or Moodle and tap the extensions button in the address bar: the puzzle piece, or on iPhone the page menu at the left. Tap <b>Glaze</b>, then <b>Always Allow…</b> and <b>Always Allow on This Website</b>. Then reload the page.</p>
                 </div>
                 <div class="mock mock-toolbar" aria-hidden="true">
                     <div class="mock-popover">
@@ -52,7 +52,21 @@
                 </div>
             </li>
         </ol>
-        <p class="note done-note">That’s it. Your colors and settings are under Glaze, from the same button in Safari.</p>
+        <p class="note done-note">Glaze is enabled. Allow it on your school’s website too, then open Glaze from Safari’s extensions menu.</p>
+        <details class="help-panel">
+            <summary>Next steps and permissions</summary>
+            <p>Choose <b>Open the editor</b> in Glaze’s Safari popup to try Looks and settings with the built-in sample page.</p>
+            <p>Glaze’s enabled state and access to each website are separate. Check the profile you use for school and, if needed, the private browsing switch in Safari’s extension settings.</p>
+            <p>You can close this app. Safari manages the extension’s background activity; Background App Refresh for this setup guide is not required.</p>
+        </details>
+        <section class="updates" hidden>
+            <h2>Updates</h2>
+            <p class="note">The App Store updates Glaze and its Safari extension. Manage automatic app updates in Settings → Apps → App Store.</p>
+            <button data-action="open-app-store">Open App Store</button>
+        </section>
+        <footer><span class="app-version"></span><button data-action="copy-setup">Copy setup details</button><button data-action="open-help">Setup help</button><button data-action="open-privacy">Privacy</button></footer>
+        <p class="note copy-status" role="status" aria-live="polite"></p>
     </section>
+    <p class="error" role="alert"></p>
 </body>
 </html>

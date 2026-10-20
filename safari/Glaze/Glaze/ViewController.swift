@@ -9,24 +9,39 @@ import Cocoa
 import SafariServices
 import WebKit
 
-let extensionBundleIdentifier = "io.frostdev.Glaze.Extension"
+let extensionBundleIdentifier = (Bundle.main.bundleIdentifier ?? "io.frostdev.Glaze") + ".Extension"
 
 class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
 
     @IBOutlet var webView: WKWebView!
     private var stateTimer: Timer?
-    private var checkedOnce = false
     private var failedChecks = 0
+    private var pageReady = false
+    private var stateCheckInFlight = false
+    private var stateGeneration = 0
+    private var displayedState: String?
+    private let guideURL = Bundle.main.url(forResource: "Main", withExtension: "html")!
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
         self.webView.navigationDelegate = self
 
-        self.webView.configuration.userContentController.add(self, name: "controller")
+        // WKUserContentController retains its handlers; the proxy must not retain this controller.
+        self.webView.configuration.userContentController.add(GuideMessageProxy(self), name: "controller")
+        NotificationCenter.default.addObserver(self, selector: #selector(resumeStateChecks),
+                                               name: NSApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(stopStateChecks),
+                                               name: NSApplication.didResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(configureApp),
+                                               name: Notification.Name("GlazeUpdateStateChanged"), object: nil)
 
-        self.webView.loadFileURL(Bundle.main.url(forResource: "Main", withExtension: "html")!, allowingReadAccessTo: Bundle.main.resourceURL!)
+        self.webView.loadFileURL(guideURL, allowingReadAccessTo: Bundle.main.resourceURL!)
     }
+
+    override func viewDidAppear() { super.viewDidAppear(); resumeStateChecks() }
+    override func viewWillDisappear() { stopStateChecks(); super.viewWillDisappear() }
+    deinit { stateTimer?.invalidate(); NotificationCenter.default.removeObserver(self) }
 
     // The sandbox points NSHomeDirectory() at the app's container; the account's real home is in the user database.
     private var homeApplications: URL {
@@ -36,8 +51,13 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
 
     // Opened from the disk image or Downloads, Glaze offers to install itself; from an Applications folder it shows the guide.
     private var isInstalled: Bool {
+        #if GLAZE_DMG && !DEBUG
         let folder = Bundle.main.bundleURL.deletingLastPathComponent().standardizedFileURL.path
         return folder == "/Applications" || folder == homeApplications.standardizedFileURL.path
+        #else
+        // Store builds use the App Store. Development previews must never replace an installed release.
+        return true
+        #endif
     }
 
     private var version: String { Self.version(of: Bundle.main) }
@@ -58,9 +78,14 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard webView.url?.standardizedFileURL == guideURL.standardizedFileURL else { return }
+        stopStateChecks()
+        displayedState = nil
+        pageReady = true
         if #available(macOS 13, *) {
             webView.evaluateJavaScript("useSettingsName()")
         }
+        configureApp()
         guard isInstalled else {
             showInstall()
             return
@@ -68,36 +93,72 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
         // The installer launches an update with -updated-from <old version>; NSUserDefaults reads launch arguments.
         let updatedFrom = UserDefaults.standard.string(forKey: "updated-from")
         call("showGuide", updatedFrom.map { ["from": $0, "to": version] } ?? NSNull())
+        resumeStateChecks()
+    }
+
+    @objc private func resumeStateChecks() {
+        guard pageReady, isInstalled, NSApp.isActive, view.window?.isVisible == true else { return }
+        stateTimer?.invalidate()
+        configureApp()
         refreshState()
-        // Tick the guide off as soon as Safari turns Glaze on.
-        stateTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshState() }
+        stateTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.refreshState() }
+        stateTimer?.tolerance = 1
+    }
+
+    @objc private func stopStateChecks() {
+        stateTimer?.invalidate()
+        stateTimer = nil
+        stateGeneration += 1
+        stateCheckInFlight = false
     }
 
     private func refreshState() {
-        SFSafariExtensionManager.getStateOfSafariExtension(withIdentifier: extensionBundleIdentifier) { (state, error) in
+        guard pageReady, !stateCheckInFlight, NSApp.isActive, view.window?.isVisible == true else { return }
+        stateCheckInFlight = true
+        let generation = stateGeneration
+        SFSafariExtensionManager.getStateOfSafariExtension(withIdentifier: extensionBundleIdentifier) { [weak self] (state, error) in
             DispatchQueue.main.async {
-                // Opening Glaze while it's off means setting it up, so go straight to Safari's settings.
-                // That also launches Safari, which can't report a just-installed Glaze until it has run.
-                if !self.checkedOnce && state?.isEnabled != true {
-                    self.openSafariSettings()
-                }
-                self.checkedOnce = true
+                guard let self, generation == self.stateGeneration else { return }
+                self.stateCheckInFlight = false
                 guard let state = state, error == nil else {
                     self.failedChecks += 1
-                    if self.failedChecks == 15 {
+                    self.showState(nil)
+                    if self.failedChecks == 3 {
                         self.showExtensionError(error)
                     }
                     return
                 }
-                if self.failedChecks >= 15 {
+                if self.failedChecks >= 3 {
                     self.showError("")
                 }
                 self.failedChecks = 0
-                // Stay above Safari's settings window until Glaze is on, so the guide stays in view.
-                self.view.window?.level = state.isEnabled ? .normal : .floating
-                self.webView.evaluateJavaScript("show(\(state.isEnabled))")
+                self.showState(state.isEnabled)
             }
         }
+    }
+
+    private func showState(_ enabled: Bool?) {
+        let value = enabled.map { $0 ? "true" : "false" } ?? "null"
+        guard displayedState != value else { return }
+        displayedState = value
+        webView.evaluateJavaScript("show(\(value))")
+    }
+
+    @objc private func configureApp() {
+        guard pageReady else { return }
+        var info: [String: Any] = ["version": version, "channel": "app-store"]
+        #if GLAZE_DMG
+        info["channel"] = "dmg"
+        if let delegate = NSApp.delegate as? AppDelegate {
+            info.merge(delegate.updateSettings()) { _, new in new }
+        }
+        #endif
+        call("configureApp", info)
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        decisionHandler(action.request.url?.standardizedFileURL == guideURL.standardizedFileURL ? .allow : .cancel)
     }
 
     // Tell the page what's already installed: nothing, an older or newer Glaze, or the App Store's.
@@ -206,7 +267,7 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
 
     private func showExtensionError(_ error: Error?) {
         NSLog("Glaze Safari extension error: %@", String(describing: error))
-        showError("Safari could not load Glaze. Install and open the signed, notarized Glaze app, then try again.")
+        showError("Safari could not report Glaze’s status. Open Safari’s extension settings, check that Glaze is listed, then return here. If it is missing, reinstall Glaze from the same source.")
     }
 
     private func showError(_ message: String) {
@@ -221,12 +282,49 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame,
+              message.frameInfo.request.url?.standardizedFileURL == guideURL.standardizedFileURL else { return }
+        #if GLAZE_DMG
+        if let preference = message.body as? [String: Any], preference.count == 2,
+           let action = preference["action"] as? String, let enabled = preference["enabled"] as? Bool,
+           action == "automatic-checks" || action == "automatic-downloads" {
+            (NSApp.delegate as? AppDelegate)?.setUpdatePreference(action, enabled: enabled)
+            return
+        }
+        #endif
         switch message.body as? String {
+        #if GLAZE_DMG && !DEBUG
         case "install": install()
         case "open-installed": installedCopy.map { launch($0) }
+        #endif
         case "open-preferences": openSafariSettings()
+        case "open-app-store": NSWorkspace.shared.open(URL(string: "https://apps.apple.com/app/id6821739877")!)
+        case "open-help": NSWorkspace.shared.open(URL(string: "https://frostdev.io/glaze")!)
+        case "open-privacy": NSWorkspace.shared.open(URL(string: "https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md")!)
+        case "copy-setup":
+            #if GLAZE_DMG
+            let channel = "Downloaded Mac app"
+            #else
+            let channel = "Mac App Store"
+            #endif
+            let state = displayedState == "true" ? "Enabled" : displayedState == "false" ? "Disabled" : "Unknown"
+            let details = "Glaze \(version)\nSource: \(channel)\nSystem: \(ProcessInfo.processInfo.operatingSystemVersionString)\nSafari extension: \(state)\nWebsite access: check separately in Safari."
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(details, forType: .string)
+            webView.evaluateJavaScript("setupCopied()")
+        #if GLAZE_DMG
+        case "check-updates": (NSApp.delegate as? AppDelegate)?.checkForUpdatesByUser()
+        #endif
         default: break
         }
     }
 
+}
+
+private final class GuideMessageProxy: NSObject, WKScriptMessageHandler {
+    weak var handler: WKScriptMessageHandler?
+    init(_ handler: WKScriptMessageHandler) { self.handler = handler }
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        handler?.userContentController(controller, didReceive: message)
+    }
 }
