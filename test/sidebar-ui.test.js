@@ -23,7 +23,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
   const doc = { activeElement: null };
   doc.root = new El('html', doc);
   doc.body = parse(read(`test/fixtures/${fixture}`), doc);
-  const store = structuredClone(stored), sent = [], loads = [], storeListeners = [], keyListeners = [], winListeners = [], observers = [];
+  const store = structuredClone(stored), sent = [], loads = [], storeListeners = [], keyListeners = [], winListeners = [], observers = [], sizes = [];
   const net = { fail: false }, timers = new Map();
   let timerId = 0;
   let queue = Promise.resolve();
@@ -39,7 +39,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
     setTimeout: (f, ms) => { const id = ++timerId; timers.set(id, { f, ms }); return id; }, clearTimeout: (id) => timers.delete(id), setImmediate,
     addEventListener: (type, f) => winListeners.push({ type, f }), removeEventListener: (type, f) => { const i = winListeners.findIndex((l) => l.type === type && l.f === f); if (i >= 0) winListeners.splice(i, 1); },
     innerWidth: width, innerHeight: 900, location: { origin: O, pathname: where },
-    document: doc, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+    document: doc, ResizeObserver: class { constructor(f) { this.f = f; this.targets = []; sizes.push(this); } observe(e) { this.targets.push(e); } unobserve(e) { this.targets = this.targets.filter((x) => x !== e); } disconnect() { this.targets = []; } },
     MutationObserver: class { constructor(f) { this.f = f; observers.push(this); } observe(target) { this.target = target; this.on = true; } disconnect() { this.on = false; } },
     requestAnimationFrame: (f) => { f(); return 1; }, cancelAnimationFrame() {},
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W, GZ_SIDEBAR: S,
@@ -82,7 +82,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
   const mode = () => doc.root.dataset.gzSidebar;
   const host = () => doc.root.all().find((e) => e.dataset?.gzSidebarHost);
   const ours = (e) => { for (let p = e; p && p.tagName; p = p.parentNode) if (/^gz-/.test(p.id) || /(^|\s)gz-/.test(String(p.className))) return true; return false; };
-  return { c, doc, side, ui, store, sent, loads, net, timers, observers, storeListeners, winListeners, pass, resize, $, mode, host, ours, fire: doc.fire };
+  return { c, doc, side, ui, store, sent, loads, net, timers, observers, sizes, storeListeners, winListeners, pass, resize, $, mode, host, ours, fire: doc.fire };
 };
 const record = (x = {}) => ({ [KEY]: { ...S.clean({ mig: 1, ...x }) } });
 
@@ -715,6 +715,46 @@ test('Canvas reserves the footer height before it scrolls into view, without mea
   assert.equal(p.winListeners.some((x) => x.type === 'scroll'), false, 'no per-scroll layout reads');
   p.side.sync(false);
   assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-foot'), '', 'teardown restores the page');
+});
+
+test('Canvas page course-tab rows clear the sidebar on every page shell, including the in-main frame fallback', async () => {
+  for (const [fixture, where] of FAMILIES) for (const nav of [0, 80]) {
+    const p = page({ fixture, where, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    const strip = p.doc.createElement('nav'); strip.id = 'gz-ctabs';
+    strip.box = { left: 200, top: nav, width: 1240, height: 40 };
+    p.$('#main').prepend(strip); // coursetabs.home() uses this when a Canvas page has no breadcrumb row.
+    p.c.getComputedStyle = () => ({ getPropertyValue: (k) => k === '--gz-navbar-top' ? `${nav}px` : '' });
+    await p.pass();
+    assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), `${nav + 40}px`, `${fixture}, navigation ${nav}: course tabs clear the sidebar, counted once`);
+    const observer = p.sizes.find((o) => o.targets.includes(strip));
+    assert.ok(observer, 'observe the actual course-tab row even when --gz-ctabs-row is unset');
+    strip.box.height = 64;
+    observer.f();
+    await settle();
+    assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), `${nav + 64}px`, 'a resized tab row updates the offset');
+  }
+});
+
+test('Canvas tab-row offsets retain the main/navigation floors and ignore hidden or offscreen rows', async () => {
+  const p = page({ stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const main = p.$('#main');
+  main.box = { left: 276, top: 180, width: 1164, height: 720 };
+  const strip = p.doc.createElement('nav'); strip.id = 'gz-ctabs';
+  strip.box = { left: 276, top: 64, width: 1164, height: 40 }; main.prepend(strip);
+  p.c.getComputedStyle = () => ({ getPropertyValue: (k) => ({ '--gz-navbar-top': '64px', '--gz-ctabs-row': '40px' })[k] || '' });
+  await p.pass();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '180px', 'a lower content start still reserves its room');
+  main.box.top = -180;
+  await p.resize(1440);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '104px', 'scrolling the content cannot undercut the global navbar/tab floor');
+  strip.box = { left: 276, top: 64, width: 1164, height: 140 };
+  for (const [why, change, hidden] of [['hidden', {}, true], ['zero width', { width: 0 }], ['zero height', { height: 0 }], ['outside viewport', { left: -1164 }]]) {
+    strip.hidden = !!hidden;
+    const before = { ...strip.box }; Object.assign(strip.box, change);
+    await p.resize(1440);
+    assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '104px', why);
+    strip.box = before;
+  }
 });
 
 test('a disabled page never starts the sidebar runtime, and disabling an active page removes its listeners', async () => {

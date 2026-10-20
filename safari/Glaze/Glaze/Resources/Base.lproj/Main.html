@@ -1,28 +1,29 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <title>Glaze setup</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
 
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <link rel="stylesheet" href="../Style.css">
     <script src="../Script.js" defer></script>
 </head>
 <body>
-    <section class="install">
+    <section class="install" role="main" aria-labelledby="install-title">
         <img src="../Icon.png" width="112" height="112" alt="">
-        <h1>Glaze for Safari</h1>
-        <p>Your colors on Blackboard Ultra and Canvas.</p>
+        <h1 id="install-title">Glaze for Safari</h1>
+        <p>Your colors on Blackboard Ultra, Canvas and Moodle.</p>
         <button class="primary install-button">Install Glaze</button>
         <p class="note">Copies Glaze into Applications, then shows you how to turn it on in Safari.</p>
     </section>
 
-    <section class="guide">
+    <section class="guide" role="main" aria-labelledby="guide-title">
         <header>
             <img src="../Icon.png" width="44" height="44" alt="">
             <div>
-                <h1>Turn on Glaze in Safari</h1>
+                <h1 id="guide-title">Turn on Glaze in Safari</h1>
                 <p class="note">Glaze is installed. Two steps in Safari and you’re done.</p>
             </div>
         </header>
@@ -30,10 +31,10 @@
         <ol class="steps">
             <li class="step step-enable">
                 <div class="step-text">
-                    <h2><span class="badge">1</span> Tick Glaze in <span class="settings-name">Settings</span></h2>
+                    <h2><span class="badge" aria-hidden="true">1</span><span>Turn on Glaze in <span class="settings-name">Settings</span></span></h2>
                     <p>In Safari’s <span class="settings-name">Settings</span> → Extensions, select the checkbox beside <b>Glaze</b>.</p>
-                    <p class="status"><span class="status-off">Waiting for Safari…</span><span class="status-on">✓ Glaze is on</span></p>
-                    <button class="open-preferences">Open Safari <span class="settings-name">Settings</span></button>
+                    <p class="status" role="status" aria-live="polite">Checking Safari…</p>
+                    <button class="open-preferences" data-action="open-preferences">Open Safari <span class="settings-name">Settings</span></button>
                 </div>
                 <div class="mock mock-settings" aria-hidden="true">
                     <div class="mock-bar"><i></i><i></i><i></i><span>Extensions</span></div>
@@ -50,8 +51,8 @@
 
             <li class="step">
                 <div class="step-text">
-                    <h2><span class="badge">2</span> Allow it on Blackboard or Canvas</h2>
-                    <p>Open your Blackboard Ultra or Canvas site, click the Glaze button in Safari’s toolbar and choose <b>Always Allow on This Website</b>. Then reload the page.</p>
+                    <h2><span class="badge" aria-hidden="true">2</span><span>Allow it on your school’s website</span></h2>
+                    <p>Open Blackboard Ultra, Canvas or Moodle in Safari, click the Glaze button in the toolbar and choose <b>Always Allow on This Website</b>. Then reload the page.</p>
                 </div>
                 <div class="mock mock-toolbar" aria-hidden="true">
                     <div class="mock-bar"><i></i><i></i><i></i><span class="address">school.edu/ultra/courses</span><img class="target" src="../Icon.png" alt=""></div>
@@ -63,7 +64,26 @@
                 </div>
             </li>
         </ol>
-        <p class="note done-note">That’s it. You can close this window; Safari keeps Glaze on.</p>
+        <p class="note done-note">Glaze is enabled. Website access is managed separately in Safari, for each profile you use.</p>
+        <details class="help-panel">
+            <summary>Next steps and permissions</summary>
+            <p>From Glaze’s Safari button, choose <b>Open the editor</b> to try Looks and settings with the built-in sample page.</p>
+            <p>Enable Glaze in each Safari profile where you use your school’s site. Private browsing has a separate switch in Safari’s extension settings.</p>
+            <p>You can close this app. Safari runs the extension when needed; no login item or always-running setup app is required.</p>
+        </details>
+        <section class="updates" hidden>
+            <h2>Updates</h2>
+            <div class="store-updates"><p class="note">The App Store updates Glaze and its Safari extension. Manage automatic app updates in the App Store’s settings.</p><button data-action="open-app-store">Open App Store</button></div>
+            <div class="dmg-updates">
+                <label><input class="update-preference automatic-checks" data-preference="automatic-checks" type="checkbox"> Check for updates automatically</label>
+                <label><input class="update-preference automatic-downloads" data-preference="automatic-downloads" type="checkbox"> Download and install updates automatically</label>
+                <p class="note">Checks can run quietly while you use Glaze in Safari. macOS may ask for approval if installing an update needs it.</p>
+                <button class="check-updates" data-action="check-updates">Check for Updates…</button>
+                <p class="note update-status" role="status" aria-live="polite"></p>
+            </div>
+        </section>
+        <footer><span class="app-version"></span><button data-action="copy-setup">Copy setup details</button><button data-action="open-help">Setup help</button><button data-action="open-privacy">Privacy</button></footer>
+        <p class="note copy-status" role="status" aria-live="polite"></p>
     </section>
 
     <p class="error" role="alert"></p>

@@ -29,6 +29,21 @@ const ok = (v, label) => { if (!v) throw Error(label); console.log(`ok   ${label
 const probe = (v, label) => { if (v) ok(v, label); else { failures.push(label); console.error(`FAIL ${label}`); } };
 const wait = async (read, accepts, label) => { let v; const end = Date.now() + 15000; do { v = await read(); if (accepts(v)) return v; await page.waitForTimeout(100); } while (Date.now() < end); throw Error(`${label} (last: ${JSON.stringify(v)})`); };
 const shot = (name) => page.screenshot({ path: path.join(out, `${name}.png`) });
+const headerOk = async (root, label) => {
+  const g = await root.evaluate(() => {
+    const h = document.querySelector('.gz-sb-head'), r = h?.getBoundingClientRect();
+    const controls = h ? [...h.querySelectorAll('button')].filter((e) => e.getClientRects().length) : [];
+    return { shown: !!r?.height, top: r?.top, bottom: r?.bottom, viewport: innerHeight, controls: controls.length,
+      covered: controls.map((e) => {
+        const b = e.getBoundingClientRect();
+        const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        return e.contains(hit) ? null : { control: e.className, top: b.top, hit: hit && `${hit.tagName}.${hit.className}` };
+      }).filter(Boolean) };
+  });
+  const pass = g.shown && g.top >= 0 && g.bottom <= g.viewport && g.controls > 0 && !g.covered.length;
+  probe(pass, `${label}: sidebar heading and controls stay visible and receive pointer input`);
+  if (!pass) { console.error(JSON.stringify(g)); await shot(`header-failure-${label.replace(/[^a-z0-9]+/gi, '-')}`); }
+};
 
 // What the page looks like now: the mode, the column, overflow, To Do lists shown, widgets outside the column.
 const state = () => page.evaluate(() => {
@@ -57,6 +72,7 @@ const layoutOk = async (name, width) => {
     probe(Math.abs(s.host.right - s.vw) <= 20, `${name} ${width}: the column at the window's right edge (${s.host.right}/${s.vw})`);
     probe(!s.stranded, `${name} ${width}: no widget outside the column`);
   }
+  if (s.mode === 'expanded' || s.mode === 'collapsed') await headerOk(page, `${name} ${width}`);
   if (s.mode === 'drawer') probe(!s.host?.shown, `${name} ${width}: the drawer starts closed`);
   probe(s.todos <= 1, `${name} ${width}: one To Do list at most (${s.todos})`);
   return s;
@@ -202,10 +218,12 @@ const layoutOk = async (name, width) => {
         const drawer = await root.locator('html').getAttribute('data-gz-sidebar') === 'drawer';
         if (drawer) await root.locator('#gz-sb-launch').click();
         await root.waitForFunction(() => { const { host } = __gzSbScrollCheck; return host.getClientRects().length && host.scrollHeight > host.clientHeight + 200; });
+        await headerOk(root, `${label}, before scrolling`);
         await wheel(true, 400, true); await wheel(true, -400, false);
         ok(await root.evaluate(() => __gzSbScrollCheck.main.scrollTop <= 1), `${label}: sidebar wheels leave the main content in place`);
         // Exhaust both scrollers, then wheel again: a middle-of-page gesture cannot expose scroll chaining.
         await wheel(true, 100000, true); await wheel(true, 400, true); await wheel(true, -100000, false);
+        await headerOk(root, `${label}, after scrolling`);
         if (drawer) { await page.keyboard.press('Escape'); await root.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-sidebar-open')); }
         const discussion = await root.evaluate(() => !!__gzSbScrollCheck.discussion);
         const outside = discussion && await root.evaluate(() => [scrollY, document.getElementById('drawer-layout-content').scrollTop]);
@@ -234,7 +252,7 @@ const layoutOk = async (name, width) => {
       const s = settings(true, true); s.enhance.tabs = tabs; s.navbar.tabs = false;
       await store(s, { widgetLayout: lay, [recordKey]: { v: 1, rev: 1, mig: 1, open: true, width: 352,
         dock: [{ id: 'todo' }, { id: 'notes', h: 1800 }], dest: { todo: 'dock', notes: 'dock' } } });
-      for (const [name, at] of scrollPages.filter(([n]) => !process.env.SIDEBAR_SCROLL_PAGES || process.env.SIDEBAR_SCROLL_PAGES.split(',').includes(n))) for (const width of [1440, 1024, 768, 390]) {
+      for (const [name, at] of scrollPages.filter(([n]) => !process.env.SIDEBAR_SCROLL_PAGES || process.env.SIDEBAR_SCROLL_PAGES.split(',').includes(n))) for (const width of [1440, 1024, 768, 390].filter((w) => !process.env.SIDEBAR_SCROLL_WIDTHS || process.env.SIDEBAR_SCROLL_WIDTHS.split(',').includes(String(w)))) {
         console.log(`wheel ${name} ${width} ${tabs ? 'course tabs' : 'direct'}`);
         // Each viewport starts without a prior page's scroll gesture or same-URL history restoration.
         await page.close(); page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
@@ -269,8 +287,12 @@ const layoutOk = async (name, width) => {
         if (tabs && name === 'course-home' && width === 1440) await shot('scroll-course-home-fixed');
       }
     }
-    console.log(`passed; ${checks - wheelStart} wheel checks`);
-    if (process.env.SIDEBAR_SCROLL_ONLY) return;
+    console.log(`completed; ${checks - wheelStart} wheel checks`);
+    if (process.env.SIDEBAR_SCROLL_ONLY) {
+      console.log(JSON.stringify({ checks, failures: failures.length, errors }));
+      if (failures.length || errors.length) process.exitCode = 1;
+      return;
+    }
 
     // Real pointer gestures, modal keyboard behavior, and appearance under alternate browser settings.
     await page.setViewportSize({ width: 1600, height: 1000 });
@@ -308,6 +330,7 @@ const layoutOk = async (name, width) => {
     await page.locator('.gz-sb-toggle').click();
     await wait(state, (s) => s.mode === 'collapsed', 'collapsed mode');
     probe((await state()).host.w === 48 && !await page.locator('.gz-sb-dock').isVisible(), 'collapsed mode reserves only the header strip');
+    await headerOk(page, 'collapsed desktop');
     await page.setViewportSize({ width: 768, height: 1000 });
     await page.waitForSelector('#gz-sb-launch'); await page.click('#gz-sb-launch');
     probe(await page.locator('.gz-sb-toggle').evaluate((e) => { const r = e.getBoundingClientRect(); return e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), 'backdrop stays behind the drawer controls');
@@ -431,6 +454,7 @@ const layoutOk = async (name, width) => {
         return !at?.closest('[data-gz-sidebar-host], .gz-sb-own, .gz-sb-edge, .gz-sb-launch');
       });
       if (s.mode === 'drawer') await page.click('#gz-sb-launch');
+      await headerOk(page, `footer ${footer} ${w}${navbar ? ' navbar' : ''}`);
       const g = await page.evaluate(() => {
         const f = document.getElementById('gz-footer'), host = document.querySelector('[data-gz-sidebar-host]');
         const fr = f?.getClientRects().length ? f.getBoundingClientRect() : null, hr = host.getBoundingClientRect();

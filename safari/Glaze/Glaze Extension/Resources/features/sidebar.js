@@ -24,6 +24,20 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const html = () => document.documentElement;
   const has = (el, c) => ` ${el?.className || ''} `.includes(` ${c} `);
   const rtl = () => html()?.dir === 'rtl';
+  const headerBottom = (headers) => {
+    let bottom = 0;
+    for (const e of headers) {
+      const r = e.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight)) continue;
+      let visible = true;
+      for (let p = e; p?.tagName; p = p.parentElement) {
+        const s = typeof getComputedStyle === 'function' ? getComputedStyle(p) : null;
+        if (p.hidden || s?.display === 'none' || s?.visibility === 'hidden' || s?.visibility === 'collapse' || s?.opacity === '0') { visible = false; break; }
+      }
+      if (visible) bottom = Math.max(bottom, r.bottom);
+    }
+    return Math.round(bottom);
+  };
 
   // ---- adapters -----------------------------------------------------------------------------------------------------
   // Each LMS's: family() the kind of page (its sections fold per kind), courseId() the page's course ('' elsewhere),
@@ -63,6 +77,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         const r = m.getBoundingClientRect();
         return Math.max(0, Math.round(rtl() ? innerWidth - r.right : r.left));
       },
+      // Without a breadcrumb bar (Dashboard/Calendar), course tabs go inside #main, including in a course frame.
+      // That strip is not represented by --gz-ctabs-row: measure its actual bottom as well as the content start.
+      headers: () => [...document.querySelectorAll('#gz-ctabs')],
+      top: (headers) => Math.max(headerBottom(headers), Math.min(innerHeight - 100, document.getElementById('main')?.getBoundingClientRect().top || 0)),
     },
     // Blackboard Ultra. Its columns are flex columns of blocks with no wrapper of their own, so the column is its own
     // content (page === el): Glaze's header goes first in it, This page right after, the widgets last, and every block
@@ -93,9 +111,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       native() {
         // A details layer covers the outline; it does not replace its column or the live widgets in it.
         const f = /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname) ? 'outline' : ADAPTERS.ultra.family();
+        const attempt = f === 'assessment' && nativeAttempt();
+        if (attempt) return { el: attempt, page: attempt, kind: 'attempt' };
         const el = f === 'courses' ? document.querySelector('div.todo-panel') : f === 'outline' ? document.querySelector('aside.outline-actions')
+          : f === 'assessment' ? nativeAssessment()
           : f === 'discussion' ? ADAPTERS.ultra.discussion() : null;
-        return el ? { el, page: el } : null;
+        return el ? { el, page: el, kind: f === 'assessment' ? 'overview' : '' } : null;
       },
       boundary: () => document.body,
       own: 'gz-sb-fixed',
@@ -115,11 +136,25 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         try { pad = parseFloat(getComputedStyle(m).paddingInlineStart) || 0; } catch { /* no styles to ask */ }
         return Math.max(0, Math.round((rtl() ? innerWidth - r.right : r.left) + pad));
       },
-      // Below a course's top bar (with Glaze's course tabs in it), when one is open; else below the navigation (CSS).
-      top() {
-        const r = document.querySelector('div.bb-course-navigation')?.getBoundingClientRect();
-        return r && r.height && r.top < innerHeight / 2 ? Math.max(0, Math.round(r.bottom)) : null;
+      headers() {
+        const headers = new Set(document.querySelectorAll('div.bb-course-navigation, .routed-page > content-page-header, .route-view-container > content-page-header'));
+        // Full routed documents/assessments use a panel header instead of content-page-header. Stay within that
+        // shell, outside its content: a document's own headings and article headers are not navigation.
+        for (const page of document.querySelectorAll('.routed-page.bb-offcanvas-container')) {
+          for (const e of page.querySelectorAll('[class*="panelHeaderContainerRoot"], .panel-header, header, [class*="headerRoot"]')) {
+            const body = e.closest('main, [role="main"], article, .routed-page-body, .routed-scroll, .panel-body');
+            if (body && page.contains(body)) continue;
+            // Course tabs can be siblings of the inner header inside this wrapper; reserve its whole height.
+            const wrap = e.closest('[class*="headerRoot"]');
+            headers.add(wrap && page.contains(wrap) ? wrap : e);
+          }
+        }
+        return [...headers];
       },
+      // Both course navigation and routed tools' breadcrumbs can cover the column. Their viewport bottoms already
+      // include any navigation/tab rows above them, including inside a course frame: never add those heights again.
+      // Angular can keep outgoing routes mounted while hidden or translated outside the viewport.
+      top: headerBottom,
     },
   };
   const A = ADAPTERS[LMS] || ADAPTERS.canvas;
@@ -159,6 +194,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let modalObserver = null, backdrop = null, widthCancel = null, lifted = null;
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
   let mo = null, frame = 0, noteTimer = 0, retryTimer = 0, passFrame = 0, offer = null, asleep = false;
+  let topRO = null, topHeaders = [];
   let openHere = null; // expanded or collapsed on this page, when the settings start each page one way
   const isOpen = () => (['expanded', 'collapsed'].includes(cfg().open) ? openHere ?? cfg().open === 'expanded' : rec.open);
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
@@ -343,8 +379,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const detach = () => {
     if (!host) return;
     lift(false);
+    watchNativeScroll(null);
     widthCancel?.();
     mo?.disconnect();
+    topRO?.disconnect(); topHeaders = [];
     absorb([]);
     absorbBlocked = new WeakMap();
     for (const e of [grip, head, pageHead, slot, dock]) e?.remove();
@@ -360,7 +398,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     closeDrawer(false);
     detach();
     if (n) {
-      host = { el: n.el, page: n.page, own: false };
+      host = { el: n.el, page: n.page, own: false, kind: n.kind };
       kept = ATTRS.map((k) => [k, n.el.getAttribute(k)]);
     } else {
       own ||= make('aside', { id: 'gz-sidebar', className: A.own ? `gz-sb-own ${A.own}` : 'gz-sb-own' });
@@ -401,10 +439,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // inline styles, listeners or nodes of Ultra's are changed. Its heading and controls keep their native reading order.
   // Independent scrollers cannot safely share keyboard scrolling: only a fully visible, non-scrolling slot qualifies.
   // Any scroll, re-render, obstruction or changed geometry restores native flow, without trying again on every pass.
-  // Attempt details have no verified structure yet; they always keep Ultra's presentation, even with the setting on.
+  // Unrecognized attempt shells keep Ultra's presentation. Verified current shells use their native column as host.
   let absorbed = [], absorbSheet = null, absorbRO = null, absorbMO = null, absorbRootMO = null, absorbBox = null, absorbBlocked = new WeakMap(), absorbGen = 0, rubricNative = null;
   const OVERVIEW = 'section.assessment-overview-modern-panel.routed-page.route-view-container > learning-module-panel-view.routed-page-body > div.table-of-contents-disabled > div.panel-content-body > div.root-learning-module-panel > div#learningModulePanelContainerId.content-item-container > div.content-item-container-children > content-body > div.base-body > div.content-root > div.standard-content-body > div.assessment-overview-grid';
-  const PANEL = `${OVERVIEW} > div.overview-section.overview-attempts-section.overview-attempts-section-container:nth-child(3):has(> h2#grades-attempts-header.section-label)`;
+  const PANEL = `${OVERVIEW} > div.overview-section.overview-attempts-section.overview-attempts-section-container:has(> h2#grades-attempts-header.section-label)`;
   const REVIEW = 'div.bb-offcanvas-panel.screen.student-view-submission-panel';
   const RUBRIC = `${REVIEW} > div.bb-offcanvas-panel-wrap main > aside:has(.rubric-inline-container)`;
   const absorbKey = () => JSON.stringify([location.pathname, location.search, innerWidth, innerHeight, cfg(), rec?.width, isOpen()]);
@@ -429,27 +467,75 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!el.isConnected || el.closest('[hidden], [aria-hidden="true"]')) return null;
     return { layer, wrap, main, viewer, el, heading: headings[0], frame: frames[0] };
   };
+  const readOnlyPanel = (el) => {
+    const editor = el.closest('[contenteditable]');
+    if (editor && editor.getAttribute('contenteditable') !== 'false' || el.closest('form')) return false;
+    const owned = (x) => { for (let p = x; p && p !== el; p = p.parentElement) if (part(p)) return true; return false; };
+    return ![...el.querySelectorAll('[contenteditable]')].some((x) => x.getAttribute('contenteditable') !== 'false' && !owned(x))
+      && ![...el.querySelectorAll('form, input, select, textarea, iframe, button, [role="button"], [role="textbox"], [role="combobox"]')].some((x) => !owned(x));
+  };
+  const overviewPanel = () => {
+    if (!ultra || cfg().absorb === false || !/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/overview\/?$/.test(location.pathname) || html().hasAttribute('data-gz-focus')) return null;
+    const grids = [...document.querySelectorAll('div.assessment-overview-grid')];
+    if (grids.length !== 1) return null;
+    const grid = grids[0], kids = [...grid.children].filter((e) => e !== backdrop);
+    // Ultra omits Description/Assessment Details when absent; submitted work also drops js-multiple from its
+    // action link. Validate the remaining ordered native sections and stable action class, without fixed positions.
+    const classes = ['overview-due-date-section', 'overview-attempts-section'];
+    if (has(kids[0], 'overview-description-section')) classes.unshift('overview-description-section');
+    if (has(kids[kids.length - 1], 'assessment-details-section')) classes.push('assessment-details-section');
+    const attempts = classes.indexOf('overview-attempts-section');
+    if (kids.length !== classes.length || kids.some((e, i) => e.tagName !== 'DIV' || !has(e, 'overview-section') || !has(e, classes[i]) || (i !== attempts && !has(e, 'main-section-container')))) return null;
+    // Check direct parents ourselves, rather than accepting a descendant selector's partial match.
+    const chain = ['div.standard-content-body', 'div.content-root', 'div.base-body', 'content-body', 'div.content-item-container-children',
+      'div#learningModulePanelContainerId.content-item-container', 'div.root-learning-module-panel', 'div.panel-content-body',
+      'div.table-of-contents-disabled, div.table-of-contents-enabled', 'learning-module-panel-view.routed-page-body', 'section.assessment-overview-modern-panel.routed-page.route-view-container'];
+    let parent = grid.parentElement;
+    for (const sel of chain) { if (!parent || parent.closest(sel) !== parent) return null; parent = parent.parentElement; }
+    const e = kids[attempts], heads = [...e.children].filter((n) => n.tagName === 'H2' && has(n, 'section-label'));
+    if (!has(e, 'overview-attempts-section-container') || heads.length !== 1 || heads[0].id !== 'grades-attempts-header'
+      || document.querySelectorAll('#grades-attempts-header').length !== 1 || !e.querySelector('a.button.button-attempt')
+      || !readOnlyPanel(e) || !e.isConnected || e.closest('[hidden], [aria-hidden="true"]')) return null;
+    return { el: e, grid };
+  };
+  // Current Ultra overviews have a TOC shell or a query-container grid. Use their existing column as the host:
+  // native controls and docked widgets then share one scroller, with no projection, cloning or native-node moves.
+  // The older verified shell keeps its conservative projection path for compatibility.
+  const nativeAssessment = () => {
+    const panel = overviewPanel();
+    if (!panel) return null;
+    return panel.el.closest('div.table-of-contents-enabled') || getComputedStyle(panel.grid).containerType === 'inline-size' ? panel.el : null;
+  };
+  const nativeAttempt = () => {
+    if (!ultra || cfg().absorb === false || html().hasAttribute('data-gz-focus')
+      || !/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)\/?$/.test(location.pathname)) return null;
+    const roots = [...document.querySelectorAll('bb-assignment-attempt-authoring-panel.react-container')];
+    if (roots.length !== 1) return null;
+    const root = roots[0], panels = [...root.querySelectorAll('div[class*="makeStylesdetails-"]')];
+    if (panels.length !== 1) return null;
+    const el = panels[0], container = el.parentElement, body = container?.parentElement, content = body?.parentElement;
+    const base = content?.parentElement, panel = base?.parentElement, wrap = panel?.parentElement;
+    const styled = (e, name) => String(e?.className || '').split(/\s+/).some((c) => c.startsWith(`makeStyles${name}-`));
+    if (!styled(container, 'container') || !styled(body, 'body') || !styled(content, 'contentRoot') || !styled(base, 'baseBody')
+      || !styled(panel, 'panelRoot') || wrap?.parentElement !== root || root.children.length !== 1 || wrap.children.length !== 1
+      || panel.children.length !== 1 || content.children.length !== 1 || body.children.length !== 1) return null;
+    const columns = [...container.children].filter((e) => e !== backdrop), shells = [...base.children];
+    if (columns.length !== 2 || columns[1] !== el || !styled(columns[0], 'authoring') || shells.length !== 3
+      || !styled(shells[0], 'headerRoot') || shells[1] !== content || !styled(shells[2], 'footerWrapper')) return null;
+    const editor = columns[0].querySelector('#bb-editorassignment-attempt-authoring-submission[contenteditable="true"]');
+    const footer = shells[2].firstElementChild, buttons = footer && [...footer.querySelectorAll('button')];
+    const native = [...el.children].filter((e) => !part(e)), title = native[0]?.querySelector('h2');
+    if (!editor || footer?.tagName !== 'FOOTER' || !styled(footer, 'footerRoot') || buttons.length !== 2
+      || buttons.some((e) => e.getAttribute('type') !== 'button') || !styled(native[0], 'sidePanelContentMarginFix') || !title?.textContent.trim()
+      || !el.isConnected || el.closest('[hidden], [aria-hidden="true"]') || !readOnlyPanel(el)) return null;
+    return el;
+  };
   const absorbable = () => {
     if (!ultra || cfg().absorb === false) { absorbBlocked = new WeakMap(); return []; }
     const review = rubricView();
     if (review) return absorbBlocked.get(review.el) === absorbKey() ? [] : [review.el];
-    if (!/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/overview\/?$/.test(location.pathname) || html().hasAttribute('data-gz-focus')) return [];
-    const grids = [...document.querySelectorAll('div.assessment-overview-grid')];
-    if (grids.length !== 1) return [];
-    const grid = grids[0], kids = [...grid.children];
-    const classes = ['overview-description-section', 'overview-due-date-section', 'overview-attempts-section', 'assessment-details-section'];
-    if (kids.length !== 4 || kids.some((e, i) => e.tagName !== 'DIV' || !has(e, 'overview-section') || !has(e, classes[i]) || (i !== 2 && !has(e, 'main-section-container')))) return [];
-    // Check direct parents ourselves, rather than accepting a descendant selector's partial match.
-    const chain = ['div.standard-content-body', 'div.content-root', 'div.base-body', 'content-body', 'div.content-item-container-children',
-      'div#learningModulePanelContainerId.content-item-container', 'div.root-learning-module-panel', 'div.panel-content-body',
-      'div.table-of-contents-disabled', 'learning-module-panel-view.routed-page-body', 'section.assessment-overview-modern-panel.routed-page.route-view-container'];
-    let parent = grid.parentElement;
-    for (const sel of chain) { if (!parent || parent.closest(sel) !== parent) return []; parent = parent.parentElement; }
-    const e = kids[2], heads = [...e.children].filter((n) => n.tagName === 'H2' && has(n, 'section-label'));
-    if (!has(e, 'overview-attempts-section-container') || heads.length !== 1 || heads[0].id !== 'grades-attempts-header'
-      || document.querySelectorAll('#grades-attempts-header').length !== 1 || !e.querySelector('a.button.button-attempt.js-multiple')
-      || e.querySelector('form, input, select, textarea, iframe, [contenteditable="true"], button, [role="button"]')
-      || !e.isConnected || e.closest('[hidden], [aria-hidden="true"]')) return [];
+    const e = overviewPanel()?.el;
+    if (!e) return [];
     return absorbBlocked.get(e) === absorbKey() ? [] : [e];
   };
   const pv = (e, k, v) => { if (e.style.getPropertyValue(k) !== v) e.style.setProperty(k, v); };
@@ -573,7 +659,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
           padding:calc(var(--gz-sb-pad, 1rem) * .75)!important; border:1px solid var(--gz-border-line, var(--gz-line))!important;
           border-radius:var(--gz-sb-ir, 8px)!important; background:var(--gz-surface)!important; box-shadow:none!important;
         } html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} { grid-template-columns:minmax(0,1fr)!important; }
-        html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} > :not(:nth-child(3)) { grid-column:1 / -1!important; } }`;
+        html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} > :not(.overview-attempts-section) { grid-column:1 / -1!important; } }`;
         document.body.append(absorbSheet);
         pv(slot, 'height', `${e.getBoundingClientRect().height}px`);
       }
@@ -605,6 +691,27 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const minMain = () => { const c = cfg(); return family === 'grades' ? c.grades ?? S.MAIN_GRADES : c.min ?? S.MAIN; };
   let safeEnd = 0;
   const inset = () => styleOf() === 'float' ? 12 : 0;
+  // Keep columns inside their native scroll/layout roots: discussion participants depend on that ancestry, and
+  // current assessment grids are query containers. Sticky positioning lets native controls and widgets scroll together.
+  const nativeScrollRoot = () => {
+    if (!ultra || host?.own) return null;
+    return family === 'discussion' ? host?.el.closest('#full-discussions[bb-intersection-observer-root]')
+      : family === 'assessment' ? host.kind === 'attempt' ? host.el.parentElement : host?.el.closest('.assessment-overview-grid') : null;
+  };
+  let nativeScroller = null;
+  const watchNativeScroll = (root) => {
+    let next = null;
+    if (root) {
+      for (let p = host.el.parentElement; p && p !== html(); p = p.parentElement) {
+        if (/(auto|scroll|overlay)/.test(getComputedStyle(p).overflowY)) { next = p; break; }
+      }
+      next ||= document;
+    }
+    if (next === nativeScroller) return;
+    nativeScroller?.removeEventListener('scroll', queueLayout);
+    nativeScroller = next;
+    nativeScroller?.addEventListener('scroll', queueLayout, { passive: true });
+  };
   const roomFor = () => Math.min(S.MAX_WIDTH, innerWidth - A.left() - inset() - safeEnd - S.GAP - minMain());
   // How the sidebar looks (the settings): on <html>, for features/sidebar.css.
   const dress = () => {
@@ -647,6 +754,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       p.getBoundingClientRect().width > 0 && typeof getComputedStyle === 'function' && getComputedStyle(p).position === 'absolute');
     setAttr(html(), 'data-gz-sb-tool', tool ? '' : false);
     setAttr(html(), 'data-gz-sb-family', family || false);
+    setAttr(html(), 'data-gz-sb-assessment', family === 'assessment' && !host.own ? host.kind : false);
+    const nativeRoot = nativeScrollRoot();
+    setAttr(html(), 'data-gz-sb-native-root', nativeRoot ? '' : false);
+    watchNativeScroll(nativeRoot);
     setAttr(html(), 'data-gz-sb-layer', layer ? '' : false);
     setAttr(host.el, 'data-gz-sb-overlay', ultra && A.overlay() ? '' : false);
     setAttr(html(), 'data-gz-sidebar', next);
@@ -655,10 +766,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setVar('--gz-sb-left', `${A.left()}px`);
     const main = document.getElementById('main');
     const navTop = (parseFloat(css?.getPropertyValue('--gz-navbar-top')) || 0) + (parseFloat(css?.getPropertyValue('--gz-ctabs-row')) || 0);
-    // Ultra's adapter says where a fixed column starts (a course's top bar), else below the navigation.
+    // Each LMS's headers and the global navigation share this viewport: use their furthest bottom.
+    const headers = A.headers?.();
+    watchTop(headers);
     const reviewTop = review?.layer.querySelector('[class*="headerRoot"]')?.getBoundingClientRect().bottom;
-    const top = reviewTop ?? (A.top ? A.top() ?? navTop : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0)));
+    const top = reviewTop ?? (A.top ? Math.max(navTop, A.top(headers) ?? 0) : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0)));
     setVar('--gz-sb-top', `${top}px`);
+    if (nativeRoot) {
+      const scrollRect = nativeScroller === document ? null : nativeScroller?.getBoundingClientRect();
+      setVar('--gz-sb-native-offset', `${Math.max(0, top - (scrollRect?.top || 0))}px`);
+      setVar('--gz-sb-native-top', `${Math.max(top, host.el.getBoundingClientRect().top)}px`);
+      setVar('--gz-sb-native-end', `${scrollRect ? Math.max(0, innerHeight - scrollRect.bottom) : 0}px`);
+    }
     foot();
     pageHead.hidden = pageEmpty;
     setAttr(host.el, 'data-gz-sb-page-hidden', hidePage ? '' : false);
@@ -666,10 +785,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     edge.hidden = next !== 'none';
     launch.hidden = next !== 'drawer' || drawer;
     backdrop.hidden = next !== 'drawer' || !drawer || modalAway;
-    for (const b of [edge, launch, backdrop]) if (b.parentNode !== document.body) document.body.append(b);
+    for (const b of [edge, launch]) if (b.parentNode !== document.body) document.body.append(b);
+    // Keep our backdrop in the same native stacking context as a sticky discussion drawer.
+    const backdropParent = nativeRoot ? host.el.parentElement : document.body;
+    if (backdrop.parentNode !== backdropParent) backdropParent.append(backdrop);
     // A labelled landmark beside the content; a dialog while it is an open drawer.
     const dialog = next === 'drawer' && drawer;
-    lift(ultra && dialog && !modalAway);
+    lift(ultra && dialog && !modalAway && !nativeRoot);
     setAttr(host.el, 'role', next === 'none' || (next === 'drawer' && !drawer) ? false : dialog ? 'dialog' : 'complementary');
     setAttr(host.el, 'aria-labelledby', next === 'none' ? false : 'gz-sb-title');
     setAttr(host.el, 'aria-modal', dialog && !modalAway ? 'true' : false);
@@ -762,7 +884,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const r = f?.isConnected && f.getClientRects().length ? f.getBoundingClientRect() : null;
     setVar('--gz-sb-foot', `${r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0}px`);
   };
-  const onResize = () => { absorbInvalid(); if (asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
+  const queueLayout = () => { if (!active || asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
+  const onResize = () => { absorbInvalid(); queueLayout(); };
+  // Breadcrumbs can wrap when their title arrives or the LMS changes its tools, without a window resize.
+  // Reuse the observer until Angular replaces a header; only the active document keeps observations.
+  const watchTop = (next) => {
+    if (!next || typeof ResizeObserver !== 'function') return;
+    if (next.length === topHeaders.length && next.every((e, i) => e === topHeaders[i])) return;
+    topRO ||= new ResizeObserver(queueLayout);
+    topRO.disconnect();
+    topHeaders = next;
+    for (const e of next) topRO.observe(e);
+  };
   // The document on screen changed (features/coursetabs.js): asleep, the drawer and menu close and nothing is watched;
   // awake again, the column is looked at as on a pass.
   const cover = () => {
@@ -773,6 +906,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       closeDrawer(false);
       asleep = true;
       mo?.disconnect();
+      topRO?.disconnect(); topHeaders = [];
+      watchNativeScroll(null);
       for (const f of [frame, passFrame]) cancelAnimationFrame(f);
       clearTimeout(noteTimer);
       widthCancel?.();
@@ -995,6 +1130,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     bare();
     openHere = null;
     removeEventListener('resize', onResize);
+    watchNativeScroll(null);
     document.removeEventListener('visibilitychange', cover);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
     starting = null; rec = null; key = ''; flying = 0; lost = false;
@@ -1003,12 +1139,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // <html> as before the sidebar: its attributes and variables gone.
   const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
-    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle'];
+    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root', 'data-gz-sb-assessment'];
   const bare = () => {
     const h = html();
     if (!h) return;
     for (const k of SB_ATTRS) h.removeAttribute(k);
-    for (const k of ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha']) if (h.style?.getPropertyValue?.(k)) h.style.removeProperty(k);
+    for (const k of ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha', '--gz-sb-native-offset', '--gz-sb-native-top', '--gz-sb-native-end']) if (h.style?.getPropertyValue?.(k)) h.style.removeProperty(k);
     if (hadStyle === false && h.getAttribute('style') === '') h.removeAttribute('style');
     hadStyle = null;
   };

@@ -82,6 +82,168 @@ test('offsets: Ultra\'s nav and Glaze\'s bar from the page\'s start, a course\'s
   assert.equal(r.doc.root.style.getPropertyValue('--gz-sb-top'), '60px');
 });
 
+test('routed Ultra pages keep the sidebar below their breadcrumb header, including inside course tabs', async () => {
+  for (const at of ['discussion', 'assessment', 'attempt', 'gradebook']) for (const nav of [0, 80]) {
+    const p = page({ at, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    const route = p.$('.routed-page') || p.$('.route-view-container');
+    const header = p.$('content-page-header') || p.el('content-page-header', '', 'Course / Tool');
+    if (!header.parentNode) route.prepend(header);
+    header.box = { left: 0, top: nav, width: 1800, height: 47 };
+    const style = p.c.getComputedStyle;
+    p.c.getComputedStyle = (e) => ({ ...style(e), getPropertyValue: (k) => k === '--gz-navbar-top' ? `${nav}px` : '' });
+    await p.pass();
+    assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), `${nav + 47}px`, `${at}, navigation ${nav}: below the breadcrumb, counted once`);
+    header.box.height = 71; // Wrapped breadcrumbs after a resize.
+    await p.resize(900);
+    assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), `${nav + 71}px`, `${at}: drawer follows the resized header`);
+  }
+});
+
+test('Ultra sidebar ignores hidden and offscreen outgoing headers during navigation', async () => {
+  const p = page({ at: 'discussion', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const header = p.$('content-page-header');
+  header.box = { left: 0, top: 0, width: 1800, height: 47 };
+  const stale = p.el('div', 'bb-course-navigation', 'Previous course');
+  stale.box = { left: 0, top: 0, width: 1800, height: 120 };
+  p.doc.body.prepend(stale);
+  const style = p.c.getComputedStyle;
+  p.c.getComputedStyle = (e) => ({ ...style(e), visibility: e === stale ? 'hidden' : 'visible' });
+  await p.pass();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '47px', 'a hidden outgoing navigation does not override the current page');
+  p.c.getComputedStyle = style;
+  stale.box.left = -1800;
+  await p.pass();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '47px', 'an outgoing header outside the viewport does not reserve room');
+});
+
+test('Ultra header offsets use the visible bottom of stacked bars and never undercut Glaze navigation', async () => {
+  for (const at of ['courses', 'outline', 'stream', 'discussion', 'assessment', 'attempt', 'gradebook']) {
+    const p = page({ at, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    const style = p.c.getComputedStyle;
+    p.c.getComputedStyle = (e) => ({ ...style(e), getPropertyValue: (k) => ({ '--gz-navbar-top': '64px', '--gz-ctabs-row': '36px' })[k] || '' });
+    await p.pass();
+    assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '100px', `${at}: the global navigation and tab row are a floor`);
+  }
+  const p = page({ at: 'discussion', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const nav = p.el('div', 'bb-course-navigation', 'Course tabs');
+  nav.box = { left: 200, top: 0, width: 1400, height: 60 };
+  p.doc.body.prepend(nav);
+  const header = p.$('content-page-header');
+  header.box = { left: 200, top: 60, width: 1400, height: 47 };
+  await p.pass();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '107px', 'stacked bars reserve their bottom, not their summed viewport bottoms');
+  p.c.sidebarSettings = { open: 'collapsed' };
+  await p.pass();
+  assert.equal(p.mode(), 'collapsed');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '107px', 'collapsed controls stay below the same bars');
+  header.box.top = -20;
+  nav.box.top = -60;
+  await p.resize(900);
+  assert.equal(p.mode(), 'drawer');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '27px', 'a partially scrolled header reserves only its visible bottom');
+  header.box.top = -47;
+  await p.resize(900);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '0px', 'fully scrolled headers reserve no room');
+});
+
+test('Ultra header candidates exclude hidden routes, zero-size bars and headers beyond any viewport edge', async () => {
+  const p = page({ at: 'discussion', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const header = p.$('content-page-header');
+  header.box = { left: 200, top: 0, width: 1400, height: 47 };
+  const route = p.el('section', 'routed-page');
+  const stale = p.el('content-page-header', '', 'Outgoing page');
+  route.append(stale);
+  p.doc.body.prepend(route);
+  const box = { left: 200, top: 0, width: 1400, height: 120 };
+  const style = p.c.getComputedStyle;
+  for (const [why, change, css] of [
+    ['hidden ancestor', {}, { display: 'none' }], ['invisible ancestor', {}, { visibility: 'hidden' }],
+    ['transparent ancestor', {}, { opacity: '0' }], ['zero width', { width: 0 }], ['zero height', { height: 0 }],
+    ['left of viewport', { left: -1400 }], ['right of viewport', { left: 1600 }], ['above viewport', { top: -120 }], ['below viewport', { top: 900 }],
+  ]) {
+    stale.box = { ...box, ...change };
+    p.c.getComputedStyle = (e) => ({ ...style(e), ...(e === route ? css : {}) });
+    await p.pass();
+    assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '47px', why);
+  }
+  p.c.getComputedStyle = style;
+  stale.box = box;
+  route.hidden = true;
+  await p.pass();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '47px', 'the hidden attribute on an outgoing route');
+});
+
+test('Ultra header wrapping updates the offset without a window resize and stops observing while covered or disabled', async () => {
+  const p = page({ at: 'discussion', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const header = p.$('content-page-header');
+  header.box = { left: 200, top: 0, width: 1400, height: 47 };
+  await p.pass();
+  const observer = p.sizes.find((o) => o.targets.includes(header));
+  assert.ok(observer, 'the breadcrumb size is observed');
+  header.box.height = 94;
+  observer.f();
+  await settle();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '94px', 'wrapping changes the reserved top');
+  p.doc.visibilityState = 'hidden';
+  p.side.cover();
+  assert.equal(observer.targets.length, 0, 'covered frames do not watch headers');
+  p.doc.visibilityState = 'visible';
+  p.side.cover();
+  await settle();
+  assert.ok(observer.targets.includes(header), 'the visible frame resumes observing');
+  p.side.sync(false);
+  assert.equal(observer.targets.length, 0, 'disabling releases header observations');
+});
+
+test('the header observer initial notification preserves an unchanged assignment projection', async () => {
+  const p = page({ at: 'assessment', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const header = p.el('content-page-header', '', 'Course / Assignment');
+  header.box = { left: 200, top: 0, width: 1400, height: 47 };
+  p.$('.routed-page').prepend(header);
+  await p.pass();
+  const sheet = p.$('#gz-sb-absorb');
+  assert.ok(sheet, 'the overview side panel is projected');
+  p.sizes.find((o) => o.targets.includes(header)).f();
+  await settle();
+  assert.equal(p.$('#gz-sb-absorb'), sheet, 'the first ResizeObserver notification is not a window resize or an invalidation');
+});
+
+test('standalone routed documents and assessments reserve their actual panel header shells', async (t) => {
+  for (const shape of ['panelHeaderContainerRoot', 'panel-header', 'header', 'headerRoot']) await t.test(shape, async () => {
+    const p = page({ at: 'stream', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    p.c.location.pathname = '/ultra/courses/_101_1/document/_8110_1';
+    const route = p.el('section', 'routed-page route-view-container bb-offcanvas-container');
+    const shell = p.el('section', 'makeStylespanelRoot-b8b route-view-container');
+    const base = p.el('div', 'makeStylesbaseBody-b8b');
+    const wrapper = p.el('div', 'makeStylesheaderRoot-b8b');
+    const header = shape === 'headerRoot' ? wrapper : p.el(shape === 'header' ? 'header' : 'div', shape === 'panelHeaderContainerRoot' ? 'makeStylespanelHeaderContainerRoot-b8b' : shape === 'panel-header' ? shape : '', p.el('h1', '', 'Routed reading'));
+    header.box = { left: 200, top: 64, width: 1400, height: 47 };
+    wrapper.box = { left: 200, top: 64, width: 1400, height: 83 };
+    if (header !== wrapper) wrapper.append(header);
+    // Course tabs live beside the inner header, inside headerRoot. The whole shell must clear the sidebar.
+    wrapper.append(p.el('nav', '', 'Course tabs'));
+    const prose = p.el('main', 'makeStylescontentGridArea-b8b', p.el('h1', '', 'A document heading'), p.el('header', '', 'Article header'));
+    for (const e of prose.children) e.box = { left: 200, top: 350, width: 1400, height: 70 };
+    base.append(wrapper, p.el('div', 'routed-scroll', prose)); shell.append(base); route.append(shell); p.doc.body.append(route);
+    await p.pass();
+    assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '147px', 'include the header wrapper and its tab row; ignore document headings');
+    const observer = p.sizes.find((o) => o.targets.includes(wrapper));
+    assert.ok(observer, 'observe the shell that changes when its title or tabs wrap');
+    const replacement = p.el('header', '', 'Next document');
+    replacement.box = { left: 200, top: 64, width: 1400, height: 60 };
+    wrapper.replaceWith(replacement);
+    await p.pass();
+    assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '124px', 'plain route header without a generated wrapper');
+    assert.ok(!observer.targets.includes(wrapper) && observer.targets.includes(replacement), 'release the replaced header and watch its successor');
+    p.side.sync(false);
+    let reads = 0;
+    replacement.getBoundingClientRect = () => { reads++; return {}; };
+    observer.f();
+    await settle();
+    assert.equal(reads, 0, 'a queued header notification after teardown performs no geometry reads');
+  });
+});
+
 test('drawer threshold uses the course content after navigation, rather than its full-window shell', async () => {
   const p = page({ width: 1280, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
   const boxes = p.doc.boxOf;

@@ -1,17 +1,21 @@
 * {
-    -webkit-user-select: none;
     -webkit-user-drag: none;
-    cursor: default;
     box-sizing: border-box;
 }
 
 :root {
     color-scheme: light dark;
     --accent: -apple-system-control-accent;
-    --ok: #2f9e44;
+    --action: var(--accent);
+    --ok: #217a35;
+    --error: #b43810;
     --muted: color-mix(in srgb, CanvasText 60%, transparent);
     --line: color-mix(in srgb, CanvasText 14%, transparent);
     --panel: color-mix(in srgb, CanvasText 5%, Canvas);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root { --ok: #73d08e; --error: #ffb190; }
 }
 
 html {
@@ -19,6 +23,7 @@ html {
 }
 
 body {
+    cursor: default;
     margin: 0;
     padding: 24px 28px;
     min-height: 100vh;
@@ -30,8 +35,9 @@ body {
 }
 
 h1 { font-size: 20px; margin: 0; }
-h2 { font-size: 14px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+h2 { font-size: 14px; line-height: 1.4; margin: 0 0 6px; display: flex; align-items: flex-start; gap: 8px; }
 p { margin: 0 0 8px; line-height: 1.4; }
+p, .app-version { cursor: text; }
 .note { color: var(--muted); font-size: 12px; }
 
 button {
@@ -48,7 +54,7 @@ button.primary {
     font-weight: 600;
     padding: 10px 36px;
     border: 0;
-    background: var(--accent);
+    background: var(--action);
     color: white;
 }
 button:disabled { opacity: .6; }
@@ -70,13 +76,15 @@ body[data-view="guide"] .guide { display: block; }
 .install .primary { margin: 14px 0 4px; }
 .install .note { max-width: 300px; }
 
+.guide { width: 100%; max-width: 780px; margin-inline: auto; }
 .guide header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.guide header img { flex: none; }
 .guide header p { margin: 2px 0 0; }
 
 .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .step {
     display: grid;
-    grid-template-columns: 1fr 200px;
+    grid-template-columns: minmax(0, 1fr) 200px;
     gap: 16px;
     align-items: center;
     padding: 14px;
@@ -85,16 +93,18 @@ body[data-view="guide"] .guide { display: block; }
     background: var(--panel);
 }
 .step p { font-size: 12.5px; }
+.step-text { min-width: 0; }
 .badge {
     display: inline-grid;
     place-items: center;
     width: 20px; height: 20px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--action);
     color: white;
     font-size: 12px;
+    flex: none;
 }
-.state-on .step-enable .badge { background: var(--ok); }
+.state-on .step-enable .badge { background: var(--ok); color: Canvas; }
 .state-on .step-enable .badge { font-size: 0; }
 .state-on .step-enable .badge::after { content: "✓"; font-size: 12px; }
 
@@ -102,10 +112,12 @@ body[data-view="guide"] .guide { display: block; }
 .status-on, .state-on .status-off { display: none; }
 .state-on .status-on { display: inline; color: var(--ok); }
 .status-off { color: var(--muted); }
-.state-on .open-preferences { display: none; }
+.state-unknown .status { color: var(--muted); }
+.state-on .status { color: var(--ok); }
 
 /* Drawn stand-ins for Safari's own screens; the highlighted part is what to click. */
 .mock {
+    -webkit-user-select: none;
     border: 1px solid var(--line);
     border-radius: 8px;
     background: Canvas;
@@ -160,7 +172,7 @@ body[data-view="guide"] .guide { display: block; }
     background: var(--panel);
 }
 .mock-button { padding: 3px; border-radius: 4px; text-align: center; border: 1px solid var(--line); background: Canvas; }
-.mock-button.target { background: var(--accent); color: white; border-color: transparent; }
+.mock-button.target { background: var(--action); color: white; border-color: transparent; }
 
 .done-note { display: none; margin-top: 14px; text-align: center; }
 .state-on .done-note { display: block; }
@@ -172,7 +184,35 @@ body.updated.state-on[data-view="guide"] .guide { display: flex; flex-direction:
 .updated.state-on .guide header .note { max-width: 300px; margin: 6px auto 0; }
 
 .error:empty { display: none; }
-.error { margin: 12px 0 0; color: #d9480f; text-align: center; font-size: 12.5px; }
+.error { width: 100%; max-width: 780px; align-self: center; margin: 12px 0 0; padding: 12px; border: 1px solid currentColor; border-radius: 8px; color: var(--error); font-size: 12.5px; line-height: 1.5; }
+
+[hidden] { display: none !important; }
+button, summary, input, label { cursor: pointer; -webkit-user-select: none; }
+button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.help-panel, .updates { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.help-panel summary { font-weight: 600; font-size: 13px; }
+.help-panel p { margin: 10px 0 0; font-size: 12.5px; }
+body[data-view="guide"] .updates { display: block; }
+.dmg-updates, body[data-channel="dmg"] .store-updates { display: none; }
+body[data-channel="dmg"] .dmg-updates { display: block; }
+.dmg-updates label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12.5px; }
+.dmg-updates input { accent-color: var(--accent); }
+.dmg-updates label { align-items: flex-start; line-height: 1.5; }
+.dmg-updates input { flex: none; margin-top: 3px; }
+.update-status { margin-top: 8px; }
+.update-status:empty, .copy-status:empty { display: none; }
+footer { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+.app-version { margin-right: auto; font-size: 12px; color: var(--muted); }
+body.updated.state-on .help-panel, body.updated.state-on .updates { text-align: left; }
+
+@media (max-width: 480px) {
+    .step { grid-template-columns: minmax(0, 1fr); }
+    .mock { width: 100%; max-width: 320px; justify-self: center; }
+}
+
+@media (prefers-contrast: more) {
+    :root { --muted: CanvasText; --line: color-mix(in srgb, CanvasText 45%, transparent); --panel: Canvas; }
+}
 
 @keyframes pulse { 50% { outline-color: transparent; } }
 @media (prefers-reduced-motion: reduce) { .target { animation: none; } }
