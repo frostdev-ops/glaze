@@ -1193,15 +1193,22 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] #main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }
   /* A course, and a page Ultra routes in its place (an assignment's details and attempts, a document opened on its own). */
   html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
+  /* Keep the layer over its backdrop and the page underneath; only its absolute content wrapper clears the bar. */
+  html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
   html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
   html[data-gz-navbar]:not([data-gz-footer]) :is(.route-view-container, .routed-page, [data-gz-vh]) { max-height: calc(100vh - var(--gz-navbar-top)) !important; }
   html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :is(section.course, .routed-page) { max-height: 100vh !important; }
+}
+/* The strip lives in the layer's own sticky header. Leave the native close button its first 48px. */
+@media screen {
+  html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) [class*="headerRoot"]:has(bb-close, .bb-close) #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
 }
 @media (min-width: 1280px) {
   html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left: 272px; }
   html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
 }
 @media (max-width: 899.98px) {
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) { box-sizing: border-box; padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { margin-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }

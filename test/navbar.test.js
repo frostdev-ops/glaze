@@ -170,6 +170,18 @@ test('where the bar is: the placement, the course state, the style and the room 
   assert.ok(css.indexOf('html[data-gz-navbar][data-gz-footer] .inner-wrap >') > css.indexOf('html[data-gz-footer] .route-view-container'), 'after the general cap, so it wins');
 });
 
+test('full-window Ultra layers offset their content and keep their covering edges', () => {
+  const css = read('theme.css');
+  const selector = 'html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap';
+  assert.ok(css.includes(`${selector} { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }`));
+  assert.ok(css.match(/@media \(min-width: 900px\) \{[\s\S]*?\n\}/g).some((block) => block.includes(selector)), 'desktop room stays in the existing navbar guard');
+  assert.ok(css.includes('margin-inline-start: 48px !important; width: calc(100% - 48px) !important;'));
+  const mobile = selector.replace('html[data-gz-navbar]', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive])');
+  assert.ok(css.includes(`${mobile} { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }`));
+  assert.ok(css.match(/@media \(max-width: 899\.98px\) \{[\s\S]*?\n\}/g).some((block) => block.includes(mobile)), 'bottom room is mobile only');
+  assert.doesNotMatch(css, /html\[data-gz-navbar\] \.bb-offcanvas-panel[^{}>]* \{[^}]*inset-inline-start/);
+});
+
 test("Ultra's first paint words the bar as the model does, for each setting, in and out of a course", () => {
   const src = read('content-ultra.js');
   const line = src.match(/ {4}const b = I\.settings\.navbar, c = [^\n]+\n[^\n]+/)[0];
