@@ -83,7 +83,7 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
   };
   // Ultra at this width: its nav 200px, the page from there; a course's top bar 60px high.
   doc.boxOf = (e) => {
-    if (e.id === 'main-content-inner' || e.className === 'course-content-container') return { left: 200, top: 0, width: c.innerWidth - 200, height: 900 };
+    if (e.id === 'main-content-inner' || e.className === 'course-content-container' || e.className === 'course-outline-content') return { left: 200, top: 0, width: c.innerWidth - 200, height: 900 };
     if (e.className === 'bb-course-navigation') return { left: 200, top: 0, width: c.innerWidth - 200, height: 60 };
     if (e.dataset?.gzSidebarHost) return { left: c.innerWidth - 352, top: 60, width: 352, height: 800 };
     if (/route-view-container/.test(e.className)) return { left: 200, top: 0, width: c.innerWidth - 200, height: 1600 };
@@ -124,7 +124,7 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
   const mode = () => doc.root.dataset.gzSidebar;
   const host = () => doc.root.all().find((x) => x.dataset?.gzSidebarHost);
   const ours = (x) => { for (let p = x; p && p.tagName; p = p.parentNode) if (/^gz-/.test(p.id) || /(^|\s)gz-/.test(String(p.className))) return true; return false; };
-  const mutate = (target) => { for (const o of observers.filter((x) => x.on && x.targets.includes(target))) o.f([{ target, addedNodes: [], removedNodes: [] }]); };
+  const mutate = (target, change = {}) => { for (const o of observers.filter((x) => x.on && x.targets.includes(target))) o.f([{ target, addedNodes: [], removedNodes: [], ...change }]); };
   return { c, doc, side, ui, store, sent, loads, observers, todoCalls, pass, resize, $, mode, host, ours, mutate, el, fire: doc.fire };
 };
 const record = (x = {}) => ({ [KEY]: S.clean({ mig: 1, ...x }) });
@@ -138,7 +138,7 @@ const unmoved = (p, before, what) => {
 };
 
 test('each kind of Ultra page: its own column dressed in place, or Glaze\'s own where there is none or only a layer', async () => {
-  for (const [at, family, host, cls] of [['courses', 'courses', 'native', 'todo-panel'], ['outline', 'outline', 'native', 'outline-actions'], ['detail', 'detail', 'glaze', null], ['stream', 'other', 'glaze', null]]) {
+  for (const [at, family, host, cls] of [['courses', 'courses', 'native', 'todo-panel'], ['outline', 'outline', 'native', 'outline-actions'], ['detail', 'detail', 'native', 'outline-actions'], ['stream', 'other', 'glaze', null]]) {
     const p = page({ at, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
     const before = natives(p);
     await p.pass();
@@ -152,7 +152,7 @@ test('each kind of Ultra page: its own column dressed in place, or Glaze\'s own 
       assert.equal(h.children[2].className, 'gz-sb-sec gz-sb-pagehead', `${at}: This page right after it`);
       assert.equal(h.lastElementChild.id, 'gz-sb-widgets', `${at}: the widgets last`);
       assert.equal(h.dataset.gzSbSelf, '', `${at}: the column is its own content`);
-      assert.equal(h.getAttribute('role'), 'complementary');
+      assert.equal(h.getAttribute('role'), at === 'detail' ? null : 'complementary');
       assert.equal(p.doc.root.dataset.gzSbFixed, undefined, `${at}: in the page's own flow`);
     } else {
       assert.equal(h.id, 'gz-sidebar', at);
@@ -164,23 +164,24 @@ test('each kind of Ultra page: its own column dressed in place, or Glaze\'s own 
   }
 });
 
-test('a discussion\'s details layer stays as Ultra has it: the sidebar is a drawer over it, and the outline\'s column below is left alone', async () => {
+test('a discussion\'s details layer stays as Ultra has it: the existing column presents only the dock as a drawer over it', async () => {
   const p = page({ at: 'detail', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
   await p.pass();
   assert.equal(p.mode(), 'drawer', 'wide, but a layer: a drawer');
   assert.equal(p.$('#gz-sb-launch').hidden, false);
   const details = p.$('.layer-details');
   assert.ok(!details.all().some(p.ours) && details.dataset.gzSidebarHost === undefined, 'nothing of Glaze\'s in the layer');
-  assert.equal(p.$('aside.outline-actions').dataset.gzSidebarHost, undefined, 'the outline\'s column under the layer: native');
+  assert.equal(p.$('aside.outline-actions').dataset.gzSbOverlay, '', 'outline blocks stay below the layer');
   // The layer closes: the outline's own column is the sidebar again, with the same dock.
-  const dock = p.$('#gz-sb-widgets'), own = p.$('#gz-sidebar');
+  const dock = p.$('#gz-sb-widgets'), parent = dock.parentNode;
   p.$('.layer-details').remove();
   await p.pass();
   assert.equal(p.side.context().family, 'outline');
   assert.equal(p.$('aside.outline-actions').dataset.gzSidebarHost, 'native');
   assert.equal(p.$('#gz-sb-widgets'), dock, 'not rebuilt');
   assert.equal(p.mode(), 'expanded');
-  assert.equal(own.isConnected, false, 'Glaze\'s own column gone');
+  assert.ok(dock.parentNode === parent, 'the same live mounting hierarchy');
+  assert.equal(parent.dataset.gzSbOverlay, undefined);
 });
 
 test('offsets: Ultra\'s nav and Glaze\'s bar from the page\'s start, a course\'s top bar for the fixed column', async () => {
@@ -203,7 +204,16 @@ test('offsets: Ultra\'s nav and Glaze\'s bar from the page\'s start, a course\'s
   assert.equal(r.doc.root.style.getPropertyValue('--gz-sb-top'), '60px');
 });
 
-test('late Angular blocks join This page in place; a block added after the widgets puts them last again; the dock is never rebuilt', async () => {
+test('drawer threshold uses the course content after navigation, rather than its full-window shell', async () => {
+  const p = page({ width: 1280, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const boxes = p.doc.boxOf;
+  p.doc.boxOf = (e) => e.className === 'course-content-container' ? { left: 0, top: 0, width: 1280, height: 900 }
+    : e.className === 'course-outline-content' ? { left: 220, top: 60, width: 1060, height: 840 } : boxes(e);
+  await p.pass();
+  assert.equal(p.mode(), 'drawer', '1060px after navigation cannot hold 720 + 352 + 16');
+});
+
+test('late Angular blocks join This page in place; CSS keeps the widgets visually last without reinserting the dock', async () => {
   const p = page({ at: 'outline', stored: record() });
   const aside = p.$('aside.outline-actions');
   for (const k of [...aside.children]) k.remove();
@@ -216,8 +226,8 @@ test('late Angular blocks join This page in place; a block added after the widge
   p.mutate(aside);
   assert.equal(p.mode(), 'expanded');
   assert.equal(late.parentNode, aside);
-  assert.equal(aside.lastElementChild, dock, 'the widgets last again');
-  assert.equal(late.nextElementSibling, dock);
+  assert.ok(aside.lastElementChild === late, 'native insertion order is untouched');
+  assert.ok(read('features/sidebar.css').includes('[data-gz-sb-self] > #gz-sb-widgets { order: 1; }'));
   assert.ok(p.$('#gz-sb-widgets') === dock && p.$('.gz-sb-head') === head, 'the same parts');
   // A change inside Glaze's own parts says nothing of the page's.
   const calls = p.observers.filter((o) => o.on).length;
@@ -241,6 +251,49 @@ test('Angular swaps the column: the new one is dressed with the same header and 
   assert.ok(fresh.contains(dock) && !old.contains(dock));
   assert.equal(old.dataset.gzSidebarHost, undefined);
   assert.equal(old.getAttribute('role'), null);
+});
+
+test('opening and closing a details layer never detaches the live dock or changes its mounting parent', async () => {
+  const p = page({ stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  await p.pass();
+  const dock = p.$('#gz-sb-widgets'), parent = dock.parentNode;
+  let removes = 0;
+  const remove = dock.remove.bind(dock);
+  dock.remove = () => { removes++; remove(); };
+  const draft = p.el('textarea', 'draft');
+  dock.append(draft); draft.focus();
+  const layer = p.el('div', 'layer-details', 'Participation');
+  p.$('#main-content-inner').append(layer);
+  await p.pass();
+  assert.equal(removes, 0, 'no disconnect: iframe documents and focused drafts survive');
+  assert.equal(dock.parentNode, parent);
+  assert.equal(p.doc.activeElement, draft);
+  assert.equal(p.mode(), 'drawer');
+  layer.remove(); await p.pass();
+  assert.equal(removes, 0);
+  assert.equal(dock.parentNode, parent);
+  assert.equal(p.mode(), 'expanded');
+});
+
+test('late native blocks never reinsert a live dock, even when focus is elsewhere', async () => {
+  const p = page({ stored: record() });
+  await p.pass();
+  const dock = p.$('#gz-sb-widgets'), aside = p.$('aside.outline-actions');
+  let reinserts = 0;
+  const append = aside.append.bind(aside);
+  aside.append = (...nodes) => { if (nodes.includes(dock)) reinserts++; append(...nodes); };
+  aside.append(p.el('button', 'late-native', 'Schedule'));
+  p.mutate(aside); await settle();
+  assert.equal(reinserts, 0, 'CSS orders the dock after native blocks without reloading media');
+});
+
+test('Angular removing only the sidebar controls re-dresses the host without a site pass', async () => {
+  const p = page({ stored: record() });
+  await p.pass();
+  const dock = p.$('#gz-sb-widgets'), aside = p.$('aside.outline-actions');
+  dock.remove();
+  p.mutate(aside, { removedNodes: [dock] }); await settle();
+  assert.ok(dock.parentNode === aside, 'native host restored by its observer');
 });
 
 test('folding This page hides every block but Glaze\'s parts; Course notes and the syllabus stay among the page\'s blocks, above the widgets', async () => {

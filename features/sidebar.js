@@ -68,7 +68,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // between stays where Ultra (or Glaze's outline helpers: Course notes, the syllabus) put it. The Courses page's column
     // holds Ultra's To Do; a course outline's (aside.outline-actions) Faculty, Details & Actions and the schedule. A
     // content item's or a discussion's details column is in a layer over the page, where keeping room is wrong: Ultra's is
-    // left as it is, and the sidebar is Glaze's own column, as a drawer (overlay). Elsewhere, Glaze's own column, fixed at
+    // left as it is, and the existing dock opens as a drawer (overlay). Elsewhere, Glaze's own column, fixed at
     // the window's edge (own) with the page's content kept clear of it (features/sidebar.css).
     ultra: {
       family() {
@@ -81,7 +81,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       // Follow page: the course whose outline (or an item opened over it) this is; all courses elsewhere.
       courseId: () => (/^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname) && ctx.courseId?.()) || '',
       native() {
-        const f = ADAPTERS.ultra.family();
+        // A details layer covers the outline; it does not replace its column or the live widgets in it.
+        const f = /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname) ? 'outline' : ADAPTERS.ultra.family();
         const el = f === 'courses' ? document.querySelector('div.todo-panel') : f === 'outline' ? document.querySelector('aside.outline-actions') : null;
         return el ? { el, page: el } : null;
       },
@@ -91,7 +92,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       // Where the page's content starts: a course's panel, else the page (#main-content-inner, whose start padding is
       // Glaze's bar's room), right of Ultra's own nav.
       left() {
-        const m = document.querySelector('.course-content-container') || document.getElementById('main-content-inner');
+        const m = document.querySelector('.course-outline-content') || document.querySelector('div.bb-course-navigation')
+          || document.querySelector('.routed-page.bb-offcanvas-container') || document.getElementById('main-content-inner');
         if (!m) return 0;
         const r = m.getBoundingClientRect();
         let pad = 0;
@@ -119,7 +121,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let own = null, head = null, title = null, jump = null, more = null, toggle = null, grip = null, pageHead = null, pageBtn = null;
   let dock = null, dockBtn = null, list = null, note = null, addBtn = null, adding = null, live = null, edge = null, launch = null;
   let mode = 'none', drawer = false, forced = false, opener = null, inerted = [], dragW = 0, modalAway = false;
-  let modalObserver = null, backdrop = null, widthCancel = null;
+  let modalObserver = null, backdrop = null, widthCancel = null, lifted = null;
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
   let mo = null, frame = 0, noteTimer = 0, passFrame = 0, offer = null;
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
@@ -270,13 +272,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const ATTRS = ['role', 'aria-labelledby', 'aria-modal', 'aria-label'];
   const detach = () => {
     if (!host) return;
+    lift(false);
     widthCancel?.();
     mo?.disconnect();
     for (const e of [grip, head, pageHead, dock]) e?.remove();
     if (host.own) host.el.remove();
     else {
       for (const [k, v] of kept) { if (v === null) host.el.removeAttribute(k); else host.el.setAttribute(k, v); }
-      for (const k of ['data-gz-sidebar-host', 'data-gz-sb-fold-page', 'data-gz-sb-self']) host.el.removeAttribute(k);
+      for (const k of ['data-gz-sidebar-host', 'data-gz-sb-fold-page', 'data-gz-sb-self', 'data-gz-sb-overlay']) host.el.removeAttribute(k);
     }
     kept = [];
     host = null;
@@ -311,7 +314,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // A change only to Glaze's own parts of the column (a docked widget redrawing, the header) says nothing of the page's.
   const part = (n) => n === grip || n === head || n === pageHead || n === dock;
   const mine = (r) => [grip, head, pageHead, dock].some((e) => e && e !== r.target && e.contains?.(r.target)) || part(r.target)
-    || ([...(r.addedNodes || []), ...(r.removedNodes || [])].length > 0 && [...(r.addedNodes || []), ...(r.removedNodes || [])].every(part));
+    || ([...(r.addedNodes || []), ...(r.removedNodes || [])].length > 0 && [...(r.addedNodes || []), ...(r.removedNodes || [])].every((e) => part(e) && e.parentNode === host?.el));
   // Content: a child with words or a control, not one Glaze hides (the native To Do it replaces).
   const filled = (el) => [...el.children].some((c) => c.tagName && !part(c) && !['SCRIPT', 'STYLE', 'TEMPLATE', 'LINK'].includes(c.tagName) && !c.hidden
     && !(html().hasAttribute('data-gz-sidebar-todo') && c.closest(NATIVE_TODO) === c)
@@ -324,7 +327,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const roomFor = () => Math.min(S.MAX_WIDTH, innerWidth - A.left() - S.GAP - (family === 'grades' ? S.MAIN_GRADES : S.MAIN));
   const layout = () => {
     if (!active || !host) return;
-    const pageEmpty = !host.page || !filled(host.page);
+    const pageEmpty = !host.page || (ultra && A.overlay()) || !filled(host.page);
     const docked = drawnCount ?? (widgetsOn() ? S.docked(rec).length : 0);
     const m = S.mode({ vw: innerWidth, left: A.left(), width: dragW || rec.width, grades: family === 'grades', empty: pageEmpty && !docked && !forced, open: rec.open });
     // Over a layer (A.overlay: Ultra's details column), or as a standalone fallback, with anything to show, a drawer.
@@ -333,6 +336,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const w = next === 'drawer' ? Math.min(m.w || rec.width, rec.width) : m.w;
     // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
     setAttr(html(), 'data-gz-sb-fixed', host.own && A.own ? '' : false);
+    setAttr(html(), 'data-gz-sb-ultra', ultra ? '' : false);
+    setAttr(host.el, 'data-gz-sb-overlay', ultra && A.overlay() ? '' : false);
     setAttr(html(), 'data-gz-sidebar', next);
     setAttr(html(), 'data-gz-sidebar-open', next === 'drawer' && drawer ? '' : false);
     setVar('--gz-sidebar-w', `${w}px`);
@@ -350,6 +355,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     for (const b of [edge, launch, backdrop]) if (b.parentNode !== document.body) document.body.append(b);
     // A labelled landmark beside the content; a dialog while it is an open drawer.
     const dialog = next === 'drawer' && drawer;
+    lift(ultra && dialog && !modalAway);
     setAttr(host.el, 'role', next === 'none' || (next === 'drawer' && !drawer) ? false : dialog ? 'dialog' : 'complementary');
     setAttr(host.el, 'aria-labelledby', next === 'none' ? false : 'gz-sb-title');
     setAttr(host.el, 'aria-modal', dialog && !modalAway ? 'true' : false);
@@ -386,8 +392,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (self()) { if (pageHead.previousElementSibling !== head) head.after(pageHead); }
       else if (host.page && pageHead.nextElementSibling !== host.page) host.page.before(pageHead);
       if (dock.parentNode !== host.el) host.el.append(dock);
-      // A block Ultra added after the widgets: the widgets go last again, unless one of them has the focus.
-      else if (self() && host.el.lastElementChild !== dock && !dock.contains(document.activeElement)) host.el.append(dock);
+      // Ultra's late blocks stay before the dock visually through flex order, without reinserting live media.
     }
     host.fallback = !n && !!A.standalone?.();
     const first = !active;
@@ -437,6 +442,20 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // A dialog over the page: the rest of the page inert while it is open, Tab kept in it, Escape closes it, and the focus
   // goes back where it was. An LMS dialog opened from inside it is added to the page after, so it stays reachable.
   const ours = (e) => e === edge || e === launch || e === backdrop || e.id === 'gz-sb-menu';
+  // The top layer escapes Ultra's positioned course panels without moving any live DOM. Native dialogs temporarily
+  // take focus and stacking back (modalSync); closing the drawer restores the native host's popover attribute too.
+  const lift = (want) => {
+    if (lifted && (!want || lifted.el !== host?.el)) {
+      try { lifted.el.hidePopover(); } catch { /* the host was replaced */ }
+      if (lifted.value === null) lifted.el.removeAttribute('popover'); else lifted.el.setAttribute('popover', lifted.value);
+      lifted = null;
+    }
+    if (!want || lifted || !host?.el.showPopover) return;
+    const el = host.el, value = el.getAttribute('popover');
+    el.setAttribute('popover', 'manual');
+    try { el.showPopover(); lifted = { el, value }; }
+    catch { if (value === null) el.removeAttribute('popover'); else el.setAttribute('popover', value); }
+  };
   const nativeModal = () => [...document.querySelectorAll('[role="dialog"], [role="alertdialog"], dialog[open]')].some((e) =>
     e !== host?.el && !host?.el.contains(e) && e.style.display !== 'none' && !e.closest('[hidden], [aria-hidden="true"]') && (e.getClientRects?.().length ?? 1));
   const modalSync = () => {
@@ -528,7 +547,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (to !== undefined) { e.preventDefault(); rows[(to + rows.length) % rows.length].focus(); }
       else if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation?.(); closeMenu(true); }
     });
-    document.body.append(menuEl);
+    (ultra && drawer ? dock : document.body).append(menuEl);
     btn.setAttribute('aria-expanded', 'true');
     document.addEventListener('pointerdown', outside, true);
     rows[0].focus();
@@ -581,7 +600,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     clearTimeout(noteTimer);
     const h = html();
     if (h) {
-      for (const k of ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed']) h.removeAttribute(k);
+      for (const k of ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra']) h.removeAttribute(k);
       h.style?.removeProperty?.('--gz-sidebar-w');
       h.style?.removeProperty?.('--gz-sb-top');
     }
