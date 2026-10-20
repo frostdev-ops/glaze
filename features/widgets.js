@@ -15,7 +15,7 @@
 var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const ctx = globalThis.GZ_CTX;
   const t = (k, v) => ctx.t(k, v);
-  const NAMES = { notes: 'Notes', agenda: 'Agenda', timer: 'Focus timer', quotes: 'Quote', music: 'Music', breathe: 'Breathe', buddy: 'Study buddy', todo: 'To Do' };
+  const NAMES = { notes: 'Notes', agenda: 'Agenda', timer: 'Focus timer', quotes: 'Quote', music: 'Music', breathe: 'Breathe', buddy: 'Study buddy', todo: 'To Do', settings: 'Glaze settings' };
   // Tiles other files add, the same on both sites: { id: { file, name (an English key for t()), size } }. This file
   // loads the file (need) while its tile is on, and the file calls register(id, fill). Off until the student adds it.
   const MORE = { pet: { file: 'features/pet.js', name: 'Pet habitat', size: 'm' } };
@@ -174,6 +174,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Each widget fills its tile's body once; wake() runs when the page is shown again, update() when settings change,
   // stop() when the tile goes.
   const WIDGETS = {
+    settings(body) {
+      body.append(button(t('Glaze settings'), () => { send('options'); }));
+    },
     notes(body) {
       // note: the last saved (or stored) text; draft: the newest typed, stamped when typed, until a save confirms that very
       // draft. Shown is the draft while there is one.
@@ -1108,16 +1111,15 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (on && board && globalThis.GZ_COURSE_CARDS) { GZ_COURSE_CARDS.sync(draw); draw(); fillCourses(); }
     }, () => { loadingCourses = null; });
   };
-  // Canvas's Dashboard with nothing on its board: the cards of Canvas's card view become its widgets, once (lay.filled),
-  // in Canvas's order, and its card view steps aside for them. A board with widgets on it, or emptied since, is left so.
+  // Both Dashboards get their first course cards once (owner, 2026-10-20). The stored filled marker protects edits,
+  // emptied boards and removed defaults; starter utilities share the board with its cards.
   const fillCourses = () => {
-    if (ultra || board !== 'cdash' || !on || !lay || lay.filled.includes('cdash') || editing || flying) return;
+    if (!['cdash', 'dash'].includes(board) || !on || !lay || lay.filled.includes(board) || editing || flying) return;
     const C = globalThis.GZ_COURSE_CARDS;
     if (!C) { loadCourses(); return; }
-    const cards = C.shown();
-    if (!cards.length) return; // its list view, or not drawn yet: when its cards are
-    const empty = !lay.boards.cdash.some((x) => x.id !== 'todo' && x.on && allowed(x.id));
-    change({ fill: 'cdash', ops: empty ? cards.slice(0, W.COURSE_MAX).map((c) => ({ s: 'cdash', id: c.key, set: { on: true, size: 's', term: c.term || '' } })) : [] });
+    const cards = ultra ? C.list() : C.shown();
+    if (!cards.length) return;
+    change({ fill: board, ops: cards.slice(0, W.COURSE_MAX).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } })) });
   };
   // The board's Course cards button: its dialog (features/coursecards.js) ticks courses on and off this board, each
   // tick or Select all one change, with the cards new to it placed in the board's free room (arrange). It asks the
@@ -1416,7 +1418,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (c) courseArea = { left: Math.max(0, Math.round(c.left - r.left)), top: Math.max(0, Math.round(c.top - r.top)), width: c.width };
 
     }
-    const res = W.arrange(list, dims, width, { col, courseArea, w0: lay.widths[board], ordered: board === 'cdash' });
+    const card = ctx.settings().card;
+    const cards = { width: card?.width || 262, gap: card?.gap >= 0 ? card.gap : W.GAP };
+    const res = W.arrange(list, dims, width, { col, courseArea, w0: lay.widths[board], ordered: board === 'cdash', cards: lay.starter || list.some((x) => W.course(x.id)) ? cards : null });
     lastAt = res.at;
     lastW = width;
     stacked = !side || res.stack;
@@ -1588,6 +1592,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const readPrefs = () => get('sync', 'widgets').then((r) => { o = GZ_SANITIZE({ widgets: r.widgets }).widgets; });
   const onStore = (ch, a) => {
     if (a === 'sync' && ch.widgets) readPrefs().then(() => { for (const x of tiles.values()) if (shown(x.el)) x.update?.(); });
+    if (a === 'sync' && ch.card) { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board && !asleep) layoutBoard(); }); }
     // Another tab's change (this tab's own come back as the worker's answer).
     if (a === 'local' && ch.widgetLayout) { layoutRead++; if (!flying && lay) adopt(ch.widgetLayout.newValue); }
   };

@@ -515,6 +515,10 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 }
 
 /* ---- dashboard cards ---- */
+/* Fill the actual content room, including the room left beside Glaze's sidebar. */
+#application .ic-DashboardCard__box__container { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--gz-card-w, 262px)), 1fr)); gap: var(--gz-card-gap, 16px); margin: 0; }
+#application .ic-DashboardCard__box__container > .ic-DashboardCard { width: 100%; margin: 0; }
+
 #application .ic-DashboardCard {
   background: var(--gz-surface-grain, none), var(--gz-panel); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-card-r, var(--gz-radius)); box-shadow: var(--gz-rest-shadow);
   overflow: hidden; transition: var(--gz-card-transition); animation: var(--gz-enter); width: var(--gz-card-w, 262px);

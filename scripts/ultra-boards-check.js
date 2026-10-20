@@ -41,8 +41,8 @@ const SHELL = (title, main, script = '') => `<!doctype html><html lang="en"><hea
   body { margin: 0; font: 14px/1.45 "Open Sans", system-ui, sans-serif; }
   .MuiDrawer-paper { position: fixed; inset: 0 auto 0 0; width: 200px; background: #262626; }
   .MuiDrawer-paper a { display: block; padding: 10px 24px; color: #fff; text-decoration: none; }
-  main#main-content { margin-left: 200px; }
-  @media (max-width: 767px) { .MuiDrawer-paper { display: none; } main#main-content { margin-left: 0; } }
+  #main-content-inner { padding-left: 200px; }
+  @media (max-width: 767px) { .MuiDrawer-paper { display: none; } #main-content-inner { padding-left: 0; } }
   .base-header { padding: 24px 30px; border-bottom: 1px solid #d8d8d8; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
   h1#main-heading { margin: 0; font: 400 32px Georgia, serif; }
   .base-courses-content { display: flex; }
@@ -174,7 +174,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         if (cycling) await page.evaluate(() => document.querySelector('section.gz-w[data-tile="quotes"] button[aria-pressed="true"]')?.click());
       }
     };
-    // These interaction cases need the old populated layout; fresh installs intentionally start empty.
+    // These interaction cases use the retained legacy layout; fresh installs use the 2026-10-20 starter layout.
     const notes = { widgetLayout: require('../lib/widgets.js').layout({ todo: true }), [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
 
     if (!process.env.B10_ONLY) {

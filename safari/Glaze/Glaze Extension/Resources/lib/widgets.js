@@ -23,13 +23,13 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   // The old Canvas tiles in their order, each on or off, small/medium/large, in the Dashboard or floating (x, y: where in the
   // room the screen leaves, 0–1, so a smaller window still shows it). The music link too.
   // todo: Better To Do (features/todo.js) as a tile on both sites' boards, on from the start where the list was.
-  const TILES = ['notes', 'agenda', 'timer', 'quotes', 'music', 'breathe', 'buddy', 'todo'];
-  // Widgets are on by default, with no widget added: a device's first layout starts empty, and Edit layout adds them
-  // (owner, 2026-10-19). A layout stored before then started with these four, and a tile it kept without its on/off
-  // still reads as it did (layout's starts; kept, below).
+  const TILES = ['notes', 'agenda', 'timer', 'quotes', 'music', 'breathe', 'buddy', 'todo', 'settings', 'pet'];
+  // Fresh Dashboards get a small starter row above their course cards (owner, 2026-10-20), superseding the
+  // 2026-10-19 empty-layout decision. Stored layouts, including empty ones, never get seeded again.
+  const STARTER = ['pet', 'timer', 'notes', 'quotes'];
   const STARTED = ['notes', 'agenda', 'timer', 'quotes'];
   const SIZES = ['s', 'm', 'l'];
-  const SIZE = { notes: 'm', agenda: 'm', timer: 's', quotes: 'm', music: 'm', breathe: 's', buddy: 's', todo: 'm' };
+  const SIZE = { notes: 'm', agenda: 'm', timer: 's', quotes: 'm', music: 'm', breathe: 's', buddy: 's', todo: 'm', settings: 's', pet: 'm' };
   const frac = (v) => (Number.isFinite(v) && v >= 0 && v <= 1 ? v : null);
   // more: tiles other files add (features/widgets.js MORE: { id: { size } }), after the built-in ones and off until added.
   const MORE_ID = /^[a-z][a-z0-9]{1,15}$/;
@@ -96,11 +96,13 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   };
   const layout = (raw, more = {}) => {
     const ids = [...TILES, ...Object.keys(more).filter((id) => MORE_ID.test(id) && !TILES.includes(id))];
-    const starts = raw && typeof raw === 'object' && Object.keys(raw).length ? STARTED : [];
+    const fresh = !raw || typeof raw !== 'object' || !Object.keys(raw).length;
+    const starts = fresh ? [] : STARTED;
     const tiles = each(raw?.tiles, ids, (x) => tile(x, more, starts));
     const start = { cdash: tiles.map((x) => ({ id: x.id, on: x.on && !x.float, size: x.size })), courses: tiles.map((x) => ({ id: x.id, on: x.on, size: 's' })), dash: TILES.map((id) => ({ id, on: starts.includes(id) || id === 'todo' })) };
     const boards = Object.fromEntries(BOARDS.map((b) => {
-      const list = Array.isArray(raw?.boards?.[b]) ? raw.boards[b] : start[b];
+      const list = Array.isArray(raw?.boards?.[b]) ? raw.boards[b] : fresh && b !== 'courses'
+        ? [...STARTER.map((id) => ({ id, on: true, size: 's', h: id === 'pet' ? 330 : 220 })), { id: 'todo', on: true }] : start[b];
       const courses = [], counts = new Map();
       for (const x of list) {
         const c = course(x?.id);
@@ -124,9 +126,12 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     const filled = BOARDS.filter((b) => Array.isArray(raw?.filled) && raw.filled.includes(b));
     // Layouts kept before auto-fill had no marker. Their board, including an intentionally empty one, stays as it was.
     if (raw && Object.keys(raw).length && !Array.isArray(raw.filled)) filled.push('cdash');
+    // Ultra auto-fill began with the starter layout. Earlier Dashboards, even empty ones, keep their cards as saved.
+    if (!fresh && raw.starter !== true && !filled.includes('dash')) filled.push('dash');
+    // starter records the initial seed; it never enables a removed widget.
     // sidebarFresh: this device's layout began with a new install (lib/background.js keepWidgets), for the sidebar's
     // one-time move of To Do (lib/sidebar.js migrate). Kept as it is; nothing here reads it.
-    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled, ...(raw?.sidebarFresh === true && { sidebarFresh: true }) };
+    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled: BOARDS.filter((b) => filled.includes(b)), ...((fresh || raw?.starter === true) && { starter: true }), ...(raw?.sidebarFresh === true && { sidebarFresh: true }) };
   };
   // What an update keeps on a device with no layout stored: the tiles it showed when a new layout started with four. Its
   // notes box (the notes' own switch) and Ultra's Dashboard (shown whatever the widgets' switch) as they were, and the
@@ -211,8 +216,29 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   // other on purpose stay so.
   // → { at: { id: { left, top, w, h, r } }, order (reading order), stack, bottom }.
   // ponytail: free room is found by a scan of grid cells, fine for a dozen tiles.
-  const arrange = (tiles, dims, W, { col = null, w0 = 0, courseArea = null, ordered = false } = {}) => {
+  const arrange = (tiles, dims, W, { col = null, w0 = 0, courseArea = null, ordered = false, cards = null } = {}) => {
     const at = {}, rects = [];
+    // Unplaced Dashboard tiles flow in aligned rows: utilities first, course cards below. Once moved, the student's
+    // free layout wins. Width is the board's actual room, after the sidebar and navigation have taken theirs.
+    if (cards && (!col || (courseArea && tiles.every((t) => course(t.id)))) && tiles.every((t) => t.x === null)) {
+      let top = courseArea?.top || 0;
+      const left = courseArea?.left || 0, room = courseArea ? Math.max(0, Math.min(W - left, courseArea.width)) : W;
+      const rows = (items, min, gap, even = false) => {
+        const count = Math.max(1, Math.min(items.length, Math.floor((room + gap) / (min + gap))));
+        const cols = even && items.length === 4 && count === 3 ? 2 : count, w = (room - gap * (cols - 1)) / cols;
+        for (let i = 0; i < items.length; i += cols) {
+          const row = items.slice(i, i + cols).filter((t) => dims[t.id]);
+          const h = Math.max(0, ...row.map((t) => dims[t.id].h));
+          row.forEach((t, j) => { at[t.id] = { left: left + j * (w + gap), top, w, h: dims[t.id].h, r: false }; });
+          top += h + gap;
+        }
+      };
+      rows(tiles.filter((t) => !course(t.id)), 240, GAP, true);
+      const groups = new Map();
+      for (const t of tiles.filter((t) => course(t.id))) { const group = groups.get(t.term || '') || []; group.push(t); groups.set(t.term || '', group); }
+      for (const group of groups.values()) rows(group, cards.width, cards.gap);
+      return { at, order: Object.keys(at), stack: false, bottom: Math.max(0, top - (groups.size ? cards.gap : GAP)) };
+    }
     let stack = false, queue = tiles;
     const put = (id, left, top, r) => { const { w, h } = dims[id]; at[id] = { left, top, w, h, r }; rects.push(at[id]); };
     const kept = tiles.filter((t) => t.x !== null && dims[t.id]);
@@ -322,11 +348,11 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     if (BOARDS.includes(m?.fill)) {
       if (l.filled.includes(m.fill)) return l;
       l = { ...l, filled: [...l.filled, m.fill] };
-      if (l.boards[m.fill].some((x) => x.on && !(m.fill === 'cdash' && x.id === 'todo'))) return l;
+      if (l.boards[m.fill].some((x) => x.on && x.id !== 'todo' && !(l.starter && STARTER.includes(x.id)))) return l;
     }
     const ops = Array.isArray(m?.ops) ? m.ops.slice(0, 64) : [];
-    // A deliberate edit of an unfilled Canvas board also opts out, even if that edit empties it.
-    if (ops.some((o) => o?.s === 'cdash') && !l.filled.includes('cdash')) l = { ...l, filled: [...l.filled, 'cdash'] };
+    // Any deliberate Dashboard edit opts out, even if it empties the board before its cards arrive.
+    for (const b of ['cdash', 'dash']) if (ops.some((o) => o?.s === b) && !l.filled.includes(b)) l = { ...l, filled: [...l.filled, b] };
     for (const o of ops) {
       if (!SURFACES.has(o?.s) || typeof o.id !== 'string') continue;
       const { id: _, ...patch } = o.set && typeof o.set === 'object' ? o.set : {};

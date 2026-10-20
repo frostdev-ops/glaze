@@ -92,6 +92,16 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
 };
 const find = (el, pred) => (pred(el) ? el : el.children?.map((c) => find(c, pred)).find(Boolean) || null);
 
+test('the compact settings widget reuses the palette editor command', async () => {
+  const p = page(), body = new E();
+  p.ui.probe.WIDGETS.settings(body);
+  assert.equal(body.children.length, 1);
+  assert.equal(body.children[0].textContent, 'Glaze settings');
+  body.children[0].fire('click');
+  await settle();
+  assert.deepEqual(p.sent, ['options']);
+});
+
 test('Canvas tiles have a resize corner and no grip', () => {
   const p = page();
   const { el: tile } = p.ui.probe.tileEl('timer');

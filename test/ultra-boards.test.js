@@ -115,6 +115,7 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
       site: 'ultra', t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), locale: () => 'en', settings: () => settings, acted: () => (typeof acted === 'function' ? acted() : acted),
       need: async (f) => {
         loads.push(f); if (hold[f]) await hold[f];
+        if (f === 'features/pet.js') c.GZ_WIDGETS_UI.register('pet', () => ({}));
         const name = { 'features/dashboard.js': 'GZ_DASH_UI', ...(courses && { 'features/coursecards.js': 'GZ_COURSE_CARDS', 'features/cards.js': 'GZ_CARD_UI', 'lib/cards.js': 'GZ_CARDS' }) }[f];
         if (name && !c[name]) vm.runInContext(read(f), c);
       },
@@ -754,10 +755,11 @@ test('landing: opt-in, once in a tab (the worker remembers it, not the page), ne
 test('the Dashboard is on by default with its own switch: its widgets and To Do with the others off, empty but for Add widget, or Ultra\'s page when off', async () => {
   const off = { notes: false, widgets: false, pet: false };
   assert.equal(D.GZ_DEFAULTS.enhance.dashboard, true, 'on by default');
-  const fresh = page({ at: 'dash' });
+  // Owner 2026-10-20: fresh installation enables notes and pet along with the starter row.
+  const fresh = page({ at: 'dash', enhance: { notes: true, pet: true } });
   fresh.ui.sync(true);
   await settle();
-  assert.deepEqual(fresh.doc.querySelectorAll('#gz-dash section.gz-w').map((x) => x.dataset.tile), ['todo'], 'a first Dashboard: Better To Do, no widget added');
+  assert.deepEqual(fresh.doc.querySelectorAll('#gz-dash section.gz-w').map((x) => x.dataset.tile), ['pet', 'timer', 'notes', 'quotes', 'todo'], 'owner 2026-10-20: starter Dashboard widgets');
   // A device updated from a version whose layouts started with four widgets keeps them (lib/widgets.js kept).
   const p = page({ at: 'dash', enhance: off, local: { widgetLayout: W.kept(false) } });
   p.ui.sync(true);
@@ -773,7 +775,7 @@ test('the Dashboard is on by default with its own switch: its widgets and To Do 
   assert.equal(q.doc.root.dataset.gzDash, 'dash', "the Dashboard, not Ultra's page");
   assert.ok(q.doc.querySelector('[role="tablist"]'), 'with the Institution page one click away');
   q.doc.fire(q.doc.querySelector('.gz-dash-edit'), 'click');
-  assert.deepEqual(q.doc.querySelectorAll('#gz-dash .gz-dash-add button').map((x) => x.textContent), ['+ Agenda', '+ Focus timer', '+ Quote', '+ Music', '+ Breathe', '+ Study buddy', '+ To Do']);
+  assert.deepEqual(q.doc.querySelectorAll('#gz-dash .gz-dash-add button').map((x) => x.textContent), ['+ Agenda', '+ Focus timer', '+ Quote', '+ Music', '+ Breathe', '+ Study buddy', '+ To Do', '+ Glaze settings']);
   // Switched off: no board, Ultra's page as it is (content-ultra.js doesn't ask for the board there either).
   const r = page({ at: 'dash', enhance: { ...off, dashboard: false, widgets: true } });
   r.ui.sync(true);

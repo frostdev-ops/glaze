@@ -261,7 +261,7 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
   // dock it (offer). On Ultra the dock replaces the Courses page's column board, so its widgets dock too (owner,
   // 2026-10-19). todo: enhance.todo (with Better To Do off, To Do stays). Done is mig: 1; the layout and its marks are
   // never changed.
-  const migrate = (raw, rec, { lms = 'canvas', todo = true } = {}) => {
+  const migrateBase = (raw, rec, { lms = 'canvas', todo = true } = {}) => {
     const r = clean(rec);
     if (r.mig) return r;
     const out = { ...r, mig: 1 };
@@ -294,6 +294,14 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
     if (c && d) return u;
     if (!c && !d) return one(u, { op: 'remove', id: 'todo' });
     return { ...u, offer: { todo: 'pending' } };
+  };
+
+  // New installs dock the existing settings editor after To Do (owner, 2026-10-20). Migrated accounts and explicit
+  // destinations, including removals, stay as saved.
+  const migrate = (raw, rec, opts) => {
+    const before = clean(rec), r = migrateBase(raw, before, opts);
+    return !before.mig && raw?.sidebarFresh === true && raw?.starter === true && !own(before.dest, 'settings')
+      ? one(r, { op: 'dock', id: 'settings' }) : r;
   };
 
   // The worker's side ('glaze:sidebar'): m { key, ops } on what is stored now, migrating first if this account hasn't
