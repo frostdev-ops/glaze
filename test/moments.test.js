@@ -229,14 +229,15 @@ test('rotation clock repair is silent even when the stored index names a Look', 
   assert.equal(L.turned(before, forced.state), true, 'an actual forced turn still announces');
 });
 
-for (const site of ['widget', 'rail']) test(`${site}: a timer loaded already expired is silent; an observed deadline announces once`, () => {
+for (const site of ['widget', 'rail']) test(`${site}: a timer loaded already expired is silent; an observed deadline announces once`, async () => {
   const W = require('../lib/widgets.js');
   const heard = [];
+  const claimed = new Set();
   let now = 10000;
   const ctx = vm.createContext({ W, now, Date: { now: () => now }, node: { options: { work: 25, rest: 5, auto: false } }, local: {}, w: { id: 'timer' }, timerFailed: '', advanced: '',
     X: { moment: (...a) => heard.push(a), t: (s) => s }, ctx: { moment: (...a) => heard.push(a) },
     shown: () => true, alive: true, tick: 0, seenEnd: 0, o: { work: 25, rest: 5, auto: false }, s: W.IDLE,
-    clearTimeout() {}, setTimeout() {}, ask() {}, timerAction() {}, chime() {}, t: (s) => s, say: {}, phase: {}, time: {}, go: {}, body: { dataset: {} } });
+    clearTimeout() {}, setTimeout() {}, ask() { const end = ctx.local.widgetTimer.end, advanced = claimed.has(end) ? undefined : end; claimed.add(end); return Promise.resolve({ advanced }); }, timerAction() {}, chime() {}, t: (s) => s, say: {}, phase: {}, time: {}, go: {}, body: { dataset: {} } });
   if (site === 'widget') {
     const src = read('features/widgets.js');
     const start = src.indexOf('      const run = () => {', src.indexOf('    timer(body)'));
@@ -249,10 +250,12 @@ for (const site of ['widget', 'rail']) test(`${site}: a timer loaded already exp
   }
   const state = (end) => { ctx.now = now; ctx.s = { phase: 'work', end, left: 0 }; ctx.local.widgetTimer = ctx.s; ctx.run(); };
   state(9500);
+  await Promise.resolve();
   assert.equal(heard.length, 0, 'loading an expired phase is not completion');
   state(11000);
   now = 11010;
   state(11000); state(11000);
+  await Promise.resolve();
   assert.equal(heard.length, 1, 'the deadline observed running announces once');
 });
 

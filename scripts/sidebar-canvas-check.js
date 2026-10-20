@@ -10,6 +10,7 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const G = require('../defaults.js');
 const I = require('../lib/i18n.js');
+for (const lang of I.CODES) require(`../i18n/${lang}.js`);
 const W = require('../lib/widgets.js');
 const src = path.resolve(__dirname, '..');
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'glaze-sidebar-canvas-evidence'));

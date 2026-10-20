@@ -27,28 +27,30 @@ const topPage = ({ site = 'canvas', who = '3', replies = [], lib = true } = {}) 
   let listen, watcher = null;
   const host = { id: 'gz-ctabs-frames' };
   const frameOf = (name, uid = who) => {
-    const doc = { name };
+    const doc = { name, body: {}, location: { origin: site === 'canvas' ? O : 'https://bb.school.test', pathname: site === 'canvas' ? `/courses/${name}` : `/ultra/courses/${name}`, search: '' } };
     const win = { postMessage: (m, o) => posts.push({ to: name, m: structuredClone(m), o }) };
-    const el = { contentWindow: win, contentDocument: doc, parentNode: host, inert: false, style: {} };
+    const events = new Map();
+    const el = { contentWindow: win, contentDocument: doc, parentNode: host, isConnected: true, inert: false, style: {},
+      addEventListener: (type, f) => events.set(type, f), removeEventListener: (type, f) => { if (events.get(type) === f) events.delete(type); }, fire: (type) => events.get(type)?.() };
     return { el, uid, accountDoc: doc, ready: true, name };
   };
   const nav = { inert: false, tagName: 'NAV' }, app = { inert: false, tagName: 'DIV' }, script = { inert: false, tagName: 'SCRIPT' };
-  const frames = new Map([['25', frameOf('25')], ['26', frameOf('26')]]);
+  const frames = new Map(site === 'canvas' ? [['25', frameOf('25')], ['26', frameOf('26')]] : [['_25_1', frameOf('_25_1')], ['_26_1', frameOf('_26_1')]]);
   const spare = new Map([['25', [frameOf('25-before')]]]);
   const next = new Map([['26', frameOf('26-next')]]);
   const c = {
-    PAGE: 'page', L, framed: '', preview: false, on: true, who, showing: '25', frames, spare, next, host, popping: false, keepPage() {},
+    PAGE: 'page', L, framed: '', preview: false, on: true, signedOut: false, pic: null, who, showing: site === 'canvas' ? '25' : '_25_1', frames, spare, next, host, popping: false, keepPage() {},
     location: { origin: site === 'canvas' ? O : 'https://bb.school.test' }, ctx: { site, need: async () => { if (lib) c.GZ_SIDEBAR = S; } },
     GZ_SIDEBAR: lib ? S : undefined, Number, JSON, Promise, structuredClone, setTimeout, clearTimeout,
     document: { body: { children: [nav, app, host, script] } },
     MutationObserver: class { constructor(f) { this.f = f; watcher = this; } observe() { this.on = true; } disconnect() { this.on = false; } },
     addEventListener: (t, f) => { listen = f; },
-    send() {}, revoke() {}, visit() {}, later() {},
+    send() {}, revoke() {}, visit() {}, later() {}, watch() {},
     chrome: { runtime: { lastError: undefined, sendMessage: (m, cb) => { sent.push(structuredClone(m)); const r = replies.length ? replies.shift() : { ok: true, rec: S.clean({ mig: 1, open: false }) }; if (r === 'hold') held.push(cb); else cb(r); } } },
   };
   c.globalThis = c;
   vm.createContext(c);
-  vm.runInContext(`${RELAY}\n${HANDLER}`, c);
+  vm.runInContext(`${part("  const pageable = ", "  // Validate the page")}\n${RELAY}\n${HANDLER}`, c);
   const post = (f, data, origin = c.location.origin) => listen({ origin, source: f.el.contentWindow, data });
   const ask = (over = {}) => ({ gzCtab: 'sidebar', key: S.key(site === 'canvas' ? 'canvas' : 'ultra', c.location.origin, site === 'canvas' ? '3' : '_3_1'), ops: [{ op: 'open', v: false }], gen: 'doc.1', n: 1, ...over });
   return { c, posts, sent, held, frames, spare, next, post, ask, nav, app, script, watcher: () => watcher };
@@ -65,11 +67,19 @@ test('the page sends a frame\'s sidebar change only for its frame on screen, and
   assert.ok(p.posts.every((x) => x.to === '25'), 'no other frame hears of it');
 });
 
-test('a hidden, kept, loading or replaced frame, another account, origin or site, and bad or oversized ops send nothing', async () => {
+test('a hidden, kept, loading or replaced frame, another account, origin or site, and bad or oversized ops send nothing', async (t) => {
   const cases = [
     ['hidden frame', (p) => p.post(p.frames.get('26'), p.ask())],
     ['kept earlier page (spare)', (p) => p.post(p.spare.get('25')[0], p.ask())],
     ['next page loading', (p) => p.post(p.next.get('26'), p.ask())],
+    ['not ready', (p) => { p.frames.get('25').ready = false; p.post(p.frames.get('25'), p.ask()); }],
+    ['inert frame', (p) => { p.frames.get('25').el.inert = true; p.post(p.frames.get('25'), p.ask()); }],
+    ['invisible frame', (p) => { p.frames.get('25').el.style.visibility = 'hidden'; p.post(p.frames.get('25'), p.ask()); }],
+    ['display-none frame', (p) => { p.frames.get('25').el.style.display = 'none'; p.post(p.frames.get('25'), p.ask()); }],
+    ['detached frame', (p) => { p.frames.get('25').el.isConnected = false; p.post(p.frames.get('25'), p.ask()); }],
+    ['frame outside host', (p) => { p.frames.get('25').el.parentNode = {}; p.post(p.frames.get('25'), p.ask()); }],
+    ['login in page frame', (p) => { const f = p.frames.get('25'); p.frames.set('page', f); p.frames.delete('25'); p.c.showing = 'page'; f.el.contentDocument.location.pathname = '/login'; p.post(f, p.ask()); }],
+    ['account page in same document', (p) => { p.frames.get('25').el.contentDocument.location.pathname = '/profile/settings'; p.post(p.frames.get('25'), p.ask()); }],
     ['frame signed in as someone else', (p) => { p.frames.get('25').uid = '4'; p.post(p.frames.get('25'), p.ask()); }],
     ['key for another account', (p) => p.post(p.frames.get('25'), p.ask({ key: S.key('canvas', O, '4') }))],
     ['key for another origin', (p) => p.post(p.frames.get('25'), p.ask({ key: S.key('canvas', 'https://other.instructure.com', '3') }))],
@@ -78,17 +88,18 @@ test('a hidden, kept, loading or replaced frame, another account, origin or site
     ['no ops', (p) => p.post(p.frames.get('25'), p.ask({ ops: [] }))],
     ['too many ops', (p) => p.post(p.frames.get('25'), p.ask({ ops: Array.from({ length: S.OPS_MAX + 1 }, () => ({ op: 'open', v: true })) }))],
     ['oversized ops', (p) => p.post(p.frames.get('25'), p.ask({ ops: [{ op: 'open', v: true, pad: 'x'.repeat(9000) }] }))],
+    ['oversized UTF-8 ops', (p) => p.post(p.frames.get('25'), p.ask({ ops: [{ op: 'open', v: true, pad: 'é'.repeat(4200) }] }))],
     ['bad gen', (p) => p.post(p.frames.get('25'), p.ask({ gen: 'x'.repeat(65) }))],
     ['replaced document', (p) => { p.frames.get('25').el.contentDocument = { name: 'new' }; p.post(p.frames.get('25'), p.ask()); }],
     ['hidden after asking, before the worker is asked', (p) => { p.c.GZ_SIDEBAR = undefined; p.post(p.frames.get('25'), p.ask()); p.c.showing = '26'; }],
   ];
-  for (const [label, run] of cases) {
+  for (const [label, run] of cases) await t.test(label, async () => {
     const p = topPage();
     run(p);
     await settle();
     assert.deepEqual(p.sent, [], `${label}: nothing sent`);
     assert.ok(acks(p).every((x) => x.m.ok === false && !('rec' in x.m)), `${label}: refused, with no record`);
-  }
+  });
   // Another origin's message, or one without a request number, is not answered at all.
   for (const run of [(p) => p.post(p.frames.get('25'), p.ask(), 'https://evil.test'), (p) => p.post(p.frames.get('25'), p.ask({ n: undefined }))]) {
     const p = topPage();
@@ -98,10 +109,29 @@ test('a hidden, kept, loading or replaced frame, another account, origin or site
   }
 });
 
+test('an account message cannot authorize a same-origin account page', async () => {
+  const p = topPage(), f = p.frames.get('25');
+  f.el.contentDocument = { body: {}, location: { origin: O, pathname: '/login', search: '' } };
+  p.post(f, { gzCtab: 'account', uid: '3' });
+  f.ready = true;
+  p.post(f, p.ask()); await settle();
+  assert.deepEqual(p.sent, [], 'a forged same-account message cannot make a login page an owned course');
+});
+
+test('a deferred relay request remains bound to the exact document that asked', async () => {
+  const x = topPage(), g = x.frames.get('25');
+  x.c.GZ_SIDEBAR = undefined;
+  x.post(g, x.ask());
+  const replacement = { body: {}, location: { origin: O, pathname: '/courses/25', search: '' } };
+  g.el.contentDocument = replacement; g.accountDoc = replacement;
+  await settle();
+  assert.deepEqual(x.sent, [], 'an asynchronous request is bound to the document that asked');
+});
+
 test('Ultra: the same relay, its own key shape; the page\'s own account check still runs in the worker', async () => {
   const p = topPage({ site: 'ultra', who: '_3_1' });
   for (const f of p.frames.values()) f.uid = '_3_1';
-  p.post(p.frames.get('25'), p.ask());
+  p.post(p.frames.get('_25_1'), p.ask());
   await settle();
   assert.equal(p.sent.length, 1);
   assert.equal(p.sent[0].key, S.key('ultra', 'https://bb.school.test', '_3_1'));
@@ -146,13 +176,46 @@ test('a frame\'s open drawer makes the page around it inert until it closes, or 
   assert.deepEqual([p.nav.inert, p.app.inert, p.watcher().on], [false, false, false]);
 });
 
+test('a drawer lock releases when its visible iframe loads a replacement document', () => {
+  const p = topPage(), f = p.frames.get('25');
+  p.post(f, { gzCtab: 'drawer', on: true });
+  assert.equal(p.nav.inert, true);
+  f.el.contentDocument = { name: 'replacement' };
+  f.el.fire('load');
+  assert.deepEqual([p.nav.inert, p.app.inert], [false, false]);
+});
+
+test('a sidebar reply is dropped when the iframe now contains a replacement document', async () => {
+  const p = topPage({ replies: ['hold'] }), f = p.frames.get('25');
+  p.post(f, p.ask()); await settle();
+  f.el.contentDocument = { name: 'replacement' };
+  p.held.shift()({ ok: true, rec: S.clean({ mig: 1 }) });
+  assert.deepEqual(acks(p), [], 'the new document never hears the old document response');
+});
+
+test('timer operations use the same visible owned-document boundary and fixed worker operation', async () => {
+  const p = topPage({ replies: [{ ok: true, timer: { run: true, end: 2000 }, advanced: 1000 }] });
+  const ask = { gzCtab: 'timer', op: 'advance', n: 8, gen: 'timer-document' };
+  p.post(p.frames.get('25'), ask); await settle();
+  assert.deepEqual(p.sent, [{ type: 'glaze:widgetTimer', op: 'advance' }]);
+  assert.deepEqual(p.posts[0].m, { gzCtab: 'timer:ack', n: 8, gen: ask.gen, ok: true, timer: { run: true, end: 2000 }, advanced: 1000 });
+  for (const mutate of [
+    (x) => x.frames.get('25').ready = false,
+    (x) => x.frames.get('25').el.inert = true,
+    (x) => x.frames.get('25').uid = '4',
+    (x) => x.frames.get('25').el.contentDocument.location.pathname = '/login',
+    (x) => x.c.showing = '26',
+  ]) { const x = topPage(); mutate(x); x.post(x.frames.get('25'), ask); await settle(); assert.deepEqual(x.sent, []); }
+  for (const op of ['set', 'eval', null, {}, 'advance '.repeat(1000)]) { const x = topPage(); x.post(x.frames.get('25'), { ...ask, op }); await settle(); assert.deepEqual(x.sent, []); }
+});
+
 // ---- a frame's side: asking, and the answers it takes ----------------------------------------------------------------
 const frameSide = () => {
   const out = [], timers = [];
   const c = { framed: '25', showing: '', toTop: (op, m) => out.push([op, structuredClone(m)]), Number, Promise, Map,
     setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout() {} };
   vm.createContext(c);
-  const f = vm.runInContext(`${RELAY}\n({ askSidebar, acked, visible, tell: (v) => { told = v; } })`, c);
+  const f = vm.runInContext(`${RELAY}\n({ askSidebar, askTimer, acked, visible, tell: (v) => { told = v; } })`, c);
   return { ...f, out, timers };
 };
 
@@ -182,6 +245,38 @@ test('a frame asks only while on screen, and takes only the answer to its own qu
   assert.equal(late, null);
   f.acked({ n: 2, gen: 'd.1', ok: true });
   assert.equal(late, null, 'and its answer, if it comes after, changes nothing');
+});
+
+test('a frame matches timer replies to the request kind and document generation', async () => {
+  const f = frameSide(); f.tell(true);
+  let got;
+  f.askTimer('toggle').then((r) => { got = r; });
+  const [op, ask] = f.out[0];
+  assert.equal(op, 'timer');
+  f.acked({ n: ask.n, gen: ask.gen, ok: true, rec: {} });
+  f.acked({ n: ask.n, gen: 'previous-doc', ok: true, timer: {} }, 'timer');
+  await settle(); assert.equal(got, undefined);
+  f.acked({ n: ask.n, gen: ask.gen, ok: true, timer: { end: 2000 }, advanced: 1000 }, 'timer');
+  await settle(); assert.deepEqual({ ...got, timer: { ...got.timer } }, { ok: true, timer: { end: 2000 }, advanced: 1000 });
+  f.tell(false); assert.equal(await f.askTimer('reset'), null);
+  f.tell(true); assert.equal(await f.askTimer('set'), null);
+});
+
+test('a fresh tab responds in its first 400ms; only a real drag briefly suppresses clicks', () => {
+  const hits = [], el = { dataset: { courseId: '25' } };
+  let now = 150;
+  const c = { performance: { now: () => now }, tabOf: () => el, visit: (id) => hits.push(id), shut() {}, pinTab() {} };
+  vm.createContext(c);
+  const click = vm.runInContext(`${part('  let dragged = ', '  // A tablist:')}
+({ onClick, draggedAt: (n) => { dragged = n; } })`, c);
+  const e = { type: 'click', button: 0, target: { closest: () => false }, preventDefault() {}, stopPropagation() {} };
+  click.onClick(e);
+  assert.deepEqual(hits, ['25'], 'no drag occurred: the first click must open the tab');
+  click.draggedAt(160); now = 170;
+  click.onClick(e);
+  assert.deepEqual(hits, ['25'], 'the click following a drag is suppressed');
+  now = 600; click.onClick(e);
+  assert.deepEqual(hits, ['25', '25']);
 });
 
 // ---- documents: the page and its tabs' frames, each running features/sidebar.js ----------------------------------------

@@ -122,7 +122,7 @@ test('at most four frames stay running: the least recently shown go, never the o
   const frame = (at) => ({ at, ready: true, el: { style: {}, inert: false, focus() {} } });
   const frames = new Map([['_1_1', frame(1)], ['_2_1', frame(5)], ['_4_1', frame(4)], ['_5_1', frame(2)]]);
   const dropped = [];
-  const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
+  const show = vm.runInNewContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
     LIVE: 4, Date, Promise, setTimeout() {}, clearTimeout() {}, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
@@ -140,7 +140,7 @@ test('a hidden frame stays live however long it is hidden: no timer closes it', 
   const frame = (at) => ({ at, ready: true, el: { style: {}, inert: false, focus() {} } });
   const frames = new Map([['_1_1', frame(1)], ['_2_1', frame(2)], ['_3_1', frame(3)]]);
   const timers = [];
-  const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
+  const show = vm.runInNewContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
     LIVE: 4, Date, Promise, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     setTimeout: (fn, ms) => timers.push(ms), clearTimeout() {},
@@ -167,7 +167,7 @@ const switching = () => {
     open: (cid) => { const f = frame(); frames.set(cid, f); return f; },
     lay() {}, unpicture() {}, clearSlow() {}, slowFrame() {}, picture() {}, draw() {}, later() {},
   });
-  const show = vm.runInContext(part('  const drop = ', '  // A frame is shown once')
+  const show = vm.runInContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const drop = ', '  // A frame is shown once')
     + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', context);
   const fire = (id) => { const t = timers.get(id); timers.delete(id); t?.fn(); };
   return { frames, timers, context, show, fire };
@@ -295,7 +295,7 @@ test('a saved-list close destroys its live frame and a metadata change preserves
 test('four edited live frames refuse a fifth without opening or destroying a document', async () => {
   const frames = new Map(Array.from({ length: 4 }, (_, i) => [`_${i + 1}_1`, { at: i, dirty: true, ready: true }]));
   const shown = [], closed = [], notes = [];
-  const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
+  const show = vm.runInNewContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, LIVE: 4,
     host: {}, strip: null, list: null, document: { activeElement: null }, location: {}, ctx: { site: 'ultra' },
     say: (m) => notes.push(m), t: (s) => s,

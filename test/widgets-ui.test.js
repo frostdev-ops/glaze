@@ -8,7 +8,9 @@ const vm = require('node:vm');
 const D = require('../defaults.js');
 const W = require('../lib/widgets.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => process.env.GZ_P4_WIDGET_BASE && f === 'features/widgets.js'
+  ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_P4_WIDGET_BASE}:${f}`], { cwd: path.join(__dirname, '..'), encoding: 'utf8' })
+  : fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 
 class E {
@@ -81,7 +83,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
     vm.runInContext(read('lib/ultra.js'), c);
   }
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('features/widgets.js').replace('  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, set: (w, s, m) => { W = w; o = s; me = m; } } };');
+  const src = read('features/widgets.js').replace('  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, draw, onShow, layout: (x) => { lay = x; }, set: (w, s, m) => { W = w; o = s; me = m; }, state: (x) => { on = x.on; lay = x.lay; board = drawn = null; floats = x.floats; ro = x.ro; } } };');
   assert.notEqual(src, read('features/widgets.js'));
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
@@ -549,4 +551,146 @@ test('course tabs: the timer ticks in the document on screen only, from the one 
   await settle();
   assert.deepEqual(b.p.sent.map((m) => m.op), ['advance']);
   assert.deepEqual(a.p.sent, []);
+});
+
+test('covered timer storage updates wait for visibility before advancing or rendering their deadline', async () => {
+  const clock = { t: 1e12 }, p = page({ clock });
+  let visible = true;
+  p.c.GZ_CTABS = { visible: () => visible };
+  const body = new E(), tile = p.ui.probe.WIDGETS.timer(body);
+  p.answer(); await settle();
+  visible = false;
+  const before = find(body, (e) => e.className === 'gz-w-clock').children[0].data;
+  const expired = { phase: 'work', end: clock.t - 200, left: 0 };
+  for (const f of [...p.listeners]) f({ widgetTimer: { newValue: expired } }, 'local');
+  assert.equal(find(body, (e) => e.className === 'gz-w-clock').children[0].data, before, 'covered state maintenance does not paint');
+  visible = true; tile.wake(); await settle();
+  assert.deepEqual(p.sent.map((m) => m.op), ['advance'], 'the hidden storage update cannot consume an uncommitted transition');
+});
+
+test('visibility suspension stops presentation timers and board observation, including floating tiles', () => {
+  const p = page(); let sleeps = 0, disconnects = 0;
+  p.c.cancelAnimationFrame = () => {};
+  p.ui.probe.tiles.set('quotes', { el: new E(), suspend: () => sleeps++ });
+  p.ui.probe.state({ on: false, ro: { disconnect: () => disconnects++ } });
+  p.c.document.visibilityState = 'hidden'; p.ui.probe.onShow();
+  assert.equal(sleeps, 1); assert.equal(disconnects, 1);
+});
+
+test('a covered agenda neither refetches for storage updates nor paints a late response', async () => {
+  let finish, calls = 0, visible = true;
+  const p = page({ capi: async () => { calls++; return new Promise((r) => { finish = r; }); } });
+  p.c.GZ_CTABS = { visible: () => visible };
+  const body = new E(), tile = p.ui.probe.WIDGETS.agenda(body);
+  p.answer(); await settle(); p.answer(); await settle();
+  const list = find(body, (e) => e.className === 'gz-w-agenda');
+  visible = false; finish([]); await settle();
+  assert.equal(list.children.length, 0, 'the pending answer waits to paint');
+  for (const f of [...p.listeners]) f({ todoCache: { newValue: null } }, 'local');
+  await settle(); assert.equal(calls, 1, 'no work starts behind the active course tab');
+  tile.stop();
+});
+
+test('simultaneous top floating and course-frame timers announce a deadline only after one queued advance wins', async () => {
+  const Store = require('../lib/nav-store.js'), K = require('../lib/cards.js');
+  const clock = { t: 1e12 }, running = { phase: 'work', end: clock.t + 1000, left: 0 }, values = { widgetTimer: running };
+  const area = { sync: { get: async () => ({}) }, local: { get: async () => values, set: async (v) => { Object.assign(values, v); return true; } } };
+  const serial = K.queue(), moments = [];
+  const docs = ['float', 'dock'].map((name) => {
+    const p = page({ clock, local: { widgetTimer: running } }), body = new E();
+    p.c.GZ_CTX.moment = (...x) => moments.push({ name, x });
+    p.c.chrome.runtime.sendMessage = (m, cb) => serial(() => Store.timer(m.op, area, clock.t)).then(cb);
+    p.ui.probe.WIDGETS.timer(body); p.answer(); return p;
+  });
+  await settle(); clock.t = running.end + 100;
+  for (const p of docs) [...p.timers.values()].at(-1).f();
+  await settle();
+  assert.equal(moments.length, 1, 'only the response which advanced shared storage announces/chimes');
+  assert.equal(values.widgetTimer.phase, 'rest');
+});
+
+test('a covered notes save completes without repainting outgoing content, then paints on wake', async () => {
+  const p = page({ hold: true }), body = new E(); let visible = true;
+  p.c.GZ_CTABS = { visible: () => visible };
+  const tile = p.ui.probe.WIDGETS.notes(body); p.answer(); await settle();
+  const text = find(body, (e) => e.tagName === 'TEXTAREA'), view = find(body, (e) => e.className === 'gz-w-note-view');
+  text.value = 'Saved after switch'; text.fire('input'); text.fire('blur');
+  let paints = 0; view.replaceChildren = () => paints++;
+  visible = false; p.held.shift()(); await settle();
+  assert.equal(paints, 0, 'accepted writes finish quietly behind the visible frame');
+  visible = true; tile.wake(); assert.equal(paints, 1);
+});
+
+const dockAndFloat = () => {
+  const { El } = require('./stand-in-dom.js'), S = require('../lib/sidebar.js');
+  const p = page(), doc = { visibilityState: 'visible' }, loads = [], counts = { contexts: 0, suspended: 0, resumed: 0 }; let visible = true;
+  doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
+  Object.assign(doc, { documentElement: doc.root, createElement: (tag) => new El(tag, doc), querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s) });
+  p.c.document = doc; p.c.location.pathname = '/courses/25'; p.c.innerWidth = 1440; p.c.innerHeight = 900; p.c.cancelAnimationFrame = () => {};
+  p.c.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  p.c.GZ_SIDEBAR = S; p.c.GZ_CTABS = { visible: () => visible };
+  p.c.GZ_CTX.settings = () => ({ enhance: { sidebar: true, widgets: true, notes: true, pet: true } });
+  p.c.GZ_CTX.need = (file) => { loads.push(file); return new Promise(() => {}); };
+  const host = new El('div', doc); doc.body.append(host);
+  const rec = S.clean({ mig: 1, dock: [{ id: 'notes' }], dest: { notes: 'dock', quotes: 'float' } });
+  p.c.GZ_SIDEBAR_UI = { active: () => true, rec: () => rec, host: () => ({ widgets: host }), context: () => ({ accountId: '3' }), drawn() {} };
+  p.ui.declare({ notes: { name: 'Notes', size: 's', fill: () => ({ context: () => counts.contexts++, suspend: () => counts.suspended++, resume: () => counts.resumed++ }) }, quotes: { name: 'Quote', size: 's', fill: () => ({}) } });
+  const lay = W.apply(W.layout(), { ops: [{ s: 'canvas', id: 'quotes', set: { on: true, float: true } }] });
+  p.ui.probe.state({ on: true, lay }); p.ui.probe.draw();
+  return { p, doc, loads, rec, host, lay, counts, hide: () => { visible = false; p.ui.cover(); } };
+};
+
+test('a covered top document can redraw its float without mounting or relabelling dock widgets', () => {
+  const { p, loads, rec, host, counts, hide } = dockAndFloat();
+  assert.equal(counts.contexts, 1); assert.equal(p.ui.probe.tiles.size, 2);
+  hide();
+  rec.dest.pet = 'dock'; rec.dock.push({ id: 'pet' });
+  p.ui.probe.draw();
+  assert.deepEqual(loads, [], 'a newly docked habitat does not start loading behind the active course frame');
+  assert.equal(counts.suspended, 1); assert.equal(counts.contexts, 1, 'the dock keeps its outgoing context while its float reconciles');
+  assert.equal(p.ui.probe.tiles.get('notes').el.parentNode, host, 'the open form remains in its own document');
+});
+
+test('disabling the last floating tile while the top document is covered removes its live renderer', () => {
+  const { p, rec, lay, hide } = dockAndFloat();
+  hide();
+  const quote = p.ui.probe.tiles.get('quotes'); let stopped = 0; quote.stop = () => stopped++;
+  rec.dest.quotes = 'off';
+  p.ui.probe.layout(W.apply(lay, { ops: [{ s: 'canvas', id: 'quotes', set: { on: false } }] }));
+  p.ui.probe.draw();
+  assert.equal(p.ui.probe.tiles.has('quotes'), false);
+  assert.equal(quote.el.isConnected, false); assert.equal(stopped, 1);
+  assert.equal(p.ui.probe.tiles.has('notes'), true, 'the suspended dock is retained');
+});
+
+test('a suspended dock renderer moved to float while covered resumes in its existing element', () => {
+  const { p, rec, lay, counts, hide } = dockAndFloat();
+  const notes = p.ui.probe.tiles.get('notes'); hide();
+  assert.equal(counts.suspended, 1);
+  rec.dest.notes = 'float';
+  p.ui.probe.layout(W.apply(lay, { ops: [{ s: 'canvas', id: 'notes', set: { on: true, float: true } }] }));
+  p.ui.probe.draw();
+  assert.equal(p.ui.probe.tiles.get('notes'), notes);
+  assert.equal(notes.el.parentNode.id, 'gz-float');
+  assert.equal(counts.resumed, 1, 'the newly visible float resumes its stopped presentation work');
+  p.ui.probe.draw(); assert.equal(counts.resumed, 1, 'incidental redraws do not resume it twice');
+});
+
+test('a sidebar account change invalidates the cached widget profile and late previous-account answers', async () => {
+  const p = page(), listeners = {}; let accountId = '3', release;
+  p.c.cancelAnimationFrame = () => {}; p.c.GZ_WIDGETS = W;
+  p.c.document.getElementById = () => null;
+  p.c.GZ_CTX.settings = () => ({ enhance: { sidebar: true } });
+  p.c.GZ_SIDEBAR_UI = { on: (name, fn) => { listeners[name] = fn; }, context: () => ({ accountId }), ready: async () => {}, active: () => false };
+  p.ui.sync(true); p.ui.sync(false); p.answer(); await settle();
+  listeners.context();
+  p.c.GZ_CTX.profile = () => new Promise((r) => { release = r; });
+  const old = p.ui.who();
+  const rejected = assert.rejects(old, /stale profile/);
+  accountId = '4'; listeners.context();
+  p.c.GZ_CTX.profile = async () => ({ id: '4' });
+  const latest = p.ui.who();
+  release({ id: '3' }); await rejected;
+  assert.equal((await latest).uid, '4');
+  assert.equal((await p.ui.who()).uid, '4', 'the old response cannot replace the new signed-in identity');
 });

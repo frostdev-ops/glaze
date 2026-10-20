@@ -95,17 +95,17 @@ test('the navbar reads only the shown same-origin frame document and tolerates a
 });
 
 function messages(shown = 'page') {
-  const frameWindow = {}, doc = { location: new URL(shown === 'page' ? '/calendar' : `/courses/${shown}/modules`, origin) };
+  const posted = [], frameWindow = { postMessage: (m) => posted.push(m) }, doc = { location: new URL(shown === 'page' ? '/calendar' : `/courses/${shown}/modules`, origin) };
   const f = { el: { contentWindow: frameWindow, contentDocument: doc, style: {} }, ready: true, accountDoc: doc };
   let listener, synced = 0, watched = 0, kept = 0;
-  vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), {
+  vm.runInNewContext(part('  let drawerFrom = ', '  const drawerOn = ') + part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), {
     L, PAGE: 'page', framed: '', preview: false, showing: shown, on: true, ctx: { site: 'canvas' }, location: { origin },
     frames: new Map([[shown, f]]), spare: new Map(), next: new Map(), who: '42',
     addEventListener: (_, fn) => { listener = fn; },
     GZ_NAVBAR_UI: { sync: () => synced++ }, watch: () => watched++, later() {}, keepPage: () => kept++,
   });
   const send = (op, source = frameWindow, fromOrigin = origin) => listener({ origin: fromOrigin, source, data: { gzCtab: op, uid: '42' } });
-  return { send, doc, f, counts: () => ({ synced, watched, kept }) };
+  return { send, doc, f, posted, counts: () => ({ synced, watched, kept }) };
 }
 
 test('page-frame route notifications refresh the bar and reject unowned senders', () => {
@@ -130,6 +130,7 @@ test('a replaced course-frame document schedules readiness before the navbar men
   });
   watch('12', h.f); assert.equal(synced, 0); now = 301; next();
   assert.equal(h.f.ready, true); assert.equal(synced, 1);
+  assert.deepEqual(h.posted.map((m) => ({ ...m })), [{ gzCtab: 'visible', on: true }], 'sidebar ownership begins once the replacement is ready');
 });
 
 test('same-document course-frame navigation refreshes the navbar course menu', () => {
