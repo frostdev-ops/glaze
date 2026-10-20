@@ -570,12 +570,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // Document review may hide Glaze chrome only for the owned, authenticated document currently on screen.
   const relayReview = (from, src, e) => {
     const d = e.data;
-    if (typeof d.on !== 'boolean' || Object.keys(d).length !== 2 || !currentFrame(from, src)) return;
+    if (e.origin !== location.origin || e.source !== src.el.contentWindow || Array.isArray(d) || d.gzCtab !== 'review'
+      || typeof d.on !== 'boolean' || Object.keys(d).length !== 2 || !currentFrame(from, src)) return;
     const doc = src.el.contentDocument;
     ctx.need('features/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => {
-      const current = () => currentFrame(from, src) && src.el.contentDocument === doc;
-      if (!GZ_DOCREVIEW.relayable(e, location.origin, src.el.contentWindow, current())) return;
-      if (d.on && (!doc.documentElement.hasAttribute('data-gz-review-focus') || !doc.documentElement.hasAttribute('data-gz-review'))) return;
+      const current = () => currentFrame(from, src) && src.el.contentDocument === doc && ctx.on()
+        && GZ_DOCREVIEW.pathOK(ctx.site, doc.location.pathname) && doc.documentElement.hasAttribute('data-gz-review-focus') && doc.documentElement.hasAttribute('data-gz-review');
+      if (!GZ_DOCREVIEW.relayable(e, location.origin, src.el.contentWindow, currentFrame(from, src) && src.el.contentDocument === doc)) return;
+      if (d.on && !current()) return;
       GZ_DOCREVIEW.chrome(d.on, { el: src.el, current });
     }, () => {});
   };

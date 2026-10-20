@@ -13,7 +13,8 @@ const fixture = fs.readFileSync(path.join(__dirname, 'fixtures/ultra-docreview.h
 const origin = 'https://school.blackboard.com', route = '/ultra/courses/_1_1/assessment/_2_1/overview/student-submission-view';
 const page = (raw = {}, html = fixture, site = 'ultra', pathname = route) => {
   const doc = { activeElement: null }; doc.root = new El('html', doc); doc.body = parse(html, doc); doc.head = new El('head', doc); doc.root.prepend(doc.head);
-  const events = new Map(), observers = [], sent = [], store = new Map();
+  const events = new Map(), observers = [], sent = [], store = new Map(), timers = new Map(); let timerId = 0;
+  const setTimeout = (f, delay) => { timers.set(++timerId, { f, delay }); return timerId; }, clearTimeout = (id) => timers.delete(id);
   const location = new URL(origin + pathname); let settings = G.GZ_SANITIZE({ docreview: raw }), visible = true;
   Object.assign(doc, { documentElement: doc.root, location, createElement: (tag) => new El(tag, doc),
     getElementById: (id) => doc.root.all().find((e) => e.id === id) || null,
@@ -21,18 +22,18 @@ const page = (raw = {}, html = fixture, site = 'ultra', pathname = route) => {
     addEventListener: (type, f) => { const a = events.get(type) || []; a.push(f); events.set(type, a); }, removeEventListener: (type, f) => events.set(type, (events.get(type) || []).filter((x) => x !== f)),
   });
   const top = { postMessage: (d, o) => sent.push([d, o]) };
-  const c = { URL, console, module: { exports: {} }, document: doc, location, queueMicrotask, Event: class {},
+  const c = { URL, console, module: { exports: {} }, document: doc, location, queueMicrotask, setTimeout, clearTimeout, Event: class {},
     GZ_CTABS: { visible: () => visible },
     chrome: { runtime: { getURL: (f) => f } },
     MutationObserver: class { constructor(f) { this.f = f; observers.push(this); } observe() {} disconnect() {} },
     addEventListener() {}, removeEventListener() {}, dispatchEvent() {},
   };
-  const win = { top, location, sessionStorage: { setItem: (k, v) => store.set(k, v), getItem: (k) => store.get(k) },
+  const win = { top, location, setTimeout, clearTimeout, sessionStorage: { setItem: (k, v) => store.set(k, v), getItem: (k) => store.get(k) },
     getComputedStyle: () => ({ transform: 'none', filter: 'none', perspective: 'none', contain: 'none', willChange: 'auto' }), addEventListener() {}, removeEventListener() {} };
   c.window = win; c.globalThis = c; vm.createContext(c); vm.runInContext(source, c);
   const ctx = { site, t: (k) => k, settings: () => settings, on: () => true, tabFrame: '_1_1' };
   const ui = c.module.exports.create(ctx, doc, win); const $ = (s) => doc.querySelector(s);
-  return { api: c.module.exports, ui, doc, $, sent, observers, store, win, ctx, change: (s) => { settings = G.GZ_SANITIZE({ docreview: s }); ui.sync(); }, hide: () => { visible = false; ui.cover(); },
+  return { api: c.module.exports, ui, doc, $, sent, observers, store, win, ctx, c, timers, fire: (type, e = {}) => { for (const f of events.get(type) || []) f(e); }, change: (s) => { settings = G.GZ_SANITIZE({ docreview: s }); ui.sync(); }, hide: () => { visible = false; ui.cover(); },
     key: (key, target = doc.body, extra = {}) => { doc.activeElement = target; const e = { key, target, preventDefault() { this.prevented = true; }, stopPropagation() {}, ...extra }; for (const f of events.get('keydown') || []) f(e); return e; },
     mutate: async () => { for (const o of observers) o.f([]); await new Promise(setImmediate); } };
 };
@@ -123,9 +124,9 @@ test('print restores the native layout and no feature code reparents, clones or 
 test('the actual course-tab relay rechecks document ownership after lazy loading', async () => {
   const tabs = fs.readFileSync(path.join(__dirname, '../features/coursetabs.js'), 'utf8');
   const code = tabs.slice(tabs.indexOf('  const relayReview = '), tabs.indexOf('  const relayTimer = '));
-  const doc = { documentElement: { hasAttribute: () => true } }, source = {}, src = { el: { contentWindow: source, contentDocument: doc } }, calls = [];
+  const doc = { location: { pathname: route }, documentElement: { hasAttribute: () => true } }, source = {}, src = { el: { contentWindow: source, contentDocument: doc } }, calls = [];
   let current = true, release;
-  const c = { location: { origin }, ctx: { need: () => new Promise((r) => { release = r; }) }, currentFrame: () => current, GZ_DOCREVIEW: { relayable: R.relayable, chrome: (...args) => calls.push(args) } };
+  const c = { location: { origin }, ctx: { on: () => true, site: 'ultra', need: () => new Promise((r) => { release = r; }) }, currentFrame: () => current, GZ_DOCREVIEW: { pathOK: R.pathOK, relayable: R.relayable, chrome: (...args) => calls.push(args) } };
   vm.createContext(c); vm.runInContext(code + '\nglobalThis.relayReview = relayReview;', c);
   const event = (on = true) => ({ origin, source, data: { gzCtab: 'review', on } });
   c.relayReview('_1_1', src, event()); release(); await new Promise(setImmediate); assert.equal(calls.length, 1);
@@ -145,16 +146,104 @@ test('all five translated catalogues include the new review settings and actions
   for (const code of ['de', 'es', 'fr', 'nl', 'pt-BR']) for (const key of ['Document review', 'Compact submission header', 'Full-screen document button', 'Focus document button', 'Hide Glaze bars in focus', 'Remember document focus for this session', 'Grade and feedback', 'Exit focus']) assert.equal(typeof globalThis.GZ_LANGS[code][key], 'string', `${code}: ${key}`);
 });
 
-test('Canvas canvadocs with comment controls offers only fullscreen; a read-only preview also offers compact and focus', () => {
+test('Canvas canvadocs with comment controls stays entirely native; a read-only preview offers review tools', () => {
   const canvas = '<body><div id="content"><div class="submission-details-header"><h1>Submission Details</h1><span class="submission-details-header__grade-summary">5/5</span><span class="submission-details-header__time">Submitted today</span></div><div class="submission-details-container"><div class="submission-details-frame"><iframe id="preview_frame" src="https://canvadocs.instructure.com/1/sessions/abc/view"></iframe></div></div>FORM</div></body>';
   for (const form of ['', '<form><textarea></textarea><button type="submit">Submit comment</button></form>']) {
     const p = page({}, canvas.replace('FORM', form), 'canvas', '/courses/1/assignments/2/submissions/3'); p.ui.sync();
+    if (form) { assert.equal(p.doc.root.hasAttribute('data-gz-review'), false); assert.equal(p.$('[data-gz-review-ui]'), null); continue; }
     assert.ok(p.doc.root.hasAttribute('data-gz-review')); assert.equal(p.$('#gz-review-fullscreen').hidden, false);
     assert.equal(p.$('#gz-review-focus').hidden, !!form); assert.equal(p.doc.root.hasAttribute('data-gz-review-compact'), !form);
     p.ui.enter(); assert.equal(p.doc.root.hasAttribute('data-gz-review-focus'), !form);
     const submit = p.$('button[type="submit"]'); if (submit) { assert.equal(submit.listeners.length, 0); assert.equal(submit.parentNode.tagName, 'FORM'); }
   }
   const bad = page({}, canvas.replace('FORM', '').replace('canvadocs.instructure.com', 'evil.example'), 'canvas', '/courses/1/assignments/2/submissions/3'); bad.ui.sync(); assert.equal(bad.doc.root.hasAttribute('data-gz-review'), false);
+});
+
+test('composition and retargeted editable events never activate the shortcut', () => {
+  const p = page(); p.ui.sync();
+  for (const extra of [{ isComposing: true }, { keyCode: 229 }, { altKey: true }, { metaKey: true }, { shiftKey: true }]) assert.equal(p.key('f', p.doc.body, extra).prevented, undefined);
+  for (const value of ['', 'true', 'plaintext-only']) {
+    const el = new El('div', p.doc); el.setAttribute('contenteditable', value);
+    assert.equal(p.key('f', p.doc.body, { target: el }).prevented, undefined);
+  }
+  p.fire('compositionstart'); assert.equal(p.key('f').prevented, undefined); p.fire('compositionend');
+  assert.equal(p.doc.root.hasAttribute('data-gz-review-focus'), false);
+});
+
+test('comment controls and actions outside the recognized panel prevent all enhancement', () => {
+  for (const control of ['<button>Save and Close</button>', '<button>Submit</button>', '<button>New attempt</button>', '<button aria-label="Add comment">Reply</button>', '<div role="textbox"></div>', '<div contenteditable="plaintext-only"></div>']) {
+    for (const html of [fixture.replace('</main>', control + '</main>'), fixture.replace('</body>', control + '</body>')]) {
+      const p = page({}, html); p.ui.sync(); p.ui.enter();
+      assert.equal(p.doc.root.hasAttribute('data-gz-review'), false, control); assert.equal(p.$('[data-gz-review-ui]'), null);
+    }
+  }
+});
+
+test('focus suspends sidebar and dock through their cover hooks and restores them on exit', () => {
+  const p = page(), calls = [];
+  p.c.GZ_SIDEBAR_UI = { cover: () => calls.push(['sidebar', p.doc.root.hasAttribute('data-gz-review-focus')]) };
+  p.c.GZ_WIDGETS_UI = { cover: () => calls.push(['widgets', p.doc.root.hasAttribute('data-gz-review-focus')]) };
+  p.ui.sync(); p.ui.enter(); p.ui.leave();
+  assert.deepEqual(calls, [['sidebar', true], ['widgets', true], ['sidebar', false], ['widgets', false]]);
+});
+
+test('a containing-block change while focused immediately restores native mode', async () => {
+  const p = page(); p.ui.sync(); p.ui.enter();
+  p.win.getComputedStyle = () => ({ transform: 'matrix(1,0,0,1,0,0)', filter: 'none', perspective: 'none', contain: 'none', willChange: 'auto' });
+  await p.mutate(); assert.equal(p.doc.root.hasAttribute('data-gz-review-focus'), false);
+});
+
+test('an additional native feedback block invalidates the exact structure and exits focus', async () => {
+  const p = page(); p.ui.sync(); p.ui.enter(); const frame = p.$('iframe'), extra = new El('div', p.doc);
+  extra.textContent = 'Unexpected native content'; p.$('.review-feedback').append(extra); await p.mutate();
+  assert.equal(p.doc.root.hasAttribute('data-gz-review'), false); assert.equal(p.$('iframe'), frame); assert.equal(p.sent.at(-1)[0].on, false);
+});
+
+test('immersive lease expires without child renewal and renewal does not rebuild its exit button', () => {
+  const p = page(), frame = p.$('iframe'), guard = { el: frame, current: () => true };
+  p.api.chrome(true, guard); const button = p.$('#gz-review-bars');
+  p.api.chrome(true, guard); assert.equal(p.$('#gz-review-bars'), button);
+  const lease = [...p.timers.values()].find((x) => x.delay === 4000); assert.ok(lease);
+  lease.f(); assert.equal(p.doc.root.hasAttribute('data-gz-review-immersive'), false); assert.equal(p.timers.size, 0);
+});
+
+test('fullscreen is rejected on stale structure and settings off exits only owned fullscreen', async () => {
+  const p = page(); p.ui.sync(); const frame = p.$('iframe'); let requests = 0, exits = 0;
+  frame.requestFullscreen = async () => { requests++; p.doc.fullscreenElement = frame; };
+  p.doc.exitFullscreen = async () => { exits++; p.doc.fullscreenElement = null; };
+  p.$('#gz-review-fullscreen').dispatchEvent({ type: 'click' }); await new Promise(setImmediate);
+  p.change({ compact: false, fullscreen: false, focus: false }); await new Promise(setImmediate); assert.equal(exits, 1);
+  const q = page(); q.ui.sync(); const button = q.$('#gz-review-fullscreen'); q.$('iframe').requestFullscreen = async () => requests++;
+  q.$('.js-overall-feedback').className = 'changed'; button.dispatchEvent({ type: 'click' }); await new Promise(setImmediate); assert.equal(requests, 1);
+});
+
+test('a pending fullscreen request cannot outlive teardown', async () => {
+  const p = page(); p.ui.sync(); const frame = p.$('iframe'); let resolve, exits = 0;
+  frame.requestFullscreen = () => new Promise((r) => { resolve = () => { p.doc.fullscreenElement = frame; r(); }; });
+  p.doc.exitFullscreen = async () => { exits++; p.doc.fullscreenElement = null; };
+  p.$('#gz-review-fullscreen').dispatchEvent({ type: 'click' }); p.ui.teardown(); resolve(); await new Promise(setImmediate);
+  assert.equal(exits, 1); assert.equal(p.doc.fullscreenElement, null);
+});
+
+test('overlapping fullscreen clicks cannot erase ownership of a successful request', async () => {
+  const p = page(); p.ui.sync(); const frame = p.$('iframe'), pending = []; let exits = 0;
+  frame.requestFullscreen = () => new Promise((resolve, reject) => pending.push({ resolve: () => { p.doc.fullscreenElement = frame; resolve(); }, reject }));
+  p.doc.exitFullscreen = async () => { exits++; p.doc.fullscreenElement = null; };
+  const button = p.$('#gz-review-fullscreen'); button.dispatchEvent({ type: 'click' }); button.dispatchEvent({ type: 'click' });
+  pending[0].resolve(); await new Promise(setImmediate); pending[1]?.reject(Error('already requested')); await new Promise(setImmediate);
+  p.change({ fullscreen: false }); await new Promise(setImmediate); assert.equal(exits, 1); assert.equal(p.doc.fullscreenElement, null);
+});
+
+test('native inline styles, classes and pre-existing part markers survive teardown exactly', () => {
+  const p = page(); const frame = p.$('iframe'); frame.setAttribute('style', 'height: 81%; border: 2px solid red'); frame.className = 'native viewer'; frame.setAttribute('data-gz-review-part', 'prior');
+  const before = [frame.getAttribute('style'), frame.className, frame.getAttribute('data-gz-review-part')];
+  p.ui.sync(); p.ui.enter(); p.ui.teardown(); assert.deepEqual([frame.getAttribute('style'), frame.className, frame.getAttribute('data-gz-review-part')], before);
+});
+
+test('a lost extension context ends focus and stops lease renewal', () => {
+  const p = page(); p.ui.sync(); p.ui.enter(); p.ctx.on = () => false;
+  const pulse = [...p.timers.values()].find((x) => x.delay === 1000); pulse.f();
+  assert.equal(p.doc.root.hasAttribute('data-gz-review-focus'), false); assert.equal(p.timers.size, 0); assert.equal(p.sent.at(-1)[0].on, false);
 });
 
 test('immersive chrome restores on a hidden/replaced frame, frame load and explicit exit', () => {

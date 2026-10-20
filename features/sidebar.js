@@ -114,7 +114,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // page around it hides its own. Only the document on screen draws, watches or changes anything: a covered or hidden one
   // keeps its record up to date and waits (asleep), and its changes go through the page around it (GZ_CTABS.sidebar).
   const framed = !!ctx.tabFrame && globalThis.top !== globalThis.window;
-  const covered = () => { const c = globalThis.GZ_CTABS; return document.visibilityState === 'hidden' || (c?.visible ? !c.visible() : framed); };
+  const covered = () => { const c = globalThis.GZ_CTABS; return document.visibilityState === 'hidden' || html().hasAttribute('data-gz-review-focus') || html().hasAttribute('data-gz-review-immersive') || (c?.visible ? !c.visible() : framed); };
   // A request's answer is for the page it was asked on: gen moves on with the route, the account and the document.
   const DOC = Math.random().toString(36).slice(2, 10);
 
@@ -455,16 +455,17 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const cover = () => {
     const now = covered();
     if (now === asleep) return;
-    asleep = now;
-    if (asleep) {
+    if (now) {
       closeMenu();
       closeDrawer(false);
+      asleep = true;
       mo?.disconnect();
       for (const f of [frame, passFrame]) cancelAnimationFrame(f);
       clearTimeout(noteTimer);
       widthCancel?.();
       return;
     }
+    asleep = false;
     if (on) { watch(); sync(true); }
   };
 

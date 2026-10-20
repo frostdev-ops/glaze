@@ -204,7 +204,7 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
-  ['features/docreview.js', 'getComputedStyle(el)', 1], // only the viewer's ancestors on explicit focus entry; reject fixed-position traps
+  ['features/docreview.js', 'getComputedStyle(el)', 1], // only the viewer's ancestors on entry and while focused; reject fixed-position traps
 
   ['features/mods.js', 'getComputedStyle(x.canvas)', 1], // one mounted mod canvas per slot while checking whether its Worker should pause
   ['features/navbar-canvas.js', 'getComputedStyle(el)', 1], // school logo background, one header mark per replacement
