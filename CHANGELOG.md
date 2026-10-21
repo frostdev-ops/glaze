@@ -4,6 +4,15 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.4] — 2026-10-21
+
+### Fixed
+
+- Blackboard pages use consistent themed backgrounds, rounded headers and controls, and spacing across discussions, assignments, documents, announcements, Activity, Calendar and grades. Activity icons stay centered, and Course Content headings have proper insets.
+- Keep scene backgrounds continuous behind navigation and keep full-page panels clear of the bar, including retained course tabs and smaller windows.
+- Improve course-tab navigation, sidebar and widget layout recovery, grade and due-date handling, and Settings behavior across Blackboard and Canvas.
+- Correct saved Look, note-sharing and session handling, and stabilize validation and packaging checks.
+
 ## [3.3.3] — 2026-10-20
 
 ### Fixed
