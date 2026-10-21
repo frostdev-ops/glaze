@@ -29,7 +29,7 @@ class E {
 }
 
 // Ultra uses the real shared profile/planner helper; only its own-site transport is synthetic and counted.
-const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = false, tz = 'UTC', ultra = null, capi = async () => [] } = {}) => {
+const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, hold = false, tz = 'UTC', ultra = null, capi = async () => [] } = {}) => {
   const held = []; // replies the test lets through by hand (hold)
   const FakeDate = class extends Date {};
   FakeDate.now = () => clock.t;
@@ -52,7 +52,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); const r = replies.shift() || { ok: true, kept: true }; if (hold) held.push(() => cb(r)); else Promise.resolve().then(() => cb(r)); } },
       storage: {
         local: { get: (keys, cb) => reads.push(() => cb(Object.fromEntries([keys].flat().filter((k) => k in local).map((k) => [k, local[k]])))), set: (v, cb) => { Object.assign(local, v); cb?.(); } },
-        sync: { get: (k, cb) => cb({}) },
+        sync: { get: (k, cb) => cb(Object.fromEntries([k].flat().filter((x) => x in sync).map((x) => [x, sync[x]]))) },
         onChanged: { addListener: (f) => listeners.push(f), removeListener: (f) => listeners.splice(listeners.indexOf(f), 1) },
       },
     },
@@ -186,6 +186,12 @@ test('a floating widget is never wider or taller than the window, whatever its s
     assert.match(rule, /width: min\([^;]+, calc\(100vw - 24px\)\)/, sel);
   }
   assert.match(css.slice(css.indexOf('#gz-float .gz-w {')), /^[^}]*max-height: calc\(100vh - 24px\)/);
+});
+
+test("a tile's resize corner, drawn at 18px, takes presses over 24 (WCAG 2.5.8), inside the tile", () => {
+  const css = read('features/apps.css');
+  assert.match(css.slice(css.indexOf('.gz-w-resize {')), /^[^}]*position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;/);
+  assert.ok(css.includes('.gz-w-resize::before { content: ""; position: absolute; inset: -6px 0 0 -6px; }'));
 });
 
 test('the grid shows tiles in their saved order, which is also the keyboard and screen-reader order', () => {
@@ -406,6 +412,30 @@ test('Ultra shared planner: a failed range is retried, then a newer covered To D
   tile.stop();
 });
 
+test("the agenda marks work done as Better To Do does: its manual mode, and Canvas's marks when they go there", async () => {
+  const clock = { t: Date.parse('2026-10-15T16:00:00Z') };
+  const raw = [
+    { plannable_type: 'assignment', plannable_id: '5', course_id: '1', context_name: 'Bio', plannable: { title: 'Lab 3' }, plannable_date: '2026-10-15T20:00:00Z', html_url: '/courses/1/assignments/5', submissions: { submitted: true } },
+    { plannable_type: 'quiz', plannable_id: '6', course_id: '1', context_name: 'Bio', plannable: { title: 'Quiz 2' }, plannable_date: '2026-10-15T21:00:00Z', html_url: '/courses/1/quizzes/6' },
+  ];
+  const open = async (todo) => {
+    const p = page({ clock, sync: { todo }, capi: async () => raw, local: { 'todo:https://canvas.test/3': { tasks: [], items: { 'quiz:6': { done: true } } } } });
+    return { p, ...(await loadAgenda(p)) };
+  };
+  const done = ({ body }) => find(body, (e) => e.className === 'gz-w-agenda').children.map((li) => 'done' in li.dataset);
+  const auto = await open({});
+  assert.deepEqual(done(auto), [true, true], 'handed in, and ticked in Glaze');
+  const manual = await open({ done: 'manual' });
+  assert.deepEqual(done(manual), [false, true], 'a hand-in alone leaves it open');
+  const sync = await open({ sync: true });
+  assert.deepEqual(done(sync), [true, false], "marks go to Canvas: Glaze's own is set aside");
+  // Changed while the agenda is on the page.
+  for (const f of [...auto.p.listeners]) f({ todo: { newValue: { done: 'manual', sync: true } } }, 'sync');
+  for (let i = 0; i < 4; i++) { auto.p.answer(); await settle(); }
+  assert.deepEqual(done(auto), [false, false]);
+  for (const x of [auto, manual, sync]) x.tile.stop();
+});
+
 test('Canvas agenda retains its covered-cache, day memo and Canvas API path', async () => {
   let calls = 0;
   const clock = { t: Date.parse('2026-10-15T16:00:00Z') }, p = page({ clock, capi: async (url) => { assert.match(url, /^\/planner\/items\?/); calls++; return []; } });
@@ -514,6 +544,18 @@ test('buddy timer checks context invalidation before any core mutation or runtim
   }
 });
 
+
+test('a buddy win or pat stored far ahead of the clock arms no repaint longer than a timer can wait', async () => {
+  const clock = { t: 1e12 }, far = clock.t + 40 * 864e5;
+  const p = page({ clock, local: { widgetBuddy: { happyAt: far, patAt: far } } });
+  const body = new E();
+  const tile = p.ui.probe.WIDGETS.buddy(body);
+  p.answer(); await settle();
+  // Past 2^31 - 1 ms a browser runs the timer at once, and the repaint arms the same one again.
+  assert.ok([...p.timers.values()].every((x) => x.ms <= 2 ** 31 - 1));
+  assert.equal(body.dataset.mood, 'sleepy');
+  tile.stop();
+});
 
 test('declaring and revoking a built-in tile replacement disposes the previous renderer', () => {
   const p = page();
@@ -635,7 +677,8 @@ const dockAndFloat = () => {
   const { El } = require('./stand-in-dom.js'), S = require('../lib/sidebar.js');
   const p = page(), doc = { visibilityState: 'visible' }, loads = [], counts = { contexts: 0, suspended: 0, resumed: 0 }; let visible = true;
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
-  Object.assign(doc, { documentElement: doc.root, createElement: (tag) => new El(tag, doc), querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s) });
+  Object.assign(doc, { documentElement: doc.root, createElement: (tag) => new El(tag, doc), querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s),
+    getElementById: (id) => doc.root.all().find((e) => e.id === id) || null });
   p.c.document = doc; p.c.location.pathname = '/courses/25'; p.c.innerWidth = 1440; p.c.innerHeight = 900; p.c.cancelAnimationFrame = () => {};
   p.c.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
   p.c.GZ_SIDEBAR = S; p.c.GZ_CTABS = { visible: () => visible };

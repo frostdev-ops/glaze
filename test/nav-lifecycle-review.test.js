@@ -8,6 +8,9 @@ const source = () => process.env.GZ_B7C_REVIEW_BASE
   : fs.readFileSync(require.resolve('../features/nav.js'), 'utf8');
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 const turn = () => new Promise(setImmediate);
+// Today at local noon: the Next due key changes at local midnight, so a clock that starts here and moves a minute or
+// two never crosses it.
+const noon = () => new Date().setHours(12, 0, 0, 0);
 
 test('a late planner read cannot overwrite a newer account snapshot', async () => {
   const src = source(), a = src.indexOf('  const readLocal ='), b = src.indexOf('  const refreshNext =', a);
@@ -49,7 +52,7 @@ test('a rejected Next due request is retryable and keeps its visible error', asy
 });
 
 test('failed Next due requests stay bounded through one-second ticks and remounts', async () => {
-  const f = nextFixture(); let now = Date.now(), attempts = 0;
+  const f = nextFixture(); let now = noon(), attempts = 0;
   f.c.Date = class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
   f.c.GZ_ULTRA.page.planned = async () => { attempts++; throw new Error('offline'); };
   f.libraries.resolve(); await f.refresh();
@@ -64,7 +67,7 @@ test('failed Next due requests stay bounded through one-second ticks and remount
 });
 
 test('a failure completing after remount keeps its backoff and off prevents its later retry', async () => {
-  const f = nextFixture(), reply = deferred(); let now = Date.now(), attempts = 0;
+  const f = nextFixture(), reply = deferred(); let now = noon(), attempts = 0;
   f.c.Date = class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
   f.c.GZ_ULTRA.page.planned = () => { attempts++; return reply.promise; };
   f.libraries.resolve(); const pending = f.refresh(); await turn(); f.c.rev++;
@@ -74,7 +77,7 @@ test('a failure completing after remount keeps its backoff and off prevents its 
 });
 
 test('successful Next due reads keep their two-minute freshness window', async () => {
-  const f = nextFixture(); let now = Date.now();
+  const f = nextFixture(); let now = noon();
   f.c.Date = class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
   f.libraries.resolve(); await f.refresh(); now += 119999; await f.refresh(); assert.equal(f.calls(), 1);
   now++; await f.refresh(); assert.equal(f.calls(), 2);

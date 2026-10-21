@@ -49,3 +49,17 @@ test('every web-accessible resource is in the package, and only the art the exte
   assert.ok(['', '-happy', '-sleepy'].every((s) => L.BUNDLED.has(`critters/study-buddy${s}`)));
   assert.deepEqual(files('assets/art/cursors'), Object.keys(L.CURSORS).flatMap((c) => [`assets/art/cursors/${c}/default.png`, `assets/art/cursors/${c}/pointer.png`]).sort());
 });
+
+test('every relative link and source in the extension\'s pages is a file the package ships', () => {
+  // The editor once linked PRIVACY.md, which isn't packaged: the link opened a missing extension page.
+  const roots = packaged();
+  for (const page of fs.readdirSync(root).filter((f) => f.endsWith('.html'))) {
+    assert.ok(inPackage(page, roots), `${page} is left out`);
+    for (const [, url] of read(page).matchAll(/\s(?:href|src)="([^"]*)"/g)) {
+      // Another site's address, an anchor, or a root path (the preview's stand-in Ultra links to its own pages).
+      if (/^(?:[a-z][a-z0-9+.-]*:|#|\/)/i.test(url) || !url) continue;
+      const file = url.split(/[?#]/)[0];
+      assert.ok(fs.existsSync(path.join(root, file)) && inPackage(file, roots), `${page} links ${url}, which the package doesn't ship`);
+    }
+  }
+});

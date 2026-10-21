@@ -2,6 +2,7 @@
 // or save (Banner, PeopleSoft, Workday, plain lists, timetables in Glaze's other languages), .ics calendars, matching to
 // Canvas courses, what's kept and the worker's writes, and the classes on a day, as reminders and as an export.
 // Every sample here was written for this test in the shape of a real system's output; none is a real student's.
+process.env.TZ = 'UTC'; // a few calls leave the zone to the machine's: these dates fall on the same day only in zones near UTC
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const C = require('../lib/classes.js');
@@ -218,6 +219,17 @@ Spring break (no classes) Mar 9-13`;
   assert.deepEqual(r.skip, ['2027-03-09', '2027-03-10', '2027-03-11', '2027-03-12', '2027-03-13']);
 });
 
+test('a term heading in capitals is no course: the class under it keeps its own name', () => {
+  const text = `FALL 2026
+Calculus I   MWF 9:00-9:50am   Math Bldg 101
+WS 2000 Intro to Women's Studies   TR 1:30-2:45pm   Room 12
+WS 2026/27
+Programmierung   MWF 10:00-11:30am   Raum H1`;
+  const r = C.fromText(text, { now: NOW });
+  // WS 2000, with no year range, is a course (Women's Studies), as HIST 2010 is.
+  assert.deepEqual(r.entries.map((e) => [e.code, e.name]), [['', 'Calculus I'], ['WS 2000', "Intro to Women's Studies"], ['', 'Programmierung']]);
+});
+
 test('dates: years taken from the other end of a range, or nearest today', () => {
   const r = C.fromText('Spring term: Jan 12 – May 1\nECON 201 Microeconomics MW 3:30-4:45pm', { now: NOW });
   assert.deepEqual([r.term.from, r.term.to], ['2027-01-12', '2027-05-01']);
@@ -256,14 +268,19 @@ test('HTML and Word files go through lib/doctext.js to the same reader', async (
 // Codex W14 review: the date reader compared every date with every other one (2,000 dates: ~2M comparisons; 8,000:
 // ~32M). Every step is linear now, and the text has caps. Measured on an M5 Pro: 60,000 dates took the old reader
 // 2,920 ms and take 42 ms now; 20,000 meetings on one line 3,428 ms and 143 ms. The budgets leave room for a busy machine.
+// They count this thread's CPU time, not the clock's: on a shared CI runner the other test files and the host take turns
+// on the CPU, which stretched 20,000 meetings past two seconds of wall time without the reader doing any more work. Even
+// CPU time grows on a crowded machine (caches, memory): on a slow container 20,000 meetings took 380 ms alone and 850 ms
+// with seven other copies running, so their budget is 2 seconds, still well under the old reader's 3,428 ms.
 test('big or hostile input stays fast: thousands of dates, times and days on one line, and a capped paste', () => {
-  const time = (f) => { const t0 = performance.now(); const r = f(); return [r, performance.now() - t0]; };
+  const cpu = () => { const { user, system } = process.threadCpuUsage(); return (user + system) / 1000; };
+  const time = (f) => { const t0 = cpu(); const r = f(); return [r, cpu() - t0]; };
   const dates = '08/24/2026 '.repeat(60000); // 660 KB of dates, under the 1 MB cap
   const [r1, ms1] = time(() => C.fromText(dates, { now: NOW }));
   assert.ok(ms1 < 1000, `60,000 dates: ${Math.round(ms1)} ms`);
   assert.deepEqual(r1.entries, []);
   const [, ms2] = time(() => C.meetings('MWF 9:00-9:50am Room 1 '.repeat(20000))); // one 460 KB line straight to meetings()
-  assert.ok(ms2 < 1000, `20,000 meetings on a line: ${Math.round(ms2)} ms`);
+  assert.ok(ms2 < 2000, `20,000 meetings on a line: ${Math.round(ms2)} ms`);
   const [, ms3] = time(() => C.meetings('M T W R F 9 - '.repeat(6000)));
   assert.ok(ms3 < 1500, `days and bare numbers: ${Math.round(ms3)} ms`);
   const lines = Array.from({ length: 30000 }, (_, i) => `CS ${100 + (i % 900)} Course ${i} MWF 9:00-9:50am Room ${i} Aug 24 - Dec 11, 2026`).join('\n'); // ~2.2 MB
@@ -359,6 +376,12 @@ test('matching a schedule entry to a Canvas course: code first, then name', () =
   assert.equal(C.match({ code: '', name: 'History' }, courses), '', 'two courses share the word: no guess');
   assert.equal(C.match({ code: 'CHEM 101', name: 'Chemistry' }, courses), '');
   assert.equal(C.match({ code: '', name: '?' }, courses), '');
+  // A code inside a longer one is no match: the name decides.
+  const more = [...courses, { id: '16', name: 'Principles of Economics', course_code: 'ECONOMICS101' }, { id: '17', name: 'Intro to Programming', course_code: 'COMP-110' },
+    { id: '18', name: 'Calculus II', course_code: 'MATH 1210' }];
+  assert.equal(C.match({ code: 'CS 101', name: 'Intro to Programming' }, more), '17');
+  assert.equal(C.match({ code: 'MATH 121', name: 'College Algebra' }, more), '');
+  assert.equal(C.match({ code: 'PHYS-UA 91', name: 'Physics' }, [{ id: '19', name: 'Physics', course_code: 'PHYS-UA 91 001' }]), '19');
 });
 
 // ---- kept data and the worker's writes -------------------------------------------------------------------------------

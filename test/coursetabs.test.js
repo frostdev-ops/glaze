@@ -119,3 +119,33 @@ test('the hard tab bound holds even if every existing tab is pinned', () => {
   assert.deepEqual(result.tabs, pinned, 'never silently evict a pinned course');
   assert.equal(result.full, true, 'the page can explain why no tab was added');
 });
+
+test("a strip tab's pin and close, drawn at 20px, take presses over 24 (WCAG 2.5.8)", () => {
+  const css = read('features/coursetabs.css');
+  assert.match(css, /#gz-ctabs :is\(\.gz-ctab-pin, \.gz-ctab-x\) \{ position: relative;[^}]* width: 20px; height: 20px;/);
+  assert.match(css, /#gz-ctabs :is\(\.gz-ctab-pin, \.gz-ctab-x\)::after \{ content: ""; position: absolute; inset: -2px; \}/);
+});
+
+test('Delete leaves a pinned strip tab, as its close button, hidden while it is pinned, does', () => {
+  assert.match(read('features/coursetabs.css'), /#gz-ctabs \.gz-ctab\[data-pin\] \.gz-ctab-x \{ display: none; \}/);
+  const src = read('features/coursetabs.js'), shut = [];
+  const tab = (cid, pin) => ({ dataset: { courseId: cid }, hasAttribute: (k) => k === 'data-pin' && pin });
+  const tabs = [tab('_1_1', true), tab('_2_1', false)];
+  const onKey = require('node:vm').runInNewContext(`${src.slice(src.indexOf('  const onKey = '), src.indexOf('  // Dragging a tab:'))}\nonKey;`, {
+    tabOf: (e) => e.target, list: { children: tabs }, getComputedStyle: () => ({ direction: 'ltr' }), shut: (cid, keys) => shut.push([cid, keys]), visit() {}, pinTab() {}, moveTab() {} });
+  for (const key of ['Delete', 'Backspace']) onKey({ target: tabs[0], key, preventDefault() {}, stopPropagation() {} });
+  assert.deepEqual(shut, [], 'pinned: P unpins it first');
+  onKey({ target: tabs[1], key: 'Delete', preventDefault() {}, stopPropagation() {} });
+  assert.deepEqual(shut, [['_2_1', true]]);
+});
+
+test('a pin or a move on the strip is said in its word (role=status), as the widgets say theirs', () => {
+  const vm = require('node:vm'), src = read('features/coursetabs.js'), said = [];
+  const c = vm.createContext({ framed: '', L, tabs: L.clean([{ cid: '_1_1' }, { cid: '_2_1' }, { cid: '_3_1' }]), save() {}, draw() {}, say: (s) => said.push(s),
+    t: (k, v) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), rowsOf: () => c.tabs.map((x) => ({ cid: x.cid, full: `Course ${x.cid}` })) });
+  vm.runInContext(`${src.slice(src.indexOf('  const fullOf = '), src.indexOf('  const tabOf = '))}\nglobalThis.pin = pinTab; globalThis.move = moveTab;`, c);
+  c.move('_1_1', 2);
+  c.pin('_3_1');
+  c.pin('_3_1');
+  assert.deepEqual(said, ['Course _1_1 moved to 3 of 3.', 'Course _3_1, pinned', 'Course _3_1, unpinned']);
+});

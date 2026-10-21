@@ -10,11 +10,16 @@ permissions:
 jobs:
   package:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 26
+
+      # A tag that names another version would attach a zip of the manifest's version to the wrong release.
+      - name: Check the tag names the manifest's version
+        run: test "v$(node -p 'require("./manifest.json").version')" = "${GITHUB_REF_NAME%%-rc*}"
 
       - name: Validate the tagged source
         run: node --test
@@ -23,7 +28,7 @@ jobs:
         run: ./package.sh
 
       - name: Attach it to the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*.zip
           draft: true

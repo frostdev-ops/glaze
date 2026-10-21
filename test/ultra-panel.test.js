@@ -105,6 +105,9 @@ test('Ultra: Hide widgets takes every widget on the Courses page away, and stays
   const hide = p.doc.querySelector('.gz-dash-hide');
   assert.equal(hide.textContent, 'Hide widgets');
   assert.equal(hide.getAttribute('aria-pressed'), 'false');
+  // Its buttons are each a Tab stop, with no arrow keys between them: a named group, not a toolbar.
+  assert.equal(hide.parentNode.id, 'gz-toolbar');
+  assert.equal(hide.parentNode.getAttribute('role'), 'group');
   p.doc.fire(hide, 'click');
   assert.equal(JSON.stringify(p.wrote.at(-1)), '{"widgetsHidden":true}');
   assert.equal(p.panel().hidden, true);
@@ -228,6 +231,20 @@ test('Ultra hub offers Streak beside Pet habitat', async () => {
   hub.close();
 });
 
+
+test('Canvas hub: Dark documents shows and sets the documents\' choice (docPages), not a setting nothing reads', async () => {
+  const p = page({ site: 'canvas' }); p.c.navigator = { userAgent: 'Synthetic fixture' };
+  const synced = [];
+  p.c.chrome.storage.sync.set = (v) => synced.push(v);
+  p.settings.enhance.docPages = 'dark';
+  await p.ui.hub();
+  const box = p.doc.getElementById('gz-hub').querySelector('input[data-key="darkDocs"]');
+  assert.equal(box.checked, true, 'dark documents are on');
+  box.checked = false; p.doc.fire(box, 'change');
+  box.checked = true; p.doc.fire(box, 'change');
+  assert.deepEqual(synced.map((v) => [v.enhance.docPages, 'darkDocs' in v.enhance]), [['plain', false], ['dim', false]]);
+  p.doc.getElementById('gz-hub').close();
+});
 
 test('the feature hub refuses an invalid context before the core observes any mutation', async () => {
   const p = page({ local: { widgetLayout: { tiles: W.TILES.map((id) => ({ id, on: false })) } } }); p.c.navigator = { userAgent: 'Synthetic fixture' };

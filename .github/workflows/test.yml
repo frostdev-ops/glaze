@@ -2,12 +2,16 @@ name: test
 on:
   push:
   pull_request:
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
+    # A test that hangs instead of failing would otherwise hold the runner for GitHub's six-hour limit.
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Node 22's deflate-raw stream accepts trailing junk; 26 follows the browser contract.
           node-version: 26

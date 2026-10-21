@@ -37,6 +37,11 @@ function checkTag(manifest, root, env) {
     throw new Error(`${tag} already identifies another commit. Published tags are never moved; bump the version.`);
   }
 }
+// The store and Apple credentials. npm and npx run whatever install scripts their packages carry, and the website's
+// build runs its dependencies' code, so the steps that run third-party code get an environment without them: none of
+// those steps uses them.
+export const STORE_KEYS = ['AMO_JWT_ISSUER', 'AMO_JWT_SECRET', 'WEB_EXT_API_KEY', 'WEB_EXT_API_SECRET', 'CWS_SERVICE_ACCOUNT', 'ASC_KEY_PATH', 'ASC_KEY_ID', 'ASC_ISSUER_ID'];
+export const withoutStoreKeys = env => Object.fromEntries(Object.entries(env).filter(([key]) => !STORE_KEYS.includes(key)));
 export function publicPreflight(opt, env, root, manifest) {
   if (!opt.stores.includes('chrome') || !opt.stores.includes('firefox')) throw new Error('A full release needs both Chrome and Firefox packages. Use build/submit for store-only work.');
   if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) throw new Error('Public releases require a stable major.minor.patch version.');
@@ -217,6 +222,7 @@ export async function publishPublic(context) {
 async function publishWebsite({ manifest, save, out, root, env, run }) {
   const state = manifest.public;
   const site = path.join(out, 'website');
+  const bare = withoutStoreKeys(env);
   if (!fs.existsSync(site)) {
     await run('git', ['clone', '--quiet', '--no-checkout', env.FROSTDEV_SITE_DIR, site], root, env);
     git(['remote', 'set-url', 'origin', `https://github.com/${siteRepo}.git`], site, env);
@@ -236,13 +242,13 @@ async function publishWebsite({ manifest, save, out, root, env, run }) {
     const source = path.join(out, 'website-glaze-source');
     if (!fs.existsSync(source)) await run('git', ['clone', '--quiet', '--shared', '--no-checkout', root, source], root, env);
     git(['-c', 'core.hooksPath=/dev/null', 'checkout', '--quiet', '--detach', manifest.sourceCommit], source, env);
-    await run('node', ['scripts/prepare-glaze-release.mjs', manifest.version, source, feed], site, env, path.join(out, 'logs/website-prepare.log'));
-    await run('npm', ['ci'], site, env, path.join(out, 'logs/website-install.log'));
-    await run('node', ['scripts/looks.mjs'], site, env, path.join(out, 'logs/website-looks.log'));
-    await run('npm', ['run', 'test:gallery'], site, env, path.join(out, 'logs/website-gallery.log'));
-    await run('npm', ['run', 'check'], site, env, path.join(out, 'logs/website-check.log'));
-    await run('npm', ['run', 'build'], site, env, path.join(out, 'logs/website-build.log'));
-    await run('node', ['scripts/prepare-glaze-release.mjs', '--verify', manifest.version, source, feed], site, env, path.join(out, 'logs/website-output-check.log'));
+    await run('node', ['scripts/prepare-glaze-release.mjs', manifest.version, source, feed], site, bare, path.join(out, 'logs/website-prepare.log'));
+    await run('npm', ['ci'], site, bare, path.join(out, 'logs/website-install.log'));
+    await run('node', ['scripts/looks.mjs'], site, bare, path.join(out, 'logs/website-looks.log'));
+    await run('npm', ['run', 'test:gallery'], site, bare, path.join(out, 'logs/website-gallery.log'));
+    await run('npm', ['run', 'check'], site, bare, path.join(out, 'logs/website-check.log'));
+    await run('npm', ['run', 'build'], site, bare, path.join(out, 'logs/website-build.log'));
+    await run('node', ['scripts/prepare-glaze-release.mjs', '--verify', manifest.version, source, feed], site, bare, path.join(out, 'logs/website-output-check.log'));
     git(['diff', '--check'], site, env);
     const paths = ['src/data/glazeRelease.json', 'src/content/glaze-docs', 'public/projects/glaze/appcast.xml', 'vendor/glaze', 'vendor/glaze-scene'];
     git(['add', '--', ...paths], site, env);
@@ -263,9 +269,9 @@ async function publishWebsite({ manifest, save, out, root, env, run }) {
   try { command('ssh', ['-o', 'BatchMode=yes', 'loothing-vps', `test -f /opt/frostdev-public/releases/${state.siteCommit}/.complete`], root, env); staged = true; }
   catch (error) { if (error.status !== 1) throw error; }
   if (!fs.existsSync(path.join(site, 'dist/index.html'))) {
-    await run('npm', ['ci'], site, env, path.join(out, 'logs/website-install.log'));
-    await run('npm', ['run', 'check'], site, env, path.join(out, 'logs/website-check.log'));
-    await run('npm', ['run', 'build'], site, env, path.join(out, 'logs/website-build.log'));
+    await run('npm', ['ci'], site, bare, path.join(out, 'logs/website-install.log'));
+    await run('npm', ['run', 'check'], site, bare, path.join(out, 'logs/website-check.log'));
+    await run('npm', ['run', 'build'], site, bare, path.join(out, 'logs/website-build.log'));
   }
   if (!staged) await run('bash', ['ops/deploy.sh', 'stage'], site, env, path.join(out, 'logs/website-stage.log'));
   // CI and staging take time. Refuse to activate if someone promoted a newer website meanwhile.

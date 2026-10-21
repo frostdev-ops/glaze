@@ -423,6 +423,8 @@ test('GPA: past terms count in the overall GPA, show as a trend table, set a goa
   assert.equal(store.data[TKEY].t.length, 4);
   const other = await store.send({ type: 'glaze:gpaterms', key: 'gpaTerms:https://other.instructure.com:3', op: 'clear', at: Date.now() }, { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` });
   assert.deepEqual(other, { ok: false, error: 'sender' }, "a page can't change another site's terms");
+  const port = await store.send({ type: 'glaze:gpaterms', key: `gpaTerms:${ORIGIN}:8443:3`, op: 'clear', at: Date.now() }, { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` });
+  assert.deepEqual(port, { ok: false, error: 'sender' }, "nor the same host's on another port");
 });
 
 // A goal for this term, with the GPA view open.

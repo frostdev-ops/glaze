@@ -10,6 +10,7 @@ const S = require('../lib/sessions.js');
 const R = require('../lib/relay.js');
 const N = require('../lib/notes.js');
 const T = require('../lib/todo.js');
+const K = require('../lib/cards.js');
 const { relay, diskStore } = require('../server/relay.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const NK = 'notesIdx:https://school.instructure.com/5', TK = 'todo:https://school.instructure.com/5';
@@ -465,7 +466,7 @@ test('E1 editor nickname writes sanitize one course against current stored prefe
   assert.equal((await send('')).ok, true); assert.equal(area.data.courses.names._1_1, undefined); assert.equal(area.data.courses.names._2_1, 'Keep me');
 });
 
-test('Pause interrupts a running sync before waiting for the shared storage queue', async () => {
+test('Pause interrupts a running sync before waiting in the sessions\' queue', async () => {
   const listeners = [], area = localArea();
   let release, entered, stopped = 0, syncs = 0;
   const gate = new Promise((r) => { release = r; }), ready = new Promise((r) => { entered = r; });
@@ -486,6 +487,95 @@ test('Pause interrupts a running sync before waiting for the shared storage queu
   assert.equal((await queued).error, 'off', 'an old queued sync cannot restart after Pause');
   assert.equal((await queuedHealth).error, 'off', 'an old queued connection test cannot start after Pause');
   assert.equal(syncs, 1);
+});
+
+test('a session operation waiting on the relay never holds up the storage broker\'s queue', async () => {
+  const listeners = [], area = localArea();
+  let release, entered, released = false;
+  const gate = new Promise((r) => { release = r; }), ready = new Promise((r) => { entered = r; });
+  const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
+    GZ_SESSIONS: { make: () => ({ handle: async (m) => { if (m.op === 'sync') { entered(); await gate; } return { ok: true }; }, stop() {} }) },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+      onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
+  vm.runInContext(read('lib/background.js'), ctx);
+  const editor = { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 };
+  const send = (m) => new Promise((resolve) => { for (const f of listeners) if (f(m, editor, resolve) === true) return; });
+  const syncing = send({ type: 'glaze:sessions', op: 'sync' }); await ready;
+  // Any broker write will do: a course nickname is the editor's own.
+  const wrote = send({ type: 'glaze:courseName', id: '_1_1', name: 'Biology' }).then((r) => ({ ok: r.ok, released }));
+  // Everything a write needs is ready before the event loop turns; only a relay answer would come after.
+  setImmediate(() => { released = true; release(); });
+  assert.deepEqual(await wrote, { ok: true, released: false }, 'the write must not wait for the relay');
+  assert.equal((await syncing).ok, true);
+});
+
+test('a relay that never answers holds up sharing alone, never another feature\'s storage write', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const server = 'https://relay.example.edu', broker = K.queue();
+  const local = localArea({ shareOn: true, [TK]: T.clean({ tasks: [{ id: 'task1', title: 'Shared task', at: 1 }] }) }), db = database();
+  const record = { st: G.create('collection', { server }), kind: 'todo', title: 'Shared', bind: { key: TK, map: { task1: 'task1' }, files: {} } };
+  await db.put('sessions', record.st.sid, record);
+  let asked, answered = false;
+  const asking = new Promise((r) => { asked = r; });
+  // Takes the request and never answers, as a blackholed relay does: only the client's own timeout ends it.
+  const fetch = (url, init) => { asked(); return new Promise((resolve, reject) => init.signal.addEventListener('abort', () => { answered = true; reject(new Error('timeout')); })); };
+  const worker = S.make({ local, sync: localArea(), db, notes: notesDB(), relay: server, dev: true, permission: async () => true, fetch, WebSocket: class { close() {} },
+    enqueue: broker, serial: K.queue() });
+  t.after(() => worker.stop());
+  t.after(worker.connect()); // what a To Do or Notes page's port does
+  await asking;
+  // A To Do or Notes edit from any tab takes the broker queue's next turn.
+  const wrote = broker(() => answered);
+  const late = setImmediate(() => t.mock.timers.tick(G.LIMIT.timeout)); // the request's timeout, if the write is still waiting on it
+  assert.equal(await wrote, false, 'the write ran while the relay was still being asked');
+  clearImmediate(late);
+});
+
+test('a change while a refresh waits on the relay asks for the next refresh', async (t) => {
+  const server = 'https://relay.example.edu', db = database(), turn = K.queue(), record = { st: G.create('collection', { server }), title: 'Shared', status: 'offline' };
+  await db.put('sessions', record.st.sid, record);
+  let asks = 0, called;
+  const waiting = [], asked = () => new Promise((r) => { called = r; });
+  const worker = S.make({ local: localArea({ shareOn: true }), sync: localArea(), db, notes: notesDB(), relay: server, dev: true, permission: async () => true, WebSocket: class { close() {} },
+    fetch: (url, init) => new Promise((resolve, reject) => { init.signal.addEventListener('abort', () => reject(new Error('aborted'))); waiting.push(reject); called(); }),
+    serial: (f) => { asks++; return turn(f); } });
+  t.after(() => worker.stop());
+  let next = asked();
+  t.after(worker.connect());
+  await next;
+  worker.changed(); worker.changed(); // the second shares the first's refresh, which hasn't started
+  next = asked(); waiting[0](new Error('offline')); await next; // that refresh is now asking the relay
+  worker.changed();
+  assert.equal(asks, 3, 'a write landing during the refresh is sent by another');
+});
+
+test('an edit made while the relay is asked is kept, and the next sync sends it', async (t) => {
+  for (const kind of ['todo', 'notes']) await t.test(kind, async (t) => {
+    const { url } = await start(t), a = device(url);
+    t.after(() => a.worker.stop());
+    if (kind === 'todo') a.local.data[TK] = T.clean({ tasks: [{ id: 'task1', title: 'Before', at: Date.now() }] });
+    const id = kind === 'todo' ? 'task1' : await seed(a, '<p>Before</p>');
+    const { sid } = await a.send('create', { kind, title: 'Shared', key: kind === 'todo' ? TK : NK, ids: [id] });
+    let release, entered;
+    const gate = new Promise((r) => { release = r; }), ready = new Promise((r) => { entered = r; });
+    const broker = K.queue(), worker = S.make({ local: a.local, sync: a.settings, db: a.db, notes: a.notes, relay: url, dev: true, permission: async () => true, enqueue: broker,
+      fetch: async (...args) => { entered(); await gate; return fetch(...args); }, WebSocket });
+    t.after(() => { release(); worker.stop(); });
+    const syncing = worker.handle({ op: 'sync', sid }); await ready;
+    // The page's own write, in its broker turn, lands between this sync's read and its apply.
+    await broker(() => kind === 'todo'
+      ? a.local.set({ [TK]: T.clean({ ...a.local.data[TK], tasks: [{ ...a.local.data[TK].tasks[0], title: 'Edited meanwhile' }] }) })
+      : N.run({ key: NK, op: 'save', id, base: a.local.data[NK].notes[id].rev, sid: crypto.randomUUID(), copy: crypto.randomUUID(), html: '<p>Edited meanwhile</p>' }, { local: a.local }, a.notes));
+    release(); await syncing;
+    const kept = async () => kind === 'todo' ? a.local.data[TK].tasks[0].title : (await N.run({ key: NK, op: 'load', id }, { local: a.local }, a.notes)).html;
+    assert.match(await kept(), /Edited meanwhile/, 'the sync that read before the edit must not put the old copy back');
+    await worker.handle({ op: 'sync', sid });
+    const shared = (await worker.handle({ op: 'read', sid })).view[id];
+    assert.match(kind === 'todo' ? shared.task.title : shared.html, /Edited meanwhile/);
+    assert.match(await kept(), /Edited meanwhile/);
+  });
 });
 
 test('disk relay: custom tasks carry only cleaned task/plan fields; joined Looks never apply themselves', async (t) => {

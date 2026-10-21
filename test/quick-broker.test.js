@@ -36,7 +36,7 @@ const worker = () => {
   };
   const holdQueue = () => {
     let release; ctx.block = new Promise((r) => { release = r; });
-    vm.runInContext('(brokerTurn ||= GZ_CARDS.queue())(() => block)', ctx);
+    vm.runInContext('(sessionTurn ||= GZ_CARDS.queue())(() => block)', ctx);
     return release;
   };
   return { send, mint, port, panel, handled, removed, holdQueue, advance: (ms) => { clock += ms; }, clients: () => clients };

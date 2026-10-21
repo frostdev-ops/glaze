@@ -186,7 +186,7 @@ const textEl = (color, link = false, fill = '') => {
 test('instructor text: re-checked when one dark palette changes to another; dark authored links lifted too', () => {
   const midnight = D.GZ_PRESET('Midnight'), frost = D.GZ_PRESET('Frost');
   const ctx = sweepWith(midnight);
-  const teal = textEl('#006e78'); // 3.0:1 on Midnight, 2.9:1 on Frost
+  const teal = textEl('#169179'); // 4.6:1 on Midnight, 4.4:1 on Frost
   const navy = textEl('#000080');
   const link = textEl('#000080', true); // an authored navy link: lifted like text
   const accent = textEl(midnight['--gz-accent'], true); // a link in the palette's accent: left alone
@@ -206,6 +206,38 @@ test('instructor text: re-checked when one dark palette changes to another; dark
   run(midnight['--gz-surface'], frost['--gz-surface']);
   run(frost['--gz-surface'], frost['--gz-surface']);
   assert.deepEqual([sweeps, relifts], [0, 1]);
+});
+
+test('instructor text: mid-dark colours lifted under 4.5:1; translucent, gradient and picture fills keep readable ink', () => {
+  const frost = D.GZ_PRESET('Frost'), ctx = sweepWith(frost);
+  // The editor's own blue and red, 3.2:1 and 3.0:1 on Frost: over 3:1, under what text needs.
+  const blue = textEl('#236fa1'), red = textEl('#ba372a'), green = textEl('#2dc26b');
+  ctx.api.sweepEls([blue.e, red.e, green.e]);
+  assert.deepEqual([blue, red, green].map((x) => x.attrs.has('data-gz-lift')), [true, true, false]);
+  // Text on its own fill: ink (as authored, or '' for the palette's), the computed fill and image.
+  const on = ({ ink = '', bg = '', image = '' }) => {
+    const x = textEl(ink || frost['--gz-ink']);
+    Object.assign(x.e.style, { color: ink, backgroundColor: bg, backgroundImage: image });
+    Object.assign(x.e.cs, { backgroundColor: bg || 'rgba(0, 0, 0, 0)', backgroundImage: image || 'none' });
+    ctx.api.sweepEls([x.e]);
+    return Object.fromEntries(x.attrs);
+  };
+  // A translucent highlight, light as its author saw it on white: over the surface, the palette's light ink can't read
+  // on it (2.7:1 at 60%).
+  assert.deepEqual(on({ bg: 'rgba(251, 238, 184, 0.9)' }), { 'data-gz-dark': 'highlight' });
+  assert.deepEqual(on({ bg: 'rgba(251, 238, 184, 0.6)' }), { 'data-gz-dark': 'highlight' });
+  // Faint, the surface shows through: light ink reads, and their black is the palette's ink as on no fill.
+  assert.deepEqual(on({ bg: 'rgba(251, 238, 184, 0.2)' }), {});
+  assert.deepEqual(on({ ink: 'rgb(0, 0, 0)', bg: 'rgba(251, 238, 184, 0.2)' }), { 'data-gz-dark': '' });
+  // An opaque white box is paper: the surface's, as before.
+  assert.deepEqual(on({ bg: 'rgb(255, 255, 255)' }), { 'data-gz-light': '' });
+  // A light gradient, grey or not, can't be repainted: dark ink on it. A dark one stays as it was.
+  assert.deepEqual(on({ image: 'linear-gradient(rgb(255, 255, 255), rgb(236, 240, 241))' }), { 'data-gz-dark': 'highlight' });
+  assert.deepEqual(on({ image: 'linear-gradient(rgb(11, 18, 32), rgb(30, 41, 59))' }), {});
+  // A picture: the ink the author saw on it. Canvas's dark ink where they set none, theirs (even navy) where they did.
+  assert.deepEqual(on({ image: 'url("https://school.instructure.com/banner.png")' }), { 'data-gz-dark': 'highlight' });
+  assert.deepEqual(on({ ink: 'rgb(0, 0, 128)', image: 'url("https://school.instructure.com/banner.png")' }), {});
+  assert.deepEqual(on({ ink: 'rgb(255, 255, 255)', image: 'url("https://school.instructure.com/banner.png")' }), {});
 });
 
 test('editor: clearing a time keeps the last valid one and saves nothing', () => {

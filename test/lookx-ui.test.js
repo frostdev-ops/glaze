@@ -105,48 +105,59 @@ test('stickers: the picture cap counts every picture stored, not a list a failed
   assert.ok(r2.ok && `stkImg:${r2.id}` in w.local);
 });
 
-test('rotation: a favorite still decoding when the student turns rotation off or changes the theme is not worn', async () => {
+test('Reset everything saves: settings a library adds after defaults.js (todo, widgets, remind, tabs) go with the Look\'s', async () => {
+  const w = worker();
+  const d = JSON.parse(JSON.stringify(vm.runInContext('GZ_SANITIZE()', w.context)));
+  const patch = { version: 2, bg: d.bg, todo: d.todo, widgets: d.widgets, remind: d.remind, tabs: d.tabs };
+  assert.deepEqual(await w.send({ type: 'glaze:look', parts: null, patch }, w.editor), { ok: true });
+  assert.deepEqual([w.sync.todo, w.sync.tabs], [d.todo, d.tabs]);
+  assert.deepEqual(await w.send({ type: 'glaze:look', parts: null, patch: { version: 2, todo: d.todo } }), { ok: false, error: 'sender' }, 'a page writes the Look\'s keys only');
+});
+
+test('rotation: a favorite still decoding when the student turns rotation off or changes the theme is not worn', { timeout: 10000 }, async () => {
   const G = require('../defaults.js');
   const H = require('../lib/history.js');
   const start = () => {
     const s = G.GZ_SANITIZE({ ...G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, G.GZ_LOOKS.find((l) => l.name === 'Library')), extras: { rotate: '6h' } });
-    const w = worker({ rotateLooks: ['glaze1:fav'], rotateState: { mode: '6h 08:00', at: 1, i: -1 } }, structuredClone(s));
-    // The favorite's code decodes when the test says so.
+    const w = worker({ rotateLooks: ['glaze1:fav'], lookFavorites: [{ code: 'glaze1:fav', name: 'Fav' }], rotateState: { mode: '6h 08:00', at: 1, i: -1 } }, structuredClone(s));
+    // The favorite's code decodes when the test says so, and says when the worker has asked for it: by then the worker
+    // has read what it compares against, so a change the test makes next is one made meanwhile.
     let done;
     w.context.held = new Promise((r) => { done = r; });
-    vm.runInContext('GZ_SHARE.decode = () => globalThis.held;', w.context);
+    const begun = new Promise((r) => { w.context.begun = r; });
+    vm.runInContext('GZ_SHARE.decode = () => { globalThis.begun(); return globalThis.held; };', w.context);
     const got = { colors: G.GZ_PRESETS.find(([n]) => n === 'Forest')[1], look: { font: 'jetbrains-mono' }, bg: {}, card: {}, cards: [] };
-    return { w, s, decoded: () => done(got) };
+    return { w, s, begun, decoded: () => done(got) };
   };
   // Turned off meanwhile.
-  let { w, decoded } = start();
+  let { w, begun, decoded } = start();
   let turn = w.send({ type: 'glaze:rotate' });
-  await tick(5);
+  await begun;
   w.sync.extras = { ...w.sync.extras, rotate: 'off' };
   decoded();
   assert.deepEqual(await turn, { ok: false, error: 'changed' });
   assert.notEqual(w.sync.look.font, 'jetbrains-mono');
   // A Look picked by hand meanwhile.
   let s;
-  ({ w, s, decoded } = start());
+  ({ w, s, begun, decoded } = start());
   turn = w.send({ type: 'glaze:rotate' });
-  await tick(5);
+  await begun;
   const mine = G.GZ_LOOK_APPLY(s, G.GZ_LOOKS.find((l) => l.name === 'Clear'));
   Object.assign(w.sync, structuredClone(mine));
   decoded();
   await turn;
   assert.deepEqual(H.theme(G.GZ_SANITIZE(w.sync)), H.theme(G.GZ_SANITIZE({ ...s, ...mine })), 'the hand-picked Look stays');
   // Nothing changed meanwhile: worn.
-  ({ w, decoded } = start());
+  ({ w, begun, decoded } = start());
   turn = w.send({ type: 'glaze:rotate' });
-  await tick(5);
+  await begun;
   decoded();
   assert.ok((await turn).ok);
   assert.equal(w.sync.look.font, 'jetbrains-mono');
   assert.equal(w.local.rotateState.i, 0);
 });
 
-test('rotation: a favorite brings its parts with it, a built-in Look clears them, and parts changed meanwhile drop the turn', async () => {
+test('rotation: a favorite brings its parts with it, a built-in Look clears them, and parts changed meanwhile drop the turn', { timeout: 10000 }, async () => {
   const G = require('../defaults.js');
   const X = require('../lib/lookparts.js');
   const parts = { x: { cursor: { kind: 'glow' } } };
@@ -155,7 +166,7 @@ test('rotation: a favorite brings its parts with it, a built-in Look clears them
   const due = { mode: '6h 08:00', at: 1, i: -1 };
   const forest = G.GZ_PRESETS.find(([n]) => n === 'Forest')[1];
   const favorite = async (parts, during) => {
-    const w = worker({ rotateLooks: ['glaze2:fav'], rotateState: due }, await settings());
+    const w = worker({ rotateLooks: ['glaze2:fav'], lookFavorites: [{ code: 'glaze2:fav', name: 'Fav' }], rotateState: due }, await settings());
     let done;
     w.context.held = new Promise((r) => { done = r; });
     const begun = new Promise((r) => { w.context.begun = r; });
@@ -561,7 +572,7 @@ test('a command palette palette choice clears the previous Look parts through th
 
 test('rotation does not announce a favorite that could not be decoded or worn', async () => {
   const before = { mode: '6h 08:00', at: 1, i: 0 };
-  const w = worker({ rotateState: before, rotateLooks: ['glaze1:bad'] }, { extras: { rotate: '6h', at: '08:00' } });
+  const w = worker({ rotateState: before, rotateLooks: ['glaze1:bad'], lookFavorites: [{ code: 'glaze1:bad', name: 'Bad' }] }, { extras: { rotate: '6h', at: '08:00' } });
   w.context.GZ_SHARE = { decode: () => Promise.reject(new Error('bad code')) };
   assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
   assert.equal(L.turned(before, w.local.rotateState), false);

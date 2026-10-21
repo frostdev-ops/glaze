@@ -89,12 +89,13 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
 
   // ---- reading a schedule --------------------------------------------------------------------------------------
   const read = async (file, text, link, signal) => {
+    // A calendar goes to lib/ics.js as bytes: it unfolds lines before decoding them, as a fold can split a character.
     const ics = (s) => C.fromIcs(s, { tz });
     if (file) {
       if (/\.(ics|ical|ifb)$/i.test(file.name) || file.type === 'text/calendar') {
         if (file.size > MAX) throw new Error(t('That file is too big for a schedule.'));
         await ctx.need('lib/ics.js', () => globalThis.GZ_ICS);
-        return ics(await file.text());
+        return ics(new Uint8Array(await file.arrayBuffer()));
       }
       await ctx.need('features/import.js', () => globalThis.GZ_IMPORT);
       const r = await GZ_IMPORT.read(file, { signal, progress: (s) => say(s) });
@@ -106,10 +107,10 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       try { u = new URL(link.replace(/^webcals?:\/\//i, 'https://'), location.origin); } catch { u = null; }
       if (!u || u.origin !== location.origin) throw new Error(t('Glaze only reads calendar links on {site}. Download the .ics file instead and choose it above.', { site: location.host }));
       const r = await fetch(u.href, { credentials: 'same-origin', redirect: 'error' });
-      const s = r.ok ? await r.text() : '';
-      if (!/BEGIN:VCALENDAR/.test(s.slice(0, 2000)) || s.length > MAX) throw new Error(t("That link isn't a calendar Glaze can read."));
+      const b = r.ok ? new Uint8Array(await r.arrayBuffer()) : new Uint8Array();
+      if (!/BEGIN:VCALENDAR/.test(new TextDecoder().decode(b.subarray(0, 2000))) || b.length > MAX) throw new Error(t("That link isn't a calendar Glaze can read."));
       await ctx.need('lib/ics.js', () => globalThis.GZ_ICS);
-      return ics(s);
+      return ics(b);
     }
     if (/^\s*BEGIN:VCALENDAR/.test(text)) { await ctx.need('lib/ics.js', () => globalThis.GZ_ICS); return ics(text); }
     return C.fromText(text, { lang: lang() });

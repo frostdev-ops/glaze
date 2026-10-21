@@ -34,6 +34,17 @@ const tr = ({ title, href, aid, status = 'No Submission', cls = 'submissionStatu
 const docOf = (rows) => el({ one: { '#assignments-student-table': el({ all: { 'tbody tr': rows } }) } });
 const row = (id, more = {}) => ({ id, title: `HW ${id}`, due: 1, late: null, sub: false, graded: false, score: null, points: null, lateSub: false, ...more });
 // storage.local as the worker's change() sees it.
+// A page script's async work as the tests below run it: SHA-256 is hashed at once (the real digest runs on a thread pool
+// that lags on a busy machine) and short timers are counted, so a test waits until none is pending a few turns in a
+// row, not for a fixed time.
+const pageWork = () => {
+  const short = new Set();
+  const later = (f, ms, ...a) => { const id = setTimeout(() => { short.delete(id); f(...a); }, ms); if (!(ms > 100)) short.add(id); return id; };
+  const cancel = (id) => { short.delete(id); clearTimeout(id); };
+  const digest = async (alg, data) => { const b = nodeCrypto.createHash('sha256').update(data).digest(); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); };
+  const settle = async () => { for (let quiet = 0, turns = 0; quiet < 3 && turns < 400; turns++) { await new Promise((r) => setTimeout(r, 5)); quiet = short.size ? 0 : quiet + 1; } };
+  return { setTimeout: later, clearTimeout: cancel, crypto: { subtle: { digest }, randomUUID: () => nodeCrypto.randomUUID() }, settle };
+};
 const memory = (store = {}) => ({ store, area: { local: { get: async (k) => ({ [k[0]]: store[k[0]] }), set: async (p) => { Object.assign(store, JSON.parse(JSON.stringify(p))); return true; } } } });
 
 test('dates: Gradescope\'s "YYYY-MM-DD HH:MM:SS -0700", ISO, and nothing that isn\'t a real date', () => {
@@ -394,13 +405,13 @@ test('the worker: who may write, the script on Gradescope only while on, and the
 
 test('on Gradescope: only with Glaze and its switch on; whose account first; redirects refused; stops when switched off mid-way', async () => {
   const run = async (sync, { redirect = false, offAfter = null, placed = ['42', '43'] } = {}) => {
-    const fetched = [], drawn = [], sent = [];
+    const fetched = [], drawn = [], sent = [], work = pageWork();
     const local = { seenCourses: {}, gradescope: { acct: { id: A1, name: 'Sam' }, map: Object.fromEntries(placed.map((g) => [g, { to: 'canvas:https://c.test/7', name: g }])) } };
     const get = (s) => ({ get: (k, cb) => cb(Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))) });
     const node = () => ({ prepend: (x) => drawn.push(x) });
     const doc = { querySelector: () => null, querySelectorAll: () => [] };
     const context = vm.createContext({
-      URL, console, Promise, Date, setTimeout, TextEncoder, crypto: globalThis.crypto, matchMedia: () => ({ matches: false, addEventListener() {} }), clearTimeout, addEventListener() {}, navigator: { language: 'en' }, location: { pathname: '/' },
+      URL, console, Promise, Date, setTimeout: work.setTimeout, TextEncoder, crypto: work.crypto, matchMedia: () => ({ matches: false, addEventListener() {} }), clearTimeout: work.clearTimeout, addEventListener() {}, navigator: { language: 'en' }, location: { pathname: '/' },
       DOMParser: class { parseFromString(s) { return s === 'account' ? { querySelector: (q) => (q === 'input[name="user[email]"]' ? { getAttribute: () => EMAIL } : null) } : doc; } },
       fetch: async (u, init) => {
         fetched.push(u);
@@ -419,7 +430,7 @@ test('on Gradescope: only with Glaze and its switch on; whose account first; red
     context.window = context;
     context.window.top = context;
     for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
-    await new Promise((r) => setTimeout(r, 30));
+    await work.settle();
     return { fetched, drawn, sent };
   };
   const on = { enhance: { gradescope: true } };
@@ -449,7 +460,7 @@ test('on Gradescope: the bar is drawn only if both switches still hold after eve
     closest() { return this; }
   }
   const run = async ({ lang = 'en', offWhileLoading = false, look = {}, readFails = false } = {}) => {
-    const sync = { enhance: { gradescope: true }, look };
+    const sync = { enhance: { gradescope: true }, look }, work = pageWork();
     const local = {
       seenCourses: { 'canvas:https://c.test/7': { name: 'Calculus I', code: 'MATH 1350', canvas: true } },
       gradescope: { acct: { id: A1, name: 'Sam' } },
@@ -461,7 +472,7 @@ test('on Gradescope: the bar is drawn only if both switches still hold after eve
     box.querySelector = (q) => (q === '.courseBox--shortname' ? { textContent: 'MATH 1350' } : null);
     const get = (s) => ({ get: (k, cb) => { if (readFails) throw Error('storage failed'); cb(Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))); } });
     const context = vm.createContext({
-      URL, console, Promise, Date, setTimeout, TextEncoder, crypto: globalThis.crypto, matchMedia: () => ({ matches: false, addEventListener() {} }), clearTimeout, addEventListener() {}, navigator: { language: lang }, location: { pathname: '/' },
+      URL, console, Promise, Date, setTimeout: work.setTimeout, TextEncoder, crypto: work.crypto, matchMedia: () => ({ matches: false, addEventListener() {} }), clearTimeout: work.clearTimeout, addEventListener() {}, navigator: { language: lang }, location: { pathname: '/' },
       DOMParser: class { parseFromString() { return { querySelector: (q) => (q === 'input[name="user[email]"]' ? { getAttribute: () => EMAIL } : null) }; } },
       fetch: async (u) => ({ ok: true, url: `https://www.gradescope.com${u}`, text: async () => 'account' }),
       document: { querySelector: (q) => (q === 'main' ? main : null), querySelectorAll: (q) => (q.includes('courseBox') ? [box] : []), body: new E('body'), createElement: (t) => new E(t) },
@@ -470,7 +481,7 @@ test('on Gradescope: the bar is drawn only if both switches still hold after eve
         runtime: {
           id: 'glaze', getURL: (p) => `chrome-extension://x/${p}`,
           sendMessage: (m, cb) => {
-            if (m.type === 'glaze:load') { if (offWhileLoading) sync.enabled = false; return setTimeout(() => cb({ ok: true }), 5); }
+            if (m.type === 'glaze:load') { if (offWhileLoading) sync.enabled = false; return work.setTimeout(() => cb({ ok: true }), 5); }
             context.GZ_GRADESCOPE.change(m, memory(local).area).then(cb);
           },
         },
@@ -480,11 +491,11 @@ test('on Gradescope: the bar is drawn only if both switches still hold after eve
     context.window = context;
     context.window.top = context;
     for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
-    await new Promise((r) => setTimeout(r, 40));
+    await work.settle();
     const off = async (patch) => {
       Object.assign(sync, patch);
       for (const f of changed) f(Object.fromEntries(Object.keys(patch).map((k) => [k, { newValue: patch[k] }])), 'sync');
-      await new Promise((r) => setTimeout(r, 10));
+      await work.settle();
     };
     return { main, off };
   };

@@ -346,6 +346,17 @@ test('a new account discovered in a live frame revokes the owner and clears its 
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{ op: 'drop', signout: true }]);
 });
 
+test('signing out (the site\'s link or Glaze\'s bar) drops every picture, and a Canvas frame asks the page around it to', () => {
+  for (const [framed, site, want] of [['', 'ultra', [['send', { op: 'drop', signout: true }], ['revoke']]], ['12', 'canvas', [['top', 'signout']]], ['_2_1', 'ultra', []]]) {
+    const calls = [];
+    const signOut = vm.runInNewContext(part('  const signOut = ', '  // Leaving through Ultra') + '\nsignOut;', {
+      framed, ctx: { site }, send: (m) => calls.push(['send', m]), revoke: () => calls.push(['revoke']), toTop: (k) => calls.push(['top', k]),
+    });
+    signOut();
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), want, `${site} ${framed || 'page'}`);
+  }
+});
+
 test('a screenshot delayed across an in-page course switch is forgotten instead of cached under the old course', async () => {
   const doc = { body: {}, querySelectorAll: () => [] }; const sent = [], kept = [];
   let current = { cid: '_2_1', path: '/ultra/courses/_2_1/outline', doc, frame: {} }, resolve;
@@ -377,6 +388,33 @@ test('closing the surrounding course keeps the next course’s existing edited f
   assert.deepEqual(drops, ['_1_1'], 'the next live document must not be destroyed as a side effect of closing another tab');
   assert.deepEqual(visits, ['_2_1']);
   assert.deepEqual(routes, ['/ultra/course']);
+});
+
+test('closing the open course’s tab by its keys gives focus to the next tab once the page puts the strip back', () => {
+  const { El } = require('./stand-in-dom.js');
+  const doc = { activeElement: null };
+  doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
+  const bar = new El('div', doc), strip = new El('div', doc), list = new El('div', doc);
+  strip.append(list); bar.append(strip); doc.body.append(bar);
+  let acted = 0;
+  // A browser focuses only what is in the document.
+  const tab = (cid) => { const e = new El('div', doc); e.setAttribute('data-course-id', cid); e.focus = () => { if (e.isConnected) doc.activeElement = e; }; return e; };
+  const c = vm.createContext({ PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false, document: doc, strip, list, L, on: true,
+    framed: '', showing: '', here: () => '_2_1', tabs: [{ cid: '_1_1' }, { cid: '_2_1' }, { cid: '_3_1' }], snaps: new Map(), frames: new Map(),
+    ctx: { site: 'ultra', courseId: () => '_2_1', acted: () => acted }, preview: false, save() {}, send() {}, flag() {}, drop() {}, visit() {}, P: () => ({ place: true }),
+    draw: () => list.replaceChildren(...c.tabs.map((x) => tab(x.cid))),
+    // Leaving the closed course's page, Ultra takes its bar away for a moment: the strip, and focus, with it.
+    route: () => { strip.remove(); doc.activeElement = doc.body; },
+    hosted: () => false, keepClear() {}, measureRow() {}, home: () => ({ ok: strip.isConnected, at: 'nested', put: () => bar.append(strip) }) });
+  vm.runInContext(part('  const place = ', '  // From content-ultra.js') + part('  let handTo = ', '  const pinTab = ') + '\nglobalThis.place = place; globalThis.shut = shut;', c);
+  c.draw(); list.querySelector('[data-course-id="_2_1"]').focus();
+  c.shut('_2_1', true);
+  assert.equal(doc.activeElement, doc.body);
+  c.place();
+  assert.equal(doc.activeElement, list.querySelector('[data-course-id="_3_1"]'), 'the strip back, the next tab has focus');
+  acted = Date.now() + 1; doc.activeElement = doc.body; strip.remove();
+  c.place();
+  assert.equal(doc.activeElement, doc.body, 'not after the student has done something else');
 });
 
 

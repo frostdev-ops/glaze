@@ -434,10 +434,12 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   };
 
   // ---- the nav: items for transforms, rail widgets, a replacement -----------------------------------------------------------
-  // The bar's items where Glaze's bar is drawn (features/navbar.js), else the older rail's.
+  // The bar's items where Glaze's bar is drawn (features/navbar.js), else the older rail's. Not the account item: its
+  // label is the student's name, and these go to every mod, frames included, while personal data stays in a Worker
+  // granted nav.read. A layout places no account item anyway.
   const bar = () => globalThis.GZ_NAVBAR_UI || null;
-  const navItems = () => bar()?.live() ? (bar().model()?.items || []).filter((i) => !i.hidden && !i.id.startsWith('w:')).slice(0, 64).map((i) => ({ id: i.id, label: String(i.label).slice(0, 80) })) : [...document.querySelectorAll('[data-gz-nav-id]')].slice(0, 64).map((u) => ({ id: u.dataset.gzNavId, label: (u.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80) }))
-    .filter((i) => i.id && !i.id.startsWith('w:') && !i.id.startsWith('g:'));
+  const navItems = () => (bar()?.live() ? (bar().model()?.items || []).filter((i) => !i.hidden && !i.id.startsWith('w:')).slice(0, 64).map((i) => ({ id: i.id, label: String(i.label).slice(0, 80) })) : [...document.querySelectorAll('[data-gz-nav-id]')].slice(0, 64).map((u) => ({ id: u.dataset.gzNavId, label: (u.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80) }))
+    .filter((i) => i.id && !i.id.startsWith('w:') && !i.id.startsWith('g:'))).filter((i) => i.id !== 'profile');
   let itemsSig = '';
   const itemsNow = () => { const items = navItems(), isig = JSON.stringify(items); if (isig !== itemsSig) { itemsSig = isig; emitAll('nav.items', { items }); } };
   // nav.read: the bar as a mod may read it, cleaned and capped (no addresses).

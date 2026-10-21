@@ -114,6 +114,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.dock.setAttribute('aria-label', t('Widgets')); el.dock.tabIndex = -1;
     el.ind = part(make('span', { className: 'ind', hidden: true }), 'indicator');
     el.list = make('div', { className: 'list' });
+    el.list.addEventListener('scroll', () => listScroll(), { passive: true });
     el.bottom = make('div', { className: 'slot' }); el.bottom.dataset.slot = 'bottom';
     el.account = make('div', { className: 'foot' });
     el.toggle = part(make('button', { type: 'button', className: 'item toggle' }, icon('chevron')), 'toggle');
@@ -162,6 +163,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     root.addEventListener('click', click);
     root.addEventListener('auxclick', click);
     root.addEventListener('keydown', key);
+    root.addEventListener('focusout', leftPanel);
     el.rail.addEventListener('pointerenter', pointIn);
     el.rail.addEventListener('pointerleave', pointOut);
     el.rail.addEventListener('focusin', focusIn);
@@ -175,7 +177,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       const r = el.sheet.getBoundingClientRect();
       if (e.target === el.sheet && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) sheetTo(false);
     });
-    (document.body || html).append(host);
+    // First in the page, as the site's own navigation it stands in for: keyboard and screen-reader order meet it, and its
+    // Skip to content, before the page (it's fixed, so nothing moves on screen).
+    (document.body || html).prepend(host);
     if (typeof ResizeObserver === 'function') {
       sizes = new ResizeObserver(() => { if (host === mounted) { measured = ''; queue(); } });
       for (const box of [el.tbrand, el.titems, el.ttabs, el.twidgets]) sizes.observe(box);
@@ -419,16 +423,19 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Inside a course set to icons, the rail can't be pinned open there: the setting decides.
     el.pin.hidden = inCourse() && settings().course === 'icons';
     el.toggle.hidden = el.pin.hidden;
+    // One name, pressed or not: a screen reader says "Pin open, pressed" once it's pinned, not a new name and the state.
     el.pin.setAttribute('aria-pressed', String(pin));
-    el.pin.lastElementChild.textContent = t(pin ? 'Pinned' : 'Pin open');
+    el.pin.lastElementChild.textContent = t('Pin open');
     el.tsub.hidden = !(lay.menu && cmenu && lay.place === 'top' && wide());
     room();
     if (panel) placePanel();
     if (docked) { if (lay.place === 'rail' && wide() || lay.place === 'none' || !el.dock.childElementCount) dockTo(false, false); else placeDock(); }
     if (open !== shown) { shown = open; emit(open ? 'expand' : 'collapse', {}); if (open) tip(null); }
     if (host.hidden) return;
+    const moved = measured !== geometry();
     measured = geometry();
     if (lay.place === 'top' && wide()) { fit(); if (!placed) tabsReveal(); }
+    if (lay.place === 'rail' && wide()) { if (!placed || moved) listReveal(); listScroll(); }
     // The markers glide; the first placement after a redraw doesn't (it would slide in from the top).
     const still = !placed;
     const glide = (ind, target, horizontal) => {
@@ -484,6 +491,20 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (!cur || box.scrollWidth <= box.clientWidth + 1) return;
     const b = box.getBoundingClientRect(), r = cur.getBoundingClientRect();
     if (r.left < b.left + 28) box.scrollLeft -= b.left + 28 - r.left; else if (r.right > b.right - 28) box.scrollLeft += r.right - (b.right - 28);
+  };
+  // The rail's list, on a window too short for it, scrolls with no bar: the same fade at the edges it goes on past, and
+  // where the student is kept in view (a course's page, else the open course's tab, else the bar's item), on a redraw and
+  // when the window changes size.
+  const listScroll = () => {
+    const box = el.list, max = box.scrollHeight - box.clientHeight;
+    if (max <= 1) { box.removeAttribute('data-scroll'); return; }
+    box.setAttribute('data-scroll', [box.scrollTop > 1 ? 'start' : '', box.scrollTop < max - 1 ? 'end' : ''].join(' ').trim());
+  };
+  const listReveal = () => {
+    const box = el.list, cur = box.querySelector('.cmenu .item[aria-current="page"]') || box.querySelector('.ctab-go[aria-current="page"]') || box.querySelector('.item[aria-current="page"]');
+    if (!cur || box.scrollHeight <= box.clientHeight + 1) return;
+    const b = box.getBoundingClientRect(), r = cur.getBoundingClientRect();
+    if (r.top < b.top + 28) box.scrollTop -= b.top + 28 - r.top; else if (r.bottom > b.bottom - 28) box.scrollTop += r.bottom - (b.bottom - 28);
   };
   const tip = (target) => {
     if (!el.tip) return;
@@ -651,6 +672,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (!panel) {
       el.panel.hidden = true; el.panel.replaceChildren();
       document.removeEventListener('pointerdown', outsidePanel, true);
+      document.removeEventListener('keydown', escapePanel, true);
       if (focus && was && panelFrom?.isConnected) panelFrom.focus({ preventScroll: true });
       panelFrom = null; emit('panel', { id: '' });
       return;
@@ -663,6 +685,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.panel.hidden = false;
     placePanel();
     document.addEventListener('pointerdown', outsidePanel, true);
+    document.addEventListener('keydown', escapePanel, true);
     emit('panel', { id: panel });
     if (focus) (el.panel.querySelector('.find, .body .row, .row') || el.panel.querySelector('.close'))?.focus({ preventScroll: true });
     if (fresh) return;
@@ -676,6 +699,11 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (had) (el.panel.querySelector('.find, .body .row, .row') || el.panel.querySelector('.close'))?.focus({ preventScroll: true });
   };
   const outsidePanel = (e) => { if (!e.composedPath().includes(host)) panelTo('', null, false); };
+  // Tabbed on past it into the page, it closes, as the top bar's menus do, and focus stays where it went: left open, it
+  // would cover what's focused there. (A row redrawn under focus leaves for nowhere: no relatedTarget, it stays.)
+  const leftPanel = (e) => { if (panel && e.relatedTarget && !root.contains(e.relatedTarget)) panelTo('', null, false); };
+  // Escape from the page too (the bar's own keys hear it inside): focus goes back to its button only from nowhere.
+  const escapePanel = (e) => { if (e.key === 'Escape' && !e.composedPath().includes(host)) panelTo('', null, !document.activeElement || document.activeElement === document.body); };
 
   // ---- acting ---------------------------------------------------------------------------------------------------------
   const glaze = (what, e) => {
@@ -701,6 +729,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Canvas: a page's address goes through the course tabs while their frames run, so none of them reloads.
     if (X.site === 'canvas' && globalThis.GZ_CTABS?.frames?.() && /^https?:[^#]*$/.test(item.href || '') && api?.open?.(item.href)) return;
     api?.leave();
+    if (id === 'logout') api?.signout?.();
     if (!site.go(id)) location.assign(item.href);
   };
   const tabAct = (act, cid, e) => {
@@ -726,7 +755,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // A panel's row: a page of this site opens here (through the course tabs where they run), another site's in a new tab.
     const prow = el.panel && path.includes(el.panel) && path.find((n) => n.classList?.contains('row') && n.parentElement && !n.dataset.act);
     if (prow && e.type === 'click') {
-      if (prow.dataset.run !== undefined && prow.tagName === 'BUTTON') { e.preventDefault(); const what = prow.dataset.run; panelTo('', null, false); site.run?.(what); return; }
+      if (prow.dataset.run !== undefined && prow.tagName === 'BUTTON') { e.preventDefault(); const what = prow.dataset.run; panelTo('', null, false); if (what === 'logout') tabsApi()?.signout?.(); site.run?.(what); return; }
       if (prow.href && prow.target !== '_blank' && sameSite(prow.href) && plain(e)) { e.preventDefault(); const href = prow.href; panelTo('', null, false); openHere(href); return; }
       if (prow.href) { panelTo('', null, false); return; }
     }
@@ -789,7 +818,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       if (docked) { e.preventDefault(); dockTo(false); return; }
       if (sheetOpen) { e.preventDefault(); sheetTo(false); return; }
       if (menu) { e.preventDefault(); menuTo(''); return; }
-      if (peek) { e.preventDefault(); peekTo(false); el.toggle.focus({ preventScroll: true }); }
+      // The peek folds away; focus stays on the item that had it (its icon), not the rail's foot.
+      if (peek) { e.preventDefault(); peekTo(false); }
       return;
     }
     // A course tab: Delete closes it and P pins it, as on the strip.
@@ -852,7 +882,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     }
     host.setAttribute('dir', (html.dir || document.body?.dir) === 'rtl' ? 'rtl' : 'ltr');
     host.dataset.motion = html.getAttribute('data-gz-motion') || '';
-    host.toggleAttribute('data-footer', html.hasAttribute('data-gz-footer'));
+    // The bar stands on Glaze's footer where it runs under the bar: fixed on Ultra, last in Moodle's page. Canvas's is in its
+    // body, above the room kept under the page for the bar: raised, the bar went over it and over Canvas's Previous and Next.
+    host.toggleAttribute('data-footer', X.site !== 'canvas' && html.hasAttribute('data-gz-footer'));
     const api = tabsApi();
     if (skipMain.size) {
       const main = mainAt();

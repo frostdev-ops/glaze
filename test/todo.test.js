@@ -213,6 +213,52 @@ test("the student's own: custom tasks, do-on dates, timed sessions, local marks"
   assert.deepEqual(groups(course), { tomorrow: ['task:a'] });
 });
 
+test('saving the edit form changes only what it edits: a tick made since it opened stays', async () => {
+  const key = 'todo:https://school.instructure.com/3';
+  const store = {};
+  const local = { get: async (k) => Object.fromEntries(k.filter((x) => x in store).map((x) => [x, store[x]])), set: async (v) => (Object.assign(store, JSON.parse(JSON.stringify(v))), true) };
+  const send = (...edits) => T.change({ key, edits }, { local });
+  await send(['task', { id: 'a', title: 'Read', cid: '25', due: { day: '2026-10-16' }, notes: 'p. 4', at: 7 }]);
+  await send(['taskDone', 'a', 5000]); // ticked here or in another tab while the form was open
+  await send(['task', { id: 'a', title: 'Read ch. 4', cid: '', due: null, notes: 'p. 4-9' }]);
+  assert.deepEqual(store[key].tasks, [{ id: 'a', title: 'Read ch. 4', cid: '', due: null, notes: 'p. 4-9', done: 5000, at: 7 }]);
+  // A page from before this, still open, sends what the form opened with.
+  await send(['task', { id: 'a', title: 'Read ch. 5', cid: '', due: null, notes: '', done: 0, at: 1 }]);
+  assert.deepEqual([store[key].tasks[0].title, store[key].tasks[0].done, store[key].tasks[0].at], ['Read ch. 5', 5000, 7]);
+  // A new task is added as sent.
+  await send(['task', { id: 'b', title: 'New', at: 9 }]);
+  assert.deepEqual(store[key].tasks.map((x) => [x.id, x.done, x.at]), [['a', 5000, 7], ['b', 0, 9]]);
+});
+
+test('past a limit (tasks, marks, steps, sessions) a change is refused whole, not answered as kept and dropped', async () => {
+  const key = 'todo:https://school.instructure.com/3';
+  const full = {
+    tasks: Array.from({ length: 500 }, (_, i) => ({ id: `t${i}`, title: `Task ${i}`, cid: '', due: null, notes: '', done: 0, at: 1 })),
+    items: {
+      ...Object.fromEntries(Array.from({ length: 1999 }, (_, i) => [`assignment:${i + 1}`, { done: true }])),
+      'quiz:1': { subs: Array.from({ length: 50 }, (_, i) => ({ id: `s${i}`, title: `Step ${i}`, done: false })), sessions: Array.from({ length: 20 }, (_, i) => ({ at: 1e12 + i * 1e6, min: 30 })) },
+    },
+  };
+  const store = { [key]: full };
+  const local = { get: async (k) => Object.fromEntries(k.filter((x) => x in store).map((x) => [x, store[x]])), set: async (v) => (Object.assign(store, JSON.parse(JSON.stringify(v))), true) };
+  const send = (...edits) => T.change({ key, edits }, { local });
+  const kept = JSON.stringify(store[key]);
+  const refused = { ok: false, error: 'cap' };
+  assert.deepEqual(await send(['task', { id: 'new', title: 'The 501st', at: 2 }]), refused);
+  assert.deepEqual(await send(['importTask', { id: 'syl', title: 'From a syllabus', cid: '25', due: { day: '2026-11-04' } }]), refused);
+  assert.deepEqual(await send(['done', 'assignment:5000', true]), refused);
+  assert.deepEqual(await send(['addStep', 'quiz:1', { id: 'more', title: 'The 51st', done: false }]), refused);
+  assert.deepEqual(await send(['addSession', 'quiz:1', { at: 2e12, min: 30 }]), refused);
+  assert.deepEqual(await send(['taskDone', 't0', 5000], ['task', { id: 'new', title: 'The 501st', at: 2 }]), refused, 'one over the limit refuses the whole change');
+  assert.equal(JSON.stringify(store[key]), kept, 'nothing was written');
+  // What stays within a limit still goes through: changing, ticking and clearing what is there, or making room first.
+  assert.equal((await send(['task', { id: 't1', title: 'Renamed' }], ['taskDone', 't2', 5000], ['done', 'assignment:1', null], ['step', 'quiz:1', 's0', true], ['dropSession', 'quiz:1', { at: 1e12, min: 30 }])).ok, true);
+  assert.equal((await send(['dropTask', 't3'], ['task', { id: 'new', title: 'The 500th', at: 2 }])).ok, true);
+  assert.equal(store[key].tasks.length, 500);
+  assert.ok(store[key].tasks.some((x) => x.id === 'new') && !store[key].tasks.some((x) => x.id === 't3'));
+  assert.equal((await send(['done', 'assignment:5000', true])).ok, true, 'a mark has room once another is cleared');
+});
+
 test('teachers: work to grade, per course, and graded out of handed in', () => {
   const grading = [
     { type: 'grading', needs_grading_count: 4, course_id: 26, context_name: 'Writing', html_url: 'http://localhost:3000/courses/26/gradebook/speed_grader?assignment_id=178', assignment: { id: 178, name: 'Peer review', due_at: '2026-10-06T03:59:00Z' } },
@@ -276,6 +322,13 @@ test('planner items are kept small and on their own site', () => {
   assert.deepEqual(s, { type: 'planner_note', id: '7', cid: '', course: '', title: 'Note', at: at('2026-10-16T16:00:00Z'), url: '', sub: null, ov: null, aid: '', read: false, note: 'Bring goggles', ws: '', allDay: false });
   assert.equal(T.slim({ plannable_type: 'assignment', plannable_id: 1, html_url: '//evil.test/x' }).url, '');
   assert.equal(T.slim({ plannable_type: 'assignment', plannable_id: 1, html_url: 'https://other.test/courses/1/assignments/1' }).url, '/courses/1/assignments/1');
+  // Browsers read a backslash as a slash and drop tabs and newlines, so these would be another site's address.
+  for (const bad of ['/\\evil.test/x', '/\t/evil.test/x', '/\n/evil.test/x', '/\r/evil.test/x', 'https://x.test/\\evil.test/x', '/courses/1/a\\b']) {
+    assert.equal(T.slim({ plannable_type: 'assignment', plannable_id: 1, html_url: bad }).url, '', JSON.stringify(bad));
+    assert.equal(T.slimGrading({ html_url: bad }).url, '', JSON.stringify(bad));
+    assert.equal(new URL(T.slim({ plannable_type: 'assignment', plannable_id: 1, html_url: bad }).url, 'https://school.test').origin, 'https://school.test');
+  }
+  for (const ok of ['/courses/1/assignments/1?a=b&c=d#e', '/courses/1/files/a%20b.pdf', '/']) assert.equal(T.slim({ plannable_type: 'assignment', plannable_id: 1, html_url: `https://x.test${ok}` }).url, ok);
 });
 
 test('its settings join GZ_SPEC from here, so the first content script carries only the switch', () => {

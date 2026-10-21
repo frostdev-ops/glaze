@@ -337,6 +337,35 @@ test("two tabs adding tasks at once both keep theirs (the worker's one queue)", 
   assert.deepEqual(shared.store[KEY(3)].tasks.map((x) => x.title).sort(), ['From tab one', 'From tab two']);
 });
 
+test('saving an edited task keeps a tick made while its form was open', async () => {
+  const task = { id: 'abc', title: 'Read ch. 4', cid: '', due: null, notes: '', done: 0, at: 1 };
+  const f = feature({ stored: { [KEY(3)]: { tasks: [task], items: {} } } });
+  f.p.seed({ prefs: O, data: { tasks: [task], items: {} } });
+  f.p.render(true);
+  const edit = { tagName: 'BUTTON', dataset: { act: 'edit' }, closest: () => ({ dataset: { key: 'task:abc' } }) };
+  f.p.onClick({ target: { closest: () => edit } });
+  await f.p.save([['taskDone', 'abc', 5000]]); // ticked from the row, or in another tab
+  f.c.FormData = class { constructor() { return [['title', 'Read ch. 4 and 5'], ['cid', ''], ['date', ''], ['time', ''], ['notes', '']]; } };
+  f.p.onSubmit({ target: { dataset: { act: 'saveTask' }, closest: () => null, querySelector: () => null }, isTrusted: true, preventDefault() {} });
+  await settled();
+  assert.deepEqual([f.store[KEY(3)].tasks[0].title, f.store[KEY(3)].tasks[0].done], ['Read ch. 4 and 5', 5000]);
+  assert.equal(f.p.get().data.tasks[0].done, 5000);
+});
+
+test('a task past the limit is not shown as added: the list says it was not saved and the form keeps what was typed', async () => {
+  const tasks = Array.from({ length: 500 }, (_, i) => ({ id: `t${i}`, title: `Task ${i}`, cid: '', due: null, notes: '', done: 0, at: 1 }));
+  const f = feature({ stored: { [KEY(3)]: { tasks, items: {} } } });
+  f.p.seed({ prefs: O, data: { tasks, items: {} } });
+  f.p.render(true);
+  f.c.FormData = class { constructor() { return [['title', 'The 501st'], ['cid', ''], ['date', ''], ['time', ''], ['notes', 'x']]; } };
+  f.p.form({ cid: '' });
+  f.p.onSubmit({ target: { dataset: { act: 'saveTask' }, closest: () => null, querySelector: () => null }, isTrusted: true, preventDefault() {} });
+  await settled();
+  assert.equal(f.p.get().note, "Couldn't save that on this device, so nothing changed.");
+  assert.equal(f.store[KEY(3)].tasks.length, 500);
+  assert.equal(f.p.formNow().draft.title, 'The 501st');
+});
+
 test("the worker takes To Do writes from a Canvas page for its own site's accounts, and backups from the editor only, one at a time", async () => {
   const m = require('../manifest.json');
   const store = { sync: { version: 2 }, local: { [KEY(3)]: { tasks: [{ id: 'old', title: 'Before' }], items: {} } } };
@@ -390,6 +419,15 @@ test("the worker takes To Do writes from a Canvas page for its own site's accoun
 
 // ---- mounted by its widget in the sidebar's dock --------------------------------------------------------------------
 const course = (f) => { const asked = []; f.c.GZ_TODO = { ...T, build: (x) => { asked.push(x.course); return T.build(x); } }; return asked; };
+
+test('outside the dock the head has no scope buttons, and nothing in their place (not the word "undefined")', async () => {
+  const f = feature();
+  const target = new E();
+  f.c.GZ_TODO_UI.mount(target, { courseId: '25' });
+  await settle(); await settle();
+  const head = f.p.get().box.children[0];
+  assert.deepEqual(head.children.filter((x) => x === undefined || x === null || typeof x === 'string' || x?.className === 'gz-todo-scope'), []);
+});
 
 test('in the dock: Follow page shows this course, All courses every course, and the choice goes to the record', async () => {
   const f = feature();

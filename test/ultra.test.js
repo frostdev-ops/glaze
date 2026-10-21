@@ -451,6 +451,23 @@ test('planner: everything due, one request at a time from this site, due-date ex
   assert.equal(asked.length, 9);
 });
 
+test('a due-date exception counts for its own column only, not one whose id starts the same', async () => {
+  const row = (columnId) => ({ columnId, column: { dueDate: '2026-10-01T03:59:00.000Z' }, submissionStatus: { status: 'NOT_SUBMITTED' } });
+  const r = { get: async () => ({ results: [{ columnId: '_612_10', dueDate: '2026-10-30T03:59:00.000Z' }] }) };
+  const excepted = await U.excepts(r, { id: '_302_1', dueDateExceptionType: 'Normal' }, '_102_1', [row('_612_1'), row('_612_10')], LATER);
+  assert.deepEqual([excepted('_612_10'), excepted('_612_1')], [true, false]);
+});
+
+test('the due-date chips\' late check takes an exception for its own column only, as excepts does', async () => {
+  const part = src('content-ultra.js'), lateIn = part.slice(part.indexOf('  const lateIn = '), part.indexOf('  // Per-course gradebook cache.'));
+  const row = (columnId) => ({ columnId, column: { dueDate: '2026-10-01T03:59:00.000Z' }, lastAttempt: { attemptDate: '2026-10-02T03:59:00.000Z' } });
+  const late = await require('node:vm').runInNewContext(`${lateIn}\nlateIn`, {
+    GZ_GRADES: { awaiting: (r) => r, late: () => true }, GZ_PAGE: { submitted: () => true }, I: { settings: { enhance: { inline: true } } }, Set, Promise,
+    myCourses: async () => [{ courseId: '_102_1', id: '_302_1', dueDateExceptionType: 'Normal' }], api: async () => ({ results: [{ columnId: '_612_10' }] }),
+  })('_102_1', [row('_612_1'), row('_612_10')]);
+  assert.deepEqual([...late], ['_612_1']);
+});
+
 test("PRIVACY doesn't promise folder previews leave memory after a minute: the minute is only when they're asked again", () => {
   const para = src('PRIVACY.md').match(/- \*\*Folder previews\*\*[\s\S]*?(?=\n- \*\*)/)[0];
   assert.doesNotMatch(para, /kept in memory for a minute/);

@@ -69,6 +69,11 @@ test('grade hover changes opacity and keeps the separate keyboard grade link out
   assert.ok(rules.some(([sel, body]) => sel === '#application .gz-card-grade:focus-visible' && /clip-path:\s*none/.test(body)));
 });
 
+test("the keyboard grade link's chip takes presses over at least 24px, however short the grade (WCAG 2.5.8)", () => {
+  assert.ok(rules.some(([sel, body]) => sel === '#application .gz-card-grade:focus-visible' && /overflow:\s*visible/.test(body)), 'what reaches past it is not clipped');
+  assert.ok(rules.some(([sel, body]) => sel === '#application .gz-card-grade:focus-visible::before' && /width:\s*max\(100%, 24px\)/.test(body) && /height:\s*max\(100%, 24px\)/.test(body)));
+});
+
 test('native card-menu focus remains visible after the proxy menu closes', () => {
   assert.ok(rules.some(([sel, body]) => sel.includes('.ic-DashboardCard__header-button:is([aria-expanded="true"], :focus)') && /visibility:\s*visible/.test(body)));
   assert.ok(rules.some(([sel, body]) => sel.includes(':has(.ic-DashboardCard__header-button:is([aria-expanded="true"], :focus)) > .gz-cm-btn') && /visibility:\s*hidden/.test(body)));

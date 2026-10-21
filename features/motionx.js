@@ -21,6 +21,7 @@
 // frames run only while something is alive or the pointer is moving, and not while the page is hidden.
 var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
   const ctx = globalThis.GZ_CTX;
+  if (!ctx) return null; // a frame-only injection can outlive its document
   const html = document.documentElement;
   const lib = () => Promise.all([ctx.need('lib/motionx.js', () => globalThis.GZ_MX), ctx.need('lib/lookx.js', () => globalThis.GZ_LX)]);
   const quiet = () => !!globalThis.GZ_LX?.quiet(location.pathname, document);

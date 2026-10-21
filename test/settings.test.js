@@ -57,6 +57,8 @@ test('hostile import is cleaned, not trusted', () => {
 test('https image URLs only, normalised so they are safe inside url("…")', () => {
   assert.equal(G.GZ_SANITIZE({ bg: { image: 'https://example.com/a.jpg' } }).bg.image, 'https://example.com/a.jpg');
   assert.equal(G.GZ_SANITIZE({ bg: { image: 'https://example.com/a"b\\c\n.jpg' } }).bg.image.includes('"'), false);
+  // The parser keeps a quote in the host and a backslash in the query or fragment: either would end or escape url("…").
+  for (const u of ['https://a"b.example/x.jpg', 'https://a%22b.example/x.jpg', 'https://example.com/a.jpg?x\\', 'https://example.com/a.jpg#x\\']) assert.equal(G.GZ_SANITIZE({ bg: { image: u } }).bg.image, '', u);
   for (const u of ['http://example.com/a.jpg', 'data:image/png;base64,AAAA', 'not a url']) assert.equal(G.GZ_SANITIZE({ bg: { image: u } }).bg.image, '', u);
 });
 
@@ -136,6 +138,20 @@ test('intensity runs from barely there to full strength', () => {
   assert.ok(G.GZ_SCENE_LOOK(G.GZ_DEFAULTS.bg.intensity).dim < 0.6, 'the default stands out more than the old fixed dim of 60%');
 });
 
+test('a drawn background\'s CSS fallback is dimmed like a quiet gradient, whatever the intensity', () => {
+  // The scene Looks dim their colours by a third or less, but the fallback (the bright gradient, before the scene draws
+  // or without WebGL) is what the page's text sits on then.
+  for (const L of G.GZ_LOOKS.filter((l) => l.bg.kind === 'scene')) assert.ok(G.GZ_SCENE_LOOK(L.bg.intensity ?? G.GZ_DEFAULTS.bg.intensity).dim < 0.75, L.name);
+  const fs = require('node:fs');
+  const css = fs.readFileSync(require.resolve('../extras.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const base = css.indexOf('html[data-gz-bg]:not([data-gz-bg="solid"]) {');
+  const m = css.match(/html\[data-gz-bg\]:is\(([^)]*)\) \{\s*--gz-bg-tint: color-mix\(in srgb, var\(--gz-surface-2\) max\(var\(--gz-bg-dim, 60%\), 75%\), transparent\);\s*\}/);
+  assert.ok(m && base >= 0 && m.index > base, 'after the layer\'s own tint, at its specificity, so it wins');
+  // The kinds content.js gives the scene's dim to are the ones floored here.
+  const kinds = [...fs.readFileSync(require.resolve('../content.js'), 'utf8').match(/const look = \(([^)]*)\) && GZ_SCENE_LOOK/)[1].matchAll(/'(\w+)'/g)].map((k) => k[1]);
+  assert.deepEqual([...m[1].matchAll(/\[data-gz-bg="(\w+)"\]/g)].map((k) => k[1]).sort(), kinds.sort());
+});
+
 test('gradient: blend sets how long each color holds, spread how much of the line the change covers', () => {
   const g = (o) => G.GZ_GRADIENT({ ...G.GZ_DEFAULTS.bg, ...o });
   assert.equal(g({ blend: 100 }), 'linear-gradient(135deg, var(--gz-bg-1) 0% 0%, var(--gz-bg-2) 50% 50%, var(--gz-bg-3) 100% 100%)');
@@ -158,6 +174,10 @@ test('theme codes round-trip palette, look and background, and nothing else', as
   assert.equal(got.look.radius, 4);
   assert.ok(!('tooltips' in got.look), 'behaviour settings are not part of a theme');
   assert.deepEqual(got.bg, s.bg);
+  // A picture tried and set aside stays stored, and may be private: a Look that doesn't show it leaves it out.
+  const aside = 'https://photos.example.com/u/me/IMG_1.jpg?token=x';
+  const other = await S.decode(await S.encode(G.GZ_SANITIZE({ bg: { kind: 'gradient', image: aside }, nav: { k: 'solid', u: aside } })));
+  assert.deepEqual([other.bg.kind, 'image' in other.bg, other.nav.k, 'u' in other.nav], ['gradient', false, 'solid', false]);
 });
 
 test('theme codes are untrusted: anything off refuses the whole code', async () => {

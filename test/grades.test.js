@@ -100,6 +100,9 @@ test('new content: items not seen before, counted into the folders above them', 
   assert.deepEqual(opened.seen, [...first.seen, 'y']);
   assert.deepEqual(R.newItems(null, first.seen).seen, first.seen, 'a failed request changes nothing');
   assert.equal(R.newItems(null, undefined).seen, undefined, 'and never records an empty course');
+  // Folders in each other (a parentId cycle) end the count, not the page.
+  const loop = R.newItems([{ id: 'a', parentId: 'b' }, { id: 'b', parentId: 'a' }, { id: 'z', parentId: 'a' }], ['a', 'b']);
+  assert.deepEqual([[...loop.ids], [...loop.inside.keys()]], [['z'], ['a', 'b']]);
 });
 
 test('late: the latest attempt after the due date, for work waiting to be graded', () => {

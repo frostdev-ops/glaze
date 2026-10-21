@@ -24,6 +24,13 @@ html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
   --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
+/* Under a drawn background (a scene, shader, layers or media) the layer is its fallback: the bright gradient, all there is
+   behind the page until the scene draws, and for good without WebGL. Its dim comes from the scene's intensity (30 to 34%
+   in the Looks: text sat on bright colour at about 2.2 to 3.6:1); here it is never under 75%, a quiet gradient's. The
+   scene itself still dims its own colours by intensity. */
+html[data-gz-bg]:is([data-gz-bg="scene"], [data-gz-bg="shader"], [data-gz-bg="layers"], [data-gz-bg="media"]) {
+  --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) max(var(--gz-bg-dim, 60%), 75%), transparent);
+}
 /* Keep viewport backgrounds below a panel's header. Off-canvas shells also own the close button
    that hangs into Ultra's side gutter: clip vertically, but let the backdrop cover that gutter. */
 html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { isolation: isolate; clip-path: inset(0); background: transparent !important; }
@@ -248,6 +255,7 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
 #gz-keys dt { display: flex; gap: 0.25rem; }
 #gz-keys dd { margin: 0; color: var(--gz-ink-muted); font-size: 13px; }
 #gz-keys kbd { min-width: 1.6em; padding: 0.1rem 0.4rem; text-align: center; font: 600 12px/1.5 ui-monospace, Menlo, monospace; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-bottom-width: 2px; border-radius: calc(var(--gz-radius, 12px) * 1 / 2); }
+#gz-keys button { margin-top: 0.9rem; padding: 0.4rem 0.75rem; font: inherit; font-size: 13px; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); cursor: pointer; }
 
 /* New grades: a badge on gradebook rows and course cards (content.js sets the label). */
 html[data-gz-enhance-newgrades] [data-gz-new]::after {
@@ -442,6 +450,20 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 }
 #gz-cm .gz-cm-look:hover { transform: var(--gz-lift); }
 #gz-cm .gz-cm-look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
+/* Forced colours (Windows High Contrast) drop fills and shadows: the swatches keep their own colours, edged; the switch
+   and what is picked are drawn in system colours. */
+@media screen and (forced-colors: active) {
+  /* Ultra's ten are read off a hidden probe (content-ultra.js courseColor): its own colour, not the system's. */
+  html > i[class^="course-color-"] { forced-color-adjust: none; }
+  #gz-cm .gz-cm-sw { forced-color-adjust: none; border-color: CanvasText; }
+  #gz-cm .gz-cm-sw[aria-pressed="true"] { border: 3px solid Highlight; }
+  #gz-cm input.gz-cm-custom[data-on] { outline: 2px solid Highlight; outline-offset: 2px; }
+  #gz-cm .gz-cm-look[aria-pressed="true"] { border: 2px solid Highlight !important; } /* over its own colour, set inline */
+  #gz-cm .gz-cm-tint input { forced-color-adjust: none; background: Canvas !important; border: 1px solid ButtonText !important; }
+  #gz-cm .gz-cm-tint input::before { top: 2px; left: 2px; background: ButtonText; }
+  #gz-cm .gz-cm-tint input:checked { background: Highlight !important; border-color: Highlight !important; }
+  #gz-cm .gz-cm-tint input:checked::before { background: HighlightText; }
+}
 
 /* ---- declutter ---- */
 html[data-gz-hide-help] .pagehelp-directive { display: none !important; }

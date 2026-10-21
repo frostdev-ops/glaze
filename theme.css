@@ -246,7 +246,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 /* The course header's toolbar is inset 16px inside it: a second glass box there showed square edges. */
 .bb-course-navigation course-page-header > header [class*="makeStylestoolbar"] { background: transparent !important; border: 0 !important; backdrop-filter: none; }
 /* The outline's "Course Content" header is a box inside the content column, not a page header. */
-#site-wrap header.outline-header { border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
+#site-wrap header.outline-header { box-sizing: border-box; padding-inline: 1rem !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
 
 /* ---- cards ---- */
 .element-card, .MuiPaper-root:not(.MuiDrawer-paper), .MuiCard-root, .panel, .todo-item, article,
@@ -298,15 +298,19 @@ aside.student-grade-overview { border-left: 0 !important; }
 input, textarea, select, .MuiInputBase-root, .MuiOutlinedInput-root, .MuiSelect-select {
   background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important;
   color: var(--gz-ink) !important;
-  border-color: var(--gz-border-line, var(--gz-line)) !important;
+  /* A field's edge says where to type, so it is a control's outline (3:1 against what is around it), which the theme's
+     lines, made to recede, are not: the faint ink is. It doesn't follow the Look's border opacity for the same reason. */
+  border-color: var(--gz-ink-faint) !important;
   border-radius: var(--gz-radius-sm) !important;
   transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease) !important;
 }
-.MuiOutlinedInput-notchedOutline { border-color: var(--gz-border-line, var(--gz-line)) !important; transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease); }
-.MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
+.MuiOutlinedInput-notchedOutline { border-color: var(--gz-ink-faint) !important; transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease); }
+.MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-ink-muted) !important; }
 .Mui-focused .MuiOutlinedInput-notchedOutline { border-color: var(--gz-accent) !important; box-shadow: 0 0 0 3px var(--gz-accent-soft); }
 #site-wrap legend, #site-wrap legend *, #site-wrap label { background: transparent !important; }
-#site-wrap legend * { color: transparent !important; }
+/* Only the outline's notch label: it is there to size the gap in the border. A form group's legend is its visible title,
+   and its required asterisk went with it. */
+#site-wrap .MuiOutlinedInput-notchedOutline > legend * { color: transparent !important; }
 /* MUI floating label: the notch cover is the label's ::before (an absolute block), which Ultra paints white. */
 #site-wrap label.MuiInputLabel-root { background: transparent !important; color: var(--gz-ink-muted) !important; padding: 0 4px !important; }
 /* Ultra hides the field border behind a shrunk label with a white block. Any block shows wherever the label sits off the
@@ -419,11 +423,26 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 80%), transparent) !important; color: var(--gz-ink) !important;
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important;
 }
-#site-wrap :is(.js-content-navigator-previous, .js-content-navigator-next) button:is(:hover, :focus-visible) { color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; background: var(--gz-accent-soft) !important; }
+#site-wrap :is(.js-content-navigator-previous, .js-content-navigator-next) button:is(:hover, :focus-visible) { color: var(--gz-accent-hi) !important; border-color: var(--gz-accent) !important; background: var(--gz-accent-soft) !important; }
 
 /* Item panels (discussions, assignments, tests): Ultra's panel chrome and its Quill editor are white. */
 #site-wrap .panel-header, #site-wrap .persistent-white-header, #site-wrap .panel-title, #site-wrap .panel-content, #site-wrap .panel-content-slide-toggle, #site-wrap .collapsible-row, #site-wrap .editable-title-container { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
 #site-wrap .panel-header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: none !important; }
+/* Item titles keep one surface behind the whole band, as the nearby content panels do. */
+#site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
+  .base-header, .course-groups-header,
+  bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"],
+  .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
+  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"],
+  .bb-offcanvas-panel.full .panel-header.simple-header) {
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
+  border-radius: var(--gz-radius) !important;
+  box-shadow: var(--gz-rest-shadow) !important;
+}
+#site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
+  .bb-offcanvas-panel.full .panel-header.simple-header) :is(.panel-title, .editable-title-container) { background: transparent !important; }
 #site-wrap .reply-form, #site-wrap .new-comment, #site-wrap .bb-editor-root, #site-wrap .bb-editor-container, #site-wrap .editor-content-container, #site-wrap .ql-editor, #site-wrap .ql-container, #site-wrap .ql-toolbar, #site-wrap bb-message, #site-wrap .message-body, #site-wrap .comments { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 #site-wrap .lti-placement__root { background: transparent !important; }
 
@@ -451,7 +470,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap .peek-panel__container { overflow-x: hidden !important; }
 #site-wrap .bb-offcanvas-overlay { background: var(--gz-surface-grain, none), color-mix(in srgb, color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)), #000 45%) 60%, transparent) !important; }
 #site-wrap .peek .panel-header { padding-bottom: 0.25rem; }
-#site-wrap .peek .panel-sub-title { color: var(--gz-ink-faint) !important; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+#site-wrap .peek .panel-sub-title { color: var(--gz-ink-muted) !important; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
 #site-wrap .peek .panel-footer { border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 /* The close button straddles the sheet's edge: a round button instead of a tab with a purple fold. */
 #site-wrap .peek button.bb-close {
@@ -463,7 +482,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap .peek button.bb-close:is(:hover, :focus-visible) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; }
 #site-wrap button.bb-close::after { display: none !important; }
 #site-wrap .rubric-view-panel .panel-body > div, #site-wrap .rubric-view-panel .MuiAccordionDetails-root > div > div > div { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) !important; }
-#site-wrap .js-rubric-view-achievement-score { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
+#site-wrap .js-rubric-view-achievement-score { background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
 
 /* File attachment header above the PDF/file viewer (the viewer itself is an iframe on /bbcswebdav/, untouched). */
 #site-wrap div:has(> .js-file-viewer-root-controls) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important; }
@@ -481,6 +500,28 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap .element-card-container { background: transparent !important; border: 0 !important; box-shadow: none !important; }
 #site-wrap .calendar-toggle button { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) !important; }
 #site-wrap .calendar-toggle button:hover { color: var(--gz-ink) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
+/* Native lists and calendars used the page itself as their fill. Keep one rounded surface behind
+   each group, without clipping table controls, calendar popovers or the native scroll containers. */
+#site-wrap :is(.calendar-wrapper, .tabular-list,
+  course-student-grades,
+  course-achievements-panel [class*="makeStylescomponentContainer-"],
+  .messages-container .no-messages, .base-profile .account-snapshot) {
+  box-sizing: border-box;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
+  border-radius: var(--gz-radius) !important;
+  box-shadow: var(--gz-rest-shadow) !important;
+}
+#site-wrap :is(course-achievements-panel [class*="makeStylescomponentContainer-"], .messages-container .no-messages) { padding: 1.5rem !important; margin-block: 1rem; }
+#site-wrap course-student-grades { display: block; }
+/* The table's own square row fills must not cover the surrounding surface's corners. */
+#site-wrap .tabular-list > table { border-collapse: separate; border-spacing: 0; }
+#site-wrap .tabular-list :is(thead, thead tr) { background: transparent !important; }
+#site-wrap .tabular-list thead th:first-child { border-start-start-radius: var(--gz-radius); }
+#site-wrap .tabular-list thead th:last-child { border-start-end-radius: var(--gz-radius); }
+#site-wrap .tabular-list tbody tr:last-child td:first-child { border-end-start-radius: var(--gz-radius); }
+#site-wrap .tabular-list tbody tr:last-child td:last-child { border-end-end-radius: var(--gz-radius); }
+#site-wrap course-student-grades thead.MuiTableHead-root { clip-path: inset(0 round var(--gz-radius) var(--gz-radius) 0 0); }
 
 /* Gradebook (MUI table + readonly grade pills). */
 #site-wrap table, #site-wrap .MuiTable-root, #site-wrap .MuiTableCell-root { background: transparent !important; color: var(--gz-ink) !important; }
@@ -527,9 +568,10 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 /* Assessment overview: Foundation-style .button links (Start attempt) and the Contents tree's selected row. */
 /* Button hierarchy. Ultra's Foundation .button is on everything from "Start attempt" to "Back" and
    "Show more", so a solid accent on all of them left no hierarchy. Tonal by default; solid only for
-   the per-view call to action; text and clear buttons are links. */
+   the per-view call to action; text and clear buttons are links. Words on the accent tint, here and on every tonal
+   control, are the bright accent: the accent itself is under 4.5:1 on the light palettes' tint (4.24 on Paper). */
 #site-wrap a.button, #site-wrap button.button { background: var(--gz-accent-soft) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important; }
-#site-wrap a.button, #site-wrap a.button *, #site-wrap button.button, #site-wrap button.button * { color: var(--gz-accent) !important; }
+#site-wrap a.button, #site-wrap a.button *, #site-wrap button.button, #site-wrap button.button * { color: var(--gz-accent-hi) !important; }
 #site-wrap a.button:hover, #site-wrap button.button:hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 22%, var(--gz-surface-paint, var(--gz-surface))) !important; border-color: var(--gz-accent) !important; }
 #site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]) { background: var(--gz-accent) !important; border-color: transparent !important; }
 #site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]), #site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]) * { color: var(--gz-accent-ink) !important; }
@@ -545,7 +587,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap button.button.small.today-toggle { border-radius: var(--gz-radius-sm) !important; }
 #site-wrap button.button.small:is(.left-button, .right-button):hover { background: var(--gz-accent-soft) !important; }
 #site-wrap button.button.small.active-switch { position: relative; z-index: 1; background: var(--gz-accent-soft) !important; border-color: var(--gz-accent) !important; }
-#site-wrap button.button.small.active-switch, #site-wrap button.button.small.active-switch * { color: var(--gz-accent) !important; font-weight: 600 !important; }
+#site-wrap button.button.small.active-switch, #site-wrap button.button.small.active-switch * { color: var(--gz-accent-hi) !important; font-weight: 600 !important; }
 #site-wrap .MuiListItem-root { background: transparent !important; }
 #site-wrap .MuiListItem-root.Mui-selected, #site-wrap .MuiListItem-root[aria-current], #site-wrap li.MuiListItem-padding:has([aria-current]) { background: var(--gz-accent-soft) !important; box-shadow: inset 3px 0 0 var(--gz-accent) !important; }
 
@@ -588,8 +630,27 @@ svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 
 .MuiModal-root :is(a, .MuiLink-root), .MuiPopper-root :is(a, .MuiLink-root) { color: var(--gz-accent) !important; }
 .MuiModal-root :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root), .MuiPopper-root :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root) { color: var(--gz-ink-muted) !important; }
 .MuiModal-root .Mui-checked, .MuiPopper-root .Mui-checked { color: var(--gz-accent) !important; }
-.MuiModal-root :is(fieldset, legend, legend *, .MuiFormControlLabel-root, .MuiMenuItem-root, .MuiListItem-root, [class*="popover-container"]), .MuiPopper-root :is(fieldset, legend, legend *, .MuiFormControlLabel-root, .MuiMenuItem-root, .MuiListItem-root, [class*="popover-container"]) { background: transparent !important; }
+.MuiModal-root :is(fieldset, legend, legend *, .MuiFormControlLabel-root, [class*="popover-container"]), .MuiPopper-root :is(fieldset, legend, legend *, .MuiFormControlLabel-root, [class*="popover-container"]) { background: transparent !important; }
+/* Menu and list items are clear at rest too, but not in the states that say where you are: MUI draws no outline on a
+   focused item, only a fill, so with every fill cleared the keyboard was nowhere to be seen, and the chosen option
+   looked like the rest. */
+.MuiModal-root :is(.MuiMenuItem-root, .MuiListItem-root), .MuiPopper-root :is(.MuiMenuItem-root, .MuiListItem-root) { background: transparent !important; }
+.MuiModal-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root):is(:hover, .Mui-focusVisible), .MuiPopper-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root):is(:hover, .Mui-focusVisible) { background: var(--gz-hover-fill) !important; }
+.MuiModal-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root).Mui-focusVisible, .MuiPopper-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root).Mui-focusVisible { outline: 2px solid var(--gz-accent) !important; outline-offset: -2px; }
+.MuiModal-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root).Mui-selected, .MuiPopper-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root).Mui-selected { background: var(--gz-accent-soft) !important; box-shadow: inset 3px 0 0 var(--gz-accent) !important; }
 .MuiPaper-root:not(.MuiDrawer-paper) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
+
+/* ---- disabled: the accent fills and ink forced above outrank MUI's own disabled colours, so a button that does nothing
+   looked like one that would (a dialog's greyed Submit stayed accent). MUI's disabled look, restated in the palette:
+   page and portals, its buttons, date-picker days and plain buttons. Menu items keep MUI's own fade; a filled button
+   drops Ultra's (its .button's opacity), or the two fades together left its label barely there. ---- */
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.MuiButton-root, .MuiIconButton-root, .MuiToggleButton-root, .MuiPickersDay-root, .MuiTab-root, button, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.MuiButton-root, .MuiIconButton-root, .MuiToggleButton-root, .MuiPickersDay-root, .MuiTab-root, button, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) * { color: var(--palette-action-disabled) !important; }
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.MuiButton-contained, a.button, button.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) { background: var(--palette-action-disabledBackground) !important; border-color: var(--palette-action-disabledBackground) !important; box-shadow: none !important; filter: none; opacity: 1; }
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) .MuiButton-outlined:is(.Mui-disabled, :disabled, [aria-disabled="true"]) { border-color: var(--palette-action-disabledBackground) !important; }
+/* The chosen day in MUI's date picker: filled with the primary colour, which is the palette's ink, and its number given
+   that same ink by the portal's inherit rule, so the date you picked was a blank disc. The accent, as chosen things are. */
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) .MuiPickersDay-root.Mui-selected { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
 
 /* ---- footer bar (content.js appends it; every rule here is gated on the popup's Footer switch) ----
    Ultra sizes its layout to the full viewport and scrolls inside, so a footer only earns its space
@@ -613,6 +674,16 @@ html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, h
 html[data-gz-navbar][data-gz-footer] .inner-wrap > :is(section.course, .routed-page) {
   max-height: calc(100vh - var(--gz-footer-h)) !important;
 }
+/* Printed, the page is Ultra's own: no footer on every sheet, and none of its room (the caps above are Ultra's heights). */
+@media print {
+  html[data-gz-footer] { --gz-footer-h: 0px !important; }
+  html[data-gz-footer] #gz-footer { display: none !important; }
+}
+/* A window this short (a phone on its side, a page zoomed to 400%) keeps its 32px for Ultra: no footer, and no room for it. */
+@media (max-height: 420px) {
+  html[data-gz-footer] { --gz-footer-h: 0px; }
+  html[data-gz-footer] #gz-footer { display: none !important; }
+}
 #gz-footer {
   position: fixed;
   inset: auto 0 0 0;
@@ -625,12 +696,12 @@ html[data-gz-navbar][data-gz-footer] .inner-wrap > :is(section.course, .routed-p
   padding: 0 1rem;
   font: 500 11px/1 ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.02em;
-  color: var(--gz-ink-faint) !important;
+  color: var(--gz-ink-muted) !important;
   background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2));
   border-top: 1px solid var(--gz-border-line, var(--gz-line));
 }
 #gz-footer a {
-  color: var(--gz-ink-faint) !important;
+  color: var(--gz-ink-muted) !important;
   text-decoration: none;
   transition: color var(--gz-t) var(--gz-ease);
 }
@@ -661,9 +732,18 @@ html[data-gz-navbar][data-gz-footer] .inner-wrap > :is(section.course, .routed-p
 
 /* ---- borders: every border under the page is a theme line; the few that mean something are restated ---- */
 #site-wrap * { border-color: var(--gz-border-line, var(--gz-line)) !important; }
-#site-wrap .element-card:hover, #site-wrap .content-list-item > .itemContainer:hover, #site-wrap .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
+/* Except a field's edge (see controls), here and in portals, whose own catch-all comes earlier. */
+#site-wrap :where(input, textarea, select, .MuiOutlinedInput-notchedOutline), .MuiModal-root :where(input, textarea, select, .MuiOutlinedInput-notchedOutline),
+.MuiPopper-root :where(input, textarea, select, .MuiOutlinedInput-notchedOutline) { border-color: var(--gz-ink-faint) !important; }
+#site-wrap .element-card:hover, #site-wrap .content-list-item > .itemContainer:hover { border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
+#site-wrap .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-ink-muted) !important; }
 #site-wrap .Mui-focused .MuiOutlinedInput-notchedOutline { border-color: var(--gz-accent) !important; }
 #site-wrap .wrapping-input-style.pill-style, #site-wrap .MuiChip-root { border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
+/* A field that refused its input: the edge and label rules above made it look like any other, its "Enter a number" in
+   plain ink. MUI's error state in the palette's error colour, hovered and focused too, on the page and in dialogs. */
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) .MuiInputBase-root.Mui-error .MuiOutlinedInput-notchedOutline,
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(input, textarea, select)[aria-invalid="true"] { border-color: var(--gz-err) !important; }
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.MuiFormLabel-root, .MuiInputLabel-root, .MuiFormHelperText-root, .MuiFormLabel-asterisk).Mui-error { color: var(--gz-err) !important; }
 /* Course tab strip: the active tab's 4px underline is the course colour in Ultra; theme accent here. */
 #site-wrap a.MuiListItemButton-root[variant=secondary] { border-bottom-color: transparent !important; }
 #site-wrap a.MuiListItemButton-root[aria-current=page] { border-bottom-color: var(--gz-accent) !important; }
@@ -696,6 +776,9 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 .calendar-wrapper .event-dot[class*="course-color-"] { background-color: var(--gz-course) !important; }
 #site-wrap [class*="course-color-"].top-border, .peek .telemetry-panel.panel-wrap[class*="course-color-"] { border-top-color: var(--gz-course) !important; }
 #site-wrap .calendar-wrapper .month-list li[class*="course-color-"] { border-color: var(--gz-course) !important; }
+/* The Grades tile's native stripe extended past its rounded top corners. Inset just the stripe,
+   leaving the tile's controls and their popovers free to extend outside the card. */
+#site-wrap .base-grades-course-tile::before { inset-inline: var(--gz-radius) !important; width: auto !important; border-radius: 999px; }
 /* Calendar tiles: the selected/hovered tile turned its stripe grey in Ultra; keep the course hue. */
 .calendar-wrapper .element-card.tile[class*="course-color-"]:is(:hover, :focus)::before { background-color: var(--gz-course) !important; }
 
@@ -715,7 +798,7 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 
 /* ---- course list view toggle (list / grid): radio labels, the checked one is the current view ---- */
 #site-wrap [data-analytics-id^="courses.overview.view.toggle."] { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease); }
-#site-wrap [data-analytics-id^="courses.overview.view.toggle."]:has(input:checked) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; }
+#site-wrap [data-analytics-id^="courses.overview.view.toggle."]:has(input:checked) { background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border-color: var(--gz-accent) !important; }
 
 /* ---- course content ----
    The right column's blocks (Course Faculty, Details & Actions, Better To Do): each a panel on Glaze's surface, frosted
@@ -755,6 +838,9 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
 /* Over a solid background the glass on the nav, the headers and these panels blurs a flat colour: nothing to see, and
    a GPU layer each. Same fill. */
 html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header,
+  #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header,
+  bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
+  #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header,
   .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
   bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]), #site-wrap .outline-action-block,
   #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),
@@ -785,9 +871,58 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 /* ---- stream & grades item icons: a soft accent tile instead of a white outline on navy ---- */
 #site-wrap .element-card .element-image { background: var(--gz-accent-soft) !important; border: 0 !important; border-radius: var(--gz-radius-sm) !important; color: var(--gz-accent) !important; }
 #site-wrap .element-card .element-image svg { color: var(--gz-accent) !important; }
+/* Stream cards used a stretched Angular switch around a top-aligned icon. Give the icon its own
+   centered column, with the same inset around it as the text, including cards with longer copy. */
+#site-wrap .activity-stream .stream-panel-activity-card { box-sizing: border-box; align-items: center; gap: 1rem; padding: 0.75rem 1rem !important; }
+#site-wrap .activity-stream .stream-panel-activity-card > ng-switch { display: grid; place-items: center; flex: 0 0 48px; align-self: stretch; }
+#site-wrap .activity-stream .stream-panel-activity-icon { display: grid; place-items: center; width: 48px; height: 48px; float: none; margin: 0; }
+#site-wrap .activity-stream .stream-panel-activity-icon svg { display: block; }
+#site-wrap .activity-stream .stream-panel-activity-card > .element-details { min-width: 0; margin: 0 !important; padding-inline-start: 0.75rem !important; }
+#site-wrap .activity-stream .timestamp .date { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 999px; padding: 0.2rem 0.55rem; line-height: 1.5; white-space: nowrap; }
 
 /* ---- discussions: the author header was its own card, narrower than the post body under it ---- */
 #site-wrap .clearfix > div:has(> .user-info) { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+/* One rounded surface per topic, post or reply, including its author and controls. Inner editor wrappers stay clear
+   instead of painting square layers over the corners. The fill follows every Look's surface settings. */
+#site-wrap .discussion-board {
+  --gz-discussion-fill: color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent);
+}
+#site-wrap .discussion-board :is(.initial-post, .entry-wrapper, .new-comment, .reply-input-wrapper) {
+  background: var(--gz-surface-grain, none), var(--gz-discussion-fill) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
+  border-radius: var(--gz-radius) !important;
+  box-shadow: var(--gz-rest-shadow) !important;
+}
+#site-wrap .discussion-board :is(.initial-post, .entry-wrapper, .reply-input-wrapper) { padding: 1rem; margin-block: 0.75rem; }
+#site-wrap .discussion-board .entry-wrapper .entry.comment-entry { margin-block-start: 0; }
+#site-wrap .discussion-board .new-comment { padding-inline: 1rem; }
+#site-wrap .discussion-board :is(bb-message, .reply-form, .comments,
+  .bb-editor-root:has(.bb-editor-container.is-read-only), .editor-content-container:has(> .bb-editor-container.is-read-only),
+  .bb-editor-container.is-read-only, .bb-editor-container.is-read-only .ql-editor) { background: transparent !important; }
+#site-wrap .discussion-board .bb-editor-container.is-read-only { padding: 0 !important; border: 0 !important; box-shadow: none !important; }
+#site-wrap .discussion-board .reply-input-wrapper .bb-editor-root { border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); }
+#site-wrap .discussion-board .reply-input-wrapper :is(.bb-editor-toolbar, .ql-toolbar) { border: 0 !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) var(--gz-radius-sm) 0 0; }
+#site-wrap .discussion-board .reply-input-wrapper .editor-content-container { border-radius: 0 0 var(--gz-radius-sm) var(--gz-radius-sm); }
+#site-wrap .discussion-board .reply-input-wrapper .bb-editor-container:not(.is-read-only) { border: 0 !important; border-radius: 0 0 var(--gz-radius-sm) var(--gz-radius-sm) !important; }
+#site-wrap .discussion-board .reply-control { padding-inline: 0.5rem; }
+#site-wrap .discussion-board .discussion-sorting-wrapper { margin-block: 1rem; }
+#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label,
+  .activity-stream .activity-group-title, .base-profile .profile-content h2),
+#site-wrap .discussion-board :is(.discussion-full-panel-detail-header,
+  discussion-refresh-button button, discussion-follow-button button, bb-discussion-sorting-options button, discussion-reply-button button) {
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
+  color: var(--gz-ink) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
+  border-radius: 999px !important;
+}
+/* Section-heading pills retain the native heading text and scale with the active Look. */
+#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label,
+  .activity-stream .activity-group-title, .base-profile .profile-content h2),
+#site-wrap .discussion-board .discussion-full-panel-detail-header { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
+#site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button { min-width: 2.25rem; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
+#site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button:is(:hover, :focus-visible, [aria-pressed="true"]) {
+  background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border-color: var(--gz-accent) !important;
+}
 /* Decorative divider images (thin, wide, made for a white page) — content.js tags them. */
 html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg); opacity: 0.5; }
 
@@ -797,6 +932,12 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
    pointed at, so a white screenshot doesn't glare. */
 #site-wrap .bb-editor-container.is-read-only img:not([data-gz-rule]) { border-radius: var(--gz-radius-sm); transition: filter var(--gz-t) var(--gz-ease); }
 html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([data-gz-rule], :hover) { filter: brightness(0.85); }
+/* An instructor's highlight (an inline background, or <mark>) keeps its colour, light as highlighters are, but the words
+   in it took the palette's ink: light on yellow, about 1:1, on a dark palette. There they take the ground's dark instead.
+   Only inline text: a dark table cell or banner pasted from Word keeps the light ink it reads with. Not a see-through
+   background (Google Docs puts one on every span), nor a light grey one the sweep repaints to the surface (data-gz-light). */
+html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])),
+html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) a { color: var(--gz-surface-2) !important; }
 
 /* ---- rich text editor (submissions, replies, messages): toolbar, text and word count as one
    card, with the accent ring while you type ---- */
@@ -811,8 +952,8 @@ html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([d
 }
 #site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-toolbar :is(button, .ql-picker) { border-color: transparent !important; border-radius: var(--gz-radius-sm) !important; }
 #site-wrap .bb-editor-wrapper:not(.read-only) :is(.editor-content-container, .bb-editor-container) { border: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .ql-editor.ql-blank::before { color: var(--gz-ink-faint) !important; font-style: normal !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .status-bar { padding: 0.3rem 0.9rem 0.45rem !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; text-align: right; font-size: 12px; color: var(--gz-ink-faint) !important; }
+#site-wrap .bb-editor-wrapper:not(.read-only) .ql-editor.ql-blank::before { color: var(--gz-ink-muted) !important; font-style: normal !important; }
+#site-wrap .bb-editor-wrapper:not(.read-only) .status-bar { padding: 0.3rem 0.9rem 0.45rem !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; text-align: right; font-size: 12px; color: var(--gz-ink-muted) !important; }
 #site-wrap .bb-editor-wrapper:not(.read-only) .status-bar * { font-style: normal !important; color: inherit !important; }
 
 /* ---- assessment pages (an assignment or test attempt, its submission view): Ultra lays out an
@@ -835,17 +976,17 @@ html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([d
 #site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"]:is(:hover, :focus-within) { border-color: var(--gz-accent) !important; background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-soft) 50%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 #site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"] svg { color: var(--gz-accent) !important; }
 /* The Exit button in the item header: Ultra paints it #404040. */
-#site-wrap header[class*="makeStylesheader-"] .MuiButtonBase-root[class*="makeStylescontained-"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap header[class*="makeStylesheader-"] .MuiButtonBase-root[class*="makeStylescontained-"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border-radius: var(--gz-radius-sm) !important; }
 
 /* ---- empty states: centred, quieter ---- */
-#site-wrap :is(.js-empty-state, [class*="empty-state"]) { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-faint) !important; border-color: color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important; }
+#site-wrap :is(.js-empty-state, [class*="empty-state"]) { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-muted) !important; border-color: color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important; }
 
 /* ---- course header pieces Ultra paints #404040 ---- */
 course-page-header > header [data-analytics-id="course.header.home"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-radius: var(--gz-radius-sm) !important; }
 course-page-header > header .MuiDivider-root { background-color: var(--gz-line) !important; }
 
 /* ---- row actions: a solid MUI button repeated on every gradebook row is noise; tonal, like .button ---- */
-#site-wrap :is([class*="resultsButtonWrapper"], [role="row"], td) .MuiButton-contained { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
+#site-wrap :is([class*="resultsButtonWrapper"], [role="row"], td) .MuiButton-contained { background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
 #site-wrap :is([class*="resultsButtonWrapper"], [role="row"], td) .MuiButton-contained:hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 22%, var(--gz-surface-paint, var(--gz-surface))) !important; border-color: var(--gz-accent) !important; filter: none; }
 
 /* ---- review state (the circle before each item): not started is quiet, started is accent, done is ok ---- */
@@ -1174,6 +1315,10 @@ html[data-gz-nav-overflow="shrink"] .MuiDrawer-paper:has(#base_tools, [data-gz-n
    drawer is #main-content-inner's padding; a course is a section of its own beside the page; Glaze's course tabs are
    frames over the page. Below 900px the bar sits at the bottom and the page keeps room under its content. ---- */
 html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; }
+/* What Tab or a link scrolls to stops clear of the top bar, not under it (WCAG 2.4.11), in whichever box Ultra scrolls: the
+   page, its main column, a course's panel, a routed page, a box the window's height. One that doesn't scroll ignores it.
+   Above the phone's bottom bar, below. */
+html[data-gz-navbar], html[data-gz-navbar] :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-top: var(--gz-navbar-top); }
 /* Course tabs only in the bar (tabs.at 'nav', worded by features/coursetabs.js): no strip, and no room kept for one. */
 html[data-gz-ctabs~="nav"] { --gz-ctabs-h: 0px !important; }
 html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
@@ -1193,8 +1338,16 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] #main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }
   /* A course, and a page Ultra routes in its place (an assignment's details and attempts, a document opened on its own). */
   html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
+  /* A course whose panel holds its section (.course-content-container > .panel-wrap > section.course, as in
+     test/fixtures/ultra-course.html), and the item panels opened over it: absolute over the page, so nothing above moves
+     them and the rail covered their first 40px. Not inside a course section that rule already keeps clear: twice the room. */
+  html[data-gz-navbar] .course-content-container:not(.inner-wrap > section.course *) > .panel-wrap { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
   /* Keep the layer over its backdrop and the page underneath; only its absolute content wrapper clears the bar. */
   html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
+  /* Legacy full panels (announcements, roster and other course tools) have a native 36px inset that ignores the course's padding.
+     Keep its background full-width and move just the content clear of the current rail or top bar. */
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) { inset-inline: 0 !important; width: auto !important; }
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
   html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
   html[data-gz-navbar]:not([data-gz-footer]) :is(.route-view-container, .routed-page, [data-gz-vh]) { max-height: calc(100vh - var(--gz-navbar-top)) !important; }
   html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :is(section.course, .routed-page) { max-height: 100vh !important; }
@@ -1202,13 +1355,41 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
 /* The strip lives in the layer's own sticky header. Leave the native close button its first 48px. */
 @media screen {
   html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) [class*="headerRoot"]:has(bb-close, .bb-close) #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap > .bb-close-offset > .bb-close { inset-inline-start: 6px !important; }
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
 }
 @media (min-width: 1280px) {
   html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left: 272px; }
   html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
 }
 @media (max-width: 899.98px) {
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  /* What the bar takes from the window's bottom, Glaze's footer under it included (as moodle.css words it). */
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(96px + var(--gz-footer-h) + env(safe-area-inset-bottom, 0px)); }
+  /* A slide-out's actions (a peek's Cancel and Save) sit at its bottom, under the bar like a full-window layer's: their content
+     wrappers clear it. */
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel:is(.screen, .peek):not(:is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  /* What Ultra fixes along the window's bottom (an attempt's Save and Submit, the help button; content.js tags them) stands on
+     the bar instead of under it. A layer the window's height (a dialog over the bar, a backdrop: data-gz-vh) and a slide-out
+     (its wrapper, above) keep their edges. */
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :is(.pagehelp-directive, [data-gz-fixed-bottom]:not([data-gz-vh], .bb-offcanvas-panel)) { bottom: var(--gz-navbar-bottom) !important; max-height: calc(100vh - var(--gz-navbar-bottom)) !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) { box-sizing: border-box; padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { margin-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  /* Focus stops above the bottom bar: in the page, over Glaze's footer too; in the boxes Ultra scrolls, its app's, which ends
+     at the footer (theme.css shrinks it). */
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { scroll-padding-bottom: var(--gz-navbar-bottom); }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+}
+/* A window this short: the bar sits lower and is shorter (features/navbar.css), and what stands on it comes down with it. */
+@media (max-width: 899.98px) and (max-height: 420px) {
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(72px + var(--gz-footer-h) + env(safe-area-inset-bottom, 0px)); }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
+}
+/* Printed, the page is Ultra's own: the bar doesn't print (features/navbar.css), and the page keeps no room for it. */
+@media print {
+  html[data-gz-navbar] { --gz-navbar-left: 0px !important; --gz-navbar-top: 0px !important; --gz-navbar-bottom: 0px !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) { padding-bottom: 0 !important; }
 }
