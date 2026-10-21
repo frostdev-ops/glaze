@@ -9,7 +9,7 @@
     {"id": "_705_1", "title": "Lab unknown availability"},
     {"id": "_706_1", "parentId": "_707_1", "title": "Lab cycle", "availability": {"available": "Yes", "adaptiveRelease": {}}},
     {"id": "_707_1", "parentId": "_706_1", "title": "Lab cycle", "availability": {"available": "Yes", "adaptiveRelease": {}}},
-    {"id": "_710_1", "title": "Final exam answer key", "body": "<p>secret answer material</p>", "availability": {"available": "Yes", "adaptiveRelease": {"start": "2027-01-01T00:00:00Z"}}},
+    {"id": "_710_1", "title": "Final exam answer key", "body": "<p>secret answer material</p>", "availability": {"available": "Yes", "adaptiveRelease": {"start": "2099-01-01T00:00:00Z"}}},
     {"id": "_711_1", "title": "Expired answers", "body": "<p>secret answer material</p>", "availability": {"available": "Yes", "adaptiveRelease": {"end": "2025-01-01T00:00:00Z"}}},
     {"id": "_712_1", "title": "Restricted answers", "body": "<p>secret answer material</p>", "availability": {"available": "Yes", "adaptiveRelease": {"grade": {"minimum": 80}}}},
     {"id": "_713_1", "title": "Unknown release", "body": "<p>secret answer material</p>", "availability": {"available": "Yes"}},
@@ -18,7 +18,7 @@
   ],
   "announcements": [
     {"id": "_801_1", "title": "Lab moved", "body": "<p>Meet in the laboratory.</p>", "availability": {"duration": {"type": "Permanent"}}},
-    {"id": "_802_1", "title": "Lab next year", "body": "<p>Not yet.</p>", "availability": {"duration": {"type": "Restricted", "start": "2027-01-01T00:00:00Z"}}},
+    {"id": "_802_1", "title": "Lab not yet open", "body": "<p>Not yet.</p>", "availability": {"duration": {"type": "Restricted", "start": "2099-01-01T00:00:00Z"}}},
     {"id": "_803_1", "title": "Lab expired", "availability": {"duration": {"type": "Restricted", "end": "2025-01-01T00:00:00Z"}}}
   ],
   "discussions": [

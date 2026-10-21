@@ -155,6 +155,43 @@ test('notes: kept per site and user, a newer note wins, links are links and noth
   assert.deepEqual(W.links(''), []);
 });
 
+test('links: an address ends where its sentence does, and a long run of brackets or marks after it is not rescanned for each one', () => {
+  const texts = (s) => W.links(s).map((p) => p.text);
+  assert.deepEqual(texts('see https://a.com/x) and (https://b.com/y), https://c.com/z_(w)).'), ['see ', 'https://a.com/x', ') and (', 'https://b.com/y', '), ', 'https://c.com/z_(w)', ').']);
+  assert.deepEqual(texts('https://a.com/[1](2)]).!'), ['https://a.com/[1](2)', ']).!']);
+  assert.deepEqual(texts('https://a.com/a.)?).'), ['https://a.com/a', '.)?).']);
+  assert.deepEqual(texts('https://a.com/(((..'), ['https://a.com/(((', '..']);
+  // Notes hold up to NOTES_MAX characters, drawn again on every render: the work is the text's length, not its square.
+  const n = W.NOTES_MAX - 20;
+  const spent = [')', ']', '.)', '.'].map((mark) => {
+    const text = 'https://a.com/' + (mark === '.' ? '.'.repeat(n) + 'x' : mark.repeat(n / mark.length));
+    const before = process.cpuUsage();
+    const out = W.links(text);
+    const used = process.cpuUsage(before);
+    assert.equal(out.map((p) => p.text).join(''), text, 'nothing lost');
+    return (used.user + used.system) / 1000;
+  });
+  assert.ok(spent.reduce((a, b) => a + b) < 1000, `${spent.map(Math.round)} ms of CPU for four 20,000-character runs`);
+});
+
+test('notes: a time from a clock that ran ahead does not outlast it, so the typing after it is kept', async () => {
+  const key = W.notesKey('https://school.instructure.com', '44');
+  const box = {};
+  const local = { get: async (k) => ({ [k[0]]: box[k[0]] }), set: async (p) => (Object.assign(box, JSON.parse(JSON.stringify(p))), true) };
+  const ahead = Date.now() + 2 * 864e5;
+  // Typed while the clock was two days ahead: stamped now, so typing from before it is still refused and the next is newer.
+  const first = await W.saveNote({ key, text: 'old', at: ahead }, local);
+  assert.ok(first.ok && first.note.at > 0 && first.note.at <= Date.now());
+  assert.equal((await W.saveNote({ key, text: 'typed before', at: first.note.at - 1 }, local)).kept, false);
+  const second = await W.saveNote({ key, text: 'typed after', at: Date.now() }, local);
+  assert.deepEqual([second.kept, box[key].text], [true, 'typed after']);
+  // A time an earlier version stored ahead of the clock reads as older than any typing since, here and on the page.
+  box[key] = { text: 'stored ahead', at: ahead };
+  assert.deepEqual(W.cleanNote(box[key]), { text: 'stored ahead', at: 0 });
+  const third = await W.saveNote({ key, text: 'typed now', at: Date.now() }, local);
+  assert.deepEqual([third.kept, box[key].text], [true, 'typed now']);
+});
+
 test('agenda: one day\'s due work, plans and focus sessions, in the student\'s time zone', () => {
   const tz = 'America/New_York';
   const day = L.keyDay('2026-10-15');
@@ -177,6 +214,26 @@ test('agenda: one day\'s due work, plans and focus sessions, in the student\'s t
   assert.equal(rows.find((r) => r.kind === 'session').min, 30);
   assert.deepEqual(W.agenda(L, { items, data, day: day + 1, tz }).map((r) => r.title), ['Quiz']);
   assert.deepEqual(W.agenda(L, { items: [], data: null, day, tz }), []);
+});
+
+test("agenda: done as Better To Do has it, by its manual mode, and with marks going to Canvas Glaze's own set aside", () => {
+  const tz = 'UTC', day = L.keyDay('2026-10-22');
+  const at = (iso) => Date.parse(iso);
+  const items = [
+    { type: 'assignment', id: '5', title: 'Lab 3', at: at('2026-10-22T20:00:00Z'), sub: { submitted: true } }, // handed in
+    { type: 'quiz', id: '6', title: 'Quiz', at: at('2026-10-22T10:00:00Z') }, // ticked in Glaze
+    { type: 'assignment', id: '7', title: 'Essay', at: at('2026-10-22T12:00:00Z'), ov: { id: '1', done: true } }, // ticked in Canvas
+  ];
+  const data = { tasks: [], items: { 'quiz:6': { done: true }, 'assignment:5': { on: '2026-10-22' } } };
+  const state = (more) => Object.fromEntries(W.agenda(L, { items, data, day, tz, ...more }).map((r) => [`${r.kind} ${r.key}`, r.done]));
+  const auto = { 'due assignment:5': true, 'plan assignment:5': true, 'due quiz:6': true, 'due assignment:7': true };
+  assert.deepEqual(state(), auto, 'without its settings, as before');
+  assert.deepEqual(state({ o: { done: 'auto' } }), auto);
+  // Manual: only a mark counts, so a hand-in alone leaves it open.
+  assert.deepEqual(state({ o: { done: 'manual' } }), { 'due assignment:5': false, 'plan assignment:5': false, 'due quiz:6': true, 'due assignment:7': true });
+  // Marks go to Canvas: what Glaze holds is set aside, and Canvas's own mark and its hand-in count.
+  assert.deepEqual(state({ o: { done: 'auto' }, sync: true }), { 'due assignment:5': true, 'plan assignment:5': true, 'due quiz:6': false, 'due assignment:7': true });
+  assert.deepEqual(state({ o: { done: 'manual' }, sync: true }), { 'due assignment:5': false, 'plan assignment:5': false, 'due quiz:6': false, 'due assignment:7': true });
 });
 
 test('feedback: a prefilled GitHub issue with version, browser and system only', () => {
@@ -202,6 +259,15 @@ test('study buddy: happy after a win, awake while the timer runs or after a pat,
   assert.equal(W.mood({ happyAt: now - 11 * 6e4 }, now).mood, 'sleepy');
   assert.equal(W.ticks({ items: { 'assignment:1': { done: true }, 'quiz:2': { done: false }, 'quiz:3': {} }, tasks: [{ done: 5 }, { done: 0 }] }), 2);
   assert.equal(W.ticks(undefined), 0);
+});
+
+test('study buddy: a win or pat time ahead of the clock counts as none, and no repaint is asked for far ahead', () => {
+  const now = 1_000_000_000, far = now + 40 * 864e5;
+  assert.deepEqual(W.mood({ happyAt: far }, now), { mood: 'sleepy', until: 0 });
+  assert.deepEqual(W.mood({ patAt: far }, now), { mood: 'sleepy', until: 0 });
+  assert.deepEqual(W.mood({ happyAt: far, running: true }, now), { mood: '', until: 0 });
+  assert.deepEqual(W.mood({ happyAt: Infinity, patAt: Infinity }, now), { mood: 'sleepy', until: 0 });
+  assert.deepEqual(W.mood({ happyAt: now }, now), { mood: 'happy', until: now + 10 * 6e4 }, 'a win just now still counts');
 });
 
 test('layout: a tile another file declares (MORE) comes after the built-in ones, off and at its size, and keeps its place', () => {
@@ -391,6 +457,28 @@ test('floating: at their places in the room; stacked when the window is too narr
   // A new one starts at the bottom right, clear of the others, then up the edge.
   assert.deepEqual(W.corner([], 288, 200, 1000, 800), { left: 1000 - W.EDGE - 288, top: 800 - W.EDGE - 200 });
   assert.deepEqual(W.corner([{ left: 700, top: 588, w: 288, h: 200 }], 288, 200, 1000, 800), { left: 700, top: 588 - W.GAP - 200 });
+});
+
+test("room: floating tiles keep clear of Glaze's own bar on both sites, and of what else stays over the page", () => {
+  const box = (left, top, w, h) => ({ left, top, right: left + w, bottom: top + h });
+  const pick = (r) => [r.left, r.top, r.right, r.bottom, r.W, r.H];
+  assert.deepEqual(pick(W.room(1440, 900)), [0, 0, 1440, 900, 1440, 900], 'nothing over the page: the window');
+  // Glaze's rail (its room, from --gz-navbar-left: the box would be its open width even while it shows its icons), its
+  // start the right on a right-to-left page; its top bar (--gz-navbar-top).
+  assert.deepEqual(pick(W.room(1440, 900, [], { bar: { left: 96 } })), [96, 0, 1440, 900, 1344, 900]);
+  assert.deepEqual(pick(W.room(1440, 900, [], { bar: { left: 272 }, rtl: true })), [0, 0, 1168, 900, 1168, 900]);
+  assert.deepEqual(pick(W.room(1440, 900, [], { bar: { top: 80 } })), [0, 80, 1440, 900, 1440, 820]);
+  // A phone's bottom bar, Canvas's course tabs under the top bar, Ultra's footer: each takes its side.
+  assert.deepEqual(pick(W.room(375, 812, [box(12, 696, 351, 70), box(0, 24, 375, 40)])), [0, 64, 375, 696, 375, 632]);
+  assert.deepEqual(pick(W.room(1440, 900, [box(296, 92, 1120, 40), box(0, 868, 1440, 32)], { bar: { top: 80 } })), [0, 132, 1440, 868, 1440, 736]);
+  // A site's drawer at either side, the sidebar beside the content; nothing for a box with no size or scrolled away.
+  assert.deepEqual(pick(W.room(1440, 900, [box(0, 0, 200, 900), box(1240, 0, 200, 900)])), [200, 0, 1240, 900, 1040, 900]);
+  assert.deepEqual(pick(W.room(1440, 900, [], { bar: { left: 96 }, aside: box(1088, 0, 352, 900) })), [96, 0, 1088, 900, 992, 900]);
+  assert.deepEqual(pick(W.room(1440, 900, [], { bar: { left: 96 }, rtl: true, aside: box(0, 0, 352, 900) })), [352, 0, 1344, 900, 992, 900]);
+  assert.deepEqual(pick(W.room(1440, 900, [box(0, 0, 0, 0), box(296, -60, 1120, 40)])), [0, 0, 1440, 900, 1440, 900]);
+  // The tiles' places are in this room: a tile at the top left sits right of the rail, its header clear of it.
+  const r = W.room(1440, 900, [], { bar: { left: 272 } });
+  assert.equal(r.left + W.floating([{ id: 'timer', x: 0, y: 0 }], { timer: { w: 288, h: 140 } }, r.W, r.H).at.timer.left, 272 + W.EDGE);
 });
 
 // Codex B7b 1: changes are patches the worker applies to what is stored then, never a tab's whole layout.

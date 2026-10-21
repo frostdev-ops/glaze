@@ -356,7 +356,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     dock = make('section', { id: 'gz-sb-widgets', className: 'gz-sb-widgets' }, make('h2', { className: 'gz-sb-sec' }, dockBtn), offer, list, note, addBtn, adding);
     dock.setAttribute('aria-labelledby', 'gz-sb-wh');
     edge = button(`+ ${t('Add widgets')}`, () => { forced = true; openDrawer(edge); openAdd(true); }, { id: 'gz-sb-edge', className: 'gz-sb-btn gz-sb-edge gz-sb-own', hidden: true });
-    launch = label(button(name(), () => openDrawer(launch), { id: 'gz-sb-launch', className: 'gz-sb-btn gz-sb-launch gz-sb-own', hidden: true }), t('Open {name}', { name: name() }));
+    // Its words show, and its name says what it does: no title as well, which a screen reader reads again after it.
+    launch = button(name(), () => openDrawer(launch), { id: 'gz-sb-launch', className: 'gz-sb-btn gz-sb-launch gz-sb-own', hidden: true });
+    launch.setAttribute('aria-label', t('Open {name}', { name: name() }));
     launch.setAttribute('aria-haspopup', 'dialog');
     backdrop = make('div', { className: 'gz-sb-backdrop', hidden: true });
     backdrop.setAttribute('aria-hidden', 'true');
@@ -688,7 +690,16 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let hadStyle = null;
   const setVar = (k, v) => { if (hadStyle === null) hadStyle = html().hasAttribute('style'); const s = html().style; if (s.getPropertyValue(k) !== v) s.setProperty(k, v); };
   const setAttr = (el, k, v) => { if (v === false || v == null) { if (el.hasAttribute(k)) el.removeAttribute(k); } else if (el.getAttribute(k) !== v) el.setAttribute(k, v); };
-  const minMain = () => { const c = cfg(); return family === 'grades' ? c.grades ?? S.MAIN_GRADES : c.min ?? S.MAIN; };
+  // A drawer starts closed. Canvas's column holds a quiz's timer and question list, so a quiz's content gives up room down
+  // to S.MAIN_KEEP before they go into one. On the grades page, while what-if scores show the note that they aren't
+  // official (with Revert), the table keeps the room any page does (sidebar.min) instead of its own: narrower, it would
+  // run under the column.
+  const whatIf = () => { const n = document.getElementById('student-grades-revert'); return !!n && n.style.display !== 'none'; };
+  const minMain = () => {
+    const c = cfg(), min = c.min ?? S.MAIN, grades = c.grades ?? S.MAIN_GRADES;
+    if (!ultra && family === 'quiz') return Math.min(min, S.MAIN_KEEP);
+    return family !== 'grades' ? min : !ultra && whatIf() ? Math.min(min, grades) : grades;
+  };
   let safeEnd = 0;
   const inset = () => styleOf() === 'float' ? 12 : 0;
   // Keep columns inside their native scroll/layout roots: discussion participants depend on that ancestry, and
@@ -725,7 +736,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setVar('--gz-sb-blur', `${Number.isFinite(c.blur) ? c.blur : 16}px`);
     setVar('--gz-sb-alpha', `${Number.isFinite(c.opacity) ? c.opacity : 88}%`);
     if (title.textContent !== name()) title.textContent = name();
-    if (launch.textContent !== name()) { launch.textContent = name(); label(launch, t('Open {name}', { name: name() })); }
+    if (launch.textContent !== name()) { launch.textContent = name(); launch.setAttribute('aria-label', t('Open {name}', { name: name() })); }
   };
   const layout = () => {
     if (!active || !host || asleep) return;
@@ -786,6 +797,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     launch.hidden = next !== 'drawer' || drawer;
     backdrop.hidden = next !== 'drawer' || !drawer || modalAway;
     for (const b of [edge, launch]) if (b.parentNode !== document.body) document.body.append(b);
+    bars();
     // Keep our backdrop in the same native stacking context as a sticky discussion drawer.
     const backdropParent = nativeRoot ? host.el.parentElement : document.body;
     if (backdrop.parentNode !== backdropParent) backdropParent.append(backdrop);
@@ -883,6 +895,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const f = document.getElementById('gz-footer');
     const r = f?.isConnected && f.getClientRects().length ? f.getBoundingClientRect() : null;
     setVar('--gz-sb-foot', `${r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0}px`);
+  };
+  // A bar the site fixes along the window's bottom holds its actions at its end, where the edge buttons are: Ultra's Save
+  // and Submit (content.js tags them) and its help button, Canvas's Previous and Next; the site's CSS stands them on Glaze's
+  // bar. The button showing stands above the highest one under it (--gz-sb-bar). A layer the window's height is no bar.
+  const bars = () => {
+    const b = [launch, edge].find((x) => !x.hidden)?.getBoundingClientRect();
+    let up = 0;
+    if (b?.width) for (const e of document.querySelectorAll('[data-gz-fixed-bottom], .pagehelp-directive, #module_sequence_footer')) {
+      const r = e.getBoundingClientRect();
+      if (r.height && r.height < innerHeight / 2 && r.left < b.right && r.right > b.left && !host.el.contains(e)) up = Math.max(up, Math.round(innerHeight - r.top));
+    }
+    if (up) setVar('--gz-sb-bar', `${up}px`); else html().style.removeProperty('--gz-sb-bar');
   };
   const queueLayout = () => { if (!active || asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
   const onResize = () => { absorbInvalid(); queueLayout(); };
@@ -1144,7 +1168,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const h = html();
     if (!h) return;
     for (const k of SB_ATTRS) h.removeAttribute(k);
-    for (const k of ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha', '--gz-sb-native-offset', '--gz-sb-native-top', '--gz-sb-native-end']) if (h.style?.getPropertyValue?.(k)) h.style.removeProperty(k);
+    for (const k of ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-bar', '--gz-sb-blur', '--gz-sb-alpha', '--gz-sb-native-offset', '--gz-sb-native-top', '--gz-sb-native-end']) if (h.style?.getPropertyValue?.(k)) h.style.removeProperty(k);
     if (hadStyle === false && h.getAttribute('style') === '') h.removeAttribute('style');
     hadStyle = null;
   };

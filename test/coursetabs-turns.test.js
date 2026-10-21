@@ -452,6 +452,34 @@ test('a committed pending frame receives the same external-navigation recovery a
   assert.equal(g.el.src, origin + '/courses/12');
 });
 
+test('a course whose own home goes off-site (an expired sign-in) is sent back once, then dropped, never reloaded in a loop', () => {
+  const w = world();
+  const loads = new Map();
+  w.c.frameEl = (cid, url) => ({ style: { visibility: 'hidden' }, inert: true, contentDocument: blank(),
+    contentWindow: { location: { origin }, postMessage() {} }, addEventListener: (ev, fn) => loads.set(ev, fn), focus() {}, remove() {} });
+  const dropped = [];
+  w.c.drop = (cid) => dropped.push(cid);
+  vm.runInContext(part('  const guardFrame = ', '  const frameEl = '), w.c);
+  w.fn('turnTo')('12', '/courses/12/grades');
+  const g = w.fn('next').get('12');
+  g.el.contentDocument = docAt('/courses/12/grades'); w.wait(40);
+  g.el.contentWindow.location.origin = 'https://idp.test';
+  loads.get('load')();
+  assert.equal(g.el.src, origin + '/courses/12', 'sent back to its course');
+  // Its own site in between: the next trip away is a new one.
+  g.el.contentWindow.location.origin = origin;
+  loads.get('load')();
+  g.el.contentWindow.location.origin = 'https://idp.test';
+  g.el.src = '';
+  loads.get('load')();
+  assert.equal(g.el.src, origin + '/courses/12', 'sent back again');
+  // Its home goes off-site too: dropped, not reloaded.
+  g.el.src = '';
+  loads.get('load')();
+  assert.equal(g.el.src, '', 'not reloaded');
+  assert.deepEqual(dropped, ['12']);
+});
+
 test('a transient missing document waits for load rather than losing the click', () => {
   const w = world();
   w.fn('turnTo')('12', '/courses/12/grades');
@@ -643,4 +671,21 @@ test('a player inside the page\'s own frame is put back too as the kept page sho
   w.pop({ gzTurn: { cid: '12', url: '/courses/12/pages/week-2' } });
   assert.equal(player.src, 'https://www.youtube.com/embed/xyz', 'restored at the depth it was stopped');
   assert.equal(player.hasAttribute('data-gz-rest'), false);
+});
+
+test("the open course's tab comes back into view when the window changes size, without scrolling the page", () => {
+  // Five tabs of 104px, the open one last; the strip 351px wide on a phone after a rotation, still scrolled to its start.
+  const tabs = [0, 1, 2, 3, 4].map((i) => ({ offsetLeft: i * 108, offsetWidth: 104 }));
+  const list = { scrollLeft: 0, clientWidth: 351, querySelector: (s) => (s === '[aria-selected="true"]' ? tabs[4] : null) };
+  const c = vm.createContext({ list, ctx: { site: 'ultra' }, lay() {}, navRoom() {} });
+  const onResize = vm.runInContext(`${part('  const inView = ', '  const draw = ')}${part('  const onResize = ', '  let navWatch = ')}\nonResize;`, c);
+  onResize();
+  assert.equal(list.scrollLeft, 4 * 108 - 8, 'scrolled to the open tab');
+  // In view already: left as it is.
+  list.scrollLeft = 200; list.clientWidth = 600;
+  onResize();
+  assert.equal(list.scrollLeft, 200);
+  // No strip yet: nothing to do.
+  c.list = null;
+  assert.doesNotThrow(onResize);
 });

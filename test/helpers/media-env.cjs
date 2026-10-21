@@ -60,8 +60,11 @@ exports.env = ({ preview = false, storage = {}, ask = async () => ({ ok: true, j
       return a;
     },
   };
+  // WebCrypto's digest finishes on a thread of its own, after a test's short wait on a busy machine; the same SHA-256
+  // made here resolves with the page's other promises, before any wait ends.
+  const subtle = { digest: async (alg, data) => { const b = crypto.createHash('sha256').update(data).digest(); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); } };
   const ctx = vm.createContext({
-    document, Image: function Image() { return new El('img', env); }, Blob, atob, btoa, console, Promise, JSON, Object, Array, Uint8Array, String, Number, Math, Error, crypto,
+    document, Image: function Image() { return new El('img', env); }, Blob, atob, btoa, console, Promise, JSON, Object, Array, Uint8Array, String, Number, Math, Error, crypto: { subtle },
     createImageBitmap: async () => { await bitmapWait; return { width: 640, height: 360, close() { env.bitmapClosed = true; } }; },
     chrome: {
       runtime: { getURL: (f) => f, lastError: null, sendMessage: (m, cb) => { env.messages.push(m); ask(m).then(cb); } },

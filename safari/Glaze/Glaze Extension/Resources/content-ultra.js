@@ -60,7 +60,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       const m = ms.find((x) => x.courseId === cid);
       if (!m || m.dueDateExceptionType !== 'Normal') return () => true;
       return api(`/courses/${cid}/gradebook/memberships/${m.id}/exceptions?columnId=${waiting.map((g) => g.columnId).join(',')}`)
-        .then((j) => { const text = JSON.stringify(j.results || []); return (col) => text.includes(col); }, () => () => true);
+        .then((j) => { const cols = new Set([].concat(j.results || []).map((x) => x?.columnId)); return (col) => cols.has(col); }, () => () => true);
     });
     return excepted.then((exc) => new Set(waiting.filter((g) => !exc(g.columnId) && g.lastAttempt?.status !== 'IN_PROGRESS'
       && GZ_GRADES.late(g.lastAttempt?.attemptDate, g.column.dueDate)).map((g) => g.columnId)));

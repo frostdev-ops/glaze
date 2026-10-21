@@ -474,7 +474,8 @@ GZ_UI.load().then((s) => {
     if (!e.target.open || e.target.dataset.loaded) return;
     e.target.dataset.loaded = '1';
     previewLink(GZ_FONTS.LIST.filter((f) => f.google || f.preview).map((f) => f.preview || f.google));
-    // The small file-only faces load whole; the Nerd Fonts preview through their base family.
+    // The small file-only faces load whole (OpenDyslexic, from jsDelivr: PRIVACY.md says so); the Nerd Fonts preview
+    // through their base family.
     for (const f of GZ_FONTS.LIST) if (f.files && !f.size) GZ_FONTS.load(f.id);
   });
   for (const r of $$('input[name="font-slot"]')) r.addEventListener('change', () => { slot = r.value; renderFonts(); });
@@ -792,6 +793,9 @@ GZ_UI.load().then((s) => {
       let url = null;
       try { url = new URL(raw); } catch { /* not a URL */ }
       if (url?.protocol !== 'https:') return hint(t('Use an https:// link to an image.'), true);
+      // One the settings won't keep (too long, or a quote or backslash the page's url("…") can't hold) is refused here,
+      // not dropped silently when it is saved.
+      if (GZ_SANITIZE({ bg: { image: url.href } }).bg.image !== url.href) return hint(t('That link can’t be saved.'), true);
       s.bg.image = url.href;
       s.bg.kind = 'image';
     } else s.bg.image = '';
@@ -1216,7 +1220,10 @@ GZ_UI.load().then((s) => {
     });
   });
   // A Look picked on the gallery (lib/gallery.js, then the background): previewed here; the student decides.
+  // The editor the worker opens takes it (openOptionsPage: a tab of its own). Settings framed in a school's page, open or
+  // not, would otherwise take it first, and that tab would show nothing.
   const takeOffer = async () => {
+    if (embedded) return;
     const { galleryOffer: g } = await local.get('galleryOffer');
     if (!g?.code) return;
     await local.remove('galleryOffer');
@@ -1327,7 +1334,9 @@ GZ_UI.load().then((s) => {
     next.nav.i = ''; next.nav.li = ''; if (next.nav.brand === 'custom') next.nav.brand = 'glaze'; // A backup never names a picture on another device.
     if (next.navbar.brand === 'custom') next.navbar.brand = 'glaze';
     const mediaSrc = raw.parts?.x?.bg?.media?.src;
-    const mediaMissing = next.bg.kind === 'media' && typeof mediaSrc === 'string' && mediaSrc.startsWith('file:');
+    // A kept file isn't in a backup: unless this computer still has it (a backup put back where it was made).
+    const kept = typeof mediaSrc === 'string' && mediaSrc.startsWith('file:') ? `lookMedia:${mediaSrc.slice(5)}` : '';
+    const mediaMissing = next.bg.kind === 'media' && !!kept && !(await chrome.storage.local.get(kept).catch(() => ({})))[kept];
     if (mediaMissing) next.bg.kind = 'gradient';
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
@@ -1355,6 +1364,11 @@ GZ_UI.load().then((s) => {
     }
     hint(t(mediaMissing ? 'Imported {file}. The background file was not included in this backup; showing the gradient.' : 'Imported {file}.', { file: file.name }));
   });
+  // The defaults this device started with: a fresh install has Notes and the pet habitat on (GZ_SANITIZE's fresh), so a
+  // reset gives those back rather than turning them off.
+  let freshHere = false;
+  chrome.storage.local.get('freshDefaults', (r) => { freshHere = r?.freshDefaults?.fresh === true; });
+  const defaultsHere = () => ({ ...GZ_SANITIZE(undefined, freshHere), card: GZ_CARDS.settings() });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
   let armed = 0;
   $('#reset-all').addEventListener('click', (e) => {
@@ -1367,7 +1381,7 @@ GZ_UI.load().then((s) => {
     clearTimeout(armed);
     armed = 0;
     b.textContent = t('Reset everything');
-    const defaults = { ...GZ_SANITIZE(), card: GZ_CARDS.settings() };
+    const defaults = defaultsHere();
     const touched = GZ_EDITOR.reset(s, Object.keys(defaults), defaults);
     pendingNav.clear();
     // Keep image IDs, per-course styles/bookmarks, local data and share keys. No destructive worker reset. The Look's
@@ -1385,7 +1399,7 @@ GZ_UI.load().then((s) => {
     button.setAttribute('aria-label', t('Reset {name}', { name: control?.closest('label')?.querySelector('span')?.textContent || button.dataset.resetSetting }));
     button.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
-    const path = button.dataset.resetSetting, touched = GZ_EDITOR.reset(s, [path], { ...GZ_SANITIZE(), card: GZ_CARDS.settings() });
+    const path = button.dataset.resetSetting, touched = GZ_EDITOR.reset(s, [path], defaultsHere());
     fill(); save(touched);
     });
   }
@@ -1393,7 +1407,7 @@ GZ_UI.load().then((s) => {
     if (!e.isTrusted) return;
     if (button.dataset.resetSection === 'sharing/relay') return resetRelay();
     const section = button.closest('[data-editor-section]'), paths = GZ_EDITOR.keys(section);
-    const touched = GZ_EDITOR.reset(s, paths, { ...GZ_SANITIZE(), card: GZ_CARDS.settings() });
+    const touched = GZ_EDITOR.reset(s, paths, defaultsHere());
     if (touched.includes('nav')) for (const key of paths.filter((p) => p.startsWith('nav.') && !['nav.i', 'nav.li'].includes(p))) pendingNav.add(key.slice(4));
     fill(); save(touched); hint(t('Section reset. Your local data is kept.'));
   });

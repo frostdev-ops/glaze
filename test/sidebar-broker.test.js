@@ -40,14 +40,14 @@ const worker = ({ local = {}, state = null, production = false, manualTimers = f
   const changed = [], startup = [];
   const fail = { set: 0, layout: 0 }, slow = { get: 0, script: false, ultra: false }, registrations = [];
   const accounts = { [CANVAS]: '42', [CANVAS2]: '42', [ULTRA]: '_9_1', [ULTRA2]: '_9_1' };
-  const pages = new Map(), probes = [], reads = [], scripts = [], timers = new Map();
+  const pages = new Map(), probes = [], reads = [], scripts = [], timers = new Map(), writes = { sync: 0, local: 0, session: 0 };
   let timerId = 0;
   const area = (s, name) => ({
     get: async (k) => {
       for (let i = 0; i < (name === 'local' ? slow.get : 0); i++) await new Promise(setImmediate);
       return structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])));
     },
-    set: async (v) => { if (name === 'local' && Object.hasOwn(v, 'ultra') && slow.ultra) await new Promise((res) => registrations.push(res)); if (name === 'local' && ((fail.set && fail.set--) || (v.widgetLayout && fail.layout && fail.layout--))) throw Error('quota'); Object.assign(s, structuredClone(v)); },
+    set: async (v) => { writes[name]++; if (name === 'local' && Object.hasOwn(v, 'ultra') && slow.ultra) await new Promise((res) => registrations.push(res)); if (name === 'local' && ((fail.set && fail.set--) || (v.widgetLayout && fail.layout && fail.layout--))) throw Error('quota'); Object.assign(s, structuredClone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete s[x]; },
   });
   const listeners = [], installed = [];
@@ -87,7 +87,7 @@ const worker = ({ local = {}, state = null, production = false, manualTimers = f
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
     if (!kept) res('ignored');
   });
-  return { store, send, installed, fail, slow, accounts, pages, probes, reads, scripts, timers, registrations, changed, startup };
+  return { store, send, installed, fail, slow, accounts, pages, probes, reads, scripts, timers, registrations, changed, startup, writes };
 };
 // A tab's frame: Canvas's pages anywhere on the site, Ultra's under /ultra.
 const at = (url, frameId = 0, tab = url) => ({ id: 'glaze', url, frameId, tab: { id: 1, url: tab } });
@@ -500,6 +500,13 @@ test('synced removals also reach starter layouts installed before the defaults t
   assert.equal(w.store.local.freshDefaults.fresh, false, 'an update gains no new seeding authority');
   const other = await w.send(sb(cKey(CANVAS2), [{ op: 'migrate' }]), at(`${CANVAS2}/courses/1`));
   assert.equal(other.rec.dest.todo, 'off', 'a removal can sync before this device first creates its account record');
+});
+
+test('moving a Dashboard tile writes its starter marks to sync once, not at every press (sync takes 120 writes a minute)', async () => {
+  const w = worker();
+  for (let x = 0; x < 5; x++) assert.equal((await w.send({ type: 'glaze:widgetLayout', ops: [{ s: 'cdash', id: 'notes', set: { x } }] }, CP)).ok, true);
+  assert.equal(w.store.sync['starterOff:cdash:cards'], true);
+  assert.equal(w.writes.sync, 1);
 });
 
 test('startup queued before the first install event cannot classify the new device as an update', async () => {

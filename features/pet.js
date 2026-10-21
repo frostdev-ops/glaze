@@ -1,6 +1,7 @@
 // W24's local pet. No work requests: the broker reads only records Glaze already keeps on this device.
 var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const ctx = globalThis.GZ_CTX, t = (k, v) => ctx.t(k, v);
+  if (!ctx) return null; // a frame-only injection can outlive its document
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const button = (text, run) => { const b = make('button', { type: 'button', textContent: text }); b.addEventListener('click', run); return b; };
   const NAMES = { books: 'Books', plant: 'Mushroom', moon: 'Moon', stars: 'Stars', plain: 'Classic buddy', bandana: 'Mint bandana', happy: 'Happy buddy' };

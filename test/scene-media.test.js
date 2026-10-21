@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { env } = require('./helpers/media-env.cjs');
 
-// Long enough for the digest of a kept file, which finishes on a thread of its own.
+// Long enough for the page's promises to settle (the env's digest of a kept file is one of them).
 const settle = () => new Promise((done) => setTimeout(done, 20));
 // What the VM made, as plain data (its objects have the VM's prototypes).
 const plain = (x) => JSON.parse(JSON.stringify(x));

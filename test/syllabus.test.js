@@ -346,7 +346,10 @@ test('a syllabus record only moves forward: an older save never replaces a newer
 });
 
 test('a large or hostile text is read in one pass, and a text over the cap is cut and says so', () => {
-  const time = (text) => { const t0 = performance.now(); const r = S.extract(text); return { r, ms: performance.now() - t0 }; };
+  // This process's CPU time, not the clock's: on a shared CI runner other test files take turns on the CPU, which
+  // stretches wall time without the reader doing any more work.
+  const cpu = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
+  const time = (text) => { const t0 = cpu(); const r = S.extract(text); return { r, ms: cpu() - t0 }; };
   // Codex's witness: rows of zero weights made the old search quadratic (48 KB took 0.6 s).
   const zeros = time('Category 0%\n'.repeat(Math.floor(S.MAX / 12)));
   assert.ok(zeros.ms < 1500, `${Math.round(zeros.ms)} ms for ${S.MAX} characters of zero weights`);

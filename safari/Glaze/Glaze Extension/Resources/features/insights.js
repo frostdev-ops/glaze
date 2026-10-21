@@ -79,6 +79,9 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
   // ---- the view ----------------------------------------------------------------------------------------------------
   // gen: the view's current load; anything that finishes for an older one (closed, refreshed, cleared) draws nothing.
   let box = null, opener = null, gen = 0;
+  // What has focus, through open shadow roots: from Glaze's bar (its palette), the document's is the bar's host, which
+  // can't take focus back.
+  const focused = () => { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a; };
   let me = null; // { key, uid, tz, base (the last clear this view knows of), rec (what it shows) }
   const stop = (my) => my !== gen || !box || !alive();
   const say = (s) => { const l = box?.querySelector('.gz-ins-say'); if (l) l.textContent = s; };
@@ -102,7 +105,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
     box.setAttribute('aria-labelledby', 'gz-ins-title');
     box.addEventListener('click', (e) => { if (e.target === box) box.close(); });
     box.addEventListener('close', () => { gen++; box?.remove(); box = null; me = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
-    opener = document.activeElement;
+    opener = focused();
     document.body.append(box);
     box.showModal();
     box.querySelector('h2').focus();

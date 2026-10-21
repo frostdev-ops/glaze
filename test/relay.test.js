@@ -290,6 +290,26 @@ test('limits: batch size, session size, request rates and subscriptions', async 
   assert.deepEqual(await c.s.edit({ long: { title: 'Long', html: `<p>${'€'.repeat(1500000)}</p>` } }), { n: 1, big: ['long'] });
 });
 
+test('a request refused whatever it carries is answered before its body is read', { timeout: 10000 }, async (t) => {
+  const r = await up();
+  t.after(() => r.close());
+  const a = make(r);
+  a.local = { n1: { title: 'Cells', html: '' } };
+  await a.pump();
+  const id = () => crypto.randomBytes(16).toString('base64url');
+  // The headers promise 20 MB and nothing more is sent: only an answer that doesn't wait for the body comes back.
+  const ask = (line, extra = '') => new Promise((resolve, reject) => {
+    const s = net.connect(r.port, '127.0.0.1');
+    let got = '';
+    s.on('data', (d) => { got += d; if (got.includes('\r\n')) { s.destroy(); resolve(got.split('\r\n')[0]); } });
+    s.on('error', reject);
+    s.write(`${line} HTTP/1.1\r\nHost: relay\r\n${extra}Content-Type: application/octet-stream\r\nContent-Length: ${20 << 20}\r\n\r\n`);
+  });
+  assert.match(await ask(`PUT /s/${id()}/b/${id()}`, `X-Glaze-Sig: ${'A'.repeat(86)}\r\n`), / 404 /, 'a file for a share that does not exist');
+  assert.match(await ask(`POST /s/${id()}`), / 404 /, 'a batch for a share that does not exist');
+  assert.match(await ask(`PUT /s/${a.st.sid}/b/${id()}`), / 400 /, 'a file without a signature');
+});
+
 test('a malformed WebSocket request is refused, and the relay keeps running', async (t) => {
   const r = await up();
   t.after(() => r.close());
@@ -488,7 +508,10 @@ test('keys from Export all bring a share back on a new computer, delete rights i
 // A store whose first put waits until the test lets it go (a slow R2 or disk write), then works, fails (true), or
 // lands and then throws ('landed': the bucket kept it but the reply was lost). A copy over `base`, which keeps its
 // objects, so one relay's view of a shared store can misbehave on its own.
-const slow = (base = memory()) => {
+// A test that fails while the upload waits here would leave it waiting, and the relay's close (which waits for every
+// request) with it: the file would never exit. So the gate also opens, as a failed write, when the test ends, before
+// the relay's own close hook runs.
+const slow = (t, base = memory()) => {
   const s = { ...base };
   let go, first = true;
   s.started = new Promise((resolve) => { s.start = resolve; });
@@ -503,15 +526,20 @@ const slow = (base = memory()) => {
     return base.put(k, b);
   };
   s.release = (how = false) => go(how);
+  t.after(() => go(true));
   return s;
 };
+// The grace the relays below get: long enough that no scheduled delete runs by itself during a test, however slow the
+// machine. A test moves past it by ageing the doomed keys (a controlled clock, as for the lease), then runs the sweep.
+const GRACE = 60e3;
+const pastGrace = (r) => r.db.prepare('UPDATE doomed SET since = since - ?, next = next - ?').run(GRACE + 1000, GRACE + 1000);
 const doomed = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM doomed WHERE sid = ?').get(sid).c;
 const booked = (r) => r.db.prepare('SELECT blob FROM totals').get().blob;
 const blobRows = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM blobs WHERE sid = ?').get(sid).c;
 
 test('a file upload still in flight when its share is deleted (by the creator or by expiry) leaves nothing behind', async (t) => {
   for (const [how, fail] of [['creator', false], ['creator', true], ['expiry', false]]) {
-    const store = slow();
+    const store = slow(t);
     const r = await up({ store });
     t.after(() => r.close());
     const a = make(r, 'notes', { expire: how === 'expiry' });
@@ -534,8 +562,10 @@ test('a failed upload, even one that landed before failing, is doomed: deleted, 
   for (const how of [true, 'landed']) {
     const dir = tmp(t);
     const db = path.join(dir, 'share.db');
-    const store = slow();
-    let r = await up({ db, store, maxBlobBytes: 5000, grace: 150 });
+    const store = slow(t);
+    let r = await up({ db, store, maxBlobBytes: 5000, grace: GRACE });
+    const r1 = r;
+    t.after(() => r1.close());
     const a = make(r);
     a.local = { n1: { title: 'x', html: '' } };
     await a.pump();
@@ -547,7 +577,7 @@ test('a failed upload, even one that landed before failing, is doomed: deleted, 
     // held until the first scheduled delete.
     assert.deepEqual([blobRows(r, a.st.sid), doomed(r, a.st.sid), store.m.size, booked(r)], [0, 1, 0, 4124], `${how}`);
     await assert.rejects(a.s.put(new Uint8Array(4000)), (e) => e.status === 507);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    pastGrace(r);
     await r.expire();
     assert.equal(booked(r), 0);
     await a.s.put(new Uint8Array(4000));
@@ -556,12 +586,12 @@ test('a failed upload, even one that landed before failing, is doomed: deleted, 
     r.db.prepare('INSERT INTO blobs (sid, id, size, at, owner) VALUES (?, ?, ?, ?, ?)').run(a.st.sid, 'P'.repeat(22), 100, Date.now(), 'a-relay-that-died');
     store.m.set(`${a.st.sid}/${'P'.repeat(22)}`, Buffer.alloc(100));
     await r.close();
-    r = await up({ db, store, maxBlobBytes: 5000, grace: 150 }, port);
+    r = await up({ db, store, maxBlobBytes: 5000, grace: GRACE }, port);
     t.after(() => r.close());
     // At start its row becomes a doomed key: the object goes, its room stays booked until the first scheduled delete.
     await r.expire();
     assert.deepEqual([store.m.size, blobRows(r, a.st.sid), booked(r)], [1, 1, 4124 + 100]);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    pastGrace(r);
     await r.expire();
     assert.deepEqual([store.m.size, blobRows(r, a.st.sid), booked(r)], [1, 1, 4124]);
   }
@@ -581,7 +611,7 @@ test('a backup taken while an upload is in flight leaves it alone, and the room 
   for (const [then, fail] of [['stored', false], ['deleted', false], ['deleted', true]]) {
     const dir = tmp(t);
     const db = path.join(dir, 'share.db'), blobs = path.join(dir, 'blobs');
-    const store = slow(diskStore(blobs));
+    const store = slow(t, diskStore(blobs));
     const r = await up({ db, store, maxBlobBytes: 5000 });
     t.after(() => r.close());
     const a = make(r);
@@ -653,14 +683,14 @@ test('one serving relay per database: a second waits out the lease and refuses; 
   d0.close();
   store.m.set(`${a.sid}/${'D'.repeat(22)}`, Buffer.alloc(100));
   const t1 = Date.now();
-  const fourth = await up({ db, store, lease: 300, grace: 150 });
+  const fourth = await up({ db, store, lease: 300, grace: GRACE });
   t.after(() => fourth.close());
   assert.ok(Date.now() - t1 >= 250, `took over after ${Date.now() - t1} ms`);
   // Its row became a doomed key, its object deleted and its room still booked. A late write from the dead relay (a bucket
   // finishing a request it already had) lands afterwards; the next scheduled delete takes it.
   assert.deepEqual([store.m.size, blobRows(fourth, a.sid), doomed(fourth, a.sid), booked(fourth)], [0, 0, 1, 100]);
   store.m.set(`${a.sid}/${'D'.repeat(22)}`, Buffer.alloc(100));
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  pastGrace(fourth);
   await fourth.expire();
   assert.deepEqual([store.m.size, doomed(fourth, a.sid), booked(fourth)], [0, 1, 0]); // kept, and deleted again, for a week
 });
@@ -672,7 +702,7 @@ test('a relay whose lease was taken over commits nothing after its wait: no row,
     const dir = tmp(t);
     const db = path.join(dir, 'share.db');
     const shared = memory();
-    const store = slow(shared);
+    const store = slow(t, shared);
     const old = await up({ db, store, maxBlobBytes: 5000 });
     t.after(() => old.close());
     const a = make(old);
@@ -681,7 +711,7 @@ test('a relay whose lease was taken over commits nothing after its wait: no row,
     const upload = a.s.put(new Uint8Array(4000)).then(() => 'stored', (e) => e.status ?? e.message); // 4,124 B sealed
     await store.started;
     old.db.prepare('UPDATE lease SET seen = seen - 61000').run();
-    const next = await up({ db, store: shared, maxBlobBytes: 5000, grace: 150 });
+    const next = await up({ db, store: shared, maxBlobBytes: 5000, grace: GRACE });
     t.after(() => next.close());
     // The old upload's room stays on the books until none of its writes can land: never spent twice.
     const b = make(next);
@@ -691,7 +721,7 @@ test('a relay whose lease was taken over commits nothing after its wait: no row,
     assert.equal(shared.m.size, 0, `fail ${fail}: the object the old relay wrote is gone`);
     assert.notEqual((await fetch(`${old.url}/health`).catch(() => ({ status: 'closed' }))).status, 200, 'the old relay stopped');
     // After the grace the reclaimed row and its room go, and the replacement can use the room once.
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    pastGrace(next);
     await next.expire();
     assert.deepEqual([shared.m.size, blobRows(next, a.st.sid), next.db.prepare('SELECT blob FROM totals').get().blob], [0, 0, 0]);
     const ref = await b.s.put(new Uint8Array(4000));
@@ -708,7 +738,7 @@ test('a late write landing after the grace is still reconciled: recorded by the 
     const dir = tmp(t);
     const db = path.join(dir, 'share.db');
     const shared = memory();
-    const store = slow(shared);
+    const store = slow(t, shared);
     const old = await up({ db, store, maxBlobBytes: 5000 });
     t.after(() => old.close());
     const a = make(old);
@@ -717,11 +747,11 @@ test('a late write landing after the grace is still reconciled: recorded by the 
     const upload = a.s.put(new Uint8Array(4000)).then(() => 'stored', (e) => e.status ?? e.message);
     await store.started;
     old.db.prepare('UPDATE lease SET seen = seen - 61000').run();
-    let next = await up({ db, store: shared, maxBlobBytes: 5000, grace: 150 });
+    let next = await up({ db, store: shared, maxBlobBytes: 5000, grace: GRACE });
     const first = next;
     t.after(() => first.close());
     // Past the grace: the replacement's first scheduled delete has run, the room is free, and it is spent.
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    pastGrace(next);
     await next.expire();
     const b = make(next);
     await b.s.put(new Uint8Array(4000));
@@ -736,9 +766,9 @@ test('a late write landing after the grace is still reconciled: recorded by the 
     // The holder's sweep deletes it on schedule, after a restart too.
     const port = next.port;
     await next.close();
-    next = await up({ db, store: shared, maxBlobBytes: 5000, grace: 150 }, port);
+    next = await up({ db, store: shared, maxBlobBytes: 5000, grace: GRACE }, port);
     t.after(() => next.close());
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    pastGrace(next);
     await next.expire();
     assert.deepEqual([shared.m.size, booked(next), blobRows(next, a.st.sid)], [1, 4124, 0], `${how} ${delFails}`);
   }
@@ -748,7 +778,7 @@ test('a relay that loses its lease cuts connections after the drain, and still d
   const dir = tmp(t);
   const db = path.join(dir, 'share.db');
   const shared = memory();
-  const store = slow(shared);
+  const store = slow(t, shared);
   const old = await up({ db, store, lease: 300, drain: 100 });
   t.after(() => old.close());
   const a = make(old);
@@ -773,7 +803,7 @@ test('a relay that loses its lease cuts connections after the drain, and still d
 });
 
 test('a live holder\'s upload completes however long it takes; a relay that loses its lease stops taking work at once', async (t) => {
-  const store = slow();
+  const store = slow(t);
   const r = await up({ store, lease: 300 });
   t.after(() => r.close());
   const a = make(r);
@@ -796,7 +826,7 @@ test('--delete in its own process beside a serving relay: an upload to that shar
   for (const same of [true, false]) {
     const dir = tmp(t);
     const db = path.join(dir, 'share.db'), blobs = path.join(dir, 'blobs');
-    const store = slow(diskStore(blobs));
+    const store = slow(t, diskStore(blobs));
     const r = await up({ db, store });
     t.after(() => r.close());
     const doomed = make(r), other = make(r);

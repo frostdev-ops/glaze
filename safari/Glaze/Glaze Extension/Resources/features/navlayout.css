@@ -51,9 +51,10 @@ html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-
   html[data-gz-nav-place="top"] #site-wrap { box-sizing: border-box; padding-top: var(--gz-nav-bar); }
   html:is([data-gz-nav-place="bottom"], [data-gz-nav-place="dock"]) #site-wrap { box-sizing: border-box; padding-bottom: calc(var(--gz-nav-bar) + 16px); }
 
-  /* ---- Canvas: the global nav's rail turns into the bar; its collapse toggle has nothing to collapse. ---- */
+  /* ---- Canvas: the global nav's rail turns into the bar; its collapse toggle has nothing to collapse. Over Canvas's
+     other fixed bars at its z-index of 100, which come later in the page and would paint over it. ---- */
   html[data-gz-nav-place] #header.ic-app-header {
-    position: fixed !important; inset: auto 0 0 0 !important; z-index: 100; box-sizing: border-box;
+    position: fixed !important; inset: auto 0 0 0 !important; z-index: 101; box-sizing: border-box;
     display: flex; flex-direction: row; align-items: center; gap: 8px;
     width: auto !important; height: var(--gz-nav-bar) !important; padding: 0 12px; overflow: auto hidden;
     border-right: 0; border-top: 1px solid var(--gz-border-line, var(--gz-line));
@@ -69,6 +70,8 @@ html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-
   html[data-gz-nav-place] body:not(#gz-nav) :is(#wrapper, .ic-Layout-wrapper, .tray-with-space-for-global-nav) { margin-inline-start: 0 !important; }
   html[data-gz-nav-place="top"] #wrapper { padding-top: var(--gz-nav-bar); }
   html:is([data-gz-nav-place="bottom"], [data-gz-nav-place="dock"]) #wrapper { padding-bottom: calc(var(--gz-nav-bar) + 16px); }
+  /* Previous and Next, fixed to the window's bottom (inline) where the bar now is: they stand on it. */
+  html:is([data-gz-nav-place="bottom"], [data-gz-nav-place="dock"]) #module_sequence_footer:is([style*="fixed"], [data-gz-fixed-bottom]) { bottom: calc(var(--gz-nav-bar) + 16px) !important; }
 
   /* ---- Moodle: its primary navigation is a top bar already; bottom and dock lift it out. A backdrop filter on the
      navbar would hold a fixed child inside it, so the glass goes while the bar is elsewhere. ---- */

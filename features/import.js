@@ -6,6 +6,7 @@
 // fails, goes quiet for a minute or is called off (signal), which stops its work and frees its memory.
 var GZ_IMPORT = globalThis.GZ_IMPORT || (() => {
   const X = globalThis.GZ_CTX;
+  if (!X) return null; // a frame-only injection can outlive its document
   const t = (k, v) => X.t(k, v);
   const D = () => globalThis.GZ_DOCTEXT;
   const MAX = 32 << 20; // a text, web page, Word or PowerPoint file

@@ -224,6 +224,23 @@ test('rename and move: each field is set only by a change made after its last on
   assert.deepEqual(await w.run({ op: 'meta', id: id(5), title: 'x' }), { ok: false, error: 'gone' });
 });
 
+test('rename and move: a time from a clock that ran ahead does not block the changes after it', async () => {
+  const w = world();
+  const day = 864e5;
+  await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>1</p>', title: 'First', copy: id(90) }, 100);
+  // Renamed when the page's clock was a day ahead: stamped no later than the worker's now.
+  await w.run({ op: 'meta', id: id(1), title: 'Ahead', at: 100 + day }, 200);
+  assert.ok(w.idx().notes[id(1)].ft.title <= 200);
+  await w.run({ op: 'meta', id: id(1), title: 'Now', at: 250 }, 300);
+  assert.equal(w.idx().notes[id(1)].title, 'Now');
+  // A time an earlier version stored ahead of the clock counts as older than any change made since.
+  w.store[KEY].notes[id(1)].ft.title = 400 + day;
+  await w.run({ op: 'meta', id: id(1), title: 'Healed', at: 450 }, 500);
+  assert.equal(w.idx().notes[id(1)].title, 'Healed');
+  await w.run({ op: 'save', id: id(2), base: 0, sid: 'b', html: '<p>2</p>', title: 'Second', copy: id(91), at: 600 + day }, 700);
+  assert.deepEqual(Object.values(w.idx().notes[id(2)].ft), [700, 700, 700], 'a new note is stamped no later than now either');
+});
+
 test('files: pictures by their bytes, sizes capped, unused ones cleared', async () => {
   const w = world();
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);

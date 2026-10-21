@@ -146,6 +146,9 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     ];
   };
   let cmd = null; // { box, input, list, all, shown, active, back }
+  // What has focus, through open shadow roots: opened from Glaze's bar, the document's is the bar's host, which can't take
+  // focus back.
+  const focused = () => { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a; };
   const closeCmd = () => {
     if (!cmd) return;
     cmd.stop?.();
@@ -247,7 +250,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       // Ultra's own shortcuts never see keys meant for the palette.
       e.stopPropagation();
     });
-    cmd = { box, input, list, all: [], shown: [], active: 0, back: document.activeElement, loading: true };
+    cmd = { box, input, list, all: [], shown: [], active: 0, back: focused(), loading: true };
     document.body.append(box);
     input.focus();
     // Pages show at once; courses and items join when Ultra answers.

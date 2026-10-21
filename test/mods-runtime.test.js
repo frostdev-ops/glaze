@@ -1081,6 +1081,21 @@ test('nav.items: a mod\'s items go to the bar under its own name, at most eight,
   port.close();
 });
 
+test('nav.items: every mod reads the bar\'s items, but not the account item, whose label is the student\'s name', async () => {
+  const p = page();
+  const profile = { id: 'profile', label: 'Jane Q. Student', icon: 'user', href: 'https://lms.test/profile', badge: '', active: false, hidden: false };
+  p.ctx.GZ_NAVBAR_UI = fakeBar({ ...BAR, items: [...BAR.items, profile] });
+  p.chrome.runtime.sendMessage = async () => ({ ok: true });
+  p.G.start([W('a')]);
+  const { port, got } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  p.G.pass();
+  await settle();
+  eq(got.filter((x) => x.event === 'nav.items').at(-1).data, { items: [{ id: 'course', label: 'Courses' }, { id: 'calendar', label: 'Calendar' }] });
+  port.close();
+});
+
 test('nav.read: the model is cleaned and capped, and the bar\'s events reach only granted mods', async () => {
   const p = page();
   p.ctx.GZ_NAVBAR_UI = fakeBar(BAR);

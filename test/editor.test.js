@@ -148,6 +148,17 @@ test('E1 section and global preference resets preserve pictures, preset librarie
   assert.ok(js.includes('GZ_EDITOR.reset'));
 });
 
+test('resets give back the defaults this device started with: a fresh install keeps Notes and the pet habitat on', () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const helper = source.slice(source.indexOf('  let freshHere = false;'), source.indexOf('  // Two clicks, so a stray one'));
+  for (const fresh of [true, false]) {
+    const defaults = vm.runInNewContext(`${helper}\ndefaultsHere()`, { GZ_SANITIZE: D.GZ_SANITIZE, GZ_CARDS: { settings: () => ({}) },
+      chrome: { storage: { local: { get: (k, cb) => cb({ freshDefaults: { fresh } }) } } } });
+    assert.deepEqual([defaults.enhance.notes, defaults.enhance.pet], [fresh, fresh], fresh ? 'a fresh install' : 'an update');
+  }
+  for (const site of ["GZ_EDITOR.reset(s, [path], defaultsHere())", "GZ_EDITOR.reset(s, paths, defaultsHere())", "const defaults = defaultsHere();"]) assert.ok(source.includes(site), site);
+});
+
 test('E1 Ultra preview carries the chosen course color and nickname without saving a pending Look', () => {
   const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
   const preview = source.slice(source.indexOf('  const preview = () => {') + '  const preview = '.length, source.indexOf('\n  const contextPreview =')).replace(/;\s*$/, '');

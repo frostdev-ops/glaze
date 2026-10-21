@@ -13,7 +13,8 @@ test('a card style keeps only what its kind uses, and refuses what is off', () =
     { k: 'image', u: 'https://x.test/a%20b%22.png', c: '#ff0000', o: 40, f: 'noir', x: 20, y: 80, z: 150 });
   assert.deepEqual(K.style({ k: 'image', i: 'abcdef123456', f: 'toString', z: 50 }), { k: 'image', i: 'abcdef123456' });
   for (const bad of [null, 'x', [], { k: 'sync' }, { k: 'solid' }, { k: 'solid', c: 'red' }, { k: 'gradient', c: '#111111' },
-    { k: 'image' }, { k: 'image', u: 'http://x.test/a.png' }, { k: 'image', u: 'javascript:alert(1)' }, { k: 'image', i: '../../x' }, { k: 'solid', c: '#000000; x' }]) {
+    { k: 'image' }, { k: 'image', u: 'http://x.test/a.png' }, { k: 'image', u: 'javascript:alert(1)' }, { k: 'image', i: '../../x' }, { k: 'solid', c: '#000000; x' },
+    { k: 'image', u: 'https://a"b.test/a.png' }, { k: 'image', u: 'https://x.test/a.png?q\\' }]) {
     assert.equal(K.style(bad), null, JSON.stringify(bad));
   }
 });

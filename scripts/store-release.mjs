@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { parseEnv } from 'node:util';
 import { spawn, execFileSync } from 'node:child_process';
 import { appleApp, appleBuild, amo, chromeStatus, submitChrome, submitFirefox, submitApple } from './store-api.mjs';
-import { publicPreflight, preparePublic, publishPublic } from './public-release.mjs';
+import { publicPreflight, preparePublic, publishPublic, withoutStoreKeys } from './public-release.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaults = {
@@ -163,7 +163,7 @@ async function build(opt, env, manifest, save, out) {
       await run('python3', [path.join(root, 'scripts/store-firefox-source.py'), 'create', firefox, upload, review], root, env);
       const extracted = path.join(temp, 'firefox-package'); fs.mkdirSync(extracted);
       await run('unzip', ['-q', upload, '-d', extracted], root, env);
-      await run('npx', ['--yes', 'web-ext@10.8.0', 'lint', '--no-config-discovery', '--warnings-as-errors', '--source-dir', extracted, '--output', 'json'], root, env, path.join(out, 'logs/firefox-lint.json'));
+      await run('npx', ['--yes', 'web-ext@10.8.0', 'lint', '--no-config-discovery', '--warnings-as-errors', '--source-dir', extracted, '--output', 'json'], root, withoutStoreKeys(env), path.join(out, 'logs/firefox-lint.json'));
       const rebuilt = path.join(temp, 'reviewer'); fs.mkdirSync(rebuilt);
       await run('unzip', ['-q', review, '-d', rebuilt], root, env);
       await run('python3', ['reviewer/rebuild.py', 'verify'], rebuilt, env, path.join(out, 'logs/firefox-rebuild.log'));

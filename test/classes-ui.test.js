@@ -15,7 +15,7 @@ const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setI
 const ORIGIN = 'https://canvas.test';
 const KEY = C.storeKey(ORIGIN, '3');
 const ICS = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'BEGIN:VEVENT', 'UID:a@x', 'SUMMARY:BIO 1100 Biology', 'DTSTART;TZID=America/New_York:20260825T133000',
-  'DTEND;TZID=America/New_York:20260825T144500', 'RRULE:FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20261211T235959Z', 'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n');
+  'DTEND;TZID=America/New_York:20260825T144500', 'RRULE:FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20991211T235959Z', 'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n');
 
 const page = () => {
   const document = { activeElement: null };
@@ -54,10 +54,13 @@ const page = () => {
   const box = {};
   const area = { local: { get: async (ks) => Object.fromEntries(ks.filter((k) => k in box).map((k) => [k, structuredClone(box[k])])), set: async (p) => { Object.assign(box, structuredClone(p)); return true; } } };
   const sent = [], held = [], replies = [], imports = [];
-  let hold = false, holdReplies = false;
+  let hold = false, holdReplies = false, feed = new TextEncoder().encode(ICS);
   const c = {
-    console, URL, Intl, AbortController, document, location: { origin: ORIGIN, host: 'canvas.test' },
-    fetch: async (u) => { if (hold) await new Promise((res) => held.push(res)); return { ok: String(u).startsWith(ORIGIN), text: async () => ICS }; },
+    console, URL, Intl, AbortController, TextDecoder, document, location: { origin: ORIGIN, host: 'canvas.test' },
+    fetch: async (u) => {
+      if (hold) await new Promise((res) => held.push(res));
+      return { ok: String(u).startsWith(ORIGIN), text: async () => new TextDecoder().decode(feed), arrayBuffer: async () => feed.slice().buffer };
+    },
     GZ_I18N: { locale: () => 'en' }, GZ_TODO: T, GZ_CLASSES: C, GZ_ICS: I,
     // features/import.js, held: a read is recorded and never answers.
     GZ_IMPORT: { read: (file, opts) => { imports.push({ file, opts }); return new Promise(() => {}); }, note: () => '', doubt: () => false },
@@ -76,7 +79,7 @@ const page = () => {
   const ui = vm.runInContext(read('features/classes.js'), c);
   const dialog = () => document.body.children.find((x) => x.tagName === 'DIALOG' && x.open) || null;
   const find = (text, tag = 'BUTTON') => dialog()?.all.find((n) => n.tagName === tag && n.textContent === text);
-  return { ui, box, sent, imports, document, dialog, find, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); },
+  return { ui, box, sent, imports, document, dialog, find, serve: (b) => { feed = b; }, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); },
     holdReplies: () => { holdReplies = true; }, stopHolding: () => { holdReplies = false; }, releaseReplies: () => { holdReplies = false; replies.splice(0).forEach((r) => r()); } };
 };
 
@@ -113,6 +116,27 @@ test('a calendar link still being read when the dialog is closed and opened agai
   p.find('Read schedule').fire('click');
   await settle();
   assert.equal(p.dialog().querySelectorAll('.gz-cl-entry').length, 1);
+});
+
+// RFC 5545 folds lines by octets, so a fold can fall inside a character ("é", C3 A9): lib/ics.js joins it back only
+// when it is given the bytes, before decoding.
+test('a calendar file or link is read as bytes: a line folded inside a character still reads whole', async () => {
+  const enc = (s) => new TextEncoder().encode(s);
+  const [a, b] = ICS.replace('Biology', 'Biologie générale').split('énérale');
+  const bytes = new Uint8Array([...enc(a), 0xc3, ...enc('\r\n '), 0xa9, ...enc(`nérale${b}`)]);
+  const title = async (p) => { p.find('Read schedule').fire('click'); await settle(); return p.dialog().querySelector('.gz-cl-entry legend')?.textContent; };
+  const p = page();
+  await p.ui.open();
+  p.find('Import a schedule').fire('click');
+  p.dialog().querySelector('input').files = [{ name: 'schedule.ics', type: 'text/calendar', size: bytes.length,
+    text: async () => new TextDecoder().decode(bytes), arrayBuffer: async () => bytes.slice().buffer }];
+  assert.equal(await title(p), 'BIO 1100 Biologie générale', 'a file');
+  const q = page();
+  q.serve(bytes);
+  await q.ui.open();
+  q.find('Import a schedule').fire('click');
+  q.dialog().all.find((n) => n.type === 'url').value = `${ORIGIN}/feeds/calendars/user_x.ics`;
+  assert.equal(await title(q), 'BIO 1100 Biologie générale', 'a link');
 });
 
 test('writes say when they were asked for; a script\'s click does nothing', async () => {

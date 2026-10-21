@@ -9,7 +9,7 @@ const B = require('../lib/navbar.js');
 
 const source = fs.readFileSync(require.resolve('../options.js'), 'utf8');
 const backup = source.slice(source.indexOf('  // ---- backup ----'), source.indexOf('  // Two clicks, so a stray'));
-const restore = async (src, kind = 'media', extra = {}, roundTrip = false) => {
+const restore = async (src, kind = 'media', extra = {}, roundTrip = false, stored = {}) => {
   let raw = { ...structuredClone(G.GZ_DEFAULTS), bg: { ...G.GZ_DEFAULTS.bg, kind }, parts: { x: { bg: { media: { type: 'video', src } }, cursor: { kind: 'glow' } } }, ...extra };
   const elements = {}, sent = [], hints = [], s = {};
   let exported;
@@ -19,7 +19,7 @@ const restore = async (src, kind = 'media', extra = {}, roundTrip = false) => {
     $: (id) => (elements[id] ||= { addEventListener: (type, fn) => { elements[id][type] = fn; } }),
     flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true,
     hint: (...v) => hints.push(v), t: (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars[k]),
-    chrome: { storage: { local: { get: async () => ({}) }, sync: { get: async () => ({}) } }, runtime: { sendMessage: (m, cb) => { if (m.type === 'glaze:sessions') return Promise.resolve({ ok: true, keys: [] }); sent.push(m); cb?.({ ok: true }); } } },
+    chrome: { storage: { local: { get: async (k) => (k in stored ? { [k]: stored[k] } : {}) }, sync: { get: async () => ({}) } }, runtime: { sendMessage: (m, cb) => { if (m.type === 'glaze:sessions') return Promise.resolve({ ok: true, keys: [] }); sent.push(m); cb?.({ ok: true }); } } },
   };
   vm.runInNewContext(backup, context);
   if (roundTrip) {
@@ -38,6 +38,14 @@ test('a backup without its kept background file restores the gradient and explai
   assert.equal(r.s.bg.kind, 'gradient');
   assert.equal(r.s.parts.x.cursor.kind, 'glow', 'the rest of the Look survives');
   assert.match(r.hints.at(-1)[0], /background file was not included.*gradient/i);
+});
+
+test('a backup put back on the computer that still keeps its background file keeps that background', async () => {
+  const h = 'A'.repeat(43);
+  const r = await restore(`file:${h}`, 'media', {}, false, { [`lookMedia:${h}`]: { t: 'video/webm', b: 'AAAA' } });
+  assert.equal(r.sent[0].restore.settings.bg.kind, 'media');
+  assert.equal(r.s.parts.x.bg.media.src, `file:${h}`);
+  assert.equal(r.hints.at(-1)[0], 'Imported backup.json.');
 });
 
 test('backup restore preserves URL backgrounds and inactive media drafts', async () => {

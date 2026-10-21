@@ -8,6 +8,17 @@ html[data-gz-ctabs~="large"] { --gz-ctabs-h: 48px; }
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
   border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
 }
+/* Printed, a page is itself: no strip of the other courses' tabs, and no room kept for one. */
+@media print {
+  html[data-gz-ctabs] { --gz-ctabs-h: 0px !important; }
+  #gz-ctabs { display: none !important; }
+}
+/* A window this short (a phone on its side, a page zoomed to 400%) has no room for a row of tabs Glaze's bar holds too (its
+   words say `tabs`: the rail, or the phone's More sheet): they are in the bar alone, as at "only in the navigation". */
+@media (max-height: 420px) {
+  html[data-gz-navbar~="tabs"][data-gz-ctabs] { --gz-ctabs-h: 0px !important; }
+  html[data-gz-navbar~="tabs"] #gz-ctabs { display: none !important; }
+}
 /* Over a solid background the strip and the document buttons would blur a flat colour: a GPU layer for nothing. Same fill. */
 html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter: none; }
 #gz-ctabs[data-size="small"] { font-size: 12px; }
@@ -42,7 +53,9 @@ html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter:
 #gz-ctabs[data-color="theme"] .gz-ctab[class*="course-color-"][aria-selected="true"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 42%, var(--gz-surface-paint, var(--gz-surface))); border-color: var(--gz-course); }
 #gz-ctabs:is([data-color="tint"], [data-color="theme"]) .gz-ctab[class*="course-color-"][aria-selected="true"]::after { background: var(--gz-course); }
 #gz-ctabs .gz-ctab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--gz-ink-faint); }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) { position: relative; flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--gz-ink-faint); }
+/* Drawn at 20px, pressed anywhere within 24 (WCAG 2.5.8). */
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x)::after { content: ""; position: absolute; inset: -2px; }
 #gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 #gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x):hover { background: color-mix(in srgb, var(--gz-ink) 14%, transparent); color: var(--gz-ink); }
 #gz-ctabs .gz-ctab:not(:hover, :focus-visible, [data-pin]) .gz-ctab-pin { display: none; }

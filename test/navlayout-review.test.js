@@ -61,3 +61,13 @@ test('Moodle keyboard order and group descriptions follow visible items and rest
   api.restoreMenu();
   assert.equal(JSON.stringify([current.attrs, course.attrs, link.attrs]), before);
 });
+
+test("a Look's bar placed at Canvas's bottom stays over Canvas's other fixed bars, and Previous and Next stand on it", () => {
+  const css = source('features/navlayout.css');
+  const wide = css.slice(css.indexOf('@media (min-width: 900px) {'));
+  // Canvas's module sequence bar is fixed at z-index 100 later in the page: at the same z-index it painted over the bar.
+  const at = wide.indexOf('html[data-gz-nav-place] #header.ic-app-header {');
+  assert.ok(Number(wide.slice(at, wide.indexOf('}', at)).match(/z-index: (\d+)/)[1]) > 100);
+  assert.ok(wide.includes('html:is([data-gz-nav-place="bottom"], [data-gz-nav-place="dock"]) #module_sequence_footer:is([style*="fixed"], [data-gz-fixed-bottom]) { bottom: calc(var(--gz-nav-bar) + 16px) !important; }'),
+    'lifted by the bar and its gap, as the page keeps room for it');
+});

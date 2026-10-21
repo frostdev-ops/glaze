@@ -36,7 +36,7 @@ class El {
 const page = ({ kept = {} } = {}) => {
   const S = { enabled: true, enhance: { insights: true, streak: false } };
   const fetches = [], sent = [];
-  const course = { id: '1', name: 'BIO', enrollments: [{ type: 'student' }], term: { id: 5, name: 'Fall', start_at: '2026-08-24T04:00:00Z', end_at: '2027-12-19T05:00:00Z' } };
+  const course = { id: '1', name: 'BIO', enrollments: [{ type: 'student' }], term: { id: 5, name: 'Fall', start_at: '2026-08-24T04:00:00Z', end_at: '2099-12-19T05:00:00Z' } };
   const drawn = []; // text the summary picture draws
   const canvas = () => Object.assign(new El('canvas'), {
     getContext: () => ({ fillText: (s) => drawn.push(s), measureText: () => ({ width: 0 }), fillRect() {}, beginPath() {}, roundRect() {}, fill() {} }),
@@ -56,7 +56,7 @@ const page = ({ kept = {} } = {}) => {
   const ui = vm.runInContext(source, context);
   const say = () => doc.body.children[0]?.querySelector('.gz-ins-say')?.textContent;
   const find = (text, el = doc.body) => el.textContent === text ? el : el.children.filter((c) => c instanceof El).map((c) => find(text, c)).find(Boolean);
-  return { S, ui, fetches, sent, say, drawn, find };
+  return { S, ui, fetches, sent, say, drawn, find, doc };
 };
 const reply = (body, link) => ({ ok: true, text: async () => JSON.stringify(body), headers: { get: (h) => (h === 'link' && link ? link : null) } });
 const GROUPS = [{ id: 1, assignments: [{ id: 7, name: 'Lab', points_possible: 10, published: true, due_at: '2026-09-10T20:00:00Z', submission: { score: 9, workflow_state: 'graded', submitted_at: '2026-09-09T20:00:00Z' } }] }];
@@ -72,6 +72,16 @@ test('a page held while Insights is turned off: the next page is never asked for
   await settle();
   assert.equal(p.fetches.length, 1, 'no second page');
   assert.ok(!p.sent.some((m) => m.op === 'put'), 'nothing kept');
+});
+
+test("Insights opened from Glaze's bar (its palette) gives focus back to the bar's item, not the bar's host", async () => {
+  const p = page();
+  let back = null;
+  const item = { isConnected: true, focus: () => { back = item; } }, host = { isConnected: true, shadowRoot: { activeElement: item }, focus: () => { back = host; } };
+  p.doc.activeElement = host; // the document sees only the host of the bar's shadow root
+  await p.ui.open();
+  p.doc.body.children[0].close();
+  assert.equal(back, item);
 });
 
 test('a closed view stops paging too', async () => {

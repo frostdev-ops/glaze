@@ -239,6 +239,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
 
     agenda(body) {
       let L = null, day = null, data = null, cache = null, alive = true;
+      let todo = {}; // Better To Do's settings (storage.sync todo): what counts as done, and whether ticks go to Canvas
       // The class schedule (lib/classes.js, features/classes.js), when the student has one: the day's classes too.
       let C = null, classes = null, ckey = '';
       const withClasses = (raw) => {
@@ -284,7 +285,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         title.textContent = dayName(day);
         home.hidden = day === today();
         let rows;
-        try { rows = W.agenda(L, { items: await items(day), data, day, tz: me.tz, extra: classRows(day) }); } catch { rows = null; }
+        try { rows = W.agenda(L, { items: await items(day), data, day, tz: me.tz, extra: classRows(day), o: todo, sync: !ultra && !!todo.sync }); } catch { rows = null; }
         if (n !== asked || !alive || !shown(body)) return;
         list.replaceChildren(...(rows === null ? [make('li', { className: 'gz-w-faint', textContent: t("Couldn't load this day. Try again in a moment.") })]
           : rows.length ? rows.map((r) => {
@@ -300,6 +301,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           }) : [make('li', { className: 'gz-w-faint', textContent: t('Nothing planned or due.') })]));
       };
       const onStore = (ch, a) => {
+        if (a === 'sync' && ch.todo && L) { todo = GZ_SANITIZE({ todo: ch.todo.newValue }).todo; paint(); return; }
         if (a !== 'local' || !L) return;
         const k = L.storeKey(location.origin, me.uid);
         if (ch.todoCache) cache = ch.todoCache.newValue;
@@ -314,7 +316,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         L = globalThis.GZ_TODO;
         const k = L.storeKey(location.origin, me.uid);
         ckey = `classes:${location.origin}/${me.uid}`;
-        const r = await get('local', [k, 'todoCache', ckey]);
+        const [r, prefs] = await Promise.all([get('local', [k, 'todoCache', ckey]), get('sync', ['todo'])]);
+        todo = GZ_SANITIZE({ todo: prefs.todo }).todo;
         data = L.clean(r[k]);
         await withClasses(r[ckey]);
         if (!alive) return;
@@ -882,29 +885,21 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   const movable = (id) => (dockIds.includes(id) ? false : fl(id) ? !floatsStacked : board ? editing && !stacked : false);
   const roomEl = () => (board === 'courses' ? room : grid?.querySelector('.gz-dash-grid'));
-  // The room a floating tile has: on Ultra, the window right of the nav, below a course's top bar (B8's course tabs, or
-  // anything else marked data-gz-keep-clear, too) and above Glaze's own footer, so it never covers them; on Canvas, the
-  // window.
+  // The room a floating tile has (lib/widgets.js room), so it never covers what stays over the page: the window less Glaze's
+  // bar (its rail's or top bar's room, its bottom bar on a phone), and on Ultra the nav right of it, a course's top bar and
+  // Glaze's footer; the course tabs (B8's, or anything else marked data-gz-keep-clear) and the sidebar expanded beside the
+  // content on both. Canvas's footer is in its page.
   const floatRoom = () => {
-    let left = 0, right = innerWidth, top = 0, bottom = innerHeight;
-    const edges = ultra ? [...document.querySelectorAll('.MuiDrawer-paper, #base_tools, div.bb-course-navigation, [data-gz-keep-clear], #gz-footer')] : [];
-    if (ultra) {
-      for (const e of edges) {
-        const r = e.getBoundingClientRect();
-        if (!r.width || !r.height) continue;
-        if (r.left <= 1 && r.right < innerWidth / 2 && r.height > innerHeight / 2) left = Math.max(left, r.right);
-        else if (r.right >= innerWidth - 1 && r.left > innerWidth / 2 && r.height > innerHeight / 2) right = Math.min(right, r.left);
-        else if (r.top < innerHeight / 2 && r.bottom > 0) top = Math.max(top, r.bottom);
-        else if (r.top > innerHeight / 2) bottom = Math.min(bottom, r.top);
-      }
-    }
-    // The sidebar, expanded beside the content: floats keep clear of it.
-    const sb = document.documentElement?.getAttribute('data-gz-sidebar') === 'expanded' && globalThis.GZ_SIDEBAR_UI?.host?.()?.el;
-    if (sb) {
-      const r = sb.getBoundingClientRect();
-      if (r.width) { if (document.documentElement.dir === 'rtl') left = Math.max(left, r.right); else right = Math.min(right, r.left); edges.push(sb); }
-    }
-    return { left, right, top, bottom, W: Math.max(0, right - left), H: Math.max(0, bottom - top), edges };
+    const html = document.documentElement, css = html && typeof getComputedStyle === 'function' ? getComputedStyle(html) : null;
+    const edges = [...document.querySelectorAll(ultra ? '.MuiDrawer-paper, #base_tools, div.bb-course-navigation, [data-gz-keep-clear], #gz-footer' : '[data-gz-keep-clear]')];
+    const tabs = document.getElementById('gz-navbar')?.shadowRoot?.querySelector('.tabs');
+    if (tabs) edges.push(tabs);
+    const sb = html?.getAttribute('data-gz-sidebar') === 'expanded' && globalThis.GZ_SIDEBAR_UI?.host?.()?.el;
+    if (sb) edges.push(sb);
+    const at = (v) => parseFloat(css?.getPropertyValue(v)) || 0;
+    const r = W.room(innerWidth, innerHeight, edges.filter((e) => e !== sb).map((e) => e.getBoundingClientRect()),
+      { bar: { left: at('--gz-navbar-left'), top: at('--gz-navbar-top') }, rtl: html?.dir === 'rtl', aside: sb ? sb.getBoundingClientRect() : null });
+    return { ...r, edges };
   };
   // The room a tile moves in: its box on screen, its size, the other tiles in it ({ left, top, w, h }) and Ultra's column.
   const frame = (id) => {
@@ -1190,7 +1185,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const add = make('div', { className: 'gz-dash-add' });
     const area = make('div', { className: 'gz-dash-grid' });
     bar = make('div', { className: 'gz-dash-bar' }, !ultra && make('h2', { className: 'screenreader-only', textContent: t('Notes and widgets') }), hide, edit, reset, remind, hubBtn);
-    if (board === 'courses') { bar.id = 'gz-toolbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Glaze'); bar.addEventListener('keydown', escape); }
+    // A named group, not a toolbar: a toolbar promises arrow keys between its buttons, and Tab reaches each of these.
+    if (board === 'courses') { bar.id = 'gz-toolbar'; bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Glaze'); bar.addEventListener('keydown', escape); }
     const box = make('section', { id: 'gz-dash' }, ...(board === 'courses' ? [] : [bar]), area, add);
     if (board) box.dataset.board = board;
     box.setAttribute('aria-label', t(board === 'dash' ? 'Dashboard' : 'Notes and widgets'));
@@ -1525,6 +1521,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     hubBox?.remove();
     const s = ctx.settings();
     const set = (k, v) => { try { chrome.storage.sync.set({ version: 2, enhance: { ...ctx.settings().enhance, [k]: v } }); } catch { /* reloaded */ } };
+    // Dark documents is a choice of docPages (darkDocs is only read once, from an older Glaze): on as the documents'
+    // own button turns it on, dimmed, and off plain.
+    const isOn = (e, k) => (k === 'darkDocs' ? !!e && e.docPages !== 'plain' : !!e?.[k]);
     const close = () => hubBox?.close();
     const report = make('a', { className: 'gz-w-btn', textContent: t('Report a problem'), target: '_blank', rel: 'noopener noreferrer',
       href: W.feedback({ version: chrome.runtime.getManifest().version, ua: navigator.userAgent, lang: ctx.locale(), lms: ultra ? 'Blackboard Ultra' : 'Canvas' }) });
@@ -1536,15 +1535,15 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       make('p', { className: 'gz-w-faint', textContent: t('Switch any of these on or off. Everything runs on this device; the editor has the details.') }),
       ...(ultra ? HUB_ULTRA : HUB).map(([group, keys]) => make('fieldset', {}, make('legend', { textContent: t(group) }),
         ...keys.map((k) => {
-          const box = make('input', { type: 'checkbox', checked: !!s.enhance[k] });
+          const box = make('input', { type: 'checkbox', checked: isOn(s.enhance, k) });
           box.setAttribute('role', 'switch');
           box.dataset.key = k;
-          box.addEventListener('change', () => set(k, box.checked));
+          box.addEventListener('change', () => (k === 'darkDocs' ? set('docPages', box.checked ? 'dim' : 'plain') : set(k, box.checked)));
           return make('label', { className: 'gz-w-check' }, box, make('span', { textContent: t(EXTRA[k]) }));
         }))),
       make('footer', { className: 'gz-w-row' }, tourBtn, report, editor));
     hubBox.setAttribute('aria-labelledby', 'gz-hub-h');
-    const sync = (ch, a) => { if (a === 'sync' && ch.enhance) for (const b of hubBox.querySelectorAll('input[data-key]')) b.checked = !!ch.enhance.newValue?.[b.dataset.key]; };
+    const sync = (ch, a) => { if (a === 'sync' && ch.enhance) for (const b of hubBox.querySelectorAll('input[data-key]')) b.checked = isOn(ch.enhance.newValue, b.dataset.key); };
     try { chrome.storage.onChanged.addListener(sync); } catch { /* reloaded */ }
     hubBox.addEventListener('close', () => { try { chrome.storage.onChanged.removeListener(sync); } catch { /* reloaded */ } hubBox.remove(); hubBox = null; });
     hubBox.addEventListener('click', (e) => { if (e.target === hubBox) close(); });

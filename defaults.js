@@ -255,9 +255,9 @@ const cleanValue = (v, d, rule) => {
   if (rule === 'hexes') return Array.isArray(v) && v.length === 3 && v.every((c) => HEX.test(c)) ? v.map((c) => c.toLowerCase()) : [...d];
   if (rule === 'url') {
     if (v === '') return '';
-    // href, not the raw string: the parser percent-encodes quotes and strips newlines, so the value
-    // is safe inside the CSS url("…") content.js builds from it.
-    try { const u = typeof v === 'string' && v.length <= 2048 && new URL(v); return u && u.protocol === 'https:' ? u.href : d; } catch { return d; }
+    // href (no newlines), with no quote or backslash, which it keeps in a host or query: none ends
+    // the CSS url("…") content.js builds.
+    try { const u = typeof v === 'string' && v.length <= 2048 && new URL(v); return u && u.protocol === 'https:' && !/["\\]/.test(u.href) ? u.href : d; } catch { return d; }
   }
   if (typeof rule[0] === 'number') return typeof v === 'number' && v >= rule[0] && v <= rule[1] ? v : d;
   return rule.includes(v) ? v : d;
@@ -385,15 +385,21 @@ const GZ_ACTIVE_COLORS = (s, prefersDark, now = new Date()) => {
 };
 
 // ---- contrast ---------------------------------------------------------------------------------
-// [foreground, background, minimum ratio, what it is]. Text pairs need WCAG AA 4.5:1; the muted
-// and faint roles are secondary text and lines, held to 3:1.
+// [foreground, background, minimum ratio, what it is]. Text needs WCAG AA 4.5:1: the ink, the muted
+// ink (empty states, hints, placeholders), errors and the words on tonal buttons (the bright accent on
+// the tint). The faint ink draws field edges and the accent marks controls: 3:1, as outlines need.
 const GZ_CONTRAST_PAIRS = [
   ['--gz-ink', '--gz-surface', 4.5, 'Text on surface'],
   ['--gz-ink', '--gz-surface-2', 4.5, 'Text on ground'],
-  ['--gz-ink-muted', '--gz-surface', 3, 'Muted text on surface'],
+  ['--gz-ink-muted', '--gz-surface', 4.5, 'Muted text on surface'],
+  ['--gz-ink-muted', '--gz-surface-2', 4.5, 'Muted text on ground'],
+  ['--gz-ink-faint', '--gz-surface', 3, 'Faint text on surface'],
   ['--gz-ink-faint', '--gz-surface-2', 3, 'Faint text on ground'],
   ['--gz-accent', '--gz-surface', 3, 'Accent on surface'],
   ['--gz-accent-ink', '--gz-accent', 4.5, 'Text on accent'],
+  ['--gz-accent-hi', '--gz-accent-soft', 4.5, 'Bright accent on accent tint'],
+  ['--gz-err', '--gz-surface', 4.5, 'Error on surface'],
+  ['--gz-err', '--gz-surface-2', 4.5, 'Error on ground'],
 ];
 const GZ_CONTRAST = (colors) => GZ_CONTRAST_PAIRS.map(([fg, bg, min, label]) => {
   const ratio = GZC.contrast(colors[fg], colors[bg]);
@@ -537,7 +543,8 @@ const GZ_CANVAS_DUE_WEEK = (items, now) => (Array.isArray(items) ? items : [])
 // tenth of `t` toward the course. Contrast holds: a surface tint that costs text contrast the palette
 // had is dropped, and the accent moves toward the text until it reads on the surface and its own
 // text reads on it (in every preset, text on the accent is ground-like). A palette where that can't
-// work gets black or white text on the accent, one of which always clears 4.5:1.
+// work gets black or white text on the accent, one of which always clears 4.5:1. The bright accent
+// moves toward the text too, until it reads on the tint.
 const GZ_TINT = (colors, course, t) => {
   const m = GZC.mix;
   const ink = colors['--gz-ink'];
@@ -559,6 +566,7 @@ const GZ_TINT = (colors, course, t) => {
   const ok = () => reads('--gz-accent', '--gz-surface') && reads('--gz-accent-ink', '--gz-accent');
   for (let i = 0; i < 20 && !ok(); i++) out['--gz-accent'] = m(out['--gz-accent'], ink, 0.15);
   if (!ok()) out['--gz-accent-ink'] = GZC.contrast(out['--gz-accent'], '#000000') > GZC.contrast(out['--gz-accent'], '#ffffff') ? '#000000' : '#ffffff';
+  for (let i = 0; i < 20 && !reads('--gz-accent-hi', '--gz-accent-soft'); i++) out['--gz-accent-hi'] = m(out['--gz-accent-hi'], ink, 0.15);
   return out;
 };
 

@@ -84,8 +84,7 @@
   // Read everything first, write after: setting an attribute mid-loop invalidates layout and the
   // next getBoundingClientRect would force a reflow, once per element.
   // A full pass is O(elements) getComputedStyle calls, so only the first pass looks at everything;
-  // after that we only look at the subtrees the mutation observer reports.
-  // ponytail: 20k-element cap per pass; drop it if a real page ever needs one that big.
+  // after that we only look at the subtrees the mutation observer reports. A pass reads at most MAX_FULL.
   const MAX_FULL = 20000;
   // Thin, wide images in course content are decorative dividers drawn for a white page; on a dark
   // theme they glow. Their size is only known once loaded.
@@ -118,6 +117,11 @@
     for (const e of els) { liftable.delete(e); for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a); }
     const pending = [];
     const canvasInk = !ultra && new Map();
+    // A translucent colour as it shows over the palette's surface, or over the white page its author saw it on.
+    const ground = C.parse(palette['--gz-surface']), white = C.parse('#fff');
+    const over = (c, base = ground) => c && base && { r: c.r * c.a + base.r * (1 - c.a), g: c.g * c.a + base.g * (1 - c.a), b: c.b * c.a + base.b * (1 - c.a), a: 1 };
+    // canvas.css's highlight ink (#14181f) reads better there than the palette's.
+    const darkReads = (c) => C.contrast('#14181f', C.hex(c)) > C.contrast(palette['--gz-ink'], C.hex(c));
     for (const e of els) {
       if (e.tagName === 'IMG') {
         if (e.complete) tagRule(e);
@@ -146,15 +150,23 @@
         const fg = C.parse(colors.color);
         let fill = null, fillColor = null;
         if (!ultra && e.closest('.user_content')) {
-          // Keep an instructor's light coloured highlight, and only repair ink that cannot read on it.
-          // shortcut: opaque inline fills only; add compositing for translucent or gradient highlights when seen.
+          // Keep an instructor's light coloured highlight, and only repair ink that cannot read on it. Light is as they saw
+          // it, on white; what shows of a translucent one is over the surface, where it may be too dark for the highlight
+          // ink. Their light gradient is a fill too, grey or not (the light tag can't repaint it), at its darkest stop; a
+          // picture's colours are unknown (no fillColor), so it keeps the ink they saw on it.
           for (let p = e; p; p = p.parentElement) {
             const fillStyle = p === e ? cs : getComputedStyle(p);
             const authored = p.style.backgroundColor && C.parse(fillStyle.backgroundColor);
-            if (p.style.backgroundImage && fillStyle.backgroundImage !== 'none') break;
+            const image = p.style.backgroundImage && fillStyle.backgroundImage;
+            if (image && image !== 'none') {
+              const stops = image.includes('url(') ? [] : (image.match(/rgba?\([^)]*\)/g) || []).map(C.parse).filter(Boolean);
+              const darkest = stops.map((c) => over(c)).sort((a, b) => C.luminance(a) - C.luminance(b))[0];
+              if (stops.every((c) => C.luminance(over(c, white)) > 0.45) && (!darkest || darkReads(darkest))) { fill = p; fillColor = darkest || null; }
+              break;
+            }
             if (authored && authored.a > 0) {
-              if (authored.a === 1 && C.luminance(authored) > 0.45
-                && Math.max(authored.r, authored.g, authored.b) !== Math.min(authored.r, authored.g, authored.b)) { fill = p; fillColor = authored; }
+              if (C.luminance(over(authored, white)) > 0.45 && Math.max(authored.r, authored.g, authored.b) !== Math.min(authored.r, authored.g, authored.b)
+                && darkReads(over(authored))) { fill = p; fillColor = over(authored); }
               break;
             }
             if (p.classList.contains('user_content')) break;
@@ -168,8 +180,9 @@
               // On enable the stylesheet may still be loading; un-authored inherited ink becomes palette ink.
               if (p.classList.contains('user_content')) { inkColor = paletteInk; break; }
             }
-            const ink = `rgb(${['r', 'g', 'b'].map((k) => inkColor[k] * inkColor.a + fillColor[k] * (1 - inkColor.a)).join(', ')})`;
-            if (C.contrast(ink, C.hex(fillColor)) < 4.5) canvasInk.set(e, 'highlight');
+            // On a picture, the ink they saw on it: Canvas's own where they set none.
+            const ink = fillColor && `rgb(${['r', 'g', 'b'].map((k) => inkColor[k] * inkColor.a + fillColor[k] * (1 - inkColor.a)).join(', ')})`;
+            if (fillColor ? C.contrast(ink, C.hex(fillColor)) < 4.5 : inkColor === paletteInk) canvasInk.set(e, 'highlight');
           }
           const line = e.tagName === 'HR' && e.style.borderTopColor && C.parse(cs.borderTopColor);
           if (line && line.a === 1 && C.same(line, C.parse('#000'))) canvasInk.set(e, 'rule');
@@ -182,7 +195,7 @@
         // Instructor's dark colour (navy), links too: canvas.css lifts it.
         if (!ultra && fg?.a >= 0.5 && C.saturated(fg) && !onFill && hasText(e) && e.closest('.user_content')) {
           liftable.set(e, C.hex(fg));
-          if (C.contrast(C.hex(fg), palette['--gz-surface']) < 3) tags.push('data-gz-lift');
+          if (C.contrast(C.hex(fg), palette['--gz-surface']) < LIFT) tags.push('data-gz-lift');
         }
         if (!ultra && tags.includes('data-gz-dark') && !canvasInk.has(e)) canvasInk.set(e, '');
       }
@@ -196,12 +209,15 @@
     }
     for (const [e, tags] of pending) for (const a of tags) e.setAttribute(a, (!ultra && a === 'data-gz-dark' && canvasInk.get(e)) || '');
   };
-  // Instructor colours met by the sweep: a new dark palette re-checks only these.
-  const liftable = new Map();
-  const relift = () => { for (const [e, c] of liftable) if (!e.isConnected) liftable.delete(e); else e.toggleAttribute('data-gz-lift', C.contrast(c, palette['--gz-surface']) < 3); };
-  const sweepAll = () => {
-    const all = document.body.querySelectorAll('*');
-    if (all.length <= MAX_FULL) sweepEls(all);
+  // Instructor colours met by the sweep: a new dark palette re-checks only these. Lifted under text's 4.5:1.
+  const LIFT = 4.5, liftable = new Map();
+  const relift = () => { for (const [e, c] of liftable) if (!e.isConnected) liftable.delete(e); else e.toggleAttribute('data-gz-lift', C.contrast(c, palette['--gz-surface']) < LIFT); };
+  // A bigger page (a long discussion) goes MAX_FULL at a time in document order, a pass's throttle apart. A newer full
+  // pass, Glaze turned off, or a course tab's frame hidden (its reveal sweeps it all) ends the rest.
+  let fullRun = 0;
+  const sweepAll = (all = [...document.body.querySelectorAll('*')], run = ++fullRun) => {
+    sweepEls(all.slice(0, MAX_FULL));
+    if (all.length > MAX_FULL) setTimeout(() => { if (run !== fullRun || !observer) return; if (hid()) full = true; else sweepAll(all.slice(MAX_FULL), run); }, 150);
   };
   const sweepRoots = (roots) => {
     const els = [];
@@ -421,7 +437,6 @@
     if (full) { full = false; if (ultra) X.gate(document.body); sweepAll(); } else sweepRoots(roots);
     if (said) { tagExtras(all ? [document.body] : roots); wordsLate = false; } else wordsLate = true;
     // Every site runs the same list; what a site doesn't do is a default that does nothing (X).
-    themeEditors();
     if (tip && ultraTipShown()) hideTip();
     X.paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked || surfaceCourse() !== html.style.getPropertyValue('--gz-surface-course')) applySettings();
@@ -877,8 +892,7 @@
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.gz = key;
-    b.title = label;
-    b.setAttribute('aria-label', label);
+    b.title = label; // its name too: an aria-label as well made screen readers say it twice
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('aria-hidden', 'true');
@@ -957,10 +971,10 @@
   }
 
   // ---- footer ---------------------------------------------------------------------------------
-  // A full-width bar, top frame only. theme.css shrinks the app by --gz-footer-h so the bar sits
-  // below everything rather than over it.
+  // Full-width, top frame only, last in the page. theme.css shrinks the app by --gz-footer-h: the bar sits
+  // below everything, not over it.
   const syncFooter = () => {
-    const want = links.length && settings.footer && window.top === window && document.body;
+    const want = links.length && settings.footer && window.top === window && observer;
     const have = document.getElementById('gz-footer');
     if (want && !have) {
       const f = document.createElement('footer');
@@ -1128,10 +1142,9 @@
         b.setAttribute('aria-haspopup', 'dialog');
         b.setAttribute('aria-expanded', String(globalThis.GZ_COURSE_MENU?.cid() === cid));
         card.append(b);
-      } else if (b.getAttribute('aria-label') !== label) {
-        b.setAttribute('aria-label', label);
-        // While the pointer is on it, its title is in the tooltip (onTip).
-        if (b.dataset.gzTitle !== undefined) b.dataset.gzTitle = label; else b.title = label;
+      } else if ((b.dataset.gzTitle ?? b.title) !== label) {
+        // While the pointer is on it, its title is in the tooltip and its name an aria-label (onTip).
+        if (b.dataset.gzTitle === undefined) b.title = label; else { b.dataset.gzTitle = label; if (b.dataset.gzAria) b.setAttribute('aria-label', label); }
       }
     }
     globalThis.GZ_COURSE_MENU?.sync(on);
@@ -1311,7 +1324,6 @@
     if (!s.look.tooltips) hideTip();
     if (said) syncDocTools();
     syncScene();
-    themeEditors();
     armFlip();
   };
   // Scheduled dark's clock loads while a schedule is worn.
@@ -1331,52 +1343,14 @@
     attrs.clear();
   };
 
-  // ---- Canvas: the rich text editor's writing area ---------------------------------------------
-  // TinyMCE (discussion replies, text submissions, the inbox) writes in a same-origin iframe that it fills by script.
-  // The content script isn't injected there (about:blank, and the manifest doesn't ask for it), and canvas.css doesn't
-  // reach into it, so it would stay white. The page reaches in instead: the frame gets one small <style>, the palette's
-  // values copied from <html> (the --gz-* vars, color-scheme) and the few rules a writing area needs. It is rewritten
-  // on every sweep pass (a new editor is an added node), by applySettings (a palette change reaches an open editor),
-  // and on the frame's load, for a frame TinyMCE hadn't filled yet when the pass saw it. It is in the frame's <head>;
-  // what Canvas posts is the body's HTML, so none of it is saved. disable() calls this after dropping the links: it removes it.
-  // Canvas compares this default token to the selection's colour before deciding to save a foreground.
-  const EDITOR_CSS = `html, body.mce-content-body { --ic-brand-font-color-dark: var(--gz-ink) !important; background: var(--gz-surface) !important; color: var(--ic-brand-font-color-dark) !important; }
-body.mce-content-body { caret-color: var(--gz-accent); }
-body.mce-content-body[data-mce-placeholder]::before { color: var(--gz-ink-faint) !important; }
-body.mce-content-body a { color: var(--gz-accent); }
-body.mce-content-body blockquote { border-left: 3px solid var(--gz-accent); color: var(--gz-ink-muted); }
-body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-strong); }
-::selection { background: var(--gz-accent-soft); color: var(--gz-ink); }`;
-  const waiting = new WeakSet();
-  const themeEditors = () => {
-    if (ultra) return;
-    for (const frame of document.querySelectorAll('iframe.tox-edit-area__iframe')) {
-      let doc;
-      try { doc = frame.contentDocument; } catch { continue; }
-      let style = doc?.getElementById('gz-editor');
-      if (!links.length) { style?.remove(); continue; }
-      if (!doc?.body?.classList.contains('mce-content-body')) {
-        if (!waiting.has(frame)) { waiting.add(frame); frame.addEventListener('load', themeEditors, { once: true }); }
-        continue;
-      }
-      const css = `:root { ${[...vars].map((k) => `${k}: ${html.style.getPropertyValue(k)}`).join('; ')} }\n${EDITOR_CSS}`
-        + (darkTheme ? '\nbody.mce-content-body img:not(:hover) { filter: brightness(0.88); }' : '');
-      if (!style) {
-        style = doc.createElement('style');
-        style.id = 'gz-editor';
-        (doc.head || doc.documentElement).append(style);
-      }
-      if (style.textContent !== css) style.textContent = css;
-    }
-  };
-
   const enable = () => {
     if (notUltra) return;
     if (!links.length) {
       links = SHEETS.map((f) => {
         const l = (ultra && globalThis.GZ_SITE_ULTRA?.sheets?.shift()) || document.createElement('link');
-        // The tint reads the course color theme.css resolves: none before it loads.
-        l.addEventListener('load', () => { if (tintKey() !== tinted) reapply(); }, { once: true });
+        // The tint reads the course color theme.css resolves: none before it loads. A sweep already run read the page
+        // without this sheet (Canvas's ink on a quiz label it fills): one full pass again.
+        l.addEventListener('load', () => { if (tintKey() !== tinted) reapply(); if (observer) { full = true; if (!timer) timer = setTimeout(flush, 150); } }, { once: true });
         // Moving/reassigning an early Ultra sheet restarts its load and can release its render blocker.
         if (!l.isConnected) {
           l.rel = 'stylesheet';
@@ -1403,8 +1377,8 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       if (partIn) await partIn;
       if (!links.length) return;
       if (!on(settings)) return disable();
-      syncFooter();
       startSweep();
+      syncFooter();
       syncScene();
       moveParts();
     });
@@ -1430,7 +1404,6 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     X.syncRemind();
     X.syncSyl();
     X.syncInsights();
-    themeEditors();
     syncPageFade();
     stopScene();
     stopSweep();

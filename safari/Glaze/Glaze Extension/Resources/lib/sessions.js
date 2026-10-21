@@ -47,7 +47,10 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
     return { get: (s, k) => tx(s, 'readonly', (o) => o.get(k)), all: (s) => tx(s, 'readonly', (o) => o.getAll()),
       put: (s, k, v) => tx(s, 'readwrite', (o) => o.put(v, k)), del: (s, k) => tx(s, 'readwrite', (o) => o.delete(k)) };
   };
-  const make = ({ local, sync, notes, db = database(), enqueue = (f) => f(), fetch, WebSocket, relay = C.SERVER, dev = false, permission = (server) => chrome.permissions.contains({ origins: [server + '/*'] }), now = Date.now, offerLook = async () => false, notify = () => {}, healthTimeout = 5000 }) => {
+  // enqueue: a turn of the storage broker's queue, for reading and writing what other features keep too (Notes, To Do,
+  // the Look, media). serial: the sessions' own queue, where the worker runs handle() too: one operation at a time. The
+  // relay is asked there, never in a broker turn, so a slow relay holds up sharing alone.
+  const make = ({ local, sync, notes, db = database(), enqueue = (f) => f(), serial = (f) => f(), fetch, WebSocket, relay = C.SERVER, dev = false, permission = (server) => chrome.permissions.contains({ origins: [server + '/*'] }), now = Date.now, offerLook = async () => false, notify = () => {}, healthTimeout = 5000 }) => {
     check(dev || relay === C.SERVER, 'bad');
     let live = new Map(), ctl = new AbortController(), ports = 0, timer = 0, scheduled = false, generation = 0;
     const save = async (r) => { check(JSON.stringify(r).length <= LIMIT.state, 'big'); await db.put('sessions', r.st.sid, r); };
@@ -106,7 +109,8 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
       }
       return { sources: out.slice(0, 3000), partial: out.length > 3000, accounts: Object.keys(got).filter((k) => N.KEY.test(k) || T.STORE_KEY.test(k)) };
     };
-    const readLocal = async (r, c) => {
+    // In a broker turn. Uploads wait in `files` for the caller to run after it, in order.
+    const readLocal = async (r, c, files) => {
       const v = c.view(), b = r.bind;
       if (!b || !r.st.seed || r.st.gone) return v;
       const out = Object.fromEntries(Object.entries(v).filter(([id]) => id.startsWith('_m_')));
@@ -121,15 +125,15 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
         if (h) {
           const e = 'f_media', old = await db.get('files', fileKey(r, e));
           let ref = old?.h === h ? old.ref : null;
-          if (!ref) {
-            const f = await media().read(local, h);
+          const f = !ref && await media().read(local, h);
+          if (f && old?.h !== h) await cacheFile(r, e, { bytes: f.bytes, name: 'media', type: f.mime, kind: 'file', h });
+          files.push(async () => {
             if (f) {
-              if (old?.h !== h) await cacheFile(r, e, { bytes: f.bytes, name: 'media', type: f.mime, kind: 'file', h });
               ref = { ...await c.put(f.bytes), n: 'media', t: f.mime };
               await db.put('files', fileKey(r, e), { ...await db.get('files', fileKey(r, e)), ref });
             }
-          }
-          if (ref) out[e] = { file: ref };
+            if (ref) out[e] = { file: ref };
+          });
         }
       } else if (r.kind === 'notes') {
         const stored = await local.get(b.key); check(Object.hasOwn(stored, b.key));
@@ -154,13 +158,17 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
             const data = N.unb64(f.data); bytes += data.length; check(bytes <= LIMIT.files, 'full');
             const old = await db.get('files', fileKey(r, e));
             if (!old) await cacheFile(r, e, { bytes: data, name: f.name, type: f.type, kind: f.kind, note: entity });
-            // Files are immutable in Notes. An upload is done once, before its reference is published.
-            let ref = v[e]?.file || old?.ref;
-            if (!ref) ref = { ...await c.put(data), n: f.name, t: f.type };
-            const kept = await db.get('files', fileKey(r, e));
-            if (!v[e]?.file && kept.ref?.h !== ref.h) await db.put('files', fileKey(r, e), { ...kept, ref });
-            if (!v[e]?.file) { b.hashes ||= {}; b.hashes[canonical] = JSON.stringify(ref); }
-            out[e] = { file: ref };
+            // Files are immutable in Notes. An upload is done once, before its reference is published; only the bytes
+            // of a file without one wait for it.
+            const up = v[e]?.file || old?.ref ? null : { data, n: f.name, t: f.type };
+            files.push(async () => {
+              const kept = await db.get('files', fileKey(r, e));
+              let ref = v[e]?.file || kept.ref;
+              if (!ref) ref = { ...await c.put(up.data), n: up.n, t: up.t };
+              if (!v[e]?.file && kept.ref?.h !== ref.h) await db.put('files', fileKey(r, e), { ...kept, ref });
+              if (!v[e]?.file) { b.hashes ||= {}; b.hashes[canonical] = JSON.stringify(ref); }
+              out[e] = { file: ref };
+            });
           }
         }
       } else {
@@ -171,8 +179,16 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
           if (task) out[entity] = { task: { ...task, id: entity, cid: '' }, plan: d.items[`task:${id}`] || {} };
         }
       }
-      check(Object.keys(out).length <= LIMIT.items * 3, 'big');
       return out;
+    };
+    // What a bound session's apply writes over, as stored: its notes' index entries, or its tasks and their plans.
+    const held = async (r) => {
+      const b = r.bind;
+      if (!b || r.kind === 'look') return '';
+      const stored = (await local.get(b.key))[b.key], ids = Object.values(b.map);
+      if (r.kind === 'todo') { const d = T.clean(stored); return JSON.stringify(ids.map((id) => [d.tasks.find((x) => x.id === id), d.items[`task:${id}`]])); }
+      const idx = N.clean(stored);
+      return JSON.stringify(ids.map((id) => idx.notes[id]));
     };
     const keepFiles = async (r, c) => {
       let bytes = 0;
@@ -238,13 +254,19 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
       if (r.st.gone || !await allowed(r.st.server) || signal.aborted) return;
       const c = client(r);
       const current = () => check(!signal.aborted, 'off');
+      let seen;
       try {
         if (r.st.seed && r.st.type && now() - (c.view()[`_m_${r.st.actor}`]?.member?.at || 0) >= 60000) {
           const v = c.view(); v[`_m_${r.st.actor}`] = { member: { name: r.name || '…', at: now() } };
           await c.edit(v); current(); await save(r);
         }
         // Persist edits before sending. Failed local reads never turn into an empty shared view.
-        if (r.bind && r.st.seed) { const e = await c.edit(await readLocal(r, c)); current(); check(!e.big.length, 'big'); await save(r); }
+        if (r.bind && r.st.seed) {
+          const files = [], view = await enqueue(async () => { current(); const out = await readLocal(r, c, files); seen = await held(r); return out; });
+          for (const put of files) await put();
+          check(Object.keys(view).length <= LIMIT.items * 3, 'big');
+          const e = await c.edit(view); current(); check(!e.big.length, 'big'); await save(r);
+        }
         const result = await c.sync();
         current();
         check(Object.keys(c.view()).length <= LIMIT.items * 3, 'big');
@@ -257,13 +279,22 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
             v[id] = { file: { ...await c.put(f.bytes), n: f.name, t: f.type } };
             await db.put('files', fileKey(r, id), { ...f, ref: v[id].file });
           }
-          await c.edit(v); current(); await save(r); await c.sync(); current();
+          // Saved below with what the syncs received: a dropped round leaves none of it on disk.
+          await c.edit(v); current(); await c.sync(); current();
         }
         await keepFiles(r, c);
         current();
         // Persist received data before touching the local apps. Reopening retries a failed apply.
         r.status = result.gone ? 'gone' : result.more || result.bad ? 'incomplete' : 'live';
-        r.at = now(); await save(r); current(); await apply(r, c, current); current(); await save(r);
+        r.at = now();
+        await enqueue(async () => {
+          current();
+          // A write to what this session shares landed while the relay was asked. Applying now would put back what was
+          // read before it, so the round is dropped as an aborted one is: nothing received is kept, and the next round
+          // (that write's) sends it first and gets the same changes again.
+          if (seen !== undefined && await held(r) !== seen) return;
+          await save(r); current(); await apply(r, c, current); current(); await save(r);
+        });
       } catch (e) { if (signal.aborted) return; r.status = 'offline'; r.error = ['big', 'full', 'missing', 'storage', 'off'].includes(e.message) ? e.message : 'network'; await save(r); }
       notify();
     };
@@ -279,13 +310,13 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
         if (!ports || mine !== generation) return;
         if (!await allowed(server) || mine !== generation || !ports) continue;
         const sids = rs.filter((r) => !r.st.gone && r.st.server === server).map((r) => r.st.sid);
-        live.set(server, C.live(server, sids, (m) => enqueue(async () => {
+        live.set(server, C.live(server, sids, (m) => serial(async () => {
           if (mine !== generation || !ports || !await allowed(server)) return;
           const r = await db.get('sessions', m.s); if (r?.st.server === server && mine === generation) await update(r);
         }).catch(() => {}), { WebSocket }));
       }
       // Presence is a last-seen device list, not an account identity or an access-control list.
-      if (mine === generation && ports) timer = setTimeout(() => enqueue(refresh).catch(() => {}), 60000);
+      if (mine === generation && ports) timer = setTimeout(() => serial(refresh).catch(() => {}), 60000);
     };
     const brief = (r) => ({ sid: r.st.sid, server: r.st.server, title: r.title, kind: r.kind, edit: !!r.st.seed, creator: !!r.st.del, expire: !!r.st.expire,
       status: r.st.gone ? 'gone' : r.st.pending.length ? 'pending' : r.status || 'offline', error: r.error, at: r.at || 0, bound: !!r.bind,
@@ -295,11 +326,12 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
       items: Object.entries(C.view(r.st)).filter(([, v]) => v.html !== undefined || v.task || v.code).map(([id, v]) => ({ id, title: v.title || v.task?.title || r.title })) });
     const handle = async (m) => {
       const mine = generation, current = () => check(mine === generation, 'off');
-      if (m.op === 'notesRead' || m.op === 'notesGetFile') {
+      // Operations on Notes, To Do or media take a broker turn whole, as those features' own writes do.
+      if (m.op === 'notesRead' || m.op === 'notesGetFile') return enqueue(async () => {
         check(N.KEY.test(m.key) && Object.hasOwn(await local.get(m.key), m.key), 'bad');
         return N.run({ key: m.key, op: m.op === 'notesRead' ? 'load' : 'getFile', id: m.id }, { local }, notes);
-      }
-      if (m.op === 'notesFile' || m.op === 'notesImport') {
+      });
+      if (m.op === 'notesFile' || m.op === 'notesImport') return enqueue(async () => {
         check(N.KEY.test(m.key) && Object.hasOwn(await local.get(m.key), m.key), 'bad');
         if (m.op === 'notesFile') return N.run({ ...m.file, key: m.key, op: 'file' }, { local }, notes);
         check(typeof m.json === 'string' && m.json.length <= (16 << 20), 'big');
@@ -310,7 +342,7 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
           check(r.ok); done += r.done; skipped += r.skipped;
         }
         return { ok: true, done, skipped };
-      }
+      });
       // m.scope (set only by the worker, from a Notes share panel's ticket): that one Notes account and note.
       if (m.op === 'list') {
         const out = { ok: true, on: await enabled(), relay: await selected(), defaultRelay: C.SERVER, hosts: await hosts(), name: str((await local.get('shareName')).shareName, 60) || '', sessions: (await all()).map(brief), ...await sources() };
@@ -406,7 +438,7 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
         for (const f of await db.all('files')) if (f.sid === r.st.sid) await db.del('files', fileKey(r, f.entity));
         await refresh(); return { ok: true };
       }
-      if (m.op === 'attach') {
+      if (m.op === 'attach') return enqueue(async () => {
         check(!r.bind && ['notes', 'todo'].includes(r.kind) && (r.kind === 'notes' ? N.KEY : T.STORE_KEY).test(m.key), 'bad');
         check(Object.hasOwn(await local.get(m.key), m.key), 'bad');
         r.bind = { key: m.key, map: {}, files: {} }; await save(r); await apply(r, client(r));
@@ -415,8 +447,8 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
           r.copy = { key: m.key, notes: Object.values(r.bind.map) }; r.bind = null;
         }
         await save(r); return { ok: true };
-      }
-      if (m.op === 'useLook') {
+      });
+      if (m.op === 'useLook') return enqueue(async () => {
         check(r.kind === 'look', 'bad');
         const code = C.view(r.st).look?.code; check(code, 'bad');
         const got = await L.decode(code);
@@ -424,7 +456,7 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
         const wanted = got.parts?.x?.bg?.media, h = media().fileOf(wanted?.src), f = h && await db.get('files', fileKey(r, 'f_media'));
         if (f?.bytes && !await media().read(local, h)) await media().change({ op: 'put', kind: wanted.type, expect: h, b64: media().std(f.bytes) }, { local });
         check(await offerLook(code, r.title)); return { ok: true };
-      }
+      });
       check(await allowed(r.st.server), 'off');
       current();
       if (m.op === 'delete') { await client(r).remove(); r.status = 'gone'; await save(r); await refresh(); }
@@ -441,8 +473,10 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
       return { site: new URL(key.slice(9)).origin, folders: N.folderList(idx).map(([id, f]) => ({ id, ...f })),
         notes: N.list(idx).map(([id, n]) => ({ id, ...n })), files: [], keys: await keys() };
     };
-    return { handle, backupNotes, keys, stop, changed: () => { if (!ports || scheduled) return; const mine = generation; scheduled = true; enqueue(() => mine === generation && refresh()).catch(() => {}).finally(() => { scheduled = false; }); },
-      connect: () => { ports++; const mine = generation; enqueue(() => mine === generation && refresh()).catch(() => {}); return () => { ports = Math.max(0, ports - 1); if (!ports) stop(); }; } };
+    // Changes share one waiting refresh. Once it starts, the next change asks for another: a write can land while it
+    // waits on the relay, and that refresh sends it.
+    return { handle, backupNotes, keys, stop, changed: () => { if (!ports || scheduled) return; const mine = generation; scheduled = true; serial(() => { scheduled = false; return mine === generation && refresh(); }).catch(() => {}); },
+      connect: () => { ports++; const mine = generation; serial(() => mine === generation && refresh()).catch(() => {}); return () => { ports = Math.max(0, ports - 1); if (!ports) stop(); }; } };
   };
   return { LIMIT, database, make };
 })();

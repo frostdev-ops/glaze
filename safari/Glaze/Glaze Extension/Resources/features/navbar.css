@@ -15,6 +15,8 @@
   color: var(--gz-ink, #e8f2fa);
 }
 :host([hidden]) { display: none; }
+/* Printed, the page is the site's own: the bar (the phone's on every sheet, the Skip link) is for the screen. */
+@media print { :host { display: none !important; } }
 :host([data-replaced]) :is(.rail, .topbar, .tsub, .tabs, .menu, .tip, .sheet, .skip) { visibility: hidden !important; pointer-events: none; }
 * { box-sizing: border-box; }
 svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -60,6 +62,10 @@ a { color: inherit; text-decoration: none; }
 .brand small, .account small { font-size: 12px; color: var(--gz-ink-muted, #8fa8c0); overflow: hidden; text-overflow: ellipsis; }
 
 .list { position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: hidden auto; scrollbar-width: none; }
+/* No scrollbar: on a short window the list fades at the edge it goes on past (navbar.js), as the top bar's course tabs do. */
+.list[data-scroll~="end"] { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); }
+.list[data-scroll~="start"] { -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to top, #000 calc(100% - 28px), transparent); }
+.list[data-scroll~="start"][data-scroll~="end"] { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
 .group { display: contents; }
 .group-label { padding: 10px 14px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted, #8fa8c0); }
 .rail:not([data-open]) .group-label { visibility: hidden; height: 0; padding: 0; }
@@ -370,6 +376,22 @@ a.widget[aria-disabled="true"] { cursor: default; }
   .swidgets .widget:is([data-w="next"], [data-w="timer"]) { grid-column: 1 / -1; }
   :host([data-dock]) .dock { inset-inline: 8px; top: auto; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); width: auto; animation-name: gz-nb-panel-up; }
   :host([data-dock][data-footer]) .dock { bottom: calc(92px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)); }
+}
+/* A window this short (a phone on its side, a page zoomed to 400%) keeps little of itself under the bar: the bar sits
+   closer to the bottom and its tabs are shorter, 64px from the bottom instead of 84px (the footer goes too, theme.css). */
+@media (max-width: 899.98px) and (max-height: 420px) {
+  .tabs { bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+  :host([data-footer]) .tabs { bottom: calc(6px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)); }
+  .tab, .pill { height: 44px; }
+  .tab { gap: 1px; }
+  .tab svg { width: 20px; height: 20px; }
+}
+
+/* ---- forced colours (Windows High Contrast): fills and shadows are dropped, so where you are and what is pressed are
+   drawn in the system's Highlight ---- */
+@media screen and (forced-colors: active) {
+  .ind, .tind, .pill, :is(.chip, .row, .tsub .item)[aria-current="page"], .pin[aria-pressed="true"] { border: 2px solid Highlight; }
+  .ind::before, .tind::after { forced-color-adjust: none; background: Highlight; }
 }
 
 /* ---- motion: off, and the student's reduced motion ---- */

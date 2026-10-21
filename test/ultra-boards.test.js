@@ -905,6 +905,31 @@ test('a keep-clear strip inserted after floats mount is measured on the next con
   assert.equal(px(p.tile('notes').style.top), 94 + W.EDGE, 'removed strip releases its room without saving the layout');
 });
 
+test("floats keep clear of Glaze's own bar: the rail's or top bar's room, and the bottom bar on a phone", async () => {
+  const p = page({ at: 'dash', local: { widgetLayout: { tiles: [{ id: 'notes', on: true, float: true, x: 0, y: 0 }] } } });
+  // Glaze's bar on: Ultra's drawer has no width, and the page keeps the bar's room (theme.css, from navbar.js's words).
+  p.doc.querySelector('.MuiDrawer-paper').box = { left: 0, top: 0, width: 0, height: 900 };
+  const room = { '--gz-navbar-left': '96px', '--gz-navbar-top': '0px' };
+  p.c.getComputedStyle = (e) => ({ getPropertyValue: (k) => (e === p.doc.root ? room[k] || '' : '') });
+  p.ui.sync(true);
+  await settle();
+  assert.equal(px(p.tile('notes').style.left), 96 + W.EDGE, 'right of the rail, its header clear of it');
+  assert.equal(px(p.tile('notes').style.top), W.EDGE);
+  Object.assign(room, { '--gz-navbar-left': '0px', '--gz-navbar-top': '80px' });
+  p.ui.sync(true);
+  assert.deepEqual([px(p.tile('notes').style.left), px(p.tile('notes').style.top)], [W.EDGE, 80 + W.EDGE], 'under the top bar');
+  assert.equal(p.wrote.length, 0, 'no geometry saved just to fit');
+  // A phone: the bar along the window's bottom (its shadow root's bottom bar); stacked tiles end above it.
+  const q = page({ at: 'dash', width: 390, local: { widgetLayout: { tiles: [{ id: 'notes', on: true, float: true, x: 0, y: 0 }] } } });
+  const host = q.doc.createElement('div'); host.id = 'gz-navbar'; q.doc.body.prepend(host);
+  const bar = q.doc.createElement('nav'); bar.className = 'tabs'; bar.box = { left: 12, top: 784, width: 366, height: 70 };
+  host.attachShadow({ mode: 'open' }).append(bar);
+  q.ui.sync(true);
+  await settle();
+  assert.equal(q.floats().hasAttribute('data-stack'), true);
+  assert.equal(q.floats().style.getPropertyValue('--gz-float-bottom'), `${900 - 784 + W.EDGE}px`, 'the stack ends above the bar');
+});
+
 
 test('landing works before the lazy widgets schema reaches content settings, and only follows a same-origin nav link', async () => {
   const p = page({ sync: { widgets: { land: true } }, path: '/ultra/stream' });

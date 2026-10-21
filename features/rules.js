@@ -6,6 +6,7 @@
 // no rules for this LMS, sync() takes everything back off. Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_RULES = globalThis.GZ_RULES || (() => {
   const ctx = globalThis.GZ_CTX;
+  if (!ctx) return null; // a frame-only injection can outlive its document
   const html = document.documentElement;
   const libs = () => Promise.all([ctx.need('lib/parts.js', () => globalThis.GZ_PARTS), ctx.need('lib/lookx.js', () => globalThis.GZ_LX)]);
   // Rules stay off whole quiz and tool routes, including their overview and entry pages.

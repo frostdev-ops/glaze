@@ -46,7 +46,7 @@ NEW IN 3.0
 • Search inside your courses with Ctrl+K (⌘K on a Mac), and hide folders you don't use.
 • Restyle Blackboard's navigation: logo, sizes and spacing, reordered or hidden items, and your own links.
 • Moodle: the same Looks, plus your course total on each course card, what's due this week and keyboard shortcuts.
-• A settings editor in eight tabs, with search and a live preview at desktop or phone widths.
+• A settings editor in ten tabs, with search and a live preview at desktop or phone widths.
 
 YOUR LOOK
 

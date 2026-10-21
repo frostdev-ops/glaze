@@ -2,6 +2,7 @@
 // shortcut: cold local pictures start with their fill; revisit if their first paint must block.
 var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const X = globalThis.GZ_CTX;
+  if (!X) return null; // a frame-only injection can outlive its document
   // Canvas and Moodle use the rail for a Look's nav layout or mods' widgets; the worker loads lib/nav*.js with this file.
   const rail = typeof GZ_NAV !== 'undefined' ? GZ_ULTRA_RAIL(X) : null;
   let reading = '', loaded = null, toggle = null;

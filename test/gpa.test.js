@@ -48,6 +48,9 @@ test('terms in time order, whatever the naming', () => {
   assert.deepEqual(got, ['Automne 2022', '2023 Semester 1', 'My first term', '2023 Semester 2', 'Fall 2024', 'Winter 2025', 'Spring 2025', 'Summer 2025', 'Sommersemester 2025', 'Wintersemester 2025/26']);
   // A name without a year stays after the term before it.
   assert.deepEqual(G.order([{ n: 'Fall 2024' }, { n: 'Extra' }, { n: 'Spring 2024' }]).map((t) => t.n), ['Spring 2024', 'Fall 2024', 'Extra']);
+  // Named by academic year: its fall, then its winter, spring and summer, before the next year's fall.
+  const years = ['2024-2025 Fall Semester', '2023-2024 Summer Session', '2023-2024 Spring Semester', '2023-24 Winter Quarter', '2023-2024 Fall Semester'];
+  assert.deepEqual(G.order(years.map((n) => ({ n }))).map((t) => t.n), ['2023-2024 Fall Semester', '2023-24 Winter Quarter', '2023-2024 Spring Semester', '2023-2024 Summer Session', '2024-2025 Fall Semester']);
 });
 
 test('the cumulative GPA term by term', () => {
@@ -204,6 +207,22 @@ test('a course row is a course whatever its title says; the review checks the cr
   const s = G.parse('Fall 2025\nBIO 101 Biology 3 A\nQuality Points 12.00 A\nTerm Totals 3.00 3.00 12.00')[0];
   assert.deepEqual(s.c.map((c) => c.n), ['BIO 101 Biology']);
   assert.deepEqual(s.printed, [3, 3, 12]);
+});
+
+test('credits attempted and earned side by side: a failed course counts the credits attempted, a withdrawal those earned', () => {
+  const t = G.parse(['Fall 2024', 'MATH 1210 Calculus I 4.000 4.000 A 16.000', 'CHEM 1210 General Chemistry 4.000 0.000 F 0.000',
+    'ENGL 1010 Writing 3.000 3.000 B 9.000', 'HIST 1700 American Civilization 3.000 0.000 W 0.000', 'Term GPA 2.27 Term Totals 11.000 7.000 25.000'].join('\n'))[0];
+  assert.deepEqual(t.c, [{ n: 'MATH 1210 Calculus I', cr: 4, g: 'A' }, { n: 'CHEM 1210 General Chemistry', cr: 4, g: 'F' },
+    { n: 'ENGL 1010 Writing', cr: 3, g: 'B' }, { n: 'HIST 1700 American Civilization', cr: 0, g: 'W' }]);
+  assert.deepEqual(t.c.map(G.why), [null, null, null, 'w'], 'the F counts; the withdrawal is still left out');
+  assert.deepEqual(G.check(t), { gpa: true, mine: 25 / 11, credits: true, all: 11 });
+});
+
+test('a term heading in capitals is a term, not a course code; a course numbered like a year is still a course', () => {
+  const t = G.parse(['FALL 2024', 'MATH 2010 Calculus I 4 A', "WS 2000 Intro to Women's Studies 3 B", 'SPRING TERM 2025', 'ENGL 1010 Writing 3 A',
+    'WS 2025/26', 'INFO 1100 Programmierung 5 A'].join('\n'));
+  assert.deepEqual(t.map((x) => [x.n, x.c.map((c) => c.n)]), [['FALL 2024', ['MATH 2010 Calculus I', "WS 2000 Intro to Women's Studies"]],
+    ['SPRING TERM 2025', ['ENGL 1010 Writing']], ['WS 2025/26', ['INFO 1100 Programmierung']]]);
 });
 
 test('a transcript as an HTML table, through lib/doctext.js', () => {

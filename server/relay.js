@@ -442,9 +442,15 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       : m[2] === 'expiry' ? req.method === 'POST' && 'expiry' : { GET: 'read', POST: 'append', DELETE: 'delete' }[req.method];
     if (!kind) return send(res, m ? 405 : 404, { error: m ? 'method' : 'unknown' });
     if (!take(ip, kind === 'read' || kind === 'getBlob' ? 'read' : 'write')) return send(res, 429, { error: 'rate' });
+    const sid = m[1];
+    // A body is held whole until it is in, so what would be refused whatever it carried is refused before it is read:
+    // an unknown or deleted share, or a file without a signature, costs no memory.
+    const known = q.get.get(sid);
+    if (!known) return send(res, 404, { error: 'unknown' });
+    if (known.gone) return send(res, 410, { error: 'gone' });
+    if (kind === 'putBlob' && !sigOf(req.headers['x-glaze-sig'])) return send(res, 400, { error: 'bad' });
     // The body first, then the session as it is once the body is in: other requests may have changed it meanwhile.
     const b = kind === 'putBlob' ? await raw(req, limit.blob) : ['append', 'trim', 'expiry'].includes(kind) ? await json(req) : null;
-    const sid = m[1];
     const row = q.get.get(sid);
     if (!row) return send(res, 404, { error: 'unknown' });
     if (row.gone) return send(res, 410, { error: 'gone' });
@@ -458,14 +464,15 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       // server restored from an older backup from the one it read.
       const at = after > row.base ? q.at.get(sid, after)?.sig : after === row.base && after > 0 ? row.base_sig : null;
       const out = { head: row.head, base: row.base, at: at ? Buffer.from(at).toString('base64url') : null, ops: [], more: false };
-      let size = 0;
-      const rows = q.page.all(sid, Math.max(after, row.base));
-      for (const o of rows) {
+      let size = 0, seen = 0;
+      // Row by row, so a page stops reading where it is full: a session can hold far more than one page.
+      for (const o of q.page.iterate(sid, Math.max(after, row.base))) {
+        seen++;
         if (size + o.op.length > limit.page && out.ops.length) { out.more = true; break; }
         out.ops.push({ n: o.n, op: Buffer.from(o.op).toString('base64url'), sig: Buffer.from(o.sig).toString('base64url') });
         size += o.op.length;
       }
-      if (!out.more && rows.length === 1000) out.more = true;
+      if (!out.more && seen === 1000) out.more = true;
       if (!take(ip, 'down', size)) return send(res, 429, { error: 'rate' });
       return send(res, 200, out);
     }
