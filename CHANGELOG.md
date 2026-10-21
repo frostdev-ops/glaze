@@ -4,6 +4,12 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.3] — 2026-10-20
+
+### Fixed
+
+- Layouts, pets and other saved changes work again after installing over a Dashboard layout kept from an earlier version. The new-install setup no longer stops on that layout and blocks every save.
+
 ## [3.3.2] — 2026-10-20
 
 ### Fixed
