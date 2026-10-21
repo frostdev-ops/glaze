@@ -18,7 +18,8 @@ const rig = () => {
     hasAttribute(k) { return this.attrs.has(k); },
     closest(selector) {
       for (let p = this; p; p = p.parentNode) {
-        if (selector.includes('.bb-offcanvas-panel') && p.name === 'screen' || selector.includes('.course-content-container') && p.name === 'course') return p;
+        if (selector.includes('.bb-offcanvas-panel') && p.name === 'screen' || selector.includes('.course-content-container') && p.name === 'course'
+          || selector.includes('.routed-page') && p.name === 'routed') return p;
       }
       return null;
     },
@@ -57,6 +58,10 @@ test('a mod background uses the same full course surface', () => {
 test('a standalone item panel covers the underlying course instead of sharing its backdrop', () => {
   const r = rig(), item = r.element('item', r.course); r.c.layers = [r.outline, item]; r.c.placeScene();
   assert.equal(r.c.sceneCanvas.parentNode, item);
+});
+test('a routed discussion covers its full-width page shell, not just the clipped panel beside the navbar', () => {
+  const r = rig(), routed = r.element('routed', r.body), panel = r.element('panel', routed); r.c.layers = [panel]; r.c.placeScene();
+  assert.equal(r.c.sceneCanvas.parentNode, routed);
 });
 test('base pages and other LMSs keep the body backdrop', () => {
   const r = rig(); r.c.layers = []; r.c.placeScene(); assert.equal(r.c.sceneCanvas.parentNode, r.body);

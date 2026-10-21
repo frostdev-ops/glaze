@@ -1,4 +1,4 @@
-process.env.TZ = 'UTC'; // a few calls leave the zone to the machine, and the fixtures' days are UTC days
+// Class schedule import (lib/classes.js): the meeting-time reader, whole registrar documents in the formats students copy
 // or save (Banner, PeopleSoft, Workday, plain lists, timetables in Glaze's other languages), .ics calendars, matching to
 // Canvas courses, what's kept and the worker's writes, and the classes on a day, as reminders and as an export.
 // Every sample here was written for this test in the shape of a real system's output; none is a real student's.
@@ -268,17 +268,19 @@ test('HTML and Word files go through lib/doctext.js to the same reader', async (
 // Codex W14 review: the date reader compared every date with every other one (2,000 dates: ~2M comparisons; 8,000:
 // ~32M). Every step is linear now, and the text has caps. Measured on an M5 Pro: 60,000 dates took the old reader
 // 2,920 ms and take 42 ms now; 20,000 meetings on one line 3,428 ms and 143 ms. The budgets leave room for a busy machine.
-// They count this process's CPU time, not the clock's: on a shared CI runner the other test files and the host take turns
-// on the CPU, which stretched 20,000 meetings past two seconds of wall time without the reader doing any more work.
+// They count this thread's CPU time, not the clock's: on a shared CI runner the other test files and the host take turns
+// on the CPU, which stretched 20,000 meetings past two seconds of wall time without the reader doing any more work. Even
+// CPU time grows on a crowded machine (caches, memory): on a slow container 20,000 meetings took 380 ms alone and 850 ms
+// with seven other copies running, so their budget is 2 seconds, still well under the old reader's 3,428 ms.
 test('big or hostile input stays fast: thousands of dates, times and days on one line, and a capped paste', () => {
-  const cpu = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
+  const cpu = () => { const { user, system } = process.threadCpuUsage(); return (user + system) / 1000; };
   const time = (f) => { const t0 = cpu(); const r = f(); return [r, cpu() - t0]; };
   const dates = '08/24/2026 '.repeat(60000); // 660 KB of dates, under the 1 MB cap
   const [r1, ms1] = time(() => C.fromText(dates, { now: NOW }));
   assert.ok(ms1 < 1000, `60,000 dates: ${Math.round(ms1)} ms`);
   assert.deepEqual(r1.entries, []);
   const [, ms2] = time(() => C.meetings('MWF 9:00-9:50am Room 1 '.repeat(20000))); // one 460 KB line straight to meetings()
-  assert.ok(ms2 < 1000, `20,000 meetings on a line: ${Math.round(ms2)} ms`);
+  assert.ok(ms2 < 2000, `20,000 meetings on a line: ${Math.round(ms2)} ms`);
   const [, ms3] = time(() => C.meetings('M T W R F 9 - '.repeat(6000)));
   assert.ok(ms3 < 1500, `days and bare numbers: ${Math.round(ms3)} ms`);
   const lines = Array.from({ length: 30000 }, (_, i) => `CS ${100 + (i % 900)} Course ${i} MWF 9:00-9:50am Room ${i} Aug 24 - Dec 11, 2026`).join('\n'); // ~2.2 MB
