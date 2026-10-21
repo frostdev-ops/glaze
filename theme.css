@@ -430,10 +430,11 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap .panel-header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: none !important; }
 /* Item titles keep one surface behind the whole band, as the nearby content panels do. */
 #site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
+  .base-header, .course-groups-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"],
   .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
   document-panel-react [class*="makeStylespanelHeaderContainerRoot-"],
-  .announcement-detail-panel .panel-header.simple-header) {
+  .bb-offcanvas-panel.full .panel-header.simple-header) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
   backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
@@ -441,7 +442,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
   box-shadow: var(--gz-rest-shadow) !important;
 }
 #site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
-  .announcement-detail-panel .panel-header.simple-header) :is(.panel-title, .editable-title-container) { background: transparent !important; }
+  .bb-offcanvas-panel.full .panel-header.simple-header) :is(.panel-title, .editable-title-container) { background: transparent !important; }
 #site-wrap .reply-form, #site-wrap .new-comment, #site-wrap .bb-editor-root, #site-wrap .bb-editor-container, #site-wrap .editor-content-container, #site-wrap .ql-editor, #site-wrap .ql-container, #site-wrap .ql-toolbar, #site-wrap bb-message, #site-wrap .message-body, #site-wrap .comments { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 #site-wrap .lti-placement__root { background: transparent !important; }
 
@@ -499,6 +500,28 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap .element-card-container { background: transparent !important; border: 0 !important; box-shadow: none !important; }
 #site-wrap .calendar-toggle button { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) !important; }
 #site-wrap .calendar-toggle button:hover { color: var(--gz-ink) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
+/* Native lists and calendars used the page itself as their fill. Keep one rounded surface behind
+   each group, without clipping table controls, calendar popovers or the native scroll containers. */
+#site-wrap :is(.calendar-wrapper, .tabular-list,
+  course-student-grades,
+  course-achievements-panel [class*="makeStylescomponentContainer-"],
+  .messages-container .no-messages, .base-profile .account-snapshot) {
+  box-sizing: border-box;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
+  border-radius: var(--gz-radius) !important;
+  box-shadow: var(--gz-rest-shadow) !important;
+}
+#site-wrap :is(course-achievements-panel [class*="makeStylescomponentContainer-"], .messages-container .no-messages) { padding: 1.5rem !important; margin-block: 1rem; }
+#site-wrap course-student-grades { display: block; }
+/* The table's own square row fills must not cover the surrounding surface's corners. */
+#site-wrap .tabular-list > table { border-collapse: separate; border-spacing: 0; }
+#site-wrap .tabular-list :is(thead, thead tr) { background: transparent !important; }
+#site-wrap .tabular-list thead th:first-child { border-start-start-radius: var(--gz-radius); }
+#site-wrap .tabular-list thead th:last-child { border-start-end-radius: var(--gz-radius); }
+#site-wrap .tabular-list tbody tr:last-child td:first-child { border-end-start-radius: var(--gz-radius); }
+#site-wrap .tabular-list tbody tr:last-child td:last-child { border-end-end-radius: var(--gz-radius); }
+#site-wrap course-student-grades thead.MuiTableHead-root { clip-path: inset(0 round var(--gz-radius) var(--gz-radius) 0 0); }
 
 /* Gradebook (MUI table + readonly grade pills). */
 #site-wrap table, #site-wrap .MuiTable-root, #site-wrap .MuiTableCell-root { background: transparent !important; color: var(--gz-ink) !important; }
@@ -753,6 +776,9 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 .calendar-wrapper .event-dot[class*="course-color-"] { background-color: var(--gz-course) !important; }
 #site-wrap [class*="course-color-"].top-border, .peek .telemetry-panel.panel-wrap[class*="course-color-"] { border-top-color: var(--gz-course) !important; }
 #site-wrap .calendar-wrapper .month-list li[class*="course-color-"] { border-color: var(--gz-course) !important; }
+/* The Grades tile's native stripe extended past its rounded top corners. Inset just the stripe,
+   leaving the tile's controls and their popovers free to extend outside the card. */
+#site-wrap .base-grades-course-tile::before { inset-inline: var(--gz-radius) !important; width: auto !important; border-radius: 999px; }
 /* Calendar tiles: the selected/hovered tile turned its stripe grey in Ultra; keep the course hue. */
 .calendar-wrapper .element-card.tile[class*="course-color-"]:is(:hover, :focus)::before { background-color: var(--gz-course) !important; }
 
@@ -812,9 +838,9 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
 /* Over a solid background the glass on the nav, the headers and these panels blurs a flat colour: nothing to see, and
    a GPU layer each. Same fill. */
 html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header,
-  #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls,
+  #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .announcement-detail-panel .panel-header.simple-header,
+  #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header,
   .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
   bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]), #site-wrap .outline-action-block,
   #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),
@@ -845,6 +871,14 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 /* ---- stream & grades item icons: a soft accent tile instead of a white outline on navy ---- */
 #site-wrap .element-card .element-image { background: var(--gz-accent-soft) !important; border: 0 !important; border-radius: var(--gz-radius-sm) !important; color: var(--gz-accent) !important; }
 #site-wrap .element-card .element-image svg { color: var(--gz-accent) !important; }
+/* Stream cards used a stretched Angular switch around a top-aligned icon. Give the icon its own
+   centered column, with the same inset around it as the text, including cards with longer copy. */
+#site-wrap .activity-stream .stream-panel-activity-card { box-sizing: border-box; align-items: center; gap: 1rem; padding: 0.75rem 1rem !important; }
+#site-wrap .activity-stream .stream-panel-activity-card > ng-switch { display: grid; place-items: center; flex: 0 0 48px; align-self: stretch; }
+#site-wrap .activity-stream .stream-panel-activity-icon { display: grid; place-items: center; width: 48px; height: 48px; float: none; margin: 0; }
+#site-wrap .activity-stream .stream-panel-activity-icon svg { display: block; }
+#site-wrap .activity-stream .stream-panel-activity-card > .element-details { min-width: 0; margin: 0 !important; padding-inline-start: 0.75rem !important; }
+#site-wrap .activity-stream .timestamp .date { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 999px; padding: 0.2rem 0.55rem; line-height: 1.5; white-space: nowrap; }
 
 /* ---- discussions: the author header was its own card, narrower than the post body under it ---- */
 #site-wrap .clearfix > div:has(> .user-info) { background: transparent !important; border: 0 !important; box-shadow: none !important; }
@@ -872,7 +906,8 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 #site-wrap .discussion-board .reply-input-wrapper .bb-editor-container:not(.is-read-only) { border: 0 !important; border-radius: 0 0 var(--gz-radius-sm) var(--gz-radius-sm) !important; }
 #site-wrap .discussion-board .reply-control { padding-inline: 0.5rem; }
 #site-wrap .discussion-board .discussion-sorting-wrapper { margin-block: 1rem; }
-#site-wrap .overview-description-section > #assessment-description-header,
+#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label,
+  .activity-stream .activity-group-title, .base-profile .profile-content h2),
 #site-wrap .discussion-board :is(.discussion-full-panel-detail-header,
   discussion-refresh-button button, discussion-follow-button button, bb-discussion-sorting-options button, discussion-reply-button button) {
   background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
@@ -881,7 +916,8 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
   border-radius: 999px !important;
 }
 /* Section-heading pills retain the native heading text and scale with the active Look. */
-#site-wrap .overview-description-section > #assessment-description-header,
+#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label,
+  .activity-stream .activity-group-title, .base-profile .profile-content h2),
 #site-wrap .discussion-board .discussion-full-panel-detail-header { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button { min-width: 2.25rem; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button:is(:hover, :focus-visible, [aria-pressed="true"]) {
@@ -1308,10 +1344,10 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] .course-content-container:not(.inner-wrap > section.course *) > .panel-wrap { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
   /* Keep the layer over its backdrop and the page underneath; only its absolute content wrapper clears the bar. */
   html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
-  /* Announcement details use Ultra's legacy full panel, whose native 36px inset ignores the course's padding.
+  /* Legacy full panels (announcements, roster and other course tools) have a native 36px inset that ignores the course's padding.
      Keep its background full-width and move just the content clear of the current rail or top bar. */
-  html[data-gz-navbar] .bb-offcanvas-panel.full:has(.announcement-detail-panel):not(.bb-offcanvas-panel *) { inset-inline: 0 !important; width: auto !important; }
-  html[data-gz-navbar] .bb-offcanvas-panel.full:has(.announcement-detail-panel):not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) { inset-inline: 0 !important; width: auto !important; }
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
   html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
   html[data-gz-navbar]:not([data-gz-footer]) :is(.route-view-container, .routed-page, [data-gz-vh]) { max-height: calc(100vh - var(--gz-navbar-top)) !important; }
   html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :is(section.course, .routed-page) { max-height: 100vh !important; }
@@ -1319,8 +1355,8 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
 /* The strip lives in the layer's own sticky header. Leave the native close button its first 48px. */
 @media screen {
   html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) [class*="headerRoot"]:has(bb-close, .bb-close) #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
-  html[data-gz-navbar] .bb-offcanvas-panel.full:has(.announcement-detail-panel):not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap > .bb-close-offset > .bb-close { inset-inline-start: 6px !important; }
-  html[data-gz-navbar] .bb-offcanvas-panel.full:has(.announcement-detail-panel):not(.bb-offcanvas-panel *) .announcement-detail-panel #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap > .bb-close-offset > .bb-close { inset-inline-start: 6px !important; }
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
 }
 @media (min-width: 1280px) {
   html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left: 272px; }
@@ -1333,7 +1369,7 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   /* A slide-out's actions (a peek's Cancel and Save) sit at its bottom, under the bar like a full-window layer's: their content
      wrappers clear it. */
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel:is(.screen, .peek):not(:is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.full:has(.announcement-detail-panel):not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
   /* What Ultra fixes along the window's bottom (an attempt's Save and Submit, the help button; content.js tags them) stands on
      the bar instead of under it. A layer the window's height (a dialog over the bar, a backdrop: data-gz-vh) and a slide-out
      (its wrapper, above) keep their edges. */
@@ -1350,7 +1386,7 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(72px + var(--gz-footer-h) + env(safe-area-inset-bottom, 0px)); }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.full:has(.announcement-detail-panel):not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
 }
 /* Printed, the page is Ultra's own: the bar doesn't print (features/navbar.css), and the page keeps no room for it. */
 @media print {
