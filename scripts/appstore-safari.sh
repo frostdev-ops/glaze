@@ -25,12 +25,11 @@ sh scripts/safari-manifest.sh "$resources/manifest.json"
 # The app bundles only what the Xcode project lists: stop before building if the package has something it doesn't.
 node scripts/safari-resources.js "$resources"
 
-auth="-allowProvisioningUpdates -authenticationKeyPath $ASC_KEY_PATH -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+set -- -allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 out=release/$version
 mkdir -p "$out/build/logs" "$out/app-store"
-# shellcheck disable=SC2086
 if ! xcodebuild archive -project "$stage/Glaze/Glaze.xcodeproj" -scheme Glaze -configuration Release \
-  -archivePath "$stage/Glaze.xcarchive" -destination 'generic/platform=macOS' $auth \
+  -archivePath "$stage/Glaze.xcarchive" -destination 'generic/platform=macOS' "$@" \
   CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$team" CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   'CODE_SIGN_ENTITLEMENTS=$(SRCROOT)/$(TARGET_NAME)/Release.entitlements' \
   'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO MACOSX_DEPLOYMENT_TARGET=12.0 \
@@ -54,9 +53,8 @@ cat > "$stage/ExportOptions.plist" <<EOF
 </dict>
 </plist>
 EOF
-# shellcheck disable=SC2086
 if ! xcodebuild -exportArchive -archivePath "$stage/Glaze.xcarchive" \
-  -exportOptionsPlist "$stage/ExportOptions.plist" -exportPath "$stage/export" $auth \
+  -exportOptionsPlist "$stage/ExportOptions.plist" -exportPath "$stage/export" "$@" \
   >> $out/build/logs/appstore-build.log 2>&1; then
   tail -n 40 $out/build/logs/appstore-build.log >&2
   exit 1

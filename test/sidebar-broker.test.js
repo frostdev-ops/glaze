@@ -391,6 +391,19 @@ test('content writes and account migration before onInstalled do not lose the fr
   }
 });
 
+test('an install over a layout from before the Canvas Dashboard board completes and saves layouts', async () => {
+  // Safari can keep an earlier version's storage and still report an install: that layout has no cdash board.
+  const old = { tiles: W.TILES.map((id) => ({ id, on: id === 'notes' })), boards: { courses: [], dash: W.TILES.map((id) => ({ id, on: id === 'pet' })) } };
+  const w = worker({ local: { widgetLayout: old } });
+  w.installed[0]({ reason: 'install' }); await settle();
+  assert.deepEqual(w.store.local.freshDefaults, { fresh: true, pending: false });
+  assert.ok(Array.isArray(w.store.local.widgetLayout.boards.cdash));
+  const r = await w.send({ type: 'glaze:widgetLayout', ops: [{ s: 'dash', id: 'timer', set: { on: true } }] }, UP);
+  assert.equal(r.ok, true);
+  assert.equal(w.store.local.widgetLayout.boards.dash.find((t) => t.id === 'timer').on, true);
+  assert.equal(w.store.local.widgetLayout.boards.dash.find((t) => t.id === 'pet').on, true, 'the saved pet stays');
+});
+
 test('a durable install resumes after a failed seed and worker restart', async () => {
   const w = worker();
   w.fail.layout = 1;

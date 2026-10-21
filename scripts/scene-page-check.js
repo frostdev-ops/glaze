@@ -44,6 +44,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       if (u.pathname.startsWith('/learn/api/')) return r.fulfill({ json: u.pathname.endsWith('/users/me') ? { id: '_900_1' } : { results: [] } });
       blocked.push(u.href); return r.abort();
     });
+    // Exercise the injection broker too: a rejected helper load must not poison the shorter scene retries.
+    const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+    await worker.evaluate(() => {
+      const inject = chrome.scripting.executeScript.bind(chrome.scripting);
+      globalThis.__gzSceneHostFailures = 0;
+      chrome.scripting.executeScript = (details) => {
+        if (details.files?.includes('lib/scene-host.js') && !globalThis.__gzSceneHostFailures) {
+          globalThis.__gzSceneHostFailures++;
+          return Promise.reject(new Error('simulated transient scene-host injection failure'));
+        }
+        return inject(details);
+      };
+    });
     const opts = await context.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
     const store = (bg, lookX) => opts.evaluate(async ({ defaults, bg, lookX }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set({ ...defaults, bg, lookX }); }, { defaults: D.GZ_DEFAULTS, bg: { ...D.GZ_DEFAULTS.bg, ...bg }, lookX });
@@ -70,6 +83,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     check('a built-in scene still draws on the page, without the shader checker', await waitScene(page), 'no #gz-scene');
     check('a transient scene-module request failure recovers without a page reload', failedModules === 1 && !!(await scene(page)), `failed requests: ${failedModules}`);
     check('a cached dependency failure is retried under a fresh module URL', failedDependencies === 1 && !!(await scene(page)), `failed dependency requests: ${failedDependencies}`);
+    check('a transient scene-host injection failure recovers through the broker', await worker.evaluate(() => globalThis.__gzSceneHostFailures) === 1 && !!(await scene(page)), 'the helper failed once before the renderer started');
     const builtin = await scene(page);
     check('  at its own 0.6 scale, and the checker was never loaded for it', builtin?.w === Math.round(1280 * 0.6) && (await held(page))?.checker === 'undefined', JSON.stringify([builtin, await held(page)]));
     await page.close();

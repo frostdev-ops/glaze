@@ -30,7 +30,17 @@ the upload and source ZIPs there. Use these artifacts for Firefox Add-ons and an
 built from main alone is not the compatibility candidate. Do not replace already published 3.0.2 packages or tags.
 Never submit or publish as part of routine branch synchronization.
 
-## Steps
+## Complete automated release
+
+1. Bump `manifest.json`, add the `CHANGELOG.md` entry, refresh the checked-in Safari resources, and commit the release source.
+2. Configure the credentials below, then run `node scripts/store-release.mjs doctor`.
+3. Run `node scripts/store-release.mjs plan`, then `node scripts/store-release.mjs release`.
+
+`release` builds and submits the stores **and** completes GitHub and frostdev.io publication. It does
+not report success until the pushed tag, GitHub assets, public website and signed update feed are verified.
+It never moves a published tag or replaces a published asset with different bytes.
+
+### Individual build/publication tools (recovery only)
 
 1. Bump `version` in `manifest.json`, add the `CHANGELOG.md` entry, commit.
 2. `sh scripts/release.sh` runs the tests and builds the Chrome zip. With `MAC=1` and notarization
@@ -83,3 +93,132 @@ To block something, and to renew (a list expires 30 days after it is signed):
    expiry and `seq` and says why if it refuses; `curl -i https://frostdev.io/glaze/mods/api/blocklist` shows what is served.
 4. Do 2 and 3 again before the 30 days are up, even with nothing new, or extensions treat the list as out of date: blocks it
    made stay, but later blocks and unblocks reach no one. Extensions pick a new list up within a day of opening.
+
+## Release command and credentials
+
+After updating the manifest/changelog and committing the release source, run:
+
+```sh
+node scripts/store-release.mjs release
+```
+
+This runs the Node suites, builds Chrome and Firefox packages, Mac and iPhone/iPad App Store packages,
+and the universal Developer ID Mac app/ZIP/DMG. Before uploads, the app and extension must both contain
+arm64 and x86_64, pass signing/notarization checks, and match the manifest version. The Sparkle key must
+match the app. The signed update feed is based on the current public feed and preserves every prior entry.
+It then submits exact checksummed store artifacts and completes these public stages:
+
+1. Push the frozen source to `main` if needed, create an annotated `v<version>` tag, and push the tag.
+   A divergent main or a same-name tag at another commit stops publication.
+2. Wait for the tag's **Package** workflow, then complete its draft GitHub release with the exact Chrome
+   and Firefox store ZIPs, universal DMG/Mac ZIP, checksum sidecars, SHA256SUMS and signed appcast.
+   Every asset is checked against its saved hash; published bytes are never overwritten.
+3. Clone the website in the release output directory, vendor the public tag, mirror the eight guides,
+   update its central version/notes metadata and copy the signed feed byte-for-byte. Run gallery/Look
+   checks, type check, production build and version/download/feed checks.
+4. Commit and push that website candidate to `frostdev-ops/frostdev.io` main, wait for **Website** CI,
+   and run only its `ops/deploy.sh`. It activates atomically, verifies origin/public routes and rolls back
+   on activation verification failure. Check all affected public pages and the signed feed against the build.
+
+The command uses the store APIs directly;
+Fastlane is not required. Run it on a Mac with Node.js 26+ (matching CI and the validation suite), full Xcode selected, Python 3, Git 2.29+,
+zip/unzip, Google Cloud CLI, GitHub CLI (`gh auth login`), SSH/rsync access to `loothing-vps`, and the existing Sparkle 2.10.0 tools/signing key. Firefox lint downloads pinned `web-ext@10.8.0` through npx.
+
+Chrome is submitted with staged publication, and Apple versions use manual release after approval.
+AMO listed submissions may become public as soon as Mozilla approves them. GitHub and website publication
+do not wait for store approval. The command does not install an app or change permanent `dev/firefox`.
+
+### Credentials
+
+```sh
+mkdir -p ~/.config/glaze
+cp scripts/store-release.env.example ~/.config/glaze/stores.env
+chmod 600 ~/.config/glaze/stores.env
+# Fill in the empty values locally, then check access without uploading:
+node scripts/store-release.mjs doctor
+```
+
+Keep this file and Apple's private key outside the repository. The config is parsed as data (shell
+commands are never evaluated); exported environment variables override it. `--config /path/to/file.env`
+selects another file. Quoted values and paths with spaces work. `ASC_KEY_PATH` may be absolute, start
+with `~/`, or be relative to the config file. Never paste private keys or tokens into logs or chat.
+
+| Store | Required values | Setup |
+| --- | --- | --- |
+| Chrome | Existing `gcloud` login | Glaze's publisher/item/service-account defaults are included. Run `gcloud auth login` if authentication expired. Your account needs Service Account Token Creator on the configured service account, which must be linked to the Chrome Web Store publisher. No service-account key file is needed. |
+| Firefox | `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` | Create API credentials at [AMO API keys](https://addons.mozilla.org/developers/addon/api/key/) using an account that owns Glaze. `WEB_EXT_API_KEY` / `WEB_EXT_API_SECRET` are accepted aliases. Add-on ID defaults to `glaze@frostdev.io`. |
+| Apple | `ASC_KEY_PATH`, `ASC_KEY_ID`, `ASC_ISSUER_ID` | Download the `.p8` for a team API key in App Store Connect → Users and Access → Integrations. Use Admin access when Xcode must create signing certificates/profiles. The existing app record must include Mac and iOS; bundle ID and team default to Glaze's. |
+
+Public publication also needs `SPARKLE_BIN` (the existing Sparkle **2.10.0** `bin` directory), the
+matching key in this Mac's login Keychain, and notarization through `NOTARY_PROFILE` or `ASC_KEY_*`.
+`FROSTDEV_SITE_DIR` defaults to `~/Projects/frostdev.io`; it must identify the separate website repository,
+not the old `homepage` alias. Config-relative paths and `~/` work. GitHub authentication needs push/release
+access to both repositories. `doctor` checks these prerequisites without building, signing or publishing.
+The website main branch must already include `scripts/prepare-glaze-release.mjs` and the central
+`src/data/glazeRelease.json` template support. Website wording distinguishes GitHub package versions
+from store approval rather than predicting which store version is live.
+
+Existing store listings, privacy answers, review contact/demo access, screenshots, agreements and export
+compliance must already be complete. Apple reuses the existing listing; English What's New is taken from
+the current changelog entry for updates. Apple does not allow that field for a platform's first release.
+To supply shorter or separately prepared notes (Apple's limit is 4,000
+characters), pass `--notes /path/to/notes.txt` on the first build. Other localizations stay unchanged.
+The store APIs report any missing submission requirements; they cannot bypass store review.
+
+### Source isolation and Firefox review
+
+The command builds committed `HEAD`, excluding local uncommitted/untracked files. It creates disposable
+clones so the current checkout and any other worktrees stay in place. Firefox starts from the permanent
+`dev/firefox` branch, merges the chosen release source only in its disposable clone, and requires its
+suite and zero-warning lint to pass. A merge conflict stops before uploads; resolve the compatibility
+branch separately. The command never rebases, updates, pushes or deletes permanent `dev/firefox`.
+`--firefox-ref REF` may select a newer candidate only if it contains permanent `dev/firefox`.
+`--source-ref main` builds the current main commit even when running the command from a separate tooling
+worktree. A tag or commit SHA also works. The resolved commit is frozen before any builds begin.
+
+Firefox's source ZIP contains the exact source snapshot in `source/`, reconstruction metadata and a
+rebuild script in `reviewer/`, and a README for reviewers. Before submitting, a fresh extraction must
+reproduce every upload entry and the entire normalized ZIP byte for byte. Source and upload hashes,
+source/Firefox commit IDs, build number, notes and submission receipts are recorded in
+`release/<version>/stores/<source-commit>/release.json`. Logs and `SHA256SUMS` are beside it.
+
+### Preview, build only, and recovery
+
+```sh
+node scripts/store-release.mjs plan                 # no network, builds or uploads
+node scripts/store-release.mjs build                # store packages only; no public build or uploads
+node scripts/store-release.mjs build --stores chrome,firefox  # no Apple credentials needed
+node scripts/store-release.mjs submit               # resume stores only
+node scripts/store-release.mjs publish              # resume saved GitHub/website publication only
+node scripts/store-release.mjs release --apple-platforms MAC_OS  # omit iPhone/iPad
+```
+
+All selected store and public-release prerequisites are checked before `release` builds or uploads anything.
+Every store package and the notarized universal DMG/signed feed must build successfully before the first upload.
+`--stores` selects store submissions; full `release` still requires Chrome and Firefox for the public packages.
+For partial store-only work use `build` then `submit`. Independent store submissions and public publication continue if a store fails; the command exits nonzero
+and records unfinished stages. Rerun `release` with the same source/selection/options/output to resume all
+stages. `submit` intentionally resumes only stores; `publish` resumes only already prepared public packages. Completed submissions are skipped, remote versions/builds are
+checked after interrupted responses, and changed artifact hashes are refused. A recorded submission
+means accepted for processing/review at that point, not approved or publicly available.
+An existing same-version Chrome/Firefox submission without a matching local receipt is refused when
+its bytes cannot be verified (Mozilla adds signatures to signed XPIs). Inspect it in the dashboard or
+use a new version; the command does not overwrite another release candidate.
+
+Keep the source commit fixed while resuming (`--source-ref <original-SHA>` if the branch has advanced).
+Saved packages are reused instead of being rebuilt. Public hashes, GitHub/Website CI URLs, website commit,
+and publication receipts are in `release.json.public`; its `complete` flag is set only after live verification.
+An interrupted upload rechecks remote asset hashes before continuing. An interrupted website activation
+reuses a verified server stage. If website main advances, the command refuses a stale deployment: review
+that integration, remove only the generated `website` clone and clear `public.siteCommit` in its receipt,
+then resume to regenerate and validate against the new main. Keep the original public artifacts and feed.
+A same-version release already in the public feed cannot be rebuilt into a different candidate; use the
+original receipts or bump the version. Logs remain beside the receipts for diagnosis.
+`BUILD_NUMBER` can set a specific Apple build number before the first build; otherwise a UTC timestamp
+is saved for both platforms. `--out DIRECTORY` chooses a separate release workspace for another build
+or selection. A lock prevents simultaneous runs in the same output directory. If a run is killed,
+check that the PID in `.lock` has stopped before removing that lock and resuming.
+
+API references: [Chrome publishing](https://developer.chrome.com/docs/webstore/api/reference/rest/v2/publishers.items/publish),
+[AMO submissions](https://mozilla.github.io/addons-server/topics/api/addons.html),
+[Apple review submissions](https://developer.apple.com/documentation/appstoreconnectapi/review-submissions).

@@ -35,6 +35,8 @@ Runs the tests for the colour, settings and page-text logic. Use Node 26, matchi
 
 For Ultra background clipping, run `NODE_PATH=/path/to/node_modules nice -n 15 node scripts/ultra-panel-background-check.js` with Playwright available. It checks native off-canvas gutters, close-button clicks, scene continuity and scrolled headers at desktop/mobile widths in both text directions, plus partial-width sheet exclusions. Panel course tabs are checked above and below native headers with negative margins, at every strip size, so announcement labels stay exposed. An optional output directory saves screenshots; `CHROME` selects a different Chromium executable.
 
+`scripts/background-shell-check.js` checks rendered pixels behind the navbar and sidebar across base pages, course tools and item panels, before and after scrolling, at desktop/mobile widths in both text directions. `scripts/background-pages-check.js` runs the unpacked extension and its contour renderer through Ultra's synthetic routes and retained course tabs, then checks cleanup when switching to solid. Both accept an optional evidence directory and acquire `/private/tmp/claude-501/glaze-heavy.lock`; they use local fixtures, not a signed-in LMS. Scene placement (`lib/scene-host.js`) loads only when an animated or mod background needs it.
+
 `scripts/navbar-check.js` checks Glaze's own navigation bar in the editor's Ultra preview: the drawer it stands in for,
 the room it keeps, items, badges and the current page, the icons rail's tooltips, peek and keyboard, right-to-left, the
 phone bar and its More sheet, and turning it off. Run it with the same `NODE_PATH` setup and an optional screenshots
@@ -51,6 +53,11 @@ frames. It accepts the same `NODE_PATH` setup and an optional evidence directory
 only routed synthetic sites in a temporary browser profile.
 
 ### Publishing to the Chrome Web Store
+
+For one command that submits Chrome, Firefox, Mac and iPhone/iPad releases, pushes the release tag,
+publishes the universal notarized DMG on GitHub, and deploys frostdev.io with the signed update feed, use
+`node scripts/store-release.mjs release`. Credential setup, build-only mode and resumable submission
+are documented in [Releasing Glaze](../RELEASING.md#release-command-and-credentials).
 
 ```sh
 sh scripts/publish-chrome.sh

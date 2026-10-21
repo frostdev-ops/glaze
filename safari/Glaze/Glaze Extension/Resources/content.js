@@ -976,7 +976,6 @@
   };
 
   // ---- animated background -----------------------
-  const LAYERS = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
   const sceneFrame = solo || location.protocol !== 'https:';
   let scene = null, sceneCanvas = null, sceneFile = '';
   const sceneLoad = {};
@@ -991,11 +990,7 @@
   let modBg = null;
   const placeScene = () => {
     const c = modBg || sceneCanvas;
-    if (!c) return;
-    const home = (ultra && [...document.querySelectorAll(LAYERS)].filter((e) => e.getClientRects().length).pop()) || document.body;
-    if (c.parentNode === home) return;
-    home.append(c);
-    scene?.draw();
+    if (c && globalThis.GZ_SCENE_HOST?.place(c, ultra)) scene?.draw();
   };
   const stopScene = () => {
     clearTimeout(sceneRetry?.timer);
@@ -1003,6 +998,7 @@
     sceneFailed = false;
     scene?.stop();
     scene = null;
+    globalThis.GZ_SCENE_HOST?.clear(sceneCanvas);
     sceneCanvas?.remove();
     sceneCanvas = null;
   };
@@ -1035,20 +1031,20 @@
   const syncScene = () => {
     // An extension reload leaves the last frame in place.
     if (!chrome.runtime?.id) return;
-    if (modBg) { stopScene(); return placeScene(); }
     const key = sceneSig();
     if (sceneRetry && sceneRetry.key !== key) { clearTimeout(sceneRetry.timer); sceneRetry = null; sceneFailed = false; }
     if (scenePending && scenePending.key !== key) scenePending = null;
-    if (!settings.enabled || !links.length || !sceneKind() || !sceneFrame || !document.body || hid() || sceneBad === key) return stopScene();
+    if (!modBg && (!settings.enabled || !links.length || !sceneKind() || !sceneFrame || !document.body || hid() || sceneBad === key)) return stopScene();
     if (sceneFailed || scenePending) return;
     const file = sceneModule();
     if (scene && sceneFile !== file) stopScene();
     const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL;
-    if (scene && !wait) { try { scene.update(sceneOpts()); } catch (error) { retryScene(key, error); } return; }
-    sceneLoad[file] ||= import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { delete sceneLoad[file]; throw error; });
+    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); } catch (error) { retryScene(key, error); } return; }
+    if (!modBg) sceneLoad[file] ||= import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { delete sceneLoad[file]; throw error; });
     const pending = scenePending = { key };
-    Promise.all([sceneLoad[file], wait && need('lib/glsl.js', () => globalThis.GZ_GLSL).catch(() => {})]).then(([mod]) => {
+    Promise.all([!modBg && sceneLoad[file], need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).catch(error => { loading.delete('lib/scene-host.js'); throw error; }), !modBg && wait && need('lib/glsl.js', () => globalThis.GZ_GLSL).catch(() => {})]).then(([mod]) => {
       if (scenePending !== pending) return;
+      if (modBg) { scenePending = null; return placeScene(); }
       if (!settings.enabled || sceneBad === key || !chrome.runtime?.id || !links.length || hid() || key !== sceneSig() || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
       if (!scene) {
         sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');
@@ -1490,7 +1486,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
     // Look parts stay off on courses with their own Look; changes fire `glaze:parts`.
     parts: () => (on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz') && !lookHere() && (globalThis.GZ_MODS ? GZ_MODS.parts(globalThis.GZ_XPARTS_PAGE?.now() || null) : globalThis.GZ_XPARTS_PAGE?.now())) || null,
-    background: (el) => { if (modBg && modBg !== el) modBg.remove(); modBg = el || null; syncScene(); },
+    background: (el) => { stopScene(); if (modBg && modBg !== el) { globalThis.GZ_SCENE_HOST?.clear(modBg); modBg.remove(); } modBg = el || null; syncScene(); },
     canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => { syncScene(); if (full && !timer && !hid()) timer = setTimeout(flush); },
     ...Object.fromEntries(['me', 'canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
 
