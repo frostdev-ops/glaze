@@ -15,7 +15,7 @@ Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/jmm
 ## Firefox
 
 Install Glaze from [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/glaze/).
-Version 3.3.0 is available for desktop Firefox 140 or newer and Firefox for Android 142 or newer.
+Version 3.3.2 is available for desktop Firefox 140 or newer and Firefox for Android 142 or newer.
 
 1. Open the listing in Firefox and choose **Add to Firefox**.
 2. Review and confirm Firefox's installation prompt, then open Glaze from the Extensions menu.
@@ -38,7 +38,7 @@ For the dedicated Firefox for Android emulator, launcher and validation checklis
 
 ## Safari on Mac
 
-[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.3.1/glaze-3.3.1-safari-macos.dmg): signed and notarized, attached to each release on
+[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.3.2/glaze-3.3.2-safari-macos.dmg): signed and notarized, attached to each release on
 [GitHub Releases](https://github.com/frostdev-ops/glaze/releases). It runs
 on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
 the frosted-glass blur needs Safari 18.
