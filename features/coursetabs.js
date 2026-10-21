@@ -1331,6 +1331,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!on || !e.isTrusted || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = e.composedPath().find((n) => n instanceof HTMLAnchorElement && n.hasAttribute('href'));
     if (!a || a.target && a.target !== '_self' || a.hasAttribute('download')) return;
+    // Ultra uses fragment-only and empty hrefs for native actions; its CDN <base> makes a.href look external.
+    const href = a.getAttribute('href').trim();
+    if (!href || href.startsWith('#')) return;
     let u;
     try { u = new URL(a.href, location.href); } catch { return; }
     if (!/^https?:$/.test(u.protocol) || u.href.split('#')[0] === location.href.split('#')[0]) return;
