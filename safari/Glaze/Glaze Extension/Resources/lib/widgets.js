@@ -385,11 +385,12 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     if (BOARDS.includes(m?.fill) && !l.filled.includes(m.fill)) l = { ...l, filled: [...l.filled, m.fill] };
     return layout(l, more);
   };
+  // A stored layout's mod tiles and their sizes, so reading it back (layout) keeps them.
+  const mods = (raw) => Object.fromEntries((Array.isArray(raw?.tiles) ? raw.tiles : []).filter((t) => /^m[a-z2-7]{14}[0-7]$/.test(t?.id)).map((t) => [t.id, { size: t.size }]));
   // The worker's side: m's changes on what is stored now. → { ok, layout } (what is stored after).
   const change = async (m, local) => {
     const raw = (await local.get(['widgetLayout'])).widgetLayout;
-    const kept = (Array.isArray(raw?.tiles) ? raw.tiles : []).filter((t) => /^m[a-z2-7]{14}[0-7]$/.test(t?.id));
-    const more = { ...Object.fromEntries(kept.map((t) => [t.id, { size: t.size }])), ...(m?.more && typeof m.more === 'object' ? m.more : {}) };
+    const more = { ...mods(raw), ...(m?.more && typeof m.more === 'object' ? m.more : {}) };
     const next = apply(raw, m, more);
     return (await local.set({ widgetLayout: next })) ? { ok: true, layout: next } : { ok: false, error: 'write' };
   };
@@ -604,7 +605,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     return `${REPO}/issues/new?${new URLSearchParams({ labels: 'bug', body })}`;
   };
 
-  return { SPEC, TILES, SIZES, course, COURSE_MAX, COURSE_TOTAL, mood, ticks, layout, fresh, kept, move, set, place, spot, EDGE, SNAP, BOARDS, WIDTH, MIN_W, MIN_H, GRID, GAP, snap, stretch, arrange, spotOf, reserve, front, bset, floating, corner, apply, change, DASH, landing, music, IDLE, cleanTimer, len, left, start, pause, advance, clock, breath, quoteAt, NOTES_MAX, notesKey, NOTES_KEY, cleanNote, saveNote, links, agenda, browser, feedback };
+  return { SPEC, TILES, SIZES, course, COURSE_MAX, COURSE_TOTAL, mood, ticks, layout, fresh, kept, move, set, place, spot, EDGE, SNAP, BOARDS, WIDTH, MIN_W, MIN_H, GRID, GAP, snap, stretch, arrange, spotOf, reserve, front, bset, floating, corner, apply, mods, change, DASH, landing, music, IDLE, cleanTimer, len, left, start, pause, advance, clock, breath, quoteAt, NOTES_MAX, notesKey, NOTES_KEY, cleanNote, saveNote, links, agenda, browser, feedback };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WIDGETS; else GZ_WIDGETS;

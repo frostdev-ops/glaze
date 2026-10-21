@@ -866,6 +866,8 @@ const resumeDefaults = async (force = false) => {
   state ||= { fresh: false, pending: false };
   const sync = await chrome.storage.sync.get(null), patch = {};
   let lay = local.widgetLayout;
+  // A layout stored by an earlier version can lack boards added since (cdash); read it as the pages do.
+  if (lay && !(GZ_WIDGETS.BOARDS.every((b) => Array.isArray(lay.boards?.[b])) && Array.isArray(lay.filled))) lay = GZ_WIDGETS.layout(lay, GZ_WIDGETS.mods(lay));
   if (state.pending) {
     if (!lay || local.earlyWidgetEdits) {
       lay = state.fresh ? GZ_WIDGETS.fresh() : GZ_WIDGETS.kept(sync.enhance?.widgets);
