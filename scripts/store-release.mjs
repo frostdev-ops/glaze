@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { parseEnv } from 'node:util';
 import { spawn, execFileSync } from 'node:child_process';
 import { appleApp, appleBuild, amo, chromeStatus, submitChrome, submitFirefox, submitApple } from './store-api.mjs';
+import { publicPreflight, preparePublic, publishPublic } from './public-release.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaults = {
@@ -16,13 +17,14 @@ const defaults = {
   CWS_SERVICE_ACCOUNT: 'cws-publisher@frostdev-507119.iam.gserviceaccount.com',
   AMO_ADDON_ID: 'glaze@frostdev.io', ASC_BUNDLE_ID: 'io.frostdev.Glaze', SAFARI_TEAM_ID: '22AAZFMTV8',
 };
-const usage = `Usage: node scripts/store-release.mjs [release|doctor|plan|build|submit] [options]
+const usage = `Usage: node scripts/store-release.mjs [release|doctor|plan|build|submit|publish] [options]
 
-  release              Check credentials, build, upload, and submit (default).
-  doctor               Read-only credential and store-access checks.
+  release              Build, submit stores, tag/push GitHub, deploy website/feed (default).
+  doctor               Read-only store and public-release prerequisite checks.
   plan                 Show source/targets/output without network access or writes.
   build                Test and build packages, with no uploads.
-  submit               Resume uploads/submissions from existing verified packages.
+  submit               Resume store submissions only from verified packages.
+  publish              Resume GitHub and website publication of saved public packages.
 
   --config FILE        Credentials file (default ~/.config/glaze/stores.env).
   --stores LIST        chrome,firefox,apple (default all three).
@@ -57,7 +59,7 @@ export function options(args) {
     else if (arg === '--apple-platforms') result.applePlatforms = [...new Set(value.split(','))];
     else throw new Error(`Unknown option ${arg}`);
   }
-  if (!['release', 'doctor', 'plan', 'build', 'submit'].includes(result.command)) throw new Error(`Unknown command ${result.command}`);
+  if (!['release', 'doctor', 'plan', 'build', 'submit', 'publish'].includes(result.command)) throw new Error(`Unknown command ${result.command}`);
   if (result.stores.some(s => !['chrome', 'firefox', 'apple'].includes(s))) throw new Error('Stores must be chrome,firefox,apple.');
   if (result.applePlatforms.some(s => !['MAC_OS', 'IOS'].includes(s))) throw new Error('Apple platforms must be MAC_OS,IOS.');
   return result;
@@ -70,6 +72,10 @@ function environment(opt) {
   env.AMO_JWT_ISSUER ||= env.WEB_EXT_API_KEY;
   env.AMO_JWT_SECRET ||= env.WEB_EXT_API_SECRET;
   if (env.ASC_KEY_PATH) env.ASC_KEY_PATH = path.resolve(path.dirname(opt.config), expand(env.ASC_KEY_PATH));
+  for (const key of ['SPARKLE_BIN', 'FROSTDEV_SITE_DIR']) {
+    if (env[key]) env[key] = path.resolve(path.dirname(opt.config), expand(env[key]));
+  }
+  env.FROSTDEV_SITE_DIR ||= path.join(os.homedir(), 'Projects/frostdev.io');
   return env;
 }
 function executable(name) {
@@ -215,7 +221,6 @@ export async function main(args = process.argv.slice(2)) {
   if (opt.help) { console.log(usage); return; }
   if (Number(process.versions.node.split('.')[0]) < 26) throw new Error('Node.js 26 or newer is required, matching CI and the release validation suite.');
   const env = environment(opt);
-  if (opt.command === 'doctor') { if (!await doctor(opt, env)) process.exitCode = 1; return; }
   const commit = git(['rev-parse', '--verify', `${opt.sourceRef}^{commit}`]);
   const version = JSON.parse(git(['show', `${commit}:manifest.json`])).version;
   const firefoxBase = opt.stores.includes('firefox') ? git(['rev-parse', '--verify', `${opt.firefoxRef}^{commit}`]) : null;
@@ -225,7 +230,11 @@ export async function main(args = process.argv.slice(2)) {
   }
   const out = opt.out || path.join(root, 'release', version, 'stores', commit.slice(0, 12));
   console.log(`Glaze ${version}, committed source ${commit}\nStores: ${opt.stores.join(', ')}\nApple platforms: ${opt.applePlatforms.join(', ')}\nFirefox compatibility base: ${firefoxBase || '(not selected)'}\nOutput: ${out}`);
-  if (opt.command === 'plan') { console.log('No builds, network calls, uploads, or branch changes performed.'); return; }
+  if (opt.command === 'plan') {
+    console.log(`Full release: verify prerequisites; build/store checks; universal notarized DMG; signed feed; store submissions; push main and immutable v${version}; wait Package CI; publish verified GitHub assets; prepare/test/push frostdev.io; wait Website CI; deploy and verify live pages/feed.\nWebsite checkout: ${env.FROSTDEV_SITE_DIR}\nNo builds, network calls, uploads, or branch changes performed.`); return;
+  }
+  if (['release', 'publish', 'doctor'].includes(opt.command)) publicPreflight(opt, env, root, { version, sourceCommit: commit });
+  if (opt.command === 'doctor') { if (!await doctor(opt, env)) process.exitCode = 1; return; }
   if (['release', 'submit'].includes(opt.command) && !await doctor(opt, env)) throw new Error('Credential preflight failed; no packages were uploaded.');
   if (opt.command === 'build' && opt.stores.includes('apple') && !await doctor({ ...opt, stores: ['apple'] }, env, false)) throw new Error('Apple signing prerequisites are missing.');
   fs.mkdirSync(path.join(out, 'logs'), { recursive: true });
@@ -240,15 +249,18 @@ export async function main(args = process.argv.slice(2)) {
       schema: 1, version, sourceCommit: commit, firefoxBase, stores: opt.stores, applePlatforms: opt.applePlatforms,
       buildNumber: env.BUILD_NUMBER || new Date().toISOString().replace(/\D/g, '').slice(0, 14), targets, files: {}, receipts: {}, ready: false,
     };
-    for (const [name, value] of Object.entries({ sourceCommit: commit, stores: opt.stores, applePlatforms: opt.applePlatforms, targets })) {
+    for (const [name, value] of Object.entries({ version, sourceCommit: commit, stores: opt.stores, applePlatforms: opt.applePlatforms, targets })) {
       if (JSON.stringify(manifest[name]) !== JSON.stringify(value)) throw new Error(`${name} differs from the saved release. Use a separate --out directory.`);
     }
     if (!manifest.ready && manifest.firefoxBase !== firefoxBase) throw new Error('Firefox base changed during an incomplete build; use a separate --out directory.');
     const save = () => { fs.writeFileSync(`${file}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 }); fs.renameSync(`${file}.tmp`, file); };
     save();
-    if (opt.command !== 'submit') await build(opt, env, manifest, save, out);
+    if (!['submit', 'publish'].includes(opt.command)) await build(opt, env, manifest, save, out);
     verify(manifest, out);
     if (opt.command === 'build') { console.log(`Built and verified packages: ${out}`); return; }
+    const publicContext = { manifest, save, out, root, env, run };
+    if (opt.command === 'release') await preparePublic(publicContext);
+    if (opt.command === 'publish') { await publishPublic(publicContext); return; }
     // Resolve paths only in the upload view; the persisted manifest remains relocatable.
     const upload = { ...manifest, files: Object.fromEntries(Object.entries(manifest.files).map(([k, f]) => [k, { ...f, path: path.join(out, f.path) }])) };
     let failures = 0;
@@ -262,9 +274,13 @@ export async function main(args = process.argv.slice(2)) {
         delete receipt.error; save();
       } catch (error) { failures++; receipt.error = error.message; save(); console.error(`${store}: ${error.message}`); }
     }
+    if (opt.command === 'release') {
+      try { await publishPublic(publicContext); }
+      catch (error) { failures++; manifest.public.error = error.message; save(); console.error(`Public release: ${error.message}`); }
+    }
     console.log(`Receipts: ${file}`);
-    if (failures) throw new Error(`${failures} store(s) need attention. Resolve the reported issue and rerun submit with the same options.`);
-    console.log('All selected releases submitted. Submission is separate from approval and public availability.');
+    if (failures) throw new Error(`${failures} release stage(s) need attention. Rerun release with the same --source-ref/--out/options to resume all stages; submit resumes stores only, publish resumes public publication only.`);
+    console.log(opt.command === 'release' ? 'Release complete: stores submitted, GitHub release published, website and signed feed verified live. Store approval/public availability remains separate.' : 'All selected stores submitted. Public publication was not run; use release or publish for GitHub and frostdev.io. Store approval/public availability remains separate.');
   } finally { fs.closeSync(lockFd); fs.rmSync(lock, { force: true }); }
 }
 const chromeTarget = env => `${env.CWS_PUBLISHER_ID}/${env.CWS_EXTENSION_ID}`;

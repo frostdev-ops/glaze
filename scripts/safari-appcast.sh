@@ -48,14 +48,27 @@ with tempfile.TemporaryDirectory(prefix='glaze-appcast-') as temp:
             sys.exit('safari-appcast: app has no real Sparkle public key; replace the placeholder and rebuild')
         if info.get('SUFeedURL') != 'https://frostdev.io/projects/glaze/appcast.xml':
             sys.exit('safari-appcast: unexpected appcast URL')
+        if os.environ.get('SAFARI_REQUIRE_UNIVERSAL') == '1':
+            for bundle in (app, app / 'Contents/PlugIns/Glaze Extension.appex'):
+                with (bundle / 'Contents/Info.plist').open('rb') as f:
+                    metadata = plistlib.load(f)
+                if (metadata.get('CFBundleShortVersionString') != version or metadata.get('CFBundleVersion') != version):
+                    sys.exit('safari-appcast: app and extension versions must match the manifest')
+                binary = bundle / 'Contents/MacOS' / metadata['CFBundleExecutable']
+                architectures = subprocess.check_output(['lipo', '-archs', str(binary)], text=True).split()
+                if set(architectures) != {'arm64', 'x86_64'}:
+                    sys.exit('safari-appcast: app and extension must both be universal arm64/x86_64')
         subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
         subprocess.run(['xcrun', 'stapler', 'validate', str(app)], check=True)
     finally:
         subprocess.run(['hdiutil', 'detach', '-quiet', str(mount)], check=True)
-    output = root / 'release/appcast.xml'
+    output = Path(os.environ.get('SAFARI_APPCAST_OUT', root / 'release/appcast.xml')).resolve()
+    base = Path(os.environ.get('SAFARI_APPCAST_BASE', output)).resolve()
+    if 'SAFARI_APPCAST_BASE' in os.environ and not base.is_file():
+        sys.exit('safari-appcast: configured base feed is missing; refusing to discard history')
     ns = 'http://www.andymatuschak.org/xml-namespaces/sparkle'
     ET.register_namespace('sparkle', ns)
-    tree = ET.parse(output) if output.exists() else ET.ElementTree(ET.fromstring('<rss version="2.0"><channel><title>Glaze</title><link>https://frostdev.io/projects/glaze</link><description>Glaze for Safari updates</description></channel></rss>'))
+    tree = ET.parse(base) if base.exists() else ET.ElementTree(ET.fromstring('<rss version="2.0"><channel><title>Glaze</title><link>https://frostdev.io/projects/glaze</link><description>Glaze for Safari updates</description></channel></rss>'))
     channels = tree.getroot().findall('channel')
     if tree.getroot().tag != 'rss' or len(channels) != 1:
         sys.exit('safari-appcast: existing feed has an unexpected structure; left unchanged')

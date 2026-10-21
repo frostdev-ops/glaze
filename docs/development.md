@@ -54,9 +54,10 @@ only routed synthetic sites in a temporary browser profile.
 
 ### Publishing to the Chrome Web Store
 
-For one command that builds and submits Chrome, Firefox, Mac and iPhone/iPad releases, use
+For one command that submits Chrome, Firefox, Mac and iPhone/iPad releases, pushes the release tag,
+publishes the universal notarized DMG on GitHub, and deploys frostdev.io with the signed update feed, use
 `node scripts/store-release.mjs release`. Credential setup, build-only mode and resumable submission
-are documented in [Releasing Glaze](../RELEASING.md#build-and-submit-all-three-stores).
+are documented in [Releasing Glaze](../RELEASING.md#release-command-and-credentials).
 
 ```sh
 sh scripts/publish-chrome.sh

@@ -3,6 +3,7 @@
 #   sh scripts/release.sh          tests, then the Chrome zip
 #   MAC=1 sh scripts/release.sh    also the notarized Mac app and DMG (NOTARY_PROFILE or ASC_KEY_*)
 # Firefox is built from dev/firefox; store uploads, GitHub and the appcast follow RELEASING.md.
+# Complete automated publication: node scripts/store-release.mjs release
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
