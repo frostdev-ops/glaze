@@ -147,7 +147,11 @@ async function workflow(repoName, name, commit, root, env) {
 }
 function releaseInfo(tag, root, env) {
   try { return api(`repos/${repo}/releases/tags/${tag}`, root, env); }
-  catch (error) { if (String(error.stderr).includes('(HTTP 404)')) return null; throw error; }
+  catch (error) { if (!String(error.stderr).includes('(HTTP 404)')) throw error; }
+  // The tags endpoint omits drafts, including the one the Package workflow creates for the tag.
+  const drafts = api(`repos/${repo}/releases?per_page=100`, root, env).filter(release => release.draft && release.tag_name === tag);
+  if (drafts.length > 1) throw new Error(`Several draft releases use ${tag}; delete the extras on GitHub, then resume.`);
+  return drafts[0] || null;
 }
 function verifyAsset(asset, expected, tag, root, env) {
   if (asset.digest) return asset.digest === `sha256:${expected}`;
@@ -219,7 +223,8 @@ async function publishWebsite({ manifest, save, out, root, env, run }) {
   }
   const feed = path.join(out, state.files.appcast.path);
   if (!state.siteCommit) {
-    if (git(['status', '--porcelain', '--untracked-files=all'], site, env)) throw new Error(`Website preparation is incomplete at ${site}. Review its diff, then remove only this generated clone and resume.`);
+    // A fresh --no-checkout clone has no index yet; its files only look deleted.
+    if (fs.existsSync(path.join(site, '.git/index')) && git(['status', '--porcelain', '--untracked-files=all'], site, env)) throw new Error(`Website preparation is incomplete at ${site}. Review its diff, then remove only this generated clone and resume.`);
     git(['fetch', '--quiet', 'origin', 'main'], site, env);
     git(['-c', 'core.hooksPath=/dev/null', 'checkout', '--quiet', '--detach', 'origin/main'], site, env);
     if (!fs.existsSync(path.join(site, 'scripts/prepare-glaze-release.mjs'))) throw new Error('The website release helper must be committed and pushed to frostdev.io main first.');
