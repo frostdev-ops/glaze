@@ -100,8 +100,9 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const notes = (o) => o.event?.isTrusted && need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open(o), () => {});
   // Everything the palette can do, built when it opens.
   const commands = async () => {
-    // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds).
-    await need('features/lookx.js', () => globalThis.GZ_LOOKX).catch(() => {});
+    // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds), the pointer picture's
+    // once lookx knows there is one.
+    await need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => globalThis.GZ_LOOKX?.ready(), () => {});
     if (moodle) { const [m, due] = await Promise.all([moodleIn(), dueWeek()]); return [...await m.commands(go), ...dueCmds(due), ...glazeCmds()]; }
     if (!ultra) return canvasCommands();
     const cid = courseId();

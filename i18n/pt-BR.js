@@ -3045,5 +3045,6 @@
   "Which pointer you see is yours to choose:": "Qual ponteiro você vê é você quem escolhe:",
   "You see {name} instead, your own choice:": "Você vê {name} no lugar, sua própria escolha:",
   "Your own picture, kept on this computer: a theme code of this Look goes without it.": "Sua própria imagem, guardada neste computador: um código de tema deste Look vai sem ela.",
-  "Worn with this Look, and in a theme code of it. Drawn by your system so it never lags; text fields keep the usual text cursor.": "Vai com este Look e no código de tema dele. Desenhado pelo seu sistema para nunca atrasar; campos de texto mantêm o cursor de texto normal."
+  "Worn with this Look, and in a theme code of it. Drawn by your system so it never lags; text fields keep the usual text cursor.": "Vai com este Look e no código de tema dele. Desenhado pelo seu sistema para nunca atrasar; campos de texto mantêm o cursor de texto normal.",
+  "Pointer: {name}": "Ponteiro: {name}"
 };

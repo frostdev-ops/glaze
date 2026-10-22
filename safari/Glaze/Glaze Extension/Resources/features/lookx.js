@@ -466,7 +466,13 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     stickers();
   };
 
-  // The command palette's switches (features/palette.js).
+  // The command palette's switches (features/palette.js). The student's pointer by name, as the editor's Look › Pointer
+  // lists them (settings extras.pointer, defaults.js); their own picture only once there is one (ready(), asked as the
+  // palette opens).
+  const POINTERS = { look: "The Look's pointer", off: 'System pointer', aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal',
+    lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', own: 'Your own picture' };
+  let ownPic = false;
+  const ready = async () => { ownPic = !!(await get('cursorImg')).cursorImg; };
   const cmds = () => {
     const x = X();
     const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, extras: { ...x, ...patch } }); } catch { /* extension reloaded */ } };
@@ -474,12 +480,15 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     return [
       ...(top && !quiz() ? [{ label: t('Place stickers on this page'), hint: 'Glaze', group: 'Glaze', run: edit }] : []),
       { label: t(x.stickers ? 'Hide stickers' : 'Show stickers'), hint: 'Glaze', group: 'Glaze', run: store({ stickers: !x.stickers }) },
+      ...Object.entries(POINTERS).filter(([v]) => v !== 'own' || ownPic || x.pointer === 'own')
+        .map(([v, n]) => ({ label: t('Pointer: {name}', { name: t(n) }), hint: hint(x.pointer === v), group: 'Glaze', run: store({ pointer: v }) })),
+      { label: t(x.pointerAnim ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t('Pointer animation') }), hint: 'Glaze', group: 'Glaze', run: store({ pointerAnim: !x.pointerAnim }) },
       ...[['off', 'Off'], ['6h', 'Every 6 hours'], ['12h', 'Every 12 hours'], ['24h', 'Every 24 hours'], ['week', 'Every week'], ['daily', 'Every day at a set time']]
         .map(([v, n]) => ({ label: t('Look rotation: {every}', { every: t(n) }), hint: hint(x.rotate === v), group: 'Glaze', run: store({ rotate: v }) })),
       ...(x.rotate !== 'off' ? [{ label: t('Next Look now'), hint: t('Look rotation'), group: 'Glaze', run: () => send({ type: 'glaze:rotate', now: true }) }] : []),
     ];
   };
 
-  return { sync, cmds, edit };
+  return { sync, cmds, ready, edit };
 })();
 GZ_LOOKX;

@@ -197,6 +197,25 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('  Pointer animation off: nothing drawn around it', !(await sleep(600), await glow()));
     await extras({ pointerAnim: true });
     check('  on again: it plays', await until(glow, 4000));
+    // The command palette (Ctrl+K): a Pointer: entry per choice; their own picture only once there is one.
+    await lms.keyboard.press('Control+k');
+    await lms.waitForSelector('#gz-cmd input');
+    // What the palette lists for a search (it shows the best few, so each is searched for by name).
+    const listed = async (q) => {
+      await lms.fill('#gz-cmd input', q);
+      await sleep(250);
+      return lms.evaluate(() => [...document.querySelectorAll('#gz-cmd-list li')].map((li) => li.textContent).filter((x) => /^Pointer: /.test(x)));
+    };
+    const names = ["The Look's pointer", 'System pointer', 'Terminal', 'Pumpkin'];
+    const found = [];
+    for (const n of names) if ((await listed(`Pointer: ${n}`)).some((x) => x.startsWith(`Pointer: ${n}`))) found.push(n);
+    check('the palette has Pointer: entries, the Look\'s and the system\'s among them', found.length === names.length, found.join(', '));
+    check('  but none for a picture there isn\'t', !(await listed('Pointer: Your own picture')).some((x) => /Your own picture/.test(x)));
+    await lms.fill('#gz-cmd input', 'Pointer:');
+    await lms.keyboard.type(' Rose');
+    const rose = await until(() => lms.evaluate(() => [...document.querySelectorAll('#gz-cmd-list li')].find((li) => /^Pointer: Rose/.test(li.textContent))?.id));
+    await lms.click(`#${rose}`);
+    check('  choosing Pointer: Rose saves it, and the page wears it', await until(async () => (await sync()).pointer === 'rose') && !!await shows('rose'), await onPage());
     check('no page errors', !errors.length, errors.join(' | '));
   } finally {
     await context?.close().catch(() => {});

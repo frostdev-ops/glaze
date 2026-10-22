@@ -492,6 +492,33 @@ test('page: a new picture of their own is shown at once while it is the pointer 
   assert.equal(shown(p), 'rose');
 });
 
+test('palette: a Pointer: entry for every choice the setting takes, the current one marked, and the animation switch', async () => {
+  const G = require('../defaults.js');
+  const p = page({});
+  p.settings.extras = { ...G.GZ_DEFAULTS.extras, pointer: 'lava' };
+  await p.lx.ready();
+  const pointers = () => [...p.lx.cmds()].filter((c) => c.label === 'Pointer: {name}');
+  const chosen = (list) => list.map((c) => { c.run(); return p.synced.at(-1).extras.pointer; });
+  // No picture of their own yet: every other choice, in the editor's order.
+  assert.deepEqual(chosen(pointers()), G.GZ_SPEC.extras.pointer[1].filter((v) => v !== 'own'));
+  assert.deepEqual(pointers().map((c) => c.hint), pointers().map((c, i) => (G.GZ_SPEC.extras.pointer[1][i] === 'lava' ? 'Current' : 'Glaze')));
+  // Each writes only the pointer into the extras the page has, nothing of the Look's.
+  pointers()[0].run();
+  assert.deepEqual(JSON.parse(JSON.stringify(p.synced.at(-1))), { version: 2, extras: { ...G.GZ_DEFAULTS.extras, pointer: 'look' } });
+  // With a picture: it too.
+  p.local.cursorImg = 'data:image/png;base64,AAAA';
+  await p.lx.ready();
+  assert.deepEqual(chosen(pointers()), G.GZ_SPEC.extras.pointer[1]);
+  // The pointer's animation: one switch, saying which way it goes.
+  const anim = p.lx.cmds().find((c) => /^Turn (off|on) \{name\|lower\}$/.test(c.label) && (c.run(), p.synced.at(-1).extras.pointerAnim === false));
+  assert.equal(anim.label, 'Turn off {name|lower}');
+  p.settings.extras = { ...p.settings.extras, pointerAnim: false };
+  const on = p.lx.cmds().filter((c) => c.label === 'Turn on {name|lower}');
+  assert.equal(on.length, 1);
+  on[0].run();
+  assert.equal(p.synced.at(-1).extras.pointerAnim, true);
+});
+
 // A tab on a computer whose worker is the real one (lib/background.js), in sticker mode on `path`.
 const key = (e, k) => { for (const f of e.on?.keydown || []) f({ key: k, shiftKey: false, preventDefault() {}, stopPropagation() {} }); };
 const stickersOf = (p) => p.body.find('gz-stickers').children;
