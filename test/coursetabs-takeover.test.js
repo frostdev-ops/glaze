@@ -122,3 +122,36 @@ test('a single copy keeps its own strip and frames across passes and toggles', a
   await settle();
   assert.equal(p.doc.getElementById('gz-ctabs'), strip, 'switched back on, the same copy draws the same strip');
 });
+
+test('taking over a legacy Canvas page clears its old row height when the navbar holds the tabs', async () => {
+  const p = page();
+  const strip = p.doc.createElement('div'); strip.id = 'gz-ctabs'; p.bar.append(strip);
+  const host = p.doc.createElement('div'); host.id = 'gz-ctabs-frames'; p.body.append(host);
+  const picture = p.doc.createElement('div'); picture.className = 'gz-ctabs-pic'; host.append(picture);
+  p.html.style.setProperty('--gz-ctabs-row', '72px');
+  p.html.setAttribute('data-gz-navbar', 'top tabs');
+  p.html.setAttribute('data-gz-ctab-framed', '');
+  const g = glaze(p, {}, (c) => {
+    c.GZ_CTX.site = 'canvas'; c.GZ_CTX.canvasCourseId = () => '1'; c.GZ_CTX.profile = async () => ({ id: '9' });
+    c.location = new URL('/courses/1', origin);
+    c.chrome.storage.sync.get = (_, cb) => cb({ tabs: { at: 'nav' } });
+  });
+  g.api.sync(true);
+  await settle();
+  assert.equal(host.isConnected, false, 'legacy copies need not know the takeover event');
+  assert.equal(picture.isConnected, false);
+  assert.equal(p.html.hasAttribute('data-gz-ctab-framed'), false);
+  assert.equal(p.html.style.getPropertyValue('--gz-ctabs-row'), '', 'the native sticky menu keeps no old strip offset');
+});
+
+test('the editor preview never sends a takeover or clears its existing page marks', () => {
+  const p = page();
+  let takes = 0;
+  p.on('gz-ctabs-take', () => takes++);
+  p.html.setAttribute('data-gz-placing', '');
+  p.html.setAttribute('data-gz-ctab-framed', '');
+  glaze(p, {}, (c) => { c.location.protocol = 'safari-web-extension:'; });
+  assert.equal(takes, 0);
+  assert.ok(p.html.hasAttribute('data-gz-placing'));
+  assert.ok(p.html.hasAttribute('data-gz-ctab-framed'));
+});

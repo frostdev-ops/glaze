@@ -1878,6 +1878,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   if (!preview && !gone) {
     for (const e of document.querySelectorAll('#gz-ctabs, #gz-ctabs-say, #gz-ctabs-frames')) e.remove();
     html.removeAttribute('data-gz-placing');
+    html.style.removeProperty('--gz-ctabs-row');
     if (!framed && html.hasAttribute('data-gz-ctab-framed')) {
       html.removeAttribute('data-gz-ctab-framed');
       ctx.scene();
