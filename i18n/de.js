@@ -3051,5 +3051,6 @@
   "Shard": "Splitter",
   "Contour": "Kontur",
   "Topography": "Topografie",
-  "Living terrain cut into paper terraces": "Lebendiges Gelände aus Papierterrassen"
+  "Living terrain cut into paper terraces": "Lebendiges Gelände aus Papierterrassen",
+  "Frostdev": "Frostdev"
 };

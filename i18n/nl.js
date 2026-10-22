@@ -3051,5 +3051,6 @@
   "Shard": "Scherf",
   "Contour": "Contour",
   "Topography": "Topografie",
-  "Living terrain cut into paper terraces": "Levend landschap, gesneden in papieren terrassen"
+  "Living terrain cut into paper terraces": "Levend landschap, gesneden in papieren terrassen",
+  "Frostdev": "Frostdev"
 };

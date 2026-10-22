@@ -3051,5 +3051,6 @@
   "Shard": "Éclat",
   "Contour": "Contour",
   "Topography": "Topographie",
-  "Living terrain cut into paper terraces": "Un relief vivant découpé en terrasses de papier"
+  "Living terrain cut into paper terraces": "Un relief vivant découpé en terrasses de papier",
+  "Frostdev": "Frostdev"
 };

@@ -3051,5 +3051,6 @@
   "Shard": "Lasca",
   "Contour": "Contorno",
   "Topography": "Topografia",
-  "Living terrain cut into paper terraces": "Terreno vivo recortado em terraços de papel"
+  "Living terrain cut into paper terraces": "Terreno vivo recortado em terraços de papel",
+  "Frostdev": "Frostdev"
 };

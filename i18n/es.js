@@ -3051,5 +3051,6 @@
   "Shard": "Esquirla",
   "Contour": "Contorno",
   "Topography": "Topografía",
-  "Living terrain cut into paper terraces": "Terreno vivo recortado en terrazas de papel"
+  "Living terrain cut into paper terraces": "Terreno vivo recortado en terrazas de papel",
+  "Frostdev": "Frostdev"
 };
