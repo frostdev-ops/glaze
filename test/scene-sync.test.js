@@ -178,6 +178,22 @@ test('a course frame shown again while its hidden startup still loads starts one
   assert.deepEqual([r.log.imports, r.log.starts.length, r.timers.size], [1, 1, 0]);
 });
 
+test('the background starts when the body is in, without waiting for a site part the worker has not sent', async () => {
+  const enable = source.slice(source.indexOf('  const enable = () => {'), source.indexOf('  const disable = () => {'));
+  let body = null, scenes = 0, sweeps = 0;
+  const ctx = vm.createContext({
+    ultra: true, links: [1], settings: { enabled: true }, notUltra: false, ready: Promise.resolve(), partIn: new Promise(() => {}),
+    document: { body: null }, onBody: (fn) => { body = fn; }, isUltra: () => true, on: (s) => s.enabled,
+    applySettings() {}, disable() {}, startSweep: () => sweeps++, syncFooter() {}, moveParts() {}, syncScene: () => scenes++,
+  });
+  vm.runInContext(`${enable}; enable();`, ctx);
+  ctx.document.body = {}; body(); await settle();
+  assert.equal(scenes, 1, 'a background needs the body and the settings, not the site\'s part');
+  assert.equal(sweeps, 0, 'the sweep and the extras still wait for it');
+  ctx.settings.enabled = false; body(); await settle();
+  assert.equal(scenes, 1, 'not when Glaze is off here');
+});
+
 test('mod handoffs cancel pending built-in startup and restore the built-in scene on removal', async () => {
   const r = rig(); let removed = 0;
   const mod = { remove() { removed++; } };

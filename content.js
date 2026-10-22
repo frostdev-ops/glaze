@@ -1424,8 +1424,9 @@
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
       // The sweep fetches, records and registers the site: not on defaults.
       await ready;
-      // The site's part still on its way: the theme is on already; the sweep and the extras wait for it.
-      if (partIn) await partIn;
+      // The site's part still on its way: the theme is on already, and so is the background (its answer may never come); the
+      // sweep and the extras wait for it.
+      if (partIn) { if (on(settings)) syncScene(); await partIn; }
       if (!links.length) return;
       if (!on(settings)) return disable();
       startSweep();
