@@ -1056,8 +1056,8 @@
   };
   const sceneNeed = (file, ready) => {
     if (ready()) return Promise.resolve();
-    const p = need(file, ready);
-    return sceneWait(p, () => { if (loading.get(file) === p) loading.delete(file); });
+    const p = need(file, ready), gone = () => { if (loading.get(file) === p) loading.delete(file); };
+    return sceneWait(p, gone).catch((error) => { gone(); throw error; });
   };
   // Another chance (what was needed in after all, the page back on screen): a startup still waiting goes on, one that gave
   // up starts over, one that never started starts.
@@ -1096,7 +1096,7 @@
     if (!modBg && !sceneLoad[file]) { const p = sceneLoad[file] = import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { if (sceneLoad[file] === p) delete sceneLoad[file]; throw error; }); }
     const load = !modBg && sceneLoad[file];
     const pending = scenePending = { key };
-    Promise.all([load && sceneWait(load, () => { if (sceneLoad[file] === load) delete sceneLoad[file]; }, () => { sceneLoad[file] = load; sceneAgain(); }), sceneNeed('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).catch((error) => { loading.delete('lib/scene-host.js'); throw error; }), !modBg && wait && sceneNeed('lib/glsl.js', () => globalThis.GZ_GLSL).catch((error) => { if (error.late) throw error; })]).then(([mod]) => {
+    Promise.all([load && sceneWait(load, () => { if (sceneLoad[file] === load) delete sceneLoad[file]; }, () => { sceneLoad[file] = load; sceneAgain(); }), sceneNeed('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST), !modBg && wait && sceneNeed('lib/glsl.js', () => globalThis.GZ_GLSL)]).then(([mod]) => {
       if (scenePending !== pending) return;
       if (modBg) { scenePending = null; return placeScene(); }
       if (!settings.enabled || sceneBad === key || !chrome.runtime?.id || !links.length || hid() || key !== sceneSig() || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }

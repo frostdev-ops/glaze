@@ -17,7 +17,7 @@ assert.ok(block.includes('importScene('));
 const background = source.match(/background: (\(el\) => \{.*\}),\n/)[1];
 const loader = source.slice(source.indexOf('  const loading = new Map();'), source.indexOf("  // Moodle's extras"));
 const settle = () => new Promise(setImmediate);
-const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, hostFails = null, hostHangs = 0, hostSilent = false, glslHangs = 0, importHangs = 0 } = {}) => {
+const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, hostFails = null, hostHangs = 0, hostSilent = false, glslHangs = 0, glslFails = 0, importHangs = 0 } = {}) => {
   const log = { starts: [], updates: [], needs: [], answers: [], held: [], stops: 0, removed: 0, imports: 0, files: [], urls: [], listeners: new Map() };
   const timers = new Map(); let nextTimer = 0;
   let failScene = null;
@@ -37,7 +37,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
         if (hostSilent) ran(); // the worker ran the file, and its answer was lost
         return new Promise((ok) => log.answers.push(() => { ran(); ok({ ok: true }); }));
       }
-      if (file !== 'lib/glsl.js' && hostFails-- > 0) throw new Error('temporary injection failure');
+      if (file === 'lib/glsl.js' ? glslFails-- > 0 : hostFails-- > 0) throw new Error('temporary injection failure');
       ran(); return { ok: true };
     } } },
     importScene: (url, file) => {
@@ -54,7 +54,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     parts, GZ_GLSL: glsl ? {} : undefined,
     JSON, Promise, setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: (id) => timers.delete(id),
   });
-  vm.runInContext(`${hostFails === null && !hostHangs && !glslHangs ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
+  vm.runInContext(`${hostFails === null && !hostHangs && !glslHangs && !glslFails ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
   return { api: ctx.api, log, ctx, timers, retry: async () => { const [id, timer] = [...timers].find(([, timer]) => timer.ms < 60000) || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
 };
 const SHADER = { bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(1.); }' } } };
@@ -349,8 +349,18 @@ test('with the checker already here, a shader does not ask again; a built-in sce
 test('if the checker will not load the shader is not drawn, and the built-in scenes are not given up on', async () => {
   const r = rig({ kind: 'shader', parts: SHADER, needFails: true });
   r.api.syncScene(); await settle();
-  assert.equal(r.log.starts.length, 0);
-  assert.equal(r.api.state().sceneFailed, false);
+  assert.deepEqual([r.log.starts.length, r.api.state().sceneBad], [0, ''], 'not refused: its retries ask again');
+  r.ctx.worn.bg.kind = 'scene'; r.api.syncScene(); await settle();
+  assert.equal(r.log.updates.at(-1)?.kind, 'scene');
+});
+
+test('a shader checker the worker failed to load is asked for again, and the shader starts', async () => {
+  const r = rig({ kind: 'shader', parts: SHADER, glslFails: 1 });
+  r.api.syncScene(); await settle();
+  assert.deepEqual([r.log.starts.length, r.api.state().sceneBad], [0, '']);
+  await r.retry();
+  assert.equal(r.log.needs.filter((f) => f === 'lib/glsl.js').length, 2, 'not the failed request again');
+  assert.deepEqual([r.log.starts.length, r.log.updates[0]?.kind], [1, 'shader']);
 });
 
 test('a shader checker request the worker never answers does not hold the shader: the startup asks again', async () => {
