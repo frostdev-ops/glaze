@@ -30,6 +30,70 @@ test('which grades count, and what they are worth', () => {
   assert.equal(G.why({ g: 'A', cr: 3, x: 1 }), 'out');
 });
 
+// ACA-8: schools that grade an academic-dishonesty or never-attended failure write it as its own grade; all of them count
+// as the F they are, with the credits attempted.
+test('XF, FN, IF and FA are failing grades: 0 points, credits counted', () => {
+  for (const g of ['XF', 'FN', 'IF', 'FA', 'xf', 'Fn']) {
+    assert.equal(G.kind(g), 'gpa', g);
+    for (const plus of [true, false]) assert.equal(G.pointsOf({ g, cr: 3 }, plus), 0, `${g} ${plus}`);
+    assert.equal(G.pointsOf({ g, cr: 3, l: 1 }, true, true), 0, `${g} gets no honors bonus`);
+    assert.equal(G.why({ g, cr: 3 }), null, `${g} counts`);
+    assert.equal(G.why({ g, cr: 0 }), 'credits');
+  }
+  // A letter that only looks like them still doesn't count.
+  for (const g of ['XA', 'FNX', 'IFF', 'FB', 'I', 'IFN']) assert.notEqual(G.kind(g), 'gpa', g);
+  // The 3 credits of 0 points pull the term GPA down, as the school's own figure does.
+  const C = require('../lib/gradecalc.js');
+  const t = term('Fall 2024', [{ n: 'Calc', cr: 4, g: 'A' }, { n: 'Hist', cr: 3, g: 'XF' }]);
+  close(C.gpa(G.rowsOf(t)).gpa, 16 / 7, 'term GPA');
+  assert.equal(C.gpa(G.rowsOf(t)).credits, 7);
+});
+
+test('a transcript row graded XF, FN, IF or FA is read, counted as attempted, and not skipped', () => {
+  const t = G.parse(['Fall 2024', 'MATH 1210 Calculus I 4.000 4.000 A 16.000', 'HIST 1700 American Civilization 3.000 0.000 XF 0.000',
+    'BIO 1100 Biology 3.000 0.000 FN 0.000', 'ART 1000 Drawing 2.000 0.000 FA 0.000', 'ENG 1010 Writing 3.000 0.000 IF 0.000', 'Term Totals 15.000 4.000 16.000'].join('\n'))[0];
+  assert.deepEqual(t.c.map((c) => [c.n, c.cr, c.g]), [['MATH 1210 Calculus I', 4, 'A'], ['HIST 1700 American Civilization', 3, 'XF'], ['BIO 1100 Biology', 3, 'FN'],
+    ['ART 1000 Drawing', 2, 'FA'], ['ENG 1010 Writing', 3, 'IF']]);
+  assert.equal(t.skipped, undefined, 'nothing is skipped');
+  assert.deepEqual(t.c.map(G.why), [null, null, null, null, null]);
+  const r = G.check(t);
+  close(r.mine, 16 / 15, 'the failed credits are in the GPA');
+  assert.equal(r.all, 15);
+});
+
+// ACA-9: terms with no season word fall in the year where they are held.
+test('J-Term, January and May terms, Intersession and Maymester sort in calendar order within the year', () => {
+  const names = ['Fall 2025', 'Maymester 2025', 'Summer 2025', 'J-Term 2025', 'Spring 2025', 'Winter 2025', 'Intersession 2025', 'January Term 2025', 'May Term 2025', 'Fall 2024', 'Spring 2026'];
+  const got = G.order(names.map((n) => ({ n }))).map((t) => t.n);
+  assert.deepEqual(got.slice(0, 1).concat(got.slice(-2)), ['Fall 2024', 'Fall 2025', 'Spring 2026']);
+  const at = (n) => got.indexOf(n);
+  for (const early of ['J-Term 2025', 'January Term 2025', 'Intersession 2025']) {
+    assert.ok(at('Winter 2025') < at(early) && at(early) < at('Spring 2025'), `${early} is after Winter and before Spring`);
+  }
+  for (const may of ['Maymester 2025', 'May Term 2025']) assert.ok(at('Spring 2025') < at(may) && at(may) < at('Summer 2025'), `${may} is after Spring and before Summer`);
+  assert.ok(at('Summer 2025') < at('Fall 2025'));
+  assert.ok(G.when('J-Term 2025') < G.when('Fall 2025') && G.when('Fall 2024') < G.when('J-Term 2025'));
+  assert.ok(G.when('Maymester 2025') < G.when('Fall 2025'));
+  // A year range puts a January term in the second year, as it does a spring term.
+  assert.ok(G.when('J-Term 2024-25') > G.when('Fall 2024') && G.when('J-Term 2024-25') < G.when('Spring 2024-25'));
+  // The existing names are unmoved, and a transcript's heading is read the same way.
+  assert.equal(G.when('Winter 2025'), 20250);
+  assert.equal(G.when('Fall 2025'), 20253);
+  assert.equal(G.when('Winter Intersession 2025'), 20250.5, 'the intersession it names, not the Winter before it');
+  assert.equal(G.when('You may terminate by 2025'), 20255, 'a sentence is no May term');
+  const t = G.parse(['Fall 2024', 'MATH 1210 Calculus I 4 A', 'J-Term 2025', 'ART 1000 Drawing 2 B', 'Maymester 2025', 'BIO 1100 Biology 3 B'].join('\n'));
+  assert.deepEqual(t.map((x) => x.n), ['Fall 2024', 'J-Term 2025', 'Maymester 2025']);
+});
+
+test('a goal route starts failing variants at F, with a known baseline', () => {
+  for (const letter of ['XF', 'FN', 'IF', 'FA', 'xf']) {
+    for (const plus of [true, false]) {
+      assert.deepEqual(G.route([{ credits: 3, letter }], 0, plus), [{ letter: 'F', min: null, up: 0 }], `${letter}: already enough`);
+      assert.deepEqual(G.route([{ credits: 3, letter }], 1, plus), [{ letter: 'D', min: null, up: plus ? 2 : 1 }], `${letter}: steps from failure`);
+    }
+  }
+});
+
 test('a term GPA over credits, with plus/minus or whole letters, leaving out what does not count', () => {
   const rows = [{ n: 'Bio', cr: 4, g: 'A-' }, { n: 'Eng', cr: 3, g: 'B+' }, { n: 'Art', cr: 2, g: 'P' }, { n: 'Chem', cr: 4, g: 'W' }, { n: 'Lab', cr: 1, g: 'A', x: 1 }];
   const of = (t, w) => require('../lib/gradecalc.js').gpa(G.rowsOf(t, w));
@@ -116,6 +180,12 @@ test('a route: the cheapest steps up from the grades now', () => {
   }
   // The floor of a letter on a scale with fewer steps.
   assert.equal(G.floor([['A', 90], ['B', 80], ['C', 70], ['F', 0]], 'B+', true), 90);
+  // F on a scale that leaves it out starts at 0 (gradecalc's letter() gives F under the lowest bound): not "F 60+".
+  const NO_F = [['A', 90], ['B', 80], ['C', 70], ['D', 60]];
+  assert.equal(G.floor(NO_F, 'F', true), 0);
+  assert.equal(G.floor(NO_F, 'D', true), 60);
+  assert.equal(G.floor(NO_F, 'C-', false), 70);
+  assert.equal(G.topOf({ credits: 3, scale: NO_F, max: 52 }, true), G.LADDER.true.indexOf('F'), 'a best of 52% on that scale still ends on an F, not on nothing');
 });
 
 test('a route offers only letters a course can still give: by its scale, and by its work left as Canvas rounds', () => {

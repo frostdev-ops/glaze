@@ -372,6 +372,35 @@ test('a weight block that does not add up to 100 is shown whole, marked to check
   assert.deepEqual(S.extract('Grading\nHomework 40%\nExams 60%').weights.issues, []);
 });
 
+// ACA-7: a course with no term dates has no start to place a year-less date by; today stands in for it.
+test('with no term start known, a year-less date takes the year nearest today, and a past one is not a sure one', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 });
+  const on = (y, m, d) => t.mock.timers.setTime(Date.UTC(y, m - 1, d, 12));
+  const rows = (text, opts) => S.extract(text, opts).dates.map((x) => [x.title, x.day, x.conf]);
+  on(2026, 10, 21);
+  assert.deepEqual(rows('Exam 1: September 1\nExam 2: October 23\nFinal exam: December 16'), [
+    ['Exam 1', '2026-09-01', 'check'], ['Exam 2', '2026-10-23', 'sure'], ['Final exam', '2026-12-16', 'sure']], 'September stays in 2026: not a year late as a sure one');
+  assert.deepEqual(rows('Quiz: September 20\nExam: August 5\nMidterm: January 12\nExam: May 5'), [
+    ['Quiz', '2026-09-20', 'sure'], ['Exam', '2026-08-05', 'check'], ['Midterm', '2027-01-12', 'sure'], ['Exam', '2026-05-05', 'check']], 'within 45 days back: as before; further back: this year\'s, to check; next January: next year');
+  assert.deepEqual(rows('Exam: September 1, 2026\nFinal: Jan 12, 2027\nQuiz 9/1/2026', { md: true }), [['Exam', '2026-09-01', 'sure'], ['Final', '2027-01-12', 'sure'], ['Quiz', '2026-09-01', 'check']], 'a year written is the year');
+  assert.deepEqual(rows('Quiz 9/1', { md: true }), [['Quiz', '2026-09-01', 'check']]);
+  assert.deepEqual(rows('Final exam: December 15-17'), [['Final exam', '2026-12-15', 'check']], 'a range is still a guess');
+  assert.deepEqual(S.extract('Exam 1: September 1', {}).dates.map((x) => x.day), ['2026-09-01'], 'an options object with no start is the same as none');
+  assert.deepEqual(S.extract('Exam 1: September 1', { start: undefined }).dates.map((x) => x.day), ['2026-09-01']);
+  assert.deepEqual(S.extract('Exam 1: September 1', { start: NaN }).dates.map((x) => x.day), ['2026-09-01']);
+  // Just after New Year, last month's date is last year's; next month's is this year's.
+  on(2027, 1, 5);
+  assert.deepEqual(rows('Exam: December 10\nExam: January 20\nExam: March 3\nExam: November 2'), [
+    ['Exam', '2026-12-10', 'sure'], ['Exam', '2027-01-20', 'sure'], ['Exam', '2027-03-03', 'sure'], ['Exam', '2026-11-02', 'check']]);
+  // Late in a year, January is next year's.
+  on(2026, 12, 20);
+  assert.deepEqual(rows('Exam: December 1\nExam: January 12\nExam: November 2'), [['Exam', '2026-12-01', 'sure'], ['Exam', '2027-01-12', 'sure'], ['Exam', '2026-11-02', 'check']]);
+  assert.deepEqual(rows('Exam: February 30'), [], 'no such day in any year');
+  // A term start that is known keeps the rule that serves a term across New Year.
+  assert.deepEqual(rows('Exam 1: Dec 10\nExam 2: Jan 21', { start: FALL }), [['Exam 1', '2026-12-10', 'sure'], ['Exam 2', '2027-01-21', 'sure']]);
+  assert.deepEqual(rows('Exam 1: Jan 20\nExam 2: Mar 3', { start: SPRING }), [['Exam 1', '2027-01-20', 'sure'], ['Exam 2', '2027-03-03', 'sure']]);
+});
+
 test('date ranges and numeric dates that read either way are guesses', () => {
   const d = (text, md) => S.extract(text, { start: FALL, md }).dates.map((x) => [x.title, x.day, x.end, x.conf]);
   assert.deepEqual(d('Final exam: December 15-17'), [['Final exam', '2026-12-15', '2026-12-17', 'check']]);

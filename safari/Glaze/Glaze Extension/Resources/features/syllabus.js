@@ -150,7 +150,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const extract = (text, ocr) => {
     const c = opened.course;
     const startAt = Date.parse(c?.term?.start_at || c?.start_at || '');
-    const r = L.extract(text, { start: Number.isFinite(startAt) ? startAt : Date.now(), md: monthFirst(), hint: locale() });
+    // No start for a course with no term dates: the reader then places a year-less date by today, not as if today began the term.
+    const r = L.extract(text, { start: Number.isFinite(startAt) ? startAt : undefined, md: monthFirst(), hint: locale() });
     if (!ocr) return r;
     const d = (f) => (GZ_IMPORT.doubt(ocr, f.src) ? { ...f, conf: 'check' } : f);
     return { ...r, ocr, prof: Object.fromEntries(Object.entries(r.prof).map(([k, f]) => [k, d(f)])), hours: r.hours.map(d), meetings: r.meetings.map(d), dates: r.dates.map(d), scale: d(r.scale), weights: d(r.weights) };

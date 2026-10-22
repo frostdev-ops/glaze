@@ -441,8 +441,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   };
 
   // ---- letters and GPA ------------------------------------------------------------------------------------------
-  // Canvas's default grading scheme, lower bounds in %; the letter is the highest bound the score reaches (the
-  // lowest when it reaches none), from the score rounded as Canvas keeps it.
+  // Canvas's default grading scheme, lower bounds in %; the letter is the highest bound the score reaches, from the
+  // score rounded as Canvas keeps it (under every bound: see letter()).
   const SCHEME = [['A', 94], ['A-', 90], ['B+', 87], ['B', 84], ['B-', 80], ['C+', 77], ['C', 74], ['C-', 70], ['D+', 67], ['D', 64], ['D-', 61], ['F', 0]];
   // Whether a score earns a letter whose lowest bound is `min`: rounded as Canvas keeps it (89.995 reaches 90).
   const reaches = (score, min) => round2(score) >= min - 1e-9;
@@ -450,21 +450,32 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   // only 90.01 earns), less the half that rounds up to it (89.995 for 90, 90.005 for 90.004). What a "what you'd
   // need" search aims at for a letter; a percent typed as a goal keeps its own meaning.
   const reachFrom = (min) => Math.ceil(Number(((min - 1e-9) * 100).toPrecision(12))) / 100 - 0.005;
+  // Under every bound, a scale that reaches 0 (Canvas's does) gives its lowest letter. One that stops short of it, as a
+  // student's own or a syllabus's usually does ("A 90, B 80, C 70, D 60"), leaves F below: where every letter on it has
+  // grade points, else (Pass/Fail) there is no letter, not the lowest passing one.
   const letter = (score, scheme = SCHEME) => {
     if (score == null || !scheme?.length) return null;
-    return (scheme.find(([, min]) => reaches(score, min)) || scheme[scheme.length - 1])[0];
+    const hit = scheme.find(([, min]) => reaches(score, min));
+    if (hit) return hit[0];
+    const lowest = scheme[scheme.length - 1];
+    if (lowest[1] <= 0) return lowest[0];
+    return scheme.every(([name]) => points(name, true) != null) ? 'F' : null;
   };
   // Canvas's own scheme from the course (grading_scheme: [[name, 0.94], …]) in %.
   const schemeOf = (raw) => (Array.isArray(raw) && raw.length ? raw.map(([n, v]) => [String(n), round2(num(v) * 100)]).sort((a, b) => b[1] - a[1]) : null);
-  // "A 93, A- 90, B+ 87, …" (or "A=93; B: 83%") → [['A', 93], …], highest first; null if it isn't one.
+  // "A 93, A- 90, B+ 87, …" (or "A=93; B: 83%") → [['A', 93], …], highest first; null if it isn't one. Each part is a
+  // name of letters, + and - (or − and –), then its lowest percent as a syllabus writes it: "A 93", "A: 93%", "A >= 93",
+  // "A 93+", or a range "A 93-100" of which the low end is kept. The name never takes digits or signs along, which would
+  // make a letter no grade points belong to and drop the course from the GPA.
+  const SCHEME_PART = /^([\p{L}][\p{L}+\-−–]{0,11})(?:\s*(?:[:=]|>=|≥|=>))?\s*(\d{1,3}(?:\.\d+)?)(?:\s*%)?(?:\s*[-–—−]\s*(\d{1,3}(?:\.\d+)?)(?:\s*%)?)?(?:\s*\+)?$/u;
   const parseScheme = (text) => {
     const out = [];
     for (const part of String(text || '').split(/[,;\n]+/)) {
       if (!part.trim()) continue;
-      const m = part.trim().match(/^(\S.{0,11}?)\s*[:=]?\s*(\d{1,3}(?:\.\d+)?)\s*%?$/);
-      if (!m || /\d$/.test(m[1])) return null;
+      const m = part.trim().match(SCHEME_PART);
+      if (!m) return null;
       const min = Number(m[2]);
-      if (!(min <= 100) || out.some(([n]) => n === m[1])) return null;
+      if (!(min <= 100) || (m[3] != null && Number(m[3]) < min) || out.some(([n]) => n === m[1])) return null;
       out.push([m[1], min]);
     }
     return out.length && out.length <= 20 ? out.sort((a, b) => b[1] - a[1]) : null;
@@ -472,7 +483,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   const schemeText = (scheme) => scheme.map(([n, v]) => `${n} ${v}`).join(', ');
   // Grade points on a 4.0 scale: with plus/minus, A− is 3.7, B+ 3.3 …; without, any A is 4. A letter outside the
   // usual ones (Pass, Excellent) has none. Weighted adds the course's bonus (honors 0.5, AP/IB 1) to a passing grade.
-  const POINTS = { 'A+': 4, A: 4, 'A-': 3.7, 'B+': 3.3, B: 3, 'B-': 2.7, 'C+': 2.3, C: 2, 'C-': 1.7, 'D+': 1.3, D: 1, 'D-': 0.7, F: 0, E: 0 };
+  // XF, FN, IF and FA are the failures some schools name apart (dishonesty, never attended, incomplete): an F by any count.
+  const POINTS = { 'A+': 4, A: 4, 'A-': 3.7, 'B+': 3.3, B: 3, 'B-': 2.7, 'C+': 2.3, C: 2, 'C-': 1.7, 'D+': 1.3, D: 1, 'D-': 0.7, F: 0, E: 0, XF: 0, FN: 0, IF: 0, FA: 0 };
   const points = (name, plusMinus, bonus = 0) => {
     const L = String(name || '').trim().toUpperCase().replace(/[−–]/g, '-');
     if (!(L in POINTS)) return null;
@@ -481,7 +493,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   };
   // A course on the GPA: its letter, and with a what-if grade (%), and the points for each. One scale converts any
   // percentage: the student's own for the course, else the course's own scheme, else Canvas's default. The letter now
-  // is Canvas's own where it reports one (the course's scheme, a teacher's override included). `needs`: a what-if is
+  // is Canvas's own where it reports one (the course's scheme, a teacher's override included), and still when the
+  // student's scale has no letter below its lowest bound to give (letter()). `needs`: a what-if is
   // set under Canvas's letter but the course's scheme isn't known yet; until it is, there is no what-if letter.
   // e: the student's enrollment from the course list; pref: its gpaCourses entry; opts: { plus } (plus/minus points).
   const gpaRow = (e, pref = {}, whatIf = null, opts = {}, courseScheme = null) => {
@@ -489,7 +502,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     const scale = own || courseScheme || SCHEME;
     const score = e?.computed_current_score ?? null;
     const canvas = e?.computed_current_grade || e?.computed_current_letter_grade || null;
-    const now = own ? letter(score, own) : canvas || letter(score, scale);
+    const now = (own && letter(score, own)) || canvas || (own ? null : letter(score, scale));
     const needs = whatIf != null && !own && !courseScheme && !!canvas;
     const at = (name) => ({ pts: points(name, opts.plus), wpts: points(name, opts.plus, pref.l || 0) });
     const wiLetter = whatIf == null || needs ? null : letter(whatIf, scale);
