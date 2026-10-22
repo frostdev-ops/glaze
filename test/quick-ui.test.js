@@ -293,8 +293,8 @@ test('quick custom-relay confirmation cancels before joining and disables contro
 
 test('quick non-Notes invites are retained for Settings without attaching them to Notes', async (t) => {
   const server = await start(t), creator = device(t, server), joined = device(t, server), key = 'todo:https://school.instructure.com/5';
-  await creator.local.set({ [key]: T.clean({ tasks: [{ id: 'task-1', title: 'Read chapter' }] }) });
-  const { sid } = await creator.send('create', { kind: 'todo', title: 'Tasks', key, ids: ['task-1'] });
+  await creator.local.set({ [key]: T.clean({ tasks: [{ id: '3f9a1c0e-7b42', title: 'Read chapter' }] }) });
+  const { sid } = await creator.send('create', { kind: 'todo', title: 'Tasks', key, ids: ['3f9a1c0e-7b42'] });
   const link = (await creator.send('link', { sid })).link, p = await page(joined);
   p.get('invite').value = link; p.click('join'); p.click('ask-yes');
   await until(() => p.get('status').textContent.includes('not for notes'));

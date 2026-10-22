@@ -14,6 +14,8 @@ const K = require('../lib/cards.js');
 const { relay, diskStore } = require('../server/relay.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const NK = 'notesIdx:https://school.instructure.com/5', TK = 'todo:https://school.instructure.com/5';
+// Entity ids are the ones Glaze makes (lib/sessions.js ENTITY): a note's UUID, and a To Do task's 13 characters of one.
+const SHARED = '6c1d2f4e-8a3b-4c5d-9e6f-0a1b2c3d4e5f';
 const clone = (x) => x === undefined ? x : structuredClone(x);
 const localArea = (data = {}) => ({ data, get: async (keys) => Object.fromEntries([].concat(keys ?? Object.keys(data)).filter((k) => k in data).map((k) => [k, clone(data[k])])),
   set: async (patch) => { Object.assign(data, clone(patch)); return true; }, remove: async () => true });
@@ -150,7 +152,7 @@ test('a scoped panel attaches only sessions joined by that panel without taking 
     const d = device('http://127.0.0.1:1'), scope = { key: NK, note: '', id: 'panel-a' };
     try {
       const record = { st: G.create('collection', { server: 'http://127.0.0.1:1' }), kind: 'notes', title: 'Private shared note' };
-      await G.session(record.st).edit({ _: { kind: 'notes', title: record.title }, shared: { title: 'Private', html: '<p>Other account content</p>' } });
+      await G.session(record.st).edit({ _: { kind: 'notes', title: record.title }, [SHARED]: { title: 'Private', html: '<p>Other account content</p>' } });
       if (owner === 'other-panel') record.joinedScope = 'panel-b';
       if (owner === 'missing-ticket') { record.joinedScope = scope.id; delete scope.id; }
       if (owner === 'empty-ticket') record.joinedScope = scope.id = '';
@@ -176,7 +178,7 @@ test('a scoped Join records its panel provenance and permits its own Notes attac
   const d = device('http://127.0.0.1:1'), scope = { key: NK, note: '', id: 'panel-a' };
   try {
     const st = G.create('collection', { server: 'http://127.0.0.1:1' });
-    await G.session(st).edit({ _: { kind: 'notes', title: 'Joined' }, shared: { title: 'Joined', html: '<p>Joined by this panel</p>' } });
+    await G.session(st).edit({ _: { kind: 'notes', title: 'Joined' }, [SHARED]: { title: 'Joined', html: '<p>Joined by this panel</p>' } });
     const joined = await d.send('join', { link: G.link(st.server, { sid: st.sid, seed: G.unb64(st.seed) }, true), scope });
     const record = await session(d, joined.sid);
     assert.equal(record.joinedScope, scope.id);
@@ -514,8 +516,8 @@ test('a session operation waiting on the relay never holds up the storage broker
 test('a relay that never answers holds up sharing alone, never another feature\'s storage write', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const server = 'https://relay.example.edu', broker = K.queue();
-  const local = localArea({ shareOn: true, [TK]: T.clean({ tasks: [{ id: 'task1', title: 'Shared task', at: 1 }] }) }), db = database();
-  const record = { st: G.create('collection', { server }), kind: 'todo', title: 'Shared', bind: { key: TK, map: { task1: 'task1' }, files: {} } };
+  const local = localArea({ shareOn: true, [TK]: T.clean({ tasks: [{ id: '3f9a1c0e-7b42', title: 'Shared task', at: 1 }] }) }), db = database();
+  const record = { st: G.create('collection', { server }), kind: 'todo', title: 'Shared', bind: { key: TK, map: { ['3f9a1c0e-7b42']: '3f9a1c0e-7b42' }, files: {} } };
   await db.put('sessions', record.st.sid, record);
   let asked, answered = false;
   const asking = new Promise((r) => { asked = r; });
@@ -555,8 +557,8 @@ test('an edit made while the relay is asked is kept, and the next sync sends it'
   for (const kind of ['todo', 'notes']) await t.test(kind, async (t) => {
     const { url } = await start(t), a = device(url);
     t.after(() => a.worker.stop());
-    if (kind === 'todo') a.local.data[TK] = T.clean({ tasks: [{ id: 'task1', title: 'Before', at: Date.now() }] });
-    const id = kind === 'todo' ? 'task1' : await seed(a, '<p>Before</p>');
+    if (kind === 'todo') a.local.data[TK] = T.clean({ tasks: [{ id: '3f9a1c0e-7b42', title: 'Before', at: Date.now() }] });
+    const id = kind === 'todo' ? '3f9a1c0e-7b42' : await seed(a, '<p>Before</p>');
     const { sid } = await a.send('create', { kind, title: 'Shared', key: kind === 'todo' ? TK : NK, ids: [id] });
     let release, entered;
     const gate = new Promise((r) => { release = r; }), ready = new Promise((r) => { entered = r; });
@@ -581,15 +583,15 @@ test('an edit made while the relay is asked is kept, and the next sync sends it'
 test('disk relay: custom tasks carry only cleaned task/plan fields; joined Looks never apply themselves', async (t) => {
   const { url } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });
-  a.local.data[TK] = T.clean({ tasks: [{ id: 'task1', title: 'Write essay', cid: '123', at: Date.now() }], items: { 'task:task1': { on: '2026-10-20', subs: [{ id: 'step', title: 'Outline', done: false }] } } });
-  const taskSession = await a.send('create', { kind: 'todo', title: 'Our work', key: TK, ids: ['task1'] });
+  a.local.data[TK] = T.clean({ tasks: [{ id: '3f9a1c0e-7b42', title: 'Write essay', cid: '123', at: Date.now() }], items: { 'task:3f9a1c0e-7b42': { on: '2026-10-20', subs: [{ id: 'step', title: 'Outline', done: false }] } } });
+  const taskSession = await a.send('create', { kind: 'todo', title: 'Our work', key: TK, ids: ['3f9a1c0e-7b42'] });
   const view = (await a.send('read', taskSession)).view;
-  assert.equal(view.task1.task.cid, '');
-  assert.equal(view.task1.plan.on, '2026-10-20');
+  assert.equal(view['3f9a1c0e-7b42'].task.cid, '');
+  assert.equal(view['3f9a1c0e-7b42'].plan.on, '2026-10-20');
   await b.send('join', { link: (await a.send('link', { ...taskSession, edit: true })).link });
   await b.send('attach', { ...taskSession, key: TK });
   assert.equal(b.local.data[TK].tasks[0].title, 'Write essay');
-  assert.notEqual(b.local.data[TK].tasks[0].id, 'task1');
+  assert.notEqual(b.local.data[TK].tasks[0].id, '3f9a1c0e-7b42');
   const lookSession = await a.send('create', { kind: 'look', title: 'Study Look' });
   await b.send('join', { link: (await a.send('link', lookSession)).link });
   assert.deepEqual(b.settings.data, {}, 'following never changes the theme');

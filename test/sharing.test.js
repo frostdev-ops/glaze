@@ -132,6 +132,33 @@ test('edit: deletions and restores are changes too, and a value too big to share
   await assert.rejects(G.edit({ ...blank(), seed: undefined }, AD, { x: { a: 1 } }, 1e12), /read-only/);
 });
 
+test('edit: an entity named like a prototype member is an ordinary entity: it can be deleted, and a view without it is not taken to have it', async () => {
+  const d = blank(), now = 1.7e12;
+  const t = (ms, c = 0, a = 'aaaaaaaa') => ms.toString(36).padStart(9, '0') + c.toString(36).padStart(3, '0') + a;
+  await G.merge(d, AD, ['toString', 'hasOwnProperty', 'valueOf'].map((e) => ({ e, f: 'a', v: 1, t: t(now), p: '' })), now);
+  assert.deepEqual(Object.keys(G.view(d)).sort(), ['hasOwnProperty', 'toString', 'valueOf']);
+  // The caller's view is a plain object that inherits those names; an entity is in it only if it is its own.
+  assert.deepEqual(await G.edit(d, AD, { x: { a: 2 } }, now + 1), { n: 4, big: [] });
+  assert.deepEqual(G.view(d), { x: { a: 2 } });
+  assert.deepEqual(d.pending.flat().filter((o) => o.f === 'del').map((o) => o.e).sort(), ['hasOwnProperty', 'toString', 'valueOf']);
+});
+
+test('adapters can name the ids they take: others are no entity, in a merge, an edit, a view or the whole state', async () => {
+  G.ADAPTERS.named = { fields: ['a'], clean: (f, v) => (typeof v === 'number' ? v : undefined), id: (e) => /^n\d$/.test(e) };
+  try {
+    const now = 1.7e12, t = (ms, c = 0, a = 'aaaaaaaa') => ms.toString(36).padStart(9, '0') + c.toString(36).padStart(3, '0') + a;
+    const d = { ...blank(), type: 'named' }, ad = G.ADAPTERS.named;
+    await G.merge(d, ad, ['n1', 'toString', 'zz', '_m_x'].map((e) => ({ e, f: 'a', v: 1, t: t(now), p: '' })), now);
+    assert.deepEqual(Object.keys(d.state), ['n1']);
+    // A state kept before the adapter took only these ids: nothing of the others is offered, sent again, or deleted.
+    d.state.zz = { a: [1, t(now), ''] }; d.state.toString = { a: [1, t(now), ''] };
+    assert.deepEqual(G.view(d), { n1: { a: 1 } });
+    assert.deepEqual(G.everything(d).flat().map((o) => o.e), ['n1']);
+    assert.deepEqual(await G.edit(d, ad, { n1: { a: 1 }, toString: { a: 5 }, qq: { a: 5 } }, now + 1), { n: 0, big: [] });
+    assert.deepEqual(d.pending, []);
+  } finally { delete G.ADAPTERS.named; }
+});
+
 test('edit: unsent changes keep only the newest value per field, naming the value the others last saw', async () => {
   const a = blank('aaaaaaaa'), b = blank('bbbbbbbb');
   await G.edit(b, AD, { x: { a: 1, b: 1 } }, 1e12);

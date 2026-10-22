@@ -88,7 +88,7 @@ test('a changed media file replaces the one shared; a Look whose file is not her
   const second = await wear(a, fx('still.webp'), { dim: 10 });
   assert.notEqual(first, second);
   await a.send('sync', look); await b.send('sync', look);
-  assert.equal(files(blobs).length, 2, 'the new file is a new upload');
+  assert.equal(files(blobs).length, 1, 'the new file is a new upload, and the one it replaced is gone from the relay');
   await b.send('useLook', look);
   assert.equal((await L.decode(b.offered.at(-1))).parts.x.bg.media.src, `file:${second}`);
   assert.equal((await M.read(b.local, second)).mime, 'image/webp');
@@ -112,6 +112,24 @@ test('a changed media file replaces the one shared; a Look whose file is not her
   const before = files(blobs).length;
   await e.send('sync', plain);
   assert.equal(files(blobs).length, before, 'the draft stays on this computer');
+});
+
+test('the media file goes off the relay when the Look stops using it, and comes back as a new upload if it is worn again', async (t) => {
+  const { url, blobs } = await start(t), a = device(url), b = device(url);
+  t.after(() => { a.worker.stop(); b.worker.stop(); });
+  const h = await wear(a, fx('anim.webp'));
+  const look = await a.send('create', { kind: 'look', title: 'Moving' });
+  await b.send('join', { link: (await a.send('link', look)).link });
+  assert.equal(files(blobs).length, 1);
+  const media = a.settings.data.bg;
+  a.settings.data.bg = { kind: 'solid' };
+  await a.send('sync', look);
+  assert.equal(files(blobs).length, 0, 'nothing of the Look\'s media is left on the relay');
+  a.settings.data.bg = media;
+  await a.send('sync', look); await b.send('sync', look);
+  assert.equal(files(blobs).length, 1, 'worn again, the file is sent again');
+  await b.send('useLook', look);
+  assert.deepEqual(Buffer.from((await M.read(b.local, h)).bytes), Buffer.from(fx('anim.webp')));
 });
 
 test('retrying a changed media upload never reuses the previous background file', async (t) => {
