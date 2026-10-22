@@ -1084,6 +1084,13 @@ GZ_UI.load().then((s) => {
     if (!code) return endOffer();
     let got;
     try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
+    const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
+    // A Look part's sentence (lib/lookparts.js): a list in it is Glaze's own names, each translated, then joined.
+    const say = (n) => t(n.why, n.vars && Object.fromEntries(Object.entries(n.vars).map(([k, v]) => [k, Array.isArray(v) ? and(v.map((w) => t(w))) : v])));
+    // Every code is someone else's Look here (pasted, the gallery's, a Look share's): one that takes away signing out or
+    // the account, or adds a link without https or named as Glaze's own, is refused whole, with its reasons.
+    const refused = GZ_XPARTS.outside(got.parts);
+    if (refused.length) { endOffer(); return hint([t("Glaze won't use this Look."), ...refused.map(say)].join(' '), true); }
     from = gallery;
     offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav), navbar: { ...s.navbar, ...got.navbar || {} }, sidebar: { ...s.sidebar, ...got.sidebar || {} } });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
@@ -1109,7 +1116,6 @@ GZ_UI.load().then((s) => {
       // Style and scene values are the editor's own labels, lowercased: 'radial' is 'Radial'.
       const word = (v) => t(v[0].toUpperCase() + v.slice(1));
       const kind = { solid: t('a solid background'), gradient: t('a {style|lower} gradient background', { style: word(offer.bg.style) }), aurora: t('an aurora background'), scene: t('the {scene|lower} animated background', { scene: word(offer.bg.scene) }), image: t('an image background') }[offer.bg.kind] || t(GZ_XPARTS.KIND_WORD[offer.bg.kind]);
-      const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
       what.append(t("{palette}, {fonts}, and {background}. It's showing in the preview.", { palette, fonts: and(fonts.map(fontName)), background: kind }));
       const notes = [];
       if (web.length) notes.push(t('Downloads {fonts} (web fonts).', { n: web.length, fonts: and(web) }));
@@ -1119,7 +1125,7 @@ GZ_UI.load().then((s) => {
       if (got.cards.length) notes.push(t('Brings {n} course card styles for your Canvas Dashboard.', { n: got.cards.length }));
       if (cardHosts.length) notes.push(t('Its card pictures load from {hosts}.', { hosts: and(cardHosts) }));
       if (offer.nav.k === 'image' && offer.nav.u) notes.push(t('Its sidebar picture loads from {host}.', { host: new URL(offer.nav.u).hostname }));
-      for (const n of GZ_XPARTS.describe(got.parts)) notes.push(t(n.why, n.vars));
+      for (const n of GZ_XPARTS.describe(got.parts)) notes.push(say(n));
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;

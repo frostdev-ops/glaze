@@ -13,21 +13,23 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
   const WIDGETS = { clock: ['Clock and date', 'history'], next: ['Next due', 'calendar'], timer: ['Focus timer', 'timer'], pet: ['Pet habitat', 'star'] };
   const MAX_BYTES = 8000;
 
-  // The groups as the bar has them, every item in its place, hidden ones too: [{ label, items: [{ id, name, icon, hidden, tab, link }] }].
-  const rows = (prefs, { legacy = null, names = (id) => NAMES[id] || id } = {}) => {
+  // The groups as the bar has them, every item in its place, hidden ones too: [{ label, items: [{ id, name, icon, hidden, tab,
+  // link, own, from }] }]. look: the worn Look's layout (x.nav), whose hiding, grouping and links the bar follows where the
+  // student hasn't chosen; from: the host one of its links goes to.
+  const rows = (prefs, { legacy = null, look = null, names = (id) => NAMES[id] || id } = {}) => {
     const p = M().clean(prefs);
     const native = ULTRA.map((id) => ({ id, label: names(id) }));
-    // Built with everything shown, to know where each item goes; the student's own hiding is read from p.
+    // Built with everything shown, to know where each item goes; the student's own hiding and the Look's are read from real.
     const shownAll = { ...p, items: Object.fromEntries(Object.entries(p.items).map(([id, v]) => { const { hidden, ...rest } = v; return [id, rest]; })) };
-    const m = M().build({ native, prefs: shownAll, legacy: legacy ? { ...legacy, hidden: [] } : null, names: { notes: names('glaze:notes'), todo: names('glaze:todo'), search: names('glaze:search'), settings: names('glaze:settings') } });
-    const real = M().build({ native, prefs: p, legacy, names: {} });
+    const m = M().build({ native, prefs: shownAll, legacy: legacy ? { ...legacy, hidden: [] } : null, look: look ? { ...look, hidden: [] } : null, names: { notes: names('glaze:notes'), todo: names('glaze:todo'), search: names('glaze:search'), settings: names('glaze:settings') } });
+    const real = M().build({ native, prefs: p, legacy, look, names: {} });
     const tabs = new Set(real.tabs.map((i) => i.id));
     const hidden = new Set(real.items.filter((i) => i.hidden).map((i) => i.id));
     const groups = p.groups.length ? p.groups.map((g) => ({ label: g.label || '', items: [] })) : m.groups.map(() => ({ label: '', items: [] }));
     const byGroup = new Map(m.groups.map((g, at) => [g.id, at]));
     for (const g of m.groups) {
       const at = p.groups.length ? Number(g.id.slice(1)) : byGroup.get(g.id);
-      for (const i of g.items) (groups[at] || groups.at(-1)).items.push({ id: i.id, name: i.label, icon: i.icon, hidden: hidden.has(i.id), tab: tabs.has(i.id), link: i.id.startsWith('link:') ? i.id.slice(5) : '', own: !!p.links.find((l) => `link:${l.id}` === i.id) });
+      for (const i of g.items) (groups[at] || groups.at(-1)).items.push({ id: i.id, name: i.label, icon: i.icon, hidden: hidden.has(i.id), tab: tabs.has(i.id), link: i.id.startsWith('link:') ? i.id.slice(5) : '', own: !!p.links.find((l) => `link:${l.id}` === i.id), ...(i.from && { from: i.from }) });
     }
     if (groups.length < 2) groups.push({ label: '', items: [] });
     return groups;
@@ -45,6 +47,8 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
     let prefs = M().clean(), legacy = null, written = '', picking = '', drag = null, armed = 0;
     let saved = prefs, revision = 0, writing = 0, writes = Promise.resolve();
     const names = (id) => (id.startsWith('glaze:') ? t(GLAZE[id.slice(6)]) : t(id === 'institution-page' && settings().enhance.dashboard ? 'Dashboard' : NAMES[id] || id));
+    // The worn Look's layout, which the bar follows while Glaze is on: what it hides is listed as hidden here.
+    const worn = () => (settings().enabled !== false ? settings().parts?.x?.nav || null : null);
     const say = (text, bad = false) => { $('#nbar-status').textContent = text; if (bad) hint(text, true); };
     const write = async (next) => {
       const clean = M().clean(next);
@@ -75,7 +79,7 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
     const render = () => {
       const focus = document.activeElement?.closest?.('#nbar-items li') ? [document.activeElement.closest('li').dataset.id, document.activeElement.dataset.nb] : null;
       const widgetFocus = document.activeElement?.closest?.('#nbar-widgets li') ? [document.activeElement.closest('li').dataset.w, document.activeElement.tagName.toLowerCase()] : null;
-      const gs = rows(prefs, { legacy, names });
+      const gs = rows(prefs, { legacy, look: worn(), names });
       const tabCount = gs.flatMap((g) => g.items).filter((i) => i.tab).length;
       const lists = gs.map((g, gi) => {
         const name = node('input', { type: 'text', value: g.label, maxLength: 24, placeholder: t('Group {n}', { n: gi + 1 }) });
@@ -118,6 +122,7 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
           label.addEventListener('change', () => { const v = label.value.trim(); const { label: _l, ...rest } = prefs.items[item.id] || {}; write({ ...prefs, items: { ...prefs.items, [item.id]: v ? { ...rest, label: v } : rest } }); });
           const check = (text, on, run, disabled = false, nb) => { const c = node('input', { type: 'checkbox', checked: on, disabled }); c.dataset.nb = nb; c.addEventListener('change', () => run(c.checked)); return node('label', {}, c, t(text)); };
           const tools = node('span', { className: 'nb-tools' },
+            item.from ? node('span', { className: 'desc', textContent: t('From {name}', { name: item.from }) }) : null,
             check('Shown', !item.hidden, (v) => write({ ...prefs, items: { ...prefs.items, [item.id]: { ...prefs.items[item.id], hidden: !v } } }), false, 'shown'),
             check('Phone tab', item.tab, (v) => {
               const now = gs.flatMap((x) => x.items).filter((i) => i.tab).map((i) => i.id);
@@ -151,7 +156,7 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
         return node('label', {}, c, svg(g === 'settings' ? 'glaze' : g), t(GLAZE[g]));
       }));
       // Glaze's widgets: the student's once they choose, else what the bar shows now (a worn Look's or the older rail's).
-      const shown = M().build({ prefs, legacy, look: settings().enabled !== false ? settings().parts?.x?.nav : null }).widgets;
+      const shown = M().build({ prefs, legacy, look: worn() }).widgets;
       $('#nbar-widgets').replaceChildren(...Object.keys(WIDGETS).map((id) => {
         const on = shown.find((w) => w.id === id), name = t(WIDGETS[id][0]);
         const pick = (next) => write({ ...prefs, widgets: Object.keys(WIDGETS).map((w) => (w === id ? next : shown.find((x) => x.id === w))).filter(Boolean) });
@@ -172,7 +177,7 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
       const id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
       const link = NI().link({ id, n: $('#nbar-link-name').value, u: $('#nbar-link-url').value.trim(), i: 'link', tab: $('#nbar-link-tab').checked });
       if (!link) return say(t('Use an http or https link and a name.'), true);
-      const gs = rows(prefs, { legacy, names });
+      const gs = rows(prefs, { legacy, look: worn(), names });
       write({ ...prefs, links: [...prefs.links, link], ...(prefs.groups.length && { groups: [...groupsOf(gs).slice(0, -1), { ...groupsOf(gs).at(-1), items: [...groupsOf(gs).at(-1).items, `link:${id}`] }] }) })
         .then((ok) => { if (ok) e.target.reset(); });
     });

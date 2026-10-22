@@ -195,6 +195,18 @@ test('rotation: a favorite brings its parts with it, a built-in Look clears them
 });
 
 // ---- the page -------------------------------------------------------------------------------------------------------
+test('rotation refuses legacy outside favorites that hide critical controls without restricting own Look storage', async () => {
+  const G = require('../defaults.js'), X = require('../lib/lookparts.js'), S = require('../lib/share.js');
+  const parts = { x: { nav: { hidden: ['logout'] } } };
+  const code = await S.encode(G.GZ_SANITIZE({}), {}, parts);
+  const packed = await X.pack(parts);
+  const w = worker({ rotateLooks: [code], lookFavorites: [{ code, name: 'Legacy' }], rotateState: { mode: '6h 08:00', at: 1, i: -1 } }, { ...G.GZ_SANITIZE({ extras: { rotate: '6h' } }), lookX: packed });
+  assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
+  assert.equal(w.sync.lookX, packed, 'refused favorite leaves own worn Look intact');
+  assert.equal(w.local.rotateState.turned, false);
+  assert.deepEqual((await S.decode(code)).parts, parts, 'own code still decodes');
+});
+
 class El {
   constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, parent: null, style: {}, id: '' }); }
   get classList() { const el = this; return { toggle: (c, on) => { el[`class:${c}`] = on; }, contains: (c) => !!el[`class:${c}`] }; }

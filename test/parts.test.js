@@ -9,6 +9,7 @@ const P = require('../lib/parts.js');
 const G = require('../defaults.js');
 const F = require('../lib/fonts.js');
 const LX = require('../lib/lookx.js');
+const C = require('../lib/color.js');
 
 test('the registry: dotted names per LMS, a selector and label each, containers shared by what may move together', () => {
   assert.ok(P.PARTS.size > 60);
@@ -175,7 +176,7 @@ class El extends Node {
   toggleAttribute(k, on) { if (on) this.setAttribute(k, ''); else this.removeAttribute(k); }
   texts() { return this.children.flatMap((c) => (c instanceof Text ? [c] : c.texts())); }
 }
-const page = (site, build, at = '/') => {
+const page = (site, build, at = '/', extra = {}) => {
   const doc = { writes: 0 };
   const el = (sel, kids, props) => new El(doc, [].concat(sel), kids, props);
   const body = build(el, (name) => P.get(name).s);
@@ -195,7 +196,7 @@ const page = (site, build, at = '/') => {
   let on = true, x = null;
   const ctx = { site, on: () => on, parts: () => x, need: () => Promise.resolve() };
   const fonts = [];
-  const c = vm.createContext({ GZ_CTX: ctx, GZ_PARTS: P, GZ_LX: LX, GZ_FONTS: { load: (f) => fonts.push(f) }, document: doc, location: { pathname: at }, NodeFilter: { SHOW_TEXT: 4 }, chrome: { runtime: { getURL: (f) => `ext/${f}` } } });
+  const c = vm.createContext({ GZ_CTX: ctx, GZ_PARTS: P, GZ_LX: LX, GZ_COLOR: C, GZ_FONTS: { load: (f) => fonts.push(f) }, document: doc, location: { pathname: at }, NodeFilter: { SHOW_TEXT: 4 }, chrome: { runtime: { getURL: (f) => `ext/${f}` } }, ...extra });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'features/rules.js'), 'utf8'), c);
   return { doc, body, fonts, R: c.GZ_RULES, wear: (rules) => { x = rules && { rules }; c.GZ_RULES.sync(); }, go: (at) => { c.location.pathname = at; c.GZ_RULES.sync(); }, off: () => { on = false; c.GZ_RULES.sync(); }, sheet: () => doc.getElementById('gz-rules-css') };
 };
@@ -353,6 +354,36 @@ test('opacity cannot hide a container holding Glaze settings', () => {
   footer.append(nav.children[0]);
   R.sync();
   assert.equal(footer.style.getPropertyValue('--gz-r-o'), '', 'a late settings item is protected on the next pass');
+});
+
+test('a colour rule that would hide Glaze settings in its own background is ignored, as opacity is', () => {
+  // The page's palette (content.js sets it on <html>) and what Ultra draws: its rail on surface-2, Glaze's item in ink.
+  const tokens = { '--gz-surface-2': '#102030', '--gz-ink': '#eef2f8' };
+  const getComputedStyle = (e) => ({
+    getPropertyValue: (k) => (e === e.doc.root ? tokens[k] || '' : ''),
+    color: e.href === '#glaze' ? 'rgb(238, 242, 248)' : '', backgroundColor: e.sel.has(P.get('ultra.nav').s) ? 'rgb(16, 32, 48)' : 'rgba(0, 0, 0, 0)', backgroundImage: 'none',
+  });
+  const { body, wear } = page('ultra', (el, s) => el([], [
+    el(s('ultra.nav'), [el([], ['Glaze settings'], { href: '#glaze' })]),
+    el(s('ultra.nav.footer'), ['Footer']),
+  ]), '/', { getComputedStyle });
+  const [nav, footer] = body.children;
+  const colours = () => [nav.getAttribute('data-gz-r-st'), nav.style.getPropertyValue('--gz-r-fg'), nav.style.getPropertyValue('--gz-r-bg')];
+  // The audit's rule: foreground and background both surface-2. Other styling stays; a part without Glaze settings keeps it.
+  wear([{ p: 'ultra.nav', do: 'style', st: { fg: 'surface-2', bg: 'surface-2', r: 8 } }, { p: 'ultra.nav.footer', do: 'style', st: { fg: 'surface-2', bg: 'surface-2' } }]);
+  assert.deepEqual(colours(), ['r', '', '']);
+  assert.equal(nav.style.getPropertyValue('--gz-r-r'), '8px');
+  assert.equal(footer.getAttribute('data-gz-r-st'), 'fg bg', 'ordinary parts are the Look\'s to colour');
+  // Nearly the same colour, a token against its own hex, or one side against what the page already draws.
+  for (const st of [{ fg: '#112233', bg: '#13253a' }, { fg: 'surface-2', bg: '#102030' }, { fg: '#102030' }, { fg: 'surface-2' }, { bg: '#eef2f8' }, { bg: 'ink' }]) {
+    wear([{ p: 'ultra.nav', do: 'style', st }]);
+    assert.deepEqual(colours(), [null, '', ''], JSON.stringify(st));
+  }
+  // Colours Glaze settings can be read on stay.
+  wear([{ p: 'ultra.nav', do: 'style', st: { fg: '#ffffff', bg: '#112233' } }]);
+  assert.deepEqual(colours(), ['fg bg', '#ffffff', '#112233']);
+  wear([{ p: 'ultra.nav', do: 'style', st: { bg: '#000000' } }]);
+  assert.deepEqual(colours(), ['bg', '', '#000000']);
 });
 
 test('Glaze classes are protected even after native classes', () => {

@@ -21,6 +21,28 @@ var GZ_NAV_LAYOUT = globalThis.GZ_NAV_LAYOUT || (() => {
     α: 'a', ε: 'e', ο: 'o', ρ: 'p', χ: 'x', ι: 'i', κ: 'k', ν: 'v', τ: 't' };
   const fold = (v) => (typeof v === 'string' ? v.normalize('NFKC').toLowerCase().normalize('NFKD').replace(/[аеорсхуіјѕӏαεορχικντ]/gu, (c) => CONFUSABLE[c]).replace(/[\p{M}\s\p{P}\p{S}\p{Cc}\p{Cf}]+/gu, '') : '');
   const reserved = (label, also = []) => { const f = fold(label); return !!f && [...RESERVED.names, ...also].some((n) => fold(n) === f); };
+  // Shared Looks have no LMS to ask yet. Match the native names in every shipped language, using the same comparison
+  // as reserved controls; tests keep this small table in step with the catalogues.
+  const NATIVE_NAMES = {
+    'institution-page': ['Institution page', 'Institutionsseite', 'Página de la institución', "Page de l’établissement", "Page de l'établissement", 'Instellingspagina', 'Página da instituição'],
+    stream: ['Activity', 'Aktivität', 'Actividad', 'Activité', 'Activiteit', 'Atividade'],
+    course: ['Courses', 'Kurse', 'Cursos', 'Cours', 'Cursussen'],
+    organization: ['Organizations', 'Organisationen', 'Organizaciones', 'Organisations', 'Organisaties', 'Organizações'],
+    calendar: ['Calendar', 'Kalender', 'Calendario', 'Calendrier', 'Agenda', 'Calendário'],
+    messages: ['Messages', 'Nachrichten', 'Mensajes', 'Berichten', 'Mensagens'],
+    grades: ['Grades', 'Noten', 'Calificaciones', 'Notes', 'Cijfers', 'Notas'],
+    tools: ['Tools', 'Herramientas', 'Outils', 'Hulpmiddelen', 'Ferramentas'],
+    dashboard: ['Dashboard', 'Tablero', 'Tableau de bord', 'Painel'],
+    home: ['Site home', 'Startseite der Website', 'Inicio del sitio', 'Accueil du site', 'Startpagina van de site', 'Página inicial do site'],
+    history: ['History', 'Verlauf', 'Historial', 'Historique', 'Geschiedenis', 'Histórico'],
+    help: ['Help', 'Hilfe', 'Ayuda', 'Aide', 'Ajuda'],
+    groups: ['Groups', 'Gruppen', 'Grupos', 'Groupes', 'Groepen'],
+    admin: ['Admin', 'Verwaltung', 'Administración', 'Administration', 'Beheer', 'Administração'],
+    notifications: ['Notifications', 'Benachrichtigungen', 'Notificaciones', 'Meldingen', 'Notificações'],
+    profile: ['Your account', 'Dein Konto', 'Tu cuenta', 'Ton compte', 'Je account', 'Sua conta'],
+    logout: RESERVED.names,
+  };
+  const mimics = (label, ids) => ids.some((id) => (NATIVE_NAMES[id] || []).some((n) => fold(label) === fold(n)));
   // The one rule for a link a mod's code supplies (an item's href, a layout's link): an http(s) page of `origin`, the
   // school's site the tab is on, with no credentials, at most 512 characters. → its address, resolved against that site,
   // or '' when it isn't one. Anywhere else, a mod could carry what it read (grades, say) off the site in the address,
@@ -31,6 +53,9 @@ var GZ_NAV_LAYOUT = globalThis.GZ_NAV_LAYOUT || (() => {
   };
   // A cleaned layout's links that aren't pages of `origin` (every one, given none).
   const offsite = (nav, origin) => (nav?.links || []).filter((l) => !onSite(l.u, origin));
+  // Where a worn Look's link goes, for the bar to say: its host when it leaves `origin` (every one, given none), '' for a
+  // page of the school's site. A Look is someone else's, so its "Grades" must not pass for the school's own.
+  const away = (l, origin) => { if (onSite(l?.u, origin)) return ''; try { return new URL(l.u).hostname; } catch { return ''; } };
   const PLACES = ['left', 'top', 'bottom', 'dock'];
   const CANVAS = { profile: 'profile', dashboard: 'dashboard', courses: 'course', calendar: 'calendar', conversations: 'messages', history: 'history', help: 'help', accounts: 'admin', groups: 'groups' };
   const MOODLE = [[/\/my\/courses\.php$/, 'course'], [/\/my\/(index\.php)?$/, 'dashboard'], [/\/admin\/search\.php$/, 'admin'], [/\/calendar\/view\.php$/, 'calendar'], [/\/message\/index\.php$/, 'messages'], [/\/grade\/report\/overview\/index\.php$/, 'grades']];
@@ -125,6 +150,6 @@ var GZ_NAV_LAYOUT = globalThis.GZ_NAV_LAYOUT || (() => {
     widgets: N.WIDGETS.filter((w) => (nav.groups || []).some((g) => g.items.includes(`w:${w}`))).map((id) => ({ id, on: true, at: 'inline' })),
   });
 
-  return { NATIVE, NAMES, RESERVED, PLACES, clean, resolve, rail, canvas, moodle, reserved, onSite, offsite };
+  return { NATIVE, NAMES, RESERVED, PLACES, KEYS, clean, resolve, rail, canvas, moodle, reserved, mimics, onSite, offsite, away };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_NAV_LAYOUT; else GZ_NAV_LAYOUT;

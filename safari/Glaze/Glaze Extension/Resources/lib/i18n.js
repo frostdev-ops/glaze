@@ -20,6 +20,9 @@ const GZ_I18N = (() => {
     'Saved {n} files': { one: 'Saved {n} file', other: 'Saved {n} files' },
     '{n} settings': { one: '{n} setting', other: '{n} settings' },
     'Downloads {fonts} (web fonts).': { one: 'Downloads {fonts} (a web font).', other: 'Downloads {fonts} (web fonts).' },
+    'Hides {n} parts of your school pages: {parts}.': { one: 'Hides {n} part of your school pages: {parts}.', other: 'Hides {n} parts of your school pages: {parts}.' },
+    'Makes {n} parts of your school pages see-through: {parts}.': { one: 'Makes {n} part of your school pages see-through: {parts}.', other: 'Makes {n} parts of your school pages see-through: {parts}.' },
+    'Changes how {n} parts of your school pages look: {parts}.': { one: 'Changes how {n} part of your school pages looks: {parts}.', other: 'Changes how {n} parts of your school pages look: {parts}.' },
   };
 
   // The languages Glaze has besides English, one catalogue each in i18n/. The extension's own pages load them

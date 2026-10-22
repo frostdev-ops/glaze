@@ -150,7 +150,7 @@ test('lookup, placeholders and plurals', () => {
 });
 
 test('Look part descriptions use singular and plural catalogue forms', () => {
-  for (const key of ['{name}: {n} layers.', 'Layers {n} animated backgrounds.', 'Changes {n} animations.', 'Plays effects for {n} events.', 'Changes how {n} parts of your school pages look.']) {
+  for (const key of ['{name}: {n} layers.', 'Layers {n} animated backgrounds.', 'Changes {n} animations.', 'Plays effects for {n} events.', 'Hides {n} parts of your school pages: {parts}.', 'Makes {n} parts of your school pages see-through: {parts}.', 'Changes how {n} parts of your school pages look: {parts}.']) {
     for (const lang of I.CODES) {
       const cat = LANGS[lang];
       for (const n of [1, 2]) {

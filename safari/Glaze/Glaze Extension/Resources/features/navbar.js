@@ -201,14 +201,17 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (item.switch) { e.setAttribute('role', 'switch'); e.setAttribute('aria-checked', String(!!item.checked)); e.disabled = !!item.disabled; part(e, `${partName} switch${item.checked ? ' switch-on' : ''}`); }
     if (item.active) e.setAttribute('aria-current', 'page');
     if (item.by) { const from = t('From {name}', { name: item.by }); e.setAttribute('aria-description', from); e.setAttribute('title', from); }
+    // A worn Look's link that leaves the site says where it goes, in its name too: the Look's "Grades" isn't the school's.
+    if (item.from) { const from = fromHost(item); e.setAttribute('aria-label', `${item.label} · ${from}`); e.setAttribute('title', from); }
     return e;
   };
+  const fromHost = (item) => (item.from ? t('From {name}', { name: item.from }) : '');
   const badgeOf = (item) => (settings().badges !== false && item.badge ? item.badge : '');
   const barItem = (item, i) => {
     const e = node(item, 'item', 'item');
     const b = badgeOf(item);
     put(e, icon(item.icon), label(item.label, i), b ? badge(b) : null);
-    e.dataset.tip = [item.label, b, item.by].filter(Boolean).join(' · ');
+    e.dataset.tip = [item.label, b, item.by, fromHost(item)].filter(Boolean).join(' · ');
     return e;
   };
   const initials = (name) => [...(name.match(/\p{L}[\p{L}'’-]*/gu) || [])].filter((w, i, a) => i === 0 || i === a.length - 1).map((w) => [...w][0].toUpperCase()).join('') || [...name.trim()][0] || '?';
@@ -913,7 +916,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const sited = native.filter((n) => /^link:[a-z0-9]{12}$/.test(n.id));
     model = M.build({ native: sited.length ? native.filter((n) => !sited.includes(n)) : native, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
       prefs: sited.length ? { ...prefs, links: [...prefs.links.filter((l) => !sited.some((n) => n.id === 'link:' + l.id)), ...sited.map((n) => ({ id: n.id.slice(5), n: n.label, u: n.href, i: n.icon || 'link' }))] } : prefs,
-      names: { notes: t('Notes'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') } });
+      names: { notes: t('Notes'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') }, origin: location.origin });
     for (const n of sited) {
       const i = model.items.find((x) => x.id === n.id);
       if (i) Object.assign(i, { active: !!n.active, ...(n.panel && { panel: true }), ...(typeof n.checked === 'boolean' && { switch: true, checked: n.checked, disabled: !!n.disabled }) });

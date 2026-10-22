@@ -170,7 +170,8 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
   };
 
   // ---- the whole ---------------------------------------------------------------------------------
-  const clean = shape({ bg, anim, fx, cursor, nav, rules: ruleList });
+  const GROUPS = { bg, anim, fx, cursor, nav, rules: ruleList };
+  const clean = shape(GROUPS);
   // The mods a Look works with: a 16-character base32 id, the bundle's SHA-256 (base64url) and a name.
   const mods = once(list(shape({ id: (v) => (typeof v === 'string' && /^[a-z2-7]{16}$/.test(v) ? v : null), h: (v) => (typeof v === 'string' && /^[\w-]{43}$/.test(v) ? v : null), name: text(40) }, ['id', 'h', 'name']), 1, 8), (m) => m.id);
   // { x, m }: what a code or the stored Look carries; null when there is nothing, or anything is wrong.
@@ -305,7 +306,29 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
   };
 
   // ---- what a code brings, for the editor's offer -------------------------------------------------
-  // Plain sentences with {placeholders}, for t(why, vars): English here, translated where they are shown.
+  // Plain sentences with {placeholders}, for t(why, vars): English here, translated where they are shown. A var that is a
+  // list holds Glaze's own English names (navigation items, page parts), for the offer to translate and join.
+  // The account item has no name of Glaze's (its label is the student's name).
+  const itemName = (id) => (id === 'profile' ? 'Your account' : NL().NAMES[id] || id);
+  // A part's label (lib/parts.js, loaded wherever an offer is shown), else its name.
+  const REGISTRY = () => (typeof GZ_PARTS !== 'undefined' ? GZ_PARTS : typeof require === 'function' ? require('./parts.js') : null);
+  const partName = (p) => REGISTRY()?.get(p)?.label || p;
+  const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
+  // Each part's end state as lib/parts.js folds the rules for the page: hidden (a later show undoes it), its last text, its
+  // last opacity, and whether anything else restyles or moves it.
+  const fold = (rules) => {
+    const hide = new Set(), text = new Map(), o = new Map(), look = new Set();
+    for (const r of rules) {
+      if (r.do === 'hide') hide.add(r.p);
+      else if (r.do === 'show') hide.delete(r.p);
+      else if (r.do === 'label') text.set(r.p, r.t);
+      else if (r.do === 'move') look.add(r.p);
+      else if (r.do === 'style') { if (own(r.st, 'o')) o.set(r.p, r.st.o); if (Object.keys(r.st).some((k) => k !== 'o')) look.add(r.p); }
+    }
+    return { hide, text, fade: new Set([...o].filter(([, v]) => v < 100).map(([p]) => p)), look };
+  };
+  // A Look comes from someone else, so nothing it does to the navigation or the school's pages goes unsaid: each item it
+  // hides, each link with the site it goes to, each part it hides, fades or restyles, and each text it writes, word for word.
   const describe = (P) => {
     const x = P?.x || {}, out = [];
     const add = (why, vars) => out.push({ why, vars });
@@ -319,15 +342,49 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
     if (x.anim) add('Changes {n} animations.', { n: Object.keys(x.anim).length });
     if (x.fx) add('Plays effects for {n} events.', { n: Object.keys(x.fx).length });
     if (x.cursor) add('Adds a cursor effect.');
-    if (x.nav) add('Rearranges the sidebar.');
-    if (x.rules) add('Changes how {n} parts of your school pages look.', { n: x.rules.length });
+    if (x.nav) {
+      const n = x.nav;
+      if (n.place || n.groups || n.icons) add('Rearranges the navigation.');
+      if (n.hidden?.length) add('Hides {items} in the navigation.', { items: n.hidden.map(itemName) });
+      for (const l of n.links || []) add('Adds a link: {name} → {host}.', { name: l.n, host: hostOf(l.u) });
+    }
+    if (x.rules) {
+      const f = fold(x.rules), names = (set) => [...new Set([...set].map(partName))];
+      const parts = (why, set) => { const list = names(set); if (list.length) add(why, { n: list.length, parts: list }); };
+      parts('Hides {n} parts of your school pages: {parts}.', f.hide);
+      for (const [p, text] of f.text) add('Changes the text of {part} to “{text}”.', { part: [partName(p)], text });
+      parts('Makes {n} parts of your school pages see-through: {parts}.', f.fade);
+      parts('Changes how {n} parts of your school pages look: {parts}.', f.look);
+    }
     if (P?.m) add('Works with the mods {names}, which this does not install.', { names: P.m.map((m) => m.name).join(', ') });
+    return out;
+  };
+
+  // ---- a Look from someone else -------------------------------------------------------------------
+  // A code, a gallery Look or a Look share. It may not take away signing out or the student's account (x.nav hidden: on a
+  // shared computer they'd be left with no way out), link to a page without https (anyone on the network can change what it
+  // shows), or name a link as signing out or Glaze settings (lib/navlayout.js reserved, as for mods' items). The editor
+  // refuses such a code whole, as it refuses any code it can't use, and says why; the student's own Look may do any of
+  // these. -> the reasons, as describe's sentences; none when it may be offered.
+  const KEEP = ['logout', 'profile'];
+  const outside = (P) => {
+    const nav = P?.x?.nav, out = [];
+    const add = (why, vars) => out.push({ why, vars });
+    const kept = (nav?.hidden || []).filter((id) => KEEP.includes(id));
+    if (kept.length) add('It hides {items}, which only you can hide.', { items: kept.map(itemName) });
+    const f = fold(P?.x?.rules || []);
+    if (f.hide.has('canvas.global-nav.account') || f.fade.has('canvas.global-nav.account')) add('It hides {items}, which only you can hide.', { items: [partName('canvas.global-nav.account')] });
+    for (const l of nav?.links || []) {
+      if (!String(l.u).startsWith('https:')) add('Its link {name} goes to {host} without https.', { name: l.n, host: hostOf(l.u) });
+      if (NL().reserved(l.n)) add('Its link {name} could pass for signing out or Glaze settings.', { name: l.n });
+      else if (NL().mimics(l.n, nav?.hidden || [])) add('Its link {name} could pass for a navigation item it hides.', { name: l.n });
+    }
     return out;
   };
   // How a background kind reads in the offer ("…, and a custom shader background").
   const KIND_WORD = { shader: 'a custom shader background', layers: 'a layered animated background', media: 'a video or animation background' };
 
-  return { BLENDS, MEDIA, MAX_JSON, SHADER_MAX, DEFAULTS, clean, mods, bundle, over, same, strip, compact, pipe, b64, unb64, deflate, inflate, pack, parse, unpack, hash, areas, stored, fromStored, read, write, describe, KIND_WORD };
+  return { BLENDS, MEDIA, MAX_JSON, SHADER_MAX, DEFAULTS, GROUPS: Object.keys(GROUPS), RULE_DO: Object.keys(DO), clean, mods, bundle, over, same, strip, compact, pipe, b64, unb64, deflate, inflate, pack, parse, unpack, hash, areas, stored, fromStored, read, write, describe, outside, KIND_WORD };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_XPARTS; else GZ_XPARTS;

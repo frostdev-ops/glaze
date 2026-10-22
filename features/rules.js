@@ -71,6 +71,29 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
     sheet(false);
   };
 
+  // A rule's colour as the page draws it: a palette token through its --gz-* value on the page, a hex as it is.
+  const css = (el) => (typeof getComputedStyle === 'function' ? getComputedStyle(el) : null);
+  const drawn = (v) => (/^var\(--gz-[\w-]+\)$/.test(v) ? css(html)?.getPropertyValue(v.slice(4, -1)).trim() || v : v);
+  // What the page itself draws there, for the side a rule leaves alone: Glaze's item's text, and the first solid background
+  // from the element up ('' when a picture is behind it, or nothing is).
+  const ink = (el) => css(el.matches(GLAZE_ITEM) ? el : el.querySelector(GLAZE_ITEM) || el)?.color || '';
+  const behind = (el) => {
+    for (let e = el; e; e = e.parentElement) {
+      const s = css(e);
+      if (!s || (s.backgroundImage && s.backgroundImage !== 'none')) return '';
+      if ((GZ_COLOR.parse(s.backgroundColor)?.a ?? 0) >= 0.5) return s.backgroundColor;
+    }
+    return '';
+  };
+  // A foreground on (nearly) its own background hides text as surely as opacity 0. Below 3:1, the least a control needs
+  // (WCAG 1.4.11), a Look's colours give way where they would hide Glaze settings.
+  const unreadable = (el, vars) => {
+    const fg = vars['--gz-r-fg'], bg = vars['--gz-r-bg'];
+    if (!fg && !bg) return false;
+    if (fg === bg) return true;
+    const a = fg ? drawn(fg) : ink(el), b = bg ? drawn(bg) : behind(el);
+    return !!GZ_COLOR.parse(a) && !!GZ_COLOR.parse(b) && GZ_COLOR.contrast(a, b) < 3;
+  };
   // Each part's elements on the page now, with what its end state asks of them; an element two parts name takes both.
   const want = (plan) => {
     const els = new Map();
@@ -89,11 +112,13 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
       for (const f of s.fonts) GZ_FONTS.load(f);
     }
     for (const [el, w] of els) {
-      if ((w.hide || w.st.includes('o')) && (el.matches(GLAZE_ITEM) || el.querySelector(GLAZE_ITEM)
+      const paints = w.st.includes('fg') || w.st.includes('bg');
+      if ((w.hide || w.st.includes('o') || paints) && (el.matches(GLAZE_ITEM) || el.querySelector(GLAZE_ITEM)
         || [...el.querySelectorAll(OWN)].some((node) => node.matches(CONTROL) || node.querySelector(CONTROL)))) {
         w.hide = false;
-        delete w.vars['--gz-r-o'];
-        w.st = w.st.filter((k) => k !== 'o');
+        const drop = paints && unreadable(el, w.vars) ? ['o', 'fg', 'bg'] : ['o'];
+        for (const k of drop) delete w.vars[`--gz-r-${k}`];
+        w.st = w.st.filter((k) => !drop.includes(k));
       }
     }
     return els;

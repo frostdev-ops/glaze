@@ -307,7 +307,9 @@ const BROKER = {
         const L = GZ_LOOKS.find((l) => l.name === list[r.wear]);
         const lookX = (await sync.get('lookX')).lookX;
         // A favorite that no longer decodes is passed over: its turn goes by unworn.
-        const got = L ? null : await GZ_SHARE.decode(list[r.wear]).catch(() => null);
+        // Favorites are saved only from the outside-code offer. Recheck old entries that predate its safety limits;
+        // the student's own worn Look and history are separate and keep their full editing freedom.
+        const got = L ? null : await GZ_SHARE.decode(list[r.wear]).then((g) => GZ_XPARTS.outside(g.parts).length ? null : g).catch(() => null);
         const patch = L ? GZ_LOOK_APPLY(s, L) : got && GZ_LX.wearCode(s, got);
         // Decoding takes a moment, and the editor and popup write outside this queue: if rotation was turned off or
         // changed, or the student changed the theme meanwhile, this turn is dropped rather than worn over their choice.
