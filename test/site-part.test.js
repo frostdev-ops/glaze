@@ -43,8 +43,10 @@ class El {
   getClientRects() { return []; }
 }
 
-const page = ({ site, preload, answer, raw = {}, local = {}, pathname }) => {
+const page = ({ site, preload, answer, raw = {}, local: own = {}, pathname }) => {
   const sent = [], held = [], swept = [], storeListeners = [];
+  // An Ultra site the student said yes to (lib/background.js approved): school.test is no Blackboard host of its own.
+  const local = { [site]: [site === 'ultra' ? 'https://school.test' : 'https://school.test/*'], ...own };
   const html = new El('html');
   html.lang = 'en';
   const head = new El('head');
@@ -139,8 +141,8 @@ for (const site of ['canvas', 'ultra']) {
     assert.equal(p.asked(), 0);
     assert.equal(p.swept.length, 1, 'the sweep started');
     assert.ok(partOn(p, site));
-    // Ultra, once Glaze has started on it: the site is reported to the worker (lib/background.js fromUltra). Canvas has its own.
-    assert.equal(p.sent.filter((m) => m?.type === 'glaze:ultra').length, site === 'ultra' ? 1 : 0);
+    // On a site the student approved, nothing is reported or asked: only the student's yes approves one (WP-C2).
+    assert.equal(p.sent.filter((m) => m === 'ultra' || m?.type === 'glaze:ultra').length, 0);
   }));
 
   test(`${site}: a page without its part keeps the theme while the part is asked for, and sweeps once it is in`, () => noUnhandled(async () => {

@@ -35,22 +35,16 @@ test("the worker takes a page's notes changes for its own site's index only", as
   ]) assert.deepEqual(await send(m, sender), { ok: false, error: 'sender' }, why);
   assert.deepEqual(await send({ ...m, key: 'notesIdx:https://school.instructure.com/5/../6' }, page('https://school.instructure.com/')), { ok: false, error: 'sender' }, 'a key outside the pattern');
   assert.deepEqual(await send(m, page('https://school.instructure.com/courses/1')), { ok: false, error: 'db' }, 'its own site: past the check, and the database it lacks fails it');
-  // Blackboard Ultra: a page under /ultra on https, on a site Glaze has found to be Ultra (content-ultra.js reports it
-  // once it has started there), for its own origin's accounts (Ultra's ids are _N_N).
+  // Blackboard Ultra: a page under /ultra on https, on an Ultra site the student approved (lib/background.js approved; the
+  // yes puts its origin on storage.local `ultra`), for its own origin's accounts (Ultra's ids are _N_N).
   const u = { ...m, key: 'notesIdx:https://school.blackboard.test/_5_1' };
-  // Codex B5 review: an /ultra address alone isn't Ultra.
-  assert.deepEqual(await send(u, page('https://school.blackboard.test/ultra/courses/_7_1/outline')), { ok: false, error: 'sender' }, 'not yet found to be Ultra');
-  const found = (url, frameId = 0) => send({ type: 'glaze:ultra' }, { ...page(url), frameId }).then(() => new Promise((r) => setTimeout(r, 20)));
-  await found('https://school.blackboard.test/ultra/course', 3);
-  await found('https://school.blackboard.test/webapps/login/');
-  await found('http://school.blackboard.test/ultra/course');
-  await send({ type: 'glaze:ultra' }, { id: 'other', tab: {}, frameId: 0, url: 'https://school.blackboard.test/ultra/course' });
-  assert.deepEqual(store.local, {}, 'only a top frame of Glaze in a tab, on an https /ultra page, reports a site');
-  await found('https://school.blackboard.test/ultra/course');
-  assert.deepEqual(JSON.parse(JSON.stringify(store.local)), { ultra: ['https://school.blackboard.test'] }, 'its origin, once');
-  await found('https://school.blackboard.test/ultra/stream');
-  assert.deepEqual(JSON.parse(JSON.stringify(store.local)).ultra, ['https://school.blackboard.test']);
-  assert.deepEqual(await send(u, page('https://unrelated.example/ultra/course')), { ok: false, error: 'sender' }, 'a site never found to be Ultra');
+  // Codex B5 review: an /ultra address alone isn't Ultra. WP-C2: nor is a page that says it is ('glaze:ultra' is gone).
+  assert.deepEqual(await send(u, page('https://school.blackboard.test/ultra/courses/_7_1/outline')), { ok: false, error: 'sender' }, 'not approved');
+  assert.equal(await send({ type: 'glaze:ultra' }, page('https://school.blackboard.test/ultra/course')), 'ignored');
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(store.local, {}, 'a page reports nothing that approves its site');
+  store.local.ultra = ['https://school.blackboard.test'];
+  assert.deepEqual(await send(u, page('https://unrelated.example/ultra/course')), { ok: false, error: 'sender' }, 'a site never approved');
   assert.deepEqual(await send({ ...u, key: 'notesIdx:https://unrelated.example/_5_1' }, page('https://unrelated.example/ultra/course')), { ok: false, error: 'sender' }, 'not even for its own keys');
   for (const [url, why] of [
     ['https://other.blackboard.test/ultra/course', "another Ultra site's page"],
@@ -338,7 +332,7 @@ test('turning Notes on puts the Course notes hook into course homes already open
         getRegisteredContentScripts: async () => registered,
         registerContentScripts: async (l) => { registered.push(...l); },
         unregisterContentScripts: async ({ ids }) => { registered = registered.filter((s) => !ids.includes(s.id)); },
-        executeScript: async (o) => { injected.push([o.target.tabId, [...o.target.frameIds], [...o.files].join()]); return [{ result: true }]; },
+        executeScript: async (o) => { if (o.files) injected.push([o.target.tabId, [...o.target.frameIds || []], [...o.files].join()]); return [{ result: /typeof GZ_I18N|window\.__gzGlaze/.test(String(o.func)) ? false : true }]; },
       },
     },
   });
@@ -351,12 +345,19 @@ test('turning Notes on puts the Course notes hook into course homes already open
   await toggle({ notes: false });
   await toggle({ notes: true });
   assert.equal(injected.length, 2, 'on again: again');
-  // A Canvas site found on a page (lib/detect.js): Glaze first, then the hook, and the site's pages registered for it.
+  // A Canvas site found on a page (lib/detect.js): the question first (WP-C2); on Yes, Glaze, then the hook, and the site's
+  // pages registered for it.
   injected.length = 0;
-  for (const f of listeners) f('canvas', { tab: { id: 8 }, frameId: 0, url: 'https://canvas.new.edu/courses/3' }, () => {});
+  const found = { id: 'glaze', tab: { id: 8 }, frameId: 0, url: 'https://canvas.new.edu/courses/3' };
+  for (const f of listeners) f('canvas', found, () => {});
+  await wait(20);
+  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, 'lib/i18n.js,features/consent.js']]);
+  assert.ok(!registered.some((s) => s.id === 'https://canvas.new.edu/*' || s.matches.includes('https://canvas.new.edu/courses/*')), 'nothing registered before the yes');
+  injected.length = 0;
+  for (const f of listeners) f({ type: 'glaze:consent', op: 'yes', kind: 'canvas' }, found, () => {});
   await wait(20);
   const canvasFirst = require('../manifest.json').content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*')).js; // Canvas's first script (B0b)
-  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, canvasFirst.join()], [8, 'features/notes-home.js']]);
+  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, canvasFirst.filter((f) => f !== 'lib/i18n.js').join()], [8, 'features/notes-home.js']], 'lib/i18n.js came with the question');
   assert.ok(registered.find((s) => s.id === 'gz-notes-home').matches.includes('https://canvas.new.edu/courses/*'));
 });
 

@@ -1399,8 +1399,46 @@ GZ_UI.load().then((s) => {
     save([...touched, 'parts']);
     fill();
     hint(t('Preferences reset. Your presets and local data are kept.'));
-
+    // And the sites said yes to (Sites, below): Glaze asks again on each.
+    chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'reset' }).catch(() => {});
   });
+
+  // ---- Sites: the sites the student said yes to (lib/background.js approved), each with Remove, which only the worker does.
+  // Canvas's and Blackboard's own hosts are Glaze's anyway, so they aren't listed.
+  const KINDS = { canvas: 'Canvas', moodle: 'Moodle', ultra: 'Blackboard Ultra' };
+  const siteSaid = (text) => { $('#site-status').textContent = text; };
+  const renderSites = (r) => {
+    const sites = new Map();
+    for (const kind of Object.keys(KINDS)) for (const x of Array.isArray(r?.[kind]) ? r[kind] : []) {
+      let u;
+      try { u = new URL(String(x).replace(/\/\*$/, '')); } catch { continue; }
+      const automatic = !u.port && (kind === 'canvas' ? /(^|\.)instructure\.com$/.test(u.hostname) : kind === 'ultra' && /\.blackboard\.com$/.test(u.hostname));
+      if (u.protocol !== 'https:' || automatic) continue;
+      sites.set(u.origin, [...new Set([...sites.get(u.origin) || [], t(KINDS[kind])])]);
+    }
+    $('#site-list').replaceChildren(...[...sites].sort(([a], [b]) => a.localeCompare(b)).map(([origin, kinds]) => {
+      const host = new URL(origin).host;
+      const name = Object.assign(document.createElement('span'), { className: 'name' });
+      name.append(Object.assign(document.createElement('span'), { textContent: host, translate: false }), Object.assign(document.createElement('small'), { textContent: kinds.join(' · ') }));
+      const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Remove') });
+      remove.setAttribute('aria-label', t('Remove {name}', { name: host }));
+      remove.addEventListener('click', async (e) => {
+        if (!e.isTrusted || remove.disabled) return;
+        remove.disabled = true;
+        const done = await chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'remove', origin }).catch(() => null);
+        if (!done?.ok) { remove.disabled = false; siteSaid(t('Not saved. Try again in a moment.')); return; }
+        siteSaid(t('Removed {site}. Glaze no longer runs there.', { site: host }));
+        $('#heading-backup-sites').focus({ preventScroll: true });
+      });
+      const li = document.createElement('li');
+      li.append(name, remove);
+      return li;
+    }));
+    $('#site-empty').hidden = sites.size > 0;
+  };
+  const readSites = () => chrome.storage.local.get(Object.keys(KINDS), renderSites);
+  readSites();
+  chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && Object.keys(KINDS).some((k) => k in c)) readSites(); });
 
   for (const button of $$('[data-reset-setting]')) {
     const control = $$('[data-key]').find((el) => el.dataset.key === button.dataset.resetSetting);

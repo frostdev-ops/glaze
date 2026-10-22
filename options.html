@@ -95,6 +95,7 @@
   .courses .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .courses .name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 0.78em; color: var(--gz-ink-faint); }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
+  .sites li { grid-template-columns: minmax(0, 1fr) auto; }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
   button:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
   body.off [data-editor-section]:not(#data) { opacity: 0.5; }
@@ -1317,7 +1318,7 @@
           <p class="desc" id="mod-key-said" role="status" aria-live="polite"></p>
         </div>
 </section></div>
-<div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" hidden><nav class="section-links" aria-label="Sections"><a href="#backup/privacy" data-editor-alias>Backup and privacy</a><a href="#backup/notes" data-editor-alias>Notes backup</a></nav>
+<div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" hidden><nav class="section-links" aria-label="Sections"><a href="#backup/privacy" data-editor-alias>Backup and privacy</a><a href="#backup/notes" data-editor-alias>Notes backup</a><a href="#backup/sites" data-editor-alias>Sites</a></nav>
 <section id="data" data-editor-section="backup/privacy" data-sites="Extension only" aria-labelledby="heading-backup-privacy">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/privacy" data-editor-alias>Backup and privacy</a></p><div class="section-heading"><h2 id="heading-backup-privacy">Backup and privacy</h2></div>
 <p class="desc section-note">Export or import your settings, tasks and share keys.</p><p class="site-scope">On this device</p>
@@ -1342,6 +1343,14 @@
 <p class="desc">Includes all share keys and creator delete tokens, even while sharing is paused. Anyone with this backup can open those sessions and may change or delete them. Keep it private.</p>
 <p class="desc">Import restores keys locally. It connects only after you create, join or resume a session.</p>
 <p class="desc" id="nb-status" role="status" aria-live="polite"></p>
+</section>
+<section id="sites" data-editor-section="backup/sites" data-sites="Extension only" aria-labelledby="heading-backup-sites">
+<p class="section-path" data-editor-breadcrumb><a href="#backup/sites" data-editor-alias>Sites</a></p><div class="section-heading"><h2 id="heading-backup-sites" tabindex="-1">Sites</h2></div>
+<p class="desc section-note">Glaze runs on Canvas at instructure.com and on Blackboard at blackboard.com. On a school's own address it asks first; these are the sites you said yes to.</p><p class="site-scope">On this device</p>
+<ul class="courses sites" id="site-list"></ul>
+<p class="desc" id="site-empty">No other sites yet.</p>
+<p class="desc">Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.</p>
+<p class="desc" id="site-status" role="status" aria-live="polite"></p>
 </section></div>
 <div id="panel-about" role="tabpanel" aria-labelledby="tab-about" data-editor-panel="about" hidden><nav class="section-links" aria-label="Sections"><a href="#about/glaze" data-editor-alias>About Glaze</a></nav>
 <section id="about-glaze" data-editor-section="about/glaze" data-sites="Extension only" aria-labelledby="heading-about-glaze">

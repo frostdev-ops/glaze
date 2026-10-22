@@ -10,7 +10,8 @@ const manifest = require('../manifest.json');
 const files = manifest.content_scripts.find((s) => s.matches.includes('https://*/ultra')).js;
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
-const ORIGIN = 'https://bb.school.test';
+// A Blackboard host, approved without asking (WP-C2): these tests are about Glaze's switch, not consent.
+const ORIGIN = 'https://school.blackboard.com';
 const OWN = ['theme.css', 'motion.css', 'extras.css', 'apps.css', 'coursetabs.css', 'sidebar.css', 'surfaces.css'];
 
 // cached: this tab's sessionStorage copy (null: a fresh tab). raw: what storage.sync answers when asked.
@@ -70,7 +71,7 @@ const page = ({ cached = null, raw = {}, local = {}, pathname = '/ultra/course',
   });
   const c = vm.createContext({
     document: doc, console, Intl, URL, URLSearchParams, TextEncoder, structuredClone, crypto: require('node:crypto').webcrypto,
-    location: { protocol: 'https:', origin: ORIGIN, pathname, href: `${ORIGIN}${pathname}`, search: '', hash: '' },
+    location: { protocol: 'https:', origin: ORIGIN, hostname: new URL(ORIGIN).hostname, pathname, href: `${ORIGIN}${pathname}`, search: '', hash: '' },
     navigator: { language: 'en' }, Element: El, HTMLElement: El, Node: El, SVGElement: class {}, NodeFilter: { SHOW_TEXT: 4 },
     getComputedStyle: () => ({ backgroundColor: 'rgb(255, 255, 255)', color: 'rgb(0, 0, 0)', backgroundImage: 'none', position: 'static', transitionDuration: '0s', getPropertyValue: () => '' }),
     CSS: { supports: () => false }, matchMedia: () => ({ matches: false, addEventListener() {} }), Image: class {},

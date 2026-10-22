@@ -100,7 +100,9 @@ Notes **Back up or restore** opens **Settings → Backup and privacy → Notes b
 
 - **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
 
-- **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain. Moodle is recognized by the keywords line its core writes in every page's head, together with the page id and layout it puts on the page's body.
+- **Any host** — Canvas on `*.instructure.com` and Blackboard Ultra on `*.blackboard.com` work without configuration. On a school's own address, Glaze recognizes Canvas by its own stylesheet, Moodle by the keywords line its core writes in every page's head (with the page id and layout it puts on the body), and Ultra by its `/ultra/` pages. A page proves nothing on its own, so there Glaze asks once, on the page: **Use Glaze on example.edu?** **Yes** turns it on for that site; **Not now** stops asking there for a week. Until Yes, Glaze doesn't theme the site, read its data or keep anything from it, and it never asks while it's off.
+
+- **Sites** — Settings → Backup and privacy → Sites lists the sites you said yes to, with each one's LMS. **Remove** stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears the list. Sites Glaze ran on before it asked stay on the list.
 
 ## Glaze navigation
 

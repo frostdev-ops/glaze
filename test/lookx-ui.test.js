@@ -554,7 +554,7 @@ test('a partial Look nav patch preserves personal pictures through the parts quo
 
 
 test('the queued Look writer limits page callers to theme changes and refuses arbitrary storage keys', async () => {
-  const w = worker();
+  const w = worker({ moodle: ['https://moodle.example.edu/*'] }); // a Moodle the student approved (lib/background.js approved)
   const message = { type: 'glaze:look', parts: null, patch: { colors: { '--gz-accent': '#123456' } } };
   const denied = { ok: false, error: 'sender' };
   assert.deepEqual(await w.send(message, { id: 'other', tab: {}, url: `${SITE}/courses/1` }), denied);
@@ -563,6 +563,8 @@ test('the queued Look writer limits page callers to theme changes and refuses ar
   assert.deepEqual(await w.send({ ...message, patch: JSON.parse('{"__proto__":{}}') }, w.editor), denied);
   assert.deepEqual(w.sync, {});
   const moodle = { id: 'glaze', tab: {}, url: 'https://moodle.example.edu/my/' };
+  assert.deepEqual(await w.send(message, { ...moodle, url: 'https://shop.example/' }), denied, 'not from a tab where only lib/detect.js runs (WP-C2)');
+  assert.deepEqual(w.sync, {});
   assert.deepEqual(await w.send(message, moodle), { ok: true });
   assert.equal(w.sync.lookX, '');
   const popup = { id: 'glaze', url: 'chrome-extension://x/popup.html' };

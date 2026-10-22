@@ -179,14 +179,17 @@ test("the worker takes an Ultra page's planning writes for its own site's accoun
   const todo = (key) => ({ type: 'glaze:todo', key, edits: [['task', { id: 'n', title: 'Read chapter 3' }]] });
   const own = `todo:${o}/_900_1`;
   const until = async (f) => { for (let i = 0; i < 100 && !f(); i++) await new Promise((r) => setTimeout(r, 2)); };
-  // An /ultra address alone isn't Ultra: only a host where Glaze's detection found it (content-ultra.js says so as it starts).
-  assert.deepEqual(await w.send(todo(own), page), nope, 'a host Glaze has not found Ultra on');
-  await w.send({ type: 'glaze:ultra' }, { ...page, frameId: 2 });
-  await w.send({ type: 'glaze:ultra' }, { ...page, url: 'http://bb.example.edu/ultra/course' });
-  await w.send({ type: 'glaze:ultra' }, { ...page, url: `${o}/webapps/portal/frameset.jsp` });
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(w.store.local.ultra, undefined, 'a frame, http or a page outside /ultra records nothing');
+  // An /ultra address alone isn't Ultra, and nor is a page saying so: only the student's yes on the page approves the site
+  // (WP-C2, features/consent.js), from its top frame, over https, on an /ultra page.
+  assert.deepEqual(await w.send(todo(own), page), nope, 'a host the student has not approved');
+  const yes = { type: 'glaze:consent', op: 'yes', kind: 'ultra' };
   await w.send({ type: 'glaze:ultra' }, page);
+  await w.send(yes, { ...page, frameId: 2 });
+  await w.send(yes, { ...page, url: 'http://bb.example.edu/ultra/course' });
+  await w.send(yes, { ...page, url: `${o}/webapps/portal/frameset.jsp` });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(w.store.local.ultra, undefined, 'a report, a frame, http or a page outside /ultra approves nothing');
+  await w.send(yes, page);
   await until(() => w.store.local.ultra);
   assert.deepEqual(w.store.local.ultra, [o]);
   assert.equal((await w.send(todo(own), page)).ok, true);

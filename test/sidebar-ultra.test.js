@@ -779,13 +779,3 @@ test('a disabled Ultra page kind keeps the legacy widget-loader boundary in cour
   p.c.sidebarSettings = {};
   assert.equal(vm.runInContext('!!widgetsHere();', p.c), true);
 });
-
-test('an Ultra document can recover registration lost during a worker restart without reloading', async () => {
-  const registration = { ready: false }, p = page({ at: 'detail', registration });
-  await p.pass();
-  assert.equal(p.side.rec().mig, 1, 'the first assessment migrates even if the bootstrap report was lost');
-  registration.ready = false;
-  assert.equal(await p.side.op([{ op: 'width', px: 420 }]), true);
-  await settle();
-  assert.equal(p.store[KEY].width, 420, 'a restarted worker can accept an existing document again');
-});

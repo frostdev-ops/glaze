@@ -83,20 +83,32 @@ GZ_UI.load().then((s) => {
 });
 
 // Due this week, as Blackboard, Canvas or Moodle last told the content script (the popup can't ask them): the count and
-// the next three, to read. A list over a day old is left out; it would miss what was added since.
-chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'seenCourses'], (r) => GZ_UI.load().then((s) => {
+// the next three, to read. Each site keeps its own list (content.js dueWeek, `dueWeek:<origin>`): the one of the site in this
+// tab, or else every site's, each item with its site's name. A list over a day old is left out; it would miss what was
+// added since.
+const local = chrome.storage.local;
+Promise.all([
+  Promise.resolve().then(() => chrome.tabs.query({ active: true, currentWindow: true })).then(([tab]) => new URL(tab.url).origin).catch(() => ''),
+  Promise.resolve().then(() => (local.getKeys ? local.getKeys() : local.get(null).then(Object.keys))).then((keys) => keys.filter((k) => k.startsWith('dueWeek:'))).catch(() => []),
+  GZ_UI.load(),
+]).then(async ([here, keys, s]) => {
+  const r = await local.get([...keys, 'seenCourses']);
   const now = new Date();
-  const fresh = now - (r?.dueWeekAt || 0) < 864e5;
-  const due = fresh ? (r.dueWeek || []).filter((d) => d.due >= now) : [];
+  const lists = keys.map((k) => [k.slice(8), r[k]]).filter(([, v]) => Array.isArray(v?.list) && now - (v.at || 0) < 864e5);
+  const mine = lists.filter(([site]) => site === here);
+  const fresh = lists.length > 0;
+  const due = (mine.length ? mine : lists).flatMap(([site, v]) => v.list.filter((d) => d.due >= now).map((d) => ({ ...d, site }))).sort((a, b) => a.due - b.due);
   $('#due-n').textContent = fresh ? due.length : '–';
   const note = (text) => Object.assign(document.createElement('li'), { className: 'note', textContent: text });
   $('#due-list').replaceChildren(...(!fresh ? [note(t("Open Blackboard, Canvas or Moodle to see what's due."))] : !due.length ? [note(t('Nothing due in the next seven days.'))]
     : due.slice(0, 3).map((d) => {
       const { rel, sub } = GZ_PAGE.describe(new Date(d.due), true, now, GZ_I18N.ui());
+      const where = mine.length ? '' : new URL(d.site).host;
+      const course = r.seenCourses?.[d.cid];
       const li = document.createElement('li');
       // A course goes by its nickname, if it has one (the course menu).
-      li.title = [d.title, (s.enhance.coursemenu && s.courses.names[d.cid]) || d.course || r.seenCourses?.[d.cid]?.name, sub].filter(Boolean).join(' · ');
-      li.append(Object.assign(document.createElement('b'), { textContent: d.title }), Object.assign(document.createElement('small'), { textContent: rel }));
+      li.title = [d.title, (s.enhance.coursemenu && s.courses.names[d.cid]) || d.course || (course && (!course.site || course.site === d.site) ? course.name : ''), sub, where].filter(Boolean).join(' · ');
+      li.append(Object.assign(document.createElement('b'), { textContent: d.title }), Object.assign(document.createElement('small'), { textContent: where ? `${rel} · ${where}` : rel }));
       return li;
     })));
-}));
+});

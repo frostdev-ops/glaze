@@ -34,6 +34,17 @@
     document.addEventListener('DOMContentLoaded', look);
     look();
   });
+  // The all-host Ultra entry can also encounter spoofed Canvas/Moodle markup. Gate the detected kind, not just Ultra.
+  const yes = (list) => Array.isArray(list) && list.includes(site === 'ultra' ? location.origin : `${location.origin}/*`);
+  const known = location.protocol === 'https:' && !location.port && (site === 'ultra' ? /\.blackboard\.com$/.test(location.hostname) : site === 'canvas' && /(^|\.)instructure\.com$/.test(location.hostname));
+  if (site && !isPreview && !known
+    && !await new Promise((res) => { try { chrome.storage.local.get(site, (r) => res(yes(r?.[site]))); } catch { res(false); } })) {
+    globalThis.GZ_SITE_ULTRA?.sheets?.splice(0).forEach((l) => l.remove());
+    if (window.top === window) try { chrome.runtime.sendMessage(site).catch(() => {}); } catch { /* reloaded */ }
+    await new Promise((res) => { try { chrome.storage.onChanged.addListener(function on(c, area) {
+      if (area === 'local' && yes(c[site]?.newValue)) { chrome.storage.onChanged.removeListener?.(on); res(); }
+    }); } catch { /* reloaded: stays out */ } });
+  }
   if (site !== 'ultra') globalThis.GZ_SITE_ULTRA?.sheets?.forEach((l) => l.remove());
   if (!site) return;
   const ultra = site === 'ultra';
@@ -303,21 +314,20 @@
   // its planner (GZ_CANVAS_DUE_WEEK), for the command palette and the popup (which can't ask the site, so it
   // reads what's kept here). Asked once a page load and at most every ten minutes, like the course list, which
   // names each Ultra item's course (a Canvas item brings its own, and its address, which Ultra's never do).
+  // Kept per site (`dueWeek:<origin>`): another site's items (Blackboard and Canvas, or two schools) open nothing here.
   let dueSoon = null;
+  const DUE = `dueWeek:${location.origin}`;
   const dueWeek = () => (dueSoon ||= new Promise((res) => {
-    try { chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'dueWeekFrom'], res); } catch { res({}); }
+    try { chrome.storage.local.get(DUE, (r) => res(r?.[DUE])); } catch { res(); }
   }).then((r) => {
     const now = Date.now();
-    // A list kept by another site (someone with Blackboard and Canvas, or two schools' Canvas, open) is no use
-    // here: its items open nothing, or the wrong school's. Even an empty one says nothing about this site.
-    const other = r?.dueWeekFrom !== location.origin;
-    const kept = other ? [] : r?.dueWeek || [];
-    if (!other && now - (r?.dueWeekAt || 0) < 600000) return kept;
+    const kept = Array.isArray(r?.list) ? r.list : [];
+    if (now - (r?.at || 0) < 600000) return kept;
     const at = (days) => new Date(now + days * 864e5).toISOString();
     const ask = ultra ? api(`/calendars/todo/studentItems?since=${at(0)}&until=${at(7)}`).then((j) => GZ_DUE_WEEK(j, now))
       : moodle ? moodleIn().then((m) => m.due(now)) : capi(`/planner/items?start_date=${at(0)}&end_date=${at(7)}&per_page=100`).then((j) => GZ_CANVAS_DUE_WEEK(j, now));
     return ask.then((list) => {
-      try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now(), dueWeekFrom: location.origin }); } catch { /* reloaded */ }
+      try { chrome.storage.local.set({ [DUE]: { at: Date.now(), list } }); } catch { /* reloaded */ }
       return list;
     }, () => kept);
   }));

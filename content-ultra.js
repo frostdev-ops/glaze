@@ -7,21 +7,23 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
-  // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
+  // a page load and at most every ten minutes. Stored locally; nothing leaves the device. Each Ultra site has its own: two
+  // schools' records stay side by side, each with its own ten-minute gate (`seenCoursesAt <origin>`, as Moodle's).
   const record = () => {
-    // This site is Ultra (Glaze started here): the worker lets its pages keep their own data (lib/background.js fromUltra).
-    try { chrome.runtime.sendMessage({ type: 'glaze:ultra' }).catch(() => {}); } catch { /* reloaded */ }
+    const at = `seenCoursesAt ${location.origin}`;
     try {
-      chrome.storage.local.get('seenCoursesAt', (r) => {
-        if (Date.now() - (r?.seenCoursesAt || 0) < 600000) return;
+      chrome.storage.local.get(at, (r) => {
+        if (Date.now() - (r?.[at] || 0) < 600000) return;
         myCourses().then((ms) => {
           const seen = GZ_COURSES(ms);
           if (!Object.keys(seen).length) return;
           for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
           for (const m of ms) if (seen[m.courseId]) Object.assign(seen[m.courseId], { site: location.origin, code: String(m.course.displayId || '').slice(0, 80) });
           try { chrome.storage.local.get('seenCourses', (r) => {
-            const canvas = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k]) => k.includes(':')));
-            chrome.storage.local.set({ seenCourses: { ...canvas, ...seen }, seenCoursesAt: Date.now(), courseSlots });
+            // Canvas's and Moodle's (keyed by site) and other Ultra sites' stay; this site's go, with any kept before Ultra's
+            // records named their site.
+            const kept = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k, c]) => k.includes(':') || (c?.site && c.site !== location.origin)));
+            chrome.storage.local.set({ seenCourses: { ...kept, ...seen }, [at]: Date.now(), courseSlots });
           }); } catch { /* reloaded */ }
         });
       });
@@ -749,7 +751,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 });
 
 // Known Ultra entry: arm before asynchronous head detection lets the parser reach <body>.
-if (/html/.test(document.contentType) && !document.body && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
+if (/html/.test(document.contentType) && !document.body && location.protocol === 'https:' && !location.port && /\.blackboard\.com$/.test(location.hostname) && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
   GZ_SITE_ULTRA.sheets = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => {
     const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = chrome.runtime.getURL(f);
     l.setAttribute('blocking', 'render');
