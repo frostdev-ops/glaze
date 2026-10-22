@@ -20,7 +20,7 @@ const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', maxB
 // A headless Chrome: CHROME, else puppeteer's headless shell, else Playwright's (the repo's other checks use that one).
 const find = () => {
   if (process.env.CHROME) return process.env.CHROME;
-  const roots = [path.join(os.homedir(), '.cache/puppeteer/chrome-headless-shell'), path.join(os.homedir(), 'Library/Caches/ms-playwright')];
+  const roots = [path.join(os.homedir(), '.cache/puppeteer/chrome-headless-shell'), path.join(os.homedir(), 'Library/Caches/ms-playwright'), path.join(os.homedir(), '.cache/ms-playwright')];
   for (const r of roots) {
     if (!fs.existsSync(r)) continue;
     const hit = execSync(`find "${r}" -type f -name 'chrome-headless-shell' -o -type f -name 'headless_shell' | sort -r | head -1`, { encoding: 'utf8' }).trim();

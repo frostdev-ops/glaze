@@ -23,7 +23,7 @@ const root = path.join(__dirname, '..');
 const G = require(path.join(root, 'defaults.js'));
 const M = require(path.join(root, 'lib/motionx.js'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-motionx-'));
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const PAGE = fs.readFileSync(path.join(root, 'test/fixtures/ultra-courses.html'), 'utf8');
 const SITE = 'https://bb.school.test';
 const POLICY = "default-src 'self'; style-src 'self'; script-src 'self' 'unsafe-inline'; img-src * data: blob:";
@@ -60,7 +60,7 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, motion: { ...G.GZ_D
   const external = [], errors = [];
   await require('./wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
-    executablePath: CHROME, headless: true, viewport: { width: 1280, height: 900 },
+    ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 },
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
   });
   try {

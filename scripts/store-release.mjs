@@ -8,9 +8,12 @@ import { createHash } from 'node:crypto';
 import { parseEnv } from 'node:util';
 import { spawn, execFileSync } from 'node:child_process';
 import { appleApp, appleBuild, amo, chromeStatus, submitChrome, submitFirefox, submitApple } from './store-api.mjs';
-import { publicPreflight, preparePublic, publishPublic, withoutStoreKeys } from './public-release.mjs';
+import { publicPreflight, preparePublic, publishPublic, withIsolatedEnv, artifactPath } from './public-release.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// The one place the Firefox linter's version is chosen. npx runs it (and whatever npm resolves for its dependencies) with
+// no credentials and a temporary HOME: see isolatedEnv in public-release.mjs.
+export const WEB_EXT = 'web-ext@10.8.0';
 const defaults = {
   CWS_PUBLISHER_ID: '82318a69-812d-438a-842f-e87fcaec1bd6',
   CWS_EXTENSION_ID: 'jmmaeoajomodnbnlmdikjooalmcilooh',
@@ -163,7 +166,7 @@ async function build(opt, env, manifest, save, out) {
       await run('python3', [path.join(root, 'scripts/store-firefox-source.py'), 'create', firefox, upload, review], root, env);
       const extracted = path.join(temp, 'firefox-package'); fs.mkdirSync(extracted);
       await run('unzip', ['-q', upload, '-d', extracted], root, env);
-      await run('npx', ['--yes', 'web-ext@10.8.0', 'lint', '--no-config-discovery', '--warnings-as-errors', '--source-dir', extracted, '--output', 'json'], root, withoutStoreKeys(env), path.join(out, 'logs/firefox-lint.json'));
+      await withIsolatedEnv(env, isolated => run('npx', ['--yes', WEB_EXT, 'lint', '--no-config-discovery', '--warnings-as-errors', '--source-dir', extracted, '--output', 'json'], root, isolated, path.join(out, 'logs/firefox-lint.json')));
       const rebuilt = path.join(temp, 'reviewer'); fs.mkdirSync(rebuilt);
       await run('unzip', ['-q', review, '-d', rebuilt], root, env);
       await run('python3', ['reviewer/rebuild.py', 'verify'], rebuilt, env, path.join(out, 'logs/firefox-rebuild.log'));
@@ -184,13 +187,12 @@ async function build(opt, env, manifest, save, out) {
     fs.writeFileSync(path.join(out, 'SHA256SUMS'), Object.values(manifest.files).map(file => `${file.sha256}  ${file.path}\n`).join(''));
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }
-function verify(manifest, out) {
+export function verify(manifest, out) {
   if (!manifest.ready) throw new Error('Packages are incomplete. Run build or release first.');
   const required = manifest.stores.flatMap(store => store === 'chrome' ? ['chrome'] : store === 'firefox' ? ['firefox', 'firefoxSource'] : manifest.applePlatforms);
   for (const key of required) {
     const file = requireValue(manifest.files[key], `Artifact ${key}`);
-    if (path.isAbsolute(file.path) || path.relative(out, path.resolve(out, file.path)).startsWith('..')) throw new Error('Artifact path leaves the release directory.');
-    if (digest(path.join(out, file.path)) !== file.sha256) throw new Error(`Checksum changed for ${file.path}; refusing upload.`);
+    if (digest(artifactPath(out, file.path)) !== file.sha256) throw new Error(`Checksum changed for ${file.path}; refusing upload.`);
   }
 }
 async function uploadApple(env, manifest, receipt, save, out) {
@@ -216,6 +218,31 @@ async function uploadApple(env, manifest, receipt, save, out) {
   }
 }
 
+// The Firefox compatibility source. dev/firefox is pushed to from other worktrees and machines too, so a build first
+// fetches origin's copy: a local branch that has fallen behind or split from it stops the release instead of being built
+// silently, and with no local branch the build starts from origin's. The branch itself is never moved. Without `fetch`
+// (plan, and runs resuming saved packages) nothing touches the network and the refs are used as they are.
+export function resolveFirefoxBase(ref, { cwd = root, fetch = true } = {}) {
+  const rev = name => { try { return git(['rev-parse', '--verify', '--quiet', `${name}^{commit}`], cwd); } catch { return null; } };
+  const contains = (ancestor, descendant) => { try { git(['merge-base', '--is-ancestor', ancestor, descendant], cwd); return true; } catch { return false; } };
+  if (fetch) {
+    try { git(['fetch', '--quiet', 'origin', '+refs/heads/dev/firefox:refs/remotes/origin/dev/firefox'], cwd); }
+    catch (error) { throw new Error(`Could not fetch origin/dev/firefox (${String(error.stderr || error.message).trim().split('\n')[0]}). A release builds Firefox on the current compatibility branch.`); }
+  }
+  const local = rev('refs/heads/dev/firefox'), remote = rev('refs/remotes/origin/dev/firefox');
+  if (!local && !remote) throw new Error('There is no dev/firefox branch, local or on origin.');
+  if (fetch && local && remote && local !== remote) {
+    if (contains(local, remote)) throw new Error('dev/firefox is behind origin/dev/firefox. Fast-forward it (git merge --ff-only origin/dev/firefox, in the worktree that has it checked out), then rerun.');
+    if (!contains(remote, local)) throw new Error('dev/firefox and origin/dev/firefox have diverged. Integrate them without rebasing or force-pushing, then rerun.');
+    console.log('Note: dev/firefox has commits that are not on origin yet.');
+  }
+  const permanent = local || remote;
+  const base = ref === 'dev/firefox' ? permanent : rev(ref);
+  if (!base) throw new Error(`--firefox-ref ${ref} does not name a commit.`);
+  if (!contains(permanent, base)) throw new Error('--firefox-ref must contain the permanent dev/firefox branch and its compatibility fixes.');
+  return base;
+}
+
 export async function main(args = process.argv.slice(2)) {
   const opt = options(args);
   if (opt.help) { console.log(usage); return; }
@@ -223,12 +250,11 @@ export async function main(args = process.argv.slice(2)) {
   const env = environment(opt);
   const commit = git(['rev-parse', '--verify', `${opt.sourceRef}^{commit}`]);
   const version = JSON.parse(git(['show', `${commit}:manifest.json`])).version;
-  const firefoxBase = opt.stores.includes('firefox') ? git(['rev-parse', '--verify', `${opt.firefoxRef}^{commit}`]) : null;
-  if (firefoxBase) {
-    const permanent = git(['rev-parse', '--verify', 'dev/firefox^{commit}']);
-    try { git(['merge-base', '--is-ancestor', permanent, firefoxBase]); } catch { throw new Error('--firefox-ref must contain the permanent dev/firefox branch and its compatibility fixes.'); }
-  }
   const out = opt.out || path.join(root, 'release', version, 'stores', commit.slice(0, 12));
+  // Only a run that is about to build needs the current branch; one resuming saved packages keeps the base they were built on.
+  const saved = path.join(out, 'release.json');
+  const building = ['release', 'build'].includes(opt.command) && !(fs.existsSync(saved) && json(saved).ready);
+  const firefoxBase = opt.stores.includes('firefox') ? resolveFirefoxBase(opt.firefoxRef, { fetch: building }) : null;
   console.log(`Glaze ${version}, committed source ${commit}\nStores: ${opt.stores.join(', ')}\nApple platforms: ${opt.applePlatforms.join(', ')}\nFirefox compatibility base: ${firefoxBase || '(not selected)'}\nOutput: ${out}`);
   if (opt.command === 'plan') {
     console.log(`Full release: verify prerequisites; build/store checks; universal notarized DMG; signed feed; store submissions; push main and immutable v${version}; wait Package CI; publish verified GitHub assets; prepare/test/push frostdev.io; wait Website CI; deploy and verify live pages/feed.\nWebsite checkout: ${env.FROSTDEV_SITE_DIR}\nNo builds, network calls, uploads, or branch changes performed.`); return;

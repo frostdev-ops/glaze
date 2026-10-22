@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const root = process.env.EXT || path.resolve(__dirname, '..');
 const out = process.argv[2];
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const fixture = `<!doctype html><html><head><style>
   html { --gz-surface-2: #102030; --gz-bg-grad: linear-gradient(#102030, #102030); --gz-bg-dim: 0%;
     --gz-bg-image: linear-gradient(#102030, #102030); --gz-bg-1: #102030; --gz-bg-2: #102030; --gz-bg-3: #102030; }
@@ -35,7 +35,7 @@ const fixture = `<!doctype html><html><head><style>
   const check = (value, message) => { checks++; if (!value) failures.push(message); };
   try {
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(profile, { executablePath: chrome, headless: true, viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+    context = await chromium.launchPersistentContext(profile, { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
     await context.route('**/*', (route) => route.abort());
     const page = await context.newPage(), decoder = await context.newPage();
     // Decode screenshot pixels in a separate blank document, without another image dependency.

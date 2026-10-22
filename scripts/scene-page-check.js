@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 
 const ext = fs.realpathSync(path.join(__dirname, '..'));
 const out = process.argv[2] && path.resolve(process.argv[2]);
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const origin = 'https://ultra.fixture.test';
 const D = require(path.join(ext, 'defaults.js'));
@@ -28,7 +28,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   try {
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      executablePath: chrome, headless: true, viewport: { width: 1280, height: 800 },
+      ...chromeLaunch, headless: true, viewport: { width: 1280, height: 800 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     context.setDefaultTimeout(15000);
@@ -152,7 +152,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     fs.rmSync(scratch, { recursive: true, force: true });
   }
   const bad = results.filter((r) => !r.ok);
-  console.log(JSON.stringify({ chrome: 'Chrome for Testing (Playwright chromium-1243)', passed: results.length - bad.length, failed: bad.length, failures: bad }, null, 1));
+  console.log(JSON.stringify({ chrome: process.env.CHROME || "Playwright's bundled Chromium", passed: results.length - bad.length, failed: bad.length, failures: bad }, null, 1));
   for (const r of results) console.log(`${r.ok ? 'ok  ' : 'FAIL'} ${r.name}`);
   process.exitCode = bad.length ? 1 : 0;
 })().catch((e) => { console.error(e); process.exitCode = 1; });

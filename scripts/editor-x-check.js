@@ -10,7 +10,7 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 
 const ext = fs.realpathSync(path.join(__dirname, '..'));
 const out = process.argv[2] && path.resolve(process.argv[2]);
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const AURORA = fs.readFileSync(path.join(ext, 'assets/shaders/aurora.glsl'), 'utf8');
 const BG = require(path.join(ext, 'lib/editor-xbg.js'));
@@ -28,7 +28,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
   try {
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      executablePath: chrome, headless: true, viewport: { width: 1400, height: 1000 },
+      ...chromeLaunch, headless: true, viewport: { width: 1400, height: 1000 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     context.setDefaultTimeout(15000);

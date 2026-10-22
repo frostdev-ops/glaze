@@ -10,7 +10,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(),'glaze-background-pages-'));
 const fixture = fs.readFileSync(path.join(root,'test/fixtures/ultra-course.html'),'utf8').replace('</style>', `
   .course-content-container > .panel-wrap { top:var(--gz-navbar-top,0px); left:var(--gz-navbar-left,0px); }
   </style>`);
-const lock = '/private/tmp/claude-501/glaze-heavy.lock';
+const lock = require('./check-env.js').lockPath();
 let ctx, held=false; const results=[], errors=[];
 const until = async fn => { const end=Date.now()+15000; while(Date.now()<end) { const v=await fn(); if(v)return v; await new Promise(r=>setTimeout(r,100)); } throw Error('background did not settle'); };
 const check = (value,label) => { assert.ok(value,label); results.push(label); };
@@ -18,7 +18,7 @@ const check = (value,label) => { assert.ok(value,label); results.push(label); };
   try {
     fs.mkdirSync(lock); held=true; fs.writeFileSync(path.join(lock,'owner'),`${process.pid}\nbackground-pages-check\n`);
     await require('./wait-for-browser.js')();
-    ctx=await chromium.launchPersistentContext(path.join(tmp,'profile'),{headless:true,executablePath:process.env.CHROME || path.join(os.homedir(),'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'),viewport:{width:1800,height:1000},reducedMotion:'reduce',args:[`--disable-extensions-except=${root}`,`--load-extension=${root}`,'--disable-background-networking','--host-resolver-rules=MAP * ~NOTFOUND']});
+    ctx=await chromium.launchPersistentContext(path.join(tmp,'profile'),{headless:true,...require('./check-env.js').chromeLaunch(),viewport:{width:1800,height:1000},reducedMotion:'reduce',args:[`--disable-extensions-except=${root}`,`--load-extension=${root}`,'--disable-background-networking','--host-resolver-rules=MAP * ~NOTFOUND']});
     await ctx.route('**/*',r=>{
       const u=new URL(r.request().url());
       if(u.protocol==='chrome-extension:')return r.continue();

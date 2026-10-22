@@ -28,7 +28,7 @@ globalThis.GZ_GLSL = GLSL;
 globalThis.GZ_PARTS = PARTS;
 const S = require(path.join(ext, 'lib/share.js'));
 const X = require(path.join(ext, 'lib/lookparts.js'));
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -132,7 +132,7 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
   try {
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
-      executablePath: CHROME, headless: true, viewport: { width: 1280, height: 860 }, locale: 'en-US', timezoneId: 'America/New_York',
+      ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 }, locale: 'en-US', timezoneId: 'America/New_York',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     ctx.setDefaultTimeout(15000);

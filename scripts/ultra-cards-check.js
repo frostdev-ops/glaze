@@ -17,7 +17,7 @@ const G = require('../defaults.js');
 
 const ext = process.env.EXT || path.join(__dirname, '..');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-cards-'));
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-courses.html'), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
@@ -36,7 +36,7 @@ const MODES = {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'b7a-'));
   await require('./wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
-    executablePath: CHROME, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce',
+    ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce',
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
   });
   try {

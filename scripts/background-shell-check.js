@@ -6,13 +6,13 @@ const root = process.env.EXT || path.resolve(__dirname, '..'), out = process.arg
 const source = fs.readFileSync(path.join(root, 'content.js'), 'utf8');
 const start = source.indexOf('  const placeScene = '), end = source.indexOf('  const stopScene = ', start);
 const placement = source.slice(start, end);
-const lock = '/private/tmp/claude-501/glaze-heavy.lock';
+const lock = require('./check-env.js').lockPath();
 const failures = [], results = []; let browser, held = false;
 (async () => {
   try {
     fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nbackground-shell-check\n`);
     await require('./wait-for-browser.js')();
-    browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing') });
+    browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch() });
     const page = await browser.newPage(), decoder = await browser.newPage();
     await page.route('**/*', r => r.abort());
     const families = ['dashboard', 'courses', 'activity', 'global-calendar', 'global-grades', 'global-messages', 'profile', 'outline', 'calendar', 'announcements', 'discussions', 'gradebook', 'messages', 'groups', 'achievements', 'document', 'assignment', 'test', 'submission', 'discussion', 'announcement', 'standalone-item', 'retained-course', 'canvas', 'moodle'];

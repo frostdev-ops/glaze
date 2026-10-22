@@ -1,7 +1,7 @@
 // The sidebar with course tabs on Blackboard Ultra, on the synthetic Ultra course (test/fixtures/ultra-course.html, no
 // account or outside network): one working dock at a time (the document on screen), a placement made in a course
 // frame kept through switching and a refresh, rapid switching and Back/Forward, and no sidebar work in hidden documents.
-// Hold /private/tmp/claude-501/glaze-heavy.lock and run under nice.
+// Hold $GLAZE_LOCK (default glaze-heavy.lock in the OS temp directory) and run under nice.
 // NODE_PATH=<installed playwright> nice -n 15 node scripts/sidebar-ultra-tabs-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -74,7 +74,7 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     fs.mkdirSync(out, { recursive: true });
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      executablePath: process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'),
+      ...require('./check-env.js').chromeLaunch(),
       headless: true, viewport: { width: 1600, height: 1000 }, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });

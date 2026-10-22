@@ -9,7 +9,7 @@
 // Saves the class schedule's list, light and dark, as test/fixtures/import/canvas-schedule-{light,dark}.png. Writes
 // nothing to Canvas: what Save keeps goes to the throwaway profile's extension storage.
 //   NODE_PATH=/path/to/node_modules node scripts/import-check.js [out dir]   (needs playwright)
-//   CHROME=/path/to/chrome runs that browser instead of Chrome for Testing.
+//   CHROME=/path/to/chrome runs that browser instead of Playwright's Chromium.
 const { chromium } = require('playwright');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -25,7 +25,7 @@ const FX = path.join(root, 'test/fixtures/import');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-import-'));
 const BASE = 'http://localhost:3000';
 const CREDS = path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const NOT_EXTENSION = new Set(['assets', 'safari', 'scripts', 'store', 'test', 'docs', 'dist', 'release', 'node_modules']);
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) process.exitCode = 1; };
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -48,7 +48,7 @@ const frames = (page) => page.evaluate(() => document.querySelectorAll('iframe[s
   fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
   await require('./wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-    executablePath: fs.existsSync(CHROME) ? CHROME : undefined, headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1,
+    ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1,
     reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York', args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
   });
   try {

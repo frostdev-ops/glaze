@@ -7,7 +7,7 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const ext = fs.realpathSync(path.join(__dirname, '..'));
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const check = (name, ok) => { assert.ok(ok, name); console.log(`ok  ${name}`); };
 const until = async (name, fn) => {
@@ -49,7 +49,7 @@ const until = async (name, fn) => {
     });
     watchdog = setTimeout(() => { console.error('FAIL timed out after 180 s'); cleanup().finally(() => process.exit(1)); }, 180000);
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { executablePath: chrome, headless: true, locale: 'en-US', viewport: { width: 1200, height: 900 },
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...chromeLaunch, headless: true, locale: 'en-US', viewport: { width: 1200, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--disable-component-update', '--no-proxy-server',
         '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', '--renderer-process-limit=2'] });
     context.setDefaultTimeout(10000);

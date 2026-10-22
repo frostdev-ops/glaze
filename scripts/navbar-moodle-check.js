@@ -1,6 +1,6 @@
 // Headless navigation checks in the editor preview and the local Moodle test instance.
 // NODE_PATH=<playwright node_modules> nice -n 15 node scripts/navbar-moodle-check.js [evidence directory]
-// The caller holds /private/tmp/claude-501/glaze-heavy.lock. HTTP permissions use a temporary extension/profile.
+// The caller holds $GLAZE_LOCK (default glaze-heavy.lock in the OS temp directory). HTTP permissions use a temporary extension/profile.
 // A calendar block is added only to a GLZ test course and removed in finally, alongside the browser profile.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
@@ -27,7 +27,7 @@ const until = async (fn, timeout = 30000) => { const end = Date.now() + timeout;
     fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
     const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { headless: true, executablePath: process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'), viewport: { width: 1440, height: 1000 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking'] });
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { headless: true, ...require('./check-env.js').chromeLaunch(), viewport: { width: 1440, height: 1000 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking'] });
     const worker = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
     await worker.evaluate((s) => chrome.storage.sync.set(s), G.GZ_SANITIZE({ enhance: { dashboard: false }, motion: { level: 'off' } }));
     worker.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

@@ -25,7 +25,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
   try {
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      executablePath: process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'),
+      ...require('./check-env.js').chromeLaunch(),
       headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
