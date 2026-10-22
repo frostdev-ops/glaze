@@ -228,3 +228,20 @@ test('the media builder offers exactly the kinds and fits the cleaner has, each 
   assert.match(read('lib/editor-xbg.js'), /askWorker\(\{ op: 'put', kind: mediaKind, b64 \}\)/);
   assert.match(read('lib/editor-xbg.js'), /\{ type: 'glaze:media', \.\.\.m \}/);
 });
+
+test('the event builder offers the canvas marks and shows the Look\'s selected marks', () => {
+  const MX = require('../lib/motionx.js'), checks = [];
+  let builder;
+  const node = () => ({ dataset: {}, querySelector: node, append() {}, closest: () => null, childElementCount: 0, replaceChildren() {} });
+  const host = node();
+  const context = vm.createContext({ document: { getElementById: (id) => id === 'x-motion' ? host : null },
+    GZ_MX: MX, GZ_EDITOR_X: {
+      add: (b) => { builder = b; }, tr: (s) => s, tokenName: (s) => s,
+      el: (tag, props) => { if (tag === 'input' && props.type === 'checkbox') checks.push(props); return node(); },
+      select: node, slider: node, colors: node, button: node, status: node, motionNote: () => '',
+    } });
+  vm.runInContext(read('lib/editor-xmotion.js'), context);
+  builder.mount({ s: { parts: { x: { fx: { complete: { kind: 'sprite', shapes: ['ghost'] } } } } } });
+  for (const shape of MX.DRAWN) assert.ok(checks.some((c) => c['data-focus'] === `fx-complete-${shape}`), shape);
+  assert.equal(checks.find((c) => c['data-focus'] === 'fx-complete-ghost').checked, true);
+});

@@ -276,3 +276,16 @@ test('the pointer\'s marks and its candle flicker stay in their bounds', () => {
   assert.equal(M.cursor({ kind: 'sparkle', shape: 'bat' }).shape, 'bat');
   assert.equal(M.fx({ kind: 'burst', shapes: ['ghost', 'nope'] }).shapes[0], 'ghost');
 });
+
+test('a sparkle draws the mark selected in the Look builder', () => {
+  for (const shape of M.DRAWN) {
+    const c = M.cursor({ kind: 'sparkle', shape });
+    assert.equal(M.dust(c, 10, 20, seeded(4)).shape, shape);
+  }
+});
+
+test('an orbit can have just one mark', () => {
+  assert.equal(M.cursor({ kind: 'orbit', len: 1 }).len, 1);
+  const X = require('../lib/editor-x.js');
+  assert.deepEqual(X.put(null, 'cursor', { kind: 'orbit', len: 1 }), { x: { cursor: { kind: 'orbit', len: 1 } } });
+});
