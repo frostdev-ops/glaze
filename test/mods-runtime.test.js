@@ -787,6 +787,92 @@ test('the glaze client\'s v1 calls: transforms answer when Glaze asks, palette c
   ch.port1.close();
 });
 
+test('the glaze client ships only canvases that were drawn on, so four canvas slots and one animation loop stay under the host\'s rate', async () => {
+  const src = read('mods/host.js');
+  const client = src.slice(src.indexOf('  function glazeClient(port) {'), src.indexOf('\n  }\n', src.indexOf('  function glazeClient(port) {')) + 4);
+  // A stand-in port: a real one cannot transfer a stand-in picture.
+  const frames = {}, listeners = [];
+  const port = { postMessage: (m) => { if (m.frame) frames[m.frame] = (frames[m.frame] || 0) + 1; }, addEventListener: (t, f) => listeners.push(f), start() {} };
+  const deliver = (data) => listeners.forEach((f) => f({ data }));
+  class OffscreenCanvas { constructor(w, h) { this.width = w; this.height = h; this.ctx = { fillStyle: '', fillRect() {}, canvas: this }; } getContext() { return this.ctx; } }
+  const ctx = vm.createContext({ setTimeout, clearTimeout, Promise, Error, TypeError, Object, Map, Number, String, Array, Proxy, Reflect, performance, OffscreenCanvas, createImageBitmap: async (c) => ({ width: c.width, height: c.height, close() {} }) });
+  ctx.globalThis = ctx;
+  const glaze = vm.runInContext(`${client}\nglazeClient(port);`, Object.assign(ctx, { port }));
+  const slots = ['tile:a', 'tile:b', 'tile:c', 'background'];
+  for (const s of slots) deliver({ event: 'canvas.size', data: { slot: s, w: 100, h: 100 } });
+  deliver({ event: 'canvas.pause', data: { paused: false } });
+  await settle();
+  const canvases = {};
+  for (const s of slots) canvases[s] = await glaze.ui.canvas(s);
+  const g = canvases['tile:a'].getContext('2d');
+  assert.equal(canvases['tile:a'].getContext('2d'), g, 'repeated getContext keeps the native context identity');
+  assert.equal(g.canvas, canvases['tile:a'], 'the context still reads like the real one');
+  let live = true;
+  const loop = () => { if (!live) return; g.fillStyle = 'red'; g.fillRect(0, 0, 10, 10); ctx.requestAnimationFrame(loop); };
+  loop();
+  await new Promise((r) => setTimeout(r, 1000));
+  live = false;
+  const total = Object.values(frames).reduce((a, b) => a + b, 0);
+  assert.ok(total <= 240, `at most RATE pictures a second, got ${total}`);
+  assert.ok(frames['tile:a'] >= 20, `the drawn canvas keeps animating, got ${frames['tile:a']}`);
+  for (const s of slots.slice(1)) assert.ok(!frames[s], `${s} was never drawn on, so nothing is shipped (${frames[s]})`);
+  glaze.ui.commit('tile:b');
+  await settle();
+  assert.equal(frames['tile:b'], 1, 'commit(slot) ships on demand');
+});
+
+test('canvas dirtiness resets after shipping and survives drawing, commit, pause and slot resize', async () => {
+  const src = read('mods/host.js');
+  const client = src.slice(src.indexOf('  function glazeClient(port) {'), src.indexOf('\n  }\n', src.indexOf('  function glazeClient(port) {')) + 4);
+  const frames = [], listeners = [], timers = new Map();
+  let next = 0, failPicture = false;
+  class OffscreenCanvas {
+    constructor(w, h) { this.width = w; this.height = h; this.ctx = { fillStyle: '', canvas: this, fillRect() { assert.equal(this.canvas.ctx, this); } }; }
+    getContext() { return this.ctx; }
+  }
+  const port = { postMessage: (m) => { if (m.frame) frames.push(m); }, addEventListener: (t, f) => listeners.push(f), start() {} };
+  const ctx = vm.createContext({ port, OffscreenCanvas, performance,
+    setTimeout: (f) => { timers.set(++next, f); return next; }, clearTimeout: (id) => timers.delete(id),
+    createImageBitmap: async (c) => { if (failPicture) { failPicture = false; throw new Error('temporary picture failure'); } return { width: c.width, height: c.height, close() {} }; } });
+  const glaze = vm.runInContext(`${client}\nglazeClient(port);`, ctx);
+  const deliver = (event, data) => listeners.forEach((f) => f({ data: { event, data } }));
+  const tick = async () => { ctx.requestAnimationFrame(() => {}); const due = [...timers.values()]; timers.clear(); due.forEach((f) => f()); await settle(); };
+  const slots = ['tile:a', 'tile:b', 'tile:c', 'background'], contexts = [];
+  for (const slot of slots) {
+    deliver('canvas.size', { slot, w: 100, h: 100 });
+    contexts.push((await glaze.ui.canvas(slot)).getContext('2d'));
+  }
+  for (let i = 0; i < 65; i++) { contexts.forEach((g) => g.fillRect()); await tick(); }
+  assert.equal(frames.length, 260, 'all four drawn canvases keep delivering');
+  await tick();
+  assert.equal(frames.length, 260, 'an unchanged frame sends nothing');
+  contexts[0].fillStyle = 'red';
+  await tick();
+  assert.equal(frames.length, 261, 'assigning context state counts');
+  deliver('canvas.pause', { paused: true });
+  contexts[1].fillRect();
+  glaze.ui.commit(slots[2]);
+  await settle();
+  assert.equal(frames.length, 261, 'no pictures during pause');
+  deliver('canvas.pause', { paused: false });
+  await settle();
+  assert.equal(frames.length, 265, 'resume refreshes every canvas');
+  deliver('canvas.size', { slot: slots[0], w: 200, h: 50 });
+  await settle();
+  assert.equal(frames.at(-1).bm.width, 200);
+  assert.equal(frames.at(-1).bm.height, 50);
+  const count = frames.length;
+  deliver('canvas.size', { slot: slots[0], w: 200, h: 50 });
+  await tick();
+  assert.equal(frames.length, count, 'same dimensions and no drawing remain clean');
+  contexts[0].fillRect();
+  failPicture = true;
+  await tick();
+  assert.equal(frames.length, count, 'failed bitmap produces no picture');
+  await tick();
+  assert.equal(frames.length, count + 1, 'a failed bitmap stays dirty for the next animation frame');
+});
+
 test('Look rules and every mod rule layer merge in student order without changing part precedence', async () => {
   const p = page();
   p.G.start([W('a'), W('b')]);
@@ -882,6 +968,24 @@ test('the host bounds Worker bitmap dimensions and frame rate and drops frames w
   await settle();
   clock += 20;
   assert.equal(send(100, 100).closed, true);
+  port.close();
+});
+
+test('the host counts Worker pictures per canvas, not toward its message rate', async () => {
+  const h = host(), port = h.post(hello), got = inbox(port);
+  port.postMessage({ op: 'start', mods: [H(W('a'))] });
+  await settle();
+  const slots = ['tile:a', 'tile:b', 'tile:c', 'tile:d', 'background'];
+  for (const slot of slots) port.postMessage({ event: 'canvas.size', mod: 'a', data: { slot, w: 100, h: 100 } });
+  port.postMessage({ event: 'canvas.pause', mod: 'a', data: { paused: false } });
+  await settle();
+  for (let i = 0; i < 61; i++) for (const slot of slots) h.workers[0].onmessage({ data: { frame: slot, bm: new h.ImageBitmap(100, 100) } });
+  await settle();
+  assert.equal(h.workers[0].terminated, false, 'five canvases at 61 a second each are not a flood');
+  for (let i = 0; i < 241; i++) h.workers[0].onmessage({ data: { frame: 'tile:a', bm: new h.ImageBitmap(100, 100) } });
+  await settle();
+  assert.equal(h.workers[0].terminated, true, 'one canvas past its own budget still is');
+  eq(got.at(-1), { stopped: 'a', why: 'error' });
   port.close();
 });
 

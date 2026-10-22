@@ -15,7 +15,7 @@ const perms = (...ids) => ids.map((id) => ({ id, why: 'x' }));
 
 test('the manifest takes nav.read, nav.items and nav.layout; nav.read is personal data, with no page of its own', async () => {
   const got = await man({ permissions: perms('nav.read', 'nav.items', 'nav.layout') });
-  assert.deepEqual(M.caps(got.manifest), ['nav.read', 'nav.items', 'nav.layout']);
+  assert.deepEqual(M.caps(got.manifest), ['nav.read', 'nav.items', 'nav.layout', 'code']);
   for (const id of ['nav', 'nav.write', 'nav.replace', 'NAV.READ']) await assert.rejects(man({ permissions: perms(id) }), /permissions\.0\.id/);
   await assert.rejects(man({ permissions: perms('nav.read', 'nav.read') }), /permissions\.1\.id/);
   const page = ['tile.html', u8('<p>')];

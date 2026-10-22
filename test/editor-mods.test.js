@@ -8,7 +8,9 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 
 // The mounted tab, with storage reads that tests can hold across a change event.
-const mounted = (mods, data = {}, read = async (k, v) => v) => {
+let ask = () => true; // what window.confirm answers; the question it was asked is in `asked`
+const asked = [];
+const mounted = (mods, data = {}, read = async (k, v) => v, respond = async () => ({ ok: true })) => {
   const ids = new Map(), sent = [];
   let changed;
   const element = () => ({ children: [], attrs: {}, dataset: {}, checked: false, disabled: false, textContent: '', className: '',
@@ -19,10 +21,11 @@ const mounted = (mods, data = {}, read = async (k, v) => v) => {
   const document = { activeElement: null, createElement: element, querySelector: () => null,
     getElementById(id) { if (!ids.has(id)) ids.set(id, element()); return ids.get(id); } };
   const local = { get: async (k) => read(k, structuredClone(Object.fromEntries([].concat(k).filter((x) => Object.hasOwn(data, x)).map((x) => [x, data[x]])))),
-    set: async (patch) => { Object.assign(data, structuredClone(patch)); changed(Object.fromEntries(Object.keys(patch).map((k) => [k, {}])), 'local'); } };
+    set: async (patch) => { Object.assign(data, structuredClone(patch)); changed(Object.fromEntries(Object.keys(patch).map((k) => [k, {}])), 'local'); },
+    remove: async (k) => { for (const x of [].concat(k)) delete data[x]; } };
   const chrome = { storage: { local, onChanged: { addListener(f) { changed = f; } } }, runtime: { getManifest: () => ({ sandbox: {} }),
-    sendMessage: async (m) => { sent.push(m); return m.op === 'list' ? { ok: true, mods: structuredClone(mods) } : { ok: true }; } } };
-  const ctx = vm.createContext({ chrome, document, GZ_MODBUNDLE: M, GZ_XPARTS: require('../lib/lookparts.js'), GZ_MODAPI: require('../lib/modapi.js'), requestAnimationFrame: (f) => f() });
+    sendMessage: async (m) => { sent.push(m); return m.op === 'list' ? { ok: true, mods: structuredClone(mods) } : respond(m); } } };
+  const ctx = vm.createContext({ chrome, document, GZ_MODBUNDLE: M, GZ_XPARTS: require('../lib/lookparts.js'), GZ_MODAPI: require('../lib/modapi.js'), requestAnimationFrame: (f) => f(), confirm: (q) => { asked.push(q); return ask(q); } });
   vm.runInContext(fs.readFileSync(require.resolve('../lib/editor-mods.js'), 'utf8'), ctx);
   ctx.GZ_MODSEDIT.mount({ t, and, when: String });
   const find = (f, e = document.getElementById('mods-list')) => e?.dataset?.f === f ? e : e?.children?.map((c) => find(f, c)).find(Boolean);
@@ -46,7 +49,11 @@ test('prompt lines: Glaze words first, the author\'s reason kept apart, new perm
   assert.deepEqual(E.lines(v, t, ['network:api.weather.gov']).map((l) => l.fresh), [false, true]);
   // A page of its own is asked about too, with no author reason.
   const framed = E.lines(view({ ui: { tiles: [{ id: 'a', name: 'A', file: 'a.html', sizes: ['m'] }] } }), t);
-  assert.deepEqual(framed.map((l) => [l.id, l.why]), [['frame', '']]);
+  assert.deepEqual(framed.map((l) => [l.id, l.why]), [['code', ''], ['frame', '']]);
+  // Code is asked about too: the line says so, and a widget Glaze draws itself has none.
+  const hooked = E.lines(view({ hooks: 'hooks.js' }), t);
+  assert.deepEqual(hooked.map((l) => [l.id, l.text]), [['code', 'Runs its author’s code — Glaze doesn’t draw it itself.']]);
+  assert.deepEqual(E.lines(view({ permissions: [{ id: 'todo', why: 'x' }], ui: { tiles: [{ id: 'a', name: 'A', sizes: ['m'], blocks: [{ type: 'text', text: 'hi' }] }] } }), t).map((l) => l.id), ['todo']);
 });
 
 test('warnings: personal data with a network host names both, own pages, Chrome, unsigned and not reviewed', () => {
@@ -220,6 +227,48 @@ test('each replacement switch sends only the key that changed', async () => {
   p.find('a:replace:nav').onchange({ target: { checked: true } });
   await settle();
   assert.deepEqual(p.sent.filter((m) => m.op === 'replace').map((m) => JSON.parse(JSON.stringify(m.set))), [{ bg: true }, { nav: true }]);
+});
+
+test('Remove offers to take the mod\'s stored data too, on by default, and says what it will do', async () => {
+  const p = mounted([record('a')]);
+  await settle();
+  const wipe = p.find('a:wipe');
+  assert.equal(wipe.checked, true, 'on by default');
+  asked.length = 0;
+  await p.find('a:remove').onclick();
+  assert.equal(asked.at(-1), 'Remove Grade Ring? Its settings and the data it stored on this device go too.');
+  assert.equal(p.sent.filter((m) => m.op === 'remove').at(-1).data, true);
+  wipe.checked = false;
+  await p.find('a:remove').onclick();
+  assert.equal(asked.at(-1), 'Remove Grade Ring? Its settings on this device go too, but the data it stored stays.');
+  assert.equal(p.sent.filter((m) => m.op === 'remove').at(-1).data, false);
+  ask = () => false;
+  const before = p.sent.length;
+  await p.find('a:remove').onclick();
+  assert.equal(p.sent.length, before, 'cancelling sends nothing');
+  ask = () => true;
+});
+
+test('Remove waits for the broker before clearing settings and keeps them after a failed removal', async () => {
+  let release;
+  const data = { 'modSettings:a': { plant: 'Fern' } };
+  const p = mounted([record('a')], data, undefined, () => new Promise((r) => { release = r; }));
+  await settle();
+  const pending = p.find('a:remove').onclick();
+  await settle();
+  assert.ok(data['modSettings:a'], 'settings remain while the broker is working');
+  p.find('a:wipe').checked = false;
+  assert.equal(p.sent.at(-1).data, true, 'the confirmed choice was captured before awaiting');
+  release({ ok: false, error: 'write' });
+  await pending;
+  assert.ok(data['modSettings:a'], 'failed removal preserves settings');
+  const retry = p.find('a:remove').onclick();
+  await settle();
+  assert.equal(p.sent.at(-1).data, false);
+  release({ ok: true });
+  await retry;
+  assert.equal(data['modSettings:a'], undefined, 'success removes settings even when cached data was kept');
+  assert.equal(p.document.activeElement, p.document.getElementById('heading-mods-installed'));
 });
 
 test('a replacement change during a draw is rendered after the pending read', async () => {

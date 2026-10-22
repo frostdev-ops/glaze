@@ -134,6 +134,19 @@ test('permission growth waits for the prompt; the blocklist applies', async (t) 
   assert.equal(f.local.s[`mod:${id}`].version, '1.0.0');
 });
 
+test('an update that turns a widget Glaze draws into a code mod waits for the prompt, with the same permissions', async (t) => {
+  const server = await up(t), author = area(), todo = [{ id: 'todo', why: 'Shows what is due next.' }];
+  const widget = { ...manifest('1.0.0', todo), hooks: undefined, ui: { tiles: [{ id: 'main', name: 'Due soon', sizes: ['m'], blocks: [{ type: 'text', text: 'Next: {next.title}' }] }] } };
+  const packed = async (m, f = {}) => (await M.pack(f, JSON.parse(JSON.stringify(m)), (await authors()).a)).bytes;
+  const { link } = await CH.publish(await packed(widget), { local: author, fetch, server });
+  const f = follower();
+  const id = await installFrom(f, link);
+  await CH.publish(await packed({ ...manifest('1.0.1', todo), ui: { tiles: [{ id: 'main', name: 'Due soon', sizes: ['m'] }] } }, files('1.0.1')), { local: author, fetch, server });
+  assert.equal((await CH.check(f.env, { force: true })).checked[id], 'pending', 'no code, then code: the student is asked');
+  assert.equal(f.local.s[`mod:${id}`].version, '1.0.0', 'and nothing is installed meanwhile');
+  assert.equal(f.local.s[CH.STATE(id)].pending.version, '1.0.1');
+});
+
 test('daily throttle, only enabled followed mods, stop following, and an unreachable relay', async (t) => {
   const server = await up(t), author = area();
   const { link } = await CH.publish(await pack('1.0.0'), { local: author, fetch, server });

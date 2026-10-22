@@ -98,6 +98,11 @@ chooses what to allow, and can take any of it back later. A call without its gra
 - **Glaze adds its own warnings** to the prompt: personal data together with a network host ("could send your grades to
   ..."), a page of its own (it can contact other sites, which learn the student's address and when they use it), unsigned
   (Dev), not reviewed, and Chrome only.
+- **Code is a permission of its own.** A mod with `hooks` or a slot `file` is listed as "Runs its author's code". An update
+  that adds code to a mod that had none (a widget made of blocks) asks again, even with the same permissions, and a
+  followed channel waits for the student's review.
+- **Removing a mod** asks whether to remove its stored data too (on by default): what it saved with `glaze.storage`, its
+  private-data mark, its navigation-layout switch and its stop note. Keep it, and a mod with the same id finds it again.
 
 ### `replaces`
 
@@ -345,8 +350,9 @@ A slot is `tile:<id>` (a tile on the student's widget boards), `rail:<id>` (a wi
 
 **Canvas.** Render a tree with a `canvas`, then `const c = await glaze.ui.canvas(slot)` and draw with
 `requestAnimationFrame`. The canvas has the slot's width in device pixels (at most 2 a CSS pixel and 4096 a side) and
-Glaze resizes it as the slot changes. Its picture goes to the page after each animation frame, or on `glaze.ui.commit`,
-at most 60 a second. Frames stop while `canvas.pause` says so. Nothing animates with motion off.
+Glaze resizes it as the slot changes. Its picture goes to the page after each animation frame in which the mod drew on it
+(any call or assignment on the canvas's context counts; a context taken from `OffscreenCanvas.prototype` directly isn't
+seen, so call `glaze.ui.commit` after drawing with one), or on `glaze.ui.commit`, at most 60 a second. Frames stop while `canvas.pause` says so. Nothing animates with motion off.
 
 ## Limits
 
@@ -354,7 +360,7 @@ at most 60 a second. Frames stop while `canvas.pause` says so. Nothing animates 
 |---|---|
 | A bundle | 256 files, 2 MiB in all, 256 KiB of `.js`, `mod.json` 64 KiB |
 | A call | arguments 1 MiB as JSON, an answer 4 MiB, 64 calls waiting |
-| Messages | 240 a second from a mod (canvas pictures count); over that the mod is stopped |
+| Messages | 240 a second from a mod; over that the mod is stopped. Canvas pictures count against their own canvas, 240 a second each |
 | `glaze.storage` | 1 MiB per mod |
 | `glaze.fetch` | 15 s, 2 MiB back, no redirects |
 | `courses`, `todo`, `schedule`, `grades` | at most 500 items; `schedule` spans at most 60 days |
