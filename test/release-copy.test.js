@@ -5,9 +5,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const latest = read('CHANGELOG.md').split('## [3.4.0]')[1]?.split(/^## /m)[0] || '';
+const latest = read('CHANGELOG.md').split('## [3.3.5]')[1]?.split(/^## /m)[0] || '';
 
-test('3.4 release claims retain queue, identity and compatibility boundaries', () => {
+test('3.3.5 release claims retain queue, identity and compatibility boundaries', () => {
   assert.match(latest, /Selected bulk reads/);
   assert.match(latest, /per document/);
   assert.match(latest, /Due this week[^\n]*per site/);
@@ -17,7 +17,7 @@ test('3.4 release claims retain queue, identity and compatibility boundaries', (
   assert.match(latest, /best effort/);
 });
 
-test('3.4 media release notes retain container and local-only legacy boundaries', () => {
+test('3.3.5 media release notes retain container and local-only legacy boundaries', () => {
   assert.match(latest, /container metadata/);
   assert.match(latest, /older files[^\n]*local[^\n]*not shared/);
 });
@@ -30,15 +30,15 @@ const terms = {
   nl: ['nog niet goedgekeurde', 'Geselecteerde bulkverzoeken', 'containermetadata', 'oudere bestanden blijven lokaal'],
   'pt-BR': ['ainda não aprovado', 'Leituras em lote selecionadas', 'metadados do contêiner', 'arquivos antigos ficam apenas neste dispositivo'],
 };
-for (const [lang, expected] of Object.entries(terms)) test(`3.4 listing ${lang || 'en'} retains consent, queue and media limits`, () => {
+for (const [lang, expected] of Object.entries(terms)) test(`3.3.5 listing ${lang || 'en'} retains consent, queue and media limits`, () => {
   const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
-  const block = text.slice(text.indexOf('3.4\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
+  const block = text.slice(text.indexOf('3.3.5\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
   for (const term of expected) assert.ok(block.includes(term), term);
 });
 
-test('3.4 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '3.4.0');
-  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.4.0');
+test('3.3.5 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '3.3.5');
+  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.3.5');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('scripts/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));

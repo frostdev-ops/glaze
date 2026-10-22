@@ -7,8 +7,8 @@ const policy = read('PRIVACY.md');
 
 test('media policy bounds container cleanup and preserves the local-only legacy exception', () => {
   assert.match(policy, /removed from the file’s container/);
-  assert.match(policy, /saved before 3\.4\.0[^.]*not shared/);
-  assert.match(read('docs/privacy.md'), /saved before 3\.4\.0[^.]*not shared/);
+  assert.match(policy, /saved before 3\.3\.5[^.]*not shared/);
+  assert.match(read('docs/privacy.md'), /saved before 3\.3\.5[^.]*not shared/);
 });
 
 test('Moodle navigation retention names the actual site and user cache dimensions', () => {

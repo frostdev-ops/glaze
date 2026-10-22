@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4 (Dutch)
+# Chrome Web Store listing — Glaze 3.3.5 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -8,7 +8,7 @@ Geef Blackboard Ultra, Canvas en Moodle je eigen stijl en navigatie, plus een be
 
 Maak Blackboard Ultra, Canvas en Moodle echt van jou. Glaze geeft je cursussen een nieuwe stijl met paletten, lettertypen, achtergronden en beweging, en voegt hulpmiddelen voor plannen en studeren toe precies waar je je cursuswerk doet. Het werkt op elke school die Blackboard Ultra, Canvas of Moodle gebruikt, ook op het eigen domein van een school, waar het vraagt voordat het een nog niet goedgekeurde site inschakelt. Geen account, geen analytics. Je cursussen, cijfers, notities en taken blijven op je apparaat; je instellingen volgen de synchronisatie van je browser als die aanstaat; delen is optioneel en versleuteld.
 
-NIEUW IN 3.4
+NIEUW IN 3.3.5
 
 • Op een nog niet goedgekeurde eigen schoolsite vraagt Glaze eerst toestemming; de instellingen tonen goedgekeurde eigen sites met Verwijderen.
 • Een gedeelde Look laat zien wat hij verandert voordat je hem gebruikt: elk navigatie-item dat hij verbergt, waar elke link heen gaat en de paginadelen die hij aanpast. Looks van anderen die Uitloggen zouden verbergen of een link zouden vermommen, worden geweigerd.
@@ -100,7 +100,7 @@ De hulpfuncties van Glaze wijzigen geen cijfers, leveren geen cursuswerk in en v
 
 PRIVACY
 
-Geen analytics, geen advertenties en geen account. Instellingen blijven in je browser en volgen Chrome- of Firefox-synchronisatie als die aanstaat (ze bevatten bijnamen van cursussen, GPA-keuzes en sommige school-, cursus- en account-ID’s; Safari bewaart ze op het apparaat). Cursusgegevens, cijfergegevens, notities, taken, waar je was, de lijst met deadlines en back-ups van wat je typt blijven op je apparaat. Glaze leest je eigen Blackboard-, Canvas- of Moodle-site met je bestaande sessie en schrijft er alleen naar als jij erom vraagt (een vinkje in de planner, een Canvas-bijnaam of kleur, uitloggen, de bewerkmodus van Moodle). Gekozen weblettertypen en achtergrondafbeeldingen doen gewone netwerkverzoeken; gelinkte video's en animaties haalt Glazes achtergrondproces zonder cookies, referrer of omleidingen op (12 MiB video, 6 MiB afbeelding, 1 MiB Lottie; video-/afbeeldingszijden tot 4096 pixels). Identificerende metadata worden uit de bestandscontainer verwijderd; gecodeerde streams en zichtbare pixels blijven. Bestanden die vóór 3.4.0 zijn opgeslagen en niet kunnen worden opgeschoond, blijven op dit apparaat en worden niet gedeeld. Afbeeldingen van cursustabbladen blijven in het geheugen en worden nergens naartoe verstuurd. Gedeelde sessies en modkanalen sturen, alleen als je ze gebruikt, versleutelde inhoud die de relay niet kan lezen. Glaze verzamelt of verkoopt je cursuswerk, cijfers, inloggegevens of browsegeschiedenis niet. Een mod met toegang tot cursusgegevens en het netwerk kan die gegevens naar goedgekeurde hosts sturen. Volledig beleid: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+Geen analytics, geen advertenties en geen account. Instellingen blijven in je browser en volgen Chrome- of Firefox-synchronisatie als die aanstaat (ze bevatten bijnamen van cursussen, GPA-keuzes en sommige school-, cursus- en account-ID’s; Safari bewaart ze op het apparaat). Cursusgegevens, cijfergegevens, notities, taken, waar je was, de lijst met deadlines en back-ups van wat je typt blijven op je apparaat. Glaze leest je eigen Blackboard-, Canvas- of Moodle-site met je bestaande sessie en schrijft er alleen naar als jij erom vraagt (een vinkje in de planner, een Canvas-bijnaam of kleur, uitloggen, de bewerkmodus van Moodle). Gekozen weblettertypen en achtergrondafbeeldingen doen gewone netwerkverzoeken; gelinkte video's en animaties haalt Glazes achtergrondproces zonder cookies, referrer of omleidingen op (12 MiB video, 6 MiB afbeelding, 1 MiB Lottie; video-/afbeeldingszijden tot 4096 pixels). Identificerende metadata worden uit de bestandscontainer verwijderd; gecodeerde streams en zichtbare pixels blijven. Bestanden die vóór 3.3.5 zijn opgeslagen en niet kunnen worden opgeschoond, blijven op dit apparaat en worden niet gedeeld. Afbeeldingen van cursustabbladen blijven in het geheugen en worden nergens naartoe verstuurd. Gedeelde sessies en modkanalen sturen, alleen als je ze gebruikt, versleutelde inhoud die de relay niet kan lezen. Glaze verzamelt of verkoopt je cursuswerk, cijfers, inloggegevens of browsegeschiedenis niet. Een mod met toegang tot cursusgegevens en het netwerk kan die gegevens naar goedgekeurde hosts sturen. Volledig beleid: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
 Open source (MIT): https://github.com/frostdev-ops/glaze
 

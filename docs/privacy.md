@@ -88,7 +88,7 @@ animation background is fetched by Glaze's background worker instead, with no co
 (12 MiB for a video, 6 MiB for a picture, 1 MiB for a Lottie animation; pictures and videos at most 4096 pixels on a side),
 and handed to the page as a cleaned copy. Location, device, time, title and program details are removed from the file’s container;
 the encoded stream and visible pixels remain, so this is not a forensic guarantee. New files whose containers cannot be cleaned
-are refused. Files saved before 3.4.0 that cannot be cleaned stay on this device and are not shared.
+are refused. Files saved before 3.3.5 that cannot be cleaned stay on this device and are not shared.
 Selected bulk reads share a queue per document and school site: three at a time, with a pause after a 429 or server error.
 Separate tabs and frames have independent queues; identity, membership, due-date exception and other readers use their existing paths.
 Ultra's queue honors Retry-After up to ten minutes; Canvas module-list failures use a fallback delay because their adapter does not expose that header. For Canvas Download all, the extension's background worker

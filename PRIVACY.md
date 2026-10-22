@@ -772,7 +772,7 @@ you import) are bundled. It makes requests in these cases:
   WebM and AVIF files have location, device, time, title and program details removed from the file’s container
   before new files are kept or shared. The encoded stream and visible pixels remain; this is not a forensic guarantee
   that all identifying information is gone. New files whose containers cannot be cleaned safely are refused.
-  Files saved before 3.4.0 that cannot be cleaned stay on this device and are not shared. The editor, and the preview of a theme code, name the site before you apply the Look. A
+  Files saved before 3.3.5 that cannot be cleaned stay on this device and are not shared. The editor, and the preview of a theme code, name the site before you apply the Look. A
   Look can also name a file kept on your computer by its SHA-256; such a file reaches you only through a share session
   (encrypted end to end, like a shared note's file), the gallery, or because you chose it in the editor. Kept files are
   held in a database only Glaze's background worker opens (`glaze-media`), with a small index (`lookMediaIndex`) in

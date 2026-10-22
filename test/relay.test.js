@@ -433,7 +433,8 @@ test('SHR-1: refused upgrades are closed at once, even while the client keeps se
     clients.push(s);
     let got = '';
     s.on('data', (d) => { got += d; if (got.includes('\r\n')) resolve({ s, line: got.split('\r\n')[0] }); });
-    s.on('error', reject);
+    // macOS resets a socket the accept-time cap closes; Linux closes it cleanly. Both are a refusal before headers.
+    s.on('error', (e) => (e.code === 'ECONNRESET' ? resolve({ s, line: got.split('\r\n')[0] }) : reject(e)));
     s.on('close', () => resolve({ s, line: got.split('\r\n')[0] }));
     t.after(() => s.destroy());
   });

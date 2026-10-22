@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4
+# Chrome Web Store listing — Glaze 3.3.5
 
 ## Name
 
@@ -16,7 +16,7 @@ Productivity
 
 Make Blackboard Ultra, Canvas and Moodle feel like yours. Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain, where it asks before enabling a site it has not already approved. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
-NEW IN 3.4
+NEW IN 3.3.5
 
 • On a school's own domain not already approved, Glaze asks before it runs; Settings lists approved custom sites, with Remove.
 • A shared Look shows what it changes before you use it: each navigation item it hides, where each link goes, and the page parts it restyles. Looks from others that would hide Sign out or disguise a link are refused.
@@ -107,17 +107,17 @@ Glaze's helpers do not change grades, submit coursework or send messages. What-i
 
 PRIVACY
 
-No analytics, no ads and no account. Settings stay in your browser and follow Chrome or Firefox sync if it is on (they include course nicknames, GPA choices and some school/course/account identifiers; Safari keeps them on the device). Course details, grade records, notes, tasks, your place, the due list and typing backups stay on your device. Glaze reads your own Blackboard, Canvas or Moodle site using your existing session, and writes to it only when you ask (a planner tick, a Canvas nickname or color, Sign out, Moodle's Edit mode). Chosen web fonts and background images make ordinary network requests; linked videos and animations are fetched by Glaze's worker without cookies, a referrer or redirects (12 MiB video, 6 MiB picture, 1 MiB Lottie; video/picture sides up to 4096 pixels). Identifying metadata is removed from the file’s container; encoded streams and visible pixels remain. Files saved before 3.4.0 that cannot be cleaned stay on this device and are not shared. Course tab pictures stay in memory and are never sent anywhere. Share sessions and mod channels, only if you use them, send encrypted content that the relay cannot read. Glaze does not collect or sell your coursework, grades, credentials or browsing history. A mod granted course data and network access can send that data to its granted hosts. Full policy: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+No analytics, no ads and no account. Settings stay in your browser and follow Chrome or Firefox sync if it is on (they include course nicknames, GPA choices and some school/course/account identifiers; Safari keeps them on the device). Course details, grade records, notes, tasks, your place, the due list and typing backups stay on your device. Glaze reads your own Blackboard, Canvas or Moodle site using your existing session, and writes to it only when you ask (a planner tick, a Canvas nickname or color, Sign out, Moodle's Edit mode). Chosen web fonts and background images make ordinary network requests; linked videos and animations are fetched by Glaze's worker without cookies, a referrer or redirects (12 MiB video, 6 MiB picture, 1 MiB Lottie; video/picture sides up to 4096 pixels). Identifying metadata is removed from the file’s container; encoded streams and visible pixels remain. Files saved before 3.3.5 that cannot be cleaned stay on this device and are not shared. Course tab pictures stay in memory and are never sent anywhere. Share sessions and mod channels, only if you use them, send encrypted content that the relay cannot read. Glaze does not collect or sell your coursework, grades, credentials or browsing history. A mod granted course data and network access can send that data to its granted hosts. Full policy: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
 Open source (MIT): https://github.com/frostdev-ops/glaze
 
 Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Anthology Inc. Moodle is a registered trademark of Moodle Pty Ltd. Glaze is an independent project and is not affiliated with or endorsed by any of these companies or any school.
 
-## What's new in 3.4
+## What's new in 3.3.5
 
 Prepared release copy; the Chrome Web Store has no separate What's New field.
 
-Glaze 3.4 asks before running on an unapproved school domain and lists approved custom sites in Settings, shows what a shared Look changes and refuses ones that could mislead, paces selected bulk reads per document and site, and fetches Look media with size caps and container metadata cleanup. Uncleanable older files stay local and are not shared. It also fixes grade and GPA reading, course tabs, notes, pets, documents and accessibility, and keeps Moodle's Edit mode in Glaze's bar. Glaze 3.3 added its own navigation on all three sites, a sidebar, live course tabs on Canvas, document review on submitted work and a starter Dashboard; 3.0.4 added mods and video and animated backgrounds.
+Glaze 3.3.5 asks before running on an unapproved school domain and lists approved custom sites in Settings, shows what a shared Look changes and refuses ones that could mislead, paces selected bulk reads per document and site, and fetches Look media with size caps and container metadata cleanup. Uncleanable older files stay local and are not shared. It also fixes grade and GPA reading, course tabs, notes, pets, documents and accessibility, and keeps Moodle's Edit mode in Glaze's bar. Glaze 3.3 added its own navigation on all three sites, a sidebar, live course tabs on Canvas, document review on submitted work and a starter Dashboard; 3.0.4 added mods and video and animated backgrounds.
 
 ## Single-purpose statement
 
