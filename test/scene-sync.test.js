@@ -54,12 +54,43 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     parts, GZ_GLSL: glsl ? {} : undefined,
     JSON, Promise, setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: (id) => timers.delete(id),
   });
-  vm.runInContext(`${hostFails === null && !hostHangs && !glslHangs && !glslFails ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
+  vm.runInContext(`${hostFails === null && !hostHangs && !glslHangs && !glslFails ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneAgain, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
   // waits(): the delays of what is scheduled to try again (need()'s own one-minute forgetting left out).
   return { api: ctx.api, log, ctx, timers, waits: () => [...timers.values()].map((t) => t.ms).filter((ms) => ms < 60000), retry: async () => { const [id, timer] = [...timers].find(([, timer]) => timer.ms < 60000) || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
 };
 const SHADER = { bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(1.); }' } } };
 const LAYERS = { bg: { layers: [{ k: 'noise' }] } };
+
+test('abandoned startup waits are cancelled, and their late answers cancel the scheduled retry', async () => {
+  const r = rig({ importHangs: 1, hostHangs: 1 });
+  r.api.syncScene(); await settle();
+  assert.deepEqual(r.waits(), [10000, 10000]);
+  await r.retry();
+  assert.deepEqual(r.waits(), [1000], 'one timeout abandons every wait in that startup');
+  r.log.answers[0](); await settle();
+  assert.deepEqual([r.log.starts.length, r.waits()], [1, []], 'the late answer calls off the retry');
+  r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.stops, r.waits()], [1, 0, []]);
+});
+
+test('stopping a pending scene clears its waits; late answers do not revive a disabled page', async () => {
+  const r = rig({ importHangs: 1, hostHangs: 1 });
+  r.api.syncScene(); await settle();
+  r.ctx.settings.enabled = false; r.api.syncScene();
+  assert.deepEqual(r.waits(), []);
+  r.log.answers[0](); r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.starts.length, r.waits()], [0, []]);
+});
+
+test('a late answer replaces a pending attempt without leaving its timers behind', async () => {
+  const r = rig({ hostHangs: 2 });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry();
+  r.log.answers[0](); await settle();
+  assert.deepEqual([r.log.starts.length, r.waits()], [1, []]);
+  r.log.answers[1](); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.stops, r.waits()], [1, 0, []]);
+});
 
 test('a temporary animation module failure recovers without reloading the page', async () => {
   const r = rig({ importFails: 1 });
