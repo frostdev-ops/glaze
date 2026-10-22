@@ -59,6 +59,18 @@ const create = (d, id, rest = {}) => d.send('create', { kind: 'notes', title: 'B
 const sync = (d, sid) => d.send('sync', { sid });
 const session = (d, sid) => d.db.get('sessions', sid);
 
+test('attaching stored oversized shared HTML refuses it before a shortened local note can be created', async () => {
+  const d = device('http://127.0.0.1:1');
+  try {
+    const st = G.create('collection', { server: 'http://127.0.0.1:1' });
+    // An id of the shape Glaze makes (WP-S3 ignores any other).
+    st.state[crypto.randomUUID()] = { title: ['Large', '000000001000aaaaaaaa', ''], html: ['<span></span>'.repeat(155000) + '<p>must survive</p>', '000000001000aaaaaaaa', ''] };
+    await d.db.put('sessions', st.sid, { st, kind: 'notes', title: 'Recovered shared notes', status: 'offline' });
+    await assert.rejects(d.send('attach', { sid: st.sid, key: NK }), /storage/);
+    assert.equal(Object.keys(N.clean(d.local.data[NK]).notes).length, 0, 'nothing shortened stored locally');
+  } finally { d.worker.stop(); }
+});
+
 test('optional switch: list/export/import are offline; permission, key reads and local reads fail closed', async () => {
   const d = device('http://127.0.0.1:1');
   assert.throws(() => S.make({ local: d.local, sync: d.settings, db: d.db, notes: d.notes, relay: 'https://evil.invalid' }), /bad/);

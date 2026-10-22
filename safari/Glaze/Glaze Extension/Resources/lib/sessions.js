@@ -325,7 +325,7 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
           }
           // A file that isn't here yet (it is fetched after the text) keeps the id it has in the share; the next apply, once
           // the file is here, gives it a local one.
-          const html = N.sanitize(x.html.replace(/data-gz-file="([0-9a-f-]{36})"/g, (m, f) => remap[f] ? `data-gz-file="${remap[f]}"` : m));
+          const html = x.html.replace(/data-gz-file="([0-9a-f-]{36})"/g, (m, f) => remap[f] ? `data-gz-file="${remap[f]}"` : m);
           const had = idx.notes[id];
           const body = had && await N.run({ key: b.key, op: 'load', id }, { local }, notes);
           if (!had || body?.html !== html) {

@@ -67,6 +67,88 @@ test('timer: start, pause, reset and a phase ending while away', () => {
   assert.equal(W.pause({ phase: 'work', end: t0, left: 0 }, t0 + 1).left, 1000, 'a pause at the bell keeps a second');
 });
 
+// WID-11: the deadline is a wall-clock time, so a clock set back left a block "ending" hours from now: 144:00 on the tile,
+// a chime hours late, and Pause stored 144 minutes, which the cleaner then threw away (back to 25:00).
+test('timer: after the clock is set back it never shows more than its length, and runs on from now', async () => {
+  const t0 = Date.parse('2026-10-21T12:00:00Z');
+  const s = W.start(W.IDLE, t0, o);
+  const back = t0 + 60e3 - 2 * 3600e3; // a minute in, the clock set back two hours
+  assert.equal(W.clock(W.left(s, back, o)), '25:00', 'never more than the phase, even before anything moves it');
+  const a = W.advance(s, back, o);
+  assert.deepEqual(a, { phase: 'work', end: back + 25 * 6e4, left: 0 }, 'the phase starts over from the clock it has now');
+  assert.equal(W.advance(a, back + 1000, o), a, 'and then runs as it always does');
+  assert.deepEqual(W.advance(a, back + 26 * 6e4, o), { phase: 'rest', end: back + 30 * 6e4, left: 0 }, 'rings when that deadline passes, not hours later');
+  const p = W.pause(a, back + 10 * 6e4);
+  assert.deepEqual(p, { phase: 'work', end: 0, left: 15 * 6e4 });
+  assert.equal(W.clock(W.left(W.cleanTimer(p), back + 10 * 6e4, o)), '15:00', 'Pause keeps what was left');
+  // A break the same way, with its own length.
+  const r = { phase: 'rest', end: t0 + 5 * 6e4, left: 0 };
+  assert.deepEqual(W.advance(r, t0 - 3600e3, o), { phase: 'rest', end: t0 - 3600e3 + 5 * 6e4, left: 0 });
+  assert.equal(W.left(r, t0 - 3600e3, o), 5 * 6e4);
+  // A second of difference between two documents' clocks is not a clock change.
+  assert.equal(W.advance(s, t0 - 500, o), s);
+  assert.equal(W.left(s, t0 - 500, o), 25 * 6e4);
+  // Idle and paused timers have no deadline to correct.
+  assert.equal(W.advance(W.IDLE, back, o), W.IDLE);
+  const paused = { phase: 'work', end: 0, left: 15 * 6e4 };
+  assert.equal(W.advance(paused, back, o), paused);
+  // The worker's timer op (lib/nav-store.js) uses the same functions: the stored deadline is corrected, and Pause after it keeps its minutes.
+  const Store = require('../lib/nav-store.js');
+  const values = { widgetTimer: s };
+  const area = { sync: { get: async () => ({}) }, local: { get: async () => values, set: async (v) => { Object.assign(values, v); return true; } } };
+  assert.deepEqual((await Store.timer('advance', area, back)).timer, a);
+  assert.deepEqual(values.widgetTimer, a, 'stored');
+  const paused2 = await Store.timer('toggle', area, back + 10 * 6e4);
+  assert.deepEqual(paused2.timer, p);
+});
+
+// WID-15: coursePlace was read and written whole from each tab (features/place.js), so two tabs scrolling different courses
+// could write each other's older copy back. The worker applies each tab's fields to what is stored when its turn comes.
+test('your place: each change is applied to what is stored now, so two tabs on different courses keep both', async () => {
+  const box = {};
+  const local = { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in box).map((x) => [x, structuredClone(box[x])])), set: async (p) => (Object.assign(box, structuredClone(p)), true) };
+  const A = '_101_1', B = '_202_1', C = 'canvas:https://school.instructure.com/25';
+  // The tabs send only what they changed, never a copy they read earlier; the worker's queue runs them one at a time.
+  const r = [await W.placeChange({ cid: A, open: ['_8130_1'], top: 640 }, local, 1000), await W.placeChange({ cid: B, open: ['_9_1'], top: 12.6 }, local, 1001)];
+  assert.deepEqual(r, [{ ok: true }, { ok: true }]);
+  assert.deepEqual(box.coursePlace, { [A]: { open: ['_8130_1'], top: 640, at: 1000 }, [B]: { open: ['_9_1'], top: 13, at: 1001 } });
+  // Canvas's item and its scroll are two fields written by two kinds of change; neither drops the other.
+  await W.placeChange({ cid: C, item: '271' }, local, 2000);
+  await W.placeChange({ cid: C, top: 380 }, local, 2001);
+  await W.placeChange({ cid: A, top: 700 }, local, 2002);
+  assert.deepEqual(box.coursePlace[C], { open: [], top: 380, item: '271', at: 2001 });
+  assert.deepEqual(box.coursePlace[A], { open: ['_8130_1'], top: 700, at: 2002 }, 'its folders stay when only the scroll is sent');
+  assert.deepEqual(box.coursePlace[B], { open: ['_9_1'], top: 13, at: 1001 }, "another course's place is untouched");
+  // What is not a place is refused, and nothing is written for it.
+  const before = JSON.stringify(box);
+  for (const m of [null, {}, { cid: 5 }, { cid: 'not a course' }, { cid: '_1_1/../x' }, { cid: `canvas:https://x.test/${'9'.repeat(300)}` }, { cid: 'canvas:javascript:alert(1)/5' }]) {
+    assert.deepEqual(await W.placeChange(m, local, 3000), { ok: false, error: 'bad' }, JSON.stringify(m));
+  }
+  assert.equal(JSON.stringify(box), before);
+  // A failed write says so.
+  assert.deepEqual(await W.placeChange({ cid: A, top: 1 }, { ...local, set: async () => false }, 4000), { ok: false, error: 'write' });
+});
+
+test('your place: the worker keeps the same rules as the page (lib/page.js place), which it cannot load', async () => {
+  const P = require('../lib/page.js');
+  const cases = [
+    { cid: '_5_1', v: { open: ['_7_1', '_7_1', 'x"]', ...Array.from({ length: 120 }, (_, i) => `_${i + 100}_1`)], top: 812.6 } },
+    { cid: '_1_1', v: { open: ['_2_1'], top: -5 } },
+    { cid: '_1_1', v: { open: [], top: NaN } },
+    { cid: 'canvas:https://school.instructure.com/25', v: { open: [], top: 40, item: '271' } },
+    { cid: 'canvas:https://school.instructure.com/25', v: { open: [], top: 0, item: '1"><b>' } },
+  ];
+  for (const { cid, v } of cases) {
+    const all = {};
+    for (let i = 0; i < 40; i++) all[`_${i + 500}_1`] = { open: [], top: i, at: 10 + (i * 7) % 40 };
+    all.bad = null; all.old = { open: [], top: 1, at: 0 };
+    const box = { coursePlace: structuredClone(all) };
+    const local = { get: async () => structuredClone(box), set: async (p) => (Object.assign(box, structuredClone(p)), true) };
+    await W.placeChange({ cid, ...v }, local, 9999);
+    assert.deepEqual(box.coursePlace, P.place(all, cid, { open: v.open, top: v.top, item: v.item }, 9999), JSON.stringify(v).slice(0, 80));
+  }
+});
+
 test('breathing: phases, counts, cycles, and a hold of zero skipped', () => {
   const b = { inhale: 4, hold: 4, exhale: 6, cycles: 2 };
   assert.deepEqual(W.breath(0, b), { phase: 'in', count: 4, cycle: 1, next: 4000 });
@@ -185,11 +267,26 @@ test('notes: a time from a clock that ran ahead does not outlast it, so the typi
   assert.equal((await W.saveNote({ key, text: 'typed before', at: first.note.at - 1 }, local)).kept, false);
   const second = await W.saveNote({ key, text: 'typed after', at: Date.now() }, local);
   assert.deepEqual([second.kept, box[key].text], [true, 'typed after']);
-  // A time an earlier version stored ahead of the clock reads as older than any typing since, here and on the page.
+  // A time an earlier version stored ahead of the clock reads as older than any typing since, here and on the page, but not
+  // as no time at all: the tile takes a note once it has a time to beat (WID-2), so the note is shown instead of hidden.
   box[key] = { text: 'stored ahead', at: ahead };
-  assert.deepEqual(W.cleanNote(box[key]), { text: 'stored ahead', at: 0 });
+  assert.deepEqual(W.cleanNote(box[key]), { text: 'stored ahead', at: 1 });
   const third = await W.saveNote({ key, text: 'typed now', at: Date.now() }, local);
   assert.deepEqual([third.kept, box[key].text], [true, 'typed now']);
+});
+
+test('notes: a note with no usable time still has one the tile can adopt; an emptied one has none to keep', () => {
+  const ahead = Date.now() + 3 * 864e5;
+  for (const at of [ahead, undefined, null, NaN, -5, 0, 'x', Infinity]) assert.deepEqual(W.cleanNote({ text: 'Exam room 204', at }), { text: 'Exam room 204', at: 1 }, String(at));
+  assert.deepEqual(W.cleanNote({ text: '', at: ahead }), { text: '', at: 0 }, 'nothing to show, nothing to protect');
+  const past = Date.now() - 1000;
+  assert.deepEqual(W.cleanNote({ text: 'kept', at: past }), { text: 'kept', at: past }, 'a real time stays');
+  assert.deepEqual(W.cleanNote(null), { text: '', at: 0 });
+  // The tile's rule (features/widgets.js newer): a note replaces the one shown only if its time is later; the shown one starts at 0.
+  let shown = { text: '', at: 0 };
+  const newer = (x) => { if (x && x.at > shown.at) shown = x; };
+  newer(W.cleanNote({ text: 'typed three days ahead', at: ahead }));
+  assert.equal(shown.text, 'typed three days ahead');
 });
 
 test('agenda: one day\'s due work, plans and focus sessions, in the student\'s time zone', () => {

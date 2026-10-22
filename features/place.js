@@ -3,7 +3,7 @@
 // anything (wheel, touch, a key, a click), which it watches from the page's start.
 // Ultra keeps a course's open folders and last-clicked item in memory only: gone with a reload, a
 // new visit or another course's content. Glaze keeps them per course on this device (storage.local
-// coursePlace, lib/page.js): a folder once it unfolds, forgotten once you fold it yourself (Ultra
+// coursePlace, written by the worker: lib/widgets.js placeChange): a folder once it unfolds, forgotten once you fold it yourself (Ultra
 // folds some itself), and how far down you were. Each time the outline comes back, folders still
 // closed are unfolded as the jump above does, each once, then it scrolls back if nothing has moved
 // it. Anything you do first (wheel, touch, a key, a click) ends that; given up after ten seconds.
@@ -24,13 +24,16 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
   // Also kept in this tab's sessionStorage, so a reload finds it even when storage.local can't be
   // reached: an extension updated or reloaded under the tab leaves the tab's old script without it.
   const tabPlace = (cid) => `gz-place:${cid}`;
+  // What's kept on this device goes through the worker's one write queue (lib/background.js 'glaze:place'), which applies
+  // only the fields sent to what is stored then: a read and a write from here, at up to two a second while scrolling, let
+  // two tabs on different courses write each other's older copy back. The item a tab opened stays with a later scroll.
+  const keep = (cid, fields) => { try { chrome.runtime.sendMessage({ type: 'glaze:place', cid, ...fields }, () => void chrome.runtime.lastError); } catch { /* the extension was reloaded under this tab */ } };
   const savePlace = () => {
     const p = place;
     if (!p?.loaded) return;
     const v = { open: [...(p.open || [])], top: p.top };
-    const now = Date.now();
-    try { sessionStorage.setItem(tabPlace(p.cid), JSON.stringify(GZ_PAGE.place(null, p.cid, v, now)[p.cid])); } catch { /* blocked or full */ }
-    local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, { ...v, item: r?.coursePlace?.[p.cid]?.item }, now) })));
+    try { sessionStorage.setItem(tabPlace(p.cid), JSON.stringify(GZ_PAGE.place(null, p.cid, v, Date.now())[p.cid])); } catch { /* blocked or full */ }
+    keep(p.cid, v);
   };
   // Canvas keeps which modules you collapsed itself (per student, on its server), so here it's how far down
   // the Modules list you were, measured from the list's top so a course home showing it agrees with the
@@ -60,7 +63,7 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
     const item = new URLSearchParams(location.search).get('module_item_id');
     if (item && !noted) {
       noted = true;
-      local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, cid, { open: [], top: r?.coursePlace?.[cid]?.top, item }, Date.now()) })));
+      keep(cid, { item });
     }
     if (place || !/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) || !document.getElementById(MODULES)) return;
     const p = (place = { cid, top: 0, back: !ctx.acted() && { at: Date.now() } });

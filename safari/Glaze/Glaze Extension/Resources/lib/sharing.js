@@ -215,7 +215,7 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
       fields: ['title', 'html', 'file'],
       copy: ['html'],
       clean: (f, v) => (f === 'title' ? str(v, N().LIMIT.title) : f === 'file' ? fileRef(v, N().LIMIT.file)
-        : str(v, N().LIMIT.body) !== undefined ? N().sanitize(v) : undefined),
+        : str(v, N().LIMIT.body) !== undefined ? (() => { const r = N().sanitized(v); return !r.cut && r.html.length <= N().LIMIT.body ? r.html : undefined; })() : undefined),
       copyOf: (ent, f, v) => ({ title: `${ent.title || ''} (conflict copy)`.trim().slice(-N().LIMIT.title), html: v }),
     },
     // A Look: its theme code (lib/share.js decode, all or nothing, as for a pasted code) and its name.

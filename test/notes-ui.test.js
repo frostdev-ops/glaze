@@ -394,6 +394,70 @@ test('Back up or restore settles the open note, then opens extension-only backup
   assert.equal(P.sent.length, before, 'a synthetic click does not open the extension surface');
 });
 
+// WID-1 on the page: serialize() ran the same sanitizer, so a note past its budget was cut before it was ever sent, and
+// the worker saw a short note and answered ok. The text in the editor looked complete; reopening it was shorter.
+test('a note too big for the sanitizer is not saved cut: the page says so, sends nothing, and leaves what is typed', async () => {
+  const P = page();
+  await P.openView();
+  P.fire(P.button('New note'), 'click');
+  await settle();
+  const body = P.box().querySelector('.gz-nt-body');
+  const paras = (n) => Array.from({ length: n }, (_, i) => `<p>line ${i}</p>`).join('');
+  const saves = () => P.sent.filter((m) => m.op === 'save');
+  // The autosave comes 700 ms after the last change: wait for what it does, not for a time.
+  const until = async (done) => { for (let i = 0; i < 200 && !done(); i++) await wait(20); assert.ok(done(), 'it happened'); };
+  body.innerHTML = '<p>fits</p>';
+  P.fire(body, 'input');
+  await until(() => saves().length === 1);
+  await settle();
+  assert.equal(P.say(), '');
+  // Typing on past what a note can hold: nothing is sent (not a cut copy either), and the student is told.
+  const huge = paras(60000);
+  body.innerHTML = huge;
+  P.fire(body, 'input');
+  await until(() => /too long to save/.test(P.say()));
+  assert.equal(saves().length, 1, 'no save of a cut note');
+  assert.ok(body.innerHTML === huge, 'the editor still holds all of it');
+  const downloads = P.blobs.length;
+  for (const action of ['Duplicate', 'Export as Markdown', 'Export as HTML']) {
+    P.fire(P.button(action), 'click'); await settle();
+    assert.equal(saves().length, 1, `${action} cannot store a cut copy`);
+    assert.equal(P.blobs.length, downloads, `${action} cannot export a cut copy`);
+  }
+  // A smaller note again saves, and the warning goes.
+  body.innerHTML = paras(50);
+  P.fire(body, 'input');
+  await until(() => saves().length === 2);
+  await settle();
+  assert.equal(saves()[1].html, paras(50));
+  assert.equal(P.say(), '', 'the warning is cleared by the save that works');
+});
+
+test('pasting or dropping more than the sanitizer can keep inserts none of it, and says so', async () => {
+  const P = page();
+  await P.openView();
+  P.fire(P.button('New note'), 'click');
+  await settle();
+  const body = P.box().querySelector('.gz-nt-body');
+  const calls = [];
+  P.doc.execCommand = (...a) => { calls.push(a); return true; };
+  const huge = Array.from({ length: 60000 }, (_, i) => `<p>row ${i}</p>`).join('');
+  const clip = (html) => ({ files: [], getData: (type) => (type === 'text/html' ? html : '') });
+  const pasted = P.fire(body, 'paste', { clipboardData: clip(huge) });
+  assert.equal(pasted.defaultPrevented, true);
+  const inserted = () => calls.filter((c) => c[0] === 'insertHTML').map((c) => c[2].length); // lengths: a failure must not print megabytes
+  assert.deepEqual(inserted(), [], 'no cut copy inserted');
+  assert.match(P.say(), /too big to paste/);
+  P.box().querySelector('.gz-nt-say').textContent = '';
+  const dropped = P.fire(body, 'drop', { dataTransfer: clip(huge), clientX: 1, clientY: 1 });
+  assert.equal(dropped.defaultPrevented, true);
+  assert.deepEqual(inserted(), []);
+  assert.match(P.say(), /too big to paste/);
+  // What fits goes in as before.
+  P.fire(body, 'paste', { clipboardData: clip('<p>a few rows</p>') });
+  assert.deepEqual(inserted(), ['<p>a few rows</p>'.length]);
+});
+
 test('Share on a note saves it, then frames the extension share panel with a one-use ticket, out of the page\'s reach', async () => {
   const P = page();
   await P.openView();

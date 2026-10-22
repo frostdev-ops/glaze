@@ -60,6 +60,15 @@ test('sealing: a round trip, padded lengths, and any change to a sealed batch is
 const AD = { fields: ['a', 'b'], copy: ['b'], clean: (f, v) => (typeof v === 'number' ? v : undefined), copyOf: (ent, f, v) => ({ a: -1, b: v }) };
 const blank = (actor = 'zzzzzzzz') => ({ actor, clock: [0, 0], state: {}, pending: [], held: [], seed: 'x' });
 
+test('notes merge refuses budget-cut remote HTML and keeps the previous complete body', async () => {
+  const d = blank(), now = 1.7e12;
+  const stamp = (n) => n.toString(36).padStart(9, '0') + '000aaaaaaaa';
+  await G.merge(d, G.ADAPTERS.notes, [{ e: 'note', f: 'html', v: '<p>complete</p>', t: stamp(now), p: '' }], now);
+  await G.merge(d, G.ADAPTERS.notes, [{ e: 'note', f: 'html', v: '<p>x</p>'.repeat(60000), t: stamp(now + 1), p: stamp(now) }], now + 1);
+  assert.equal(G.view(d).note.html.length, '<p>complete</p>'.length, 'a refused update cannot replace the original with its prefix');
+  assert.equal(G.view(d).note.html, '<p>complete</p>');
+});
+
 test('merge: every order, with repeats, gives the same state', async () => {
   let seed = 2026; // mulberry32
   const rnd = (n) => { seed = (seed + 0x6d2b79f5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) % n; };

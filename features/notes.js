@@ -394,11 +394,15 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const flush = () => { if (cur && !cur.ro && cur.saved != null && el.body?.isConnected) { cur.pending = serialize(); save(cur); } };
   const clean = () => !el.body?.isConnected || serialize() === cur.saved;
   const snapshot = (c) => (c === cur && el.body?.isConnected && c.saved != null ? serialize() : c.pending);
-  // The editor's HTML as it is stored: sanitized, pictures by their id only.
+  // The editor's HTML as it is stored: sanitized, pictures by their id only. CUT instead when the sanitizer would have to
+  // leave part of it out (lib/notes.js parse): never a shortened copy to save, compare with what is stored, duplicate or export.
+  const CUT = Symbol('cut');
+  const warnSave = (c, text) => { c.warned = text; if (c === cur) say(text); return false; };
   const serialize = () => {
     const c = el.body.cloneNode(true);
     for (const img of c.querySelectorAll('img')) img.removeAttribute('src');
-    return N.sanitize(c.innerHTML);
+    const r = N.sanitized(c.innerHTML);
+    return r.cut ? CUT : r.html;
   };
 
   const TOOLS = [
@@ -541,10 +545,14 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     clearTimeout(c.wait);
     const html = snapshot(c);
     if (html == null) return true;
+    // A warning about a save stays until a save works: the one that clears it is told which words were its own.
+    const warn = (text) => warnSave(c, text);
+    const long = () => warn(t("This note is too long to save. Split it into two notes."));
+    if (html === CUT) return long();
     c.pending = html;
     if (c.busy) return c.inflight;
     if (c.rev ? html === c.saved : !html && !c.title.trim()) return true;
-    if (html.length > N.LIMIT.body) { say(t("This note is too long to save. Split it into two notes.")); return false; }
+    if (html.length > N.LIMIT.body) return long();
     c.busy = true;
     c.sid ||= uuid();
     c.copy ||= uuid();
@@ -555,13 +563,14 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     c.busy = false;
     landed(!!r?.ok);
     if (!r?.ok) {
-      say(r?.error === 'big' ? t(ERR.big) : r?.error === 'many' ? t(ERR.many) : t("Couldn't save this note. It's still here, and Glaze will try again."));
+      warn(r?.error === 'big' ? t(ERR.big) : r?.error === 'many' ? t(ERR.many) : t("Couldn't save this note. It's still here, and Glaze will try again."));
       c.tries = (c.tries || 0) + 1;
       if (r?.error !== 'big' && r?.error !== 'many' && c.tries < 3) c.wait = setTimeout(() => save(c), 3000);
       return false;
     }
     c.sid = c.copy = null;
     c.tries = 0;
+    if (c.warned) { if (c === cur && el.say?.textContent === c.warned) say(''); c.warned = ''; }
     if (r.conflict) {
       c.id = r.id;
       c.title = t('{title} (conflict copy)', { title: c.title.trim() || t('Untitled') });
@@ -605,6 +614,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const c = cur;
     if (!c) return;
     const html = serialize();
+    if (html === CUT) return warnSave(c, t(ERR.big));
     const id = uuid();
     const title = t('{title} (copy)', { title: c.title.trim() || t('Untitled') });
     const r = await send({ op: 'save', id, base: 0, sid: uuid(), copy: uuid(), html, title, folder: c.folder, course: c.course, cn: c.cn });
@@ -703,7 +713,14 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const files = [...(e.clipboardData?.files || [])];
     if (files.length) { e.preventDefault(); keepRange(); addFiles(files); return; }
     const html = e.clipboardData?.getData('text/html');
-    if (html) { e.preventDefault(); exec('insertHTML', N.sanitize(html, { base: location.href })); }
+    if (html) { e.preventDefault(); insertPasted(html); }
+  };
+  // A paste or drop is cleaned before it goes in. One the sanitizer would have to cut is not inserted cut, with the rest
+  // missing and nothing said: none of it goes in, and the student is told.
+  const insertPasted = (html) => {
+    const r = N.sanitized(html, { base: location.href });
+    if (r.cut) say(t("That's too big to paste into a note. Paste it in smaller parts."));
+    else exec('insertHTML', r.html);
   };
   let dragging = false; // a drag that started in the note: the browser moves it
   const onDrop = (e) => {
@@ -715,7 +732,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const at = document.caretRangeFromPoint?.(e.clientX, e.clientY);
     if (at) { const s = getSelection(); s.removeAllRanges(); s.addRange(at); }
     keepRange();
-    if (files.length) addFiles(files); else { putRange(); exec('insertHTML', N.sanitize(html, { base: location.href })); }
+    if (files.length) addFiles(files); else { putRange(); insertPasted(html); }
   };
   // Each file goes to the worker first, then into the note where the caret was: a picture shown from the file itself,
   // anything else as an attachment to download.
@@ -866,6 +883,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     if (!cur || !el.body?.isConnected) return;
     // A snapshot first: the note can be switched or the view closed while its pictures are read.
     const html = serialize(), title = cur.title.trim() || t('Untitled');
+    if (html === CUT) return warnSave(cur, t(ERR.big));
     const imgs = new Map();
     for (const id of N.refs(html)) { const f = await send({ op: 'getFile', id }); if (f?.ok && f.kind === 'image') imgs.set(id, dataUrl(f)); }
     const name = title.replace(/[\u0000-\u001f\\/:*?"<>|]+/g, '_').replace(/[. ]+$/, '').slice(0, 120).trim() || 'note';
