@@ -555,6 +555,13 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 /* Any Ultra "*-header" bar (course-groups-header, base-header, messages-header, …) is ground. */
 #site-wrap div:is([class*="-header"], [class*="header-"]):not(.base-header, .base-header-tools) { background: var(--gz-ground) !important; color: var(--gz-ink) !important; box-shadow: none !important; }
 #site-wrap .course-groups-header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
+/* The same names inside a surface (the page header's card, a list or table, a card) are part of it, not bars on the page:
+   the header's tools slot (behind Glaze's toolbar on Courses, the settings button on Activity), each Announcements row,
+   a Grades card's title band, the calendar's bars. Ground there showed as a dark patch on the surface (light on Paper).
+   A header card of its own keeps its paint. */
+#site-wrap :is(.base-header, .course-groups-header, [class*="makeStylespanelHeaderContainerRoot-"], .calendar-wrapper, .tabular-list, table, course-student-grades,
+  .element-card, .base-grades-course-tile, article, .MuiCard-root, .MuiPaper-root:not(.MuiDrawer-paper))
+  :is(div:is([class*="-header"], [class*="header-"]), .guidance-wrapper):not(.base-header, .base-header-tools, .course-groups-header, .panel-header, [class*="makeStylespanelHeaderContainerRoot-"]) { background: transparent !important; }
 
 /* Attendance peek panel. */
 #site-wrap .peek-panel__content-wrapper, #site-wrap .student-panel, #site-wrap .student-panel__background { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
