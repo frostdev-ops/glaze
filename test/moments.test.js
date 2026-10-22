@@ -70,7 +70,7 @@ test('the rotation turned: its Look changed, not its clock started or its mode',
 // content.js: moment(), celebrate() and moveParts() run in a VM with stand-ins, sliced between markers.
 const firstScript = read('content.js');
 const slice = (from, to) => { const a = firstScript.indexOf(from), b = firstScript.indexOf(to, a); assert.ok(a > 0 && b > a, `${from} … ${to}`); return firstScript.slice(a, b); };
-const rig = ({ level = 'expressive', rect = { left: 10, top: 20, width: 30, height: 40 }, parts = null, motionx = null, extras = { pointer: 'look', pointerAnim: true }, partsOn = true } = {}) => {
+const rig = ({ level = 'expressive', rect = { left: 10, top: 20, width: 30, height: 40 }, parts = null, motionx = null, extras = { pointer: 'look', pointerAnim: true }, partsOn = true, courseLook = null } = {}) => {
   const events = [], needed = [], burst = [];
   const attrs = { 'data-gz-motion': level };
   const document = {
@@ -80,7 +80,7 @@ const rig = ({ level = 'expressive', rect = { left: 10, top: 20, width: 30, heig
   };
   const ctx = vm.createContext({ document, html: { getAttribute: (k) => attrs[k] ?? null }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } },
     setTimeout: () => 0, globalThis: null, need: (f) => { needed.push(f); return motionx ? Promise.resolve() : Promise.reject(new Error('stand-in')); },
-    settings: { extras }, partsOn: () => partsOn });
+    settings: { extras }, partsOn: () => partsOn, lookHere: () => courseLook });
   ctx.globalThis = ctx;
   ctx.GZ_CTX = { parts: () => parts };
   if (motionx) ctx.GZ_MOTIONX = motionx;
@@ -143,11 +143,13 @@ test('the first script loads the pointer\'s code only for a pointer that will sh
   assert.deepEqual(asked({ parts: { pointer: 'pumpkin' } }), ['features/lookx.js']);
   assert.deepEqual(asked({ parts: { pointer: 'pumpkin' }, extras: { pointer: 'off', pointerAnim: true } }), []);
   assert.deepEqual(asked({ parts: null }), [], 'following a Look without a pointer: nothing');
+  assert.deepEqual(asked({ parts: null, courseLook: 'Library' }), ['features/lookx.js'], 'a course Look brings its pointer without global parts');
   // A set or their own picture of the student's: with any Look or none, where the Look's parts would show.
   for (const pointer of ['aqua', 'lava', 'own']) {
     assert.deepEqual(asked({ parts: null, extras: { pointer, pointerAnim: true } }), ['features/lookx.js'], pointer);
     assert.deepEqual(asked({ parts: { pointer: 'ghost' }, extras: { pointer, pointerAnim: true } }), ['features/lookx.js'], pointer);
-    assert.deepEqual(asked({ parts: null, extras: { pointer, pointerAnim: true }, partsOn: false }), [], `${pointer}: not on a course with its own Look`);
+    assert.deepEqual(asked({ parts: null, extras: { pointer, pointerAnim: true }, courseLook: 'Library' }), ['features/lookx.js'], `${pointer}: also on a course Look`);
+    assert.deepEqual(asked({ parts: null, extras: { pointer, pointerAnim: true }, partsOn: false }), [], `${pointer}: not with Glaze off or in a quiz preview`);
   }
   // The pointer's animation alone brings motionx only while the student leaves it on.
   assert.deepEqual(asked({ parts: { cursor: { kind: 'glow' } }, extras: { pointer: 'look', pointerAnim: false } }), []);

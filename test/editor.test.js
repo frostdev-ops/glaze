@@ -171,7 +171,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
     frame: { contentDocument: { querySelector: () => section }, contentWindow: { postMessage: (m) => messages.push(m) } },
     $: (selector) => ({ value: selector === '#preview-size' ? 'desktop' : 'current' }), location: { origin: 'chrome-extension://fixture' },
     previewSite: 'ultra', previewPage: 'outline', previewCourse: '', renderNav() {}, renderContrast() {}, sizePreview() {}, previewItems: () => ({}),
-    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED,
+    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../lib/lookset.js'),
   });
   vm.runInContext(`(${preview})()`, context);
   assert.equal(section.className, 'course course-color-2'); assert.equal(name.textContent, 'My course');
@@ -179,6 +179,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
   state.courses.looks._1_1 = D.GZ_LOOKS[0].name;
   vm.runInContext(`(${preview})()`, context);
   assert.equal(messages.at(-2).gzPreview.colors['--gz-surface'], D.GZ_LOOKS[0].colors['--gz-surface']);
+  assert.deepEqual(JSON.parse(JSON.stringify(messages.at(-2).gzPreviewParts)), { x: { pointer: 'aurora' } });
   context.previewCourse = '_2_1'; vm.runInContext(`(${preview})()`, context);
   assert.equal(messages.at(-2).gzPreview.courses.tinted.length, 0, 'A selected untinted course must not borrow another course’s tint');
   context.previewCourse = '_1_1';
