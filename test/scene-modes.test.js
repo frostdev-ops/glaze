@@ -463,7 +463,7 @@ test('at most four layers, of the four kinds; anything else is dropped', () => {
 });
 
 test('every built-in scene works as a layer, points scenes included', () => {
-  for (const name of ['mist', 'orbs', 'borealis', 'lava', 'contours', 'horizon', 'graveyard', 'pumpkins', 'waves', 'dust', 'no such scene']) {
+  for (const name of ['mist', 'orbs', 'borealis', 'lava', 'contours', 'horizon', 'graveyard', 'pumpkins', 'topography', 'waves', 'dust', 'no such scene']) {
     const e = engine(), scene = e.start({});
     scene.update(layersOf([{ k: 'scene', name }], { speed: 0 }));
     assert.equal(e.made.materials.length, 1, name);
@@ -522,7 +522,7 @@ test('a key a layer leaves out means what lib/lookparts.js says it means', () =>
     scene.update(layersOf([layer], { speed: 2 }));
     e.tick(34);
     const m = e.made.materials[0];
-    return { uniforms: Object.fromEntries(Object.entries(m.uniforms).filter(([k]) => k !== 'uAspect' && k !== 'uPx').map(([k, u]) => [k, u.value?.hex ?? u.value])), blend: [m.blendSrc, m.blendDst], defines: plain(m.defines), attributes: e.made.attributes.length };
+    return plain({ uniforms: Object.fromEntries(Object.entries(m.uniforms).filter(([k]) => k !== 'uAspect' && k !== 'uPx').map(([k, u]) => [k, u.value?.hex ?? u.value])), blend: [m.blendSrc, m.blendDst], defines: m.defines, attributes: e.made.attributes.length });
   };
   for (const [k, d] of Object.entries(D)) {
     const own = { k, ...(k === 'scene' && { name: 'mist' }), ...(k === 'gradient' && { c: ['#111111', '#222222'] }) };
@@ -599,4 +599,33 @@ test('built-in scenes are what they were: their own scale, no probe, the canvas 
     assert.deepEqual([e.counts.draws, e.made.materials.length, canvas.style.visibility], [1, 1, undefined]);
     assert.equal(e.made.materials[0].glslVersion, undefined, 'three\'s ESSL 3.00 wrapper, not the raw one');
   }
+});
+
+test('topography: its own terrain, dimmed like the rest, following the pointer by at most 8 px only while it animates', async () => {
+  const e = engine({ latency: 1 }), w = watch(e);
+  w.scene.update({ ...base, name: 'topography', dim: 0.3 });
+  const m = e.made.materials[0];
+  assert.match(m.fragmentShader, /uniform float uDim;[\s\S]*float tfbm\(/, 'the terrain shader');
+  assert.equal(m.uniforms.uDim.value, 0.3);
+  const move = e.listeners.get('pointermove');
+  assert.ok(move, 'listening while it animates');
+  move({ clientX: 1280, clientY: 0, pointerType: 'mouse' });
+  await frames(e, 30);
+  const [x, y] = m.uniforms.uShift.value;
+  assert.ok(Math.abs(x * 1280 - 8) < 0.01 && Math.abs(y * 900 - 8) < 0.01, `settled at the edge: ${x * 1280}, ${y * 900} px`);
+  move({ clientX: 0, clientY: 0, pointerType: 'touch' });
+  await frames(e, 3);
+  assert.ok(Math.abs(m.uniforms.uShift.value[0] * 1280 - 8) < 0.01, 'a touch is not a pointer');
+  w.scene.update({ ...base, name: 'topography', speed: 0 });
+  assert.equal(e.listeners.has('pointermove'), false, 'motion off: still, and not listening');
+  assert.deepEqual(plain(m.uniforms.uShift.value), [0, 0]);
+  w.scene.update({ ...base, name: 'topography' });
+  assert.ok(e.listeners.has('pointermove'));
+  w.scene.stop();
+  assert.equal(e.listeners.has('pointermove'), false, 'stopped: not listening');
+  const other = engine({ latency: 1 }), o = watch(other);
+  o.scene.update(base);
+  assert.equal(other.listeners.has('pointermove'), false, 'no other scene listens to the pointer');
+  o.scene.update(layersOf([{ k: 'scene', name: 'topography' }]));
+  assert.equal(other.listeners.has('pointermove'), false, 'nor topography as a layer');
 });

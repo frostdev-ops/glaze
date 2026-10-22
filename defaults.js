@@ -56,7 +56,7 @@ const GZ_SPEC = {
     // The gradient's shape: style, direction (degrees), blend (100 melts the colors together, 0 is
     // hard bands) and spread (how much of the screen the change of color covers, in %).
     style: ['linear', ['linear', 'radial', 'conic', 'mesh']], angle: [135, [0, 360]], blend: [100, [0, 100]], spread: [100, [20, 200]],
-    scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins']], intensity: [50, [0, 100]],
+    scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins', 'topography']], intensity: [50, [0, 100]],
   },
   nav: {
     k: ['default', ['default', 'solid', 'gradient', 'image']], c: ['#243447', 'hex'], d: ['#57748c', 'hex'], a: [135, [0, 360]],
