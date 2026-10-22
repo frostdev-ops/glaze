@@ -23,6 +23,10 @@ const brokerArea = (area) => ({
 });
 // Who asks: Glaze's own editor page, or a content script in a tab on a Canvas site Glaze runs on.
 const fromEditor = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('options.html');
+// The extension's origin, as a sender's origin gives it: Safari lowercases its UUID there (and in location.origin), while
+// getURL keeps it uppercase. Chrome's and Firefox's ids are lowercase already.
+const OWN_ORIGIN = chrome.runtime.getURL('').replace(/\/$/, '').toLowerCase();
+const ownOrigin = (o) => typeof o === 'string' && o.toLowerCase() === OWN_ORIGIN;
 // The sites Glaze runs on: is `u` on an LMS (`kind`: canvas, moodle or ultra) the student approved? Canvas on *.instructure.com
 // (the manifest's match) and Ultra on *.blackboard.com are Glaze's from the start. Anywhere else, what a page looks like
 // proves nothing (its markup is its own, and any site can serve an /ultra/ address): only the student's yes (features/
@@ -116,7 +120,7 @@ const settingsFramesLoaded = settingsRestoreDone ? Promise.resolve() : new Promi
 });
 const claimSettingsFrame = async (s) => {
   if (!Number.isInteger(s.frameId) || s.frameId <= 0 || !Number.isInteger(s.tab?.id)
-    || (s.origin !== undefined && s.origin !== chrome.runtime.getURL('').replace(/\/$/, ''))) throw Error('sender');
+    || (s.origin !== undefined && !ownOrigin(s.origin))) throw Error('sender');
   const f = { frameId: s.frameId, ...(s.documentId && { documentId: s.documentId }), pending: true };
   settingsFrames.set(s.tab.id, f);
   try {
@@ -134,7 +138,7 @@ const trustedFrame = (s, purpose) => {
   if (purpose !== 'settings') return false;
   if (s.frameId === 0) return true;
   if (!Number.isInteger(s.frameId) || !Number.isInteger(s.tab?.id) || !fromEditor(s)) return false;
-  if (s.origin !== undefined && s.origin !== chrome.runtime.getURL('').replace(/\/$/, '')) return false; // when the browser says, it must be ours
+  if (s.origin !== undefined && !ownOrigin(s.origin)) return false; // when the browser says, it must be ours
   const f = settingsFrames.get(s.tab.id);
   return !!f && !f.pending && f.frameId === s.frameId && f.documentId === s.documentId;
 };
@@ -177,7 +181,7 @@ const BROKER = {
     },
   },
   courseName: {
-    allow: (m, s) => fromEditor(s) && trustedFrame(s, 'settings') && s.origin === chrome.runtime.getURL('').replace(/\/$/, '')
+    allow: (m, s) => fromEditor(s) && trustedFrame(s, 'settings') && ownOrigin(s.origin)
       && /^_\d+_\d+$/.test(m.id) && typeof m.name === 'string' && m.name.length <= GZ_NICK_MAX * 2,
     run: async (m, { sync }) => {
       const courses = GZ_SANITIZE(await sync.get('courses')).courses;
@@ -200,7 +204,7 @@ const BROKER = {
     run: (m, area) => GZ_PET.change(m, area),
   },
   petSprites: {
-    allow: async (m, s) => (fromEditor(s) && trustedFrame(s, 'settings') && s.origin === chrome.runtime.getURL('').replace(/\/$/, '')) || (['list', 'get'].includes(m.op) && typeof m.key === 'string' && GZ_PET.KEY.test(m.key)
+    allow: async (m, s) => (fromEditor(s) && trustedFrame(s, 'settings') && ownOrigin(s.origin)) || (['list', 'get'].includes(m.op) && typeof m.key === 'string' && GZ_PET.KEY.test(m.key)
       && m.key.startsWith(`pet:${(await fromCanvas(s)) || (await fromUltra(s))}/`) && await switchOn('pet')),
     run: (m, area) => GZ_PET_SPRITES.change(m, area),
   },
@@ -574,7 +578,7 @@ BROKER_FILES.mods = ['zip.js', 'modapi.js', 'modwidget.js', 'modbundle.js', 'blo
 BROKER_FILES.modwidget = ['gradecalc.js']; // a widget's GPA
 globalThis.addEventListener?.('install', () => importScripts('zip.js', 'modapi.js', 'modwidget.js', 'modbundle.js'));
 BROKER.mods = {
-  allow: (m, s) => fromEditor(s) && s.frameId === 0 && s.origin === chrome.runtime.getURL('').replace(/\/$/, '') && GZ_MODBUNDLE.OPS.includes(m.op),
+  allow: (m, s) => fromEditor(s) && s.frameId === 0 && ownOrigin(s.origin) && GZ_MODBUNDLE.OPS.includes(m.op),
   run: (m, area) => GZ_MODBUNDLE.change(m, area),
 };
 // Media for a Look (lib/media.js): the files this computer keeps for a Look's video, animated picture or Lottie animation
@@ -682,7 +686,7 @@ let sessionGeneration = 0;
 // broker's queue mustn't wait on it. Reads and writes of Notes, To Do, the Look and media take broker turns.
 let sessionTurn = null;
 // origin is optional in MessageSender: when the browser gives it, it must be the extension's own.
-const extensionOrigin = (s) => s.origin === undefined || s.origin === chrome.runtime.getURL('').replace(/\/$/, '');
+const extensionOrigin = (s) => s.origin === undefined || ownOrigin(s.origin);
 const sessionFrame = (s) => s.frameId === 0 && extensionOrigin(s);
 // Settings (options.html, top frame) owns every operation. The Notes share panel (sharing/quick.html) is an extension
 // frame inside a Notes view: the LMS page around it cannot read its keys, and it gets only the ops a quick share needs,
@@ -1587,7 +1591,7 @@ const channelEnv = () => ({ local: channelLocal(), fetch: (u, i) => fetch(u, i),
 const channelCheck = (opts) => channels().check(channelEnv(), opts);
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:modchannel') return;
-  if (!fromEditor(s) || s.frameId !== 0 || s.origin !== chrome.runtime.getURL('').replace(/\/$/, '') || !CHANNEL_OPS.has(m.op)) { reply({ ok: false, error: 'sender' }); return; }
+  if (!fromEditor(s) || s.frameId !== 0 || !ownOrigin(s.origin) || !CHANNEL_OPS.has(m.op)) { reply({ ok: false, error: 'sender' }); return; }
   const id = typeof m.id === 'string' && /^[a-z2-7]{16}$/.test(m.id) ? m.id : null;
   (async () => {
     if (m.id !== undefined && !id) return { ok: false, error: 'bad' };

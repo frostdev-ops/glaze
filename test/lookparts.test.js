@@ -590,3 +590,9 @@ test('a committed clear succeeds even if removing its unused local copy fails', 
   assert.equal(await X.write({ sync, local }, null, { bg: { kind: 'solid' } }), true);
   assert.deepEqual(sync.data, { lookX: '', bg: { kind: 'solid' } });
 });
+
+test('packing writes bytes straight into the compression stream, never through a Blob stream (Safari content scripts refuse its chunks)', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/lookparts.js'), 'utf8');
+  assert.doesNotMatch(src, /\.stream\(\)\.pipeThrough/);
+  assert.match(src, /writer\.write\(new Uint8Array\(bytes\)\)/);
+});
