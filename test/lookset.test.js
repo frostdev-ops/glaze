@@ -147,3 +147,27 @@ test('a normal worker wake retries an unfinished pointer migration', async () =>
   await vm.runInContext('(brokerTurn || (() => Promise.resolve()))(() => {})', w.context);
   assert.deepEqual(await X.unpack(w.sync.lookX), { x: { pointer: 'pearl' } });
 });
+
+test('pointer migration keeps sync arrivals and recovers from storage failure', async () => {
+  const original = await X.pack({ x: { cursor: { kind: 'glow' } } });
+  const latest = await X.pack({ x: { pointer: 'ghost', type: { kind: 'snow' } } });
+  const sync = { extras: { cursor: 'lilac', stickers: false }, lookX: original };
+  const w = worker(sync, {}, { beforeSet: (area, patch) => {
+    if (area === 'local' && patch.pointerMove && !patch.pointerMove.done) {
+      sync.lookX = latest;
+      sync.extras = { cursor: 'lilac', stickers: true };
+    }
+  } });
+  await w.move();
+  assert.equal(sync.lookX, latest, 'an arriving Look is never overwritten');
+  assert.equal(sync.extras.stickers, true, 'arriving settings survive too');
+  const local = { lookX: original }, failedSync = { extras: { cursor: 'aqua' }, lookX: { h: X.hash(original) } };
+  let fail = true;
+  const failed = worker(failedSync, local, { beforeSet: (area) => { if (area === 'sync' && fail) throw Error('storage unavailable'); } });
+  await failed.move();
+  assert.equal(local.lookX, original, 'failed sync restores the previous device parts');
+  assert.equal(failedSync.extras.cursor, 'aqua', 'choice remains until it is committed');
+  fail = false;
+  await failed.move();
+  assert.deepEqual(await X.fromStored(failedSync.lookX, { get: async () => local }), { x: { cursor: { kind: 'glow' }, pointer: 'aqua' } });
+});
