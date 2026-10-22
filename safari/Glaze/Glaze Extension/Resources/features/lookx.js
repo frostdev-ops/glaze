@@ -35,11 +35,11 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
 
   // ---- the pointer: a set as a CSS cursor on the page (features/lookx.css), the system's I-beam kept on text. The system
   // draws it, so it never lags; its animation is features/motionx.js's, on the canvas around it. Which one is the student's
-  // choice (extras.pointer) over the Look's (x.pointer, lib/lookx.js pointerOf), wherever the Look's parts would show
-  // (GZ_CTX.partsOn: not with Glaze off, nor on a course that wears its own Look).
+  // choice (extras.pointer) over the Look's, including a course's assigned Look. Off on quiz/tool pages and with Glaze off.
   let pointer = '', pointing = 0; // the own pointer's blob: address and the latest read
   let live = true; // false from pagehide until the page is shown again: no blob: address is made meanwhile
-  const worn = () => (ctx.on() && ctx.partsOn() ? GZ_LX.pointerOf(X().pointer, ctx.parts()?.pointer) : 'off');
+  const worn = () => (ctx.on() && ctx.partsOn(true) && !quiz() ? GZ_LX.pointerOf(X().pointer,
+    ctx.courseLook?.() ? globalThis.GZ_LOOK_PARTS?.({ name: ctx.courseLook() })?.x?.pointer : ctx.parts()?.pointer) : 'off');
   // Whether this browser takes image-set() in a cursor (for the 2x picture); one that doesn't gets the 1x PNG after the SVG.
   let sets;
   const imageSet = () => (sets ??= !!globalThis.CSS?.supports?.('cursor', 'image-set(url("a.png") 1x, url("b.png") 2x) 0 0, auto'));
@@ -458,10 +458,13 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   });
   addEventListener('pageshow', (e) => { live = true; if (e.persisted) { key = ''; sync(); } });
   // Ultra changes pages in place: its stickers are the new path's.
-  globalThis.navigation?.addEventListener('navigatesuccess', () => { if (key) stickers(); });
+  const moved = () => { if (globalThis.GZ_LX) cursor(); if (key) stickers(); };
+  globalThis.navigation?.addEventListener('navigatesuccess', moved);
+  addEventListener('popstate', moved);
 
   const sync = async () => {
     await lib();
+    if (ctx.courseLook?.()) await ctx.need('lib/lookset.js', () => globalThis.GZ_LOOK_PARTS);
     cursor();
     arm();
     stickers();

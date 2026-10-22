@@ -186,7 +186,8 @@ GZ_UI.load().then((s) => {
     const colors = scheme === 'current' ? null : GZ_PRESET(scheme === 'light' ? 'Paper' : 'Frost');
     const shown = previewSite === 'ultra' && course ? { ...settings, courses: { ...settings.courses, tinted: GZ_COURSE_TINTED(settings.courses, id, courses) ? [id] : [] } } : settings;
     frame.contentWindow?.postMessage({ gzPreviewContext: { site: previewSite, page: previewPage, viewport: $('#preview-size').value } }, location.origin);
-    frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) }, gzPreviewParts: settings === base ? base.parts ?? null : null }, location.origin);
+    const coursePointer = settings !== base && GZ_LOOK_PARTS({ name: base.courses.looks[id] })?.x?.pointer;
+    frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) }, gzPreviewParts: settings === base ? base.parts ?? null : coursePointer ? { x: { pointer: coursePointer } } : null }, location.origin);
     renderNav(); renderContrast(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
   };
   const contextPreview = (site, page) => {

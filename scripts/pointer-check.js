@@ -219,6 +219,22 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     const rose = await until(() => lms.evaluate(() => [...document.querySelectorAll('#gz-cmd-list li')].find((li) => /^Pointer: Rose/.test(li.textContent))?.id));
     await lms.click(`#${rose}`);
     check('  choosing Pointer: Rose saves it, and the page wears it', await until(async () => (await sync()).pointer === 'rose') && !!await shows('rose'), await onPage());
+    await page.evaluate(async () => {
+      const { courses } = await chrome.storage.sync.get('courses');
+      await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: 'Library', _102_1: 'Graveyard' } } });
+    });
+    await lms.goto(`${SITE}/ultra/courses/_101_1/outline`);
+    check('a course with its own Look still wears the personal override', await shows('rose'), await onPage());
+    await extras({ pointer: 'look' });
+    check('following the Look on that course wears Library\'s quill', await shows('quill'), await onPage());
+    await lms.goto(`${SITE}/ultra/courses/_102_1/outline`);
+    check('another course follows its own Look\'s ghost', await shows('ghost'), await onPage());
+    await extras({ pointer: 'lava' });
+    await shows('lava');
+    await lms.evaluate(() => { history.pushState({}, '', location.origin + '/ultra/courses/_102_1/assessment/_2_1/attempt'); dispatchEvent(new PopStateEvent('popstate')); });
+    check('entering a quiet page clears the override without reloading', await shows('system'), await onPage());
+    await lms.evaluate(() => { history.pushState({}, '', location.origin + '/ultra/courses/_102_1/outline'); dispatchEvent(new PopStateEvent('popstate')); });
+    check('leaving the quiet page restores the personal override', await shows('lava'), await onPage());
     check('no page errors', !errors.length, errors.join(' | '));
   } finally {
     await context?.close().catch(() => {});

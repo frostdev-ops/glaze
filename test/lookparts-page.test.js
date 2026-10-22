@@ -48,9 +48,9 @@ test('only the top frame and live tab frames read parts, never the editor\'s pre
 
 test('content.js hands parts to the pages through GZ_CTX.parts(), asks only when storage changes lookX, and feeds the preview', () => {
   // Running code mods lay their parts over the Look's (features/mods.js parts), under the same gate.
-  // Where a Look's parts show at all (partsOn, which the pointer the student chose follows too), and what they are.
-  assert.match(content, /const partsOn = \(\) => on\(settings\) && \(!isPreview \|\| html\.dataset\.previewPage !== 'quiz'\) && !lookHere\(\);/);
-  assert.match(content, /\n    partsOn,\n    parts: \(\) => \(partsOn\(\) && \(globalThis\.GZ_MODS \? GZ_MODS\.parts\(globalThis\.GZ_XPARTS_PAGE\?\.now\(\) \|\| null\) : globalThis\.GZ_XPARTS_PAGE\?\.now\(\)\)\) \|\| null,/);
+  // Course Looks suppress global parts; their pointer is resolved separately.
+  assert.match(content, /const partsOn = \(pointer = false\) => on\(settings\) && \(!isPreview \|\| html\.dataset\.previewPage !== 'quiz'\) && \(pointer \|\| !lookHere\(\)\);/);
+  assert.match(content, /partsOn, courseLook: lookHere,\n    parts: \(\) => \(partsOn\(\) && \(globalThis\.GZ_MODS \? GZ_MODS\.parts\(globalThis\.GZ_XPARTS_PAGE\?\.now\(\) \|\| null\) : globalThis\.GZ_XPARTS_PAGE\?\.now\(\)\)\) \|\| null,/);
   assert.match(content, /if \(changes\.lookX && area === 'sync'\) lookX = changes\.lookX\.newValue;/);
   assert.match(content, /globalThis\.GZ_XPARTS_PAGE\?\.preview\(e\.data\.gzPreviewParts\);/);
   // The first-paint path is untouched: parts are asked for after `ready`, which is the settings read.
@@ -244,7 +244,8 @@ test('the Ultra preview suppresses parts on its mock quiz and restores them on r
   assert.ok(context.ctx.parts(), 'a live page cannot suppress parts with a preview attribute');
   assert.equal(context.ctx.partsOn(), true);
   context.lookHere = () => 'Clear';
-  assert.equal(context.ctx.partsOn(), false, 'a course that wears its own Look: no parts, no chosen pointer');
+  assert.equal(context.ctx.partsOn(), false, 'a course Look suppresses the global Look parts');
+  assert.equal(context.ctx.partsOn(true), true, 'the personal pointer remains eligible on a course Look');
   assert.equal(context.ctx.parts(), null);
 });
 
@@ -260,14 +261,16 @@ test('changing the mock page announces parts so rules, scenes and nav follow the
 });
 
 
-test('a course Look preview receives no global Look parts', () => {
+test('a course Look preview receives its own pointer without the global Look parts', () => {
   const G = require('../defaults.js');
   const base = { ...G.GZ_SANITIZE({ courses: { looks: { _1_1: 'Terminal' } } }), parts: GLOW };
   const settings = G.GZ_COURSE_LOOK(base, '_1_1'), sent = [];
   assert.notEqual(settings, base);
-  const message = read('options.js').split('\n').find((line) => line.includes('gzPreviewParts:'));
-  vm.runInNewContext(message, { frame: { contentWindow: { postMessage: (m) => sent.push(m) } }, base, settings, shown: settings, nav: settings.nav, colors: null, location: { origin: 'chrome-extension://x' } });
-  assert.equal(sent[0].gzPreviewParts, null);
+  const lines = read('options.js').split('\n');
+  const message = lines.find((line) => line.includes('gzPreviewParts:'));
+  const pointer = lines.find((line) => line.includes('const coursePointer =')) || '';
+  vm.runInNewContext(`${pointer}\n${message}`, { GZ_LOOK_PARTS: require('../lib/lookset.js'), id: '_1_1', frame: { contentWindow: { postMessage: (m) => sent.push(m) } }, base, settings, shown: settings, nav: settings.nav, colors: null, location: { origin: 'chrome-extension://x' } });
+  assert.deepEqual(JSON.parse(JSON.stringify(sent[0].gzPreviewParts)), { x: { pointer: 'terminal' } });
 });
 
 

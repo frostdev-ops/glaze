@@ -245,7 +245,7 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
   let b = 0;
   const settings = { extras: { stickers: true, rotate: 'off', at: '08:00' } };
   let parts = null; // the worn Look's parts, as GZ_CTX.parts() hands them
-  let on = true, partsOn = true; // Glaze on here; the Look's parts would show here (not a course with its own Look)
+  let on = true, partsOn = true, courseLook = null;
   const docOn = {}, changed = [], synced = []; // the document's listeners; storage.onChanged's; what went to storage.sync
   const held = []; // storage reads made to wait: { keys, release }
   let hold = () => false;
@@ -275,7 +275,7 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
     },
     GZ_MATCH_PRESET: () => null,
     CSS: { supports: () => true },
-    GZ_CTX: { t: (k) => k, need: () => Promise.resolve(), settings: () => settings, parts: () => parts, partsOn: () => on && partsOn, on: () => on, solo: true },
+    GZ_CTX: { t: (k) => k, need: (file) => { if (file === 'lib/lookset.js') assert.equal(vm.runInContext(read(file), context)?.ready, true, 'the worker requires a serializable completion value'); return Promise.resolve(); }, settings: () => settings, parts: () => parts, partsOn: (pointer) => on && (pointer || partsOn), courseLook: () => courseLook, on: () => on, solo: true },
   });
   context.window = context;
   context.top = context;
@@ -286,7 +286,7 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
   const runTimers = () => { for (const [id, f] of [...fns]) if (timers.get(id) <= 1000) { timers.delete(id); fns.delete(id); f(); } };
   const fire = (type, e = {}) => { for (const f of win[type] || []) f(e); };
   return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; }, wear: (x) => { parts = x; },
-    setOn: (v) => { on = v; }, setPartsOn: (v) => { partsOn = v; }, emit: (t) => { for (const f of docOn[t] || []) f({ type: t }); }, stored: (c) => { for (const f of changed) f(c, 'local'); }, local, synced };
+    setOn: (v) => { on = v; }, setPartsOn: (v) => { partsOn = v; }, setCourseLook: (v) => { courseLook = v; partsOn = !v; }, emit: (t) => { for (const f of docOn[t] || []) f({ type: t }); }, stored: (c) => { for (const f of changed) f(c, 'local'); }, local, synced };
 };
 
 test('page: a picture read that answers after Hide doesn\'t draw the stickers back', async () => {
@@ -435,18 +435,26 @@ test('page: the student\'s pointer stays through a change of Look; the Look\'s f
   assert.equal(shown(p), 'ghost');
 });
 
-test('page: no pointer of Glaze\'s with Glaze off or where the Look\'s parts don\'t show, and it comes back after', async () => {
+test('page: the personal pointer wins on course Looks, and following the Look uses that course\'s pointer', async () => {
   const p = page({});
   p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'neon' };
   await p.lx.sync();
   await settle();
   assert.equal(shown(p), 'neon');
-  // A course that wears its own Look (content.js partsOn): neither the Look's pointer nor the student's.
-  p.setPartsOn(false);
+  p.setCourseLook('Library');
   await p.lx.sync();
   await settle();
+  assert.equal(shown(p), 'neon', 'the personal override also wins on a course Look');
+  await choose(p, 'look');
+  assert.equal(shown(p), 'quill', 'the course Look, not the global Look');
+  p.setCourseLook('Graveyard');
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'ghost', 'changing courses follows their respective Looks');
+  await choose(p, 'off');
   assert.equal(shown(p), 'system');
-  p.setPartsOn(true);
+  await choose(p, 'neon');
+  p.setCourseLook(null);
   await p.lx.sync();
   await settle();
   assert.equal(shown(p), 'neon');
@@ -460,6 +468,19 @@ test('page: no pointer of Glaze\'s with Glaze off or where the Look\'s parts don
   await p.lx.sync();
   await settle();
   assert.equal(shown(p), 'neon');
+});
+
+test('page: no custom pointer on quiz or quiet pages, including an override with no Look parts', async () => {
+  for (const pathname of ['/courses/1/quizzes/2/take', '/ultra/courses/_1_1/assessment/_2_1/attempt', '/courses/1/external_tools/2', '/mod/quiz/attempt.php']) {
+    const p = page({}, pathname);
+    await choose(p, 'neon');
+    assert.equal(shown(p), 'system', pathname);
+    assert.equal(p.html.style['--gz-cursor-pointer'], undefined);
+    p.location.pathname = '/courses/1';
+    await p.lx.sync();
+    await settle();
+    assert.equal(shown(p), 'neon');
+  }
 });
 
 test('page: a new picture of their own is shown at once while it is the pointer worn, and not read otherwise', async () => {

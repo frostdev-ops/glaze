@@ -263,7 +263,7 @@
   const moveParts = () => {
     const p = GZ_CTX.parts(), x = settings.extras;
     if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerAnim || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
-    if (globalThis.GZ_LOOKX || (x.pointer === 'look' ? p?.pointer : x.pointer !== 'off' && partsOn())) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
+    if (globalThis.GZ_LOOKX || (x.pointer === 'look' ? p?.pointer || lookHere() : x.pointer !== 'off' && partsOn(true))) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
   };
   document.addEventListener('glaze:parts', moveParts);
   // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed. The dots are
@@ -1504,7 +1504,7 @@
   document.addEventListener('glaze:parts', () => { if (links.length) X.syncNav(); });
 
   // This frame's helpers for lazy features; site helpers resolve when called.
-  const partsOn = () => on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz') && !lookHere();
+  const partsOn = (pointer = false) => on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz') && (pointer || !lookHere());
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, moment, gradeMoment, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
     account: () => (site === 'canvas' ? X.ctx.profile().then((p) => String(p.id)) : X.ctx.me()),
     // The palette, the keys, the course menu, the previews and Download all (W0c).
@@ -1513,8 +1513,8 @@
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    // Look parts stay off on courses with their own Look (partsOn); changes fire `glaze:parts`.
-    partsOn,
+    // Course Looks replace global parts; pointers resolve the course Look separately.
+    partsOn, courseLook: lookHere,
     parts: () => (partsOn() && (globalThis.GZ_MODS ? GZ_MODS.parts(globalThis.GZ_XPARTS_PAGE?.now() || null) : globalThis.GZ_XPARTS_PAGE?.now())) || null,
     background: (el) => { stopScene(); if (modBg && modBg !== el) { globalThis.GZ_SCENE_HOST?.clear(modBg); modBg.remove(); } modBg = el || null; syncScene(); },
     canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => { syncScene(); if (full && !timer && !hid()) timer = setTimeout(flush); },
