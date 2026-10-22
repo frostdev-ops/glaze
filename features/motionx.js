@@ -356,6 +356,11 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
     if (!pending) pending = requestAnimationFrame(spill);
   };
   const onCompose = (e) => { composing = e.type === 'compositionstart'; };
+  const clearKeys = () => {
+    cancelAnimationFrame(pending);
+    pending = keyed = 0;
+    field = null;
+  };
   const armType = () => {
     const want = !!typ;
     if (want === typArmed) return;
@@ -365,9 +370,7 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
     f.call(document, 'compositionstart', onCompose, { passive: true, capture: true });
     f.call(document, 'compositionend', onCompose, { passive: true, capture: true });
     if (!want) {
-      cancelAnimationFrame(pending);
-      pending = keyed = 0;
-      field = null;
+      clearKeys();
       composing = false;
     }
   };
@@ -385,7 +388,7 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
     cur = GZ_MX.cursor(p?.cursor);
     typ = GZ_MX.typing(p?.type);
     const next = JSON.stringify([fxs, cur, typ]);
-    if (next !== config) { engine.end(); config = next; }
+    if (next !== config) { clearKeys(); engine.end(); config = next; }
     tones.clear();
     arm();
     armType();

@@ -382,3 +382,14 @@ test('typing rechecks sensitive fields and composition before a queued frame', a
     assert.equal(x.queue.size, 0, change);
   }
 });
+
+test('changing Looks discards typing queued by the previous Look', async () => {
+  const x = feature({ parts: TYPE });
+  await x.api.sync();
+  x.listeners.input(typed(field()));
+  x.setParts({ type: { kind: 'snow' } });
+  await x.api.sync();
+  assert.equal(x.queue.size, 0, 'no stale typing measurement');
+  x.tick();
+  assert.equal(x.canvases.length, 0, 'the new Look starts without the previous key');
+});
