@@ -646,6 +646,23 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (showing === cid && !replacing) show('');
   };
   const dropNext = (cid) => { const g = next.get(cid); if (!g) return; clearTimeout(g.cool); clearTimeout(g.tick); g.clean?.(); g.el.remove(); next.delete(cid); turning(); if (g.reveal && waiting === cid) wait(''); };
+  // Safari can leave a shown frame's new content off screen after its page changes in place, until something makes this
+  // page composite again (a scroll, a hover): a no-op layer change on the frame does that. Once the frame's page has drawn
+  // (shown, or its 'moved', which comes 0.5 s after its address settles), and again a second later; nothing at rest.
+  let nudgeTimer = 0;
+  const nudge = (f) => {
+    clearTimeout(nudgeTimer);
+    const once = () => {
+      // (Still nudged: its frames haven't run, as in a background tab.)
+      if (frames.get(showing) !== f || !f.el.isConnected || f.el.style.transform === 'translateZ(0)') return;
+      const was = f.el.style.transform;
+      f.el.style.transform = 'translateZ(0)';
+      void f.el.offsetWidth;
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (f.el.style.transform === 'translateZ(0)') f.el.style.transform = was; }));
+    };
+    once();
+    nudgeTimer = setTimeout(once, 1000);
+  };
   // Canvas loads a whole page for each link, which here would end every tab's frame; Ultra routes in place, so its frames
   // live on. With a frame running, a plain click on a link to a course page opens it in that course's frame instead (made
   // if new), and in a tab's frame a link to another course goes to that course's frame: the page around never reloads.
@@ -1112,7 +1129,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         f.stale = null;
         if (waiting === cid && showing !== cid) { show(cid); return; }
         if (waiting === cid) wait('');
-        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); f.el.contentWindow?.postMessage({ gzCtab: 'visible', on: true }, location.origin); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
+        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); f.el.contentWindow?.postMessage({ gzCtab: 'visible', on: true }, location.origin); nudge(f); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
         return;
       }
       if (now - t0 > 8000 && !f.slow) {
@@ -1239,6 +1256,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid && g.ready }, location.origin);
     }
     if (host) { host.toggleAttribute('data-on', !!cid); lay(); }
+    if (f?.ready) nudge(f);
     clearSlow();
     unpicture(true);
     if (f && !f.ready) { if (f.slow) slowFrame(cid, f); else picture(cid, f); }
@@ -1333,7 +1351,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (ctx.site === 'canvas' && from === showing) w.postMessage({ gzCtab: 'loading', cid: waiting }, location.origin);
       globalThis.GZ_PET_WORLD?.refresh();
     }
-    else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); later(700); keepPage(); if (ctx.site === 'canvas' || from === PAGE) globalThis.GZ_NAVBAR_UI?.sync(); }
+    else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); nudge(src); later(700); keepPage(); if (ctx.site === 'canvas' || from === PAGE) globalThis.GZ_NAVBAR_UI?.sync(); }
     // A link to a page of its own (go), or pressed (warm): turned to by this page (turnTo), the one it leaves kept.
     else if ((op === 'go' || op === 'warm') && ctx.site === 'canvas' && typeof url === 'string' && url.length < 1300) {
       const u = canvasURL(url), c = u && (u.match(/^\/courses\/(\d+)/)?.[1] || PAGE);

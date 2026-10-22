@@ -77,7 +77,7 @@ function fixture({ nativePath = '/', saved = new Map(), stored, manualDecode = f
     disconnect() { this.target = null; }
   }
   const tabs = L.clean(['12', '13', '14', '15', '16'].map((cid) => ({ cid, name: `Course ${cid}`, path: `/courses/${cid}` })), 'canvas');
-  const c = vm.createContext({ L, URL, PAGE: 'page', LIVE: 4, frames, host, html, document, location, history, navigation,
+  const c = vm.createContext({ L, URL, PAGE: 'page', requestAnimationFrame() {}, nudge() {}, LIVE: 4, frames, host, html, document, location, history, navigation,
     on: true, signedOut: false, framed: '', preview: false, showing: '', shownFrom: '', shooting: null, pic: null, showTurn: 0,
     closedCourse: '', navWatch: null, tabs, snaps: new Map(), strip: null, list: null, who: '42', loaded: true, last: undefined,
     ctx: { site: 'canvas', courseId: () => location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] || '', me: async () => '42', scene() {} },
@@ -408,7 +408,7 @@ test('a pending Canvas page redirected to another course retains its anchor and 
 
 test('Canvas frame pagehide must detach its observer from the surviving parent document', () => {
   const observers = [], parentRoot = {}, handlers = events(), document = events();
-  const c = vm.createContext({ framed: '12', preview: false, onPress() {}, onPop() {}, onStore() {}, ctx: { site: 'canvas' }, on: true, showing: '', PAGE: 'page', frames: new Map(),
+  const c = vm.createContext({ framed: '12', preview: false, onPress() {}, onPop() {}, onStore() {}, ctx: { site: 'canvas' }, on: true, showing: '', PAGE: 'page', requestAnimationFrame() {}, nudge() {}, frames: new Map(),
     parent: { document: { documentElement: parentRoot } }, navRoom() {}, bar: { place() {} },
     chrome: { runtime: { id: 'glaze' }, storage: { onChanged: { addListener() {}, removeListener() {} } } },
     document, location: { origin }, sessionStorage: { setItem() {} }, saveNow() {},
