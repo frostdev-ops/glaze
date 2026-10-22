@@ -1342,7 +1342,8 @@ GZ_UI.load().then((s) => {
   });
   takeOffer();
 
-  // ---- Look rotation's list and your own pointer picture: kept on this computer (storage.local), lib/lookx.js ----
+  // ---- Look rotation's list: kept on this computer (storage.local), lib/lookx.js. Your own pointer picture is
+  // lib/editor-pointer.js's. ----
   let rotateLooks = [];
   const renderExtras = () => {
     $('#rotate-at').hidden = s.extras.rotate !== 'daily';
@@ -1358,33 +1359,6 @@ GZ_UI.load().then((s) => {
     const favs = await Promise.all(favorites.map((f) => GZ_SHARE.decode(f.code).then((got) => tick(f.code, got.colors, f.name), () => null)));
     $('#rotate-looks').replaceChildren(...GZ_LOOKS.map((L) => tick(L.name, L.colors, L.name)), ...favs.filter(Boolean));
   };
-  const showCursor = () => local.get('cursorImg', (r) => { const i = $('#cursor-img'); i.hidden = !r?.cursorImg; if (r?.cursorImg) i.src = r.cursorImg; });
-  $('#cursor-pick').addEventListener('click', () => $('#cursor-file').click());
-  // Read and scaled here, kept as PNG: SVG and anything else the browser can't draw as a bitmap is refused. The picture is
-  // the Look's pointer from then on (x.pointer 'own'), saved like any of its parts.
-  $('#cursor-file').addEventListener('change', async (e) => {
-    const f = e.target.files[0];
-    e.target.value = '';
-    if (!f) return;
-    let bmp;
-    try { bmp = await createImageBitmap(f); } catch { return hint(t("That file isn't a picture Glaze can read."), true); }
-    const [w, h] = GZ_LX.fit(bmp.width, bmp.height, 32);
-    const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
-    c.getContext('2d').drawImage(bmp, 0, 0, w, h);
-    bmp.close();
-    local.set({ cursorImg: c.toDataURL('image/png') }, () => {
-      const err = chrome.runtime.lastError;
-      if (err) return hint(t('Not saved: {error}', { error: err.message }), true);
-      showCursor();
-      const next = GZ_EDITOR_X.put(s.parts, 'pointer', 'own');
-      if (!next) return;
-      s.parts = next;
-      preview();
-      save(['parts'], false, ['pointer']);
-      GZ_EDITOR_X.render();
-    });
-  });
-  showCursor();
   local.get('rotateLooks', (r) => { rotateLooks = Array.isArray(r?.rotateLooks) ? r.rotateLooks : []; renderRotate(); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
@@ -1565,8 +1539,9 @@ GZ_UI.load().then((s) => {
     if (touched.includes('nav')) for (const key of paths.filter((p) => p.startsWith('nav.') && !['nav.i', 'nav.li'].includes(p))) pendingNav.add(key.slice(4));
     fill(); save(touched); hint(t('Section reset. Your local data is kept.'));
   });
-  // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key.
-  GZ_EDITOR_X.mount({ s, save, preview, t, frame });
+  // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key. The pointer
+  // (lib/editor-pointer.js) is the student's, not the Look's: it saves extras.
+  GZ_EDITOR_X.mount({ s, save, preview, t, frame, hint });
   $('#editor-version').textContent = `Glaze ${chrome.runtime.getManifest().version}`;
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
   // Mods (lib/editor-mods.js): installed mods, adding one, its install prompt and dev mode.

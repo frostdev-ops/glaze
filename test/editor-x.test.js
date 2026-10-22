@@ -208,12 +208,13 @@ test('the page carries the builders in the sections their settings live in, with
   assert.match(section('look/background'), /data-kinds="gradient aurora scene shader layers"><span>Colors/);
   assert.match(section('look/background'), /data-kinds="scene shader layers"><span>Intensity/);
   assert.match(section('look/motion'), /<div id="x-motion" class="group"><\/div>/);
+  assert.match(section('look/pointer'), /<div class="seg pt-cards" role="radiogroup" aria-labelledby="heading-look-pointer" aria-describedby="pointer-note" id="pointer-tiles" data-setting-owner="extras\.pointer"><\/div>/);
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);
-  for (const [a, b] of [['lib/motionx.js', 'lib/editor-x.js'], ['lib/lookparts.js', 'lib/editor-x.js'], ['lib/glsl.js', 'lib/editor-xbg.js'], ['lib/media.js', 'lib/editor-xbg.js'], ['lib/editor-x.js', 'lib/editor-xbg.js'], ['lib/editor-x.js', 'lib/editor-xmotion.js'], ['lib/editor-xmotion.js', 'options.js'], ['lib/editor-xbg.js', 'options.js']]) {
+  for (const [a, b] of [['lib/motionx.js', 'lib/editor-x.js'], ['lib/lookparts.js', 'lib/editor-x.js'], ['lib/glsl.js', 'lib/editor-xbg.js'], ['lib/media.js', 'lib/editor-xbg.js'], ['lib/editor-x.js', 'lib/editor-xbg.js'], ['lib/editor-x.js', 'lib/editor-xmotion.js'], ['lib/editor-xmotion.js', 'options.js'], ['lib/editor-xbg.js', 'options.js'], ['lib/lookx.js', 'options.js'], ['lib/editor-xmotion.js', 'lib/editor-pointer.js'], ['lib/editor-pointer.js', 'options.js']]) {
     assert.ok(at(a) > 0 && at(a) < at(b), `${a} loads before ${b}`);
   }
   const js = read('options.js');
-  assert.match(js, /GZ_EDITOR_X\.mount\(\{ s, save, preview, t, frame \}\)/);
+  assert.match(js, /GZ_EDITOR_X\.mount\(\{ s, save, preview, t, frame, hint \}\)/);
   assert.match(js.split('const refresh = () => {')[1].split('};')[0], /GZ_EDITOR_X\.render\(\);/);
   // Builders never save on their own: only through the editor's save() and the Look's parts key.
   for (const f of ['lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js']) assert.doesNotMatch(read(f), /chrome\.storage|GZ_UI\.save|innerHTML|insertAdjacentHTML/, f);

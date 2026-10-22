@@ -54,7 +54,7 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
   let A = null, shown = '', box, note;
   const { el, tr } = X;
   const xOf = () => A.s.parts?.x || {};
-  const sig = () => JSON.stringify([xOf().anim, xOf().fx, xOf().cursor, xOf().pointer, xOf().type]);
+  const sig = () => JSON.stringify([xOf().anim, xOf().fx, xOf().cursor, xOf().pointer, xOf().type, A.s.extras?.pointer]);
   const write = (key, value, soon = false) => { A.write(key, X.prune(value || {}), soon); shown = sig(); };
   const unit = (u) => (v) => `${v}${u}`;
   const fmtKey = (k) => (KEYS[k][2] === '' ? (v) => `${Math.round(v * 100)}%` : unit(KEYS[k][2]));
@@ -174,15 +174,18 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
     ] : [])];
   };
 
-  // The pointer: one of the sets, or the student's own picture (chosen in options.js, kept on this computer, never in a
-  // code), or the system's.
+  // The Look's pointer: one of the sets, or the system's. The student's own picture is offered only to a Look that wears it
+  // already: a picture is the student's choice, under Look › Pointer (lib/editor-pointer.js), which also says whether they
+  // see the Look's pointer at all.
   const pointerUI = () => {
-    const v = xOf().pointer || '';
-    const pick = X.select({ label: tr('Pointer'), value: v, options: [['', tr('Standard')], ...MX().POINTERS.map((k) => [k, tr(POINTERS[k] || X.tokenName(k))])],
+    const v = xOf().pointer || '', mine = A.s.extras?.pointer || 'look';
+    const pick = X.select({ label: tr('Pointer'), value: v, options: [['', tr('Standard')], ...MX().POINTERS.filter((k) => k !== 'own' || v === 'own').map((k) => [k, tr(POINTERS[k] || X.tokenName(k))])],
       on: (next) => { A.write('pointer', next || null); shown = sig(); redraw('pointer'); } });
     pick.querySelector('select').dataset.focus = 'pointer';
-    return [pick, el('p', { class: 'desc' }, tr(v === 'own' ? 'Your own picture, chosen under Pointers, stickers and rotation. It stays on this computer: a theme code of this Look goes without it.'
-      : 'Shown on your course pages with this Look, drawn by your system so it never lags. Text fields keep the usual text cursor.'))];
+    return [pick, el('p', { class: 'desc' }, tr(v === 'own' ? 'Your own picture, kept on this computer: a theme code of this Look goes without it.'
+      : 'Worn with this Look, and in a theme code of it. Drawn by your system so it never lags; text fields keep the usual text cursor.')),
+    el('p', { class: 'desc' }, mine === 'look' ? tr('Which pointer you see is yours to choose:') : tr('You see {name} instead, your own choice:', { name: tr(POINTERS[mine] || (mine === 'off' ? 'System pointer' : mine)) }),
+      ' ', el('a', { href: '#look/pointer', 'data-editor-alias': true }, tr('Pointer settings')))];
   };
   const typeUI = () => {
     const c = xOf().type, d = c && MX().typing(c);

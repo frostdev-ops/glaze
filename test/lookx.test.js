@@ -186,8 +186,38 @@ test('a rotated favorite is worn like "Use this theme": its palette, look and ba
 });
 
 test('extras settings: off by default, sanitized', () => {
-  assert.deepEqual(G.GZ_DEFAULTS.extras, { stickers: true, rotate: 'off', at: '08:00' });
-  assert.deepEqual(G.GZ_SANITIZE({ extras: { cursor: 'evil', rotate: '1m', at: '25:99', stickers: 'yes' } }).extras, G.GZ_DEFAULTS.extras);
+  assert.deepEqual(G.GZ_DEFAULTS.extras, { pointer: 'look', pointerAnim: true, stickers: true, rotate: 'off', at: '08:00' });
+  assert.deepEqual(G.GZ_SANITIZE({ extras: { cursor: 'evil', pointer: 'evil', pointerAnim: 'no', rotate: '1m', at: '25:99', stickers: 'yes' } }).extras, G.GZ_DEFAULTS.extras);
+});
+
+test('the pointer setting: the Look\'s, the system\'s, any bundled set or the student\'s own picture, kept as chosen', () => {
+  // Every set a Look may name (and 'own'), after the two that are not a set.
+  assert.deepEqual(G.GZ_SPEC.extras.pointer, ['look', ['look', 'off', ...MX.POINTERS]]);
+  assert.equal(G.GZ_SPEC.extras.pointer[1].length, 16, 'the ten Look sets, aqua, lilac, pearl and own, after look and off');
+  for (const v of G.GZ_SPEC.extras.pointer[1]) assert.equal(G.GZ_SANITIZE({ extras: { pointer: v } }).extras.pointer, v);
+  for (const v of ['', 'Pumpkin', 'none', 'standard', 'cursor', 0, null, ['lava'], { set: 'lava' }]) assert.equal(G.GZ_SANITIZE({ extras: { pointer: v } }).extras.pointer, 'look', JSON.stringify(v));
+  assert.equal(G.GZ_SANITIZE({ extras: { pointerAnim: false } }).extras.pointerAnim, false);
+  // Settings saved before there was one (sync extras without the keys) wear the Look's pointer and its animation, as before.
+  const before = G.GZ_SANITIZE({ extras: { stickers: false, rotate: '6h', at: '09:00' } }).extras;
+  assert.deepEqual([before.pointer, before.pointerAnim, before.stickers, before.rotate], ['look', true, false, '6h']);
+});
+
+test('which pointer is worn: the student\'s choice over the Look\'s; the Look\'s only while the choice is the Look\'s', () => {
+  const P = L.pointerOf;
+  // The Look's, which may be a set, the student's picture, or none (the system's).
+  assert.equal(P('look', 'pumpkin'), 'pumpkin');
+  assert.equal(P('look', 'own'), 'own');
+  assert.equal(P('look', undefined), 'off');
+  assert.equal(P('look', null), 'off');
+  assert.equal(P(undefined, 'lava'), 'lava', 'no setting yet: the Look\'s');
+  // Off: the system's, whatever the Look has.
+  assert.equal(P('off', 'pumpkin'), 'off');
+  assert.equal(P('off', 'own'), 'off');
+  // A set, or the student's own picture, over the Look's or where the Look has none.
+  assert.equal(P('aqua', 'pumpkin'), 'aqua');
+  assert.equal(P('aqua', undefined), 'aqua');
+  assert.equal(P('own', 'pumpkin'), 'own');
+  assert.equal(P('pumpkin', 'pumpkin'), 'pumpkin');
 });
 
 test('Ultra LTI launch frames and direct attempts exclude Look effects', () => {

@@ -127,6 +127,19 @@
   .nb-thumb .bar { fill: color-mix(in srgb, var(--gz-accent) 32%, var(--gz-surface)); }
   .nb-thumb .ln { fill: color-mix(in srgb, var(--gz-ink-muted) 22%, transparent); }
   .nb-thumb .it { fill: var(--gz-accent-hi); }
+  /* The pointer (lib/editor-pointer.js): a card per pointer, its arrow and hand on a stage half light and half dark, as pages
+     are. Hovering a card wears its hand. */
+  .seg.pt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: .6rem; padding: 0; border: 0; border-radius: 0; background: none; }
+  .seg.pt-cards label { position: relative; display: grid; gap: .3rem; align-content: start; justify-items: center; text-align: center; padding: .5rem .5rem .6rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6); border: 1px solid var(--gz-border-line, var(--gz-line)); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); font-size: 13px; cursor: pointer; transition: border-color .2s var(--gz-ease), box-shadow .2s var(--gz-ease), transform .2s var(--gz-ease); }
+  .seg.pt-cards label:hover { border-color: var(--gz-border-strong, var(--gz-line-strong)); transform: translateY(-1px); }
+  .seg.pt-cards label:has(input:checked) { border-color: var(--gz-accent); box-shadow: 0 0 0 1px var(--gz-accent), 0 8px 24px color-mix(in srgb, var(--gz-accent) 18%, transparent); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-soft) 45%, var(--gz-surface-fill, var(--gz-surface))); color: var(--gz-ink); font-weight: 400; }
+  .seg.pt-cards label:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+  .seg.pt-cards label:has(input:disabled) { cursor: default; transform: none; }
+  .seg.pt-cards b { font-weight: 600; }
+  .seg.pt-cards .desc { margin: -.15rem 0 0; font-size: 11px; }
+  .pt-stage { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; place-items: center; width: 100%; height: 56px; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); background: linear-gradient(90deg, #f4f5f7 50%, #1b1e25 50%); border: 1px solid var(--gz-border-line, var(--gz-line)); box-sizing: border-box; }
+  .pt-stage :is(img, svg) { display: block; width: 32px; height: 32px; }
+  .pt-none { display: grid; place-items: center; width: 34px; height: 34px; border: 2px dashed #8a8f99; border-radius: calc(var(--gz-radius, 12px) / 2); color: #8a8f99; font-size: 22px; font-weight: 300; line-height: 1; grid-column: 1 / -1; background: #f4f5f7; }
   .nb-note p { margin: 0 0 .35rem; }
   .nb-note { margin: .25rem 0 1rem; padding: .7rem .85rem; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); border: 1px solid color-mix(in srgb, var(--gz-accent) 40%, transparent); background: color-mix(in srgb, var(--gz-accent-soft) 35%, transparent); font-size: 13px; }
   .nb-note[hidden] { display: none; }
@@ -319,7 +332,7 @@
   <div class="layout">
 
     <main class="editor" id="editor">
-<div id="panel-look" role="tabpanel" aria-labelledby="tab-look" data-editor-panel="look"><nav class="section-links" aria-label="Sections"><a href="#look/palette" data-editor-alias>Palette and Looks</a><a href="#look/type" data-editor-alias>Fonts and shape</a><a href="#look/surfaces" data-editor-alias>Surfaces</a><a href="#look/background" data-editor-alias>Background</a><a href="#look/cards" data-editor-alias>Course cards</a><a href="#look/courses" data-editor-alias>Course appearance</a><a href="#look/navigation" data-editor-alias>Navigation appearance</a><a href="#look/nav-layout" data-editor-alias>This Look's navigation</a><a href="#look/rules" data-editor-alias>Page tweaks</a><a href="#look/motion" data-editor-alias>Motion</a><a href="#look/extras" data-editor-alias>Pointers, stickers and rotation</a></nav>
+<div id="panel-look" role="tabpanel" aria-labelledby="tab-look" data-editor-panel="look"><nav class="section-links" aria-label="Sections"><a href="#look/palette" data-editor-alias>Palette and Looks</a><a href="#look/type" data-editor-alias>Fonts and shape</a><a href="#look/surfaces" data-editor-alias>Surfaces</a><a href="#look/background" data-editor-alias>Background</a><a href="#look/cards" data-editor-alias>Course cards</a><a href="#look/courses" data-editor-alias>Course appearance</a><a href="#look/navigation" data-editor-alias>Navigation appearance</a><a href="#look/nav-layout" data-editor-alias>This Look's navigation</a><a href="#look/rules" data-editor-alias>Page tweaks</a><a href="#look/motion" data-editor-alias>Motion</a><a href="#look/pointer" data-editor-alias>Pointer</a><a href="#look/extras" data-editor-alias>Stickers and rotation</a></nav>
 <section id="palette" data-editor-section="look/palette" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-palette">
 <p class="section-path" data-editor-breadcrumb><a href="#look/palette" data-editor-alias>Palette and Looks</a></p><div class="section-heading"><h2 id="heading-look-palette">Palette and Looks</h2><button type="button" class="section-reset" data-reset-section="look/palette">Reset section</button></div>
 <p class="desc section-note">Choose your colors, saved palettes or a complete Look.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle</p>
@@ -601,9 +614,25 @@
         </div>
 <div id="x-motion" class="group"></div>
 </section>
+<section id="look-pointer" data-editor-section="look/pointer" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-pointer">
+<p class="section-path" data-editor-breadcrumb><a href="#look/pointer" data-editor-alias>Pointer</a></p><div class="section-heading"><h2 id="heading-look-pointer">Pointer</h2><button type="button" class="section-reset" data-reset-section="look/pointer">Reset section</button></div>
+<p class="desc section-note">The pointer you see with every Look: the Look's own, the system's, one of Glaze's sets or a picture of yours.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle</p>
+<div class="seg pt-cards" role="radiogroup" aria-labelledby="heading-look-pointer" aria-describedby="pointer-note" id="pointer-tiles" data-setting-owner="extras.pointer"></div>
+<p class="desc" id="pointer-note">Yours with whichever Look you wear, and never put in a Look or a theme code. Text fields keep the usual text cursor; touch screens have no pointer.</p>
+<div class="group">
+          <h3>Your own picture</h3>
+          <div class="row"><button type="button" id="pointer-pick" aria-describedby="pointer-own-note">Choose a picture…</button><button type="button" id="pointer-remove" class="danger" hidden>Remove picture</button><input type="file" id="pointer-file" accept="image/png,image/jpeg" hidden></div>
+          <p class="desc" id="pointer-own-note">A PNG or JPEG, scaled to 32 pixels and kept on this computer; choosing one makes it your pointer. Its top-left corner is the tip.</p>
+        </div>
+<div class="group">
+          <label class="check"><input type="checkbox" data-key="extras.pointerAnim" aria-describedby="pointer-anim-look"><span>Pointer animation</span>
+            <span class="desc">The Look's animation around your pointer, such as sparkles or a glow. Off keeps your pointer still; typing and event effects stay as the Look has them.</span></label>
+          <p class="desc" id="pointer-anim-look"></p>
+        </div>
+</section>
 <section id="look-extras" data-editor-section="look/extras" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-look-extras">
-<p class="section-path" data-editor-breadcrumb><a href="#look/extras" data-editor-alias>Pointers, stickers and rotation</a></p><div class="section-heading"><h2 id="heading-look-extras">Pointers, stickers and rotation</h2><button type="button" class="section-reset" data-reset-section="look/extras">Reset section</button></div>
-<p class="desc section-note">Personalize the pointer, place stickers or rotate Looks.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra</p>
+<p class="section-path" data-editor-breadcrumb><a href="#look/extras" data-editor-alias>Stickers and rotation</a></p><div class="section-heading"><h2 id="heading-look-extras">Stickers and rotation</h2><button type="button" class="section-reset" data-reset-section="look/extras">Reset section</button></div>
+<p class="desc section-note">Place stickers or rotate Looks.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra</p>
 <div class="group">
           <h3>Look rotation</h3>
           <p class="desc" id="rotate-note">Wears the next of the Looks you tick on a timer, kept on this computer. None ticked: every built-in Look. Your history keeps each one.</p>
@@ -621,11 +650,6 @@
           <ul class="saved" id="rotate-looks" aria-label="Looks to rotate through"></ul>
         </div>
 <div class="group">
-          <h3>Your own pointer</h3>
-          <div class="row">
-            <span class="row" id="cursor-own"><button type="button" id="cursor-pick" aria-describedby="cursor-note">Choose a picture…</button><img id="cursor-img" alt="" width="32" height="32" hidden><input type="file" id="cursor-file" accept="image/png,image/jpeg" hidden></span>
-          </div>
-          <p class="desc" id="cursor-note">A picture of your own (PNG or JPEG) for this Look's pointer: choosing one sets Motion › Pointer to Your own picture. It is scaled to 32 pixels and kept on this computer, never put in a theme code; its top-left corner is the tip.</p>
           <h3>Stickers</h3>
           <label class="check"><input type="checkbox" data-key="extras.stickers"><span>Show stickers</span>
             <span class="desc">Put stickers on any course page from the command palette (Ctrl+K): Place stickers on this page. They are kept on this computer, and never shown on a quiz you are taking.</span></label>
@@ -1425,6 +1449,7 @@
   <script src="lib/editor-x.js"></script>
   <script src="lib/editor-xbg.js"></script>
   <script src="lib/editor-xmotion.js"></script>
+  <script src="lib/editor-pointer.js"></script>
   <script src="lib/history.js"></script>
   <script src="lib/lookx.js"></script>
   <script src="lib/news.js"></script>
