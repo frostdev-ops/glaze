@@ -3047,6 +3047,9 @@
   "Your own picture, kept on this computer: a theme code of this Look goes without it.": "Tu propia imagen, guardada en este ordenador: un código de tema de este Look va sin ella.",
   "Worn with this Look, and in a theme code of it. Drawn by your system so it never lags; text fields keep the usual text cursor.": "Va con este Look y en su código de tema. Lo dibuja tu sistema para que nunca se retrase; los campos de texto mantienen el cursor de texto habitual.",
   "Pointer: {name}": "Puntero: {name}",
+  "Flake": "Copo",
+  "Shard": "Esquirla",
+  "Contour": "Contorno",
   "Topography": "Topografía",
   "Living terrain cut into paper terraces": "Terreno vivo recortado en terrazas de papel"
 };

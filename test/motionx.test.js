@@ -200,7 +200,8 @@ test('every kind makes its count of finite particles, and all of them finish', (
   for (const kind of M.KINDS) {
     const f = M.fx({ kind, count: 30, life: 1000, shapes: ['dot', 'star'] });
     const ps = M.spawn(f, 200, 300, 800, 600, seeded(3));
-    assert.equal(ps.length, kind === 'ring' ? 2 : 30, kind);
+    // A contour is at most four rings, then five of each mark round the rim.
+    assert.equal(ps.length, kind === 'ring' ? 2 : kind === 'contour' ? 14 : 30, kind);
     assert.ok(ps.every(finite), kind);
     for (let t = 0; t < 4000; t += 16) for (const p of ps) M.step(p, 16);
     assert.ok(ps.every((p) => !M.alive(p)), `${kind}: none left after a few seconds`);
@@ -258,7 +259,7 @@ test('typing effects: each kind makes its particles at the caret, with its own d
     const t = M.typing({ kind });
     assert.ok(t.count >= 1 && t.size >= 2 && t.c.length, kind);
     const ps = M.keys(t, 100, 50, () => 0.5);
-    assert.equal(ps.length, t.count, kind);
+    assert.equal(ps.length, t.count + (kind === 'contour' ? 1 : 0), kind === 'contour' ? 'its bloom and a fleck per count' : kind);
     for (const p of ps) assert.ok(Math.abs(p.x - 100) < 20 && p.y === 50 && p.life > 0 && M.alive(p), kind);
   }
   assert.deepEqual(M.typing({ kind: 'ink', size: 100, count: 50, c: ['#ABCDEF', 'nope!'] }), { kind: 'ink', c: ['#abcdef'], size: 24, count: 8 });
@@ -288,4 +289,33 @@ test('an orbit can have just one mark', () => {
   assert.equal(M.cursor({ kind: 'orbit', len: 1 }).len, 1);
   const X = require('../lib/editor-x.js');
   assert.deepEqual(X.put(null, 'cursor', { kind: 'orbit', len: 1 }), { x: { cursor: { kind: 'orbit', len: 1 } } });
+});
+
+test('contour: nested rings step out to the size and finish together, open ones trace round, and its marks close it', () => {
+  const f = M.fx({ kind: 'contour', count: 3, size: 30, life: 900, gravity: -1, shapes: ['flake'], c: ['accent', 'accent-hi', 'ink'] });
+  const ps = M.spawn(f, 200, 300, 800, 600, seeded(4));
+  const rings = ps.filter((p) => p.shape === 'contour');
+  assert.deepEqual(rings.map((p) => p.s), [10, 20, 30]);
+  assert.deepEqual(rings.map((p) => p.c), ['accent', 'accent-hi', 'accent'], 'the last colour is the marks\'');
+  assert.ok(rings.every((p, i) => p.age === -i * 99 && p.life - p.age === 900 && p.lift === 4 && p.sweep === Math.PI * 2), 'stepping out 99 ms apart, all done at 900 ms, lifted 4 px');
+  const flake = ps.find((p) => p.shape === 'flake');
+  assert.ok(flake && flake.c === 'ink' && flake.grow && flake.age < 0 && Math.abs(flake.life - flake.age - 900) < 1e-9, 'a flake blooms at the centre once the rings are out');
+  assert.equal(M.fx({ kind: 'contour' }).shapes.length, 0, 'no marks unless named');
+  assert.deepEqual(M.spawn(M.fx({ kind: 'contour', count: 9 }), 0, 0, 800, 600, seeded(1)).length, 4, 'four rings at most');
+  const open = M.spawn(M.fx({ kind: 'contour', count: 1, spread: 140, shapes: ['shard', 'spark'] }), 0, 0, 800, 600, seeded(2));
+  assert.ok(Math.abs(open[0].sweep - (140 * Math.PI) / 180) < 1e-9 && open[0].trace > 0, 'an open ring is traced');
+  assert.equal(open.filter((p) => p.shape === 'shard').length, 6, 'six shards settle on the rim');
+  assert.equal(open.filter((p) => p.shape === 'spark').length, 1, 'one glint where the line ends');
+});
+
+test('the contour pointer lets go a ring from 4 px to its size over its fade, and keeps the pointer\'s tip clear', () => {
+  const cur = M.cursor({ kind: 'contour', size: 22, len: 3, fade: 650 });
+  assert.deepEqual([cur.kind, cur.size, cur.len, cur.fade, cur.shape], ['contour', 22, 3, 650, undefined]);
+  const r = M.contour(cur, 10, 20, seeded(1));
+  assert.deepEqual([r.shape, r.x, r.y, r.r0, r.s, r.life, r.hole, r.sweep], ['contour', 10, 20, 4, 22, 650, true, Math.PI * 2]);
+  const t = M.typing({ kind: 'contour', count: 8 });
+  const ps = M.keys(t, 100, 50, seeded(3));
+  assert.equal(ps.filter((p) => p.shape === 'contour').length, 1, 'one open bloom');
+  assert.equal(ps.filter((p) => p.shape === 'shard').length, 3, 'at most three flecks a key');
+  assert.ok(ps.every((p) => p.life <= 320), 'gone by about 280 ms');
 });
