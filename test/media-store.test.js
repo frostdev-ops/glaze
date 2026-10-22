@@ -261,10 +261,11 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
   const on = { message: [], changed: [], startup: [], installed: [] };
   const local = { ...seed }, sync = { ...syncSeed }, opened = [];
   const timers = [], localReads = [];
-  let readGate = null;
+  let readGate = null, historyGate = null;
+  const holdHistorySnapshot = () => { let release; historyGate = new Promise((r) => { release = r; }); return () => { historyGate = null; release(); }; };
   const holdSyncSnapshot = () => { let release; const wait = new Promise((r) => { release = r; }); readGate = wait; return () => { readGate = null; release(); }; };
   const area = (store) => ({
-    get: async (k) => { if (store === local) localReads.push(k); if (store === sync && k === null && readGate) await readGate; return k === null ? clone(store) : Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, clone(store[x])])); },
+    get: async (k) => { if (store === local) localReads.push(k); if (store === local && k === 'lookHistory' && historyGate) await historyGate; if (store === sync && k === null && readGate) await readGate; return k === null ? clone(store) : Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, clone(store[x])])); },
     set: async (v) => { Object.assign(store, clone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete store[x]; },
     ...(keyListing && { getKeys: async () => Object.keys(store) }),
@@ -293,11 +294,27 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
     const r = indexedDB.open('glaze-media', 1);
     r.onsuccess = () => { const db = r.result; if (!indexedDB.dbs.get('glaze-media')?.has('files')) return res([]); const st = db.transaction('files').objectStore('files').getAllKeys(); st.onsuccess = () => res(st.result); };
   }));
-  return { on, ask, send, until, local, sync, opened, kept, indexedDB, timers, holdSyncSnapshot, localReads };
+  return { on, ask, send, until, local, sync, opened, kept, indexedDB, timers, holdSyncSnapshot, holdHistorySnapshot, localReads };
 };
 const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://glaze/options.html' };
 const page = { id: 'glaze', frameId: 0, tab: { id: 1 }, url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com' };
 const gallery = { url: 'https://frostdev.io/glaze/looks/', frameId: 0 };
+
+test('worker: a queued editor checkpoint owns its unsaved media before history lands', async () => {
+  const w = worker();
+  const r = await w.ask({ type: 'glaze:media', op: 'put', kind: 'image', b64: M.std(fx('anim.webp')) }, editor);
+  w.local[M.INDEX][r.h].at = 0;
+  const release = w.holdHistorySnapshot();
+  const pending = w.ask({ type: 'glaze:history-checkpoint', theme: { parts: { x: { bg: { media: { type: 'image', src: `file:${r.h}` } } } } } }, editor);
+  for (const f of w.on.changed) f({ lookFavorites: { newValue: [] } }, 'local');
+  await new Promise((r) => setTimeout(r, 25));
+  const kept = await w.kept();
+  release();
+  const answer = await pending;
+  assert.deepEqual(kept, [r.h], 'checkpoint prevents premature collection');
+  assert.equal(answer.ok, true);
+  assert.ok(w.local.lookHistory[0].theme.parts.x.bg.media.src.endsWith(r.h));
+});
 
 test('worker: a gallery Look\'s file waits as pending for the editor\'s answer, outside storage.local', async () => {
   const bytes = fx('spin.json'), h = await M.sha(M.check(bytes, 'bg').bytes), code = await codeWith(h, 'lottie');

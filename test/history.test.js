@@ -72,7 +72,7 @@ const worker = ({ fetch } = {}) => {
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
     chrome: {
       runtime: {
-        getURL: () => 'chrome-extension://x/', getManifest: () => m,
+        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
         openOptionsPage: () => { opened.push('options'); return Promise.resolve(); },
         onMessage: { addListener: (f) => on.message.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
@@ -80,7 +80,7 @@ const worker = ({ fetch } = {}) => {
     },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), context);
-  const send = (msg, sender) => on.message.forEach((f) => f(msg, sender));
+  const send = (msg, sender, reply = () => {}) => on.message.forEach((f) => f(msg, sender, reply));
   const change = (changes) => on.changed.forEach((f) => f(changes, 'sync'));
   const tick = () => new Promise(setImmediate);
   // A glaze2 code is read (for a background file to fetch) before it is offered.
@@ -90,6 +90,37 @@ const worker = ({ fetch } = {}) => {
   };
   return { send, change, tick, settle, timers, local, sync, opened, hold };
 };
+
+test('editor history checkpoints merge on the recording/clear queue and reject untrusted frames', async () => {
+  const w = worker(), editor = { id: 'glaze', url: 'chrome-extension://x/options.html', frameId: 0 };
+  const settle = async () => { for (let i = 0; i < 15; i++) await w.tick(); };
+  const first = wearing('Lagoon'), typed = { ...first, look: { ...first.look, radius: 2 } }, next = wearing('Library');
+  Object.assign(w.sync, first);
+  w.change({ colors: { oldValue: G.GZ_DEFAULTS.colors, newValue: first.colors } });
+  const answers = [];
+  w.send({ type: 'glaze:history-checkpoint', theme: typed }, editor, (r) => answers.push(r));
+  await settle();
+  assert.equal(answers[0]?.ok, true, 'checkpoint acknowledged before a replacement is saved');
+  Object.assign(w.sync, next);
+  w.change({ colors: { oldValue: first.colors, newValue: next.colors } });
+  w.timers.shift()();
+  await settle();
+  assert.ok(H.wearing(typed, H.previous(w.local.lookHistory, next)), 'older burst origin cannot displace typed checkpoint');
+  const release = w.hold();
+  w.send({ type: 'glaze:history-checkpoint', theme: first }, editor);
+  w.send('clear-history', editor);
+  w.send({ type: 'glaze:history-checkpoint', theme: typed }, editor);
+  release();
+  await settle();
+  assert.equal(w.local.lookHistory.length, 1, 'clear wins over earlier checkpoint, later checkpoint survives');
+  assert.ok(H.wearing(typed, w.local.lookHistory[0]));
+  const before = JSON.stringify(w.local.lookHistory);
+  for (const sender of [{ ...editor, id: 'other' }, { ...editor, frameId: 4, tab: { id: 3 } }, { ...editor, url: 'https://school.test/options.html' }]) {
+    w.send({ type: 'glaze:history-checkpoint', theme: first }, sender);
+  }
+  await settle();
+  assert.equal(JSON.stringify(w.local.lookHistory), before);
+});
 
 test('the gallery content script runs only on the gallery, and the background takes codes only from there', async () => {
   const entry = m.content_scripts.find((c) => c.js.includes('lib/gallery.js'));

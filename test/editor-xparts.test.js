@@ -16,6 +16,15 @@ const E = require('../lib/editor-xparts.js');
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const t = (s, vars = {}) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k]);
+
+test('builder redraw never passes absent optional hints as visible null text', () => {
+  const source = read('lib/editor-xparts.js');
+  const section = source.slice(source.indexOf('    const redraw ='), source.indexOf('    // A live region'));
+  const seen = [];
+  const redraw = vm.runInNewContext(`${section}\nredraw`, { document: {}, focusTo: '', CSS: {} });
+  redraw({ replaceChildren: (...kids) => seen.push(...kids) }, ['Site', null, false, 'Tweaks']);
+  assert.deepEqual(seen, ['Site', 'Tweaks']);
+});
 // The worker and the page clean rules with the registry loaded: so do these checks.
 const withRegistry = async (f) => { const was = globalThis.GZ_PARTS; globalThis.GZ_PARTS = Parts; try { return await f(); } finally { if (was === undefined) delete globalThis.GZ_PARTS; else globalThis.GZ_PARTS = was; } };
 const roundTrip = (P) => withRegistry(async () => {
@@ -167,9 +176,11 @@ test('the options page loads the builders in their own sections and redraws them
   assert.match(html, /<script src="lib\/parts\.js"><\/script>[\s\S]*<script src="lib\/editor-xparts\.js"><\/script>[\s\S]*<script src="options\.js"><\/script>/);
   assert.match(js, /GZ_XEDIT\.mount\(\{ s, t, save, refresh, frame, navItems: \(\) => navItems, preview: /);
   assert.match(js.slice(js.indexOf('  const refresh = () => {'), js.indexOf('  const fill = () => {')), /GZ_XEDIT\.render\(\);/);
-  // Its strings are written by the module through t(), so the page holds no untranslated words of its own.
+  // Its strings are written by the module through t(), so the page holds no untranslated words of its own: only the path and
+  // the Reset every section has, which the page's own translation (GZ_I18N.page) takes, and the headings are the module's.
   const own = html.slice(html.indexOf('<section id="look-nav-layout"'), html.indexOf('<section id="motion"'));
-  assert.deepEqual([...own.replace(/<p class="site-scope" translate="no">[^<]*<\/p>/g, '').matchAll(/>([^<]*\p{L}[^<]*)</gu)], []);
+  const bare = own.replace(/<p class="site-scope" translate="no">[^<]*<\/p>/g, '').replace(/<p class="section-path"[^>]*><a [^>]*>[^<]*<\/a><\/p>/g, '').replace(/<button type="button" class="section-reset"[^>]*>Reset section<\/button>/g, '');
+  assert.deepEqual([...bare.matchAll(/>([^<]*\p{L}[^<]*)</gu)], []);
 });
 
 test('the preview draws page tweaks: Ultra through its real runtime, Canvas and Moodle through the rules code on their mock', async () => {

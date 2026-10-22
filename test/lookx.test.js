@@ -160,7 +160,10 @@ test('a rotated favorite is worn like "Use this theme": its palette, look and ba
   assert.equal(w.look.font, 'inter');
   assert.equal(w.look.tooltips, false);
   assert.equal(w.bg.kind, 'aurora');
-  assert.deepEqual(Object.keys(w).sort(), ['auto', 'bg', 'colors', 'look', 'preset']);
+  // The navigation, its bar and the sidebar's look are worn as "Use this theme" wears them (a code that carries none leaves
+  // the student's own); card styles are the cards queue's, and a code's parts are written beside this patch.
+  assert.deepEqual(Object.keys(w).sort(), ['auto', 'bg', 'colors', 'look', 'nav', 'navbar', 'preset', 'sidebar']);
+  assert.deepEqual([w.nav, w.navbar, w.sidebar], [s.nav, s.navbar, s.sidebar]);
 });
 
 test('extras settings: off by default, sanitized', () => {

@@ -19,13 +19,21 @@ const FORMAT = {
   themepx: (v) => (v < 0 ? t('Theme') : `${v}px`),
 };
 
-let hintTimer = 0;
-const hint = (msg, err = false) => {
+let hintTimer = 0, undoHeld = false;
+// `undo`: what an Undo beside the message does. It stays longer, since a change that replaced something is worth a second look,
+// and the "Saved" that follows its own change leaves it be (undoHeld) until the next edit or the end of its time.
+const hint = (msg, err = false, undo = null) => {
   const h = $('#hint');
   h.textContent = msg;
   h.classList.toggle('err', err);
+  undoHeld = !!undo;
+  if (undo) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Undo') });
+    b.addEventListener('click', () => { hint(''); undo(); });
+    h.append(' ', b);
+  }
   clearTimeout(hintTimer);
-  if (msg && !err) hintTimer = setTimeout(() => { h.textContent = ''; }, 2500);
+  if (msg && !err) hintTimer = setTimeout(() => { h.textContent = ''; undoHeld = false; }, undo ? 10000 : 2500);
 };
 
 // ---- search: each child of a section (or of a .group) is a setting. It matches on its own text,
@@ -179,7 +187,7 @@ GZ_UI.load().then((s) => {
     const shown = previewSite === 'ultra' && course ? { ...settings, courses: { ...settings.courses, tinted: GZ_COURSE_TINTED(settings.courses, id, courses) ? [id] : [] } } : settings;
     frame.contentWindow?.postMessage({ gzPreviewContext: { site: previewSite, page: previewPage, viewport: $('#preview-size').value } }, location.origin);
     frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) }, gzPreviewParts: settings === base ? base.parts ?? null : null }, location.origin);
-    renderNav(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
+    renderNav(); renderContrast(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
   };
   const contextPreview = (site, page) => {
     if (!supportedPages[site].includes(page)) page = 'courses';
@@ -227,11 +235,12 @@ GZ_UI.load().then((s) => {
     const navPatch = pendingNav.size ? Object.fromEntries([...pendingNav].map((k) => [k, s.nav[k]])) : undefined;
     const navbarPatch = pendingNavbar.size ? Object.fromEntries([...pendingNavbar].map((k) => [k, s.navbar[k]])) : undefined;
     saving++;
-    GZ_UI.save(s, [...pending], (err) => { saving--; hint(err || t('Saved'), !!err); if (!err) syncSettings(); }, navPatch, partKeys?.length ? partKeys : undefined, navbarPatch);
+    GZ_UI.save(s, [...pending], (err) => { saving--; if (err || !undoHeld) hint(err || t('Saved'), !!err); if (!err) syncSettings(); }, navPatch, partKeys?.length ? partKeys : undefined, navbarPatch);
     pending.clear(); pendingNav.clear(); pendingNavbar.clear(); partKeys = [];
   };
   const save = (keys, soon = false, parts) => {
     settingsRead++;
+    undoHeld = false;
     if (keys.includes('parts')) partKeys = parts && partKeys ? [...new Set([...partKeys, ...parts])] : null;
     for (const k of keys) pending.add(k);
     clearTimeout(timer);
@@ -341,17 +350,36 @@ GZ_UI.load().then((s) => {
     }));
   };
 
-  const renderContrast = () => {
-    $('#contrast').replaceChildren(...GZ_CONTRAST(s.colors).map((r) => {
-      const li = document.createElement('li');
-      li.className = r.pass ? 'pass' : 'fail';
-      li.title = t('Needs {min}:1', { min: r.min });
-      const b = document.createElement('b');
-      b.textContent = `${GZ_I18N.num(+r.ratio.toFixed(1), GZ_I18N.ui())}:1`;
-      li.append(t(r.label), b);
-      return li;
-    }));
-  };
+  // The checks for the palette the pages are drawn with: the Look on offer while one is previewed, else the one worn (an auto
+  // palette, by the system's mode), under its surface color and tint and with its page tweaks' colors (ui.js contrast). Drawn
+  // with the preview, which also redraws when an offer comes or goes, and only when a check changed, so a search's marks on the
+  // list stay. A Look on offer that fails a check says so in its offer.
+  const renderContrast = (() => {
+    let drawn = '';
+    return () => {
+      const v = offer || s, dark = matchMedia('(prefers-color-scheme: dark)').matches;
+      const courseColors = v.look.surfaceTint && v.look.surfaceTintSource === 'course' ? [...new Set([...Object.values(GZ_COURSE_COLORS(courses, v.courses.colors)).map((c) => c.color), ...Object.values(courses).map((c) => c?.color)])].filter(Boolean) : [];
+      const rows = GZ_UI.contrast(v, dark, courseColors, v.parts?.x?.rules);
+      const sig = JSON.stringify([!!offer, rows.map((r) => [r.label, r.part, r.ratio])]);
+      if (sig === drawn) return;
+      drawn = sig;
+      const site = { ultra: 'Blackboard', canvas: 'Canvas', moodle: 'Moodle' };
+      const said = (r) => t(r.label, r.part && { part: `${site[r.part.split('.')[0]]} · ${t(GZ_PARTS.get(r.part)?.label ?? r.part)}` });
+      $('#contrast').replaceChildren(...rows.map((r) => {
+        const li = document.createElement('li');
+        li.className = r.pass ? 'pass' : 'fail';
+        li.title = t('Needs {min}:1', { min: r.min });
+        const b = document.createElement('b');
+        b.textContent = `${GZ_I18N.num(+r.ratio.toFixed(1), GZ_I18N.ui())}:1`;
+        li.append(said(r), b);
+        return li;
+      }));
+      const failing = offer ? rows.filter((r) => !r.pass) : [];
+      const warn = $('#share-contrast');
+      warn.hidden = !failing.length;
+      warn.textContent = failing.length ? t('Text in this Look may be hard to read: {pairs}.', { pairs: new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(failing.map((r) => `${said(r)} (${GZ_I18N.num(Math.floor(r.ratio * 10) / 10, GZ_I18N.ui())}:1)`)) }) : '';
+    };
+  })();
 
   // ---- everything that follows the state, cheap enough to redo on every edit ----
   const outputs = () => {
@@ -360,9 +388,14 @@ GZ_UI.load().then((s) => {
   const refresh = () => {
     GZ_UI.paint(s);
     preview();
-    GZ_UI.looks($('#looks'), s, (L) => { save(GZ_UI.pickLook(s, L)); fill(); });
+    // A whole Look brings its own extras: the Look being left is in History first, and Undo wears it again.
+    GZ_UI.looks($('#looks'), s, (L) => {
+      const undo = leaving();
+      save(GZ_UI.pickLook(s, L));
+      fill();
+      if (undo) hint(t('{name} replaced this Look’s extras.', { name: L.name }), false, undo);
+    });
     GZ_UI.swatches($('#presets'), s, (name, colors) => { save(GZ_UI.pickPreset(s, name, colors)); fill(); });
-    renderContrast();
     renderMine();
     renderHistory();
     renderExtras();
@@ -769,11 +802,19 @@ GZ_UI.load().then((s) => {
   });
 
   // ---- generic controls: data-key is the settings path; radios use it as their name ----
+  // "Use a custom surface color" paints every surface and the ground that one color. Its own default is Frost's navy whatever the
+  // palette is, so a first tick starts from the surface being worn instead, and changes nothing until a color is picked. A color
+  // the student chose before stays.
+  const seedSurface = () => {
+    if (s.look.surfaceColor !== GZ_SPEC.look.surfaceColor[0]) return;
+    s.look.surfaceColor = activeColors()['--gz-surface'];
+    for (const input of $$('[data-key="look.surfaceColor"]')) input.value = s.look.surfaceColor;
+  };
   for (const el of $$('[data-key]')) {
     const key = el.dataset.key;
     if (key === 'nav.size') el.addEventListener('change', () => { s.nav.detailed = false; pendingNav.add('detailed'); });
     if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
-    if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
+    if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'look.surfaceCustom' && el.checked) seedSurface(); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { if (key.startsWith('nav.') && Object.hasOwn(N.dimensions(s.nav), key.slice(4))) { Object.assign(s.nav, N.dimensions(s.nav), { detailed: true }); for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k); } set(key, +el.value); refresh(); save([group(key)], true); });
       el.addEventListener('change', () => save([group(key)]));
@@ -1150,10 +1191,14 @@ GZ_UI.load().then((s) => {
   $('#share-code').addEventListener('paste', () => setTimeout(tryCode));
   $('#share-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryCode(); });
   $('#share-cancel').addEventListener('click', () => { $('#share-code').value = ''; endOffer(); });
+  // A code brings its own extras or none: the Look being left goes into History before the one below replaces it.
+  $('#share-apply').addEventListener('click', () => leaving());
   $('#share-apply').addEventListener('click', () => {
     for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
     s.card = offer.card;
     s.nav = offer.nav;
+    // How Glaze's own navigation bar looks and sits (lib/share.js NAVBAR); whether it is on stays the student's.
+    s.navbar = { ...offer.navbar, on: s.navbar.on };
     // The sidebar's appearance a Look brings (lib/share.js): its style, surface and corners only.
     const sidebarLook = ['style', 'surface', 'radius'].some((k) => s.sidebar[k] !== offer.sidebar[k]);
     if (sidebarLook) for (const k of ['style', 'surface', 'radius']) s.sidebar[k] = offer.sidebar[k];
@@ -1164,7 +1209,7 @@ GZ_UI.load().then((s) => {
     $('#share-code').value = '';
     endOffer(true); // its background file, if it brought one, is kept now
     fill();
-    save([...GZ_HISTORY.KEYS, 'card', 'nav', ...sidebarLook ? ['sidebar'] : []]);
+    save([...GZ_HISTORY.KEYS, 'card', 'nav', 'navbar', ...sidebarLook ? ['sidebar'] : []]);
     hint(t('Theme applied.'));
   });
 
@@ -1212,25 +1257,52 @@ GZ_UI.load().then((s) => {
     }));
     $('#favorites').replaceChildren(...rows.filter(Boolean));
   };
+  // A change that replaces this Look's extras (a whole Look, a code, an entry of History, a reset): the Look being left goes into
+  // History now, since the background records a theme only after 4 s of rest and what was typed in the last moments would be
+  // lost. The worker merges the snapshot on its history/clear queue, even before the editor's first history read finishes.
+  // → how to wear it again, or null when it has no extras to lose.
+  const leaving = () => {
+    if (!s.parts) return null;
+    const was = structuredClone({ colors: s.colors, preset: s.preset, auto: s.auto, look: s.look, bg: s.bg, parts: s.parts, card: s.card });
+    try { chrome.runtime.sendMessage({ type: 'glaze:history-checkpoint', theme: was }, () => void chrome.runtime.lastError); } catch { /* Undo still holds the snapshot if the worker is unavailable. */ }
+    return () => { Object.assign(s, structuredClone(was)); fill(); save([...GZ_HISTORY.KEYS, 'card']); };
+  };
   const wearEntry = (e) => {
     endOffer();
+    leaving();
     Object.assign(s, GZ_HISTORY.wear(s, e));
     fill();
     save(GZ_HISTORY.KEYS);
     hint(t('Theme applied.'));
   };
-  const renderHistory = () => {
-    const back = GZ_HISTORY.previous(history, s);
-    $('#history-back').disabled = !back;
-    $('#history-back').title = back ? t('Back to {name}', { name: GZ_UI.themeName(GZ_HISTORY.theme(back.theme)) }) : '';
-    $('#history-clear').hidden = !history.length;
-    $('#history').replaceChildren(...history.map((e) => {
-      const th = GZ_HISTORY.theme(e.theme);
-      const name = GZ_UI.themeName(th);
-      if (GZ_HISTORY.wearing(s, e)) return row(th.colors, name, t('Wearing now'));
-      return row(th.colors, name, typeof e.at === 'number' ? when(e.at) : '', button(t('Wear'), t('Wear {name}', { name }), () => wearEntry(e)));
-    }));
-  };
+  // Redrawn only when what it shows changes: History itself, or which entries are worn now and which is the Previous Look (a
+  // slider moves neither, so a drag cleans one theme per tick and builds no rows). Each entry's theme and name are made once,
+  // when History comes in (lib/history.js).
+  const renderHistory = (() => {
+    let drawn = '', from = null, entries = [], shown = '';
+    return () => {
+      const worn = JSON.stringify([s.colors, s.preset, s.auto, s.look, s.bg, s.parts, s.presets]);
+      if (worn === drawn && history === from) return;
+      drawn = worn;
+      if (history !== from) {
+        from = history;
+        shown = '';
+        entries = history.map((e) => { const theme = GZ_HISTORY.theme(e.theme); return { ...e, theme, name: GZ_UI.themeName(theme) }; });
+      }
+      const now = GZ_HISTORY.theme(s), wearing = entries.map((e) => GZ_HISTORY.wearing(now, e));
+      const back = GZ_HISTORY.previous(entries, now);
+      const view = `${wearing.map(Number).join('')} ${entries.indexOf(back)}`;
+      if (view === shown) return;
+      shown = view;
+      $('#history-back').disabled = !back;
+      $('#history-back').title = back ? t('Back to {name}', { name: back.name }) : '';
+      $('#history-clear').hidden = !entries.length;
+      $('#history').replaceChildren(...entries.map((e, at) => {
+        if (wearing[at]) return row(e.theme.colors, e.name, t('Wearing now'));
+        return row(e.theme.colors, e.name, typeof e.at === 'number' ? when(e.at) : '', button(t('Wear'), t('Wear {name}', { name: e.name }), () => wearEntry(e)));
+      }));
+    };
+  })();
   $('#history-back').addEventListener('click', () => { const e = GZ_HISTORY.previous(history, s); if (e) wearEntry(e); });
   // Through the background, which also drops a recording still waiting to be written.
   $('#history-clear').addEventListener('click', () => chrome.runtime.sendMessage('clear-history', () => void chrome.runtime.lastError));
@@ -1406,6 +1478,7 @@ GZ_UI.load().then((s) => {
     clearTimeout(armed);
     armed = 0;
     b.textContent = t('Reset everything');
+    leaving();
     const defaults = defaultsHere();
     const touched = GZ_EDITOR.reset(s, Object.keys(defaults), defaults);
     pendingNav.clear();
@@ -1467,9 +1540,22 @@ GZ_UI.load().then((s) => {
     fill(); save(touched);
     });
   }
+  // A Look's own navigation layout and page tweaks are parts of the Look (lib/editor-xparts.js), not settings: the section's
+  // Reset takes that part out of the Look, as its own button does, and can be undone.
+  const LOOK_PART = { 'look/nav-layout': 'nav', 'look/rules': 'rules' };
   for (const button of $$('[data-reset-section]')) button.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
     if (button.dataset.resetSection === 'sharing/relay') return resetRelay();
+    const part = LOOK_PART[button.dataset.resetSection];
+    if (part) {
+      const was = s.parts;
+      if (!was?.x?.[part]) return hint(t('Section reset. Your local data is kept.'));
+      leaving();
+      s.parts = GZ_XEDIT.put(was, part, null);
+      refresh();
+      save(['parts'], false, [part]);
+      return hint(t('Section reset. Your local data is kept.'), false, () => { s.parts = was; refresh(); save(['parts'], false, [part]); });
+    }
     const section = button.closest('[data-editor-section]'), paths = GZ_EDITOR.keys(section);
     const touched = GZ_EDITOR.reset(s, paths, defaultsHere());
     if (touched.includes('nav')) for (const key of paths.filter((p) => p.startsWith('nav.') && !['nav.i', 'nav.li'].includes(p))) pendingNav.add(key.slice(4));

@@ -50,7 +50,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     const s = ctx.settings();
     return [
       ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L), true) })),
-      ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }, true) })),
+      ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }, false) })),
       ...[['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']].map(([m, n]) => ({ label: t('Auto light and dark: {mode}', { mode: t(n) }), hint: (s.auto.on ? s.auto.mode : 'off') === m ? t('Current') : 'Glaze', group: 'Glaze', run: store({ auto: { ...s.auto, on: m !== 'off', ...(m !== 'off' && { mode: m }) } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
       ...Object.entries(ultra ? ULTRA_EXTRAS : moodle ? { overall: CANVAS_EXTRAS.overall } : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
