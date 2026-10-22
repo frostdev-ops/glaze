@@ -60,7 +60,7 @@ test('Moodle panels use session-authenticated same-origin POST and reject failed
   const requests = [];
   const logout = { href: root + '/login/logout.php?sesskey=local-test-key%20%2B%26' };
   const context = vm.createContext({ URL, AbortSignal, location: { href: root + '/my/', origin: 'https://school.test' },
-    document: { querySelector: () => ({ querySelector: () => logout }) },
+    document: { querySelector: () => ({ querySelector: () => logout, querySelectorAll: () => [] }) },
     fetch: async (url, options) => { requests.push([new URL(url), options]); return { ok: true, json: async () => [{ data: { notifications: [] } }] }; } });
   vm.runInContext(fs.readFileSync(require.resolve('../features/navbar-moodle.js'), 'utf8'), context);
   const adapter = context.GZ_NAVBAR_MOODLE({ t: (s) => s });

@@ -2803,6 +2803,7 @@
   "Skip to content": "Naar inhoud gaan",
   "Your account": "Je account",
   "More": "Meer",
+  "Edit mode": "Bewerkmodus",
   "Customize navigation": "Navigatie aanpassen",
   "Collapse navigation": "Navigatie inklappen",
   "Expand navigation": "Navigatie uitklappen",

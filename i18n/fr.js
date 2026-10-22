@@ -2803,6 +2803,7 @@
   "Skip to content": "Aller au contenu",
   "Your account": "Ton compte",
   "More": "Plus",
+  "Edit mode": "Mode édition",
   "Customize navigation": "Personnaliser la navigation",
   "Collapse navigation": "Réduire la navigation",
   "Expand navigation": "Développer la navigation",
