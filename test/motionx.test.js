@@ -252,3 +252,27 @@ test('confetti pieces are drawn as pieces, not dots; the pointer makes its own p
   assert.equal(M.fade({ age: 0, life: 100 }), 0, 'not started: nothing shows');
   assert.ok(M.fade({ age: 10, life: 100 }) > M.fade({ age: 90, life: 100 }));
 });
+
+test('typing effects: each kind makes its particles at the caret, with its own defaults, clamped', () => {
+  for (const kind of M.TYPES) {
+    const t = M.typing({ kind });
+    assert.ok(t.count >= 1 && t.size >= 2 && t.c.length, kind);
+    const ps = M.keys(t, 100, 50, () => 0.5);
+    assert.equal(ps.length, t.count, kind);
+    for (const p of ps) assert.ok(Math.abs(p.x - 100) < 20 && p.y === 50 && p.life > 0 && M.alive(p), kind);
+  }
+  assert.deepEqual(M.typing({ kind: 'ink', size: 100, count: 50, c: ['#ABCDEF', 'nope!'] }), { kind: 'ink', c: ['#abcdef'], size: 24, count: 8 });
+  assert.equal(M.typing({ kind: 'confetti' }), null);
+  assert.equal(M.typing(null), null);
+});
+
+test('the pointer\'s marks and its candle flicker stay in their bounds', () => {
+  for (let t = 0; t < 20000; t += 37) { const f = M.flick(t); assert.ok(f > 0.4 && f <= 1, String(f)); }
+  const cur = M.cursor({ kind: 'orbit', size: 10 });
+  assert.equal(cur.shape, 'star');
+  for (let i = 0; i < 3; i++) { const o = M.orbitAt(cur, i, 3, 1234, 200, 200); assert.ok(Math.hypot(o.x - 200, o.y - 200) < 40); }
+  assert.equal(M.cursor({ kind: 'drift' }).shape, 'petal');
+  assert.equal(M.cursor({ kind: 'trail' }).shape, undefined, 'no mark where the kind draws none');
+  assert.equal(M.cursor({ kind: 'sparkle', shape: 'bat' }).shape, 'bat');
+  assert.equal(M.fx({ kind: 'burst', shapes: ['ghost', 'nope'] }).shapes[0], 'ghost');
+});

@@ -278,6 +278,7 @@ const STYLE_READS = [
   // WP-T2: only where a Look's colour rule meets Glaze settings: the root's palette, Glaze's item, and that part's ancestors
   // up to the first solid background.
   ['features/rules.js', 'getComputedStyle(el)', 1],
+  ['features/motionx.js', 'getComputedStyle(el)', 1], // a typing effect: the one field typed in, once per field (kept), to find its caret
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.
