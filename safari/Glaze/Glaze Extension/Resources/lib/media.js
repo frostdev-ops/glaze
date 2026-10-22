@@ -3,9 +3,9 @@
 // someone else's bytes, so nothing is trusted until it has been read within hard limits: the container is walked (never
 // decoded), its size, frames and pixels are capped, and a file Glaze keeps is the cleaned one (a WebP rebuilt from the
 // chunks that draw, a Lottie file rewritten from what it may hold), named by its SHA-256. Nothing here runs code.
-// Also the worker's 'glaze:media' operations (change): the files this computer keeps for a Look (storage.local
-// `lookMedia:<hash>`, put by the editor, or by a Look share), and the Lottie JSON a page asks for, cleaned, from a kept file
-// or from the address the worn Look names. Classic script for the worker, the editor and node.
+// Also the worker's 'glaze:media' operations (change): the files this computer keeps for a Look (the worker's IndexedDB, with
+// a small index in storage.local; put by the editor, a Look share or the gallery), and the Lottie JSON a page asks for,
+// cleaned, from a kept file or from the address the worn Look names. Classic script for the worker, the editor and node.
 var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
   const S = globalThis.crypto.subtle;
   const te = new TextEncoder(), td = new TextDecoder();
@@ -531,23 +531,99 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
   };
 
   // ---- the files this computer keeps ----------------------------------------------------------------------------
+  // Each file's bytes, as base64 (what a page is handed), live in the worker's own IndexedDB, which no school page can open:
+  // area.files is { get(h), put(h, rec), del([h]), keys() } over records { t: mime, b, c?: Lottie canvases }. storage.local keeps only a small
+  // index, `lookMediaIndex`: { [h]: { t, n: bytes, at: when kept, p: true while only an offer names it } }, so listing and
+  // sizing never read a file. A file is checked and named by its hash when it is put, and trusted after: only put writes it.
   const HASH = /^[\w-]{43}$/;
-  const size = (rec) => (rec && typeof rec.b === 'string' ? Math.floor(rec.b.length * 3 / 4) : 0);
-  // A kept file, read back and checked against its name; null when it is not there or not what it says.
-  const read = async (local, h) => {
-    if (!HASH.test(h)) return null;
-    const rec = (await local.get(`${KEY}${h}`))[`${KEY}${h}`];
+  const INDEX = 'lookMediaIndex';
+  const MINUTE = 60e3, HOUR = 60 * MINUTE;
+  const index = async (local) => {
+    const v = (await local.get(INDEX))[INDEX];
+    return Object.fromEntries(Object.entries(isObj(v) ? v : {}).filter(([h, e]) => HASH.test(h) && isObj(e) && typeof e.t === 'string' && Number.isFinite(e.n)));
+  };
+  const keepIndex = (local, idx) => (Object.keys(idx).length ? local.set({ [INDEX]: idx }) : local.remove(INDEX));
+  const kindOf = (mime) => (mime.startsWith('video/') ? 'video' : mime.startsWith('image/') ? 'image' : 'lottie');
+  // A record checked against the name it is kept under: what it holds, its type and its hash; null when it isn't that file.
+  const verify = async (rec, h) => {
     if (!isObj(rec) || typeof rec.b !== 'string' || typeof rec.t !== 'string') return null;
     let bytes;
     try { bytes = unstd(rec.b); } catch { return null; }
     const got = check(bytes, 'bg');
     return got && got.mime === rec.t && await sha(got.bytes) === h ? got : null;
   };
+  // Files an older Glaze kept as base64 in storage.local (`lookMedia:<hash>`) move to the files store, each checked once more;
+  // one that isn't what its name says is dropped. keys: the storage keys to look at. → { [h]: record } for those moved.
+  const migrate = async ({ local, files }, keys) => {
+    const old = Object.entries(await local.get(keys.filter((k) => k.startsWith(KEY))));
+    const moved = {};
+    if (!old.length) return moved;
+    const idx = await index(local);
+    for (const [k, rec] of old) {
+      const h = k.slice(KEY.length), got = HASH.test(h) && await verify(rec, h);
+      if (!got) continue;
+      await files.put(h, { t: rec.t, b: rec.b, ...(got.canvases && { c: got.canvases }) });
+      idx[h] = { t: rec.t, n: got.bytes.length, at: Date.now() };
+      moved[h] = { t: rec.t, b: rec.b };
+    }
+    // Callers such as Reset must not proceed as if migration finished while a legacy copy can still reappear later.
+    if (Object.keys(moved).length && !await keepIndex(local, idx)) throw new Error('write');
+    if (!await local.remove(old.map(([k]) => k))) throw new Error('write');
+    return moved;
+  };
+  // A kept file's record, as put, or null. One an older Glaze kept moves over the first time it is asked for (in queue's turn).
+  const stored = async (area, h, queue = (f) => f()) => {
+    if (!HASH.test(h)) return null;
+    const rec = await area.files.get(h);
+    if (isObj(rec) && typeof rec.b === 'string' && typeof rec.t === 'string') return rec;
+    return (await queue(() => migrate(area, [`${KEY}${h}`])))[h] || null;
+  };
+  // A kept file, read back and checked against its name (the worker's own reads: a Lottie file's JSON, a share's upload).
+  const read = async (area, h) => { const rec = await stored(area, h); return rec && verify(rec, h); };
   // The file a `file:<hash>` address names.
   const fileOf = (src) => (typeof src === 'string' && src.startsWith('file:') && HASH.test(src.slice(5)) ? src.slice(5) : null);
-  const lottieFrom = async (src, local, env) => {
+  // The files the Looks on this computer name: `now`, the Look worn (its parts, wherever they are kept), and `saved`, history's
+  // and favorites' Looks. decode: lib/share.js decode, for a favorite's code.
+  const uses = async ({ sync, local }, decode) => {
+    const now = new Set(), saved = new Set();
+    const add = (set, parts) => { const h = fileOf(parts?.x?.bg?.media?.src); if (h) set.add(h); };
+    const [{ lookX }, { lookHistory, lookFavorites, rotateLooks }] = await Promise.all([sync ? sync.get('lookX') : {}, local.get(['lookHistory', 'lookFavorites', 'rotateLooks'])]);
+    // A failed read is not evidence that a file is unused: let collection stop and retry later.
+    add(now, await X().fromStored(lookX, local));
+    for (const e of Array.isArray(lookHistory) ? lookHistory : []) add(saved, e?.theme?.parts);
+    for (const f of Array.isArray(lookFavorites) ? lookFavorites : []) {
+      if (typeof f?.code === 'string') add(saved, await Promise.resolve().then(() => decode(f.code)).then((got) => got?.parts, () => null));
+    }
+    for (const code of Array.isArray(rotateLooks) ? rotateLooks : []) {
+      if (typeof code === 'string') add(saved, await Promise.resolve().then(() => decode(code)).then((got) => got?.parts, () => null));
+    }
+    return { now, saved };
+  };
+  // Files no Look names any more go: not the Look worn, nor history's or favorites' (env.decode reads their codes). A file just
+  // kept waits a minute for the Look that names it to be saved, and one only an offer named waits an hour (the editor's Cancel
+  // takes it at once). A record the index doesn't list (a write cut short) goes too, and so does an entry with no record.
+  const collect = async (area, { decode, now = Date.now } = {}) => {
+    const idx = await index(area.local);
+    const named = await uses(area, decode), at = now(), records = new Set(await area.files.keys()), gone = [];
+    let changed = false;
+    for (const [h, e] of Object.entries(idx)) {
+      const used = named.now.has(h) || named.saved.has(h);
+      if (!records.has(h) || (!used && at - (e.at || 0) > (e.p ? HOUR : MINUTE))) { delete idx[h]; gone.push(h); changed = true; } else if (used && e.p) { delete e.p; changed = true; }
+    }
+    if (changed && !await keepIndex(area.local, idx)) return { ok: false, error: 'write', gone: [] };
+    const drop = [...records].filter((h) => !Object.hasOwn(idx, h));
+    if (drop.length) await area.files.del(drop);
+    return { ok: true, gone };
+  };
+  const lottieFrom = async (src, area, env) => {
     const h = fileOf(src);
-    if (h) { const f = await read(local, h); return f?.type === 'lottie' ? { ok: true, json: JSON.parse(td.decode(f.bytes)), canvases: f.canvases } : { ok: false, error: 'missing' }; }
+    if (h) {
+      const rec = await stored(area, h);
+      // The canvas budget was checked when kept, just as its hash was: pages need neither check again.
+      if (rec?.t === 'application/json' && Number.isInteger(rec.c) && rec.c > 0) return { ok: true, json: JSON.parse(td.decode(unstd(rec.b))), canvases: rec.c };
+      const f = rec && await read(area, h); // an older record without the checked budget
+      return f?.type === 'lottie' ? { ok: true, json: JSON.parse(td.decode(f.bytes)), canvases: f.canvases } : { ok: false, error: 'missing' };
+    }
     const url = X().MEDIA.url(src);
     if (!url || url !== src || !env.fetch) return { ok: false, error: 'bad' };
     if (!await env.allow(src)) return { ok: false, error: 'bad' };
@@ -600,15 +676,51 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
     return { ok: true, b64: std(cat(...parts)) };
   };
 
-  // ops: put { kind, b64, expect? } → { ok, h (its name), type, mime, size, width?, height?, frames? }; list; drop { h }; lottie { src } → { ok, json }.
-  // env: { fetch, allow(src) → whether this page may have that address fetched } for lottie.
-  const change = async (m, { local }, env = {}) => {
+  // ops: put { kind, b64, expect?, pending? } → { ok, h (its name), type, mime, size, width?, height?, frames? }; list → { files:
+  // [{ h, t, size, pending?, saved? }] }; drop { h, pending? }; keep { h } (an offer's file, now used); reset; file { h } →
+  // { ok, mime, b64 } (as kept, for a page); lottie { src } → { ok, json }. area: { local, sync, files }.
+  // env: { fetch, allow(src) → whether this page may have that address fetched } for lottie; decode (lib/share.js) for list's
+  // `saved`; queue for moving a file an older Glaze kept.
+  const change = async (m, area, env = {}) => {
+    const { local, files } = area;
     if (m.op === 'list') {
-      const all = await local.get(null);
-      return { ok: true, files: Object.entries(all).filter(([k]) => k.startsWith(KEY) && HASH.test(k.slice(KEY.length))).map(([k, v]) => ({ h: k.slice(KEY.length), t: v?.t, size: size(v) })) };
+      const idx = await index(local), named = env.decode && Object.keys(idx).length ? await uses(area, env.decode) : null;
+      return { ok: true, files: Object.entries(idx).map(([h, e]) => ({ h, t: e.t, size: e.n, ...(e.p && { pending: true }), ...(named?.saved.has(h) && { saved: true }) })) };
     }
-    if (m.op === 'drop') return HASH.test(m.h) ? { ok: await local.remove(`${KEY}${m.h}`) } : { ok: false, error: 'bad' };
-    if (m.op === 'lottie') return lottieFrom(m.src, local, env);
+    if (m.op === 'reset') {
+      // The records first: an index left behind by a failed reset is forgotten by collect, a record without one would not be.
+      const all = [...new Set([...Object.keys(await index(local)), ...await files.keys()])];
+      if (all.length) await files.del(all);
+      return { ok: !!await local.remove(INDEX) };
+    }
+    if (m.op === 'lottie') return lottieFrom(m.src, area, env);
+    if (['file', 'drop', 'keep'].includes(m.op) && !HASH.test(m.h)) return { ok: false, error: 'bad' };
+    if (m.op === 'file') {
+      const rec = await stored(area, m.h, env.queue);
+      return rec ? { ok: true, mime: rec.t, b64: rec.b } : { ok: false, error: 'missing' };
+    }
+    if (m.op === 'drop' || m.op === 'keep') {
+      const idx = await index(local), e = idx[m.h];
+      if (m.op === 'keep') {
+        if (!e) return { ok: false, error: 'missing' };
+        delete e.p;
+        e.at = Date.now();
+        return { ok: await keepIndex(local, idx) };
+      }
+      // A cancelled offer takes its file only while nothing else has kept it.
+      if (m.pending === true && !e?.p) return { ok: true };
+      if (m.pending === true) {
+        const named = await uses(area, env.decode);
+        if (named.now.has(m.h) || named.saved.has(m.h)) {
+          delete e.p;
+          return { ok: await keepIndex(local, idx) };
+        }
+      }
+      delete idx[m.h];
+      if (e && !await keepIndex(local, idx)) return { ok: false, error: 'write' };
+      await files.del([m.h]);
+      return { ok: true };
+    }
     if (m.op !== 'put' || !TYPES.includes(m.kind) || typeof m.b64 !== 'string') return { ok: false, error: 'bad' };
     const cap = m.kind === 'video' ? LIMIT.bg.video : m.kind === 'image' ? LIMIT.bg.image.bytes : LIMIT.bg.lottie;
     if (m.b64.length > Math.ceil(cap * 4 / 3) + 8 || !/^[A-Za-z0-9+/]*={0,2}$/.test(m.b64)) return { ok: false, error: 'big' };
@@ -620,14 +732,26 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
     // expect: the name a Look gave the file; bytes that are not that file are not kept.
     if (m.expect !== undefined && m.expect !== h) return { ok: false, error: 'hash' };
     const kept = { ok: true, h, type: got.type, mime: got.mime, size: got.bytes.length, width: got.w, height: got.h, frames: got.frames };
-    const all = await local.get(null);
-    if (all[`${KEY}${h}`]?.b === std(got.bytes)) return kept;
-    const others = Object.entries(all).filter(([k]) => k.startsWith(KEY) && k !== `${KEY}${h}`).reduce((n, [, v]) => n + size(v), 0);
+    const idx = await index(local), had = idx[h], at = Date.now();
+    // Kept already: an offer never makes a kept file pending again, and putting it outside an offer keeps it for good.
+    if (had && (await files.keys()).includes(h)) {
+      if (m.pending !== true) delete had.p;
+      had.at = at;
+      return await keepIndex(local, idx) ? kept : { ok: false, error: 'write' };
+    }
+    // No room: offers nobody answered make way first, oldest first.
+    let others = Object.entries(idx).reduce((n, [k, e]) => n + (k === h ? 0 : e.n), 0);
+    const named = others + got.bytes.length > LIMIT.total ? await uses(area, env.decode) : null;
+    const spare = Object.entries(idx).filter(([k, e]) => k !== h && e.p && !named?.now.has(k) && !named?.saved.has(k)).sort(([, a], [, b]) => (a.at || 0) - (b.at || 0)), freed = [];
+    while (others + got.bytes.length > LIMIT.total && spare.length) { const [k, e] = spare.shift(); others -= e.n; delete idx[k]; freed.push(k); }
     if (others + got.bytes.length > LIMIT.total) return { ok: false, error: 'full' };
-    if (!await local.set({ [`${KEY}${h}`]: { t: got.mime, b: std(got.bytes) } })) return { ok: false, error: 'write' };
+    try { await files.put(h, { t: got.mime, b: std(got.bytes), ...(got.canvases && { c: got.canvases }) }); } catch { return { ok: false, error: 'write' }; }
+    idx[h] = { t: got.mime, n: got.bytes.length, at, ...(m.pending === true && { p: true }) };
+    if (!await keepIndex(local, idx)) { await Promise.resolve().then(() => files.del([h])).catch(() => {}); return { ok: false, error: 'write' }; }
+    if (freed.length) await files.del(freed);
     return kept;
   };
 
-  return { LIMIT, TYPES, KEY, HASH, GALLERY, std, unstd, b64u, sha, webp, png, avif, video, lottie, check, packs, read, fileOf, fromGallery, change };
+  return { LIMIT, TYPES, KEY, INDEX, HASH, GALLERY, std, unstd, b64u, sha, webp, png, avif, video, lottie, check, packs, index, kindOf, migrate, read, fileOf, uses, collect, fromGallery, change };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MEDIA; else GZ_MEDIA;

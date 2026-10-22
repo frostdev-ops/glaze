@@ -20,6 +20,11 @@ const area = (data = {}) => ({
   async set(p) { Object.assign(data, structuredClone(p)); return true; },
   async remove(k) { for (const x of [].concat(k)) delete data[x]; return true; },
 });
+// Where the worker keeps a Look's files (lib/media.js): an index in storage.local and the records in its files store.
+const keeping = () => {
+  const records = new Map();
+  return { records, local: area(), files: { get: async (h) => structuredClone(records.get(h)), put: async (h, v) => { records.set(h, v); }, del: async (hs) => { for (const h of hs) records.delete(h); }, keys: async () => [...records.keys()] } };
+};
 
 // ---- a gallery Look's file ----------------------------------------------------------------------------------------------
 const respond = (bytes, { status = 200, length, chunk = 1 << 16, headers = {} } = {}) => {
@@ -37,8 +42,8 @@ test('fromGallery asks the one fixed address, with no cookies, no referrer and n
   assert.equal(asked[0][0], `https://frostdev.io/glaze/looks/api/media/${h}`);
   assert.deepEqual([asked[0][1].credentials, asked[0][1].referrerPolicy, asked[0][1].redirect, asked[0][1].method], ['omit', 'no-referrer', 'error', 'GET']);
   assert.ok(asked[0][1].signal instanceof AbortSignal, 'a time limit');
-  const local = area();
-  const kept = await M.change({ op: 'put', kind: 'video', b64: got.b64, expect: h }, { local });
+  const local = keeping();
+  const kept = await M.change({ op: 'put', kind: 'video', b64: got.b64, expect: h }, local);
   assert.deepEqual([kept.ok, kept.h], [true, h]);
   assert.ok((await M.read(local, h))?.type === 'video');
 });
@@ -59,12 +64,12 @@ test('fromGallery refuses what is not that file: bad names, a redirect, an error
   assert.deepEqual(await M.fromGallery(h, 'lottie', { fetch: async () => respond(huge, { length: 10 }) }), { ok: false, error: 'big' }, 'more bytes than it said, counted as they come');
   assert.deepEqual(await M.fromGallery(h, 'image', { fetch: async () => respond(new Uint8Array(M.LIMIT.bg.image.bytes + 1)) }), { ok: false, error: 'big' }, 'a picture over its cap');
   // Downloaded, but not the file the Look names, or not of its type: put refuses to keep it.
-  const local = area();
+  const local = keeping();
   const other = await M.fromGallery(h, 'video', { fetch: async () => respond(fx('clip.mp4')) });
-  assert.deepEqual(await M.change({ op: 'put', kind: 'video', b64: other.b64, expect: h }, { local }), { ok: false, error: 'hash' }, 'another file');
+  assert.deepEqual(await M.change({ op: 'put', kind: 'video', b64: other.b64, expect: h }, local), { ok: false, error: 'hash' }, 'another file');
   const lottie = await M.fromGallery(h, 'video', { fetch: async () => respond(fx('spin.json')) });
-  assert.deepEqual(await M.change({ op: 'put', kind: 'video', b64: lottie.b64, expect: h }, { local }), { ok: false, error: 'type' }, 'another type');
-  assert.deepEqual(local.data, {});
+  assert.deepEqual(await M.change({ op: 'put', kind: 'video', b64: lottie.b64, expect: h }, local), { ok: false, error: 'type' }, 'another type');
+  assert.deepEqual([local.local.data, local.records.size], [{}, 0]);
 });
 
 // ---- Look parts: a bundle file is a mod's, never a Look's -----------------------------------------------------------------

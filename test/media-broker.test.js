@@ -25,6 +25,7 @@ const rig = async ({ worn = URL1, lms = 'https://school.instructure.com', instal
   const sync = { lookX }, local2 = installed;
   const ctx = vm.createContext({
     BROKER: {}, BROKER_FILES: {}, GZ_MEDIA: M, GZ_XPARTS: X, GZ_MODBROKER: B, importScripts() {}, URL, console,
+    MEDIA_FILES: { get: async () => undefined, put: async () => {}, del: async () => {}, keys: async () => [] },
     chrome: { runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, onMessage: { addListener: (f) => listeners.push(f) } } },
     fromEditor: (s) => s.id === 'glaze' && s.url?.split(/[?#]/)[0] === 'chrome-extension://glaze/options.html',
     fromLms: async (s) => (s.id === 'glaze' && s.tab && s.frameId === 0 && s.url?.startsWith(lms) ? lms : null),
@@ -40,10 +41,10 @@ const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://glaze/options
 const preview = { id: 'glaze', frameId: 0, url: 'chrome-extension://glaze/preview.html?site=ultra' };
 const page = { id: 'glaze', frameId: 0, tab: { id: 1 }, url: 'https://school.instructure.com/ultra/stream' };
 
-test('only the editor\'s top frame puts, lists and drops the files kept for a Look', async () => {
+test('only the editor\'s top frame puts, lists, keeps, drops and resets the files kept for a Look', async () => {
   const { media } = await rig();
-  for (const op of ['put', 'list', 'drop']) assert.equal(media.allow({ op }, editor), true, op);
-  for (const op of ['lottie', 'nope', undefined]) assert.equal(media.allow({ op }, editor), false, String(op));
+  for (const op of ['put', 'list', 'drop', 'keep', 'reset']) assert.equal(media.allow({ op }, editor), true, op);
+  for (const op of ['lottie', 'file', 'nope', undefined]) assert.equal(media.allow({ op }, editor), false, String(op));
   for (const s of [{ ...editor, frameId: 1 }, preview, page, { ...editor, id: 'another-extension' }, { id: 'glaze', frameId: 0, url: 'https://evil.example/options.html' }]) assert.equal(media.allow({ op: 'put' }, s), false, JSON.stringify(s));
   assert.equal(typeof media.run, 'function');
 });

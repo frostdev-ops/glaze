@@ -36,23 +36,28 @@ const start = async (t) => {
   const address = await r.listen(0, '127.0.0.1');
   return { url: `http://127.0.0.1:${address.port}`, blobs: path.join(dir, 'blobs') };
 };
+// The worker's store of files kept for Looks' backgrounds (lib/media.js), by hash.
+const keptFiles = () => {
+  const records = new Map();
+  return { records, get: async (h) => clone(records.get(h)), put: async (h, v) => { records.set(h, clone(v)); }, del: async (hs) => { for (const h of hs) records.delete(h); }, keys: async () => [...records.keys()] };
+};
 const device = (url) => {
-  const local = localArea({ 'notesIdx:https://school.instructure.com/5': N.clean({}), 'todo:https://school.instructure.com/5': T.clean({}) }), settings = localArea(), db = database();
-  const d = { local, settings, db, requests: [], offered: [], fetch };
-  d.worker = S.make({ local, sync: settings, db, notes: notesDB(), relay: url, dev: true, permission: async () => true, offerLook: async (code) => { d.offered.push(code); return true; },
+  const local = localArea({ 'notesIdx:https://school.instructure.com/5': N.clean({}), 'todo:https://school.instructure.com/5': T.clean({}) }), settings = localArea(), db = database(), files = keptFiles();
+  const d = { local, settings, db, files, kept: { local, sync: settings, files }, requests: [], offered: [], media: [], fetch };
+  d.worker = S.make({ local, sync: settings, db, notes: notesDB(), keptFiles: files, relay: url, dev: true, permission: async () => true, offerLook: async (code, name, media) => { d.offered.push(code); d.media.push(media); return true; },
     fetch: (...a) => { d.requests.push(a[0]); return d.fetch(...a); }, WebSocket });
   d.send = (op, rest = {}) => d.worker.handle({ op, ...rest });
   return d;
 };
 // A device wearing a Look whose background is `file` kept on it.
 const wear = async (d, file, extra = {}) => {
-  const put = await M.change({ op: 'put', kind: 'image', b64: M.std(file) }, { local: d.local });
+  const put = await M.change({ op: 'put', kind: 'image', b64: M.std(file) }, d.kept);
   Object.assign(d.settings.data, { bg: { kind: 'media' }, lookX: await X.pack({ x: { bg: { media: { type: 'image', src: `file:${put.h}`, fit: 'cover', ...extra } } } }) });
   return put.h;
 };
 const files = (dir) => fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => path.join(e.parentPath, e.name));
 
-test('a Look with a media file: the file goes up once, encrypted, and the follower keeps exactly it before the Look is offered', async (t) => {
+test('a Look with a media file: the file goes up once, encrypted, and the follower keeps exactly it, pending, before the Look is offered', async (t) => {
   const { url, blobs } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });
   const h = await wear(a, fx('anim.webp'));
@@ -63,15 +68,19 @@ test('a Look with a media file: the file goes up once, encrypted, and the follow
   assert.equal(sent.length, 1, 'one encrypted file on the relay');
   const bytes = fs.readFileSync(sent[0]);
   assert.equal(Buffer.from(bytes).includes(Buffer.from(fx('anim.webp').subarray(0, 12))), false, 'the relay holds nothing it could read');
-  assert.equal(`lookMedia:${h}` in b.local.data, false, 'following keeps nothing yet');
+  assert.equal(b.files.records.has(h), false, 'following keeps nothing yet');
   await b.send('useLook', look);
   assert.equal(b.offered.length, 1);
   const got = await L.decode(b.offered[0]);
   assert.equal(got.parts.x.bg.media.src, `file:${h}`);
   assert.equal(got.bg.kind, 'media');
-  const kept = await M.read(b.local, h);
+  const kept = await M.read(b.kept, h);
   assert.deepEqual([kept.type, kept.mime], ['image', 'image/webp']);
   assert.deepEqual(Buffer.from(kept.bytes), Buffer.from(fx('anim.webp')));
+  // Kept pending, as a gallery Look's file is: the editor lets it go unless the student uses the Look.
+  assert.deepEqual(b.media, [{ h, pending: true }]);
+  assert.equal(b.local.data[M.INDEX][h].p, true);
+  assert.equal(Object.keys(b.local.data).some((k) => k.startsWith('lookMedia:')), false, 'nothing in storage.local but the index');
   assert.deepEqual(b.settings.data, {}, 'following never changes the theme');
   // Syncing again uploads nothing more.
   await a.send('sync', look); await a.send('sync', look);
@@ -91,8 +100,8 @@ test('a changed media file replaces the one shared; a Look whose file is not her
   assert.equal(files(blobs).length, 1, 'the new file is a new upload, and the one it replaced is gone from the relay');
   await b.send('useLook', look);
   assert.equal((await L.decode(b.offered.at(-1))).parts.x.bg.media.src, `file:${second}`);
-  assert.equal((await M.read(b.local, second)).mime, 'image/webp');
-  assert.equal((await M.change({ op: 'list' }, { local: b.local })).files.some((f) => f.h === second), true);
+  assert.equal((await M.read(b.kept, second)).mime, 'image/webp');
+  assert.equal((await M.change({ op: 'list' }, b.kept)).files.some((f) => f.h === second), true);
   // The Look names a file this device does not have: the code is shared, and no file entity is made.
   const c = device(url), d = device(url);
   t.after(() => { c.worker.stop(); d.worker.stop(); });
@@ -102,7 +111,7 @@ test('a changed media file replaces the one shared; a Look whose file is not her
   await c.send('sync', empty); await d.send('sync', empty);
   await d.send('useLook', empty);
   assert.equal((await L.decode(d.offered[0])).parts.x.bg.media.src, `file:${'A'.repeat(43)}`);
-  assert.deepEqual(Object.keys(d.local.data).filter((k) => k.startsWith('lookMedia:')), [], 'nothing to keep');
+  assert.deepEqual([d.files.records.size, d.local.data[M.INDEX]], [0, undefined], 'nothing to keep');
   // A media Look that is not worn as media (another kind) shares no file.
   const e = device(url);
   t.after(() => e.worker.stop());
@@ -129,7 +138,7 @@ test('the media file goes off the relay when the Look stops using it, and comes 
   await a.send('sync', look); await b.send('sync', look);
   assert.equal(files(blobs).length, 1, 'worn again, the file is sent again');
   await b.send('useLook', look);
-  assert.deepEqual(Buffer.from((await M.read(b.local, h)).bytes), Buffer.from(fx('anim.webp')));
+  assert.deepEqual(Buffer.from((await M.read(b.kept, h)).bytes), Buffer.from(fx('anim.webp')));
 });
 
 test('retrying a changed media upload never reuses the previous background file', async (t) => {
@@ -147,7 +156,7 @@ test('retrying a changed media upload never reuses the previous background file'
   await b.send('sync', look);
   await b.send('useLook', look);
   assert.equal((await L.decode(b.offered.at(-1))).parts.x.bg.media.src, `file:${h}`);
-  assert.deepEqual(Buffer.from((await M.read(b.local, h))?.bytes || []), Buffer.from(fx('still.webp')));
+  assert.deepEqual(Buffer.from((await M.read(b.kept, h))?.bytes || []), Buffer.from(fx('still.webp')));
 });
 
 test('a file that is not the one the Look names is not kept', async (t) => {
@@ -163,16 +172,31 @@ test('a file that is not the one the Look names is not kept', async (t) => {
   assert.ok(key, 'the file reached the follower');
   b.db.stores.files.set(key, { ...b.db.stores.files.get(key), bytes: fx('still.webp') });
   await b.send('useLook', look);
-  assert.equal(`lookMedia:${h}` in b.local.data, false, 'bytes that are not the file named are not kept');
-  assert.deepEqual(Object.keys(b.local.data).filter((k) => k.startsWith('lookMedia:')), []);
+  assert.equal(b.files.records.has(h), false, 'bytes that are not the file named are not kept');
+  assert.deepEqual([b.files.records.size, b.local.data[M.INDEX]], [0, undefined]);
   assert.equal(b.offered.length, 1, 'the Look itself is still offered');
+  assert.deepEqual(b.media, [{ h, error: 'hash' }], 'and the editor is told why its file is not here');
   // Bytes that are not media at all.
   b.db.stores.files.set(key, { ...b.db.stores.files.get(key), bytes: new TextEncoder().encode('<script>alert(1)</script>') });
   await b.send('useLook', look);
-  assert.deepEqual(Object.keys(b.local.data).filter((k) => k.startsWith('lookMedia:')), []);
+  assert.deepEqual([b.files.records.size, b.local.data[M.INDEX]], [0, undefined]);
 });
 
-test('Reset everything takes the kept media files with the rest of what a Look keeps on this computer', () => {
+test('a Look share offered when there is no room for its file says so', async (t) => {
+  const { url } = await start(t), a = device(url), b = device(url);
+  t.after(() => { a.worker.stop(); b.worker.stop(); });
+  const h = await wear(a, fx('anim.webp'));
+  const look = await a.send('create', { kind: 'look', title: 'Moving' });
+  await b.send('join', { link: (await a.send('link', look)).link });
+  await a.send('sync', look); await b.send('sync', look);
+  b.local.data[M.INDEX] = { ['B'.repeat(43)]: { t: 'video/webm', n: M.LIMIT.total, at: Date.now() } };
+  b.files.records.set('B'.repeat(43), { t: 'video/webm', b: 'AAAA' });
+  await b.send('useLook', look);
+  assert.deepEqual(b.media, [{ h, error: 'full' }]);
+  assert.equal(b.files.records.has(h), false);
+});
+
+test('a stray old-style kept file is still taken by the sticker reset\'s rule', () => {
   const L2 = require('../lib/lookx.js');
   assert.equal(L2.RESET('lookMedia:abc'), true);
   assert.equal(L2.RESET('lookMedia'), false);

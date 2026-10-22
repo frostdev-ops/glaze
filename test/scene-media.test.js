@@ -215,13 +215,16 @@ test('nothing waits on a timer until the page is resized, and a resize does noth
 
 // ---- a file kept on this computer ---------------------------------------------------------------------------------------
 const bytes = Uint8Array.from({ length: 300 }, (_, i) => i & 255);
-const kept = (rec) => ({ [`lookMedia:${rec.h}`]: { t: rec.t, b: Buffer.from(rec.bytes).toString('base64') } });
+// The worker's answer to 'glaze:keptFile' (lib/background.js): the file as it was kept, checked and named when it was put.
+const answer = (h, reply) => async (m) => (m.type === 'glaze:keptFile' && m.h === h ? reply : { ok: false, error: 'missing' });
+const kept = (rec) => answer(rec.h, { ok: true, mime: rec.t, b64: Buffer.from(rec.bytes).toString('base64') });
 
-test('a kept file is read back, checked against its name, and played from a blob address that is revoked after', async () => {
+test('a kept file is asked of the worker and played from a blob address that is revoked after', async () => {
   const e0 = env();
   const h = e0.sha(bytes);
-  const r = rig({ storage: kept({ h, t: 'video/webm', bytes }) });
+  const r = rig({ ask: kept({ h, t: 'video/webm', bytes }) });
   const v = await video(r, { type: 'video', src: `file:${h}` });
+  assert.deepEqual(plain(r.e.messages), [{ type: 'glaze:keptFile', h }]);
   assert.deepEqual(r.e.blobs, [['blob:glaze/0', 300, 'video/webm']]);
   assert.equal(v.src, 'blob:glaze/0');
   assert.equal(v.plays, 1);
@@ -229,17 +232,18 @@ test('a kept file is read back, checked against its name, and played from a blob
   assert.deepEqual(r.e.revoked, ['blob:glaze/0']);
 });
 
-test('a kept file that is missing, changed or the wrong kind is not shown', async () => {
+// Whether the bytes are the file named was settled when the worker kept them (lib/media.js put); the page doesn't hash them.
+test('a kept file that is missing, the wrong kind or not an answer is not shown', async () => {
   const h = env().sha(bytes);
-  for (const [why, storage, media] of [
-    ['missing', {}, { type: 'video', src: `file:${h}` }],
-    ['changed', kept({ h, t: 'video/webm', bytes: bytes.map((b) => b ^ 1) }), { type: 'video', src: `file:${h}` }],
+  for (const [why, ask, media] of [
+    ['missing', answer(h, { ok: false, error: 'missing' }), { type: 'video', src: `file:${h}` }],
+    ['no worker', async () => null, { type: 'video', src: `file:${h}` }],
     ['a picture where a video was asked for', kept({ h, t: 'image/webp', bytes }), { type: 'video', src: `file:${h}` }],
     ['a type nobody plays', kept({ h, t: 'text/html', bytes }), { type: 'video', src: `file:${h}` }],
-    ['a record that is not one', { [`lookMedia:${h}`]: 'x' }, { type: 'video', src: `file:${h}` }],
-    ['a name that is not base64', { [`lookMedia:${h}`]: { t: 'video/webm', b: '!!' } }, { type: 'video', src: `file:${h}` }],
+    ['an answer that is not one', answer(h, { ok: true, mime: 'video/webm' }), { type: 'video', src: `file:${h}` }],
+    ['bytes that are not base64', answer(h, { ok: true, mime: 'video/webm', b64: '!!' }), { type: 'video', src: `file:${h}` }],
   ]) {
-    const r = rig({ storage });
+    const r = rig({ ask });
     r.scene.update(o(media));
     await settle();
     assert.deepEqual([why, r.fails, r.e.blobs.length, r.e.srcs.length], [why, ['file'], 0, 0]);
@@ -287,7 +291,7 @@ test('a page that opens with motion off never puts the moving picture on the pag
 
 test('a picture from a kept file takes its first frame from its own bytes', async () => {
   const h = env().sha(bytes);
-  const r = rig({ storage: kept({ h, t: 'image/webp', bytes }) });
+  const r = rig({ ask: kept({ h, t: 'image/webp', bytes }) });
   r.scene.update(o({ type: 'image', src: `file:${h}` }, { speed: 0 }));
   await settle();
   assert.equal(r.e.bitmapClosed, true, 'decoded from the bytes, then let go');
@@ -445,7 +449,7 @@ test('stopping or replacing a Lottie that is still loading destroys its renderer
 test('a still image that decodes late cannot clear a picture that has resumed playing', async () => {
   let release;
   const bitmapWait = new Promise((done) => { release = done; });
-  const h = env().sha(bytes), r = rig({ storage: kept({ h, t: 'image/webp', bytes }), bitmapWait });
+  const h = env().sha(bytes), r = rig({ ask: kept({ h, t: 'image/webp', bytes }), bitmapWait });
   const spec = { type: 'image', src: `file:${h}` };
   r.scene.update(o(spec));
   await settle();
@@ -473,7 +477,7 @@ test('stopping before a media source resolves prevents a late network load', asy
 test('abandoning a kept video before its first frame revokes its blob immediately', async () => {
   const h = env().sha(bytes);
   for (const stop of [true, false]) {
-    const r = rig({ storage: kept({ h, t: 'video/webm', bytes }) });
+    const r = rig({ ask: kept({ h, t: 'video/webm', bytes }) });
     r.scene.update(o({ type: 'video', src: `file:${h}` }));
     await settle();
     const pending = kinds(r.e, 'video')[0];

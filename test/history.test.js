@@ -5,6 +5,8 @@ const vm = require('node:vm');
 const H = require('../lib/history.js');
 const G = require('../defaults.js');
 const m = require('../manifest.json');
+const M = require('../lib/media.js');
+const { fakeIDB } = require('./helpers/fake-idb.cjs');
 
 const looks = Object.fromEntries(G.GZ_LOOKS.map((L) => [L.name, L]));
 const wearing = (name, s = G.GZ_DEFAULTS) => G.GZ_SANITIZE({ ...s, ...G.GZ_LOOK_APPLY(s, looks[name]) });
@@ -65,6 +67,7 @@ const worker = ({ fetch } = {}) => {
   });
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
+    ...fakeIDB(), // the worker's own IndexedDB, where it keeps a Look's files
     setTimeout: (f) => timers.push(f), clearTimeout: () => timers.splice(0),
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
     chrome: {
@@ -297,9 +300,9 @@ test('gallery Look names and authors lose bidi and control characters before sto
   assert.deepEqual(w.local.galleryOffer, { code: 'glaze2:abc', name: 'abc', author: 'xy' });
 });
 
-// A gallery Look whose background is a file: the worker fetches that one file from the gallery and keeps it before the
-// editor opens; anything wrong with it still offers the Look, without the file.
-test('a gallery Look\'s background file is fetched from the gallery and kept by its name before the offer', async () => {
+// A gallery Look whose background is a file: the worker fetches that one file from the gallery and keeps it, pending, before
+// the editor opens (test/media-store.test.js follows it there); anything wrong with it still offers the Look, without the file.
+test('a gallery Look\'s background file is fetched from the gallery and kept by its name, pending, before the offer', async () => {
   const S = require('../lib/share.js'), M = require('../lib/media.js');
   const bytes = fs.readFileSync(require.resolve('./fixtures/media/spin.json'));
   const h = await M.sha(M.check(new Uint8Array(bytes), 'bg').bytes);
@@ -311,21 +314,23 @@ test('a gallery Look\'s background file is fetched from the gallery and kept by 
   w.send({ gallery: { code, name: 'Spin' } }, { url, frameId: 0 });
   await w.settle();
   assert.deepEqual(asked, [[`https://frostdev.io/glaze/looks/api/media/${h}`, 'omit', 'error', 'no-referrer']]);
-  assert.equal(w.local[`lookMedia:${h}`]?.t, 'application/json');
+  assert.deepEqual([w.local[M.INDEX]?.[h]?.t, w.local[M.INDEX]?.[h]?.p], ['application/json', true]);
   assert.equal(w.local.galleryOffer?.code, code);
+  assert.deepEqual(w.local.galleryOffer?.media, { h, pending: true });
   // Kept already: nothing is fetched.
   delete w.local.galleryOffer;
   w.send({ gallery: { code, name: 'Spin' } }, { url, frameId: 0 });
   await w.settle();
   assert.equal(asked.length, 1);
   assert.equal(w.local.galleryOffer?.code, code);
-  // The wrong file, or no gallery: offered all the same, nothing kept.
-  for (const f of [serve('{"not":"it"}'), serve(fs.readFileSync(require.resolve('./fixtures/media/clip.webm'))), async () => { throw new TypeError('offline'); }]) {
+  // The wrong file, or no gallery: offered all the same, nothing kept, and the editor told why.
+  for (const [f, error] of [[serve('{"not":"it"}'), 'type'], [serve(fs.readFileSync(require.resolve('./fixtures/media/clip.webm'))), 'type'], [async () => { throw new TypeError('offline'); }, 'network']]) {
     const v = worker({ fetch: f });
     v.send({ gallery: { code, name: 'Spin' } }, { url, frameId: 0 });
     await v.settle();
     assert.equal(v.local.galleryOffer?.code, code);
-    assert.equal(Object.keys(v.local).some((k) => k.startsWith('lookMedia:')), false);
+    assert.deepEqual(v.local.galleryOffer?.media, { h, error });
+    assert.equal(M.INDEX in v.local, false);
   }
   // Not from the gallery's pages: nothing is fetched.
   const x = worker({ fetch: () => assert.fail('fetched') });

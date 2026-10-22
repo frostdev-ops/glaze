@@ -448,6 +448,27 @@ const NOTES_DB = {
   keys: (s, prefix) => notesTx(s, 'readonly', (st) => idbDone(st.getAllKeys(IDBKeyRange.bound(prefix, `${prefix}\uffff`)))),
   estimate: () => navigator.storage?.estimate?.(),
 };
+// The files kept for Looks' backgrounds (lib/media.js), by hash: their own IndexedDB, which only the worker opens. Pages get a
+// file through 'glaze:keptFile'; storage.local keeps only their index.
+let mediaDb = null;
+const mediaOpen = () => (mediaDb ||= new Promise((res, rej) => {
+  const r = indexedDB.open('glaze-media', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('files');
+  r.onsuccess = () => { r.result.onversionchange = () => { r.result.close(); mediaDb = null; }; res(r.result); };
+  r.onerror = () => rej(r.error);
+}).catch((e) => { mediaDb = null; throw e; }));
+const mediaTx = async (mode, f) => {
+  const tx = (await mediaOpen()).transaction('files', mode);
+  const out = f(tx.objectStore('files'));
+  await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = tx.onabort = () => rej(tx.error); });
+  return out;
+};
+const MEDIA_FILES = {
+  get: (h) => mediaTx('readonly', (st) => idbDone(st.get(h))),
+  put: (h, v) => mediaTx('readwrite', (st) => { st.put(v, h); }),
+  del: (hs) => mediaTx('readwrite', (st) => { for (const h of hs) st.delete(h); }),
+  keys: () => mediaTx('readonly', (st) => idbDone(st.getAllKeys())),
+};
 // The widgets' layout (lib/widgets.js change): a Canvas or Ultra page's changes, applied to what is stored then, so two
 // tabs' changes never undo each other (B7b).
 BROKER.widgetLayout = {
@@ -545,14 +566,54 @@ BROKER.mods = {
   run: (m, area) => GZ_MODBUNDLE.change(m, area),
 };
 // Media for a Look (lib/media.js): the files this computer keeps for a Look's video, animated picture or Lottie animation
-// (storage.local `lookMedia:<hash>`) are put, listed and dropped only by the editor, which sends the bytes; every one is
-// read again here before it is kept.
+// (MEDIA_FILES, indexed in storage.local `lookMediaIndex`) are put, listed, kept, dropped and reset only by the editor, which
+// sends the bytes; every one is read again here before it is kept.
 BROKER_FILES.media = ['media.js'];
 globalThis.addEventListener?.('install', () => importScripts('media.js'));
 BROKER.media = {
-  allow: (m, s) => fromEditor(s) && trustedFrame(s, 'settings') && ['put', 'list', 'drop'].includes(m.op),
-  run: (m, area) => GZ_MEDIA.change(m, area),
+  allow: (m, s) => fromEditor(s) && trustedFrame(s, 'settings') && ['put', 'list', 'drop', 'keep', 'reset'].includes(m.op),
+  run: async (m, area) => {
+    const store = { ...area, files: MEDIA_FILES };
+    // Settings can open before the update event finishes, or after a failed migration. Discover legacy files there too.
+    if (['list', 'reset'].includes(m.op)) await migrateMedia(store);
+    return GZ_MEDIA.change(m, store, { decode: GZ_SHARE.decode });
+  },
 };
+// A kept file for a page's background (lib/scene-media.js): as it was kept (checked and named when it was put), for the file
+// the worn Look names only; the editor and its preview frame may have any. Read outside the broker's queue: only a file an
+// older Glaze kept in storage.local, moving over, takes a turn.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:keptFile') return;
+  (async () => {
+    if (!globalThis.GZ_MEDIA) importScripts('media.js');
+    const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
+    if (!fromPreview(s) && (!await fromLms(s) || GZ_MEDIA.fileOf((await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media?.src) !== m.h)) {
+      return { ok: false, error: 'sender' };
+    }
+    return GZ_MEDIA.change({ op: 'file', h: m.h }, area, { queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f) });
+  })().then(reply, () => reply({ ok: false, error: 'failed' }));
+  return true;
+});
+// Kept files no Look names any more go (lib/media.js collect): when the worker starts or Glaze updates (after files an
+// older Glaze kept in storage.local have moved), once history has recorded a Look change, and when favorites change. Not
+// while a Look change is still resting before history records it: the Look it left may still be on its way into history.
+const mediaHistory = new Set(); // snapshots queued for history still own the files of the Look just left
+const migrateMedia = async (area) => {
+  let keys;
+  if (chrome.storage.local.getKeys) keys = await chrome.storage.local.getKeys();
+  else {
+    // Older browsers cannot enumerate keys cheaply. Move known files lazily; leave unseen legacy copies intact.
+    const named = await GZ_MEDIA.uses(area, GZ_SHARE.decode);
+    keys = [...new Set([...Object.keys(await GZ_MEDIA.index(area.local)), ...named.now, ...named.saved])].map((h) => `${GZ_MEDIA.KEY}${h}`);
+  }
+  return GZ_MEDIA.migrate(area, keys);
+};
+const sweepMedia = (update = false) => (brokerTurn ||= GZ_CARDS.queue())(async () => {
+  if (!globalThis.GZ_MEDIA) importScripts('media.js');
+  const local = brokerArea('local'), area = { sync: brokerArea('sync'), local, files: MEDIA_FILES };
+  if (update) await migrateMedia(area);
+  if (!before && !mediaHistory.size) return GZ_MEDIA.collect(area, { decode: GZ_SHARE.decode });
+}).catch(() => {});
 // A Lottie animation for a page's background (lib/scene-media.js): the cleaned JSON of a kept file, or of the address the
 // worn Look or an eligible installed mod names (a fetch with no cookies, no referrer, no redirect and a size cap, so it is not in the broker's queue, which a
 // slow host would hold up). The editor's preview may try any address the editor is showing.
@@ -565,7 +626,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     const free = fromPreview(s);
     const site = free ? null : await fromLms(s);
     if (!free && !site) return { ok: false, error: 'sender' };
-    const area = { sync: brokerArea('sync'), local: brokerArea('local') };
+    const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
     return GZ_MEDIA.change({ op: 'lottie', src: m.src }, area, { fetch: (u, i) => fetch(u, i),
       allow: async (src) => {
         if (free || (await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media?.src === src) return true;
@@ -607,8 +668,8 @@ const sessions = () => {
     if (!globalThis.GZ_MEDIA) importScripts('media.js'); // a Look share carries its media file
     importScripts('relay.js', 'sharing.js', 'sessions.js');
     // getKeys (where the browser has it) names the Notes and To Do accounts without reading the rest of local storage.
-    sessionsWorker = GZ_SESSIONS.make({ local: Object.assign(brokerArea('local'), chrome.storage.local.getKeys && { getKeys: () => chrome.storage.local.getKeys() }), sync: brokerArea('sync'), notes: NOTES_DB,
-      offerLook: async (code, name) => { await chrome.storage.local.set({ galleryOffer: { code, name } }); openEditor(); return true; },
+    sessionsWorker = GZ_SESSIONS.make({ local: Object.assign(brokerArea('local'), chrome.storage.local.getKeys && { getKeys: () => chrome.storage.local.getKeys() }), sync: brokerArea('sync'), notes: NOTES_DB, keptFiles: MEDIA_FILES,
+      offerLook: async (code, name, media) => { await chrome.storage.local.set({ galleryOffer: { code, name, ...(media && { media }) } }); openEditor(); return true; },
       enqueue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f), serial: (f) => (sessionTurn ||= GZ_CARDS.queue())(f), notify: () => { for (const p of sessionPorts) { try { p.postMessage({ changed: true }); } catch {} } } });
   }
   return sessionsWorker;
@@ -808,19 +869,25 @@ chrome.runtime.onMessage.addListener((m, { url, frameId }) => {
   // The editor checks the code itself (lib/share.js); this only keeps the sizes sane.
   const name = (v, max) => text(v, max).replace(/[\p{Cc}\p{Bidi_Control}]/gu, '').trim();
   const offer = { code: text(g.code, GZ_SHARE.MAX_CODE2), name: name(g.name, 40), author: name(g.author, 39) };
-  if (offer.code) galleryMedia(offer.code).catch(() => {}).then(() => chrome.storage.local.set({ galleryOffer: offer })).then(openEditor, console.warn);
+  if (offer.code) galleryMedia(offer.code).catch(() => null).then((media) => chrome.storage.local.set({ galleryOffer: media ? { ...offer, media } : offer })).then(openEditor, console.warn);
 });
 // A gallery Look whose background is a file (`file:<h>`) this computer doesn't keep: that one file, from the gallery's fixed
-// address (lib/media.js fromGallery), kept as the editor's are (put: cleaned again, named by its hash, under the total cap),
-// before the editor previews the Look. Any failure still offers the Look; the editor then says the file isn't here.
+// address (lib/media.js fromGallery), kept as the editor's are (put: cleaned again, named by its hash, under the total cap)
+// but pending: the editor previews the Look with it, and lets it go unless the student uses the Look. → the offer's
+// `media`: { h, pending? } when the file is here, { h, error } when it isn't ('full': no room); null for no file. Any
+// failure still offers the Look.
 const galleryMedia = async (code) => {
-  if (!code.startsWith(GZ_SHARE.PREFIX2)) return; // only a glaze2 code has parts
+  if (!code.startsWith(GZ_SHARE.PREFIX2)) return null; // only a glaze2 code has parts
   const m = (await GZ_SHARE.decode(code)).parts?.x?.bg?.media;
   if (!globalThis.GZ_MEDIA) importScripts('media.js');
-  const h = m && GZ_MEDIA.fileOf(m.src), local = brokerArea('local');
-  if (!h || (await GZ_MEDIA.read(local, h))?.type === m.type) return;
+  const h = m && GZ_MEDIA.fileOf(m.src), area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
+  if (!h) return null;
+  const had = (await GZ_MEDIA.index(area.local))[h];
+  if (had && GZ_MEDIA.kindOf(had.t) === m.type) return { h, ...(had.p && { pending: true }) };
   const got = await GZ_MEDIA.fromGallery(h, m.type, { fetch: (u, i) => fetch(u, i) });
-  if (got.ok) await (brokerTurn ||= GZ_CARDS.queue())(() => GZ_MEDIA.change({ op: 'put', kind: m.type, b64: got.b64, expect: h }, { local }));
+  if (!got.ok) return { h, error: got.error };
+  const r = await (brokerTurn ||= GZ_CARDS.queue())(() => GZ_MEDIA.change({ op: 'put', kind: m.type, b64: got.b64, expect: h, pending: true }, area, { decode: GZ_SHARE.decode }));
+  return r.ok ? { h, pending: true } : { h, error: r.error };
 };
 
 // "Use in Glaze" on the gallery's mod pages: { id, hash } only. The worker downloads that exact bundle (lib/modbundle.js
@@ -848,6 +915,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   rest = setTimeout(() => {
     // This burst's snapshot goes with its own write: a later burst may start before the queue gets here.
     const left = before;
+    mediaHistory.add(left);
     before = null;
     serial(async () => {
       const was = await left;
@@ -859,6 +927,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
       const [wasParts, nowParts] = await Promise.all([GZ_XPARTS.fromStored(was.lookX, local), GZ_XPARTS.fromStored(now.lookX, local)]);
       const list = GZ_HISTORY.entries(lookHistory);
       await chrome.storage.local.set({ lookHistory: GZ_HISTORY.add(wasParts === undefined ? list : GZ_HISTORY.add(list, { ...was, parts: wasParts }, at), { ...now, parts: nowParts ?? null }, at) });
+      mediaHistory.delete(left);
+      sweepMedia();
     });
   }, 4000);
 });
@@ -866,7 +936,13 @@ chrome.runtime.onMessage.addListener((m, { url }) => {
   if (m !== 'clear-history' || !String(url).startsWith(chrome.runtime.getURL(''))) return;
   clearTimeout(rest);
   before = null;
+  mediaHistory.clear(); // explicitly clearing history also releases its queued snapshots
   serial(() => chrome.storage.local.set({ lookHistory: [] }));
+});
+// History and favorites name kept files too: once either has changed, and no Look change is still resting, files neither
+// they nor the worn Look name can go.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && (changes.lookHistory || changes.lookFavorites) && !before) sweepMedia();
 });
 
 // Canvas on a school's own domain (canvas.school.edu) can't be matched by address, nor can Moodle anywhere. Once the student
@@ -1052,10 +1128,11 @@ chrome.runtime.onInstalled.addListener((d) => {
   const seeded = ['install', 'update'].includes(d?.reason)
     ? (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(d.reason === 'install')).catch(() => {}) : Promise.resolve();
   serial(async () => { await seeded; await chrome.scripting.unregisterContentScripts(); await ensure(); });
+  if (d?.reason === 'update') sweepMedia(true);
   moveChannelKeys().catch(() => {});
   if (d?.reason === 'update') serial(perSite);
 });
-chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(false, true)).catch(() => {}); serial(ensure); moveChannelKeys().catch(() => {}); });
+chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(false, true)).catch(() => {}); serial(ensure); moveChannelKeys().catch(() => {}); sweepMedia(); });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && Object.keys(changes).some((k) => k.startsWith('starterOff:')))
     (brokerTurn ||= GZ_CARDS.queue())(() => resumeDefaults(true)).catch(() => {});

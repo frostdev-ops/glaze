@@ -1055,6 +1055,7 @@ GZ_UI.load().then((s) => {
     if (area === 'local' && (changes.gradescope || changes.seenCourses)) gsLoad();
     if (area === 'sync' && changes.cards) renderCardSet(changes.cards.newValue);
     if (area === 'sync' || (area === 'local' && changes.freshDefaults)) syncSettings();
+    if (area === 'local' && changes[GZ_MEDIA.INDEX]) GZ_EDITOR_XBG.kept(); // the files kept for backgrounds (lib/media.js)
   });
 
   // ---- share: a theme code is the palette, look and background, checked by lib/share.js ----
@@ -1078,12 +1079,24 @@ GZ_UI.load().then((s) => {
   });
   // from: the gallery Look the code came with ({ name, author }), or null for a pasted code.
   let from = null;
-  const endOffer = () => { offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
+  // The background file the worker kept for a gallery or share offer, pending (lib/media.js) until the offer is used: any other
+  // end of the offer, or leaving the editor, lets it go. used: the Look (or a favorite) now names it, so it stays.
+  let offerFile = '', offerGeneration = 0;
+  const letGo = (used = false) => {
+    if (offerFile) chrome.runtime.sendMessage({ type: 'glaze:media', op: used ? 'keep' : 'drop', h: offerFile, ...(!used && { pending: true }) }, () => void chrome.runtime.lastError);
+    offerFile = '';
+  };
+  addEventListener('pagehide', () => { offerGeneration++; letGo(); });
+  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
   const tryCode = async (gallery = null) => {
     const code = $('#share-code').value.trim();
     if (!code) return endOffer();
+    const generation = ++offerGeneration;
+    if (offerFile && offerFile !== gallery?.media?.h) letGo();
+    if (gallery?.media?.pending) offerFile = gallery.media.h;
     let got;
-    try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
+    try { got = await GZ_SHARE.decode(code); } catch (e) { if (generation !== offerGeneration) return; endOffer(); return hint(t(e.why || e.message, e.vars), true); }
+    if (generation !== offerGeneration) return; // Cancel, another code or leaving the editor won while decoding.
     const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
     // A Look part's sentence (lib/lookparts.js): a list in it is Glaze's own names, each translated, then joined.
     const say = (n) => t(n.why, n.vars && Object.fromEntries(Object.entries(n.vars).map(([k, v]) => [k, Array.isArray(v) ? and(v.map((w) => t(w))) : v])));
@@ -1126,6 +1139,7 @@ GZ_UI.load().then((s) => {
       if (cardHosts.length) notes.push(t('Its card pictures load from {hosts}.', { hosts: and(cardHosts) }));
       if (offer.nav.k === 'image' && offer.nav.u) notes.push(t('Its sidebar picture loads from {host}.', { host: new URL(offer.nav.u).hostname }));
       for (const n of GZ_XPARTS.describe(got.parts)) notes.push(say(n));
+      if (from?.media?.error === 'full') notes.push(t("There isn't room to keep this Look's background file, so the gradient shows instead. Remove a kept file under Background, then open the Look again."));
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;
@@ -1148,7 +1162,7 @@ GZ_UI.load().then((s) => {
     const set = offer.cardSet;
     if (set.length) cardsOp({ set });
     $('#share-code').value = '';
-    endOffer();
+    endOffer(true); // its background file, if it brought one, is kept now
     fill();
     save([...GZ_HISTORY.KEYS, 'card', 'nav', ...sidebarLook ? ['sidebar'] : []]);
     hint(t('Theme applied.'));
@@ -1222,6 +1236,7 @@ GZ_UI.load().then((s) => {
   $('#history-clear').addEventListener('click', () => chrome.runtime.sendMessage('clear-history', () => void chrome.runtime.lastError));
   $('#share-fav').addEventListener('click', () => {
     const f = { code: offer.code, name: from?.name || offer.preset || t('Custom theme'), author: from?.author || '', at: Date.now() };
+    letGo(true); // a favorite names its background file: it stays
     local.set({ lookFavorites: GZ_HISTORY.favor(favorites, f) }, () => {
       const err = chrome.runtime.lastError;
       hint(err ? t('Not saved: {error}', { error: err.message }) : t('Saved to your favorites.'), !!err);
@@ -1236,7 +1251,7 @@ GZ_UI.load().then((s) => {
     if (!g?.code) return;
     await local.remove('galleryOffer');
     $('#share-code').value = g.code;
-    await tryCode({ name: g.name || t('Custom theme'), author: g.author || '' });
+    await tryCode({ name: g.name || t('Custom theme'), author: g.author || '', media: g.media });
     editor.show('look/palette', { scroll: true });
     if (offer) $('#share-apply').focus({ preventScroll: true });
   };
@@ -1342,9 +1357,11 @@ GZ_UI.load().then((s) => {
     next.nav.i = ''; next.nav.li = ''; if (next.nav.brand === 'custom') next.nav.brand = 'glaze'; // A backup never names a picture on another device.
     if (next.navbar.brand === 'custom') next.navbar.brand = 'glaze';
     const mediaSrc = raw.parts?.x?.bg?.media?.src;
-    // A kept file isn't in a backup: unless this computer still has it (a backup put back where it was made).
-    const kept = typeof mediaSrc === 'string' && mediaSrc.startsWith('file:') ? `lookMedia:${mediaSrc.slice(5)}` : '';
-    const mediaMissing = next.bg.kind === 'media' && !!kept && !(await chrome.storage.local.get(kept).catch(() => ({})))[kept];
+    // A kept file isn't in a backup: unless this computer still has it (a backup put back where it was made), as the worker
+    // that keeps it lists it (lib/media.js).
+    const kept = typeof mediaSrc === 'string' && mediaSrc.startsWith('file:') ? mediaSrc.slice(5) : '';
+    const mediaMissing = next.bg.kind === 'media' && !!kept
+      && !(await chrome.runtime.sendMessage({ type: 'glaze:media', op: 'list' }).catch(() => null))?.files?.some((f) => f.h === kept);
     if (mediaMissing) next.bg.kind = 'gradient';
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
@@ -1392,13 +1409,14 @@ GZ_UI.load().then((s) => {
     const defaults = defaultsHere();
     const touched = GZ_EDITOR.reset(s, Object.keys(defaults), defaults);
     pendingNav.clear();
-    // Keep image IDs, per-course styles/bookmarks, local data and share keys. No destructive worker reset. The Look's
-    // parts go: they are part of the Look being reset.
+    // Keep image IDs, per-course styles/bookmarks, local data and share keys: the worker resets only the files kept for Looks'
+    // backgrounds (lib/media.js). The Look's parts go too: they are part of the Look being reset.
     s.parts = null;
     GZ_EDITOR_X.render(true); // Discard unsaved shader text even when there were no saved parts.
     save([...touched, 'parts']);
     fill();
-    hint(t('Preferences reset. Your presets and local data are kept.'));
+    hint(t('Preferences reset and files kept for backgrounds removed. Your presets and other local data are kept.'));
+    chrome.runtime.sendMessage({ type: 'glaze:media', op: 'reset' }, (r) => { if (chrome.runtime.lastError || !r?.ok) hint(t("Couldn't remove the files kept for backgrounds. Try again in a moment."), true); });
     // And the sites said yes to (Sites, below): Glaze asks again on each.
     chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'reset' }).catch(() => {});
   });

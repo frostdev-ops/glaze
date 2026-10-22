@@ -38,11 +38,11 @@ test('Lottie reports every instantiated matte buffer through precomp reuse and e
 
 test('worker Lottie replies retain the checked canvas count for files and remote data', async () => {
   const bytes = M.lottie(animation([solid(1), solid(2, 1)])).bytes;
-  const h = await M.sha(bytes), key = `${M.KEY}${h}`;
-  const local = { get: async () => ({ [key]: { t: 'application/json', b: M.std(bytes) } }) };
-  const file = await M.change({ op: 'lottie', src: `file:${h}` }, { local });
+  const h = await M.sha(bytes);
+  const area = { local: { get: async () => ({}) }, files: { get: async (k) => (k === h ? { t: 'application/json', b: M.std(bytes) } : undefined) } };
+  const file = await M.change({ op: 'lottie', src: `file:${h}` }, area);
   assert.equal(file.canvases, 3);
-  const remote = await M.change({ op: 'lottie', src: 'https://cdn.example.com/a.json' }, { local }, {
+  const remote = await M.change({ op: 'lottie', src: 'https://cdn.example.com/a.json' }, area, {
     allow: async () => true, fetch: async () => new Response(bytes),
   });
   assert.equal(remote.canvases, 3);

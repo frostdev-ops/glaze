@@ -8,7 +8,7 @@
 // start(host, live, onFail) → { update(o), draw(), stop() }. host is an empty element in the page; o is { x, ground, speed }:
 // x the Look's parts (GZ_CTX.parts()), ground the colour the dim fades toward, speed 0 for a still frame.
 // Sources are cleaned before they get here (lib/lookparts.js): an https address, or `file:<sha-256>` for a file kept on this
-// computer (storage.local lookMedia:<hash>, put by the editor, a Look share or the gallery), or `mod:<id>/<path>` for a file
+// computer (kept by the worker, put by the editor, a Look share or the gallery), or `mod:<id>/<path>` for a file
 // an installed mod carries, asked of the worker ('glaze:modpage' media), which checks the mod and cleans the file. A Lottie
 // file is asked of the worker ('glaze:lottie'), which hands back only a cleaned copy of what a kept file or the worn Look's
 // address holds.
@@ -40,21 +40,19 @@ const once = (target, ok, bad) => new Promise((res, rej) => {
   target.addEventListener(ok, () => res(), { once: true });
   if (bad) target.addEventListener(bad, () => rej(new Error(bad)), { once: true });
 });
-// A file kept on this computer, as bytes: read back from storage and checked against the SHA-256 that names it.
-const kept = async (h, type) => {
-  const key = `lookMedia:${h}`;
-  const rec = (await chrome.storage.local.get(key))[key];
-  if (!rec || typeof rec.b !== 'string' || !(MIMES[type] || []).includes(rec.t)) return null;
-  let bytes;
-  try {
-    const bin = atob(rec.b);
-    bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  } catch { return null; }
-  const sum = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  return sum === h ? { bytes, mime: rec.t } : null;
-};
 const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
+// A file kept on this computer, as bytes, from the worker that keeps it ('glaze:keptFile'). It was checked and named by its
+// SHA-256 when it was kept, and only the worker writes it, so it isn't hashed again on every page.
+const kept = async (h, type) => {
+  const r = await send({ type: 'glaze:keptFile', h });
+  if (!r?.ok || typeof r.b64 !== 'string' || !(MIMES[type] || []).includes(r.mime)) return null;
+  try {
+    if (typeof Uint8Array.fromBase64 === 'function') return { bytes: Uint8Array.fromBase64(r.b64), mime: r.mime };
+    const bin = atob(r.b64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, mime: r.mime };
+  } catch { return null; }
+};
 const modFile = (src) => src.startsWith('mod:');
 const ask = (src) => (modFile(src) ? send({ type: 'glaze:modpage', op: 'media', src }).then((r) => (r?.ok && r.kind === 'lottie' ? r : { ok: false, error: 'missing' }))
   : send({ type: 'glaze:lottie', src }));
