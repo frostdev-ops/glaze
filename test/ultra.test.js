@@ -302,6 +302,36 @@ test("grades: B0's calibration (weighted categories, discrepancy 0), and the est
   assert.equal(U.grade(book()).letter, null);
 });
 
+// ACA-5: what an overall column writes is a letter only when its schema is a letter scale (or the text is a letter with grade
+// points). A Percent or Score column writes its figure, and the GPA must compute the letter from that.
+test('the overall column\'s text is the course letter only for a letter scale or a letter with points', () => {
+  const schemas = load('schemas').results;
+  const withText = (text, schema) => {
+    const rows = book();
+    const overall = rows.find((r) => r.column.externalGrade);
+    overall.displayGrade.text = text;
+    if (schema) overall.column.gradingSchemaId = schema;
+    return rows;
+  };
+  for (const text of ['87%', '88.00%', '88', '88 / 100', '87,5 %', 'Excellent', 'Pass', 'Complete']) {
+    assert.equal(U.grade(withText(text), schemas).letter, null, `a Percent schema's "${text}" is no letter`);
+    assert.equal(U.grade(withText(text, '_401_1'), schemas).letter, null, `a Score schema's "${text}" is no letter`);
+    assert.equal(U.grade(withText(text), []).letter, null, `and with no schema at all, "${text}" isn't either`);
+  }
+  // A letter with grade points is one wherever it comes from.
+  for (const text of ['A', 'B+', 'C-', 'F', 'a-']) assert.equal(U.grade(withText(text), schemas).letter, text, text);
+  // A letter scale's own words are kept whatever they are: Pass/Fail has no points, and the GPA leaves it out.
+  assert.equal(U.grade(withText('Pass', '_403_1'), schemas).letter, 'Pass');
+  assert.equal(U.grade(withText('B', '_403_1'), schemas).letter, 'B');
+  assert.equal(U.grade(withText('', '_403_1'), schemas).letter, null);
+  // The GPA row then computes its letter from the score on a common scale, instead of "88.00%" with no points.
+  const C = require('../lib/gradecalc.js');
+  const g = U.grade(withText('88.00%'), schemas);
+  const e = { computed_current_score: g.overall, computed_current_grade: g.letter || (g.overall != null && g.scale ? C.letter(g.overall, g.scale) : null) };
+  const row = C.gpaRow(e, {}, null, { plus: true });
+  assert.deepEqual([row.letter, row.pts], ['B+', 3.3]);
+});
+
 test("this term's courses: a student's, open, within their term's dates; organizations, closed and other roles left out", () => {
   const mem = clone(load('memberships').results);
   const all = U.current(mem, NOW);

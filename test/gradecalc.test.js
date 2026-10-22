@@ -169,14 +169,87 @@ test('letters: the highest bound reached, from the rounded score', () => {
   assert.equal(G.letter(null), null);
   const mine = G.parseScheme('A 90, B 80, C 70');
   assert.equal(G.letter(85, mine), 'B');
-  assert.equal(G.letter(50, mine), 'C', 'below every bound: the lowest');
+  assert.equal(G.letter(50, mine), 'F', 'below every bound of a scale whose letters all have points: an F, not the lowest passing letter');
   assert.deepEqual(G.schemeOf([['A', 0.94], ['B', 0.8], ['F', 0]]), [['A', 94], ['B', 80], ['F', 0]]);
+});
+
+// ACA-2: a scale typed by the student or read from a syllabus often leaves F out.
+test('a score below the lowest bound is an F where every letter has points, and no letter otherwise', () => {
+  const noF = G.parseScheme('A 90, B 80, C 70, D 60');
+  assert.equal(G.letter(52, noF), 'F');
+  assert.equal(G.letter(59.994, noF), 'F', 'rounded as Canvas keeps it, 59.99 is still below 60');
+  assert.equal(G.letter(59.995, noF), 'D');
+  assert.equal(G.letter(60, noF), 'D');
+  assert.equal(G.letter(52, G.parseScheme('A 90, B 80, F 0')), 'F', 'a scale that reaches 0 names its own lowest');
+  assert.equal(G.letter(-5, G.parseScheme('A 90, B 80, C 0')), 'C', 'and a score under 0 is still that lowest');
+  assert.equal(G.letter(39, G.parseScheme('A 90, B 80, E 40')), 'F', 'an E that starts at 40 does not catch 39');
+  assert.equal(G.letter(52, G.parseScheme('Pass 60')), null, 'a scale with no grade points has no letter below it');
+  assert.equal(G.letter(52, G.parseScheme('A 90, Pass 60')), null);
+  assert.equal(G.letter(null, noF), null);
+  // The GPA row: the scale's own F, so the course is counted as failed (0 points), as Canvas's F says.
+  const failed = G.gpaRow({ computed_current_score: 52, computed_current_grade: 'F' }, { s: G.schemeText(noF) }, null, { plus: true });
+  assert.deepEqual([failed.letter, failed.pts], ['F', 0]);
+  const noCanvas = G.gpaRow({ computed_current_score: 45 }, { s: 'A 90, B 80, C 70, D 60' }, null, { plus: false });
+  assert.deepEqual([noCanvas.letter, noCanvas.pts], ['F', 0], 'not the D that the old lowest-letter rule gave');
+  assert.equal(G.gpa([{ credits: 3, points: failed.pts }, { credits: 3, points: 4 }]).gpa, 2, 'the failed course is in the GPA');
+  // A below-scale score on a scale with no points keeps the LMS's own letter, rather than losing the course's grade.
+  const pf = G.gpaRow({ computed_current_score: 52, computed_current_grade: 'F' }, { s: 'Pass 60' }, null, { plus: true });
+  assert.deepEqual([pf.letter, pf.pts], ['F', 0]);
+  const pfNone = G.gpaRow({ computed_current_score: 52 }, { s: 'Pass 60' }, null, { plus: true });
+  assert.deepEqual([pfNone.letter, pfNone.pts], [null, null]);
+  // A what-if under the scale's lowest bound is an F too.
+  assert.equal(G.gpaRow({ computed_current_score: 95 }, { s: 'A 90, B 80, C 70, D 60' }, 40, { plus: true }).wiLetter, 'F');
 });
 
 test('scales typed by the student', () => {
   assert.deepEqual(G.parseScheme('A 93, A- 90; B+ 87%\nB=83, Pass: 60.5'), [['A', 93], ['A-', 90], ['B+', 87], ['B', 83], ['Pass', 60.5]]);
   for (const bad of ['', 'A 93, A 90', 'A 120', '93', 'A', 'A ninety', 'Excellent work 12 90']) assert.equal(G.parseScheme(bad), null, bad);
   assert.equal(G.schemeText(G.parseScheme('B 80,A 90')), 'A 90, B 80');
+});
+
+// ACA-1: a syllabus's own wording, pasted into a course's Scale field.
+test('scales written as ranges or comparisons keep each letter and its lowest percent', () => {
+  const want = [['A', 93], ['B', 83], ['C', 73], ['D', 60], ['F', 0]];
+  for (const s of ['A 93-100, B 83-92.99, C 73-82.99, D 60-72.99, F 0-59.99', 'A 93–100, B 83–92.99, C 73–82.99, D 60–72.99, F 0–59.99', 'A 93 - 100\nB 83 - 92.99\nC 73 - 82.99\nD 60 - 72.99\nF 0 - 59.99',
+    'A: 93-100; B: 83-92.99; C: 73-82.99; D: 60-72.99; F: 0-59.99', 'A: 93%-100%, B: 83%-92.99%, C: 73%-82.99%, D: 60%-72.99%, F: 0%-59.99%', 'A >= 93, B >= 83, C >= 73, D >= 60, F >= 0',
+    'A ≥ 93, B ≥ 83, C ≥ 73, D ≥ 60, F ≥ 0', 'A>=93; B>=83; C>=73; D>=60; F>=0', 'A 93+, B 83+, C 73+, D 60+, F 0+', 'A 93%+, B 83%+, C 73%+, D 60%+, F 0%+',
+    'A 93- 100, B 83- 92.99, C 73- 82.99, D 60- 72.99, F 0- 59.99']) {
+    assert.deepEqual(G.parseScheme(s), want, s);
+  }
+  assert.deepEqual(G.parseScheme('A+ 97-100, A 93-96.99, A- 90-92.99, B+ 87-89.99'), [['A+', 97], ['A', 93], ['A-', 90], ['B+', 87]]);
+  assert.deepEqual(G.parseScheme('A− 90–92'), [['A−', 90]], 'a Unicode minus or an en dash can be part of a letter');
+  assert.deepEqual(G.parseScheme('A– 90, B 80'), [['A–', 90], ['B', 80]]);
+  assert.deepEqual(G.parseScheme('A-90, B+87'), [['A-', 90], ['B+', 87]], 'the letter keeps its own minus');
+  // The letters still score: a course at 95% gets an A, not "B 83-" with no points.
+  const sc = G.parseScheme('A 93-100, B 83-92.99, C 73-82.99, D 60-72.99, F 0-59.99');
+  assert.deepEqual([G.letter(95, sc), G.letter(85, sc), G.letter(10, sc)], ['A', 'B', 'F']);
+  assert.deepEqual(G.parseScheme('A 93-93'), [['A', 93]], 'a range of one point');
+});
+
+test('a scale line that is not letters and a lowest percent is refused, not turned into junk letters', () => {
+  for (const bad of ['A 100-93', 'A 93-', 'A -93', 'A 93-100-120', 'A > 93', 'A < 60', 'A 93 to 100 pts', 'A (93-100)', '93-100', '93-100 A', '>= 93', 'A+++++++++++++ 90', 'A1 90', 'Level 2 90', 'A 93-100%%', 'A 9 3',
+    'A 93-100, B', 'A 93-100, B ninety', 'A 93-100, A 90-92', 'A 120-130', ':90']) assert.equal(G.parseScheme(bad), null, bad);
+  for (const name of ['A 93', 'a- 90', 'F 0', 'Pass 60', 'HD 85', 'Ü 50']) assert.ok(G.parseScheme(name), name);
+  // Whatever it parses to is a name that is letters, plus and minus only: never a number, a colon or a comparison sign.
+  for (const s of ['A 93-100, B 83-92.99', 'A: 90-100', 'A >= 93', 'A 93%+', 'A-90']) {
+    for (const [name] of G.parseScheme(s)) assert.match(name, /^\p{L}[\p{L}+\-−–]{0,11}$/u, `${s} → ${name}`);
+  }
+});
+
+test('a course never silently drops out of the GPA because of how its scale was written', () => {
+  const key = 'canvas:https://x.instructure.com/1';
+  const typed = 'A 93-100, B 83-92.99, C 73-82.99, D 60-72.99, F 0-59.99';
+  const prefs = G.cleanGpa({ [key]: { s: typed } });
+  assert.equal(prefs[key].s, 'A 93, B 83, C 73, D 60, F 0');
+  const row = G.gpaRow({ computed_current_score: 95, computed_current_grade: 'A' }, prefs[key], null, { plus: true });
+  assert.deepEqual([row.letter, row.pts], ['A', 4]);
+  assert.equal(G.gpa([{ credits: 3, points: row.pts }, { credits: 3, points: 2 }]).gpa, 3, 'the course counts: (4 + 2) / 2');
+  // What an older Glaze stored for that text (the lazy name took "A 93-") reads as the scale it was meant to be.
+  assert.equal(G.cleanGpa({ [key]: { s: 'A 93- 100, B 83- 92.99, C 73- 82.99, D 60- 72.99, F 0- 59.99' } })[key].s, 'A 93, B 83, C 73, D 60, F 0');
+  // Text that is no scale is not stored, and the Scale field and syllabus review show their error for it (parseScheme null).
+  assert.deepEqual(G.cleanGpa({ [key]: { s: 'A 93 percent and up' } }), {});
+  assert.deepEqual(G.patchGpa({}, key, { s: 'A > 93' }), { prefs: {}, ok: false, error: 'bad' });
+  assert.equal(G.patchGpa({}, key, { s: 'A >= 93, B >= 83' }).prefs[key].s, 'A 93, B 83');
 });
 
 test('GPA: points on the 4.0 and plus/minus scales, the weighted bonus, credits', () => {

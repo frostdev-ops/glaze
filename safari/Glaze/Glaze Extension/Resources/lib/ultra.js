@@ -251,7 +251,10 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const sym = arr(schema?.symbols);
     const scale = /^tabular$/i.test(schema?.scaleType || '') && sym.every((s) => s?.lowerBound != null)
       ? sym.map((s) => [str(s?.text, 20), Number(s.lowerBound)]).filter(([t, v]) => t && Number.isFinite(v)).sort((a, b) => b[1] - a[1]) : null;
-    const more = { scale: scale?.length ? scale : null, letter: str(overallRow?.displayGrade?.text, 20) || null };
+    // The text is the letter only on a letter (Tabular) scale, or when it is a letter with grade points: a Percent or
+    // Score column writes its figure ("87%"), which is not a grade the GPA could use.
+    const text = str(overallRow?.displayGrade?.text, 20);
+    const more = { scale: scale?.length ? scale : null, letter: text && (/^tabular$/i.test(schema?.scaleType || '') || G.points(text, true) != null) ? text : null };
     if (m.kind === 'weighted') return { ...m, estimate: false, why: '', ...more };
     const pts = G.model(arr(rows).filter((r) => !r?.column?.externalGrade), names);
     return { ...pts, estimate: true, overall: m.overall ?? null, why: m.kind === 'unsupported' ? m.why : '', ...more };

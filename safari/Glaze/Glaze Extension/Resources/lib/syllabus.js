@@ -68,14 +68,20 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     [/(?<![\d/])(\d{1,2})\/(\d{1,2})(?:\/(\d{4}|\d{2}))?(?![\d/%])(?!\s*(?:of|der|des|de|van|do|da)\b)/g, (m, o) => ({ ...(o.md ? { mo: +m[1] - 1, d: +m[2] } : { d: +m[1], mo: +m[2] - 1 }), y: m[3], amb: +m[1] <= 12 && +m[2] <= 12 && m[1] !== m[2] })],
   ];
   // A day in the course's term: an explicit year as written, else the year that puts it no earlier than 45 days before
-  // the term starts (a spring term's January after a December syllabus date, say).
-  const dayOf = ({ y, mo, d }, start) => {
+  // the term starts (a spring term's January after a December syllabus date, say). With no term start known (known
+  // false), today stands in for it and the year is the one that puts the day nearest today, as lib/classes.js reads a
+  // class date: in October a September date is this year's, and a January one next year's.
+  const dayOf = ({ y, mo, d }, { start, known }) => {
     if (mo < 0 || mo > 11 || d < 1 || d > 31) return null;
-    let year = y ? (y.length === 2 ? 2000 + +y : +y) : new Date(start).getUTCFullYear();
-    if (!y && Date.UTC(year, mo, d) < start - 45 * DAY) year++;
-    const t = new Date(Date.UTC(year, mo, d));
-    return t.getUTCMonth() === mo ? t.toISOString().slice(0, 10) : null;
+    const key = (year) => { const t = new Date(Date.UTC(year, mo, d)); return t.getUTCMonth() === mo ? t.toISOString().slice(0, 10) : null; };
+    if (y) return key(y.length === 2 ? 2000 + +y : +y);
+    const here = new Date(start).getUTCFullYear();
+    if (known) return key(here + (Date.UTC(here, mo, d) < start - 45 * DAY ? 1 : 0));
+    return [here, here - 1, here + 1].map(key).filter(Boolean).sort((a, b) => Math.abs(Date.parse(a) - start) - Math.abs(Date.parse(b) - start))[0] || null;
   };
+  // A year-less day more than 45 days before today, with no term start to place it by, may as well be a year on: not a
+  // sure one.
+  const stale = (day, { start, known }) => !known && Date.parse(day) < start - 45 * DAY;
   const datesIn = (line, o) => {
     const found = [];
     for (const [re, read] of DATE_RES) {
@@ -92,9 +98,10 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
           if (x && +x[1] < r.d) { end = r.d; r.d = +x[1]; len += at - x.index; at = x.index; }
         }
         if (found.some((f) => at < f.at + f.len && f.at < at + len)) continue;
-        const day = dayOf(r, o.start);
-        // Sure only of a named month or a year, and never of a range or of a numeric date that reads either way round.
-        if (day) found.push({ day, end: end && dayOf({ ...r, d: end }, o.start), at, len, sure: !!(r.named || r.y) && !end && !r.amb });
+        const day = dayOf(r, o);
+        // Sure only of a named month or a year, and never of a range, of a numeric date that reads either way round, or
+        // of a past day whose year is only a guess.
+        if (day) found.push({ day, end: end && dayOf({ ...r, d: end }, o), at, len, sure: !!(r.named || r.y) && !end && !r.amb && !(!r.y && stale(day, o)) });
       }
     }
     return found.sort((a, b) => a.at - b.at);
@@ -150,7 +157,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       const found = meetingsIn(line, lines[i - 1] || '', lang);
       block = hoursHere ? 4 : block && found[0]?.at <= 2 ? block - 1 : 0;
       const inBlock = hoursHere || block > 0;
-      if (datesIn(line, { start: 0 }).some((d) => d.sure)) return;
+      if (datesIn(line, { start: 0, known: true }).some((d) => d.sure)) return; // only whether a date is named: any year will do
       for (const { unsure, at: _, ...row } of found) {
         const sure = inBlock || CLASS_RE.test(line) || CLASS_RE.test(lines[i - 1] || '');
         out.push({ ...row, hours: inBlock, conf: sure && !unsure ? 'sure' : 'check', src: at(lines, i) });
@@ -338,8 +345,9 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   };
 
   // ---- everything -------------------------------------------------------------------------------------------------
-  // text: the syllabus as plain text. opts.start: when the course's term starts (ms; defaults to now), for dates without
-  // a year; opts.md: numeric dates are month first (US English); opts.hint: the page's language, where the text's own
+  // text: the syllabus as plain text. opts.start: when the course's term starts (ms), for dates without a year; leave it out
+  // when the course has no term dates, and today stands in for it, its dates read by the year nearest today (dayOf);
+  // opts.md: numeric dates are month first (US English); opts.hint: the page's language, where the text's own
   // can't be told. → { prof, hours, meetings, dates, scale, weights, truncated }.
   // At most MAX characters are read (truncated says when there were more), and each line's first 2,000: a syllabus is far
   // shorter, and every step stays one pass over what's read.
@@ -351,7 +359,8 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const starts = [];
     for (let i = 0, k = 0; k < full.length; k++) { starts.push(i); i += full[k].length + 1; }
     const lines = full.map((l) => l.slice(0, 2000));
-    const o = { start: Number.isFinite(opts.start) ? opts.start : Date.now(), md: !!opts.md };
+    const known = Number.isFinite(opts.start);
+    const o = { start: known ? opts.start : Date.now(), known, md: !!opts.md };
     // The text's language by its day names, else the page's (opts.hint), for W14's day tables.
     const lang = CL().detect(s, opts.hint || 'en');
     const all = scan(lines, lang);
