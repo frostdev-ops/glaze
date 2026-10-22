@@ -37,18 +37,18 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   // draws it, so it never lags; its animation is features/motionx.js's, on the canvas around it. Which one is the student's
   // choice (extras.pointer) over the Look's (x.pointer, lib/lookx.js pointerOf), wherever the Look's parts would show
   // (GZ_CTX.partsOn: not with Glaze off, nor on a course that wears its own Look).
-  let pointer = ''; // the own pointer's blob: address
+  let pointer = '', pointing = 0; // the own pointer's blob: address and the latest read
   let live = true; // false from pagehide until the page is shown again: no blob: address is made meanwhile
   const worn = () => (ctx.on() && ctx.partsOn() ? GZ_LX.pointerOf(X().pointer, ctx.parts()?.pointer) : 'off');
   // Whether this browser takes image-set() in a cursor (for the 2x picture); one that doesn't gets the 1x PNG after the SVG.
   let sets;
   const imageSet = () => (sets ??= !!globalThis.CSS?.supports?.('cursor', 'image-set(url("a.png") 1x, url("b.png") 2x) 0 0, auto'));
   const cursor = async () => {
-    const c = worn();
+    const g = ++pointing, c = worn();
     let d = '', p = '', made = '';
     if (c === 'own') {
       const { cursorImg: img } = await get('cursorImg');
-      if (!live || c !== worn()) return; // hidden or changed while reading: a newer pass draws
+      if (!live || g !== pointing || c !== worn()) return; // hidden or superseded while reading: a newer pass draws
       made = blobOf(img);
       if (made) d = p = `url("${made}") 0 0`;
     } else if (GZ_LX.CURSORS[c]) [d, p] = ['default', 'pointer'].map((k) => GZ_LX.cursorCss(c, k, url, imageSet()));
@@ -449,6 +449,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   addEventListener('pagehide', () => {
     flush();
     live = false;
+    pointing++;
     for (const u of [...Object.values(own), pointer]) if (u) URL.revokeObjectURL(u);
     dropLotties();
     forgetMods();

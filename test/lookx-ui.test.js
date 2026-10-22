@@ -267,7 +267,7 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
         sync: { set: (v) => synced.push(structuredClone(v)) },
         local: {
           get: (keys, cb) => {
-            const answer = () => cb(structuredClone(keys === null ? local : Object.fromEntries([].concat(keys).filter((k) => k in local).map((k) => [k, local[k]]))));
+            const answer = (snapshot) => cb(structuredClone(snapshot || (keys === null ? local : Object.fromEntries([].concat(keys).filter((k) => k in local).map((k) => [k, local[k]])))));
             if (hold(keys)) held.push({ keys, release: answer }); else setTimeout(answer);
           },
         },
@@ -490,6 +490,39 @@ test('page: a new picture of their own is shown at once while it is the pointer 
   await settle();
   assert.equal(reads, 0);
   assert.equal(shown(p), 'rose');
+});
+
+test('page: a stale own-picture read cannot undo removal or survive a pagehide and restore', async () => {
+  const img = 'data:image/png;base64,b25l';
+  const p = page({ cursorImg: img });
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'own' };
+  p.holdWhen((keys) => keys === 'cursorImg');
+  await p.lx.sync();
+  assert.equal(p.held.length, 1);
+  delete p.local.cursorImg;
+  p.stored({ cursorImg: { oldValue: img } });
+  assert.equal(p.held.length, 2);
+  p.held[1].release({});
+  await settle();
+  p.held[0].release({ cursorImg: img });
+  await settle();
+  assert.equal(shown(p), 'system', 'the removed picture must not reappear');
+  assert.equal(p.blobs.size, 0);
+
+  p.local.cursorImg = img;
+  await p.lx.sync();
+  const old = p.held.at(-1);
+  p.fire('pagehide');
+  p.fire('pageshow', { persisted: true });
+  await settle();
+  const current = p.held.at(-1);
+  current.release({ cursorImg: img });
+  await settle();
+  const restored = p.html.style['--gz-cursor'];
+  old.release({});
+  await settle();
+  assert.equal(p.html.style['--gz-cursor'], restored, 'a read from the previous page lifetime cannot clear the restored pointer');
+  assert.equal(p.blobs.size, 1);
 });
 
 test('palette: a Pointer: entry for every choice the setting takes, the current one marked, and the animation switch', async () => {
