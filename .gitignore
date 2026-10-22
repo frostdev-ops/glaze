@@ -7,3 +7,6 @@ assets/ads/
 
 # Local secrets (e.g. cloudflare-r2.env for the share relay)
 *.env
+
+# Local work-package board (rimewire): tracker, specs and journal stay on this machine
+/.rimewire/
