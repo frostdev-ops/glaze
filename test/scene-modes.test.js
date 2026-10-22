@@ -297,6 +297,24 @@ test('a built-in scene or layers whose lost context is never given back are drop
   assert.deepEqual([ws.fails.length, s.timers.size], [0, 0], 'stopped meanwhile: nothing more');
 });
 
+test('a restored context redraws a still built-in scene or layers without starting an animation loop', async () => {
+  for (const o of [{ ...base, speed: 0 }, layersOf([{ k: 'noise' }], { speed: 0 })]) {
+    const e = engine({ latency: 4 }), w = watch(e);
+    w.scene.update(o); await e.pump();
+    assert.deepEqual([e.counts.draws, e.frames.size], [1, 0]);
+    e.gl.lost = true; e.canvasListeners.get('webglcontextlost')(); e.advance(1000);
+    e.gl.lost = false; e.canvasListeners.get('webglcontextrestored')(); await e.pump();
+    assert.deepEqual([e.counts.draws, e.frames.size, e.timers.size, w.fails.length], [2, 0, 0, 0], 'restore clears the drawing buffer: even motion off needs a new frame');
+    e.document.hidden = true;
+    e.gl.lost = true; e.canvasListeners.get('webglcontextlost')();
+    e.gl.lost = false; e.canvasListeners.get('webglcontextrestored')(); await e.pump();
+    assert.equal(e.counts.draws, 2, 'no hidden draw');
+    e.document.hidden = false; e.docListeners.get('visibilitychange')(); await e.pump();
+    assert.deepEqual([e.counts.draws, e.frames.size, e.timers.size], [3, 0, 0]);
+    w.scene.stop();
+  }
+});
+
 test('a shader starts with a hidden 72x45 probe frame, then draws at 0.6', async () => {
   const e = engine({ latency: 3, glsl: GLSL }), canvas = e.canvas(), w = watch(e, canvas);
   w.scene.update(shader(fixture('starfield')));
