@@ -26,11 +26,13 @@ def project(path):
 
 
 def app(path):
-    for plist, want in ((f'{path}/Contents/Info.plist', GLAZE), (f'{path}/Contents/PlugIns/Glaze Extension.appex/Contents/Info.plist', GLAZE + '.Extension')):
+    plists = ((f'{path}/Contents/Info.plist', GLAZE), (f'{path}/Contents/PlugIns/Glaze Extension.appex/Contents/Info.plist', GLAZE + '.Extension'))
+    for plist, want in plists:
         with open(plist, 'rb') as f:
             info = plistlib.load(f)
         if info.get('CFBundleIdentifier') != BUILD + want[len(GLAZE):]:
             sys.exit(f"safari-build-ids: {plist} isn't a build-id copy ({info.get('CFBundleIdentifier')})")
+    for plist, want in plists:
         subprocess.run(['plutil', '-replace', 'CFBundleIdentifier', '-string', want, plist], check=True)
 
 

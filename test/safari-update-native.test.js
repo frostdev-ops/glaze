@@ -169,3 +169,32 @@ test('the build-id helper swaps the project to build ids and a built app back', 
     fs.rmSync(temp, { recursive: true, force: true });
   }
 });
+
+test('the build-id helper rejects an invalid extension before changing either plist', { skip: process.platform !== 'darwin' }, async (t) => {
+  const info = (id) => `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${id}</string></dict></plist>`;
+  for (const [name, contents] of [
+    ['wrong id', info('io.frostdev.Other.Extension')],
+    ['malformed plist', 'not a plist'],
+    ['missing plist', null],
+  ]) {
+    await t.test(name, () => {
+      const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-build-ids-invalid-'));
+      try {
+        // Only plist fixtures, with no executable or .app directory.
+        const fixture = path.join(temp, 'fixture with spaces');
+        const appInfo = path.join(fixture, 'Contents/Info.plist');
+        const extensionInfo = path.join(fixture, 'Contents/PlugIns/Glaze Extension.appex/Contents/Info.plist');
+        fs.mkdirSync(path.dirname(extensionInfo), { recursive: true });
+        const original = info('io.frostdev.GlazeBuild');
+        fs.writeFileSync(appInfo, original);
+        if (contents !== null) fs.writeFileSync(extensionInfo, contents);
+        const result = run('python3', ['scripts/safari-build-ids.py', 'app', fixture]);
+        assert.notEqual(result.status, 0, result.stderr);
+        assert.equal(plist(appInfo).CFBundleIdentifier, 'io.frostdev.GlazeBuild', 'a rejected extension must leave the app under its build id');
+        assert.equal(fs.readFileSync(appInfo, 'utf8'), original);
+        if (contents !== null) assert.equal(fs.readFileSync(extensionInfo, 'utf8'), contents);
+        else assert.ok(!fs.existsSync(extensionInfo));
+      } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+    });
+  }
+});
