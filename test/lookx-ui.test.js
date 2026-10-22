@@ -573,6 +573,15 @@ test('palette: a Pointer: entry for every choice the setting takes, the current 
   assert.equal(p.synced.at(-1).extras.pointerAnim, true);
 });
 
+test('palette: a pointer command preserves settings changed since the palette opened', () => {
+  const G = require('../defaults.js'), p = page({});
+  p.settings.extras = { ...G.GZ_DEFAULTS.extras };
+  const command = p.lx.cmds().filter((c) => c.label === 'Pointer: {name}')[2]; // Aqua
+  p.settings.extras = { ...p.settings.extras, pointerAnim: false, stickers: false, rotate: 'daily', at: '10:30' };
+  command.run();
+  assert.deepEqual(p.synced.at(-1).extras, { ...p.settings.extras, pointer: 'aqua' });
+});
+
 // A tab on a computer whose worker is the real one (lib/background.js), in sticker mode on `path`.
 const key = (e, k) => { for (const f of e.on?.keydown || []) f({ key: k, shiftKey: false, preventDefault() {}, stopPropagation() {} }); };
 const stickersOf = (p) => p.body.find('gz-stickers').children;

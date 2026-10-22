@@ -479,7 +479,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   const ready = async () => { ownPic = !!(await get('cursorImg')).cursorImg; };
   const cmds = () => {
     const x = X();
-    const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, extras: { ...x, ...patch } }); } catch { /* extension reloaded */ } };
+    const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, extras: { ...X(), ...patch } }); } catch { /* extension reloaded */ } };
     const hint = (now) => (now ? t('Current') : 'Glaze');
     return [
       ...(top && !quiz() ? [{ label: t('Place stickers on this page'), hint: 'Glaze', group: 'Glaze', run: edit }] : []),
