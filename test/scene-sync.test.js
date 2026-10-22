@@ -177,6 +177,34 @@ test('hiding and showing a page does not reset the three dropped-context attempt
   assert.equal(r.api.state().sceneBad, r.api.sceneSig());
 });
 
+test('course-frame hiding preserves the failed scene retry count', async () => {
+  const r = rig(); r.api.syncScene(); await settle();
+  for (let i = 0; i < 3; i++) {
+    r.fail('dropped');
+    r.ctx.hid = () => true; r.api.syncScene();
+    assert.deepEqual(r.waits(), []);
+    r.ctx.hid = () => false; r.api.syncScene(); await settle();
+  }
+  assert.deepEqual([r.log.starts.length, r.waits()], [3, []]);
+  assert.equal(r.api.state().sceneBad, r.api.sceneSig());
+});
+
+test('a minute hidden does not count as a minute drawing when resetting dropped-context attempts', async () => {
+  let now = 0;
+  const r = rig(); r.ctx.Date = { now: () => now };
+  r.api.syncScene(); await settle();
+  const visibility = r.log.listeners.get('visibilitychange');
+  for (let i = 0; i < 3; i++) {
+    r.ctx.document.hidden = true; visibility();
+    now += 61000;
+    r.ctx.document.hidden = false; visibility();
+    r.fail('dropped');
+    if (i < 2) await r.retry();
+  }
+  assert.deepEqual([r.log.starts.length, r.waits()], [3, []]);
+  assert.equal(r.api.state().sceneBad, r.api.sceneSig());
+});
+
 test('scene startup rechecks quiz-light after the tool wrapper arrives while the site adapter waits', async () => {
   const r = rig({ importHangs: 1 });
   r.api.syncScene(); await settle();

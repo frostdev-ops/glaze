@@ -1010,7 +1010,7 @@
   const sceneFrame = solo || location.protocol !== 'https:';
   let scene = null, sceneCanvas = null, sceneFile = '';
   const sceneLoad = {};
-  let sceneLoadId = 0;
+  let sceneLoadId = 0, sceneShown = 0;
   let sceneFailed = false, sceneRetry = null, scenePending = null;
   let sceneBad = '';
   const partsOf = () => globalThis.GZ_CTX?.parts() ?? null;
@@ -1086,7 +1086,8 @@
     const key = sceneSig();
     if (sceneRetry && sceneRetry.key !== key) { clearTimeout(sceneRetry.timer); sceneRetry = null; sceneFailed = false; }
     if (scenePending && scenePending.key !== key) sceneUnwait();
-    if (!on(settings) || !links.length || !document.body || hid() || (!modBg && (!sceneKind() || !sceneFrame || sceneBad === key))) return stopScene();
+    if (!on(settings) || !links.length || !document.body || (!modBg && (!sceneKind() || !sceneFrame || sceneBad === key))) return stopScene();
+    if (hid()) { const retry = sceneRetry; stopScene(); sceneRetry = retry; return; }
     if (document.hidden) { sceneUnwait(); clearTimeout(sceneRetry?.timer); return; }
     if (sceneFailed || scenePending) return;
     const file = sceneModule();
@@ -1108,10 +1109,10 @@
         sceneCanvas.setAttribute('aria-hidden', 'true');
         placeScene();
         sceneFile = file;
-        // A context the browser took back (dropped) comes back on a new canvas; after a minute of drawing, with new tries.
+        // A dropped context gets a new canvas; a minute shown without interruption earns new tries.
         const at = Date.now();
         scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, (why) => {
-          if (why === 'dropped' && Date.now() - at > 60000) sceneRetry = null;
+          if (why === 'dropped' && Date.now() - Math.max(at, sceneShown) > 60000) sceneRetry = null;
           if (why === 'module' || why === 'dropped') retryScene(sceneSig(), why, why === 'module'); else { sceneBad = sceneSig(); stopScene(); }
         });
       }
@@ -1120,7 +1121,7 @@
     }).catch((error) => { if (scenePending === pending) retryScene(key, error, !pending.draw); });
   };
   document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && sceneFailed) sceneAgain(); else syncScene(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) sceneShown = Date.now(); if (!document.hidden && sceneFailed) sceneAgain(); else syncScene(); });
 
   // ---- course colors and tint ------------------------------------------------------------------
   // Every course its own color (GZ_COURSE_COLORS), worked out from the course list recordCourses
