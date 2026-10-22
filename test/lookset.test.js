@@ -171,3 +171,21 @@ test('pointer migration keeps sync arrivals and recovers from storage failure', 
   await failed.move();
   assert.deepEqual(await X.fromStored(failedSync.lookX, { get: async () => local }), { x: { cursor: { kind: 'glow' }, pointer: 'aqua' } });
 });
+
+test('a legacy setting changed during a large migration cannot strand the original parts', async () => {
+  const original = await X.pack({ x: { cursor: { kind: 'glow' } } });
+  const sync = { extras: { cursor: 'aqua' }, lookX: { h: X.hash(original) } }, local = { lookX: original };
+  let changed = false;
+  const w = worker(sync, local, { beforeSet: (area, patch) => {
+    if (area === 'sync' && typeof patch.lookX === 'string') throw Error('sync item quota');
+    if (area === 'local' && patch.lookX && patch.lookX !== original && !changed) {
+      changed = true;
+      sync.extras.cursor = 'off';
+    }
+  } });
+  await w.move();
+  assert.ok(changed);
+  await w.move();
+  assert.deepEqual(await X.fromStored(sync.lookX, { get: async () => local }), { x: { cursor: { kind: 'glow' } } });
+  assert.equal(sync.extras.cursor, undefined);
+});
