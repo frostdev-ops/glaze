@@ -1086,8 +1086,8 @@
     const key = sceneSig();
     if (sceneRetry && sceneRetry.key !== key) { clearTimeout(sceneRetry.timer); sceneRetry = null; sceneFailed = false; }
     if (scenePending && scenePending.key !== key) sceneUnwait();
-    if (!modBg && (!settings.enabled || !links.length || !sceneKind() || !sceneFrame || !document.body || hid() || sceneBad === key)) return stopScene();
-    if (document.hidden || hid()) { sceneUnwait(); clearTimeout(sceneRetry?.timer); return; }
+    if (!on(settings) || !links.length || !document.body || hid() || (!modBg && (!sceneKind() || !sceneFrame || sceneBad === key))) return stopScene();
+    if (document.hidden) { sceneUnwait(); clearTimeout(sceneRetry?.timer); return; }
     if (sceneFailed || scenePending) return;
     const file = sceneModule();
     if (scene && sceneFile !== file) stopScene();
@@ -1098,8 +1098,9 @@
     const pending = scenePending = { key, cancel: [] };
     Promise.all([load && sceneWait(load, () => { if (sceneLoad[file] === load) delete sceneLoad[file]; }, () => { if (sceneLoad[file] !== load) { sceneLoad[file] = load; sceneAgain(); } }), sceneNeed('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST), !modBg && wait && sceneNeed('lib/glsl.js', () => globalThis.GZ_GLSL)]).then(([mod]) => {
       if (scenePending !== pending) return;
+      if (!on(settings) || !chrome.runtime?.id || !links.length || document.hidden || hid() || key !== sceneSig()) { scenePending = null; return; }
       if (modBg) { scenePending = null; return placeScene(); }
-      if (!settings.enabled || sceneBad === key || !chrome.runtime?.id || !links.length || hid() || key !== sceneSig() || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
+      if (sceneBad === key || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
       pending.draw = true;
       if (!scene) {
         sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');

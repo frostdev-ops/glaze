@@ -15,6 +15,7 @@ const block = source.slice(a, b).replace(/import\((chrome\.runtime\.getURL\((?:f
 assert.ok(block.includes('importScene('));
 
 const background = source.match(/background: (\(el\) => \{.*\}),\n/)[1];
+const on = source.match(/^  const on = .*;$/m)[0];
 const loader = source.slice(source.indexOf('  const loading = new Map();'), source.indexOf("  // Moodle's extras"));
 const settle = () => new Promise(setImmediate);
 const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, updateFails = 0, hostFails = null, hostHangs = 0, hostSilent = false, glslHangs = 0, glslFails = 0, importHangs = 0 } = {}) => {
@@ -23,12 +24,12 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
   let failScene = null;
   const canvas = (tag) => ({ tag, remove() { log.removed++; }, setAttribute() {}, parentNode: null });
   const ctx = vm.createContext({
-    solo, ultra: false, isPreview: false, loading: new Map(), docId: 'fixture-document', location: { protocol: 'https:' },
-    settings: { enabled }, links: [1], hid: () => false, palette: { '--gz-surface-2': '#202030', '--gz-accent': '#abcdef' },
+    solo, ultra: false, isPreview: false, loading: new Map(), docId: 'fixture-document', location: { protocol: 'https:', pathname: '/' },
+    settings: { enabled, enhance: { quizLight: true } }, links: [1], hid: () => false, palette: { '--gz-surface-2': '#202030', '--gz-accent': '#abcdef' },
     html: { hasAttribute: () => false, getAttribute: () => 'normal' },
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
-    document: { hidden: false, body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
+    document: { hidden: false, body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, getElementById: () => null, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
     chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async (m) => {
       const file = m.files[0], ran = () => { if (file === 'lib/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() { log.placements++; }, clear() {} }; };
       log.needs.push(file);
@@ -54,7 +55,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     parts, GZ_GLSL: glsl ? {} : undefined,
     JSON, Promise, setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: (id) => timers.delete(id),
   });
-  vm.runInContext(`${hostFails === null && !hostHangs && !glslHangs && !glslFails ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneAgain, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
+  vm.runInContext(`${on}\n${hostFails === null && !hostHangs && !glslHangs && !glslFails ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneAgain, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
   // waits(): the delays of what is scheduled to try again (need()'s own one-minute forgetting left out).
   return { api: ctx.api, log, ctx, timers, waits: () => [...timers.values()].map((t) => t.ms).filter((ms) => ms < 60000), retry: async () => { const [id, timer] = [...timers].find(([, timer]) => timer.ms < 60000) || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
 };
@@ -174,6 +175,26 @@ test('hiding and showing a page does not reset the three dropped-context attempt
   }
   assert.deepEqual([r.log.starts.length, r.waits()], [3, []]);
   assert.equal(r.api.state().sceneBad, r.api.sceneSig());
+});
+
+test('scene startup rechecks quiz-light after the tool wrapper arrives while the site adapter waits', async () => {
+  const r = rig({ importHangs: 1 });
+  r.api.syncScene(); await settle();
+  r.ctx.document.getElementById = (id) => id === 'tool_content' ? {} : null;
+  r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.starts.length, r.waits()], [0, []]);
+  r.api.sceneAgain(); await settle();
+  assert.equal(r.log.starts.length, 0);
+});
+
+test('a mod host answering late cannot place a background on disabled or quiz-light pages', async () => {
+  for (const off of [r => { r.ctx.settings.enabled = false; }, r => { r.ctx.location.pathname = '/courses/1/quizzes/2/take'; }]) {
+    const r = rig({ hostHangs: 1 });
+    r.api.background({}); await settle();
+    off(r); r.api.stopScene();
+    r.log.answers[0](); await settle();
+    assert.deepEqual([r.log.placements, r.waits()], [0, []]);
+  }
 });
 
 test('a temporary animation module failure recovers without reloading the page', async () => {
