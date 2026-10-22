@@ -1,44 +1,36 @@
-# Chrome Web Store listing — Glaze 3.0.4 (German)
+# Chrome Web Store listing — Glaze 3.3 (German)
 
 ## Short summary (132 character maximum)
 
-Gestalte Blackboard Ultra, Canvas und Moodle neu: Farbpaletten, Schriften, Hintergründe, ein besseres To-do, Widgets und Extras.
+Gestalte Blackboard Ultra, Canvas und Moodle mit eigenem Look und eigener Navigation, dazu ein besseres To-do, Widgets, Lernhilfen.
 
 ## Detailed description
 
-Blackboard Ultra, Canvas und Moodle sollen sich wie deine eigenen anfühlen. Glaze gestaltet deine Kurse mit Paletten, Schriften, Hintergründen und Bewegung neu und ergänzt Werkzeuge zum Planen und Lernen genau dort, wo du deine Kursarbeit erledigst. Es funktioniert an jeder Schule, die Blackboard Ultra, Canvas oder Moodle nutzt, auch auf der eigenen Domain einer Schule. Was Glaze speichert, bleibt auf deinem Gerät.
+Blackboard Ultra, Canvas und Moodle sollen sich wie deine eigenen anfühlen. Glaze gestaltet deine Kurse mit Paletten, Schriften, Hintergründen und Bewegung neu und ergänzt Werkzeuge zum Planen und Lernen genau dort, wo du deine Kursarbeit erledigst. Es funktioniert an jeder Schule, die Blackboard Ultra, Canvas oder Moodle nutzt, auch auf der eigenen Domain einer Schule, wo es vor dem Aktivieren einer noch nicht genehmigten Website fragt. Kein Konto, keine Analysen. Deine Kurse, Noten, Notizen und Aufgaben bleiben auf deinem Gerät; deine Einstellungen folgen der Synchronisierung deines Browsers, wenn sie eingeschaltet ist; das Teilen ist optional und verschlüsselt.
 
-NEU IN 3.0.4
+NEU IN 3.3
+
+• Glaze-Navigation auf Blackboard Ultra, Canvas und Moodle, standardmäßig an: eine seitliche oder obere Leiste anstelle der Navigation der Seite, schwebend oder eingebettet, auf dem Smartphone eine untere Leiste. Benenne Einträge um, ordne sie neu an, blende sie aus oder füge eigene hinzu (bis zu acht eigene Links), wähle deine vier Smartphone-Tabs und halte Kurs-Tabs darin. Schaltest du sie aus, kommt die Navigation der Seite zurück. In Moodle behält sie den Schalter für den Bearbeitungsmodus und die eigenen Menülinks deiner Schule.
+• Eine Seitenleiste auf Canvas und Blackboard Ultra: die eigene Seitenleiste der Seite und die Widgets, die du darunter andockst, in einer Spalte bei breiten Fenstern und als Schublade bei schmalen.
+• Kurs-Tabs jetzt auch auf Canvas, jeder Kurs als eigene aktive Seite, und Module ausblenden, die du nicht brauchst, so wie du auf Blackboard Ordner ausblendest.
+• Dokumentprüfung auf Seiten mit abgegebener Arbeit: kompakte Kopfzeilen, ausklappbares Feedback, Vollbild und Dokumentfokus. Seiten, die du bearbeiten kannst, bleiben so, wie die Seite sie gebaut hat.
+• Neue Installationen starten mit einem Dashboard aus Haustier-Zuhause, Fokus-Timer, Notizen, Zitaten und deinen Kurskarten sowie Glaze-Einstellungen in der Leiste. Gespeicherte Layouts und Entfernungen bleiben, wie du sie gewählt hast. Canvas-Kurskarten können auch Widgets sein.
+• Die Einstellungen öffnen sich als Seite der Website deiner Schule, mit Live-Vorschau.
+
+AUS 3.0.4
 
 • Mods: Füge Hintergründe, Animationen, Widgets, Navigationslayouts und Seitenanpassungen hinzu, die andere gemacht haben, per Code, Link, Datei oder aus der Galerie. Jeder Mod zeigt, was er liest und warum, bevor du ihn hinzufügst, und läuft in einer Sandbox.
 • Baue dein eigenes Dashboard- oder Leisten-Widget ganz ohne Code.
 • Designs können als Hintergrund ein Video in Endlosschleife, ein animiertes Bild oder eine Lottie-Animation haben.
 
-AUS 3.0.3
-
-• Wähle eine Begleiterfigur für das Haustier-Zuhause, den Lernbuddy, das Abzeichen in der Blackboard-Navigation und den Begleiter auf der Kurskarte. Ihre Sichtbarkeitseinstellungen bleiben getrennt, und der Fortschritt bleibt beim Konto deiner Schule.
-• Die ursprüngliche Katze und das Häschen kommen zur Auswahl der Begleiterfiguren hinzu. Begleiter reagieren auf Fokuszeiten und erledigte Aufgaben, berücksichtigen reduzierte Bewegung und pausieren, solange sie verborgen sind.
-• Blackboard-Dateivorschauen erneuern abgelaufene Betrachter-Tickets und versuchen es erneut, während hochgeladene Dateien konvertiert werden.
-
-AUS 3.0.2
-
-• Deutlich schneller in Blackboard Ultra: Klicks, Mouseover und Seitenwechsel sorgen nicht mehr dafür, dass der Browser die ganze Seite neu gestaltet, und Seiten bekommen früher ihr Design.
-• Kurs-Tabs halten auf jedem Computer wieder bis zu vier aktive Seiten, und verborgene schließen sich im Leerlauf nicht mehr.
-
-NEU IN 3.0.1
-
-• Lege Deckkraft, Tönung, Körnung, Schattenfarbe und -stärke sowie die Ränder der Flächen fest. Jede Inhaltsfläche folgt den abgerundeten Ecken deines Designs, auch bei kursspezifischen Designs und Dokument-Steuerelementen.
-• Sieben animierte Begleiter, darunter der Glaze-Tropfen und Rime, dazu lokaler Import von ChatGPT-Begleiterpaketen. Vorhandene XP und Dekorationen bleiben erhalten. Die Bewegung pausiert, solange sie verborgen ist, und richtet sich nach reduzierter Bewegung und nach Glaze-Bewegung „Aus“.
-• Leichtere Blackboard-Kurs-Tabs und weniger Hintergrundaktualisierungen. Bearbeitete Seiten bleiben geschützt. Einfarbige Hintergründe überspringen die Glasunschärfe.
-
-NEU IN 3.0
+AUS 3.0
 
 • Blackboard Ultra bekommt ein Glaze-Dashboard und Widgets, die du überallhin setzen kannst: Better To Do, Notizen, eine Agenda, einen Fokus-Timer und deine Kurskarten als Widgets, die du verschieben, in der Größe ändern und einklappen kannst.
 • Kurs-Tabs auf Blackboard: Jeder Kurs, den du öffnest, bekommt einen Tab, wie in einem Browser. Bis zu vier bleiben aktiv, sodass ein Tab genau so zurückkommt, wie du ihn verlassen hast: die geöffnete Seite, was du getippt hast und wo du gescrollt hast.
 • Durchsuche deine Kurse mit Ctrl+K (⌘K auf dem Mac) und blende Ordner aus, die du nicht nutzt.
 • Gestalte die Navigation von Blackboard neu: Logo, Größen und Abstände, neu angeordnete oder ausgeblendete Einträge und deine eigenen Links.
 • Moodle: dieselben Designs, dazu deine Kursnote auf jeder Kurskarte, was diese Woche fällig ist und Tastenkürzel.
-• Ein Einstellungs-Editor in acht Tabs, mit Suche und einer Live-Vorschau in Desktop- oder Smartphone-Breite.
+• Ein Einstellungs-Editor in zehn Tabs, mit Suche und einer Live-Vorschau in Desktop- oder Smartphone-Breite.
 
 DEIN AUSSEHEN
 
@@ -56,7 +48,7 @@ PLANEN UND LERNEN AUF BLACKBOARD ULTRA UND CANVAS
 • Aufgaben auf Kurskarten, Erinnerungen an Fristen innerhalb der Seite (nie Browser-Benachrichtigungen) und eine optionale Serie, jeweils aus, bis du sie einschaltest.
 • Exportiere deine Fristen und Pläne als Kalenderdatei (.ics) für Google Calendar, Outlook oder Apple Calendar.
 • Importiere deinen Stundenplan oder den Syllabus eines Kurses aus einem PDF, Foto, einer Word-Datei, einer Webseite oder eingefügtem Text. Glaze liest den Inhalt auf deinem Gerät und zeigt dir alles zur Kontrolle, bevor es etwas speichert.
-• Notizen mit Ordnern, formatiertem Text, Bildern und Anhängen. Widgets: eine Agenda, ein Fokus-Timer, Zitate, Musik, eine Atemübung und ein Lernbuddy. Einblicke in dein Semester und ein Haustier-Zuhause. Standardmäßig aus.
+• Notizen mit Ordnern, formatiertem Text, Bildern und Anhängen. Widgets: eine Agenda, ein Fokus-Timer, Zitate, Musik, eine Atemübung und ein Lernbuddy. Einblicke in dein Semester (aus, bis du sie einschaltest) und ein Haustier-Zuhause. Neue Installationen starten mit eingeschalteten Notizen, Haustier und einigen Widgets; bestehende Einstellungen bleiben.
 • Gradescope-Aufgaben in Better To Do, wenn du es einschaltest.
 
 EXTRAS AUF BLACKBOARD ULTRA
@@ -82,20 +74,23 @@ AUF MOODLE
 
 • Das Design auf Moodles Boost-Theme (Moodle 5 und 4.x, soweit das Markup übereinstimmt): Dashboard, Meine Kurse, Kurs- und Aktivitätsseiten, Noten, Kalender, Nachrichten und die Anmeldeseite.
 • Deine Kursnote auf jeder Kurskarte, was diese Woche laut deiner Zeitleiste fällig ist, eine Tönung und ein Design pro Kurs sowie Tastenkürzel.
+• Glaze-Navigation, mit dem Schalter für den Bearbeitungsmodus von Moodle und den eigenen Menülinks deiner Schule in der Leiste.
 
 ÜBERALL
 
-Drücke Ctrl+K (⌘K auf dem Mac), um zu Kursen, Seiten, Glaze-Einstellungen und fälliger Arbeit zu springen. Das Popup hält Schnellsteuerungen griffbereit. Auf Blackboard und Canvas listet „Was Glaze kann“ jedes Extra mit seinem Schalter auf. Exportiere und importiere alle deine Einstellungen als Datei.
+Drücke Ctrl+K (⌘K auf dem Mac), um zu Kursen, Seiten, Glaze-Einstellungen und fälliger Arbeit zu springen. Auf einer noch nicht genehmigten eigenen Domain einer Schule fragt Glaze „Glaze auf dieser Website verwenden?“ und unternimmt dort nichts, bis du Ja sagst; die Einstellungen listen diese Websites und können sie entfernen. Das Popup hält Schnellsteuerungen griffbereit. Auf Blackboard und Canvas listet „Was Glaze kann“ jedes Extra mit seinem Schalter auf. Exportiere und importiere alle deine Einstellungen als Datei.
+
+Canvas auf instructure.com und Ultra auf blackboard.com sind automatisch aktiv; frühere Genehmigungen bleiben erhalten.
 
 OPTIONALE GETEILTE SITZUNGEN
 
-Teile ausgewählte Notizen, Dateien, ein Design oder deine eigenen Aufgaben mit Mitstudierenden. Alles wird auf deinem Gerät verschlüsselt, bevor es dein Gerät verlässt, über das Relay von frostdev.io oder eines, das du selbst betreibst. Das Teilen bleibt aus, bis du eine Sitzung erstellst oder ihr beitrittst, und Glaze funktioniert auch ohne das Teilen uneingeschränkt.
+Teile ausgewählte Notizen, Dateien, ein Design oder deine eigenen Aufgaben mit Mitstudierenden. Alles wird auf deinem Gerät verschlüsselt, bevor es dein Gerät verlässt, über das Relay von frostdev.io oder eines, das du selbst betreibst. Das Teilen bleibt aus, bis du eine Sitzung erstellst oder ihr beitrittst, und Glaze funktioniert auch ohne das Teilen uneingeschränkt. Auf dem Relay von frostdev.io wird eine Freigabe, die zwei Jahre lang niemand genutzt hat, gelöscht.
 
 Die Hilfen von Glaze ändern keine Noten, geben keine Kursarbeiten ab und senden keine Nachrichten. Was-wäre-wenn-Werte sind hypothetisch und bleiben auf deinem Gerät.
 
 DATENSCHUTZ
 
-Keine Analysen, keine Werbung und kein Konto. Einstellungen bleiben in deinem Browser und folgen der Chrome-Synchronisierung, wenn diese eingeschaltet ist. Kursdetails, Noteneinträge, Notizen, Aufgaben, deine Stelle, die Liste fälliger Aufgaben und Eingabesicherungen bleiben auf deinem Gerät. Glaze liest deine eigene Blackboard-, Canvas- oder Moodle-Seite mit deiner bestehenden Sitzung. Gewählte Webschriften und Hintergrundbilder lösen gewöhnliche Netzwerkanfragen aus. Bilder der Kurs-Tabs bleiben im Arbeitsspeicher und werden nirgendwohin gesendet. Geteilte Sitzungen senden, nur wenn du sie nutzt, verschlüsselte Inhalte, die das Relay nicht lesen kann. Glaze sammelt oder verkauft deine Kursarbeiten, Noten, Zugangsdaten und deinen Browserverlauf nicht. Vollständige Datenschutzerklärung: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+Keine Analysen, keine Werbung und kein Konto. Einstellungen bleiben in deinem Browser und folgen der Chrome- oder Firefox-Synchronisierung, wenn diese eingeschaltet ist (sie enthalten Kurs-Spitznamen, GPA-Angaben und einige Schul-, Kurs- und Kontokennungen; Safari behält sie auf dem Gerät). Kursdetails, Noteneinträge, Notizen, Aufgaben, deine Stelle, die Liste fälliger Aufgaben und Eingabesicherungen bleiben auf deinem Gerät. Glaze liest deine eigene Blackboard-, Canvas- oder Moodle-Seite mit deiner bestehenden Sitzung und schreibt dorthin nur, wenn du es auslöst (ein Haken im Planer, ein Canvas-Spitzname oder eine Farbe, Abmelden, der Bearbeitungsmodus von Moodle). Gewählte Webschriften und Hintergrundbilder lösen gewöhnliche Netzwerkanfragen aus; verlinkte Videos und Animationen holt Glazes Hintergrundprozess ohne Cookies, Referrer oder Weiterleitungen ab (12 MiB Video, 6 MiB Bild, 1 MiB Lottie; Video-/Bildseiten bis 4096 Pixel). Identifizierende Metadaten werden aus dem Dateicontainer entfernt; kodierte Datenströme und sichtbare Pixel bleiben. Vor 3.4.0 gespeicherte Dateien, die nicht bereinigt werden können, bleiben auf diesem Gerät und werden nicht geteilt. Bilder der Kurs-Tabs bleiben im Arbeitsspeicher und werden nirgendwohin gesendet. Geteilte Sitzungen und Mod-Kanäle senden, nur wenn du sie nutzt, verschlüsselte Inhalte, die das Relay nicht lesen kann. Glaze sammelt oder verkauft deine Kursarbeiten, Noten, Zugangsdaten und deinen Browserverlauf nicht. Ein Mod mit Zugriff auf Kursdaten und das Netzwerk kann diese Daten an genehmigte Hosts senden. Vollständige Datenschutzerklärung: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
 Open Source (MIT): https://github.com/frostdev-ops/glaze
 

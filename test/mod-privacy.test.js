@@ -13,7 +13,10 @@ test('public privacy descriptions disclose user-installed mod code and granted d
     assert.doesNotMatch(text, /None\. All executable code ships in the package/, file);
   }
   const privacy = fs.readFileSync(path.join(__dirname, '../PRIVACY.md'), 'utf8');
-  assert.match(privacy, /Per-mod storage and its private-data classification remain/i);
+  // Remove takes a mod's stored data with it unless the student keeps it (WP-M1), so the policy says that, not that it remains.
+  assert.match(privacy, /by default, the data it stored, its\s+private-data classification/i);
+  assert.match(privacy, /untick \*\*Remove its stored\s+data too\*\* to keep those on this device/i);
+  assert.doesNotMatch(privacy, /Per-mod storage and its private-data classification remain/i);
 });
 
 test('gallery privacy discloses the media request without promising network anonymity', () => {
