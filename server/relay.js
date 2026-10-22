@@ -13,7 +13,8 @@
 //                                          deleted ones included). These cap what's stored, not the disk itself:
 //                                          leave room for the database's own overhead, its WAL and backups.
 //                                          Files go to Cloudflare R2 instead of BLOBS when R2_ACCOUNT_ID,
-//                                          R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET are set.
+//                                          R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET are set. SPOOL (DB
+//                                          plus .spool) is where file uploads wait, on disk, until they are checked.
 //   node server/relay.js --backup <file>   a consistent copy of the database (SQLite's online backup, read-only), safe
 //                                          beside a serving relay; files aren't in it
 //   node server/relay.js --delete <id>     delete a session and its files (an abuse report), beside a serving relay too
@@ -25,14 +26,26 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const net = require('node:net');
+const os = require('node:os');
 const path = require('node:path');
+const { pipeline } = require('node:stream/promises');
+const { Readable } = require('node:stream');
 const { DatabaseSync, backup: sqliteBackup } = require('node:sqlite');
 
 // A sealed batch; one session's batches together; a JSON body (a batch in base64); a catch-up page; an encrypted file
 // (a 20 MiB attachment, padded); one session's files together; sessions per socket; sockets per address; a frame from
 // a client; what a socket may have waiting to be sent before it counts as not reading.
-const LIMIT = { op: 4 << 20, session: 50 << 20, body: 5600000 + 4096, page: 4 << 20, blob: (20 << 20) + 4096 + 28, blobs: 500 << 20, sub: 200, sockets: 8, frame: 16384, backlog: 65536 };
-// Per client address (an IPv6 /64): [burst, refilled over ms]. bytes counts what is written, down what is read.
+// Then what one client, or all of them, can hold of the relay at once: TCP connections on the whole relay (including
+// incomplete headers and closing WebSockets); request bodies in flight, by their declared length, per address and on the whole relay (64 MiB is
+// three of the largest files; 256 MiB bounds the memory bodies can take, since a file is read whole to check its
+// signature); a file upload's no-progress window and the progress it must make in each (16 KiB in 30 s, far below any
+// link that could send a file), and the time any other body has to arrive whole.
+const LIMIT = {
+  op: 4 << 20, session: 50 << 20, body: 5600000 + 4096, page: 4 << 20, blob: (20 << 20) + 4096 + 28, blobs: 500 << 20, sub: 200, sockets: 8, frame: 16384, backlog: 65536,
+  socketsAll: 10000, inflight: 64 << 20, inflightAll: 256 << 20, idle: 30e3, progress: 16384, bodyTime: 60e3,
+};
+// Per client address (an IPv6 /64): [burst, refilled over ms]. bytes counts what is written (every write's declared
+// body, charged before it is read, whatever its signature), down what is read.
 const RATE = { create: [30, 3600e3], write: [240, 60e3], read: [600, 60e3], bytes: [500 << 20, 3600e3], down: [2 ** 31, 3600e3] };
 const SID = /^[\w-]{22}$/, KEY = /^[\w-]{43}$/, SIG = /^[\w-]{86}$/, B64 = /^[\w-]+$/;
 const DAY = 864e5;
@@ -60,17 +73,27 @@ const sigv4 = ({ method, url, headers = {}, body = '', keyId, secret, region, se
   delete all.host; // fetch sets it
   return { ...all, authorization: `AWS4-HMAC-SHA256 Credential=${keyId}/${scope}, SignedHeaders=${names.join(';')}, Signature=${sig}` };
 };
+// A store's get answers a stream (or, from a store of one's own, bytes) or null; the relay streams it to the client.
 const s3Store = ({ endpoint, bucket, keyId, secret, region = 'auto' }) => {
-  const call = async (method, key, body = Buffer.alloc(0)) => {
+  // The minute covers a request until its answer starts. A read's body then streams to the client at the client's pace,
+  // so it isn't timed here: the relay's idle timeout ends a download that stops moving, and cancels this read with it.
+  const call = async (method, key, body = Buffer.alloc(0), signal) => {
     const url = `${endpoint}/${bucket}/${key}`;
     const headers = sigv4({ method, url, headers: { 'x-amz-content-sha256': crypto.createHash('sha256').update(body).digest('hex') }, keyId, secret, region });
-    const r = await fetch(url, { method, headers, body: method === 'PUT' ? body : undefined, signal: AbortSignal.timeout(60e3) });
-    if (!r.ok && !(method === 'DELETE' && r.status === 404) && !(method === 'GET' && r.status === 404)) throw new Error(`store ${method} ${r.status}`);
-    return r;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(new Error(`store ${method} timed out`)), 60e3);
+    try {
+      const r = await fetch(url, { method, headers, body: method === 'PUT' ? body : undefined, signal: signal ? AbortSignal.any([signal, ctl.signal]) : ctl.signal });
+      // Only a successful GET hands its body to a reader. Discard all other bodies explicitly: even an error page
+      // can be large or never end, and leaving it unread pins the bucket connection until garbage collection.
+      if (method !== 'GET' || !r.ok) await r.body?.cancel();
+      if (!r.ok && !(method === 'DELETE' && r.status === 404) && !(method === 'GET' && r.status === 404)) throw new Error(`store ${method} ${r.status}`);
+      return r;
+    } finally { clearTimeout(timer); }
   };
   return {
     put: async (key, bytes) => { await call('PUT', key, bytes); },
-    get: async (key) => { const r = await call('GET', key); return r.ok ? Buffer.from(await r.arrayBuffer()) : null; },
+    get: async (key, { signal } = {}) => { const r = await call('GET', key, undefined, signal); return !r.ok ? null : r.body ? Readable.fromWeb(r.body) : Readable.from([]); },
     del: async (key) => { await call('DELETE', key); },
   };
 };
@@ -82,13 +105,34 @@ const diskStore = (dir) => {
       await fs.promises.writeFile(`${at(key)}.part`, bytes);
       await fs.promises.rename(`${at(key)}.part`, at(key));
     },
-    get: (key) => fs.promises.readFile(at(key)).catch((e) => (e.code === 'ENOENT' ? null : Promise.reject(e))),
-    del: async (key) => { await fs.promises.rm(at(key), { force: true }); await fs.promises.rmdir(path.dirname(at(key))).catch(() => {}); },
+    get: async (key) => {
+      const fh = await fs.promises.open(at(key)).catch((e) => (e.code === 'ENOENT' ? null : Promise.reject(e)));
+      return fh && fh.createReadStream();
+    },
+    // With the .part a put left if it never got to its rename.
+    del: async (key) => {
+      await fs.promises.rm(at(key), { force: true });
+      await fs.promises.rm(`${at(key)}.part`, { force: true });
+      await fs.promises.rmdir(path.dirname(at(key))).catch(() => {});
+    },
+    // The .part files older than `before`: what puts cut short by a crash left behind (keys are <sid>/<id>). A put in
+    // flight now is newer, so it is left alone.
+    sweep: async (before) => {
+      const top = await fs.promises.opendir(dir).catch((e) => (e.code === 'ENOENT' ? null : Promise.reject(e)));
+      if (!top) return;
+      for await (const sid of top) {
+        if (!sid.isDirectory()) continue;
+        for (const f of await fs.promises.readdir(path.join(dir, sid.name)).catch(() => [])) {
+          const p = path.join(dir, sid.name, f);
+          if (f.endsWith('.part') && (await fs.promises.stat(p).catch(() => null))?.mtimeMs < before) await fs.promises.rm(p, { force: true });
+        }
+      }
+    },
   };
 };
 
 const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHeader = '', trustedProxies = '127.0.0.1/8,::1/128', maxBytes = 5 * 2 ** 30,
-  maxBlobBytes = 20 * 2 ** 30, maxSessions = 500000, expiryDays = 365, lease = 60e3, grace = 600e3, drain = 5000, rate = RATE, limit = LIMIT } = {}) => {
+  maxBlobBytes = 20 * 2 ** 30, maxSessions = 500000, expiryDays = 365, lease = 60e3, grace = 600e3, drain = 5000, rate = RATE, limit = LIMIT, spool = '' } = {}) => {
   // A busy timeout: --delete and a serving relay may write at the same moment.
   const db = new DatabaseSync(file, { timeout: 5000 });
   // A file's row is written before its object and counts from then on: `at` is set while it uploads (pending) and
@@ -200,17 +244,30 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
   const subs = new Map(); // sid -> Set of sockets
   const perIp = new Map();
   const all = new Set();
+  const refusing = new Set();
   const frame = (op, data) => Buffer.concat([data.length < 126 ? Buffer.from([0x80 | op, data.length]) : Buffer.from([0x80 | op, 126, data.length >> 8, data.length & 255]), data]);
   // A socket that doesn't read what it's sent is cut off rather than buffered for.
   const say = (sock, m) => { if (sock.destroyed) return; if (sock.writableLength > limit.backlog) sock.destroy(); else sock.write(frame(1, Buffer.from(JSON.stringify(m)))); };
   const ring = (sid, m) => { for (const sock of subs.get(sid) || []) say(sock, { s: sid, ...m }); };
   const unsub = (sock) => { for (const sid of sock.subs || []) { const set = subs.get(sid); set?.delete(sock); if (set && !set.size) subs.delete(sid); } sock.subs = new Set(); };
+  // A refusal is its status line, then the socket goes at once. Nothing reads a refused socket, so one left half-closed
+  // would keep its descriptor, and whatever the client sent after the request, for as long as the client liked.
+  const refuse = (sock, status) => {
+    refusing.add(sock);
+    sock.once('close', () => refusing.delete(sock));
+    sock.write(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
+    sock.destroy();
+  };
   const upgrade = (req, sock, early) => {
+    // Before anything is written: Node stops handling this socket's errors once 'upgrade' is emitted, and a reset from
+    // the client would otherwise be an unhandled 'error' that ends the process.
+    sock.on('error', () => sock.destroy());
     const ip = clientOf(req);
     const key = req.headers['sec-websocket-key'];
-    if (!serving) return sock.end('HTTP/1.1 503 Service Unavailable\r\n\r\n');
-    if (target(req)?.pathname !== '/live' || String(req.headers.upgrade).toLowerCase() !== 'websocket' || typeof key !== 'string') return sock.end('HTTP/1.1 400 Bad Request\r\n\r\n');
-    if ((perIp.get(ip) || 0) >= limit.sockets || !take(ip, 'read')) return sock.end('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+    if (!serving) return refuse(sock, '503 Service Unavailable');
+    if (target(req)?.pathname !== '/live' || String(req.headers.upgrade).toLowerCase() !== 'websocket' || typeof key !== 'string') return refuse(sock, '400 Bad Request');
+    if (all.size + refusing.size >= limit.socketsAll) return refuse(sock, '503 Service Unavailable');
+    if ((perIp.get(ip) || 0) >= limit.sockets || !take(ip, 'read')) return refuse(sock, '429 Too Many Requests');
     perIp.set(ip, (perIp.get(ip) || 0) + 1);
     all.add(sock);
     const accept = crypto.createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
@@ -221,10 +278,8 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (done) return;
       done = true;
       unsub(sock);
-      all.delete(sock);
-      perIp.set(ip, perIp.get(ip) - 1);
-      if (!perIp.get(ip)) perIp.delete(ip);
-      if (!sock.destroyed) sock.end(frame(8, Buffer.from([code >> 8, code & 255])));
+      // The close frame, then a moment for the client's own close; a client that never sends one is cut off.
+      if (!sock.destroyed) { sock.end(frame(8, Buffer.from([code >> 8, code & 255]))); setTimeout(() => sock.destroy(), 2000).unref(); }
     };
     const text = (s) => {
       let m;
@@ -240,6 +295,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       }
     };
     const onData = (d) => {
+      if (done) return; // closing: nothing more is kept
       buf = Buffer.concat([buf, d]);
       while (buf.length >= 2 && !done) {
         const op = buf[0] & 15, fin = buf[0] & 0x80, masked = buf[1] & 0x80;
@@ -257,9 +313,17 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       }
     };
     sock.on('data', onData);
+    // Upgraded sockets allow half-open connections: a client that has finished sending is done with this one.
+    sock.on('end', () => sock.destroy());
+    sock.on('close', () => {
+      bye();
+      // A closing peer still owns its descriptor during the close grace. Release admission only at actual close,
+      // otherwise invalid frames let it open replacements while thousands of old descriptors wait for their timers.
+      all.delete(sock);
+      perIp.set(ip, perIp.get(ip) - 1);
+      if (!perIp.get(ip)) perIp.delete(ip);
+    });
     if (early?.length) onData(early); // bytes that came with the handshake
-    sock.on('error', () => bye(1011));
-    sock.on('close', () => bye());
   };
 
   // ---- deletion and expiry ------------------------------------------------------------------------------------------
@@ -319,29 +383,33 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       write(() => (passed >= STEPS.length ? q.undoom.run(sid, id) : q.doomStep.run(passed, since + STEPS[passed], passed ? 0 : 1, sid, id)));
     }
   };
-  const removeFiles = () => (removing = removing.then(async () => {
-    try {
-      for (const { sid, id, size, at } of q.orphans.all({ serving: serving ? 1 : 0, boot })) {
-        if (uploading.has(`${sid}/${id}`)) continue;
-        if (at !== null) {
-          // Another relay's upload that never committed: its row becomes a doomed key, in one write, so its room stays
-          // counted through the schedule.
-          write(() => { q.dropBlob.run(sid, id); q.doom.run(sid, id, size, Date.now(), Date.now() + STEPS[0]); });
-          await store.del(`${sid}/${id}`).catch(() => {});
-          continue;
-        }
-        try { await store.del(`${sid}/${id}`); } catch (e) { console.error('relay: file store:', e.message); return; }
-        write(() => q.dropBlob.run(sid, id));
-      }
-      if (serving) await reconcile();
-    } catch (e) { if (!e.fenced) throw e; }
+  // File housekeeping runs one step at a time on this chain. Each step catches and logs its own failure (a full disk,
+  // a database error), so the chain always settles: one bad step must neither end the process as an unhandled
+  // rejection nor stop every later step from running. What a failed step left undone, the next sweep finds again.
+  const chain = (step) => (removing = removing.then(async () => {
+    try { await step(); } catch (e) { if (!e.fenced) console.error('relay: file sweep:', e.message); }
   }));
+  const removeFiles = () => chain(async () => {
+    for (const { sid, id, size, at } of q.orphans.all({ serving: serving ? 1 : 0, boot })) {
+      if (uploading.has(`${sid}/${id}`)) continue;
+      if (at !== null) {
+        // Another relay's upload that never committed: its row becomes a doomed key, in one write, so its room stays
+        // counted through the schedule.
+        write(() => { q.dropBlob.run(sid, id); q.doom.run(sid, id, size, Date.now(), Date.now() + STEPS[0]); });
+        await store.del(`${sid}/${id}`).catch(() => {});
+        continue;
+      }
+      try { await store.del(`${sid}/${id}`); } catch (e) { console.error('relay: file store:', e.message); return; }
+      write(() => q.dropBlob.run(sid, id));
+    }
+    if (serving) await reconcile();
+  });
   const remove = (sid) => {
     const row = q.get.get(sid);
     if (!row || row.gone) return false;
     write(() => { q.drop.run(sid, Number.MAX_SAFE_INTEGER); q.gone.run(today(), sid); });
     ring(sid, { gone: 1 });
-    removeFiles();
+    removeFiles().catch(() => {}); // settles whatever happens (see chain); never left to reject unhandled
     return true;
   };
   // Opt-in expiry: a session its creator asked to expire goes once nobody has read or written it for expiryDays.
@@ -365,8 +433,16 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       await new Promise((resolve) => setTimeout(resolve, Math.max(10, held + lease - Date.now() + 10)));
     }
   };
+  // Where file uploads wait, on disk, until they're in and checked: beside the database by default, or a folder of this
+  // relay's own (removed on close) for a database in memory.
+  let spoolDir = spool || (file === ':memory:' ? '' : `${file}.spool`), ownSpool = false;
   const serve = async () => {
     await takeLease();
+    const started = Date.now();
+    if (spoolDir) await fs.promises.mkdir(spoolDir, { recursive: true, mode: 0o700 });
+    else { spoolDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'glaze-relay-spool-')); ownSpool = true; }
+    // Spool files left by a relay that stopped mid-upload: none of this relay's own exist yet.
+    for (const f of await fs.promises.readdir(spoolDir)) if (f.endsWith('.part')) await fs.promises.rm(path.join(spoolDir, f), { force: true });
     listening = serving = true;
     timers.push(
       // Renewal between writes. A relay that stalls past its lease and finds it taken stops serving at once.
@@ -385,25 +461,71 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     for (const t of timers) t.unref();
     // Pending uploads of a relay that died, and anything due to expire.
     await expire().catch(() => {});
+    // A store's own half-written files from before this start: in the background, as a big store takes a while.
+    if (store.sweep) chain(() => store.sweep(started));
   };
 
   // ---- HTTP ---------------------------------------------------------------------------------------------------------
+  // An answer given before its request's body was read closes the connection after it: otherwise Node would read the
+  // rest of the body to keep the connection, for as long as the client cared to send it. (A request without a body
+  // isn't `complete` yet while it is handled either, so what counts is whether it has one.)
+  const unread = (req) => !req.complete && (req.headers['transfer-encoding'] !== undefined || Number(req.headers['content-length']) > 0);
+  const start = (res, status, type) => res.writeHead(status, {
+    'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer',
+    ...(type.startsWith('text/html') && { 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" }),
+    ...((status === 429 || status === 503) && { 'retry-after': '60' }),
+    ...(unread(res.req) && { connection: 'close' }),
+  });
   const send = (res, status, body, type = 'application/json') => {
-    res.writeHead(status, {
-      'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer',
-      ...(type.startsWith('text/html') && { 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" }),
-      ...(status === 429 && { 'retry-after': '60' }),
-    });
+    start(res, status, type);
     res.end(Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body));
   };
-  const raw = (req, cap) => new Promise((resolve, reject) => {
+
+  // ---- request bodies: admitted by their declared length, then read with a deadline ---------------------------------
+  // Nothing of a body is read before it is admitted: it must declare its length (a chunked body could be any size), be
+  // within its cap, and fit in the room for bodies in flight, its address's and the whole relay's. That room is held
+  // until its request ends, so neither slow clients nor many at once can hold more than that of the relay's memory or
+  // spool. Writes pay their bytes budget from the declared length too, before reading, so a body refused afterwards (a
+  // bad signature) has cost its sender as much as a good one.
+  const inflight = new Map();
+  let inflightAll = 0;
+  const declared = (req) => (req.headers['transfer-encoding'] === undefined && /^\d{1,15}$/.test(req.headers['content-length'] ?? '') ? Number(req.headers['content-length']) : null);
+  const admit = (req, ip, ctx, cap, charge) => {
+    const len = declared(req);
+    if (len === null) return [411, 'length'];
+    if (len > cap) return [413, 'big'];
+    const mine = inflight.get(ip) || 0;
+    if (mine + len > limit.inflight) return [429, 'rate'];
+    if (inflightAll + len > limit.inflightAll) return [503, 'busy'];
+    inflight.set(ip, mine + len);
+    inflightAll += len;
+    ctx.release = () => { const left = inflight.get(ip) - len; if (left > 0) inflight.set(ip, left); else inflight.delete(ip); inflightAll -= len; };
+    if (charge && !take(ip, 'bytes', len)) return [429, 'rate'];
+    return null;
+  };
+  // A file may take as long as it needs on a slow link, as long as it keeps moving: `progress` bytes every `idle` ms.
+  // Any other body (a batch, at most a few MB) has `bodyTime` to arrive whole. A client that falls behind is cut off.
+  const receive = async (req, file, chunk) => {
+    let got = 0, mark = 0;
+    const cut = () => req.destroy(Object.assign(new Error('too slow'), { status: 408 }));
+    const timer = file ? setInterval(() => { if (got - mark < limit.progress) cut(); mark = got; }, limit.idle) : setTimeout(cut, limit.bodyTime);
+    try { for await (const d of req) { got += d.length; await chunk(d); } } finally { clearInterval(timer); }
+  };
+  const json = async (req) => {
     const parts = [];
-    let size = 0;
-    req.on('data', (d) => { size += d.length; if (size > cap) { req.pause(); reject(Object.assign(new Error('big'), { status: 413 })); } else parts.push(d); });
-    req.on('end', () => resolve(Buffer.concat(parts)));
-    req.on('error', reject);
-  });
-  const json = (req) => raw(req, limit.body).then((b) => { try { return JSON.parse(b.toString() || 'null'); } catch { throw Object.assign(new Error('bad'), { status: 400 }); } });
+    await receive(req, false, (d) => { parts.push(d); });
+    try { return JSON.parse(Buffer.concat(parts).toString() || 'null'); } catch { throw Object.assign(new Error('bad'), { status: 400 }); }
+  };
+  // A file goes to the spool as it arrives, so one that arrives slowly holds disk, not memory. Its signature covers all
+  // of it (Ed25519 checks a message whole), so it is read back once complete, and its spool file goes either way.
+  const spooled = async (req) => {
+    const file = path.join(spoolDir, `${crypto.randomUUID()}.part`);
+    try {
+      const fh = await fs.promises.open(file, 'wx', 0o600);
+      try { await receive(req, true, async (d) => { for (let at = 0; at < d.length;) at += (await fh.write(d, at)).bytesWritten; }); } finally { await fh.close(); }
+      return await fs.promises.readFile(file);
+    } finally { await fs.promises.rm(file, { force: true }); }
+  };
   const bytes = (s) => (typeof s === 'string' && B64.test(s) ? Buffer.from(s, 'base64url') : null);
   const sigOf = (s) => (typeof s === 'string' && SIG.test(s) ? Buffer.from(s, 'base64url') : null);
   // What a signature covers: Glaze's prefix, the session, the kind, its place (a batch's number, a trim's end, a file's
@@ -415,7 +537,9 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     } catch { return false; }
   };
   const ROUTE = /^\/s\/([\w-]{22})(?:\/(trim|expiry)|\/b\/([\w-]{22}))?$/;
-  const handle = async (req, res) => {
+  let downloading = 0;
+  const disconnected = new WeakMap();
+  const handle = async (req, res, ctx) => {
     const ip = clientOf(req);
     const url = target(req);
     if (!url) return send(res, 400, { error: 'bad' });
@@ -426,6 +550,8 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     if (look && url.pathname === '/health') return send(res, 200, { ok: true });
     if (req.method === 'POST' && url.pathname === '/s') {
       if (!take(ip, 'create')) return send(res, 429, { error: 'rate' });
+      const no = admit(req, ip, ctx, limit.body, false);
+      if (no) return send(res, no[0], { error: no[1] });
       const b = await json(req);
       if (!SID.test(b?.sid) || !KEY.test(b.pub) || !KEY.test(b.del)) return send(res, 400, { error: 'bad' });
       const [status, error] = write(() => {
@@ -443,14 +569,17 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     if (!kind) return send(res, m ? 405 : 404, { error: m ? 'method' : 'unknown' });
     if (!take(ip, kind === 'read' || kind === 'getBlob' ? 'read' : 'write')) return send(res, 429, { error: 'rate' });
     const sid = m[1];
-    // A body is held whole until it is in, so what would be refused whatever it carried is refused before it is read:
-    // an unknown or deleted share, or a file without a signature, costs no memory.
+    // What would be refused whatever its body carried is refused before the body is admitted: an unknown or deleted
+    // share, or a file without a signature, costs no room and no budget.
     const known = q.get.get(sid);
     if (!known) return send(res, 404, { error: 'unknown' });
     if (known.gone) return send(res, 410, { error: 'gone' });
     if (kind === 'putBlob' && !sigOf(req.headers['x-glaze-sig'])) return send(res, 400, { error: 'bad' });
+    const bodied = kind === 'putBlob' || kind === 'append' || kind === 'trim' || kind === 'expiry';
+    const no = bodied && admit(req, ip, ctx, kind === 'putBlob' ? limit.blob : limit.body, kind === 'putBlob' || kind === 'append');
+    if (no) return send(res, no[0], { error: no[1] });
     // The body first, then the session as it is once the body is in: other requests may have changed it meanwhile.
-    const b = kind === 'putBlob' ? await raw(req, limit.blob) : ['append', 'trim', 'expiry'].includes(kind) ? await json(req) : null;
+    const b = kind === 'putBlob' ? await spooled(req) : bodied ? await json(req) : null;
     const row = q.get.get(sid);
     if (!row) return send(res, 404, { error: 'unknown' });
     if (row.gone) return send(res, 410, { error: 'gone' });
@@ -483,7 +612,6 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (op.length > limit.op) return send(res, 413, { error: 'big' });
       if (b.n !== row.head + 1) return send(res, 409, { error: 'place', head: row.head });
       if (!signed(row.pub, sid, 'op', String(b.n), op, sig)) return send(res, 403, { error: 'signature' });
-      if (!take(ip, 'bytes', op.length)) return send(res, 429, { error: 'rate' });
       if (row.bytes + op.length > limit.session || used().log + op.length > maxBytes) return send(res, 507, { error: 'full' });
       write(() => { q.add.run(sid, b.n, op, sig); q.grow.run(b.n, op.length, sid); });
       ring(sid, { n: b.n });
@@ -506,7 +634,6 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (!sig || b.length < 29) return send(res, 400, { error: 'bad' });
       if (q.blob.get(sid, m[3])) return send(res, 409, { error: 'exists' });
       if (!signed(row.pub, sid, 'blob', m[3], b, sig)) return send(res, 403, { error: 'signature' });
-      if (!take(ip, 'bytes', b.length)) return send(res, 429, { error: 'rate' });
       if (Number(q.blobBytes.get(sid).b) + b.length > limit.blobs || used().blob + b.length > maxBlobBytes) return send(res, 507, { error: 'full' });
       // On the books (a pending row this relay owns) before the store call: two uploads at once can't both take the last
       // room, and a file whose share is deleted meanwhile is never lost track of. No other process reclaims it.
@@ -555,9 +682,30 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     if (kind === 'getBlob') {
       const meta = q.blob.get(sid, m[3]);
       if (!meta || meta.at !== null) return send(res, 404, { error: 'unknown' });
+      // HTTP pipelining can start many reads on one connection before any response is writable. Bound the store reads
+      // themselves too; otherwise the TCP cap alone doesn't bound open file descriptors or bucket requests.
+      if (downloading >= limit.socketsAll) return send(res, 503, { error: 'busy' });
       if (!take(ip, 'down', meta.size)) return send(res, 429, { error: 'rate' });
-      const data = await store.get(`${sid}/${m[3]}`);
-      return data ? send(res, 200, data, 'application/octet-stream') : send(res, 404, { error: 'unknown' });
+      let peer = disconnected.get(req.socket);
+      if (!peer) {
+        peer = new AbortController();
+        disconnected.set(req.socket, peer);
+        req.socket.once('close', () => peer.abort());
+      }
+      const ctl = new AbortController(), stop = () => ctl.abort();
+      const signal = AbortSignal.any([peer.signal, ctl.signal]);
+      res.once('close', stop);
+      downloading++;
+      try {
+        const data = await store.get(`${sid}/${m[3]}`, { signal });
+        if (!data) return res.destroyed ? undefined : send(res, 404, { error: 'unknown' });
+        if (data instanceof Uint8Array) return res.destroyed ? undefined : send(res, 200, Buffer.from(data.buffer, data.byteOffset, data.byteLength), 'application/octet-stream');
+        // Also closes a late stream returned after the client disconnected while waiting for the store's headers.
+        const stream = typeof data.getReader === 'function' ? Readable.fromWeb(data) : data;
+        if (signal.aborted || res.destroyed) { stream.destroy(); return; }
+        start(res, 200, 'application/octet-stream');
+        await pipeline(stream, res, { signal });
+      } finally { downloading--; res.off('close', stop); }
     }
     // expiry and delete: the creator's token, whose hash the session keeps
     const token = bytes(/^Bearer ([\w-]{43})$/.exec(req.headers.authorization || '')?.[1]);
@@ -572,34 +720,44 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     return send(res, 204, '');
   };
 
-  // A body over the cap is answered 413 and its connection closed, rather than read to the end. Every request's handler
-  // is tracked until it ends, connection or not: an upload's clean-up (dooming its key) runs even after its connection
-  // was closed, and the database stays open for it.
+  // Every request's handler is tracked until it ends, connection or not: an upload's clean-up (dooming its key) runs
+  // even after its connection was closed, and the database stays open for it. Its room for a body is held as long.
   const running = new Set();
   const server = http.createServer((req, res) => {
-    const p = handle(req, res).catch((e) => {
-      if (e.status === 413) res.once('finish', () => req.socket.destroy());
+    const ctx = {};
+    const p = handle(req, res, ctx).catch((e) => {
       if (res.destroyed) return;
       if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'server' }); else res.destroy();
       if (!e.status) console.error('relay:', e.message);
-    });
+    }).finally(() => ctx.release?.());
     running.add(p);
     p.finally(() => running.delete(p));
   });
-  server.requestTimeout = 60e3;
+  // Node's request timeout counts a whole upload, which would cut a large file on a slow link; bodies have their own
+  // limits instead (receive). Headers still have to arrive promptly, and a socket with nothing moving either way for two
+  // minutes (a download nobody reads, say) is closed.
+  server.requestTimeout = 0;
+  server.headersTimeout = 20e3;
+  server.timeout = 120e3;
+  // Admission at accept time also counts incomplete HTTP headers, ordinary requests and closing WebSockets. Checking
+  // only in upgrade() would let pending handshakes exhaust descriptors before they ever reached that check.
+  server.maxConnections = limit.socketsAll;
   server.on('upgrade', upgrade);
   let closing = null;
   // gently: after losing the lease, requests already running get `drain` ms to finish with their answers; then their
   // connections are cut. Either way the database closes only once every handler has ended and the sweep has settled.
   const close = (gently = false) => (closing ||= new Promise((resolve) => {
     for (const t of timers) clearInterval(t);
-    for (const sock of all) sock.destroy();
+    for (const sock of [...all, ...refusing]) sock.destroy();
     server.close(async () => {
       while (running.size) await Promise.allSettled([...running]);
-      await removing;
-      if (serving) q.leaseFree.run(boot);
+      await removing.catch(() => {});
+      // A full disk can also prevent giving back the lease. Finish closing anyway: its last renewal will expire,
+      // whereas rejecting this async server callback would be unhandled and leave close() waiting forever.
+      try { if (serving) q.leaseFree.run(boot); } catch (e) { console.error('relay: lease release:', e.message); }
       serving = false;
       db.close();
+      if (ownSpool) await fs.promises.rm(spoolDir, { recursive: true, force: true }).catch(() => {});
       resolve();
     });
     if (!gently) server.closeAllConnections();
@@ -636,6 +794,7 @@ const fromEnv = (env) => ({
   maxSessions: Number(env.MAX_SESSIONS) || undefined,
   maxBytes: Number(env.MAX_BYTES) || undefined,
   maxBlobBytes: Number(env.MAX_BLOB_BYTES) || undefined,
+  spool: env.SPOOL || undefined,
   store: env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET
     ? s3Store({ endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`, bucket: env.R2_BUCKET, keyId: env.R2_ACCESS_KEY_ID, secret: env.R2_SECRET_ACCESS_KEY })
     : diskStore(env.BLOBS || 'share-blobs'),
