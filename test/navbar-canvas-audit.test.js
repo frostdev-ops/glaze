@@ -477,3 +477,57 @@ test("on a short window the rail's list keeps the open course's tab in view, and
   const css = read('features/navbar.css');
   for (const at of ['end', 'start']) assert.match(css, new RegExp(`\\.list\\[data-scroll~="${at}"\\] \\{ -webkit-mask-image: linear-gradient\\(to ${at === 'end' ? 'bottom' : 'top'}, #000 calc\\(100% - 28px\\), transparent\\);`));
 });
+
+// ---- WP-N2 (NAV-9, NAV-12): focus after a redraw, and tooltips ----------------------------------------------------------------
+test('closing a panel puts focus back on its item even when the bar was redrawn while the panel was open', async () => {
+  const h = await setup({ shown: '34', frameDoc: course('/courses/34') });
+  const opener = h.root.querySelector('.rail [data-id="course"]');
+  h.click(opener); await new Promise(setImmediate);
+  assert.equal(h.root.querySelector('.panel').hidden, false);
+  assert.ok(h.root.querySelector('.panel').contains(h.root.activeElement), 'focus went into the panel');
+  // Another course tab on screen: the bar is drawn again, and the button the panel came from is a new element.
+  h.state.shown = '12'; h.state.frameDoc = course('/courses/12'); h.ui.sync();
+  const again = h.root.querySelector('.rail [data-id="course"]');
+  assert.ok(again && again !== opener, 'a new element'); assert.equal(opener.isConnected, false);
+  assert.equal(h.key('Escape').defaultPrevented, true);
+  assert.equal(h.root.querySelector('.panel').hidden, true);
+  assert.ok(h.root.activeElement === again, 'back on the item that opened it, not lost to the page');
+  // The panel's own Close button does the same.
+  h.click(again); await new Promise(setImmediate);
+  h.state.shown = '34'; h.state.frameDoc = course('/courses/34'); h.ui.sync();
+  h.click(h.root.querySelector('.panel .close'));
+  assert.ok(h.root.activeElement === h.root.querySelector('.rail [data-id="course"]'));
+});
+
+test('a bar tooltip goes away on Escape, wherever focus is, without moving the pointer', async () => {
+  const h = await setup({ navbar: { rail: 'icons' } });
+  const heard = new Map();
+  h.document.addEventListener = (type, f) => heard.set(`${type}`, f);
+  h.document.removeEventListener = (type, f) => { if (heard.get(type) === f) heard.delete(type); };
+  const rail = h.root.querySelector('.rail'), item = rail.querySelector('[data-id="calendar"]'), tip = h.root.querySelector('.tip');
+  rail.dispatchEvent({ type: 'pointerover', composedPath: () => [item, rail] });
+  assert.equal(tip.hasAttribute('data-on'), true, 'the tip shows on hover');
+  assert.equal(tip.textContent, 'Calendar');
+  heard.get('keydown')({ key: 'ArrowDown' });
+  assert.equal(tip.hasAttribute('data-on'), true, 'other keys leave it');
+  heard.get('keydown')({ key: 'Escape' });
+  assert.equal(tip.hasAttribute('data-on'), false, 'Escape dismisses it (WCAG 1.4.13)');
+  assert.equal(heard.has('keydown'), false, 'and the page-level listener goes with it');
+  // Turning the bar off takes the listener away too.
+  rail.dispatchEvent({ type: 'pointerover', composedPath: () => [item, rail] });
+  h.ui.sync(); h.settings.navbar.on = false; h.ui.sync();
+  assert.equal(heard.has('keydown'), false);
+});
+
+test('closing a phone panel returns to More when its still-connected opener is in the closed sheet', async () => {
+  const h = await setup({ width: 390 });
+  h.click(h.root.querySelector('.tab.more'));
+  const opener = h.root.querySelector('.sheet [data-id="profile"]');
+  h.click(opener); await new Promise(setImmediate);
+  assert.equal(h.root.querySelector('.panel').hidden, false);
+  assert.equal(opener.isConnected, true);
+  // Browser getClientRects is empty for descendants of the now-closed modal sheet.
+  for (const e of h.root.querySelectorAll('[data-id="profile"]')) e.getClientRects = () => [];
+  h.key('Escape');
+  assert.ok(h.root.activeElement === h.root.querySelector('.tab.more'), 'return to the visible More button, not the hidden account row');
+});

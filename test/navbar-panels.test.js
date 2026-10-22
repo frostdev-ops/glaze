@@ -10,16 +10,17 @@ const panelHarness = () => {
   const doc = { activeElement: null, on: new Map(), addEventListener(type, f) { this.on.set(type, f); }, removeEventListener(type, f) { if (this.on.get(type) === f) this.on.delete(type); } };
   doc.body = new El('body', doc);
   const box = new El('div', doc), from = new El('button', doc);
+  from.getClientRects = () => [{}];
   doc.root = new El('#document', doc); doc.root.append(from);
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(new El(tag, doc), props); e.append(...kids); return e; };
   const root = { querySelectorAll: () => [], get activeElement() { return doc.activeElement; }, contains: (e) => e === from || box.contains(e) };
   let resolve;
   const context = vm.createContext({ document: doc, root, el: { panel: box }, host: {}, panel: '', panelTurn: 0, panelFrom: null, panels: new Map(),
     byId: () => ({ label: 'Messages' }), make, put: (e, ...kids) => { e.append(...kids); return e; }, part: (e) => e, icon: () => new El('svg', doc), t: (s) => s, emit() {},
-    menuTo() {}, sheetTo() {}, placePanel() {}, URL, location: { href: 'https://school.test/', origin: 'https://school.test', protocol: 'https:', host: 'school.test' }, isPreview: false,
+    menuTo() {}, sheetTo() {}, placePanel() {}, getComputedStyle: () => ({ visibility: 'visible' }), URL, location: { href: 'https://school.test/', origin: 'https://school.test', protocol: 'https:', host: 'school.test' }, isPreview: false,
     M: { PICKS: ['bell'] }, site: { panel: () => new Promise((r) => { resolve = r; }) } });
   const src = fs.readFileSync(require.resolve('../features/navbar.js'), 'utf8');
-  vm.runInContext(src.slice(src.indexOf('  const safeHref ='), src.indexOf('  // The open course')) + src.slice(src.indexOf('  const panelRow ='), src.indexOf('  // ---- acting')) + '\nglobalThis.open = panelTo; globalThis.left = leftPanel;', context);
+  vm.runInContext(src.slice(src.indexOf('  const safeHref ='), src.indexOf('  // The open course')) + src.slice(src.indexOf('  const panelAnchor ='), src.indexOf('  const placePanel =')) + src.slice(src.indexOf('  const panelRow ='), src.indexOf('  // ---- acting')) + '\nglobalThis.open = panelTo; globalThis.left = leftPanel;', context);
   return { doc, box, from, open: context.open, left: context.left, resolve: (v) => resolve(v) };
 };
 
@@ -82,7 +83,7 @@ test('turning the bar off restores tabindex added by Skip to content', () => {
     if (tabindex !== null) main.setAttribute('tabindex', tabindex);
     // Mirror the browser's reflected tabindex property in this small DOM stand-in.
     Object.defineProperty(main, 'tabIndex', { set(v) { this.setAttribute('tabindex', String(v)); } });
-    const context = vm.createContext({ document: doc, html, el: { skip }, host: new El('div', doc), site: { main: () => main, unobserve() {} }, tabsApi: () => null,
+    const context = vm.createContext({ document: Object.assign(doc, { removeEventListener() {} }), escapeTip() {}, html, el: { skip }, host: new El('div', doc), site: { main: () => main, unobserve() {} }, tabsApi: () => null,
       chrome: { runtime: { id: "glaze" } }, clearLogo() {},
       enter: 0, leave: 0, frame: 0, queued: 0, sheetOpen: false, sizes: null, words: '', panels: new Map(),
       clearTimeout() {}, cancelAnimationFrame() {}, menuTo() {}, panelTo() {}, dockTo() {}, emit() {} });

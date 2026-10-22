@@ -444,7 +444,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
 
   // ---- the global navigation (features/navbar.js) --------------------------------------------------
   const paintNav = (n, picture) => {
-    if (window.top !== window) { setAttr('data-gz-navbar-frame', I.tabFrame && I.settings.navbar.on && (I.settings.navbar.cmenu !== false && I.settings.navbar.course !== 'hide' ? 'menu' : '')); return; }
+    if (window.top !== window) { setAttr('data-gz-navbar-frame', I.tabFrame && I.settings.navbar.on && (I.settings.navbar.course === 'hide' ? 'none' : I.settings.navbar.cmenu !== false ? 'menu' : '')); return; }
     // Reserve the bar's room before its lazy renderer arrives, using GZ_NAVBAR.layout's words.
     const b = I.settings.navbar, c = /^\/courses\/\d+(?:\/|$)/.test(location.pathname) ? b?.course : 'same';
     const p = c === 'same' ? b?.place : c === 'icons' ? 'rail' : c === 'hide' ? 'none' : 'top';

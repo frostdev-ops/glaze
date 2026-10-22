@@ -107,10 +107,10 @@ Notes **Back up or restore** opens **Settings → Backup and privacy → Notes b
 ## Glaze navigation
 
 On by default on Blackboard Ultra, Canvas and Moodle, Glaze draws its own navigation in place of the site's, set
-up in Settings → **Navigation**. **Placement**: a side rail, open with labels or icons only (with a tooltip on each and
+up in Settings → **Navigation**. **Placement**: a side rail, open with labels or icons only (with a tooltip on each, which Escape dismisses, and
 a peek when you point at it or move focus into it), or a top bar whose items move under **More** when they don't fit.
 **Style**: floating glass with a little room around it, or embedded at the page's edge. **Inside a course** it can stay
-the same, become icons only, become a top bar, or hide (the course's own Home button remains). **Course tabs** show in it
+the same, become icons only, become a top bar, or hide (the course's own navigation remains, and on a Canvas phone so does Canvas's own header, with its menus). **Course tabs** show in it
 too: click one to switch, the middle button or Delete closes it, and P pins it. Course tab settings (Settings →
 Navigation → Course tabs) can keep them **only in the navigation**, with no strip, in course pages and their frames alike.
 The logo can be Glaze's, the school's, **your own picture** (kept on this device; a shared Look shows Glaze's logo in its
@@ -121,7 +121,8 @@ tab.
 
 On Moodle, the bar replaces the top navigation and phone hamburger. Profile, notifications and conversations open in Glaze panels; messages link to Moodle's full messaging page. A course's secondary navigation, including More links, appears in the rail or the top bar's second row when **Course menu** is on. The course index and block drawers remain available. Turning navigation off restores Moodle's own navigation.
 
-**Navigation items** renames, re-icons, reorders and groups every item, hides any of them, picks the four phone tabs,
+**Navigation items** renames, re-icons, reorders and groups every item of Blackboard, Canvas and Moodle (an item only some of
+them have says which), hides any of them, picks up to four preferred phone tabs (defaults vary by site, and any remaining slots fill automatically),
 adds up to eight links of your own, and turns on Notes, To Do, search and Glaze settings (off by default). Its
 **Widgets** put the clock, what's due next, the focus timer and your pet at the top or bottom of the rail (a square each
 in the icons rail, with the details in its tip), compact in a top bar and in a phone's More sheet; they are the same

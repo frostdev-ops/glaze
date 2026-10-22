@@ -58,7 +58,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 
   let host = null, root, el = {}, sizes = null, model = null, rows = [], sig = '', prefs = M.clean(), legacy = null, read = false, lay = null, words = '';
   let rail = null, applied = null, peek = false, shown = false, sheetOpen = false, menu = '', enter = 0, leave = 0, queued = 0, placed = false, frame = 0, sleeping = false, measured = '';
-  let cmenu = null, panel = '', panelFrom = null, panelTurn = 0;
+  let cmenu = null, panel = '', panelFrom = null, panelFromId = '', panelTurn = 0; // panelFromId: the item it came from by id, for when the bar is drawn again
   let wx = null, docked = false; // Glaze's widgets (features/navbar-widgets.js), once any is on; the dock open over the page
   const skipMain = new Set(); // Elements given a temporary focus target by Skip to content.
   const mainAt = () => { try { return site.main(tabsApi()?.doc?.() || document); } catch { return site.main(); } };
@@ -512,10 +512,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const b = box.getBoundingClientRect(), r = cur.getBoundingClientRect();
     if (r.top < b.top + 28) box.scrollTop -= b.top + 28 - r.top; else if (r.bottom > b.bottom - 28) box.scrollTop += r.bottom - (b.bottom - 28);
   };
+  // A tip shown stays until the pointer or focus leaves, and Escape dismisses it wherever focus is (WCAG 1.4.13).
+  const escapeTip = (e) => { if (e.key === 'Escape') tip(null); };
   const tip = (target) => {
     if (!el.tip) return;
     const vertical = lay?.place === 'top';
-    if (!target || !wide() || (!vertical && shown) || (vertical && !el.topbar.hasAttribute('data-compact') && !target.classList.contains('tacc') && !target.classList.contains('ctab-go') && !target.closest('.twidgets'))) { el.tip.removeAttribute('data-on'); return; }
+    if (!target || !wide() || (!vertical && shown) || (vertical && !el.topbar.hasAttribute('data-compact') && !target.classList.contains('tacc') && !target.classList.contains('ctab-go') && !target.closest('.twidgets'))) { el.tip.removeAttribute('data-on'); document.removeEventListener('keydown', escapeTip, true); return; }
     const r = target.getBoundingClientRect();
     el.tip.textContent = target.dataset.tip;
     el.tip.toggleAttribute('data-below', vertical);
@@ -524,6 +526,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Kept on screen: a tip under the top bar's last item would run off the window's edge.
     if (vertical) { const half = el.tip.offsetWidth / 2; el.tip.style.left = `${Math.max(8 + half, Math.min(innerWidth - 8 - half, r.left + r.width / 2))}px`; }
     el.tip.setAttribute('data-on', '');
+    document.addEventListener('keydown', escapeTip, true);
   };
   const tipFor = (e) => { const target = e.composedPath().find((n) => n.dataset?.tip); if (target && !target.hasAttribute('data-over')) tip(target); };
   const peekTo = (v) => { clearTimeout(enter); clearTimeout(leave); enter = leave = 0; if (peek !== v) { peek = v; if (lay) layout(); } };
@@ -611,6 +614,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 
   // ---- panels: a site's own menus, drawn by Glaze ----------------------------------------------------------------------
   // Beside the rail (its full height), under the top bar's item, or on a phone as a sheet over the bottom bar.
+  const panelAnchor = () => {
+    const same = panelFromId ? root.querySelectorAll(`[data-id="${CSS.escape(panelFromId)}"]:not(.brand)`) : [];
+    // A connected opener can still be in a closed More sheet/menu, or in the rail hidden behind a top bar.
+    return [panelFrom, ...same].find((e) => e?.isConnected && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden')
+      || (!wide() ? el.more : lay?.place === 'top' ? panelFromId === 'profile' ? el.tacc : el.tmore : el.toggle);
+  };
   const placePanel = () => {
     if (!panel || el.panel.hidden) return;
     el.panel.toggleAttribute('data-phone', !wide());
@@ -622,7 +631,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       el.panel.style.top = `${r.top}px`;
       el.panel.style.height = `${r.height}px`;
     } else {
-      const r = (panelFrom?.isConnected ? panelFrom : el.topbar).getBoundingClientRect();
+      const r = (panelAnchor() || el.topbar).getBoundingClientRect();
       el.panel.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, rtl() ? r.right - w : r.left))}px`;
       el.panel.style.top = `${r.bottom + 8}px`;
       el.panel.style.height = '';
@@ -679,11 +688,13 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       el.panel.hidden = true; el.panel.replaceChildren();
       document.removeEventListener('pointerdown', outsidePanel, true);
       document.removeEventListener('keydown', escapePanel, true);
-      if (focus && was && panelFrom?.isConnected) panelFrom.focus({ preventScroll: true });
-      panelFrom = null; emit('panel', { id: '' });
+      // The button it came from, or (the bar redrew its items while the panel was open) the same item drawn again.
+      const back = panelAnchor();
+      if (focus && was && back) back.focus({ preventScroll: true });
+      panelFrom = null; panelFromId = ''; emit('panel', { id: '' });
       return;
     }
-    panelFrom = from;
+    panelFrom = from; panelFromId = from?.dataset?.id || '';
     menuTo('', false); sheetTo(false);
     const kept = panels.get(panel);
     const fresh = kept && Date.now() - kept.at < 60000;
@@ -851,6 +862,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     cancelAnimationFrame(frame); frame = 0;
     cancelAnimationFrame(queued); queued = 0;
     clearLogo();
+    document.removeEventListener('keydown', escapeTip, true);
     if (!host) return;
     if (sheetOpen) sheetTo(false);
     dockTo(false, false);
@@ -1082,7 +1094,8 @@ function GZ_NAVBAR_ULTRA(X) {
     avatar: () => { const img = anchors().find((a) => idOf(a) === 'profile')?.querySelector('img'); return img?.currentSrc || img?.src || ''; },
     // Home: the Glaze Dashboard where it's on (it takes Ultra's institution page), else Courses, as Ultra's logo does in Glaze.
     home: () => (X.settings().enhance.dashboard ? 'institution-page' : 'course'),
-    main: () => document.getElementById('main-content') || document.querySelector('main'),
+    // The page's, or the course tab's frame on screen (same origin), which the covered page is not.
+    main: (doc = document) => doc.getElementById('main-content') || doc.querySelector('main'),
     inCourse: () => /^\/ultra\/courses\//.test(location.pathname),
     observe: (fn) => { notify = fn; mo = new MutationObserver(() => notify?.()); swap = new MutationObserver(() => notify?.()); watched = null; watch(); },
     unobserve: () => { mo?.disconnect(); swap?.disconnect(); mo = swap = null; watched = null; notify = null; },

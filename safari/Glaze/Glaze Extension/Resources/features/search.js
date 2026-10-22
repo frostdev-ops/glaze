@@ -48,7 +48,7 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
 
     // Screen readers hear the count once the search is done, not every arrival.
     const live = document.createElement('p');
-    live.className = 'screenreader-only';
+    live.className = 'gz-sr';
     live.setAttribute('aria-live', 'polite');
     cmd.list.after(live);
     let wait = 0, ctl = null, last = '';

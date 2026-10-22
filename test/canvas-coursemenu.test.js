@@ -45,6 +45,7 @@ const page = () => {
     document: doc, Element: El, Node: El, location: { origin }, innerWidth: 1200, innerHeight: 900,
     setTimeout: (f) => { timers.set(++timerId, f); return timerId; }, clearTimeout: (id) => timers.delete(id),
     addEventListener() {}, matchMedia: () => ({ matches: false }), requestAnimationFrame: () => 0,
+    getComputedStyle: (el) => ({ direction: el.closest('[dir]')?.getAttribute('dir') || doc.root.style.direction || 'ltr' }),
     chrome: { runtime: { id: 'glaze' }, storage: { sync: { set() {} }, onChanged: { addListener() {} } } },
     fetch: (url, init) => new Promise((resolve, reject) => requests.push({ url, init, ok: () => resolve({ ok: true, json: async () => ({}) }), fail: () => reject(Error('unavailable')) })),
     ultra: false, moodle: false, menuOn: () => true, courseList: courses, settings,
@@ -150,4 +151,56 @@ test('removing a board menu button closes its menu instead of anchoring to the n
   p.ui.sync(true);
   assert.equal(p.doc.getElementById('gz-cm'), undefined);
   assert.equal(p.ui.cid(), undefined);
+});
+
+// ---- WP-N2 (NAV-6, NAV-10): the popover's keys ----------------------------------------------------------------------------------
+const press = (p, target, extra) => {
+  const e = { type: 'keydown', key: 'Enter', target, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {}, ...extra };
+  for (const l of p.events.filter((x) => x.type === 'keydown')) l.f(e);
+  return e;
+};
+
+test('the Enter that confirms an IME composition in the nickname field neither saves nor is swallowed', async () => {
+  const p = page(); await p.open();
+  const n = p.doc.getElementById('gz-cm-nick');
+  n.value = 'にほん'; p.doc.fire(n, 'input'); n.focus();
+  for (const extra of [{ isComposing: true, keyCode: 229 }, { keyCode: 229 }]) {
+    const e = press(p, n, extra); await settle();
+    assert.equal(e.defaultPrevented, false, JSON.stringify(extra));
+    assert.equal(p.requests.length, 0, 'nothing is sent mid-composition');
+  }
+  const e = press(p, n, { keyCode: 13 }); await settle();
+  assert.equal(e.defaultPrevented, true);
+  assert.equal(p.requests.length, 1, 'the Enter after it saves');
+});
+
+test('Escape that cancels an IME composition does not close the popover', async () => {
+  const p = page(); await p.open();
+  const n = p.doc.getElementById('gz-cm-nick');
+  const e = press(p, n, { key: 'Escape', isComposing: true, keyCode: 229 });
+  assert.equal(e.defaultPrevented, false);
+  assert.equal(p.ui.cid(), 'canvas:https://school.instructure.com/27');
+  press(p, n, { key: 'Escape', keyCode: 27 });
+  assert.equal(p.ui.cid(), undefined);
+});
+
+test('the arrow keys of the popover mirror in a right-to-left page: Left goes on, Right goes back', async () => {
+  for (const rtl of [false, true]) {
+    const p = page(); if (rtl) p.doc.root.setAttribute('dir', 'rtl'); await p.open();
+    const group = p.doc.querySelector('[data-roving]'), items = group.querySelectorAll('button, input');
+    assert.ok(items.length >= 3);
+    const step = (from, key) => { items[from].focus(); press(p, items[from], { key }); return items.findIndex((x) => x === p.doc.activeElement); };
+    assert.equal(step(1, 'ArrowRight'), rtl ? 0 : 2, `${rtl ? 'rtl' : 'ltr'}: Right`);
+    assert.equal(step(1, 'ArrowLeft'), rtl ? 2 : 0, `${rtl ? 'rtl' : 'ltr'}: Left`);
+    assert.equal(step(1, 'Home'), 0);
+    assert.equal(step(1, 'End'), items.length - 1);
+    assert.equal(step(0, 'ArrowDown'), items.length - 1, 'down is down in both (the stand-in has no rows: one row of all)');
+  }
+});
+
+test('course-menu arrow direction follows computed CSS direction without a dir attribute', async () => {
+  const p = page(); p.doc.root.style.direction = 'rtl'; await p.open();
+  const items = p.doc.querySelector('[data-roving]').querySelectorAll('button, input');
+  items[1].focus(); press(p, items[1], { key: 'ArrowRight' });
+  assert.equal(p.doc.activeElement, items[0]);
 });

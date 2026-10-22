@@ -1582,7 +1582,10 @@ html[data-gz-ctab-framed], html[data-gz-ctab-framed] #drawer-layout-content { ov
 /* Glaze navigation replaces only Canvas's navigation chrome. Portal trays, dialogs and alerts stay outside these rules.
    The words reserve first-paint room; the renderer supplies the same dimensions inline once mounted. */
 html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; }
-html[data-gz-navbar] :is(#header, #mobile-header) { display: none !important; }
+html[data-gz-navbar] #header { display: none !important; }
+/* Canvas's phone header holds the hamburger (global navigation) and the course menu's button. With the bar hidden inside a
+   course ("none") nothing else leads there on a phone, so it stays. */
+html[data-gz-navbar]:not([data-gz-navbar~="none"]) #mobile-header { display: none !important; }
 /* Canvas's native support forms and other trays must stay above the replacement bar. */
 html[data-gz-navbar] #nav-tray-portal { z-index: 1261 !important; }
 /* Canvas's jQuery UI dialogs stack from z-index 1000 (inline: each over the last, its backdrop just under it), below Glaze's
@@ -1629,7 +1632,8 @@ html[data-gz-navbar][data-gz-ctabs~="nav"] #sticky-container { top: var(--gz-nav
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) body { padding-bottom: 0 !important; }
 }
 
-html[data-gz-navbar-frame] :is(#header, #mobile-header) { display: none !important; }
+html[data-gz-navbar-frame] #header { display: none !important; }
+html[data-gz-navbar-frame]:not([data-gz-navbar-frame~="none"]) #mobile-header { display: none !important; }
 html[data-gz-navbar-frame] #wrapper { margin-inline: 0 !important; }
 /* A tab's frame fills the window under the bar, as the page itself does, and keeps the bar's room in it the same way
    (--gz-navbar-left and -top, the page around's, copied by features/coursetabs.js): the page's own background runs under

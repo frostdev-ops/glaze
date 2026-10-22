@@ -2863,6 +2863,7 @@
   "Details": "Details",
   "Logo": "Logo",
   "Reset items": "Einträge zurücksetzen",
+  "Defaults vary by site. Choose up to four preferred phone tabs; other slots fill automatically.": "Die Vorgaben unterscheiden sich je nach Website. Wähle bis zu vier bevorzugte Telefon-Tabs; die übrigen Plätze werden automatisch gefüllt.",
   "Name, icon, order and grouping of every item, which ones show, and the four on a phone's bar.": "Name, Symbol, Reihenfolge und Gruppe jedes Eintrags, welche angezeigt werden, und die vier in der Leiste auf dem Telefon.",
   "Off by default. Each one opens where you are.": "Standardmäßig aus. Jeder öffnet sich dort, wo du bist.",
   "Your links": "Deine Links",

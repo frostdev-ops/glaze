@@ -2863,6 +2863,7 @@
   "Details": "Details",
   "Logo": "Logo",
   "Reset items": "Items herstellen",
+  "Defaults vary by site. Choose up to four preferred phone tabs; other slots fill automatically.": "Standaardkeuzes verschillen per site. Kies maximaal vier voorkeurstabbladen voor je telefoon; andere plekken worden automatisch gevuld.",
   "Name, icon, order and grouping of every item, which ones show, and the four on a phone's bar.": "Naam, pictogram, volgorde en groep van elk item, welke worden getoond, en de vier op de balk van een telefoon.",
   "Off by default. Each one opens where you are.": "Standaard uit. Elk opent waar je bent.",
   "Your links": "Je links",

@@ -307,12 +307,13 @@ test('a navbar edit batched with Look parts merges in the worker queue too', asy
 test("the editor lists every item where the bar puts it, hidden ones too, with the phone's tabs", () => {
   const E = require('../lib/editor-navbar.js');
   const ids = (gs) => gs.map((g) => g.items.map((i) => i.id));
-  assert.deepEqual(ids(E.rows({})), [['institution-page', 'stream', 'course', 'organization', 'calendar', 'messages', 'grades'], ['tools']]);
-  assert.deepEqual(E.rows({}).flatMap((g) => g.items).filter((i) => i.tab).map((i) => i.id), ['institution-page', 'course', 'calendar', 'messages']);
+  // Every LMS's items (WP-N2, NAV-4): Ultra's, Canvas's and Moodle's, in the default groups' order.
+  assert.deepEqual(ids(E.rows({})), [['institution-page', 'dashboard', 'home', 'stream', 'course', 'organization', 'groups', 'calendar', 'messages', 'notifications', 'grades'], ['tools', 'history', 'help', 'admin']]);
+  assert.deepEqual(E.rows({}).flatMap((g) => g.items).filter((i) => i.tab).map((i) => i.id), ['institution-page', 'dashboard', 'course', 'calendar', 'messages'], "each LMS's four: Ultra's Institution page, Canvas's and Moodle's Dashboard");
   const prefs = { items: { stream: { hidden: true, label: 'Feed' }, tools: { icon: 'star' } }, groups: [{ label: 'Daily', items: ['calendar', 'stream'] }, { items: [] }, { items: ['tools'] }], tabs: ['calendar'], glaze: ['notes'], links: [{ id: 'aaaaaaaaaaaa', n: 'Wiki', u: 'https://wiki.test/' }] };
   const gs = E.rows(prefs);
   assert.deepEqual(gs.map((g) => g.label), ['Daily', '', '']);
-  assert.deepEqual(ids(gs), [['calendar', 'stream', 'institution-page', 'course', 'organization', 'messages', 'grades'], [], ['tools', 'link:aaaaaaaaaaaa', 'glaze:notes']], 'an empty group stays to drop into');
+  assert.deepEqual(ids(gs), [['calendar', 'stream', 'institution-page', 'dashboard', 'home', 'course', 'organization', 'groups', 'messages', 'notifications', 'grades', 'history', 'help', 'admin'], [], ['tools', 'link:aaaaaaaaaaaa', 'glaze:notes']], 'an empty group stays to drop into');
   const stream = gs[0].items[1];
   assert.deepEqual([stream.hidden, stream.name], [true, 'Feed'], 'hidden, still listed in its place');
   assert.equal(gs[2].items[0].icon, 'star');

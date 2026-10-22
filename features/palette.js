@@ -243,6 +243,9 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     });
     input.addEventListener('input', showCmd);
     input.addEventListener('keydown', (e) => {
+      // An IME's own keys (the Enter that picks a candidate, its arrows and Escape) are not the palette's; keyCode 229 is what
+      // Safari sends for the Enter that follows compositionend.
+      if (e.isComposing || e.keyCode === 229) { e.stopPropagation(); return; }
       const n = cmd.shown.length;
       const step = { ArrowDown: 1, ArrowUp: -1, Tab: e.shiftKey ? -1 : 1 }[e.key];
       if (step && n) { e.preventDefault(); cmd.active = (cmd.active + step + n) % n; mark(); } else if (e.key === 'Tab') e.preventDefault();

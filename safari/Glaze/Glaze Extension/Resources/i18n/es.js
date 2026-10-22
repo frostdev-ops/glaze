@@ -2863,6 +2863,7 @@
   "Details": "Detalles",
   "Logo": "Logotipo",
   "Reset items": "Restablecer elementos",
+  "Defaults vary by site. Choose up to four preferred phone tabs; other slots fill automatically.": "Los valores predeterminados varían según el sitio. Elige hasta cuatro pestañas preferidas para el teléfono; los demás espacios se rellenan automáticamente.",
   "Name, icon, order and grouping of every item, which ones show, and the four on a phone's bar.": "Nombre, icono, orden y grupo de cada elemento, cuáles se muestran y los cuatro de la barra del teléfono.",
   "Off by default. Each one opens where you are.": "Desactivados por defecto. Cada uno se abre donde estás.",
   "Your links": "Tus enlaces",
