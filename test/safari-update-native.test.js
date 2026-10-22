@@ -135,8 +135,66 @@ test('nothing that builds, packages or installs the Mac app unregisters a copy o
   const build = fs.readFileSync(path.join(root, 'scripts/build-safari.sh'), 'utf8');
   const xcode = build.slice(build.indexOf('xcodebuild -project'), build.indexOf(' build > '));
   assert.match(xcode, /CODE_SIGN_IDENTITY=- /);
-  assert.match(build, /'io\.frostdev\.GlazeBuild' \+ i\[/, 'Xcode builds under ids of its own');
-  assert.match(build, /plutil -replace CFBundleIdentifier -string io\.frostdev\.Glaze "\$app\/Contents\/Info\.plist"/);
   assert.ok(build.indexOf('ditto "$built" "$app"') > build.indexOf(' build > ') && build.indexOf('ditto "$built" "$app"') < build.indexOf('codesign --force'));
   assert.doesNotMatch(build, /ditto "\$app" "\$out\/build\/Glaze\.app"/, 'no unpacked app is left in release/');
+  // Both Mac builds run under ids of their own, signed ad hoc; only the copy that ships gets Glaze's back.
+  const store = fs.readFileSync(path.join(root, 'scripts/appstore-safari.sh'), 'utf8');
+  assert.match(store.slice(store.indexOf('xcodebuild archive'), store.indexOf('appstore-build.log')), /CODE_SIGN_IDENTITY=- /);
+  for (const [f, src, before, after] of [['build-safari.sh', build, 'xcodebuild -project', 'codesign --force'], ['appstore-safari.sh', store, 'xcodebuild archive', 'xcodebuild -exportArchive']]) {
+    assert.ok(src.indexOf('safari-build-ids.py project') > 0 && src.indexOf('safari-build-ids.py project') < src.indexOf(before), `${f}: build ids before Xcode`);
+    assert.ok(src.indexOf('safari-build-ids.py app') > src.indexOf(before) && src.indexOf('safari-build-ids.py app') < src.indexOf(after), `${f}: Glaze's ids back before signing`);
+  }
+});
+
+test('the build-id helper swaps the project to build ids and a built app back', { skip: process.platform !== 'darwin' }, () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-build-ids-'));
+  try {
+    const project = path.join(temp, 'project.pbxproj');
+    fs.copyFileSync(path.join(root, 'safari/Glaze/Glaze.xcodeproj/project.pbxproj'), project);
+    assert.equal(run('python3', ['scripts/safari-build-ids.py', 'project', project]).status, 0);
+    const ids = Object.values(plist(project).objects).map((o) => o.buildSettings?.PRODUCT_BUNDLE_IDENTIFIER).filter(Boolean);
+    assert.ok(ids.length >= 2);
+    assert.ok(ids.every((i) => i === 'io.frostdev.GlazeBuild' || i === 'io.frostdev.GlazeBuild.Extension'), ids.join());
+    const app = path.join(temp, 'Glaze.app');
+    const appex = path.join(app, 'Contents/PlugIns/Glaze Extension.appex/Contents');
+    fs.mkdirSync(appex, { recursive: true });
+    const info = (file, id) => run('plutil', ['-create', 'xml1', file]).status === 0 && run('plutil', ['-insert', 'CFBundleIdentifier', '-string', id, file]);
+    info(path.join(app, 'Contents/Info.plist'), 'io.frostdev.GlazeBuild');
+    info(path.join(appex, 'Info.plist'), 'io.frostdev.GlazeBuild.Extension');
+    assert.equal(run('python3', ['scripts/safari-build-ids.py', 'app', app]).status, 0);
+    assert.equal(plist(path.join(app, 'Contents/Info.plist')).CFBundleIdentifier, 'io.frostdev.Glaze');
+    assert.equal(plist(path.join(appex, 'Info.plist')).CFBundleIdentifier, 'io.frostdev.Glaze.Extension');
+    assert.notEqual(run('python3', ['scripts/safari-build-ids.py', 'app', app]).status, 0, 'refuses a copy that already has Glaze ids');
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test('the build-id helper rejects an invalid extension before changing either plist', { skip: process.platform !== 'darwin' }, async (t) => {
+  const info = (id) => `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${id}</string></dict></plist>`;
+  for (const [name, contents] of [
+    ['wrong id', info('io.frostdev.Other.Extension')],
+    ['malformed plist', 'not a plist'],
+    ['missing plist', null],
+  ]) {
+    await t.test(name, () => {
+      const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-build-ids-invalid-'));
+      try {
+        // Only plist fixtures, with no executable or .app directory.
+        const fixture = path.join(temp, 'fixture with spaces');
+        const appInfo = path.join(fixture, 'Contents/Info.plist');
+        const extensionInfo = path.join(fixture, 'Contents/PlugIns/Glaze Extension.appex/Contents/Info.plist');
+        fs.mkdirSync(path.dirname(extensionInfo), { recursive: true });
+        const original = info('io.frostdev.GlazeBuild');
+        fs.writeFileSync(appInfo, original);
+        if (contents !== null) fs.writeFileSync(extensionInfo, contents);
+        const result = run('python3', ['scripts/safari-build-ids.py', 'app', fixture]);
+        assert.notEqual(result.status, 0, result.stderr);
+        assert.equal(plist(appInfo).CFBundleIdentifier, 'io.frostdev.GlazeBuild', 'a rejected extension must leave the app under its build id');
+        assert.equal(fs.readFileSync(appInfo, 'utf8'), original);
+        if (contents !== null) assert.equal(fs.readFileSync(extensionInfo, 'utf8'), contents);
+        else assert.ok(!fs.existsSync(extensionInfo));
+      } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+    });
+  }
 });

@@ -41,22 +41,7 @@ app="$stage/release/Glaze.app"
 export SAFARI_UPDATE_PUBLIC_KEY="${SAFARI_UPDATE_PUBLIC_KEY:-0lbeC9MO1QDsjSGjs6iyxSBwXKMpEiKVoB+5wZwQEqY=}"
 # Only the DMG project contains Sparkle. Stage-only usage never reaches signing/notarization.
 python3 scripts/stage-safari-dmg.py "$stage"
-python3 - "$stage/Glaze/Glaze.xcodeproj/project.pbxproj" <<'PY'
-import plistlib, sys
-with open(sys.argv[1], 'rb') as f:
-    project = plistlib.load(f)
-n = 0
-for o in project['objects'].values():
-    s = o.get('buildSettings', {})
-    i = s.get('PRODUCT_BUNDLE_IDENTIFIER', '')
-    if i == 'io.frostdev.Glaze' or i.startswith('io.frostdev.Glaze.'):
-        s['PRODUCT_BUNDLE_IDENTIFIER'] = 'io.frostdev.GlazeBuild' + i[len('io.frostdev.Glaze'):]
-        n += 1
-if not n:
-    sys.exit('build-safari: the staged project has no Glaze bundle ids')
-with open(sys.argv[1], 'wb') as f:
-    plistlib.dump(project, f)
-PY
+python3 scripts/safari-build-ids.py project "$stage/Glaze/Glaze.xcodeproj/project.pbxproj"
 # The app bundles only what the Xcode project lists: stop before building if the package has something it doesn't.
 node scripts/safari-resources.js "$stage/Glaze/Glaze Extension/Resources"
 case "${SAFARI_UPDATE_PUBLIC_KEY:-}" in
@@ -81,9 +66,7 @@ fi
 # The release copy, under Glaze's own ids.
 mkdir "$stage/release"
 ditto "$built" "$app"
-test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = io.frostdev.GlazeBuild
-plutil -replace CFBundleIdentifier -string io.frostdev.Glaze "$app/Contents/Info.plist"
-plutil -replace CFBundleIdentifier -string io.frostdev.Glaze.Extension "$app/Contents/PlugIns/Glaze Extension.appex/Contents/Info.plist"
+python3 scripts/safari-build-ids.py app "$app"
 
 # Check package integration and URL registration before final re-signing and packaging.
 test -d "$app/Contents/Frameworks/Sparkle.framework" || { echo "build-safari: Sparkle framework is missing" >&2; exit 1; }
