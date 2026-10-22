@@ -386,8 +386,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   if (window.top === window) try {
     const epoch = floatEpoch;
-    chrome.storage.local.get('widgetLayout', (r) => { if (!chrome.runtime.lastError && epoch === floatEpoch) floatsIn(r?.widgetLayout); });
-    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { floatEpoch++; floatsIn(ch.widgetLayout.newValue); } });
+    // Not on a fresh tab's defaults: Glaze may be off.
+    chrome.storage.local.get('widgetLayout', (r) => { const go = () => epoch === floatEpoch && floatsIn(r?.widgetLayout); if (!chrome.runtime.lastError) Promise.resolve().then(() => I.ready).then(go, go); });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { const epoch = ++floatEpoch; Promise.resolve().then(() => I.ready).then(() => { if (epoch === floatEpoch) floatsIn(ch.widgetLayout.newValue); }, () => {}); } });
   } catch { /* extension reloaded */ }
 
   // Course tabs load on demand; extras.css first reserves their cached place and size.

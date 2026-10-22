@@ -857,15 +857,16 @@
   };
   // Expired copies go; with backup off, all copies go. Top frame only.
   const tidyDrafts = () => {
-    if (window.top !== window) return;
+    if (window.top !== window || !settings.enabled) return;
     const sweep = (s, all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
-      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }, () => {});
+      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (settings.enabled && old.length) s.remove(old); }, () => {});
     };
     local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => {
+      if (!settings.enabled) return;
       if (ks) return s.get(ks.filter((k) => k.startsWith('draft:')), (all) => sweep(s, all));
       // Without key listing everything is read, local artwork too: at most once a day, so old copies still go.
-      s.get('draftsSwept', (r) => { if (!(r?.draftsSwept > Date.now() - 864e5)) { s.set({ draftsSwept: Date.now() }); s.get(null, (all) => sweep(s, all)); } });
+      s.get('draftsSwept', (r) => { if (settings.enabled && !(r?.draftsSwept > Date.now() - 864e5)) { s.set({ draftsSwept: Date.now() }); s.get(null, (all) => sweep(s, all)); } });
     }).catch(() => {}));
   };
 
@@ -1342,6 +1343,8 @@
     vars.clear();
     attrs.clear();
   };
+  // Ultra's early sheets enable() hasn't taken: off, they'd style the page with no palette.
+  const early = () => globalThis.GZ_SITE_ULTRA?.sheets?.splice(0).forEach((l) => l.remove());
 
   const enable = () => {
     if (notUltra) return;
@@ -1372,7 +1375,8 @@
     onBody(async () => {
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
-      if (!ultra) await ready;
+      // The sweep fetches, records and registers the site: not on defaults.
+      await ready;
       // The site's part still on its way: the theme is on already; the sweep and the extras wait for it.
       if (partIn) await partIn;
       if (!links.length) return;
@@ -1397,6 +1401,7 @@
     unmenu();
     for (const l of links) l.remove();
     links = [];
+    early();
     armFlip();
     X.syncTodo();
     X.syncCardTasks();
@@ -1424,7 +1429,7 @@
   const I = { C, html, isPreview, solo, tabFrame, need, t, locale, api, capi, canvasCourseKey, canvasCourseId, courseId, celebrate, markDue, drawProgress, cardBadge, KIND,
     cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled, setVar, setAttr,
     setCourseList: (all) => { courseList = all; X.paintCourses(); syncCourseMenu(); reapply(); },
-    get settings() { return settings; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
+    get settings() { return settings; }, get ready() { return ready; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
     get courseList() { return courseList; }, get worn() { return worn; } };
   const part = { ultra: 'GZ_SITE_ULTRA', canvas: 'GZ_SITE_CANVAS' }[site];
   const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
@@ -1477,10 +1482,16 @@
       if (n !== settingsRead) return settingsPending;
       lookX = raw?.lookX;
       const s = GZ_SANITIZE(raw, fresh);
-      // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
-      try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
+      try { sessionStorage.setItem(KEPT, JSON.stringify(firstPaint(s))); } catch { /* blocked or full */ }
       return s;
     }));
+  };
+  // The page can read this copy: only what first paint shows anyway, no names, addresses or course maps.
+  const firstPaint = (s) => {
+    const { image, ...bg } = s.bg, { u, i, ...nav } = s.nav, { title, ...sidebar } = s.sidebar, { harmonize, tint, strength } = s.courses;
+    const pal = (n) => ({ name: n, colors: GZ_PRESET(s.auto[n], s.presets) || s.colors });
+    return { enabled: s.enabled, colors: s.colors, auto: { ...s.auto, light: 'light', dark: 'dark' }, presets: [pal('light'), pal('dark')], look: s.look, bg, nav, sidebar,
+      navbar: s.navbar, motion: s.motion, enhance: s.enhance, declutter: s.declutter, extras: s.extras, footer: s.footer, courses: { harmonize, tint, strength } };
   };
   // The previous palette covers storage latency, avoiding a dark flash with a light look.
   const KEPT = 'gz-settings';
@@ -1497,6 +1508,7 @@
     else enable();
   });
   if (on(settings)) enable();
+  else early();
   // Load parts after the theme, only when present.
   const partsIn = (m) => {
     if (solo && !isPreview && (m || lookX || globalThis.GZ_XPARTS_PAGE)) need('features/lookparts.js', () => globalThis.GZ_XPARTS_PAGE).then(() => GZ_XPARTS_PAGE.read(), () => {});
