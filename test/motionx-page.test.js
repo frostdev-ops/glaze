@@ -10,7 +10,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const ENTER = { s: [{ at: 0, y: 20, o: 0 }, { at: 1, y: 0, o: 1 }], ms: 500, ease: 'spring', delay: 0, stagger: 80 };
 
 // ---- features/motionx.js ----------------------------------------------------------------------------------------------------------
-const feature = ({ adopt = true, parts = null, level = 'subtle', quiet = false } = {}) => {
+const feature = ({ adopt = true, parts = null, level = 'subtle', quiet = false, extras = { pointer: 'look', pointerAnim: true } } = {}) => {
   const styles = [], listeners = {}, handlers = {}, queue = new Map(), switches = new Set(), canvases = [];
   let on = true, fills = 0, styleReads = 0;
   let adopted = [], now = 1000, ids = 0;
@@ -37,11 +37,12 @@ const feature = ({ adopt = true, parts = null, level = 'subtle', quiet = false }
   ctx.window = ctx;
   ctx.GZ_MX = M;
   ctx.GZ_LX = { quiet: () => quiet };
-  ctx.GZ_CTX = { on: () => on, need: () => Promise.resolve(), parts: () => parts };
+  const settings = { extras };
+  ctx.GZ_CTX = { on: () => on, need: () => Promise.resolve(), parts: () => parts, settings: () => settings };
   vm.runInContext(read('features/motionx.js'), ctx);
   // Frames the browser would run: every callback asked for, 16 ms apart.
   const tick = (ms = 16) => { now += ms; const run = [...queue]; queue.clear(); if (run.length > 4) throw new Error(`${run.length} frame loops running at once`); for (const [, f] of run) f(now); };
-  return { api: ctx.GZ_MOTIONX, adopted: () => adopted, styles, listeners, handlers, document, ctx, queue, tick, now: () => now, canvases, switches, fills: () => fills, setOn: (v) => { on = v; }, setParts: (v) => { parts = v; }, setQuiet: (v) => { quiet = v; }, styleReads: () => styleReads };
+  return { settings, api: ctx.GZ_MOTIONX, adopted: () => adopted, styles, listeners, handlers, document, ctx, queue, tick, now: () => now, canvases, switches, fills: () => fills, setOn: (v) => { on = v; }, setParts: (v) => { parts = v; }, setQuiet: (v) => { quiet = v; }, styleReads: () => styleReads };
 };
 const settle = () => new Promise(setImmediate);
 
@@ -180,6 +181,32 @@ test('motion off or a hidden page: an event draws nothing and a running effect e
   assert.equal(x.queue.size, 0);
 });
 
+
+test('the student\'s pointer animation switch: off, the Look\'s pointer animation stops and nothing listens; on, it plays again', async () => {
+  const look = { cursor: { kind: 'trail', fade: 300 }, fx: { complete: {} }, type: { kind: 'sparks' } };
+  const x = feature({ parts: look, extras: { pointer: 'look', pointerAnim: false } });
+  await x.api.sync();
+  await settle();
+  assert.equal(x.handlers.pointermove, undefined, 'no pointer listener with the animation off');
+  // The Look's other effects stay: an event still plays, and typing still listens.
+  assert.equal(x.api.has('complete'), true);
+  assert.equal(typeof x.listeners.input, 'function', 'typing still listens');
+  // Turned on (applySettings asks again): the Look's animation plays while the pointer moves.
+  x.settings.extras = { ...x.settings.extras, pointerAnim: true };
+  await x.api.sync();
+  assert.equal(typeof x.handlers.pointermove, 'function');
+  x.handlers.pointermove({ pointerType: 'mouse', clientX: 50, clientY: 60 });
+  x.tick();
+  assert.ok(x.canvases.at(-1)?.isConnected, 'drawn around the pointer');
+  // Off again while particles are alive: they go, with the listener, and no frame is left asked for.
+  x.settings.extras = { ...x.settings.extras, pointerAnim: false };
+  await x.api.sync();
+  assert.equal(x.handlers.pointermove, undefined);
+  assert.equal(x.canvases.at(-1).isConnected, false);
+  assert.equal(x.queue.size, 0);
+  // The setting never touches the Look: its parts are as they were.
+  assert.deepEqual(look.cursor, { kind: 'trail', fade: 300 });
+});
 
 test('changing or removing a Look cancels its running particles without adding pointer listeners', async () => {
   const x = feature({ parts: { cursor: { kind: 'glow' }, fx: { complete: {} } } });

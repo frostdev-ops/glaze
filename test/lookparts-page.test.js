@@ -48,7 +48,9 @@ test('only the top frame and live tab frames read parts, never the editor\'s pre
 
 test('content.js hands parts to the pages through GZ_CTX.parts(), asks only when storage changes lookX, and feeds the preview', () => {
   // Running code mods lay their parts over the Look's (features/mods.js parts), under the same gate.
-  assert.match(content, /parts: \(\) => \(on\(settings\) && \(!isPreview \|\| html\.dataset\.previewPage !== 'quiz'\) && !lookHere\(\) && \(globalThis\.GZ_MODS \? GZ_MODS\.parts\(globalThis\.GZ_XPARTS_PAGE\?\.now\(\) \|\| null\) : globalThis\.GZ_XPARTS_PAGE\?\.now\(\)\)\) \|\| null,/);
+  // Where a Look's parts show at all (partsOn, which the pointer the student chose follows too), and what they are.
+  assert.match(content, /const partsOn = \(\) => on\(settings\) && \(!isPreview \|\| html\.dataset\.previewPage !== 'quiz'\) && !lookHere\(\);/);
+  assert.match(content, /\n    partsOn,\n    parts: \(\) => \(partsOn\(\) && \(globalThis\.GZ_MODS \? GZ_MODS\.parts\(globalThis\.GZ_XPARTS_PAGE\?\.now\(\) \|\| null\) : globalThis\.GZ_XPARTS_PAGE\?\.now\(\)\)\) \|\| null,/);
   assert.match(content, /if \(changes\.lookX && area === 'sync'\) lookX = changes\.lookX\.newValue;/);
   assert.match(content, /globalThis\.GZ_XPARTS_PAGE\?\.preview\(e\.data\.gzPreviewParts\);/);
   // The first-paint path is untouched: parts are asked for after `ready`, which is the settings read.
@@ -219,21 +221,31 @@ test('Canvas and Moodle preview getters suppress parts while disabled or preview
   assert.ok(context.GZ_CTX.parts());
   context.context.page = 'quiz';
   assert.equal(context.GZ_CTX.parts(), null);
+  assert.equal(context.GZ_CTX.partsOn(), false, 'the chosen pointer follows the parts');
+  context.context.page = 'courses';
+  assert.equal(context.GZ_CTX.partsOn(), true);
+  context.settings.enabled = false;
+  assert.equal(context.GZ_CTX.partsOn(), false);
 });
 
 test('the Ultra preview suppresses parts on its mock quiz and restores them on return', () => {
-  const getter = content.split('\n').find((line) => line.trim().startsWith('parts: () =>'));
+  const lines = content.split('\n'), getter = lines.find((line) => line.trim().startsWith('parts: () =>')), gate = lines.find((line) => line.trim().startsWith('const partsOn = '));
   const context = vm.createContext({ settings: { enabled: true }, on: (s) => s.enabled, lookHere: () => null,
     isPreview: true, html: { dataset: { previewPage: 'courses' } }, GZ_XPARTS_PAGE: { now: () => ({ cursor: { kind: 'glow' } }) } });
-  vm.runInContext(`globalThis.ctx = { ${getter} };`, context);
+  vm.runInContext(`${gate}\nglobalThis.ctx = { partsOn, ${getter} };`, context);
   assert.ok(context.ctx.parts());
   context.html.dataset.previewPage = 'quiz';
   assert.equal(context.ctx.parts(), null);
   context.html.dataset.previewPage = 'courses';
   assert.ok(context.ctx.parts());
   context.html.dataset.previewPage = 'quiz';
+  assert.equal(context.ctx.partsOn(), false, 'nor the pointer the student chose');
   context.isPreview = false;
   assert.ok(context.ctx.parts(), 'a live page cannot suppress parts with a preview attribute');
+  assert.equal(context.ctx.partsOn(), true);
+  context.lookHere = () => 'Clear';
+  assert.equal(context.ctx.partsOn(), false, 'a course that wears its own Look: no parts, no chosen pointer');
+  assert.equal(context.ctx.parts(), null);
 });
 
 test('changing the mock page announces parts so rules, scenes and nav follow the preview context', () => {

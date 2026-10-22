@@ -258,12 +258,12 @@
     const r = el?.getBoundingClientRect();
     document.dispatchEvent(new CustomEvent('glaze:moment', { detail: r?.width ? { name, x: r.left + r.width / 2, y: r.top + r.height / 2 } : { name } }));
   };
-  // A Look with animations, effects, a pointer effect or a typing effect (GZ_CTX.parts()) brings features/motionx.js in, and
-  // one with a pointer set features/lookx.js, which shows it.
+  // A Look with animations, effects, a pointer effect (unless the student turned it off) or a typing effect (GZ_CTX.parts())
+  // brings features/motionx.js in, and a pointer, the Look's or the student's own choice of one, features/lookx.js.
   const moveParts = () => {
-    const p = GZ_CTX.parts();
-    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
-    if (globalThis.GZ_LOOKX || p?.pointer) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
+    const p = GZ_CTX.parts(), x = settings.extras;
+    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerAnim || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
+    if (globalThis.GZ_LOOKX || (x.pointer === 'look' ? p?.pointer : x.pointer !== 'off' && partsOn())) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
   };
   document.addEventListener('glaze:parts', moveParts);
   // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed. The dots are
@@ -1504,6 +1504,7 @@
   document.addEventListener('glaze:parts', () => { if (links.length) X.syncNav(); });
 
   // This frame's helpers for lazy features; site helpers resolve when called.
+  const partsOn = () => on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz') && !lookHere();
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, moment, gradeMoment, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
     account: () => (site === 'canvas' ? X.ctx.profile().then((p) => String(p.id)) : X.ctx.me()),
     // The palette, the keys, the course menu, the previews and Download all (W0c).
@@ -1512,8 +1513,9 @@
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    // Look parts stay off on courses with their own Look; changes fire `glaze:parts`.
-    parts: () => (on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz') && !lookHere() && (globalThis.GZ_MODS ? GZ_MODS.parts(globalThis.GZ_XPARTS_PAGE?.now() || null) : globalThis.GZ_XPARTS_PAGE?.now())) || null,
+    // Look parts stay off on courses with their own Look (partsOn); changes fire `glaze:parts`.
+    partsOn,
+    parts: () => (partsOn() && (globalThis.GZ_MODS ? GZ_MODS.parts(globalThis.GZ_XPARTS_PAGE?.now() || null) : globalThis.GZ_XPARTS_PAGE?.now())) || null,
     background: (el) => { stopScene(); if (modBg && modBg !== el) { globalThis.GZ_SCENE_HOST?.clear(modBg); modBg.remove(); } modBg = el || null; syncScene(); },
     canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => { syncScene(); if (full && !timer && !hid()) timer = setTimeout(flush); },
     ...Object.fromEntries(['me', 'canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });

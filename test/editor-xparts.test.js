@@ -186,11 +186,15 @@ test('the options page loads the builders in their own sections and redraws them
 test('the preview draws page tweaks: Ultra through its real runtime, Canvas and Moodle through the rules code on their mock', async () => {
   const source = read('lib/editor-preview.js');
   const ultra = source.split("if (site === 'ultra') {")[1].split('} else {')[0];
-  assert.match(ultra, /'lib\/lookx\.js', 'features\/rules\.js'/);
+  assert.match(ultra, /'lib\/lookx\.js', 'features\/lookx\.js', 'features\/rules\.js'/);
   const other = source.split("document.getElementById('preview-menu').remove();")[1];
-  assert.match(other, /for \(const file of \['lib\/lookx\.js', 'features\/rules\.js', 'features\/motionx\.js'\]\) await load\(file\);/);
+  assert.match(other, /for \(const file of \['lib\/lookx\.js', 'features\/lookx\.js', 'features\/rules\.js', 'features\/motionx\.js'\]\) await load\(file\);/);
   assert.ok(other.indexOf('globalThis.GZ_CTX ||=') < other.indexOf("'features/rules.js'"), 'rules.js reads GZ_CTX as it loads');
   assert.match(other, /globalThis\.GZ_RULES\?\.sync\(\);/);
+  // The pointer worn (the student's, or the Look's) on the mock, so hovering the preview uses it: synced on every paint.
+  assert.ok(other.indexOf('globalThis.GZ_CTX ||=') < other.indexOf("'features/lookx.js'"), 'lookx.js reads GZ_CTX as it loads');
+  assert.match(other, /globalThis\.GZ_LOOKX\?\.sync\(\);/);
+  assert.match(other, /partsOn: \(\) => settings\.enabled && context\.page !== 'quiz',/);
   const getter = source.match(/globalThis\.GZ_CTX \|\|= Object\.freeze\(\{[\s\S]*?\}\);/)[0], loaded = [];
   const context = vm.createContext({ site: 'moodle', settings: { enabled: true }, context: { page: 'courses' }, GZ_XPARTS_PAGE: { now: () => null }, Promise, Error, CustomEvent: class {}, document: {}, load: async (file) => { loaded.push(file); } });
   vm.runInContext(getter, context);

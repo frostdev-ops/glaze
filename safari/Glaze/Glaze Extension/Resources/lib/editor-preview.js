@@ -42,7 +42,8 @@
     else if (globalThis.GZ_MX?.EVENTS.includes(m)) globalThis.GZ_CTX?.moment?.(m);
   });
   if (site === 'ultra') {
-    for (const file of ['content-ultra.js', 'content.js', 'features/coursetabs.js', 'features/cards.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-widgets.js', 'features/navbar.js', 'lib/lookx.js', 'features/rules.js', 'lib/motionx.js', 'features/motionx.js']) await load(file);
+    // features/lookx.js shows the pointer worn (the student's, or the Look's), so hovering the preview uses it.
+    for (const file of ['content-ultra.js', 'content.js', 'features/coursetabs.js', 'features/cards.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-widgets.js', 'features/navbar.js', 'lib/lookx.js', 'features/lookx.js', 'features/rules.js', 'lib/motionx.js', 'features/motionx.js']) await load(file);
     // The mock supplies the phone drawer shell; the actual rail code still owns labels, shrink and hover expansion.
     const menu = document.querySelector('#preview-menu'), drawer = document.querySelector('.MuiDrawer-root');
     const close = () => { html.removeAttribute('data-preview-nav-open'); drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); menu.setAttribute('aria-expanded', 'false'); menu.focus(); };
@@ -131,6 +132,7 @@
       if (site === 'canvas') sidebar(s);
       samples(s);
       globalThis.GZ_MOTIONX?.sync();
+      globalThis.GZ_LOOKX?.sync();
       if (s.enabled && drawn && sig !== sceneBad) {
         const file = kind === 'media' ? 'lib/scene-media.js' : 'lib/scene.js';
         if (scene && sceneFile !== file) { scene.stop(); scene = null; sceneCanvas?.remove(); }
@@ -158,12 +160,13 @@
       scene: () => {},
       ...(site === 'moodle' ? { setVar: (key, value) => variable(key, value), nav: () => settings.nav } : {}),
       on: () => settings.enabled,
+      partsOn: () => settings.enabled && context.page !== 'quiz',
       parts: () => (settings.enabled && context.page !== 'quiz' && globalThis.GZ_XPARTS_PAGE?.now()) || null,
       need: (file, ready) => ready() ? Promise.resolve() : load(file),
       moment: (name) => document.dispatchEvent(new CustomEvent('glaze:moment', { detail: { name } })),
     });
-    // The Look's page tweaks and motion on the mock, through the page's own code (each reads GZ_CTX as it loads).
-    for (const file of ['lib/lookx.js', 'features/rules.js', 'features/motionx.js']) await load(file);
+    // The Look's page tweaks, motion and pointer on the mock, through the page's own code (each reads GZ_CTX as it loads).
+    for (const file of ['lib/lookx.js', 'features/lookx.js', 'features/rules.js', 'features/motionx.js']) await load(file);
     if (site === 'canvas') for (const file of ['features/coursetabs.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-widgets.js', 'features/navbar.js']) await load(file);
     if (site === 'moodle') for (const file of ['lib/navbar.js', 'features/navbar-moodle.js', 'features/navbar-widgets.js', 'features/navbar.js']) await load(file);
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', paint);

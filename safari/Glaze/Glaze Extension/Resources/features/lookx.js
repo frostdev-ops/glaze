@@ -1,6 +1,6 @@
-// Look extras on the LMS page (W12): the Look's pointer, Look rotation's clock, and stickers. content.js loads this (need)
-// once one is in use on the page (the worn Look's x.pointer, settings.extras, or stickers kept for this page) and calls
-// sync() from applySettings and when the Look's parts change; the
+// Look extras on the LMS page (W12): the pointer, Look rotation's clock, and stickers. content.js loads this (need)
+// once one is in use on the page (the worn Look's x.pointer or the student's own choice of pointer, settings.extras, or
+// stickers kept for this page) and calls sync() from applySettings and when the Look's parts change; the
 // command palette loads it for its switches (cmds). The pure parts are lib/lookx.js. What it keeps stays on this
 // device (storage.local), written through the worker's queue (lib/background.js 'glaze:stickers', 'glaze:rotate').
 // Stickers never take a click meant for the page: they let pointers through except in sticker mode, and are never
@@ -33,11 +33,13 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (!document.getElementById('gz-lookx-css')) (document.head || html).append(make('link', { id: 'gz-lookx-css', rel: 'stylesheet', href: url('features/lookx.css') }));
   };
 
-  // ---- the pointer: the Look's set (x.pointer) as a CSS cursor on the page (features/lookx.css), the system's I-beam kept
-  // on text. The system draws it, so it never lags; its animation is features/motionx.js's, on the canvas around it.
+  // ---- the pointer: a set as a CSS cursor on the page (features/lookx.css), the system's I-beam kept on text. The system
+  // draws it, so it never lags; its animation is features/motionx.js's, on the canvas around it. Which one is the student's
+  // choice (extras.pointer) over the Look's (x.pointer, lib/lookx.js pointerOf), wherever the Look's parts would show
+  // (GZ_CTX.partsOn: not with Glaze off, nor on a course that wears its own Look).
   let pointer = ''; // the own pointer's blob: address
   let live = true; // false from pagehide until the page is shown again: no blob: address is made meanwhile
-  const worn = () => (ctx.on() && ctx.parts?.()?.pointer) || 'off';
+  const worn = () => (ctx.on() && ctx.partsOn() ? GZ_LX.pointerOf(X().pointer, ctx.parts()?.pointer) : 'off');
   // Whether this browser takes image-set() in a cursor (for the 2x picture); one that doesn't gets the 1x PNG after the SVG.
   let sets;
   const imageSet = () => (sets ??= !!globalThis.CSS?.supports?.('cursor', 'image-set(url("a.png") 1x, url("b.png") 2x) 0 0, auto'));
@@ -436,11 +438,12 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   chrome.storage.onChanged.addListener((c, area) => {
     if (area !== 'local') return;
     if (c.rotateState) { arm(); if (top && globalThis.GZ_LX?.turned(c.rotateState.oldValue, c.rotateState.newValue)) ctx.moment?.('look.rotate'); }
-    if (c.cursorImg && worn() === 'own') cursor();
+    if (c.cursorImg && globalThis.GZ_LX && worn() === 'own') cursor();
     if (Object.keys(c).some((k) => k === 'mods' || k.startsWith('mod:') || k === 'modsBlocklist' || k === 'modDev')) refreshMods();
     if (key && c[key] && !editing && !pending.size) { key = ''; stickers(); }
   });
-  // The Look changed: its pointer may have (features/lookparts.js; the event says nothing, the parts are asked again).
+  // The Look changed: its pointer may have (features/lookparts.js; the event says nothing, the parts are asked again). The
+  // student's choice changing is a settings change: applySettings calls sync().
   document.addEventListener('glaze:parts', () => { if (globalThis.GZ_LX) cursor(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) arm(); mute(); });
   addEventListener('pagehide', () => {

@@ -245,6 +245,8 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
   let b = 0;
   const settings = { extras: { stickers: true, rotate: 'off', at: '08:00' } };
   let parts = null; // the worn Look's parts, as GZ_CTX.parts() hands them
+  let on = true, partsOn = true; // Glaze on here; the Look's parts would show here (not a course with its own Look)
+  const docOn = {}, changed = [], synced = []; // the document's listeners; storage.onChanged's; what went to storage.sync
   const held = []; // storage reads made to wait: { keys, release }
   let hold = () => false;
   const timers = new Map();
@@ -257,12 +259,12 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
     setTimeout: (f, ms) => { const id = ++n; timers.set(id, ms); fns.set(id, f); return id; }, clearTimeout: (id) => { timers.delete(id); fns.delete(id); },
     addEventListener: (type, f) => { (win[type] ||= []).push(f); }, innerWidth: 1000, innerHeight: 800,
     location: { origin: SITE, pathname },
-    document: { documentElement: html, head, body, createElement: (t) => new El(t), getElementById: (id) => html.find(id), addEventListener() {}, hidden: false },
+    document: { documentElement: html, head, body, createElement: (t) => new El(t), getElementById: (id) => html.find(id), addEventListener: (t, f) => { (docOn[t] ||= []).push(f); }, hidden: false },
     chrome: {
       runtime: { getURL: (f) => `chrome-extension://x/${f}`, sendMessage: (m, cb) => send(structuredClone(m), cb) },
       storage: {
-        onChanged: { addListener() {} },
-        sync: { set() {} },
+        onChanged: { addListener: (f) => changed.push(f) },
+        sync: { set: (v) => synced.push(structuredClone(v)) },
         local: {
           get: (keys, cb) => {
             const answer = () => cb(structuredClone(keys === null ? local : Object.fromEntries([].concat(keys).filter((k) => k in local).map((k) => [k, local[k]]))));
@@ -273,7 +275,7 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
     },
     GZ_MATCH_PRESET: () => null,
     CSS: { supports: () => true },
-    GZ_CTX: { t: (k) => k, need: () => Promise.resolve(), settings: () => settings, parts: () => parts, on: () => true, solo: true },
+    GZ_CTX: { t: (k) => k, need: () => Promise.resolve(), settings: () => settings, parts: () => parts, partsOn: () => on && partsOn, on: () => on, solo: true },
   });
   context.window = context;
   context.top = context;
@@ -283,7 +285,8 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
   // Runs the timers due now (the 300 ms save; not rotation's ten-minute one).
   const runTimers = () => { for (const [id, f] of [...fns]) if (timers.get(id) <= 1000) { timers.delete(id); fns.delete(id); f(); } };
   const fire = (type, e = {}) => { for (const f of win[type] || []) f(e); };
-  return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; }, wear: (x) => { parts = x; } };
+  return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; }, wear: (x) => { parts = x; },
+    setOn: (v) => { on = v; }, setPartsOn: (v) => { partsOn = v; }, emit: (t) => { for (const f of docOn[t] || []) f({ type: t }); }, stored: (c) => { for (const f of changed) f(c, 'local'); }, local, synced };
 };
 
 test('page: a picture read that answers after Hide doesn\'t draw the stickers back', async () => {
@@ -375,6 +378,118 @@ test('page: the Look\'s pointer set is the system\'s cursor, its SVG first with 
   await tick();
   assert.equal(p.html.style['--gz-cursor'], undefined);
   assert.equal(p.blobs.size, 0, 'a set is the extension\'s file, never a blob');
+});
+
+// The student's pointer (settings extras.pointer) over the Look's: what --gz-cursor says, as a set's name, 'own' or none.
+const shown = (p) => {
+  const c = p.html.style['--gz-cursor'];
+  if (c === undefined) return 'data-gz-cursor' in p.html.attrs ? 'broken' : 'system';
+  return /^url\("blob:/.test(c) ? 'own' : c.match(/cursors\/(\w+)\/default\./)?.[1] || c;
+};
+const choose = async (p, pointer) => { p.settings.extras = { ...p.settings.extras, pointer }; await p.lx.sync(); await settle(); };
+
+test('page: the student\'s pointer wins over the Look\'s; The Look\'s pointer gives the Look\'s back', async () => {
+  const data = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
+  const p = page({ cursorImg: data });
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'look' };
+  p.wear({ pointer: 'pumpkin', cursor: { kind: 'flicker' } });
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'pumpkin', 'the Look\'s, by default');
+  await choose(p, 'aqua');
+  assert.equal(shown(p), 'aqua', 'a set over the Look\'s');
+  assert.match(p.html.style['--gz-cursor-pointer'], /cursors\/aqua\/pointer\.png"\) 14 2, pointer$/, 'its hand where the page is clickable');
+  await choose(p, 'off');
+  assert.equal(shown(p), 'system', 'System pointer: none of Glaze\'s, whatever the Look has');
+  assert.equal(p.html.style['--gz-cursor-pointer'], undefined);
+  await choose(p, 'own');
+  assert.equal(shown(p), 'own', 'their picture, as a blob: address');
+  assert.equal(p.blobs.size, 1);
+  await choose(p, 'look');
+  assert.equal(shown(p), 'pumpkin', 'back to the Look\'s');
+  assert.equal(p.blobs.size, 0, 'the picture\'s address revoked');
+});
+
+test('page: the student\'s pointer stays through a change of Look; the Look\'s follows it', async () => {
+  const p = page({});
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'lava' };
+  p.wear({ pointer: 'pumpkin' });
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'lava');
+  // Another Look is worn (features/lookparts.js fires glaze:parts): the choice stays.
+  p.wear({ pointer: 'ghost' });
+  p.emit('glaze:parts');
+  await settle();
+  assert.equal(shown(p), 'lava');
+  p.wear(null);
+  p.emit('glaze:parts');
+  await settle();
+  assert.equal(shown(p), 'lava', 'a Look without a pointer or any parts: still the student\'s');
+  // Following the Look again: each Look's own, and none for a Look without.
+  await choose(p, 'look');
+  assert.equal(shown(p), 'system');
+  p.wear({ pointer: 'ghost' });
+  p.emit('glaze:parts');
+  await settle();
+  assert.equal(shown(p), 'ghost');
+});
+
+test('page: no pointer of Glaze\'s with Glaze off or where the Look\'s parts don\'t show, and it comes back after', async () => {
+  const p = page({});
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'neon' };
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'neon');
+  // A course that wears its own Look (content.js partsOn): neither the Look's pointer nor the student's.
+  p.setPartsOn(false);
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'system');
+  p.setPartsOn(true);
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'neon');
+  // Glaze turned off (disable() calls sync()): the attribute and both variables go.
+  p.setOn(false);
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'system');
+  assert.ok(!('data-gz-cursor' in p.html.attrs) && p.html.style['--gz-cursor-pointer'] === undefined);
+  p.setOn(true);
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'neon');
+});
+
+test('page: a new picture of their own is shown at once while it is the pointer worn, and not read otherwise', async () => {
+  const one = `data:image/png;base64,${Buffer.from('one').toString('base64')}`, two = `data:image/png;base64,${Buffer.from('two').toString('base64')}`;
+  const p = page({ cursorImg: one });
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'own' };
+  await p.lx.sync();
+  await settle();
+  const first = p.html.style['--gz-cursor'];
+  assert.equal(shown(p), 'own');
+  p.local.cursorImg = two;
+  p.stored({ cursorImg: { oldValue: one, newValue: two } });
+  await settle();
+  assert.equal(shown(p), 'own');
+  assert.notEqual(p.html.style['--gz-cursor'], first, 'the new picture');
+  assert.equal(p.blobs.size, 1, 'the old address revoked');
+  // Removed: the system's pointer, not a broken one.
+  delete p.local.cursorImg;
+  p.stored({ cursorImg: { oldValue: two } });
+  await settle();
+  assert.equal(shown(p), 'system');
+  assert.equal(p.blobs.size, 0);
+  // Wearing a set, a new picture is not even read.
+  await choose(p, 'rose');
+  let reads = 0;
+  p.holdWhen((keys) => { if ([].concat(keys).includes('cursorImg')) reads++; return false; });
+  p.stored({ cursorImg: { newValue: one } });
+  await settle();
+  assert.equal(reads, 0);
+  assert.equal(shown(p), 'rose');
 });
 
 // A tab on a computer whose worker is the real one (lib/background.js), in sticker mode on `path`.
@@ -516,6 +631,16 @@ test('picking a palette in the popup or the editor keeps the Look’s parts; pic
   const looked = w.context.UI.pickLook(s, G.GZ_LOOKS[0]);
   assert.deepEqual(JSON.parse(JSON.stringify(s.parts)), require('../lib/lookset.js')(G.GZ_LOOKS[0]), 'a whole Look brings its own extras');
   assert.ok(looked.includes('parts'));
+});
+
+test('the student\'s pointer and its animation switch stay through every way of changing Look; only the Look\'s parts change', () => {
+  const G = require('../defaults.js');
+  const w = worker(), u = ui(w);
+  const s = { ...structuredClone(G.GZ_SANITIZE({ extras: { pointer: 'lava', pointerAnim: false } })), parts: { x: { pointer: 'ghost' } } };
+  const keys = [...w.context.UI.pickLook(s, G.GZ_LOOKS.find((L) => L.name === 'Pumpkin Patch')), ...w.context.UI.pickPreset(s, 'Frost', G.GZ_PRESET('Frost'))];
+  assert.equal(JSON.parse(JSON.stringify(s.parts)).x.pointer, 'pumpkin', 'the new Look\'s own pointer');
+  assert.deepEqual([s.extras.pointer, s.extras.pointerAnim], ['lava', false]);
+  assert.ok(!keys.includes('extras'), 'and the setting is not even rewritten');
 });
 
 
