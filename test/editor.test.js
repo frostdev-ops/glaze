@@ -179,7 +179,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
   state.courses.looks._1_1 = D.GZ_LOOKS[0].name;
   vm.runInContext(`(${preview})()`, context);
   assert.equal(messages.at(-2).gzPreview.colors['--gz-surface'], D.GZ_LOOKS[0].colors['--gz-surface']);
-  assert.deepEqual(JSON.parse(JSON.stringify(messages.at(-2).gzPreviewParts)), { x: { pointer: 'aurora' } });
+  assert.deepEqual(JSON.parse(JSON.stringify(messages.at(-2).gzPreviewParts)), { x: { pointer: 'frostdev' } });
   context.previewCourse = '_2_1'; vm.runInContext(`(${preview})()`, context);
   assert.equal(messages.at(-2).gzPreview.courses.tinted.length, 0, 'A selected untinted course must not borrow another course’s tint');
   context.previewCourse = '_1_1';

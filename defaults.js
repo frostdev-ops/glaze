@@ -287,6 +287,10 @@ const GZ_ALL_PRESETS = (custom = []) => [...GZ_PRESETS, ...custom.map((p) => [p.
 // look and background value (what it doesn't name goes back to the default), so one look never keeps
 // another's leftovers; tooltips, hints and a background image's address stay the user's.
 const GZ_LOOKS = [
+  ['Frostdev', GZ_PALETTE(
+    '#27cdf1', '#a6efff', '#123b54', '#03131e',
+    '#102338', '#060d18', '#ecf5fa', '#aec4d5', '#829eb5', '#2b465d', '#4d6f8a',
+    '#78dfc0', '#ffd18c', '#ffa7b2'), { font: 'geist', head: 'manrope', radius: 16, glass: 18, depth: 2, surfaceOpacity: 90 }, { kind: 'scene', scene: 'topography', intensity: 75, colors: ['#1f8fc9', '#2e6db4', '#5f93ab'] }],
   ['Aurora Night', 'Midnight', { font: 'outfit', radius: 16, glass: 16, depth: 2 }, { kind: 'scene', scene: 'borealis', intensity: 55 }],
   ['Library', 'Paper', { font: 'literata', head: 'fraunces', radius: 6, density: 'roomy', leading: 1.7, glass: 0 }, { kind: 'solid' }],
   ['Terminal', 'Forest', { font: 'jetbrains-mono', radius: 2, density: 'compact', glass: 0, depth: 0 }, { kind: 'solid' }],

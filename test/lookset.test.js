@@ -29,7 +29,7 @@ test('every built-in Look has a full set: its own pointer, the pointer\'s animat
   assert.equal(LOOK_PARTS({ name: 'Not a Look' }), null);
   const a = LOOK_PARTS(G.GZ_LOOKS[0]);
   a.x.pointer = 'aqua';
-  assert.equal(LOOK_PARTS(G.GZ_LOOKS[0]).x.pointer, 'aurora', 'a copy each time');
+  assert.equal(LOOK_PARTS(G.GZ_LOOKS[0]).x.pointer, 'frostdev', 'a copy each time');
 });
 
 test('a built-in Look\'s code carries its parts; the student\'s own pointer picture never goes in a code', async () => {
@@ -188,4 +188,16 @@ test('a legacy setting changed during a large migration cannot strand the origin
   await w.move();
   assert.deepEqual(await X.fromStored(sync.lookX, { get: async () => local }), { x: { cursor: { kind: 'glow' } } });
   assert.equal(sync.extras.cursor, undefined);
+});
+
+test('Frostdev speaks in contours: rings behind the pointer, a contour bloom at the caret, and contour effects', () => {
+  const P = LOOK_PARTS(G.GZ_LOOKS.find((l) => l.name === 'Frostdev')).x;
+  assert.equal(P.pointer, 'frostdev');
+  assert.deepEqual(MX.cursor(P.cursor), { kind: 'contour', c: ['accent', 'accent-hi'], size: 22, len: 3, fade: 650 });
+  assert.equal(MX.typing(P.type).kind, 'contour');
+  const fx = MX.fxs(P.fx);
+  assert.ok(MX.EVENTS.every((e) => fx[e].kind === 'contour'), 'every event');
+  assert.deepEqual(MX.EVENTS.map((e) => fx[e].life), [700, 650, 450, 900, 800, 900]);
+  assert.deepEqual(MX.EVENTS.map((e) => fx[e].shapes), [['flake'], ['shard'], ['spark'], ['dot'], ['flake'], []]);
+  assert.ok(Object.values(fx).every((f) => f.c.every((c) => G.GZ_COLORS.some(([v]) => v === `--gz-${c}`))), 'palette tokens only');
 });

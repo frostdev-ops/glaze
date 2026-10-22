@@ -1,12 +1,16 @@
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs');
 const G = require('../defaults.js'), S = require('../lib/share.js');
 test('old Looks retain role-specific opacity, no frost, palette colors and existing depth', () => {
-  for (const look of G.GZ_LOOKS) {
+  for (const look of G.GZ_LOOKS.filter((l) => l.name !== 'Frostdev')) {
     const settings = G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, look), vars = G.GZ_SURFACE_VARS(settings);
     assert.equal(vars['--gz-surface-opacity'], ''); assert.equal(vars['--gz-surface-color'], ''); assert.equal(vars['--gz-surface-grain'], 'none');
     assert.equal(vars['--gz-shadow-strength'], '35%'); assert.equal(vars['--gz-surface-border'], '100%');
     assert.equal(vars['--gz-glass-mix'], settings.look.glass ? '78%' : '100%');
   }
+});
+test('Frostdev reads on a 90% opaque base, with the role defaults for everything else about its surfaces', () => {
+  const settings = G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, G.GZ_LOOKS.find((l) => l.name === 'Frostdev')), vars = G.GZ_SURFACE_VARS(settings);
+  assert.deepEqual([vars['--gz-surface-opacity'], vars['--gz-glass-mix'], vars['--gz-surface-color'], vars['--gz-surface-grain'], vars['--gz-shadow-strength'], vars['--gz-surface-border']], ['90%', '90%', '', 'none', '35%', '100%']);
 });
 test('custom opacity never creates transparent glass without blur or over a solid page', () => {
   const settings = G.GZ_SANITIZE({ look: { glass: 12, surfaceOpacity: 25 }, bg: { kind: 'gradient' } });
