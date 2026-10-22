@@ -1826,13 +1826,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     reply({ ok: true });
   });
   // Glaze restarted under an open page (an update, Safari registering it again) runs this file there again, in a world of
-  // its own: the old copy's strip, frames and marks stay in the page, which it can no longer save or show. This copy takes
-  // the page over as after a reload (the frame on screen opens again from sessionStorage, start), and an old copy still
-  // running lets go when told.
+  // its own: the old copy's strip, frames and marks stay in the page. A working copy keeps the page and its unsaved work;
+  // only a copy cut off from the extension lets go. A page script can fire this event too.
   const TAKE = 'gz-ctabs-take';
   let gone = false;
-  const letGo = () => {
+  const letGo = (e) => {
+    try { if (chrome.runtime?.id) { e.preventDefault(); return; } } catch { /* reloaded */ }
     gone = true;
+    ++showTurn;
     removeEventListener(TAKE, letGo);
     clearTimeout(saveTimer); clearTimeout(capTimer); clearTimeout(sayTimer);
     if (on) { on = false; listen(false); }
@@ -1841,7 +1842,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     frames.clear(); spare.clear(); next.clear(); showing = ''; waiting = '';
   };
   if (!preview) {
-    dispatchEvent(new Event(TAKE));
+    if (!dispatchEvent(new Event(TAKE, { cancelable: true }))) gone = true;
+  }
+  if (!preview && !gone) {
     for (const e of document.querySelectorAll('#gz-ctabs, #gz-ctabs-say, #gz-ctabs-frames')) e.remove();
     html.removeAttribute('data-gz-placing');
     if (!framed && html.hasAttribute('data-gz-ctab-framed')) {

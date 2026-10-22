@@ -48,7 +48,7 @@ const page = () => {
     session: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
     on: (type, f) => { if (!events.has(type)) events.set(type, new Set()); events.get(type).add(f); },
     off: (type, f) => events.get(type)?.delete(f),
-    fire: (e) => { for (const f of [...(events.get(e.type) || [])]) f(e); return true; },
+    fire: (e) => { for (const f of [...(events.get(e.type) || [])]) f(e); return !e.defaultPrevented; },
   };
 };
 
@@ -63,7 +63,8 @@ const glaze = (p, local) => {
     me: async () => '_9_1', settings: () => ({ tabs: GZ_SANITIZE({}).tabs }), scene() {}, holding: () => false, acted: () => 0, on: () => true };
   const c = { GZ_CTX: ctx, GZ_CTABS_LIB: L, GZ_SANITIZE, chrome, document: p.doc, sessionStorage: p.session,
     location: { origin, protocol: 'https:', pathname: '/ultra/courses/_1_1/outline', search: '', href: `${origin}/ultra/courses/_1_1/outline` },
-    performance: { now: p.clock.now, timeOrigin: 0 }, Element: El, Event: class { constructor(type) { this.type = type; } },
+    performance: { now: p.clock.now, timeOrigin: 0 }, Element: El,
+    Event: class { constructor(type, options) { this.type = type; this.cancelable = !!options?.cancelable; } preventDefault() { if (this.cancelable) this.defaultPrevented = true; } },
     MutationObserver: class { observe() {} disconnect() {} },
     setTimeout: p.clock.setTimeout, clearTimeout: p.clock.clearTimeout, requestAnimationFrame: p.clock.requestAnimationFrame, innerWidth: 1280, innerHeight: 800,
     addEventListener: p.on, removeEventListener: p.off, dispatchEvent: p.fire };

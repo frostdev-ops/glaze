@@ -8,6 +8,40 @@ const { page, glaze, settle, origin, L } = require('./helpers/coursetabs-page.cj
 const course = '_53708_1';
 const frames = (p) => p.doc.querySelectorAll('iframe').filter((e) => e.name === `gz-ctab:${course}`);
 
+test('a page event cannot retire a working copy or discard its edited frame', async () => {
+  const p = page(), local = { [L.storeKey(origin, '_9_1')]: { tabs: [{ cid: course, at: 1 }] } };
+  const g = glaze(p, local);
+  g.api.sync(true);
+  await settle();
+  g.api.bar.visit(course);
+  await settle();
+  const el = frames(p)[0];
+  p.fire({ type: 'message', origin, source: el.contentWindow, data: { gzCtab: 'edited' } });
+  p.fire(new g.c.Event('gz-ctabs-take', { cancelable: true }));
+  assert.ok(el.isConnected, 'native work stays in its original frame');
+  assert.equal(g.api.showing(), course);
+  g.api.sync(true);
+  assert.equal(frames(p)[0], el, 'the working copy still owns the page');
+});
+
+test('another live copy yields to the working copy and its edited frame', async () => {
+  const p = page(), local = { [L.storeKey(origin, '_9_1')]: { tabs: [{ cid: course, at: 1 }] } };
+  const old = glaze(p, local);
+  old.api.sync(true);
+  await settle();
+  old.api.bar.visit(course);
+  await settle();
+  const el = frames(p)[0], strip = p.doc.getElementById('gz-ctabs');
+  p.fire({ type: 'message', origin, source: el.contentWindow, data: { gzCtab: 'edited' } });
+  const fresh = glaze(p, local);
+  fresh.api.sync(true);
+  await settle();
+  assert.ok(el.isConnected, 'a second injection preserves the working frame');
+  assert.equal(frames(p).length, 1);
+  assert.equal(p.doc.getElementById('gz-ctabs'), strip);
+  assert.equal(old.api.showing(), course);
+});
+
 test('a fresh copy of Glaze takes over the frames, strip and marks the old copy left on the page', async () => {
   const p = page(), local = {};
   local[L.storeKey(origin, '_9_1')] = { tabs: [{ cid: '_1_1', at: 1 }, { cid: course, at: 2 }] };
