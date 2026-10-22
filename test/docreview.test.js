@@ -172,6 +172,34 @@ test('Canvas canvadocs with comment controls stays entirely native; a read-only 
   const bad = page({}, canvas.replace('FORM', '').replace('canvadocs.instructure.com', 'evil.example'), 'canvas', '/courses/1/assignments/2/submissions/3'); bad.ui.sync(); assert.equal(bad.doc.root.hasAttribute('data-gz-review'), false);
 });
 
+// test/fixtures/canvas-submission.html is a real Canvas submission page. Like every student's, it carries the comment box
+// (a textarea, Save, Attach File) and a Re-submit link, which review's rule keeps native; docs/features.md says so.
+test('a real Canvas submission page stays native for its comment box and Re-submit link, and its header and grade are recognised without them', () => {
+  const real = fs.readFileSync(path.join(__dirname, 'fixtures/canvas-submission.html'), 'utf8');
+  const where = '/courses/31/assignments/213/submissions/3';
+  // The docs make no promise the page can't keep: they say a comment box and a Re-submit link keep Canvas's page native.
+  const promise = fs.readFileSync(path.join(__dirname, '../docs/features.md'), 'utf8').split('\n').find((l) => l.startsWith('- **Document review**'));
+  assert.match(promise, /Canvas's usual submission page has a comment box and a Re-submit link, so it stays native/);
+  assert.doesNotMatch(promise, /read-only Canvas canvadocs previews also qualify/);
+  const p = page({}, real, 'canvas', where);
+  const frame = p.doc.getElementById('preview_frame');
+  assert.equal(p.api.recognize(p.doc, 'canvas', where), null, 'as captured: a text entry, not a document');
+  // The preview of a file submission is a same-origin page that frames canvadocs; stand that in.
+  frame.contentDocument = { querySelector: () => ({ getAttribute: () => '/api/v1/canvadoc_session?blob=x' }) };
+  assert.equal(p.api.recognize(p.doc, 'canvas', where), null, 'a canvadocs preview, but beside the comment box and Re-submit link');
+  p.ui.sync();
+  assert.equal(p.doc.root.hasAttribute('data-gz-review'), false);
+  assert.equal(p.$('[data-gz-review-ui]'), null, 'nothing of Glaze\'s is added');
+  // The same page without them (what a read-only variant looks like) is the page the tools are for.
+  p.$('.submission-details-comments').remove();
+  p.$('.ic-Action-header__Secondary').remove();
+  const found = p.api.recognize(p.doc, 'canvas', where);
+  assert.ok(found?.canvas && found.frame === frame && found.heading.textContent.includes('Submission Details'), 'recognised');
+  p.ui.sync();
+  assert.equal(p.doc.root.getAttribute('data-gz-review'), 'canvas');
+  assert.equal(p.$('#gz-review-fullscreen').hidden, false);
+});
+
 test('composition and retargeted editable events never activate the shortcut', () => {
   const p = page(); p.ui.sync();
   for (const extra of [{ isComposing: true }, { keyCode: 229 }, { altKey: true }, { metaKey: true }, { shiftKey: true }]) assert.equal(p.key('f', p.doc.body, extra).prevented, undefined);

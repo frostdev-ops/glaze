@@ -132,7 +132,7 @@
     },
     {
       "matches": [
-        "https://canvadocs.instructure.com/*"
+        "https://*.instructure.com/*"
       ],
       "js": [
         "lib/ink.js",

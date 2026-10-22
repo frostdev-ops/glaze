@@ -122,6 +122,9 @@ const ULTRA_OFF = { ultra: 982 + 230, canvas: 982, moodle: 982 };
 // Four-digit en-US years (WP-G1; the owner's audit-fix allowance, 2026-10-21): lib/page.js's DATE and DUE take the year as
 // (\d{4}|\d{2})(?!\d), so "10/25/2026, 11:59 PM" keeps its year and its time: 12 bytes on every site. Measured against 0035441.
 const EN_US_YEARS = 12;
+// Dark documents (WP-D1; owner's audit-fix allowance): merge docPages into stored enhance, ignoring late reads from
+// earlier clicks. content.js adds 242 bytes on Ultra, Canvas and Moodle, measured against 6abefdc.
+const DOC_PAGES = 242;
 // Look offers (WP-T2; the owner's audit-fix allowance): lib/i18n.js's English plural forms for the offer's three counted
 // sentences (the parts a Look hides, fades and restyles), 577 bytes on every site; the offer itself is the editor's.
 // Measured against 9371c51.
@@ -144,7 +147,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site], budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + DOC_PAGES, budget = Math.round(baseline * 1.02);
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }

@@ -914,11 +914,14 @@
     b.addEventListener('click', onClick);
     return b;
   };
+  let darkSave = 0;
   const setDark = (v) => {
+    const save = ++darkSave;
     settings = { ...settings, enhance: { ...settings.enhance, docPages: v } };
     setAttr('data-gz-enhance-docPages', v);
     syncDocTools();
-    try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
+    // Only this field, on what is stored: this tab's copy has every default filled in.
+    try { chrome.storage.sync.get('enhance', (r) => chrome.runtime.lastError || save !== darkSave || chrome.storage.sync.set({ enhance: { ...r.enhance, docPages: v } })); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
     // Read-only review is independently lazy, including when the reading tools are off.
