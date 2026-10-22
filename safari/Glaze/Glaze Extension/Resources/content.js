@@ -1043,7 +1043,7 @@
     stopScene();
     sceneFailed = true;
     const retry = sceneRetry = { key, tries, timer: 0 };
-    if (tries < 3 || error !== 'dropped') retry.timer = setTimeout(() => {
+    if (!document.hidden && !hid() && (tries < 3 || error !== 'dropped')) retry.timer = setTimeout(() => {
       if (sceneRetry !== retry) return;
       retry.timer = 0; sceneFailed = false; syncScene();
     }, [1000, 5000][tries - 1] || 30000);
@@ -1089,6 +1089,7 @@
     if (sceneRetry && sceneRetry.key !== key) { clearTimeout(sceneRetry.timer); sceneRetry = null; sceneFailed = false; }
     if (scenePending && scenePending.key !== key) sceneUnwait();
     if (!modBg && (!settings.enabled || !links.length || !sceneKind() || !sceneFrame || !document.body || hid() || sceneBad === key)) return stopScene();
+    if (document.hidden || hid()) { sceneUnwait(); clearTimeout(sceneRetry?.timer); return; }
     if (sceneFailed || scenePending) return;
     const file = sceneModule();
     if (scene && sceneFile !== file) stopScene();
@@ -1119,8 +1120,7 @@
     }).catch((error) => { if (scenePending === pending) retryScene(key, error); });
   };
   document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
-  // Back on screen, a background that gave up tries again (a frame shown again or a Look change already does).
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && sceneFailed) sceneAgain(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && sceneFailed) sceneAgain(); else syncScene(); });
 
   // ---- course colors and tint ------------------------------------------------------------------
   // Every course its own color (GZ_COURSE_COLORS), worked out from the course list recordCourses

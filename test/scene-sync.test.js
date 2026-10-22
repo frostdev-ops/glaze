@@ -18,7 +18,7 @@ const background = source.match(/background: (\(el\) => \{.*\}),\n/)[1];
 const loader = source.slice(source.indexOf('  const loading = new Map();'), source.indexOf("  // Moodle's extras"));
 const settle = () => new Promise(setImmediate);
 const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, hostFails = null, hostHangs = 0, hostSilent = false, glslHangs = 0, glslFails = 0, importHangs = 0 } = {}) => {
-  const log = { starts: [], updates: [], needs: [], answers: [], held: [], stops: 0, removed: 0, imports: 0, files: [], urls: [], listeners: new Map() };
+  const log = { starts: [], updates: [], needs: [], answers: [], held: [], stops: 0, removed: 0, imports: 0, placements: 0, files: [], urls: [], listeners: new Map() };
   const timers = new Map(); let nextTimer = 0;
   let failScene = null;
   const canvas = (tag) => ({ tag, remove() { log.removed++; }, setAttribute() {}, parentNode: null });
@@ -30,7 +30,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
     document: { hidden: false, body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
     chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async (m) => {
-      const file = m.files[0], ran = () => { if (file === 'lib/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; };
+      const file = m.files[0], ran = () => { if (file === 'lib/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() { log.placements++; }, clear() {} }; };
       log.needs.push(file);
       // A request the worker sits on: answered (the file run, ok) only when the test calls log.answers[i].
       if (file === 'lib/glsl.js' ? glslHangs-- > 0 : hostHangs-- > 0) {
@@ -90,6 +90,49 @@ test('a late answer replaces a pending attempt without leaving its timers behind
   assert.deepEqual([r.log.starts.length, r.waits()], [1, []]);
   r.log.answers[1](); await settle();
   assert.deepEqual([r.log.starts.length, r.log.stops, r.waits()], [1, 0, []]);
+});
+
+test('slow scene and mod retries pause while the document is hidden and resume when shown', async () => {
+  for (const mod of [false, true]) {
+    const r = rig({ hostFails: 4 });
+    if (mod) r.api.background({}); else r.api.syncScene();
+    await settle(); await r.retry(); await r.retry();
+    assert.deepEqual(r.waits(), [30000]);
+    const visibility = r.log.listeners.get('visibilitychange');
+    r.ctx.document.hidden = true; visibility(); await settle();
+    assert.deepEqual(r.waits(), [], 'no retry timer in a hidden document');
+    r.api.sceneAgain(); r.api.syncScene(); await settle();
+    assert.equal(r.log.needs.length, 3, 'late answers and syncs cannot restart hidden work');
+    r.ctx.document.hidden = false; visibility(); await settle();
+    assert.equal(r.log.needs.length, 4, 'one immediate attempt when shown');
+    await r.retry();
+    assert.deepEqual([r.log.needs.length, r.waits()], [5, []]);
+  }
+});
+
+test('a hidden document starts no scene, and an in-flight answer waits for visibility', async () => {
+  const r = rig({ hostHangs: 1 });
+  r.ctx.document.hidden = true; r.api.syncScene(); await settle();
+  assert.deepEqual([r.log.imports, r.log.needs.length, r.waits()], [0, 0, []]);
+  const visibility = r.log.listeners.get('visibilitychange');
+  r.ctx.document.hidden = false; visibility(); await settle();
+  r.ctx.document.hidden = true; visibility(); await settle();
+  assert.deepEqual(r.waits(), []);
+  r.log.answers[0](); await settle();
+  assert.equal(r.log.starts.length, 0, 'a late answer cannot create a hidden WebGL context');
+  r.ctx.document.hidden = false; visibility(); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.needs.length, r.waits()], [1, 1, []]);
+});
+
+test('a mod host answering after Glaze hides its course frame waits until the frame is shown', async () => {
+  const r = rig({ hostHangs: 1 });
+  r.api.background({}); await settle();
+  r.ctx.hid = () => true; r.api.syncScene();
+  assert.deepEqual(r.waits(), []);
+  r.log.answers[0](); await settle();
+  assert.equal(r.log.placements, 0);
+  r.ctx.hid = () => false; r.api.syncScene(); await settle();
+  assert.equal(r.log.placements, 1);
 });
 
 test('a temporary animation module failure recovers without reloading the page', async () => {
