@@ -1261,8 +1261,8 @@ const pointerToLook = () => (brokerTurn ||= GZ_CARDS.queue())(async () => {
     local: { ...area.local, set: async (p) => await still() && area.local.set(p) } };
   if (await GZ_XPARTS.write(guarded, parts, { extras: rest })) await area.local.set({ pointerMove: { done: true } });
 }).catch(() => {});
-// Ordinary service-worker wakes do not fire onStartup. Retry pending work before queued editor or page writes.
-pointerToLook();
+// Ordinary service-worker wakes do not fire onStartup. Retry after initialisation; a failed retry must not stop the worker.
+Promise.resolve().then(pointerToLook).catch(() => {});
 // Once, on the update from 3.3.4: that one list goes under its site, and Ultra's one ten-minute gate for its course list
 // (seenCoursesAt) goes, now that each Ultra site has its own (`seenCoursesAt <origin>`, content-ultra.js record).
 const perSite = async () => {

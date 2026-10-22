@@ -144,7 +144,7 @@ test('pointer migration resumes after a worker restart between local and sync wr
 
 test('a normal worker wake retries an unfinished pointer migration', async () => {
   const w = worker({ extras: { cursor: 'pearl' } });
-  await vm.runInContext('(brokerTurn || (() => Promise.resolve()))(() => {})', w.context);
+  await vm.runInContext('Promise.resolve().then(() => (brokerTurn || (() => Promise.resolve()))(() => {}))', w.context);
   assert.deepEqual(await X.unpack(w.sync.lookX), { x: { pointer: 'pearl' } });
 });
 
