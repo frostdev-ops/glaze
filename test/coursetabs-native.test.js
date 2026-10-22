@@ -14,17 +14,17 @@ test('automatic native new-content callbacks wait while a tab\'s frame covers th
     GZ_CTABS: { showing: () => active }, tabFrame: '', seen: {}, courseId: () => '_102_1',
     location: { pathname: '/ultra/courses/_102_1/outline' },
     renderItems(cid) { nativePasses++; fns.courseItems(cid); },
-    api: async () => { requests++; return { results: [] }; },
+    // The course's contents come through lib/ultra.js's paged reader and the site's queue (WP-A1).
+    reader: async () => ({ list: async () => { requests++; return { items: [], complete: true }; } }), covered: (rows) => rows,
   });
-  fns.renderNew();
+  const settle = async () => { for (let i = 0; i < 4; i++) await new Promise(setImmediate); };
+  fns.renderNew(); await settle();
   assert.equal(requests, 0, 'the covered page\'s callback starts no contents request');
   assert.equal(nativePasses, 0, 'nor marks its rows seen while hidden');
-  fns.courseItems('_103_1');
+  fns.courseItems('_103_1'); await settle();
   assert.equal(requests, 1, 'an explicit reader remains available while a frame covers the page');
-  await new Promise(setImmediate);
-  active = false; fns.renderNew();
+  active = false; fns.renderNew(); await settle();
   assert.equal(requests, 2, 'the genuine live target still reads its contents');
-  await new Promise(setImmediate);
 });
 
 test('a revoked document cannot recreate the first-paint tab reservation', () => {

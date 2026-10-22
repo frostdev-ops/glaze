@@ -33,11 +33,15 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     const kept = JSON.parse(sessionStorage.getItem(COURSE_CACHE)), age = Date.now() - kept?.at;
     if (age >= 0 && age < 60000 && /^\d+$/.test(kept.uid) && Array.isArray(kept.list) && kept.colors && typeof kept.colors === 'object') canvasSnapshot = kept;
   } catch { /* blocked or empty */ }
-  // Follow Canvas's next link, never off this API; a broken cycle or huge account stops at twenty pages.
-  const readCourses = async () => {
-    let next = '/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100';
+  // A whole list, page by page as Canvas's Link header says: a school may cap per_page below the 100 asked (50 by
+  // default), so a short page is no end. Never off this API; a broken cycle or a huge list stops at twenty pages, and
+  // then `complete` is false.
+  const canvasAll = async (first) => {
+    let next = first;
+    let complete = true;
     const out = [], seen = new Set();
     for (let page = 0; next && page < 20 && !seen.has(next); page++) {
+      if (I.settings.enabled === false) throw new Error('stale');
       const path = next;
       seen.add(path); next = '';
       let link;
@@ -48,10 +52,12 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
       if (raw) try {
         const u = new URL(raw, `${location.origin}/api/v1${path}`);
         if (u.origin === location.origin && !u.username && !u.password && u.pathname.startsWith('/api/v1/')) next = u.pathname.slice(7) + u.search;
-      } catch { /* malformed next link */ }
+        else complete = false;
+      } catch { complete = false; }
     }
-    return out;
+    return Object.defineProperty(out, 'complete', { value: complete && !next });
   };
+  const readCourses = () => canvasAll('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100');
   let mine = null;
   const profile = () => (mine ||= capi('/users/self/profile').catch((e) => { mine = null; throw e; }));
   // Who is signed in is always Canvas's word on this page (the page's own storage could say anything); a snapshot counts
@@ -176,8 +182,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const workIn = (cid) => {
     if (canvasWork?.cid !== cid) {
       const w = (canvasWork = { cid, by: null });
-      capi(`/courses/${cid}/assignments?include[]=submission&per_page=100`).then((list) => {
-        // ponytail: the first 100 assignments, no paging.
+      canvasAll(`/courses/${cid}/assignments?include[]=submission&per_page=100`).then((list) => {
         w.by = new Map((Array.isArray(list) ? list : []).flatMap((a) => [[`Assignment_${a.id}`, a], ...(a.quiz_id ? [[`Quiz_${a.quiz_id}`, a]] : []),
           ...(a.discussion_topic?.id ? [[`DiscussionTopic_${a.discussion_topic.id}`, a]] : [])]));
         if (I.observer && canvasWork === w) tagExtras([document.body]);
@@ -224,16 +229,8 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // ---- folder previews (Extras) ----------------------------------------------------------------
   // What a module or folder holds, for features/previews.js and features/download.js.
   const peeks = new Map();
-  // Canvas paginates these lists; cache complete answers, shared by previews and module downloads.
-  const canvasPeekList = async (path) => {
-    const out = [];
-    for (let page = 1; ; page++) {
-      const rows = await capi(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
-      if (!Array.isArray(rows)) throw new Error('Invalid list');
-      out.push(...rows);
-      if (rows.length < 100) return out;
-    }
-  };
+  // Canvas paginates these lists; cache whole answers, shared by previews and module downloads.
+  const canvasPeekList = (path) => canvasAll(`${path}${path.includes('?') ? '&' : '?'}per_page=100`);
   const canvasPeek = (path) => {
     const key = `canvas:${path}`;
     const hit = peeks.get(key);
@@ -249,13 +246,16 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // as Canvas's own API has them for this student, above the Modules list, also on a course home
   // that shows it. A course that sets none gets no bar: Canvas calls a module without requirements "completed", and it
   // hides that itself, as nothing there was asked of you.
-  // Progress and new-content badges share this exact capped list; both refresh after five minutes.
+  // Progress and new-content badges share this exact list (every page of it); both refresh after five minutes.
   const canvasModuleLists = new Map();
   const canvasModules = (cid) => {
     let c = canvasModuleLists.get(cid);
     if (!c || Date.now() - c.at >= 300000) {
       c = { at: Date.now() };
-      c.p = capi(`/courses/${cid}/modules?include[]=items&per_page=100`).catch((e) => {
+      c.p = canvasAll(`/courses/${cid}/modules?include[]=items&per_page=100`).then((rows) => {
+        if (rows.complete === false) throw new Error('Incomplete Canvas modules');
+        return rows;
+      }).catch((e) => {
         if (canvasModuleLists.get(cid) === c) canvasModuleLists.delete(cid);
         throw e;
       });
@@ -280,7 +280,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     const load = canvasModules(cid);
     if (reqs?.cid !== cid || reqs.load !== load) {
       const r = (reqs = { cid, load });
-      // shortcut: hide incomplete module lists; follow Link and items_url if large-course progress is needed.
+      // shortcut: hide incomplete module lists; follow items_url if large-course progress is needed.
       load.then((mods) => {
         r.progress = GZ_PAGE.canvasProgress(mods);
         if (reqs === r) canvasProgress();
@@ -296,7 +296,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // Canvas keeps unread grade dots itself. A passive HTML GET reads those exact dots, without running
   // the grade page's scripts. The submissions API's include[]=read_state would mark submissions read.
   // Keep only counts and module ids, scoped to this host AND signed-in user; five-minute cache across pages.
-  // shortcut: first 100 modules; Canvas omits items in oversized modules. Don't guess at their contents.
+  // Canvas omits items in oversized modules: don't guess at their contents.
   let canvasNews = null, canvasNewsLoad = null, canvasNewsUser = null;
   const canvasNewsPending = new Set(), canvasNewsShown = new Map();
   const canvasNewsKey = (cid) => `${location.origin}/${canvasNewsUser}/${cid}`;

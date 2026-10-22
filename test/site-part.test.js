@@ -67,7 +67,7 @@ const page = ({ site, preload, answer, raw = {}, local: own = {}, pathname }) =>
     remove: (k, cb) => { cb?.(); return Promise.resolve(); },
   });
   const c = vm.createContext({
-    document, console, Intl, URL, URLSearchParams, TextEncoder, structuredClone, crypto: require('node:crypto').webcrypto,
+    document, console, Intl, URL, URLSearchParams, Response, TextEncoder, structuredClone, crypto: require('node:crypto').webcrypto,
     location: { protocol: 'https:', origin: 'https://school.test', pathname: pathname || (site === 'ultra' ? '/ultra/course' : '/'), href: 'https://school.test/', search: '', hash: '' },
     navigator: { language: 'en' }, Element: El, HTMLElement: El, SVGElement: class {}, Node: El, NodeFilter: { SHOW_TEXT: 4 },
     getComputedStyle: () => ({ getPropertyValue: () => '', color: '', backgroundColor: '' }), CSS: { supports: () => false },
@@ -87,6 +87,12 @@ const page = ({ site, preload, answer, raw = {}, local: own = {}, pathname }) =>
           if (m?.files?.includes(`content-${site}.js`)) {
             if (answer === 'held') return new Promise((resolve) => held.push(resolve));
             return Promise.resolve({ ok: false, error: 'not loadable' });
+          }
+          // Ultra's gradebook reads come through lib/ultra.js's reader and the site's request queue (WP-A1): the worker
+          // puts them in, as lib/background.js does.
+          if (m?.type === 'glaze:load' && m.files.every((f) => ['lib/lmsq.js', 'lib/ultra.js'].includes(f))) {
+            for (const f of m.files) vm.runInContext(read(f), c, { filename: f });
+            return Promise.resolve({ ok: true });
           }
           return Promise.resolve({ ok: false, error: 'not in this test' });
         },
@@ -210,15 +216,16 @@ test('Ultra course cards peek at existing promises and books without starting a 
 });
 
 test('an existing Ultra grade request refreshes mounted course cards when it finishes without native DOM', async () => {
-  const p = page({ site: 'ultra', preload: true, raw: { enabled: false }, pathname: '/ultra/institution-page' });
+  const p = page({ site: 'ultra', preload: true, raw: { enabled: true }, local: { 'seenCoursesAt https://school.test': Date.now() }, pathname: '/ultra/institution-page' });
   await p.done;
+  await settle();
   let updates = 0, requests = 0, finish, observed;
   p.c.GZ_COURSE_CARDS = { sync: () => { updates++; observed = p.c.GZ_CTX.canvasPeek().books.get('_101_1').overall?.label; } };
   p.c.fetch = async (u) => {
     requests++;
     const profile = u.endsWith('/users/me');
     if (!profile) await new Promise((r) => { finish = r; });
-    return { ok: true, url: u, text: async () => JSON.stringify(profile ? { id: '_900_1' } : { results: [{ columnId: '_5_1', effectiveScore: 87, pointsPossible: 100, displayGrade: { text: '87%' }, column: { externalGrade: true } }] }), headers: { get: () => null } };
+    return new Response(JSON.stringify(profile ? { id: '_900_1' } : { results: [{ columnId: '_5_1', effectiveScore: 87, pointsPossible: 100, displayGrade: { text: '87%' }, column: { externalGrade: true } }] }));
   };
   const book = p.c.GZ_CTX.bookFor('_101_1');
   await settle();

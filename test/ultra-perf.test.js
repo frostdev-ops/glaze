@@ -5,13 +5,16 @@ const source = fs.readFileSync(process.env.PERF_ULTRA_SOURCE || require.resolve(
 const settle = () => new Promise(setImmediate);
 const light = vm.runInNewContext(fs.readFileSync(require.resolve('../features/light.js'), 'utf8'), { document: { addEventListener() {} } });
 const covered = vm.runInNewContext(`(${source.match(/  const covered = ([^\n]+);/)[1]})`);
+// bookFor's failure gate (WP-A1), and its reader: lib/ultra.js's, through the site's queue; here its get() alone.
+const gate = source.match(/(?:  const route = [^\n]+\n)?  const failed = [^\n]+\n  const askAgain = [^\n]+\n/)[0];
+const reader = (get) => async () => ({ get });
 
 test('GZ-01: the one-page gradebook cache preserves coverage and redraws when only coverage changes', async () => {
   const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
   let changed = 0, now = 100000, partial = true;
-  const bookFor = vm.runInNewContext(`${source.slice(start, end)} bookFor`, {
-    books: new Map(), covered, Date: { now: () => now }, me: async () => '_900_1',
-    api: async () => ({ results: [], ...(partial && { paging: { nextPage: '?offset=200' } }) }),
+  const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
+    books: new Map(), covered, Date: { now: () => now }, me: async () => '_900_1', location: { pathname: '/ultra/courses/_101_1/outline' },
+    reader: reader(async () => ({ results: [], ...(partial && { paging: { nextPage: '?offset=200' } }) })),
     GZ_PAGE: { gradesByContent: () => new Map(), overall: () => null }, locale: () => 'en', onBook: () => changed++,
   });
   bookFor('_101_1'); await settle();
@@ -26,9 +29,9 @@ test('an unchanged gradebook remembers a successful empty late-status answer', a
   const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
   let requests = 0, changed = 0, now = 100000, fail = false;
   const books = new Map();
-  const bookFor = vm.runInNewContext(`${source.slice(start, end)} bookFor`, {
-    books, covered, Date: { now: () => now }, me: async () => '_900_1',
-    api: async () => { requests++; if (fail) throw new Error('offline'); return { results: [] }; }, lateIn: async () => new Set(),
+  const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
+    books, covered, Date: { now: () => now }, me: async () => '_900_1', location: { pathname: '/ultra/courses/_101_1/outline' },
+    reader: reader(async () => { requests++; if (fail) throw new Error('offline'); return { results: [] }; }), lateIn: async () => new Set(),
     GZ_PAGE: { gradesByContent: () => new Map(), overall: () => null }, locale: () => 'en', onBook: () => changed++,
   });
   bookFor('_101_1'); await settle();
@@ -39,8 +42,11 @@ test('an unchanged gradebook remembers a successful empty late-status answer', a
   assert.equal(books.get('_101_1').late, undefined, 'a failed read is not cached as an empty success');
   fail = false;
   bookFor('_101_1', true); await settle();
+  assert.equal(requests, 2, 'a failed read waits a minute, lateness or not (WP-A1, ULT-1)');
+  now += 60001;
+  bookFor('_101_1', true); await settle();
   const book = bookFor('_101_1', true); await settle();
-  assert.equal(requests, 3, 'the failed read retries, then the empty success is reused on the next pass');
+  assert.equal(requests, 3, 'then the failed read retries, and the empty success is reused on the next pass');
   assert.equal(book.late.size, 0);
   assert.equal(changed, 1, 'unchanged grades do not redraw');
   now += 60001;
