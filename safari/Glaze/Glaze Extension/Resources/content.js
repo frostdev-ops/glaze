@@ -1054,7 +1054,8 @@
     return Promise.race([p, new Promise((_, no) => { timer = setTimeout(() => { p.then(sceneAgain, () => {}); no(Error('no answer')); }, 10000); })])
       .finally(() => clearTimeout(timer)).catch((error) => { if (loading.get('lib/scene-host.js') === p) loading.delete('lib/scene-host.js'); throw error; });
   };
-  // The host in after all: a startup still waiting goes on at once; one that gave up starts over.
+  // Another chance (the host in after all, the page back on screen): a startup still waiting goes on, one that gave up
+  // starts over.
   const sceneAgain = () => {
     if (scenePending) scenePending = null;
     else if (sceneFailed && !sceneRetry?.timer) { sceneRetry = null; sceneFailed = false; }
@@ -1106,6 +1107,8 @@
     }).catch((error) => { if (scenePending === pending) retryScene(key, error); });
   };
   document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
+  // Back on screen, a background that gave up tries again (a frame shown again or a Look change already does).
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && sceneFailed) sceneAgain(); });
 
   // ---- course colors and tint ------------------------------------------------------------------
   // Every course its own color (GZ_COURSE_COLORS), worked out from the course list recordCourses

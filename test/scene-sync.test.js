@@ -28,7 +28,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     html: { hasAttribute: () => false, getAttribute: () => 'normal' },
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
-    document: { body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
+    document: { hidden: false, body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
     chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async () => {
       log.needs.push('lib/scene-host.js');
       // A request the worker sits on: answered (the host run, ok) only when the test calls log.answers[i].
@@ -154,6 +154,23 @@ test('persistent startup failures have bounded retries and do not block a differ
   r.ctx.worn.bg.kind = 'media'; r.ctx.parts = { bg: { media: { type: 'video', src: 'https://cdn.example.com/loop.webm' } } };
   r.api.syncScene(); await settle();
   assert.equal(r.log.updates.at(-1).kind, 'media', 'WebGL failure cannot disable video backgrounds');
+});
+
+test('a background that gave up gets new tries when the page is back on screen', async () => {
+  const r = rig({ startFails: 4 });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry();
+  assert.deepEqual([r.log.starts.length, r.timers.size, r.api.state().sceneFailed], [3, 0, true], 'given up');
+  const shown = r.log.listeners.get('visibilitychange');
+  assert.ok(shown, 'the page coming back on screen is heard');
+  r.ctx.document.hidden = true; shown(); await settle();
+  assert.equal(r.log.starts.length, 3, 'not while hidden');
+  r.ctx.document.hidden = false; shown(); await settle();
+  assert.equal(r.log.starts.length, 4, 'a fresh attempt');
+  await r.retry();
+  assert.equal(r.log.updates.length, 1, 'with fresh tries, it starts');
+  shown(); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.stops], [5, 0], 'a running background is left alone');
 });
 
 test('disabling a failed animation cancels its pending recovery', async () => {
