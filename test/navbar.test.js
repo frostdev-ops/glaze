@@ -272,6 +272,12 @@ test("a mod's items are checked: name, icon, address, badge, place; one owner ca
   for (let i = 0; i < 8; i++) ui.add('many', { id: `i${i}`, label: `Item ${i}` });
   assert.equal(ui.add('many', { id: 'i8', label: 'Ninth' }), false, 'at most eight a mod');
   assert.equal(ui.remove('countdown', 'next'), true);
+  // Nothing a mod adds passes for Glaze's own items (NAV-8): not their icons, nor their names, however spelled.
+  for (const bad of [{ id: 'a', label: 'Glaze settings', icon: 'glaze' }, { id: 'a', label: 'Glaze settings' }, { id: 'a', label: ' SIGN  out ' }, { id: 'a', label: 'Abmelden' }, { id: 'a', label: 'Log-out' },
+    { id: 'a', label: 'Due', icon: 'glaze' }, { id: 'a', label: 'Due', icon: 'signout' }]) assert.equal(ui.add('countdown', bad), false, JSON.stringify(bad));
+  assert.equal(ui.add('countdown', { id: 'next', label: 'Next due', icon: 'gear' }), true);
+  assert.equal(ui.update('countdown', 'next', { label: 'Glaze  Settings' }), false);
+  assert.equal(ui.update('countdown', 'next', { icon: 'signout' }), false);
 });
 
 test('a navbar control saves only its edit, preserving a pin from another tab', () => {

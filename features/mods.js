@@ -434,12 +434,17 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   };
 
   // ---- the nav: items for transforms, rail widgets, a replacement -----------------------------------------------------------
-  // The bar's items where Glaze's bar is drawn (features/navbar.js), else the older rail's. Not the account item: its
-  // label is the student's name, and these go to every mod, frames included, while personal data stays in a Worker
-  // granted nav.read. A layout places no account item anyway.
+  // The page's native items shown in Glaze's bar (features/navbar.js), else in the older rail, by id, each with Glaze's own
+  // name for it (lib/navlayout.js NAMES, loaded with either). These go to every mod, frames included, with no permission, so
+  // nothing the student typed (a renamed item, their own links), the account item (their name), Glaze's own items or other
+  // mods' items is in them: the bar as drawn is nav.read's, personal data for a granted Worker. A layout needs no more: it
+  // names native items by these ids.
   const bar = () => globalThis.GZ_NAVBAR_UI || null;
-  const navItems = () => (bar()?.live() ? (bar().model()?.items || []).filter((i) => !i.hidden && !i.id.startsWith('w:')).slice(0, 64).map((i) => ({ id: i.id, label: String(i.label).slice(0, 80) })) : [...document.querySelectorAll('[data-gz-nav-id]')].slice(0, 64).map((u) => ({ id: u.dataset.gzNavId, label: (u.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80) }))
-    .filter((i) => i.id && !i.id.startsWith('w:') && !i.id.startsWith('g:'))).filter((i) => i.id !== 'profile');
+  const navItems = () => {
+    const names = globalThis.GZ_NAV_LAYOUT?.NAMES || {};
+    const ids = bar()?.live() ? (bar().model()?.items || []).filter((i) => !i.hidden).map((i) => i.id) : [...document.querySelectorAll('[data-gz-nav-id]')].filter((u) => !u.hidden).map((u) => u.dataset.gzNavId);
+    return [...new Set(ids)].filter((id) => typeof id === 'string' && Object.hasOwn(names, id)).slice(0, 64).map((id) => ({ id, label: names[id] }));
+  };
   let itemsSig = '';
   const itemsNow = () => { const items = navItems(), isig = JSON.stringify(items); if (isig !== itemsSig) { itemsSig = isig; emitAll('nav.items', { items }); } };
   // nav.read: the bar as a mod may read it, cleaned and capped (no addresses).
