@@ -4,6 +4,13 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.7] — 2026-10-22
+
+### Fixed
+
+- Blackboard: opening an announcement in a course tab shows it in that tab, instead of a "We can't find that page" error.
+- Includes everything in 3.3.6, which was not released to the stores.
+
 ## [3.3.6] — 2026-10-22
 
 ### Added

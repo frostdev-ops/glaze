@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.6 (French)
+# Chrome Web Store listing — Glaze 3.3.7 (French)
 
 ## Short summary (132 character maximum)
 
@@ -8,13 +8,14 @@ Changez le style de Blackboard Ultra, Canvas et Moodle, avec votre look et votre
 
 Faites de Blackboard Ultra, Canvas et Moodle un espace à votre image. Glaze change le style de vos cours avec des palettes, des polices, des arrière-plans et des animations, et ajoute des outils pour planifier et étudier directement là où vous faites vos travaux de cours. Il fonctionne dans tous les établissements qui utilisent Blackboard Ultra, Canvas ou Moodle, y compris sur le domaine propre d’un établissement, où il demande avant d’activer un site qui n’est pas déjà approuvé. Ni compte ni outil d’analyse. Vos cours, vos résultats, vos notes personnelles et vos tâches restent sur votre appareil ; vos réglages suivent la synchronisation de votre navigateur si elle est activée ; le partage est facultatif et chiffré.
 
-NOUVEAUTÉS DE LA VERSION 3.3.6
+NOUVEAUTÉS DE LA VERSION 3.3.7
 
 • Chaque Look fourni a son propre pointeur, une animation autour, un effet de frappe et ses propres effets pour les travaux terminés, les notes et les séries.
 • Effets de frappe : de petites particules au curseur de texte pendant que vous tapez. Ils ne lisent jamais ce que vous tapez et n'apparaissent jamais dans les champs de mot de passe ou de carte, pendant les tests ou avec les animations désactivées.
 • Look › Pointeur : gardez le pointeur du Look, utilisez celui du système, choisissez l'un des pointeurs de Glaze ou une image à vous, et activez ou désactivez l'animation du pointeur.
 • Safari : les réglages ouverts dans une page de cours ne s'affichent plus vides, et les animations et effets des Looks se chargent de nouveau sur les pages de cours.
 • Le fond animé d'un onglet de cours ne reste plus bloqué sur sa version floue provisoire.
+• Blackboard : une annonce ouverte dans un onglet de cours s'y affiche, au lieu d'une erreur de page introuvable.
 
 DE LA VERSION 3.3
 

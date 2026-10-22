@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.6 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 3.3.7 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -8,13 +8,14 @@ Dê um novo visual ao Blackboard Ultra, Canvas e Moodle, com sua navegação, ma
 
 Deixe o Blackboard Ultra, o Canvas e o Moodle com a sua cara. O Glaze dá um novo visual aos seus cursos com paletas, fontes, fundos e movimento, e traz ferramentas para planejar e estudar bem onde você faz seus trabalhos. Funciona em qualquer escola que use Blackboard Ultra, Canvas ou Moodle, inclusive em um domínio próprio da escola, onde ele pergunta antes de ativar um site ainda não aprovado. Sem conta e sem análises de uso. Seus cursos, suas notas de avaliação, anotações e tarefas ficam no seu dispositivo; suas configurações acompanham a sincronização do navegador, se ela estiver ativada; compartilhar é opcional e criptografado.
 
-NOVO NA 3.3.6
+NOVO NA 3.3.7
 
 • Cada Look incluído tem seu próprio ponteiro, uma animação ao redor, um efeito de digitação e efeitos próprios para tarefas concluídas, notas e sequências.
 • Efeitos de digitação: pequenas partículas no cursor de texto enquanto você digita. Eles nunca leem o que você digita e nunca aparecem em campos de senha ou cartão, em provas ou com o movimento desligado.
 • Look › Ponteiro: mantenha o ponteiro do Look, use o do sistema, escolha qualquer ponteiro do Glaze ou uma imagem sua, e ligue ou desligue a animação do ponteiro.
 • Safari: as configurações abertas dentro de uma página do curso não abrem mais em branco, e as animações e efeitos dos Looks voltam a carregar nas páginas do curso.
 • O fundo animado de uma aba de curso não fica mais preso na versão desfocada provisória.
+• Blackboard: um aviso aberto em uma aba de curso aparece nela, em vez de um erro de página não encontrada.
 
 DA 3.3
 

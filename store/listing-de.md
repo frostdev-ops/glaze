@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.6 (German)
+# Chrome Web Store listing — Glaze 3.3.7 (German)
 
 ## Short summary (132 character maximum)
 
@@ -8,13 +8,14 @@ Gestalte Blackboard Ultra, Canvas und Moodle mit eigenem Look und eigener Naviga
 
 Blackboard Ultra, Canvas und Moodle sollen sich wie deine eigenen anfühlen. Glaze gestaltet deine Kurse mit Paletten, Schriften, Hintergründen und Bewegung neu und ergänzt Werkzeuge zum Planen und Lernen genau dort, wo du deine Kursarbeit erledigst. Es funktioniert an jeder Schule, die Blackboard Ultra, Canvas oder Moodle nutzt, auch auf der eigenen Domain einer Schule, wo es vor dem Aktivieren einer noch nicht genehmigten Website fragt. Kein Konto, keine Analysen. Deine Kurse, Noten, Notizen und Aufgaben bleiben auf deinem Gerät; deine Einstellungen folgen der Synchronisierung deines Browsers, wenn sie eingeschaltet ist; das Teilen ist optional und verschlüsselt.
 
-NEU IN 3.3.6
+NEU IN 3.3.7
 
 • Jeder mitgelieferte Look hat seinen eigenen Mauszeiger, eine Animation darum, einen Tippeffekt und eigene Effekte für erledigte Aufgaben, Noten und Serien.
 • Tippeffekte: kleine Partikel an der Einfügemarke beim Tippen. Sie lesen nie, was du tippst, und erscheinen nie in Passwort- oder Kartenfeldern, bei Tests oder mit ausgeschalteter Bewegung.
 • Look › Mauszeiger: Behalte den Zeiger des Looks, nutze den Systemzeiger, wähle einen von Glazes Zeigern oder ein eigenes Bild und schalte die Zeigeranimation ein oder aus.
 • Safari: Die Einstellungen in einer Kursseite öffnen sich nicht mehr leer, und Animationen und Effekte von Looks laden auf Kursseiten wieder.
 • Der animierte Hintergrund eines Kurs-Tabs bleibt nicht mehr auf seinem unscharfen Platzhalter hängen.
+• Blackboard: Eine in einem Kurs-Tab geöffnete Mitteilung erscheint dort statt der Fehlerseite „Seite nicht gefunden“.
 
 AUS 3.3
 

@@ -23,15 +23,15 @@ const terms = {
   nl: ['lezen nooit wat je typt', 'Look › Aanwijzer', 'Safari: instellingen'],
   'pt-BR': ['nunca leem o que você digita', 'Look › Ponteiro', 'Safari: as configurações'],
 };
-for (const [lang, expected] of Object.entries(terms)) test(`3.3.6 listing ${lang || 'en'} keeps typing privacy, the pointer choice and the Safari fix`, () => {
+for (const [lang, expected] of Object.entries(terms)) test(`3.3.7 listing ${lang || 'en'} keeps typing privacy, the pointer choice and the Safari fix`, () => {
   const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
-  const block = text.slice(text.indexOf('3.3.6\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
+  const block = text.slice(text.indexOf('3.3.7\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
   for (const term of expected) assert.ok(block.includes(term), term);
 });
 
-test('3.3.6 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '3.3.6');
-  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.3.6');
+test('3.3.7 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '3.3.7');
+  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.3.7');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('scripts/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
@@ -43,6 +43,6 @@ test('3.3.6 versions agree and the exact pure notes transform fits Apple', () =>
   });
   const result = notes(root);
   assert.ok(result.length <= 4000, `${result.length} characters`);
-  assert.match(result, /^Added\n/);
-  assert.ok(!result.includes('## [3.3.5]'));
+  assert.match(result, /^Fixed\n/);
+  assert.ok(!result.includes('## [3.3.6]'));
 });

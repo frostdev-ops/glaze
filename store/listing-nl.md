@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.6 (Dutch)
+# Chrome Web Store listing — Glaze 3.3.7 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -8,13 +8,14 @@ Geef Blackboard Ultra, Canvas en Moodle je eigen stijl en navigatie, plus een be
 
 Maak Blackboard Ultra, Canvas en Moodle echt van jou. Glaze geeft je cursussen een nieuwe stijl met paletten, lettertypen, achtergronden en beweging, en voegt hulpmiddelen voor plannen en studeren toe precies waar je je cursuswerk doet. Het werkt op elke school die Blackboard Ultra, Canvas of Moodle gebruikt, ook op het eigen domein van een school, waar het vraagt voordat het een nog niet goedgekeurde site inschakelt. Geen account, geen analytics. Je cursussen, cijfers, notities en taken blijven op je apparaat; je instellingen volgen de synchronisatie van je browser als die aanstaat; delen is optioneel en versleuteld.
 
-NIEUW IN 3.3.6
+NIEUW IN 3.3.7
 
 • Elke meegeleverde Look heeft een eigen aanwijzer, een animatie eromheen, een type-effect en eigen effecten voor afgerond werk, cijfers en reeksen.
 • Type-effecten: kleine deeltjes bij de tekstcursor terwijl je typt. Ze lezen nooit wat je typt en verschijnen nooit in wachtwoord- of kaartvelden, bij toetsen of met beweging uit.
 • Look › Aanwijzer: houd de aanwijzer van de Look, gebruik die van het systeem, kies een van Glazes aanwijzers of een eigen afbeelding, en zet de aanwijzeranimatie aan of uit.
 • Safari: instellingen binnen een cursuspagina openen niet meer leeg, en animaties en effecten van Looks laden weer op cursuspagina's.
 • De bewegende achtergrond van een cursustab blijft niet meer hangen op zijn wazige tijdelijke versie.
+• Blackboard: een mededeling die je in een cursustab opent, verschijnt daar in plaats van een foutmelding dat de pagina niet bestaat.
 
 UIT 3.3
 
