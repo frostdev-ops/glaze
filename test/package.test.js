@@ -47,7 +47,7 @@ test('every web-accessible resource is in the package, and only the art the exte
   const art = [...L.BUNDLED.keys(), ...Object.values(P.WEAR).map((x) => `critters/${x.art}`)];
   assert.deepEqual(files('assets/art/stickers'), [...new Set(art)].map(L.file).sort());
   assert.ok(['', '-happy', '-sleepy'].every((s) => L.BUNDLED.has(`critters/study-buddy${s}`)));
-  assert.deepEqual(files('assets/art/cursors'), Object.keys(L.CURSORS).flatMap((c) => [`assets/art/cursors/${c}/default.png`, `assets/art/cursors/${c}/pointer.png`]).sort());
+  assert.deepEqual(files('assets/art/cursors'), Object.entries(L.CURSORS).flatMap(([c, { svg }]) => ['default', 'pointer'].flatMap((k) => [`${k}.png`, ...(svg ? [`${k}.svg`, `${k}@2x.png`] : [])]).map((f) => `assets/art/cursors/${c}/${f}`)).sort());
 });
 
 test('every relative link and source in the extension\'s pages is a file the package ships', () => {
