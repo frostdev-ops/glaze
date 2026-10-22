@@ -1227,20 +1227,42 @@ const dueBySite = ({ dueWeek, dueWeekAt, dueWeekFrom, ...patch }) => {
   } catch { /* old invalid source: discard it */ }
   return patch;
 };
-// Once, on the update that made the pointer part of the Look: the pointer chosen as a setting (extras.cursor) goes into the
-// parts of the Look being worn, so the student keeps it, and the setting goes. A Look that already has a pointer keeps its
-// own. Parts saved on another computer can't be written over unseen: the setting waits for the next start.
+// The retired pointer setting moves once into the worn Look, without replacing parts we cannot read. Keep the proposed
+// parts before writing: a worker can stop after local's large-parts write and before sync's hash and extras commit.
 const pointerToLook = () => (brokerTurn ||= GZ_CARDS.queue())(async () => {
   const area = { sync: brokerArea('sync'), local: brokerArea('local') };
-  const { extras } = await area.sync.get('extras');
-  if (!extras || typeof extras !== 'object' || !Object.hasOwn(extras, 'cursor')) return;
+  const { pointerMove } = await area.local.get('pointerMove');
+  const { extras, lookX = '' } = await area.sync.get(['extras', 'lookX']);
+  if (!extras || typeof extras !== 'object' || !Object.hasOwn(extras, 'cursor')) {
+    if (pointerMove && !pointerMove.done) await area.local.set({ pointerMove: { done: true } });
+    return;
+  }
   const { cursor, ...rest } = extras;
+  const still = async () => {
+    const now = await area.sync.get(['extras', 'lookX']);
+    return GZ_XPARTS.same(now.lookX ?? '', lookX) && GZ_XPARTS.same(now.extras, extras);
+  };
+  const done = async () => { if (await still() && await area.sync.set({ extras: rest })) await area.local.set({ pointerMove: { done: true } }); };
+  if (pointerMove?.done) return done();
   const set = typeof cursor === 'string' && cursor !== 'off' && GZ_MX.POINTERS.includes(cursor) ? cursor : null;
-  const P = set ? await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local) : null;
-  if (P === undefined) return;
-  if (!set || P?.x?.pointer) return area.sync.set({ extras: rest });
-  await GZ_XPARTS.write(area, { ...P, x: { ...P?.x, pointer: set } }, { extras: rest });
+  if (!set) return done();
+  let parts;
+  if (pointerMove?.cursor === cursor && GZ_XPARTS.same(pointerMove.source, lookX)
+    && GZ_XPARTS.same(GZ_XPARTS.bundle(pointerMove.parts), pointerMove.parts)) parts = pointerMove.parts;
+  else {
+    const P = await GZ_XPARTS.fromStored(lookX, area.local);
+    if (P === undefined || (lookX !== '' && !P)) return;
+    if (P?.x?.pointer) return done();
+    parts = { ...P, x: { ...P?.x, pointer: set } };
+    if (!await area.local.set({ pointerMove: { source: lookX, cursor, parts } })) return;
+  }
+  // A sync arrival during packing must not restore the Look or settings that were read before it.
+  const guarded = { sync: { ...area.sync, set: async (p) => await still() && area.sync.set(p) },
+    local: { ...area.local, set: async (p) => await still() && area.local.set(p) } };
+  if (await GZ_XPARTS.write(guarded, parts, { extras: rest })) await area.local.set({ pointerMove: { done: true } });
 }).catch(() => {});
+// Ordinary service-worker wakes do not fire onStartup. Retry pending work before queued editor or page writes.
+pointerToLook();
 // Once, on the update from 3.3.4: that one list goes under its site, and Ultra's one ten-minute gate for its course list
 // (seenCoursesAt) goes, now that each Ultra site has its own (`seenCoursesAt <origin>`, content-ultra.js record).
 const perSite = async () => {

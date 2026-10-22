@@ -56,11 +56,11 @@ test('pointer and typing parts: names from the tables, values clamped, anything 
 });
 
 // The real worker (lib/background.js) over stand-in storage.
-const worker = (sync, local = {}) => {
+const worker = (sync, local = {}, hooks = {}) => {
   const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
   const area = (s) => ({
     get: (k) => later(() => structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])))),
-    set: (v) => later(() => { Object.assign(s, structuredClone(v)); }),
+    set: async (v) => { await hooks.beforeSet?.(s === sync ? 'sync' : 'local', v); return later(() => { Object.assign(s, structuredClone(v)); }); },
     remove: (k) => later(() => { for (const x of [].concat(k)) delete s[x]; }),
   });
   const noop = { addListener() {} };
@@ -73,7 +73,7 @@ const worker = (sync, local = {}) => {
     },
   });
   vm.runInContext(read('lib/background.js'), context);
-  return { move: () => vm.runInContext('pointerToLook()', context), sync, local };
+  return { move: () => vm.runInContext('pointerToLook()', context), sync, local, context };
 };
 
 test('the pointer a student chose as a setting moves into the Look they wear, once, and the setting goes', async () => {
@@ -100,4 +100,50 @@ test('the pointer a student chose as a setting moves into the Look they wear, on
   const away = worker({ extras: { cursor: 'pearl' }, lookX: { h: 'abc' } });
   await away.move();
   assert.deepEqual(away.sync.extras, { cursor: 'pearl' });
+});
+
+
+test('pointer migration preserves unreadable parts and ignores stale local parts', async () => {
+  const old = await X.pack({ x: { cursor: { kind: 'glow' } } });
+  for (const lookX of ['x1:broken', await X.pack({ x: { future: true } })]) {
+    const w = worker({ extras: { cursor: 'aqua' }, lookX }, { lookX: old });
+    await w.move();
+    assert.equal(w.sync.lookX, lookX, 'unreadable parts are never replaced');
+    assert.equal(w.sync.extras.cursor, 'aqua', 'choice waits until the parts can be read');
+  }
+  const w = worker({ extras: { cursor: 'pearl' }, lookX: '' }, { lookX: old });
+  await w.move();
+  assert.deepEqual(await X.unpack(w.sync.lookX), { x: { pointer: 'pearl' } }, 'sync clears stale local parts');
+});
+
+test('pointer migration resumes after a worker restart between local and sync writes', async () => {
+  const source = await X.pack({ x: { cursor: { kind: 'glow' } } });
+  const sync = { extras: { cursor: 'lilac', stickers: false }, lookX: { h: X.hash(source) } }, local = { lookX: source };
+  let interrupted = false, reached;
+  const stopped = new Promise((r) => { reached = r; });
+  worker(sync, local, { beforeSet: (area, patch) => {
+    if (area !== 'sync' || !Object.hasOwn(patch, 'lookX')) return;
+    if (typeof patch.lookX === 'string') throw Error('sync item quota');
+    interrupted = true;
+    reached();
+    return new Promise(() => {}); // the old worker dies before sync commits
+  } }).move();
+  await stopped;
+  assert.ok(interrupted);
+  assert.notEqual(local.lookX, source, 'the local part of the write already landed');
+  const restarted = worker(sync, local);
+  await restarted.move();
+  assert.deepEqual(await X.fromStored(sync.lookX, { get: async () => local }), { x: { cursor: { kind: 'glow' }, pointer: 'lilac' } });
+  assert.deepEqual(sync.extras, { stickers: false });
+  // An older device can sync the retired setting back after the student removes the pointer.
+  sync.lookX = '';
+  sync.extras.cursor = 'aqua';
+  await restarted.move();
+  assert.equal(sync.lookX, '', 'migration is once, even if an old setting returns');
+});
+
+test('a normal worker wake retries an unfinished pointer migration', async () => {
+  const w = worker({ extras: { cursor: 'pearl' } });
+  await vm.runInContext('(brokerTurn || (() => Promise.resolve()))(() => {})', w.context);
+  assert.deepEqual(await X.unpack(w.sync.lookX), { x: { pointer: 'pearl' } });
 });
