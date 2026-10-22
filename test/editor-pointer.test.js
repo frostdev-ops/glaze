@@ -42,7 +42,7 @@ const editor = (s, local = {}) => {
       createElementNS: (ns, tag) => Object.assign(new El(tag), { namespaceURI: ns }),
       getElementById: (id) => ids[id] || null,
     },
-    createImageBitmap: async (f) => { if (f === 'not a picture') throw new Error('no'); return { width: 64, height: 48, close() {} }; },
+    createImageBitmap: async (f) => { if (f.bad) throw new Error('no'); return { width: 64, height: 48, close() {} }; },
     chrome: {
       runtime: { lastError: null },
       storage: {
@@ -146,7 +146,7 @@ test('their own picture: chosen, it is kept on this computer and becomes the poi
   e.ids['pointer-pick'].click();
   assert.equal(e.picked(), 'asked', 'Choose a picture… opens the file chooser');
   const file = e.ids['pointer-file'];
-  file.files = ['a picture'];
+  file.files = [{ type: 'image/png', size: 100 }];
   file.fire('change');
   for (let i = 0; i < 5; i++) await tick();
   assert.equal(e.local.cursorImg, 'data:image/png;base64,cGljdHVyZQ==', 'scaled, as PNG, in storage.local');
@@ -161,7 +161,7 @@ test('their own picture: chosen, it is kept on this computer and becomes the poi
   assert.equal(e.ids['pointer-pick'].textContent, 'Replace picture…');
   assert.equal(e.ids['pointer-remove'].hidden, false);
   // A file that isn't a picture: said, and nothing changes.
-  file.files = ['not a picture'];
+  file.files = [{ type: 'image/png', size: 100, bad: true }];
   file.fire('change');
   for (let i = 0; i < 5; i++) await tick();
   assert.deepEqual(e.hints, [["That file isn't a picture Glaze can read.", true]]);
@@ -175,6 +175,31 @@ test('their own picture: chosen, it is kept on this computer and becomes the poi
   assert.equal(e.radio('own').disabled, true);
   assert.equal(e.ids['pointer-pick'].focused, true);
   assert.deepEqual(s.parts, look);
+});
+
+test('pointer uploads refuse other types and files over 5 MiB before decoding', async () => {
+  const s = settings(), e = editor(s);
+  await tick();
+  let decoded = 0;
+  e.context.createImageBitmap = async () => { decoded++; return { width: 64, height: 48, close() {} }; };
+  for (const f of [{ type: 'image/gif', size: 100 }, { type: 'image/svg+xml', size: 100 }, { type: '', size: 100 },
+    { type: 'image/png', size: 5 * 1024 * 1024 + 1 }, { type: 'image/jpeg', size: 5 * 1024 * 1024 + 1 }]) {
+    e.ids['pointer-file'].files = [f];
+    e.ids['pointer-file'].fire('change');
+    for (let i = 0; i < 3; i++) await tick();
+  }
+  assert.equal(decoded, 0, 'accept= is only a file chooser hint; invalid files must never reach the decoder');
+  assert.equal(e.hints.length, 5);
+  assert.ok(e.hints.every((h) => h[1] === true));
+  assert.deepEqual(e.changed, []);
+  assert.equal(s.extras.pointer, 'look');
+  for (const type of ['image/png', 'image/jpeg']) {
+    e.ids['pointer-file'].files = [{ type, size: 5 * 1024 * 1024 }];
+    e.ids['pointer-file'].fire('change');
+    for (let i = 0; i < 3; i++) await tick();
+  }
+  assert.equal(decoded, 2, 'both promised formats at the size boundary are accepted');
+  assert.equal(s.extras.pointer, 'own');
 });
 
 test('a picture added or removed in another tab shows here; one that is no bitmap data URL is not shown', async () => {

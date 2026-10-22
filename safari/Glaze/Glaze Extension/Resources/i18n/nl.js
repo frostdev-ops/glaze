@@ -3034,7 +3034,7 @@
   "Yours with whichever Look you wear, and never put in a Look or a theme code. Text fields keep the usual text cursor; touch screens have no pointer.": "Van jou, welke Look je ook draagt, en nooit in een Look of themacode. Tekstvelden houden de gewone tekstcursor; aanraakschermen hebben geen aanwijzer.",
   "Remove picture": "Afbeelding verwijderen",
   "Replace picture…": "Afbeelding vervangen…",
-  "A PNG or JPEG, scaled to 32 pixels and kept on this computer; choosing one makes it your pointer. Its top-left corner is the tip.": "Een PNG of JPEG, verkleind tot 32 pixels en bewaard op deze computer; als je er een kiest, wordt het je aanwijzer. De linkerbovenhoek is de punt.",
+  "A PNG or JPEG up to 5 MiB, scaled to 32 pixels and kept on this computer; choosing one makes it your pointer. Its top-left corner is the tip.": "Een PNG of JPEG van maximaal 5 MiB, verkleind tot 32 pixels en bewaard op deze computer; als je er een kiest, wordt het je aanwijzer. De linkerbovenhoek is de punt.",
   "Pointer animation": "Aanwijzeranimatie",
   "The Look's animation around your pointer, such as sparkles or a glow. Off keeps your pointer still; typing and event effects stay as the Look has them.": "De animatie van de Look rond je aanwijzer, zoals vonkjes of een gloed. Uit houdt je aanwijzer stil; type- en gebeurteniseffecten blijven zoals de Look ze heeft.",
   "The Look's pointer": "Aanwijzer van de Look",

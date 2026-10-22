@@ -3034,7 +3034,7 @@
   "Yours with whichever Look you wear, and never put in a Look or a theme code. Text fields keep the usual text cursor; touch screens have no pointer.": "Deiner, welchen Look du auch trägst, und nie in einem Look oder Themencode. Textfelder behalten den üblichen Textcursor; Touchscreens haben keinen Mauszeiger.",
   "Remove picture": "Bild entfernen",
   "Replace picture…": "Bild ersetzen…",
-  "A PNG or JPEG, scaled to 32 pixels and kept on this computer; choosing one makes it your pointer. Its top-left corner is the tip.": "Ein PNG oder JPEG, auf 32 Pixel verkleinert und auf diesem Computer gespeichert; wenn du eines wählst, wird es dein Mauszeiger. Seine obere linke Ecke ist die Spitze.",
+  "A PNG or JPEG up to 5 MiB, scaled to 32 pixels and kept on this computer; choosing one makes it your pointer. Its top-left corner is the tip.": "Ein PNG oder JPEG bis 5 MiB, auf 32 Pixel verkleinert und auf diesem Computer gespeichert; wenn du eines wählst, wird es dein Mauszeiger. Seine obere linke Ecke ist die Spitze.",
   "Pointer animation": "Mauszeiger-Animation",
   "The Look's animation around your pointer, such as sparkles or a glow. Off keeps your pointer still; typing and event effects stay as the Look has them.": "Die Animation des Looks um deinen Mauszeiger, etwa Funken oder ein Leuchten. Aus lässt deinen Mauszeiger ruhig; Tipp- und Ereigniseffekte bleiben, wie der Look sie hat.",
   "The Look's pointer": "Mauszeiger des Looks",

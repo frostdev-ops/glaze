@@ -3034,7 +3034,7 @@
   "Yours with whichever Look you wear, and never put in a Look or a theme code. Text fields keep the usual text cursor; touch screens have no pointer.": "Seu, com qualquer Look que você use, e nunca vai em um Look nem em um código de tema. Campos de texto mantêm o cursor de texto normal; telas de toque não têm ponteiro.",
   "Remove picture": "Remover imagem",
   "Replace picture…": "Trocar imagem…",
-  "A PNG or JPEG, scaled to 32 pixels and kept on this computer; choosing one makes it your pointer. Its top-left corner is the tip.": "Um PNG ou JPEG, reduzido a 32 pixels e guardado neste computador; ao escolher um, ele vira seu ponteiro. O canto superior esquerdo é a ponta.",
+  "A PNG or JPEG up to 5 MiB, scaled to 32 pixels and kept on this computer; choosing one makes it your pointer. Its top-left corner is the tip.": "Um PNG ou JPEG de até 5 MiB, reduzido a 32 pixels e guardado neste computador; ao escolher um, ele vira seu ponteiro. O canto superior esquerdo é a ponta.",
   "Pointer animation": "Animação do ponteiro",
   "The Look's animation around your pointer, such as sparkles or a glow. Off keeps your pointer still; typing and event effects stay as the Look has them.": "A animação do Look ao redor do seu ponteiro, como faíscas ou um brilho. Desligada, seu ponteiro fica parado; os efeitos de digitação e de eventos continuam como o Look os tem.",
   "The Look's pointer": "Ponteiro do Look",

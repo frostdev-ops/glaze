@@ -86,6 +86,8 @@ var GZ_EDITOR_POINTER = globalThis.GZ_EDITOR_POINTER || (() => {
   // Read and scaled here, kept as PNG: SVG and anything else the browser can't draw as a bitmap is refused. A new picture is
   // the pointer from then on.
   const take = async (f) => {
+    if (!['image/png', 'image/jpeg'].includes(f.type)) return A.hint(tr("This browser can't open that picture. Save it as PNG or JPEG and choose that."), true);
+    if (f.size > 5 * 1024 * 1024) return A.hint(tr('That file is too big for this kind (the most is {max}).', { max: '5 MiB' }), true);
     let bmp;
     try { bmp = await createImageBitmap(f); } catch { return A.hint(tr("That file isn't a picture Glaze can read."), true); }
     const [w, h] = LX().fit(bmp.width, bmp.height, 32);
