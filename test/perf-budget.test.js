@@ -114,6 +114,11 @@ const FRESH_DEFAULTS = 631;
 // tint moves the bright accent until it reads on the tint: 693 bytes on every site, raised by the excess over each budget.
 // Measured against c14b035.
 const CONTRAST_ROLES = { ultra: 510, canvas: 605, moodle: 671 };
+// Ultra with Glaze off (WP-C1; the owner's audit-fix allowance, 2026-10-21): content.js takes content-ultra.js's early sheets
+// off when the first decision is off, waits for storage before the sweep on Ultra too, and keeps only first paint's settings
+// in the page's sessionStorage and skips off-state draft maintenance (982 bytes on every site); content-ultra.js starts
+// widgets and sidebar once settings are in, including concurrent layout changes (230 on Ultra). Measured against a7e4bc9.
+const ULTRA_OFF = { ultra: 982 + 230, canvas: 982, moodle: 982 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -122,7 +127,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site], budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site], budget = Math.round(baseline * 1.02);
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
