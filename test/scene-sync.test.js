@@ -17,8 +17,8 @@ assert.ok(block.includes('importScene('));
 const background = source.match(/background: (\(el\) => \{.*\}),\n/)[1];
 const loader = source.slice(source.indexOf('  const loading = new Map();'), source.indexOf("  // Moodle's extras"));
 const settle = () => new Promise(setImmediate);
-const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, hostFails = null, hostHangs = 0, glslHangs = 0 } = {}) => {
-  const log = { starts: [], updates: [], needs: [], answers: [], stops: 0, removed: 0, imports: 0, files: [], urls: [], listeners: new Map() };
+const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, hostFails = null, hostHangs = 0, hostSilent = false, glslHangs = 0, importHangs = 0 } = {}) => {
+  const log = { starts: [], updates: [], needs: [], answers: [], held: [], stops: 0, removed: 0, imports: 0, files: [], urls: [], listeners: new Map() };
   const timers = new Map(); let nextTimer = 0;
   let failScene = null;
   const canvas = (tag) => ({ tag, remove() { log.removed++; }, setAttribute() {}, parentNode: null });
@@ -33,11 +33,21 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
       const file = m.files[0], ran = () => { if (file === 'lib/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; };
       log.needs.push(file);
       // A request the worker sits on: answered (the file run, ok) only when the test calls log.answers[i].
-      if (file === 'lib/glsl.js' ? glslHangs-- > 0 : hostHangs-- > 0) return new Promise((ok) => log.answers.push(() => { ran(); ok({ ok: true }); }));
+      if (file === 'lib/glsl.js' ? glslHangs-- > 0 : hostHangs-- > 0) {
+        if (hostSilent) ran(); // the worker ran the file, and its answer was lost
+        return new Promise((ok) => log.answers.push(() => { ran(); ok({ ok: true }); }));
+      }
       if (file !== 'lib/glsl.js' && hostFails-- > 0) throw new Error('temporary injection failure');
       ran(); return { ok: true };
     } } },
-    importScene: (url, file) => { log.imports++; log.files.push(file); log.urls.push(url); if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure')); return Promise.resolve({ start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); if (startFails-- > 0) throw new Error('temporary WebGL context failure'); return { update: (o) => log.updates.push(o), draw() {}, stop() { log.stops++; } }; } }); },
+    importScene: (url, file) => {
+      log.imports++; log.files.push(file); log.urls.push(url);
+      const mod = { start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); if (startFails-- > 0) throw new Error('temporary WebGL context failure'); return { update: (o) => log.updates.push(o), draw() {}, stop() { log.stops++; } }; } };
+      // An import that never settles until the test settles it: log.held[i].ok() or .no().
+      if (importHangs-- > 0) return new Promise((ok, no) => log.held.push({ ok: () => ok(mod), no: () => no(new Error('late module failure')) }));
+      if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure'));
+      return Promise.resolve(mod);
+    },
     need: (file, ready) => { if (file === 'lib/scene-host.js') { ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; return Promise.resolve(); } log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
     applySettings: () => ctx.api.syncScene(), // the settings paint finishes by syncing the scene
     GZ_CTX: { parts: () => ctx.parts },
@@ -119,6 +129,53 @@ test('an earlier request answered while a retry still waits starts the backgroun
   for (const [id, timer] of [...r.timers]) { r.timers.delete(id); timer.fn(); }
   r.log.answers[1](); await settle();
   assert.deepEqual([r.log.starts.length, r.log.stops, r.timers.size, r.api.state().sceneFailed], [1, 0, 0, false], 'the abandoned wait running out later changes nothing');
+});
+
+test('a scene host the worker ran without answering is used by the next attempt, not asked for again', async () => {
+  const r = rig({ hostHangs: 1, hostSilent: true });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry(); // the wait runs out; the retry finds it in
+  assert.deepEqual([r.log.needs.length, r.log.updates.length], [1, 1]);
+});
+
+test('an animation module import that never settles does not hold the background: it is asked for again at a new URL', async () => {
+  const r = rig({ importHangs: 1 });
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.starts.length, 0);
+  await r.retry(); // the wait runs out
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.imports, 1, 'syncs meanwhile import nothing more: the retry does');
+  await r.retry();
+  assert.deepEqual([r.log.imports, new Set(r.log.urls).size, r.log.updates.length], [2, 2, 1]);
+  assert.deepEqual([r.timers.size, r.api.state().sceneFailed], [0, false]);
+});
+
+test('an import that settles after the startup let go of it: in, it starts the background once; failed, it drops nothing', async () => {
+  const r = rig({ importHangs: 3 });
+  r.api.syncScene(); await settle();
+  for (let i = 0; i < 5; i++) await r.retry(); // three waits run out, two retries between them
+  assert.deepEqual([r.log.imports, r.log.starts.length, r.api.state().sceneFailed], [3, 0, true]);
+  r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.starts.length, r.api.state().sceneFailed], [1, false], 'the module in after all starts it');
+  r.log.held[1].ok(); r.log.held[2].no(); await settle();
+  assert.equal(r.log.starts.length, 1, 'later ones start nothing more');
+  r.api.stopScene(); r.api.syncScene(); await settle();
+  assert.deepEqual([r.log.imports, r.log.starts.length], [3, 2], 'a late failure does not drop the module that came in');
+  const q = rig({ importHangs: 1 });
+  q.api.syncScene(); await settle();
+  await q.retry(); await q.retry();
+  q.log.held[0].no(); await settle();
+  q.api.stopScene(); q.api.syncScene(); await settle();
+  assert.deepEqual([q.log.imports, q.log.starts.length], [2, 2], 'nor the one the retry loaded');
+});
+
+test('a course frame shown again while its hidden startup still loads starts one scene', async () => {
+  const r = rig({ importHangs: 1 });
+  r.api.syncScene();
+  r.ctx.hid = () => true; r.api.syncScene();
+  r.ctx.hid = () => false; r.api.syncScene();
+  r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.imports, r.log.starts.length, r.timers.size], [1, 1, 0]);
 });
 
 test('mod handoffs cancel pending built-in startup and restore the built-in scene on removal', async () => {
