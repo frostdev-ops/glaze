@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3 (Dutch)
+# Chrome Web Store listing — Glaze 3.4 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -8,9 +8,19 @@ Geef Blackboard Ultra, Canvas en Moodle je eigen stijl en navigatie, plus een be
 
 Maak Blackboard Ultra, Canvas en Moodle echt van jou. Glaze geeft je cursussen een nieuwe stijl met paletten, lettertypen, achtergronden en beweging, en voegt hulpmiddelen voor plannen en studeren toe precies waar je je cursuswerk doet. Het werkt op elke school die Blackboard Ultra, Canvas of Moodle gebruikt, ook op het eigen domein van een school, waar het vraagt voordat het een nog niet goedgekeurde site inschakelt. Geen account, geen analytics. Je cursussen, cijfers, notities en taken blijven op je apparaat; je instellingen volgen de synchronisatie van je browser als die aanstaat; delen is optioneel en versleuteld.
 
-NIEUW IN 3.3
+NIEUW IN 3.4
 
-• Glaze-navigatie op Blackboard Ultra, Canvas en Moodle, standaard aan: een zij- of bovenbalk in plaats van die van de site, zwevend of ingebed, en een onderbalk op telefoons. Hernoem, herorden, verberg of voeg items toe (tot acht eigen links), kies je vier telefoontabs en houd cursustabbladen erin. Zet je hem uit, dan komt de navigatie van de site terug. Op Moodle blijven de schakelaar voor de bewerkmodus en de eigen menulinks van je school behouden.
+• Op een nog niet goedgekeurde eigen schoolsite vraagt Glaze eerst toestemming; de instellingen tonen goedgekeurde eigen sites met Verwijderen.
+• Een gedeelde Look laat zien wat hij verandert voordat je hem gebruikt: elk navigatie-item dat hij verbergt, waar elke link heen gaat en de paginadelen die hij aanpast. Looks van anderen die Uitloggen zouden verbergen of een link zouden vermommen, worden geweigerd.
+• Geselecteerde bulkverzoeken worden per document en schoolsite gedoseerd en wachten als de site het druk heeft.
+• Voor gelinkte achtergrondvideo’s en -afbeeldingen gelden groottelimieten. Uit nieuwe video- en AVIF-bestanden wordt containermetadata verwijderd; niet opschoonbare oudere bestanden blijven lokaal en worden niet gedeeld.
+• Gedeelde notities blijven synchroniseren terwijl je typt.
+• Op Moodle houdt de balk van Glaze de schakelaar voor de bewerkmodus en de eigen menulinks van je school.
+• Verbeteringen voor cijfers en gemiddelde, cursustabbladen, notities, de focustimer, huisdieren, documenten, schermlezers en talen die van rechts naar links worden geschreven.
+
+UIT 3.3
+
+• Glaze-navigatie op Blackboard Ultra, Canvas en Moodle, standaard aan: een zij- of bovenbalk in plaats van die van de site, zwevend of ingebed, en een onderbalk op telefoons. Hernoem, herorden, verberg of voeg items toe (tot acht eigen links), kies je vier telefoontabs en houd cursustabbladen erin. Zet je hem uit, dan komt de navigatie van de site terug.
 • Een zijbalk op Canvas en Blackboard Ultra: de eigen zijbalk van de pagina en de widgets die je eronder vastzet, in één kolom op brede vensters en als lade op smalle.
 • Cursustabbladen nu ook op Canvas, elke cursus als eigen live pagina, en verberg modules die je niet gebruikt, zoals je op Blackboard mappen verbergt.
 • Documentbeoordeling op pagina's met ingeleverd werk: compacte koppen, uitklapbare feedback, volledig scherm en documentfocus. Pagina's die je kunt bewerken blijven zoals de site ze maakte.

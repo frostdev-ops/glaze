@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3
+# Chrome Web Store listing — Glaze 3.4
 
 ## Name
 
@@ -16,9 +16,19 @@ Productivity
 
 Make Blackboard Ultra, Canvas and Moodle feel like yours. Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain, where it asks before enabling a site it has not already approved. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
-NEW IN 3.3
+NEW IN 3.4
 
-• Glaze navigation on Blackboard Ultra, Canvas and Moodle, on by default: a side rail or a top bar in place of the site's own, floating or embedded, and a bottom bar on phones. Rename, reorder, hide or add items (up to eight links of your own), choose your four phone tabs, and keep course tabs in it. Turn it off and the site's own comes back. On Moodle it keeps the Edit mode switch and your school's own menu links.
+• On a school's own domain not already approved, Glaze asks before it runs; Settings lists approved custom sites, with Remove.
+• A shared Look shows what it changes before you use it: each navigation item it hides, where each link goes, and the page parts it restyles. Looks from others that would hide Sign out or disguise a link are refused.
+• Selected bulk reads are paced per document and school site and back off when the site is busy.
+• Linked background videos and pictures have size limits. New video and AVIF files have container metadata removed; uncleanable older files stay local and are not shared.
+• Shared notes keep syncing while you type.
+• On Moodle, Glaze's bar keeps the Edit mode switch and your school's own menu links.
+• Fixes for grades and GPA, course tabs, notes, the focus timer, pets, documents, screen readers and right-to-left languages.
+
+FROM 3.3
+
+• Glaze navigation on Blackboard Ultra, Canvas and Moodle, on by default: a side rail or a top bar in place of the site's own, floating or embedded, and a bottom bar on phones. Rename, reorder, hide or add items (up to eight links of your own), choose your four phone tabs, and keep course tabs in it. Turn it off and the site's own comes back.
 • A sidebar on Canvas and Blackboard Ultra: the page's own sidebar and the widgets you dock under it, in one column on wide windows and a drawer on narrow ones.
 • Course tabs on Canvas too, each course a live page of its own, and hide modules you don't use, as you can hide folders on Blackboard.
 • Document review on submitted-work pages: compact headers, expandable feedback, full screen and document focus. Pages you can edit stay as the site made them.
@@ -103,11 +113,11 @@ Open source (MIT): https://github.com/frostdev-ops/glaze
 
 Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Anthology Inc. Moodle is a registered trademark of Moodle Pty Ltd. Glaze is an independent project and is not affiliated with or endorsed by any of these companies or any school.
 
-## What's new in 3.3
+## What's new in 3.4
 
 Prepared release copy; the Chrome Web Store has no separate What's New field.
 
-Glaze 3.3 draws its own navigation on Blackboard Ultra, Canvas and Moodle (a rail or a top bar you can rename, reorder, hide and add to, and turn off), adds a sidebar and live course tabs on Canvas, document review on submitted work, and a starter Dashboard on new installs. On a school's own domain Glaze now asks before it runs, and Settings lists the sites you approved. Glaze 3.0.4 added mods and video and animated backgrounds.
+Glaze 3.4 asks before running on an unapproved school domain and lists approved custom sites in Settings, shows what a shared Look changes and refuses ones that could mislead, paces selected bulk reads per document and site, and fetches Look media with size caps and container metadata cleanup. Uncleanable older files stay local and are not shared. It also fixes grade and GPA reading, course tabs, notes, pets, documents and accessibility, and keeps Moodle's Edit mode in Glaze's bar. Glaze 3.3 added its own navigation on all three sites, a sidebar, live course tabs on Canvas, document review on submitted work and a starter Dashboard; 3.0.4 added mods and video and animated backgrounds.
 
 ## Single-purpose statement
 

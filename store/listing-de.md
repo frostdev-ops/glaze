@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3 (German)
+# Chrome Web Store listing — Glaze 3.4 (German)
 
 ## Short summary (132 character maximum)
 
@@ -8,9 +8,19 @@ Gestalte Blackboard Ultra, Canvas und Moodle mit eigenem Look und eigener Naviga
 
 Blackboard Ultra, Canvas und Moodle sollen sich wie deine eigenen anfühlen. Glaze gestaltet deine Kurse mit Paletten, Schriften, Hintergründen und Bewegung neu und ergänzt Werkzeuge zum Planen und Lernen genau dort, wo du deine Kursarbeit erledigst. Es funktioniert an jeder Schule, die Blackboard Ultra, Canvas oder Moodle nutzt, auch auf der eigenen Domain einer Schule, wo es vor dem Aktivieren einer noch nicht genehmigten Website fragt. Kein Konto, keine Analysen. Deine Kurse, Noten, Notizen und Aufgaben bleiben auf deinem Gerät; deine Einstellungen folgen der Synchronisierung deines Browsers, wenn sie eingeschaltet ist; das Teilen ist optional und verschlüsselt.
 
-NEU IN 3.3
+NEU IN 3.4
 
-• Glaze-Navigation auf Blackboard Ultra, Canvas und Moodle, standardmäßig an: eine seitliche oder obere Leiste anstelle der Navigation der Seite, schwebend oder eingebettet, auf dem Smartphone eine untere Leiste. Benenne Einträge um, ordne sie neu an, blende sie aus oder füge eigene hinzu (bis zu acht eigene Links), wähle deine vier Smartphone-Tabs und halte Kurs-Tabs darin. Schaltest du sie aus, kommt die Navigation der Seite zurück. In Moodle behält sie den Schalter für den Bearbeitungsmodus und die eigenen Menülinks deiner Schule.
+• Auf einer noch nicht genehmigten eigenen Domain einer Schule fragt Glaze vor dem Start; die Einstellungen zeigen genehmigte eigene Websites mit Entfernen.
+• Ein geteiltes Design zeigt vor der Verwendung, was es ändert: jeden Navigationseintrag, den es ausblendet, wohin jeder Link führt, und die Seitenteile, die es umgestaltet. Designs von anderen, die Abmelden ausblenden oder einen Link tarnen würden, werden abgelehnt.
+• Ausgewählte Sammelabrufe werden pro Dokument und Schulwebsite dosiert und warten bei Überlastung.
+• Für verlinkte Hintergrundvideos und -bilder gelten Größengrenzen. Aus neuen Video- und AVIF-Dateien werden Container-Metadaten entfernt; nicht bereinigbare ältere Dateien bleiben lokal und werden nicht geteilt.
+• Geteilte Notizen synchronisieren weiter, während du tippst.
+• In Moodle behält die Glaze-Leiste den Schalter für den Bearbeitungsmodus und die eigenen Menülinks deiner Schule.
+• Korrekturen für Noten und Notendurchschnitt, Kurs-Tabs, Notizen, den Fokus-Timer, Haustiere, Dokumente, Screenreader und Sprachen mit Schreibrichtung von rechts nach links.
+
+AUS 3.3
+
+• Glaze-Navigation auf Blackboard Ultra, Canvas und Moodle, standardmäßig an: eine seitliche oder obere Leiste anstelle der Navigation der Seite, schwebend oder eingebettet, auf dem Smartphone eine untere Leiste. Benenne Einträge um, ordne sie neu an, blende sie aus oder füge eigene hinzu (bis zu acht eigene Links), wähle deine vier Smartphone-Tabs und halte Kurs-Tabs darin. Schaltest du sie aus, kommt die Navigation der Seite zurück.
 • Eine Seitenleiste auf Canvas und Blackboard Ultra: die eigene Seitenleiste der Seite und die Widgets, die du darunter andockst, in einer Spalte bei breiten Fenstern und als Schublade bei schmalen.
 • Kurs-Tabs jetzt auch auf Canvas, jeder Kurs als eigene aktive Seite, und Module ausblenden, die du nicht brauchst, so wie du auf Blackboard Ordner ausblendest.
 • Dokumentprüfung auf Seiten mit abgegebener Arbeit: kompakte Kopfzeilen, ausklappbares Feedback, Vollbild und Dokumentfokus. Seiten, die du bearbeiten kannst, bleiben so, wie die Seite sie gebaut hat.

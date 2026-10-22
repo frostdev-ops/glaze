@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3 (French)
+# Chrome Web Store listing — Glaze 3.4 (French)
 
 ## Short summary (132 character maximum)
 
@@ -8,9 +8,19 @@ Changez le style de Blackboard Ultra, Canvas et Moodle, avec votre look et votre
 
 Faites de Blackboard Ultra, Canvas et Moodle un espace à votre image. Glaze change le style de vos cours avec des palettes, des polices, des arrière-plans et des animations, et ajoute des outils pour planifier et étudier directement là où vous faites vos travaux de cours. Il fonctionne dans tous les établissements qui utilisent Blackboard Ultra, Canvas ou Moodle, y compris sur le domaine propre d’un établissement, où il demande avant d’activer un site qui n’est pas déjà approuvé. Ni compte ni outil d’analyse. Vos cours, vos résultats, vos notes personnelles et vos tâches restent sur votre appareil ; vos réglages suivent la synchronisation de votre navigateur si elle est activée ; le partage est facultatif et chiffré.
 
-NOUVEAUTÉS DE LA VERSION 3.3
+NOUVEAUTÉS DE LA VERSION 3.4
 
-• Navigation Glaze sur Blackboard Ultra, Canvas et Moodle, activée par défaut : une barre latérale ou supérieure à la place de celle du site, flottante ou intégrée, et une barre inférieure sur téléphone. Renommez, réordonnez, masquez ou ajoutez des éléments (jusqu’à huit liens à vous), choisissez vos quatre onglets de téléphone et gardez-y les onglets de cours. Désactivée, elle rend la main à la navigation du site. Sur Moodle, elle conserve le commutateur du mode édition et les liens de menu propres à votre établissement.
+• Sur un domaine propre d’établissement pas encore approuvé, Glaze demande avant de s’activer ; les réglages listent les sites propres approuvés, avec Retirer.
+• Un style partagé montre ce qu’il change avant que vous l’utilisiez : chaque élément de navigation qu’il masque, la destination de chaque lien et les parties de la page qu’il modifie. Les styles d’autres personnes qui masqueraient la déconnexion ou déguiseraient un lien sont refusés.
+• Certaines lectures groupées sont espacées par document et site scolaire et attendent si le site est surchargé.
+• Les vidéos et images d’arrière-plan liées ont des limites de taille. Les métadonnées du conteneur sont retirées des nouveaux fichiers vidéo et AVIF ; les anciens fichiers restent sur cet appareil s’ils ne peuvent pas être nettoyés et ne sont pas partagés.
+• Les notes partagées restent synchronisées pendant que vous tapez.
+• Sur Moodle, la barre de Glaze conserve le commutateur du mode édition et les liens de menu propres à votre établissement.
+• Corrections pour les notes et la moyenne, les onglets de cours, les notes, le minuteur de concentration, les animaux, les documents, les lecteurs d’écran et les langues écrites de droite à gauche.
+
+DE LA VERSION 3.3
+
+• Navigation Glaze sur Blackboard Ultra, Canvas et Moodle, activée par défaut : une barre latérale ou supérieure à la place de celle du site, flottante ou intégrée, et une barre inférieure sur téléphone. Renommez, réordonnez, masquez ou ajoutez des éléments (jusqu’à huit liens à vous), choisissez vos quatre onglets de téléphone et gardez-y les onglets de cours. Désactivée, elle rend la main à la navigation du site.
 • Une barre latérale sur Canvas et Blackboard Ultra : la barre latérale propre à la page et les widgets que vous y ancrez, en une colonne sur les grandes fenêtres et un tiroir sur les petites.
 • Les onglets de cours aussi sur Canvas, chaque cours ayant sa propre page active, et masquez les modules que vous n’utilisez pas, comme on masque des dossiers sur Blackboard.
 • Révision de documents sur les pages de travaux rendus : en-têtes compacts, commentaires dépliables, plein écran et mode document. Les pages que vous pouvez modifier restent telles que le site les a faites.
