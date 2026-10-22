@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.5 (German)
+# Chrome Web Store listing — Glaze 3.3.6 (German)
 
 ## Short summary (132 character maximum)
 
@@ -8,15 +8,13 @@ Gestalte Blackboard Ultra, Canvas und Moodle mit eigenem Look und eigener Naviga
 
 Blackboard Ultra, Canvas und Moodle sollen sich wie deine eigenen anfühlen. Glaze gestaltet deine Kurse mit Paletten, Schriften, Hintergründen und Bewegung neu und ergänzt Werkzeuge zum Planen und Lernen genau dort, wo du deine Kursarbeit erledigst. Es funktioniert an jeder Schule, die Blackboard Ultra, Canvas oder Moodle nutzt, auch auf der eigenen Domain einer Schule, wo es vor dem Aktivieren einer noch nicht genehmigten Website fragt. Kein Konto, keine Analysen. Deine Kurse, Noten, Notizen und Aufgaben bleiben auf deinem Gerät; deine Einstellungen folgen der Synchronisierung deines Browsers, wenn sie eingeschaltet ist; das Teilen ist optional und verschlüsselt.
 
-NEU IN 3.3.5
+NEU IN 3.3.6
 
-• Auf einer noch nicht genehmigten eigenen Domain einer Schule fragt Glaze vor dem Start; die Einstellungen zeigen genehmigte eigene Websites mit Entfernen.
-• Ein geteiltes Design zeigt vor der Verwendung, was es ändert: jeden Navigationseintrag, den es ausblendet, wohin jeder Link führt, und die Seitenteile, die es umgestaltet. Designs von anderen, die Abmelden ausblenden oder einen Link tarnen würden, werden abgelehnt.
-• Ausgewählte Sammelabrufe werden pro Dokument und Schulwebsite dosiert und warten bei Überlastung.
-• Für verlinkte Hintergrundvideos und -bilder gelten Größengrenzen. Aus neuen Video- und AVIF-Dateien werden Container-Metadaten entfernt; nicht bereinigbare ältere Dateien bleiben lokal und werden nicht geteilt.
-• Geteilte Notizen synchronisieren weiter, während du tippst.
-• In Moodle behält die Glaze-Leiste den Schalter für den Bearbeitungsmodus und die eigenen Menülinks deiner Schule.
-• Korrekturen für Noten und Notendurchschnitt, Kurs-Tabs, Notizen, den Fokus-Timer, Haustiere, Dokumente, Screenreader und Sprachen mit Schreibrichtung von rechts nach links.
+• Jeder mitgelieferte Look hat seinen eigenen Mauszeiger, eine Animation darum, einen Tippeffekt und eigene Effekte für erledigte Aufgaben, Noten und Serien.
+• Tippeffekte: kleine Partikel an der Einfügemarke beim Tippen. Sie lesen nie, was du tippst, und erscheinen nie in Passwort- oder Kartenfeldern, bei Tests oder mit ausgeschalteter Bewegung.
+• Look › Mauszeiger: Behalte den Zeiger des Looks, nutze den Systemzeiger, wähle einen von Glazes Zeigern oder ein eigenes Bild und schalte die Zeigeranimation ein oder aus.
+• Safari: Die Einstellungen in einer Kursseite öffnen sich nicht mehr leer, und Animationen und Effekte von Looks laden auf Kursseiten wieder.
+• Der animierte Hintergrund eines Kurs-Tabs bleibt nicht mehr auf seinem unscharfen Platzhalter hängen.
 
 AUS 3.3
 

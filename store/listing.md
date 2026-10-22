@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.5
+# Chrome Web Store listing — Glaze 3.3.6
 
 ## Name
 
@@ -16,15 +16,13 @@ Productivity
 
 Make Blackboard Ultra, Canvas and Moodle feel like yours. Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain, where it asks before enabling a site it has not already approved. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
-NEW IN 3.3.5
+NEW IN 3.3.6
 
-• On a school's own domain not already approved, Glaze asks before it runs; Settings lists approved custom sites, with Remove.
-• A shared Look shows what it changes before you use it: each navigation item it hides, where each link goes, and the page parts it restyles. Looks from others that would hide Sign out or disguise a link are refused.
-• Selected bulk reads are paced per document and school site and back off when the site is busy.
-• Linked background videos and pictures have size limits. New video and AVIF files have container metadata removed; uncleanable older files stay local and are not shared.
-• Shared notes keep syncing while you type.
-• On Moodle, Glaze's bar keeps the Edit mode switch and your school's own menu links.
-• Fixes for grades and GPA, course tabs, notes, the focus timer, pets, documents, screen readers and right-to-left languages.
+• Every built-in Look has its own pointer, an animation around it, a typing effect and its own effects for finishing work, grades and streaks.
+• Typing effects: small particles at the caret as you type. They never read what you type and never appear in password or card fields, on quizzes or with motion off.
+• Look › Pointer: keep the Look's pointer, use the system pointer, pick any of Glaze's pointers or a picture of your own, and turn the pointer animation on or off.
+• Safari: Settings inside a course page no longer opens blank, and Look animations and effects load on course pages again.
+• A course tab's animated background no longer gets stuck on its blurred stand-in.
 
 FROM 3.3
 

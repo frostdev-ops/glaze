@@ -142,7 +142,7 @@ An installed mod's `parts` apply while it is on (and not blocklisted; a developm
 on every browser: a mod with only `parts` and no code is a whole mod, and a code mod's parts apply in Firefox and Safari
 too, where its code can't run. They go where a Look's parts go, including live course tabs, never on quiz or tool pages, nor on a course that wears
 a Look of its own. The student's Look is the base; each mod's parts lay over it in the student's mod order: the first
-mod to set a key (`bg`, `anim`, `fx`, `cursor`, `nav`) wins it whole, and `rules` add up, the Look's first, to 64 in
+mod to set a key (`bg`, `anim`, `fx`, `cursor`, `pointer`, `type`, `nav`) wins it whole, and `rules` add up, the Look's first, to 64 in
 all. A mod's background is drawn whatever kind of background the student chose. `glaze.look.override()` layers from
 running code go on top of all of these. Turning the mod off, removing it or reordering applies at once:
 
@@ -153,7 +153,9 @@ running code go on top of all of these. Turning the mod off, removing it or reor
 | `bg.media` | `{ type, src, fit?, dim?, loop? }`: a looping `video`, an animated `image` (WebP or AVIF) or a `lottie` animation. `src` is an `https:` address (the install prompt names its host), or `./<path>`, a file in the bundle: `.webm` or `.mp4` for a video, `.webp` or `.avif` for a picture, `.json` for Lottie. The file must be what `type` says and within a Look background's limits (video 12 MiB, picture 6 MiB, Lottie 1 MiB); it also shares the bundle's 2 MiB with every other file, so in practice a bundled background is a Lottie animation, an animated WebP or AVIF, or a short clip. Otherwise the bundle is refused, as it is for a `file:` source; the file is checked again each time a page or the editor's preview asks for it. A video file may be in a bundle only as this. The gallery takes only `./` files. |
 | `anim` | Keyframes for `page.enter` `panel.enter` `card.enter` `tile.enter` `rail.open` `tooltip.in` `card.hover` `button.press`. |
 | `fx` | Effects for `complete` `submit` `grade` `streak` `timer.done` `look.rotate`. |
-| `cursor` | `trail`, `sparkle`, `ripple` or `glow`. |
+| `cursor` | The pointer's animation, drawn around the system pointer: `trail`, `sparkle`, `ripple`, `glow`, `flicker`, `orbit`, `scan` or `drift`, with `shape` for the marks `orbit`, `drift` and `sparkle` use. |
+| `pointer` | The pointer set, by name: `aqua` `lilac` `pearl` `aurora` `quill` `terminal` `lava` `neon` `clear` `lagoon` `rose` `ghost` `pumpkin`, or `own` (the student's own picture, which never travels in a code). |
+| `type` | A typing effect at the caret: `embers`, `ink`, `sparks`, `pixels`, `petals`, `snow`, `bubbles` or `wisps`, with `c`, `size` and `count` (per key). Never in password, card or one-time-code fields, never while composing, never on quiz or tool pages; it never reads what is typed. |
 | `nav` | A nav layout, below. |
 | `rules` | At most 64 rules on named page parts, below. |
 

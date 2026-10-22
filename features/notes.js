@@ -873,7 +873,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     frame.addEventListener('load', () => {
       if (delivered || turn !== shareGen || my !== gen) return;
       delivered = true; // never deliver again after navigation/reload, even with the same frameId
-      frame.contentWindow.postMessage({ type: 'glaze:quick-start', ticket: r.ticket }, chrome.runtime.getURL('').replace(/\/$/, ''));
+      frame.contentWindow.postMessage({ type: 'glaze:quick-start', ticket: r.ticket }, chrome.runtime.getURL('').replace(/\/$/, '').toLowerCase()); // Safari's frame origin is lowercase
     });
     frame.setAttribute('allow', 'clipboard-write');
     frame.setAttribute('style', 'display: block; width: 100%; height: 100%; border: 0; color-scheme: normal;');

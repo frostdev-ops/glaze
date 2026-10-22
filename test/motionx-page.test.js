@@ -10,9 +10,9 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const ENTER = { s: [{ at: 0, y: 20, o: 0 }, { at: 1, y: 0, o: 1 }], ms: 500, ease: 'spring', delay: 0, stagger: 80 };
 
 // ---- features/motionx.js ----------------------------------------------------------------------------------------------------------
-const feature = ({ adopt = true, parts = null, level = 'subtle', quiet = false } = {}) => {
+const feature = ({ adopt = true, parts = null, level = 'subtle', quiet = false, extras = { pointer: 'look', pointerAnim: true } } = {}) => {
   const styles = [], listeners = {}, handlers = {}, queue = new Map(), switches = new Set(), canvases = [];
-  let on = true, fills = 0;
+  let on = true, fills = 0, styleReads = 0;
   let adopted = [], now = 1000, ids = 0;
   class Sheet { replaceSync(text) { this.text = text; } }
   // A 2D context that accepts any call, and a canvas that knows whether it is on the page.
@@ -24,23 +24,25 @@ const feature = ({ adopt = true, parts = null, level = 'subtle', quiet = false }
     body: { append: (c) => { c.isConnected = true; canvases.push(c); } },
     get adoptedStyleSheets() { return adopted; },
     set adoptedStyleSheets(v) { if (!adopt) throw new TypeError('not allowed'); adopted = v; },
-    addEventListener: (t, f) => { listeners[t] = f; },
+    addEventListener: (t, f) => { listeners[t] = f; }, removeEventListener: (t) => { delete listeners[t]; },
     createElement: (tag) => (tag === 'canvas'
       ? { id: '', style: {}, isConnected: false, setAttribute() {}, getContext: () => context, remove() { this.isConnected = false; } }
-      : { isConnected: false, remove() { this.isConnected = false; }, set textContent(v) { this._t = v; }, get textContent() { return this._t; } }),
+      : { style: {}, setAttribute() {}, attachShadow: () => ({ append() {} }), replaceChildren() {}, isConnected: false, remove() { this.isConnected = false; }, set textContent(v) { this._t = v; }, get textContent() { return this._t; } }),
   };
   const ctx = vm.createContext({ document, location: { pathname: '/ultra/course' }, CSSStyleSheet: Sheet, performance: { now: () => now }, innerWidth: 800, innerHeight: 600, devicePixelRatio: 1,
     matchMedia: () => ({ matches: false }), addEventListener: (t, f) => { handlers[t] = f; }, removeEventListener: (t) => { delete handlers[t]; },
-    requestAnimationFrame: (f) => { queue.set(++ids, f); return ids; }, cancelAnimationFrame: (id) => { queue.delete(id); }, Object, Promise, Number, Math, Array, Map, RegExp, String });
+    requestAnimationFrame: (f) => { queue.set(++ids, f); return ids; }, cancelAnimationFrame: (id) => { queue.delete(id); }, Object, Promise, Number, Math, Array, Map, RegExp, String, WeakMap,
+    getComputedStyle: () => { styleReads++; return {}; }, getSelection: () => null });
   ctx.globalThis = ctx;
   ctx.window = ctx;
   ctx.GZ_MX = M;
   ctx.GZ_LX = { quiet: () => quiet };
-  ctx.GZ_CTX = { on: () => on, need: () => Promise.resolve(), parts: () => parts };
+  const settings = { extras };
+  ctx.GZ_CTX = { on: () => on, need: () => Promise.resolve(), parts: () => parts, settings: () => settings };
   vm.runInContext(read('features/motionx.js'), ctx);
   // Frames the browser would run: every callback asked for, 16 ms apart.
   const tick = (ms = 16) => { now += ms; const run = [...queue]; queue.clear(); if (run.length > 4) throw new Error(`${run.length} frame loops running at once`); for (const [, f] of run) f(now); };
-  return { api: ctx.GZ_MOTIONX, adopted: () => adopted, styles, listeners, handlers, document, ctx, queue, tick, now: () => now, canvases, switches, fills: () => fills, setOn: (v) => { on = v; }, setParts: (v) => { parts = v; }, setQuiet: (v) => { quiet = v; } };
+  return { settings, api: ctx.GZ_MOTIONX, adopted: () => adopted, styles, listeners, handlers, document, ctx, queue, tick, now: () => now, canvases, switches, fills: () => fills, setOn: (v) => { on = v; }, setParts: (v) => { parts = v; }, setQuiet: (v) => { quiet = v; }, styleReads: () => styleReads };
 };
 const settle = () => new Promise(setImmediate);
 
@@ -180,6 +182,32 @@ test('motion off or a hidden page: an event draws nothing and a running effect e
 });
 
 
+test('the student\'s pointer animation switch: off, the Look\'s pointer animation stops and nothing listens; on, it plays again', async () => {
+  const look = { cursor: { kind: 'trail', fade: 300 }, fx: { complete: {} }, type: { kind: 'sparks' } };
+  const x = feature({ parts: look, extras: { pointer: 'look', pointerAnim: false } });
+  await x.api.sync();
+  await settle();
+  assert.equal(x.handlers.pointermove, undefined, 'no pointer listener with the animation off');
+  // The Look's other effects stay: an event still plays, and typing still listens.
+  assert.equal(x.api.has('complete'), true);
+  assert.equal(typeof x.listeners.input, 'function', 'typing still listens');
+  // Turned on (applySettings asks again): the Look's animation plays while the pointer moves.
+  x.settings.extras = { ...x.settings.extras, pointerAnim: true };
+  await x.api.sync();
+  assert.equal(typeof x.handlers.pointermove, 'function');
+  x.handlers.pointermove({ pointerType: 'mouse', clientX: 50, clientY: 60 });
+  x.tick();
+  assert.ok(x.canvases.at(-1)?.isConnected, 'drawn around the pointer');
+  // Off again while particles are alive: they go, with the listener, and no frame is left asked for.
+  x.settings.extras = { ...x.settings.extras, pointerAnim: false };
+  await x.api.sync();
+  assert.equal(x.handlers.pointermove, undefined);
+  assert.equal(x.canvases.at(-1).isConnected, false);
+  assert.equal(x.queue.size, 0);
+  // The setting never touches the Look: its parts are as they were.
+  assert.deepEqual(look.cursor, { kind: 'trail', fade: 300 });
+});
+
 test('changing or removing a Look cancels its running particles without adding pointer listeners', async () => {
   const x = feature({ parts: { cursor: { kind: 'glow' }, fx: { complete: {} } } });
   await x.api.sync();
@@ -250,4 +278,145 @@ test('a glow resumes drawing after the page was hidden', async () => {
   x.handlers.pointermove({ pointerType: 'mouse', clientX: 200, clientY: 30 });
   x.tick();
   assert.ok(x.fills() > before, 'the new canvas contains a glow');
+});
+
+// ---- typing --------------------------------------------------------------------------------------------------------------------
+// A text field as a page has it; `attrs` for autocomplete. Its value is what the student typed.
+const field = (tag = 'input', type = 'text', attrs = {}) => ({
+  tagName: tag.toUpperCase(), type, value: 'my secret essay', selectionEnd: 15, scrollLeft: 0, scrollTop: 0, isConnected: true, isContentEditable: false,
+  matches: (sel) => sel.split(',').some((s) => s.trim() === tag) || (sel === 'input, textarea' && ['input', 'textarea'].includes(tag)),
+  getAttribute: (k) => attrs[k] ?? null, getBoundingClientRect: () => ({ left: 100, top: 200, right: 400, bottom: 230, width: 300, height: 30 }),
+});
+// An input event that throws if anything reads what was typed (its data).
+const typed = (target, inputType = 'insertText', isComposing = false) => new Proxy({ target, inputType, isComposing, composedPath: () => [target] }, {
+  get: (o, k) => { if (k === 'data' || k === 'dataTransfer') throw new Error('read what was typed'); return o[k]; },
+});
+const TYPE = { type: { kind: 'embers', c: ['warn'] } };
+
+test('typing: no listener and no canvas unless the Look has a typing effect', async () => {
+  const x = feature({ parts: { cursor: { kind: 'glow' } } });
+  await x.api.sync();
+  await settle();
+  assert.equal(x.listeners.input, undefined);
+  x.setParts(TYPE);
+  await x.api.sync();
+  await settle();
+  assert.equal(typeof x.listeners.input, 'function');
+  x.setParts(null);
+  await x.api.sync();
+  await settle();
+  assert.equal(x.listeners.input, undefined, 'and it goes with the part');
+});
+
+test('typing: particles at the field, one measurement a frame however many keys, and nothing typed is read', async () => {
+  const x = feature({ parts: TYPE });
+  await x.api.sync();
+  await settle();
+  const f = field();
+  for (let i = 0; i < 10; i++) x.listeners.input(typed(f));
+  assert.equal(x.queue.size, 1, 'one frame asked for');
+  x.tick();
+  assert.equal(x.canvases.length, 1, 'a canvas for the particles');
+  assert.equal(x.styleReads(), 0, 'no field style read');
+  x.listeners.input(typed(f));
+  x.tick();
+  assert.equal(x.styleReads(), 0, 'nor for the next key');
+  for (let i = 0; i < 200; i++) x.tick();
+  assert.equal(x.canvases[0].isConnected, false, 'gone once they have faded');
+});
+
+test('typing: never in a password, card or one-time-code field, never while composing, never deleting, never with motion off', async () => {
+  const quietFields = [field('input', 'password'), field('input', 'text', { autocomplete: 'cc-number' }), field('input', 'text', { autocomplete: 'section-pay billing cc-csc' }),
+    field('input', 'text', { autocomplete: 'one-time-code' }), field('input', 'number'), field('input', 'checkbox'),
+    field('input', 'text', { autocomplete: 'current-password' }), field('input', 'text', { autocomplete: 'section-login New-Password' })];
+  for (const f of quietFields) {
+    const x = feature({ parts: TYPE });
+    await x.api.sync();
+    await settle();
+    x.listeners.input(typed(f));
+    assert.equal(x.queue.size, 0, `${f.type} ${f.getAttribute('autocomplete')}`);
+  }
+  const x = feature({ parts: TYPE });
+  await x.api.sync();
+  await settle();
+  const f = field('textarea', 'textarea');
+  x.listeners.compositionstart({ type: 'compositionstart' });
+  x.listeners.input(typed(f));
+  x.listeners.input(typed(f, 'insertCompositionText', true));
+  assert.equal(x.queue.size, 0, 'composing');
+  x.listeners.compositionend({ type: 'compositionend' });
+  x.listeners.input(typed(f, 'deleteContentBackward'));
+  assert.equal(x.queue.size, 0, 'deleting');
+  x.listeners.input(typed(f));
+  assert.equal(x.queue.size, 1, 'typing again');
+  const off = feature({ parts: TYPE, level: 'off' });
+  await off.api.sync();
+  await settle();
+  off.listeners.input(typed(field()));
+  assert.equal(off.queue.size, 0, 'motion off');
+  const quiz = feature({ parts: TYPE });
+  await quiz.api.sync();
+  await settle();
+  quiz.setQuiet(true);
+  quiz.listeners.input(typed(field()));
+  assert.equal(quiz.queue.size, 0, 'a quiz');
+});
+
+test('the pointer\'s new animations run while it moves and stop once they have faded', async () => {
+  for (const cursor of [{ kind: 'orbit', shape: 'bat', len: 3 }, { kind: 'flicker', c: ['accent', 'warn'] }, { kind: 'scan' }, { kind: 'drift', shape: 'petal' }]) {
+    const x = feature({ parts: { cursor } });
+    await x.api.sync();
+    await settle();
+    for (let i = 0; i < 30; i++) {
+      x.handlers.pointermove({ pointerType: 'mouse', clientX: 50 + i * 10, clientY: 100 });
+      x.tick();
+      assert.ok(x.queue.size <= 1, cursor.kind);
+    }
+    assert.ok(x.canvases.at(-1).isConnected, `${cursor.kind}: drawing while it moves`);
+    for (let i = 0; i < 300; i++) x.tick();
+    assert.equal(x.queue.size, 0, `${cursor.kind}: no frames once it has faded`);
+    assert.equal(x.canvases.at(-1).isConnected, false, `${cursor.kind}: canvas gone`);
+  }
+});
+
+
+test('typing never reads field text, including through a shadow root event path', async () => {
+  for (const tag of ['input', 'textarea']) {
+    const x = feature({ parts: TYPE });
+    await x.api.sync();
+    let reads = 0;
+    const f = field(tag);
+    for (const k of ['value', 'textContent', 'innerText']) Object.defineProperty(f, k, { get() { reads++; throw new Error('private text'); } });
+    const e = typed(f);
+    x.listeners.input({ target: {}, inputType: e.inputType, composedPath: () => [f, {}] });
+    x.tick();
+    assert.equal(reads, 0, tag);
+    assert.equal(x.canvases.length, 1, 'uses field geometry without its contents');
+  }
+});
+
+test('typing rechecks sensitive fields and composition before a queued frame', async () => {
+  for (const change of ['password', 'autocomplete', 'composition']) {
+    const x = feature({ parts: TYPE });
+    await x.api.sync();
+    const attrs = {}, f = field('input', 'text', attrs);
+    x.listeners.input(typed(f));
+    if (change === 'password') f.type = 'password';
+    if (change === 'autocomplete') attrs.autocomplete = 'cc-number';
+    if (change === 'composition') x.listeners.compositionstart({ type: 'compositionstart' });
+    x.tick();
+    assert.equal(x.canvases.length, 0, change);
+    assert.equal(x.queue.size, 0, change);
+  }
+});
+
+test('changing Looks discards typing queued by the previous Look', async () => {
+  const x = feature({ parts: TYPE });
+  await x.api.sync();
+  x.listeners.input(typed(field()));
+  x.setParts({ type: { kind: 'snow' } });
+  await x.api.sync();
+  assert.equal(x.queue.size, 0, 'no stale typing measurement');
+  x.tick();
+  assert.equal(x.canvases.length, 0, 'the new Look starts without the previous key');
 });

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.3.5",
+  "version": "3.3.6",
   "description": "Restyle Blackboard Ultra, Canvas and Moodle: palettes, fonts, backgrounds and motion, plus handy extras.",
   "default_locale": "en",
   "permissions": [
@@ -142,6 +142,7 @@
         "assets/art/pets/*/reactions.webp",
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
+        "assets/art/cursors/*/*.svg",
         "features/lookx.css",
         "features/rules.css",
         "features/navlayout.css",

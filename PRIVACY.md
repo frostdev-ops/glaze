@@ -400,8 +400,11 @@ not those unknown legacy copies or unrelated stickers.
   stickers on a page (the site's address and the page's path, with each sticker's position, size and angle), the
   pictures you add as your own stickers (scaled down to at most 256 pixels, at most about 200 KB each and 4 MB in all),
   your own pointer picture (scaled to 32 pixels), and which Looks rotation takes turns with and when it last changed.
-  None of it is synced, exported or put in a theme code; the pointer and rotation choices themselves sync with your
-  settings. Remove deletes a sticker, Delete your picture deletes a picture; Reset everything deletes all of it.
+  None of it is synced, exported or put in a theme code; rotation's choices sync with your settings, and which pointer a
+  Look wears is part of the Look (a theme code of a Look with your own pointer picture goes without it). Which pointer
+  you see with every Look (the Look's, the system's, a set or your picture) and whether its animation plays sync with
+  your settings, and are never put in a Look or a theme code. Remove deletes a sticker, Delete your picture deletes a picture,
+  Remove picture under Look › Pointer deletes your pointer picture; Reset everything deletes all of it.
   Your own pictures are shown on a page through temporary blob addresses, not written into it, though the LMS page's
   own code can still read a picture shown on it.
 - **What you keep from a syllabus** (Canvas and Blackboard, the Syllabus import Extra, off by default), in

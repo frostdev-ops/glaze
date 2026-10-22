@@ -15,33 +15,215 @@ const block = source.slice(a, b).replace(/import\((chrome\.runtime\.getURL\((?:f
 assert.ok(block.includes('importScene('));
 
 const background = source.match(/background: (\(el\) => \{.*\}),\n/)[1];
+const on = source.match(/^  const on = .*;$/m)[0];
 const loader = source.slice(source.indexOf('  const loading = new Map();'), source.indexOf("  // Moodle's extras"));
 const settle = () => new Promise(setImmediate);
-const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, hostFails = null } = {}) => {
-  const log = { starts: [], updates: [], needs: [], stops: 0, removed: 0, imports: 0, files: [], urls: [], listeners: new Map() };
+const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, updateFails = 0, hostFails = null, hostHangs = 0, hostSilent = false, glslHangs = 0, glslFails = 0, importHangs = 0 } = {}) => {
+  const log = { starts: [], updates: [], needs: [], answers: [], held: [], stops: 0, removed: 0, imports: 0, placements: 0, files: [], urls: [], listeners: new Map() };
   const timers = new Map(); let nextTimer = 0;
   let failScene = null;
   const canvas = (tag) => ({ tag, remove() { log.removed++; }, setAttribute() {}, parentNode: null });
   const ctx = vm.createContext({
-    solo, ultra: false, isPreview: false, loading: new Map(), docId: 'fixture-document', location: { protocol: 'https:' },
-    settings: { enabled }, links: [1], hid: () => false, palette: { '--gz-surface-2': '#202030', '--gz-accent': '#abcdef' },
+    solo, ultra: false, isPreview: false, loading: new Map(), docId: 'fixture-document', location: { protocol: 'https:', pathname: '/' },
+    settings: { enabled, enhance: { quizLight: true } }, links: [1], hid: () => false, palette: { '--gz-surface-2': '#202030', '--gz-accent': '#abcdef' },
     html: { hasAttribute: () => false, getAttribute: () => 'normal' },
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
-    document: { body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
-    chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async () => { log.needs.push('lib/scene-host.js'); if (hostFails-- > 0) throw new Error('temporary injection failure'); ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; return { ok: true }; } } },
-    importScene: (url, file) => { log.imports++; log.files.push(file); log.urls.push(url); if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure')); return Promise.resolve({ start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); if (startFails-- > 0) throw new Error('temporary WebGL context failure'); return { update: (o) => log.updates.push(o), draw() {}, stop() { log.stops++; } }; } }); },
+    document: { hidden: false, body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, getElementById: () => null, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
+    chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async (m) => {
+      const file = m.files[0], ran = () => { if (file === 'lib/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() { log.placements++; }, clear() {} }; };
+      log.needs.push(file);
+      // A request the worker sits on: answered (the file run, ok) only when the test calls log.answers[i].
+      if (file === 'lib/glsl.js' ? glslHangs-- > 0 : hostHangs-- > 0) {
+        if (hostSilent) ran(); // the worker ran the file, and its answer was lost
+        return new Promise((ok) => log.answers.push(() => { ran(); ok({ ok: true }); }));
+      }
+      if (file === 'lib/glsl.js' ? glslFails-- > 0 : hostFails-- > 0) throw new Error('temporary injection failure');
+      ran(); return { ok: true };
+    } } },
+    importScene: (url, file) => {
+      log.imports++; log.files.push(file); log.urls.push(url);
+      const mod = { start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); if (startFails-- > 0) throw new Error('WebGL context failure'); return { update: (o) => { log.updates.push(o); if (updateFails-- > 0) throw new Error('drawing failure'); }, draw() {}, stop() { log.stops++; } }; } };
+      // An import that never settles until the test settles it: log.held[i].ok() or .no().
+      if (importHangs-- > 0) return new Promise((ok, no) => log.held.push({ ok: () => ok(mod), no: () => no(new Error('late module failure')) }));
+      if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure'));
+      return Promise.resolve(mod);
+    },
     need: (file, ready) => { if (file === 'lib/scene-host.js') { ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; return Promise.resolve(); } log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
     applySettings: () => ctx.api.syncScene(), // the settings paint finishes by syncing the scene
     GZ_CTX: { parts: () => ctx.parts },
     parts, GZ_GLSL: glsl ? {} : undefined,
     JSON, Promise, setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: (id) => timers.delete(id),
   });
-  vm.runInContext(`${hostFails === null ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
-  return { api: ctx.api, log, ctx, timers, retry: async () => { const [id, timer] = [...timers].find(([, timer]) => timer.ms < 60000) || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
+  vm.runInContext(`${on}\n${hostFails === null && !hostHangs && !glslHangs && !glslFails ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneAgain, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
+  // waits(): the delays of what is scheduled to try again (need()'s own one-minute forgetting left out).
+  return { api: ctx.api, log, ctx, timers, waits: () => [...timers.values()].map((t) => t.ms).filter((ms) => ms < 60000), retry: async () => { const [id, timer] = [...timers].find(([, timer]) => timer.ms < 60000) || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
 };
 const SHADER = { bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(1.); }' } } };
 const LAYERS = { bg: { layers: [{ k: 'noise' }] } };
+
+test('abandoned startup waits are cancelled, and their late answers cancel the scheduled retry', async () => {
+  const r = rig({ importHangs: 1, hostHangs: 1 });
+  r.api.syncScene(); await settle();
+  assert.deepEqual(r.waits(), [10000, 10000]);
+  await r.retry();
+  assert.deepEqual(r.waits(), [1000], 'one timeout abandons every wait in that startup');
+  r.log.answers[0](); await settle();
+  assert.deepEqual([r.log.starts.length, r.waits()], [1, []], 'the late answer calls off the retry');
+  r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.stops, r.waits()], [1, 0, []]);
+});
+
+test('stopping a pending scene clears its waits; late answers do not revive a disabled page', async () => {
+  const r = rig({ importHangs: 1, hostHangs: 1 });
+  r.api.syncScene(); await settle();
+  r.ctx.settings.enabled = false; r.api.syncScene();
+  assert.deepEqual(r.waits(), []);
+  r.log.answers[0](); r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.starts.length, r.waits()], [0, []]);
+});
+
+test('a late answer replaces a pending attempt without leaving its timers behind', async () => {
+  const r = rig({ hostHangs: 2 });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry();
+  r.log.answers[0](); await settle();
+  assert.deepEqual([r.log.starts.length, r.waits()], [1, []]);
+  r.log.answers[1](); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.stops, r.waits()], [1, 0, []]);
+});
+
+test('slow scene and mod retries pause while the document is hidden and resume when shown', async () => {
+  for (const mod of [false, true]) {
+    const r = rig({ hostFails: 4 });
+    if (mod) r.api.background({}); else r.api.syncScene();
+    await settle(); await r.retry(); await r.retry();
+    assert.deepEqual(r.waits(), [30000]);
+    const visibility = r.log.listeners.get('visibilitychange');
+    r.ctx.document.hidden = true; visibility(); await settle();
+    assert.deepEqual(r.waits(), [], 'no retry timer in a hidden document');
+    r.api.sceneAgain(); r.api.syncScene(); await settle();
+    assert.equal(r.log.needs.length, 3, 'late answers and syncs cannot restart hidden work');
+    r.ctx.document.hidden = false; visibility(); await settle();
+    assert.equal(r.log.needs.length, 4, 'one immediate attempt when shown');
+    await r.retry();
+    assert.deepEqual([r.log.needs.length, r.waits()], [5, []]);
+  }
+});
+
+test('a hidden document starts no scene, and an in-flight answer waits for visibility', async () => {
+  const r = rig({ hostHangs: 1 });
+  r.ctx.document.hidden = true; r.api.syncScene(); await settle();
+  assert.deepEqual([r.log.imports, r.log.needs.length, r.waits()], [0, 0, []]);
+  const visibility = r.log.listeners.get('visibilitychange');
+  r.ctx.document.hidden = false; visibility(); await settle();
+  r.ctx.document.hidden = true; visibility(); await settle();
+  assert.deepEqual(r.waits(), []);
+  r.log.answers[0](); await settle();
+  assert.equal(r.log.starts.length, 0, 'a late answer cannot create a hidden WebGL context');
+  r.ctx.document.hidden = false; visibility(); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.needs.length, r.waits()], [1, 1, []]);
+});
+
+test('a mod host answering after Glaze hides its course frame waits until the frame is shown', async () => {
+  const r = rig({ hostHangs: 1 });
+  r.api.background({}); await settle();
+  r.ctx.hid = () => true; r.api.syncScene();
+  assert.deepEqual(r.waits(), []);
+  r.log.answers[0](); await settle();
+  assert.equal(r.log.placements, 0);
+  r.ctx.hid = () => false; r.api.syncScene(); await settle();
+  assert.equal(r.log.placements, 1);
+});
+
+test('no WebGL stops after three attempts, including across visibility changes and late answers', async () => {
+  const r = rig({ startFails: 100 });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry();
+  assert.deepEqual([r.log.starts.length, r.waits()], [3, []]);
+  assert.equal(r.api.state().sceneBad, r.api.sceneSig());
+  const visibility = r.log.listeners.get('visibilitychange');
+  r.ctx.document.hidden = true; visibility();
+  r.ctx.document.hidden = false; visibility(); r.api.sceneAgain(); await settle();
+  assert.deepEqual([r.log.starts.length, r.waits()], [3, []]);
+});
+
+test('persistent drawing exceptions stop after three attempts and release each renderer', async () => {
+  for (const running of [false, true]) {
+    const r = rig({ updateFails: running ? 0 : 100 });
+    r.api.syncScene(); await settle();
+    if (running) {
+      r.api.state().scene.update = () => { throw new Error('drawing failure'); };
+      r.api.syncScene();
+      // Make every replacement fail its first update too.
+      r.ctx.GZ_SCENE_LOOK = () => { throw new Error('drawing failure'); };
+    }
+    await r.retry(); await r.retry();
+    assert.deepEqual([r.log.starts.length, r.log.stops, r.waits()], [3, 3, []]);
+    r.api.sceneAgain(); await settle();
+    assert.equal(r.log.starts.length, 3);
+  }
+});
+
+test('hiding and showing a page does not reset the three dropped-context attempts', async () => {
+  const r = rig(); r.api.syncScene(); await settle();
+  const visibility = r.log.listeners.get('visibilitychange');
+  for (let i = 0; i < 3; i++) {
+    r.fail('dropped');
+    r.ctx.document.hidden = true; visibility();
+    r.ctx.document.hidden = false; visibility(); await settle();
+  }
+  assert.deepEqual([r.log.starts.length, r.waits()], [3, []]);
+  assert.equal(r.api.state().sceneBad, r.api.sceneSig());
+});
+
+test('course-frame hiding preserves the failed scene retry count', async () => {
+  const r = rig(); r.api.syncScene(); await settle();
+  for (let i = 0; i < 3; i++) {
+    r.fail('dropped');
+    r.ctx.hid = () => true; r.api.syncScene();
+    assert.deepEqual(r.waits(), []);
+    r.ctx.hid = () => false; r.api.syncScene(); await settle();
+  }
+  assert.deepEqual([r.log.starts.length, r.waits()], [3, []]);
+  assert.equal(r.api.state().sceneBad, r.api.sceneSig());
+});
+
+test('a minute hidden does not count as a minute drawing when resetting dropped-context attempts', async () => {
+  let now = 0;
+  const r = rig(); r.ctx.Date = { now: () => now };
+  r.api.syncScene(); await settle();
+  const visibility = r.log.listeners.get('visibilitychange');
+  for (let i = 0; i < 3; i++) {
+    r.ctx.document.hidden = true; visibility();
+    now += 61000;
+    r.ctx.document.hidden = false; visibility();
+    r.fail('dropped');
+    if (i < 2) await r.retry();
+  }
+  assert.deepEqual([r.log.starts.length, r.waits()], [3, []]);
+  assert.equal(r.api.state().sceneBad, r.api.sceneSig());
+});
+
+test('scene startup rechecks quiz-light after the tool wrapper arrives while the site adapter waits', async () => {
+  const r = rig({ importHangs: 1 });
+  r.api.syncScene(); await settle();
+  r.ctx.document.getElementById = (id) => id === 'tool_content' ? {} : null;
+  r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.starts.length, r.waits()], [0, []]);
+  r.api.sceneAgain(); await settle();
+  assert.equal(r.log.starts.length, 0);
+});
+
+test('a mod host answering late cannot place a background on disabled or quiz-light pages', async () => {
+  for (const off of [r => { r.ctx.settings.enabled = false; }, r => { r.ctx.location.pathname = '/courses/1/quizzes/2/take'; }]) {
+    const r = rig({ hostHangs: 1 });
+    r.api.background({}); await settle();
+    off(r); r.api.stopScene();
+    r.log.answers[0](); await settle();
+    assert.deepEqual([r.log.placements, r.waits()], [0, []]);
+  }
+});
 
 test('a temporary animation module failure recovers without reloading the page', async () => {
   const r = rig({ importFails: 1 });
@@ -63,7 +245,7 @@ test('a temporary scene-host injection failure recovers within the startup retry
   assert.equal(r.api.state().sceneFailed, false);
 });
 
-test('a mod background retries a temporary scene-host failure and bounds persistent failures', async () => {
+test('a mod background retries a scene-host failure, slowly once it persists', async () => {
   for (const hostFails of [1, 3]) {
     const r = rig({ hostFails });
     r.api.background({}); await settle();
@@ -73,8 +255,124 @@ test('a mod background retries a temporary scene-host failure and bounds persist
     assert.equal(r.api.state().sceneFailed, hostFails === 3);
     assert.equal(r.log.imports, 0, 'a mod background does not load the built-in renderer');
     r.api.syncScene(); await settle();
-    assert.equal(r.log.needs.length, hostFails === 1 ? 2 : 3, 'a persistent failure stays bounded');
+    assert.equal(r.log.needs.length, hostFails === 1 ? 2 : 3, 'syncs meanwhile do not ask again: the retries do');
+    if (hostFails === 3) {
+      assert.deepEqual(r.waits(), [30000]);
+      await r.retry();
+      assert.deepEqual([r.log.needs.length, r.api.state().sceneFailed], [4, false]);
+    }
   }
+});
+
+test('a worker that fails every quick try is asked again every 30 s while the frame is shown, and the scene starts', async () => {
+  const r = rig({ hostFails: 4 });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry();
+  assert.deepEqual(r.waits(), [30000], 'past the quick tries');
+  await r.retry();
+  assert.deepEqual(r.waits(), [30000], 'and on');
+  await r.retry();
+  assert.deepEqual([r.log.needs.length, r.log.updates.length, r.waits()], [5, 1, []]);
+});
+
+test('a scene host request the worker never answers does not hold the background: the startup asks again', async () => {
+  const r = rig({ hostHangs: 1 });
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.starts.length, 0);
+  await r.retry(); // the wait for an answer runs out
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.needs.length, 1, 'syncs meanwhile ask nothing more: the retry does');
+  await r.retry();
+  assert.equal(r.log.needs.length, 2, 'the retry asks the worker again instead of waiting on the lost request');
+  assert.equal(r.log.updates.length, 1);
+  assert.equal(r.api.state().sceneFailed, false);
+});
+
+test('an answer that comes after the quick tries still starts the background at once, once', async () => {
+  const r = rig({ hostHangs: 3 });
+  r.api.syncScene(); await settle();
+  for (let i = 0; i < 5; i++) await r.retry(); // three waits run out, two retries between them
+  assert.deepEqual([r.log.needs.length, r.waits(), r.api.state().sceneFailed], [3, [30000], true], 'retrying slowly');
+  r.log.answers[0](); await settle(); // the worker wakes and answers the first request
+  assert.equal(r.log.starts.length, 1, 'not held until the slow retry');
+  assert.deepEqual([r.api.state().sceneFailed, r.waits()], [false, []], 'which is called off');
+  r.log.answers[1](); r.log.answers[2](); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.updates.length], [1, 1], 'later answers start nothing more');
+});
+
+test('an earlier request answered while a retry still waits starts the background at once', async () => {
+  const r = rig({ hostHangs: 2 });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry(); // the first wait runs out; the retry asks again, unanswered too
+  assert.equal(r.log.needs.length, 2);
+  r.log.answers[0](); await settle();
+  assert.equal(r.log.updates.length, 1, 'not held until the retry\'s own wait runs out');
+  for (const [id, timer] of [...r.timers]) { r.timers.delete(id); timer.fn(); }
+  r.log.answers[1](); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.stops, r.timers.size, r.api.state().sceneFailed], [1, 0, 0, false], 'the abandoned wait running out later changes nothing');
+});
+
+test('a scene host the worker ran without answering is used by the next attempt, not asked for again', async () => {
+  const r = rig({ hostHangs: 1, hostSilent: true });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry(); // the wait runs out; the retry finds it in
+  assert.deepEqual([r.log.needs.length, r.log.updates.length], [1, 1]);
+});
+
+test('an animation module import that never settles does not hold the background: it is asked for again at a new URL', async () => {
+  const r = rig({ importHangs: 1 });
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.starts.length, 0);
+  await r.retry(); // the wait runs out
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.imports, 1, 'syncs meanwhile import nothing more: the retry does');
+  await r.retry();
+  assert.deepEqual([r.log.imports, new Set(r.log.urls).size, r.log.updates.length], [2, 2, 1]);
+  assert.deepEqual([r.timers.size, r.api.state().sceneFailed], [0, false]);
+});
+
+test('an import that settles after the startup let go of it: in, it starts the background once; failed, it drops nothing', async () => {
+  const r = rig({ importHangs: 3 });
+  r.api.syncScene(); await settle();
+  for (let i = 0; i < 5; i++) await r.retry(); // three waits run out, two retries between them
+  assert.deepEqual([r.log.imports, r.log.starts.length, r.api.state().sceneFailed], [3, 0, true]);
+  r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.starts.length, r.api.state().sceneFailed], [1, false], 'the module in after all starts it');
+  r.log.held[1].ok(); r.log.held[2].no(); await settle();
+  assert.equal(r.log.starts.length, 1, 'later ones start nothing more');
+  r.api.stopScene(); r.api.syncScene(); await settle();
+  assert.deepEqual([r.log.imports, r.log.starts.length], [3, 2], 'a late failure does not drop the module that came in');
+  const q = rig({ importHangs: 1 });
+  q.api.syncScene(); await settle();
+  await q.retry(); await q.retry();
+  q.log.held[0].no(); await settle();
+  q.api.stopScene(); q.api.syncScene(); await settle();
+  assert.deepEqual([q.log.imports, q.log.starts.length], [2, 2], 'nor the one the retry loaded');
+});
+
+test('a course frame shown again while its hidden startup still loads starts one scene', async () => {
+  const r = rig({ importHangs: 1 });
+  r.api.syncScene();
+  r.ctx.hid = () => true; r.api.syncScene();
+  r.ctx.hid = () => false; r.api.syncScene();
+  r.log.held[0].ok(); await settle();
+  assert.deepEqual([r.log.imports, r.log.starts.length, r.timers.size], [1, 1, 0]);
+});
+
+test('the background starts when the body is in, without waiting for a site part the worker has not sent', async () => {
+  const enable = source.slice(source.indexOf('  const enable = () => {'), source.indexOf('  const disable = () => {'));
+  let body = null, scenes = 0, sweeps = 0;
+  const ctx = vm.createContext({
+    ultra: true, links: [1], settings: { enabled: true }, notUltra: false, ready: Promise.resolve(), partIn: new Promise(() => {}),
+    document: { body: null }, onBody: (fn) => { body = fn; }, isUltra: () => true, on: (s) => s.enabled,
+    applySettings() {}, disable() {}, startSweep: () => sweeps++, syncFooter() {}, moveParts() {}, syncScene: () => scenes++,
+  });
+  vm.runInContext(`${enable}; enable();`, ctx);
+  ctx.document.body = {}; body(); await settle();
+  assert.equal(scenes, 1, 'a background needs the body and the settings, not the site\'s part');
+  assert.equal(sweeps, 0, 'the sweep and the extras still wait for it');
+  ctx.settings.enabled = false; body(); await settle();
+  assert.equal(scenes, 1, 'not when Glaze is off here');
 });
 
 test('mod handoffs cancel pending built-in startup and restore the built-in scene on removal', async () => {
@@ -101,17 +399,35 @@ test('temporary WebGL startup failures retry with the already loaded scene modul
   assert.equal(r.log.updates.length, 1);
 });
 
-test('persistent startup failures have bounded retries and do not block a different background', async () => {
+test('persistent WebGL startup failures stop and do not block a different background', async () => {
   const r = rig({ startFails: 3 });
   r.api.syncScene(); await settle();
   await r.retry(); await r.retry();
   assert.equal(r.log.starts.length, 3);
-  assert.equal(r.timers.size, 0, 'persistent failures must not retry indefinitely');
+  assert.deepEqual(r.waits(), [], 'a device without WebGL stops trying');
   r.api.syncScene(); await settle();
   assert.equal(r.log.starts.length, 3);
   r.ctx.worn.bg.kind = 'media'; r.ctx.parts = { bg: { media: { type: 'video', src: 'https://cdn.example.com/loop.webm' } } };
   r.api.syncScene(); await settle();
   assert.equal(r.log.updates.at(-1).kind, 'media', 'WebGL failure cannot disable video backgrounds');
+});
+
+test('a worker retrying slowly is asked again at once when the page is back on screen', async () => {
+  const r = rig({ hostFails: 4 });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry();
+  assert.deepEqual([r.log.needs.length, r.waits(), r.api.state().sceneFailed], [3, [30000], true], 'retrying slowly');
+  const shown = r.log.listeners.get('visibilitychange');
+  assert.ok(shown, 'the page coming back on screen is heard');
+  r.ctx.document.hidden = true; shown(); await settle();
+  assert.equal(r.log.needs.length, 3, 'not while hidden');
+  r.ctx.document.hidden = false; shown(); await settle();
+  assert.equal(r.log.needs.length, 4, 'a fresh attempt');
+  assert.deepEqual(r.waits(), [30000], 'the retry count is kept');
+  await r.retry();
+  assert.equal(r.log.updates.length, 1, 'once answered, it starts');
+  shown(); await settle();
+  assert.deepEqual([r.log.starts.length, r.log.stops], [1, 0], 'a running background is left alone');
 });
 
 test('disabling a failed animation cancels its pending recovery', async () => {
@@ -139,13 +455,31 @@ test('a new background attempt never reuses module URLs poisoned by previous fai
   assert.equal(poisoned.size, 4);
 });
 
-test('asynchronous player module failures share the bounded startup recovery', async () => {
+test('asynchronous player module failures share the startup retries', async () => {
   const r = rig(); r.api.syncScene(); await settle();
   r.fail('module'); await r.retry();
   r.fail('module'); await r.retry();
   r.fail('module');
-  assert.equal(r.timers.size, 0, 'asynchronous initialization must not reset the retry budget');
+  assert.deepEqual(r.waits(), [30000], 'asynchronous initialization must not reset the quick tries');
   assert.equal(r.api.state().sceneBad, '', 'a failed player import is not a refused media file');
+});
+
+test('a scene whose context the browser takes back starts again on a new canvas, bounded while it keeps happening', async () => {
+  let now = 0;
+  const r = rig(); r.ctx.Date = { now: () => now };
+  r.api.syncScene(); await settle();
+  r.fail('dropped');
+  assert.equal(r.api.state().sceneBad, '', 'not a background this device cannot draw');
+  assert.equal(r.log.removed, 1, 'the dead canvas goes');
+  await r.retry();
+  assert.deepEqual([r.log.starts.length, r.log.starts[1] !== r.log.starts[0]], [2, true], 'a new canvas');
+  r.fail('dropped'); await r.retry();
+  r.fail('dropped');
+  assert.deepEqual([r.log.starts.length, r.timers.size, r.api.state().sceneFailed], [3, 0, true], 'taken back at every start: it gives up');
+  const q = rig(); q.ctx.Date = { now: () => now };
+  q.api.syncScene(); await settle();
+  for (let i = 0; i < 4; i++) { now += 61000; q.fail('dropped'); await q.retry(); }
+  assert.deepEqual([q.log.starts.length, q.api.state().sceneFailed], [5, false], 'after a minute of drawing, each one is a new start');
 });
 
 test('a built-in scene loads lib/scene.js, starts it once, and updates it from then on, as before', async () => {
@@ -197,8 +531,34 @@ test('with the checker already here, a shader does not ask again; a built-in sce
 test('if the checker will not load the shader is not drawn, and the built-in scenes are not given up on', async () => {
   const r = rig({ kind: 'shader', parts: SHADER, needFails: true });
   r.api.syncScene(); await settle();
+  assert.deepEqual([r.log.starts.length, r.api.state().sceneBad], [0, ''], 'not refused: its retries ask again');
+  r.ctx.worn.bg.kind = 'scene'; r.api.syncScene(); await settle();
+  assert.equal(r.log.updates.at(-1)?.kind, 'scene');
+});
+
+test('a shader checker the worker failed to load is asked for again, and the shader starts', async () => {
+  const r = rig({ kind: 'shader', parts: SHADER, glslFails: 1 });
+  r.api.syncScene(); await settle();
+  assert.deepEqual([r.log.starts.length, r.api.state().sceneBad], [0, '']);
+  await r.retry();
+  assert.equal(r.log.needs.filter((f) => f === 'lib/glsl.js').length, 2, 'not the failed request again');
+  assert.deepEqual([r.log.starts.length, r.log.updates[0]?.kind], [1, 'shader']);
+});
+
+test('a shader checker request the worker never answers does not hold the shader: the startup asks again', async () => {
+  const r = rig({ kind: 'shader', parts: SHADER, glslHangs: 1 });
+  r.api.syncScene(); await settle();
   assert.equal(r.log.starts.length, 0);
-  assert.equal(r.api.state().sceneFailed, false);
+  await r.retry(); // the wait runs out
+  await r.retry(); // the retry asks again
+  assert.equal(r.log.needs.filter((f) => f === 'lib/glsl.js').length, 2, 'not the lost request again');
+  assert.deepEqual([r.log.starts.length, r.log.updates[0]?.kind], [1, 'shader']);
+  const q = rig({ kind: 'shader', parts: SHADER, glslHangs: 3 });
+  q.api.syncScene(); await settle();
+  for (let i = 0; i < 5; i++) await q.retry();
+  assert.deepEqual([q.log.starts.length, q.waits(), q.api.state().sceneFailed], [0, [30000], true], 'retrying slowly');
+  q.log.answers[0](); await settle();
+  assert.equal(q.log.starts.length, 1, 'an answer after all starts it');
 });
 
 test('layers draw once they have layers', async () => {

@@ -299,7 +299,7 @@ const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY, def
     },
     importLottie: async () => { context.lottie = lottie; },
     GZ_MATCH_PRESET: () => null,
-    GZ_CTX: { t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), need: () => Promise.resolve(), settings: () => settings, on: () => true, solo: true },
+    GZ_CTX: { t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), need: () => Promise.resolve(), settings: () => settings, on: () => true, partsOn: () => true, parts: () => null, solo: true },
   });
   context.window = context; context.top = context; context.globalThis = context;
   vm.runInContext(fs.readFileSync(path.join(root, 'lib/lookx.js'), 'utf8'), context);

@@ -788,7 +788,9 @@ test('broker: wired as the other brokers are, and cached at install for later wo
   const src = read('lib/background.js');
   assert.match(src, /BROKER_FILES\.mods = \['zip\.js', 'modapi\.js', 'modwidget\.js', 'modbundle\.js', 'blocklist\.js'\];/);
   assert.match(src, /addEventListener\?\.\('install', \(\) => importScripts\('zip\.js', 'modapi\.js', 'modwidget\.js', 'modbundle\.js'\)\)/);
-  assert.match(src, /allow: \(m, s\) => fromEditor\(s\) && s\.frameId === 0 && s\.origin === chrome\.runtime\.getURL\(''\)\.replace\(\/\\\/\$\/, ''\) && GZ_MODBUNDLE\.OPS\.includes\(m\.op\)/);
+  assert.match(src, /allow: \(m, s\) => fromEditor\(s\) && s\.frameId === 0 && ownOrigin\(s\.origin\) && GZ_MODBUNDLE\.OPS\.includes\(m\.op\)/);
+  // Safari gives a sender's origin with its UUID lowercased, getURL uppercase: the comparison ignores case.
+  assert.match(src, /const OWN_ORIGIN = chrome\.runtime\.getURL\(''\)\.replace\(\/\\\/\$\/, ''\)\.toLowerCase\(\);\nconst ownOrigin = \(o\) => typeof o === 'string' && o\.toLowerCase\(\) === OWN_ORIGIN;/);
 });
 
 

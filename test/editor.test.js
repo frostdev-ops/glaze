@@ -22,6 +22,8 @@ const ENHANCE = {
 const OVERRIDE = {
   enabled: 'header', footer: 'blackboard/declutter', preset: 'look/palette', presets: 'look/palette',
   'widgets.land': 'blackboard/dashboard',
+  // The student's pointer and its animation have a section of their own; the rest of extras is stickers and rotation.
+  'extras.pointer': 'look/pointer', 'extras.pointerAnim': 'look/pointer',
   ...Object.fromEntries(['glass', 'depth', ...Object.keys(D.GZ_SPEC.look).filter((k) => /^(surface|shadow)/.test(k))].map((k) => [`look.${k}`, 'look/surfaces'])),
   ...Object.fromEntries(Object.entries(ENHANCE).flatMap(([section, keys]) => keys.map((key) => [`enhance.${key}`, section]))),
   ...Object.fromEntries(Object.keys(N.SPEC).map((key) => [`nav.${key}`, 'blackboard/nav'])),
@@ -33,14 +35,14 @@ const SPECIAL = {
   'look.font': ['font-grid'], 'look.head': ['font-grid'], 'look.mono': ['font-grid'],
   'bg.image': ['bg-image'], 'bg.colors': ['bg-colors'],
   'nav.u': ['nav-url'], 'nav.i': ['nav-file'], 'nav.li': ['nav-logo-file'],
-  'declutter.tabs': ['declutter-tabs'], 'sidebar.off': ['sidebar-off'],
+  'declutter.tabs': ['declutter-tabs'], 'sidebar.off': ['sidebar-off'], 'extras.pointer': ['pointer-tiles'],
   ...Object.fromEntries(D.GZ_COLORS.map(([key]) => [`colors.${key}`, ['colors']])),
   ...Object.fromEntries(['colors', 'tinted', 'looks', 'names'].map((key) => [`courses.${key}`, ['course-list', 'org-list']])),
 };
 const ACTIONS = {
   'look/palette': ['looks', 'save-preset', 'reset-colors', 'share-copy', 'share-code', 'share-try', 'share-offer', 'share-apply', 'share-fav', 'share-cancel', 'gallery-link', 'favorites', 'history', 'history-back', 'history-clear'],
   'look/type': ['font-custom', 'font-use'], 'look/background': ['bg-sets', 'x-shader', 'x-layers'], 'look/motion': ['x-motion'],
-  'look/extras': ['rotate-looks', 'cursor-pick', 'cursor-file'],
+  'look/pointer': ['pointer-tiles', 'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look'], 'look/extras': ['rotate-looks'],
   'look/navigation': ['nav-pick', 'nav-file', 'nav-url'],
   'look/cards': ['card-set', 'card-set-clear'], 'look/courses': ['course-list', 'org-list'],
   'blackboard/nav': ['nav-items', 'nav-widgets', 'nav-logo-pick', 'nav-logo-file', 'nav-link-name', 'nav-link-url', 'nav-link-icon', 'nav-link-tab', 'nav-link-save', 'nav-link-cancel', 'nav-reset'],
@@ -169,7 +171,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
     frame: { contentDocument: { querySelector: () => section }, contentWindow: { postMessage: (m) => messages.push(m) } },
     $: (selector) => ({ value: selector === '#preview-size' ? 'desktop' : 'current' }), location: { origin: 'chrome-extension://fixture' },
     previewSite: 'ultra', previewPage: 'outline', previewCourse: '', renderNav() {}, renderContrast() {}, sizePreview() {}, previewItems: () => ({}),
-    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED,
+    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../lib/lookset.js'),
   });
   vm.runInContext(`(${preview})()`, context);
   assert.equal(section.className, 'course course-color-2'); assert.equal(name.textContent, 'My course');
@@ -177,6 +179,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
   state.courses.looks._1_1 = D.GZ_LOOKS[0].name;
   vm.runInContext(`(${preview})()`, context);
   assert.equal(messages.at(-2).gzPreview.colors['--gz-surface'], D.GZ_LOOKS[0].colors['--gz-surface']);
+  assert.deepEqual(JSON.parse(JSON.stringify(messages.at(-2).gzPreviewParts)), { x: { pointer: 'aurora' } });
   context.previewCourse = '_2_1'; vm.runInContext(`(${preview})()`, context);
   assert.equal(messages.at(-2).gzPreview.courses.tinted.length, 0, 'A selected untinted course must not borrow another course’s tint');
   context.previewCourse = '_1_1';

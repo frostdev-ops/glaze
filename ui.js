@@ -116,11 +116,11 @@ const GZ_UI = (() => {
     }
   };
 
-  // A look is an explicit choice too: palette, fonts, shape and background at once, and no extras (a Look's parts) of
-  // the one before.
+  // A look is an explicit choice too: palette, fonts, shape and background at once, and its own extras (a Look's parts:
+  // pointer, effects) in place of the one before's.
   const pickLook = (s, L) => {
     Object.assign(s, GZ_LOOK_APPLY(s, L));
-    s.parts = null;
+    s.parts = GZ_LOOK_PARTS(L);
     // Course cards only as far as the look names them.
     if (L.card) s.card = GZ_CARDS.settings({ ...s.card, ...L.card });
     return ['colors', 'preset', 'auto', 'look', 'bg', 'parts', ...(L.card ? ['card'] : [])];

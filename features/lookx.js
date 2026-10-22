@@ -1,5 +1,6 @@
-// Look extras on the LMS page (W12): the pointer, Look rotation's clock, and stickers. content.js loads this (need) once
-// one is in use on the page (settings.extras, or stickers kept for this page) and calls sync() from applySettings; the
+// Look extras on the LMS page (W12): the pointer, Look rotation's clock, and stickers. content.js loads this (need)
+// once one is in use on the page (the worn Look's x.pointer or the student's own choice of pointer, settings.extras, or
+// stickers kept for this page) and calls sync() from applySettings and when the Look's parts change; the
 // command palette loads it for its switches (cmds). The pure parts are lib/lookx.js. What it keeps stays on this
 // device (storage.local), written through the worker's queue (lib/background.js 'glaze:stickers', 'glaze:rotate').
 // Stickers never take a click meant for the page: they let pointers through except in sticker mode, and are never
@@ -32,18 +33,25 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (!document.getElementById('gz-lookx-css')) (document.head || html).append(make('link', { id: 'gz-lookx-css', rel: 'stylesheet', href: url('features/lookx.css') }));
   };
 
-  // ---- the pointer: CSS cursor on the page (features/lookx.css), the system's I-beam kept on text ----------------
-  let pointer = ''; // the own pointer's blob: address
+  // ---- the pointer: a set as a CSS cursor on the page (features/lookx.css), the system's I-beam kept on text. The system
+  // draws it, so it never lags; its animation is features/motionx.js's, on the canvas around it. Which one is the student's
+  // choice (extras.pointer) over the Look's, including a course's assigned Look. Off on quiz/tool pages and with Glaze off.
+  let pointer = '', pointing = 0; // the own pointer's blob: address and the latest read
   let live = true; // false from pagehide until the page is shown again: no blob: address is made meanwhile
+  const worn = () => (ctx.on() && ctx.partsOn(true) && !quiz() ? GZ_LX.pointerOf(X().pointer,
+    ctx.courseLook?.() ? globalThis.GZ_LOOK_PARTS?.({ name: ctx.courseLook() })?.x?.pointer : ctx.parts()?.pointer) : 'off');
+  // Whether this browser takes image-set() in a cursor (for the 2x picture); one that doesn't gets the 1x PNG after the SVG.
+  let sets;
+  const imageSet = () => (sets ??= !!globalThis.CSS?.supports?.('cursor', 'image-set(url("a.png") 1x, url("b.png") 2x) 0 0, auto'));
   const cursor = async () => {
-    const c = ctx.on() ? X().cursor : 'off';
+    const g = ++pointing, c = worn();
     let d = '', p = '', made = '';
     if (c === 'own') {
       const { cursorImg: img } = await get('cursorImg');
-      if (!live || c !== (ctx.on() ? X().cursor : 'off')) return; // hidden or changed while reading: a newer pass draws
+      if (!live || g !== pointing || c !== worn()) return; // hidden or superseded while reading: a newer pass draws
       made = blobOf(img);
       if (made) d = p = `url("${made}") 0 0`;
-    } else if (GZ_LX.CURSORS[c]) [d, p] = ['default', 'pointer'].map((k) => `url("${url(`assets/art/cursors/${c}/${k}.png`)}") ${GZ_LX.CURSORS[c][k].join(' ')}`);
+    } else if (GZ_LX.CURSORS[c]) [d, p] = ['default', 'pointer'].map((k) => GZ_LX.cursorCss(c, k, url, imageSet()));
     if (pointer) URL.revokeObjectURL(pointer);
     pointer = made;
     if (d) {
@@ -430,14 +438,18 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   chrome.storage.onChanged.addListener((c, area) => {
     if (area !== 'local') return;
     if (c.rotateState) { arm(); if (top && globalThis.GZ_LX?.turned(c.rotateState.oldValue, c.rotateState.newValue)) ctx.moment?.('look.rotate'); }
-    if (c.cursorImg && X().cursor === 'own') cursor();
+    if (c.cursorImg && globalThis.GZ_LX && worn() === 'own') cursor();
     if (Object.keys(c).some((k) => k === 'mods' || k.startsWith('mod:') || k === 'modsBlocklist' || k === 'modDev')) refreshMods();
     if (key && c[key] && !editing && !pending.size) { key = ''; stickers(); }
   });
+  // The Look changed: its pointer may have (features/lookparts.js; the event says nothing, the parts are asked again). The
+  // student's choice changing is a settings change: applySettings calls sync().
+  document.addEventListener('glaze:parts', () => { if (globalThis.GZ_LX) cursor(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) arm(); mute(); });
   addEventListener('pagehide', () => {
     flush();
     live = false;
+    pointing++;
     for (const u of [...Object.values(own), pointer]) if (u) URL.revokeObjectURL(u);
     dropLotties();
     forgetMods();
@@ -446,30 +458,41 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   });
   addEventListener('pageshow', (e) => { live = true; if (e.persisted) { key = ''; sync(); } });
   // Ultra changes pages in place: its stickers are the new path's.
-  globalThis.navigation?.addEventListener('navigatesuccess', () => { if (key) stickers(); });
+  const moved = () => { if (globalThis.GZ_LX) cursor(); if (key) stickers(); };
+  globalThis.navigation?.addEventListener('navigatesuccess', moved);
+  addEventListener('popstate', moved);
 
   const sync = async () => {
     await lib();
+    if (ctx.courseLook?.()) await ctx.need('lib/lookset.js', () => globalThis.GZ_LOOK_PARTS);
     cursor();
     arm();
     stickers();
   };
 
-  // The command palette's switches (features/palette.js).
+  // The command palette's switches (features/palette.js). The student's pointer by name, as the editor's Look › Pointer
+  // lists them (settings extras.pointer, defaults.js); their own picture only once there is one (ready(), asked as the
+  // palette opens).
+  const POINTERS = { look: "The Look's pointer", off: 'System pointer', aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal',
+    lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', own: 'Your own picture' };
+  let ownPic = false;
+  const ready = async () => { ownPic = !!(await get('cursorImg')).cursorImg; };
   const cmds = () => {
     const x = X();
-    const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, extras: { ...x, ...patch } }); } catch { /* extension reloaded */ } };
+    const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, extras: { ...X(), ...patch } }); } catch { /* extension reloaded */ } };
     const hint = (now) => (now ? t('Current') : 'Glaze');
     return [
       ...(top && !quiz() ? [{ label: t('Place stickers on this page'), hint: 'Glaze', group: 'Glaze', run: edit }] : []),
       { label: t(x.stickers ? 'Hide stickers' : 'Show stickers'), hint: 'Glaze', group: 'Glaze', run: store({ stickers: !x.stickers }) },
-      ...[['off', 'Standard'], ['aqua', 'Aqua'], ['lilac', 'Lilac'], ['pearl', 'Pearl']].map(([c, n]) => ({ label: t('Pointer: {name}', { name: t(n) }), hint: hint(x.cursor === c), group: 'Glaze', run: store({ cursor: c }) })),
+      ...Object.entries(POINTERS).filter(([v]) => v !== 'own' || ownPic || x.pointer === 'own')
+        .map(([v, n]) => ({ label: t('Pointer: {name}', { name: t(n) }), hint: hint(x.pointer === v), group: 'Glaze', run: store({ pointer: v }) })),
+      { label: t(x.pointerAnim ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t('Pointer animation') }), hint: 'Glaze', group: 'Glaze', run: store({ pointerAnim: !x.pointerAnim }) },
       ...[['off', 'Off'], ['6h', 'Every 6 hours'], ['12h', 'Every 12 hours'], ['24h', 'Every 24 hours'], ['week', 'Every week'], ['daily', 'Every day at a set time']]
         .map(([v, n]) => ({ label: t('Look rotation: {every}', { every: t(n) }), hint: hint(x.rotate === v), group: 'Glaze', run: store({ rotate: v }) })),
       ...(x.rotate !== 'off' ? [{ label: t('Next Look now'), hint: t('Look rotation'), group: 'Glaze', run: () => send({ type: 'glaze:rotate', now: true }) }] : []),
     ];
   };
 
-  return { sync, cmds, edit };
+  return { sync, cmds, ready, edit };
 })();
 GZ_LOOKX;

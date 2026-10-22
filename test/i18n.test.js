@@ -12,6 +12,7 @@ const X = require('../lib/editor-x.js');
 const BG = require('../lib/editor-xbg.js');
 const M = require('../lib/editor-xmotion.js');
 const MX = require('../lib/motionx.js');
+const PTR = require('../lib/editor-pointer.js');
 const XE = require('../lib/editor-xparts.js');
 const PET = require('../lib/pet.js');
 
@@ -60,7 +61,7 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
   return out.filter(Boolean);
 };
 // And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
-const JS = ['sharing/quick.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/editor-navbar.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
+const JS = ['sharing/quick.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-pointer.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/editor-navbar.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 // Tables and generated labels reach t() through variables, not literal arguments.
 const tableWords = [
   ...Object.values(PET.DECOR).map((item) => item.name), ...Object.values(PET.HABITATS),
@@ -70,7 +71,8 @@ const tableWords = [
   ...BG.EXAMPLES.map(([, label]) => label), ...BG.KINDS.map(([, label]) => label), ...BG.PRESETS.map(([label]) => label), ...BG.MEDIA_KINDS.map(([, label]) => label), ...BG.MEDIA_FITS.map(([, label]) => label),
   ...Object.values(M.MOMENTS), ...Object.values(M.EVENTS), ...Object.values(M.KEYS).map(([label]) => label),
   ...[M.ENTER, ...Object.values(M.PRESETS)].flatMap((ps) => Object.values(ps).map(([label]) => label)),
-  ...[...MX.SHAPES, ...MX.KINDS, ...MX.CURSORS, ...Object.keys(MX.EASES), ...XP.BLENDS].map(X.tokenName),
+  ...[...MX.SHAPES, ...MX.MARKS, ...MX.KINDS, ...MX.CURSORS, ...Object.keys(MX.EASES), ...XP.BLENDS].map(X.tokenName),
+  ...Object.values(M.POINTERS), ...Object.values(M.TYPES), ...Object.values(PTR.NAMES),
 ];
 const used = new Set([
   ...tableWords,

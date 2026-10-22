@@ -311,3 +311,8 @@ test('review: a zip whose CRC, local header or sizes disagree is refused as dama
   u16(disk, eocd(disk) + 4, 1);
   assert.throws(() => D.unzip(disk), /multi-disk/);
 });
+
+test('inflating an entry writes into the stream directly, never through a Blob stream (Safari content scripts refuse its chunks)', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/doctext.js'), 'utf8');
+  assert.doesNotMatch(src, /\.stream\(\)\.pipeThrough/);
+});
