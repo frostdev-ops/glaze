@@ -37,6 +37,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     });
     const sw = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const id = new URL(sw.url()).host;
+    await sw.evaluate((origin) => chrome.storage.local.set({ ultra: [origin] }), LMS);
     const state = (url = PAGE) => sw.evaluate(async (u) => {
       const [tab] = await chrome.tabs.query({ url: u });
       const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ loaded: typeof GZ_XPARTS_PAGE, parts: globalThis.GZ_CTX ? globalThis.GZ_CTX.parts() : 'no GZ_CTX' }) });
