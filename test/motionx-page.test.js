@@ -27,7 +27,7 @@ const feature = ({ adopt = true, parts = null, level = 'subtle', quiet = false }
     addEventListener: (t, f) => { listeners[t] = f; }, removeEventListener: (t) => { delete listeners[t]; },
     createElement: (tag) => (tag === 'canvas'
       ? { id: '', style: {}, isConnected: false, setAttribute() {}, getContext: () => context, remove() { this.isConnected = false; } }
-      : { isConnected: false, remove() { this.isConnected = false; }, set textContent(v) { this._t = v; }, get textContent() { return this._t; } }),
+      : { style: {}, setAttribute() {}, attachShadow: () => ({ append() {} }), replaceChildren() {}, isConnected: false, remove() { this.isConnected = false; }, set textContent(v) { this._t = v; }, get textContent() { return this._t; } }),
   };
   const ctx = vm.createContext({ document, location: { pathname: '/ultra/course' }, CSSStyleSheet: Sheet, performance: { now: () => now }, innerWidth: 800, innerHeight: 600, devicePixelRatio: 1,
     matchMedia: () => ({ matches: false }), addEventListener: (t, f) => { handlers[t] = f; }, removeEventListener: (t) => { delete handlers[t]; },
@@ -108,9 +108,7 @@ test('has() says whether the Look has an effect for an event', async () => {
 
 test('motionx never reads the page\'s styles or sweeps it, and runs no timer under a minute', () => {
   const src = read('features/motionx.js').replace(/\/\/[^\n]*/g, '');
-  // One style read: the field typed in, once per field, for a typing effect's caret.
-  assert.equal(src.split('getComputedStyle(el)').length - 1, 1);
-  assert.doesNotMatch(src.replace('getComputedStyle(el)', ''), /getComputedStyle|querySelectorAll|setInterval|innerHTML|insertAdjacentHTML|outerHTML/);
+  assert.doesNotMatch(src, /getComputedStyle|querySelectorAll|setInterval|innerHTML|insertAdjacentHTML|outerHTML/);
   assert.doesNotMatch(read('lib/motionx.js').replace(/\/\/[^\n]*/g, ''), /document|window|innerHTML|eval|Function\(/);
 });
 
@@ -292,17 +290,18 @@ test('typing: particles at the field, one measurement a frame however many keys,
   assert.equal(x.queue.size, 1, 'one frame asked for');
   x.tick();
   assert.equal(x.canvases.length, 1, 'a canvas for the particles');
-  assert.equal(x.styleReads(), 1, 'the field\'s style, once');
+  assert.equal(x.styleReads(), 0, 'no field style read');
   x.listeners.input(typed(f));
   x.tick();
-  assert.equal(x.styleReads(), 1, 'and kept for the next key');
+  assert.equal(x.styleReads(), 0, 'nor for the next key');
   for (let i = 0; i < 200; i++) x.tick();
   assert.equal(x.canvases[0].isConnected, false, 'gone once they have faded');
 });
 
 test('typing: never in a password, card or one-time-code field, never while composing, never deleting, never with motion off', async () => {
   const quietFields = [field('input', 'password'), field('input', 'text', { autocomplete: 'cc-number' }), field('input', 'text', { autocomplete: 'section-pay billing cc-csc' }),
-    field('input', 'text', { autocomplete: 'one-time-code' }), field('input', 'number'), field('input', 'checkbox')];
+    field('input', 'text', { autocomplete: 'one-time-code' }), field('input', 'number'), field('input', 'checkbox'),
+    field('input', 'text', { autocomplete: 'current-password' }), field('input', 'text', { autocomplete: 'section-login New-Password' })];
   for (const f of quietFields) {
     const x = feature({ parts: TYPE });
     await x.api.sync();
@@ -350,5 +349,36 @@ test('the pointer\'s new animations run while it moves and stop once they have f
     for (let i = 0; i < 300; i++) x.tick();
     assert.equal(x.queue.size, 0, `${cursor.kind}: no frames once it has faded`);
     assert.equal(x.canvases.at(-1).isConnected, false, `${cursor.kind}: canvas gone`);
+  }
+});
+
+
+test('typing never reads field text, including through a shadow root event path', async () => {
+  for (const tag of ['input', 'textarea']) {
+    const x = feature({ parts: TYPE });
+    await x.api.sync();
+    let reads = 0;
+    const f = field(tag);
+    for (const k of ['value', 'textContent', 'innerText']) Object.defineProperty(f, k, { get() { reads++; throw new Error('private text'); } });
+    const e = typed(f);
+    x.listeners.input({ target: {}, inputType: e.inputType, composedPath: () => [f, {}] });
+    x.tick();
+    assert.equal(reads, 0, tag);
+    assert.equal(x.canvases.length, 1, 'uses field geometry without its contents');
+  }
+});
+
+test('typing rechecks sensitive fields and composition before a queued frame', async () => {
+  for (const change of ['password', 'autocomplete', 'composition']) {
+    const x = feature({ parts: TYPE });
+    await x.api.sync();
+    const attrs = {}, f = field('input', 'text', attrs);
+    x.listeners.input(typed(f));
+    if (change === 'password') f.type = 'password';
+    if (change === 'autocomplete') attrs.autocomplete = 'cc-number';
+    if (change === 'composition') x.listeners.compositionstart({ type: 'compositionstart' });
+    x.tick();
+    assert.equal(x.canvases.length, 0, change);
+    assert.equal(x.queue.size, 0, change);
   }
 });

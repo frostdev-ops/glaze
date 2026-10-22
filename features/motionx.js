@@ -308,14 +308,12 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
   };
 
   // ---- typing -------------------------------------------------------------------------------------------------------------
-  // Particles at the caret as the student types. What is typed is never kept or sent anywhere: an input event says only that
-  // something went in (its inputType), and its data is never read. To find the caret in an input or textarea, the text before
-  // it is laid out once in a mirror (in a closed shadow root, so no page script sees it) and taken out again in the same
-  // task; a contenteditable's caret is its selection's last rect. At most one measurement a frame, however fast the keys
-  // come. Never in a password, card or one-time-code field, never while composing (IME), never with motion off.
-  let typ = null, typArmed = false, composing = false, field = null, keyed = 0, pending = 0, typed = [], mirror = null, host = null;
+  // Input events say only that something was inserted; their data and the field's text are never read. Inputs and
+  // textareas use the field's edge or centre, since measuring their caret would need the text. A contenteditable uses
+  // the selection's rects. At most one measurement a frame, however fast the keys come.
+  let typ = null, typArmed = false, composing = false, field = null, keyed = 0, pending = 0, typed = [];
   const TEXTY = /^(?:text|search|email|url|tel)$/;
-  const SECRET = /(?:^|\s)(?:cc-[\w-]+|one-time-code)(?:\s|$)/i;
+  const SECRET = /(?:^|\s)(?:cc-[\w-]+|one-time-code|current-password|new-password)(?:\s|$)/i;
   // The field typed in, or null for one that gets nothing.
   const fieldOf = (el) => {
     if (typeof el?.matches !== 'function') return null;
@@ -325,45 +323,23 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
     }
     return el.isContentEditable ? el.closest('[contenteditable]:not([contenteditable="false"])') || el : null;
   };
-  const styles = new WeakMap();
-  const COPY = ['boxSizing', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderStyle',
-    'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontStretch', 'letterSpacing', 'wordSpacing', 'lineHeight', 'textTransform', 'textIndent', 'tabSize', 'wordBreak', 'overflowWrap', 'direction'];
-  // The caret of field `el` in the window, or its end (an input) or middle (the rest) when it can't be measured.
+  // The selection's caret, or the field's end (an input) or middle (the rest).
   const caretOf = (el) => {
     const b = el.getBoundingClientRect();
     const end = { x: el.matches('input') ? Math.max(b.left, b.right - 10) : b.left + b.width / 2, y: b.top + b.height / 2 };
+    if (el.matches('input, textarea')) return end;
     try {
-      if (!el.matches('input, textarea')) {
-        const sel = getSelection(), r = sel?.rangeCount ? sel.getRangeAt(0) : null;
-        const last = r && el.contains(r.endContainer) ? [...r.getClientRects()].pop() : null;
-        return last ? { x: last.right, y: last.top + last.height / 2 } : end;
-      }
-      if (!styles.has(el)) { const cs = getComputedStyle(el); styles.set(el, Object.fromEntries(COPY.map((k) => [k, cs[k]]))); }
-      if (!mirror) {
-        host = document.createElement('div');
-        host.setAttribute('aria-hidden', 'true');
-        Object.assign(host.style, { position: 'fixed', left: '-10000px', top: '0', visibility: 'hidden', pointerEvents: 'none', contain: 'layout style' });
-        mirror = document.createElement('div');
-        host.attachShadow({ mode: 'closed' }).append(mirror);
-      }
-      if (!host.isConnected) (document.body || html).append(host);
-      const st = styles.get(el), area = el.matches('textarea');
-      Object.assign(mirror.style, st, { position: 'absolute', left: '0', top: '0', width: `${b.width}px`, whiteSpace: area ? 'pre-wrap' : 'pre', overflow: 'hidden' });
-      const at = el.selectionEnd ?? el.value.length;
-      const mark = document.createElement('span');
-      mark.textContent = '\u200b';
-      mirror.replaceChildren(el.value.slice(0, at), mark);
-      const x = b.left + parseFloat(st.borderLeftWidth) + mark.offsetLeft - el.scrollLeft, y = b.top + parseFloat(st.borderTopWidth) + mark.offsetTop + mark.offsetHeight / 2 - el.scrollTop;
-      mirror.replaceChildren();
-      return { x: Math.min(b.right, Math.max(b.left, x)), y: Math.min(b.bottom, Math.max(b.top, y)) };
-    } catch { mirror?.replaceChildren(); return end; }
+      const sel = getSelection(), r = sel?.rangeCount ? sel.getRangeAt(0) : null;
+      const last = r && el.contains(r.endContainer) ? [...r.getClientRects()].pop() : null;
+      return last ? { x: last.right, y: last.top + last.height / 2 } : end;
+    } catch { return end; }
   };
   const spill = () => {
     pending = 0;
     const el = field, n = Math.min(3, keyed);
     keyed = 0;
     field = null;
-    if (!typ || !el?.isConnected || !n || document.hidden || !moving() || !ctx.on() || quiet()) return;
+    if (!typ || composing || !el?.isConnected || fieldOf(el) !== el || !n || document.hidden || !moving() || !ctx.on() || quiet()) return;
     typed = alive(typed);
     if (typed.length > 90) return;
     const at = caretOf(el), made = [];
@@ -393,8 +369,6 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
       pending = keyed = 0;
       field = null;
       composing = false;
-      host?.remove();
-      host = mirror = null;
     }
   };
 
