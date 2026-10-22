@@ -667,12 +667,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       restore?.();
       const was = f.el.style.transform || '', priority = f.el.style.getPropertyPriority?.('transform') || '';
       const value = `${was && was !== 'none' ? was + ' ' : ''}translateZ(0)`;
+      f.el.style.setProperty('transform', value, priority);
+      const applied = f.el.style.transform;
       restore = () => {
         clearTimeout(reset); cancelAnimationFrame(raf);
-        if (f.el.style.transform === value) f.el.style.setProperty('transform', was, priority);
+        if (f.el.style.transform === applied) f.el.style.setProperty('transform', was, priority);
         restore = null;
       };
-      f.el.style.setProperty('transform', value, priority);
       void f.el.offsetWidth;
       raf = requestAnimationFrame(() => { raf = requestAnimationFrame(() => restore?.()); });
       reset = setTimeout(() => restore?.(), 200); // animation frames may stop in a background tab

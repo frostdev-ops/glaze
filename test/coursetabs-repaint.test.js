@@ -123,6 +123,19 @@ test('a repaint preserves an existing frame transform', async () => {
   assert.equal(el.style.transform, 'scale(0.9)');
 });
 
+test('a browser-normalized transform is still restored after the repaint', async () => {
+  const { p, g, el } = await ready();
+  g.api.bar.leave();
+  await settle();
+  let value = '';
+  Object.defineProperty(el.style, 'transform', { get: () => value, set: (x) => { value = x.replace(/translateZ\(0\)/g, 'translateZ(0px)'); }, configurable: true });
+  g.api.bar.visit(A);
+  await settle();
+  assert.equal(el.style.transform, 'translateZ(0px)', 'CSSOM serializes zero lengths with px');
+  p.clock.paint(); p.clock.paint();
+  assert.equal(el.style.transform, '', 'restore the canonicalized value too');
+});
+
 test('a frame shown once its page is drawn is nudged, put back two frames later, again a second later, then left alone', async () => {
   const { p, g } = await setup();
   g.api.bar.visit(A);
