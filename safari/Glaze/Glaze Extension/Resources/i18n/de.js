@@ -3046,5 +3046,11 @@
   "You see {name} instead, your own choice:": "Du siehst stattdessen {name}, deine eigene Wahl:",
   "Your own picture, kept on this computer: a theme code of this Look goes without it.": "Dein eigenes Bild, auf diesem Computer gespeichert: Ein Themencode dieses Looks kommt ohne es aus.",
   "Worn with this Look, and in a theme code of it. Drawn by your system so it never lags; text fields keep the usual text cursor.": "Wird mit diesem Look getragen und steht in seinem Themencode. Von deinem System gezeichnet, damit er nie hinterherhinkt; Textfelder behalten den üblichen Textcursor.",
-  "Pointer: {name}": "Mauszeiger: {name}"
+  "Pointer: {name}": "Mauszeiger: {name}",
+  "Flake": "Flocke",
+  "Shard": "Splitter",
+  "Contour": "Kontur",
+  "Topography": "Topografie",
+  "Living terrain cut into paper terraces": "Lebendiges Gelände aus Papierterrassen",
+  "Frostdev": "Frostdev"
 };

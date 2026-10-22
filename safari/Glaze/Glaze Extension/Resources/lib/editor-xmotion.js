@@ -10,8 +10,8 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
   const MOMENTS = { 'page.enter': 'Page enter', 'panel.enter': 'Panel enter', 'card.enter': 'Card enter', 'card.hover': 'Card hover', 'tile.enter': 'Tile enter', 'rail.open': 'Rail open', 'tooltip.in': 'Tooltip', 'button.press': 'Button press' };
   const HELD = ['card.hover', 'button.press']; // states that last while they do, not entrances that play once
   // The pointer sets' names (lib/motionx.js POINTERS), and the typing effects'.
-  const POINTERS = { aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal', lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', own: 'Your own picture' };
-  const TYPES = { embers: 'Embers', ink: 'Ink', sparks: 'Sparks', pixels: 'Pixels', petals: 'Petals', snow: 'Snow', bubbles: 'Bubbles', wisps: 'Wisps' };
+  const POINTERS = { aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal', lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', frostdev: 'Frostdev', own: 'Your own picture' };
+  const TYPES = { embers: 'Embers', ink: 'Ink', sparks: 'Sparks', pixels: 'Pixels', petals: 'Petals', snow: 'Snow', bubbles: 'Bubbles', wisps: 'Wisps', contour: 'Contours' };
   const EVENTS = { complete: 'You complete an item', submit: 'You hand in work', grade: 'A new grade arrives', streak: 'Your streak grows', 'timer.done': 'A focus timer ends', 'look.rotate': 'Your Look rotates' };
   // A stop's values: label, slider step, unit, and the value that changes nothing (what a newly added one starts at).
   const KEYS = {
@@ -159,7 +159,7 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
     return el('details', { open: opened(ev, !!f), 'data-event': ev }, el('summary', {}, `${tr(EVENTS[ev])} · ${f ? tr(X.tokenName(f.kind)) : tr('None')}`), el('div', { class: 'x-body' }, body));
   };
   const cursorUI = () => {
-    const c = xOf().cursor, d = c && MX().cursor(c);
+    const c = xOf().cursor, d = c && MX().cursor(c), few = ['orbit', 'contour'].includes(c?.kind); // marks that are counted, not a length
     const set = (k) => (v, soon) => write('cursor', { ...xOf().cursor, [k]: v }, soon);
     const kind = X.select({ label: tr('Cursor effect'), value: c?.kind || '', options: [['', tr('None')], ...MX().CURSORS.map((k) => [k, tr(X.tokenName(k))])], on: (v) => { write('cursor', v ? { ...xOf().cursor, kind: v } : null); redraw('cursor'); } });
     kind.querySelector('select').dataset.focus = 'cursor';
@@ -168,7 +168,7 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
       X.slider({ label: tr('Size'), min: 2, max: 48, value: d.size, fmt: unit('px'), on: set('size') }),
       ['orbit', 'drift', 'sparkle'].includes(c.kind) && X.select({ label: tr('Shape'), value: d.shape || '', options: [...(c.kind === 'sparkle' ? [['', tr('Sparks and stars')]] : []), ...MX().SHAPES.concat(MX().MARKS).map((k) => [k, tr(X.tokenName(k))])],
         on: (v) => { write('cursor', { ...xOf().cursor, shape: v || null }); redraw('cursor'); } }),
-      !['glow', 'flicker', 'scan'].includes(c.kind) && X.slider({ label: tr(c.kind === 'orbit' ? 'How many' : 'Length'), min: c.kind === 'orbit' ? 1 : 2, max: c.kind === 'orbit' ? 6 : 24, value: c.kind === 'orbit' ? Math.min(6, d.len) : d.len, on: set('len') }),
+      !['glow', 'flicker', 'scan'].includes(c.kind) && X.slider({ label: tr(few ? 'How many' : 'Length'), min: c.kind === 'orbit' ? 1 : 2, max: few ? 6 : 24, value: few ? Math.min(6, d.len) : d.len, on: set('len') }),
       X.slider({ label: tr('Fade'), min: 100, max: 2000, step: 50, value: d.fade, fmt: unit(' ms'), on: set('fade') }),
       el('p', { class: 'desc' }, tr('Move the pointer over the preview to see it. Off on touch screens.')),
     ] : [])];

@@ -6,6 +6,11 @@
 var GZ_LOOK_PARTS = globalThis.GZ_LOOK_PARTS || (() => {
   const fx = (complete, submit, grade, streak, done, rotate) => ({ complete, submit, grade, streak, 'timer.done': done, 'look.rotate': rotate });
   const X = {
+    // Contour rings and terraces, the language of its scene, with the Frostdev snowflake and ice shards.
+    Frostdev: { pointer: 'frostdev', cursor: { kind: 'contour', c: ['accent', 'accent-hi'], size: 22, len: 3, fade: 650 }, type: { kind: 'contour', c: ['accent', 'accent-hi'], size: 10, count: 2 },
+      fx: fx({ kind: 'contour', count: 3, size: 18, gravity: -1, life: 700, shapes: ['flake'], c: ['accent', 'accent-hi', 'ink'] }, { kind: 'contour', count: 1, size: 20, life: 650, shapes: ['shard'], c: ['accent', 'accent-hi'] },
+        { kind: 'contour', count: 1, size: 26, spread: 140, life: 450, shapes: ['spark'], c: ['accent-hi', 'accent'] }, { kind: 'contour', count: 3, size: 30, life: 900, shapes: ['dot'], c: ['accent', 'accent-hi', 'ok'] },
+        { kind: 'contour', count: 2, size: 44, life: 800, shapes: ['flake'], c: ['accent', 'accent-hi'] }, { kind: 'contour', count: 4, size: 40, gravity: -1.5, life: 900, c: ['accent-soft', 'accent', 'accent-hi'] }) },
     'Aurora Night': { pointer: 'aurora', cursor: { kind: 'sparkle', c: ['accent', 'accent-hi', 'ok'], size: 8, len: 8, fade: 700, shape: 'star' }, type: { kind: 'sparks', c: ['accent-hi', 'ok'] },
       fx: fx({ kind: 'burst', shapes: ['star', 'spark'], c: ['accent', 'accent-hi', 'ok'] }, { kind: 'ring', c: ['accent-hi'] }, { kind: 'sprite', shapes: ['star'], c: ['accent-hi', 'ok'], count: 10 },
         { kind: 'confetti', shapes: ['star', 'spark'], c: ['accent', 'ok', 'accent-hi'] }, { kind: 'rain', shapes: ['star'], c: ['accent-hi', 'ok'], count: 24, size: 7 }, { kind: 'ring', c: ['ok', 'accent'] }) },

@@ -28,6 +28,7 @@ var GZ_LX = globalThis.GZ_LX || (() => {
     neon: { default: [4, 3], pointer: [12, 3], svg: true }, clear: { default: [4, 3], pointer: [12, 3], svg: true },
     lagoon: { default: [4, 3], pointer: [12, 3], svg: true }, rose: { default: [4, 3], pointer: [12, 3], svg: true },
     ghost: { default: [4, 3], pointer: [12, 3], svg: true }, pumpkin: { default: [4, 3], pointer: [12, 3], svg: true },
+    frostdev: { default: [3, 2], pointer: [11, 2], svg: true },
   };
   // One cursor of a set as CSS: the SVG, then the PNGs (2x through image-set when the browser takes it, then 1x), then the
   // system's own. A browser goes down the list until it has one it can draw. url(file) is the extension's address.

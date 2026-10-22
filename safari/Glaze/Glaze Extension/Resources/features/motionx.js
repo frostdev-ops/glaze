@@ -93,16 +93,57 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
       g.moveTo(h * 0.38, -h * 0.2); g.arc(h * 0.25, -h * 0.2, h * 0.13, 0, 6.2832);
     },
     pumpkin: (g, h) => { g.ellipse(0, h * 0.12, h, h * 0.78, 0, 0, 6.2832); g.rect(-h * 0.12, -h * 0.95, h * 0.24, h * 0.36); },
+    // Six arms, each with two pairs of branches (the Frostdev snowflake), and a slim ice shard.
+    flake: (g, h) => {
+      for (let i = 0; i < 6; i++) {
+        const a = (i * Math.PI) / 3;
+        g.moveTo(0, 0); g.lineTo(Math.cos(a) * h, Math.sin(a) * h);
+        for (const [d, len] of [[0.42, 0.34], [0.7, 0.24]]) for (const b of [0.75, -0.75]) {
+          const x = Math.cos(a) * d * h, y = Math.sin(a) * d * h;
+          g.moveTo(x, y); g.lineTo(x + Math.cos(a + b) * len * h, y + Math.sin(a + b) * len * h);
+        }
+      }
+    },
+    shard: (g, h) => { g.moveTo(0, -h); g.lineTo(h * 0.38, -h * 0.15); g.lineTo(0, h); g.lineTo(-h * 0.3, h * 0.1); g.closePath(); },
   };
-  const STROKED = new Set(['snow', 'bubble']);
+  const STROKED = new Set(['snow', 'bubble', 'flake']);
+  // A contour ring (lib/motionx.js ring): traced, grown and lifted with its age; one the pointer let go keeps a 6 px clear
+  // zone round the pointer's tip, wherever it is now.
+  const contour = (g, p, a) => {
+    const t = Math.min(1, p.age / p.life), e = 1 - (1 - t) ** 3, r = p.r0 + (p.s - p.r0) * e, y = p.y - p.lift * e;
+    const end = p.sweep * (p.trace ? Math.min(1, t / p.trace) : 1), n = Math.max(6, Math.ceil((end / 6.2832) * 40));
+    g.save();
+    if (p.hole && ptr) {
+      g.beginPath();
+      g.rect(0, 0, innerWidth, innerHeight);
+      g.arc(ptr.x, ptr.y, 6, 0, 6.2832, true);
+      g.clip();
+    }
+    g.beginPath();
+    for (let k = 0; k <= n; k++) {
+      const th = p.seed + (end * k) / n, w = r * (1 + 0.1 * Math.sin(3 * th + p.seed * 2) + 0.06 * Math.sin(5 * th - p.seed));
+      g[k ? 'lineTo' : 'moveTo'](p.x + Math.cos(th) * w, y + Math.sin(th) * w * 0.86);
+    }
+    if (p.fill && end >= 6.28) { g.globalAlpha = a * p.fill; g.fill(); }
+    g.lineCap = 'round';
+    g.lineWidth = 3.5;
+    g.globalAlpha = a * 0.2;
+    g.stroke();
+    g.lineWidth = 1.3;
+    g.globalAlpha = a;
+    g.stroke();
+    g.restore();
+  };
   const draw = (g, p) => {
     const a = GZ_MX.fade(p);
     if (!a) return;
     const t = p.age / p.life, c = tone(p.c);
-    const s = p.shrink ? Math.max(0.1, p.s * (1 - t)) : p.s;
+    // A mark that grows comes in at a third of its size and reaches it a third of the way through.
+    const s = p.shrink ? Math.max(0.1, p.s * (1 - t)) : p.grow ? p.s * Math.min(1, 0.35 + (0.65 * t) / 0.35) : p.s;
     g.globalAlpha = a;
     g.fillStyle = g.strokeStyle = c.hex;
-    if (p.shape === 'ring') {
+    if (p.shape === 'contour') contour(g, p, a);
+    else if (p.shape === 'ring') {
       g.globalAlpha = 1 - t;
       g.lineWidth = 2;
       g.beginPath();
@@ -133,7 +174,8 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
       g.beginPath();
       (SHAPE[p.shape] || SHAPE.dot)(g, s / 2);
       if (STROKED.has(p.shape)) {
-        g.lineWidth = Math.max(1, s / 6);
+        g.lineWidth = Math.max(1, s / (p.shape === 'flake' ? 11 : 6));
+        g.lineCap = 'round';
         g.stroke();
       } else g.fill(p.shape === 'ghost' ? 'evenodd' : 'nonzero');
       g.restore();
@@ -280,6 +322,10 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
       anchor = { ...ptr };
       dust = alive(dust);
       if (dust.length < cur.len * 2) { const d = GZ_MX.fall(cur, ptr.x, ptr.y); dust.push(d); engine.add([d], true); }
+    } else if (cur.kind === 'contour' && far(anchor, ptr, Math.max(12, cur.size))) {
+      anchor = { ...ptr };
+      dust = alive(dust);
+      if (dust.length < Math.min(6, cur.len)) { const d = GZ_MX.contour(cur, ptr.x, ptr.y); dust.push(d); engine.add([d], true); }
     } else if (cur.kind === 'ripple' && far(anchor, ptr, 64)) {
       anchor = { ...ptr };
       engine.add([GZ_MX.ripple(cur, ptr.x, ptr.y)], true);
@@ -336,7 +382,8 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
   };
   const spill = () => {
     pending = 0;
-    const el = field, n = Math.min(3, keyed);
+    // A contour bloom answers once a frame, however many keys came.
+    const el = field, n = Math.min(typ?.kind === 'contour' ? 1 : 3, keyed);
     keyed = 0;
     field = null;
     if (!typ || composing || !el?.isConnected || fieldOf(el) !== el || !n || document.hidden || !moving() || !ctx.on() || quiet()) return;

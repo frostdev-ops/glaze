@@ -102,20 +102,21 @@ var GZ_MX = globalThis.GZ_MX || (() => {
 
   // ---- event effects and the pointer: what to draw ---------------------------------------------------------------------
   const EVENTS = ['complete', 'submit', 'grade', 'streak', 'timer.done', 'look.rotate'];
-  const KINDS = ['burst', 'confetti', 'rain', 'ring', 'sprite'];
+  const KINDS = ['burst', 'confetti', 'rain', 'ring', 'sprite', 'contour'];
   const SHAPES = ['dot', 'star', 'snow', 'heart', 'leaf', 'spark'];
   // Marks: shapes only the canvas draws (event effects, the pointer's and typing's), never a background layer's particles,
   // which lib/scene.js draws on the GPU from SHAPES alone.
-  const MARKS = ['bat', 'petal', 'pixel', 'drop', 'bubble', 'ghost', 'pumpkin'];
+  const MARKS = ['bat', 'petal', 'pixel', 'drop', 'bubble', 'ghost', 'pumpkin', 'flake', 'shard'];
   const DRAWN = [...SHAPES, ...MARKS];
   // The pointer's animation, drawn around the system pointer (never in its place): a trail, sparkles, ripples, a glow that
-  // follows, a glow that flickers like a candle, marks that orbit it, scanlines that shimmer over it, marks that drift down.
-  const CURSORS = ['trail', 'sparkle', 'ripple', 'glow', 'flicker', 'orbit', 'scan', 'drift'];
+  // follows, a glow that flickers like a candle, marks that orbit it, scanlines that shimmer over it, marks that drift down,
+  // contour rings let go behind it.
+  const CURSORS = ['trail', 'sparkle', 'ripple', 'glow', 'flicker', 'orbit', 'scan', 'drift', 'contour'];
   // The pointer sets (x.pointer): assets/art/cursors/<set>/, their hotspots in lib/lookx.js. 'own' is the student's own
   // picture, which stays on their device: a theme code never carries it (lib/share.js).
-  const POINTERS = ['aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'own'];
+  const POINTERS = ['aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own'];
   // Typing effects (x.type): what rises from the caret as the student types.
-  const TYPES = ['embers', 'ink', 'sparks', 'pixels', 'petals', 'snow', 'bubbles', 'wisps'];
+  const TYPES = ['embers', 'ink', 'sparks', 'pixels', 'petals', 'snow', 'bubbles', 'wisps', 'contour'];
   // A palette token (--gz-<name> on <html>) or #rrggbb; features/motionx.js turns a name into the colour the page wears.
   const COLOR = /^(?:#[0-9a-f]{6}|[a-z][a-z0-9-]{0,24})$/i;
   const colors = (c, fallback) => {
@@ -129,12 +130,14 @@ var GZ_MX = globalThis.GZ_MX || (() => {
     rain: { count: 30, spread: 0, gravity: 1, life: 1400, size: 6 },
     ring: { count: 20, spread: 0, gravity: 0, life: 800, size: 8 },
     sprite: { count: 8, spread: 60, gravity: -0.2, life: 1400, size: 16 },
+    contour: { count: 3, spread: 360, gravity: 0, life: 800, size: 16 },
   };
   const fx = (raw) => {
     if (!isObj(raw)) return null;
     const kind = KINDS.includes(raw.kind) ? raw.kind : 'burst', d = FX[kind];
     const shapes = [...new Set((Array.isArray(raw.shapes) ? raw.shapes : []).filter((s) => DRAWN.includes(s)))].slice(0, 4);
-    return { kind, count: int(raw.count, 1, 60, d.count), shapes: shapes.length ? shapes : ['dot'], c: colors(raw.c, ['accent', 'ok', 'warn']),
+    // Contour rings stand alone unless marks are named.
+    return { kind, count: int(raw.count, 1, 60, d.count), shapes: shapes.length || kind === 'contour' ? shapes : ['dot'], c: colors(raw.c, ['accent', 'ok', 'warn']),
       spread: num(raw.spread, 0, 360, d.spread), gravity: num(raw.gravity, -2, 2, d.gravity), life: int(raw.life, 200, 2500, d.life), size: num(raw.size, 2, 48, d.size) };
   };
   // x.fx → { event: effect } for the events there are.
@@ -149,6 +152,7 @@ var GZ_MX = globalThis.GZ_MX || (() => {
     embers: { c: ['warn', 'err'], size: 4, count: 3 }, ink: { c: ['ink'], size: 4, count: 2 }, sparks: { c: ['accent', 'accent-hi'], size: 6, count: 3 },
     pixels: { c: ['accent'], size: 4, count: 3 }, petals: { c: ['accent', 'accent-hi'], size: 8, count: 2 }, snow: { c: ['ink'], size: 6, count: 2 },
     bubbles: { c: ['accent-hi'], size: 6, count: 2 }, wisps: { c: ['accent-hi'], size: 10, count: 1 },
+    contour: { c: ['accent', 'accent-hi'], size: 10, count: 2 },
   };
   const typing = (raw) => {
     if (!isObj(raw) || !TYPES.includes(raw.kind)) return null;
@@ -166,6 +170,7 @@ var GZ_MX = globalThis.GZ_MX || (() => {
   // One event's effect at (x, y) in a w × h window. rnd() is in [0, 1).
   const spawn = (f, x, y, w, h, rnd = Math.random) => {
     const out = [];
+    if (f.kind === 'contour') return contours(f, x, y, rnd);
     if (f.kind === 'ring') {
       for (let i = 0; i < Math.min(4, 1 + Math.floor(f.count / 20)); i++) out.push(blank({ shape: 'ring', x, y, s: f.size * 4, c: pick(f.c, rnd), life: f.life, age: -i * f.life * 0.18 }));
       return out;
@@ -189,6 +194,38 @@ var GZ_MX = globalThis.GZ_MX || (() => {
     }
     return out;
   };
+  // A contour ring: an irregular closed curve (or `sweep` radians of one, traced over the first `trace` of its life) round
+  // (x, y), its radius growing from r0 to s, lifted `lift` px as it goes, faintly filled with `fill`. One seed shapes it.
+  const ring = (p) => blank({ shape: 'contour', r0: p.s * 0.55, sweep: TAU, trace: 0, lift: 0, fill: 0, seed: 0, ...p });
+  // The contour effect: `count` nested rings (at most four) stepping out one after another to `size` px, open by `spread`°
+  // and traced round, lifted by -gravity × 4 px; then its marks, in its last colour: a flake blooming at the centre,
+  // six shards settling on the rim, a glint where the line ends, or any other mark scattered round the rim.
+  const contours = (f, x, y, rnd) => {
+    const n = Math.min(4, f.count), sweep = (f.spread / 360) * TAU, seed = rnd() * TAU, lift = -f.gravity * 4, gap = f.life * 0.11, ink = f.c[f.c.length - 1];
+    const lines = f.shapes.length && f.c.length > 1 ? f.c.slice(0, -1) : f.c, out = [];
+    for (let i = 0; i < n; i++) {
+      out.push(ring({ x, y, s: (f.size * (i + 1)) / n, sweep, trace: sweep < TAU ? 0.7 : 0.35, lift, fill: 0.1, seed, c: lines[i % lines.length], life: f.life - i * gap, age: -i * gap }));
+    }
+    const late = (k) => ({ life: f.life * (1 - k), age: -f.life * k });
+    for (const shape of f.shapes) {
+      if (shape === 'flake') out.push(blank({ shape, x, y: y - lift, s: Math.min(26, Math.max(16, f.size * 1.3)), c: ink, vr: 0.8, grow: true, ...late(0.42) }));
+      else if (shape === 'shard') {
+        for (let k = 0; k < 6; k++) {
+          const a = seed + (k * TAU) / 6 + (rnd() - 0.5) * 0.4, d = f.size * 1.3;
+          out.push(blank({ shape, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.86, vx: -Math.cos(a) * 30, vy: -Math.sin(a) * 30, d: 3, r: a + Math.PI / 2, s: 8, c: ink, ...late(0.4) }));
+        }
+      } else if (shape === 'spark') {
+        const a = seed + sweep;
+        out.push(blank({ shape, x: x + Math.cos(a) * f.size, y: y + Math.sin(a) * f.size * 0.86 - lift, s: 11, c: ink, grow: true, ...late(sweep < TAU ? 0.55 : 0.3) }));
+      } else {
+        for (let k = 0; k < 5; k++) {
+          const a = rnd() * TAU, d = f.size * (1 + rnd() * 0.15);
+          out.push(blank({ shape, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.86 - lift, vy: -12, r: rnd() * TAU, s: shape === 'dot' ? 3 : 7, c: ink, ...late(0.35 + rnd() * 0.15) }));
+        }
+      }
+    }
+    return out;
+  };
   // The pointer's: a trail dot, a sparkle, a ripple (small as the pointer moves, larger on a press) and the glow, which follows.
   const spot = (cur, x, y, rnd = Math.random) => blank({ x, y, s: cur.size, c: pick(cur.c, rnd), life: cur.fade, shrink: true });
   const dust = (cur, x, y, rnd = Math.random) => blank({ x: x + (rnd() - 0.5) * cur.size, y: y + (rnd() - 0.5) * cur.size, vx: (rnd() - 0.5) * 60, vy: (rnd() - 0.5) * 60 + 20, g: 200, d: 1,
@@ -208,9 +245,20 @@ var GZ_MX = globalThis.GZ_MX || (() => {
   // A mark let go as the pointer moves: it drifts down and turns.
   const fall = (cur, x, y, rnd = Math.random) => blank({ x: x + (rnd() - 0.5) * cur.size, y, vx: (rnd() - 0.5) * 50, vy: 20 + rnd() * 30, g: 60, d: 0.8, r: rnd() * TAU, vr: (rnd() - 0.5) * 3,
     s: cur.size * (0.7 + 0.5 * rnd()), shape: cur.shape || 'petal', c: pick(cur.c, rnd), life: cur.fade * (1 + rnd() * 0.5) });
+  // A contour ring the pointer lets go where it is (it then moves on): 4 px growing to the part's size, over its fade.
+  const contour = (cur, x, y, rnd = Math.random) => ring({ x, y, r0: 4, s: cur.size, seed: rnd() * TAU, c: pick(cur.c, rnd), life: cur.fade, hole: true });
   // A key's particles at the caret (x, y). What was typed never reaches here: only that something was.
   const keys = (t, x, y, rnd = Math.random) => {
     const out = [];
+    // A contour bloom: a small open ring opening beside the caret, gone in 280 ms, and at most three ice flecks.
+    if (t.kind === 'contour') {
+      out.push(ring({ x: x + 5, y, r0: 0.5, s: t.size, sweep: TAU * 0.75, trace: 0.25, seed: rnd() * TAU, c: t.c[0], life: 280 }));
+      for (let i = 0; i < Math.min(3, t.count); i++) {
+        const side = rnd() - 0.5;
+        out.push(blank({ shape: 'shard', x: x + 8 + i * 4, y, vx: 90 + side * 60, vy: (i % 2 ? 40 : -60) - rnd() * 40, d: 2, r: rnd() * TAU, vr: side * 6, s: t.size * (0.55 + 0.2 * rnd()), c: t.c[(i + 1) % t.c.length], life: 260 + rnd() * 60 }));
+      }
+      return out;
+    }
     for (let i = 0; i < t.count; i++) {
       const c = pick(t.c, rnd), s = t.size * (0.6 + 0.6 * rnd()), side = (rnd() - 0.5);
       const p = {
@@ -242,7 +290,7 @@ var GZ_MX = globalThis.GZ_MX || (() => {
   // How much of it shows: all, then none, eased in the last stretch. Not started yet: none.
   const fade = (p) => (p.age <= 0 ? 0 : Math.max(0, 1 - (p.age / p.life) ** 2));
 
-  return { MOMENTS, RANGE, EASES, EVENTS, KINDS, SHAPES, MARKS, DRAWN, CURSORS, POINTERS, TYPES, compile, hash, fx, fxs, cursor, typing, spawn, spot, dust, ripple, glow, flick, scan, orbiter, orbitAt, fall, keys, step, alive, fade };
+  return { MOMENTS, RANGE, EASES, EVENTS, KINDS, SHAPES, MARKS, DRAWN, CURSORS, POINTERS, TYPES, compile, hash, fx, fxs, cursor, typing, spawn, spot, dust, ripple, glow, flick, scan, orbiter, orbitAt, fall, contour, keys, step, alive, fade };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_MX; else GZ_MX;
