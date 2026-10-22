@@ -640,12 +640,56 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!f) return;
     if (ctx.site === 'canvas') f.unwatch?.();
     if (drawerFrom === f) drawerOff();
+    if (showing === cid) nudge();
     f.el.remove();
     frames.delete(cid);
     if (waiting === cid) { ++showTurn; wait(''); }
     if (showing === cid && !replacing) show('');
   };
   const dropNext = (cid) => { const g = next.get(cid); if (!g) return; clearTimeout(g.cool); clearTimeout(g.tick); g.clean?.(); g.el.remove(); next.delete(cid); turning(); if (g.reveal && waiting === cid) wait(''); };
+  // Safari can leave a changed frame off screen until this page composites again. Wait for its DOM to settle, then
+  // change its layer now and a second later. The watch ends within 8 s; nothing runs at rest or on other browsers.
+  let nudgeStop = null;
+  const nudge = (f, moved = false) => {
+    if (!f) { nudgeStop?.(); nudgeStop = null; return; }
+    if (!globalThis.chrome?.runtime?.getURL('').startsWith('safari-web-extension:')) return;
+    const path = pathOf(f);
+    if (moved && (!path || f.painted === path)) return; // scroll reports use 'moved' too
+    nudge();
+    f.painted = path;
+    let doc; try { doc = f.el.contentDocument; } catch { return; }
+    if (!doc?.body || document.visibilityState !== 'visible') return;
+    let timer = 0, limit = 0, reset = 0, raf = 0, mo = null, restore = null;
+    const current = () => on && frames.get(showing) === f && f.el.isConnected
+      && document.visibilityState === 'visible' && f.el.contentDocument === doc;
+    const once = () => {
+      if (!current()) return;
+      restore?.();
+      const was = f.el.style.transform || '', priority = f.el.style.getPropertyPriority?.('transform') || '';
+      const value = `${was && was !== 'none' ? was + ' ' : ''}translateZ(0)`;
+      f.el.style.setProperty('transform', value, priority);
+      const applied = f.el.style.transform;
+      restore = () => {
+        clearTimeout(reset); cancelAnimationFrame(raf);
+        if (f.el.style.transform === applied) f.el.style.setProperty('transform', was, priority);
+        restore = null;
+      };
+      void f.el.offsetWidth;
+      raf = requestAnimationFrame(() => { raf = requestAnimationFrame(() => restore?.()); });
+      reset = setTimeout(() => restore?.(), 200); // animation frames may stop in a background tab
+    };
+    nudgeStop = () => { clearTimeout(timer); clearTimeout(limit); mo?.disconnect(); restore?.(); };
+    const paint = () => {
+      clearTimeout(timer); clearTimeout(limit); mo?.disconnect(); mo = null;
+      once(); timer = setTimeout(once, 1000);
+    };
+    if (!moved) { paint(); return; } // showing an already drawn page
+    const quiet = () => { clearTimeout(timer); timer = setTimeout(paint, 300); };
+    mo = new MutationObserver(quiet);
+    mo.observe(doc.body, { subtree: true, childList: true, characterData: true });
+    limit = setTimeout(paint, 8000);
+    quiet();
+  };
   // Canvas loads a whole page for each link, which here would end every tab's frame; Ultra routes in place, so its frames
   // live on. With a frame running, a plain click on a link to a course page opens it in that course's frame instead (made
   // if new), and in a tab's frame a link to another course goes to that course's frame: the page around never reloads.
@@ -1112,7 +1156,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         f.stale = null;
         if (waiting === cid && showing !== cid) { show(cid); return; }
         if (waiting === cid) wait('');
-        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); f.el.contentWindow?.postMessage({ gzCtab: 'visible', on: true }, location.origin); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
+        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); f.el.contentWindow?.postMessage({ gzCtab: 'visible', on: true }, location.origin); nudge(f); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
         return;
       }
       if (now - t0 > 8000 && !f.slow) {
@@ -1229,6 +1273,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (ctx.site === 'canvas') wait('');
     drawerOff();
     globalThis.GZ_DOCREVIEW?.restoreChrome();
+    nudge();
     showing = cid;
     shownFrom = location.pathname + location.search;
     for (const [k, g] of [...frames]) if (g.away && k !== cid) drop(k, true);
@@ -1239,6 +1284,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid && g.ready }, location.origin);
     }
     if (host) { host.toggleAttribute('data-on', !!cid); lay(); }
+    if (f?.ready) nudge(f);
     clearSlow();
     unpicture(true);
     if (f && !f.ready) { if (f.slow) slowFrame(cid, f); else picture(cid, f); }
@@ -1333,7 +1379,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (ctx.site === 'canvas' && from === showing) w.postMessage({ gzCtab: 'loading', cid: waiting }, location.origin);
       globalThis.GZ_PET_WORLD?.refresh();
     }
-    else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); later(700); keepPage(); if (ctx.site === 'canvas' || from === PAGE) globalThis.GZ_NAVBAR_UI?.sync(); }
+    else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); nudge(src, true); later(700); keepPage(); if (ctx.site === 'canvas' || from === PAGE) globalThis.GZ_NAVBAR_UI?.sync(); }
     // A link to a page of its own (go), or pressed (warm): turned to by this page (turnTo), the one it leaves kept.
     else if ((op === 'go' || op === 'warm') && ctx.site === 'canvas' && typeof url === 'string' && url.length < 1300) {
       const u = canvasURL(url), c = u && (u.match(/^\/courses\/(\d+)/)?.[1] || PAGE);
@@ -1633,8 +1679,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (html.style.getPropertyValue(k) !== v) { if (v) html.style.setProperty(k, v); else html.style.removeProperty(k); }
     }
   };
+  const onVisibility = () => { if (document.visibilityState !== 'visible') nudge(); else { const f = frames.get(showing); if (f?.ready) nudge(f); } };
   const listen = (yes) => {
     const f = yes ? 'addEventListener' : 'removeEventListener';
+    document[f]('visibilitychange', onVisibility);
     document[f]('scroll', onScroll, { capture: true, passive: true });
     document[f]('click', onLeave, true);
     document[f]('pointerdown', onLeave, true);
@@ -1730,8 +1778,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (cid && !preview && !showing) later();
   };
   const sync = (want) => {
+    if (gone) return;
     if (signedOut) want = false;
     if (!want) {
+      nudge();
       html.removeAttribute('data-gz-ctabs');
       keepClear(null);
       measureRow(null);
@@ -1806,6 +1856,37 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     else invalidate(m.epoch);
     reply({ ok: true });
   });
+  // Glaze restarted under an open page (an update, Safari registering it again) runs this file there again, in a world of
+  // its own: the old copy's strip, frames and marks stay in the page. A working copy keeps the page and its unsaved work;
+  // only a copy cut off from the extension lets go. A page script can fire this event too.
+  const TAKE = 'gz-ctabs-take';
+  let gone = false;
+  const letGo = (e) => {
+    try { if (chrome.runtime?.id) { e.preventDefault(); return; } } catch { /* reloaded */ }
+    gone = true;
+    ++showTurn;
+    nudge();
+    removeEventListener(TAKE, letGo);
+    clearTimeout(saveTimer); clearTimeout(capTimer); clearTimeout(sayTimer);
+    if (on) { on = false; listen(false); }
+    sizes?.disconnect(); keepClear(null); measureRow(null); drawerOff(); unpicture(true); clearSlow();
+    strip?.remove(); aside?.remove(); host?.remove(); host = null;
+    frames.clear(); spare.clear(); next.clear(); showing = ''; waiting = '';
+  };
+  if (!preview) {
+    if (!dispatchEvent(new Event(TAKE, { cancelable: true }))) gone = true;
+  }
+  if (!preview && !gone) {
+    for (const e of document.querySelectorAll('#gz-ctabs, #gz-ctabs-say, #gz-ctabs-frames')) e.remove();
+    html.removeAttribute('data-gz-placing');
+    html.style.removeProperty('--gz-ctabs-row');
+    if (!framed && html.hasAttribute('data-gz-ctab-framed')) {
+      html.removeAttribute('data-gz-ctab-framed');
+      ctx.scene();
+      for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI', 'GZ_DOCREVIEW']) globalThis[n]?.cover?.();
+    }
+    addEventListener(TAKE, letGo);
+  }
   // The editor's preview has this file as a <script> after content.js, so its first ask may come before the file is in:
   // here it follows the editor's edits itself.
   if (preview) {

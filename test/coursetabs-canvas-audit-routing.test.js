@@ -27,7 +27,7 @@ function routing({ framed = '', here = '5', count = 1, showing = '12', base = fa
     matches() { return !!this.action; }
     hasAttribute(name) { return name === 'download' && !!this.download; }
   }
-  const c = vm.createContext({ L, URL, Element, PAGE: 'page', on: true, preview: false, signedOut: false,
+  const c = vm.createContext({ L, URL, Element, PAGE: 'page', requestAnimationFrame() {}, nudge() {}, on: true, preview: false, signedOut: false,
     framed, showing, here: () => here, frames: new Map(Array.from({ length: count }, (_, i) => [String(i + 12), {}])),
     location: new URL(framed === 'page' ? '/calendar' : framed ? '/courses/12/pages/reading' : '/courses/5', origin), ctx: { site: 'canvas' }, document: { querySelector: () => base ? {} : null },
     openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
@@ -116,7 +116,7 @@ function bridge(from = '12') {
   const mine = {}, calls = [], replies = [];
   let listener;
   const frame = { ready: true, el: { contentWindow: mine } };
-  const c = vm.createContext({ L, PAGE: 'page', ctx: { site: 'canvas' }, location: { origin },
+  const c = vm.createContext({ L, PAGE: 'page', requestAnimationFrame() {}, nudge() {}, ctx: { site: 'canvas' }, location: { origin },
     framed: '', preview: false, on: true, showing: from, waiting: '14', who: '42',
     spare: new Map(), next: new Map(), frames: new Map([[from, frame]]), tabs: [{ cid: '12', path: '/courses/12/pages/reading', top: 430, pin: true }],
     addEventListener: (event, fn) => { listener = fn; },
@@ -194,7 +194,7 @@ test('Canvas frame handoff must retain the fragment after scripted cross-course 
   const sent = [];
   const location = new URL('/courses/13/pages/reading?module_item_id=7#part-2', origin);
   const pass = vm.runInNewContext(part('  const pass = ', '  const sync = ') + '\npass;', {
-    on: true, ctx: { site: 'canvas' }, framed: '12', PAGE: 'page', preview: false, location,
+    on: true, ctx: { site: 'canvas' }, framed: '12', PAGE: 'page', requestAnimationFrame() {}, nudge() {}, preview: false, location,
     observeView() {}, here: () => '13', awayFrom: '', toTop: (op, m) => sent.push([op, m.url]),
   });
   pass(); pass();

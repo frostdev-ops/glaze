@@ -18,7 +18,7 @@ const stored = () => {
   const frame = (cid, dirty) => ({ el: { remove: () => removed.push(cid) }, dirty, ready: true });
   const frames = new Map([['_7_1', frame('_7_1', true)], ['_8_1', frame('_8_1', false)], ['_6_1', frame('_6_1', false)]]);
   const c = vm.createContext({ L, ctx: { site: 'ultra', courseId: () => '_1_1', courseList: () => ({ _7_1: { name: 'Biology 101' } }) }, preview: false, who: '_42_1',
-    key: () => 'ctabs:https://bb.test:_42_1', frames, spare: new Map(), next: new Map(), PAGE: 'page', closedCourse: '', showing: '_7_1', waiting: '',
+    key: () => 'ctabs:https://bb.test:_42_1', frames, spare: new Map(), next: new Map(), PAGE: 'page', requestAnimationFrame() {}, nudge() {}, closedCourse: '', showing: '_7_1', waiting: '',
     tabs: [{ cid: '_1_1', at: 1 }, { cid: '_6_1', at: 2 }, { cid: '_7_1', name: 'Biology', code: 'BIO101', pin: false, at: 3, path: '/ultra/courses/_7_1/grades', top: 40 }, { cid: '_8_1', at: 4 }],
     drawerFrom: null, drawerOff() {}, showTurn: 0, wait() {}, show: (x) => { c.showing = x; }, dropNext() {}, readPrefs: () => Promise.resolve(), pass() {}, route() {},
     save: () => saves++, say: (m) => notes.push(m), t: fill, labelFor: (cid, name) => name, Date, JSON,
@@ -77,7 +77,7 @@ test('unsaved work in an earlier or next page of a frame keeps it too; a clean l
 const passing = (dirty) => {
   const calls = [];
   const location = { pathname: '/ultra/courses/_7_1/outline', search: '' };
-  const c = vm.createContext({ on: true, framed: '', preview: false, ctx: { site: 'ultra' }, PAGE: 'page', location, showing: '', shownFrom: '', waiting: '',
+  const c = vm.createContext({ on: true, framed: '', preview: false, ctx: { site: 'ultra' }, PAGE: 'page', requestAnimationFrame() {}, nudge() {}, location, showing: '', shownFrom: '', waiting: '',
     frames: new Map([['_7_1', { dirty, ready: true }]]), spare: new Map(), next: new Map(), tabs: [{ cid: '_7_1', name: 'Biology', code: 'BIO101' }],
     loaded: true, last: '_7_1', lastPath: '', restored: true, here: () => '_7_1', observeView() {}, notePlace() {}, flag() {}, place() {}, draw() {}, lay() {}, later() {}, moved() {},
     visitTab: () => calls.push(['tab']), drop: (cid) => calls.push(['drop', cid]), say: (m) => calls.push(['say', m]), t: fill, labelFor: (cid, name) => name,
@@ -103,7 +103,7 @@ test('this page opening a course whose hidden frame holds unsaved work shows tha
 test('picking the page\'s own course shows its frame while that frame holds unsaved work', () => {
   for (const dirty of [false, true]) {
     const shown = [];
-    const c = vm.createContext({ PAGE: 'page', spare: new Map(), next: new Map(), framed: '', preview: false, tabs: [{ cid: '_7_1' }], save() {}, Date,
+    const c = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, spare: new Map(), next: new Map(), framed: '', preview: false, tabs: [{ cid: '_7_1' }], save() {}, Date,
       frames: new Map([['_7_1', { ready: true, dirty }]]), showing: '', drop() {}, reveal: (cid) => shown.push(cid), ctx: { site: 'ultra', courseId: () => '_7_1' },
     });
     vm.runInContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + "\nvisit('_7_1');", c);
@@ -170,7 +170,7 @@ test('while a frame covers the page, the page\'s own strip is inert: out of the 
   for (const site of ['ultra', 'canvas']) {
     const frames = new Map([['_2_1', { at: 0, ready: true, el: { style: {}, focus() {}, contentWindow: { postMessage() {} } } }]]);
     const strip = { inert: false, contains: () => false };
-    const c = vm.createContext({ PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false, showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, frames, LIVE: 4,
+    const c = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false, showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, frames, LIVE: 4,
       host: { toggleAttribute() {} }, strip, list: null, wait() {}, document: { activeElement: null }, location: { pathname: '/ultra/courses/_1_1/outline', search: '' }, ctx: { site, scene() {} },
       html: { toggleAttribute() {} }, sessionStorage: { setItem() {}, removeItem() {} }, hostIn() {}, lay() {}, clearSlow() {}, unpicture() {}, draw() {}, later() {}, Date,
     });
@@ -187,7 +187,7 @@ test('in a frame, Ultra\'s redirect into its own course is not leaving it; anoth
   for (const [search, away] of [['?course_id=_2_1&content_id=_9_1', false], ['?courseId=_2_1', false], ['?content_id=_9_1', false], ['?course_id=_3_1', true], ['?course_id=_2_1&courseId=_3_1', true], ['?course_id=_2_1&course_id=_3_1', true]]) {
     const sent = [];
     const location = { pathname: '/ultra/redirect', search, hash: '', href: `https://bb.test/ultra/redirect${search}` };
-    const c = vm.createContext({ on: true, framed: '_2_1', PAGE: 'page', preview: false, ctx: { site: 'ultra' }, location, URLSearchParams, awayFrom: '', here: () => undefined, observeView() {},
+    const c = vm.createContext({ on: true, framed: '_2_1', PAGE: 'page', requestAnimationFrame() {}, nudge() {}, preview: false, ctx: { site: 'ultra' }, location, URLSearchParams, awayFrom: '', here: () => undefined, observeView() {},
       toTop: (op, m) => sent.push([op, m.url]), showing: '', frames: new Map(), loaded: true, last: '_2_1', lastPath: '', flag() {}, place() {}, draw() {}, lay() {}, later() {}, moved() {},
     });
     vm.runInContext(part('  const pass = ', '  const sync = ') + '\npass();', c);
@@ -217,7 +217,7 @@ test('in a frame, a panel of its own course that Ultra opens under another page 
   for (const [pathname, search, away] of cases) {
     const sent = [];
     const location = { pathname, search, hash: '', href: `https://bb.test${pathname}${search}` };
-    const c = vm.createContext({ on: true, framed: '_2_1', PAGE: 'page', preview: false, ctx: { site: 'ultra' }, location, URLSearchParams, awayFrom: '', here: () => undefined, observeView() {},
+    const c = vm.createContext({ on: true, framed: '_2_1', PAGE: 'page', requestAnimationFrame() {}, nudge() {}, preview: false, ctx: { site: 'ultra' }, location, URLSearchParams, awayFrom: '', here: () => undefined, observeView() {},
       toTop: (op, m) => sent.push([op, m.url]), showing: '', frames: new Map(), loaded: true, last: '_2_1', lastPath: '', flag() {}, place() {}, draw() {}, lay() {}, later() {}, moved() {},
     });
     vm.runInContext(part('  const pass = ', '  const sync = ') + '\npass();', c);
