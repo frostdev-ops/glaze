@@ -74,6 +74,16 @@ test('the Ultra preview accepts settings and parts only from its editor parent a
   assert.deepEqual(writes, [data.gzPreviewParts]);
 });
 
+test('the preview saying why its background stopped: a context the browser took back is not a shader the device refused', () => {
+  const source = read('lib/editor-xbg.js'), a = source.indexOf('  const sceneSays = (d) => {'), b = source.indexOf('\n  };\n', a);
+  assert.ok(a > 0 && b > a);
+  const says = vm.runInContext(`(() => { const tr = (s) => s;\n${source.slice(a, b + 5)}\nreturn sceneSays; })()`, vm.createContext({}));
+  const lost = 'The graphics stopped while drawing this: showing the gradient.';
+  assert.equal(says({ gzSceneFailed: { why: 'lost' } }), lost);
+  assert.equal(says({ gzSceneFailed: { why: 'dropped' } }), lost);
+  assert.equal(says({ gzSceneFailed: { why: 'compile' } }), "This device couldn't draw the shader: showing the gradient.");
+});
+
 test('compiler reports are accepted only from the preview frame at the same origin', () => {
   const handlers = [], accepted = [], frame = { contentWindow: {} }, origin = 'chrome-extension://fixture';
   const ctx = vm.createContext({ document: { getElementById: () => null }, location: { origin }, addEventListener: (_, fn) => handlers.push(fn) });

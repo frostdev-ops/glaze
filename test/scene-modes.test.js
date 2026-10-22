@@ -269,6 +269,34 @@ test('a lost context takes a shader to the gradient at once, for good; a built-i
   assert.equal(wl.fails.length, 0, 'layers hold no student code');
 });
 
+test('a built-in scene or layers whose lost context is never given back are dropped, for the page to start again', async () => {
+  // WebKit takes the oldest of more than 16 contexts for good, preventDefault or not, and counts stopped ones until they
+  // are collected: three's restore never comes.
+  const b = engine({ latency: 4 }), wb = watch(b);
+  wb.scene.update(base); await b.pump();
+  b.canvasListeners.get('webglcontextlost')();
+  b.advance(2900); await b.pump();
+  assert.equal(wb.fails.length, 0, 'three may still restore it');
+  b.advance(100); await b.pump();
+  assert.deepEqual(wb.fails.map((f) => f[0]), ['dropped']);
+  assert.deepEqual([b.counts.disposed, b.canvasListeners.size, b.timers.size], [1, 0, 0], 'stopped and let go');
+  const r = engine({ latency: 4 }), wr = watch(r);
+  wr.scene.update(base); await r.pump();
+  r.canvasListeners.get('webglcontextlost')(); r.advance(1000);
+  r.canvasListeners.get('webglcontextrestored')(); r.advance(10000); await r.pump();
+  assert.deepEqual([wr.fails.length, r.counts.disposed], [0, 0], 'given back in time: three restored it, it stays');
+  const h = engine({ latency: 4 }), wh = watch(h);
+  wh.scene.update(layersOf([{ k: 'noise' }])); await h.pump();
+  h.document.hidden = true; h.canvasListeners.get('webglcontextlost')(); h.advance(10000); await h.pump();
+  assert.equal(wh.fails.length, 0, 'a hidden page starts nothing: a new context could take a page on screen\'s');
+  h.document.hidden = false; h.docListeners.get('visibilitychange')(); await h.pump();
+  assert.deepEqual(wh.fails.map((f) => f[0]), ['dropped'], 'once on screen');
+  const s = engine({ latency: 4 }), ws = watch(s);
+  ws.scene.update(base); await s.pump();
+  s.canvasListeners.get('webglcontextlost')(); ws.scene.stop(); s.advance(10000); await s.pump();
+  assert.deepEqual([ws.fails.length, s.timers.size], [0, 0], 'stopped meanwhile: nothing more');
+});
+
 test('a shader starts with a hidden 72x45 probe frame, then draws at 0.6', async () => {
   const e = engine({ latency: 3, glsl: GLSL }), canvas = e.canvas(), w = watch(e, canvas);
   w.scene.update(shader(fixture('starfield')));

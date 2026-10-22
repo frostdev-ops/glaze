@@ -207,6 +207,24 @@ test('asynchronous player module failures share the bounded startup recovery', a
   assert.equal(r.api.state().sceneBad, '', 'a failed player import is not a refused media file');
 });
 
+test('a scene whose context the browser takes back starts again on a new canvas, bounded while it keeps happening', async () => {
+  let now = 0;
+  const r = rig(); r.ctx.Date = { now: () => now };
+  r.api.syncScene(); await settle();
+  r.fail('dropped');
+  assert.equal(r.api.state().sceneBad, '', 'not a background this device cannot draw');
+  assert.equal(r.log.removed, 1, 'the dead canvas goes');
+  await r.retry();
+  assert.deepEqual([r.log.starts.length, r.log.starts[1] !== r.log.starts[0]], [2, true], 'a new canvas');
+  r.fail('dropped'); await r.retry();
+  r.fail('dropped');
+  assert.deepEqual([r.log.starts.length, r.timers.size, r.api.state().sceneFailed], [3, 0, true], 'taken back at every start: it gives up');
+  const q = rig(); q.ctx.Date = { now: () => now };
+  q.api.syncScene(); await settle();
+  for (let i = 0; i < 4; i++) { now += 61000; q.fail('dropped'); await q.retry(); }
+  assert.deepEqual([q.log.starts.length, q.api.state().sceneFailed], [5, false], 'after a minute of drawing, each one is a new start');
+});
+
 test('a built-in scene loads lib/scene.js, starts it once, and updates it from then on, as before', async () => {
   const r = rig();
   r.api.syncScene(); r.api.syncScene();

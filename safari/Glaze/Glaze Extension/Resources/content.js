@@ -1100,7 +1100,12 @@
         sceneCanvas.setAttribute('aria-hidden', 'true');
         placeScene();
         sceneFile = file;
-        scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, (why) => { if (why === 'module') retryScene(sceneSig(), why); else { sceneBad = sceneSig(); stopScene(); } });
+        // A context the browser took back (dropped) comes back on a new canvas; after a minute of drawing, with new tries.
+        const at = Date.now();
+        scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, (why) => {
+          if (why === 'dropped' && Date.now() - at > 60000) sceneRetry = null;
+          if (why === 'module' || why === 'dropped') retryScene(sceneSig(), why); else { sceneBad = sceneSig(); stopScene(); }
+        });
       }
       scene.update(sceneOpts());
       scenePending = null;
