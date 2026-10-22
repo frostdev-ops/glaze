@@ -422,7 +422,7 @@ test('Canvas frame pagehide must detach its observer from the surviving parent d
   });
   vm.runInContext(part('  const keepPage = ', '  const onResize = ')
     + part('  let navWatch = ', '  // In a Canvas tab\'s frame')
-    + part('  const listen = ', '  const start = ') + '\nlisten(true);', c);
+    + part('  const onVisibility = ', '  const start = ') + '\nlisten(true);', c);
   assert.equal(observers.length, 1); assert.equal(observers[0].target, parentRoot);
   handlers.dispatch('pagehide', { persisted: true });
   assert.equal(observers[0].target, null, 'the parent survives frame navigation and must not retain the outgoing frame closure');

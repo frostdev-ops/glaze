@@ -640,28 +640,54 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!f) return;
     if (ctx.site === 'canvas') f.unwatch?.();
     if (drawerFrom === f) drawerOff();
+    if (showing === cid) nudge();
     f.el.remove();
     frames.delete(cid);
     if (waiting === cid) { ++showTurn; wait(''); }
     if (showing === cid && !replacing) show('');
   };
   const dropNext = (cid) => { const g = next.get(cid); if (!g) return; clearTimeout(g.cool); clearTimeout(g.tick); g.clean?.(); g.el.remove(); next.delete(cid); turning(); if (g.reveal && waiting === cid) wait(''); };
-  // Safari can leave a shown frame's new content off screen after its page changes in place, until something makes this
-  // page composite again (a scroll, a hover): a no-op layer change on the frame does that. Once the frame's page has drawn
-  // (shown, or its 'moved', which comes 0.5 s after its address settles), and again a second later; nothing at rest.
-  let nudgeTimer = 0;
-  const nudge = (f) => {
-    clearTimeout(nudgeTimer);
+  // Safari can leave a changed frame off screen until this page composites again. Wait for its DOM to settle, then
+  // change its layer now and a second later. The watch ends within 8 s; nothing runs at rest or on other browsers.
+  let nudgeStop = null;
+  const nudge = (f, moved = false) => {
+    if (!f) { nudgeStop?.(); nudgeStop = null; return; }
+    if (!globalThis.chrome?.runtime?.getURL('').startsWith('safari-web-extension:')) return;
+    const path = pathOf(f);
+    if (moved && (!path || f.painted === path)) return; // scroll reports use 'moved' too
+    nudge();
+    f.painted = path;
+    let doc; try { doc = f.el.contentDocument; } catch { return; }
+    if (!doc?.body || document.visibilityState !== 'visible') return;
+    let timer = 0, limit = 0, reset = 0, raf = 0, mo = null, restore = null;
+    const current = () => on && frames.get(showing) === f && f.el.isConnected
+      && document.visibilityState === 'visible' && f.el.contentDocument === doc;
     const once = () => {
-      // (Still nudged: its frames haven't run, as in a background tab.)
-      if (frames.get(showing) !== f || !f.el.isConnected || f.el.style.transform === 'translateZ(0)') return;
-      const was = f.el.style.transform;
-      f.el.style.transform = 'translateZ(0)';
+      if (!current()) return;
+      restore?.();
+      const was = f.el.style.transform || '', priority = f.el.style.getPropertyPriority?.('transform') || '';
+      const value = `${was && was !== 'none' ? was + ' ' : ''}translateZ(0)`;
+      restore = () => {
+        clearTimeout(reset); cancelAnimationFrame(raf);
+        if (f.el.style.transform === value) f.el.style.setProperty('transform', was, priority);
+        restore = null;
+      };
+      f.el.style.setProperty('transform', value, priority);
       void f.el.offsetWidth;
-      requestAnimationFrame(() => requestAnimationFrame(() => { if (f.el.style.transform === 'translateZ(0)') f.el.style.transform = was; }));
+      raf = requestAnimationFrame(() => { raf = requestAnimationFrame(() => restore?.()); });
+      reset = setTimeout(() => restore?.(), 200); // animation frames may stop in a background tab
     };
-    once();
-    nudgeTimer = setTimeout(once, 1000);
+    nudgeStop = () => { clearTimeout(timer); clearTimeout(limit); mo?.disconnect(); restore?.(); };
+    const paint = () => {
+      clearTimeout(timer); clearTimeout(limit); mo?.disconnect(); mo = null;
+      once(); timer = setTimeout(once, 1000);
+    };
+    if (!moved) { paint(); return; } // showing an already drawn page
+    const quiet = () => { clearTimeout(timer); timer = setTimeout(paint, 300); };
+    mo = new MutationObserver(quiet);
+    mo.observe(doc.body, { subtree: true, childList: true, characterData: true });
+    limit = setTimeout(paint, 8000);
+    quiet();
   };
   // Canvas loads a whole page for each link, which here would end every tab's frame; Ultra routes in place, so its frames
   // live on. With a frame running, a plain click on a link to a course page opens it in that course's frame instead (made
@@ -1246,6 +1272,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (ctx.site === 'canvas') wait('');
     drawerOff();
     globalThis.GZ_DOCREVIEW?.restoreChrome();
+    nudge();
     showing = cid;
     shownFrom = location.pathname + location.search;
     for (const [k, g] of [...frames]) if (g.away && k !== cid) drop(k, true);
@@ -1351,7 +1378,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (ctx.site === 'canvas' && from === showing) w.postMessage({ gzCtab: 'loading', cid: waiting }, location.origin);
       globalThis.GZ_PET_WORLD?.refresh();
     }
-    else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); nudge(src); later(700); keepPage(); if (ctx.site === 'canvas' || from === PAGE) globalThis.GZ_NAVBAR_UI?.sync(); }
+    else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); nudge(src, true); later(700); keepPage(); if (ctx.site === 'canvas' || from === PAGE) globalThis.GZ_NAVBAR_UI?.sync(); }
     // A link to a page of its own (go), or pressed (warm): turned to by this page (turnTo), the one it leaves kept.
     else if ((op === 'go' || op === 'warm') && ctx.site === 'canvas' && typeof url === 'string' && url.length < 1300) {
       const u = canvasURL(url), c = u && (u.match(/^\/courses\/(\d+)/)?.[1] || PAGE);
@@ -1651,8 +1678,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (html.style.getPropertyValue(k) !== v) { if (v) html.style.setProperty(k, v); else html.style.removeProperty(k); }
     }
   };
+  const onVisibility = () => { if (document.visibilityState !== 'visible') nudge(); else { const f = frames.get(showing); if (f?.ready) nudge(f); } };
   const listen = (yes) => {
     const f = yes ? 'addEventListener' : 'removeEventListener';
+    document[f]('visibilitychange', onVisibility);
     document[f]('scroll', onScroll, { capture: true, passive: true });
     document[f]('click', onLeave, true);
     document[f]('pointerdown', onLeave, true);
@@ -1751,6 +1780,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (gone) return;
     if (signedOut) want = false;
     if (!want) {
+      nudge();
       html.removeAttribute('data-gz-ctabs');
       keepClear(null);
       measureRow(null);
@@ -1834,6 +1864,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     try { if (chrome.runtime?.id) { e.preventDefault(); return; } } catch { /* reloaded */ }
     gone = true;
     ++showTurn;
+    nudge();
     removeEventListener(TAKE, letGo);
     clearTimeout(saveTimer); clearTimeout(capTimer); clearTimeout(sayTimer);
     if (on) { on = false; listen(false); }

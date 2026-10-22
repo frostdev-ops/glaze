@@ -136,7 +136,7 @@ test('a course frame follows the parent navigation placement and disconnects whe
   });
   const api = vm.runInContext(part(src, '  const navHolds =', '  // From content-ultra.js')
     + part(src, '  const flag =', '  // ---- the strip')
-    + part(src, '  const listen =', '  const start =')
+    + part(src, '  const onVisibility =', '  const start =')
     + '\n({ listen, place, flag });', c);
   c.bar = { place: () => { api.flag(); api.place(); } };
   api.listen(true); c.bar.place(); assert.equal(flag, 'nav'); assert.equal(connected, false);

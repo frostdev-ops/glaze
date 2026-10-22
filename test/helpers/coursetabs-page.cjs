@@ -22,17 +22,20 @@ const page = () => {
   Object.assign(doc, { documentElement: html, head, body, scrollingElement: html,
     createElement: make, createElementNS: (_, t) => new E(t, doc),
     getElementById: (id) => root.all().find((e) => e.id === id) || null, querySelectorAll: q, querySelector: (s) => q(s)[0] || null,
-    getElementsByClassName: () => bars, addEventListener() {}, removeEventListener() {} });
+    getElementsByClassName: () => bars,
+    addEventListener: (type, f) => { if (!events.has(type)) events.set(type, new Set()); events.get(type).add(f); },
+    removeEventListener: (type, f) => events.get(type)?.delete(f) });
   const bar = new E('div', doc); bar.className = 'bb-course-navigation'; body.append(bar);
   const store = new Map();
   const events = new Map();
   let now = 0, ids = 0;
-  const timers = new Map(), paints = [];
+  const timers = new Map(), paints = new Map(), observers = new Set();
   const clock = {
     now: () => now,
     setTimeout: (fn, ms = 0) => { timers.set(++ids, { fn, at: now + (Number(ms) || 0) }); return ids; },
     clearTimeout: (id) => { timers.delete(id); },
-    requestAnimationFrame: (fn) => { paints.push(fn); return paints.length; },
+    requestAnimationFrame: (fn) => { paints.set(++ids, fn); return ids; },
+    cancelAnimationFrame: (id) => paints.delete(id),
     tick(ms) {
       const end = now + ms;
       for (;;) {
@@ -42,9 +45,11 @@ const page = () => {
       }
       now = end;
     },
-    paint() { for (const fn of paints.splice(0)) fn(now); },
+    paint() { const batch = [...paints.values()]; paints.clear(); for (const fn of batch) fn(now); },
   };
   return { doc, html, body, bar, clock,
+    observers,
+    mutate: (target) => { for (const o of observers) if (o.target === target) o.fn(); },
     session: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
     on: (type, f) => { if (!events.has(type)) events.set(type, new Set()); events.get(type).add(f); },
     off: (type, f) => events.get(type)?.delete(f),
@@ -52,7 +57,7 @@ const page = () => {
   };
 };
 
-const glaze = (p, local) => {
+const glaze = (p, local, configure = () => {}) => {
   const sent = [];
   const chrome = {
     runtime: { id: 'glaze', getURL: (f) => `safari-web-extension://glaze/${f}`, onMessage: { addListener() {} },
@@ -65,10 +70,11 @@ const glaze = (p, local) => {
     location: { origin, protocol: 'https:', pathname: '/ultra/courses/_1_1/outline', search: '', href: `${origin}/ultra/courses/_1_1/outline` },
     performance: { now: p.clock.now, timeOrigin: 0 }, Element: El,
     Event: class { constructor(type, options) { this.type = type; this.cancelable = !!options?.cancelable; } preventDefault() { if (this.cancelable) this.defaultPrevented = true; } },
-    MutationObserver: class { observe() {} disconnect() {} },
-    setTimeout: p.clock.setTimeout, clearTimeout: p.clock.clearTimeout, requestAnimationFrame: p.clock.requestAnimationFrame, innerWidth: 1280, innerHeight: 800,
+    MutationObserver: class { constructor(fn) { this.fn = fn; } observe(target) { this.target = target; p.observers.add(this); } disconnect() { p.observers.delete(this); this.target = null; } },
+    setTimeout: p.clock.setTimeout, clearTimeout: p.clock.clearTimeout, requestAnimationFrame: p.clock.requestAnimationFrame, cancelAnimationFrame: p.clock.cancelAnimationFrame, innerWidth: 1280, innerHeight: 800,
     addEventListener: p.on, removeEventListener: p.off, dispatchEvent: p.fire };
   c.globalThis = c; c.window = c; c.top = c; c.parent = c;
+  configure(c);
   vm.createContext(c);
   const api = vm.runInContext(source, c);
   return { api, c, sent, chrome };
