@@ -1649,6 +1649,7 @@
   "More changes remain. Sync again.": "Weitere Änderungen stehen aus. Synchronisiere erneut.",
   "No sessions on this device.": "Keine Sitzungen auf diesem Gerät.",
   "Offline — local copy kept": "Offline — lokale Kopie behalten",
+  "Too big to sync — local copy kept": "Zu groß zum Synchronisieren — lokale Kopie behalten",
   "Only the selected notes, Look or custom tasks and their plans are shared. Course account identifiers and LMS assignments are not carried.": "Nur die ausgewählten Notizen, das Aussehen oder eigene Aufgaben und ihre Pläne werden geteilt. Kurskonto-Kennungen und LMS-Aufgaben werden nicht übertragen.",
   "Paste the full link here. Anyone holding an edit link can change the session; anyone holding a view link can read it. Keep links private.": "Füge hier den vollständigen Link ein. Jeder mit einem Bearbeitungslink kann die Sitzung ändern; jeder mit einem Ansichtslink kann sie lesen. Halte die Links privat.",
   "Pause sharing": "Teilen pausieren",

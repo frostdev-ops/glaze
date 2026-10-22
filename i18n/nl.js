@@ -1649,6 +1649,7 @@
   "More changes remain. Sync again.": "Er zijn nog meer wijzigingen. Synchroniseer opnieuw.",
   "No sessions on this device.": "Geen sessies op dit apparaat.",
   "Offline — local copy kept": "Offline — lokale kopie bewaard",
+  "Too big to sync — local copy kept": "Te groot om te synchroniseren — lokale kopie bewaard",
   "Only the selected notes, Look or custom tasks and their plans are shared. Course account identifiers and LMS assignments are not carried.": "Alleen de geselecteerde notities, het uiterlijk of eigen taken en hun plannen worden gedeeld. Account-ID’s voor cursussen en LMS-opdrachten worden niet overgedragen.",
   "Paste the full link here. Anyone holding an edit link can change the session; anyone holding a view link can read it. Keep links private.": "Plak hier de volledige link. Iedereen met een bewerklink kan de sessie wijzigen; iedereen met een kijklink kan deze lezen. Houd links privé.",
   "Pause sharing": "Delen pauzeren",

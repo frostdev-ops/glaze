@@ -272,10 +272,12 @@ test('limits: batch size, session size, request rates and subscriptions', async 
   a.local.n1.html = `<p>${'x'.repeat(3000)}</p>`;
   await assert.rejects(a.pump(), (e) => e.status === 413);
   a.st.pending = [];
-  // Each of these seals to about 1.8 KB: three fit in the session's 6,000 bytes, the fourth doesn't.
+  // Each of these seals to about 1.8 KB: three fit in the session's 6,000 bytes, the fourth doesn't. The log is full,
+  // so that send compacts it: trimmed to what this device has read, with the whole state (one note) after the trim.
   for (let i = 0; i < 3; i++) { a.local.n1.html = `<p>${String(i).repeat(1500)}</p>`; await a.pump(); }
   a.local.n1.html = `<p>${'y'.repeat(1500)}</p>`;
-  await assert.rejects(a.pump(), (e) => e.status === 507);
+  await a.pump();
+  assert.deepEqual([a.st.base, a.st.head, rows(r, a.st.sid)], [4, 5, 1]);
   const big = await fetch(`${r.url}/s/${a.st.sid}`, { method: 'POST', body: JSON.stringify({ n: 9, op: 'A'.repeat(9000), sig: 'A'.repeat(86) }) }).catch(() => ({ status: 'reset' }));
   assert.equal(big.status, 413);
   const made = [];
@@ -288,6 +290,29 @@ test('limits: batch size, session size, request rates and subscriptions', async 
   const c = make(r);
   // (A note's longest HTML, 2 MiB of characters, fits; three-byte characters can pass the batch cap.)
   assert.deepEqual(await c.s.edit({ long: { title: 'Long', html: `<p>${'€'.repeat(1500000)}</p>` } }), { n: 1, big: ['long'] });
+});
+
+test('a full log (507) makes room: trimmed to what the sender read, the state sent after it; a member behind catches up', async (t) => {
+  const r = await up({ limit: { ...LIMIT, session: 8000 } });
+  t.after(() => r.close());
+  const a = make(r);
+  a.local = { n1: { title: 'one', html: '<p>1</p>' }, n2: { title: 'two', html: '' } };
+  await a.pump();
+  const late = await join(await a.s.link(false));
+  await late.pump(); // and then reads nothing while the log fills and is trimmed past it
+  for (let i = 0; i < 8; i++) { a.local.n2.html = `<p>${String(i).repeat(1500)}</p>`; await a.pump(); }
+  assert.ok(a.st.base > late.st.cursor, `trimmed to ${a.st.base}`);
+  assert.equal(a.st.pending.length, 0);
+  await late.pump();
+  assert.deepEqual(late.local, a.local);
+  // A state that can't fit even in an empty log: one try at making room per sync, then 507 with the state still queued.
+  for (let i = 3; i <= 7; i++) a.local[`n${i}`] = { title: `${i}`, html: `<p>${String(i).repeat(1500)}</p>` };
+  const pushes = () => r.db.prepare('SELECT head FROM sessions WHERE sid = ?').get(a.st.sid).head;
+  await assert.rejects(a.pump(), (e) => e.status === 507);
+  assert.ok(a.st.pending.flat().some((o) => o.e === 'n7'));
+  const head = pushes();
+  await assert.rejects(a.pump(), (e) => e.status === 507);
+  assert.equal(pushes(), head, 'nothing more lands');
 });
 
 test('a request refused whatever it carries is answered before its body is read', { timeout: 10000 }, async (t) => {
