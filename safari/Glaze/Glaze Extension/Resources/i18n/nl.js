@@ -298,6 +298,7 @@
   'Nickname': 'Bijnaam',
   'Not saved. Try again in a moment.': 'Niet opgeslagen. Probeer het zo opnieuw.',
   'Too much to sync. Shorten a nickname or clear one.': 'Te veel om te synchroniseren. Maak een bijnaam korter of wis er een.',
+  'Open Settings in its own tab.': 'Open de instellingen in een eigen tabblad.',
   'Purple': 'Paars',
   'Cyan': 'Cyaan',
   'Yellow': 'Geel',

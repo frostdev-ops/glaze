@@ -298,6 +298,7 @@
   'Nickname': 'Apodo',
   'Not saved. Try again in a moment.': 'No se guardó. Inténtalo de nuevo en un momento.',
   'Too much to sync. Shorten a nickname or clear one.': 'Demasiado para sincronizar. Acorta un apodo o borra uno.',
+  'Open Settings in its own tab.': 'Abre los ajustes en su propia pestaña.',
   'Purple': 'Morado',
   'Cyan': 'Cian',
   'Yellow': 'Amarillo',

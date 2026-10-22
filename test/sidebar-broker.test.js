@@ -442,7 +442,9 @@ test('removing fresh defaults is respected on another device, including sync arr
   for (const fn of second.changed) fn(changes, 'sync');
   await settle();
   assert.equal(second.store.local[cKey()].dest.settings, 'off');
-  assert.ok(!second.store.local.widgetLayout.boards.cdash.some((x) => x.on));
+  // The flags remove the starters the other device removed. They never removed this device's own course cards: the other
+  // device's emptied Dashboard says nothing about a school it may not even use (WP-C3, CORE-5).
+  assert.deepEqual(second.store.local.widgetLayout.boards.cdash.filter((x) => x.on).map((x) => x.id), [`course:${CANVAS}/1`]);
   assert.ok(second.store.local.widgetLayout.filled.includes('cdash'));
 });
 
