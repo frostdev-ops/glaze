@@ -7,13 +7,14 @@
 // animation switch. No network: every request outside the extension (and the synthetic page) is aborted.
 //   NODE_PATH=/path/to/node_modules nice -n 10 node scripts/pointer-check.js [out-dir for screenshots]
 // With an out dir it also saves the section in a light and a dark editor (pointer-setting-light.png, -dark.png, -phone.png).
-// One headless browser at a time across agents: it waits while another runs. The profile is temporary and removed.
+// Holds GLAZE_LOCK (check-env.js) and waits while another browser runs. The profile is temporary and removed.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 
 const ext = fs.realpathSync(path.join(__dirname, '..'));
 const out = process.argv[2] && path.resolve(process.argv[2]);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
+const lock = require('./check-env.js').lockPath();
 const G = require(path.join(ext, 'defaults.js'));
 const PAGE = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-courses.html'), 'utf8');
 const SITE = 'https://bb.school.test';
@@ -26,8 +27,10 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
 (async () => {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-pointer-')));
   const errors = [];
-  let context;
+  let context, held = false;
   try {
+    fs.mkdirSync(lock); held = true;
+    fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\npointer-check\n`);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1400, height: 1000 },
@@ -220,6 +223,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
   } finally {
     await context?.close().catch(() => {});
     fs.rmSync(scratch, { recursive: true, force: true });
+    if (held) fs.rmSync(lock, { recursive: true, force: true });
   }
   console.log(fails ? `${fails} failed` : 'all passed');
   process.exitCode = fails ? 1 : 0;
