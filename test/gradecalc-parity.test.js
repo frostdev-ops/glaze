@@ -1,5 +1,5 @@
 // Dropped scores: lib/gradecalc.js against two reference solvers on seeded, generated assignment groups, so the
-// numbers behind the drop-search decision in DECISIONS.md can be rerun.
+// numbers behind the choice to reproduce Canvas's drop search can be rerun.
 // - `reviewed`: the solver as Codex reviewed it at c84efec (6,912 cases checked against brute force there), which
 //   reproduces Canvas's search; kept here only to measure against.
 // - `exact`: Dinkelbach's iteration, which always finds a best set, given Canvas's ceiling for work worth no points

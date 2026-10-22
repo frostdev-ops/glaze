@@ -52,7 +52,7 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
       if (f === 'plan') return T.clean({ tasks: [{ id: 'x', title: 'x' }], items: { 'task:x': v } }).items['task:x'] || {};
       if (f === 'member' && v && str(v.name, 60) !== undefined && Number.isFinite(v.at) && v.at > 0) return { name: v.name, at: v.at, left: v.left === true };
     },
-    copyOf: (ent, f, v) => ({ title: (ent.title || '').slice(0, 270) + ' (conflict copy)', html: v }),
+    copyOf: (ent, f, v) => C.ADAPTERS.notes.copyOf({ ...ent, title: (ent.title || '').slice(0, 270) }, f, v),
   };
   const open = (closed) => new Promise((resolve, reject) => {
     // `vault` (version 2): keys other features keep out of storage.local, where any page's script can read them. A database

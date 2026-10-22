@@ -1,5 +1,5 @@
 // German for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
-// Machine translation, accepted as is; corrections come through bug reports (DECISIONS.md).
+// Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).de = {
   "Document review": "Dokumentprüfung",
   "Compact submission header": "Kompakter Abgabekopf",
@@ -10,6 +10,7 @@
   "Full screen": "Vollbild",
   "Focus document": "Dokument fokussieren",
   "Grade and feedback": "Note und Feedback",
+  "Rubric": "Bewertungsraster",
   "Exit focus": "Fokus beenden",
   "Document focus ended": "Dokumentfokus beendet",
   "Document focus": "Dokumentfokus",
@@ -23,7 +24,6 @@
   'Background': 'Hintergrund',
   'Motion': 'Bewegung',
   'Courses': 'Kurse',
-  'Extras': 'Extras',
   'Share': 'Teilen',
   'Dismiss': 'Schließen',
   'Save as preset': 'Als Vorlage speichern',
@@ -1325,7 +1325,6 @@
   "Note": "Notiz",
   "Library": "Bibliothek",
   "New folder": "Neuer Ordner",
-  "Import": "Importieren",
   "OK": "OK",
   "Course {id}": "Kurs {id}",
   "All folders": "Alle Ordner",
@@ -1461,7 +1460,6 @@
   "Press Ctrl+K (⌘K on a Mac) anywhere in Blackboard to jump to a course, a page or a Glaze setting.": "Drück überall in Blackboard Strg+K (⌘K auf dem Mac), um zu einem Kurs, einer Seite oder einer Glaze-Einstellung zu springen.",  "Stop reading": "Lesen abbrechen",
   // Blackboard appearance (B6).
   "Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.": "Verwende eine https://-Adresse oder einen Pfad auf dieser Blackboard-Seite. Lesezeichensymbole werden von Glaze gezeichnet.",
-  "Canvas and Blackboard navigation": "Navigation für Canvas und Blackboard",
   "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Gestalte Canvas-Dashboardkarten und Blackboard-Ultra-Kurskarten über ihr Kursmenü. Ultra-Listenzeilen behalten ihr Layout; Bannerstile und Rundungen gelten weiterhin.",
   "Use course color for overlay": "Kursfarbe für die Überlagerung verwenden",
   "Back to the course color": "Zurück zur Kursfarbe",  "Stopped.": "Abgebrochen.",
@@ -1863,7 +1861,6 @@
   "Hidden folders": "Ausgeblendete Ordner",
   "Hide folders locally without changing the course.": "Ordner lokal ausblenden, ohne den Kurs zu ändern.",
   "Hide preview": "Vorschau ausblenden",
-  "Invite only, end-to-end encrypted through your selected relay. Your local copies keep working without the server.": "Nur auf Einladung, über deinen gewählten Relay-Server Ende-zu-Ende-verschlüsselt. Deine lokalen Kopien funktionieren auch ohne den Server.",
   "Keep a local study buddy with optional progress.": "Einen lokalen Lernbegleiter mit optionalem Fortschritt behalten.",
   "Keep course colors, nicknames and Looks together.": "Kursfarben, Spitznamen und Looks zusammen verwalten.",
   "Keep notes and customize your study widgets.": "Notizen festhalten und Lern-Widgets anpassen.",
@@ -2980,6 +2977,7 @@
   "Width (pixels)": "Breite (Pixel)",
   "Until you drag its edge on a page. Dragging is kept for each site and account.": "Bis du ihren Rand auf einer Seite ziehst. Das Ziehen wird für jede Website und jedes Konto gespeichert.",
   "Shown": "Angezeigt",
+  "Phone tab": "Telefon-Tab",
   "Folded at first": "Zuerst eingeklappt",
   "Room for the page (pixels)": "Platz für die Seite (Pixel)",
   "Room for grades (pixels)": "Platz für Noten (Pixel)",

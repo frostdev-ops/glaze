@@ -1,5 +1,5 @@
 // Dutch for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
-// Machine translation, accepted as is; corrections come through bug reports (DECISIONS.md).
+// Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).nl = {
   "Document review": "Documenten bekijken",
   "Compact submission header": "Compacte inleveringskop",
@@ -10,6 +10,7 @@
   "Full screen": "Volledig scherm",
   "Focus document": "Document focussen",
   "Grade and feedback": "Cijfer en feedback",
+  "Rubric": "Beoordelingsschema",
   "Exit focus": "Focus verlaten",
   "Document focus ended": "Documentfocus beëindigd",
   "Document focus": "Documentfocus",
@@ -23,7 +24,6 @@
   'Background': 'Achtergrond',
   'Motion': 'Beweging',
   'Courses': 'Cursussen',
-  'Extras': "Extra's",
   'Share': 'Delen',
   'Dismiss': 'Sluiten',
   'Save as preset': 'Opslaan als voorinstelling',
@@ -1325,7 +1325,6 @@
   "Note": "Notitie",
   "Library": "Bibliotheek",
   "New folder": "Nieuwe map",
-  "Import": "Importeren",
   "OK": "OK",
   "Course {id}": "Cursus {id}",
   "All folders": "Alle mappen",
@@ -1461,7 +1460,6 @@
   "Press Ctrl+K (⌘K on a Mac) anywhere in Blackboard to jump to a course, a page or a Glaze setting.": "Druk overal in Blackboard op Ctrl+K (⌘K op een Mac) om naar een cursus, een pagina of een Glaze-instelling te springen.",  "Stop reading": "Stoppen met lezen",
   // Blackboard appearance (B6).
   "Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.": "Gebruik een https://-adres of een pad op deze Blackboard-site. Glaze tekent de bladwijzerpictogrammen.",
-  "Canvas and Blackboard navigation": "Navigatie voor Canvas en Blackboard",
   "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Pas Canvas-dashboardkaarten en Blackboard Ultra-cursuskaarten aan via hun cursusmenu. Ultra-lijstrijen behouden hun indeling; bannerstijlen en afgeronde hoeken blijven gelden.",
   "Use course color for overlay": "Cursuskleur voor de overlay gebruiken",
   "Back to the course color": "Terug naar de cursuskleur",  "Stopped.": "Gestopt.",
@@ -1863,7 +1861,6 @@
   "Hidden folders": "Verborgen mappen",
   "Hide folders locally without changing the course.": "Verberg mappen lokaal zonder de cursus te wijzigen.",
   "Hide preview": "Voorbeeld verbergen",
-  "Invite only, end-to-end encrypted through your selected relay. Your local copies keep working without the server.": "Alleen op uitnodiging, met eind-tot-eindversleuteling via je gekozen relay. Je lokale kopieën blijven werken zonder de server.",
   "Keep a local study buddy with optional progress.": "Houd een lokaal studiemaatje met optionele voortgang.",
   "Keep course colors, nicknames and Looks together.": "Houd cursuskleuren, bijnamen en Looks bij elkaar.",
   "Keep notes and customize your study widgets.": "Bewaar notities en pas je studiewidgets aan.",
@@ -2980,6 +2977,7 @@
   "Width (pixels)": "Breedte (pixels)",
   "Until you drag its edge on a page. Dragging is kept for each site and account.": "Tot je de rand op een pagina versleept. Slepen wordt per site en account bewaard.",
   "Shown": "Getoond",
+  "Phone tab": "Telefoontabblad",
   "Folded at first": "Eerst ingeklapt",
   "Room for the page (pixels)": "Ruimte voor de pagina (pixels)",
   "Room for grades (pixels)": "Ruimte voor cijfers (pixels)",

@@ -2,7 +2,7 @@
 // Grades page), under "Past terms, trends and goal", while that is open (and asks for it from the command palette).
 // - Past terms: typed in, or read on this device from a transcript's text, a PDF, a picture or screenshot (also
 //   pasted), a web page or a Word file (features/import.js), and always shown for review before they are kept.
-//   Pass/fail, withdrawn and transfer rows are listed, not counted. Any AI reading waits on the owner (DECISIONS.md).
+//   Pass/fail, withdrawn and transfer rows are listed, not counted. Any AI reading waits on the owner.
 // - Trends: term and cumulative GPA over time, an inline chart in the palette's colors, with the same figures as a
 //   table for screen readers and keyboards.
 // - Goal: a cumulative or term GPA to reach; what this term needs, and one way there from the grades now, with the

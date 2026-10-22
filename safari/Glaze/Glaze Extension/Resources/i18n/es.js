@@ -1,5 +1,5 @@
 // Spanish for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
-// Machine translation, accepted as is; corrections come through bug reports (DECISIONS.md).
+// Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).es = {
   "Document review": "Revisión de documentos",
   "Compact submission header": "Encabezado de entrega compacto",
@@ -10,6 +10,7 @@
   "Full screen": "Pantalla completa",
   "Focus document": "Enfocar documento",
   "Grade and feedback": "Nota y comentarios",
+  "Rubric": "Rúbrica",
   "Exit focus": "Salir del enfoque",
   "Document focus ended": "Enfoque del documento finalizado",
   "Document focus": "Enfoque del documento",
@@ -23,7 +24,6 @@
   'Background': 'Fondo',
   'Motion': 'Movimiento',
   'Courses': 'Cursos',
-  'Extras': 'Extras',
   'Share': 'Compartir',
   'Dismiss': 'Descartar',
   'Save as preset': 'Guardar como predefinida',
@@ -1325,7 +1325,6 @@
   "Note": "Nota",
   "Library": "Biblioteca",
   "New folder": "Nueva carpeta",
-  "Import": "Importar",
   "OK": "Aceptar",
   "Course {id}": "Curso {id}",
   "All folders": "Todas las carpetas",
@@ -1461,7 +1460,6 @@
   "Press Ctrl+K (⌘K on a Mac) anywhere in Blackboard to jump to a course, a page or a Glaze setting.": "Pulsa Ctrl+K (⌘K en un Mac) en cualquier parte de Blackboard para saltar a un curso, una página o un ajuste de Glaze.",  "Stop reading": "Dejar de leer",
   // Blackboard appearance (B6).
   "Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.": "Usa una dirección https:// o una ruta de este sitio Blackboard. Glaze dibuja los iconos de marcadores.",
-  "Canvas and Blackboard navigation": "Navegación de Canvas y Blackboard",
   "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Personaliza las tarjetas de Canvas y Blackboard Ultra desde su menú de curso. Las filas de lista de Ultra conservan su diseño; se aplican estilos de banner y esquinas.",
   "Use course color for overlay": "Usar el color del curso para la superposición",
   "Back to the course color": "Volver al color del curso",  "Stopped.": "Detenido.",
@@ -1863,7 +1861,6 @@
   "Hidden folders": "Carpetas ocultas",
   "Hide folders locally without changing the course.": "Oculta carpetas localmente sin cambiar el curso.",
   "Hide preview": "Ocultar vista previa",
-  "Invite only, end-to-end encrypted through your selected relay. Your local copies keep working without the server.": "Solo por invitación, con cifrado de extremo a extremo mediante el servidor de retransmisión que elijas. Tus copias locales funcionan sin el servidor.",
   "Keep a local study buddy with optional progress.": "Ten un compañero de estudio local con progreso opcional.",
   "Keep course colors, nicknames and Looks together.": "Mantén juntos los colores, nombres y estilos de los cursos.",
   "Keep notes and customize your study widgets.": "Guarda notas y personaliza tus widgets de estudio.",
@@ -2980,6 +2977,7 @@
   "Width (pixels)": "Ancho (píxeles)",
   "Until you drag its edge on a page. Dragging is kept for each site and account.": "Hasta que arrastres su borde en una página. Lo arrastrado se guarda para cada sitio y cuenta.",
   "Shown": "Visible",
+  "Phone tab": "Pestaña del teléfono",
   "Folded at first": "Contraída al principio",
   "Room for the page (pixels)": "Espacio para la página (píxeles)",
   "Room for grades (pixels)": "Espacio para calificaciones (píxeles)",
