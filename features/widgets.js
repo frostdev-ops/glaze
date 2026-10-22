@@ -537,6 +537,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       let attentionWait = 0, attentionAt = 0, attentionBlocked = 0, gaze = -1, gazing = false;
       let patPending = false, cheer = null, cheerWait = 0, lastPat = 0;
       const saved = {}, versions = new Map();
+      let lifecycle = 0;
       // Gone from the page once it has been on it. One made but not yet attached waits: the Courses page with its widgets
       // hidden builds the tiles and attaches none until Show widgets, and a buddy that stopped itself in its first paint was
       // attached then as a blank tile that never woke (the board's draw() stops the tiles it removes).
@@ -544,9 +545,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const gone = () => { if (pet.isConnected !== false) { attached = true; return false; } return attached; };
       const img = make('img', { alt: '', draggable: false, decoding: 'async' });
       const read = (keys) => {
-        const before = keys.map((k) => versions.get(k));
+        const before = keys.map((k) => versions.get(k)), life = lifecycle;
         return get('local', keys).then((r) => {
-          if (!alive || !validContext()) return;
+          if (!alive || life !== lifecycle || !validContext()) return;
           keys.forEach((k, i) => { if (before[i] === versions.get(k)) saved[k] = r[k]; });
           st.running = !!W.cleanTimer(saved.widgetTimer).end;
           st.happyAt = Math.max(st.happyAt, Number.isFinite(saved.widgetBuddy?.happyAt) ? saved.widgetBuddy.happyAt : 0);
@@ -635,7 +636,6 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (!gazing || direction !== gaze) { gaze = direction; gazing = true; player.set('look', direction); }
         clearTimeout(attentionWait); attentionWait = setTimeout(releaseGaze, 1800);
       };
-      if (options.attention !== false) document.addEventListener('pointermove', watch, { passive: true });
       const onStore = (ch, a) => {
         if (!alive || a !== 'local') return;
         if (!validContext()) { stop(); return; }
@@ -657,22 +657,43 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           if (before && after && after.xp > before.xp) { attentionBlocked = Date.now() + 900; gazing = false; player?.play(after.level > before.level ? 'level-up' : 'xp'); }
         }
       };
-      try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       body.append(pet);
       const show = () => paint();
-      const stop = () => {
-        if (!alive) return;
-        alive = false; clearTimeout(wait); clearTimeout(attentionWait); clearTimeout(cheerWait); cheer?.remove(); player?.stop();
-        try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
-        document.removeEventListener?.('visibilitychange', show); document.removeEventListener?.('pointermove', watch); removeEventListener('pagehide', stop);
+      // What the buddy listens to, and what it reads when it starts: again after a back/forward-cache restore.
+      const listen = () => {
+        if (options.attention !== false) document.addEventListener('pointermove', watch, { passive: true });
+        try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
+        document.addEventListener('visibilitychange', show);
+        read(['widgetTimer', 'widgetBuddy', 'petCharacter', 'petSprites']);
+        who().then(() => {
+          if (!alive || !validContext()) return;
+          todoKey = `todo:${location.origin}/${me.uid}`; petKey = `pet:${location.origin}/${me.uid}`;
+          read([petKey]);
+        }, () => {});
       };
-      document.addEventListener('visibilitychange', show); addEventListener('pagehide', stop, { once: true });
-      read(['widgetTimer', 'widgetBuddy', 'petCharacter', 'petSprites']);
-      who().then(() => {
-        if (!alive || !validContext()) return;
-        todoKey = `todo:${location.origin}/${me.uid}`; petKey = `pet:${location.origin}/${me.uid}`;
-        read([petKey]);
-      }, () => {});
+      const release = () => {
+        lifecycle++;
+        alive = false; clearTimeout(wait); clearTimeout(attentionWait); clearTimeout(cheerWait); cheer?.remove(); player?.stop(); player = null; sprite = '';
+        try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
+        document.removeEventListener?.('visibilitychange', show); document.removeEventListener?.('pointermove', watch);
+      };
+      // A page put in the back/forward cache is torn down by pagehide but comes back as it was, running no script again: that
+      // buddy is only put away, and pageshow wakes it. Anywhere else pagehide is the end of the page.
+      let cached = false;
+      const stop = () => {
+        if (!alive && !cached) return;
+        if (alive) release();
+        cached = false; removeEventListener('pagehide', leave); removeEventListener('pageshow', back);
+      };
+      const leave = (e) => { if (!alive) return; if (e.persisted) { cached = true; release(); } else stop(); };
+      const back = (e) => {
+        if (!e.persisted || !cached) return;
+        if (!validContext() || ctx.settings().enabled === false) { stop(); return; }
+        cached = false;
+        alive = true; listen(); paint();
+      };
+      addEventListener('pagehide', leave); addEventListener('pageshow', back);
+      listen();
       Promise.all(['lib/petbrain.js', 'lib/pet.js', 'lib/todo.js', 'lib/petsprites.js', 'lib/petplayer.js'].map((file) => ctx.need(file, () => ({ 'lib/petbrain.js': globalThis.GZ_PET_BRAIN, 'lib/pet.js': globalThis.GZ_PET, 'lib/todo.js': globalThis.GZ_TODO, 'lib/petsprites.js': globalThis.GZ_PET_SPRITES, 'lib/petplayer.js': globalThis.GZ_PET_PLAYER })[file]))).then(paint, () => {});
       Promise.resolve().then(paint);
       return { wake: () => { sleeping = false; paint(); }, sleep: () => { sleeping = true; clearTimeout(wait); releaseGaze(); player?.sleep(); }, update: paint, play: (state, direction) => { pose = [state, direction]; attentionBlocked = Date.now() + 900; gazing = false; player?.play(state, direction); }, stop };

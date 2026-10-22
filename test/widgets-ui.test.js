@@ -37,7 +37,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
   let n = 0;
   const reads = [];
   const sent = [];
-  const listeners = [];
+  const listeners = [], win = [];
   const c = {
     console, URL, URLSearchParams, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String,
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' },
@@ -47,7 +47,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
     location: ultra ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
     setTimeout: (f, ms) => { timers.set(++n, { f, ms }); return n; },
     clearTimeout: (id) => timers.delete(id),
-    addEventListener() {}, removeEventListener() {},
+    addEventListener: (type, f) => win.push({ type, f }), removeEventListener: (type, f) => { const i = win.findIndex((x) => x.type === type && x.f === f); if (i >= 0) win.splice(i, 1); },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); const r = replies.shift() || { ok: true, kept: true }; if (hold) held.push(() => cb(r)); else Promise.resolve().then(() => cb(r)); } },
       storage: {
@@ -88,7 +88,8 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
   const answer = () => { while (reads.length) reads.shift()(); };
-  return { ui, timers, answer, sent, listeners, local, clock, held, c };
+  const fire = (type, e = {}) => { for (const l of win.filter((x) => x.type === type)) l.f({ type, ...e }); };
+  return { ui, timers, answer, sent, listeners, local, clock, held, c, win, fire };
 };
 const find = (el, pred) => (pred(el) ? el : el.children?.map((c) => find(c, pred)).find(Boolean) || null);
 
@@ -893,6 +894,74 @@ test('a study buddy made before it is on the page waits for it; it stops only on
   tile.update();
   assert.equal(p.listeners.length, 0, 'now it is gone, and has stopped');
   tile.stop();
+});
+
+// WID-10: pagehide tears the buddy down, and a page restored from the back/forward cache runs nothing again.
+test('a study buddy in the back/forward cache is listening and painting again once the page is restored', async () => {
+  const p = page();
+  const body = new E();
+  const tile = p.ui.probe.WIDGETS.buddy(body);
+  p.answer(); await settle();
+  assert.equal(p.listeners.length, 1);
+  p.fire('pagehide', { persisted: true });
+  assert.equal(p.listeners.length, 0, 'put away, it listens to nothing');
+  p.fire('pageshow', { persisted: false });
+  assert.equal(p.listeners.length, 0, 'an ordinary pageshow is not a restore');
+  p.fire('pageshow', { persisted: true }); p.answer(); await settle();
+  assert.equal(p.listeners.length, 1, 'restored, it listens again');
+  assert.equal(body.dataset.mood, 'sleepy');
+  p.listeners[0]({ widgetBuddy: { newValue: { happyAt: p.clock.t, patAt: 0 } } }, 'local'); await settle();
+  assert.equal(body.dataset.mood, 'happy', 'and it paints what it hears');
+  p.fire('pagehide', { persisted: true }); p.fire('pageshow', { persisted: true }); p.answer(); await settle();
+  assert.equal(p.listeners.length, 1, 'once more');
+  tile.stop();
+  assert.equal(p.listeners.length, 0);
+  assert.equal(p.win.length, 0, 'a stopped buddy leaves no page listeners');
+});
+test('a study buddy that was left for good, or stopped, is not brought back by a later restore', async () => {
+  const p = page(), body = new E(), tile = p.ui.probe.WIDGETS.buddy(body);
+  p.answer(); await settle();
+  p.fire('pagehide', { persisted: false });
+  p.fire('pageshow', { persisted: true }); p.answer(); await settle();
+  assert.equal(p.listeners.length, 0);
+  const q = page(), other = new E(), t2 = q.ui.probe.WIDGETS.buddy(other);
+  q.answer(); await settle();
+  q.fire('pagehide', { persisted: true }); t2.stop();
+  q.fire('pageshow', { persisted: true }); q.answer(); await settle();
+  assert.equal(q.listeners.length, 0, 'stopped while put away');
+  tile.stop();
+});
+
+test('a pre-bfcache buddy read cannot overwrite newer reads after restore', async () => {
+  const p = page(), local = { petCharacter: 'cat' }, pending = [];
+  p.c.GZ_PET_SPRITES = require('../lib/petsprites.js');
+  const choices = [];
+  p.c.GZ_PET_PLAYER = { mount: (_, selected) => { choices.push(selected.name); return { stop() {}, rest() {}, sleep() {}, wake() {} }; } };
+  p.c.chrome.storage.local.get = (keys, cb) => { const snapshot = structuredClone(local); pending.push(() => cb(snapshot)); };
+  const body = new E(), tile = p.ui.probe.WIDGETS.buddy(body);
+  await settle();
+  const old = pending.splice(0);
+  p.fire('pagehide', { persisted: true });
+  local.petCharacter = 'bunny';
+  p.fire('pageshow', { persisted: true }); await settle();
+  while (pending.length) pending.shift()(); await settle();
+  assert.equal(choices.at(-1), 'Bunny');
+  for (const answer of old) answer(); await settle();
+  assert.equal(choices.at(-1), 'Bunny', 'old lifecycle replies must not replace restored state');
+  tile.stop();
+});
+
+test('a buddy restore after invalidation or disabling leaves no lifecycle listeners', async () => {
+  for (const off of ['context', 'enabled']) {
+    const p = page(), body = new E(), tile = p.ui.probe.WIDGETS.buddy(body);
+    p.answer(); await settle(); p.fire('pagehide', { persisted: true });
+    if (off === 'context') p.c.chrome.runtime.id = '';
+    else p.c.GZ_CTX.settings = () => ({ enabled: false, enhance: { pet: true } });
+    p.fire('pageshow', { persisted: true }); p.answer(); await settle();
+    assert.equal(p.listeners.length, 0, off);
+    assert.equal(p.win.length, 0, 'a failed restore must remove both page listeners');
+    tile.stop();
+  }
 });
 
 // WID-9: moving an element that holds an iframe unloads it, so the player restarted whenever the board reordered tiles.

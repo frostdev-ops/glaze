@@ -101,3 +101,34 @@ test('normalization derives counts from decoded alpha and the broker preserves t
   store.petSprites[imported.id].frameCounts[0] = 9;
   await assert.rejects(lib.change({ op: 'get', id: imported.id }, { local }), /Invalid sprite pixels/);
 });
+
+test('WID-6: an unchanged imported library is decoded once, not on every pet operation', async () => {
+  const lib = {};
+  for (let i = 0; i < 2; i++) lib[`own:${crypto.randomUUID()}`] = { name: `P${i}`, spriteVersionNumber: 2, data: `data:image/webp;base64,${Buffer.alloc(3000, i + 1).toString('base64')}` };
+  const [first] = Object.keys(lib), store = { petSprites: lib };
+  const local = { get: async () => structuredClone(store), set: async (patch) => { Object.assign(store, structuredClone(patch)); return true; } };
+  const real = globalThis.atob; let decoded = 0;
+  globalThis.atob = (s) => { decoded++; return real(s); };
+  try {
+    for (let i = 0; i < 4; i++) assert.equal((await S.change({ op: 'get', id: 'ember' }, { local })).ok, true);
+    assert.equal(decoded, 2, 'two images decoded once for four operations');
+    assert.equal((await S.change({ op: 'get', id: first }, { local })).pet.name, 'P0');
+    assert.equal(decoded, 2);
+    // A change to the stored library (another surface, an import or delete) is seen at once.
+    store.petSprites = { ...lib }; delete store.petSprites[first];
+    assert.equal((await S.change({ op: 'get', id: first }, { local })).pet, null);
+    assert.equal(decoded, 3, 'the remaining image is checked again after the change');
+    store.petSprites[Object.keys(store.petSprites)[0]].frameCounts = [99, 8, 8, 4, 5, 8, 6, 6, 6, 8, 8];
+    await assert.rejects(S.change({ op: 'get', id: 'ember' }, { local }), /Invalid sprite pixels/);
+    // A rejected library is never remembered as good.
+    await assert.rejects(S.change({ op: 'list' }, { local }), /Invalid sprite pixels/);
+  } finally { globalThis.atob = real; }
+});
+
+test('a malformed sprite library cannot hit the empty-library cache by omitting undefined entries from JSON', async () => {
+  const store = { petSprites: {} }, local = { get: async () => structuredClone(store) };
+  assert.equal((await S.change({ op: 'get', id: 'ember' }, { local })).ok, true);
+  store.petSprites = { invalid: undefined };
+  await assert.rejects(S.change({ op: 'get', id: 'ember' }, { local }), /Pet library could not be read/);
+  await assert.rejects(S.change({ op: 'list' }, { local }), /Pet library could not be read/);
+});

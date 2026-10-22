@@ -90,6 +90,17 @@ var GZ_PET_SPRITES = globalThis.GZ_PET_SPRITES || (() => {
     if (total > MAX_TOTAL) throw error('Pet library is full.');
     return raw;
   };
+  // Checking the library decodes every image (~150 ms at the cap), and every pet operation reads it. The text of the last library
+  // that passed is kept, so an unchanged one is a string comparison; any change, from any writer, fails the match and is checked in full.
+  let passed = null;
+  const checked = (raw) => {
+    const text = String(JSON.stringify(raw));
+    // JSON omits undefined entries: {bad: undefined} must not reuse the successful empty-library check.
+    if (text === passed && Object.values(raw || {}).every((p) => p && typeof p === 'object' && !Array.isArray(p))) return raw ?? {};
+    const all = clean(raw);
+    passed = text;
+    return all;
+  };
   const picture = (id, all = {}) => id === 'study-buddy'
     ? { name: 'Study buddy', layout: 'buddy', spriteVersionNumber: 1, path: 'assets/art/pets/study-buddy/sprites.webp', reactions: 'assets/art/pets/study-buddy/reactions.webp' }
     : Object.hasOwn(BUILTIN, id)
@@ -111,7 +122,7 @@ var GZ_PET_SPRITES = globalThis.GZ_PET_SPRITES || (() => {
     });
   };
   const change = async (m, { local }) => {
-    const all = clean((await local.get(KEY))[KEY]);
+    const all = checked((await local.get(KEY))[KEY]);
     if (m.op === 'list') return { ok: true, pets: [...Object.entries(BUILTIN).map(([id, p]) => ({ id, ...p })), ...Object.entries(all).map(([id, p]) => ({ id, name: p.name, spriteVersionNumber: p.spriteVersionNumber }))] };
     if (m.op === 'get') return typeof m.id !== 'string' || !ID.test(m.id) ? { ok: false } : { ok: true, pet: picture(m.id, all) };
     if (m.op === 'delete') {
@@ -134,12 +145,12 @@ var GZ_PET_SPRITES = globalThis.GZ_PET_SPRITES || (() => {
       let bytes;
       try { bytes = Uint8Array.from(atob(found.rec.files[found.pet.file]), (c) => c.charCodeAt(0)); } catch { return { ok: false, error: 'bad' }; }
       const id = `own:${crypto.randomUUID()}`, next = { ...all, [id]: { ...await normalize(bytes, { name: found.pet.name }), from } };
-      clean(next);
+      checked(next);
       return { ok: await local.set({ [KEY]: next }), id };
     }
     if (m.op !== 'import' || Object.keys(all).length >= MAX_PETS) return { ok: false, error: 'full' };
     const pet = await normalize(dataBytes(m.data), m.meta), id = `own:${crypto.randomUUID()}`, next = { ...all, [id]: pet };
-    clean(next);
+    checked(next);
     return { ok: await local.set({ [KEY]: next }), id };
   };
   return { COUNTS, STATES, REACTIONS, BUILTIN, KEY, MAX_INPUT, MAX_IMAGE, MAX_TOTAL, MAX_PETS, ID, meta, counts, frame, direction, pixels, normalize, dataBytes, dataURL, clean, picture, reactionPath, change };
