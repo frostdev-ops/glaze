@@ -1033,17 +1033,19 @@
     sceneCanvas?.remove();
     sceneCanvas = null;
   };
-  // Retry startup twice. sceneBad still blocks refused shaders and over-budget scenes.
+  // Retry startup after 1 s, 5 s, then every 30 s: what failed (a worker asleep, a module that didn't load) can come back while
+  // the page is shown. A context the browser takes back at every start gets three tries: each new one can take another
+  // frame's. sceneBad still blocks refused shaders and over-budget scenes.
   const retryScene = (key, error) => {
     console.warn('[Glaze] Background startup failed', error);
     const tries = (sceneRetry?.tries || 0) + 1;
     stopScene();
     sceneFailed = true;
     const retry = sceneRetry = { key, tries, timer: 0 };
-    if (tries < 3) retry.timer = setTimeout(() => {
+    if (tries < 3 || error !== 'dropped') retry.timer = setTimeout(() => {
       if (sceneRetry !== retry) return;
       retry.timer = 0; sceneFailed = false; syncScene();
-    }, tries === 1 ? 1000 : 5000);
+    }, [1000, 5000][tries - 1] || 30000);
   };
   // What a startup waits for (its module's import; from the worker, need: lib/scene-host.js, a shader's lib/glsl.js) can be
   // lost or come minutes late (a sleeping worker). It waits 10 s, then lets go (late) and forgets p (gone), for retryScene to
@@ -1059,12 +1061,12 @@
     const p = need(file, ready), gone = () => { if (loading.get(file) === p) loading.delete(file); };
     return sceneWait(p, gone).catch((error) => { gone(); throw error; });
   };
-  // Another chance (what was needed in after all, the page back on screen): a startup still waiting goes on, one that gave
-  // up starts over, one that never started starts.
+  // Another chance (what was needed in after all, the page back on screen): a startup still waiting goes on, one waiting to
+  // retry or that gave up starts over now, with new tries, one that never started starts.
   const sceneAgain = () => {
     if (scenePending) scenePending = null;
-    else if (sceneFailed && !sceneRetry?.timer) { sceneRetry = null; sceneFailed = false; }
-    else if (scene || sceneFailed) return;
+    else if (sceneFailed) { clearTimeout(sceneRetry?.timer); sceneRetry = null; sceneFailed = false; }
+    else if (scene) return;
     syncScene();
   };
   const sceneOpts = () => {

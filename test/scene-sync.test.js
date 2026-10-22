@@ -55,7 +55,8 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     JSON, Promise, setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: (id) => timers.delete(id),
   });
   vm.runInContext(`${hostFails === null && !hostHangs && !glslHangs && !glslFails ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
-  return { api: ctx.api, log, ctx, timers, retry: async () => { const [id, timer] = [...timers].find(([, timer]) => timer.ms < 60000) || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
+  // waits(): the delays of what is scheduled to try again (need()'s own one-minute forgetting left out).
+  return { api: ctx.api, log, ctx, timers, waits: () => [...timers.values()].map((t) => t.ms).filter((ms) => ms < 60000), retry: async () => { const [id, timer] = [...timers].find(([, timer]) => timer.ms < 60000) || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
 };
 const SHADER = { bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(1.); }' } } };
 const LAYERS = { bg: { layers: [{ k: 'noise' }] } };
@@ -80,7 +81,7 @@ test('a temporary scene-host injection failure recovers within the startup retry
   assert.equal(r.api.state().sceneFailed, false);
 });
 
-test('a mod background retries a temporary scene-host failure and bounds persistent failures', async () => {
+test('a mod background retries a scene-host failure, slowly once it persists', async () => {
   for (const hostFails of [1, 3]) {
     const r = rig({ hostFails });
     r.api.background({}); await settle();
@@ -90,8 +91,24 @@ test('a mod background retries a temporary scene-host failure and bounds persist
     assert.equal(r.api.state().sceneFailed, hostFails === 3);
     assert.equal(r.log.imports, 0, 'a mod background does not load the built-in renderer');
     r.api.syncScene(); await settle();
-    assert.equal(r.log.needs.length, hostFails === 1 ? 2 : 3, 'a persistent failure stays bounded');
+    assert.equal(r.log.needs.length, hostFails === 1 ? 2 : 3, 'syncs meanwhile do not ask again: the retries do');
+    if (hostFails === 3) {
+      assert.deepEqual(r.waits(), [30000]);
+      await r.retry();
+      assert.deepEqual([r.log.needs.length, r.api.state().sceneFailed], [4, false]);
+    }
   }
+});
+
+test('a worker that fails every quick try is asked again every 30 s while the frame is shown, and the scene starts', async () => {
+  const r = rig({ hostFails: 4 });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry();
+  assert.deepEqual(r.waits(), [30000], 'past the quick tries');
+  await r.retry();
+  assert.deepEqual(r.waits(), [30000], 'and on');
+  await r.retry();
+  assert.deepEqual([r.log.needs.length, r.log.updates.length, r.waits()], [5, 1, []]);
 });
 
 test('a scene host request the worker never answers does not hold the background: the startup asks again', async () => {
@@ -107,14 +124,14 @@ test('a scene host request the worker never answers does not hold the background
   assert.equal(r.api.state().sceneFailed, false);
 });
 
-test('an answer that comes after the startup gave up still starts the background, once', async () => {
+test('an answer that comes after the quick tries still starts the background at once, once', async () => {
   const r = rig({ hostHangs: 3 });
   r.api.syncScene(); await settle();
   for (let i = 0; i < 5; i++) await r.retry(); // three waits run out, two retries between them
-  assert.deepEqual([r.log.needs.length, r.timers.size, r.api.state().sceneFailed], [3, 0, true], 'bounded: given up');
+  assert.deepEqual([r.log.needs.length, r.waits(), r.api.state().sceneFailed], [3, [30000], true], 'retrying slowly');
   r.log.answers[0](); await settle(); // the worker wakes and answers the first request
-  assert.equal(r.log.starts.length, 1);
-  assert.equal(r.api.state().sceneFailed, false);
+  assert.equal(r.log.starts.length, 1, 'not held until the slow retry');
+  assert.deepEqual([r.api.state().sceneFailed, r.waits()], [false, []], 'which is called off');
   r.log.answers[1](); r.log.answers[2](); await settle();
   assert.deepEqual([r.log.starts.length, r.log.updates.length], [1, 1], 'later answers start nothing more');
 });
@@ -218,12 +235,12 @@ test('temporary WebGL startup failures retry with the already loaded scene modul
   assert.equal(r.log.updates.length, 1);
 });
 
-test('persistent startup failures have bounded retries and do not block a different background', async () => {
+test('persistent startup failures retry slowly and do not block a different background', async () => {
   const r = rig({ startFails: 3 });
   r.api.syncScene(); await settle();
   await r.retry(); await r.retry();
   assert.equal(r.log.starts.length, 3);
-  assert.equal(r.timers.size, 0, 'persistent failures must not retry indefinitely');
+  assert.deepEqual(r.waits(), [30000], 'past the quick tries, every 30 s');
   r.api.syncScene(); await settle();
   assert.equal(r.log.starts.length, 3);
   r.ctx.worn.bg.kind = 'media'; r.ctx.parts = { bg: { media: { type: 'video', src: 'https://cdn.example.com/loop.webm' } } };
@@ -231,17 +248,18 @@ test('persistent startup failures have bounded retries and do not block a differ
   assert.equal(r.log.updates.at(-1).kind, 'media', 'WebGL failure cannot disable video backgrounds');
 });
 
-test('a background that gave up gets new tries when the page is back on screen', async () => {
+test('a background retrying slowly tries again at once, with new tries, when the page is back on screen', async () => {
   const r = rig({ startFails: 4 });
   r.api.syncScene(); await settle();
   await r.retry(); await r.retry();
-  assert.deepEqual([r.log.starts.length, r.timers.size, r.api.state().sceneFailed], [3, 0, true], 'given up');
+  assert.deepEqual([r.log.starts.length, r.waits(), r.api.state().sceneFailed], [3, [30000], true], 'retrying slowly');
   const shown = r.log.listeners.get('visibilitychange');
   assert.ok(shown, 'the page coming back on screen is heard');
   r.ctx.document.hidden = true; shown(); await settle();
   assert.equal(r.log.starts.length, 3, 'not while hidden');
   r.ctx.document.hidden = false; shown(); await settle();
   assert.equal(r.log.starts.length, 4, 'a fresh attempt');
+  assert.deepEqual(r.waits(), [1000], 'the slow retry called off; the quick ones again');
   await r.retry();
   assert.equal(r.log.updates.length, 1, 'with fresh tries, it starts');
   shown(); await settle();
@@ -273,12 +291,12 @@ test('a new background attempt never reuses module URLs poisoned by previous fai
   assert.equal(poisoned.size, 4);
 });
 
-test('asynchronous player module failures share the bounded startup recovery', async () => {
+test('asynchronous player module failures share the startup retries', async () => {
   const r = rig(); r.api.syncScene(); await settle();
   r.fail('module'); await r.retry();
   r.fail('module'); await r.retry();
   r.fail('module');
-  assert.equal(r.timers.size, 0, 'asynchronous initialization must not reset the retry budget');
+  assert.deepEqual(r.waits(), [30000], 'asynchronous initialization must not reset the quick tries');
   assert.equal(r.api.state().sceneBad, '', 'a failed player import is not a refused media file');
 });
 
@@ -374,7 +392,7 @@ test('a shader checker request the worker never answers does not hold the shader
   const q = rig({ kind: 'shader', parts: SHADER, glslHangs: 3 });
   q.api.syncScene(); await settle();
   for (let i = 0; i < 5; i++) await q.retry();
-  assert.deepEqual([q.log.starts.length, q.timers.size, q.api.state().sceneFailed], [0, 0, true], 'bounded: given up');
+  assert.deepEqual([q.log.starts.length, q.waits(), q.api.state().sceneFailed], [0, [30000], true], 'retrying slowly');
   q.log.answers[0](); await settle();
   assert.equal(q.log.starts.length, 1, 'an answer after all starts it');
 });
