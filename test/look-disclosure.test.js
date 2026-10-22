@@ -76,6 +76,8 @@ test('every group a code can carry is described, or deliberately silent', () => 
     anim: { 'card.enter': { s: [{ at: 0, o: 0 }, { at: 1, o: 1 }] } },
     fx: { complete: { kind: 'confetti' } },
     cursor: { kind: 'glow' },
+    pointer: 'ghost',
+    type: { kind: 'embers' },
     nav: { place: 'top' },
     rules: [{ p: 'canvas.footer', do: 'hide' }],
   };
@@ -84,6 +86,8 @@ test('every group a code can carry is described, or deliberately silent', () => 
   assert.ok(said(null, [{ id: 'abcdefghijklmnop', h: 'A'.repeat(43), name: 'Clock' }]).some((n) => /mods/.test(n.why)), 'm says nothing');
   for (const media of [{ type: 'video', src: 'https://cdn.example.com/a.webm' }, { type: 'image', src: `file:${'A'.repeat(43)}` }]) assert.ok(said({ bg: { media } }).length);
   assert.ok(said({ bg: { layers: [{ k: 'noise' }] } }).length);
+  // The student's own pointer picture is theirs, and never comes in a code (lib/share.js): nothing to say about it.
+  assert.equal(said({ pointer: 'own' }).length, 0);
   // The nav layout, key by key.
   const nav = { place: { place: 'dock' }, groups: { groups: [{ items: ['grades'] }] }, hidden: { hidden: ['calendar'] }, links: { links: [{ id: 'abcdefghij12', n: 'Library', u: 'https://library.example/', i: 'book' }] }, icons: { icons: { grades: 'star' } } };
   assert.deepEqual(Object.keys(nav).sort(), [...L.KEYS].sort(), 'a new key of a nav layout needs a sentence here');

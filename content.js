@@ -258,10 +258,12 @@
     const r = el?.getBoundingClientRect();
     document.dispatchEvent(new CustomEvent('glaze:moment', { detail: r?.width ? { name, x: r.left + r.width / 2, y: r.top + r.height / 2 } : { name } }));
   };
-  // A Look with animations, effects or a pointer effect (GZ_CTX.parts()) brings features/motionx.js in.
+  // A Look with animations, effects, a pointer effect or a typing effect (GZ_CTX.parts()) brings features/motionx.js in, and
+  // one with a pointer set features/lookx.js, which shows it.
   const moveParts = () => {
     const p = GZ_CTX.parts();
-    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
+    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
+    if (globalThis.GZ_LOOKX || p?.pointer) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
   };
   document.addEventListener('glaze:parts', moveParts);
   // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed. The dots are
@@ -1345,11 +1347,12 @@
   const onSchedule = () => (links.length && worn.auto.on && worn.auto.mode === 'schedule' ? worn.auto : null);
   const armFlip = () => {
     if (onSchedule() || globalThis.GZ_SCHEDULE) need('features/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
-    // The pointer, Look rotation and this page's stickers (features/lookx.js) load once one is in use.
+    // Look rotation and this page's stickers (features/lookx.js) load once one is in use; the Look's pointer brings it too
+    // (moveParts).
     if (globalThis.GZ_LOOKX) return GZ_LOOKX.sync();
     const k = `stk:${location.origin}${location.pathname.replace(/(.)\/+$/, '$1')}`, x = settings.extras;
-    if (!links.length || !x.stickers && x.cursor === 'off' && x.rotate === 'off') return;
-    local((l) => l.get(k, (r) => { if (x.cursor !== 'off' || x.rotate !== 'off' || x.stickers && r?.[k]?.length) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
+    if (!links.length || !x.stickers && x.rotate === 'off') return;
+    local((l) => l.get(k, (r) => { if (x.rotate !== 'off' || x.stickers && r?.[k]?.length) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);

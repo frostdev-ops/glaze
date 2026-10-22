@@ -105,8 +105,8 @@ const GZ_SPEC = {
     syllabus: [false, 'bool'],
   },
   docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
-  // features/lookx.js. cursor 'own': a picture kept on this device.
-  extras: { cursor: ['off', ['off', 'aqua', 'lilac', 'pearl', 'own']], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
+  // features/lookx.js. The pointer is the Look's (x.pointer, lib/lookparts.js), not a setting.
+  extras: { stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
   // lib/blocklist.js
   mods: { blocklist: [true, 'bool'] },

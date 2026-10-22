@@ -186,7 +186,7 @@ test('a rotated favorite is worn like "Use this theme": its palette, look and ba
 });
 
 test('extras settings: off by default, sanitized', () => {
-  assert.deepEqual(G.GZ_DEFAULTS.extras, { cursor: 'off', stickers: true, rotate: 'off', at: '08:00' });
+  assert.deepEqual(G.GZ_DEFAULTS.extras, { stickers: true, rotate: 'off', at: '08:00' });
   assert.deepEqual(G.GZ_SANITIZE({ extras: { cursor: 'evil', rotate: '1m', at: '25:99', stickers: 'yes' } }).extras, G.GZ_DEFAULTS.extras);
 });
 

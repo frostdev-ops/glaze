@@ -242,7 +242,8 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
   html.style.removeProperty = (k) => { delete html.style[k]; };
   const blobs = new Set();
   let b = 0;
-  const settings = { extras: { cursor: 'off', stickers: true, rotate: 'off', at: '08:00' } };
+  const settings = { extras: { stickers: true, rotate: 'off', at: '08:00' } };
+  let parts = null; // the worn Look's parts, as GZ_CTX.parts() hands them
   const held = []; // storage reads made to wait: { keys, release }
   let hold = () => false;
   const timers = new Map();
@@ -270,7 +271,8 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
       },
     },
     GZ_MATCH_PRESET: () => null,
-    GZ_CTX: { t: (k) => k, need: () => Promise.resolve(), settings: () => settings, on: () => true, solo: true },
+    CSS: { supports: () => true },
+    GZ_CTX: { t: (k) => k, need: () => Promise.resolve(), settings: () => settings, parts: () => parts, on: () => true, solo: true },
   });
   context.window = context;
   context.top = context;
@@ -280,7 +282,7 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
   // Runs the timers due now (the 300 ms save; not rotation's ten-minute one).
   const runTimers = () => { for (const [id, f] of [...fns]) if (timers.get(id) <= 1000) { timers.delete(id); fns.delete(id); f(); } };
   const fire = (type, e = {}) => { for (const f of win[type] || []) f(e); };
-  return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; } };
+  return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; }, wear: (x) => { parts = x; } };
 };
 
 test('page: a picture read that answers after Hide doesn\'t draw the stickers back', async () => {
@@ -342,7 +344,7 @@ test('page: Place stickers with Show stickers off opens sticker mode with its la
 test('page: own sticker and pointer pictures reach the page as blob: addresses, never data: URLs', async () => {
   const data = `data:image/png;base64,${Buffer.from('not really a png').toString('base64')}`;
   const p = page({ [KEY]: [sticker('a', 'own:pic1'), sticker('b')], 'stkImg:pic1': data, cursorImg: data });
-  p.settings.extras = { ...p.settings.extras, cursor: 'own' };
+  p.wear({ pointer: 'own' });
   await p.lx.sync();
   for (let i = 0; i < 5; i++) await tick();
   const text = JSON.stringify((function walk(e) { return { a: e.attrs, s: e.style, src: e.src, kids: e.children.map(walk) }; })(p.html));
@@ -351,12 +353,27 @@ test('page: own sticker and pointer pictures reach the page as blob: addresses, 
   const img = p.body.find('gz-stickers').children[0].children[0];
   assert.match(img.src, /^blob:x\//);
   assert.equal(p.blobs.size, 2, 'the sticker and the pointer');
-  // Pointer off: its address is revoked.
-  p.settings.extras = { ...p.settings.extras, cursor: 'off' };
+  // A Look without a pointer: its address is revoked.
+  p.wear({ cursor: { kind: 'glow' } });
   await p.lx.sync();
   await tick();
   assert.equal(p.blobs.size, 1);
   assert.equal(p.html.style['--gz-cursor'], undefined);
+});
+
+test('page: the Look\'s pointer set is the system\'s cursor, its SVG first with the PNGs after, and goes with the Look', async () => {
+  const p = page({});
+  p.wear({ pointer: 'pumpkin' });
+  await p.lx.sync();
+  await tick();
+  assert.equal(p.html.style['--gz-cursor'], 'url("chrome-extension://x/assets/art/cursors/pumpkin/default.svg") 4 3, image-set(url("chrome-extension://x/assets/art/cursors/pumpkin/default.png") 1x, url("chrome-extension://x/assets/art/cursors/pumpkin/default@2x.png") 2x) 4 3, url("chrome-extension://x/assets/art/cursors/pumpkin/default.png") 4 3, auto');
+  assert.match(p.html.style['--gz-cursor-pointer'], /pumpkin\/pointer\.svg"\) 12 3, .*, pointer$/);
+  assert.ok('data-gz-cursor' in p.html.attrs);
+  p.wear(null);
+  await p.lx.sync();
+  await tick();
+  assert.equal(p.html.style['--gz-cursor'], undefined);
+  assert.equal(p.blobs.size, 0, 'a set is the extension\'s file, never a blob');
 });
 
 // A tab on a computer whose worker is the real one (lib/background.js), in sticker mode on `path`.
@@ -402,7 +419,8 @@ test('page: a move still waiting to be saved when the page changes in place is s
 test('page: a pointer picture read that answers after the page is hidden makes no blob: address', async () => {
   const data = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
   const p = page({ cursorImg: data });
-  p.settings.extras = { ...p.settings.extras, stickers: false, cursor: 'own' };
+  p.settings.extras = { ...p.settings.extras, stickers: false };
+  p.wear({ pointer: 'own' });
   p.holdWhen((keys) => [].concat(keys).includes('cursorImg'));
   p.lx.sync();
   for (let i = 0; i < 20 && !p.held.length; i++) await tick();
