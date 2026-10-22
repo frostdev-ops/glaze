@@ -1369,7 +1369,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!/^https?:$/.test(u.protocol) || u.href.split('#')[0] === location.href.split('#')[0]) return;
     const own = u.origin === location.origin;
     // Its own course's pages (and Ultra's redirects into them) stay in the frame.
-    if (own && (u.pathname.startsWith(`/ultra/courses/${framed}/`) || u.pathname === `/ultra/courses/${framed}` || u.pathname === '/ultra/redirect' && ['course_id', 'courseId'].flatMap((k) => u.searchParams.getAll(k)).every((id) => !id || id === framed))) return;
+    // So do its panels that Ultra puts under another page (an announcement opens at /ultra/stream/announcement-detail?courseId=…).
+    const ids = ['course_id', 'courseId'].flatMap((k) => u.searchParams.getAll(k));
+    if (own && (u.pathname.startsWith(`/ultra/courses/${framed}/`) || u.pathname === `/ultra/courses/${framed}` || /^\/ultra\//.test(u.pathname) && ids.every((id) => !id || id === framed) && (u.pathname === '/ultra/redirect' || ids.includes(framed)))) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (own) toTop('away', { url: u.pathname + u.search + u.hash });
     else window.open(u.href, '_blank', 'noopener');
@@ -1681,10 +1683,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const cid = here();
     // In a tab's frame, its page leaving its course (another course, a page outside one): the page around goes there.
     if (framed && !preview && (framed === PAGE ? !!cid : cid !== framed)) {
-      // Ultra's redirect into this frame's own course (a link the frame keeps, below) is on its way there, not away.
-      if (ctx.site !== 'canvas' && location.pathname === '/ultra/redirect') {
-        const q = new URLSearchParams(location.search);
-        if (['course_id', 'courseId'].flatMap((k) => q.getAll(k)).every((id) => !id || id === framed)) return;
+      // Ultra's redirect into this frame's own course (a link the frame keeps, below) is on its way there, not away; so is a
+      // panel of its course that Ultra opens under another page (an announcement: /ultra/stream/announcement-detail?courseId=…).
+      if (ctx.site !== 'canvas') {
+        const ids = ['course_id', 'courseId'].flatMap((k) => new URLSearchParams(location.search).getAll(k));
+        if (ids.every((id) => !id || id === framed) && (location.pathname === '/ultra/redirect' || ids.includes(framed))) return;
       }
       const url = location.pathname + location.search + (ctx.site === 'canvas' ? location.hash || '' : '');
       if (awayFrom !== url) { awayFrom = url; toTop('away', { url }); }
