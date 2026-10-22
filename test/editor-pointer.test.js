@@ -202,6 +202,33 @@ test('pointer uploads refuse other types and files over 5 MiB before decoding', 
   assert.equal(s.extras.pointer, 'own');
 });
 
+test('a pending upload cannot undo a later removal, pointer choice or upload', async () => {
+  for (const action of ['remove', 'choose', 'upload']) {
+    const s = settings({ pointer: 'own' }), e = editor(s, { cursorImg: 'data:image/png;base64,b25l' });
+    await tick();
+    const pending = [];
+    let closed = 0;
+    e.context.createImageBitmap = () => new Promise((resolve) => pending.push(() => resolve({ width: 64, height: 48, close() { closed++; } })));
+    const upload = () => { e.ids['pointer-file'].files = [{ type: 'image/png', size: 100 }]; e.ids['pointer-file'].fire('change'); };
+    upload();
+    if (action === 'remove') e.ids['pointer-remove'].click();
+    else if (action === 'choose') e.choose('lava');
+    else upload();
+    for (let i = 0; i < 3; i++) await tick();
+    pending[0]();
+    for (let i = 0; i < 3; i++) await tick();
+    assert.deepEqual(e.changed, action === 'remove' ? ['cursorImg'] : [], `${action}: the superseded decode must not write`);
+    assert.equal(s.extras.pointer, action === 'remove' ? 'look' : action === 'choose' ? 'lava' : 'own');
+    assert.equal(closed, 1, 'even a superseded bitmap is released');
+    if (action === 'upload') {
+      pending[1]();
+      for (let i = 0; i < 3; i++) await tick();
+      assert.deepEqual(e.changed, ['cursorImg'], 'the newest upload can still finish');
+      assert.equal(closed, 2);
+    }
+  }
+});
+
 test('a picture added or removed in another tab shows here; one that is no bitmap data URL is not shown', async () => {
   const s = settings({ pointer: 'aqua' });
   const e = editor(s, { cursorImg: 'data:image/png;base64,b25l' });
