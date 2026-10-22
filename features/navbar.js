@@ -13,6 +13,8 @@
 //
 // A site's adapter (GZ_NAVBAR_<SITE>(X), below for Ultra, features/navbar-<site>.js for the others):
 //   read() -> [{ id, label, href, active, badge, panel }]   the site's own items (lib/navlayout.js's vocabulary)
+//                              or, for what that has no name for, id 'link:<12 of a-z0-9>' (the same address, the same id), with
+//                              icon, panel (a menu, opened through panel(id)) or checked (a boolean: a switch, driven through go(id))
 //   go(id) -> bool             open one through the site's own link     brand() -> { src, name }    avatar() -> url
 //   home() -> id               the logo's item                          main(doc) -> the main element of doc (the page, or the course tab's frame on screen)
 //   observe(fn), unobserve()   call fn when the site's nav changes
@@ -196,6 +198,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (link) { e.href = item.href; if (item.tab) { e.target = '_blank'; e.rel = 'noopener noreferrer'; } } else e.type = 'button';
     e.dataset.id = item.id;
     part(e, item.active ? `${partName} active` : partName);
+    if (item.switch) { e.setAttribute('role', 'switch'); e.setAttribute('aria-checked', String(!!item.checked)); e.disabled = !!item.disabled; part(e, `${partName} switch${item.checked ? ' switch-on' : ''}`); }
     if (item.active) e.setAttribute('aria-current', 'page');
     if (item.by) { const from = t('From {name}', { name: item.by }); e.setAttribute('aria-description', from); e.setAttribute('title', from); }
     return e;
@@ -566,7 +569,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       if (focus && was) (was === 'more' ? el.tmore : el.tacc).focus({ preventScroll: true });
       return;
     }
-    const entry = (item) => { const e = node(item, 'row', 'menu-item'); e.setAttribute('role', 'menuitem'); const b = badgeOf(item); return put(e, icon(item.icon), make('span', { textContent: item.label }), b ? badge(b) : null); };
+    const entry = (item) => { const e = node(item, 'row', 'menu-item'); e.setAttribute('role', item.switch ? 'menuitemcheckbox' : 'menuitem'); const b = badgeOf(item); return put(e, icon(item.icon), make('span', { textContent: item.label }), b ? badge(b) : null); };
     const items = which === 'more' ? [...el.titems.querySelectorAll('.item[data-over]')].map((e) => byId(e.dataset.id)).filter(Boolean).map(entry)
       : [model.account && entry({ ...model.account, label: t('Account') }), model.signout && entry(model.signout)].filter(Boolean);
     const custom = make('button', { type: 'button', className: 'row customize' }, icon('settings'), make('span', { textContent: t('Customize navigation') }));
@@ -793,6 +796,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // The course's own pages: through the course tabs where they run, so a course tab's frame follows.
     if (item.course) { if (plain(e) && !item.tab) { e.preventDefault(); openHere(item.href); } sheetTo(false); if (!lay.open) peekTo(false); return; }
     if (item.owner) { if (!item.href) e.preventDefault(); if (e.isTrusted) mods.get(item.owner)?.get(item.id)?.select?.(); }
+    else if (item.switch) { e.preventDefault(); if (e.isTrusted) site.go(item.id); }
     else if (item.action) { e.preventDefault(); glaze(item.action, e); }
     // The site's own items go through its own links, so its router (and its trays) handle them as it would.
     else if (item.native && plain(e)) { e.preventDefault(); goNative(item.id); }
@@ -904,8 +908,16 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const glazePage = !!globalThis.GZ_SETTINGS_PAGE?.isOpen();
     const native = site.read().map((n) => (glazePage ? { ...n, active: false } : framed ? { ...n, active: n.id === 'course' } : n));
     const look = X.parts()?.nav ? L.clean(X.parts().nav) : null;
-    model = M.build({ native, prefs, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
+    // What the site has no shared name for (link:<id>, see the adapter contract) the model takes as links of the student's own,
+    // so they hide, rename and move like any; what a link lacks (a menu, a switch's state, the page it is) is set on them after.
+    const sited = native.filter((n) => /^link:[a-z0-9]{12}$/.test(n.id));
+    model = M.build({ native: sited.length ? native.filter((n) => !sited.includes(n)) : native, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
+      prefs: sited.length ? { ...prefs, links: [...prefs.links.filter((l) => !sited.some((n) => n.id === 'link:' + l.id)), ...sited.map((n) => ({ id: n.id.slice(5), n: n.label, u: n.href, i: n.icon || 'link' }))] } : prefs,
       names: { notes: t('Notes'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') } });
+    for (const n of sited) {
+      const i = model.items.find((x) => x.id === n.id);
+      if (i) Object.assign(i, { active: !!n.active, ...(n.panel && { panel: true }), ...(typeof n.checked === 'boolean' && { switch: true, checked: n.checked, disabled: !!n.disabled }) });
+    }
     if (glazePage) for (const i of model.items) if (i.id === 'glaze:settings') i.active = true;
     // Glaze's widgets load with the first one turned on; mods' navigation widgets go in the dock, once each.
     const wants = model.widgets.map((w) => w.id);
@@ -990,7 +1002,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Opens an item as a click on it would: the site's own through its own link.
     go: (id) => {
       const item = byId(id);
-      if (!item || item.hidden && !item.native || item.href && !sameSite(item.href)) return false;
+      if (!item || item.hidden && !item.native || item.switch || item.href && !sameSite(item.href)) return false; // a switch changes the site's state: a student's click only
       emit('navigate', { id });
       if (item.panel && site.panel) panelTo(panel === id ? '' : id);
       else if (item.course) openHere(item.href);

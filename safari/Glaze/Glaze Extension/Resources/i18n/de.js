@@ -2804,6 +2804,7 @@
   "Skip to content": "Zum Inhalt springen",
   "Your account": "Dein Konto",
   "More": "Mehr",
+  "Edit mode": "Bearbeitungsmodus",
   "Customize navigation": "Navigation anpassen",
   "Collapse navigation": "Navigation einklappen",
   "Expand navigation": "Navigation ausklappen",
