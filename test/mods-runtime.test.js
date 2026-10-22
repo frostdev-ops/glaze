@@ -1081,10 +1081,16 @@ test('nav.items: a mod\'s items go to the bar under its own name, at most eight,
   port.close();
 });
 
-test('nav.items: every mod reads the bar\'s items, but not the account item, whose label is the student\'s name', async () => {
+// nav.items goes to every mod, frames included, with no permission (MOD-2, audit navitems.js): the page's native items, by
+// id with Glaze's own names. Not the account item (the student's name), names the student typed (a renamed item, their own
+// links), Glaze's own items or other mods' items (a label like "Biology 91.5%").
+test('nav.items: every mod hears the native items by id with Glaze\'s names, nothing the student typed, nor their name, nor other mods\' items', async () => {
   const p = page();
-  const profile = { id: 'profile', label: 'Jane Q. Student', icon: 'user', href: 'https://lms.test/profile', badge: '', active: false, hidden: false };
-  p.ctx.GZ_NAVBAR_UI = fakeBar({ ...BAR, items: [...BAR.items, profile] });
+  p.ctx.GZ_NAV_LAYOUT = require('../lib/navlayout.js');
+  const it = (id, label, more = {}) => ({ id, label, icon: 'link', href: '', badge: '', active: false, hidden: false, ...more });
+  p.ctx.GZ_NAVBAR_UI = fakeBar({ ...BAR, items: [it('course', 'Courses'), it('grades', 'Jane D. grades'), it('calendar', 'Kalender'), it('tools', 'Tools', { hidden: true }),
+    it('profile', 'Jane Q. Student'), it('link:aaaaaaaaaaaa', 'Counseling appointments'), it('mod:abcdefghijklmnop.bio', 'Biology 91.5%', { owner: 'abcdefghijklmnop' }),
+    it('glaze:settings', 'Jane\'s Glaze'), it('w:clock', 'Clock'), it('logout', 'Sign out of Jane\'s account')] });
   p.chrome.runtime.sendMessage = async () => ({ ok: true });
   p.G.start([W('a')]);
   const { port, got } = await p.load();
@@ -1092,12 +1098,27 @@ test('nav.items: every mod reads the bar\'s items, but not the account item, who
   await settle();
   p.G.pass();
   await settle();
-  eq(got.filter((x) => x.event === 'nav.items').at(-1).data, { items: [{ id: 'course', label: 'Courses' }, { id: 'calendar', label: 'Calendar' }] });
+  eq(got.filter((x) => x.event === 'nav.items').at(-1).data, { items: [{ id: 'course', label: 'Courses' }, { id: 'grades', label: 'Grades' }, { id: 'calendar', label: 'Calendar' }, { id: 'logout', label: 'Sign out' }] });
   port.close();
+  // Where Glaze's bar isn't drawn, the older rail's: its units carry the student's links and group labels too.
+  const q = page();
+  q.ctx.GZ_NAV_LAYOUT = p.ctx.GZ_NAV_LAYOUT;
+  const unit = (id, textContent, hidden = false) => ({ dataset: { gzNavId: id }, textContent, hidden });
+  q.ctx.document.querySelectorAll = (sel) => (sel === '[data-gz-nav-id]' ? [unit('g:0', 'Jane\'s things'), unit('grades', 'Jane D. grades'), unit('aaaaaaaaaaaa', 'Counseling appointments'), unit('profile', 'Jane Q. Student'), unit('tools', 'Tools', true), unit('w:clock', '10:04')] : []);
+  q.chrome.runtime.sendMessage = async () => ({ ok: true });
+  q.G.start([W('a')]);
+  const r = await q.load();
+  r.port.postMessage({ ready: true });
+  await settle();
+  q.G.pass();
+  await settle();
+  eq(r.got.filter((x) => x.event === 'nav.items').at(-1).data, { items: [{ id: 'grades', label: 'Grades' }] });
+  r.port.close();
 });
 
 test('nav.read: the model is cleaned and capped, and the bar\'s events reach only granted mods', async () => {
   const p = page();
+  p.ctx.GZ_NAV_LAYOUT = require('../lib/navlayout.js'); // loaded with the bar: Glaze's names for nav.items
   p.ctx.GZ_NAVBAR_UI = fakeBar(BAR);
   p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? { ok: true, value: true } : { ok: true });
   p.G.start([{ ...W('a'), events: ['nav.read'] }, W('b')]);
@@ -1119,28 +1140,37 @@ test('nav.read: the model is cleaned and capped, and the bar\'s events reach onl
   port.close();
 });
 
-test('nav.layout lays over the student\'s like nav.set, first mod wins, and "Use my own" turns that mod\'s off', async () => {
-  const lay = { a: { hidden: ['calendar'], place: 'top' }, b: { hidden: ['grades'] } };
-  let list = [W('a'), W('b')];
+// Through the real broker. This test once had a stand-in worker answer nav.set for any mod, pinning nav.set as nav.layout
+// with no permission, which made the nav.layout permission decorative (MOD-1): now both need it granted.
+test('nav.set and nav.layout lay a layout over the student\'s only with nav.layout granted; the first mod wins, and "Use my own" turns that mod\'s off', async () => {
+  const B = require('../lib/modbroker.js');
+  const [a, b, c] = ['aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'cccccccccccccccc'];
+  // c declares nav.layout, but the student didn't grant it.
+  const data = { mods: [a, b, c], ...Object.fromEntries([a, b, c].map((id) => [`mod:${id}`, { id, enabled: true, manifest: { permissions: [{ id: 'nav.layout', why: 'w' }] }, grants: { 'nav.layout': id !== c } }])) };
+  const worker = { site: 'https://lms.test', local: { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in data).map((x) => [x, structuredClone(data[x])])), set: async (o) => (Object.assign(data, o), true) },
+    sync: { get: async () => ({}) }, queue: (f) => f(), keys: async () => Object.keys(data), record: async (id) => data[`mod:${id}`], blocklist: async () => null };
+  const lay = { [a]: { hidden: ['calendar'], place: 'top' }, [b]: { hidden: ['grades'] }, [c]: { hidden: ['course'] } };
+  let list = [W(c), W(a), W(b)];
   const p = page({ list: () => list });
-  p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? { ok: true, value: lay[m.mod] } : m.op === 'list' ? { mods: list } : { ok: true });
+  p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? B.handle(m, worker) : m.op === 'list' ? { mods: list } : { ok: true });
   p.G.start(list);
-  const { port } = await p.load();
+  const { port, got } = await p.load();
   port.postMessage({ ready: true });
   await settle();
-  port.postMessage({ mod: 'b', via: 'worker', id: 1, call: 'nav.layout', args: [] });
-  port.postMessage({ mod: 'a', via: 'worker', id: 2, call: 'nav.set', args: [] });
+  port.postMessage({ mod: c, via: 'worker', id: 1, call: 'nav.set', args: [lay[c]] });
+  port.postMessage({ mod: b, via: 'worker', id: 2, call: 'nav.layout', args: [lay[b]] });
+  port.postMessage({ mod: a, via: 'worker', id: 3, call: 'nav.set', args: [lay[a]] });
   await settle();
-  eq(p.G.parts(null).nav, lay.a, 'the first in the student\'s order wins');
-  eq(p.G.arranger(), { id: 'a', name: 'a', place: 'top' });
-  list = [{ ...W('a'), arranges: false }, W('b')];
-  p.chrome.changed({ 'modNavLayout:a': { newValue: false } }, 'local');
+  eq(got.find((x) => x.id === 1), { mod: c, via: 'worker', id: 1, ok: false, error: 'permission' }, 'not granted: refused, first in order or not');
+  eq(p.G.parts(null).nav, lay[a], 'the first granted one in the student\'s order wins');
+  eq(p.G.arranger(), { id: a, name: a, place: 'top' });
+  list = [W(c), { ...W(a), arranges: false }, W(b)];
+  p.chrome.changed({ [`modNavLayout:${a}`]: { newValue: false } }, 'local');
   await p.tick(100);
-  eq(p.G.parts(null).nav, lay.b, 'Use my own: a\'s layout is off, the next mod\'s shows');
-  eq(p.G.arranger()?.id, 'b');
+  eq(p.G.parts(null).nav, lay[b], 'Use my own: a\'s layout is off, the next mod\'s shows');
+  eq(p.G.arranger()?.id, b);
   assert.equal(p.G.stats().running, true, 'without restarting the mods');
-  lay.b = null;
-  port.postMessage({ mod: 'b', via: 'worker', id: 4, call: 'nav.layout', args: [] });
+  port.postMessage({ mod: b, via: 'worker', id: 4, call: 'nav.layout', args: [null] });
   await settle();
   assert.equal(p.G.parts(null).nav, undefined, 'null withdraws it');
   port.close();

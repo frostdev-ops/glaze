@@ -942,18 +942,21 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     place: lay?.place || 'none', style: lay?.style || 'float', course: inCourse(), menu: cmenu ? { name: cmenu.name, items: cmenu.items.map(strip) } : null, panel } : null);
   const OWNER = /^[a-z0-9][a-z0-9_-]{0,47}$/, ID = /^[a-z][a-z0-9-]{0,31}$/;
   const SLOTS = ['top', 'bottom'];
-  // A mod's item, checked: a name, one of the bar's icons, an address of this site only, a short badge, and a
-  // group of the bar or a slot. Anything else refuses (null).
+  // A mod's item, checked: a name, one of the bar's icons, an address of this site only (lib/navlayout.js onSite), a short
+  // badge, and a group of the bar or a slot. It never passes for one of Glaze's own items: not their icons, nor their names
+  // (in any of Glaze's languages, or as this page and the student name them; lib/navlayout.js reserved). Anything else
+  // refuses (null).
   const check = (owner, raw) => {
     if (!OWNER.test(owner) || !raw || typeof raw !== 'object' || !ID.test(raw.id) || typeof raw.label !== 'string') return null;
     const label = raw.label.replace(/[\p{Cc}\p{Bidi_Control}]/gu, ' ').replace(/\s+/g, ' ').trim();
-    if (!label || [...label].length > 40) return null;
+    const own = [t('Glaze settings'), t('Sign out'), ...(model?.items || []).filter((i) => i.id === 'glaze:settings' || i.id === 'logout').map((i) => i.label)];
+    if (!label || [...label].length > 40 || L.reserved(label, own)) return null;
     let href = '';
     if (raw.href !== undefined && raw.href !== '') {
-      if (typeof raw.href !== 'string' || raw.href.length > 512) return null;
-      try { const u = new URL(raw.href, location.href); if (!['http:', 'https:'].includes(u.protocol) || u.origin !== location.origin || u.username || u.password || u.href.length > 512) return null; href = u.href; } catch { return null; }
+      href = L.onSite(raw.href, location.origin);
+      if (!href) return null;
     }
-    if (raw.icon !== undefined && !M.PICKS.includes(raw.icon)) return null;
+    if (raw.icon !== undefined && !M.MOD_PICKS.includes(raw.icon)) return null;
     if (raw.badge !== undefined && !(typeof raw.badge === 'number' || (typeof raw.badge === 'string' && [...raw.badge].length <= 4))) return null;
     if (raw.slot !== undefined && !SLOTS.includes(raw.slot)) return null;
     if (raw.group !== undefined && typeof raw.group !== 'string' && !Number.isInteger(raw.group)) return null;
