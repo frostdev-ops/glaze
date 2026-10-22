@@ -1587,6 +1587,7 @@
   "Course tabs": "Abas de cursos",
   "Close a course tab before opening another to keep your unsaved work.": "Feche uma aba de curso antes de abrir outra para manter seu trabalho não salvo.",
   "{name} has unsaved work, so it stays where it was.": "{name} tem trabalho não salvo, então fica onde estava.",
+  "{name} has unsaved work, so its tab stays open.": "{name} tem trabalho não salvo, então a aba continua aberta.",
   "This page has unsaved work, so it stays where it was.": "Esta página tem trabalho não salvo, então fica onde estava.",
   "Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.": "Fixe uma aba para mantê-la, arraste as abas para ordená-las, feche uma pelo × ou com o botão do meio do mouse. No teclado: as setas passam de uma aba para outra, Delete fecha uma, P a fixa e Shift com uma seta a move.",
   "Above the course's bar": "Acima da barra do curso",

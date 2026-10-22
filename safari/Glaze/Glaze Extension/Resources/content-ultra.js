@@ -422,7 +422,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       if (replaying || !I.observer || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       if (html.getAttribute('data-gz-motion') === 'off' || html.hasAttribute('data-gz-no-enter')) return;
       const link = e.target instanceof Element && e.target.closest(PAGE_LINKS);
-      if (!link || link.matches('[aria-current="page"], .active')) return;
+      // Native fragment actions and Sign Out must keep their trusted click for later listeners (course tabs included).
+      if (!link || link.matches('[aria-current="page"], .active') || /^#|^$|(?:^|\/)logout(?:[/?#]|$)|[?&](?:action|event)=logout(?:[&#]|$)/i.test((link.getAttribute('href') || '').trim())) return;
       // Ultra gets the click inside the transition, once the old page has been captured.
       e.preventDefault();
       e.stopImmediatePropagation();

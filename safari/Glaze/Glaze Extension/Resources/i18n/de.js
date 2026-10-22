@@ -1587,6 +1587,7 @@
   "Course tabs": "Kurs-Tabs",
   "Close a course tab before opening another to keep your unsaved work.": "Schließe einen Kurs-Tab, bevor du einen weiteren öffnest, um deine ungespeicherte Arbeit zu behalten.",
   "{name} has unsaved work, so it stays where it was.": "{name} hat ungespeicherte Arbeit und bleibt deshalb, wo es war.",
+  "{name} has unsaved work, so its tab stays open.": "{name} hat ungespeicherte Arbeit, deshalb bleibt der Tab offen.",
   "This page has unsaved work, so it stays where it was.": "Diese Seite hat ungespeicherte Arbeit und bleibt deshalb, wo sie war.",
   "Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.": "Hefte einen Tab an, um ihn zu behalten, ziehe Tabs in die gewünschte Reihenfolge, schließe einen mit seinem × oder der mittleren Maustaste. Mit der Tastatur: Die Pfeiltasten wechseln zwischen Tabs, Entf schließt einen, P heftet ihn an, und Umschalt mit einer Pfeiltaste verschiebt ihn.",
   "Above the course's bar": "Über der Kursleiste",
