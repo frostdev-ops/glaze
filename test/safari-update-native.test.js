@@ -123,3 +123,20 @@ test('appcast helper validates before key lookup and preserves older release enc
     fs.rmSync(temp, { recursive: true, force: true });
   }
 });
+
+// Safari matches extensions by bundle id: unregistering any copy of Glaze (a build product, the release copy, the
+// disk image's) marks the installed Glaze removed and Safari deletes its settings. Deleting or ejecting a copy is safe.
+test('nothing that builds, packages or installs the Mac app unregisters a copy of Glaze', () => {
+  for (const f of ['scripts/build-safari.sh', 'scripts/make-dmg.sh', 'scripts/appstore-safari.sh', 'safari/Glaze/Glaze/ViewController.swift']) {
+    const src = fs.readFileSync(path.join(root, f), 'utf8').split('\n').filter((l) => !/^\s*(#|\/\/)/.test(l)).join('\n');
+    assert.doesNotMatch(src, /lsregister\S*"?\s+[^\n]*-u\b|\$0\\?"\s+-u\b|pluginkit\s+-r\b|LSUnregister/, f);
+  }
+  // Xcode registers what it builds: that copy is only ever signed ad hoc, and the release is signed in a copy of it.
+  const build = fs.readFileSync(path.join(root, 'scripts/build-safari.sh'), 'utf8');
+  const xcode = build.slice(build.indexOf('xcodebuild -project'), build.indexOf(' build > '));
+  assert.match(xcode, /CODE_SIGN_IDENTITY=- /);
+  assert.match(build, /'io\.frostdev\.GlazeBuild' \+ i\[/, 'Xcode builds under ids of its own');
+  assert.match(build, /plutil -replace CFBundleIdentifier -string io\.frostdev\.Glaze "\$app\/Contents\/Info\.plist"/);
+  assert.ok(build.indexOf('ditto "$built" "$app"') > build.indexOf(' build > ') && build.indexOf('ditto "$built" "$app"') < build.indexOf('codesign --force'));
+  assert.doesNotMatch(build, /ditto "\$app" "\$out\/build\/Glaze\.app"/, 'no unpacked app is left in release/');
+});

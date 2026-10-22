@@ -86,9 +86,9 @@ sh scripts/build-safari.sh
 ```
 
 That packages the extension, copies it into a temporary copy of the project, and builds a universal
-app in `release/<version>/build/Glaze.app`, signed with the configured Developer ID. Override `SAFARI_SIGN_IDENTITY`
-and `SAFARI_TEAM_ID` to use a different identity. Safari only installs apps from outside the App Store
-when they are notarized, so pass a saved `notarytool` Keychain profile:
+app, signed with the configured Developer ID, into `release/<version>/github/` as a zip (and a disk image when
+notarized). Override `SAFARI_SIGN_IDENTITY` and `SAFARI_TEAM_ID` to use a different identity. Safari only installs
+apps from outside the App Store when they are notarized, so pass a saved `notarytool` Keychain profile:
 
 ```sh
 NOTARY_PROFILE=your-profile sh scripts/build-safari.sh

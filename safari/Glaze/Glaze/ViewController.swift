@@ -238,19 +238,18 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
     }
 
     // Run from the disk image, this copy's extension shows up in Safari's settings as a second Glaze, and
-    // ticking that one leaves Glaze off once the image is ejected. Forget it and eject the image.
+    // ticking that one leaves Glaze off once the image is ejected. Eject the image. Never unregister this copy
+    // (lsregister -u): Safari would delete the installed Glaze's settings.
     private func leaveDiskImage() {
         let bundle = Bundle.main.bundleURL
         let volume = bundle.deletingLastPathComponent()
         guard let values = try? volume.resourceValues(forKeys: [.volumeURLKey, .volumeIsReadOnlyKey]),
               values.volumeIsReadOnly == true,
               values.volume?.standardizedFileURL == volume.standardizedFileURL else { return }
-        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
         let shell = Process()
         shell.executableURL = URL(fileURLWithPath: "/bin/sh")
         // Outlives Glaze: the image can't eject while Glaze runs from it. Best effort; it stays if Safari holds it.
-        shell.arguments = ["-c", "\"$0\" -u \"$1\"; sleep 1; /usr/sbin/diskutil eject \"$2\" >/dev/null",
-                           lsregister, bundle.path, volume.path]
+        shell.arguments = ["-c", "sleep 1; /usr/sbin/diskutil eject \"$0\" >/dev/null", volume.path]
         try? shell.run()
     }
 
