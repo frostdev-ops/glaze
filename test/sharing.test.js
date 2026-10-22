@@ -120,8 +120,9 @@ test('edit: deletions and restores are changes too, and a value too big to share
   assert.deepEqual(G.view(d), { x: { a: 1 } });
   await G.edit(d, AD, { x: { a: 1 }, y: { a: 2 } }, 1e12);
   assert.deepEqual(G.view(d), { x: { a: 1 }, y: { a: 2 } });
-  // A restore sends its fields again; a deleted entity's fields aren't sent again with the whole state.
-  assert.deepEqual(d.pending.flat().map((o) => [o.e, o.f, o.v]), [['x', 'a', 1], ['y', 'a', 2], ['y', 'del', true], ['y', 'del', false], ['y', 'a', 2]]);
+  // A restore sends its fields again (unsent, the deletion and the first copy give way to it); a deleted entity's
+  // fields aren't sent again with the whole state.
+  assert.deepEqual(d.pending.flat().map((o) => [o.e, o.f, o.v]), [['x', 'a', 1], ['y', 'del', false], ['y', 'a', 2]]);
   await G.edit(d, AD, { x: { a: 1 } }, 1e12);
   assert.deepEqual(G.everything(d).flat().map((o) => [o.e, o.f]).sort(), [['x', 'a'], ['y', 'del']]);
   const big = { fields: ['t'], clean: (f, v) => v };
@@ -129,6 +130,27 @@ test('edit: deletions and restores are changes too, and a value too big to share
   assert.deepEqual(await G.edit(n, big, { a: { t: 'x'.repeat(G.LIMIT.op) }, b: { t: 'ok' } }, 1e12), { n: 1, big: ['a'] });
   assert.deepEqual(G.view(n), { b: { t: 'ok' } });
   await assert.rejects(G.edit({ ...blank(), seed: undefined }, AD, { x: { a: 1 } }, 1e12), /read-only/);
+});
+
+test('edit: unsent changes keep only the newest value per field, naming the value the others last saw', async () => {
+  const a = blank('aaaaaaaa'), b = blank('bbbbbbbb');
+  await G.edit(b, AD, { x: { a: 1, b: 1 } }, 1e12);
+  await G.merge(a, AD, b.pending.splice(0).flat(), 1e12);
+  const seen = a.state.x.a[1];
+  // Offline: forty saves of one field, and one of another.
+  for (let i = 2; i <= 40; i++) await G.edit(a, AD, { x: { a: i, b: 1 } }, 1e12 + i);
+  await G.edit(a, AD, { x: { a: 40, b: 2 } }, 1e12 + 50);
+  assert.equal(a.pending.length, 1);
+  assert.deepEqual(a.pending[0].map((o) => [o.e, o.f, o.v, o.p]), [['x', 'a', 40, seen], ['x', 'b', 2, seen]]);
+  assert.deepEqual(a.state.x.a, [40, a.pending[0][0].t, seen], 'the state sends what the queue would (compaction sends it)');
+  // b's value is what a built on, so b keeps no conflict copy of it.
+  assert.deepEqual(await G.merge(b, AD, a.pending.flat(), 1e12), []);
+  assert.deepEqual(G.view(b), G.view(a));
+  // A newer value from another member, then an edit on top of it: that edit names the other member's value.
+  const t = (1e12 + 60).toString(36).padStart(9, '0') + '000cccccccc';
+  await G.merge(a, AD, [{ e: 'x', f: 'a', v: 99, t, p: seen }], 1e12 + 60);
+  await G.edit(a, AD, { x: { a: 100, b: 2 } }, 1e12 + 70);
+  assert.deepEqual(a.pending.flat().map((o) => [o.f, o.v, o.p]), [['b', 2, seen], ['a', 100, t]]);
 });
 
 test('conflicts: the device whose concurrent edit lost is the one that sees it lost', async () => {

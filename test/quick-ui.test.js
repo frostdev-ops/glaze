@@ -322,6 +322,14 @@ test('quick offline Join retains its keys and appears after the promised Setting
   assert.match((await N.run({ key: NK, op: 'load', id: session.notes[0] }, { local: joined.local }, joined.notes)).html, /Kept note/);
 });
 
+test('a share too big to sync says so in the panel, not Offline', async (t) => {
+  const server = await start(t), d = device(t, server), { id, sid } = await sharedNote(d);
+  // What the worker keeps after a sync that could not hold what it read (lib/sessions.js update()).
+  await d.db.put('sessions', sid, { ...await d.db.get('sessions', sid), status: 'big', error: 'state' });
+  const p = await page(d, { note: id });
+  assert.equal(p.get('note-state').textContent, 'Shared · Too big to sync — local copy kept');
+});
+
 test('a scoped panel sees and acts on only its Notes account, and shares only its own note', async (t) => {
   const server = await start(t), d = device(t, server), { id, sid } = await sharedNote(d);
   const OTHER = 'notesIdx:https://school.instructure.com/6';

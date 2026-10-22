@@ -170,10 +170,17 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
     for (const [e, ent] of Object.entries(st.state)) if (!(e in local) && !ent.del?.[0] && Object.keys(ent).length) ops.push({ e, f: 'del', v: true });
     if (!ops.length) return { n: 0, big: [] };
     const t = tick(st, now);
-    for (const o of ops) { o.t = t; o.p = (Object.hasOwn(st.state, o.e) && st.state[o.e][o.f]?.[1]) || ''; }
+    // Unsent, a change replaces the one it builds on: the queue keeps the newest value per entity and field (a device
+    // offline for a hundred saves of a note queues one copy of it, not a hundred), and that value names the one the
+    // others last saw it replace, so no member takes it for a concurrent edit.
+    const field = (o) => `${o.e} ${o.f}`, queued = new Map(st.pending.flat().map((o) => [field(o), o]));
+    for (const o of ops) {
+      const cur = (Object.hasOwn(st.state, o.e) && st.state[o.e][o.f]?.[1]) || '', had = queued.get(field(o));
+      o.t = t; o.p = had?.t === cur ? had.p : cur;
+    }
     const { list, big } = batches(ops);
-    for (const b of list) for (const o of b) entity(st, o.e)[o.f] = [o.v, o.t, o.p];
-    st.pending.push(...list);
+    for (const o of list.flat()) { entity(st, o.e)[o.f] = [o.v, o.t, o.p]; queued.delete(field(o)); queued.set(field(o), o); }
+    st.pending = batches([...queued.values()]).list;
     return { n: ops.length - big.length, big: [...new Set(big.map((o) => o.e))] };
   };
   // A state as field changes. A deleted entity keeps only its deletion: what it held isn't sent again (a device that
@@ -259,7 +266,7 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
 
   // One session's live object: the JSON (st) plus its keys, derived once. fetch, now, signal (stops everything) and
   // timeout (per request) can be swapped; tests do.
-  const session = (st, { fetch: f = (...a) => globalThis.fetch(...a), now = Date.now, signal, timeout = LIMIT.timeout } = {}) => {
+  const session = (st, { fetch: f = (...a) => globalThis.fetch(...a), now = Date.now, signal, timeout = LIMIT.timeout, checkpoint } = {}) => {
     let k;
     const key = async () => (k ||= await keys({ sid: unb64(st.sid), ...(st.seed ? { seed: unb64(st.seed) } : { secret: unb64(st.secret), pub: unb64(st.pub) }) }));
     const url = (p = '') => `${st.server}/s/${st.sid}${p}`;
@@ -297,6 +304,18 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
       }
       throw fail('busy');
     };
+    // Drops the log up to where this device has read, signed over that batch's signature, so it trims only the log it
+    // was made for.
+    const trim = async (kk) => {
+      // A durable caller keeps the merged state and a compact retry marker before history can disappear, including
+      // when the server commits the trim but its reply is lost.
+      await checkpoint?.();
+      const upto = st.cursor;
+      const sig = b64(new Uint8Array(await S.sign({ name: 'Ed25519' }, kk.sk, cat(aad(kk.sid, 'trim', String(upto)), unb64(st.last)))));
+      const r = await post(url('/trim'), { upto, sig });
+      if (r.ok) st.base = upto;
+      return r.ok;
+    };
     // Send what's queued (editors), then read what's new, then keep any lost edit as a copy and send that too. Within
     // a budget (pages, bytes, restarts), so a server that misbehaves can't keep a device busy: `more` says to come
     // back. Throws on a network error, a timeout or a refusal, with everything still queued; safe to call again.
@@ -307,7 +326,10 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
       const out = { changed: false, bad: 0, copies: 0, more: false };
       const budget = { pages: LIMIT.pages, bytes: LIMIT.bytes, resets: LIMIT.resets };
       if (!st.made) await register(kk);
-      let again = false;
+      // The worker keeps this small retry marker before compaction: a trim can commit while sending its replacement
+      // fails, and keeping a second copy of a large state as pending may exceed the worker's storage cap.
+      if (st.snapshot) { st.pending = everything(st); delete st.snapshot; }
+      let again = false, room = false;
       // Unknown to the server (restored from a backup older than the session): the creator registers it again and
       // sends everything it has.
       const lostSession = async (r) => {
@@ -318,10 +340,13 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
         return true;
       };
       for (let round = 0; round < 3; round++) {
+        let full = null;
         while (st.pending.length && kk.sk) {
           const r = await push(kk, st.pending[0]);
           if (r.status === 410) return gone();
           if (await lostSession(r)) continue;
+          // A full log takes nothing more until it's compacted: read on, then make room below (once a sync).
+          if (r.status === 507 && !room) { full = r; break; }
           if (!r.ok) throw fail('send', r);
           st.pending.shift();
         }
@@ -375,8 +400,17 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
           await edit(st, ad(), local, now());
           out.copies += lost.length;
         }
+        // Room in a full log: there is none for the whole state ahead of a trim, so the trim goes first, to where this
+        // device has read, and the state (its unsent edits in it) goes after it next round. A member who hadn't read
+        // that far reads the state instead. If the trim can't be made, the next round tries the queue once more.
+        if (full) {
+          room = true;
+          if (st.last && st.cursor > st.base && await trim(kk)) st.pending = everything(st);
+          continue;
+        }
         if (!st.pending.length || !kk.sk || halt || out.more) break;
       }
+      if (!st.pending.length) delete st.snapshot;
       return out;
     };
     const gone = () => { st.gone = true; st.pending = []; return { gone: true }; };
@@ -428,16 +462,17 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
       link: async (editable) => link(st.server, await key(), editable && !!st.seed),
       // An editor compacts once the log runs LIMIT.compact batches past its last trim: it sends the whole state again
       // at the end of the log, then has the server drop everything up to where it had read, so a new member reads the
-      // state, not the history. Needs room in the session for one more copy of the state.
+      // state, not the history. A log too full for one more copy of the state (507) is trimmed first, and the state
+      // queued to go after the trim with the next sync.
       compact: (force = false) => queue(async () => {
         const kk = await key();
         if (!kk.sk || st.pending.length || !st.last || st.cursor <= st.base || (!force && st.cursor - st.base < LIMIT.compact)) return false;
-        const upto = st.cursor, at = st.last;
-        for (const b of everything(st)) { const r = await push(kk, b); if (!r.ok) return false; }
-        const sig = b64(new Uint8Array(await S.sign({ name: 'Ed25519' }, kk.sk, cat(aad(kk.sid, 'trim', String(upto)), unb64(at)))));
-        const r = await post(url('/trim'), { upto, sig });
-        if (r.ok) st.base = upto;
-        return r.ok;
+        for (const b of everything(st)) {
+          const r = await push(kk, b);
+          if (r.status === 507) { if (!await trim(kk)) return false; st.pending = everything(st); return true; }
+          if (!r.ok) return false;
+        }
+        return trim(kk);
       }),
       // The creator's opt-in: the relay deletes the share after a year nobody used it.
       expiry: (on) => queue(async () => {
