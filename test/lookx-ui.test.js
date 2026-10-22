@@ -157,7 +157,7 @@ test('rotation: a favorite still decoding when the student turns rotation off or
   assert.equal(w.local.rotateState.i, 0);
 });
 
-test('rotation: a favorite brings its parts with it, a built-in Look clears them, and parts changed meanwhile drop the turn', { timeout: 10000 }, async () => {
+test('rotation: a favorite brings its parts with it, a built-in Look its own, and parts changed meanwhile drop the turn', { timeout: 10000 }, async () => {
   const G = require('../defaults.js');
   const X = require('../lib/lookparts.js');
   const parts = { x: { cursor: { kind: 'glow' } } };
@@ -187,11 +187,12 @@ test('rotation: a favorite brings its parts with it, a built-in Look clears them
   ({ w, r } = await favorite(parts, (x) => { x.sync.lookX = 'x1:changed'; }));
   assert.deepEqual(r, { ok: false, error: 'changed' });
   assert.equal(w.sync.lookX, 'x1:changed');
-  // Built-in Looks have no parts.
+  // A built-in Look brings its own parts.
   w = worker({ rotateState: due }, await settings());
   assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
   assert.equal(w.sync.bg.kind, 'scene');
-  assert.equal(w.sync.lookX, '');
+  const worn = await X.unpack(w.sync.lookX);
+  assert.ok(require('../defaults.js').GZ_LOOKS.some((L) => X.same(worn, require('../lib/lookset.js')(L))), JSON.stringify(worn)?.slice(0, 200));
 });
 
 // ---- the page -------------------------------------------------------------------------------------------------------
@@ -513,7 +514,7 @@ test('picking a palette in the popup or the editor keeps the Look’s parts; pic
   assert.deepEqual(s.parts, { x: { cursor: { kind: 'glow' } } }, 'a palette is not a Look: a typed colour keeps the extras, and so does a swatch');
   assert.ok(!keys.includes('parts'), 'and they are not rewritten');
   const looked = w.context.UI.pickLook(s, G.GZ_LOOKS[0]);
-  assert.equal(s.parts, null, 'a whole Look brings its own extras, or none');
+  assert.deepEqual(JSON.parse(JSON.stringify(s.parts)), require('../lib/lookset.js')(G.GZ_LOOKS[0]), 'a whole Look brings its own extras');
   assert.ok(looked.includes('parts'));
 });
 

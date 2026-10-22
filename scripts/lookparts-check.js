@@ -3,7 +3,7 @@
 //   - With no parts, the page loads nothing for them.
 //   - Pasting a glaze2 code previews its parts in the editor's frame; "Use this theme" stores them, and the page gets
 //     GZ_CTX.parts() and one glaze:parts event, from storage alone.
-//   - A plain glaze1 code, and a built-in Look from the popup, clear them again.
+//   - A plain glaze1 code clears them again; a built-in Look from the popup puts its own in their place.
 //   - Parts too big for a sync item live in local storage with a hash in sync, and the page reads them there.
 //   - A quiz page gets none.
 // EXT=/path/to/checkout NODE_PATH=/path/to/playwright/node_modules nice node scripts/lookparts-check.js
@@ -124,10 +124,11 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     await popup.click('#look');
     await popup.waitForSelector('#looks .look');
     await popup.click('#looks .look:text-is("Clear")'); // one with a bundled font: Looks with web fonts ask Google Fonts, blocked here
-    const cleared = await until(() => stored(), (v) => v.sync.lookX === '');
-    check('a built-in Look from the popup clears the parts, in sync and in local', cleared.sync.lookX === '' && !cleared.local.lookX, JSON.stringify(cleared).slice(0, 160));
-    s = await until(() => state(), (v) => v.parts === null);
-    check('and the page lets go of them', s.parts === null && (await page.evaluate(() => window.__parts)) === 6);
+    const own = require(path.join(ext, 'lib/lookset.js'))(G.GZ_LOOKS.find((L) => L.name === 'Clear'));
+    const worn = await until(async () => { const v = await stored(); return { v, P: typeof v.sync.lookX === 'string' && v.sync.lookX ? await X.unpack(v.sync.lookX) : null }; }, ({ P }) => P && X.same(P, own));
+    check('a built-in Look from the popup puts its own parts in place of the ones before, in sync, and none left in local', !!worn.P && X.same(worn.P, own) && !worn.v.local.lookX, JSON.stringify(worn.v).slice(0, 160));
+    s = await until(() => state(), (v) => v.parts?.pointer === 'clear');
+    check('and the page wears them', s.parts?.pointer === 'clear' && !s.parts.bg);
     await popup.close();
 
     check('no request left the browser', external.length === 0, [...new Set(external)].join(' '));

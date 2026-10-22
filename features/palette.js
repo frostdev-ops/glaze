@@ -31,8 +31,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   // Ultra's Institution page is Glaze's Dashboard while its switch is on (features/dashboard.js).
   const dash = () => (ctx.settings().enhance.dashboard ? [['/ultra/institution-page', 'Dashboard']] : []);
   const pages = () => (moodle ? [] : ultra ? [...dash(), ...TOOLS] : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
-  // A built-in Look comes without the extras (parts) of the one before: lookX '' in the same write (lib/lookparts.js).
-  const store = (patch, look) => () => { try { if (look) chrome.runtime.sendMessage({ type: 'glaze:look', parts: null, patch: { version: 2, ...patch } }).catch(() => {}); else chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
+  // A built-in Look comes with its own extras (parts) in place of the one before's, in the same write (lib/lookparts.js).
+  const store = (patch, look) => () => { try { if (look) chrome.runtime.sendMessage({ type: 'glaze:look', parts: null, look: look.name, patch: { version: 2, ...patch } }).catch(() => {}); else chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
     const title = new Map(all.map((c) => [c.id, c.title]));
     return all.filter((c) => c.links?.[0]?.href).map((c) => ({ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(c.links[0].href.replace(/^https?:\/\/[^/]+/, '')) }));
@@ -49,7 +49,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const glazeCmds = () => {
     const s = ctx.settings();
     return [
-      ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L), true) })),
+      ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L), L) })),
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }, false) })),
       ...[['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']].map(([m, n]) => ({ label: t('Auto light and dark: {mode}', { mode: t(n) }), hint: (s.auto.on ? s.auto.mode : 'off') === m ? t('Current') : 'Glaze', group: 'Glaze', run: store({ auto: { ...s.auto, on: m !== 'off', ...(m !== 'off' && { mode: m }) } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
