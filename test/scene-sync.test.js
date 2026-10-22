@@ -17,7 +17,7 @@ assert.ok(block.includes('importScene('));
 const background = source.match(/background: (\(el\) => \{.*\}),\n/)[1];
 const loader = source.slice(source.indexOf('  const loading = new Map();'), source.indexOf("  // Moodle's extras"));
 const settle = () => new Promise(setImmediate);
-const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, hostFails = null, hostHangs = 0 } = {}) => {
+const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0, hostFails = null, hostHangs = 0, glslHangs = 0 } = {}) => {
   const log = { starts: [], updates: [], needs: [], answers: [], stops: 0, removed: 0, imports: 0, files: [], urls: [], listeners: new Map() };
   const timers = new Map(); let nextTimer = 0;
   let failScene = null;
@@ -29,11 +29,13 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
     document: { hidden: false, body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
-    chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async () => {
-      log.needs.push('lib/scene-host.js');
-      // A request the worker sits on: answered (the host run, ok) only when the test calls log.answers[i].
-      if (hostHangs-- > 0) return new Promise((ok) => log.answers.push(() => { ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; ok({ ok: true }); }));
-      if (hostFails-- > 0) throw new Error('temporary injection failure'); ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; return { ok: true };
+    chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async (m) => {
+      const file = m.files[0], ran = () => { if (file === 'lib/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; };
+      log.needs.push(file);
+      // A request the worker sits on: answered (the file run, ok) only when the test calls log.answers[i].
+      if (file === 'lib/glsl.js' ? glslHangs-- > 0 : hostHangs-- > 0) return new Promise((ok) => log.answers.push(() => { ran(); ok({ ok: true }); }));
+      if (file !== 'lib/glsl.js' && hostFails-- > 0) throw new Error('temporary injection failure');
+      ran(); return { ok: true };
     } } },
     importScene: (url, file) => { log.imports++; log.files.push(file); log.urls.push(url); if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure')); return Promise.resolve({ start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); if (startFails-- > 0) throw new Error('temporary WebGL context failure'); return { update: (o) => log.updates.push(o), draw() {}, stop() { log.stops++; } }; } }); },
     need: (file, ready) => { if (file === 'lib/scene-host.js') { ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; return Promise.resolve(); } log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
@@ -42,7 +44,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     parts, GZ_GLSL: glsl ? {} : undefined,
     JSON, Promise, setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: (id) => timers.delete(id),
   });
-  vm.runInContext(`${hostFails === null && !hostHangs ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
+  vm.runInContext(`${hostFails === null && !hostHangs && !glslHangs ? '' : loader}\n${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, background: ${background}, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
   return { api: ctx.api, log, ctx, timers, retry: async () => { const [id, timer] = [...timers].find(([, timer]) => timer.ms < 60000) || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
 };
 const SHADER = { bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(1.); }' } } };
@@ -276,6 +278,22 @@ test('if the checker will not load the shader is not drawn, and the built-in sce
   r.api.syncScene(); await settle();
   assert.equal(r.log.starts.length, 0);
   assert.equal(r.api.state().sceneFailed, false);
+});
+
+test('a shader checker request the worker never answers does not hold the shader: the startup asks again', async () => {
+  const r = rig({ kind: 'shader', parts: SHADER, glslHangs: 1 });
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.starts.length, 0);
+  await r.retry(); // the wait runs out
+  await r.retry(); // the retry asks again
+  assert.equal(r.log.needs.filter((f) => f === 'lib/glsl.js').length, 2, 'not the lost request again');
+  assert.deepEqual([r.log.starts.length, r.log.updates[0]?.kind], [1, 'shader']);
+  const q = rig({ kind: 'shader', parts: SHADER, glslHangs: 3 });
+  q.api.syncScene(); await settle();
+  for (let i = 0; i < 5; i++) await q.retry();
+  assert.deepEqual([q.log.starts.length, q.timers.size, q.api.state().sceneFailed], [0, 0, true], 'bounded: given up');
+  q.log.answers[0](); await settle();
+  assert.equal(q.log.starts.length, 1, 'an answer after all starts it');
 });
 
 test('layers draw once they have layers', async () => {

@@ -1045,21 +1045,24 @@
       retry.timer = 0; sceneFailed = false; syncScene();
     }, tries === 1 ? 1000 : 5000);
   };
-  // lib/scene-host.js comes from the worker (need), whose answer can be lost or come minutes late (a sleeping worker). A
-  // startup waits 10 s, then gives way to retryScene, which asks again; an answer after all still starts it (sceneAgain).
-  const sceneHost = () => {
-    if (globalThis.GZ_SCENE_HOST) return Promise.resolve();
-    const p = need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST);
+  // What a startup needs from the worker (need: lib/scene-host.js, a shader's lib/glsl.js) can be lost or come minutes late
+  // (a sleeping worker). It waits 10 s, then lets go (late), for retryScene to ask again; an answer after all still starts
+  // the background (sceneAgain).
+  const sceneNeed = (file, ready) => {
+    if (ready()) return Promise.resolve();
+    const p = need(file, ready);
     let timer;
-    return Promise.race([p, new Promise((_, no) => { timer = setTimeout(() => { p.then(sceneAgain, () => {}); no(Error('no answer')); }, 10000); })])
-      .finally(() => clearTimeout(timer)).catch((error) => { if (loading.get('lib/scene-host.js') === p) loading.delete('lib/scene-host.js'); throw error; });
+    return Promise.race([p, new Promise((_, no) => { timer = setTimeout(() => {
+      if (loading.get(file) === p) loading.delete(file);
+      p.then(sceneAgain, () => {}); no(Object.assign(Error('no answer'), { late: true }));
+    }, 10000); })]).finally(() => clearTimeout(timer));
   };
-  // Another chance (the host in after all, the page back on screen): a startup still waiting goes on, one that gave up
-  // starts over.
+  // Another chance (what was needed in after all, the page back on screen): a startup still waiting goes on, one that gave
+  // up starts over, one that never started starts.
   const sceneAgain = () => {
     if (scenePending) scenePending = null;
     else if (sceneFailed && !sceneRetry?.timer) { sceneRetry = null; sceneFailed = false; }
-    else return;
+    else if (scene || sceneFailed) return;
     syncScene();
   };
   const sceneOpts = () => {
@@ -1090,7 +1093,7 @@
     if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); } catch (error) { retryScene(key, error); } return; }
     if (!modBg) sceneLoad[file] ||= import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { delete sceneLoad[file]; throw error; });
     const pending = scenePending = { key };
-    Promise.all([!modBg && sceneLoad[file], sceneHost(), !modBg && wait && need('lib/glsl.js', () => globalThis.GZ_GLSL).catch(() => {})]).then(([mod]) => {
+    Promise.all([!modBg && sceneLoad[file], sceneNeed('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).catch((error) => { loading.delete('lib/scene-host.js'); throw error; }), !modBg && wait && sceneNeed('lib/glsl.js', () => globalThis.GZ_GLSL).catch((error) => { if (error.late) throw error; })]).then(([mod]) => {
       if (scenePending !== pending) return;
       if (modBg) { scenePending = null; return placeScene(); }
       if (!settings.enabled || sceneBad === key || !chrome.runtime?.id || !links.length || hid() || key !== sceneSig() || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }

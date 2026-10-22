@@ -157,11 +157,11 @@ const NAV_FRAME_HIDE = { ultra: 0, canvas: 8, moodle: 0 };
 // Review preserves plural target cards in the singular style description (+4 bytes versus implementation).
 const EN_PLURALS = 1187;
 // Background startup recovery (owner-approved raise, 2026-10-19): content.js's scene startup waits at most 10 s for the
-// worker's answer with lib/scene-host.js, asks again through its retries, still starts on an answer that comes late (a
-// course tab's frame stayed on the gradient while a reply never came), tries again once the page is back on screen, and
-// starts a scene whose WebGL context the browser took back again on a new canvas: 1456 bytes on every site. Measured
-// against 74ac1e12.
-const SCENE_RECOVERY = 1456;
+// worker's answer with lib/scene-host.js or a shader's lib/glsl.js, asks again through its retries, still starts on an
+// answer that comes late (a course tab's frame stayed on the gradient while a reply never came), tries again once the page
+// is back on screen, and starts a scene whose WebGL context the browser took back again on a new canvas: 1650 bytes on
+// every site. Measured against 74ac1e12.
+const SCENE_RECOVERY = 1650;
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
