@@ -17,6 +17,8 @@ build=${BUILD_NUMBER:-$(date -u +%Y%m%d%H%M)}
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 cp -R safari/Glaze "$stage/Glaze"
+# Xcode registers what it archives: under build ids and signed ad hoc, as in build-safari.sh, it isn't Glaze to Safari.
+python3 scripts/safari-build-ids.py project "$stage/Glaze/Glaze.xcodeproj/project.pbxproj"
 resources="$stage/Glaze/Glaze Extension/Resources"
 rm -rf "$resources"
 mkdir -p "$resources"
@@ -30,13 +32,21 @@ out=release/$version
 mkdir -p "$out/build/logs" "$out/app-store"
 if ! xcodebuild archive -project "$stage/Glaze/Glaze.xcodeproj" -scheme Glaze -configuration Release \
   -archivePath "$stage/Glaze.xcarchive" -destination 'generic/platform=macOS' "$@" \
-  CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$team" CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
+  CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM="$team" CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   'CODE_SIGN_ENTITLEMENTS=$(SRCROOT)/$(TARGET_NAME)/Release.entitlements' \
   'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO MACOSX_DEPLOYMENT_TARGET=12.0 \
   MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build" > $out/build/logs/appstore-build.log 2>&1; then
   tail -n 60 $out/build/logs/appstore-build.log >&2
   exit 1
 fi
+
+# Glaze's ids back in the archive, re-signed ad hoc to match; the export signs it for the App Store.
+archived="$stage/Glaze.xcarchive/Products/Applications/Glaze.app"
+python3 scripts/safari-build-ids.py app "$archived"
+plutil -replace ApplicationProperties.CFBundleIdentifier -string io.frostdev.Glaze "$stage/Glaze.xcarchive/Info.plist"
+for bundle in "$archived/Contents/PlugIns/Glaze Extension.appex" "$archived"; do
+  codesign --force --sign - --preserve-metadata=entitlements,flags "$bundle"
+done
 
 destination=upload
 [ -n "${APPSTORE_EXPORT_ONLY:-}" ] && destination=export
