@@ -1730,6 +1730,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (cid && !preview && !showing) later();
   };
   const sync = (want) => {
+    if (gone) return;
     if (signedOut) want = false;
     if (!want) {
       html.removeAttribute('data-gz-ctabs');
@@ -1806,6 +1807,32 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     else invalidate(m.epoch);
     reply({ ok: true });
   });
+  // Glaze restarted under an open page (an update, Safari registering it again) runs this file there again, in a world of
+  // its own: the old copy's strip, frames and marks stay in the page, which it can no longer save or show. This copy takes
+  // the page over as after a reload (the frame on screen opens again from sessionStorage, start), and an old copy still
+  // running lets go when told.
+  const TAKE = 'gz-ctabs-take';
+  let gone = false;
+  const letGo = () => {
+    gone = true;
+    removeEventListener(TAKE, letGo);
+    clearTimeout(saveTimer); clearTimeout(capTimer); clearTimeout(sayTimer);
+    if (on) { on = false; listen(false); }
+    sizes?.disconnect(); keepClear(null); measureRow(null); drawerOff(); unpicture(true); clearSlow();
+    strip?.remove(); aside?.remove(); host?.remove(); host = null;
+    frames.clear(); spare.clear(); next.clear(); showing = ''; waiting = '';
+  };
+  if (!preview) {
+    dispatchEvent(new Event(TAKE));
+    for (const e of document.querySelectorAll('#gz-ctabs, #gz-ctabs-say, #gz-ctabs-frames')) e.remove();
+    html.removeAttribute('data-gz-placing');
+    if (!framed && html.hasAttribute('data-gz-ctab-framed')) {
+      html.removeAttribute('data-gz-ctab-framed');
+      ctx.scene();
+      for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI', 'GZ_DOCREVIEW']) globalThis[n]?.cover?.();
+    }
+    addEventListener(TAKE, letGo);
+  }
   // The editor's preview has this file as a <script> after content.js, so its first ask may come before the file is in:
   // here it follows the editor's edits itself.
   if (preview) {
