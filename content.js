@@ -1034,16 +1034,15 @@
     sceneCanvas?.remove();
     sceneCanvas = null;
   };
-  // Retry startup after 1 s, 5 s, then every 30 s: what failed (a worker asleep, a module that didn't load) can come back while
-  // the page is shown. A context the browser takes back at every start gets three tries: each new one can take another
-  // frame's. sceneBad still blocks refused shaders and over-budget scenes.
-  const retryScene = (key, error) => {
+  // Load failures retry after 1 s, 5 s, then every 30 s while shown. Drawing failures get three tries per Look.
+  const retryScene = (key, error, recover = true) => {
     console.warn('[Glaze] Background startup failed', error);
     const tries = (sceneRetry?.tries || 0) + 1;
     stopScene();
     sceneFailed = true;
     const retry = sceneRetry = { key, tries, timer: 0 };
-    if (!document.hidden && !hid() && (tries < 3 || error !== 'dropped')) retry.timer = setTimeout(() => {
+    if (!recover && tries >= 3) { sceneBad = key; return; }
+    if (!document.hidden && !hid()) retry.timer = setTimeout(() => {
       if (sceneRetry !== retry) return;
       retry.timer = 0; sceneFailed = false; syncScene();
     }, [1000, 5000][tries - 1] || 30000);
@@ -1061,11 +1060,10 @@
     const p = need(file, ready, false), gone = () => { if (loading.get(file) === p) loading.delete(file); };
     return sceneWait(p, gone);
   };
-  // Another chance (what was needed in after all, the page back on screen): a startup still waiting goes on, one waiting to
-  // retry or that gave up starts over now, with new tries, one that never started starts.
+  // A late answer or a page back on screen can start now; keep its retry count.
   const sceneAgain = () => {
     if (scene && !scenePending) return;
-    sceneUnwait(); clearTimeout(sceneRetry?.timer); sceneRetry = null; sceneFailed = false;
+    sceneUnwait(); clearTimeout(sceneRetry?.timer); sceneFailed = false;
     syncScene();
   };
   const sceneOpts = () => {
@@ -1094,7 +1092,7 @@
     const file = sceneModule();
     if (scene && sceneFile !== file) stopScene();
     const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL;
-    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); } catch (error) { retryScene(key, error); } return; }
+    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); } catch (error) { retryScene(key, error, false); } return; }
     if (!modBg && !sceneLoad[file]) { const p = sceneLoad[file] = import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { if (sceneLoad[file] === p) delete sceneLoad[file]; throw error; }); }
     const load = !modBg && sceneLoad[file];
     const pending = scenePending = { key, cancel: [] };
@@ -1102,6 +1100,7 @@
       if (scenePending !== pending) return;
       if (modBg) { scenePending = null; return placeScene(); }
       if (!settings.enabled || sceneBad === key || !chrome.runtime?.id || !links.length || hid() || key !== sceneSig() || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
+      pending.draw = true;
       if (!scene) {
         sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');
         sceneCanvas.id = 'gz-scene';
@@ -1112,12 +1111,12 @@
         const at = Date.now();
         scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, (why) => {
           if (why === 'dropped' && Date.now() - at > 60000) sceneRetry = null;
-          if (why === 'module' || why === 'dropped') retryScene(sceneSig(), why); else { sceneBad = sceneSig(); stopScene(); }
+          if (why === 'module' || why === 'dropped') retryScene(sceneSig(), why, why === 'module'); else { sceneBad = sceneSig(); stopScene(); }
         });
       }
       scene.update(sceneOpts());
       scenePending = null;
-    }).catch((error) => { if (scenePending === pending) retryScene(key, error); });
+    }).catch((error) => { if (scenePending === pending) retryScene(key, error, !pending.draw); });
   };
   document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
   document.addEventListener('visibilitychange', () => { if (!document.hidden && sceneFailed) sceneAgain(); else syncScene(); });
