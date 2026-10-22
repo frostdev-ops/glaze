@@ -227,6 +227,40 @@ test('the mode follows the room: expanded, collapsed by choice, a drawer when na
   assert.equal(h.mode(), 'expanded');
 });
 
+test('a quiz\'s timer and question list stay beside the content on a laptop, and the what-if note wherever the table fits', async () => {
+  // At 1280 Canvas alone shows its column; a drawer starts closed, and a timed quiz's clock would be out of sight.
+  const q = page({ fixture: 'canvas-quiz-take.html', where: '/courses/25/quizzes/4/take', width: 1280, left: 276 });
+  await q.pass();
+  assert.equal(q.mode(), 'expanded', '1280: 628px for the questions');
+  await q.resize(1024);
+  assert.equal(q.mode(), 'drawer', 'the course menu open at 1024 leaves 368px: no room even so');
+  q.doc.boxOf = ((box) => (e) => (e.id === 'main' || e.id === 'wrapper' ? { left: 96, top: 0, width: 1024 - 96, height: 900 } : box(e)))(q.doc.boxOf);
+  await q.resize(1024);
+  assert.equal(q.mode(), 'expanded', 'with Canvas\'s menu folded, 548px');
+  q.c.sidebarSettings = { open: 'drawer' };
+  await q.pass();
+  assert.equal(q.mode(), 'drawer', 'a student who wants the drawer gets it');
+  // Grades keep their 900px for the table; while what-if scores show the note that they aren't official, the 720px of
+  // any page (Canvas's table needs about 710), so at 1440 the note is beside it.
+  const g = page({ fixture: 'canvas-course-grades.html', where: '/courses/25/grades', width: 1440, left: 276 });
+  await g.pass();
+  assert.equal(g.mode(), 'drawer');
+  const note = g.$('#student-grades-revert');
+  note.style.display = 'block';
+  await g.pass();
+  assert.equal(g.mode(), 'expanded', 'the what-if note shows');
+  await g.resize(1366);
+  assert.equal(g.mode(), 'drawer', '714px would put the table under the column');
+  await g.resize(1440);
+  note.style.display = 'none';
+  await g.pass();
+  assert.equal(g.mode(), 'drawer', 'reverted: the table has its room again');
+  // Any other page keeps the settings' room.
+  const a = page({ fixture: 'canvas-assignment-submit.html', where: '/courses/26/assignments/9', width: 1280, left: 276 });
+  await a.pass();
+  assert.equal(a.mode(), 'drawer');
+});
+
 test('the width: the inner edge by keys, clamped and saved; responsive clamping never writes it', async () => {
   const p = page({ width: 1700, left: 84 });
   await p.pass();
@@ -491,6 +525,19 @@ test('floats keep clear of the expanded sidebar', async () => {
   assert.equal(p.$('#gz-float').style.getPropertyValue('--gz-float-right'), `${352 + W.EDGE}px`);
 });
 
+test("Canvas floats keep clear of Glaze's rail and of the course tabs, as Ultra's do", async () => {
+  const lay = lay0();
+  Object.assign(lay.tiles.find((x) => x.id === 'timer'), { on: true, float: true, x: 0, y: 0 });
+  const p = page({ stored: { widgetLayout: lay, ...record() }, widgets: true, width: 1600, left: 96 });
+  // The rail's room (--gz-navbar-left, canvas.css and features/navbar.js), and the strip's row at the page's top.
+  p.c.getComputedStyle = (e) => ({ position: 'static', getPropertyValue: (k) => (e === p.doc.root && k === '--gz-navbar-left' ? '96px' : '') });
+  const row = p.doc.createElement('div'); row.setAttribute('data-gz-keep-clear', ''); row.box = { left: 96, top: 0, width: 1152, height: 112 };
+  p.doc.body.append(row);
+  await p.pass();
+  const tile = p.$('section[data-tile="timer"]');
+  assert.deepEqual([parseFloat(tile.style.left), parseFloat(tile.style.top)], [96 + W.EDGE, 112 + W.EDGE], 'its header clear of the rail and the tabs');
+});
+
 test('a failed dock move is rolled back to what is stored', async () => {
   const p = dash({ stored: { widgetLayout: lay0(), ...record() } });
   await p.pass();
@@ -605,6 +652,8 @@ test('style: Floating by default, Embedded or like the navigation when chosen; s
   assert.equal(p.$('#gz-sb-title').textContent, 'My stuff', 'the name the student gave it, still the landmark\'s label');
   assert.equal(p.host().getAttribute('aria-labelledby'), 'gz-sb-title');
   assert.equal(p.$('#gz-sb-launch').textContent, 'My stuff');
+  assert.equal(p.$('#gz-sb-launch').getAttribute('aria-label'), 'Open My stuff');
+  assert.ok(!p.$('#gz-sb-launch').title, 'no title that a screen reader reads again as its description');
   p.side.sync(false);
   assert.deepEqual(rootMarks(p), [], 'all gone when off');
   // The sheet has a rule set for each style and surface.
@@ -699,6 +748,33 @@ test('destination menus near the window edges remain reachable, including in RTL
     assert.ok(edge >= 8 && edge + 240 <= p.c.innerWidth - 8, 'the menu fits horizontally');
     p.fire(menu.children[0], 'keydown', { key: 'Escape' });
   }
+});
+
+test("the drawer's opener stands above a bar the page fixes along the window's bottom, not over its buttons", async () => {
+  const p = page({ width: 1280, left: 276 });
+  const boxOf = p.doc.boxOf;
+  p.doc.boxOf = (e) => e.id === 'gz-sb-launch' ? { left: 1188, top: 848, width: 80, height: 36 } : boxOf(e);
+  // An attempt's Save and Submit (tagged by content.js), and a backdrop the window's height: a layer, not a bar.
+  const bar = p.doc.createElement('div'); bar.setAttribute('data-gz-fixed-bottom', ''); bar.box = { left: 276, top: 836, width: 1004, height: 64 };
+  const veil = p.doc.createElement('div'); veil.setAttribute('data-gz-fixed-bottom', ''); veil.box = { left: 0, top: 0, width: 1280, height: 900 };
+  p.doc.body.append(bar, veil);
+  await p.pass();
+  assert.equal(p.mode(), 'drawer');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-bar'), '64px', 'the bar\'s top, from the window\'s bottom');
+  // Canvas's Previous and Next stand on Glaze's bar untagged (canvas.css): seen by their id.
+  bar.removeAttribute('data-gz-fixed-bottom'); bar.id = 'module_sequence_footer'; bar.box = { left: 12, top: 764, width: 1256, height: 40 };
+  await p.resize(1280);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-bar'), '136px');
+  // A bar beside the opener, not under it, and no bar at all: no lift.
+  bar.box = { left: 12, top: 764, width: 400, height: 40 };
+  await p.resize(1280);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-bar'), '');
+  const css = read('features/sidebar.css');
+  assert.match(css.slice(css.indexOf('.gz-sb-edge, .gz-sb-launch {')), /^[^}]*bottom: max\(calc\(var\(--gz-sb-end\) \+ 1rem \+ env\(safe-area-inset-bottom, 0px\)\), calc\(var\(--gz-sb-bar, 0px\) \+ 1rem\)\);/);
+  bar.box = { left: 276, top: 836, width: 1004, height: 64 }; bar.setAttribute('data-gz-fixed-bottom', '');
+  await p.resize(1280);
+  p.side.sync(false);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-bar'), '', 'teardown restores the page');
 });
 
 test('Canvas reserves the footer height before it scrolls into view, without measuring on scroll', async () => {

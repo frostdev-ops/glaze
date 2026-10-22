@@ -141,6 +141,9 @@ test('rotation\'s list: chosen Looks and favorite codes, none chosen being every
   const looks = G.GZ_LOOKS.map((l) => l.name);
   assert.deepEqual(L.rotation(undefined, looks), looks);
   assert.deepEqual(L.rotation(['Library', 'Gone', 'glaze1:abc', 'Library', 7], looks), ['Library', 'glaze1:abc']);
+  // A favorite removed since it was ticked has no box left to untick: it isn't turned to.
+  assert.deepEqual(L.rotation(['Library', 'glaze1:abc', 'glaze2:def'], looks, ['glaze2:def']), ['Library', 'glaze2:def']);
+  assert.deepEqual(L.rotation(['glaze1:abc'], looks, []), looks, 'none left is every built-in Look');
   assert.deepEqual(L.rotation([`glaze1:${'a'.repeat(5000)}`], looks), looks);
   // A glaze2 code (a Look with parts) is longer: up to 20,000 characters.
   assert.deepEqual(L.rotation([`glaze2:${'a'.repeat(19993)}`, 'Library'], looks), [`glaze2:${'a'.repeat(19993)}`, 'Library']);
@@ -157,7 +160,10 @@ test('a rotated favorite is worn like "Use this theme": its palette, look and ba
   assert.equal(w.look.font, 'inter');
   assert.equal(w.look.tooltips, false);
   assert.equal(w.bg.kind, 'aurora');
-  assert.deepEqual(Object.keys(w).sort(), ['auto', 'bg', 'colors', 'look', 'preset']);
+  // The navigation, its bar and the sidebar's look are worn as "Use this theme" wears them (a code that carries none leaves
+  // the student's own); card styles are the cards queue's, and a code's parts are written beside this patch.
+  assert.deepEqual(Object.keys(w).sort(), ['auto', 'bg', 'colors', 'look', 'nav', 'navbar', 'preset', 'sidebar']);
+  assert.deepEqual([w.nav, w.navbar, w.sidebar], [s.nav, s.navbar, s.sidebar]);
 });
 
 test('extras settings: off by default, sanitized', () => {

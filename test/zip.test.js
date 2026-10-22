@@ -70,6 +70,40 @@ test('titles become safe path segments', () => {
   assert.equal(Z.safeName('x'.repeat(300)).length, 120);
 });
 
+test('a long name keeps its extension when it is shortened', () => {
+  const long = 'Week 3 Lecture Notes - Introduction to Thermodynamics, Entropy and the Second Law (Annotated, Revised for Fall 2026 Section 002)';
+  const n = Z.safeName(`${long}.pdf`);
+  assert.ok(n.length <= 120 && n.endsWith('.pdf') && n.startsWith('Week 3 Lecture Notes'), n);
+  assert.equal(Z.safeName('a'.repeat(300) + '.docx'), 'a'.repeat(115) + '.docx');
+  // The cut can leave a space or dot at the end of the base: Windows drops those, so they go before the extension.
+  assert.equal(Z.safeName(`${'a'.repeat(115)} ${'b'.repeat(30)}.pdf`), `${'a'.repeat(115)}.pdf`);
+  assert.equal(Z.safeName('b'.repeat(130) + '.' + 'c'.repeat(30)).length, 120, 'something that is not an extension is cut as before');
+  assert.equal(Z.safeName('v2.0 final'), 'v2.0 final');
+  assert.equal(Z.safeName('Syllabus.pdf'), 'Syllabus.pdf');
+});
+
+test('names Windows reserves are made safe, whatever their case or extension', () => {
+  for (const n of ['CON', 'con', 'PRN.pdf', 'aux.txt', 'NUL', 'Nul.tar.gz', 'COM1', 'com9.log', 'LPT1', 'lpt9.txt', 'CON.', 'NUL  ', 'COM\u00b9.txt']) {
+    const safe = Z.safeName(n);
+    assert.ok(safe !== n.trim() && /^_/.test(safe) && !/^(con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])(\.|$)/i.test(safe), `${JSON.stringify(n)} -> ${safe}`);
+  }
+  assert.equal(Z.safeName('CON.pdf'), '_CON.pdf');
+  assert.equal(Z.safeName('NUL'), '_NUL');
+  for (const ok of ['Console.txt', 'COM10', 'COM0.txt', 'LPT', 'Aux notes.pdf', 'contents', 'null.txt', 'nul2']) assert.equal(Z.safeName(ok), ok);
+  assert.equal(Z.safeName('Notes. '), 'Notes');
+  assert.equal(Z.safeName('Notes.pdf. .'), 'Notes.pdf');
+});
+
+test('a name is never cut inside an emoji or other surrogate pair', () => {
+  const whole = (s) => !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(s);
+  for (const n of [`${'a'.repeat(119)}\u{1F600}.pdf`, `${'a'.repeat(119)}\u{1F600}`, `${'a'.repeat(110)}${'\u{1F600}'.repeat(20)}`, `${'a'.repeat(118)}\u{1F600}\u{1F600}.docx`]) {
+    const safe = Z.safeName(n);
+    assert.ok(whole(safe) && safe.length <= 120, JSON.stringify(safe.slice(-6)));
+    assert.equal(Buffer.from(safe, 'utf8').toString('utf8'), safe, 'survives UTF-8, as a zip entry name does');
+  }
+  assert.ok(Z.safeName(`${'a'.repeat(119)}\u{1F600}.pdf`).endsWith('.pdf'));
+});
+
 test('duplicate names are numbered, case-insensitively', () => {
   const taken = new Set();
   assert.equal(Z.unique('a.pdf', taken), 'a.pdf');
@@ -79,6 +113,26 @@ test('duplicate names are numbered, case-insensitively', () => {
   assert.equal(Z.unique('Week 1.5/notes', taken), 'Week 1.5/notes (2)');
   assert.equal(Z.unique('b.tar.gz', taken), 'b.tar.gz');
   assert.equal(Z.unique('b.tar.gz', taken), 'b.tar (2).gz');
+});
+
+test('device-name prefixes and duplicate suffixes stay within the name limit', () => {
+  const safe = Z.safeName('CON.' + 'a'.repeat(200));
+  assert.ok(safe.startsWith('_CON.') && safe.length <= 120, safe);
+  const taken = new Set();
+  const name = Z.safeName('a'.repeat(200) + '.pdf');
+  Z.unique(name, taken);
+  const duplicate = Z.unique(name, taken);
+  assert.ok(duplicate.length <= 120 && duplicate.endsWith(' (2).pdf'), duplicate);
+});
+
+test('a file and a directory never get the same archive path in either order', () => {
+  let taken = new Set();
+  assert.equal(Z.unique('notes', taken), 'notes');
+  assert.equal(Z.unique('notes/x.pdf', taken), 'notes (2)/x.pdf');
+  assert.equal(Z.unique('notes/y.pdf', taken), 'notes (2)/y.pdf', 'siblings use the same renamed directory');
+  taken = new Set();
+  assert.equal(Z.unique('Notes/x.pdf', taken), 'Notes/x.pdf');
+  assert.equal(Z.unique('notes', taken), 'notes (2)');
 });
 
 test('Canvas downloads use unique accessible File ids and API-supplied HTTPS URLs', () => {

@@ -175,7 +175,9 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
     if (path() !== route) { route = path(); generation++; dismiss(); pendingFocus = null; }
     watch(current());
     if (!current()) {
-      if ((canvas ? /^\/(?:logout|login)(?:\/|$)/ : /\/ultra\/(?:profile|logout|login)(?:\/|$)/).test(location.pathname)) { revoked = identity; user = ''; }
+      // Signing out or in, not the profile page: content-ultra.js passes one identity promise for the page's whole life, so a
+      // revoked one never comes back, and Ultra's sign-out is a full page load anyway.
+      if ((canvas ? /^\/(?:logout|login)(?:\/|$)/ : /\/ultra\/(?:logout|login)(?:\/|$)/).test(location.pathname)) { revoked = identity; user = ''; }
       generation++; epoch++; key = ''; data = null; loading = false; clear(); return;
     }
     if (cached && cached !== identity && cached !== revoked) {

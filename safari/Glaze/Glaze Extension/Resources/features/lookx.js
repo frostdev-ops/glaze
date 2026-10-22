@@ -6,6 +6,7 @@
 // on a quiz being taken or a tool's page. Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   const ctx = globalThis.GZ_CTX;
+  if (!ctx) return null; // a frame-only injection can outlive its document
   const t = (k, v) => ctx.t(k, v);
   const html = document.documentElement;
   const top = window.top === window;

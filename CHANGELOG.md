@@ -4,6 +4,50 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.5] — 2026-10-22
+
+### Added
+
+- Glaze asks before running on a site that only looks like Canvas, Moodle or Blackboard Ultra, and records nothing there until the student says Yes. Canvas on instructure.com, Ultra on blackboard.com and sites already in use stay automatic. Settings → Backup and privacy → Sites lists approved custom sites, with Remove.
+- A shared Look's offer names every navigation item it hides, where each link goes, the page parts it restyles and any text it writes. A Look from someone else that hides Sign out or the profile, adds a link that isn't https, or disguises a link is refused, with the reasons shown.
+- Share protocol v2 adds unambiguous signatures and safe share-creation retries. It stays off until a relay operator enables it; after a share uses v2, older members must update.
+
+### Changed
+
+- Selected bulk reads are queued per document and school site, pause after errors and rate limits, and read whole lists, reducing load and missed badges.
+- Look background files live in the worker's database and are cleaned up when unused. Linked images and videos have size caps. New video and AVIF files have container metadata removed; uncleanable older files stay local and are not shared.
+- Blackboard course records name their school; "Due this week" is kept per site. Draft backups are kept per site and student.
+- An update that adds code to a no-code widget asks first. Removing a mod removes its data unless you choose to keep it. Mods can't send data off-site through navigation links.
+- Shared notes keep syncing while you type, text syncs before files, and unused relay files are deleted best effort.
+- The share relay bounds heavy traffic, limits new stored data per client per day, and expires shares after two unused years.
+- Release scripts and CI use clean checkouts, pinned tools and separate credential-bearing work from third-party checks.
+
+### Fixed
+
+- With Glaze off, Blackboard Ultra loads plain on reload.
+- Grades and GPA: range grade scales, failing grades below a scale, Ultra's percent text, XF/FN/IF/FA, J-Term order and four-digit years.
+- Moodle keeps its Edit mode switch and the school's own menu links in Glaze's bar.
+- Download all works in Blackboard course tabs, Settings opened inside a page saves, and an edited Dashboard stays as edited.
+- Blackboard course tabs with unsaved work are never closed for another tab, and Ultra's own Sign Out works with course tabs open.
+- Canvas's regional document viewers get Glaze's viewer, large Word, HTML and PowerPoint imports no longer freeze the tab, and zip downloads keep file extensions.
+- Notes refuse to save or sync a note that would be cut short, with a warning. The focus timer chimes in background tabs and survives clock changes.
+- Editing an imported syllabus row moves its To Do task instead of leaving an overdue copy.
+- Changing a Look's palette keeps its navigation and other extras, with Undo, and contrast checks use the surfaces actually shown.
+- Glaze's bar and shortcuts work with screen readers, IME input and right-to-left pages.
+- Pets keep their streak and bonding through clock changes and come back after back/forward navigation.
+- English uses singular and plural forms correctly, and a few untranslated labels are translated.
+- Blackboard header buttons, announcement rows, Grades cards and Calendar bars no longer sit on dark patches.
+- Store listings and the privacy policy describe what Glaze sends and stores accurately, including browser sync and opt-in sharing.
+
+## [3.3.4] — 2026-10-21
+
+### Fixed
+
+- Blackboard pages use consistent themed backgrounds, rounded headers and controls, and spacing across discussions, assignments, documents, announcements, Activity, Calendar and grades. Activity icons stay centered, and Course Content headings have proper insets.
+- Keep scene backgrounds continuous behind navigation and keep full-page panels clear of the bar, including retained course tabs and smaller windows.
+- Improve course-tab navigation, sidebar and widget layout recovery, grade and due-date handling, and Settings behavior across Blackboard and Canvas.
+- Correct saved Look, note-sharing and session handling, and stabilize validation and packaging checks.
+
 ## [3.3.3] — 2026-10-20
 
 ### Fixed

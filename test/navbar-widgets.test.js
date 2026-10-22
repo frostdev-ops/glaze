@@ -83,7 +83,10 @@ test("what's due next on Canvas is the soonest item on this site, and links to i
 });
 
 test("the focus timer is the worker's, and a running one is drawn every second", async () => {
-  const { w, sent, timers } = harness();
+  // An idle timer waits for the next minute, which is under a second away in the last second of every minute: half
+  // past keeps the test off that edge.
+  const at = Math.floor(Date.now() / 60000) * 60000 + 30000;
+  const { w, sent, timers } = harness({ now: () => at });
   const node = w.set(['timer']).get('timer');
   assert.equal(node.box.querySelector('.w-reset').getAttribute('aria-label'), 'Reset · Focus timer');
   await settle(); await settle();

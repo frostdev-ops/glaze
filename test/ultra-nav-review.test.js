@@ -16,7 +16,7 @@ test('the known Ultra entry provisionally blocks before a head marker or body ex
   const sheets = [], timers = [];
   const head = { appendChild: (l) => { sheets.push(l); } };
   const document = { contentType: 'text/html', body: null, head, createElement: () => ({ attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; } }) };
-  const c = vm.createContext({ document, location: { pathname: '/ultra/course' }, chrome: { runtime: { getURL: (f) => `extension://${f}` } }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); } });
+  const c = vm.createContext({ document, location: { protocol: 'https:', hostname: 'school.blackboard.com', pathname: '/ultra/course' }, chrome: { runtime: { getURL: (f) => `extension://${f}` } }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); } });
   vm.runInContext(source('content-ultra.js'), c);
   assert.equal(sheets.length, 4);
   assert.ok(sheets.every((l) => l.attrs.blocking === 'render'));
@@ -54,7 +54,7 @@ test('provisional load/error settling before core reuse releases blocking withou
   const document = { contentType: 'text/html', body: null, head: { appendChild(l) { l.isConnected = true; sheets.push(l); } },
     createElement: () => ({ attrs: {}, set rel(v) { writes++; }, set href(v) { writes++; },
       setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; }, addEventListener: (n) => events.push(n) }) };
-  const c = vm.createContext({ document, location: { pathname: '/ultra/course' }, chrome: { runtime: { getURL: (f) => f } },
+  const c = vm.createContext({ document, location: { protocol: 'https:', hostname: 'school.blackboard.com', pathname: '/ultra/course' }, chrome: { runtime: { getURL: (f) => f } },
     setTimeout: (fn, ms) => timers.push({ fn, ms }), notUltra: false, links: [], ultra: true, SHEETS: ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'], html: {}, tintKey() {}, reapply() {} });
   vm.runInContext(source('content-ultra.js'), c);
   sheets[0].onload(); sheets[1].onerror();

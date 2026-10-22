@@ -24,7 +24,7 @@ const logoFixture = () => {
   const c = vm.createContext({ X: { settings: () => state }, settings: () => state.navbar, on: () => true,
     chrome: { runtime: { id: 'glaze' }, storage: { local: { get: (key, cb) => reads.push({ key, cb }) }, onChanged: { addListener: (fn) => { changed = fn; } } } },
     Blob, Uint8Array, atob, URL: { createObjectURL: (blob) => { const url = `blob:${++serial}`; blobs.set(url, blob); return url; }, revokeObjectURL: (url) => { revoked.push(url); blobs.delete(url); } },
-    host: { remove() {} }, root: {}, el: {}, sig: '', measured: '', model: {}, rows: [], lay: {}, peek: false, shown: false, rail: null,
+    document: { removeEventListener() {} }, escapeTip() {}, host: { remove() {} }, root: {}, el: {}, sig: '', measured: '', model: {}, rows: [], lay: {}, peek: false, shown: false, rail: null,
     enter: 0, leave: 0, frame: 0, queued: 0, sheetOpen: false, words: '', clearTimeout() {}, cancelAnimationFrame() {},
     menuTo() {}, panelTo() {}, dockTo() {}, wx: null, panels: new Map(), skipMain: new Set(), site: { unobserve() {} }, sizes: null, html: { removeAttribute() {}, style: { removeProperty() {} } }, emit() {},
   });
@@ -132,7 +132,7 @@ test('a course frame follows the parent navigation placement and disconnects whe
     keepClear() {}, home: () => ({ at: 'above', ok: false, put: () => { connected = true; } }),
     MutationObserver: class { constructor(fn) { this.fn = fn; observer = this; } observe() { this.active = true; } disconnect() { this.active = false; } },
     document: { addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {},
-    onScroll() {}, onLeave() {}, onHide() {}, onShow() {}, lay() {}, onResize() {}, measureRow() {}, navRoom() {}, ctx: { site: 'ultra' }, chrome: { runtime: {} },
+    onScroll() {}, onLeave() {}, onHide() {}, onShow() {}, lay() {}, onResize() {}, measureRow() {}, navRoom() {}, handOn() {}, ctx: { site: 'ultra' }, chrome: { runtime: {} },
   });
   const api = vm.runInContext(part(src, '  const navHolds =', '  // From content-ultra.js')
     + part(src, '  const flag =', '  // ---- the strip')

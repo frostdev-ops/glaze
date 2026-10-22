@@ -99,16 +99,26 @@ test('setting, master/site stop and navigation restore native nodes; stale butto
   e.path('/ultra/stream'); e.redraw(); assert.equal(eye(e.parent), null);
   assert.ok(e.parent.isConnected && e.child.isConnected, 'native nodes are preserved');
 });
-test('unknown identity, course/account changes, profile handoff and failed storage stay isolated', async () => {
+test('unknown identity, course/account changes, sign-out handoff and failed storage stay isolated', async () => {
   const e = fixture(); e.ui.sync(true, null); await settle(); assert.equal(eye(e.parent), null); assert.deepEqual(e.store, {});
   e.ui.sync(true, e.identity); await settle(); await e.click(eye(e.parent));
   e.change('_801_1'); e.ui.sync(true, e.identity); await settle();
   assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
   const other = Promise.resolve('_901_1'); e.ui.sync(true, other); await settle(); assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
-  e.path('/ultra/profile'); e.ui.sync(false, other); e.change('_800_1'); e.ui.sync(true, other); await settle(); assert.equal(eye(e.parent), null);
+  e.path('/ultra/logout'); e.ui.sync(false, other); e.change('_800_1'); e.ui.sync(true, other); await settle(); assert.equal(eye(e.parent), null);
   e.ui.sync(true, Promise.resolve('_900_1')); await settle(); assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), 'hide');
   e.fail(true); e.changed(); await settle(); assert.equal(eye(e.parent), null); assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
   assert.equal(e.sent.length, 1);
+});
+test('visiting the profile page keeps hidden folders hidden: content-ultra.js passes one identity promise for the page\'s life', async () => {
+  const e = fixture(); const meId = e.identity;
+  e.ui.sync(true, meId); await settle(); await e.click(eye(e.parent));
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), 'hide');
+  e.path('/ultra/profile'); e.ui.sync(true, meId); await settle();
+  e.path('/ultra/courses/_800_1/outline'); e.ui.sync(true, meId); await settle();
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), 'hide');
+  assert.ok(eye(e.parent), 'the eye buttons are back');
+  assert.ok(e.document.getElementById('gz-folders-toggle'), 'and the show toggle');
 });
 test('a storage result arriving after course navigation cannot hide the new outline', async () => {
   const e = fixture(); let release; e.hold(new Promise((r) => { release = r; }));

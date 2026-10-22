@@ -227,6 +227,8 @@ html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
   --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
+/* Standing in for a scene, shader or layers, the gradient is mostly the ground, as the scene is (canvas.css's backgrounds). */
+html[data-gz-bg]:is([data-gz-bg="scene"], [data-gz-bg="shader"], [data-gz-bg="layers"]) { --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) calc(80% + var(--gz-bg-dim, 60%) / 4), transparent); }
 html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before {
   content: ""; position: fixed; inset: calc(var(--gz-bg-blur, 0px) * -2); z-index: -1; pointer-events: none;
   background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain), var(--gz-bg-art);
@@ -649,13 +651,13 @@ html .login-container .login-identityprovider-btn { background: var(--gz-surface
 html .login-divider { border-color: var(--gz-border-line, var(--gz-line)); }
 html .login-layout-left::after { color: #fff; }
 
-/* ---- the rich text editor (TinyMCE; content.js themes its writing area inside the frame) ---- */
+/* ---- the rich text editor (TinyMCE): its writing area, in a frame, stays white as readers see the post (canvas.css's editor) ---- */
 html .tox.tox-tinymce { border-color: var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); }
 html .tox :is(.tox-editor-header, .tox-menubar, .tox-toolbar, .tox-toolbar__primary, .tox-toolbar-overlord, .tox-statusbar, .tox-toolbar__overflow, .tox-promotion) { background: var(--gz-band) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
 html .tox :is(.tox-tbtn, .tox-mbtn, .tox-statusbar a, .tox-statusbar__path-item, .tox-statusbar__wordcount, .tox-split-button) { color: var(--gz-ink) !important; background: transparent; }
 html .tox :is(.tox-tbtn, .tox-split-button__chevron) svg { fill: var(--gz-ink) !important; }
 html .tox :is(.tox-tbtn, .tox-mbtn):hover, html .tox .tox-tbtn--enabled { background: var(--gz-hover-fill) !important; }
-html .tox .tox-edit-area__iframe { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
+html .tox .tox-edit-area__iframe { background: #fff; color-scheme: light; }
 html .tox :is(.tox-menu, .tox-collection--list, .tox-dialog, .tox-dialog__header, .tox-dialog__footer, .tox-dialog__body) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 html .tox .tox-collection__item { color: var(--gz-ink) !important; }
 html .tox .tox-collection__item--active { background: var(--gz-hover-fill) !important; }
@@ -810,6 +812,18 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 }
 #gz-cm .gz-cm-look:hover { transform: var(--gz-lift); }
 #gz-cm .gz-cm-look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
+/* Forced colours (Windows High Contrast) drop fills and shadows: the swatches keep their own colours, edged; the switch
+   and what is picked are drawn in system colours. */
+@media screen and (forced-colors: active) {
+  #gz-cm .gz-cm-sw { forced-color-adjust: none; border-color: CanvasText; }
+  #gz-cm .gz-cm-sw[aria-pressed="true"] { border: 3px solid Highlight; }
+  #gz-cm input.gz-cm-custom[data-on] { outline: 2px solid Highlight; outline-offset: 2px; }
+  #gz-cm .gz-cm-look[aria-pressed="true"] { border: 2px solid Highlight !important; } /* over its own colour, set inline */
+  #gz-cm .gz-cm-tint input { forced-color-adjust: none; background: Canvas !important; border: 1px solid ButtonText !important; }
+  #gz-cm .gz-cm-tint input::before { top: 2px; left: 2px; background: ButtonText; }
+  #gz-cm .gz-cm-tint input:checked { background: Highlight !important; border-color: Highlight !important; }
+  #gz-cm .gz-cm-tint input:checked::before { background: HighlightText; }
+}
 /* A card in its course's own Look or tint: features/moodle.js puts that palette on the card (--gz-*), and what the page
    derives from the palette is derived again here, from the card's. */
 html [data-region="course-content"][data-gz-course-look] {
@@ -830,9 +844,15 @@ html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft:
    First paint words come from content.js; the renderer then supplies the measured room inline. */
 html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; --gz-navbar-bottom: 0px; }
 html[data-gz-navbar] :is(nav.navbar.fixed-top, #theme_boost-drawers-primary, [data-target="theme_boost-drawers-primary"]) { display: none !important; }
+/* Everything in that navbar has a place in the bar (features/navbar-moodle.js): its links, menus and Edit mode switch. The bar's
+   own sheet styles only its pin as a toggle, so the Edit mode switch is lit from here, by part, while editing is on. */
+html #gz-navbar::part(switch-on) { color: var(--gz-accent-hi, #6fdcff); background: var(--nb-active, color-mix(in srgb, var(--gz-accent-hi, #6fdcff) 15%, transparent)); }
+@media (forced-colors: active) { html #gz-navbar::part(switch-on) { border: 2px solid Highlight; } }
 html[data-gz-navbar~="menu"] .secondary-navigation { display: none !important; }
 html[data-gz-navbar] #page-wrapper { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; padding-inline-start: var(--gz-navbar-left) !important; }
 html[data-gz-navbar] #page { margin-top: 0 !important; }
+/* What Tab or a link scrolls to stops clear of the fixed bar, not under it (WCAG 2.4.11), where the page itself scrolls. */
+html[data-gz-navbar] { scroll-padding: var(--gz-navbar-top) 0 var(--gz-navbar-bottom); }
 html[data-gz-navbar] #page.drawers { height: calc(100dvh - var(--gz-navbar-top) - var(--gz-navbar-bottom)) !important; }
 html[data-gz-navbar] :is(#theme_boost-drawers-courseindex, #theme_boost-drawers-blocks) { top: calc(var(--gz-navbar-top) + 12px) !important; bottom: var(--gz-navbar-bottom) !important; height: auto !important; max-height: calc(100dvh - var(--gz-navbar-top) - var(--gz-navbar-bottom) - 24px - var(--sticky-footer-total-height, 0px)) !important; }
 html[data-gz-navbar] #theme_boost-drawers-courseindex.show { left: auto !important; right: auto !important; inset-inline-start: var(--gz-navbar-left) !important; }

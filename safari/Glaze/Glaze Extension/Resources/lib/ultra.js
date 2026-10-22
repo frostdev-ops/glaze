@@ -251,7 +251,10 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const sym = arr(schema?.symbols);
     const scale = /^tabular$/i.test(schema?.scaleType || '') && sym.every((s) => s?.lowerBound != null)
       ? sym.map((s) => [str(s?.text, 20), Number(s.lowerBound)]).filter(([t, v]) => t && Number.isFinite(v)).sort((a, b) => b[1] - a[1]) : null;
-    const more = { scale: scale?.length ? scale : null, letter: str(overallRow?.displayGrade?.text, 20) || null };
+    // The text is the letter only on a letter (Tabular) scale, or when it is a letter with grade points: a Percent or
+    // Score column writes its figure ("87%"), which is not a grade the GPA could use.
+    const text = str(overallRow?.displayGrade?.text, 20);
+    const more = { scale: scale?.length ? scale : null, letter: text && (/^tabular$/i.test(schema?.scaleType || '') || G.points(text, true) != null) ? text : null };
     if (m.kind === 'weighted') return { ...m, estimate: false, why: '', ...more };
     const pts = G.model(arr(rows).filter((r) => !r?.column?.externalGrade), names);
     return { ...pts, estimate: true, overall: m.overall ?? null, why: m.kind === 'unsupported' ? m.why : '', ...more };
@@ -362,7 +365,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       return { items, complete };
     };
     return {
-      get, all,
+      get, all, list,
       search: async (course, k, text) => {
         const cid = course?.id;
         if (!ID.test(cid) || !SEARCH_KINDS.includes(k)) return [];
@@ -438,9 +441,10 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const risky = arr(rows).filter((g) => /^(late|missing)$/.test(standing(g, now).state)).map((g) => g.columnId);
     if (!risky.length) return () => false;
     if (m?.dueDateExceptionType !== 'Normal' || !ID.test(m?.id)) return () => true;
-    const text = await r.get(`/learn/api/v1/courses/${cid}/gradebook/memberships/${m.id}/exceptions?columnId=${risky.join(',')}`)
-      .then((j) => JSON.stringify(j?.results || []), (e) => { if (e.message === STALE) throw e; return null; });
-    return text === null ? () => true : (col) => text.includes(col);
+    // By column id exactly: an exception for _12_10 is none for _12_1.
+    const cols = await r.get(`/learn/api/v1/courses/${cid}/gradebook/memberships/${m.id}/exceptions?columnId=${risky.join(',')}`)
+      .then((j) => new Set(arr(j?.results).map((x) => x?.columnId)), (e) => { if (e.message === STALE) throw e; return null; });
+    return cols === null ? () => true : (col) => cols.has(col);
   };
 
   // ---- on an Ultra page: the planning features' reads (features/todo.js, cardtasks.js, reminders.js, calexport.js,

@@ -2,7 +2,7 @@
 // sidebar off) and after, with Canvas's own controls still working, and a widget moved board → sidebar → floating → board
 // with a reload after each move. Uses a temporary localhost-enabled extension and profile, removed on exit; never answers
 // or submits a quiz, and only inspects an already started untimed attempt.
-// Hold /private/tmp/claude-501/glaze-heavy.lock and run under nice (as for the full test suite).
+// Hold $GLAZE_LOCK (default glaze-heavy.lock in the OS temp directory) and run under nice (as for the full test suite).
 // NODE_PATH=/path/to/node_modules nice -n 15 node scripts/sidebar-canvas-check.js [screenshots directory]
 // SIDEBAR_LANG=de runs it in another language (the longest labels); SIDEBAR_REVIEW_ONLY=1 stops after the gestures,
 // keyboard, footer and appearance checks.
@@ -14,7 +14,7 @@ for (const lang of I.CODES) require(`../i18n/${lang}.js`);
 const W = require('../lib/widgets.js');
 const src = path.resolve(__dirname, '..');
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'glaze-sidebar-canvas-evidence'));
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const local = 'http://localhost:3000';
 const credentialsFile = process.env.CANVAS_CREDENTIALS || path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -89,7 +89,7 @@ const layoutOk = async (name, width) => {
     for (const w of m.web_accessible_resources) w.matches.push('http://localhost/*');
     fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { executablePath: CHROME, headless: true, viewport: { width: 1600, height: 1000 }, locale: LANG, reducedMotion: 'reduce', args: [`--lang=${LANG}`, `--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...chromeLaunch, headless: true, viewport: { width: 1600, height: 1000 }, locale: LANG, reducedMotion: 'reduce', args: [`--lang=${LANG}`, `--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
     opts = await ctx.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
     page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
     const store = async (s, l) => { await opts.evaluate(async ([s, l]) => { await chrome.storage.sync.set(s); if (l) { await chrome.storage.local.clear(); await chrome.storage.local.set(l); } }, [s, l]); await page.waitForTimeout(250); };

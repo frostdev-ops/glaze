@@ -6,18 +6,22 @@ const { El } = require('./stand-in-dom.js');
 
 // Exercise the renderer's real asynchronous panel lifecycle with a deferred site response.
 const panelHarness = () => {
-  const doc = { activeElement: null, addEventListener() {}, removeEventListener() {} };
+  // The document's listeners by type, as the panel adds them while it's open.
+  const doc = { activeElement: null, on: new Map(), addEventListener(type, f) { this.on.set(type, f); }, removeEventListener(type, f) { if (this.on.get(type) === f) this.on.delete(type); } };
+  doc.body = new El('body', doc);
   const box = new El('div', doc), from = new El('button', doc);
+  from.getClientRects = () => [{}];
+  doc.root = new El('#document', doc); doc.root.append(from);
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(new El(tag, doc), props); e.append(...kids); return e; };
-  const root = { querySelectorAll: () => [], get activeElement() { return doc.activeElement; } };
+  const root = { querySelectorAll: () => [], get activeElement() { return doc.activeElement; }, contains: (e) => e === from || box.contains(e) };
   let resolve;
   const context = vm.createContext({ document: doc, root, el: { panel: box }, host: {}, panel: '', panelTurn: 0, panelFrom: null, panels: new Map(),
     byId: () => ({ label: 'Messages' }), make, put: (e, ...kids) => { e.append(...kids); return e; }, part: (e) => e, icon: () => new El('svg', doc), t: (s) => s, emit() {},
-    menuTo() {}, sheetTo() {}, placePanel() {}, outsidePanel() {}, URL, location: { href: 'https://school.test/', origin: 'https://school.test', protocol: 'https:', host: 'school.test' }, isPreview: false,
+    menuTo() {}, sheetTo() {}, placePanel() {}, getComputedStyle: () => ({ visibility: 'visible' }), URL, location: { href: 'https://school.test/', origin: 'https://school.test', protocol: 'https:', host: 'school.test' }, isPreview: false,
     M: { PICKS: ['bell'] }, site: { panel: () => new Promise((r) => { resolve = r; }) } });
   const src = fs.readFileSync(require.resolve('../features/navbar.js'), 'utf8');
-  vm.runInContext(src.slice(src.indexOf('  const safeHref ='), src.indexOf('  // The open course')) + src.slice(src.indexOf('  const panelRow ='), src.indexOf('  const outsidePanel =')) + '\nglobalThis.open = panelTo;', context);
-  return { doc, box, from, open: context.open, resolve: (v) => resolve(v) };
+  vm.runInContext(src.slice(src.indexOf('  const safeHref ='), src.indexOf('  // The open course')) + src.slice(src.indexOf('  const panelAnchor ='), src.indexOf('  const placePanel =')) + src.slice(src.indexOf('  const panelRow ='), src.indexOf('  // ---- acting')) + '\nglobalThis.open = panelTo; globalThis.left = leftPanel;', context);
+  return { doc, box, from, open: context.open, left: context.left, resolve: (v) => resolve(v) };
 };
 
 test('a panel response preserves focus after the user tabs back to the page', async () => {
@@ -41,6 +45,27 @@ test('a response keeps focus in the panel if the user is still there; closing di
   assert.equal(h.box.textContent, '');
 });
 
+test('a panel closes when focus Tabs on into the page, and hears Escape from the page', async () => {
+  const h = panelHarness(), rows = { sections: [{ rows: [{ label: 'Biology', href: 'https://school.test/courses/1' }] }] };
+  let pending = h.open('course', h.from);
+  h.resolve(rows); await pending;
+  h.left({ relatedTarget: h.box.querySelector('.row') });
+  h.left({ relatedTarget: null });
+  assert.equal(h.box.hidden, false, 'moving inside the bar, or a row redrawn under focus, keeps it open');
+  const link = new El('a', h.doc); link.focus();
+  h.left({ relatedTarget: link });
+  assert.equal(h.box.hidden, true, 'Tab past its last row into the page closes it: it would cover what is focused there');
+  assert.equal(h.doc.activeElement, link, 'focus stays where it went');
+  assert.equal(h.doc.on.has('keydown'), false);
+  pending = h.open('course', h.from);
+  h.resolve(rows); await pending;
+  h.doc.activeElement = h.doc.body;
+  h.doc.on.get('keydown')({ key: 'Escape', composedPath: () => [h.doc.body] });
+  assert.equal(h.box.hidden, true, 'Escape heard from the page closes it');
+  assert.equal(h.doc.activeElement, h.from, 'from nowhere, focus goes back to its button');
+  assert.equal(h.doc.on.has('keydown'), false, 'the page-level listener goes with it');
+});
+
 test('panel response labels and descriptions remain literal text', async () => {
   const h = panelHarness(), pending = h.open('notifications', h.from);
   const text = '<img src=x onerror=alert(1)>';
@@ -58,7 +83,7 @@ test('turning the bar off restores tabindex added by Skip to content', () => {
     if (tabindex !== null) main.setAttribute('tabindex', tabindex);
     // Mirror the browser's reflected tabindex property in this small DOM stand-in.
     Object.defineProperty(main, 'tabIndex', { set(v) { this.setAttribute('tabindex', String(v)); } });
-    const context = vm.createContext({ document: doc, html, el: { skip }, host: new El('div', doc), site: { main: () => main, unobserve() {} }, tabsApi: () => null,
+    const context = vm.createContext({ document: Object.assign(doc, { removeEventListener() {} }), escapeTip() {}, html, el: { skip }, host: new El('div', doc), site: { main: () => main, unobserve() {} }, tabsApi: () => null,
       chrome: { runtime: { id: "glaze" } }, clearLogo() {},
       enter: 0, leave: 0, frame: 0, queued: 0, sheetOpen: false, sizes: null, words: '', panels: new Map(),
       clearTimeout() {}, cancelAnimationFrame() {}, menuTo() {}, panelTo() {}, dockTo() {}, emit() {} });
@@ -122,7 +147,7 @@ test('a delayed panel response preserves focus after the user tabs into page con
   const open = vm.runInNewContext(between('  const panelTo =', '  const outsidePanel =') + '\npanelTo;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     host: {}, panel: '', panelTurn: 0, panelFrom: null, panels: new Map(), root, el,
     site: { panel: () => new Promise((r) => { resolve = r; }) },
-    drawPanel() {}, menuTo() {}, sheetTo() {}, placePanel() {}, emit() {}, outsidePanel() {},
+    drawPanel() {}, menuTo() {}, sheetTo() {}, placePanel() {}, emit() {}, outsidePanel() {}, escapePanel() {},
     document: { addEventListener() {}, removeEventListener() {} },
   });
   const pending = open('course');

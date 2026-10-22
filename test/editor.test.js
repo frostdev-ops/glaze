@@ -148,6 +148,17 @@ test('E1 section and global preference resets preserve pictures, preset librarie
   assert.ok(js.includes('GZ_EDITOR.reset'));
 });
 
+test('resets give back the defaults this device started with: a fresh install keeps Notes and the pet habitat on', () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const helper = source.slice(source.indexOf('  let freshHere = false;'), source.indexOf('  // Two clicks, so a stray one'));
+  for (const fresh of [true, false]) {
+    const defaults = vm.runInNewContext(`${helper}\ndefaultsHere()`, { GZ_SANITIZE: D.GZ_SANITIZE, GZ_CARDS: { settings: () => ({}) },
+      chrome: { storage: { local: { get: (k, cb) => cb({ freshDefaults: { fresh } }) } } } });
+    assert.deepEqual([defaults.enhance.notes, defaults.enhance.pet], [fresh, fresh], fresh ? 'a fresh install' : 'an update');
+  }
+  for (const site of ["GZ_EDITOR.reset(s, [path], defaultsHere())", "GZ_EDITOR.reset(s, paths, defaultsHere())", "const defaults = defaultsHere();"]) assert.ok(source.includes(site), site);
+});
+
 test('E1 Ultra preview carries the chosen course color and nickname without saving a pending Look', () => {
   const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
   const preview = source.slice(source.indexOf('  const preview = () => {') + '  const preview = '.length, source.indexOf('\n  const contextPreview =')).replace(/;\s*$/, '');
@@ -157,7 +168,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
   const context = vm.createContext({ s: state, offer: null, courses: { '_1_1': { name: 'Original course', slot: '2' }, '_2_1': { name: 'Other course', slot: '2' } },
     frame: { contentDocument: { querySelector: () => section }, contentWindow: { postMessage: (m) => messages.push(m) } },
     $: (selector) => ({ value: selector === '#preview-size' ? 'desktop' : 'current' }), location: { origin: 'chrome-extension://fixture' },
-    previewSite: 'ultra', previewPage: 'outline', previewCourse: '', renderNav() {}, sizePreview() {}, previewItems: () => ({}),
+    previewSite: 'ultra', previewPage: 'outline', previewCourse: '', renderNav() {}, renderContrast() {}, sizePreview() {}, previewItems: () => ({}),
     GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED,
   });
   vm.runInContext(`(${preview})()`, context);

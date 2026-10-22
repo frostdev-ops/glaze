@@ -398,7 +398,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       return b;
     }));
     if (scope) scope.setAttribute('aria-label', t('Courses shown'));
-    head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }), scope,
+    head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }), ...(scope ? [scope] : []),
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
       ...(globalThis.GZ_REMIND_UI?.head() || []), small('sessions', t('Share sessions')), ics, add); // the streak and reminders (features/reminders.js), when on
     const parts = [form && taskForm()];
@@ -522,7 +522,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (!title) return;
       const day = L.keyDay(String(v.date || '')) !== null ? v.date : '';
       const at = day && v.time ? L.typed(day, v.time, who.tz) : null;
-      const x = { id: form.id || uid(), title, cid: String(v.cid || ''), due: at ? { at } : day ? { day } : null, notes: String(v.notes || ''), done: form.done || 0, at: form.at || Date.now() };
+      // Done and when it was made aren't the form's to send: the worker keeps what storage has for a task that's there.
+      const x = { id: form.id || uid(), title, cid: String(v.cid || ''), due: at ? { at } : day ? { day } : null, notes: String(v.notes || ''), ...(!form.id && { at: Date.now() }) };
       // The form stays open with what was typed if it couldn't be kept.
       const was = form;
       form = null;

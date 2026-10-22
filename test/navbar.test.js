@@ -176,10 +176,26 @@ test('full-window Ultra layers offset their content and keep their covering edge
   assert.ok(css.includes(`${selector} { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }`));
   assert.ok(css.match(/@media \(min-width: 900px\) \{[\s\S]*?\n\}/g).some((block) => block.includes(selector)), 'desktop room stays in the existing navbar guard');
   assert.ok(css.includes('margin-inline-start: 48px !important; width: calc(100% - 48px) !important;'));
-  const mobile = selector.replace('html[data-gz-navbar]', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive])');
+  // Below 900px the bar runs along the bottom, under a slide-out (a peek) as much as a full-window layer.
+  const mobile = 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel:is(.screen, .peek):not(:is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap';
   assert.ok(css.includes(`${mobile} { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }`));
   assert.ok(css.match(/@media \(max-width: 899\.98px\) \{[\s\S]*?\n\}/g).some((block) => block.includes(mobile)), 'bottom room is mobile only');
   assert.doesNotMatch(css, /html\[data-gz-navbar\] \.bb-offcanvas-panel[^{}>]* \{[^}]*inset-inline-start/);
+});
+
+test("below 900px, what Ultra fixes along the window's bottom stands on the bar, not under it", () => {
+  const css = read('theme.css');
+  const mobile = css.match(/@media \(max-width: 899\.98px\) \{[\s\S]*?\n\}/g).find((block) => block.includes('--gz-navbar-bottom'));
+  assert.ok(mobile, 'the bar\'s bottom room is worded once, for narrow windows');
+  const on = 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive])';
+  assert.ok(mobile.includes(`${on} { --gz-navbar-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }`));
+  assert.ok(mobile.includes('html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(96px + var(--gz-footer-h) + env(safe-area-inset-bottom, 0px)); }'),
+    'the footer under the bar counts too: the lift is from the window\'s bottom');
+  // Action bars and the help button: lifted the whole room, not just the footer's. Window-high layers (MUI's dialogs over the
+  // bar, backdrops) and slide-outs (their wrapper clears it) keep their edges.
+  const lift = `${on} :is(.pagehelp-directive, [data-gz-fixed-bottom]:not([data-gz-vh], .bb-offcanvas-panel)) { bottom: var(--gz-navbar-bottom) !important; max-height: calc(100vh - var(--gz-navbar-bottom)) !important; }`;
+  assert.ok(mobile.includes(lift));
+  assert.ok(css.indexOf(lift) > css.indexOf('html[data-gz-footer] .pagehelp-directive, html[data-gz-footer] [data-gz-fixed-bottom] {'), "after the footer's lift, which it replaces");
 });
 
 test("Ultra's first paint words the bar as the model does, for each setting, in and out of a course", () => {
@@ -256,6 +272,12 @@ test("a mod's items are checked: name, icon, address, badge, place; one owner ca
   for (let i = 0; i < 8; i++) ui.add('many', { id: `i${i}`, label: `Item ${i}` });
   assert.equal(ui.add('many', { id: 'i8', label: 'Ninth' }), false, 'at most eight a mod');
   assert.equal(ui.remove('countdown', 'next'), true);
+  // Nothing a mod adds passes for Glaze's own items (NAV-8): not their icons, nor their names, however spelled.
+  for (const bad of [{ id: 'a', label: 'Glaze settings', icon: 'glaze' }, { id: 'a', label: 'Glaze settings' }, { id: 'a', label: ' SIGN  out ' }, { id: 'a', label: 'Abmelden' }, { id: 'a', label: 'Log-out' },
+    { id: 'a', label: 'Due', icon: 'glaze' }, { id: 'a', label: 'Due', icon: 'signout' }]) assert.equal(ui.add('countdown', bad), false, JSON.stringify(bad));
+  assert.equal(ui.add('countdown', { id: 'next', label: 'Next due', icon: 'gear' }), true);
+  assert.equal(ui.update('countdown', 'next', { label: 'Glaze  Settings' }), false);
+  assert.equal(ui.update('countdown', 'next', { icon: 'signout' }), false);
 });
 
 test('a navbar control saves only its edit, preserving a pin from another tab', () => {
@@ -285,12 +307,13 @@ test('a navbar edit batched with Look parts merges in the worker queue too', asy
 test("the editor lists every item where the bar puts it, hidden ones too, with the phone's tabs", () => {
   const E = require('../lib/editor-navbar.js');
   const ids = (gs) => gs.map((g) => g.items.map((i) => i.id));
-  assert.deepEqual(ids(E.rows({})), [['institution-page', 'stream', 'course', 'organization', 'calendar', 'messages', 'grades'], ['tools']]);
-  assert.deepEqual(E.rows({}).flatMap((g) => g.items).filter((i) => i.tab).map((i) => i.id), ['institution-page', 'course', 'calendar', 'messages']);
+  // Every LMS's items (WP-N2, NAV-4): Ultra's, Canvas's and Moodle's, in the default groups' order.
+  assert.deepEqual(ids(E.rows({})), [['institution-page', 'dashboard', 'home', 'stream', 'course', 'organization', 'groups', 'calendar', 'messages', 'notifications', 'grades'], ['tools', 'history', 'help', 'admin']]);
+  assert.deepEqual(E.rows({}).flatMap((g) => g.items).filter((i) => i.tab).map((i) => i.id), ['institution-page', 'dashboard', 'course', 'calendar', 'messages'], "each LMS's four: Ultra's Institution page, Canvas's and Moodle's Dashboard");
   const prefs = { items: { stream: { hidden: true, label: 'Feed' }, tools: { icon: 'star' } }, groups: [{ label: 'Daily', items: ['calendar', 'stream'] }, { items: [] }, { items: ['tools'] }], tabs: ['calendar'], glaze: ['notes'], links: [{ id: 'aaaaaaaaaaaa', n: 'Wiki', u: 'https://wiki.test/' }] };
   const gs = E.rows(prefs);
   assert.deepEqual(gs.map((g) => g.label), ['Daily', '', '']);
-  assert.deepEqual(ids(gs), [['calendar', 'stream', 'institution-page', 'course', 'organization', 'messages', 'grades'], [], ['tools', 'link:aaaaaaaaaaaa', 'glaze:notes']], 'an empty group stays to drop into');
+  assert.deepEqual(ids(gs), [['calendar', 'stream', 'institution-page', 'dashboard', 'home', 'course', 'organization', 'groups', 'messages', 'notifications', 'grades', 'history', 'help', 'admin'], [], ['tools', 'link:aaaaaaaaaaaa', 'glaze:notes']], 'an empty group stays to drop into');
   const stream = gs[0].items[1];
   assert.deepEqual([stream.hidden, stream.name], [true, 'Feed'], 'hidden, still listed in its place');
   assert.equal(gs[2].items[0].icon, 'star');
@@ -348,4 +371,84 @@ test('queued navigation item writes restore the last successful edit if the next
   const first = editor.edit(kept), second = editor.edit({ ...kept, glaze: ['notes'] });
   assert.deepEqual(await Promise.all([first, second]), [true, false]);
   assert.deepEqual(editor.current(), kept);
+});
+
+// What a stylesheet says under one media query (`@media print`, `@media (max-height: 420px)`…): the inside of those blocks,
+// comments gone, spacing squeezed.
+const media = (file, query) => {
+  const css = read(file).replace(/\/\*[\s\S]*?\*\//g, '');
+  let out = '';
+  for (let i = css.indexOf(query); i !== -1; i = css.indexOf(query, i + 1)) {
+    if (!/^\s*\{/.test(css.slice(i + query.length))) continue;
+    let depth = 0, j = css.indexOf('{', i);
+    const from = j + 1;
+    for (; j < css.length; j++) { if (css[j] === '{') depth++; else if (css[j] === '}' && --depth === 0) break; }
+    out += `${css.slice(from, j).replace(/\s+/g, ' ').replace(/\s*([{};])\s*/g, '$1').replace(/:\s+/g, ':')}\n`;
+  }
+  return out;
+};
+const printed = (file) => media(file, '@media print');
+test("printed, a page is the site's own: none of Glaze's fixed parts on every sheet, and no room kept for them", () => {
+  // The bar in its shadow root (the phone's bottom bar, the rail, the Skip link), the course tabs' strip, the footer on
+  // Ultra (fixed) and Canvas (in the page), floating tiles and the pet out on the page; the sidebar's buttons already.
+  assert.match(printed('features/navbar.css'), /:host\{display:none !important;?\}/);
+  assert.match(printed('features/coursetabs.css'), /#gz-ctabs\{display:none !important;?\}/);
+  assert.match(printed('theme.css'), /html\[data-gz-footer\] #gz-footer\{display:none !important;?\}/);
+  assert.match(printed('canvas.css'), /#gz-footer\{display:none !important;?\}/);
+  assert.match(printed('features/apps.css'), /#gz-float\{display:none !important;?\}/);
+  assert.match(printed('features/apps.css'), /\.gz-game-world\{display:none ?!important;?\}/);
+  assert.match(printed('features/sidebar.css'), /\.gz-sb-own[^{]*\{display:none !important;?\}/);
+  assert.match(read('features/sidebar.js'), /className: 'gz-sb-btn gz-sb-launch gz-sb-own'/, 'the Sidebar button is one of them');
+  // The room: the bar's (set inline by features/navbar.js once drawn, so !important), the strip's and the footer's.
+  assert.match(printed('theme.css'), /html\[data-gz-navbar\]\{--gz-navbar-left:0px !important;--gz-navbar-top:0px !important;--gz-navbar-bottom:0px !important;?\}/);
+  assert.match(printed('theme.css'), /html\[data-gz-footer\]\{--gz-footer-h:0px !important;?\}/);
+  assert.match(printed('canvas.css'), /html\[data-gz-navbar\]\{--gz-navbar-left:0px !important;--gz-navbar-top:0px !important;?\}/);
+  assert.match(printed('features/coursetabs.css'), /html\[data-gz-ctabs\]\{--gz-ctabs-h:0px !important;?\}/);
+  // The phone bar's room under the page: reset after the rule that keeps it, so the reset wins.
+  for (const [file, sel] of [['theme.css', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) {'],
+    ['canvas.css', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]) body {']]) {
+    const css = read(file), screen = css.search(new RegExp(`${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^}]*padding-bottom: calc\\(96px`));
+    assert.ok(screen > 0 && css.lastIndexOf(`${sel} padding-bottom: 0 !important; }`) > screen, `${file}: the print reset comes after the room it resets`);
+  }
+});
+
+test('a window 420px tall or less (a phone on its side, 400% zoom) keeps more of itself: no footer, a lower, shorter bar, no second row of tabs', () => {
+  const short = '@media (max-height: 420px)', phone = '@media (max-width: 899.98px) and (max-height: 420px)';
+  // Ultra's fixed footer goes, and the room kept for it with it (the bar's raise reads the same variable).
+  assert.match(media('theme.css', short), /html\[data-gz-footer\]\{--gz-footer-h:0px;?\}/);
+  assert.match(media('theme.css', short), /html\[data-gz-footer\] #gz-footer\{display:none !important;?\}/);
+  // The bar: 6px from the bottom, 44px tabs (64px in all, from 84px), after the phone rules it changes so it wins.
+  const bar = media('features/navbar.css', phone);
+  assert.match(bar, /\.tabs\{bottom:calc\(6px \+ env\(safe-area-inset-bottom, 0px\)\);?\}/);
+  assert.match(bar, /:host\(\[data-footer\]\) \.tabs\{bottom:calc\(6px \+ var\(--gz-footer-h, 2rem\) \+ env\(safe-area-inset-bottom, 0px\)\);?\}/);
+  assert.match(bar, /\.tab, \.pill\{height:44px;?\}/);
+  const css = read('features/navbar.css');
+  assert.ok(css.indexOf(phone) > css.indexOf('@media (max-width: 899.98px) {'));
+  const top = 6 + 44 + 2 * 6 + 2; // gap, tab, the bar's padding and border
+  // What stands on the bar comes down with it, still clear of it: Ultra's bars and the sidebar's opener.
+  for (const [file, v] of [['theme.css', '--gz-navbar-bottom'], ['features/sidebar.css', '--gz-sb-bottom']]) {
+    const room = Number(media(file, phone).match(new RegExp(`${v}:calc\\((\\d+)px`))?.[1]);
+    assert.ok(room > top && room < 96, `${file} ${v}: ${room}`);
+  }
+  // The opener stays, smaller: it is the sidebar drawer's only way in.
+  assert.match(media('features/sidebar.css', short), /\.gz-sb-edge, \.gz-sb-launch\{padding:0\.2rem 0\.7rem !important;font-size:0\.8rem;?\}/);
+  assert.doesNotMatch(media('features/sidebar.css', short), /display:none/);
+  // The course tabs' strip goes only where the bar holds the tabs too (its words say `tabs`).
+  const tabs = media('features/coursetabs.css', short);
+  assert.match(tabs, /html\[data-gz-navbar~="tabs"\]\[data-gz-ctabs\]\{--gz-ctabs-h:0px !important;?\}/);
+  assert.match(tabs, /html\[data-gz-navbar~="tabs"\] #gz-ctabs\{display:none !important;?\}/);
+  assert.equal(M.layout(G.GZ_SANITIZE({}).navbar, { width: 812, course: true }).words.split(' ').includes('tabs'), true, 'by default the bar holds them');
+});
+
+test("what focus scrolls to stops clear of the bar on Ultra too, in the boxes Ultra scrolls inside its app (WCAG 2.4.11)", () => {
+  // Ultra scrolls inside its app (its main column, a course's panel, a routed page, a box the window's height), not the page.
+  const boxes = ':is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh])';
+  const css = read('theme.css'), on = 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive])';
+  assert.ok(css.includes(`html[data-gz-navbar], html[data-gz-navbar] ${boxes} { scroll-padding-top: var(--gz-navbar-top); }`), 'under the top bar');
+  // A phone: the page by the bar's whole room (the footer under it too); the app's boxes end at the footer, so by the bar's.
+  const phone = media('theme.css', '@media (max-width: 899.98px)');
+  assert.ok(phone.includes(`${on}{scroll-padding-bottom:var(--gz-navbar-bottom);}`));
+  assert.ok(phone.includes(`${on} ${boxes}{scroll-padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px));}`));
+  assert.ok(media('theme.css', '@media (max-width: 899.98px) and (max-height: 420px)').includes(`${on} ${boxes}{scroll-padding-bottom:calc(72px + env(safe-area-inset-bottom, 0px));}`),
+    'and the lower, shorter bar of a short window');
 });

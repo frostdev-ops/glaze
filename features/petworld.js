@@ -24,7 +24,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     let decision = null, feedbackAt = -Infinity, feedbackEvent = '', carePending = false, focus = false, focusEnd = 0;
     let cursor = { x: -1000, y: -1000 }, cursorAt = 0, cursorSpeed = 0, pointerForm = false, typedAt = -Infinity, scrolledAt = -Infinity, movedAt = -Infinity, celebratedAt = -Infinity, playedAt = -Infinity;
     let energy = .8, idleUntil = 0, idlePose = 'idle', activity = null, toy = null, observedAt = -Infinity, observedAction = '', xpSeen = null, wasStill = false, facing = 1;
-    let groundY = 0, offscreenAt = 0, recovery = null, geometryDirty = false, focusTimer = null, anchor = null;
+    let groundY = 0, offscreenAt = 0, recovery = null, geometryDirty = false, focusTimer = null, anchor = null, slow = false;
     let viewDoc = document, viewFrame = null, viewBlocked = false, frameOffs = [];
     let scanStyles = null;
     const styleOf = (n) => {
@@ -461,8 +461,11 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       }
       return { controlled: true, pose: Math.abs(dy) > Math.abs(dx) ? 'climbing' : facingPose(dx) };
     };
+    // Asleep, studying or perched, nothing on the page moves for 45 to 120 s: looking about once a second is enough, and the
+    // pointer, a scroll or the next choice brings the frame loop back.
+    const CALM = ['sleeping', 'review', 'perching'];
     const tick = () => {
-      clearTimeout(timer); timer = 0;
+      clearTimeout(timer); timer = 0; slow = false;
       if (!alive) return;
       if (!chrome.runtime?.id || globalThis.GZ_CTABS?.revoked?.() || (!stage?.isConnected && !wandering)) { destroy(); return; }
       syncSurface();
@@ -470,7 +473,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       actor.hidden = !allowed(); if (toy) toy.hidden = actor.hidden; for (const p of floating.values()) p.el.hidden = actor.hidden;
       if (actor.hidden) { if (awake) player?.sleep(); awake = false; return; }
       if (!awake) player?.wake(); awake = true;
-      const now = performance.now(), dt = Math.min(.05, (now - last) / 1000 || 1 / 30), box = bounds(); last = now;
+      const now = performance.now(), dt = Math.min(.05, (now - last) / 1000 || 1 / 30), elapsed = Math.min(2, (now - last) / 1000 || dt), box = bounds(); last = now;
       if (now - lastScan > 2000 || geometryDirty && (still() || now - lastScan >= 80)) { scan(); lastScan = now; geometryDirty = false; }
       if (still()) {
         if (!wasStill) { clearActivity(); nextAction = 0; wasStill = true; }
@@ -491,7 +494,8 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       const water = !wandering && data.habitat === 'aquarium';
       const fromX = b.x;
       const action = !drag ? returning ? recover(now, dt) : wandering ? explore(now, dt) : atHome(now, dt) : null;
-      energy = Math.max(0, Math.min(1, energy + dt * (decision?.action === 'rest' ? .035 : -.003)));
+      energy = Math.max(0, Math.min(1, energy + elapsed * (decision?.action === 'rest' ? .035 : -.003)));
+      let calm = false;
       if (!drag) {
         if (action?.controlled) { /* The pet grips the ledge while climbing, perching or peeking. */ }
         else if (data.physics) {
@@ -512,6 +516,9 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         const near = Math.hypot(dx, dy), watching = !travelling && now - cursorAt < 2400 && near < 600 && (['idle', 'perching', 'waiting', 'look'].includes(state) || state === 'sleeping' && near < 120 && !focus && energy > .3);
         if (watching && globalThis.GZ_PET_SPRITES) { state = 'look'; direction = GZ_PET_SPRITES.direction(dx, dy); }
         if (!actor.dataset.reaction && (state !== lastMotion || state === 'look' && direction !== lastGaze)) { lastMotion = state; lastGaze = direction; player?.play(state, direction); }
+        calm = CALM.includes(state) && !travelling && !watching && !water && !movingItem && !floating.size && !toy && !recovery && !actor.dataset.reaction
+          && now - cursorAt >= 2400 && now - scrolledAt >= 1500 && (action?.controlled || b.grounded && Math.abs(b.vx) < 1 && Math.abs(b.vy) < 1)
+          && props.every((p) => P.DECOR[p.id].fixed || !data.physics || p.grounded);
       }
       for (const p of floating.values()) if (p !== movingItem) {
         if (p.anchor?.nodes.some((n) => !n.el.isConnected)) p.anchor = anchorAt(p.x + p.w / 2, p.y + p.h / 2);
@@ -527,7 +534,9 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         if (p === movingItem || floating.has(p.id) || P.DECOR[p.id].fixed) continue;
         Object.assign(p, F.step(p, { ...box, platforms: shelves(), water, dt })); putProp(p);
       }
-      timer = setTimeout(tick, 1000 / 30);
+      const due = Math.min(...[nextAction, idleUntil, activity?.until, outing?.until].filter((v) => v > now));
+      slow = calm;
+      timer = setTimeout(tick, calm ? Math.max(1000 / 30, Math.min(1000, due - now)) : 1000 / 30);
     };
     const wake = () => { clearTimeout(timer); timer = 0; last = performance.now(); tick(); };
     const begin = (e, item = null) => {
@@ -551,6 +560,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         cursor = { x: clientX, y: clientY }; cursorAt = now;
         pointerForm = !e.target.closest?.('.gz-game-actor,.gz-game-item,.gz-game-home') && !!e.target.closest?.('input,textarea,select,button,a,[role="button"],[contenteditable="true"],[role="textbox"]');
       }
+      if (slow && e.isTrusted) wake();
       if (!drag || e.pointerId !== drag.pointer) return;
       e.preventDefault(); const now = performance.now(), dt = Math.max(16, now - drag.at);
       drag.vx = Math.max(-450, Math.min(450, (e.clientX - drag.x) / dt * 1000)); drag.vy = Math.max(-500, Math.min(500, (e.clientY - drag.y) / dt * 1000));
@@ -677,7 +687,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         const moved = shift(p.anchor);
         if (moved && p !== movingItem) { p.x += moved.dx; p.y += moved.dy; p.ground += moved.dy; if (p.support?.el && target.contains(p.support.el)) p.support = { ...p.support, x: p.support.x + moved.dx, y: p.support.y + moved.dy }; putProp(p); }
       }
-      scrolledAt = performance.now(); geometryDirty = true; if (!timer && allowed()) wake();
+      scrolledAt = performance.now(); geometryDirty = true; if ((!timer || slow) && allowed()) wake();
     };
     on(window, 'scroll', scrolled, { passive: true, capture: true });
     const syncSurface = () => {

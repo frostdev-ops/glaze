@@ -84,46 +84,59 @@ test('the detector stays under 2 KB', () => {
   assert.ok(fs.statSync(path.join(root, 'lib/detect.js')).size < 2048);
 });
 
-// ---- the background: a Moodle host is injected now and registered for good, in its own list --------------------------
+// ---- the background: a Moodle host, once the student says yes, is injected now and registered for good, in its own list --
 // Each LMS's first content script: Canvas's is the manifest's for *.instructure.com, with its part; Moodle's is the same
-// without it (B0b).
+// without it (B0b). Before the yes, the page gets only the question (WP-C2, features/consent.js), in Glaze's words.
 const CANVAS_FIRST = require('../manifest.json').content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*')).js;
 const MOODLE_FIRST = CANVAS_FIRST.filter((f) => f !== 'content-canvas.js');
-test('a Moodle host is injected now and registered from then on, apart from Canvas hosts', async () => {
+const ASK = ['lib/i18n.js', 'features/consent.js'];
+const asked = (first) => first.filter((f) => f !== 'lib/i18n.js'); // the question brought Glaze's words in already
+test('a Moodle host is asked about, then injected now and registered from then on, apart from Canvas hosts', async () => {
   const store = { canvas: ['https://canvas.school.edu/*'] };
   const injected = [], registered = [], lists = {};
   let message;
   const none = { addListener() {} };
   const context = vm.createContext({ solo: false, tabFrame: '',
-    URL, console, setTimeout, clearTimeout,
-    importScripts: (file) => vm.runInContext(read(path.join('lib', file)), context),
+    URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto,
+    importScripts: (...files) => { for (const file of files) vm.runInContext(read(path.join('lib', file)), context); },
     chrome: {
       runtime: { id: 'id', getURL: (p = '') => `chrome-extension://id/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => { message ||= []; message.push(f); } }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, store[x]])), set: async (o) => Object.assign(store, o) }, sync: { get: async () => ({}) }, onChanged: none },
       scripting: {
-        executeScript: async (o) => { injected.push(o); return [{ result: {} }]; },
+        executeScript: async (o) => { injected.push(o); return [{ result: /typeof GZ_I18N|window\.__gzGlaze/.test(String(o.func)) ? false : {} }]; },
         getRegisteredContentScripts: async () => registered.map((id) => ({ id })),
         registerContentScripts: async (list) => { for (const s of list) { assert.ok(!registered.includes(s.id), `registered twice: ${s.id}`); registered.push(s.id); lists[s.id] = s.js; } },
       },
     },
   });
   vm.runInContext(read('lib/background.js'), context);
-  const send = async (m, url) => { for (const f of message) f(m, { tab: { id: 4 }, frameId: 0, url }, () => {}); await settle(); await settle(); };
+  const send = async (m, url) => { for (const f of message) f(m, { id: 'id', tab: { id: 4 }, frameId: 0, url }, () => {}); for (let i = 0; i < 4; i++) await settle(); };
+  const yes = (kind, url) => send({ type: 'glaze:consent', op: 'yes', kind }, url);
+  const files = () => injected.filter((o) => o.files).map((o) => plain(o.files));
   await send('moodle', 'https://moodle.school.edu/my/');
-  assert.deepEqual(injected.map((o) => o.files), [MOODLE_FIRST], 'Moodle\'s whole first content script, into that page: no Canvas part');
+  assert.deepEqual(files(), [ASK], 'only the question, before any yes');
+  assert.equal(store.moodle, undefined);
+  assert.deepEqual(registered, [], 'nothing registered');
+  await yes('moodle', 'https://moodle.school.edu/my/');
+  assert.deepEqual(files().at(-1), asked(MOODLE_FIRST), 'Moodle\'s whole first content script, into that page: no Canvas part');
   assert.deepEqual(plain(store.moodle), ['https://moodle.school.edu/*']);
   assert.deepEqual(plain(store.canvas), ['https://canvas.school.edu/*'], 'the Canvas list (which Download all trusts) is untouched');
   assert.deepEqual(registered.sort(), ['https://canvas.school.edu/*', 'https://moodle.school.edu/*']);
   assert.deepEqual(plain(lists), { 'https://canvas.school.edu/*': CANVAS_FIRST, 'https://moodle.school.edu/*': MOODLE_FIRST }, 'each host its own LMS\'s list');
   assert.ok(CANVAS_FIRST.includes('content-canvas.js') && !MOODLE_FIRST.includes('content-canvas.js') && MOODLE_FIRST.at(-1) === 'content.js');
   await send('moodle', 'https://moodle.school.edu/course/view.php?id=2');
+  assert.deepEqual(files().at(-1), MOODLE_FIRST, 'an approved host whose page lacks Glaze gets it at once, unasked');
   assert.deepEqual(plain(store.moodle), ['https://moodle.school.edu/*'], 'a host once');
+  const n = injected.length;
   await send('blackboard', 'https://x.edu/');
-  assert.equal(injected.length, 2, 'only the two LMSs it knows');
-  // A Canvas host found on a page gets Canvas's list, part and all; one on both lists too (Canvas's holds Moodle's).
+  assert.equal(injected.length, n, 'only the LMSs it knows');
+  // A Canvas host gets Canvas's list, part and all; one on both lists too (Canvas's holds Moodle's). Approval is per LMS: a
+  // Moodle site that now looks like Canvas is asked about again.
   store.moodle.push('https://both.school.edu/*');
   await send('canvas', 'https://both.school.edu/courses/1');
-  assert.deepEqual(injected.at(-1).files, CANVAS_FIRST);
+  assert.deepEqual(files().at(-1), ASK);
+  await yes('canvas', 'https://both.school.edu/courses/1');
+  assert.deepEqual(files().at(-1), asked(CANVAS_FIRST));
   assert.deepEqual(plain(lists['https://both.school.edu/*']), CANVAS_FIRST);
 });
 
@@ -453,7 +466,7 @@ const pageLoad = async ({ stored, root = ORIGIN, courses = [{ id: 16, fullname: 
     location: { origin: new URL(root).origin }, moodleIn: () => Promise.resolve(p.api),
   });
   ctx.window.top = ctx.window;
-  vm.runInContext(`let canvasRecorded = false; ${contentBlock('  const recordCourses = () => {', '\n  };\n')} let dueSoon = null; ${contentBlock('  const dueWeek = () =>', '  }));\n')}
+  vm.runInContext(`let canvasRecorded = false; ${contentBlock('  const recordCourses = () => {', '\n  };\n')} let dueSoon = null; ${contentBlock('  const DUE =', '  }));\n')}
     this.load = () => { recordCourses(); return dueWeek(); };`, ctx);
   await ctx.load();
   await settle(); await settle();
@@ -463,7 +476,7 @@ const kinds = (p) => p.asked.map((a) => JSON.parse(a.body)[0].methodname.replace
 
 test('a page load reads the courses of a Moodle root that has none kept, even while the due list is fresh', async () => {
   const now = Date.now();
-  const warm = { dueWeek: [], dueWeekAt: now - 60000, dueWeekFrom: ORIGIN };
+  const warm = { [`dueWeek:${ORIGIN}`]: { at: now - 60000, list: [] } };
   const canvas = { 'canvas:https://c.example/1': { name: 'Canvas course', canvas: true } };
   const stored = { ...warm, seenCourses: { ...canvas } };
   const p = await pageLoad({ stored, now });
@@ -474,13 +487,13 @@ test('a page load reads the courses of a Moodle root that has none kept, even wh
   assert.deepEqual(kinds(await pageLoad({ stored, now: now + 60000 })), []);
   // Ten minutes on, the list again (the due list's cache, fresh or not, has no say).
   stored[`seenCoursesAt moodle:${ORIGIN}/`] -= 601000;
-  stored.dueWeekAt = now;
+  stored[`dueWeek:${ORIGIN}`].at = now;
   assert.deepEqual(kinds(await pageLoad({ stored, now })), ['enrolled_courses_by_timeline_classification']);
 });
 
 test('two Moodles on one host keep their course lists apart: one\'s fresh list never stands in for the other\'s', async () => {
   const now = Date.now();
-  const stored = { dueWeek: [], dueWeekAt: now, dueWeekFrom: 'https://school.edu', 'seenCoursesAt moodle:https://school.edu/': now,
+  const stored = { 'dueWeek:https://school.edu': { at: now, list: [] }, 'seenCoursesAt moodle:https://school.edu/': now,
     seenCourses: { 'moodle:https://school.edu/16': { name: 'A', moodle: true } } };
   const b = await pageLoad({ stored, root: 'https://school.edu/archive', now });
   assert.deepEqual(kinds(b), ['enrolled_courses_by_timeline_classification']);

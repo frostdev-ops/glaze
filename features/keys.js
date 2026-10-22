@@ -18,7 +18,7 @@ var GZ_KEYS = globalThis.GZ_KEYS || (() => {
   let gAt = 0;
   let keysBox = null;
   let keysBack = null;
-  const closeKeys = () => { keysBox?.remove(); keysBox = null; if (!ultra && keysBack?.isConnected) keysBack.focus({ preventScroll: true }); keysBack = null; };
+  const closeKeys = () => { keysBox?.remove(); keysBox = null; if (keysBack?.isConnected) keysBack.focus({ preventScroll: true }); keysBack = null; };
   const openKeys = () => {
     keysBox = document.createElement('div');
     keysBox.id = 'gz-keys';
@@ -41,18 +41,17 @@ var GZ_KEYS = globalThis.GZ_KEYS || (() => {
     row(ultra ? ['?'] : ['g', '?'], t('Show or hide this list'));
     const panel = document.createElement('div');
     panel.className = 'gz-keys-panel';
-    panel.append(h, dl);
-    if (!ultra) {
-      const b = document.createElement('button');
-      b.type = 'button'; b.textContent = t('Dismiss'); b.addEventListener('click', closeKeys); panel.append(b);
-      keysBox.setAttribute('aria-modal', 'true');
-      keysBox.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); b.focus(); } });
-      keysBack = document.activeElement;
-    }
+    // A dialog on every site: focus on its Dismiss button and kept there, then back where it was.
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = t('Dismiss'); b.addEventListener('click', closeKeys);
+    panel.append(h, dl, b);
+    keysBox.setAttribute('aria-modal', 'true');
+    keysBox.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); b.focus(); } });
+    keysBack = focused();
     keysBox.append(panel);
     keysBox.addEventListener('click', (e) => { if (e.target === keysBox) closeKeys(); });
     document.body.append(keysBox);
-    if (!ultra) keysBox.querySelector('button').focus();
+    b.focus();
   };
   // Opened before the page's words arrived: drawn again in them, keeping where focus goes back to.
   ctx.wordsIn.add(() => {
@@ -63,12 +62,15 @@ var GZ_KEYS = globalThis.GZ_KEYS || (() => {
     openKeys();
     keysBack = back;
   });
+  // What has focus, through open shadow roots: typing in Glaze's bar or its panels, the document's listeners see the
+  // bar's host as the target, so content.js hands such keys over too. Focus goes back there too, not to the host.
+  const focused = () => { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a; };
+  const inside = () => { for (let a = focused(); a && a !== document.activeElement; a = a.getRootNode?.().host) if (typing(a) || a.closest?.(`${ultra ? '' : '[role="dialog"]:not(#gz-keys), '}[role="menu"], [role="menubar"], [role="listbox"], [role="grid"], [role="tree"], [role="combobox"]`)) return true; return false; };
   const key = (e) => {
-    if (!ultra && e.key === 'Escape' && keysBox && !typing(e.target)) { e.preventDefault(); closeKeys(); return; }
+    if (e.key === 'Escape' && keysBox && !typing(e.target)) { e.preventDefault(); closeKeys(); return; }
     if (!ultra && e.key === 'Shift') return; // g then Shift+? must keep its prefix.
-    if (!ctx.keyOn(e) || (moodle && !MOODLE_PAGES.test(document.body.id))) { gAt = 0; return; }
+    if (!ctx.keyOn(e) || inside() || (moodle && !MOODLE_PAGES.test(document.body.id))) { gAt = 0; return; }
     const now = e.at || Date.now(); // a key pressed while this file loaded keeps its time
-    if (e.key === 'Escape' && keysBox) { closeKeys(); return; }
     if (!ultra && now - gAt < 1200 && e.key === '?') {
       e.preventDefault(); e.stopImmediatePropagation(); gAt = 0;
       if (keysBox) closeKeys(); else openKeys();

@@ -109,6 +109,53 @@ const SIDEBAR_SETTINGS = { ultra: 1915 + 39, canvas: 1915 + 40, moodle: 1915 };
 // and use Notes/Pet defaults only while their switches are absent. Nothing is uploaded before sync arrives.
 // Measured against 86fdc1ee: defaults.js and content.js only; the layout and migration remain lazy.
 const FRESH_DEFAULTS = 631;
+// Contrast roles (owner-approved raise, 2026-10-21): defaults.js's contrast pairs gain the roles theme.css gives the muted
+// and faint inks, errors and the bright accent on the tint, so the editor flags a custom palette that fails them, and course
+// tint moves the bright accent until it reads on the tint: 693 bytes on every site, raised by the excess over each budget.
+// Measured against c14b035.
+const CONTRAST_ROLES = { ultra: 510, canvas: 605, moodle: 671 };
+// Ultra with Glaze off (WP-C1; the owner's audit-fix allowance, 2026-10-21): content.js takes content-ultra.js's early sheets
+// off when the first decision is off, waits for storage before the sweep on Ultra too, and keeps only first paint's settings
+// in the page's sessionStorage and skips off-state draft maintenance (982 bytes on every site); content-ultra.js starts
+// widgets and sidebar once settings are in, including concurrent layout changes (230 on Ultra). Measured against a7e4bc9.
+const ULTRA_OFF = { ultra: 982 + 230, canvas: 982, moodle: 982 };
+// Four-digit en-US years (WP-G1; the owner's audit-fix allowance, 2026-10-21): lib/page.js's DATE and DUE take the year as
+// (\d{4}|\d{2})(?!\d), so "10/25/2026, 11:59 PM" keeps its year and its time: 12 bytes on every site. Measured against 0035441.
+const EN_US_YEARS = 12;
+// Dark documents (WP-D1; owner's audit-fix allowance): merge docPages into stored enhance, ignoring late reads from
+// earlier clicks. content.js adds 242 bytes on Ultra, Canvas and Moodle, measured against 6abefdc.
+const DOC_PAGES = 242;
+// Look offers (WP-T2; the owner's audit-fix allowance): lib/i18n.js's English plural forms for the offer's three counted
+// sentences (the parts a Look hides, fades and restyles), 577 bytes on every site; the offer itself is the editor's.
+// Measured against 9371c51.
+const LOOK_OFFER = 577;
+// LMS consent (WP-C2, owner decision 2026-10-21, from the 10 KB allowance across the audit fixes): content.js's wait for the
+// student's yes on an Ultra site off Blackboard's own hosts and its due list kept per site (827 bytes on every site), and
+// content-ultra.js's course records kept per site with their own gate (148 on Ultra). The question itself (features/
+// consent.js) loads on demand. Measured against a7e4bc9.
+// Review against 28b5425: detected-kind consent gating and default-port early-sheet guard included.
+const LMS_CONSENT = { ultra: 1146, canvas: 898, moodle: 898 };
+// Ultra's own Sign Out (WP-U1; the owner's audit-fix allowance, 2026-10-22): content-ultra.js's page-transition click handler
+// leaves native fragment actions and logout route/query links alone, so course tabs see the trusted click and forget their
+// pictures: 243 bytes on Ultra. Measured against immutable package base c1bdd3e.
+const ULTRA_SIGNOUT = { ultra: 243, canvas: 0, moodle: 0 };
+// LMS request discipline (WP-A1; the owner's audit-fix allowance): content-ultra.js's failure gates for /users/me and each
+// gradebook (a minute, a 401 until the page changes), the hook that reads gradebooks and paged course contents through
+// lib/ultra.js and the site's queue, on-screen cards only, and the check that keeps an incomplete or pre-paging read from
+// calling old items new (1,350 bytes on Ultra). Canvas's Link-following list reads shrink its part (-55, not counted);
+// the queue (lib/lmsq.js) loads on demand. Measured against 7bf3623.
+// Review versus immutable f8dc85a: liveness/auth/member failure guards and incomplete Canvas-list checks included.
+const LMS_REQUESTS = { ultra: 1769, canvas: 201, moodle: 0 };
+// Shortcut roles and IME (WP-N2; the owner's audit-fix allowance): content.js's keyOn skips menus, menubars, lists, grids, trees and
+// comboboxes across composed event paths, preserves queued IME flags and ignores Safari keyCode 229: 365 bytes/site. Canvas's
+// frame word also distinguishes course Hide from a disabled menu (+8 bytes). Measured against immutable WP-N2 base f8dc85a.
+const NAV_KEYS = 365;
+const NAV_FRAME_HIDE = { ultra: 0, canvas: 8, moodle: 0 };
+// English plurals (WP-B4; the owner's audit-fix allowance, 2026-10-21): lib/i18n.js's EN table gains the singular and plural
+// forms of ten counted sentences ("1 font", "Changes 1 animation."), so English never shows "1 fonts": 1,183 bytes on every
+// site. Measured against f61431b.
+// Review preserves plural target cards in the singular style description (+4 bytes versus implementation).
+const EN_PLURALS = 1187;
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -117,7 +164,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS, budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS, budget = Math.round(baseline * 1.02);
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -212,6 +259,8 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
+  ['features/coursemenu.js', 'getComputedStyle(g)', 1], // WP-N2: only the focused roving group, once per horizontal arrow key
+  ['features/navbar.js', 'getComputedStyle(e)', 1], // WP-N2: only the old opener and same-id bar copies, on panel close/reposition
   ['features/docreview.js', 'getComputedStyle(el)', 1], // only the viewer's ancestors on entry and while focused; reject fixed-position traps
 
   ['features/mods.js', 'getComputedStyle(x.canvas)', 1], // one mounted mod canvas per slot while checking whether its Worker should pause
@@ -225,6 +274,10 @@ const STYLE_READS = [
   ['features/sidebar.js', 'getComputedStyle(p)', 3],
   ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
   ['features/sidebar.js', 'getComputedStyle(panel.grid)', 1], // one verified assessment overview grid, to identify Ultra's current native sidebar shell
+  ['features/widgets.js', 'getComputedStyle(html)', 1], // the root's two room variables for Glaze's bar, when floating tiles are placed
+  // WP-T2: only where a Look's colour rule meets Glaze settings: the root's palette, Glaze's item, and that part's ancestors
+  // up to the first solid background.
+  ['features/rules.js', 'getComputedStyle(el)', 1],
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.

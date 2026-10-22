@@ -40,14 +40,14 @@ const worker = ({ local = {}, state = null, production = false, manualTimers = f
   const changed = [], startup = [];
   const fail = { set: 0, layout: 0 }, slow = { get: 0, script: false, ultra: false }, registrations = [];
   const accounts = { [CANVAS]: '42', [CANVAS2]: '42', [ULTRA]: '_9_1', [ULTRA2]: '_9_1' };
-  const pages = new Map(), probes = [], reads = [], scripts = [], timers = new Map();
+  const pages = new Map(), probes = [], reads = [], scripts = [], timers = new Map(), writes = { sync: 0, local: 0, session: 0 };
   let timerId = 0;
   const area = (s, name) => ({
     get: async (k) => {
       for (let i = 0; i < (name === 'local' ? slow.get : 0); i++) await new Promise(setImmediate);
       return structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])));
     },
-    set: async (v) => { if (name === 'local' && Object.hasOwn(v, 'ultra') && slow.ultra) await new Promise((res) => registrations.push(res)); if (name === 'local' && ((fail.set && fail.set--) || (v.widgetLayout && fail.layout && fail.layout--))) throw Error('quota'); Object.assign(s, structuredClone(v)); },
+    set: async (v) => { writes[name]++; if (name === 'local' && Object.hasOwn(v, 'ultra') && slow.ultra) await new Promise((res) => registrations.push(res)); if (name === 'local' && ((fail.set && fail.set--) || (v.widgetLayout && fail.layout && fail.layout--))) throw Error('quota'); Object.assign(s, structuredClone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete s[x]; },
   });
   const listeners = [], installed = [];
@@ -87,7 +87,7 @@ const worker = ({ local = {}, state = null, production = false, manualTimers = f
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
     if (!kept) res('ignored');
   });
-  return { store, send, installed, fail, slow, accounts, pages, probes, reads, scripts, timers, registrations, changed, startup };
+  return { store, send, installed, fail, slow, accounts, pages, probes, reads, scripts, timers, registrations, changed, startup, writes };
 };
 // A tab's frame: Canvas's pages anywhere on the site, Ultra's under /ultra.
 const at = (url, frameId = 0, tab = url) => ({ id: 'glaze', url, frameId, tab: { id: 1, url: tab } });
@@ -332,19 +332,18 @@ test('fresh Dashboard auto-fill commits through the worker on each site, with si
 });
 
 
-test('a first Ultra assessment waits for its pending site registration before migrating the fresh dock', async () => {
+// WP-C2: a page's own report no longer registers its site ('glaze:ultra' is gone); the student's yes does, before Glaze
+// starts on the site's pages (content.js waits for it), so a first page never races its registration.
+test('a first Ultra assessment migrates the fresh dock once the student approved its site, and not before', async () => {
   const w = worker({ local: { ultra: [] } });
   w.installed[0]({ reason: 'install' }); await settle();
   const sender = at(`${ULTRA}/ultra/courses/_1_1/outline/assessment/_2_1/overview`);
-  w.slow.ultra = true;
+  assert.deepEqual(await w.send(sb(uKey(), [{ op: 'migrate' }]), sender), { ok: false, error: 'sender' }, 'a site never approved');
   await w.send({ type: 'glaze:ultra' }, sender); await settle();
-  assert.equal(w.registrations.length, 1);
-  let ended = false;
-  const pending = w.send(sb(uKey(), [{ op: 'migrate' }]), sender).then((r) => { ended = true; return r; });
-  await settle();
-  assert.equal(ended, false, 'migration waits for the validated Ultra report, rather than returning an empty dock');
-  w.slow.ultra = false; w.registrations.shift()();
-  const r = await pending;
+  assert.deepEqual(w.store.local.ultra, [], 'reporting itself approves nothing');
+  assert.deepEqual(await w.send({ type: 'glaze:consent', op: 'yes', kind: 'ultra' }, sender), { ok: true });
+  assert.deepEqual(w.store.local.ultra, [ULTRA]);
+  const r = await w.send(sb(uKey(), [{ op: 'migrate' }]), sender);
   assert.equal(r.ok, true);
   assert.deepEqual(S.docked(r.rec).map((x) => x.id), ['todo', 'settings']);
 });
@@ -442,7 +441,9 @@ test('removing fresh defaults is respected on another device, including sync arr
   for (const fn of second.changed) fn(changes, 'sync');
   await settle();
   assert.equal(second.store.local[cKey()].dest.settings, 'off');
-  assert.ok(!second.store.local.widgetLayout.boards.cdash.some((x) => x.on));
+  // The flags remove the starters the other device removed. They never removed this device's own course cards: the other
+  // device's emptied Dashboard says nothing about a school it may not even use (WP-C3, CORE-5).
+  assert.deepEqual(second.store.local.widgetLayout.boards.cdash.filter((x) => x.on).map((x) => x.id), [`course:${CANVAS}/1`]);
   assert.ok(second.store.local.widgetLayout.filled.includes('cdash'));
 });
 
@@ -500,6 +501,13 @@ test('synced removals also reach starter layouts installed before the defaults t
   assert.equal(w.store.local.freshDefaults.fresh, false, 'an update gains no new seeding authority');
   const other = await w.send(sb(cKey(CANVAS2), [{ op: 'migrate' }]), at(`${CANVAS2}/courses/1`));
   assert.equal(other.rec.dest.todo, 'off', 'a removal can sync before this device first creates its account record');
+});
+
+test('moving a Dashboard tile writes its starter marks to sync once, not at every press (sync takes 120 writes a minute)', async () => {
+  const w = worker();
+  for (let x = 0; x < 5; x++) assert.equal((await w.send({ type: 'glaze:widgetLayout', ops: [{ s: 'cdash', id: 'notes', set: { x } }] }, CP)).ok, true);
+  assert.equal(w.store.sync['starterOff:cdash:cards'], true);
+  assert.equal(w.writes.sync, 1);
 });
 
 test('startup queued before the first install event cannot classify the new device as an update', async () => {

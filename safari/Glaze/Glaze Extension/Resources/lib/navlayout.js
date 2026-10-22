@@ -4,6 +4,58 @@ var GZ_NAV_LAYOUT = globalThis.GZ_NAV_LAYOUT || (() => {
   const N = typeof GZ_NAV_ITEMS === 'undefined' ? require('./nav-items.js') : GZ_NAV_ITEMS;
   // One name per kind of native item across the LMSes, so a Look hides "calendar" everywhere. Ultra's names come first.
   const NATIVE = [...N.NATIVE, 'dashboard', 'home', 'history', 'help', 'groups', 'admin', 'notifications'];
+  // Glaze's own English name for each, the same on every page: what a mod is told the bar holds (features/mods.js, the
+  // nav.items event), never what the page or the student calls it. None for the account item, whose label is the
+  // student's name, nor for Glaze's settings item in Ultra's own nav, which the bar never shows.
+  const NAMES = { 'institution-page': 'Institution page', stream: 'Activity', course: 'Courses', organization: 'Organizations', calendar: 'Calendar', messages: 'Messages', grades: 'Grades',
+    tools: 'Tools', logout: 'Sign out', dashboard: 'Dashboard', home: 'Site home', history: 'History', help: 'Help', groups: 'Groups', admin: 'Admin', notifications: 'Notifications' };
+  // What only Glaze's own items may look like, so nothing a mod adds to the bar passes for one: the icons of Glaze's
+  // settings and of signing out, and those two items' names in each of Glaze's languages (i18n/*.js, which a test keeps
+  // these in step with) and the LMSes' usual words for signing out. reserved(label, also) compares them, and `also` (the
+  // names this page gives those items), without case, accents, spaces, punctuation, symbols or invisible characters.
+  const RESERVED = { icons: ['glaze', 'signout'],
+    names: ['Glaze settings', 'Glaze-Einstellungen', 'Ajustes de Glaze', 'Réglages de Glaze', 'Glaze-instellingen', 'Configurações do Glaze', 'Sign out', 'Abmelden', 'Cerrar sesión', 'Se déconnecter', 'Uitloggen', 'Sair', 'Log out'] };
+  // Only reserved-name comparisons use this small Latin-lookalike skeleton; ordinary mod labels keep their script.
+  // Compatibility normalization runs before folding case (mathematical/fullwidth capitals can normalize to Latin).
+  const CONFUSABLE = { а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', х: 'x', у: 'y', і: 'i', ј: 'j', ѕ: 's', ӏ: 'l',
+    α: 'a', ε: 'e', ο: 'o', ρ: 'p', χ: 'x', ι: 'i', κ: 'k', ν: 'v', τ: 't' };
+  const fold = (v) => (typeof v === 'string' ? v.normalize('NFKC').toLowerCase().normalize('NFKD').replace(/[аеорсхуіјѕӏαεορχικντ]/gu, (c) => CONFUSABLE[c]).replace(/[\p{M}\s\p{P}\p{S}\p{Cc}\p{Cf}]+/gu, '') : '');
+  const reserved = (label, also = []) => { const f = fold(label); return !!f && [...RESERVED.names, ...also].some((n) => fold(n) === f); };
+  // Shared Looks have no LMS to ask yet. Match the native names in every shipped language, using the same comparison
+  // as reserved controls; tests keep this small table in step with the catalogues.
+  const NATIVE_NAMES = {
+    'institution-page': ['Institution page', 'Institutionsseite', 'Página de la institución', "Page de l’établissement", "Page de l'établissement", 'Instellingspagina', 'Página da instituição'],
+    stream: ['Activity', 'Aktivität', 'Actividad', 'Activité', 'Activiteit', 'Atividade'],
+    course: ['Courses', 'Kurse', 'Cursos', 'Cours', 'Cursussen'],
+    organization: ['Organizations', 'Organisationen', 'Organizaciones', 'Organisations', 'Organisaties', 'Organizações'],
+    calendar: ['Calendar', 'Kalender', 'Calendario', 'Calendrier', 'Agenda', 'Calendário'],
+    messages: ['Messages', 'Nachrichten', 'Mensajes', 'Berichten', 'Mensagens'],
+    grades: ['Grades', 'Noten', 'Calificaciones', 'Notes', 'Cijfers', 'Notas'],
+    tools: ['Tools', 'Herramientas', 'Outils', 'Hulpmiddelen', 'Ferramentas'],
+    dashboard: ['Dashboard', 'Tablero', 'Tableau de bord', 'Painel'],
+    home: ['Site home', 'Startseite der Website', 'Inicio del sitio', 'Accueil du site', 'Startpagina van de site', 'Página inicial do site'],
+    history: ['History', 'Verlauf', 'Historial', 'Historique', 'Geschiedenis', 'Histórico'],
+    help: ['Help', 'Hilfe', 'Ayuda', 'Aide', 'Ajuda'],
+    groups: ['Groups', 'Gruppen', 'Grupos', 'Groupes', 'Groepen'],
+    admin: ['Admin', 'Verwaltung', 'Administración', 'Administration', 'Beheer', 'Administração'],
+    notifications: ['Notifications', 'Benachrichtigungen', 'Notificaciones', 'Meldingen', 'Notificações'],
+    profile: ['Your account', 'Dein Konto', 'Tu cuenta', 'Ton compte', 'Je account', 'Sua conta'],
+    logout: RESERVED.names,
+  };
+  const mimics = (label, ids) => ids.some((id) => (NATIVE_NAMES[id] || []).some((n) => fold(label) === fold(n)));
+  // The one rule for a link a mod's code supplies (an item's href, a layout's link): an http(s) page of `origin`, the
+  // school's site the tab is on, with no credentials, at most 512 characters. → its address, resolved against that site,
+  // or '' when it isn't one. Anywhere else, a mod could carry what it read (grades, say) off the site in the address,
+  // with no network permission.
+  const onSite = (v, origin) => {
+    if (typeof v !== 'string' || !v || v.length > 512 || typeof origin !== 'string' || !origin) return '';
+    try { const u = new URL(v, `${origin}/`); return u.origin === origin && /^https?:$/.test(u.protocol) && !u.username && !u.password && u.href.length <= 512 ? u.href : ''; } catch { return ''; }
+  };
+  // A cleaned layout's links that aren't pages of `origin` (every one, given none).
+  const offsite = (nav, origin) => (nav?.links || []).filter((l) => !onSite(l.u, origin));
+  // Where a worn Look's link goes, for the bar to say: its host when it leaves `origin` (every one, given none), '' for a
+  // page of the school's site. A Look is someone else's, so its "Grades" must not pass for the school's own.
+  const away = (l, origin) => { if (onSite(l?.u, origin)) return ''; try { return new URL(l.u).hostname; } catch { return ''; } };
   const PLACES = ['left', 'top', 'bottom', 'dock'];
   const CANVAS = { profile: 'profile', dashboard: 'dashboard', courses: 'course', calendar: 'calendar', conversations: 'messages', history: 'history', help: 'help', accounts: 'admin', groups: 'groups' };
   const MOODLE = [[/\/my\/courses\.php$/, 'course'], [/\/my\/(index\.php)?$/, 'dashboard'], [/\/admin\/search\.php$/, 'admin'], [/\/calendar\/view\.php$/, 'calendar'], [/\/message\/index\.php$/, 'messages'], [/\/grade\/report\/overview\/index\.php$/, 'grades']];
@@ -98,6 +150,6 @@ var GZ_NAV_LAYOUT = globalThis.GZ_NAV_LAYOUT || (() => {
     widgets: N.WIDGETS.filter((w) => (nav.groups || []).some((g) => g.items.includes(`w:${w}`))).map((id) => ({ id, on: true, at: 'inline' })),
   });
 
-  return { NATIVE, PLACES, clean, resolve, rail, canvas, moodle };
+  return { NATIVE, NAMES, RESERVED, PLACES, KEYS, clean, resolve, rail, canvas, moodle, reserved, mimics, onSite, offsite, away };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_NAV_LAYOUT; else GZ_NAV_LAYOUT;

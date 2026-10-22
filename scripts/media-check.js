@@ -15,7 +15,7 @@ const assert = require('node:assert/strict');
 
 const ext = fs.realpathSync(path.join(__dirname, '..'));
 const out = process.argv[2] && path.resolve(process.argv[2]);
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const origin = 'https://ultra.fixture.test';
 const D = require(path.join(ext, 'defaults.js'));
@@ -41,7 +41,7 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
   try {
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      executablePath: chrome, headless: true, viewport: { width: 1280, height: 800 },
+      ...chromeLaunch, headless: true, viewport: { width: 1280, height: 800 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     context.setDefaultTimeout(15000);
@@ -77,7 +77,10 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
       await chrome.storage.sync.clear();
       await chrome.storage.sync.set({ ...defaults, bg, lookX, motion: { ...defaults.motion, level: motion, followSystem: false } });
     }, { defaults: D.GZ_DEFAULTS, bg: { ...D.GZ_DEFAULTS.bg, ...bg }, lookX, motion });
-    const wipe = () => opts.evaluate(async () => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); });
+    const wipe = () => opts.evaluate(async () => {
+      if (!(await chrome.runtime.sendMessage({ type: 'glaze:media', op: 'reset' }))?.ok) throw new Error('media reset failed');
+      await chrome.storage.sync.clear(); await chrome.storage.local.clear();
+    });
     const look = (media) => P.pack({ x: { bg: { media } } });
     const url = (f) => `${origin}/media/${f}`;
     const open = async () => { const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message)); await page.goto(`${origin}/ultra/stream`); await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-font')); return page; };
@@ -365,6 +368,7 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     const stickerKey = `stk:${origin}/ultra/stream`;
     const placements = [{ id: 'p1', s: `mod:${MOD}/wave`, x: 20, y: 100, w: 120, r: 0 }, { id: 'p2', s: `mod:${MOD}/spark`, x: 70, y: 100, w: 200, r: 0 }];
     const seed = (motion, mod = record()) => opts.evaluate(async ({ defaults, motion, mod, key, placements, id }) => {
+      if (!(await chrome.runtime.sendMessage({ type: 'glaze:media', op: 'reset' }))?.ok) throw new Error('media reset failed');
       await chrome.storage.sync.clear(); await chrome.storage.local.clear();
       await chrome.storage.sync.set({ ...defaults, extras: { ...defaults.extras, stickers: true }, motion: { ...defaults.motion, level: motion, followSystem: false } });
       await chrome.storage.local.set({ [`mod:${id}`]: mod, mods: [id], [key]: placements });
@@ -470,12 +474,12 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     };
     await ed.close();
     let ged = await useLook(good);
-    const keptGallery = await opts.evaluate(async (h) => (await chrome.storage.local.get(`lookMedia:${h}`))[`lookMedia:${h}`]?.t, good);
+    const keptGallery = await opts.evaluate(async (h) => (await chrome.runtime.sendMessage({ type: 'glaze:keptFile', h }))?.mime, good);
     check('Use this Look: the worker fetched the Look\'s file from the gallery and kept it by its name', galleryAsked.includes(good) && keptGallery === 'image/webp', JSON.stringify([galleryAsked, keptGallery]));
     check('  the editor previews the Look with that file as its background', await ged.waitForFunction(() => !!document.getElementById('preview')?.contentDocument?.querySelector('#gz-scene img, #gz-scene canvas'), null, { timeout: 15000 }).then(() => true, () => false), 'no scene in the preview');
     if (out) await ged.screenshot({ path: path.join(out, 'gallery-look.png') });
     ged = await useLook(wrong);
-    const keptWrong = await opts.evaluate(async () => Object.keys(await chrome.storage.local.get(null)).filter((k) => k.startsWith('lookMedia:')));
+    const keptWrong = await opts.evaluate(async () => (await chrome.runtime.sendMessage({ type: 'glaze:media', op: 'list' }))?.files?.map((f) => f.h) || []);
     check('a file that is not the one the Look names: asked for, not kept, and the Look is still offered', galleryAsked.includes(wrong) && keptWrong.length === 0, JSON.stringify(keptWrong));
     await sleep(2000);
     check('  the preview shows no background from it', await ged.evaluate(() => !document.getElementById('preview')?.contentDocument?.querySelector('#gz-scene img, #gz-scene video')), 'scene');
@@ -489,7 +493,7 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     fs.rmSync(scratch, { recursive: true, force: true });
   }
   const bad = results.filter((r) => !r.ok);
-  console.log(JSON.stringify({ chrome: 'Chrome for Testing (Playwright chromium-1243)', passed: results.length - bad.length, failed: bad.length, failures: bad }, null, 1));
+  console.log(JSON.stringify({ chrome: process.env.CHROME || "Playwright's bundled Chromium", passed: results.length - bad.length, failed: bad.length, failures: bad }, null, 1));
   for (const r of results) console.log(`${r.ok ? 'ok  ' : 'FAIL'} ${r.name}`);
   if (failure) { console.error(failure); process.exitCode = 1; } else process.exitCode = bad.length ? 1 : 0;
 })().catch((e) => { console.error(e); process.exitCode = 1; });

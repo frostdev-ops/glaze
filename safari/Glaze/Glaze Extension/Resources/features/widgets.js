@@ -68,6 +68,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // bar: a board's buttons (Edit layout, Reminders, Insights, What Glaze can do; on the Courses page, Hide widgets too),
   // in the Courses page's header (#gz-toolbar) or atop the Dashboard's grid. hidden: Hide widgets, on this device.
   let grid = null, floats = null, panel = null, bar = null, hidden = false;
+  let hubButton = null; // the bar's What Glaze can do, where the tour hands focus back when what opened it is gone
   const atTop = (globalThis.top ?? globalThis.window) === globalThis.window; // not in Canvas's frame for its pages outside a course (features/coursetabs.js)
   // The boards: which one this page is ('courses', 'dash', 'cdash' or null), the one drawn, and the Courses page's layer the
   // tiles float in (the Dashboard's tiles are in its own room, the grid).
@@ -239,6 +240,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
 
     agenda(body) {
       let L = null, day = null, data = null, cache = null, alive = true;
+      let todo = {}; // Better To Do's settings (storage.sync todo): what counts as done, and whether ticks go to Canvas
       // The class schedule (lib/classes.js, features/classes.js), when the student has one: the day's classes too.
       let C = null, classes = null, ckey = '';
       const withClasses = (raw) => {
@@ -284,7 +286,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         title.textContent = dayName(day);
         home.hidden = day === today();
         let rows;
-        try { rows = W.agenda(L, { items: await items(day), data, day, tz: me.tz, extra: classRows(day) }); } catch { rows = null; }
+        try { rows = W.agenda(L, { items: await items(day), data, day, tz: me.tz, extra: classRows(day), o: todo, sync: !ultra && !!todo.sync }); } catch { rows = null; }
         if (n !== asked || !alive || !shown(body)) return;
         list.replaceChildren(...(rows === null ? [make('li', { className: 'gz-w-faint', textContent: t("Couldn't load this day. Try again in a moment.") })]
           : rows.length ? rows.map((r) => {
@@ -300,6 +302,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           }) : [make('li', { className: 'gz-w-faint', textContent: t('Nothing planned or due.') })]));
       };
       const onStore = (ch, a) => {
+        if (a === 'sync' && ch.todo && L) { todo = GZ_SANITIZE({ todo: ch.todo.newValue }).todo; paint(); return; }
         if (a !== 'local' || !L) return;
         const k = L.storeKey(location.origin, me.uid);
         if (ch.todoCache) cache = ch.todoCache.newValue;
@@ -314,7 +317,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         L = globalThis.GZ_TODO;
         const k = L.storeKey(location.origin, me.uid);
         ckey = `classes:${location.origin}/${me.uid}`;
-        const r = await get('local', [k, 'todoCache', ckey]);
+        const [r, prefs] = await Promise.all([get('local', [k, 'todoCache', ckey]), get('sync', ['todo'])]);
+        todo = GZ_SANITIZE({ todo: prefs.todo }).todo;
         data = L.clean(r[k]);
         await withClasses(r[ckey]);
         if (!alive) return;
@@ -327,7 +331,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     },
 
     timer(body) {
-      let s = W.IDLE, tick = 0, audio = null, alive = true, seenEnd = 0;
+      let s = W.IDLE, tick = 0, alarm = 0, audio = null, alive = true, seenEnd = 0;
       // Text nodes changed in place, and labels only when they change: the page's own observer sees no new nodes each second.
       const phase = document.createTextNode(''), time = document.createTextNode('');
       const clock = make('p', { className: 'gz-w-clock' }, time);
@@ -369,21 +373,39 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           osc.stop(at + d + 0.75);
         }
       };
-      // One timeout to the next second shown, while it runs and the page is shown. A phase that ended while away moves
-      // on quietly; one ending now rings (if the sound is on) and says so.
+      // The phase that has run out moves on (the worker moves the stored one once, for whichever tab asks first) and rings,
+      // if the sound is on, in the tab whose answer says it was the one that moved it: only the tab where Start was pressed
+      // has the sound allowed. A phase that ended while away moves on quietly, as does one a clock set back made over: its
+      // deadline is not behind it. away: this tab was hidden and waiting for this end (the alarm), which counts as having
+      // watched it, and rings even though the tile is not on screen.
+      const over = (now, away) => {
+        const was = s, ended = away || seenEnd === was.end;
+        seenEnd = was.end > now ? was.end : 0;
+        s = W.advance(s, now, o);
+        if (s === was) return;
+        ask('advance').then((r) => {
+          const late = Date.now() - was.end;
+          if (alive && (away || shown(body)) && r?.advanced === was.end && ended && late >= 0 && late < 2000) { chime(); ctx.moment?.('timer.done', null, `timer ${was.end}`); say.textContent = t(s.phase === 'rest' ? 'Time for a break.' : 'Break over. Ready when you are.'); }
+        });
+      };
+      // A hidden tab can't tick (a chain of timeouts is what browsers slow down in the background), but a phase running in
+      // the tab that has the sound ready should still ring where it ends: one timeout to the end, set again whenever the
+      // state is. Shown, the tick below does this; a tab that took the phase from storage never had the sound allowed.
+      const arm = () => {
+        clearTimeout(alarm);
+        alarm = 0;
+        if (!alive || !s.end || !o.sound || !audio) return;
+        alarm = setTimeout(() => { alarm = 0; if (alive && !shown(body)) { over(Date.now(), true); arm(); } }, Math.max(0, Math.min(s.end - Date.now(), W.len(s.phase, o))) + 5);
+      };
+      // One timeout to the next second shown, while it runs and the page is shown.
       const run = () => {
         clearTimeout(tick);
         tick = 0;
-        if (!alive || !shown(body)) return;
-        const now = Date.now();
-        const was = s, ended = seenEnd === was.end;
-        seenEnd = was.end > now ? was.end : 0;
-        s = W.advance(s, now, o);
-        if (s !== was && shown(body)) {
-          ask('advance').then((r) => {
-            if (alive && shown(body) && r?.advanced === was.end && ended && Date.now() - was.end < 2000) { chime(); ctx.moment?.('timer.done', null, `timer ${was.end}`); say.textContent = t(s.phase === 'rest' ? 'Time for a break.' : 'Break over. Ready when you are.'); }
-          });
-        }
+        if (!alive) return;
+        const now = Date.now(), visible = shown(body);
+        if (visible) over(now);
+        arm();
+        if (!visible) return;
         phase.data = t(s.phase === 'rest' ? 'Break' : 'Focus');
         time.data = W.clock(W.left(s, now, o));
         const label = t(s.end ? 'Pause' : W.left(s, now, o) < W.len(s.phase, o) ? 'Resume' : 'Start');
@@ -397,8 +419,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       get('local', 'widgetTimer').then((r) => { if (heard === at && !asked) { s = W.cleanTimer(r.widgetTimer); run(); } });
       body.append(make('p', { className: 'gz-w-faint' }, phase), clock, make('div', { className: 'gz-w-row' }, go, reset), say);
       run();
-      // Its deadline is stored, so another document showing it carries on from there; this one stops ticking meanwhile.
-      return { wake: run, update: run, suspend: () => { clearTimeout(tick); tick = 0; }, stop: () => { alive = false; clearTimeout(tick); audio?.close?.(); try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
+      // Its deadline is stored, so another document showing it carries on from there; this one stops ticking meanwhile (but
+      // not its alarm, for the sound it holds).
+      return { wake: run, update: run, suspend: () => { clearTimeout(tick); tick = 0; }, stop: () => { alive = false; clearTimeout(tick); clearTimeout(alarm); audio?.close?.(); try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
     },
 
     quotes(body) {
@@ -514,11 +537,17 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       let attentionWait = 0, attentionAt = 0, attentionBlocked = 0, gaze = -1, gazing = false;
       let patPending = false, cheer = null, cheerWait = 0, lastPat = 0;
       const saved = {}, versions = new Map();
+      let lifecycle = 0;
+      // Gone from the page once it has been on it. One made but not yet attached waits: the Courses page with its widgets
+      // hidden builds the tiles and attaches none until Show widgets, and a buddy that stopped itself in its first paint was
+      // attached then as a blank tile that never woke (the board's draw() stops the tiles it removes).
+      let attached = false;
+      const gone = () => { if (pet.isConnected !== false) { attached = true; return false; } return attached; };
       const img = make('img', { alt: '', draggable: false, decoding: 'async' });
       const read = (keys) => {
-        const before = keys.map((k) => versions.get(k));
+        const before = keys.map((k) => versions.get(k)), life = lifecycle;
         return get('local', keys).then((r) => {
-          if (!alive || !validContext()) return;
+          if (!alive || life !== lifecycle || !validContext()) return;
           keys.forEach((k, i) => { if (before[i] === versions.get(k)) saved[k] = r[k]; });
           st.running = !!W.cleanTimer(saved.widgetTimer).end;
           st.happyAt = Math.max(st.happyAt, Number.isFinite(saved.widgetBuddy?.happyAt) ? saved.widgetBuddy.happyAt : 0);
@@ -530,7 +559,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         clearTimeout(wait);
         if (!alive) return;
         if (!validContext()) { stop(); return; }
-        if (pet.isConnected === false) { stop(); return; }
+        if (gone()) { stop(); return; }
         const P = globalThis.GZ_PET_BRAIN && globalThis.GZ_PET, S = globalThis.GZ_PET_SPRITES;
         const data = P?.view(saved[petKey]);
         options.onData?.(data);
@@ -599,7 +628,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const watch = (e) => {
         const now = Date.now();
         if (!e.isTrusted || !alive || !player || sleeping || document.hidden || now < attentionBlocked || now - attentionAt < 80) return;
-        if (!validContext() || pet.isConnected === false) { stop(); return; }
+        if (!validContext() || gone()) { stop(); return; }
         attentionAt = now;
         const r = pet.getBoundingClientRect(), dx = e.clientX - r.left - r.width / 2, dy = e.clientY - r.top - r.height / 2;
         if (!r.width || r.bottom < 0 || r.top > innerHeight || Math.hypot(dx, dy) > 420) { releaseGaze(); return; }
@@ -607,7 +636,6 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (!gazing || direction !== gaze) { gaze = direction; gazing = true; player.set('look', direction); }
         clearTimeout(attentionWait); attentionWait = setTimeout(releaseGaze, 1800);
       };
-      if (options.attention !== false) document.addEventListener('pointermove', watch, { passive: true });
       const onStore = (ch, a) => {
         if (!alive || a !== 'local') return;
         if (!validContext()) { stop(); return; }
@@ -629,22 +657,43 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           if (before && after && after.xp > before.xp) { attentionBlocked = Date.now() + 900; gazing = false; player?.play(after.level > before.level ? 'level-up' : 'xp'); }
         }
       };
-      try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       body.append(pet);
       const show = () => paint();
-      const stop = () => {
-        if (!alive) return;
-        alive = false; clearTimeout(wait); clearTimeout(attentionWait); clearTimeout(cheerWait); cheer?.remove(); player?.stop();
-        try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
-        document.removeEventListener?.('visibilitychange', show); document.removeEventListener?.('pointermove', watch); removeEventListener('pagehide', stop);
+      // What the buddy listens to, and what it reads when it starts: again after a back/forward-cache restore.
+      const listen = () => {
+        if (options.attention !== false) document.addEventListener('pointermove', watch, { passive: true });
+        try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
+        document.addEventListener('visibilitychange', show);
+        read(['widgetTimer', 'widgetBuddy', 'petCharacter', 'petSprites']);
+        who().then(() => {
+          if (!alive || !validContext()) return;
+          todoKey = `todo:${location.origin}/${me.uid}`; petKey = `pet:${location.origin}/${me.uid}`;
+          read([petKey]);
+        }, () => {});
       };
-      document.addEventListener('visibilitychange', show); addEventListener('pagehide', stop, { once: true });
-      read(['widgetTimer', 'widgetBuddy', 'petCharacter', 'petSprites']);
-      who().then(() => {
-        if (!alive || !validContext()) return;
-        todoKey = `todo:${location.origin}/${me.uid}`; petKey = `pet:${location.origin}/${me.uid}`;
-        read([petKey]);
-      }, () => {});
+      const release = () => {
+        lifecycle++;
+        alive = false; clearTimeout(wait); clearTimeout(attentionWait); clearTimeout(cheerWait); cheer?.remove(); player?.stop(); player = null; sprite = '';
+        try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
+        document.removeEventListener?.('visibilitychange', show); document.removeEventListener?.('pointermove', watch);
+      };
+      // A page put in the back/forward cache is torn down by pagehide but comes back as it was, running no script again: that
+      // buddy is only put away, and pageshow wakes it. Anywhere else pagehide is the end of the page.
+      let cached = false;
+      const stop = () => {
+        if (!alive && !cached) return;
+        if (alive) release();
+        cached = false; removeEventListener('pagehide', leave); removeEventListener('pageshow', back);
+      };
+      const leave = (e) => { if (!alive) return; if (e.persisted) { cached = true; release(); } else stop(); };
+      const back = (e) => {
+        if (!e.persisted || !cached) return;
+        if (!validContext() || ctx.settings().enabled === false) { stop(); return; }
+        cached = false;
+        alive = true; listen(); paint();
+      };
+      addEventListener('pagehide', leave); addEventListener('pageshow', back);
+      listen();
       Promise.all(['lib/petbrain.js', 'lib/pet.js', 'lib/todo.js', 'lib/petsprites.js', 'lib/petplayer.js'].map((file) => ctx.need(file, () => ({ 'lib/petbrain.js': globalThis.GZ_PET_BRAIN, 'lib/pet.js': globalThis.GZ_PET, 'lib/todo.js': globalThis.GZ_TODO, 'lib/petsprites.js': globalThis.GZ_PET_SPRITES, 'lib/petplayer.js': globalThis.GZ_PET_PLAYER })[file]))).then(paint, () => {});
       Promise.resolve().then(paint);
       return { wake: () => { sleeping = false; paint(); }, sleep: () => { sleeping = true; clearTimeout(wait); releaseGaze(); player?.sleep(); }, update: paint, play: (state, direction) => { pose = [state, direction]; attentionBlocked = Date.now() + 900; gazing = false; player?.play(state, direction); }, stop };
@@ -652,6 +701,25 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
 
   // ---- the grid, the boards and the floating layer -------------------------------------------------------------
+  // Seats a tile right after `prev` in `parent` (first when there is none). Taking an element out of the document and
+  // putting it back unloads an iframe in it, so the music player restarted, paused at its start, whenever the board put
+  // its tile elsewhere: another tile moved before it, the Courses board switching between stacked and free, a drag in the
+  // dock. Element.moveBefore moves without that, where the browser has it. Without it a tile holding a player stays where it
+  // is and the tiles in its way move past it; only a move between parents can't be helped.
+  const seatAfter = (parent, el, prev = null) => {
+    const at = prev ? prev.nextElementSibling : parent.firstElementChild;
+    if (at === el) return;
+    if (parent.moveBefore && el.isConnected && parent.isConnected) { try { parent.moveBefore(el, at); return; } catch { /* not a move it can make: the old way */ } }
+    if (el.parentNode === parent && el.querySelector('iframe')) {
+      const behind = [], ahead = [];
+      let x = el.previousElementSibling;
+      while (x && x !== prev) { behind.push(x); x = x.previousElementSibling; }
+      if (x === prev) { for (const n of behind) el.after(n); return; } // prev is before it (or none): what is between goes after it
+      for (x = el.nextElementSibling; x; x = x.nextElementSibling) { ahead.push(x); if (x === prev) break; }
+      if (x && x === prev) { for (const n of ahead) el.before(n); return; } // prev is after it: what is between, and prev, go before it
+    }
+    if (prev) prev.after(el); else parent.prepend(el);
+  };
   const tileEl = (id) => {
     const name = t(nameOf(id));
     const el = make('section', { className: 'gz-w' });
@@ -753,7 +821,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const from = list().indexOf(el);
       const move = (ev) => {
         const next = list().find((c) => { if (c === el) return false; const r = c.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; }) || null;
-        if (next ? el.nextElementSibling !== next : home.lastElementChild !== el) { if (next) next.before(el); else home.append(el); }
+        if (next ? el.nextElementSibling !== next : home.lastElementChild !== el) seatAfter(home, el, next ? next.previousElementSibling : home.lastElementChild);
       };
       const up = (ev) => {
         for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) document.removeEventListener(k, f);
@@ -882,29 +950,21 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   const movable = (id) => (dockIds.includes(id) ? false : fl(id) ? !floatsStacked : board ? editing && !stacked : false);
   const roomEl = () => (board === 'courses' ? room : grid?.querySelector('.gz-dash-grid'));
-  // The room a floating tile has: on Ultra, the window right of the nav, below a course's top bar (B8's course tabs, or
-  // anything else marked data-gz-keep-clear, too) and above Glaze's own footer, so it never covers them; on Canvas, the
-  // window.
+  // The room a floating tile has (lib/widgets.js room), so it never covers what stays over the page: the window less Glaze's
+  // bar (its rail's or top bar's room, its bottom bar on a phone), and on Ultra the nav right of it, a course's top bar and
+  // Glaze's footer; the course tabs (B8's, or anything else marked data-gz-keep-clear) and the sidebar expanded beside the
+  // content on both. Canvas's footer is in its page.
   const floatRoom = () => {
-    let left = 0, right = innerWidth, top = 0, bottom = innerHeight;
-    const edges = ultra ? [...document.querySelectorAll('.MuiDrawer-paper, #base_tools, div.bb-course-navigation, [data-gz-keep-clear], #gz-footer')] : [];
-    if (ultra) {
-      for (const e of edges) {
-        const r = e.getBoundingClientRect();
-        if (!r.width || !r.height) continue;
-        if (r.left <= 1 && r.right < innerWidth / 2 && r.height > innerHeight / 2) left = Math.max(left, r.right);
-        else if (r.right >= innerWidth - 1 && r.left > innerWidth / 2 && r.height > innerHeight / 2) right = Math.min(right, r.left);
-        else if (r.top < innerHeight / 2 && r.bottom > 0) top = Math.max(top, r.bottom);
-        else if (r.top > innerHeight / 2) bottom = Math.min(bottom, r.top);
-      }
-    }
-    // The sidebar, expanded beside the content: floats keep clear of it.
-    const sb = document.documentElement?.getAttribute('data-gz-sidebar') === 'expanded' && globalThis.GZ_SIDEBAR_UI?.host?.()?.el;
-    if (sb) {
-      const r = sb.getBoundingClientRect();
-      if (r.width) { if (document.documentElement.dir === 'rtl') left = Math.max(left, r.right); else right = Math.min(right, r.left); edges.push(sb); }
-    }
-    return { left, right, top, bottom, W: Math.max(0, right - left), H: Math.max(0, bottom - top), edges };
+    const html = document.documentElement, css = html && typeof getComputedStyle === 'function' ? getComputedStyle(html) : null;
+    const edges = [...document.querySelectorAll(ultra ? '.MuiDrawer-paper, #base_tools, div.bb-course-navigation, [data-gz-keep-clear], #gz-footer' : '[data-gz-keep-clear]')];
+    const tabs = document.getElementById('gz-navbar')?.shadowRoot?.querySelector('.tabs');
+    if (tabs) edges.push(tabs);
+    const sb = html?.getAttribute('data-gz-sidebar') === 'expanded' && globalThis.GZ_SIDEBAR_UI?.host?.()?.el;
+    if (sb) edges.push(sb);
+    const at = (v) => parseFloat(css?.getPropertyValue(v)) || 0;
+    const r = W.room(innerWidth, innerHeight, edges.filter((e) => e !== sb).map((e) => e.getBoundingClientRect()),
+      { bar: { left: at('--gz-navbar-left'), top: at('--gz-navbar-top') }, rtl: html?.dir === 'rtl', aside: sb ? sb.getBoundingClientRect() : null });
+    return { ...r, edges };
   };
   // The room a tile moves in: its box on screen, its size, the other tiles in it ({ left, top, w, h }) and Ultra's column.
   const frame = (id) => {
@@ -1183,6 +1243,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       say(t('Layout reset.'));
     }, { className: 'gz-w-small gz-dash-reset', hidden: true });
     const hubBtn = button(t('What Glaze can do'), () => hub(), { className: 'gz-w-small' });
+    hubButton = hubBtn;
     // Ultra: the reminders' hub (features/reminders.js) from here too, when it has one to open (Canvas's is in its To Do's head).
     const remind = ultra && button(t('Reminders'), () => globalThis.GZ_REMIND_UI?.cmds()[0]?.run(), { className: 'gz-w-small gz-dash-remind', hidden: true });
     // Hide widgets: every widget on the Courses page (its board's and the ones floating everywhere) away at once.
@@ -1190,7 +1251,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const add = make('div', { className: 'gz-dash-add' });
     const area = make('div', { className: 'gz-dash-grid' });
     bar = make('div', { className: 'gz-dash-bar' }, !ultra && make('h2', { className: 'screenreader-only', textContent: t('Notes and widgets') }), hide, edit, reset, remind, hubBtn);
-    if (board === 'courses') { bar.id = 'gz-toolbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Glaze'); bar.addEventListener('keydown', escape); }
+    // A named group, not a toolbar: a toolbar promises arrow keys between its buttons, and Tab reaches each of these.
+    if (board === 'courses') { bar.id = 'gz-toolbar'; bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Glaze'); bar.addEventListener('keydown', escape); }
     const box = make('section', { id: 'gz-dash' }, ...(board === 'courses' ? [] : [bar]), area, add);
     if (board) box.dataset.board = board;
     box.setAttribute('aria-label', t(board === 'dash' ? 'Dashboard' : 'Notes and widgets'));
@@ -1346,7 +1408,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const home = tile.float ? floats : tile.dock ? side.host()?.widgets : grid.querySelector('.gz-dash-grid');
       if (!home) continue;
       const prev = last.get(home);
-      if (x.el.parentNode !== home || x.el.previousElementSibling !== (prev || null)) { if (prev) prev.after(x.el); else home.prepend(x.el); }
+      if (x.el.parentNode !== home || x.el.previousElementSibling !== (prev || null)) seatAfter(home, x.el, prev);
       last.set(home, x.el);
       if (!tile.float) x.el.removeAttribute('style');
       if ((fresh || !wasShown) && tile.float && sleeping) (x.resume || x.wake)?.();
@@ -1444,7 +1506,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     let prev = null;
     for (const id of res.order) {
       const { el } = tiles.get(id);
-      if (el.parentNode !== parent || el.previousElementSibling !== prev) { if (prev) prev.after(el); else parent.prepend(el); }
+      if (el.parentNode !== parent || el.previousElementSibling !== prev) seatAfter(parent, el, prev);
       prev = el;
       const a = res.at[id];
       const z = String(1 + (cur(id)?.z || 0));
@@ -1523,28 +1585,32 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const hub = () => {
     if (!validContext()) return;
     hubBox?.remove();
+    const opener = document.activeElement; // where the tour gives focus back to when it ends
     const s = ctx.settings();
     const set = (k, v) => { try { chrome.storage.sync.set({ version: 2, enhance: { ...ctx.settings().enhance, [k]: v } }); } catch { /* reloaded */ } };
+    // Dark documents is a choice of docPages (darkDocs is only read once, from an older Glaze): on as the documents'
+    // own button turns it on, dimmed, and off plain.
+    const isOn = (e, k) => (k === 'darkDocs' ? !!e && e.docPages !== 'plain' : !!e?.[k]);
     const close = () => hubBox?.close();
     const report = make('a', { className: 'gz-w-btn', textContent: t('Report a problem'), target: '_blank', rel: 'noopener noreferrer',
       href: W.feedback({ version: chrome.runtime.getManifest().version, ua: navigator.userAgent, lang: ctx.locale(), lms: ultra ? 'Blackboard Ultra' : 'Canvas' }) });
     report.title = t('Opens a new GitHub issue with your Glaze version and browser filled in. GitHub receives that text when the page opens; nothing is posted until you submit it.');
-    const tourBtn = button(t('Take the tour'), () => { close(); tour(); }, { className: 'gz-w-btn gz-w-main' });
+    const tourBtn = button(t('Take the tour'), () => { close(); tour(opener); }, { className: 'gz-w-btn gz-w-main' });
     const editor = button(t('Glaze settings'), () => { try { chrome.runtime.sendMessage('options'); } catch { /* reloaded */ } });
     hubBox = make('dialog', { id: 'gz-hub', className: 'gz-w-dialog' },
       make('header', { className: 'gz-w-row' }, make('h2', { id: 'gz-hub-h', textContent: t('What Glaze can do') }), button('×', close, { className: 'gz-w-icon', ariaLabel: t('Close') })),
       make('p', { className: 'gz-w-faint', textContent: t('Switch any of these on or off. Everything runs on this device; the editor has the details.') }),
       ...(ultra ? HUB_ULTRA : HUB).map(([group, keys]) => make('fieldset', {}, make('legend', { textContent: t(group) }),
         ...keys.map((k) => {
-          const box = make('input', { type: 'checkbox', checked: !!s.enhance[k] });
+          const box = make('input', { type: 'checkbox', checked: isOn(s.enhance, k) });
           box.setAttribute('role', 'switch');
           box.dataset.key = k;
-          box.addEventListener('change', () => set(k, box.checked));
+          box.addEventListener('change', () => (k === 'darkDocs' ? set('docPages', box.checked ? 'dim' : 'plain') : set(k, box.checked)));
           return make('label', { className: 'gz-w-check' }, box, make('span', { textContent: t(EXTRA[k]) }));
         }))),
       make('footer', { className: 'gz-w-row' }, tourBtn, report, editor));
     hubBox.setAttribute('aria-labelledby', 'gz-hub-h');
-    const sync = (ch, a) => { if (a === 'sync' && ch.enhance) for (const b of hubBox.querySelectorAll('input[data-key]')) b.checked = !!ch.enhance.newValue?.[b.dataset.key]; };
+    const sync = (ch, a) => { if (a === 'sync' && ch.enhance) for (const b of hubBox.querySelectorAll('input[data-key]')) b.checked = isOn(ch.enhance.newValue, b.dataset.key); };
     try { chrome.storage.onChanged.addListener(sync); } catch { /* reloaded */ }
     hubBox.addEventListener('close', () => { try { chrome.storage.onChanged.removeListener(sync); } catch { /* reloaded */ } hubBox.remove(); hubBox = null; });
     hubBox.addEventListener('click', (e) => { if (e.target === hubBox) close(); });
@@ -1566,7 +1632,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     [null, 'Press Ctrl+K (⌘K on a Mac) anywhere in Blackboard to jump to a course, a page or a Glaze setting.'],
     STEPS[4],
   ];
-  const tour = () => {
+  // `from`: what had focus when the hub opened (the Dashboard's button, or whatever the command palette was opened from).
+  const tour = (from) => {
     const here = ultra ? STEPS_ULTRA : STEPS;
     const steps = here.map(([sel, text]) => [sel && [...document.querySelectorAll(sel)].find((e) => e.getClientRects().length), text]).filter(([el], i) => el || !here[i][0]);
     let i = 0;
@@ -1579,7 +1646,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     bubble.setAttribute('role', 'dialog');
     bubble.setAttribute('aria-labelledby', 'gz-tour-text');
     const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); end(); } };
-    const end = () => { ring.remove(); bubble.remove(); document.removeEventListener('keydown', key, true); };
+    // The bubble held focus, so removing it left focus on <body>: it goes back to where the tour was started from, or to the
+    // Dashboard's What Glaze can do button when that is gone (the palette closes), and stays where it is if neither is.
+    const end = () => {
+      ring.remove(); bubble.remove(); document.removeEventListener('keydown', key, true);
+      [from, hubButton].find((e) => e && e !== document.body && e.isConnected)?.focus({ preventScroll: true });
+    };
     const show = (k) => {
       i = k;
       const [el, words] = steps[i];

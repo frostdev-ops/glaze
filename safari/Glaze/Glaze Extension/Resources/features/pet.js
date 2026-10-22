@@ -1,6 +1,7 @@
 // W24's local pet. No work requests: the broker reads only records Glaze already keeps on this device.
 var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const ctx = globalThis.GZ_CTX, t = (k, v) => ctx.t(k, v);
+  if (!ctx) return null; // a frame-only injection can outlive its document
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const button = (text, run) => { const b = make('button', { type: 'button', textContent: text }); b.addEventListener('click', run); return b; };
   const NAMES = { books: 'Books', plant: 'Mushroom', moon: 'Moon', stars: 'Stars', plain: 'Classic buddy', bandana: 'Mint bandana', happy: 'Happy buddy' };
@@ -9,8 +10,9 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   let ready;
   const start = () => (ready ||= Promise.all([ctx.need('lib/petbrain.js', () => globalThis.GZ_PET_BRAIN), ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO), ctx.need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI), ctx.need('lib/petphysics.js', () => globalThis.GZ_PET_PHYSICS), ctx.need('features/petworld.js', () => globalThis.GZ_PET_WORLD)]).catch((e) => { ready = null; throw e; }));
   const send = (m) => new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: 'glaze:pet', ...m }, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
+  const mounted = new Set();
   const mount = (body, api) => {
-    let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, pets = [];
+    let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, pets = [], form = '', readout = '';
     const waiting = [];
     const tile = body.closest('.gz-w');
     if (tile) tile.hidden = true;
@@ -27,7 +29,19 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     const art = (path, cls) => make('img', { src: chrome.runtime.getURL(`assets/art/stickers/${path}.webp`), alt: '', className: cls, width: 72, height: 72, decoding: 'async' });
     const paint = () => {
       if (!alive || !data || !chrome.runtime?.id) return;
+      if (!ctx.settings().enabled || !ctx.settings().enhance.pet) { stop(); return; }
       const P = GZ_PET, d = data, allowance = P.care(d.care, tz), cooling = Date.now() < allowance.nextAt;
+      const world = () => {
+        if (globalThis.GZ_PET_WORLD) player = GZ_PET_WORLD.mount(stage, { key, data: d, t, save: (patch) => send({ key, tz, ...patch }) });
+        else if (!stage.children.length) stage.append(art(`critters/${P.WEAR[d.wear].art}`, 'gz-game-buddy'));
+      };
+      // The record is rewritten by the pet's own decisions, so a write seldom means anything on screen changed. What the controls are
+      // built from ("form") is replaced only when it changes, or an open menu closes under the pointer and a screen reader announces
+      // the control again; what only reads out (numbers, meters) is swapped in place; the world is told every time.
+      const profile = GZ_PET_BRAIN.describe(d.brain), interactions = d.brain.counts.reduce((n, value) => n + value, 0);
+      const nextForm = JSON.stringify([d.level, d.sprite, d.wear, d.habitat, d.decor, d.physics, d.learning, d.wander, pets]);
+      const nextReadout = JSON.stringify([allowance.remaining, cooling, pets.find((p) => p.id === d.sprite)?.name, d.xp, d.next, d.floor, d.work, d.plans, d.streakXp, ['mood', 'energy', 'bond', 'playful', 'curiosity', 'comfort'].map((id) => Math.round(d.needs[id])), interactions, profile.familiarity, profile.favorite, profile.habit]);
+      if (nextForm === form && nextReadout === readout) { world(); return; }
       const active = pet.contains(document.activeElement) && document.activeElement.dataset.control;
       const wasOpen = new Set([...pet.querySelectorAll('details')].filter((e) => e.open).map((e) => e.dataset.section));
       const section = (id, title, ...children) => {
@@ -49,6 +63,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       wander.dataset.control = 'wander'; wander.setAttribute('aria-pressed', String(d.wander));
       const actions = make('div', { className: 'gz-game-actions' }, pat, wander);
       const care = make('p', { className: 'gz-game-care', textContent: !allowance.remaining ? t('All bonding moments enjoyed today. More tomorrow.') : cooling ? t('{n} of {max} bonding moments left today · Ready again in a minute', { n: allowance.remaining, max: P.CARE_LIMIT }) : t('{n} of {max} bonding moments left today', { n: allowance.remaining, max: P.CARE_LIMIT }) });
+      care.dataset.live = 'care';
       const meterGroup = (ids, cls = '') => {
         const meters = make('div', { className: `gz-game-meters ${cls}` });
         for (const [id, name] of ids) {
@@ -59,7 +74,9 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         return meters;
       };
       const meters = meterGroup([['mood', 'Mood'], ['energy', 'Energy'], ['bond', 'Bond']], 'gz-game-vitals');
-      const wellbeing = section('wellbeing', 'Wellbeing', meterGroup([['playful', 'Playfulness'], ['curiosity', 'Curiosity'], ['comfort', 'Comfort']]),
+      const traits = meterGroup([['playful', 'Playfulness'], ['curiosity', 'Curiosity'], ['comfort', 'Comfort']]);
+      meters.dataset.live = 'vitals'; traits.dataset.live = 'traits';
+      const wellbeing = section('wellbeing', 'Wellbeing', traits,
         make('p', { textContent: t('Petting and play share {n} bonding moments each day, one per minute. Extra clicks do not add rewards or reactions. Your buddy is always happy to keep you company.', { n: P.CARE_LIMIT }) }));
       const wear = make('select'); wear.dataset.control = 'wear'; wear.setAttribute('aria-label', t('Buddy’s look'));
       for (const [id, item] of Object.entries(P.WEAR)) wear.append(make('option', { value: id, selected: d.wear === id, disabled: d.level < item.level, textContent: `${t(NAMES[id])} · ${t('Level {level}', { level: item.level })}` }));
@@ -103,23 +120,30 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       const settings = section('settings', 'Settings', field('Pet character', sprite), outfit, field('Gravity & water', physics), field('Learn from how I play', learning),
         make('p', { className: 'gz-game-hint', textContent: t('Drag your buddy out to explore, and back in to come home. W: wander · H: home. Drag furniture, or use arrow keys; Delete puts it away.') }));
       const forget = button(t('Reset learned behavior'), (e) => { if (e.isTrusted) update({ op: 'forget' }); }); forget.dataset.control = 'forget';
-      const profile = GZ_PET_BRAIN.describe(d.brain), interactions = d.brain.counts.reduce((n, value) => n + value, 0);
-      const learned = section('learned', 'How your buddy learns', make('p', { textContent: t('Your buddy learns the activities you welcome and settles down while you type or focus. Learning stays on this device; no typed text is read or sent. Resetting learning does not reset the daily bonding limit.') }),
-        make('p', { textContent: t('Learned interactions: {n}', { n: interactions }) }), make('p', { textContent: t('Familiarity: {n}/100', { n: profile.familiarity }) }));
-      if (interactions && Object.hasOwn(ACTIVITIES, profile.favorite)) learned.append(make('p', { textContent: t('Favorite activity: {activity}', { activity: t(ACTIVITIES[profile.favorite]) }) }));
-      if (Object.hasOwn(TIMES, profile.habit)) learned.append(make('p', { textContent: t('Preferred time: {time}', { time: t(TIMES[profile.habit]) }) }));
+      const stats = make('div', { className: 'gz-game-stats' }, make('p', { textContent: t('Learned interactions: {n}', { n: interactions }) }), make('p', { textContent: t('Familiarity: {n}/100', { n: profile.familiarity }) }));
+      stats.dataset.live = 'learned';
+      const learned = section('learned', 'How your buddy learns', make('p', { textContent: t('Your buddy learns the activities you welcome and settles down while you type or focus. Learning stays on this device; no typed text is read or sent. Resetting learning does not reset the daily bonding limit.') }), stats);
+      if (interactions && Object.hasOwn(ACTIVITIES, profile.favorite)) stats.append(make('p', { textContent: t('Favorite activity: {activity}', { activity: t(ACTIVITIES[profile.favorite]) }) }));
+      if (Object.hasOwn(TIMES, profile.habit)) stats.append(make('p', { textContent: t('Preferred time: {time}', { time: t(TIMES[profile.habit]) }) }));
       learned.append(forget);
-      const rules = section('rules', 'How XP works', make('p', { className: 'gz-game-breakdown', textContent: t('Work {work} · Plans {plans} · Streak {streak}', { work: d.work, plans: d.plans, streak: d.streakXp }) }),
+      const breakdown = make('p', { className: 'gz-game-breakdown', textContent: t('Work {work} · Plans {plans} · Streak {streak}', { work: d.work, plans: d.plans, streak: d.streakXp }) });
+      breakdown.dataset.live = 'breakdown';
+      const rules = section('rules', 'How XP works', breakdown,
         make('p', { textContent: t('Handed in: 20 XP on time, 10 XP late, 15 XP when timing is unknown. A kept do-on plan: 8 XP. Each verified streak day: 5 XP. Focus sessions give no XP.') }),
         make('p', { textContent: t('Your buddy keeps growing across semesters, with no final level. Progress stays with this school account on this device. Missing days never take progress away; unticking work removes its XP.') }),
         make('p', { textContent: t('Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.') }));
       const about = section('about', 'Progress & learning', rules, learned);
-      controls.replaceChildren(actions, care, meters, wellbeing, decor, settings, about);
-      if (globalThis.GZ_PET_WORLD) player = GZ_PET_WORLD.mount(stage, { key, data: d, t, save: (patch) => send({ key, tz, ...patch }) });
-      else if (!stage.children.length) stage.append(art(`critters/${P.WEAR[d.wear].art}`, 'gz-game-buddy'));
-      if (active) [...pet.querySelectorAll('[data-control]')].find((e) => e.dataset.control === active)?.focus({ preventScroll: true });
+      if (nextForm === form) {
+        controls.querySelector('[data-control="pet"]').disabled = pat.disabled;
+        for (const fresh of [care, meters, traits, stats, breakdown]) controls.querySelector(`[data-live="${fresh.dataset.live}"]`)?.replaceWith(fresh);
+      } else {
+        controls.replaceChildren(actions, care, meters, wellbeing, decor, settings, about);
+        if (active) [...pet.querySelectorAll('[data-control]')].find((e) => e.dataset.control === active)?.focus({ preventScroll: true });
+      }
+      form = nextForm; readout = nextReadout;
+      world();
     };
-    const stop = () => { alive = false; player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
+    const stop = () => { alive = false; mounted.delete(handle); player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
     stage.addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('application/x-glaze-pet-item')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
     stage.addEventListener('drop', (e) => {
       const id = e.dataTransfer?.getData('application/x-glaze-pet-item');
@@ -136,7 +160,9 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       busy = false;
       if (!alive) return;
       if (!chrome.runtime?.id) { stop(); return; }
-      status.textContent = r?.ok ? r.interaction?.accepted === false ? t(r.interaction.reason === 'daily' ? 'All bonding moments enjoyed today. More tomorrow.' : 'Your buddy is resting between pats. Try again in a minute.') : '' : r?.error === 'history' ? t('Pet history couldn’t be updated. Existing progress was kept.') : t('Couldn’t save your buddy. Try again.');
+      // A live region announces whenever its text node is replaced, even with the same words.
+      const said = r?.ok ? r.interaction?.accepted === false ? t(r.interaction.reason === 'daily' ? 'All bonding moments enjoyed today. More tomorrow.' : 'Your buddy is resting between pats. Try again in a minute.') : '' : r?.error === 'history' ? t('Pet history couldn’t be updated. Existing progress was kept.') : t('Couldn’t save your buddy. Try again.');
+      if (status.textContent !== said) status.textContent = said;
       if (r?.data) { data = r.data; paint(); }
       if (r?.interaction?.accepted) player?.play('playing');
       if (waiting.length) update(waiting.shift());
@@ -172,15 +198,21 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       chrome.storage.onChanged.addListener(changed);
       update(); library();
     }).catch(() => { if (alive) status.textContent = t('Your buddy is available when your account is known.'); });
-    return { wake: () => { player?.wake?.(); update(); }, update: () => update(), stop };
+    // After a back/forward-cache restore the world was torn down with the page: paint hands it to a new one.
+    const handle = { wake: () => { player?.wake?.(); update(); }, update: () => update(), stop, revive: () => { if (data) paint(); update(); } };
+    mounted.add(handle);
+    return handle;
   };
-  let box, resuming, resumeOff, retryAt = 0;
+  let box, resuming, resumeOff, retryAt = 0, resumed = false, resumeTurn = 0;
   const resume = () => {
+    resumed = true;
     globalThis.GZ_PET_WORLD?.refresh();
-    if (!ctx.settings().enabled || !ctx.settings().enhance.pet) { resuming = null; resumeOff?.(); resumeOff = null; globalThis.GZ_PET_WORLD?.stop(); return; }
+    if (!ctx.settings().enabled || !ctx.settings().enhance.pet) { resumeTurn++; resuming = null; resumeOff?.(); resumeOff = null; globalThis.GZ_PET_WORLD?.stop(); return; }
     if (Date.now() < retryAt) return;
-    return resuming ||= start().then(() => GZ_WIDGETS_UI.who()).then(async (p) => {
-      if (!ctx.settings().enabled || !ctx.settings().enhance.pet || !/^(?:\d+|_\d+_\d+)$/.test(String(p?.uid))) return;
+    if (resuming) return resuming;
+    const turn = ++resumeTurn;
+    return resuming = start().then(() => GZ_WIDGETS_UI.who()).then(async (p) => {
+      if (turn !== resumeTurn || !ctx.settings().enabled || !ctx.settings().enhance.pet || !/^(?:\d+|_\d+_\d+)$/.test(String(p?.uid))) return;
       const key = GZ_PET.storeKey(location.origin, p.uid), tz = GZ_TODO.zone(p.tz), save = (patch) => send({ key, tz, ...patch });
       if (!resumeOff) {
         const changed = (ch, area) => {
@@ -190,12 +222,12 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         };
         chrome.storage.onChanged.addListener(changed);
         resumeOff = () => chrome.storage.onChanged.removeListener(changed);
-        window.addEventListener('pagehide', () => { resumeOff?.(); resumeOff = null; }, { once: true });
       }
       const r = await save({ op: 'read' });
+      if (turn !== resumeTurn) return;
       if (!r?.ok) { retryAt = Date.now() + 60000; resuming = null; return; }
       if (r?.ok && r.data?.wander && ctx.settings().enabled && ctx.settings().enhance.pet) GZ_PET_WORLD.mount(null, { key, tz, data: r.data, save, t });
-    }).catch(() => { retryAt = Date.now() + 60000; resuming = null; });
+    }).catch(() => { if (turn === resumeTurn) { retryAt = Date.now() + 60000; resuming = null; } });
   };
   const open = async () => {
     if (!ctx.settings().enabled || !ctx.settings().enhance.pet) return;
@@ -209,10 +241,20 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     const tile = mount(body), current = box;
     const off = (ch, area) => { if (area === 'sync' && (ch.enabled?.newValue === false || (ch.enhance && !ch.enhance.newValue?.pet))) current.close(); };
     chrome.storage.onChanged.addListener(off);
-    box.addEventListener('close', () => { chrome.storage.onChanged.removeListener(off); tile.stop(); current.remove(); if (box === current) box = null; opener?.focus({ preventScroll: true }); });
+    box.addEventListener('close', () => { chrome.storage.onChanged.removeListener(off); tile.stop(); current.remove(); if (box === current) { box = null; opener?.focus({ preventScroll: true }); } });
     box.addEventListener('click', (e) => { if (e.target === current) current.close(); });
+    // Not modal (the pet can be dragged onto the page), so the browser does not close it on Escape. Something inside that used the
+    // key already (the pet's own Escape, which sends it home) has prevented it.
+    box.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); current.close(); } });
     document.body.append(box); box.show(); close.focus();
   };
+  // pagehide let go of the wandering pet; a restore from the back/forward cache runs no content script again.
+  globalThis.addEventListener?.('pagehide', () => { resumeTurn++; resuming = null; resumeOff?.(); resumeOff = null; });
+  globalThis.addEventListener?.('pageshow', (e) => {
+    if (!e.persisted) return;
+    if (resumed) { resuming = null; retryAt = 0; resume(); }
+    for (const m of [...mounted]) m.revive();
+  });
   return { mount, open, resume };
 })();
 globalThis.GZ_WIDGETS_UI?.register('pet', GZ_PET_UI.mount);

@@ -133,6 +133,30 @@ test('two tabs save the same note: the first lands, the second becomes a copy, n
   assert.equal((await w.run({ op: 'load', id: id(1) })).html, '<p>ok</p>');
 });
 
+test('loading an oversized stored body fails without exposing an editable shortened copy or changing storage', async () => {
+  const w = world();
+  await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>original</p>' });
+  const key = w.bodies(id(1))[0];
+  const html = '<p>x</p>'.repeat(60000);
+  w.db.bodies.set(key, { html });
+  const before = structuredClone(w.store);
+  const r = await w.run({ op: 'load', id: id(1) });
+  assert.deepEqual({ ok: r.ok, error: r.error, hasHtml: 'html' in r }, { ok: false, error: 'big', hasHtml: false });
+  assert.deepEqual(w.store, before);
+  assert.equal(w.db.bodies.get(key).html.length, html.length);
+});
+
+test('backup notes over the raw-input budget remain flagged and counted as skipped', async () => {
+  const site = 'https://school.instructure.com';
+  const data = N.parseExport({ format: 'glaze-notes', version: 1, site, files: [], folders: [], notes: [
+    { id: id(1), html: 'x'.repeat(N.LIMIT.body * 2 + 1) },
+    { id: id(2), html: '<p>fine</p>' },
+  ] }, { site });
+  assert.equal(data.notes.length, 2, 'oversized notes must not disappear from import accounting');
+  assert.equal(data.notes[0].big, true);
+  assert.deepEqual(await world().run({ op: 'import', notes: data.notes }), { ok: true, done: 1, skipped: 1 });
+});
+
 test('saving into a note trashed or deleted for good in another tab keeps the text as a copy', async () => {
   const w = world();
   await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>x</p>', title: 'T', copy: id(90) });
@@ -222,6 +246,23 @@ test('rename and move: each field is set only by a change made after its last on
   assert.equal(w.idx().notes[id(1)].title, 'Newer');
   assert.equal(w.idx().notes[id(1)].course, '9', 'a different field from the same late change still lands');
   assert.deepEqual(await w.run({ op: 'meta', id: id(5), title: 'x' }), { ok: false, error: 'gone' });
+});
+
+test('rename and move: a time from a clock that ran ahead does not block the changes after it', async () => {
+  const w = world();
+  const day = 864e5;
+  await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>1</p>', title: 'First', copy: id(90) }, 100);
+  // Renamed when the page's clock was a day ahead: stamped no later than the worker's now.
+  await w.run({ op: 'meta', id: id(1), title: 'Ahead', at: 100 + day }, 200);
+  assert.ok(w.idx().notes[id(1)].ft.title <= 200);
+  await w.run({ op: 'meta', id: id(1), title: 'Now', at: 250 }, 300);
+  assert.equal(w.idx().notes[id(1)].title, 'Now');
+  // A time an earlier version stored ahead of the clock counts as older than any change made since.
+  w.store[KEY].notes[id(1)].ft.title = 400 + day;
+  await w.run({ op: 'meta', id: id(1), title: 'Healed', at: 450 }, 500);
+  assert.equal(w.idx().notes[id(1)].title, 'Healed');
+  await w.run({ op: 'save', id: id(2), base: 0, sid: 'b', html: '<p>2</p>', title: 'Second', copy: id(91), at: 600 + day }, 700);
+  assert.deepEqual(Object.values(w.idx().notes[id(2)].ft), [700, 700, 700], 'a new note is stamped no later than now either');
 });
 
 test('files: pictures by their bytes, sizes capped, unused ones cleared', async () => {
@@ -365,6 +406,64 @@ test('the sanitizer bounds its work on deep or huge input, not only what it keep
   // A flood of tags stops at the token budget.
   const flood = '<b>x</b>'.repeat(400000);
   assert.ok(N.sanitize(flood).length < '<strong>x</strong>'.length * 300000);
+});
+
+// WID-1: the node budget cut a note off at its 40,000th node and the save still answered ok, so a pasted 2,000-row sheet or
+// a note of 25,000 short paragraphs came back shorter, with nothing said. Now what fits is kept whole, and what has to be
+// cut is refused as 'big' (a visible warning on the page) instead of stored cut.
+const paras = (n) => Array.from({ length: n }, (_, i) => `<p>line ${i}</p>`).join('');
+const sheet = (rows, cols = 10) => `<table>${Array.from({ length: rows }, (_, r) => `<tr>${Array.from({ length: cols }, (_, c) => `<td>${r}.${c}</td>`).join('')}</tr>`).join('')}</table>`;
+const count = (html, tag) => (html.match(new RegExp(`<${tag}>`, 'g')) || []).length;
+
+test('a long note and a big pasted sheet are kept whole (under the 2 MB body limit, past the old node budget)', async () => {
+  assert.equal(count(S(paras(25000)), 'p'), 25000);
+  assert.equal(count(S(sheet(2000)), 'tr'), 2000);
+  assert.equal(N.sanitized(paras(25000)).cut, false);
+  const w = world();
+  const html = paras(25000);
+  assert.ok(html.length < N.LIMIT.body / 4);
+  assert.deepEqual(await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html, copy: id(90), title: 'Long' }), { ok: true, id: id(1), rev: 1 });
+  assert.equal(count((await w.run({ op: 'load', id: id(1) })).html, 'p'), 25000, 'every paragraph is stored');
+  await w.run({ op: 'save', id: id(2), base: 0, sid: 'b', html: sheet(2000), copy: id(91), title: 'Sheet' });
+  assert.equal(count((await w.run({ op: 'load', id: id(2) })).html, 'tr'), 2000, 'every row is stored');
+});
+
+test('a note past the sanitizer\'s budgets is refused as big, never stored cut; the stored note stays as it was', async () => {
+  const w = world();
+  const huge = paras(60000), flood = '<b>x</b>'.repeat(400000);
+  for (const [html, why] of [[huge, 'nodes'], [flood, 'tokens'], ['x'.repeat(N.LIMIT.body * 2 + 1), 'input longer than the body limit allows twice over']]) {
+    assert.equal(N.parse(html).cut, true, why);
+    assert.equal(N.sanitized(html).cut, true, why);
+  }
+  assert.equal(N.parse('<p>fits</p>').cut, false);
+  assert.equal(N.parse('').cut, false);
+  assert.deepEqual(await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: huge, copy: id(90), title: 'Big' }), { ok: false, error: 'big' }, 'a new note');
+  assert.equal(w.idx().notes[id(1)], undefined, 'nothing stored');
+  assert.deepEqual(w.bodies(id(1)), []);
+  assert.deepEqual(await w.run({ op: 'save', id: id(2), base: 0, sid: 'b', html: '<p>small</p>', copy: id(91), title: 'Small' }), { ok: true, id: id(2), rev: 1 });
+  assert.deepEqual(await w.run({ op: 'save', id: id(2), base: 1, sid: 'c', html: huge, copy: id(92) }), { ok: false, error: 'big' }, 'an edit');
+  assert.deepEqual(await w.run({ op: 'load', id: id(2) }), { ok: true, html: '<p>small</p>', rev: 1 }, 'the note is as it was');
+  assert.equal(w.idx().notes[id(2)].rev, 1);
+});
+
+test('import skips a note it would have to cut, and the export reader carries that through a second reading', async () => {
+  const w = world();
+  const huge = paras(60000);
+  assert.deepEqual(await w.run({ op: 'import', notes: [{ id: id(1), title: 'Huge', created: 1, at: 1000, html: huge }, { id: id(2), title: 'Fine', created: 1, at: 1000, html: '<p>ok</p>' }] }),
+    { ok: true, done: 1, skipped: 1 });
+  assert.equal(w.idx().notes[id(1)], undefined);
+  assert.ok(w.idx().notes[id(2)]);
+  // The editor's backup reads an export in the page, then hands the notes to the worker as JSON, which reads them again:
+  // the first reading cuts, so it has to say so for the second.
+  const site = 'https://school.instructure.com';
+  const json = JSON.stringify({ format: 'glaze-notes', version: 1, site, folders: [], files: [], notes: [{ id: id(1), title: 'Huge', at: 5, html: huge }, { id: id(2), title: 'Fine', at: 5, html: '<p>ok</p>' }] });
+  const first = N.parseExport(json, { site });
+  assert.deepEqual(first.notes.map((n) => !!n.big), [true, false]);
+  const second = N.parseExport({ format: 'glaze-notes', version: 1, site, folders: [], files: [], notes: JSON.parse(JSON.stringify(first.notes)) }, { site });
+  assert.deepEqual(second.notes.map((n) => !!n.big), [true, false], 'still flagged');
+  const w2 = world();
+  assert.deepEqual(await w2.run({ op: 'import', notes: second.notes }), { ok: true, done: 1, skipped: 1 });
+  assert.equal(w2.idx().notes[id(1)], undefined);
 });
 
 test('import reads file references in any spelling, and keeps only the ones the export declares', () => {

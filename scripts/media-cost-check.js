@@ -12,7 +12,7 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const { execFileSync, spawnSync } = require('node:child_process');
 
 const ext = fs.realpathSync(path.join(__dirname, '..'));
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const origin = 'https://ultra.fixture.test';
 const D = require(path.join(ext, 'defaults.js'));
@@ -55,7 +55,7 @@ const lottie = (n) => ({ v: '5.7.0', fr: 30, ip: 0, op: 90, w: 1280, h: 720, nm:
     const profile = path.join(scratch, 'profile');
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(profile, {
-      executablePath: chrome, headless: true, viewport: { width: 1280, height: 800 },
+      ...chromeLaunch, headless: true, viewport: { width: 1280, height: 800 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     context.setDefaultTimeout(20000);
@@ -130,7 +130,7 @@ const lottie = (n) => ({ v: '5.7.0', fr: 30, ip: 0, op: 90, w: 1280, h: 720, nm:
     fs.rmSync(scratch, { recursive: true, force: true });
   }
   const base = results[0];
-  console.log(JSON.stringify({ chrome: 'Chrome for Testing (Playwright chromium-1243), headless, software rendering, 1280x800', window: '6 s after 2 s of warmup', results }, null, 1));
+  console.log(JSON.stringify({ chrome: `${process.env.CHROME || "Playwright's bundled Chromium"}, headless, software rendering, 1280x800`, window: '6 s after 2 s of warmup', results }, null, 1));
   for (const r of results) console.log(`${r.name.padEnd(56)} browser ${String(r.browserCpuPct).padStart(4)}% of one core   main thread ${String(r.mainThreadPct).padStart(5)}%   script ${String(r.scriptPct).padStart(5)}%`);
   // Motion off must cost what a plain background costs, in the whole browser, within the noise of a few percent of a core. Hidden is
   // emulated (the page itself is still visible to the browser, so its compositor and an <img> carry on, as no real hidden tab's would):

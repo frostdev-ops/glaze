@@ -9,7 +9,8 @@ const B = require('../lib/navbar.js');
 
 const source = fs.readFileSync(require.resolve('../options.js'), 'utf8');
 const backup = source.slice(source.indexOf('  // ---- backup ----'), source.indexOf('  // Two clicks, so a stray'));
-const restore = async (src, kind = 'media', extra = {}, roundTrip = false) => {
+// kept: the files this computer keeps for backgrounds, as the worker lists them (lib/media.js).
+const restore = async (src, kind = 'media', extra = {}, roundTrip = false, stored = {}, kept = []) => {
   let raw = { ...structuredClone(G.GZ_DEFAULTS), bg: { ...G.GZ_DEFAULTS.bg, kind }, parts: { x: { bg: { media: { type: 'video', src } }, cursor: { kind: 'glow' } } }, ...extra };
   const elements = {}, sent = [], hints = [], s = {};
   let exported;
@@ -19,11 +20,15 @@ const restore = async (src, kind = 'media', extra = {}, roundTrip = false) => {
     $: (id) => (elements[id] ||= { addEventListener: (type, fn) => { elements[id][type] = fn; } }),
     flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true,
     hint: (...v) => hints.push(v), t: (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars[k]),
-    chrome: { storage: { local: { get: async () => ({}) }, sync: { get: async () => ({}) } }, runtime: { sendMessage: (m, cb) => { if (m.type === 'glaze:sessions') return Promise.resolve({ ok: true, keys: [] }); sent.push(m); cb?.({ ok: true }); } } },
+    chrome: { storage: { local: { get: async (k) => (k in stored ? { [k]: stored[k] } : {}) }, sync: { get: async () => ({}) } }, runtime: { sendMessage: (m, cb) => {
+      if (m.type === 'glaze:sessions') return Promise.resolve({ ok: true, keys: [] });
+      if (m.type === 'glaze:media') { const r = m.op === 'list' ? { ok: true, files: kept.map((h) => ({ h, t: 'video/webm', size: 3 })) } : { ok: false }; cb?.(r); return Promise.resolve(r); }
+      sent.push(m); cb?.({ ok: true });
+    } } },
   };
   vm.runInNewContext(backup, context);
   if (roundTrip) {
-    Object.assign(s, G.GZ_SANITIZE(raw));
+    Object.assign(s, G.GZ_SANITIZE(raw), { parts: P.bundle(raw.parts) }); // the editor keeps the Look's parts beside its settings
     await elements['#export'].click({ isTrusted: true });
     assert.ok(exported, hints.map((x) => x[0]).join(', '));
     raw = JSON.parse(await exported.text());
@@ -38,6 +43,26 @@ test('a backup without its kept background file restores the gradient and explai
   assert.equal(r.s.bg.kind, 'gradient');
   assert.equal(r.s.parts.x.cursor.kind, 'glow', 'the rest of the Look survives');
   assert.match(r.hints.at(-1)[0], /background file was not included.*gradient/i);
+});
+
+test('a backup put back on the computer that still keeps its background file keeps that background', async () => {
+  const h = 'A'.repeat(43);
+  const r = await restore(`file:${h}`, 'media', {}, false, {}, [h]);
+  assert.equal(r.sent[0].restore.settings.bg.kind, 'media');
+  assert.equal(r.s.parts.x.bg.media.src, `file:${h}`);
+  assert.equal(r.hints.at(-1)[0], 'Imported backup.json.');
+});
+
+test('a backup round trip on this computer keeps its kept background file, wherever the worker keeps it', async () => {
+  const h = 'A'.repeat(43);
+  const r = await restore(`file:${h}`, 'media', {}, true, {}, [h]);
+  assert.equal(r.sent[0].restore.settings.bg.kind, 'media');
+  assert.equal(r.sent[0].restore.parts.x.bg.media.src, `file:${h}`);
+  assert.equal(r.s.bg.kind, 'media');
+  assert.equal(r.hints.at(-1)[0], 'Imported backup.json.');
+  // Another file kept here is not this one.
+  const other = await restore(`file:${h}`, 'media', {}, true, {}, ['B'.repeat(43)]);
+  assert.equal(other.s.bg.kind, 'gradient');
 });
 
 test('backup restore preserves URL backgrounds and inactive media drafts', async () => {

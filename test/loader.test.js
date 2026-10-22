@@ -14,11 +14,11 @@ const settle = () => new Promise(setImmediate);
 const ID = 'glaze-test-id';
 
 // The worker with Chrome stubbed: every onMessage listener, and the executeScript calls it makes.
-const worker = (execute = () => Promise.resolve([{ result: true }]), protocol = 'chrome-extension:') => {
+const worker = (execute = (o) => Promise.resolve([{ result: /typeof GZ_I18N|window\.__gzGlaze/.test(String(o.func)) ? false : true }]), protocol = 'chrome-extension:', local = {}) => {
   const listeners = [];
   const injected = [], asked = [];
   const none = { addListener() {} };
-  const area = { get: () => Promise.resolve({}), set: () => Promise.resolve() };
+  const area = { get: (k) => Promise.resolve(Object.fromEntries([].concat(k ?? []).filter((x) => x in local).map((x) => [x, local[x]]))), set: () => Promise.resolve() };
   const context = vm.createContext({
     URL, console, setTimeout, clearTimeout,
     importScripts: (file) => vm.runInContext(read(path.join('lib', file)), context),
@@ -28,7 +28,7 @@ const worker = (execute = () => Promise.resolve([{ result: true }]), protocol = 
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none,
       },
       storage: { local: area, sync: area, onChanged: none },
-      scripting: { executeScript: (o) => { if (o.files) injected.push(JSON.parse(JSON.stringify(o))); else asked.push(JSON.parse(JSON.stringify({ ...o, func: String(o.func) }))); return execute(o); } },
+      scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {}, executeScript: (o) => { if (o.files) injected.push(JSON.parse(JSON.stringify(o))); else asked.push(JSON.parse(JSON.stringify({ ...o, func: String(o.func) }))); return execute(o); } },
     },
   });
   vm.runInContext(read('lib/background.js'), context, { filename: 'lib/background.js' });
@@ -48,6 +48,13 @@ test('an allowlisted file runs in the asking frame only, and the reply waits for
   assert.deepEqual(w.injected, [{ target: { tabId: 7, frameIds: [3] }, files: ['lib/zip.js'], injectImmediately: true }]);
   assert.deepEqual(await w.send({ type: 'glaze:load', files: ['i18n/de.js'] }, tab(0)), { ok: true });
   assert.deepEqual(w.injected[1].target, { tabId: 7, frameIds: [0] });
+});
+
+test('a Canvas page found by the detector gets Glaze in that page, not whatever its tab has gone on to', async () => {
+  const w = worker(undefined, undefined, { canvas: ['https://canvas.school.edu/*'] }); // a site the student approved (WP-C2)
+  w.send('canvas', { id: ID, tab: { id: 7 }, frameId: 0, url: 'https://canvas.school.edu/courses/1', documentId: 'doc-1' });
+  await settle();
+  assert.deepEqual(w.injected[0].target, { tabId: 7, documentIds: ['doc-1'] });
 });
 
 test('anything off the list, or from outside a tab of this extension, runs nothing', async () => {
@@ -233,6 +240,37 @@ test('a navigation between a frame probe and injection cannot initialize orphan 
       assert.ok(vm.runInContext(read(file), fresh));
     }
   }
+});
+
+// Pinning the document is not enough either: Chrome can run files asked for by a page that is navigating away in the
+// frame's next document, before that document's first content script, so before its GZ_CTX. A feature that reads
+// GZ_CTX as it loads must then keep nothing: the next document's content.js would find the module already there and
+// never load it again, and the kept copy has no helpers (features/pet.js's resume() threw on every widgets pass).
+test('a feature that reads GZ_CTX as it loads keeps nothing when it lands before its bootstrap', () => {
+  const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
+  // The page's globals, whatever a file touches: each property, call and construction gives the same stand-in back.
+  // The language's own (Map, JSON…) are real; no GZ_ global is there, and no node module.
+  const JS = new Set(vm.runInNewContext('Object.getOwnPropertyNames(globalThis)'));
+  const any = new Proxy(function () {}, { get: (_, k) => (k === Symbol.toPrimitive ? () => '' : k === 'then' ? undefined : any), apply: () => any, construct: () => any });
+  const readers = [];
+  for (const f of list) {
+    const name = read(f).match(/^var (GZ_\w+) = globalThis\.\1 \|\|/m)?.[1];
+    if (!name) continue;
+    let asked = false;
+    const own = {};
+    const context = vm.createContext(new Proxy(own, { has: () => true, get: (t, k) => {
+      if (k === 'GZ_CTX') { asked = true; return undefined; }
+      if (Object.hasOwn(t, k)) return t[k];
+      if (typeof k !== 'string' || /^(GZ_|__gz|module$|exports$|require$)/.test(k)) return undefined;
+      return JS.has(k) ? globalThis[k] : any;
+    } }));
+    own.globalThis = own.window = own.self = vm.runInContext('this', context);
+    try { vm.runInContext(read(f), context); } catch { /* it threw as it loaded: nothing kept, so it is asked for again */ }
+    if (!asked) continue;
+    readers.push(f);
+    assert.ok(!vm.runInContext(name, context), `${f} keeps ${name} without GZ_CTX`);
+  }
+  for (const f of ['features/pet.js', 'features/widgets.js', 'features/coursetabs.js']) assert.ok(readers.includes(f), `${f} reads GZ_CTX as it loads`);
 });
 
 test('a course-tab feature request includes its library in the same injection', async () => {

@@ -29,7 +29,7 @@ class E {
 }
 
 // Ultra uses the real shared profile/planner helper; only its own-site transport is synthetic and counted.
-const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = false, tz = 'UTC', ultra = null, capi = async () => [] } = {}) => {
+const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, hold = false, tz = 'UTC', ultra = null, capi = async () => [] } = {}) => {
   const held = []; // replies the test lets through by hand (hold)
   const FakeDate = class extends Date {};
   FakeDate.now = () => clock.t;
@@ -37,7 +37,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
   let n = 0;
   const reads = [];
   const sent = [];
-  const listeners = [];
+  const listeners = [], win = [];
   const c = {
     console, URL, URLSearchParams, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String,
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' },
@@ -47,12 +47,12 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
     location: ultra ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
     setTimeout: (f, ms) => { timers.set(++n, { f, ms }); return n; },
     clearTimeout: (id) => timers.delete(id),
-    addEventListener() {}, removeEventListener() {},
+    addEventListener: (type, f) => win.push({ type, f }), removeEventListener: (type, f) => { const i = win.findIndex((x) => x.type === type && x.f === f); if (i >= 0) win.splice(i, 1); },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); const r = replies.shift() || { ok: true, kept: true }; if (hold) held.push(() => cb(r)); else Promise.resolve().then(() => cb(r)); } },
       storage: {
         local: { get: (keys, cb) => reads.push(() => cb(Object.fromEntries([keys].flat().filter((k) => k in local).map((k) => [k, local[k]])))), set: (v, cb) => { Object.assign(local, v); cb?.(); } },
-        sync: { get: (k, cb) => cb({}) },
+        sync: { get: (k, cb) => cb(Object.fromEntries([k].flat().filter((x) => x in sync).map((x) => [x, sync[x]]))) },
         onChanged: { addListener: (f) => listeners.push(f), removeListener: (f) => listeners.splice(listeners.indexOf(f), 1) },
       },
     },
@@ -83,12 +83,13 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
     vm.runInContext(read('lib/ultra.js'), c);
   }
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('features/widgets.js').replace('  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, draw, onShow, layout: (x) => { lay = x; }, set: (w, s, m) => { W = w; o = s; me = m; }, state: (x) => { on = x.on; lay = x.lay; board = drawn = null; floats = x.floats; ro = x.ro; } } };');
+  const src = read('features/widgets.js').replace('  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, draw, onShow, seatAfter: typeof seatAfter === "function" ? seatAfter : null, layout: (x) => { lay = x; }, set: (w, s, m) => { W = w; o = s; me = m; }, hubFrom: (b) => { hubButton = b; }, state: (x) => { on = x.on; lay = x.lay; board = drawn = null; floats = x.floats; ro = x.ro; } } };');
   assert.notEqual(src, read('features/widgets.js'));
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
   const answer = () => { while (reads.length) reads.shift()(); };
-  return { ui, timers, answer, sent, listeners, local, clock, held, c };
+  const fire = (type, e = {}) => { for (const l of win.filter((x) => x.type === type)) l.f({ type, ...e }); };
+  return { ui, timers, answer, sent, listeners, local, clock, held, c, win, fire };
 };
 const find = (el, pred) => (pred(el) ? el : el.children?.map((c) => find(c, pred)).find(Boolean) || null);
 
@@ -186,6 +187,12 @@ test('a floating widget is never wider or taller than the window, whatever its s
     assert.match(rule, /width: min\([^;]+, calc\(100vw - 24px\)\)/, sel);
   }
   assert.match(css.slice(css.indexOf('#gz-float .gz-w {')), /^[^}]*max-height: calc\(100vh - 24px\)/);
+});
+
+test("a tile's resize corner, drawn at 18px, takes presses over 24 (WCAG 2.5.8), inside the tile", () => {
+  const css = read('features/apps.css');
+  assert.match(css.slice(css.indexOf('.gz-w-resize {')), /^[^}]*position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;/);
+  assert.ok(css.includes('.gz-w-resize::before { content: ""; position: absolute; inset: -6px 0 0 -6px; }'));
 });
 
 test('the grid shows tiles in their saved order, which is also the keyboard and screen-reader order', () => {
@@ -406,6 +413,30 @@ test('Ultra shared planner: a failed range is retried, then a newer covered To D
   tile.stop();
 });
 
+test("the agenda marks work done as Better To Do does: its manual mode, and Canvas's marks when they go there", async () => {
+  const clock = { t: Date.parse('2026-10-15T16:00:00Z') };
+  const raw = [
+    { plannable_type: 'assignment', plannable_id: '5', course_id: '1', context_name: 'Bio', plannable: { title: 'Lab 3' }, plannable_date: '2026-10-15T20:00:00Z', html_url: '/courses/1/assignments/5', submissions: { submitted: true } },
+    { plannable_type: 'quiz', plannable_id: '6', course_id: '1', context_name: 'Bio', plannable: { title: 'Quiz 2' }, plannable_date: '2026-10-15T21:00:00Z', html_url: '/courses/1/quizzes/6' },
+  ];
+  const open = async (todo) => {
+    const p = page({ clock, sync: { todo }, capi: async () => raw, local: { 'todo:https://canvas.test/3': { tasks: [], items: { 'quiz:6': { done: true } } } } });
+    return { p, ...(await loadAgenda(p)) };
+  };
+  const done = ({ body }) => find(body, (e) => e.className === 'gz-w-agenda').children.map((li) => 'done' in li.dataset);
+  const auto = await open({});
+  assert.deepEqual(done(auto), [true, true], 'handed in, and ticked in Glaze');
+  const manual = await open({ done: 'manual' });
+  assert.deepEqual(done(manual), [false, true], 'a hand-in alone leaves it open');
+  const sync = await open({ sync: true });
+  assert.deepEqual(done(sync), [true, false], "marks go to Canvas: Glaze's own is set aside");
+  // Changed while the agenda is on the page.
+  for (const f of [...auto.p.listeners]) f({ todo: { newValue: { done: 'manual', sync: true } } }, 'sync');
+  for (let i = 0; i < 4; i++) { auto.p.answer(); await settle(); }
+  assert.deepEqual(done(auto), [false, false]);
+  for (const x of [auto, manual, sync]) x.tile.stop();
+});
+
 test('Canvas agenda retains its covered-cache, day memo and Canvas API path', async () => {
   let calls = 0;
   const clock = { t: Date.parse('2026-10-15T16:00:00Z') }, p = page({ clock, capi: async (url) => { assert.match(url, /^\/planner\/items\?/); calls++; return []; } });
@@ -514,6 +545,18 @@ test('buddy timer checks context invalidation before any core mutation or runtim
   }
 });
 
+
+test('a buddy win or pat stored far ahead of the clock arms no repaint longer than a timer can wait', async () => {
+  const clock = { t: 1e12 }, far = clock.t + 40 * 864e5;
+  const p = page({ clock, local: { widgetBuddy: { happyAt: far, patAt: far } } });
+  const body = new E();
+  const tile = p.ui.probe.WIDGETS.buddy(body);
+  p.answer(); await settle();
+  // Past 2^31 - 1 ms a browser runs the timer at once, and the repaint arms the same one again.
+  assert.ok([...p.timers.values()].every((x) => x.ms <= 2 ** 31 - 1));
+  assert.equal(body.dataset.mood, 'sleepy');
+  tile.stop();
+});
 
 test('declaring and revoking a built-in tile replacement disposes the previous renderer', () => {
   const p = page();
@@ -635,7 +678,8 @@ const dockAndFloat = () => {
   const { El } = require('./stand-in-dom.js'), S = require('../lib/sidebar.js');
   const p = page(), doc = { visibilityState: 'visible' }, loads = [], counts = { contexts: 0, suspended: 0, resumed: 0 }; let visible = true;
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
-  Object.assign(doc, { documentElement: doc.root, createElement: (tag) => new El(tag, doc), querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s) });
+  Object.assign(doc, { documentElement: doc.root, createElement: (tag) => new El(tag, doc), querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s),
+    getElementById: (id) => doc.root.all().find((e) => e.id === id) || null });
   p.c.document = doc; p.c.location.pathname = '/courses/25'; p.c.innerWidth = 1440; p.c.innerHeight = 900; p.c.cancelAnimationFrame = () => {};
   p.c.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
   p.c.GZ_SIDEBAR = S; p.c.GZ_CTABS = { visible: () => visible };
@@ -703,4 +747,331 @@ test('a sidebar account change invalidates the cached widget profile and late pr
   release({ id: '3' }); await rejected;
   assert.equal((await latest).uid, '4');
   assert.equal((await p.ui.who()).uid, '4', 'the old response cannot replace the new signed-in identity');
+});
+
+// ---- WP-W1: notes, the timer, the study buddy, the music tile and the tour -----------------------------------------------
+
+// WID-2: 22be3da read a stored note stamped ahead of the clock as time 0, which the tile (it adopts a note only when its
+// time is later than the one it shows, which starts at 0) never showed; typing then replaced the text it hid.
+test('a note stored with a time ahead of the clock is shown in the tile, and typing goes on from it', async () => {
+  const key = 'notes:https://canvas.test/3';
+  const p = page({ local: { [key]: { text: 'Exam room 204, bring calculator', at: Date.now() + 3 * 864e5 } } });
+  const body = new E();
+  const tile = p.ui.probe.WIDGETS.notes(body);
+  await settle(); p.answer(); await settle(); // who is signed in, then the stored note
+  const view = find(body, (e) => e.className === 'gz-w-note-view'), text = find(body, (e) => e.tagName === 'TEXTAREA');
+  assert.deepEqual(view.children, ['Exam room 204, bring calculator'], 'the note, not the placeholder');
+  view.fire('click');
+  assert.equal(text.value, 'Exam room 204, bring calculator', 'and it is what a click edits');
+  text.value += '; lab at 3';
+  text.fire('input'); text.fire('blur'); await settle();
+  assert.equal(p.sent.at(-1).text, 'Exam room 204, bring calculator; lab at 3', 'what is typed is added to it');
+  tile.stop();
+  // The same note arriving from another tab while the tile is empty.
+  const q = page();
+  const b2 = new E();
+  const t2 = q.ui.probe.WIDGETS.notes(b2);
+  await settle(); q.answer(); await settle();
+  for (const f of [...q.listeners]) f({ [key]: { newValue: { text: 'from another tab', at: Date.now() + 864e5 } } }, 'local');
+  assert.deepEqual(find(b2, (e) => e.className === 'gz-w-note-view').children, ['from another tab']);
+  t2.stop();
+});
+
+// WID-5: run() stopped everything when the page was hidden, so a block ending while the student was in another tab or
+// app passed in silence. One timeout to the end now stays armed in the tab that has the sound ready.
+const audioPage = (extra = {}) => {
+  const clock = { t: 1e12 };
+  const running = { phase: 'work', end: clock.t + 25 * 6e4, left: 0 };
+  const rest = { phase: 'rest', end: running.end + 5 * 6e4, left: 0 };
+  const replies = [{ ok: true, timer: running }, { ok: true, timer: rest, advanced: running.end }];
+  const p = page({ clock, replies, ...extra });
+  const notes = [];
+  p.c.AudioContext = class { constructor() { this.currentTime = 0; this.destination = {}; } resume() {} close() {}
+    createOscillator() { const x = { frequency: {}, connect: (n) => n, start() {}, stop() {} }; notes.push(x); return x; }
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect: (n) => n }; } };
+  p.ui.probe.set(W, { ...D.GZ_SANITIZE({}).widgets, sound: true }, { uid: '3', tz: 'UTC' });
+  const moments = [];
+  p.c.GZ_CTX.moment = (...a) => moments.push(a);
+  const body = new E();
+  const tile = p.ui.probe.WIDGETS.timer(body);
+  const status = find(body, (e) => e.className === 'gz-w-status');
+  const start = async () => { p.answer(); await settle(); find(body, (e) => e.className === 'gz-w-btn gz-w-main').fire('click'); await settle(); };
+  const away = () => { p.c.document.visibilityState = 'hidden'; tile.suspend(); };
+  // A timer that fires is spent (the stub keeps it until it is cleared, as the page never would).
+  const fire = async (x) => { for (const [k, v] of p.timers) if (v === x) p.timers.delete(k); x.f(); await settle(); };
+  return { p, clock, running, rest, replies, notes, moments, body, tile, status, start, away, fire, timers: () => [...p.timers.values()] };
+};
+
+test('the chime rings when the phase ends while this tab is in the background, once, with the break announced', async () => {
+  const a = audioPage();
+  await a.start();
+  a.away();
+  assert.equal(a.timers().length, 1, 'one timeout to the end stays armed while hidden');
+  assert.ok(Math.abs(a.timers()[0].ms - (25 * 6e4 + 5)) < 50, `${a.timers()[0].ms} ms`);
+  a.clock.t = a.running.end + 5;
+  await a.fire(a.timers()[0]);
+  assert.deepEqual(a.p.sent.map((m) => m.op), ['toggle', 'advance']);
+  assert.equal(a.notes.length, 2, 'the two notes of the chime');
+  assert.equal(a.status.textContent, 'Time for a break.', 'and the tile says so for when the student comes back');
+  assert.equal(a.moments.length, 1);
+  assert.equal(a.timers().length, 1, 'the break is watched the same way');
+  assert.ok(Math.abs(a.timers()[0].ms - 5 * 6e4) < 50, `${a.timers()[0].ms} ms to the break's end`);
+  a.tile.stop();
+  assert.equal(a.timers().length, 0, 'nothing left armed when the tile goes');
+});
+
+test('the background chime stays quiet when it should: no sound set, a phase that ended long ago, another tab moved it on, or a tab that never watched it', async () => {
+  // No sound (or no Start pressed in this tab): nothing armed while hidden, as before.
+  const quiet = audioPage();
+  quiet.p.ui.probe.set(W, { ...D.GZ_SANITIZE({}).widgets, sound: false }, { uid: '3', tz: 'UTC' });
+  await quiet.start(); quiet.away();
+  assert.equal(quiet.timers().length, 0);
+  // The computer slept through the end: it moves on quietly, as a phase that ended while away always has.
+  const late = audioPage();
+  await late.start(); late.away();
+  late.clock.t = late.running.end + 60e3;
+  await late.fire(late.timers()[0]);
+  assert.deepEqual(late.p.sent.map((m) => m.op), ['toggle', 'advance'], 'it still moves on');
+  assert.equal(late.notes.length, 0);
+  assert.equal(late.status.textContent, '');
+  // Another tab's advance came first: this one's answer carries no `advanced`, and only the tab that moved it rings.
+  const lost = audioPage();
+  lost.replies[1] = { ok: true, timer: lost.rest };
+  await lost.start(); lost.away();
+  lost.clock.t = lost.running.end + 5;
+  await lost.fire(lost.timers()[0]);
+  assert.deepEqual(lost.p.sent.map((m) => m.op), ['toggle', 'advance']);
+  assert.equal(lost.notes.length, 0);
+  // A tab that took the phase from storage (Start was pressed elsewhere) never had the sound allowed: nothing armed.
+  const other = audioPage();
+  other.p.answer(); await settle();
+  for (const f of [...other.p.listeners]) f({ widgetTimer: { newValue: other.running } }, 'local');
+  other.away();
+  assert.equal(other.timers().length, 0);
+});
+
+test('a visible tab still rings at the end, and a clock set back does not ring a deadline that was never reached (WID-11)', async () => {
+  const a = audioPage();
+  await a.start();
+  const tick = a.timers().find((x) => x.ms <= 1005);
+  assert.ok(tick, 'the visible tab ticks');
+  a.clock.t = a.running.end + 5;
+  await a.fire(tick);
+  assert.equal(a.notes.length, 2);
+  assert.equal(a.status.textContent, 'Time for a break.');
+  a.tile.stop();
+  // The clock set back two hours a minute in: the tile shows the phase's length at most, starts it over from now, and rings nothing
+  // (the worker's answer to the correction carries the old deadline as `advanced`, which is not a phase that ended).
+  const b = audioPage();
+  await b.start();
+  b.clock.t = b.running.end - 24 * 6e4 - 2 * 3600e3;
+  b.replies[0] = { ok: true, timer: { phase: 'work', end: b.clock.t + 25 * 6e4, left: 0 }, advanced: b.running.end }; // Start's answer is spent: this is the next
+  const clockText = () => find(b.body, (e) => e.className === 'gz-w-clock').children[0].data;
+  await b.fire(b.timers().find((x) => x.ms <= 1005));
+  assert.equal(clockText(), '25:00');
+  assert.deepEqual(b.p.sent.map((m) => m.op), ['toggle', 'advance'], 'the worker is asked to correct the stored deadline');
+  assert.equal(b.notes.length, 0, 'no chime');
+  assert.equal(b.status.textContent, '', 'and no break announced');
+  b.tile.stop();
+});
+
+// WID-8: the first paint ran as a microtask and stopped for good when the tile was not on the page yet (Hide widgets on
+// Ultra's Courses page builds the tiles and attaches none), so pressing Show widgets attached a dead tile.
+test('a study buddy made before it is on the page waits for it; it stops only once it has been, and then is gone', async () => {
+  const p = page();
+  const body = new E();
+  const tile = p.ui.probe.WIDGETS.buddy(body);
+  const pet = find(body, (e) => e.className === 'gz-w-pet');
+  pet.isConnected = false; // made, not yet attached (nothing has run yet: the first paint is a microtask)
+  p.answer(); await settle();
+  assert.equal(body.dataset.mood, 'sleepy', 'drawn all the same');
+  assert.ok(find(body, (e) => e.tagName === 'IMG').src, 'with its picture');
+  assert.equal(p.listeners.length, 1, 'still listening for its storage');
+  pet.isConnected = true; // Show widgets
+  tile.update();
+  assert.equal(p.listeners.length, 1, 'alive on the page');
+  pet.isConnected = false; // the page took it out
+  tile.update();
+  assert.equal(p.listeners.length, 0, 'now it is gone, and has stopped');
+  tile.stop();
+});
+
+// WID-10: pagehide tears the buddy down, and a page restored from the back/forward cache runs nothing again.
+test('a study buddy in the back/forward cache is listening and painting again once the page is restored', async () => {
+  const p = page();
+  const body = new E();
+  const tile = p.ui.probe.WIDGETS.buddy(body);
+  p.answer(); await settle();
+  assert.equal(p.listeners.length, 1);
+  p.fire('pagehide', { persisted: true });
+  assert.equal(p.listeners.length, 0, 'put away, it listens to nothing');
+  p.fire('pageshow', { persisted: false });
+  assert.equal(p.listeners.length, 0, 'an ordinary pageshow is not a restore');
+  p.fire('pageshow', { persisted: true }); p.answer(); await settle();
+  assert.equal(p.listeners.length, 1, 'restored, it listens again');
+  assert.equal(body.dataset.mood, 'sleepy');
+  p.listeners[0]({ widgetBuddy: { newValue: { happyAt: p.clock.t, patAt: 0 } } }, 'local'); await settle();
+  assert.equal(body.dataset.mood, 'happy', 'and it paints what it hears');
+  p.fire('pagehide', { persisted: true }); p.fire('pageshow', { persisted: true }); p.answer(); await settle();
+  assert.equal(p.listeners.length, 1, 'once more');
+  tile.stop();
+  assert.equal(p.listeners.length, 0);
+  assert.equal(p.win.length, 0, 'a stopped buddy leaves no page listeners');
+});
+test('a study buddy that was left for good, or stopped, is not brought back by a later restore', async () => {
+  const p = page(), body = new E(), tile = p.ui.probe.WIDGETS.buddy(body);
+  p.answer(); await settle();
+  p.fire('pagehide', { persisted: false });
+  p.fire('pageshow', { persisted: true }); p.answer(); await settle();
+  assert.equal(p.listeners.length, 0);
+  const q = page(), other = new E(), t2 = q.ui.probe.WIDGETS.buddy(other);
+  q.answer(); await settle();
+  q.fire('pagehide', { persisted: true }); t2.stop();
+  q.fire('pageshow', { persisted: true }); q.answer(); await settle();
+  assert.equal(q.listeners.length, 0, 'stopped while put away');
+  tile.stop();
+});
+
+test('a pre-bfcache buddy read cannot overwrite newer reads after restore', async () => {
+  const p = page(), local = { petCharacter: 'cat' }, pending = [];
+  p.c.GZ_PET_SPRITES = require('../lib/petsprites.js');
+  const choices = [];
+  p.c.GZ_PET_PLAYER = { mount: (_, selected) => { choices.push(selected.name); return { stop() {}, rest() {}, sleep() {}, wake() {} }; } };
+  p.c.chrome.storage.local.get = (keys, cb) => { const snapshot = structuredClone(local); pending.push(() => cb(snapshot)); };
+  const body = new E(), tile = p.ui.probe.WIDGETS.buddy(body);
+  await settle();
+  const old = pending.splice(0);
+  p.fire('pagehide', { persisted: true });
+  local.petCharacter = 'bunny';
+  p.fire('pageshow', { persisted: true }); await settle();
+  while (pending.length) pending.shift()(); await settle();
+  assert.equal(choices.at(-1), 'Bunny');
+  for (const answer of old) answer(); await settle();
+  assert.equal(choices.at(-1), 'Bunny', 'old lifecycle replies must not replace restored state');
+  tile.stop();
+});
+
+test('a buddy restore after invalidation or disabling leaves no lifecycle listeners', async () => {
+  for (const off of ['context', 'enabled']) {
+    const p = page(), body = new E(), tile = p.ui.probe.WIDGETS.buddy(body);
+    p.answer(); await settle(); p.fire('pagehide', { persisted: true });
+    if (off === 'context') p.c.chrome.runtime.id = '';
+    else p.c.GZ_CTX.settings = () => ({ enabled: false, enhance: { pet: true } });
+    p.fire('pageshow', { persisted: true }); p.answer(); await settle();
+    assert.equal(p.listeners.length, 0, off);
+    assert.equal(p.win.length, 0, 'a failed restore must remove both page listeners');
+    tile.stop();
+  }
+});
+
+// WID-9: moving an element that holds an iframe unloads it, so the player restarted whenever the board reordered tiles.
+test('seating a tile moves it with moveBefore where the browser has it; without, a tile holding a player stays and the others move around it', () => {
+  const { El } = require('./stand-in-dom.js');
+  const p = page();
+  const doc = {}; doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
+  const row = (names) => { const parent = new El('div', doc); for (const n of names) { const e = new El('section', doc); e.id = n; parent.append(e); } doc.body.append(parent); return parent; };
+  const order = (parent) => parent.children.map((c) => c.id).join(' ');
+  const at = (parent, id) => parent.children.find((c) => c.id === id);
+  // How often an element is taken out of one place and put in another (adopted) by the stand-in's own moves.
+  const counted = (el, ...parents) => { el.moved = 0; for (const parent of parents) { const adopt = parent.adopt.bind(parent); parent.adopt = (k) => { if (k === el) el.moved++; return adopt(k); }; } return el; };
+  const player = (parent, id, ...also) => { const el = at(parent, id); el.append(new El('iframe', doc)); return counted(el, parent, ...also); };
+  const seat = p.ui.probe.seatAfter;
+  // Without moveBefore, the tile with the player stays where it is while what is in its way moves past it.
+  const a = row(['a', 'music', 'b', 'c']), music = player(a, 'music');
+  seat(a, music, null);
+  assert.equal(order(a), 'music a b c');
+  assert.equal(music.moved, 0, 'the player was not moved');
+  const unset = row(['x', 'music', 'y']), unsetMusic = player(unset, 'music');
+  seat(unset, unsetMusic, undefined); // draw() uses last.get(home) for the first tile
+  assert.equal(order(unset), 'music x y');
+  assert.equal(unsetMusic.moved, 0, 'an unset first predecessor must also preserve the player');
+  const b = row(['x', 'y', 'music', 'z']), m2 = player(b, 'music');
+  seat(b, m2, at(b, 'x'));
+  assert.equal(order(b), 'x music y z');
+  assert.equal(m2.moved, 0);
+  // A tile without a player is moved the usual way, and so is one that has to change parents (its player reloads: nothing else can be done).
+  const plain = row(['a', 'b', 'c']);
+  seat(plain, at(plain, 'c'), null);
+  assert.equal(order(plain), 'c a b');
+  seat(plain, at(plain, 'c'), at(plain, 'b'));
+  assert.equal(order(plain), 'a b c');
+  const other = row(['q']);
+  counted(m2, other);
+  seat(other, m2, at(other, 'q'));
+  assert.equal(order(other), 'q music');
+  assert.equal(m2.moved, 1, 'a move between parents is a move');
+  // With moveBefore it is used, across parents too, and the tile is not taken out and put back the old way.
+  const calls = [];
+  const t1 = row(['m', 'n']), t2 = row(['k', 'l']);
+  for (const [name, parent] of [['t1', t1], ['t2', t2]]) {
+    parent.moveBefore = (node, ref) => {
+      calls.push([name, node.id, ref?.id || null]);
+      node.parentNode.children.splice(node.parentNode.children.indexOf(node), 1);
+      node.parentNode = parent;
+      parent.children.splice(ref ? parent.children.indexOf(ref) : parent.children.length, 0, node);
+    };
+  }
+  const tile = player(t1, 'm', t2);
+  seat(t2, tile, at(t2, 'k'));
+  assert.equal(order(t2), 'k m l');
+  assert.deepEqual(calls, [['t2', 'm', 'l']]);
+  seat(t2, tile, null);
+  assert.equal(order(t2), 'm k l');
+  assert.equal(tile.moved, 0, 'never adopted anew');
+  // A browser that refuses the move gets the old way, not an error.
+  t2.moveBefore = () => { throw new Error('HierarchyRequestError'); };
+  seat(t2, at(t2, 'l'), null);
+  assert.equal(order(t2), 'l m k');
+});
+
+// WID-14: the tour is opened from the hub (a dialog that closes first), and ended by Esc, End tour or Finish; the bubble
+// that held focus was removed and focus went to <body>, so a keyboard user started over from the top of the page.
+const tourPage = () => {
+  const { El } = require('./stand-in-dom.js');
+  const p = page(), doc = { visibilityState: 'visible', keys: [] };
+  doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
+  Object.assign(doc, { documentElement: doc.root, createElement: (tag) => new El(tag, doc), createTextNode: (data) => ({ data }), querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s),
+    getElementById: (id) => doc.root.all().find((e) => e.id === id) || null,
+    addEventListener: (type, f) => { if (type === 'keydown') doc.keys.push(f); }, removeEventListener: (type, f) => { doc.keys = doc.keys.filter((k) => k !== f); } });
+  doc.activeElement = doc.body;
+  p.c.document = doc; p.c.navigator = { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/150.0.0.0 Safari/537.36' };
+  const press = (box, text) => box.querySelectorAll('button').find((b) => b.textContent === text).listeners.find((l) => l.type === 'click').f({});
+  const begin = async () => {
+    await p.ui.hub(); await settle();
+    press(doc.getElementById('gz-hub'), 'Take the tour'); await settle();
+    assert.ok(doc.querySelector('.gz-tour'), 'the tour is on');
+    assert.ok(doc.activeElement.className.includes('gz-tour'), 'focus is in its bubble');
+  };
+  return { p, doc, El, press, begin, bubble: () => doc.querySelector('.gz-tour') };
+};
+
+test('the tour gives focus back to where the student opened it from when it ends, by Esc, End tour or Finish', async () => {
+  const { doc, El, press, begin, bubble } = tourPage();
+  const opener = new El('button', doc); opener.id = 'opener'; doc.body.append(opener);
+  for (const how of ['Esc', 'End tour', 'Finish']) {
+    opener.focus();
+    await begin();
+    if (how === 'Esc') doc.keys[0]({ key: 'Escape', preventDefault() {} });
+    else if (how === 'End tour') press(bubble(), 'End tour');
+    else { press(bubble(), 'Next'); press(bubble(), 'Finish'); }
+    assert.equal(bubble(), null, how);
+    assert.equal(doc.activeElement, opener, `${how}: back on the control that opened it`);
+    assert.equal(doc.keys.length, 0, 'and its key handler is gone');
+  }
+});
+
+test('when what opened the tour is gone, the tour hands focus to the Dashboard button, and to nothing missing', async () => {
+  const { p, doc, El, press, begin, bubble } = tourPage();
+  const opener = new El('button', doc); doc.body.append(opener);
+  const dashHub = new El('button', doc); doc.body.append(dashHub);
+  p.ui.probe.hubFrom(dashHub); // the Dashboard's What Glaze can do, as the board built it
+  opener.focus();
+  await begin();
+  opener.remove(); // the palette that ran the command is closed
+  press(bubble(), 'End tour');
+  assert.equal(doc.activeElement, dashHub);
+  dashHub.remove(); opener.remove();
+  await begin();
+  assert.doesNotThrow(() => press(bubble(), 'End tour'));
+  assert.equal(bubble(), null);
 });

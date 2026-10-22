@@ -8,6 +8,17 @@ html[data-gz-ctabs~="large"] { --gz-ctabs-h: 48px; }
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
   border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
 }
+/* Printed, a page is itself: no strip of the other courses' tabs, and no room kept for one. */
+@media print {
+  html[data-gz-ctabs] { --gz-ctabs-h: 0px !important; }
+  #gz-ctabs { display: none !important; }
+}
+/* A window this short (a phone on its side, a page zoomed to 400%) has no room for a row of tabs Glaze's bar holds too (its
+   words say `tabs`: the rail, or the phone's More sheet): they are in the bar alone, as at "only in the navigation". */
+@media (max-height: 420px) {
+  html[data-gz-navbar~="tabs"][data-gz-ctabs] { --gz-ctabs-h: 0px !important; }
+  html[data-gz-navbar~="tabs"] #gz-ctabs { display: none !important; }
+}
 /* Over a solid background the strip and the document buttons would blur a flat colour: a GPU layer for nothing. Same fill. */
 html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter: none; }
 #gz-ctabs[data-size="small"] { font-size: 12px; }
@@ -17,7 +28,7 @@ html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter:
 #gz-ctabs .gz-ctabs-list::-webkit-scrollbar { display: none; }
 #gz-ctabs .gz-ctab {
   position: relative; display: flex; align-items: center; gap: 7px; box-sizing: border-box; flex: 0 1 var(--gz-ctab-w, 180px); min-width: min(104px, var(--gz-ctab-w, 180px));
-  max-width: var(--gz-ctab-w, 180px); height: calc(var(--gz-ctabs-h, 40px) - 10px); padding: 0 6px 0 11px; border: 1px solid transparent;
+  max-width: var(--gz-ctab-w, 180px); height: calc(var(--gz-ctabs-h, 40px) - 10px); padding-block: 0; padding-inline: 11px 6px; border: 1px solid transparent;
   border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 55%), transparent); color: var(--gz-ink-muted);
   cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: pan-x; outline: none;
   transition: background-color var(--gz-t, 0.2s) var(--gz-ease, ease), color var(--gz-t, 0.2s) var(--gz-ease, ease);
@@ -42,7 +53,9 @@ html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter:
 #gz-ctabs[data-color="theme"] .gz-ctab[class*="course-color-"][aria-selected="true"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 42%, var(--gz-surface-paint, var(--gz-surface))); border-color: var(--gz-course); }
 #gz-ctabs:is([data-color="tint"], [data-color="theme"]) .gz-ctab[class*="course-color-"][aria-selected="true"]::after { background: var(--gz-course); }
 #gz-ctabs .gz-ctab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--gz-ink-faint); }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) { position: relative; flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--gz-ink-faint); }
+/* Drawn at 20px, pressed anywhere within 24 (WCAG 2.5.8). */
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x)::after { content: ""; position: absolute; inset: -2px; }
 #gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 #gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x):hover { background: color-mix(in srgb, var(--gz-ink) 14%, transparent); color: var(--gz-ink); }
 #gz-ctabs .gz-ctab:not(:hover, :focus-visible, [data-pin]) .gz-ctab-pin { display: none; }
@@ -54,11 +67,19 @@ html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter:
 /* Narrow: the word lies over the strip's own end for its few seconds (a click lets it go), not over the tabs' room. */
 @media (max-width: 700px) {
   #gz-ctabs .gz-ctabs-note {
-    position: absolute; z-index: 3; top: 3px; bottom: 3px; right: 6px; max-width: calc(100% - 12px); display: flex; align-items: center; padding: 0 10px;
+    position: absolute; z-index: 3; top: 3px; bottom: 3px; inset-inline-end: 6px; max-width: calc(100% - 12px); display: flex; align-items: center; padding: 0 10px;
     white-space: normal; line-height: 1.2; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
     border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); box-shadow: var(--gz-shadow); cursor: pointer;
   }
 }
+/* The same word where no strip shows (Glaze's bar holds the tabs, or a short window): over the top of the page, above a
+   shown frame. Empty, it stays in the page with no box, so a screen reader hears what comes into it. */
+#gz-ctabs-say { position: fixed; z-index: 1260; top: calc(var(--gz-navbar-top, 0px) + 10px); inset-inline: 0; width: fit-content; max-width: calc(100% - 32px); margin-inline: auto; box-sizing: border-box; font: 500 13px/1.3 var(--gz-font, inherit); color: var(--gz-ink, CanvasText); }
+#gz-ctabs-say:not(:empty) {
+  padding: 8px 14px; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
+  border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); box-shadow: var(--gz-shadow); cursor: pointer;
+}
+@media print { #gz-ctabs-say { display: none !important; } }
 /* Course tabs' live frames (features/coursetabs.js): over the whole window, above Glaze's footer; shown only while a tab's
    frame is picked. Floating widgets stay over them. */
 #gz-ctabs-frames { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1250; visibility: hidden; background: var(--gz-ground, Canvas); }

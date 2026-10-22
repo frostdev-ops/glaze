@@ -5,7 +5,7 @@
 // a phone photo, and the timetable behind a password (macOS's PDFKit, through swift). The class schedule as it shows on
 // the local Canvas comes from scripts/import-check.js. Every name, school and grade here was made up for these tests.
 //   NODE_PATH=/path/to/node_modules node scripts/import-fixtures.js   (needs playwright)
-//   CHROME=/path/to/chrome runs that browser instead of Chrome for Testing.
+//   CHROME=/path/to/chrome runs that browser instead of Playwright's Chromium.
 const { chromium } = require('playwright');
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 
 const out = path.join(__dirname, '../test/fixtures/import');
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const page = (body, css = '') => `<!doctype html><html lang="en"><meta charset="utf-8"><style>
 body { margin: 0; padding: 36px 44px; font: 11pt/1.4 Helvetica, Arial, sans-serif; color: #111; background: #fff; }
 h1 { font-size: 17pt; margin: 0 0 6px; } h2 { font-size: 12.5pt; margin: 18px 0 6px; } p { margin: 4px 0; }
@@ -74,7 +74,7 @@ ${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
 
 (async () => {
   fs.mkdirSync(out, { recursive: true });
-  const browser = await chromium.launch({ executablePath: fs.existsSync(CHROME) ? CHROME : undefined, headless: true });
+  const browser = await chromium.launch({ ...chromeLaunch, headless: true });
   try {
     const tab = await browser.newPage({ viewport: { width: 860, height: 600 }, deviceScaleFactor: 1 });
     const pdf = async (name, html) => {

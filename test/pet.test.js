@@ -1,3 +1,4 @@
+process.env.TZ = 'UTC'; // a few calls leave the zone to the machine, and the fixtures' days are UTC days
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const P = require('../lib/pet.js'), T = require('../lib/todo.js');

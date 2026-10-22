@@ -12,7 +12,7 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const ext = process.env.EXT || path.resolve(__dirname, '..');
 const X = require(path.join(ext, 'lib/lookparts.js'));
-const chromePath = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() + ms; let v; while (Date.now() < end) { try { v = await fn(); if (ok(v)) return v; } catch { /* the frame is reloading */ } await new Promise((r) => setTimeout(r, 50)); } throw new Error('Timed out waiting for editor or preview state'); };
 
 (async () => {
@@ -22,7 +22,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
   const check = (name, pass, detail = '') => { if (!pass) fails++; console.log(`${pass ? 'ok  ' : 'FAIL'} ${name}${pass ? '' : ` ${detail}`}`); };
   try {
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(scratch, { executablePath: chromePath, headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
+    context = await chromium.launchPersistentContext(scratch, { ...chromeLaunch, headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-webgl', '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await context.route('**/*', (route) => { const url = route.request().url(); if (url.startsWith('chrome-extension:') || url.startsWith('data:')) return route.continue(); external.push(url); return route.abort(); });
     const sw = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');

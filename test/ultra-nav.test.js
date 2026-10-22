@@ -144,14 +144,17 @@ test('Canvas picture writes count protected nav logos without collecting them as
 });
 
 test('the wrong-LMS-host fallback injects the nav schema before Ultra once with the same target', async () => {
-  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
-  const start = source.indexOf('const SAFARI = new URL'), end = source.indexOf('// Canvas page reads', start);
-  let listener, scripts = [];
-  const ctx = vm.createContext({ URL, chrome: { runtime: { id: 'glaze', getURL: () => 'chrome-extension://glaze/', onMessage: { addListener: (f) => { listener ||= f; } } }, scripting: { executeScript: async (v) => { scripts.push(v); return [{ result: {} }]; } } } });
-  // Stop after the load handler; the neighboring reader handler belongs to a separate feature.
-  const loadEnd = source.indexOf('return true; // the reply comes once the files have run', start);
-  vm.runInContext(source.slice(start, source.indexOf('\n});', loadEnd) + 4), ctx);
-  const request = (files, sender = { id: 'glaze', tab: { id: 8 }, frameId: 0, documentId: 'doc-1' }) => new Promise((r) => listener({ type: 'glaze:load', files }, sender, r));
+  const vm = require('node:vm');
+  const listeners = [], scripts = [], none = { addListener() {} };
+  const ctx = vm.createContext({ URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto,
+    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), ctx); },
+    chrome: { runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
+      storage: { local: { get: async () => ({ canvas: ['https://canvas.school.edu/*'] }) }, sync: { get: async () => ({}) }, onChanged: none },
+      scripting: { executeScript: async (v) => { scripts.push(v); return [{ result: {} }]; } } } });
+  vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), ctx);
+  // A page of a school's own Canvas the student approved, which now serves Ultra (its list lacks Ultra's part).
+  const page = { id: 'glaze', tab: { id: 8 }, frameId: 0, documentId: 'doc-1', url: 'https://canvas.school.edu/ultra/course' };
+  const request = (files, sender = page) => new Promise((r) => { for (const f of listeners) f({ type: 'glaze:load', files }, sender, r); });
   assert.equal((await request(['content-ultra.js', 'lib/nav.js', 'content-ultra.js'])).ok, true);
   assert.deepEqual(JSON.parse(JSON.stringify(scripts[0].files)), ['lib/nav.js', 'content-ultra.js']);
   assert.deepEqual(JSON.parse(JSON.stringify(scripts[0].target)), { tabId: 8, documentIds: ['doc-1'] });

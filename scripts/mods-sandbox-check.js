@@ -7,7 +7,7 @@ const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 const assert = require('node:assert/strict');
 const ext = path.resolve(process.env.EXT || path.join(__dirname, '..'));
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chrome = require('./check-env.js').chromePath() || chromium.executablePath();
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
   const end = Date.now() + ms;

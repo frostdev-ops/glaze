@@ -19,13 +19,21 @@ const FORMAT = {
   themepx: (v) => (v < 0 ? t('Theme') : `${v}px`),
 };
 
-let hintTimer = 0;
-const hint = (msg, err = false) => {
+let hintTimer = 0, undoHeld = false;
+// `undo`: what an Undo beside the message does. It stays longer, since a change that replaced something is worth a second look,
+// and the "Saved" that follows its own change leaves it be (undoHeld) until the next edit or the end of its time.
+const hint = (msg, err = false, undo = null) => {
   const h = $('#hint');
   h.textContent = msg;
   h.classList.toggle('err', err);
+  undoHeld = !!undo;
+  if (undo) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Undo') });
+    b.addEventListener('click', () => { hint(''); undo(); });
+    h.append(' ', b);
+  }
   clearTimeout(hintTimer);
-  if (msg && !err) hintTimer = setTimeout(() => { h.textContent = ''; }, 2500);
+  if (msg && !err) hintTimer = setTimeout(() => { h.textContent = ''; undoHeld = false; }, undo ? 10000 : 2500);
 };
 
 // ---- search: each child of a section (or of a .group) is a setting. It matches on its own text,
@@ -37,7 +45,8 @@ const editor = GZ_EDITOR.mount({ onRoute: (route) => followSection(route) });
 
 // Opened as a page of the school's site (features/settingspage.js): the same Settings, with Close and a way to its own tab.
 // The page around can't read this frame, but it could cover it and borrow a click, so what holds keys and grants (sharing,
-// mods, backups) asks for a tab of its own. The worker refuses those operations from a frame anyway.
+// mods, backups) asks for a tab of its own. The worker refuses those operations from a frame anyway; it trusts this frame, once
+// it has claimed its ticket, only for the writes that hold no keys or grants (nicknames, Look media, the pet library).
 const embedded = window.top !== window;
 if (embedded) {
   document.documentElement.setAttribute('data-embedded', '');
@@ -178,7 +187,7 @@ GZ_UI.load().then((s) => {
     const shown = previewSite === 'ultra' && course ? { ...settings, courses: { ...settings.courses, tinted: GZ_COURSE_TINTED(settings.courses, id, courses) ? [id] : [] } } : settings;
     frame.contentWindow?.postMessage({ gzPreviewContext: { site: previewSite, page: previewPage, viewport: $('#preview-size').value } }, location.origin);
     frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) }, gzPreviewParts: settings === base ? base.parts ?? null : null }, location.origin);
-    renderNav(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
+    renderNav(); renderContrast(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
   };
   const contextPreview = (site, page) => {
     if (!supportedPages[site].includes(page)) page = 'courses';
@@ -226,11 +235,12 @@ GZ_UI.load().then((s) => {
     const navPatch = pendingNav.size ? Object.fromEntries([...pendingNav].map((k) => [k, s.nav[k]])) : undefined;
     const navbarPatch = pendingNavbar.size ? Object.fromEntries([...pendingNavbar].map((k) => [k, s.navbar[k]])) : undefined;
     saving++;
-    GZ_UI.save(s, [...pending], (err) => { saving--; hint(err || t('Saved'), !!err); if (!err) syncSettings(); }, navPatch, partKeys?.length ? partKeys : undefined, navbarPatch);
+    GZ_UI.save(s, [...pending], (err) => { saving--; if (err || !undoHeld) hint(err || t('Saved'), !!err); if (!err) syncSettings(); }, navPatch, partKeys?.length ? partKeys : undefined, navbarPatch);
     pending.clear(); pendingNav.clear(); pendingNavbar.clear(); partKeys = [];
   };
   const save = (keys, soon = false, parts) => {
     settingsRead++;
+    undoHeld = false;
     if (keys.includes('parts')) partKeys = parts && partKeys ? [...new Set([...partKeys, ...parts])] : null;
     for (const k of keys) pending.add(k);
     clearTimeout(timer);
@@ -340,17 +350,36 @@ GZ_UI.load().then((s) => {
     }));
   };
 
-  const renderContrast = () => {
-    $('#contrast').replaceChildren(...GZ_CONTRAST(s.colors).map((r) => {
-      const li = document.createElement('li');
-      li.className = r.pass ? 'pass' : 'fail';
-      li.title = t('Needs {min}:1', { min: r.min });
-      const b = document.createElement('b');
-      b.textContent = `${GZ_I18N.num(+r.ratio.toFixed(1), GZ_I18N.ui())}:1`;
-      li.append(t(r.label), b);
-      return li;
-    }));
-  };
+  // The checks for the palette the pages are drawn with: the Look on offer while one is previewed, else the one worn (an auto
+  // palette, by the system's mode), under its surface color and tint and with its page tweaks' colors (ui.js contrast). Drawn
+  // with the preview, which also redraws when an offer comes or goes, and only when a check changed, so a search's marks on the
+  // list stay. A Look on offer that fails a check says so in its offer.
+  const renderContrast = (() => {
+    let drawn = '';
+    return () => {
+      const v = offer || s, dark = matchMedia('(prefers-color-scheme: dark)').matches;
+      const courseColors = v.look.surfaceTint && v.look.surfaceTintSource === 'course' ? [...new Set([...Object.values(GZ_COURSE_COLORS(courses, v.courses.colors)).map((c) => c.color), ...Object.values(courses).map((c) => c?.color)])].filter(Boolean) : [];
+      const rows = GZ_UI.contrast(v, dark, courseColors, v.parts?.x?.rules);
+      const sig = JSON.stringify([!!offer, rows.map((r) => [r.label, r.part, r.ratio])]);
+      if (sig === drawn) return;
+      drawn = sig;
+      const site = { ultra: 'Blackboard', canvas: 'Canvas', moodle: 'Moodle' };
+      const said = (r) => t(r.label, r.part && { part: `${site[r.part.split('.')[0]]} · ${t(GZ_PARTS.get(r.part)?.label ?? r.part)}` });
+      $('#contrast').replaceChildren(...rows.map((r) => {
+        const li = document.createElement('li');
+        li.className = r.pass ? 'pass' : 'fail';
+        li.title = t('Needs {min}:1', { min: r.min });
+        const b = document.createElement('b');
+        b.textContent = `${GZ_I18N.num(+r.ratio.toFixed(1), GZ_I18N.ui())}:1`;
+        li.append(said(r), b);
+        return li;
+      }));
+      const failing = offer ? rows.filter((r) => !r.pass) : [];
+      const warn = $('#share-contrast');
+      warn.hidden = !failing.length;
+      warn.textContent = failing.length ? t('Text in this Look may be hard to read: {pairs}.', { pairs: new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(failing.map((r) => `${said(r)} (${GZ_I18N.num(Math.floor(r.ratio * 10) / 10, GZ_I18N.ui())}:1)`)) }) : '';
+    };
+  })();
 
   // ---- everything that follows the state, cheap enough to redo on every edit ----
   const outputs = () => {
@@ -359,9 +388,14 @@ GZ_UI.load().then((s) => {
   const refresh = () => {
     GZ_UI.paint(s);
     preview();
-    GZ_UI.looks($('#looks'), s, (L) => { save(GZ_UI.pickLook(s, L)); fill(); });
+    // A whole Look brings its own extras: the Look being left is in History first, and Undo wears it again.
+    GZ_UI.looks($('#looks'), s, (L) => {
+      const undo = leaving();
+      save(GZ_UI.pickLook(s, L));
+      fill();
+      if (undo) hint(t('{name} replaced this Look’s extras.', { name: L.name }), false, undo);
+    });
     GZ_UI.swatches($('#presets'), s, (name, colors) => { save(GZ_UI.pickPreset(s, name, colors)); fill(); });
-    renderContrast();
     renderMine();
     renderHistory();
     renderExtras();
@@ -474,7 +508,8 @@ GZ_UI.load().then((s) => {
     if (!e.target.open || e.target.dataset.loaded) return;
     e.target.dataset.loaded = '1';
     previewLink(GZ_FONTS.LIST.filter((f) => f.google || f.preview).map((f) => f.preview || f.google));
-    // The small file-only faces load whole; the Nerd Fonts preview through their base family.
+    // The small file-only faces load whole (OpenDyslexic, from jsDelivr: PRIVACY.md says so); the Nerd Fonts preview
+    // through their base family.
     for (const f of GZ_FONTS.LIST) if (f.files && !f.size) GZ_FONTS.load(f.id);
   });
   for (const r of $$('input[name="font-slot"]')) r.addEventListener('change', () => { slot = r.value; renderFonts(); });
@@ -767,11 +802,19 @@ GZ_UI.load().then((s) => {
   });
 
   // ---- generic controls: data-key is the settings path; radios use it as their name ----
+  // "Use a custom surface color" paints every surface and the ground that one color. Its own default is Frost's navy whatever the
+  // palette is, so a first tick starts from the surface being worn instead, and changes nothing until a color is picked. A color
+  // the student chose before stays.
+  const seedSurface = () => {
+    if (s.look.surfaceColor !== GZ_SPEC.look.surfaceColor[0]) return;
+    s.look.surfaceColor = activeColors()['--gz-surface'];
+    for (const input of $$('[data-key="look.surfaceColor"]')) input.value = s.look.surfaceColor;
+  };
   for (const el of $$('[data-key]')) {
     const key = el.dataset.key;
     if (key === 'nav.size') el.addEventListener('change', () => { s.nav.detailed = false; pendingNav.add('detailed'); });
     if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
-    if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
+    if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'look.surfaceCustom' && el.checked) seedSurface(); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { if (key.startsWith('nav.') && Object.hasOwn(N.dimensions(s.nav), key.slice(4))) { Object.assign(s.nav, N.dimensions(s.nav), { detailed: true }); for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k); } set(key, +el.value); refresh(); save([group(key)], true); });
       el.addEventListener('change', () => save([group(key)]));
@@ -792,6 +835,9 @@ GZ_UI.load().then((s) => {
       let url = null;
       try { url = new URL(raw); } catch { /* not a URL */ }
       if (url?.protocol !== 'https:') return hint(t('Use an https:// link to an image.'), true);
+      // One the settings won't keep (too long, or a quote or backslash the page's url("…") can't hold) is refused here,
+      // not dropped silently when it is saved.
+      if (GZ_SANITIZE({ bg: { image: url.href } }).bg.image !== url.href) return hint(t('That link can’t be saved.'), true);
       s.bg.image = url.href;
       s.bg.kind = 'image';
     } else s.bg.image = '';
@@ -858,7 +904,8 @@ GZ_UI.load().then((s) => {
           flush();
           try {
             const result = await chrome.runtime.sendMessage({ type: 'glaze:courseName', id, name: nickname.value });
-            if (!result?.ok) return hint(t('Too much to sync. Shorten a nickname or clear one.'), true);
+            // The worker refuses a frame it doesn't know ('sender'): that is no size problem, and Settings in a tab of its own saves.
+            if (!result?.ok) return hint(result?.error === 'sender' ? t('Open Settings in its own tab.') : t('Too much to sync. Shorten a nickname or clear one.'), true);
             s.courses = result.courses; renderCourses(); refresh(); hint(t('Saved'));
           } catch { hint(t('Not saved. Try again in a moment.'), true); }
         });
@@ -1049,6 +1096,7 @@ GZ_UI.load().then((s) => {
     if (area === 'local' && (changes.gradescope || changes.seenCourses)) gsLoad();
     if (area === 'sync' && changes.cards) renderCardSet(changes.cards.newValue);
     if (area === 'sync' || (area === 'local' && changes.freshDefaults)) syncSettings();
+    if (area === 'local' && changes[GZ_MEDIA.INDEX]) GZ_EDITOR_XBG.kept(); // the files kept for backgrounds (lib/media.js)
   });
 
   // ---- share: a theme code is the palette, look and background, checked by lib/share.js ----
@@ -1067,17 +1115,37 @@ GZ_UI.load().then((s) => {
   $('#share-copy').addEventListener('click', async () => {
     const { cards } = await new Promise((res) => chrome.storage.sync.get('cards', (r) => res(r || {})));
     let code;
-    try { code = await GZ_SHARE.encode(s, cards, s.parts); } catch (e) { return hint(t(e.why || e.message, e.vars), true); }
+    // A pasted code can't bring a file kept on this computer (only a share session can), so a Look that needs one is refused here.
+    try { code = await GZ_SHARE.encode(s, cards, s.parts, { files: false }); } catch (e) { return hint(t(e.why || e.message, e.vars), true); }
     try { await navigator.clipboard.writeText(code); hint(t('Theme code copied.')); } catch { $('#share-code').value = code; $('#share-code').select(); hint(t('Copy the code from the box.')); }
   });
   // from: the gallery Look the code came with ({ name, author }), or null for a pasted code.
   let from = null;
-  const endOffer = () => { offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
+  // The background file the worker kept for a gallery or share offer, pending (lib/media.js) until the offer is used: any other
+  // end of the offer, or leaving the editor, lets it go. used: the Look (or a favorite) now names it, so it stays.
+  let offerFile = '', offerGeneration = 0;
+  const letGo = (used = false) => {
+    if (offerFile) chrome.runtime.sendMessage({ type: 'glaze:media', op: used ? 'keep' : 'drop', h: offerFile, ...(!used && { pending: true }) }, () => void chrome.runtime.lastError);
+    offerFile = '';
+  };
+  addEventListener('pagehide', () => { offerGeneration++; letGo(); });
+  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
   const tryCode = async (gallery = null) => {
     const code = $('#share-code').value.trim();
     if (!code) return endOffer();
+    const generation = ++offerGeneration;
+    if (offerFile && offerFile !== gallery?.media?.h) letGo();
+    if (gallery?.media?.pending) offerFile = gallery.media.h;
     let got;
-    try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
+    try { got = await GZ_SHARE.decode(code); } catch (e) { if (generation !== offerGeneration) return; endOffer(); return hint(t(e.why || e.message, e.vars), true); }
+    if (generation !== offerGeneration) return; // Cancel, another code or leaving the editor won while decoding.
+    const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
+    // A Look part's sentence (lib/lookparts.js): a list in it is Glaze's own names, each translated, then joined.
+    const say = (n) => t(n.why, n.vars && Object.fromEntries(Object.entries(n.vars).map(([k, v]) => [k, Array.isArray(v) ? and(v.map((w) => t(w))) : v])));
+    // Every code is someone else's Look here (pasted, the gallery's, a Look share's): one that takes away signing out or
+    // the account, or adds a link without https or named as Glaze's own, is refused whole, with its reasons.
+    const refused = GZ_XPARTS.outside(got.parts);
+    if (refused.length) { endOffer(); return hint([t("Glaze won't use this Look."), ...refused.map(say)].join(' '), true); }
     from = gallery;
     offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav), navbar: { ...s.navbar, ...got.navbar || {} }, sidebar: { ...s.sidebar, ...got.sidebar || {} } });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
@@ -1103,7 +1171,6 @@ GZ_UI.load().then((s) => {
       // Style and scene values are the editor's own labels, lowercased: 'radial' is 'Radial'.
       const word = (v) => t(v[0].toUpperCase() + v.slice(1));
       const kind = { solid: t('a solid background'), gradient: t('a {style|lower} gradient background', { style: word(offer.bg.style) }), aurora: t('an aurora background'), scene: t('the {scene|lower} animated background', { scene: word(offer.bg.scene) }), image: t('an image background') }[offer.bg.kind] || t(GZ_XPARTS.KIND_WORD[offer.bg.kind]);
-      const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
       what.append(t("{palette}, {fonts}, and {background}. It's showing in the preview.", { palette, fonts: and(fonts.map(fontName)), background: kind }));
       const notes = [];
       if (web.length) notes.push(t('Downloads {fonts} (web fonts).', { n: web.length, fonts: and(web) }));
@@ -1113,7 +1180,8 @@ GZ_UI.load().then((s) => {
       if (got.cards.length) notes.push(t('Brings {n} course card styles for your Canvas Dashboard.', { n: got.cards.length }));
       if (cardHosts.length) notes.push(t('Its card pictures load from {hosts}.', { hosts: and(cardHosts) }));
       if (offer.nav.k === 'image' && offer.nav.u) notes.push(t('Its sidebar picture loads from {host}.', { host: new URL(offer.nav.u).hostname }));
-      for (const n of GZ_XPARTS.describe(got.parts)) notes.push(t(n.why, n.vars));
+      for (const n of GZ_XPARTS.describe(got.parts)) notes.push(say(n));
+      if (from?.media?.error === 'full') notes.push(t("There isn't room to keep this Look's background file, so the gradient shows instead. Remove a kept file under Background, then open the Look again."));
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;
@@ -1124,10 +1192,14 @@ GZ_UI.load().then((s) => {
   $('#share-code').addEventListener('paste', () => setTimeout(tryCode));
   $('#share-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryCode(); });
   $('#share-cancel').addEventListener('click', () => { $('#share-code').value = ''; endOffer(); });
+  // A code brings its own extras or none: the Look being left goes into History before the one below replaces it.
+  $('#share-apply').addEventListener('click', () => leaving());
   $('#share-apply').addEventListener('click', () => {
     for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
     s.card = offer.card;
     s.nav = offer.nav;
+    // How Glaze's own navigation bar looks and sits (lib/share.js NAVBAR); whether it is on stays the student's.
+    s.navbar = { ...offer.navbar, on: s.navbar.on };
     // The sidebar's appearance a Look brings (lib/share.js): its style, surface and corners only.
     const sidebarLook = ['style', 'surface', 'radius'].some((k) => s.sidebar[k] !== offer.sidebar[k]);
     if (sidebarLook) for (const k of ['style', 'surface', 'radius']) s.sidebar[k] = offer.sidebar[k];
@@ -1136,9 +1208,9 @@ GZ_UI.load().then((s) => {
     const set = offer.cardSet;
     if (set.length) cardsOp({ set });
     $('#share-code').value = '';
-    endOffer();
+    endOffer(true); // its background file, if it brought one, is kept now
     fill();
-    save([...GZ_HISTORY.KEYS, 'card', 'nav', ...sidebarLook ? ['sidebar'] : []]);
+    save([...GZ_HISTORY.KEYS, 'card', 'nav', 'navbar', ...sidebarLook ? ['sidebar'] : []]);
     hint(t('Theme applied.'));
   });
 
@@ -1186,42 +1258,73 @@ GZ_UI.load().then((s) => {
     }));
     $('#favorites').replaceChildren(...rows.filter(Boolean));
   };
+  // A change that replaces this Look's extras (a whole Look, a code, an entry of History, a reset): the Look being left goes into
+  // History now, since the background records a theme only after 4 s of rest and what was typed in the last moments would be
+  // lost. The worker merges the snapshot on its history/clear queue, even before the editor's first history read finishes.
+  // → how to wear it again, or null when it has no extras to lose.
+  const leaving = () => {
+    if (!s.parts) return null;
+    const was = structuredClone({ colors: s.colors, preset: s.preset, auto: s.auto, look: s.look, bg: s.bg, parts: s.parts, card: s.card });
+    try { chrome.runtime.sendMessage({ type: 'glaze:history-checkpoint', theme: was }, () => void chrome.runtime.lastError); } catch { /* Undo still holds the snapshot if the worker is unavailable. */ }
+    return () => { Object.assign(s, structuredClone(was)); fill(); save([...GZ_HISTORY.KEYS, 'card']); };
+  };
   const wearEntry = (e) => {
     endOffer();
+    leaving();
     Object.assign(s, GZ_HISTORY.wear(s, e));
     fill();
     save(GZ_HISTORY.KEYS);
     hint(t('Theme applied.'));
   };
-  const renderHistory = () => {
-    const back = GZ_HISTORY.previous(history, s);
-    $('#history-back').disabled = !back;
-    $('#history-back').title = back ? t('Back to {name}', { name: GZ_UI.themeName(GZ_HISTORY.theme(back.theme)) }) : '';
-    $('#history-clear').hidden = !history.length;
-    $('#history').replaceChildren(...history.map((e) => {
-      const th = GZ_HISTORY.theme(e.theme);
-      const name = GZ_UI.themeName(th);
-      if (GZ_HISTORY.wearing(s, e)) return row(th.colors, name, t('Wearing now'));
-      return row(th.colors, name, typeof e.at === 'number' ? when(e.at) : '', button(t('Wear'), t('Wear {name}', { name }), () => wearEntry(e)));
-    }));
-  };
+  // Redrawn only when what it shows changes: History itself, or which entries are worn now and which is the Previous Look (a
+  // slider moves neither, so a drag cleans one theme per tick and builds no rows). Each entry's theme and name are made once,
+  // when History comes in (lib/history.js).
+  const renderHistory = (() => {
+    let drawn = '', from = null, entries = [], shown = '';
+    return () => {
+      const worn = JSON.stringify([s.colors, s.preset, s.auto, s.look, s.bg, s.parts, s.presets]);
+      if (worn === drawn && history === from) return;
+      drawn = worn;
+      if (history !== from) {
+        from = history;
+        shown = '';
+        entries = history.map((e) => { const theme = GZ_HISTORY.theme(e.theme); return { ...e, theme, name: GZ_UI.themeName(theme) }; });
+      }
+      const now = GZ_HISTORY.theme(s), wearing = entries.map((e) => GZ_HISTORY.wearing(now, e));
+      const back = GZ_HISTORY.previous(entries, now);
+      const view = `${wearing.map(Number).join('')} ${entries.indexOf(back)}`;
+      if (view === shown) return;
+      shown = view;
+      $('#history-back').disabled = !back;
+      $('#history-back').title = back ? t('Back to {name}', { name: back.name }) : '';
+      $('#history-clear').hidden = !entries.length;
+      $('#history').replaceChildren(...entries.map((e, at) => {
+        if (wearing[at]) return row(e.theme.colors, e.name, t('Wearing now'));
+        return row(e.theme.colors, e.name, typeof e.at === 'number' ? when(e.at) : '', button(t('Wear'), t('Wear {name}', { name: e.name }), () => wearEntry(e)));
+      }));
+    };
+  })();
   $('#history-back').addEventListener('click', () => { const e = GZ_HISTORY.previous(history, s); if (e) wearEntry(e); });
   // Through the background, which also drops a recording still waiting to be written.
   $('#history-clear').addEventListener('click', () => chrome.runtime.sendMessage('clear-history', () => void chrome.runtime.lastError));
   $('#share-fav').addEventListener('click', () => {
     const f = { code: offer.code, name: from?.name || offer.preset || t('Custom theme'), author: from?.author || '', at: Date.now() };
+    letGo(true); // a favorite names its background file: it stays
     local.set({ lookFavorites: GZ_HISTORY.favor(favorites, f) }, () => {
       const err = chrome.runtime.lastError;
       hint(err ? t('Not saved: {error}', { error: err.message }) : t('Saved to your favorites.'), !!err);
     });
   });
   // A Look picked on the gallery (lib/gallery.js, then the background): previewed here; the student decides.
+  // The editor the worker opens takes it (openOptionsPage: a tab of its own). Settings framed in a school's page, open or
+  // not, would otherwise take it first, and that tab would show nothing.
   const takeOffer = async () => {
+    if (embedded) return;
     const { galleryOffer: g } = await local.get('galleryOffer');
     if (!g?.code) return;
     await local.remove('galleryOffer');
     $('#share-code').value = g.code;
-    await tryCode({ name: g.name || t('Custom theme'), author: g.author || '' });
+    await tryCode({ name: g.name || t('Custom theme'), author: g.author || '', media: g.media });
     editor.show('look/palette', { scroll: true });
     if (offer) $('#share-apply').focus({ preventScroll: true });
   };
@@ -1327,7 +1430,11 @@ GZ_UI.load().then((s) => {
     next.nav.i = ''; next.nav.li = ''; if (next.nav.brand === 'custom') next.nav.brand = 'glaze'; // A backup never names a picture on another device.
     if (next.navbar.brand === 'custom') next.navbar.brand = 'glaze';
     const mediaSrc = raw.parts?.x?.bg?.media?.src;
-    const mediaMissing = next.bg.kind === 'media' && typeof mediaSrc === 'string' && mediaSrc.startsWith('file:');
+    // A kept file isn't in a backup: unless this computer still has it (a backup put back where it was made), as the worker
+    // that keeps it lists it (lib/media.js).
+    const kept = typeof mediaSrc === 'string' && mediaSrc.startsWith('file:') ? mediaSrc.slice(5) : '';
+    const mediaMissing = next.bg.kind === 'media' && !!kept
+      && !(await chrome.runtime.sendMessage({ type: 'glaze:media', op: 'list' }).catch(() => null))?.files?.some((f) => f.h === kept);
     if (mediaMissing) next.bg.kind = 'gradient';
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
@@ -1355,6 +1462,11 @@ GZ_UI.load().then((s) => {
     }
     hint(t(mediaMissing ? 'Imported {file}. The background file was not included in this backup; showing the gradient.' : 'Imported {file}.', { file: file.name }));
   });
+  // The defaults this device started with: a fresh install has Notes and the pet habitat on (GZ_SANITIZE's fresh), so a
+  // reset gives those back rather than turning them off.
+  let freshHere = false;
+  chrome.storage.local.get('freshDefaults', (r) => { freshHere = r?.freshDefaults?.fresh === true; });
+  const defaultsHere = () => ({ ...GZ_SANITIZE(undefined, freshHere), card: GZ_CARDS.settings() });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
   let armed = 0;
   $('#reset-all').addEventListener('click', (e) => {
@@ -1367,33 +1479,86 @@ GZ_UI.load().then((s) => {
     clearTimeout(armed);
     armed = 0;
     b.textContent = t('Reset everything');
-    const defaults = { ...GZ_SANITIZE(), card: GZ_CARDS.settings() };
+    leaving();
+    const defaults = defaultsHere();
     const touched = GZ_EDITOR.reset(s, Object.keys(defaults), defaults);
     pendingNav.clear();
-    // Keep image IDs, per-course styles/bookmarks, local data and share keys. No destructive worker reset. The Look's
-    // parts go: they are part of the Look being reset.
+    // Keep image IDs, per-course styles/bookmarks, local data and share keys: the worker resets only the files kept for Looks'
+    // backgrounds (lib/media.js). The Look's parts go too: they are part of the Look being reset.
     s.parts = null;
     GZ_EDITOR_X.render(true); // Discard unsaved shader text even when there were no saved parts.
     save([...touched, 'parts']);
     fill();
-    hint(t('Preferences reset. Your presets and local data are kept.'));
-
+    hint(t('Preferences reset and files kept for backgrounds removed. Your presets and other local data are kept.'));
+    chrome.runtime.sendMessage({ type: 'glaze:media', op: 'reset' }, (r) => { if (chrome.runtime.lastError || !r?.ok) hint(t("Couldn't remove the files kept for backgrounds. Try again in a moment."), true); });
+    // And the sites said yes to (Sites, below): Glaze asks again on each.
+    chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'reset' }).catch(() => {});
   });
+
+  // ---- Sites: the sites the student said yes to (lib/background.js approved), each with Remove, which only the worker does.
+  // Canvas's and Blackboard's own hosts are Glaze's anyway, so they aren't listed.
+  const KINDS = { canvas: 'Canvas', moodle: 'Moodle', ultra: 'Blackboard Ultra' };
+  const siteSaid = (text) => { $('#site-status').textContent = text; };
+  const renderSites = (r) => {
+    const sites = new Map();
+    for (const kind of Object.keys(KINDS)) for (const x of Array.isArray(r?.[kind]) ? r[kind] : []) {
+      let u;
+      try { u = new URL(String(x).replace(/\/\*$/, '')); } catch { continue; }
+      const automatic = !u.port && (kind === 'canvas' ? /(^|\.)instructure\.com$/.test(u.hostname) : kind === 'ultra' && /\.blackboard\.com$/.test(u.hostname));
+      if (u.protocol !== 'https:' || automatic) continue;
+      sites.set(u.origin, [...new Set([...sites.get(u.origin) || [], t(KINDS[kind])])]);
+    }
+    $('#site-list').replaceChildren(...[...sites].sort(([a], [b]) => a.localeCompare(b)).map(([origin, kinds]) => {
+      const host = new URL(origin).host;
+      const name = Object.assign(document.createElement('span'), { className: 'name' });
+      name.append(Object.assign(document.createElement('span'), { textContent: host, translate: false }), Object.assign(document.createElement('small'), { textContent: kinds.join(' · ') }));
+      const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Remove') });
+      remove.setAttribute('aria-label', t('Remove {name}', { name: host }));
+      remove.addEventListener('click', async (e) => {
+        if (!e.isTrusted || remove.disabled) return;
+        remove.disabled = true;
+        const done = await chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'remove', origin }).catch(() => null);
+        if (!done?.ok) { remove.disabled = false; siteSaid(t('Not saved. Try again in a moment.')); return; }
+        siteSaid(t('Removed {site}. Glaze no longer runs there.', { site: host }));
+        $('#heading-backup-sites').focus({ preventScroll: true });
+      });
+      const li = document.createElement('li');
+      li.append(name, remove);
+      return li;
+    }));
+    $('#site-empty').hidden = sites.size > 0;
+  };
+  const readSites = () => chrome.storage.local.get(Object.keys(KINDS), renderSites);
+  readSites();
+  chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && Object.keys(KINDS).some((k) => k in c)) readSites(); });
 
   for (const button of $$('[data-reset-setting]')) {
     const control = $$('[data-key]').find((el) => el.dataset.key === button.dataset.resetSetting);
     button.setAttribute('aria-label', t('Reset {name}', { name: control?.closest('label')?.querySelector('span')?.textContent || button.dataset.resetSetting }));
     button.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
-    const path = button.dataset.resetSetting, touched = GZ_EDITOR.reset(s, [path], { ...GZ_SANITIZE(), card: GZ_CARDS.settings() });
+    const path = button.dataset.resetSetting, touched = GZ_EDITOR.reset(s, [path], defaultsHere());
     fill(); save(touched);
     });
   }
+  // A Look's own navigation layout and page tweaks are parts of the Look (lib/editor-xparts.js), not settings: the section's
+  // Reset takes that part out of the Look, as its own button does, and can be undone.
+  const LOOK_PART = { 'look/nav-layout': 'nav', 'look/rules': 'rules' };
   for (const button of $$('[data-reset-section]')) button.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
     if (button.dataset.resetSection === 'sharing/relay') return resetRelay();
+    const part = LOOK_PART[button.dataset.resetSection];
+    if (part) {
+      const was = s.parts;
+      if (!was?.x?.[part]) return hint(t('Section reset. Your local data is kept.'));
+      leaving();
+      s.parts = GZ_XEDIT.put(was, part, null);
+      refresh();
+      save(['parts'], false, [part]);
+      return hint(t('Section reset. Your local data is kept.'), false, () => { s.parts = was; refresh(); save(['parts'], false, [part]); });
+    }
     const section = button.closest('[data-editor-section]'), paths = GZ_EDITOR.keys(section);
-    const touched = GZ_EDITOR.reset(s, paths, { ...GZ_SANITIZE(), card: GZ_CARDS.settings() });
+    const touched = GZ_EDITOR.reset(s, paths, defaultsHere());
     if (touched.includes('nav')) for (const key of paths.filter((p) => p.startsWith('nav.') && !['nav.i', 'nav.li'].includes(p))) pendingNav.add(key.slice(4));
     fill(); save(touched); hint(t('Section reset. Your local data is kept.'));
   });

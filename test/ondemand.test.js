@@ -87,12 +87,12 @@ const dom = () => {
 };
 
 // features/keys.js on Canvas, as content.js hands it keys, with the stand-in DOM.
-const keys = (words = { de: false }, site = 'canvas') => {
+const keys = (words = { de: false }, site = 'canvas', typing = () => false) => {
   const document = dom();
   const wordsIn = new Set();
   const ctx = vm.createContext({ solo: false, tabFrame: '',
     document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, Date, GZ_PAGE: require('../lib/page.js'),
-    GZ_CTX: { site, settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing: () => false, keyOn: () => true, wordsIn,
+    GZ_CTX: { site, settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing, keyOn: () => true, wordsIn,
       t: (k) => (words.de && k === 'Keyboard shortcuts' ? 'Tastenkürzel' : k) },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../features/keys.js'), 'utf8'), ctx);
@@ -116,19 +116,74 @@ test('the keyboard help, opened before the page\'s words arrived, is redrawn in 
   assert.equal(k.shown().length, 1, 'one dialog, the old one gone');
 });
 
-test('on Ultra, "?" alone shows and hides the keyboard help, which has no Dismiss button', () => {
+test('on Ultra, "?" alone shows and hides the keyboard help, a dialog as on Canvas: focus on Dismiss, then back', () => {
   const k = keys(undefined, 'ultra');
+  let back = 0;
+  const was = { isConnected: true, focus: () => { back++; k.document.activeElement = was; } };
+  k.document.activeElement = was;
   k.press('?');
   assert.equal(k.shown().length, 1);
-  assert.equal(k.shown()[0].querySelector('button'), null);
+  assert.equal(k.shown()[0].attrs['aria-modal'], 'true');
+  assert.equal(k.document.activeElement, k.shown()[0].querySelector('button'), 'focus on its Dismiss button');
   k.press('?');
   assert.equal(k.shown().length, 0);
+  assert.equal(back, 1, 'focus back where it was');
+  k.press('?');
+  k.press('Escape');
+  assert.equal(k.shown().length, 0);
+  assert.equal(back, 2);
+});
+
+test('keys typed in a field or panel inside a shadow root (Glaze\'s bar) are not shortcuts, though content.js sees only the host', () => {
+  const field = { field: true, closest: () => null }, panelButton = { closest: (sel) => (sel.includes('[role="dialog"]') ? {} : null) };
+  for (const [site, inner, want] of [['canvas', field, 0], ['ultra', field, 0], ['canvas', panelButton, 0], ['ultra', panelButton, 1], ['canvas', null, 1]]) {
+    const k = keys(undefined, site, (el) => !!el?.field);
+    const host = { shadowRoot: inner && { activeElement: inner } };
+    k.document.activeElement = host;
+    k.press('g');
+    k.press('?');
+    assert.equal(k.shown().length, want, `${site}: ${inner === field ? 'a field' : inner ? 'a panel' : 'the host itself'}`);
+  }
 });
 
 test('a closed keyboard help stays closed when the words arrive', () => {
   const k = keys();
   for (const f of k.wordsIn) f();
   assert.equal(k.document.body.children.length, 0);
+});
+
+// Focus in Glaze's bar is an item inside its shadow root; the document sees the bar's host, which can't take focus.
+const inBar = () => {
+  const was = { at: null };
+  const item = { isConnected: true, closest: () => null, focus() { was.at = item; } };
+  const host = { isConnected: true, shadowRoot: { activeElement: item }, focus() { was.at = host; } };
+  return { item, host, was };
+};
+
+test('the keyboard help opened from Glaze\'s bar gives focus back to the bar\'s item, not its host', () => {
+  const k = keys(), bar = inBar();
+  k.document.activeElement = bar.host;
+  k.press('g');
+  k.press('?');
+  assert.equal(k.shown().length, 1);
+  k.press('Escape');
+  assert.equal(bar.was.at, bar.item);
+});
+
+test('the command palette opened from Glaze\'s bar gives focus back to the bar\'s item, not its host', () => {
+  const { El } = require('./stand-in-dom.js');
+  const doc = { activeElement: null };
+  doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
+  doc.createElement = (tag) => new El(tag, doc);
+  const ctx = vm.createContext({ document: doc, location: { origin: 'https://bb.school.test', pathname: '/ultra/stream' },
+    GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ({ enhance: {} }), need: () => new Promise(() => {}), courseId: () => '' } });
+  const cmd = vm.runInContext(fs.readFileSync(require.resolve('../features/palette.js'), 'utf8'), ctx);
+  const bar = inBar();
+  doc.activeElement = bar.host;
+  cmd.open();
+  assert.ok(cmd.isOpen());
+  cmd.close();
+  assert.equal(bar.was.at, bar.item);
 });
 
 // The draft backup on Ultra, while lib/drafts.js and features/drafts.js are on their way: the editor still there when
@@ -151,11 +206,11 @@ for (const gone of Object.keys(AFTER)) {
     });
     const listeners = {};
     const ctx = vm.createContext({ solo: false, tabFrame: '',
-      ultra: true, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/ultra/courses/_1_1/outline' },
+      ultra: true, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { origin: 'https://bb.school.test', pathname: '/ultra/courses/_1_1/outline' },
       document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => null, querySelectorAll: () => [],
         body: {}, createTreeWalker: () => ({ nextNode: () => null }) }, // the page's text, where a sent post would show: none here
       NodeFilter: { SHOW_ELEMENT: 1, SHOW_TEXT: 4 },
-      chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
+      chrome: { storage: { local: { set: (v) => saved.push(v), get: (k, cb) => cb({}), remove() {} } } },
       need: (file) => (loads.find((l) => l.file === file) || loads[loads.push({ file, p: later() }) - 1]).p, // one request a file, as need() does
       setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, window: {}, globalThis: null,
     });
@@ -183,13 +238,13 @@ for (const gone of Object.keys(AFTER)) {
     await settle();
     assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js', 'features/drafts.js'], 'then the backup itself');
     ctx.GZ_CTX = { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local,
-      draftEditor: '.ql-editor[contenteditable="true"]', draftAt: ctx.api.draftAt };
+      draftEditor: '.ql-editor[contenteditable="true"]', draftAt: ctx.api.draftAt, account: () => Promise.resolve('_7_1') };
     vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
     loads[1].p.resolve();
     await settle();
     t.run();
     assert.equal(saved.length, 1, 'the paste is kept once the module arrives, without another input');
-    assert.deepEqual(Object.keys(saved[0]), ['draft:/ultra/courses/_1_1/outline#_12_3/ed1'], 'under the page and post it was written on');
+    assert.deepEqual(Object.keys(saved[0]), ['draft:ultra:https://bb.school.test/_7_1/ultra/courses/_1_1/outline#_12_3/ed1'], 'under the site, the account, and the page and post it was written on');
     assert.equal(Object.values(saved[0])[0].text, text);
   });
 }
@@ -409,7 +464,7 @@ for (const gone of ['never', 'before the files arrive', 'while the account is as
     const ctx = vm.createContext({ solo: false, tabFrame: '',
       ultra: false, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/conversations', origin: 'https://school.test' },
       document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: (s) => (s === SEL ? editor : null), querySelectorAll: () => [] },
-      chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
+      chrome: { storage: { local: { set: (v) => saved.push(v), get: (k, cb) => cb({}), remove() {} } } },
       need: (file) => { const p = later(); loads.push({ file, p }); return p; },
       setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, Promise, window: {}, globalThis: null,
     });

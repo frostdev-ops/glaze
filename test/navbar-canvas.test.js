@@ -250,6 +250,15 @@ test('Canvas login and logout pages do not reserve authenticated navigation room
   }
 });
 
+test('what focus scrolls to stops clear of the fixed bar on Canvas and Moodle (WCAG 2.4.11)', () => {
+  const canvas = read('canvas.css'), moodle = read('moodle.css');
+  const phone = (css) => css.slice(css.indexOf('@media (max-width: 899.98px)', css.indexOf('html[data-gz-navbar] {')));
+  assert.match(canvas, /^html\[data-gz-navbar\] \{ scroll-padding-top: var\(--gz-navbar-top\); \}$/m, 'under the top bar');
+  assert.match(phone(canvas).slice(0, phone(canvas).indexOf('\n}')), /html\[data-gz-navbar\]:not\(\[data-gz-navbar~="none"\]\) \{ scroll-padding-bottom: calc\(96px \+ env\(safe-area-inset-bottom, 0px\)\); \}/, "above a phone's bottom bar");
+  // Moodle keeps the bottom bar's room as a variable of its own.
+  assert.match(moodle, /^html\[data-gz-navbar\] \{ scroll-padding: var\(--gz-navbar-top\) 0 var\(--gz-navbar-bottom\); \}$/m);
+});
+
 test('a failed lazy navbar load restores native Canvas navigation', async () => {
   const source = read('content-canvas.js'), start = source.indexOf('  const syncNav =');
   const window = {}; window.top = window;

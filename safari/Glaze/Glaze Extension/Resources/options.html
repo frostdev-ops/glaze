@@ -34,6 +34,7 @@
   /* One row of search, status and switches; the tabs under it. */
   .editor-tabs { display: flex; gap: .35rem; flex: 1 0 100%; order: 1; overflow-x: auto; padding-block: .2rem; }
   .top > #hint { flex: 1 1 auto; min-width: 0; }
+  #hint button { margin-inline-start: .4rem; padding: .1rem .55rem; font-size: 11px; }
   .editor-tabs button { flex: none; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); font-size: 13px; }
   .editor-tabs [aria-selected="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
   .top nav a { color: var(--gz-ink-muted); text-decoration: none; font-size: 13px; padding: 0.25rem 0.6rem; border-radius: 999px; }
@@ -95,6 +96,7 @@
   .courses .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .courses .name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 0.78em; color: var(--gz-ink-faint); }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
+  .sites li { grid-template-columns: minmax(0, 1fr) auto; }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
   button:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
   body.off [data-editor-section]:not(#data) { opacity: 0.5; }
@@ -236,6 +238,7 @@
   body.finding .section-links { display: none; }
   #relay-status { min-height: 1.5em; overflow-wrap: anywhere; }
   #relay-status.error { color: var(--gz-err); }
+  #share-contrast { margin: 0; color: var(--gz-err); }
   #ss-status.error, #nb-status.error { color: var(--gz-err); }
   #ss-status:empty, #nb-status:empty { display: none; }
   .ss-status { position: sticky; top: 0; z-index: 1; padding: 0.4rem 0; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); font-size: 13px; color: var(--gz-ink); }
@@ -316,7 +319,7 @@
   <div class="layout">
 
     <main class="editor" id="editor">
-<div id="panel-look" role="tabpanel" aria-labelledby="tab-look" data-editor-panel="look"><nav class="section-links" aria-label="Sections"><a href="#look/palette" data-editor-alias>Palette and Looks</a><a href="#look/type" data-editor-alias>Fonts and shape</a><a href="#look/surfaces" data-editor-alias>Surfaces</a><a href="#look/background" data-editor-alias>Background</a><a href="#look/cards" data-editor-alias>Course cards</a><a href="#look/courses" data-editor-alias>Course appearance</a><a href="#look/navigation" data-editor-alias>Navigation appearance</a><a href="#look/motion" data-editor-alias>Motion</a><a href="#look/extras" data-editor-alias>Pointers, stickers and rotation</a></nav>
+<div id="panel-look" role="tabpanel" aria-labelledby="tab-look" data-editor-panel="look"><nav class="section-links" aria-label="Sections"><a href="#look/palette" data-editor-alias>Palette and Looks</a><a href="#look/type" data-editor-alias>Fonts and shape</a><a href="#look/surfaces" data-editor-alias>Surfaces</a><a href="#look/background" data-editor-alias>Background</a><a href="#look/cards" data-editor-alias>Course cards</a><a href="#look/courses" data-editor-alias>Course appearance</a><a href="#look/navigation" data-editor-alias>Navigation appearance</a><a href="#look/nav-layout" data-editor-alias>This Look's navigation</a><a href="#look/rules" data-editor-alias>Page tweaks</a><a href="#look/motion" data-editor-alias>Motion</a><a href="#look/extras" data-editor-alias>Pointers, stickers and rotation</a></nav>
 <section id="palette" data-editor-section="look/palette" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-palette">
 <p class="section-path" data-editor-breadcrumb><a href="#look/palette" data-editor-alias>Palette and Looks</a></p><div class="section-heading"><h2 id="heading-look-palette">Palette and Looks</h2><button type="button" class="section-reset" data-reset-section="look/palette">Reset section</button></div>
 <p class="desc section-note">Choose your colors, saved palettes or a complete Look.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle</p>
@@ -362,6 +365,7 @@
         </div>
 <div class="offer" id="share-offer" hidden>
           <p id="share-what"></p>
+          <p class="desc" id="share-contrast" role="status" hidden></p>
           <div class="row"><button type="button" id="share-apply" class="primary">Use this theme</button><button type="button" id="share-fav">Save to favorites</button><button type="button" id="share-cancel">Cancel</button></div>
         </div>
 <div class="group">
@@ -571,11 +575,11 @@
 </section>
 <!-- A Look's own nav layout and page tweaks (Look parts): drawn by lib/editor-xparts.js, which writes their words. -->
 <section id="look-nav-layout" data-editor-section="look/nav-layout" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-nav-layout">
-<div class="section-heading"><h2 id="heading-look-nav-layout"></h2></div><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle</p>
+<p class="section-path" data-editor-breadcrumb><a href="#look/nav-layout" data-editor-alias>This Look's navigation</a></p><div class="section-heading"><h2 id="heading-look-nav-layout"></h2><button type="button" class="section-reset" data-reset-section="look/nav-layout">Reset section</button></div><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle</p>
 <div id="xnav"></div>
 </section>
 <section id="look-rules" data-editor-section="look/rules" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-rules">
-<div class="section-heading"><h2 id="heading-look-rules"></h2></div><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle</p>
+<p class="section-path" data-editor-breadcrumb><a href="#look/rules" data-editor-alias>Page tweaks</a></p><div class="section-heading"><h2 id="heading-look-rules"></h2><button type="button" class="section-reset" data-reset-section="look/rules">Reset section</button></div><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle</p>
 <div id="xrules"></div>
 </section>
 <section id="motion" data-editor-section="look/motion" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-motion">
@@ -1317,7 +1321,7 @@
           <p class="desc" id="mod-key-said" role="status" aria-live="polite"></p>
         </div>
 </section></div>
-<div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" hidden><nav class="section-links" aria-label="Sections"><a href="#backup/privacy" data-editor-alias>Backup and privacy</a><a href="#backup/notes" data-editor-alias>Notes backup</a></nav>
+<div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" hidden><nav class="section-links" aria-label="Sections"><a href="#backup/privacy" data-editor-alias>Backup and privacy</a><a href="#backup/notes" data-editor-alias>Notes backup</a><a href="#backup/sites" data-editor-alias>Sites</a></nav>
 <section id="data" data-editor-section="backup/privacy" data-sites="Extension only" aria-labelledby="heading-backup-privacy">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/privacy" data-editor-alias>Backup and privacy</a></p><div class="section-heading"><h2 id="heading-backup-privacy">Backup and privacy</h2></div>
 <p class="desc section-note">Export or import your settings, tasks and share keys.</p><p class="site-scope">On this device</p>
@@ -1332,7 +1336,7 @@
 <p class="desc">Resetting preferences keeps your presets, pictures, local notes, tasks, bookmarks and share keys.</p>
 <label class="check"><input type="checkbox" data-key="mods.blocklist"><span>Check the mod blocklist</span>
           <span class="desc">On Chrome, while you have code mods installed, Glaze asks frostdev.io about once a day for a list, signed by Glaze's owner, of mods that must stop. Nothing about you is sent. Turn this off and Glaze never asks; mods it already stopped stay stopped.</span></label>
-<a href="PRIVACY.md" target="_blank" rel="noopener">Privacy</a>
+<a href="https://frostdev.io/glaze/privacy" target="_blank" rel="noopener">Privacy</a>
 </section>
 <section id="notes-backup" data-editor-section="backup/notes" data-sites="Extension only" aria-labelledby="heading-backup-notes">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/notes" data-editor-alias>Notes backup</a></p><div class="section-heading"><h2 id="heading-backup-notes">Notes backup</h2></div>
@@ -1342,6 +1346,14 @@
 <p class="desc">Includes all share keys and creator delete tokens, even while sharing is paused. Anyone with this backup can open those sessions and may change or delete them. Keep it private.</p>
 <p class="desc">Import restores keys locally. It connects only after you create, join or resume a session.</p>
 <p class="desc" id="nb-status" role="status" aria-live="polite"></p>
+</section>
+<section id="sites" data-editor-section="backup/sites" data-sites="Extension only" aria-labelledby="heading-backup-sites">
+<p class="section-path" data-editor-breadcrumb><a href="#backup/sites" data-editor-alias>Sites</a></p><div class="section-heading"><h2 id="heading-backup-sites" tabindex="-1">Sites</h2></div>
+<p class="desc section-note">Glaze runs on Canvas at instructure.com and on Blackboard at blackboard.com. On a school's own address it asks first; these are the sites you said yes to.</p><p class="site-scope">On this device</p>
+<ul class="courses sites" id="site-list"></ul>
+<p class="desc" id="site-empty">No other sites yet.</p>
+<p class="desc">Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.</p>
+<p class="desc" id="site-status" role="status" aria-live="polite"></p>
 </section></div>
 <div id="panel-about" role="tabpanel" aria-labelledby="tab-about" data-editor-panel="about" hidden><nav class="section-links" aria-label="Sections"><a href="#about/glaze" data-editor-alias>About Glaze</a></nav>
 <section id="about-glaze" data-editor-section="about/glaze" data-sites="Extension only" aria-labelledby="heading-about-glaze">

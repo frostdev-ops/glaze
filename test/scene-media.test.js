@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { env } = require('./helpers/media-env.cjs');
 
-// Long enough for the digest of a kept file, which finishes on a thread of its own.
+// Long enough for the page's promises to settle (the env's digest of a kept file is one of them).
 const settle = () => new Promise((done) => setTimeout(done, 20));
 // What the VM made, as plain data (its objects have the VM's prototypes).
 const plain = (x) => JSON.parse(JSON.stringify(x));
@@ -35,7 +35,7 @@ test('a video is muted, loops, has no controls and no autoplay, and plays only o
   const v = kinds(r.e, 'video')[0];
   assert.deepEqual([v.muted, v.defaultMuted, v.loop, v.controls, v.playsInline, v.disablePictureInPicture, v.disableRemotePlayback, v.tabIndex], [true, true, true, false, true, true, true, -1]);
   assert.deepEqual([v.attrs.muted, v.attrs['aria-hidden'], 'autoplay' in v.attrs, v.autoplay], ['', 'true', false, undefined]);
-  assert.deepEqual([v.src, v.preload], [URL1, 'auto']);
+  assert.deepEqual([v.src, v.preload], ['blob:glaze/0', 'auto'], 'the checked copy, not the address');
   assert.deepEqual([v.plays, r.host.children.length], [0, 0], 'nothing is on the page, and nothing plays, before the first frame');
   v.fire('loadeddata');
   await settle();
@@ -162,7 +162,7 @@ test('a load nobody waits for any more is let go: its source is emptied, and it 
   r.scene.update(o({ type: 'video', src: 'https://cdn.example.com/slow.webm' }));
   await settle();
   const slow = kinds(r.e, 'video')[0];
-  assert.equal(slow.src, 'https://cdn.example.com/slow.webm');
+  assert.equal(slow.src, 'blob:glaze/0');
   r.scene.update(o({ type: 'video', src: 'https://cdn.example.com/other.webm' }));
   assert.deepEqual([slow.attrs.src, slow.loads], [undefined, 1], 'the slow one stops loading at once');
   await settle();
@@ -215,13 +215,16 @@ test('nothing waits on a timer until the page is resized, and a resize does noth
 
 // ---- a file kept on this computer ---------------------------------------------------------------------------------------
 const bytes = Uint8Array.from({ length: 300 }, (_, i) => i & 255);
-const kept = (rec) => ({ [`lookMedia:${rec.h}`]: { t: rec.t, b: Buffer.from(rec.bytes).toString('base64') } });
+// The worker's answer to 'glaze:keptFile' (lib/background.js): the file as it was kept, checked and named when it was put.
+const answer = (h, reply) => async (m) => (m.type === 'glaze:keptFile' && m.h === h ? reply : { ok: false, error: 'missing' });
+const kept = (rec) => answer(rec.h, { ok: true, mime: rec.t, b64: Buffer.from(rec.bytes).toString('base64') });
 
-test('a kept file is read back, checked against its name, and played from a blob address that is revoked after', async () => {
+test('a kept file is asked of the worker and played from a blob address that is revoked after', async () => {
   const e0 = env();
   const h = e0.sha(bytes);
-  const r = rig({ storage: kept({ h, t: 'video/webm', bytes }) });
+  const r = rig({ ask: kept({ h, t: 'video/webm', bytes }) });
   const v = await video(r, { type: 'video', src: `file:${h}` });
+  assert.deepEqual(plain(r.e.messages), [{ type: 'glaze:keptFile', h }]);
   assert.deepEqual(r.e.blobs, [['blob:glaze/0', 300, 'video/webm']]);
   assert.equal(v.src, 'blob:glaze/0');
   assert.equal(v.plays, 1);
@@ -229,20 +232,142 @@ test('a kept file is read back, checked against its name, and played from a blob
   assert.deepEqual(r.e.revoked, ['blob:glaze/0']);
 });
 
-test('a kept file that is missing, changed or the wrong kind is not shown', async () => {
+// Whether the bytes are the file named was settled when the worker kept them (lib/media.js put); the page doesn't hash them.
+test('a kept file that is missing, the wrong kind or not an answer is not shown', async () => {
   const h = env().sha(bytes);
-  for (const [why, storage, media] of [
-    ['missing', {}, { type: 'video', src: `file:${h}` }],
-    ['changed', kept({ h, t: 'video/webm', bytes: bytes.map((b) => b ^ 1) }), { type: 'video', src: `file:${h}` }],
+  for (const [why, ask, media] of [
+    ['missing', answer(h, { ok: false, error: 'missing' }), { type: 'video', src: `file:${h}` }],
+    ['no worker', async () => null, { type: 'video', src: `file:${h}` }],
     ['a picture where a video was asked for', kept({ h, t: 'image/webp', bytes }), { type: 'video', src: `file:${h}` }],
     ['a type nobody plays', kept({ h, t: 'text/html', bytes }), { type: 'video', src: `file:${h}` }],
-    ['a record that is not one', { [`lookMedia:${h}`]: 'x' }, { type: 'video', src: `file:${h}` }],
-    ['a name that is not base64', { [`lookMedia:${h}`]: { t: 'video/webm', b: '!!' } }, { type: 'video', src: `file:${h}` }],
+    ['an answer that is not one', answer(h, { ok: true, mime: 'video/webm' }), { type: 'video', src: `file:${h}` }],
+    ['bytes that are not base64', answer(h, { ok: true, mime: 'video/webm', b64: '!!' }), { type: 'video', src: `file:${h}` }],
   ]) {
-    const r = rig({ storage });
+    const r = rig({ ask });
     r.scene.update(o(media));
     await settle();
     assert.deepEqual([why, r.fails, r.e.blobs.length, r.e.srcs.length], [why, ['file'], 0, 0]);
+  }
+});
+
+// ---- an address the Look names: the worker fetches and cleans it; the page plays the checked copy ------------------------------
+// The worker's answer to 'glaze:remoteMedia' (lib/background.js): the file as lib/media.js remote cleaned it, or why not.
+const remote = (reply) => async (m) => (m.type === 'glaze:remoteMedia' ? (typeof reply === 'function' ? reply(m) : reply) : { ok: false, error: 'bad' });
+const wire = (type, mime) => ({ ok: true, type, mime, b64: Buffer.from(bytes).toString('base64') });
+const given = (e) => e.srcs.map(([, src]) => src).filter(Boolean);
+
+test('a video at an address is asked of the worker and played from the checked copy, never from the address', async () => {
+  const r = rig({ ask: remote(wire('video', 'video/webm')) });
+  const v = await video(r);
+  assert.deepEqual(plain(r.e.messages), [{ type: 'glaze:remoteMedia', src: URL1, kind: 'video' }]);
+  assert.deepEqual(r.e.blobs, [['blob:glaze/0', 300, 'video/webm']]);
+  assert.equal(v.src, 'blob:glaze/0');
+  assert.deepEqual(given(r.e).filter((u) => u.startsWith('https:')), [], 'no element is ever given the address');
+  assert.equal(v.plays, 1);
+  r.scene.stop();
+  assert.deepEqual(r.e.revoked, ['blob:glaze/0'], 'and the copy is let go when it stops');
+});
+
+test('a picture at an address is asked of the worker, and its first frame comes from the checked bytes', async () => {
+  const r = rig({ ask: remote(wire('image', 'image/webp')) });
+  r.scene.update(o({ type: 'image', src: 'https://cdn.example.com/a.webp' }, { speed: 0 }));
+  await settle();
+  assert.deepEqual(plain(r.e.messages), [{ type: 'glaze:remoteMedia', src: 'https://cdn.example.com/a.webp', kind: 'image' }]);
+  assert.equal(r.e.bitmapClosed, true, 'decoded from the bytes, then let go');
+  assert.deepEqual(given(r.e).filter((u) => u.startsWith('https:')), [], 'no picture element is ever given the address');
+  assert.deepEqual(r.fails, []);
+});
+
+test('an address the worker refuses leaves the gradient, and says whether the file broke a limit', async () => {
+  for (const [why, ask, want] of [
+    ['over the byte cap', remote({ ok: false, error: 'big' }), 'limits'],
+    ['over a side, frame or pixel cap, or not that kind of file', remote({ ok: false, error: 'type' }), 'limits'],
+    ['offline or redirected', remote({ ok: false, error: 'network' }), 'load'],
+    ['not an address it may fetch', remote({ ok: false, error: 'bad' }), 'load'],
+    ['not this page', remote({ ok: false, error: 'sender' }), 'load'],
+    ['no worker', async () => null, 'load'],
+    ['the wrong kind back', remote(wire('image', 'image/webp')), 'load'],
+    ['a type nobody plays', remote(wire('video', 'text/html')), 'load'],
+    ['no bytes', remote({ ok: true, type: 'video', mime: 'video/webm' }), 'load'],
+    ['bytes that are not base64', remote({ ok: true, type: 'video', mime: 'video/webm', b64: '!!' }), 'load'],
+  ]) {
+    const r = rig({ ask });
+    r.scene.update(o({ type: 'video', src: URL1 }));
+    await settle();
+    assert.deepEqual([why, r.fails, r.e.blobs.length, given(r.e)], [why, [want], 0, []]);
+  }
+});
+
+test('the editor\'s preview is told when an address broke a limit', async () => {
+  const r = rig({ preview: true, ask: remote({ ok: false, error: 'big' }) });
+  r.scene.update(o({ type: 'video', src: URL1 }));
+  await settle();
+  assert.deepEqual(plain(r.e.posted), [[{ gzMediaState: { state: 'failed', why: 'limits' } }, 'chrome-extension://glaze']]);
+});
+
+test('a video or picture the decoder finds past the side limit is dropped, whatever the container said', async () => {
+  // The worker read the size from the container; the decoder is the one that has to hold the frames.
+  for (const [w, h] of [[5000, 100], [100, 4097], [8192, 8192]]) {
+    const r = rig({ ask: remote(wire('video', 'video/webm')), preview: true });
+    r.scene.update(o({ type: 'video', src: URL1 }));
+    await settle();
+    const v = kinds(r.e, 'video')[0];
+    Object.assign(v, { videoWidth: w, videoHeight: h });
+    v.fire('loadeddata');
+    await settle();
+    assert.deepEqual([r.fails, r.host.children.length, v.attrs.src, v.loads, r.e.revoked], [['limits'], 0, undefined, 1, ['blob:glaze/0']], `${w} x ${h}`);
+    assert.deepEqual(plain(r.e.posted), [[{ gzMediaState: { state: 'failed', why: 'limits' } }, 'chrome-extension://glaze']]);
+    const p = rig({ ask: remote(wire('image', 'image/webp')), natural: [w, h] });
+    p.scene.update(o({ type: 'image', src: 'https://cdn.example.com/a.webp' }));
+    await settle();
+    assert.deepEqual([p.fails, p.host.children.length], [['limits'], 0], `a picture ${w} x ${h}`);
+  }
+  // At the limit is fine, and so is a decoder that does not say.
+  const ok = rig({ ask: remote(wire('video', 'video/webm')) });
+  ok.scene.update(o({ type: 'video', src: URL1 }));
+  await settle();
+  const v = kinds(ok.e, 'video')[0];
+  Object.assign(v, { videoWidth: 4096, videoHeight: 4096 });
+  v.fire('loadeddata');
+  await settle();
+  assert.deepEqual([ok.fails, ok.host.children.length], [[], 2]);
+  const kept = rig({ ask: remote(wire('image', 'image/webp')), natural: [4096, 4096] });
+  kept.scene.update(o({ type: 'image', src: 'https://cdn.example.com/a.webp' }));
+  await settle();
+  assert.deepEqual(kept.fails, []);
+});
+
+test('the page and the worker agree on the longest side', () => {
+  const side = Number(/^const SIDE = (\d+);/m.exec(require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/scene-media.js'), 'utf8'))[1]);
+  assert.equal(side, require('../lib/media.js').LIMIT.bg.image.side);
+});
+
+test('video decoder dimensions are refused at metadata time before waiting for a first frame', async () => {
+  const r = rig();
+  r.scene.update(o({ type: 'video', src: URL1 }));
+  await settle();
+  const v = kinds(r.e, 'video')[0];
+  v.videoWidth = 5000; v.videoHeight = 100;
+  v.fire('loadedmetadata');
+  await settle();
+  assert.deepEqual(r.fails, ['limits']);
+  assert.equal(v.src, '');
+  assert.ok(r.e.revoked.includes('blob:glaze/0'));
+});
+
+test('abandoning a remote video before its copy arrives, or before its first frame, releases it at once', async () => {
+  for (const stop of [true, false]) {
+    let answer;
+    const wait = new Promise((done) => { answer = done; });
+    const r = rig({ ask: async (m) => { await wait; return remote(wire('video', 'video/webm'))(m); } });
+    r.scene.update(o({ type: 'video', src: URL1 }));
+    await settle();
+    if (stop) r.scene.stop(); else r.scene.update(o({ type: 'video', src: 'https://cdn.example.com/two.webm' }));
+    answer();
+    await settle();
+    assert.deepEqual(kinds(r.e, 'video').filter((v) => v.src === 'blob:glaze/0'), [], 'the stale copy never reaches an element');
+    assert.ok(r.e.revoked.includes('blob:glaze/0'), 'and its blob is revoked');
+    r.scene.stop();
   }
 });
 
@@ -254,7 +379,7 @@ test('an animated picture shows in an img, and motion off swaps it for its first
   const [img, probe] = kinds(r.e, 'img'), canvas = kinds(r.e, 'canvas')[0];
   assert.equal(probe.src, '', 'the element that checked it decodes is let go');
   assert.deepEqual([img.alt, img.decoding, img.referrerPolicy, img.draggable], ['', 'async', 'no-referrer', false]);
-  assert.equal(img.src, 'https://cdn.example.com/a.webp');
+  assert.equal(img.src, 'blob:glaze/0');
   const box = r.host.children[0];
   assert.deepEqual(box.children, [img]);
   assert.equal(r.e.draws.length, 0, 'no canvas is drawn while it moves');
@@ -266,7 +391,7 @@ test('an animated picture shows in an img, and motion off swaps it for its first
   assert.deepEqual([canvas.width, canvas.height], [640, 360]);
   r.scene.update(o({ type: 'image', src: 'https://cdn.example.com/a.webp' }, { speed: 1 }));
   assert.deepEqual(box.children, [img]);
-  assert.equal(img.src, 'https://cdn.example.com/a.webp');
+  assert.equal(img.src, 'blob:glaze/0');
   r.scene.update(o({ type: 'image', src: 'https://cdn.example.com/a.webp' }, { speed: 0 }));
   await settle();
   assert.equal(r.e.draws.length, 1, 'the first frame is drawn once');
@@ -287,7 +412,7 @@ test('a page that opens with motion off never puts the moving picture on the pag
 
 test('a picture from a kept file takes its first frame from its own bytes', async () => {
   const h = env().sha(bytes);
-  const r = rig({ storage: kept({ h, t: 'image/webp', bytes }) });
+  const r = rig({ ask: kept({ h, t: 'image/webp', bytes }) });
   r.scene.update(o({ type: 'image', src: `file:${h}` }, { speed: 0 }));
   await settle();
   assert.equal(r.e.bitmapClosed, true, 'decoded from the bytes, then let go');
@@ -311,7 +436,7 @@ test('a hidden tab leaves a picture alone: the browser draws nothing for it', as
   await settle();
   const img = kinds(r.e, 'img')[0];
   r.e.visibility(true);
-  assert.equal(img.src, 'https://cdn.example.com/a.webp');
+  assert.equal(img.src, 'blob:glaze/0');
   assert.equal(r.e.draws.length, 0);
 });
 
@@ -388,7 +513,7 @@ test('Lottie is never imported for a video or a picture', async () => {
   const r = rig();
   await video(r);
   assert.equal(r.e.ctx?.lottie, undefined);
-  assert.deepEqual(r.e.messages, []);
+  assert.deepEqual(plain(r.e.messages), [{ type: 'glaze:remoteMedia', src: URL1, kind: 'video' }], 'only the video\'s own file is asked for');
 });
 
 test('the editor\'s preview is told when it plays', async () => {
@@ -445,7 +570,7 @@ test('stopping or replacing a Lottie that is still loading destroys its renderer
 test('a still image that decodes late cannot clear a picture that has resumed playing', async () => {
   let release;
   const bitmapWait = new Promise((done) => { release = done; });
-  const h = env().sha(bytes), r = rig({ storage: kept({ h, t: 'image/webp', bytes }), bitmapWait });
+  const h = env().sha(bytes), r = rig({ ask: kept({ h, t: 'image/webp', bytes }), bitmapWait });
   const spec = { type: 'image', src: `file:${h}` };
   r.scene.update(o(spec));
   await settle();
@@ -473,7 +598,7 @@ test('stopping before a media source resolves prevents a late network load', asy
 test('abandoning a kept video before its first frame revokes its blob immediately', async () => {
   const h = env().sha(bytes);
   for (const stop of [true, false]) {
-    const r = rig({ storage: kept({ h, t: 'video/webm', bytes }) });
+    const r = rig({ ask: kept({ h, t: 'video/webm', bytes }) });
     r.scene.update(o({ type: 'video', src: `file:${h}` }));
     await settle();
     const pending = kinds(r.e, 'video')[0];

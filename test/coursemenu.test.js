@@ -101,3 +101,20 @@ test('Canvas course tint and Look survive sanitizing without colliding with Ultr
   assert.deepEqual(fresh({ tinted: bad, looks: Object.fromEntries(bad.map((id) => [id, G.GZ_LOOKS[0].name])) }).tinted, []);
   assert.deepEqual(fresh({ looks: Object.fromEntries(bad.map((id) => [id, G.GZ_LOOKS[0].name])) }).looks, {});
 });
+
+// Forced colours (Windows High Contrast) drop fills and shadows: the menu's swatches, its switch and what is picked
+// would vanish or look alike. Each site's sheet keeps them visible.
+const forced = (css) => { const at = css.indexOf('@media screen and (forced-colors: active)'); return at < 0 ? '' : css.slice(at, css.indexOf('\n}\n', at)); };
+test('in forced colours the course menu keeps its swatches, its Tint switch and what is picked visible, on every site', () => {
+  const read = (f) => require('node:fs').readFileSync(require.resolve(`../${f}`), 'utf8');
+  for (const f of ['extras.css', 'canvas.css', 'moodle.css']) {
+    const fc = forced(read(f).slice(read(f).indexOf('#gz-cm .gz-cm-look[aria-pressed="true"]')));
+    assert.match(fc, /#gz-cm \.gz-cm-sw \{ forced-color-adjust: none; border-color: CanvasText; \}/, `${f}: swatches in their own colours`);
+    assert.match(fc, /#gz-cm \.gz-cm-sw\[aria-pressed="true"\] \{ border: 3px solid Highlight; \}/, f);
+    assert.match(fc, /#gz-cm \.gz-cm-look\[aria-pressed="true"\] \{ border: 2px solid Highlight !important; \}/, `${f}: the Look picked`);
+    assert.match(fc, /#gz-cm \.gz-cm-tint input \{ forced-color-adjust: none; background: Canvas !important; border: 1px solid ButtonText !important; \}/, `${f}: the switch`);
+    assert.match(fc, /#gz-cm \.gz-cm-tint input:checked \{ background: Highlight !important;/, `${f}: the switch on`);
+  }
+  // Ultra's swatches are the colours a hidden probe reads: forced, it would read the system's.
+  assert.match(forced(read('extras.css').slice(read('extras.css').indexOf('#gz-cm .gz-cm-look[aria-pressed="true"]'))), /html > i\[class\^="course-color-"\] \{ forced-color-adjust: none; \}/);
+});

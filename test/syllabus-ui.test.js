@@ -228,3 +228,29 @@ test('a file is read only on the student\'s own click of Read it, never a script
   await settle();
   assert.equal(reads.length, 1, 'the student\'s click reads it');
 });
+
+// ACA-7: the date reader is told a term start only when the course has one; "now" is not a start (lib/syllabus.js extract).
+test('a course with no term dates gives the date reader no start, one with a term gives its start', async () => {
+  const startsFor = async (course) => {
+    const p = page({ GZ_IMPORT: { read: async () => ({ text: 'Exam 1: September 1', ocr: null }), note: () => '', doubt: () => false } });
+    p.ctx.GZ_CTX.canvasCourses = () => Promise.resolve([course]);
+    const opening = p.UI.open();
+    await settle();
+    p.release();
+    await opening;
+    await settle();
+    const seen = [];
+    const extract = p.ctx.GZ_SYLLABUS.extract;
+    p.ctx.GZ_SYLLABUS.extract = (text, opts) => { seen.push(opts); return extract(text, opts); };
+    const dlg = p.body.children[0];
+    dlg.all.find((e) => e.id === 'gz-syl-file').files = [{ name: 'syllabus.pdf' }];
+    dlg.all.find((e) => e.tagName === 'BUTTON' && e.text === 'Read it').fire('click');
+    await settle();
+    assert.equal(seen.length, 1);
+    return seen[0].start;
+  };
+  assert.equal(await startsFor({ id: '25' }), undefined, 'no term: no start');
+  assert.equal(await startsFor({ id: '25', term: { name: 'Default Term', start_at: null } }), undefined, 'a term without dates: no start');
+  assert.equal(await startsFor({ id: '25', term: { start_at: '2026-08-24T00:00:00Z' } }), Date.UTC(2026, 7, 24), 'the term\'s start');
+  assert.equal(await startsFor({ id: '25', start_at: '2026-01-19T00:00:00Z', term: { start_at: null } }), Date.UTC(2026, 0, 19), 'the course\'s own start');
+});

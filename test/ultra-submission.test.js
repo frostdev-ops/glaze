@@ -50,10 +50,12 @@ test('the gradebook requests expanded submission data and redraws for each chang
   const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
   let changed = 0, now = 100000, partial = true;
   const grade = row('_601_1'), asked = [];
-  const bookFor = vm.runInNewContext(`${source.slice(start, end)} bookFor`, {
+  const gate = source.match(/(?:  const route = [^\n]+\n)?  const failed = [^\n]+\n  const askAgain = [^\n]+\n/)[0];
+  const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
     books: new Map(), covered: (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete }),
-    Date: { now: () => now }, me: async () => '_900_1', GZ_PAGE: P, locale: () => 'en', onBook: () => changed++,
-    api: async (path) => { asked.push(path); return { results: [structuredClone(grade)], ...(partial && { paging: { nextPage: '?offset=200' } }) }; },
+    Date: { now: () => now }, me: async () => '_900_1', GZ_PAGE: P, locale: () => 'en', onBook: () => changed++, location: { pathname: '/ultra/courses/_101_1/grades' },
+    // lib/ultra.js's reader through the site's queue (WP-A1); its get() is what asks.
+    reader: async () => ({ get: async (path) => { asked.push(path); return { results: [structuredClone(grade)], ...(partial && { paging: { nextPage: '?offset=200' } }) }; } }),
   });
   bookFor('_101_1'); await settle();
   assert.equal(new URL(asked[0], 'https://school.test').searchParams.get('expand'), 'column,lastAttempt,submissionStatus');

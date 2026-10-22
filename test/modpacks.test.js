@@ -265,6 +265,11 @@ const FILES_REPLY = {
   spark: { ok: true, kind: 'lottie', canvases: 1, json: { v: '5.7.0', w: 200, h: 120, fr: 30, ip: 0, op: 60, layers: [] } },
 };
 const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY, deferSticker } = {}) => {
+  // The page's short waits (storage and message answers, a redraw) are counted, so settle() waits for them and not for
+  // the clock: on a busy machine a fixed wait could end between two of them. The save and rotation timers are longer.
+  const short = new Set();
+  const later = (f, ms, ...a) => { const id = setTimeout(() => { short.delete(id); f(...a); }, ms); if (!(ms > 100)) short.add(id); return id; };
+  const cancel = (id) => { short.delete(id); clearTimeout(id); };
   const html = new El('html'), head = new El('head'), body = new El('body');
   html.append(head, body);
   html.style.setProperty = (k, v) => { html.style[k] = v; };
@@ -277,20 +282,20 @@ const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY, def
     log.sent.push(structuredClone(m));
     const r = m.type === 'glaze:modpage' && m.op === 'packs' ? { ok: true, packs: packList } : m.type === 'glaze:modpage' && m.op === 'sticker' ? (replies[m.id] || { ok: false, error: 'asset' }) : { ok: true };
     if (m.op === 'sticker' && deferSticker?.(m, () => cb?.(structuredClone(r)))) return;
-    setTimeout(() => cb?.(structuredClone(r)));
+    later(() => cb?.(structuredClone(r)));
   };
   const lottie = { loadAnimation: (o) => { const calls = []; const a = { o, calls, isLoaded: true, play: () => calls.push('play'), pause: () => calls.push('pause'), goToAndStop: (...x) => calls.push(['goToAndStop', ...x]), destroy: () => calls.push('destroy'), setSubframe: () => {} }; log.anims.push(a); return a; } };
   const context = vm.createContext({
     console, Promise, Date, Map, Set, structuredClone, crypto: globalThis.crypto, Blob, atob, btoa, Uint8Array, JSON,
     URL: { createObjectURL: (blob) => { const u = `blob:x/${++b}`; log.blobs.push([u, blob.type, blob.size]); return u; }, revokeObjectURL: (u) => log.revoked.push(u) },
     createImageBitmap: async () => { log.bitmaps++; return { width: 48, height: 48, close() {} }; },
-    setTimeout, clearTimeout, addEventListener() {}, innerWidth: 1000, innerHeight: 800, devicePixelRatio: 1,
+    setTimeout: later, clearTimeout: cancel, addEventListener() {}, innerWidth: 1000, innerHeight: 800, devicePixelRatio: 1,
     location: { origin: SITE, pathname: '/courses/1' },
     document: { documentElement: html, head, body, createElement: (t) => new El(t), getElementById: (id) => html.find(id), addEventListener: (t, f) => { (docListeners[t] ||= []).push(f); }, hidden: false },
     chrome: {
       runtime: { getURL: (f) => `chrome-extension://x/${f}`, sendMessage: send },
       storage: { onChanged: { addListener: (f) => storageListeners.push(f) }, sync: { set() {} },
-        local: { get: (keys, cb) => setTimeout(() => cb(structuredClone(keys === null ? local : Object.fromEntries([].concat(keys).filter((k) => k in local).map((k) => [k, local[k]]))))) } },
+        local: { get: (keys, cb) => later(() => cb(structuredClone(keys === null ? local : Object.fromEntries([].concat(keys).filter((k) => k in local).map((k) => [k, local[k]]))))) } },
     },
     importLottie: async () => { context.lottie = lottie; },
     GZ_MATCH_PRESET: () => null,
@@ -300,7 +305,7 @@ const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY, def
   vm.runInContext(fs.readFileSync(path.join(root, 'lib/lookx.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(root, 'features/lookx.js'), 'utf8').replace(/import\(chrome\.runtime\.getURL\((['`])lib\/lottie\/lottie_light_canvas\.min\.js/, "importLottie(chrome.runtime.getURL($1lib/lottie/lottie_light_canvas.min.js"), context);
   const layer = () => body.find('gz-stickers');
-  const settle = () => new Promise((r) => setTimeout(r, 25));
+  const settle = async () => { for (let quiet = 0, turns = 0; quiet < 3 && turns < 400; turns++) { await new Promise((r) => setTimeout(r, 5)); quiet = short.size ? 0 : quiet + 1; } };
   return { lx: context.GZ_LOOKX, html, body, log, layer, settle, settings,
     motion: (m) => { motionLevel = m; }, hide: (hidden) => { context.document.hidden = hidden; for (const f of docListeners.visibilitychange || []) f(); },
     packs: (p) => { packList = p; }, changed: (c) => { for (const f of storageListeners) f(c, 'local'); } };

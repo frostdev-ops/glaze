@@ -137,7 +137,7 @@ var GZ_XEDIT = globalThis.GZ_XEDIT || (() => {
     const redraw = (box, kids) => {
       const f = document.activeElement?.closest?.('[data-f]') && box.contains(document.activeElement) ? focusTo || document.activeElement.dataset.f : '';
       focusTo = '';
-      box.replaceChildren(...kids);
+      box.replaceChildren(...kids.filter((k) => k != null && k !== false));
       if (f) (box.querySelector(`[data-f="${CSS.escape(f)}"]`) || box.querySelector(`[data-f="${CSS.escape(f.replace(/:(hide|show)$/, (_, act) => act === 'hide' ? ':show' : ':hide'))}"]`) || box.querySelector('[data-f]'))?.focus();
     };
     // A live region made once, so screen readers hear each add, remove and move.

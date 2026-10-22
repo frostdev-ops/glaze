@@ -34,6 +34,17 @@
     document.addEventListener('DOMContentLoaded', look);
     look();
   });
+  // The all-host Ultra entry can also encounter spoofed Canvas/Moodle markup. Gate the detected kind, not just Ultra.
+  const yes = (list) => Array.isArray(list) && list.includes(site === 'ultra' ? location.origin : `${location.origin}/*`);
+  const known = location.protocol === 'https:' && !location.port && (site === 'ultra' ? /\.blackboard\.com$/.test(location.hostname) : site === 'canvas' && /(^|\.)instructure\.com$/.test(location.hostname));
+  if (site && !isPreview && !known
+    && !await new Promise((res) => { try { chrome.storage.local.get(site, (r) => res(yes(r?.[site]))); } catch { res(false); } })) {
+    globalThis.GZ_SITE_ULTRA?.sheets?.splice(0).forEach((l) => l.remove());
+    if (window.top === window) try { chrome.runtime.sendMessage(site).catch(() => {}); } catch { /* reloaded */ }
+    await new Promise((res) => { try { chrome.storage.onChanged.addListener(function on(c, area) {
+      if (area === 'local' && yes(c[site]?.newValue)) { chrome.storage.onChanged.removeListener?.(on); res(); }
+    }); } catch { /* reloaded: stays out */ } });
+  }
   if (site !== 'ultra') globalThis.GZ_SITE_ULTRA?.sheets?.forEach((l) => l.remove());
   if (!site) return;
   const ultra = site === 'ultra';
@@ -84,8 +95,7 @@
   // Read everything first, write after: setting an attribute mid-loop invalidates layout and the
   // next getBoundingClientRect would force a reflow, once per element.
   // A full pass is O(elements) getComputedStyle calls, so only the first pass looks at everything;
-  // after that we only look at the subtrees the mutation observer reports.
-  // ponytail: 20k-element cap per pass; drop it if a real page ever needs one that big.
+  // after that we only look at the subtrees the mutation observer reports. A pass reads at most MAX_FULL.
   const MAX_FULL = 20000;
   // Thin, wide images in course content are decorative dividers drawn for a white page; on a dark
   // theme they glow. Their size is only known once loaded.
@@ -118,6 +128,11 @@
     for (const e of els) { liftable.delete(e); for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a); }
     const pending = [];
     const canvasInk = !ultra && new Map();
+    // A translucent colour as it shows over the palette's surface, or over the white page its author saw it on.
+    const ground = C.parse(palette['--gz-surface']), white = C.parse('#fff');
+    const over = (c, base = ground) => c && base && { r: c.r * c.a + base.r * (1 - c.a), g: c.g * c.a + base.g * (1 - c.a), b: c.b * c.a + base.b * (1 - c.a), a: 1 };
+    // canvas.css's highlight ink (#14181f) reads better there than the palette's.
+    const darkReads = (c) => C.contrast('#14181f', C.hex(c)) > C.contrast(palette['--gz-ink'], C.hex(c));
     for (const e of els) {
       if (e.tagName === 'IMG') {
         if (e.complete) tagRule(e);
@@ -146,15 +161,23 @@
         const fg = C.parse(colors.color);
         let fill = null, fillColor = null;
         if (!ultra && e.closest('.user_content')) {
-          // Keep an instructor's light coloured highlight, and only repair ink that cannot read on it.
-          // shortcut: opaque inline fills only; add compositing for translucent or gradient highlights when seen.
+          // Keep an instructor's light coloured highlight, and only repair ink that cannot read on it. Light is as they saw
+          // it, on white; what shows of a translucent one is over the surface, where it may be too dark for the highlight
+          // ink. Their light gradient is a fill too, grey or not (the light tag can't repaint it), at its darkest stop; a
+          // picture's colours are unknown (no fillColor), so it keeps the ink they saw on it.
           for (let p = e; p; p = p.parentElement) {
             const fillStyle = p === e ? cs : getComputedStyle(p);
             const authored = p.style.backgroundColor && C.parse(fillStyle.backgroundColor);
-            if (p.style.backgroundImage && fillStyle.backgroundImage !== 'none') break;
+            const image = p.style.backgroundImage && fillStyle.backgroundImage;
+            if (image && image !== 'none') {
+              const stops = image.includes('url(') ? [] : (image.match(/rgba?\([^)]*\)/g) || []).map(C.parse).filter(Boolean);
+              const darkest = stops.map((c) => over(c)).sort((a, b) => C.luminance(a) - C.luminance(b))[0];
+              if (stops.every((c) => C.luminance(over(c, white)) > 0.45) && (!darkest || darkReads(darkest))) { fill = p; fillColor = darkest || null; }
+              break;
+            }
             if (authored && authored.a > 0) {
-              if (authored.a === 1 && C.luminance(authored) > 0.45
-                && Math.max(authored.r, authored.g, authored.b) !== Math.min(authored.r, authored.g, authored.b)) { fill = p; fillColor = authored; }
+              if (C.luminance(over(authored, white)) > 0.45 && Math.max(authored.r, authored.g, authored.b) !== Math.min(authored.r, authored.g, authored.b)
+                && darkReads(over(authored))) { fill = p; fillColor = over(authored); }
               break;
             }
             if (p.classList.contains('user_content')) break;
@@ -168,8 +191,9 @@
               // On enable the stylesheet may still be loading; un-authored inherited ink becomes palette ink.
               if (p.classList.contains('user_content')) { inkColor = paletteInk; break; }
             }
-            const ink = `rgb(${['r', 'g', 'b'].map((k) => inkColor[k] * inkColor.a + fillColor[k] * (1 - inkColor.a)).join(', ')})`;
-            if (C.contrast(ink, C.hex(fillColor)) < 4.5) canvasInk.set(e, 'highlight');
+            // On a picture, the ink they saw on it: Canvas's own where they set none.
+            const ink = fillColor && `rgb(${['r', 'g', 'b'].map((k) => inkColor[k] * inkColor.a + fillColor[k] * (1 - inkColor.a)).join(', ')})`;
+            if (fillColor ? C.contrast(ink, C.hex(fillColor)) < 4.5 : inkColor === paletteInk) canvasInk.set(e, 'highlight');
           }
           const line = e.tagName === 'HR' && e.style.borderTopColor && C.parse(cs.borderTopColor);
           if (line && line.a === 1 && C.same(line, C.parse('#000'))) canvasInk.set(e, 'rule');
@@ -182,7 +206,7 @@
         // Instructor's dark colour (navy), links too: canvas.css lifts it.
         if (!ultra && fg?.a >= 0.5 && C.saturated(fg) && !onFill && hasText(e) && e.closest('.user_content')) {
           liftable.set(e, C.hex(fg));
-          if (C.contrast(C.hex(fg), palette['--gz-surface']) < 3) tags.push('data-gz-lift');
+          if (C.contrast(C.hex(fg), palette['--gz-surface']) < LIFT) tags.push('data-gz-lift');
         }
         if (!ultra && tags.includes('data-gz-dark') && !canvasInk.has(e)) canvasInk.set(e, '');
       }
@@ -196,12 +220,15 @@
     }
     for (const [e, tags] of pending) for (const a of tags) e.setAttribute(a, (!ultra && a === 'data-gz-dark' && canvasInk.get(e)) || '');
   };
-  // Instructor colours met by the sweep: a new dark palette re-checks only these.
-  const liftable = new Map();
-  const relift = () => { for (const [e, c] of liftable) if (!e.isConnected) liftable.delete(e); else e.toggleAttribute('data-gz-lift', C.contrast(c, palette['--gz-surface']) < 3); };
-  const sweepAll = () => {
-    const all = document.body.querySelectorAll('*');
-    if (all.length <= MAX_FULL) sweepEls(all);
+  // Instructor colours met by the sweep: a new dark palette re-checks only these. Lifted under text's 4.5:1.
+  const LIFT = 4.5, liftable = new Map();
+  const relift = () => { for (const [e, c] of liftable) if (!e.isConnected) liftable.delete(e); else e.toggleAttribute('data-gz-lift', C.contrast(c, palette['--gz-surface']) < LIFT); };
+  // A bigger page (a long discussion) goes MAX_FULL at a time in document order, a pass's throttle apart. A newer full
+  // pass, Glaze turned off, or a course tab's frame hidden (its reveal sweeps it all) ends the rest.
+  let fullRun = 0;
+  const sweepAll = (all = [...document.body.querySelectorAll('*')], run = ++fullRun) => {
+    sweepEls(all.slice(0, MAX_FULL));
+    if (all.length > MAX_FULL) setTimeout(() => { if (run !== fullRun || !observer) return; if (hid()) full = true; else sweepAll(all.slice(MAX_FULL), run); }, 150);
   };
   const sweepRoots = (roots) => {
     const els = [];
@@ -287,21 +314,20 @@
   // its planner (GZ_CANVAS_DUE_WEEK), for the command palette and the popup (which can't ask the site, so it
   // reads what's kept here). Asked once a page load and at most every ten minutes, like the course list, which
   // names each Ultra item's course (a Canvas item brings its own, and its address, which Ultra's never do).
+  // Kept per site (`dueWeek:<origin>`): another site's items (Blackboard and Canvas, or two schools) open nothing here.
   let dueSoon = null;
+  const DUE = `dueWeek:${location.origin}`;
   const dueWeek = () => (dueSoon ||= new Promise((res) => {
-    try { chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'dueWeekFrom'], res); } catch { res({}); }
+    try { chrome.storage.local.get(DUE, (r) => res(r?.[DUE])); } catch { res(); }
   }).then((r) => {
     const now = Date.now();
-    // A list kept by another site (someone with Blackboard and Canvas, or two schools' Canvas, open) is no use
-    // here: its items open nothing, or the wrong school's. Even an empty one says nothing about this site.
-    const other = r?.dueWeekFrom !== location.origin;
-    const kept = other ? [] : r?.dueWeek || [];
-    if (!other && now - (r?.dueWeekAt || 0) < 600000) return kept;
+    const kept = Array.isArray(r?.list) ? r.list : [];
+    if (now - (r?.at || 0) < 600000) return kept;
     const at = (days) => new Date(now + days * 864e5).toISOString();
     const ask = ultra ? api(`/calendars/todo/studentItems?since=${at(0)}&until=${at(7)}`).then((j) => GZ_DUE_WEEK(j, now))
       : moodle ? moodleIn().then((m) => m.due(now)) : capi(`/planner/items?start_date=${at(0)}&end_date=${at(7)}&per_page=100`).then((j) => GZ_CANVAS_DUE_WEEK(j, now));
     return ask.then((list) => {
-      try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now(), dueWeekFrom: location.origin }); } catch { /* reloaded */ }
+      try { chrome.storage.local.set({ [DUE]: { at: Date.now(), list } }); } catch { /* reloaded */ }
       return list;
     }, () => kept);
   }));
@@ -421,7 +447,6 @@
     if (full) { full = false; if (ultra) X.gate(document.body); sweepAll(); } else sweepRoots(roots);
     if (said) { tagExtras(all ? [document.body] : roots); wordsLate = false; } else wordsLate = true;
     // Every site runs the same list; what a site doesn't do is a default that does nothing (X).
-    themeEditors();
     if (tip && ultraTipShown()) hideTip();
     X.paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked || surfaceCourse() !== html.style.getPropertyValue('--gz-surface-course')) applySettings();
@@ -842,15 +867,16 @@
   };
   // Expired copies go; with backup off, all copies go. Top frame only.
   const tidyDrafts = () => {
-    if (window.top !== window) return;
+    if (window.top !== window || !settings.enabled) return;
     const sweep = (s, all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
-      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }, () => {});
+      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (settings.enabled && old.length) s.remove(old); }, () => {});
     };
     local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => {
+      if (!settings.enabled) return;
       if (ks) return s.get(ks.filter((k) => k.startsWith('draft:')), (all) => sweep(s, all));
       // Without key listing everything is read, local artwork too: at most once a day, so old copies still go.
-      s.get('draftsSwept', (r) => { if (!(r?.draftsSwept > Date.now() - 864e5)) { s.set({ draftsSwept: Date.now() }); s.get(null, (all) => sweep(s, all)); } });
+      s.get('draftsSwept', (r) => { if (settings.enabled && !(r?.draftsSwept > Date.now() - 864e5)) { s.set({ draftsSwept: Date.now() }); s.get(null, (all) => sweep(s, all)); } });
     }).catch(() => {}));
   };
 
@@ -877,8 +903,7 @@
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.gz = key;
-    b.title = label;
-    b.setAttribute('aria-label', label);
+    b.title = label; // its name too: an aria-label as well made screen readers say it twice
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('aria-hidden', 'true');
@@ -889,11 +914,14 @@
     b.addEventListener('click', onClick);
     return b;
   };
+  let darkSave = 0;
   const setDark = (v) => {
+    const save = ++darkSave;
     settings = { ...settings, enhance: { ...settings.enhance, docPages: v } };
     setAttr('data-gz-enhance-docPages', v);
     syncDocTools();
-    try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
+    // Only this field, on what is stored: this tab's copy has every default filled in.
+    try { chrome.storage.sync.get('enhance', (r) => chrome.runtime.lastError || save !== darkSave || chrome.storage.sync.set({ enhance: { ...r.enhance, docPages: v } })); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
     // Read-only review is independently lazy, including when the reading tools are off.
@@ -912,16 +940,17 @@
   // "g" then a letter goes somewhere, "/" searches, "?" lists them: features/keys.js, loaded on the first key that
   // starts one while the switch is on, then handed every key. Top frame only.
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
-  // Whether a key is one for the shortcuts: switched on, no modifier, not typing, and on Canvas and Moodle not repeated, not
+  // Whether a key is one for the shortcuts: switched on, no modifier, not typing or composing, not in a menu, list, grid or tree
+  // (type-ahead: a dialog too on Canvas and Moodle, but Ultra's courses are dialogs), and on Canvas and Moodle not repeated, not
   // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too, and Moodle's pages).
-  const keyOn = (e) => !!chrome.runtime?.id && !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target)
-    && (ultra || !(e.defaultPrevented || e.repeat || !(moodle || GZ_PAGE.canvasKeys(location.pathname)) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')));
+  const keyOn = (e) => !!chrome.runtime?.id && !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && e.keyCode !== 229
+    && !(e.path || e.composedPath?.() || [e.target]).some((el) => typing(el) || el?.closest?.(`${ultra ? '' : '[role="dialog"]:not(#gz-keys), '}[role="menu"], [role="menubar"], [role="listbox"], [role="grid"], [role="tree"], [role="combobox"]`)) && (ultra || !(e.defaultPrevented || e.repeat || !(moodle || GZ_PAGE.canvasKeys(location.pathname))));
   let keysWaiting = null; // the keys pressed while keys.js loads, as they were: handed over in order when it's in
   if (solo) {
     document.addEventListener('keydown', (e) => {
       if (!chrome.runtime?.id) return;
       if (globalThis.GZ_KEYS) return GZ_KEYS.key(e);
-      const was = { key: e.key, target: e.target, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, repeat: e.repeat, at: Date.now(), preventDefault() {}, stopImmediatePropagation() {} };
+      const was = { key: e.key, target: e.target, path: e.composedPath?.(), isComposing: e.isComposing, keyCode: e.keyCode, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, repeat: e.repeat, at: Date.now(), preventDefault() {}, stopImmediatePropagation() {} };
       if (keysWaiting) {
         // What keys.js does at once with a "?" (Ultra's list; Canvas's g then ?, so Canvas's own help stays shut),
         // which can't wait for the file.
@@ -957,10 +986,10 @@
   }
 
   // ---- footer ---------------------------------------------------------------------------------
-  // A full-width bar, top frame only. theme.css shrinks the app by --gz-footer-h so the bar sits
-  // below everything rather than over it.
+  // Full-width, top frame only, last in the page. theme.css shrinks the app by --gz-footer-h: the bar sits
+  // below everything, not over it.
   const syncFooter = () => {
-    const want = links.length && settings.footer && window.top === window && document.body;
+    const want = links.length && settings.footer && window.top === window && observer;
     const have = document.getElementById('gz-footer');
     if (want && !have) {
       const f = document.createElement('footer');
@@ -1128,10 +1157,9 @@
         b.setAttribute('aria-haspopup', 'dialog');
         b.setAttribute('aria-expanded', String(globalThis.GZ_COURSE_MENU?.cid() === cid));
         card.append(b);
-      } else if (b.getAttribute('aria-label') !== label) {
-        b.setAttribute('aria-label', label);
-        // While the pointer is on it, its title is in the tooltip (onTip).
-        if (b.dataset.gzTitle !== undefined) b.dataset.gzTitle = label; else b.title = label;
+      } else if ((b.dataset.gzTitle ?? b.title) !== label) {
+        // While the pointer is on it, its title is in the tooltip and its name an aria-label (onTip).
+        if (b.dataset.gzTitle === undefined) b.title = label; else { b.dataset.gzTitle = label; if (b.dataset.gzAria) b.setAttribute('aria-label', label); }
       }
     }
     globalThis.GZ_COURSE_MENU?.sync(on);
@@ -1311,7 +1339,6 @@
     if (!s.look.tooltips) hideTip();
     if (said) syncDocTools();
     syncScene();
-    themeEditors();
     armFlip();
   };
   // Scheduled dark's clock loads while a schedule is worn.
@@ -1330,53 +1357,17 @@
     vars.clear();
     attrs.clear();
   };
-
-  // ---- Canvas: the rich text editor's writing area ---------------------------------------------
-  // TinyMCE (discussion replies, text submissions, the inbox) writes in a same-origin iframe that it fills by script.
-  // The content script isn't injected there (about:blank, and the manifest doesn't ask for it), and canvas.css doesn't
-  // reach into it, so it would stay white. The page reaches in instead: the frame gets one small <style>, the palette's
-  // values copied from <html> (the --gz-* vars, color-scheme) and the few rules a writing area needs. It is rewritten
-  // on every sweep pass (a new editor is an added node), by applySettings (a palette change reaches an open editor),
-  // and on the frame's load, for a frame TinyMCE hadn't filled yet when the pass saw it. It is in the frame's <head>;
-  // what Canvas posts is the body's HTML, so none of it is saved. disable() calls this after dropping the links: it removes it.
-  // Canvas compares this default token to the selection's colour before deciding to save a foreground.
-  const EDITOR_CSS = `html, body.mce-content-body { --ic-brand-font-color-dark: var(--gz-ink) !important; background: var(--gz-surface) !important; color: var(--ic-brand-font-color-dark) !important; }
-body.mce-content-body { caret-color: var(--gz-accent); }
-body.mce-content-body[data-mce-placeholder]::before { color: var(--gz-ink-faint) !important; }
-body.mce-content-body a { color: var(--gz-accent); }
-body.mce-content-body blockquote { border-left: 3px solid var(--gz-accent); color: var(--gz-ink-muted); }
-body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-strong); }
-::selection { background: var(--gz-accent-soft); color: var(--gz-ink); }`;
-  const waiting = new WeakSet();
-  const themeEditors = () => {
-    if (ultra) return;
-    for (const frame of document.querySelectorAll('iframe.tox-edit-area__iframe')) {
-      let doc;
-      try { doc = frame.contentDocument; } catch { continue; }
-      let style = doc?.getElementById('gz-editor');
-      if (!links.length) { style?.remove(); continue; }
-      if (!doc?.body?.classList.contains('mce-content-body')) {
-        if (!waiting.has(frame)) { waiting.add(frame); frame.addEventListener('load', themeEditors, { once: true }); }
-        continue;
-      }
-      const css = `:root { ${[...vars].map((k) => `${k}: ${html.style.getPropertyValue(k)}`).join('; ')} }\n${EDITOR_CSS}`
-        + (darkTheme ? '\nbody.mce-content-body img:not(:hover) { filter: brightness(0.88); }' : '');
-      if (!style) {
-        style = doc.createElement('style');
-        style.id = 'gz-editor';
-        (doc.head || doc.documentElement).append(style);
-      }
-      if (style.textContent !== css) style.textContent = css;
-    }
-  };
+  // Ultra's early sheets enable() hasn't taken: off, they'd style the page with no palette.
+  const early = () => globalThis.GZ_SITE_ULTRA?.sheets?.splice(0).forEach((l) => l.remove());
 
   const enable = () => {
     if (notUltra) return;
     if (!links.length) {
       links = SHEETS.map((f) => {
         const l = (ultra && globalThis.GZ_SITE_ULTRA?.sheets?.shift()) || document.createElement('link');
-        // The tint reads the course color theme.css resolves: none before it loads.
-        l.addEventListener('load', () => { if (tintKey() !== tinted) reapply(); }, { once: true });
+        // The tint reads the course color theme.css resolves: none before it loads. A sweep already run read the page
+        // without this sheet (Canvas's ink on a quiz label it fills): one full pass again.
+        l.addEventListener('load', () => { if (tintKey() !== tinted) reapply(); if (observer) { full = true; if (!timer) timer = setTimeout(flush, 150); } }, { once: true });
         // Moving/reassigning an early Ultra sheet restarts its load and can release its render blocker.
         if (!l.isConnected) {
           l.rel = 'stylesheet';
@@ -1398,13 +1389,14 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     onBody(async () => {
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
-      if (!ultra) await ready;
+      // The sweep fetches, records and registers the site: not on defaults.
+      await ready;
       // The site's part still on its way: the theme is on already; the sweep and the extras wait for it.
       if (partIn) await partIn;
       if (!links.length) return;
       if (!on(settings)) return disable();
-      syncFooter();
       startSweep();
+      syncFooter();
       syncScene();
       moveParts();
     });
@@ -1423,6 +1415,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     unmenu();
     for (const l of links) l.remove();
     links = [];
+    early();
     armFlip();
     X.syncTodo();
     X.syncCardTasks();
@@ -1430,7 +1423,6 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     X.syncRemind();
     X.syncSyl();
     X.syncInsights();
-    themeEditors();
     syncPageFade();
     stopScene();
     stopSweep();
@@ -1451,7 +1443,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   const I = { C, html, isPreview, solo, tabFrame, need, t, locale, api, capi, canvasCourseKey, canvasCourseId, courseId, celebrate, markDue, drawProgress, cardBadge, KIND,
     cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled, setVar, setAttr,
     setCourseList: (all) => { courseList = all; X.paintCourses(); syncCourseMenu(); reapply(); },
-    get settings() { return settings; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
+    get settings() { return settings; }, get ready() { return ready; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
     get courseList() { return courseList; }, get worn() { return worn; } };
   const part = { ultra: 'GZ_SITE_ULTRA', canvas: 'GZ_SITE_CANVAS' }[site];
   const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
@@ -1504,10 +1496,16 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       if (n !== settingsRead) return settingsPending;
       lookX = raw?.lookX;
       const s = GZ_SANITIZE(raw, fresh);
-      // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
-      try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
+      try { sessionStorage.setItem(KEPT, JSON.stringify(firstPaint(s))); } catch { /* blocked or full */ }
       return s;
     }));
+  };
+  // The page can read this copy: only what first paint shows anyway, no names, addresses or course maps.
+  const firstPaint = (s) => {
+    const { image, ...bg } = s.bg, { u, i, ...nav } = s.nav, { title, ...sidebar } = s.sidebar, { harmonize, tint, strength } = s.courses;
+    const pal = (n) => ({ name: n, colors: GZ_PRESET(s.auto[n], s.presets) || s.colors });
+    return { enabled: s.enabled, colors: s.colors, auto: { ...s.auto, light: 'light', dark: 'dark' }, presets: [pal('light'), pal('dark')], look: s.look, bg, nav, sidebar,
+      navbar: s.navbar, motion: s.motion, enhance: s.enhance, declutter: s.declutter, extras: s.extras, footer: s.footer, courses: { harmonize, tint, strength } };
   };
   // The previous palette covers storage latency, avoiding a dark flash with a light look.
   const KEPT = 'gz-settings';
@@ -1524,6 +1522,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     else enable();
   });
   if (on(settings)) enable();
+  else early();
   // Load parts after the theme, only when present.
   const partsIn = (m) => {
     if (solo && !isPreview && (m || lookX || globalThis.GZ_XPARTS_PAGE)) need('features/lookparts.js', () => globalThis.GZ_XPARTS_PAGE).then(() => GZ_XPARTS_PAGE.read(), () => {});

@@ -315,9 +315,9 @@ const gpaPage = ({ store = shared(), list, capi }) => {
   const doc = page();
   doc.body.append(el(doc, 'div', { id: 'DashboardCard_Container' }));
   const state = { settings: { enabled: true, enhance: { gpa: true, gpaPlus: true } } };
-  const chrome = { runtime: { sendMessage: () => Promise.resolve() }, storage: { local: store.tab({}), sync: shared().tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
+  const chrome = { runtime: { sendMessage: () => Promise.resolve({ ok: true }) }, storage: { local: store.tab({}), sync: shared().tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
   const ctx = vm.createContext({
-    document: doc, location: { pathname: '/', search: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome,
+    document: doc, location: { pathname: '/', search: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, TextEncoder, GZ_I18N: I, chrome,
     GZ_CTX: {
       t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', capi, canvasCourses: () => Promise.resolve(list), canvasCourseId: () => undefined,
       need: (f, ready) => (ready() ? Promise.resolve() : Promise.reject(new Error('not loaded'))), settings: () => state.settings, on: () => true,
@@ -343,6 +343,44 @@ test('GPA: a course answer without a grading scheme says the what-if needs a sca
   p.UI.render();
   await settle(10);
   assert.equal(asked.length, 1, 'and not again');
+});
+
+// ACA-1 and ACA-2 at the Scale field: a syllabus's own wording counts the course, text that is no scale says so and changes nothing.
+test('GPA: a scale pasted as ranges counts the course, and text that is no scale shows the error', async () => {
+  const p = gpaPage({
+    list: [{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 95, computed_current_grade: 'A' }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } },
+      { id: '28', name: 'History', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 52, computed_current_grade: 'F' }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } }],
+    capi: (q) => Promise.resolve({ id: q.match(/courses\/(\d+)/)[1], grading_scheme: [['A', 0.94], ['B', 0.84], ['C', 0.74], ['D', 0.64], ['F', 0]] }),
+  });
+  p.UI.render();
+  await settle(10);
+  const cell = (id) => {
+    let row = find(p.box(), (e) => e.dataset.f === `s:${id}`);
+    while (row.tagName !== 'TR') row = row.parentNode;
+    return find(row, (e) => e.className === 'gz-gpa-grade').textContent;
+  };
+  const scale = (id) => find(p.box(), (e) => e.dataset.f === `s:${id}`);
+  const note = () => find(p.box(), (e) => e.className === 'gz-gpa-note' && e.role === 'status').textContent;
+  const type = (id, text) => { const input = scale(id); input.value = text; input.fire('change'); return input; };
+  assert.match(cell(27), /^A\b/);
+  // The syllabus's table, ranges and all: the letters are kept, the 95% is an A with its points, the course is in the GPA.
+  const ranges = type(27, 'A 93-100, B 83-92.99, C 73-82.99, D 60-72.99, F 0-59.99');
+  await settle(4);
+  assert.equal(ranges.attrs['aria-invalid'], 'false');
+  assert.equal(note(), '');
+  assert.equal(ranges.value, 'A 93, B 83, C 73, D 60, F 0', 'shown as the scale it was read as');
+  assert.match(cell(27), /^A · 95% · 4\.00/);
+  assert.match(p.box().textContent, /4\.00/, 'and the GPA has it');
+  // A scale without an F: 52% is the F that Canvas gave, not the lowest passing letter.
+  type(28, 'A 90, B 80, C 70, D 60');
+  await settle(4);
+  assert.match(cell(28), /^F · 52% · 0\.00/);
+  assert.match(p.box().textContent, /2\.00/, '(4 + 0) / 2: the failed course is in the GPA');
+  // Text that was once read as a letter named "A 93 to" is now refused with the existing message, and nothing is stored.
+  const bad = type(27, 'A 93 to 100');
+  assert.equal(bad.attrs['aria-invalid'], 'true');
+  assert.equal(note(), 'Write a scale as letters and their lowest percent: A 93, A- 90, B+ 87.');
+  assert.match(cell(27), /^A · 95% · 4\.00/, 'the course keeps the scale it had');
 });
 
 // The GPA with past terms, trends and a goal (features/gpaterms.js, lib/gpa.js), kept through the service worker.
@@ -423,6 +461,8 @@ test('GPA: past terms count in the overall GPA, show as a trend table, set a goa
   assert.equal(store.data[TKEY].t.length, 4);
   const other = await store.send({ type: 'glaze:gpaterms', key: 'gpaTerms:https://other.instructure.com:3', op: 'clear', at: Date.now() }, { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` });
   assert.deepEqual(other, { ok: false, error: 'sender' }, "a page can't change another site's terms");
+  const port = await store.send({ type: 'glaze:gpaterms', key: `gpaTerms:${ORIGIN}:8443:3`, op: 'clear', at: Date.now() }, { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` });
+  assert.deepEqual(port, { ok: false, error: 'sender' }, "nor the same host's on another port");
 });
 
 // A goal for this term, with the GPA view open.

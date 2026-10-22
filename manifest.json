@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.3.3",
+  "version": "3.3.5",
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [
@@ -25,7 +25,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "glaze@frostdev.io",
-      "strict_min_version": "121.0"
+      "strict_min_version": "140.0"
     }
   },
   "icons": {
@@ -132,7 +132,7 @@
     },
     {
       "matches": [
-        "https://canvadocs.instructure.com/*"
+        "https://*.instructure.com/*"
       ],
       "js": [
         "lib/ink.js",

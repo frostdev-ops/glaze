@@ -16,8 +16,9 @@ var GZ_GPA = globalThis.GZ_GPA || (() => {
   const okNum = (v, max) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max;
 
   // ---- grades ----------------------------------------------------------------------------------------------------
-  // What a transcript's grade means for the GPA. A letter (A+ to F, or E) or grade points (0 to 5, as written) count;
-  // a percentage (over 5) counts as Canvas's default scheme reads it. Pass/fail, withdrawn (WF too: schools differ, and
+  // What a transcript's grade means for the GPA. A letter (A+ to F, or E; XF, FN, IF and FA are failures, 0 points) or
+  // grade points (0 to 5, as written) count; a percentage (over 5) counts as Canvas's default scheme reads it.
+  // Pass/fail, withdrawn (WF too: schools differ, and
   // the grade can be changed to F), transfer, incomplete, audit and anything else are listed but left out.
   const up = (g) => String(g ?? '').trim().toUpperCase().replace(/[−–]/g, '-');
   const NUM = /^\d{1,3}(?:[.,]\d{1,3})?$/;
@@ -49,16 +50,20 @@ var GZ_GPA = globalThis.GZ_GPA || (() => {
   // ---- terms in time ---------------------------------------------------------------------------------------------
   // Where a term falls, from its name: the year, then its season or its number in the year ("Fall 2024", "Spring
   // Semester 2025", "2025 Term 1", "Wintersemester 2024/25", "Automne 2024"). null without a year.
-  const SEASONS = [[/winter|hiver|invierno|inverno|\bws\b/i, 0], [/spring|printemps|primavera|voorjaar|lente|fr[üu]hling/i, 1],
+  // A January term or an intersession is held between Winter and Spring, a Maymester or May term between Spring and
+  // Summer. They are tried first, so that "Winter Intersession" is the intersession it names.
+  const SEASONS = [[/\b(?:j|jan(?:uary)?)[ -]?term\b|\binter-?session/i, 0.5], [/\bmay(?:mester|[ -]?term)\b/i, 1.5],
+    [/winter|hiver|invierno|inverno|\bws\b/i, 0], [/spring|printemps|primavera|voorjaar|lente|fr[üu]hling/i, 1],
     [/summer|sommer|[ée]t[ée]|verano|ver[ãa]o|zomer|\bss\b/i, 2], [/fall|autumn|automne|oto[ñn]o|outono|herbst|najaar|herfst/i, 3]];
   const when = (name) => {
     const s = String(name || '');
     const y = /\b((?:19|20)\d\d)(\s*[/-]\s*\d{2,4})?\b/.exec(s);
     if (!y) return null;
     const season = SEASONS.find(([re]) => re.test(s));
-    // A winter term across two years (Wintersemester 2024/25) starts late in the first.
+    // A winter term across two years (Wintersemester 2024/25) starts late in the first; spring and summer in an academic
+    // year (2023-2024 Spring Semester) are in the second.
     const at = season ? (season[1] === 0 && y[2] ? 3.5 : season[1]) : Math.min(9, Number(/\b(?:term|semester|quarter|trimester|semestre|trimestre|[qst])\s*(\d)\b|\b(\d)(?:st|nd|rd|th)\b/i.exec(s)?.slice(1).find(Boolean) ?? 5));
-    return Number(y[1]) * 10 + at;
+    return (Number(y[1]) + (season && y[2] && at < 3 ? 1 : 0)) * 10 + at;
   };
   // Oldest first. A term whose name has no year keeps its place after the one before it.
   const order = (terms) => {
@@ -91,10 +96,12 @@ var GZ_GPA = globalThis.GZ_GPA || (() => {
   };
 
   const LADDER = { true: ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A'], false: ['F', 'D', 'C', 'B', 'A'] };
-  // The lowest percent for a letter on a scale ([[name, min %], …]): the least that earns at least its points.
+  // The lowest percent for a letter on a scale ([[name, min %], …]): the least that earns at least its points. A failing
+  // letter starts at 0 on a scale whose letters all have points, as letter() gives an F below its lowest bound.
   const floor = (scale, name, plus) => {
     const want = C().points(name, plus);
     const ok = scale.filter(([n]) => (C().points(n, plus) ?? -1) >= want).map(([, min]) => min);
+    if (want === 0 && ok.length === scale.length) return 0;
     return ok.length ? Math.min(...ok) : null;
   };
   // The highest letter (its place on the ladder) a course can still end on: one its scale gives (any, when the scale
@@ -125,7 +132,7 @@ var GZ_GPA = globalThis.GZ_GPA || (() => {
     const pts = (c, k) => C().points(L[k], plus, c.bonus || 0);
     const avg = L.findIndex((n) => C().points(n, plus) >= need - 1e-9);
     const st = courses.map((c) => {
-      const name = up(c.letter) === 'E' ? 'F' : up(c.letter);
+      const name = C().points(c.letter, true) === 0 ? 'F' : up(c.letter);
       const now = c.letter ? L.indexOf(plus ? name : name[0]) : -1;
       const top = Math.max(0, topOf(c, plus));
       return { c, k: Math.min(now >= 0 ? now : avg >= 0 ? avg : L.length - 1, top), top, from: now };
@@ -154,8 +161,10 @@ var GZ_GPA = globalThis.GZ_GPA || (() => {
   // what comes before them. A table read one cell per line is folded back into rows. The transcript's own term GPA and
   // the figures on its term summary lines (credits attempted, earned, totals) are kept to check against, and lines
   // with a course code that couldn't be read are listed (skipped). Nothing here is kept until the student has reviewed it.
-  const CODE = /\b[A-Z]{2,5}[ -]?\d{3,4}[A-Z]?\b/;
-  const GRADE = /^(?:[A-DF][+-]?|E|P|NP|S|U|W[DPFXN]?|I|IP|INC|CR|NC|AU|TR|NR|NG)$/;
+  // A season or term word and a year is a term heading, not a code ("FALL 2024", "FALL TERM 2024"); so is WS with a year
+  // range ("WS 2024/25"), as WS 2000 can be Women's Studies.
+  const CODE = /\b(?!(?:FALL|TERM|HIVER|LENTE|ZOMER)[ -]?(?:19|20)\d\d\b|WS[ -]?(?:19|20)\d\d\s*\/)[A-Z]{2,5}[ -]?\d{3,4}[A-Z]?\b/;
+  const GRADE = /^(?:[A-DF][+-]?|E|XF|FN|IF|FA|P|NP|S|U|W[DPFXN]?|I|IP|INC|CR|NC|AU|TR|NR|NG)$/;
   const CREDIT = /^\d{1,2}(?:[.,]\d{1,3})?$/;
   // Words of summary lines, not courses; a row that starts with a course code is a course whatever its title says
   // ("CIS301 Software Quality Assurance").
@@ -172,7 +181,10 @@ var GZ_GPA = globalThis.GZ_GPA || (() => {
     const credit = (k) => CREDIT.test(toks[k] || '') && parseFloat(toks[k].replace(',', '.')) <= 12;
     for (let gi = toks.length - 1; gi > 0; gi--) {
       if (!GRADE.test(toks[gi]) || !(credit(gi - 1) || credit(gi + 1))) continue;
-      const ci = credit(gi - 1) ? gi - 1 : gi + 1;
+      let ci = credit(gi - 1) ? gi - 1 : gi + 1;
+      // Credits attempted, then earned (PeopleSoft): a failed course earned none, but the GPA counts those attempted. A
+      // grade the GPA leaves out (W, NC, I) keeps the credits it earned.
+      if (ci === gi - 1 && credit(gi - 2) && !parseFloat(toks[ci].replace(',', '.')) && kind(toks[gi]) === 'gpa') ci--;
       let s = Math.min(gi, ci);
       while (s > 0 && CREDIT.test(toks[s - 1])) s--;
       const name = toks.slice(0, s).join(' ');

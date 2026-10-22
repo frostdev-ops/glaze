@@ -84,13 +84,14 @@ const GZ_UI = (() => {
     }
   };
 
-  // Picking a preset is an explicit choice, so it also turns auto light/dark off.
+  // Picking a preset is an explicit choice, so it also turns auto light/dark off. It changes the palette and nothing else: the
+  // Look's extras (shader, layers, media, tweaks, navigation, animations) stay, as they do when a colour is typed. Only a whole
+  // Look (pickLook) brings its own.
   const pickPreset = (s, name, colors) => {
     s.colors = { ...colors };
     s.preset = name;
     s.auto = { ...s.auto, on: false };
-    s.parts = null;
-    return ['colors', 'preset', 'auto', 'parts'];
+    return ['colors', 'preset', 'auto'];
   };
 
   // One card per look: its name in its own text color on its own surface, fading into its background's
@@ -128,5 +129,45 @@ const GZ_UI = (() => {
   // A theme's name in the history and favorites: the Look it is, else its palette's name.
   const themeName = (th) => GZ_LOOKS.find((L) => GZ_LOOK_ON(th, L))?.name || th.preset || GZ_I18N.t('Custom theme', {}, GZ_I18N.ui());
 
-  return { load, save, paint, swatches, pickPreset, looks, pickLook, themeName };
+  // ---- contrast, as the pages draw it ----
+  // features/surfaces.css paints every surface and the ground as color-mix(in srgb, tint X%, surface color): a custom surface
+  // color or a tint changes what text sits on while the palette's own tokens still read well. (A glass surface's opacity over a
+  // picture isn't known here.)
+  const blend = (from, to, t) => {
+    const a = GZ_COLOR.parse(from), b = GZ_COLOR.parse(to);
+    return GZ_COLOR.hex({ r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t });
+  };
+  const TWEAK_MIN = 4.5;
+  // The checks (GZ_CONTRAST's rows) for the Look in settings `v`: the one on offer, or the one worn. The palette is the one in
+  // force (an auto palette, by `dark`: the system's mode), under the Look's own surface color and tint. A course tint leans
+  // toward each of `courses` (colors): the worst of them counts. Then a row for each page tweak (`rules`) whose text and
+  // background colors can't be read together; a tweak that sets one side is judged against the surface, or the ink, the other
+  // side would be.
+  const contrast = (v, dark, courses = [], rules = []) => {
+    const worn = GZ_ACTIVE_COLORS(v, dark), l = v.look, seen = new Set();
+    const leans = courses.filter((c) => GZ_COLOR.parse(c));
+    const tints = l.surfaceTint && l.surfaceTintSource === 'course' && leans.length ? leans : [worn['--gz-accent']];
+    const painted = (tint) => (l.surfaceCustom || l.surfaceTint
+      ? { ...worn, ...Object.fromEntries(['--gz-surface', '--gz-surface-2'].map((k) => [k, blend(l.surfaceCustom ? l.surfaceColor : worn[k], tint, l.surfaceTint / 100)])) } : worn);
+    const runs = tints.map((tint) => GZ_CONTRAST(painted(tint)));
+    const rows = runs[0].map((row, i) => runs.reduce((worst, run) => (run[i].ratio < worst.ratio ? run[i] : worst), row));
+    const styles = new Map();
+    for (const r of rules) if (r?.do === 'style') styles.set(r.p, { ...styles.get(r.p), ...r.st });
+    for (const [part, st] of styles) {
+      if (!(st.fg || st.bg)) continue;
+      const color = (c) => (c[0] === '#' ? c : worn[`--gz-${c}`]);
+      const fg = st.fg ? color(st.fg) : worn['--gz-ink'];
+      if (!GZ_COLOR.parse(fg)) continue;
+      const backgrounds = st.bg ? [color(st.bg)] : tints.map((tint) => painted(tint)['--gz-surface']);
+      const bg = backgrounds.filter((c) => GZ_COLOR.parse(c)).sort((a, b) => GZ_COLOR.contrast(fg, a) - GZ_COLOR.contrast(fg, b))[0];
+      if (!bg) continue;
+      const ratio = GZ_COLOR.contrast(fg, bg), key = `${part} ${fg} ${bg}`;
+      if (ratio >= TWEAK_MIN || seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ fg, bg, min: TWEAK_MIN, label: 'Page tweak on {part}', part, ratio, pass: false });
+    }
+    return rows;
+  };
+
+  return { load, save, paint, swatches, pickPreset, looks, pickLook, themeName, contrast };
 })();

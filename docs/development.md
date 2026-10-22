@@ -25,7 +25,7 @@ grade calculators, loads on demand from `features/` the first time a page needs 
 
 Writes `dist/glaze-v<version>.zip`, ready for the Chrome Web Store. Requires `node` and `zip`.
 From a clean `dev/firefox` checkout, `sh scripts/package-firefox.sh` writes it too, plus `dist/glaze-v<version>-firefox.zip` for Firefox Add-ons. The Firefox compatibility branch must include the intended main release, as [Releasing](../RELEASING.md) describes. Other checkouts require an explicit `--development` argument; that produces a visibly named development build for local checks, not a store upload. Each Firefox ZIP records its source commit and development status in `glaze-build.json`.
-For a release, `sh scripts/release.sh` builds everything into `release/<version>/`; see [RELEASING.md](../RELEASING.md).
+For a release, `sh scripts/release.sh` builds everything into `release/<version>/`, from a fresh checkout of the committed `HEAD` (it refuses a dirty working tree); see [RELEASING.md](../RELEASING.md).
 
 ```sh
 node --test
@@ -33,9 +33,11 @@ node --test
 
 Runs the tests for the colour, settings and page-text logic. Use Node 26, matching CI and the browser's strict compression-stream behavior. No dependencies to install.
 
-For Ultra background clipping, run `NODE_PATH=/path/to/node_modules nice -n 15 node scripts/ultra-panel-background-check.js` with Playwright available. It checks native off-canvas gutters, close-button clicks, scene continuity and scrolled headers at desktop/mobile widths in both text directions, plus partial-width sheet exclusions. Panel course tabs are checked above and below native headers with negative margins, at every strip size, so announcement labels stay exposed. An optional output directory saves screenshots; `CHROME` selects a different Chromium executable.
+The browser checks in `scripts/*-check.js` need Playwright (`NODE_PATH=/path/to/node_modules`, and `npx playwright install chromium` once). They launch Playwright's own Chromium; set `CHROME` to use another executable. `mods-api-check.js`, `mods-sandbox-check.js` and `widgets-builder-check.js` also use macOS's `sandbox-exec` and run only there. The three heaviest checks (`background-shell-check.js`, `background-pages-check.js` and `docreview-check.js`) take a lock directory so only one runs at a time: `glaze-heavy.lock` in the OS temp directory, or `GLAZE_LOCK` if set (`scripts/check-env.js` resolves both).
 
-`scripts/background-shell-check.js` checks rendered pixels behind the navbar and sidebar across base pages, course tools and item panels, before and after scrolling, at desktop/mobile widths in both text directions. `scripts/background-pages-check.js` runs the unpacked extension and its contour renderer through Ultra's synthetic routes and retained course tabs, then checks cleanup when switching to solid. Both accept an optional evidence directory and acquire `/private/tmp/claude-501/glaze-heavy.lock`; they use local fixtures, not a signed-in LMS. Scene placement (`lib/scene-host.js`) loads only when an animated or mod background needs it.
+For Ultra background clipping, run `NODE_PATH=/path/to/node_modules nice -n 15 node scripts/ultra-panel-background-check.js` with Playwright available. It checks native off-canvas gutters, close-button clicks, scene continuity and scrolled headers at desktop/mobile widths in both text directions, plus partial-width sheet exclusions. Panel course tabs are checked above and below native headers with negative margins, at every strip size, so announcement labels stay exposed. An optional output directory saves screenshots.
+
+`scripts/background-shell-check.js` checks rendered pixels behind the navbar and sidebar across base pages, course tools and item panels, before and after scrolling, at desktop/mobile widths in both text directions. `scripts/background-pages-check.js` runs the unpacked extension and its contour renderer through Ultra's synthetic routes and retained course tabs, then checks cleanup when switching to solid. Both accept an optional evidence directory and hold the shared lock described above; they use local fixtures, not a signed-in LMS. Scene placement (`lib/scene-host.js`) loads only when an animated or mod background needs it.
 
 `scripts/navbar-check.js` checks Glaze's own navigation bar in the editor's Ultra preview: the drawer it stands in for,
 the room it keeps, items, badges and the current page, the icons rail's tooltips, peek and keyboard, right-to-left, the
@@ -63,7 +65,7 @@ are documented in [Releasing Glaze](../RELEASING.md#release-command-and-credenti
 sh scripts/publish-chrome.sh
 ```
 
-Packages the extension, uploads it with the Chrome Web Store API, and submits it for review. Pass a
+Packages the extension from a fresh checkout of the committed `HEAD` (it refuses a working tree with uncommitted or untracked files), uploads it with the Chrome Web Store API, and submits it for review. Pass a
 zip path to upload a specific build; set `CWS_NO_PUBLISH=1` to upload without submitting. It signs in
 as the `cws-publisher` service account through `gcloud` impersonation, so no key file is kept: your
 Google account needs the Service Account Token Creator role on it, and the service account must be
@@ -163,4 +165,4 @@ create them. It never uploads unless `APPSTORE_UPLOAD=1` is set. To try it in th
 
 ## Bundled libraries
 
-Glaze is MIT licensed ([LICENSE](../LICENSE)). Bundled with it, each under its own license beside it: three.js (MIT, `lib/three.LICENSE`), lottie-web's light canvas player (MIT, `lib/lottie/LICENSE`), pdf.js and its JBIG2 and JPEG 2000 decoders (Apache-2.0 and BSD, `lib/pdfjs/`), and the Tesseract OCR engine and its tessdata_fast models (Apache-2.0, `lib/tesseract/`), each rebuilt by its `scripts/vendor-*.sh`.
+Glaze is MIT licensed ([LICENSE](../LICENSE)). Bundled with it, each under its own license beside it: three.js (MIT, `lib/three.LICENSE`), lottie-web's light canvas player (MIT, `lib/lottie/LICENSE`), pdf.js and its JBIG2 and JPEG 2000 decoders (Apache-2.0 and BSD, `lib/pdfjs/`), and the Tesseract OCR engine and its tessdata_fast models (Apache-2.0, `lib/tesseract/`), each rebuilt by its `scripts/vendor-*.sh`. The scripts check what they download against pinned hashes; `vendor-three.sh`, which uses npm, installs with install scripts off and checks the installed packages against pinned integrity values (`scripts/npm-integrity.js`).

@@ -23,6 +23,8 @@
 #gz-float .gz-w[data-size="l"] { width: min(27rem, calc(100vw - 24px)); }
 #gz-float .gz-w-head { cursor: grab; touch-action: none; }
 #gz-float .gz-w[data-dragging] { cursor: grabbing; opacity: 0.92; }
+/* Fixed over the page, a floating tile would print over the first sheet's text: printed, the page is itself. */
+@media print { #gz-float { display: none !important; } }
 .gz-w :is(button, input, select, textarea) { font: inherit; }
 .gz-w [hidden], .gz-game-dialog [hidden], #gz-hub [hidden], #gz-ccm [hidden], .gz-tour [hidden] { display: none !important; }
 .gz-w :is(button, input, select, textarea, a, [tabindex]):focus-visible, :is(#gz-hub, #gz-ccm, .gz-tour) :is(button, input, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
@@ -275,6 +277,8 @@ html[data-gz-sidebar-todo] div.todo-panel > bb-todo { display: none !important; 
   display: none; position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 0 0 var(--gz-radius) 0; cursor: nwse-resize; touch-action: none;
   color: var(--gz-ink-faint); background: linear-gradient(135deg, transparent 0 52%, currentColor 52% 59%, transparent 59% 70%, currentColor 70% 77%, transparent 77%);
 }
+/* Drawn at 18px in the corner, taken from 24 (WCAG 2.5.8): the extra reaches into the tile, never out past its edge. */
+.gz-w-resize::before { content: ""; position: absolute; inset: -6px 0 0 -6px; }
 :is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w > .gz-w-resize, #gz-float:not([data-stack]) > .gz-w > .gz-w-resize { display: block; }
 .gz-w-resize:hover, .gz-w[data-resizing] > .gz-w-resize { color: var(--gz-accent); }
 .gz-w-resize:focus-visible { outline-offset: -2px; }
@@ -917,6 +921,8 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 .gz-game-world{position:fixed;inset:0;overflow:clip;pointer-events:none;z-index:2147483001}
 .gz-game-world>*{translate:calc(0px - var(--gz-world-x,0px)) calc(0px - var(--gz-world-y,0px))}
 .gz-game-world>.gz-game-actor,.gz-game-world>.gz-game-item{pointer-events:auto}
+/* The pet out on the page, and its toys: for the screen, not the printed page. */
+@media print{.gz-game-world{display:none!important}}
 
 /* Keep everyday care in view; furniture and preferences open when they are needed. */
 .gz-game [hidden]{display:none!important}

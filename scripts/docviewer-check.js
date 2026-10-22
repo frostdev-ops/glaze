@@ -6,7 +6,7 @@
 // again, zoom, rotation, and German words. There is no canvadocs on a local Canvas: a real signed-in viewer is still a
 // check by hand before release.
 //   NODE_PATH=/path/to/node_modules node scripts/docviewer-check.js [out dir for screenshots]   (needs playwright)
-//   CHROME=/path/to/chrome runs that browser instead of Chrome for Testing.
+//   CHROME=/path/to/chrome runs that browser instead of Playwright's Chromium.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -18,7 +18,7 @@ const opaqueHex = (value) => { const c = C.parse(value); return c?.a === 1 ? C.h
 
 const ext = path.join(__dirname, '..');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docviewer-'));
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const fx = (f) => fs.readFileSync(path.join(ext, 'test/fixtures', f), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const BLOB = encodeURIComponent(JSON.stringify({ user_id: 170000000000042, attachment_id: 21, type: 'canvadoc' }));
@@ -29,7 +29,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'w9-'));
   await require('./wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
-    executablePath: CHROME, headless: true, viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce', colorScheme: 'dark',
+    ...chromeLaunch, headless: true, viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce', colorScheme: 'dark',
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
   });
   try {

@@ -353,3 +353,11 @@ test('GZ-02: exhausting the query request budget must not announce exhaustive ab
   assert.match(p.live.textContent, /partial|incomplete|limited|not all|searched (?:portion|part|items)|narrow|more|budget/i,
     'unsearched course lists must not be described as having no matching items');
 });
+
+// WP-N2 (NAV-11): the status line for screen readers is hidden by a class Glaze's sheets define (Canvas's own isn't on Ultra).
+test('the search status is a live region with a visually-hidden class Glaze defines', async () => {
+  const p = ui();
+  await p.attach();
+  assert.equal(p.live.className, 'gz-sr');
+  assert.match(fs.readFileSync(require.resolve('../features/apps.css'), 'utf8'), /\.gz-sr \{[^}]*clip-path: inset\(50%\)/);
+});

@@ -118,8 +118,11 @@ test('the broker cleans what a mod hands Glaze to show, and refuses the rest', a
   assert.deepEqual(await call(e, 'look.override', [{ cursor: { kind: 'trail' } }]), { ok: true, value: { cursor: { kind: 'trail' } } });
   assert.deepEqual(await call(e, 'look.override', [null]), { ok: true, value: null });
   for (const bad of [{ cursor: { kind: 'laser' } }, { css: 'body{}' }, {}]) assert.deepEqual(await call(e, 'look.override', [bad]), { ok: false, error: 'args' }, JSON.stringify(bad));
-  assert.deepEqual(await call(e, 'nav.set', [{ hidden: 'all' }]), { ok: false, error: 'args' });
+  // A layout from code needs nav.layout, which this mod lacks (test/mod-nav.test.js has the rest); withdrawing needs none.
+  assert.deepEqual(await call(e, 'nav.set', [{ hidden: ['calendar'] }]), { ok: false, error: 'permission' });
   assert.deepEqual(await call(e, 'nav.set', [null]), { ok: true, value: null });
+  const arranges = rec({ grants: { courses: true, 'nav.layout': true }, manifest: { ...rec().manifest, permissions: [{ id: 'courses', why: 'w' }, { id: 'nav.layout', why: 'w' }] } });
+  assert.deepEqual(await call(env(arranges), 'nav.set', [{ hidden: 'all' }]), { ok: false, error: 'args' });
   assert.equal((await call(e, 'effects.play', ['burst', { count: 5 }])).value.fx.count, 5);
   assert.deepEqual(await call(e, 'effects.play', ['laser']), { ok: false, error: 'args' });
   assert.deepEqual(await call(e, 'broadcast', [{ a: 1 }]), { ok: true, value: { a: 1 } });

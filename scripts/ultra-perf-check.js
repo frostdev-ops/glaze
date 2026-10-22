@@ -6,7 +6,7 @@ const { execFileSync } = require('node:child_process');
 const assert = require('node:assert/strict');
 const source = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
 const output = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'glaze-ultra-perf.json'));
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const origin = 'https://ultra.fixture.test';
 const reps = Number(process.env.PERF_REPS || 3);
 const D = require(path.join(source, 'defaults.js'));
@@ -121,7 +121,7 @@ const listeners = async (cdp) => {
       }
       await require('./wait-for-browser.js')();
       context = await chromium.launchPersistentContext(path.join(scratch, instrumented ? 'instrumented-profile' : 'plain-profile'), {
-        executablePath: chrome, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce',
+        ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce',
         args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1', '--disable-background-networking'],
       });
       context.setDefaultTimeout(10000);

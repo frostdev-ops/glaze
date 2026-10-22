@@ -12,7 +12,7 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const ext = process.env.EXT || path.resolve(__dirname, '..');
 const G = require(path.join(ext, 'defaults.js')), S = require(path.join(ext, 'lib/share.js')), X = require(path.join(ext, 'lib/lookparts.js'));
-const chromePath = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const LMS = 'https://school.example.test';
 const PAGE = `${LMS}/ultra/courses/_1_1/outline`, QUIZ = `${LMS}/ultra/courses/_1_1/assessment/_9_1`;
 const html = '<!doctype html><html><head><base href="https://school.example.test/ultra/"><title>Course</title></head><body><main id="app"><h1>A course</h1></main></body></html>';
@@ -27,7 +27,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
   let context;
   try {
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(scratch, { executablePath: chromePath, headless: true, viewport: { width: 1280, height: 850 }, locale: 'en-US',
+    context = await chromium.launchPersistentContext(scratch, { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 850 }, locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-webgl', '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await context.route('**/*', (route) => {
       const url = route.request().url();

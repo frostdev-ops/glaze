@@ -60,6 +60,15 @@ test('sealing: a round trip, padded lengths, and any change to a sealed batch is
 const AD = { fields: ['a', 'b'], copy: ['b'], clean: (f, v) => (typeof v === 'number' ? v : undefined), copyOf: (ent, f, v) => ({ a: -1, b: v }) };
 const blank = (actor = 'zzzzzzzz') => ({ actor, clock: [0, 0], state: {}, pending: [], held: [], seed: 'x' });
 
+test('notes merge refuses budget-cut remote HTML and keeps the previous complete body', async () => {
+  const d = blank(), now = 1.7e12;
+  const stamp = (n) => n.toString(36).padStart(9, '0') + '000aaaaaaaa';
+  await G.merge(d, G.ADAPTERS.notes, [{ e: 'note', f: 'html', v: '<p>complete</p>', t: stamp(now), p: '' }], now);
+  await G.merge(d, G.ADAPTERS.notes, [{ e: 'note', f: 'html', v: '<p>x</p>'.repeat(60000), t: stamp(now + 1), p: stamp(now) }], now + 1);
+  assert.equal(G.view(d).note.html.length, '<p>complete</p>'.length, 'a refused update cannot replace the original with its prefix');
+  assert.equal(G.view(d).note.html, '<p>complete</p>');
+});
+
 test('merge: every order, with repeats, gives the same state', async () => {
   let seed = 2026; // mulberry32
   const rnd = (n) => { seed = (seed + 0x6d2b79f5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) % n; };
@@ -120,8 +129,9 @@ test('edit: deletions and restores are changes too, and a value too big to share
   assert.deepEqual(G.view(d), { x: { a: 1 } });
   await G.edit(d, AD, { x: { a: 1 }, y: { a: 2 } }, 1e12);
   assert.deepEqual(G.view(d), { x: { a: 1 }, y: { a: 2 } });
-  // A restore sends its fields again; a deleted entity's fields aren't sent again with the whole state.
-  assert.deepEqual(d.pending.flat().map((o) => [o.e, o.f, o.v]), [['x', 'a', 1], ['y', 'a', 2], ['y', 'del', true], ['y', 'del', false], ['y', 'a', 2]]);
+  // A restore sends its fields again (unsent, the deletion and the first copy give way to it); a deleted entity's
+  // fields aren't sent again with the whole state.
+  assert.deepEqual(d.pending.flat().map((o) => [o.e, o.f, o.v]), [['x', 'a', 1], ['y', 'del', false], ['y', 'a', 2]]);
   await G.edit(d, AD, { x: { a: 1 } }, 1e12);
   assert.deepEqual(G.everything(d).flat().map((o) => [o.e, o.f]).sort(), [['x', 'a'], ['y', 'del']]);
   const big = { fields: ['t'], clean: (f, v) => v };
@@ -129,6 +139,54 @@ test('edit: deletions and restores are changes too, and a value too big to share
   assert.deepEqual(await G.edit(n, big, { a: { t: 'x'.repeat(G.LIMIT.op) }, b: { t: 'ok' } }, 1e12), { n: 1, big: ['a'] });
   assert.deepEqual(G.view(n), { b: { t: 'ok' } });
   await assert.rejects(G.edit({ ...blank(), seed: undefined }, AD, { x: { a: 1 } }, 1e12), /read-only/);
+});
+
+test('edit: an entity named like a prototype member is an ordinary entity: it can be deleted, and a view without it is not taken to have it', async () => {
+  const d = blank(), now = 1.7e12;
+  const t = (ms, c = 0, a = 'aaaaaaaa') => ms.toString(36).padStart(9, '0') + c.toString(36).padStart(3, '0') + a;
+  await G.merge(d, AD, ['toString', 'hasOwnProperty', 'valueOf'].map((e) => ({ e, f: 'a', v: 1, t: t(now), p: '' })), now);
+  assert.deepEqual(Object.keys(G.view(d)).sort(), ['hasOwnProperty', 'toString', 'valueOf']);
+  // The caller's view is a plain object that inherits those names; an entity is in it only if it is its own.
+  assert.deepEqual(await G.edit(d, AD, { x: { a: 2 } }, now + 1), { n: 4, big: [] });
+  assert.deepEqual(G.view(d), { x: { a: 2 } });
+  assert.deepEqual(d.pending.flat().filter((o) => o.f === 'del').map((o) => o.e).sort(), ['hasOwnProperty', 'toString', 'valueOf']);
+});
+
+test('adapters can name the ids they take: others are no entity, in a merge, an edit, a view or the whole state', async () => {
+  G.ADAPTERS.named = { fields: ['a'], clean: (f, v) => (typeof v === 'number' ? v : undefined), id: (e) => /^n\d$/.test(e) };
+  try {
+    const now = 1.7e12, t = (ms, c = 0, a = 'aaaaaaaa') => ms.toString(36).padStart(9, '0') + c.toString(36).padStart(3, '0') + a;
+    const d = { ...blank(), type: 'named' }, ad = G.ADAPTERS.named;
+    await G.merge(d, ad, ['n1', 'toString', 'zz', '_m_x'].map((e) => ({ e, f: 'a', v: 1, t: t(now), p: '' })), now);
+    assert.deepEqual(Object.keys(d.state), ['n1']);
+    // A state kept before the adapter took only these ids: nothing of the others is offered, sent again, or deleted.
+    d.state.zz = { a: [1, t(now), ''] }; d.state.toString = { a: [1, t(now), ''] };
+    assert.deepEqual(G.view(d), { n1: { a: 1 } });
+    assert.deepEqual(G.everything(d).flat().map((o) => o.e), ['n1']);
+    assert.deepEqual(await G.edit(d, ad, { n1: { a: 1 }, toString: { a: 5 }, qq: { a: 5 } }, now + 1), { n: 0, big: [] });
+    assert.deepEqual(d.pending, []);
+  } finally { delete G.ADAPTERS.named; }
+});
+
+test('edit: unsent changes keep only the newest value per field, naming the value the others last saw', async () => {
+  const a = blank('aaaaaaaa'), b = blank('bbbbbbbb');
+  await G.edit(b, AD, { x: { a: 1, b: 1 } }, 1e12);
+  await G.merge(a, AD, b.pending.splice(0).flat(), 1e12);
+  const seen = a.state.x.a[1];
+  // Offline: forty saves of one field, and one of another.
+  for (let i = 2; i <= 40; i++) await G.edit(a, AD, { x: { a: i, b: 1 } }, 1e12 + i);
+  await G.edit(a, AD, { x: { a: 40, b: 2 } }, 1e12 + 50);
+  assert.equal(a.pending.length, 1);
+  assert.deepEqual(a.pending[0].map((o) => [o.e, o.f, o.v, o.p]), [['x', 'a', 40, seen], ['x', 'b', 2, seen]]);
+  assert.deepEqual(a.state.x.a, [40, a.pending[0][0].t, seen], 'the state sends what the queue would (compaction sends it)');
+  // b's value is what a built on, so b keeps no conflict copy of it.
+  assert.deepEqual(await G.merge(b, AD, a.pending.flat(), 1e12), []);
+  assert.deepEqual(G.view(b), G.view(a));
+  // A newer value from another member, then an edit on top of it: that edit names the other member's value.
+  const t = (1e12 + 60).toString(36).padStart(9, '0') + '000cccccccc';
+  await G.merge(a, AD, [{ e: 'x', f: 'a', v: 99, t, p: seen }], 1e12 + 60);
+  await G.edit(a, AD, { x: { a: 100, b: 2 } }, 1e12 + 70);
+  assert.deepEqual(a.pending.flat().map((o) => [o.f, o.v, o.p]), [['b', 2, seen], ['a', 100, t]]);
 });
 
 test('conflicts: the device whose concurrent edit lost is the one that sees it lost', async () => {

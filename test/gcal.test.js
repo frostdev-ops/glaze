@@ -398,7 +398,7 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
 
 // ---- the build-time switch (lib/gcal.js ON): off in the repo and the store package until Google verifies the app ----
 test('switch off (the repo as it is): no settings section, no sync, no page script, even with a connection left from a dev build', async () => {
-  assert.equal(G.ON, false, 'lib/gcal.js ON stays false until Google verifies the app (DECISIONS.md, W13)');
+  assert.equal(G.ON, false, 'lib/gcal.js ON stays false until Google verifies the app');
   // The section is hidden in the page itself, and only the switch shows it; the editor loads the switch.
   assert.match(read('options.html'), /<div class="group" id="gcal" hidden>/);
   assert.match(read('options.html'), /<script src="lib\/gcal\.js"><\/script>[\s\S]*<script src="options\.js"><\/script>/);

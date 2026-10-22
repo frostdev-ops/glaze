@@ -112,7 +112,7 @@ const page = ({ frame = '', body = false, marker = true, wrapper = true, cached 
   const c = vm.createContext({
     document: doc, console, Intl, URL, URLSearchParams, TextEncoder, structuredClone,
     crypto: require('node:crypto').webcrypto, Date: AuditDate,
-    location: { protocol: 'https:', origin: 'https://school.instructure.com', pathname, href: `https://school.instructure.com${pathname}`, search: '', hash: '' },
+    location: { protocol: 'https:', origin: 'https://school.instructure.com', hostname: 'school.instructure.com', pathname, href: `https://school.instructure.com${pathname}`, search: '', hash: '' },
     navigator: { language: 'en' }, Element: El, HTMLElement: El, Node: El, SVGElement: class {}, NodeFilter: { SHOW_TEXT: 4 },
     getComputedStyle: (el) => {
       events.push(['style', el]);
@@ -164,7 +164,7 @@ const page = ({ frame = '', body = false, marker = true, wrapper = true, cached 
     clock = until;
   };
   return { c, doc, html, head, body: bodyEl, El, events, queries, requests, sent, storage, observers, timeouts, intervals, session, done,
-    answer, loaded, advance, addBody, fire: (type, data) => fire(doc, type, data),
+    answer, loaded, advance, addBody, fire: (type, data) => fire(doc, type, data), fireOn: fire,
     detect: () => { hasMarker = true; observers.find((o) => o.active && o.target === doc).deliver([]); },
     change: async (settings) => { raw = settings; for (const f of changes) f({ enabled: { newValue: settings.enabled } }, 'sync'); await answer(); },
     sweep: () => observers.find((o) => o.active && o.target === bodyEl),
@@ -216,6 +216,19 @@ test('Canvas reinjection does not duplicate storage reads, sheets or observers',
 test('a same-host tool iframe without the Canvas wrapper performs no theme, storage or sweep work', async () => {
   const p = page({ frame: 'external-tool', wrapper: false }); await settle(); await p.loaded(); await p.done;
   assert.equal(p.sheets().length, 0); assert.equal(p.storage.length, 0); assert.equal(p.sweep(), undefined);
+});
+
+test("Canvas's footer goes last in its page, even when the settings come while the page is still coming in", async () => {
+  // In flow on Canvas: appended to a <body> still being parsed, it landed before the rest of the page, a strip above Canvas.
+  const raw = quiet(); raw.footer = true;
+  const p = page({ body: true, cached: raw, raw }); await settle();
+  await p.answer();
+  assert.equal(p.doc.getElementById('gz-footer'), null, 'not while the page is still coming in');
+  const app = new p.El('div'); app.id = 'application'; p.body.append(app);
+  await p.loaded(); await p.done;
+  assert.equal(p.body.children.at(-1).id, 'gz-footer', 'after the page, where it shows');
+  await p.change({ ...raw, footer: false });
+  assert.equal(p.doc.getElementById('gz-footer'), null, 'and off with its switch');
 });
 
 test('a Canvas course-tab frame gates the footer, nav renderer, widgets, reminders, syllabus and draft cleanup', async () => {
@@ -291,12 +304,33 @@ test('Canvas memoizes repeated course-list requests within one document', async 
   assert.equal(courseRequests(p).length, count);
 });
 
-test('Canvas skips the initial full-page sweep when the document exceeds 20000 elements', async () => {
-  const p = page();
-  for (let i = 0; i < 20001; i++) p.body.append(new p.El());
-  await settle(); await p.answer(); await p.loaded();
-  assert.ok(p.sweep(), 'the observer still starts');
-  assert.equal(p.events.filter(([kind]) => kind === 'style' || kind === 'layout').length, 0);
+test('Canvas sweeps a document over 20000 elements 20000 at a time in document order, a pass\'s throttle apart', async () => {
+  // Skipping it left a long discussion's colours unrepaired; one pass over all of it would stall the page.
+  const big = async (opts) => {
+    const p = page(opts);
+    for (let i = 0; i < 40007; i++) p.body.append(new p.El());
+    await settle(); await p.answer(); await p.loaded();
+    return p;
+  };
+  const p = await big(), reads = () => p.events.filter(([kind]) => kind === 'style');
+  assert.ok(p.sweep(), 'the observer starts');
+  assert.equal(reads().length, 20000, 'the first 20000 at load');
+  assert.ok(reads().every(([, el], i) => el === p.body.children[i]), 'in document order');
+  assert.equal(p.events.filter(([kind]) => kind === 'layout').length, 20000);
+  await p.advance(149); assert.equal(reads().length, 20000);
+  await p.advance(1); assert.equal(reads().length, 40000);
+  await p.advance(150); assert.equal(reads().length, 40007);
+  await p.advance(5000); assert.equal(reads().length, 40007, 'each element once');
+  // Turned off midway, the rest is never read.
+  const q = await big(), off = quiet(); off.enabled = false;
+  await q.change(off); await q.advance(5000);
+  assert.equal(q.events.filter(([kind]) => kind === 'style').length, 20000);
+  // A course tab's frame hidden midway waits, and its reveal starts a whole pass again.
+  const f = await big({ frame: 'gz-ctab:27' });
+  f.html.setAttribute('data-gz-ctab-framed', ''); f.events.length = 0;
+  await f.advance(5000); assert.equal(f.events.filter(([kind]) => kind === 'style' || kind === 'layout').length, 0);
+  f.html.removeAttribute('data-gz-ctab-framed'); f.c.GZ_CTX.scene(); await f.advance(0);
+  assert.equal(f.events.filter(([kind, el]) => kind === 'style' && el === f.body.children[0]).length, 1);
 });
 
 test('Canvas course-tab themes and render blockers are installed before DOMContentLoaded', async () => {
@@ -354,4 +388,39 @@ test('Canvas startup without storage.getKeys reads all local storage for draft c
   assert.ok('draftsSwept' in local, 'the sweep is noted');
   const again = await boot({ getKeys: false, local });
   assert.equal(bulk(again).length, 0, `read all local storage again (${bulk(again).reduce((n, r) => n + r.bytes, 0)} bytes) the same day`);
+});
+
+test('a Glaze sheet that loads after the sweep began brings one full pass, which reads the page with it', async () => {
+  // canvas.css late: the first pass read a quiz result's label with Canvas's ink and no fill yet, and tagged it dark.
+  const early = page(), a = new early.El(); early.body.append(a); await settle();
+  for (const l of early.sheets()) early.fireOn(l, 'load');
+  await early.answer(); await early.loaded(); await early.advance(1000);
+  assert.equal(early.events.filter(([kind, el]) => kind === 'style' && el === a).length, 1, 'sheets in before the sweep: one pass');
+  const p = page(), el = new p.El(); p.body.append(el); await settle(); await p.answer(); await p.loaded();
+  p.events.length = 0;
+  for (const l of p.sheets()) p.fireOn(l, 'load');
+  assert.equal([...p.timeouts.values()].filter((t) => t.delay === 150).length, 1, 'six sheets, one pass');
+  await p.advance(150);
+  assert.equal(p.events.filter(([kind, node]) => kind === 'style' && node === el).length, 1);
+  await p.advance(1000);
+  assert.equal(p.events.filter(([kind, node]) => kind === 'style' && node === el).length, 1);
+});
+
+test('the editor\'s writing area keeps Canvas\'s white and ink on a dark palette: nothing is written into its frame', async () => {
+  // Colours an author picks or pastes there (a #fbeeb8 highlight, an #ecf0f1 cell, #000) are chosen against white.
+  const p = await boot(), frame = new p.El('iframe'), head = new p.El('head'), body = new p.El('body');
+  body.className = 'mce-content-body';
+  frame.className = 'tox-edit-area__iframe';
+  frame.contentDocument = { head, body, documentElement: head, getElementById: () => null, createElement: (t) => new p.El(t) };
+  p.doc.querySelectorAll = (s) => (s.includes('tox-edit-area__iframe') ? [frame] : []);
+  p.body.append(frame);
+  assert.ok(p.html.hasAttribute('data-gz-dark-theme'), 'a dark palette');
+  p.sweep().deliver([added(p, [frame])]); await p.advance(150);
+  assert.deepEqual(head.children, [], 'no style in the writing area');
+  assert.equal(body.attrs.size, 0);
+  for (const [f, rule] of [['canvas.css', /\.tox\.tox-tinymce \.tox-edit-area__iframe \{([^}]*)\}/], ['moodle.css', /html \.tox \.tox-edit-area__iframe \{([^}]*)\}/]]) {
+    const css = read(f).match(rule)?.[1] || '';
+    assert.match(css, /background: #fff;/, `${f}: the frame is white behind the page in it`);
+    assert.match(css, /color-scheme: light;/, `${f}: and light, so the page's own canvas stays clear`);
+  }
 });

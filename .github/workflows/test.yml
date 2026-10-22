@@ -2,12 +2,21 @@ name: test
 on:
   push:
   pull_request:
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # A test that hangs instead of failing would otherwise hold the runner for GitHub's six-hour limit.
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Actions are pinned by commit SHA, with the tag each was resolved from in its comment.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Node 22's deflate-raw stream accepts trailing junk; 26 follows the browser contract.
           node-version: 26
@@ -20,8 +29,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Package Firefox and require clean lint
@@ -32,7 +43,7 @@ jobs:
           npx --yes web-ext@10.8.0 lint --no-config-discovery --warnings-as-errors --source-dir "$RUNNER_TEMP/glaze-firefox"
           version=$(node -p 'require("./manifest.json").version')
           git archive --format=zip -o "dist/glaze-v$version-source.zip" HEAD
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: firefox
           path: |

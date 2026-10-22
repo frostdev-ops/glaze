@@ -5,7 +5,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const { relay, diskStore } = require('../server/relay.js');
 const G = require('../defaults.js');
 const ext = fs.realpathSync(path.join(__dirname, '..'));
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const site = 'https://bb.school.test';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, ms = 10000) => {
@@ -40,7 +40,7 @@ const click = async (page, locator, dwell = 750) => {
     const relayURL = `http://127.0.0.1:${address.port}`;
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      executablePath: chrome, headless: true, viewport: { width: 1280, height: 860 },
+      ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--no-proxy-server', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'],
     });
     ctx.setDefaultTimeout(10000);

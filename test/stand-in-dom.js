@@ -64,6 +64,7 @@ class El {
   focus() { this.doc.activeElement = this; }
   scrollIntoView() {}
   click() { this.doc.fire(this, 'click', { trusted: false }); }
+  show() { this.open = true; }
   showModal() { this.open = true; }
   close() { if (!this.open) return; this.open = false; this.dispatchEvent({ type: 'close' }); }
   // A test can give an element a box ({ left, top, width, height }), or the document a boxOf(el) that lays elements out;

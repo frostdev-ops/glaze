@@ -53,6 +53,35 @@ test('no hint where there is no real date', () => {
   for (const t of ['', 'Fall 2026', '2 / 2', '2/30/26', '13/1/26', null]) assert.equal(P.when(t, now), null, String(t));
 });
 
+// CORE-7: Ultra's en-US dates may carry a four-digit year, and its time then comes with it.
+test('four-digit years in en-US dates are read whole, with their time', () => {
+  const t = (x) => P.when(x, now, 'en-US');
+  assert.deepEqual(P.when('Due date: 10/13/2026, 11:59 PM (EDT)', now), { title: 'Due in 2 days', sub: 'Tuesday, October 13 at 11:59 PM', rel: 'in 2 days', past: false });
+  assert.deepEqual(t('Due date: 10/13/2026, 11:59 PM'), P.when('Due date: 10/13/26, 11:59 PM', now));
+  assert.deepEqual(t('10/13/2026, 11:59 PM'), P.when('10/13/26, 11:59 PM', now));
+  assert.equal(t('10/13/2026 9:00 AM').sub, 'Tuesday, October 13 at 9:00 AM', 'the time is kept without a comma too');
+  assert.deepEqual(t('Due date: 10/25/2026, 11:59 PM'), { title: 'Due in 2 weeks', sub: 'Sunday, October 25 at 11:59 PM', rel: 'in 2 weeks', past: false }, 'not 72 months ago in 2020');
+  assert.equal(t('10/4/2026, 11:59 PM').title, P.when('10/4/26, 11:59 PM', now).title);
+  assert.deepEqual(t('9/17/2026'), P.when('9/17/26', now), 'a date alone');
+  assert.equal(t('1/5/2027').sub, 'Tuesday, January 5, 2027');
+  assert.equal(t('Due: 12/25/2026').title, 'Due in 2 months');
+  assert.equal(P.read('10/25/2026, 11:59 PM', 'en-US', now).at.getFullYear(), 2026);
+  assert.equal(P.read('10/25/2026, 11:59 PM', undefined, now).timed, true);
+  // The chip: an unopened item due next week is not past due.
+  assert.deepEqual(P.status('Due date: 10/30/2026, 11:59 PM', 'false', undefined, now, false, 'en-US'), P.status('Due date: 10/30/26, 11:59 PM', 'false', undefined, now, false, 'en-US'));
+  assert.equal(P.status('Due date: 10/30/2026, 11:59 PM', 'false', undefined, now, false, 'en-US').tone, 'later');
+  assert.equal(P.status('Due date: 10/4/2026, 11:59 PM', 'false', undefined, now, false, 'en-US').tone, 'overdue');
+  // The chip's tone and the hover's wording agree (due() already read the four-digit year; when() did not).
+  for (const d of ['Due date: 10/11/2026, 2:59 PM', 'Due date: 10/12/2026, 9:00 AM', 'Due date: 10/14/2026, 11:59 PM', 'Due date: 10/15/2026, 12:01 AM', 'Due date: 10/4/2026, 11:59 PM']) {
+    assert.equal(P.due(d, now), P.due(d.replace('/2026', '/26'), now), d);
+  }
+  // A year that is neither two nor four digits is no date.
+  for (const bad of ['Due date: 10/25/202, 11:59 PM', 'Due date: 10/25/20266, 11:59 PM', '10/25/202', '10/25/20266']) {
+    assert.equal(P.when(bad, now, 'en-US'), null, bad);
+    assert.equal(P.due(bad, now), null, bad);
+  }
+});
+
 // ---- other locales ----
 const at = new Date(2026, 9, 18, 23, 59); // next Sunday, a minute before midnight
 const fmt = (l, o, d = at) => new Intl.DateTimeFormat(l, o).format(d);

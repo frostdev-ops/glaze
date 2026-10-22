@@ -8,7 +8,7 @@ const check = (ok, message) => { checks++; fails += !ok; console.log(`${ok ? 'ok
   let browser;
   try {
     await require('./wait-for-browser.js')();
-    browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'), args: ['--host-resolver-rules=MAP * ~NOTFOUND'] });
+    browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'] });
     const page = await browser.newPage();
     page.on('pageerror', (e) => console.error(e.message));
     const shot = async (name) => { if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, `${name}.png`) }); } };

@@ -41,8 +41,10 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   const VOID_OUT = set('br hr img');
   const KINDS = set('file page module course item');
   // Bounds on the work, not only on what's kept: a note nests at most 48 deep (anything deeper is kept only for its text,
-  // and no frame is tracked for it, so each tag looks at 48 frames at most), keeps 40,000 nodes and reads 300,000 tags.
-  const MAX_DEPTH = 48, MAX_NODES = 40000, MAX_TOKENS = 300000;
+  // and no frame is tracked for it, so each tag looks at 48 frames at most), keeps 100,000 nodes (a sheet of 4,000 rows of
+  // ten cells; about 170 ms to read, and the token budget bounds the work either way) and reads 300,000 tags. What is past
+  // a budget is not kept, and `parse` says so (root.cut): a note is refused as too big, never stored cut.
+  const MAX_DEPTH = 48, MAX_NODES = 100000, MAX_TOKENS = 300000;
   const ATTR = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
   const attrsOf = (s) => {
     const out = new Map();
@@ -99,9 +101,11 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   // Opening one of these ends an open <p> (as HTML does), unless a list item, cell, quote or block is between them.
   const ENDS_P = set('p div h1 h2 h3 ul ol li pre blockquote table hr');
   const WALL = set('li td th blockquote div table ul ol');
-  // The tree of what's kept: { kids } of { tag, attrs, kids } and strings; `steps` counts the stack frames looked at.
+  // The tree of what's kept: { kids } of { tag, attrs, kids } and strings; `steps` counts the stack frames looked at; `cut`
+  // is true when input was left unread because a budget (nodes, tags, or twice the body limit of text) ran out.
   const parse = (html, { base } = {}) => {
-    const root = { kids: [], steps: 0 };
+    const src = String(html || '');
+    const root = { kids: [], steps: 0, cut: src.length > LIMIT.body * 2 };
     const stack = []; // { name, node }, node null for an element kept only for what's inside it
     let drop = null, nodes = 0, tokens = 0;
     const parent = () => { for (let i = stack.length - 1; i >= 0; i--) { root.steps++; if (stack[i].node) return stack[i].node; } return root; };
@@ -115,8 +119,8 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       }
       return -1;
     };
-    for (const tk of D().tokens(String(html || '').slice(0, LIMIT.body * 2), RAW)) {
-      if (nodes > MAX_NODES || ++tokens > MAX_TOKENS) break;
+    for (const tk of D().tokens(src.slice(0, LIMIT.body * 2), RAW)) {
+      if (nodes > MAX_NODES || ++tokens > MAX_TOKENS) { root.cut = true; break; }
       if (tk.text != null || tk.cdata != null) {
         if (drop) continue;
         const s = clip(tk.cdata ?? D().decode(tk.text), Infinity);
@@ -162,7 +166,10 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
     if (n.tag === 'img' && o.src) { const src = o.src(n.attrs['data-gz-file']); if (src) a += ` src="${escA(src)}"`; }
     return `<${n.tag}${a}>${VOID_OUT.has(n.tag) ? '' : `${n.kids.map((k) => ser(k, o)).join('')}</${n.tag}>`}`;
   };
-  const sanitize = (html, opts) => parse(html, opts).kids.map((k) => ser(k, opts)).join('');
+  // { html, cut }: what is kept, and whether input past a budget was left out (see parse). Whoever stores a note or
+  // inserts a paste checks `cut` and refuses; `sanitize` alone is for what is only shown or searched.
+  const sanitized = (html, opts) => { const root = parse(html, opts); return { html: root.kids.map((k) => ser(k, opts)).join(''), cut: root.cut }; };
+  const sanitize = (html, opts) => sanitized(html, opts).html;
 
   // ---- text and Markdown out of a note -----------------------------------------------------------------------------
   const BLOCK = set('p div h1 h2 h3 ul ol li pre blockquote table thead tbody tr hr');
@@ -367,7 +374,10 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       return reply;
     };
     const count = () => Object.keys(idx.notes).length;
-    const at = time(m.at) || now;
+    // A change's time is held to now, and a stored time ahead of now (from a clock that ran ahead and was set right) counts as
+    // older than any change made since: otherwise every later change to that field is refused while the answer is ok.
+    const at = Math.min(time(m.at) || now, now);
+    const past = (t) => (t > now ? 0 : t);
     const ids = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && ID.test(x)).slice(0, LIMIT.notes) : []);
     // A note's new revision goes in beside the last one; the index points at it when finish() commits. If the index
     // can't be written the save fails, the last revision is still the note's text, and the page tries again from the
@@ -385,14 +395,17 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         const b = await db.get('bodies', bk(m.id, n.rev));
         // A note that was saved but whose text can't be found: an error, never an empty note to type over.
         if (!b && n.rev > 0) return finish({ ok: false, error: 'missing' });
-        return finish({ ok: true, html: sanitize(b?.html || ''), rev: n.rev });
+        const { html, cut } = sanitized(b?.html || '');
+        if (cut || html.length > LIMIT.body) return { ok: false, error: 'big' };
+        return finish({ ok: true, html, rev: n.rev });
       }
       case 'save': {
         // m: { id, base (the revision the page started from; 0 for a new note), sid (this save, so a retry is
         // recognised), html, copy (an id for a conflict copy), copyTitle, and for a new note title, folder, course }.
         if (!ID.test(m.id) || typeof m.sid !== 'string' || !m.sid || m.sid.length > 40 || !Number.isInteger(m.base) || typeof m.html !== 'string') return { ok: false, error: 'bad' };
-        const html = sanitize(m.html);
-        if (html.length > LIMIT.body) return { ok: false, error: 'big' };
+        // A note the sanitizer had to cut is refused, not stored short with an ok: the page tells the student.
+        const { html, cut } = sanitized(m.html);
+        if (cut || html.length > LIMIT.body) return { ok: false, error: 'big' };
         const n = idx.notes[m.id];
         // A retry of a save that landed (its answer was lost): again, so the page sends anything typed since afresh.
         if (n?.sid === m.sid) return finish({ ok: true, id: m.id, rev: n.rev, again: true });
@@ -418,13 +431,13 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         // Rename, move, or change the course: each field is set only by a change made after its last one.
         const n = idx.notes[m.id];
         if (!n) return finish({ ok: false, error: 'gone' });
-        if (typeof m.title === 'string' && at >= n.ft.title) { n.title = str(m.title, LIMIT.title).trim(); n.ft.title = at; }
-        if (typeof m.folder === 'string' && at >= n.ft.folder) {
+        if (typeof m.title === 'string' && at >= past(n.ft.title)) { n.title = str(m.title, LIMIT.title).trim(); n.ft.title = at; }
+        if (typeof m.folder === 'string' && at >= past(n.ft.folder)) {
           n.folder = liveFolder(idx, m.folder);
           n.ft.folder = at;
-          if (idx.folders[n.folder]?.course && at >= n.ft.course) { Object.assign(n, courseOf(idx.folders[n.folder])); n.ft.course = at; }
+          if (idx.folders[n.folder]?.course && at >= past(n.ft.course)) { Object.assign(n, courseOf(idx.folders[n.folder])); n.ft.course = at; }
         }
-        if (typeof m.course === 'string' && at >= n.ft.course) { Object.assign(n, courseOf(m)); n.ft.course = at; }
+        if (typeof m.course === 'string' && at >= past(n.ft.course)) { Object.assign(n, courseOf(m)); n.ft.course = at; }
         return finish({ ok: true });
       }
       case 'trash': {
@@ -550,8 +563,8 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
           const had = idx.notes[x.id], when = Math.min(time(x.at) || now, now);
           if (had && had.at >= when) { skipped++; continue; }
           if (!had && count() >= LIMIT.notes) return finish({ ok: false, error: 'many', done, skipped });
-          const html = sanitize(x.html);
-          if (html.length > LIMIT.body) { skipped++; continue; }
+          const { html, cut } = sanitized(x.html);
+          if (cut || x.big === true || html.length > LIMIT.body) { skipped++; continue; }
           const folder = liveFolder(idx, x.folder);
           delete idx.gone[x.id];
           await write(x.id, html, { title: str(x.title, LIMIT.title).trim(), folder, ...courseOf(x, idx.folders[folder]), created: Math.min(time(x.created) || when, when), at: when,
@@ -610,9 +623,11 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
     const folders = (Array.isArray(r.folders) ? r.folders : []).slice(0, LIMIT.folders).filter(once())
       .map((f) => ({ id: f.id, name: str(f.name, LIMIT.name).trim() || '…', course: same ? cid(f.course) : '', cn: same ? str(f.cn, 120) : '', order: Number.isFinite(f.order) ? f.order : 0 }));
     const kept = new Set(folders.map((f) => f.id));
-    const html = (h) => sanitize(sanitize(h).replace(/ data-gz-file="([0-9a-f-]{36})"/g, (m, x) => (declared.has(x) ? m : '')));
-    const notes = (Array.isArray(r.notes) ? r.notes : []).slice(0, LIMIT.notes).filter(once()).filter((n) => typeof n.html === 'string' && n.html.length <= LIMIT.body * 2)
-      .map((n) => ({ id: n.id, title: str(n.title, LIMIT.title).trim(), folder: kept.has(n.folder) ? n.folder : '', course: same ? cid(n.course) : '', cn: same ? str(n.cn, 120) : '', created: time(n.created), at: time(n.at), html: html(n.html) }));
+    // big: a note the sanitizer had to cut here, or flagged so by an earlier reading (the page reads an export, then hands the
+    // notes to the worker, which reads them again from what was kept): run 'import' skips it instead of storing it short.
+    const html = (h) => { const a = sanitized(h), b = sanitized(a.html.replace(/ data-gz-file="([0-9a-f-]{36})"/g, (m, x) => (declared.has(x) ? m : ''))); return { html: b.html, big: a.cut || b.cut }; };
+    const notes = (Array.isArray(r.notes) ? r.notes : []).slice(0, LIMIT.notes).filter(once()).filter((n) => typeof n.html === 'string')
+      .map((n) => { const h = html(n.html); return { id: n.id, title: str(n.title, LIMIT.title).trim(), folder: kept.has(n.folder) ? n.folder : '', course: same ? cid(n.course) : '', cn: same ? str(n.cn, 120) : '', created: time(n.created), at: time(n.at), html: h.html, ...((h.big || n.big === true) && { big: true }) }; });
     return { folders, notes, files };
   };
 
@@ -645,7 +660,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
     return out.filter((l) => l.title);
   };
 
-  return { LIMIT, TRASH, KEY, ID, storeKey, parse, sanitize, text, excerpt, markdown, clean, fold, terms, list, folderList, run, b64, unb64, imageType, EXT, refs, exportZip, parseExport, canvasLinks, ultraLinks, safeUrl };
+  return { LIMIT, TRASH, KEY, ID, storeKey, parse, sanitize, sanitized, text, excerpt, markdown, clean, fold, terms, list, folderList, run, b64, unb64, imageType, EXT, refs, exportZip, parseExport, canvasLinks, ultraLinks, safeUrl };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_NOTES; else GZ_NOTES;

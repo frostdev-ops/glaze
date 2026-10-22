@@ -787,6 +787,92 @@ test('the glaze client\'s v1 calls: transforms answer when Glaze asks, palette c
   ch.port1.close();
 });
 
+test('the glaze client ships only canvases that were drawn on, so four canvas slots and one animation loop stay under the host\'s rate', async () => {
+  const src = read('mods/host.js');
+  const client = src.slice(src.indexOf('  function glazeClient(port) {'), src.indexOf('\n  }\n', src.indexOf('  function glazeClient(port) {')) + 4);
+  // A stand-in port: a real one cannot transfer a stand-in picture.
+  const frames = {}, listeners = [];
+  const port = { postMessage: (m) => { if (m.frame) frames[m.frame] = (frames[m.frame] || 0) + 1; }, addEventListener: (t, f) => listeners.push(f), start() {} };
+  const deliver = (data) => listeners.forEach((f) => f({ data }));
+  class OffscreenCanvas { constructor(w, h) { this.width = w; this.height = h; this.ctx = { fillStyle: '', fillRect() {}, canvas: this }; } getContext() { return this.ctx; } }
+  const ctx = vm.createContext({ setTimeout, clearTimeout, Promise, Error, TypeError, Object, Map, Number, String, Array, Proxy, Reflect, performance, OffscreenCanvas, createImageBitmap: async (c) => ({ width: c.width, height: c.height, close() {} }) });
+  ctx.globalThis = ctx;
+  const glaze = vm.runInContext(`${client}\nglazeClient(port);`, Object.assign(ctx, { port }));
+  const slots = ['tile:a', 'tile:b', 'tile:c', 'background'];
+  for (const s of slots) deliver({ event: 'canvas.size', data: { slot: s, w: 100, h: 100 } });
+  deliver({ event: 'canvas.pause', data: { paused: false } });
+  await settle();
+  const canvases = {};
+  for (const s of slots) canvases[s] = await glaze.ui.canvas(s);
+  const g = canvases['tile:a'].getContext('2d');
+  assert.equal(canvases['tile:a'].getContext('2d'), g, 'repeated getContext keeps the native context identity');
+  assert.equal(g.canvas, canvases['tile:a'], 'the context still reads like the real one');
+  let live = true;
+  const loop = () => { if (!live) return; g.fillStyle = 'red'; g.fillRect(0, 0, 10, 10); ctx.requestAnimationFrame(loop); };
+  loop();
+  await new Promise((r) => setTimeout(r, 1000));
+  live = false;
+  const total = Object.values(frames).reduce((a, b) => a + b, 0);
+  assert.ok(total <= 240, `at most RATE pictures a second, got ${total}`);
+  assert.ok(frames['tile:a'] >= 20, `the drawn canvas keeps animating, got ${frames['tile:a']}`);
+  for (const s of slots.slice(1)) assert.ok(!frames[s], `${s} was never drawn on, so nothing is shipped (${frames[s]})`);
+  glaze.ui.commit('tile:b');
+  await settle();
+  assert.equal(frames['tile:b'], 1, 'commit(slot) ships on demand');
+});
+
+test('canvas dirtiness resets after shipping and survives drawing, commit, pause and slot resize', async () => {
+  const src = read('mods/host.js');
+  const client = src.slice(src.indexOf('  function glazeClient(port) {'), src.indexOf('\n  }\n', src.indexOf('  function glazeClient(port) {')) + 4);
+  const frames = [], listeners = [], timers = new Map();
+  let next = 0, failPicture = false;
+  class OffscreenCanvas {
+    constructor(w, h) { this.width = w; this.height = h; this.ctx = { fillStyle: '', canvas: this, fillRect() { assert.equal(this.canvas.ctx, this); } }; }
+    getContext() { return this.ctx; }
+  }
+  const port = { postMessage: (m) => { if (m.frame) frames.push(m); }, addEventListener: (t, f) => listeners.push(f), start() {} };
+  const ctx = vm.createContext({ port, OffscreenCanvas, performance,
+    setTimeout: (f) => { timers.set(++next, f); return next; }, clearTimeout: (id) => timers.delete(id),
+    createImageBitmap: async (c) => { if (failPicture) { failPicture = false; throw new Error('temporary picture failure'); } return { width: c.width, height: c.height, close() {} }; } });
+  const glaze = vm.runInContext(`${client}\nglazeClient(port);`, ctx);
+  const deliver = (event, data) => listeners.forEach((f) => f({ data: { event, data } }));
+  const tick = async () => { ctx.requestAnimationFrame(() => {}); const due = [...timers.values()]; timers.clear(); due.forEach((f) => f()); await settle(); };
+  const slots = ['tile:a', 'tile:b', 'tile:c', 'background'], contexts = [];
+  for (const slot of slots) {
+    deliver('canvas.size', { slot, w: 100, h: 100 });
+    contexts.push((await glaze.ui.canvas(slot)).getContext('2d'));
+  }
+  for (let i = 0; i < 65; i++) { contexts.forEach((g) => g.fillRect()); await tick(); }
+  assert.equal(frames.length, 260, 'all four drawn canvases keep delivering');
+  await tick();
+  assert.equal(frames.length, 260, 'an unchanged frame sends nothing');
+  contexts[0].fillStyle = 'red';
+  await tick();
+  assert.equal(frames.length, 261, 'assigning context state counts');
+  deliver('canvas.pause', { paused: true });
+  contexts[1].fillRect();
+  glaze.ui.commit(slots[2]);
+  await settle();
+  assert.equal(frames.length, 261, 'no pictures during pause');
+  deliver('canvas.pause', { paused: false });
+  await settle();
+  assert.equal(frames.length, 265, 'resume refreshes every canvas');
+  deliver('canvas.size', { slot: slots[0], w: 200, h: 50 });
+  await settle();
+  assert.equal(frames.at(-1).bm.width, 200);
+  assert.equal(frames.at(-1).bm.height, 50);
+  const count = frames.length;
+  deliver('canvas.size', { slot: slots[0], w: 200, h: 50 });
+  await tick();
+  assert.equal(frames.length, count, 'same dimensions and no drawing remain clean');
+  contexts[0].fillRect();
+  failPicture = true;
+  await tick();
+  assert.equal(frames.length, count, 'failed bitmap produces no picture');
+  await tick();
+  assert.equal(frames.length, count + 1, 'a failed bitmap stays dirty for the next animation frame');
+});
+
 test('Look rules and every mod rule layer merge in student order without changing part precedence', async () => {
   const p = page();
   p.G.start([W('a'), W('b')]);
@@ -882,6 +968,24 @@ test('the host bounds Worker bitmap dimensions and frame rate and drops frames w
   await settle();
   clock += 20;
   assert.equal(send(100, 100).closed, true);
+  port.close();
+});
+
+test('the host counts Worker pictures per canvas, not toward its message rate', async () => {
+  const h = host(), port = h.post(hello), got = inbox(port);
+  port.postMessage({ op: 'start', mods: [H(W('a'))] });
+  await settle();
+  const slots = ['tile:a', 'tile:b', 'tile:c', 'tile:d', 'background'];
+  for (const slot of slots) port.postMessage({ event: 'canvas.size', mod: 'a', data: { slot, w: 100, h: 100 } });
+  port.postMessage({ event: 'canvas.pause', mod: 'a', data: { paused: false } });
+  await settle();
+  for (let i = 0; i < 61; i++) for (const slot of slots) h.workers[0].onmessage({ data: { frame: slot, bm: new h.ImageBitmap(100, 100) } });
+  await settle();
+  assert.equal(h.workers[0].terminated, false, 'five canvases at 61 a second each are not a flood');
+  for (let i = 0; i < 241; i++) h.workers[0].onmessage({ data: { frame: 'tile:a', bm: new h.ImageBitmap(100, 100) } });
+  await settle();
+  assert.equal(h.workers[0].terminated, true, 'one canvas past its own budget still is');
+  eq(got.at(-1), { stopped: 'a', why: 'error' });
   port.close();
 });
 
@@ -1081,8 +1185,44 @@ test('nav.items: a mod\'s items go to the bar under its own name, at most eight,
   port.close();
 });
 
+// nav.items goes to every mod, frames included, with no permission (MOD-2, audit navitems.js): the page's native items, by
+// id with Glaze's own names. Not the account item (the student's name), names the student typed (a renamed item, their own
+// links), Glaze's own items or other mods' items (a label like "Biology 91.5%").
+test('nav.items: every mod hears the native items by id with Glaze\'s names, nothing the student typed, nor their name, nor other mods\' items', async () => {
+  const p = page();
+  p.ctx.GZ_NAV_LAYOUT = require('../lib/navlayout.js');
+  const it = (id, label, more = {}) => ({ id, label, icon: 'link', href: '', badge: '', active: false, hidden: false, ...more });
+  p.ctx.GZ_NAVBAR_UI = fakeBar({ ...BAR, items: [it('course', 'Courses'), it('grades', 'Jane D. grades'), it('calendar', 'Kalender'), it('tools', 'Tools', { hidden: true }),
+    it('profile', 'Jane Q. Student'), it('link:aaaaaaaaaaaa', 'Counseling appointments'), it('mod:abcdefghijklmnop.bio', 'Biology 91.5%', { owner: 'abcdefghijklmnop' }),
+    it('glaze:settings', 'Jane\'s Glaze'), it('w:clock', 'Clock'), it('logout', 'Sign out of Jane\'s account')] });
+  p.chrome.runtime.sendMessage = async () => ({ ok: true });
+  p.G.start([W('a')]);
+  const { port, got } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  p.G.pass();
+  await settle();
+  eq(got.filter((x) => x.event === 'nav.items').at(-1).data, { items: [{ id: 'course', label: 'Courses' }, { id: 'grades', label: 'Grades' }, { id: 'calendar', label: 'Calendar' }, { id: 'logout', label: 'Sign out' }] });
+  port.close();
+  // Where Glaze's bar isn't drawn, the older rail's: its units carry the student's links and group labels too.
+  const q = page();
+  q.ctx.GZ_NAV_LAYOUT = p.ctx.GZ_NAV_LAYOUT;
+  const unit = (id, textContent, hidden = false) => ({ dataset: { gzNavId: id }, textContent, hidden });
+  q.ctx.document.querySelectorAll = (sel) => (sel === '[data-gz-nav-id]' ? [unit('g:0', 'Jane\'s things'), unit('grades', 'Jane D. grades'), unit('aaaaaaaaaaaa', 'Counseling appointments'), unit('profile', 'Jane Q. Student'), unit('tools', 'Tools', true), unit('w:clock', '10:04')] : []);
+  q.chrome.runtime.sendMessage = async () => ({ ok: true });
+  q.G.start([W('a')]);
+  const r = await q.load();
+  r.port.postMessage({ ready: true });
+  await settle();
+  q.G.pass();
+  await settle();
+  eq(r.got.filter((x) => x.event === 'nav.items').at(-1).data, { items: [{ id: 'grades', label: 'Grades' }] });
+  r.port.close();
+});
+
 test('nav.read: the model is cleaned and capped, and the bar\'s events reach only granted mods', async () => {
   const p = page();
+  p.ctx.GZ_NAV_LAYOUT = require('../lib/navlayout.js'); // loaded with the bar: Glaze's names for nav.items
   p.ctx.GZ_NAVBAR_UI = fakeBar(BAR);
   p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? { ok: true, value: true } : { ok: true });
   p.G.start([{ ...W('a'), events: ['nav.read'] }, W('b')]);
@@ -1104,28 +1244,37 @@ test('nav.read: the model is cleaned and capped, and the bar\'s events reach onl
   port.close();
 });
 
-test('nav.layout lays over the student\'s like nav.set, first mod wins, and "Use my own" turns that mod\'s off', async () => {
-  const lay = { a: { hidden: ['calendar'], place: 'top' }, b: { hidden: ['grades'] } };
-  let list = [W('a'), W('b')];
+// Through the real broker. This test once had a stand-in worker answer nav.set for any mod, pinning nav.set as nav.layout
+// with no permission, which made the nav.layout permission decorative (MOD-1): now both need it granted.
+test('nav.set and nav.layout lay a layout over the student\'s only with nav.layout granted; the first mod wins, and "Use my own" turns that mod\'s off', async () => {
+  const B = require('../lib/modbroker.js');
+  const [a, b, c] = ['aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'cccccccccccccccc'];
+  // c declares nav.layout, but the student didn't grant it.
+  const data = { mods: [a, b, c], ...Object.fromEntries([a, b, c].map((id) => [`mod:${id}`, { id, enabled: true, manifest: { permissions: [{ id: 'nav.layout', why: 'w' }] }, grants: { 'nav.layout': id !== c } }])) };
+  const worker = { site: 'https://lms.test', local: { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in data).map((x) => [x, structuredClone(data[x])])), set: async (o) => (Object.assign(data, o), true) },
+    sync: { get: async () => ({}) }, queue: (f) => f(), keys: async () => Object.keys(data), record: async (id) => data[`mod:${id}`], blocklist: async () => null };
+  const lay = { [a]: { hidden: ['calendar'], place: 'top' }, [b]: { hidden: ['grades'] }, [c]: { hidden: ['course'] } };
+  let list = [W(c), W(a), W(b)];
   const p = page({ list: () => list });
-  p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? { ok: true, value: lay[m.mod] } : m.op === 'list' ? { mods: list } : { ok: true });
+  p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? B.handle(m, worker) : m.op === 'list' ? { mods: list } : { ok: true });
   p.G.start(list);
-  const { port } = await p.load();
+  const { port, got } = await p.load();
   port.postMessage({ ready: true });
   await settle();
-  port.postMessage({ mod: 'b', via: 'worker', id: 1, call: 'nav.layout', args: [] });
-  port.postMessage({ mod: 'a', via: 'worker', id: 2, call: 'nav.set', args: [] });
+  port.postMessage({ mod: c, via: 'worker', id: 1, call: 'nav.set', args: [lay[c]] });
+  port.postMessage({ mod: b, via: 'worker', id: 2, call: 'nav.layout', args: [lay[b]] });
+  port.postMessage({ mod: a, via: 'worker', id: 3, call: 'nav.set', args: [lay[a]] });
   await settle();
-  eq(p.G.parts(null).nav, lay.a, 'the first in the student\'s order wins');
-  eq(p.G.arranger(), { id: 'a', name: 'a', place: 'top' });
-  list = [{ ...W('a'), arranges: false }, W('b')];
-  p.chrome.changed({ 'modNavLayout:a': { newValue: false } }, 'local');
+  eq(got.find((x) => x.id === 1), { mod: c, via: 'worker', id: 1, ok: false, error: 'permission' }, 'not granted: refused, first in order or not');
+  eq(p.G.parts(null).nav, lay[a], 'the first granted one in the student\'s order wins');
+  eq(p.G.arranger(), { id: a, name: a, place: 'top' });
+  list = [W(c), { ...W(a), arranges: false }, W(b)];
+  p.chrome.changed({ [`modNavLayout:${a}`]: { newValue: false } }, 'local');
   await p.tick(100);
-  eq(p.G.parts(null).nav, lay.b, 'Use my own: a\'s layout is off, the next mod\'s shows');
-  eq(p.G.arranger()?.id, 'b');
+  eq(p.G.parts(null).nav, lay[b], 'Use my own: a\'s layout is off, the next mod\'s shows');
+  eq(p.G.arranger()?.id, b);
   assert.equal(p.G.stats().running, true, 'without restarting the mods');
-  lay.b = null;
-  port.postMessage({ mod: 'b', via: 'worker', id: 4, call: 'nav.layout', args: [] });
+  port.postMessage({ mod: b, via: 'worker', id: 4, call: 'nav.layout', args: [null] });
   await settle();
   assert.equal(p.G.parts(null).nav, undefined, 'null withdraws it');
   port.close();

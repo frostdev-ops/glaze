@@ -115,7 +115,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
       docTools.setAttribute('aria-label', t('Document'));
       const time = document.createElement('span');
       time.className = 'gz-doc-time';
-      docTools.append(time, docButton('dark', t('Dark documents'), () => setDark(ctx.settings().enhance.docPages === 'plain' ? 'dim' : 'plain')), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
+      docTools.append(time, docButton('dark', t('Dark documents'), () => setDark({ plain: 'dim', dim: 'dark' }[ctx.settings().enhance.docPages] || 'plain')), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
       document.body.append(docTools);
     }
     if (!ultra) {
@@ -166,18 +166,23 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     const file = id(b.attachment_id) || id(location.pathname.match(/\/files\/(\d+)/)?.[1]) || id(new URLSearchParams(location.search).get('preview'));
     const asked = (Array.isArray(q.words) ? q.words : []).filter((w) => typeof w === 'string' && w.length < 100).slice(0, 40);
     // Whose marks: the blob's user, else Canvas is asked (your own /users/self/profile), only while annotations are on.
-    // Signed out (401, 403) is the site's "anon"; any other failure is nobody, so no marks rather than someone else's.
-    let user = id(b.user_id) || null, asking = false;
+    // Signed out (401) is the site's "anon". Any other failure, a 403 for throttling or a forbidden read included, is
+    // nobody for now (no marks, none moved to "anon" or anyone else) and is asked again after a pause that grows.
+    let user = id(b.user_id) || null, asking = false, fails = 0;
     const whose = () => {
       if (user !== null || asking) return;
       asking = true;
-      ctx.profile().then((p) => id(p?.id), (s) => (s === 401 || s === 403 ? 'anon' : '')).then((u) => { user = u; tell(); });
+      ctx.profile().then((p) => id(p?.id) || null, (s) => (s === 401 ? 'anon' : null)).then((u) => {
+        if (u !== null) { user = u; tell(); return; }
+        setTimeout(() => { asking = false; tell(); }, Math.min(300000, 15000 * 2 ** fails++));
+      });
     };
     let said = '';
     // Only the frame's latest question is answered: a profile or the words arriving for an earlier one (another file in
     // the same frame) say nothing.
     const tell = () => {
       if (docFrames.get(e.source) !== tell) return;
+      if (e.source.closed || ![...document.getElementsByTagName('iframe')].includes(f)) { docFrames.delete(e.source); ctx.wordsIn.delete(tell); return; }
       const s = ctx.settings().enhance;
       if (ctx.on() && s.docInk) whose(); // Glaze off: the frame is told so, and Canvas isn't asked who you are
       const msg = { gz: 'docs', on: ctx.on(), dark: ctx.darkTheme(), colors: Object.fromEntries([...GZ_COLORS.map(([v]) => v), '--gz-surface-course'].map((v) => [v, html.style.getPropertyValue(v)])),

@@ -343,6 +343,26 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     }
     return { left: Math.max(EDGE, W - EDGE - w), top: Math.max(EDGE, H - EDGE - h) };
   };
+  // The room floating tiles have in a vw × vh window: the window less what stays over the page at its sides. bar is the
+  // room Glaze's own bar keeps at the window's start and top (--gz-navbar-left and -top; the start is the right on a
+  // right-to-left page), aside the box of the sidebar beside the content, at the end. Each edge is the box ({ left, top,
+  // right, bottom }) of something else fixed over the page: a tall one at a side takes that side (a site's nav drawer), else
+  // one in the top half takes the top (a course's top bar, the course tabs), one in the bottom half the bottom (Glaze's
+  // footer, the phone's bottom bar). → { left, right, top, bottom, W, H }.
+  const room = (vw, vh, edges = [], { bar = {}, rtl = false, aside = null } = {}) => {
+    const start = bar.left || 0;
+    let left = rtl ? 0 : start, right = vw - (rtl ? start : 0), top = bar.top || 0, bottom = vh;
+    for (const r of edges) {
+      if (!(r.right > r.left && r.bottom > r.top)) continue;
+      const tall = r.bottom - r.top > vh / 2;
+      if (tall && r.left <= 1 && r.right < vw / 2) left = Math.max(left, r.right);
+      else if (tall && r.right >= vw - 1 && r.left > vw / 2) right = Math.min(right, r.left);
+      else if (r.top < vh / 2 && r.bottom > 0) top = Math.max(top, r.bottom);
+      else if (r.top > vh / 2) bottom = Math.min(bottom, r.top);
+    }
+    if (aside?.right > aside?.left) { if (rtl) left = Math.max(left, aside.right); else right = Math.min(right, aside.left); }
+    return { left, right, top, bottom, W: Math.max(0, right - left), H: Math.max(0, bottom - top) };
+  };
 
   // Changes to the layout, as the worker's queue applies them to what is stored then ('glaze:widgetLayout'), and as the
   // page shows them at once: never a whole copy of a tab's layout, which would undo another tab's change made since.
@@ -463,13 +483,19 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     end: Number.isFinite(raw?.end) && raw.end > 0 && raw.end < 1e14 ? raw.end : 0,
     left: Number.isFinite(raw?.left) && raw.left > 0 && raw.left <= 120 * 6e4 ? raw.left : 0,
   });
-  const left = (s, now, o) => (s.end ? Math.max(0, s.end - now) : Math.min(s.left || len(s.phase, o), len(s.phase, o)));
+  // Never more than the phase is long: a deadline further off than that can only be from a clock set back since it was made.
+  const left = (s, now, o) => (s.end ? Math.min(Math.max(0, s.end - now), len(s.phase, o)) : Math.min(s.left || len(s.phase, o), len(s.phase, o)));
   const start = (s, now, o) => (s.end ? s : { ...s, end: now + left(s, now, o), left: 0 });
   const pause = (s, now) => (s.end ? { ...s, end: 0, left: Math.max(1000, s.end - now) } : s);
   // Where a running timer is now: past its end, work goes on to a break that starts at once, and a break back to
   // work, waiting for Start. However long the page was away, it never runs more than that one break on its own.
+  // A deadline more than the phase's length away (a second's slack: two documents' clocks are not exactly one) is from a
+  // clock set back since it was made: the phase starts over from now, instead of showing hours that aren't there, ringing
+  // late, and keeping them as "left" when paused (which cleanTimer then drops, so Pause went back to the full length).
   const advance = (s, now, o) => {
-    if (!s.end || now < s.end) return s;
+    if (!s.end) return s;
+    if (s.end - now > len(s.phase, o) + 1000) return { ...s, end: now + len(s.phase, o), left: 0 };
+    if (now < s.end) return s;
     if (s.phase === 'work' && s.end + len('rest', o) > now) return { phase: 'rest', end: s.end + len('rest', o), left: 0 };
     return IDLE;
   };
@@ -482,10 +508,12 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   // Happy for ten minutes after a win (a focus block finished, an item ticked off); awake while the timer runs or for a
   // minute after a pat; asleep otherwise. → { mood: '' | 'happy' | 'sleepy', until: when that changes, or 0 }.
   const HAPPY = 10 * 6e4, PAT = 6e4;
+  // A win or pat ahead of now (the clock was set back since) isn't one: it would hold the mood for as long as the clock is
+  // behind, and `until` could be further off than a timer can wait.
   const mood = ({ happyAt = 0, patAt = 0, running = false }, now) => {
-    if (now - happyAt < HAPPY) return { mood: 'happy', until: happyAt + HAPPY };
+    if (happyAt <= now && now - happyAt < HAPPY) return { mood: 'happy', until: happyAt + HAPPY };
     if (running) return { mood: '', until: 0 };
-    if (now - patAt < PAT) return { mood: '', until: patAt + PAT };
+    if (patAt <= now && now - patAt < PAT) return { mood: '', until: patAt + PAT };
     return { mood: 'sleepy', until: 0 };
   };
   // Items done in Better To Do's data for one account (raw, as stored): ticks on Canvas items and tasks ticked off.
@@ -521,16 +549,54 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   const NOTES_MAX = 20000;
   const notesKey = (origin, uid) => `notes:${origin}/${uid}`;
   const NOTES_KEY = /^notes:https?:\/\/[a-z\d.-]+(?::\d+)?\/(\d+|_\d+_\d+)$/i; // a Canvas user id, or Ultra's _N_N
-  const cleanNote = (raw) => ({ text: typeof raw?.text === 'string' ? raw.text.slice(0, NOTES_MAX) : '', at: Number.isFinite(raw?.at) && raw.at > 0 ? raw.at : 0 });
+  // A time ahead of the clock is from a clock that ran ahead and was set right, so it reads as older than any typing since:
+  // 1, the earliest time there is. Not 0, which is the time of no note at all: the tile takes a note only when its time is
+  // later than the one it shows (it starts at 0), so a note given 0 was never shown, and typing then replaced it unseen.
+  const cleanNote = (raw) => {
+    const text = typeof raw?.text === 'string' ? raw.text.slice(0, NOTES_MAX) : '';
+    return { text, at: Number.isFinite(raw?.at) && raw.at > 0 && raw.at <= Date.now() ? raw.at : text ? 1 : 0 };
+  };
   // In the worker's write queue (lib/background.js 'glaze:notes'): m { key, text, at } is kept unless what's stored is
   // newer (another tab typed later), which comes back instead. An emptied note is kept as its time alone ({ text: '', at }),
   // as what-if's Clear all keeps its time: a text typed before the clearing that arrives after it is refused.
   const saveNote = async (m, local) => {
     if (typeof m?.key !== 'string' || !NOTES_KEY.test(m.key) || typeof m.text !== 'string' || !Number.isFinite(m.at)) return { ok: false, error: 'bad' };
     const cur = cleanNote((await local.get([m.key]))[m.key]);
-    if (cur.at > m.at) return { ok: true, kept: false, note: cur };
-    const note = cleanNote(m);
+    const at = Math.min(m.at, Date.now()); // a clock that is ahead must not stamp a time that typing after it can't beat
+    if (cur.at > at) return { ok: true, kept: false, note: cur };
+    const note = cleanNote({ text: m.text, at });
     return (await local.set({ [m.key]: note })) ? { ok: true, kept: true, note } : { ok: false, error: 'write' };
+  };
+  // ---- your place in a course (storage.local coursePlace, written through the worker) ------------------------------
+  // { cid: { open: [folder ids], top, item?, at } }: the 30 courses most recently left, each with its last 100 open folders
+  // (Ultra's), how far down the outline or Modules list, and Canvas's module item opened last. The same rules as
+  // lib/page.js place, which the page uses for its own tab's copy and the worker can't load (it needs lib/i18n.js):
+  // test/widgets.test.js keeps the two equal. In the worker's write queue (lib/background.js 'glaze:place'), m { cid,
+  // open?, top?, item? } changes only the fields it has, in what is stored when its turn comes: a tab scrolling one course
+  // never writes back another's place from an older read, nor an item opened in one tab the scroll of another.
+  const PLACE_CID = /^(?:canvas:https?:\/\/[a-z\d.-]+(?::\d+)?\/\d+|_\d+_\d+)$/i; // Canvas's (origin and course) or Ultra's _N_N
+  const placeChange = async (m, local, now = Date.now()) => {
+    if (typeof m?.cid !== 'string' || m.cid.length > 200 || !PLACE_CID.test(m.cid)) return { ok: false, error: 'bad' };
+    const all = (await local.get(['coursePlace'])).coursePlace;
+    const was = all?.[m.cid] && typeof all[m.cid] === 'object' ? all[m.cid] : {};
+    const open = Array.isArray(m.open) ? m.open : Array.isArray(was.open) ? was.open : [];
+    const top = Number.isFinite(m.top) ? m.top : was.top;
+    const item = m.item !== undefined ? m.item : was.item;
+    const out = { [m.cid]: { open: [...new Set(open)].filter((id) => /^_\d+_\d+$/.test(id)).slice(-100), top: Math.max(0, Math.round(top) || 0), ...(typeof item === 'string' && /^\d+$/.test(item) && { item }), at: now } };
+    const rest = Object.entries(all && typeof all === 'object' ? all : {}).filter(([k, v]) => k !== m.cid && v?.at > 0).sort((a, b) => b[1].at - a[1].at).slice(0, 29);
+    return (await local.set({ coursePlace: Object.assign(out, Object.fromEntries(rest)) })) ? { ok: true } : { ok: false, error: 'write' };
+  };
+  // What ends the address is cut from its end, with each kind of bracket counted once: counting again for every one of a
+  // long run of them took the square of the run's length, on every draw of a note.
+  const trim = (url) => {
+    const n = { '(': 0, ')': 0, '[': 0, ']': 0 };
+    for (const c of url) if (c in n) n[c]++;
+    let end = url.length;
+    for (;;) {
+      while (end > 0 && ".,;:!?'*".includes(url[end - 1])) end--;
+      const c = url[end - 1], open = c === ')' ? '(' : c === ']' ? '[' : '';
+      if (open && n[open] < n[c]) { n[c]--; end--; } else return url.slice(0, end);
+    }
   };
   // Plain text, with web addresses as links: [{ text }, { text, href }…]. Only http(s); punctuation that ends a
   // sentence after an address isn't part of it, nor is a closing bracket the address didn't open.
@@ -538,8 +604,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     const out = [];
     let last = 0;
     for (const m of String(text).matchAll(/\bhttps?:\/\/[^\s<>"]+/gi)) {
-      let url = m[0].replace(/[.,;:!?'*]+$/, '');
-      while (/[)\]]$/.test(url) && url.split(url.at(-1) === ')' ? '(' : '[').length < url.split(url.at(-1)).length) url = url.slice(0, -1).replace(/[.,;:!?'*]+$/, '');
+      const url = trim(m[0]);
       let href;
       try { const u = new URL(url); if (u.protocol === 'https:' || u.protocol === 'http:') href = u.href; } catch { /* not an address */ }
       if (!href) continue;
@@ -552,12 +617,14 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   };
 
   // ---- the agenda: one day of Better To Do's data (lib/todo.js, L) ----------------------------------------------
-  // items: slim planner items (L.slim); data: the student's own ({ tasks, items }); day: a day number in tz.
+  // items: slim planner items (L.slim); data: the student's own ({ tasks, items }); day: a day number in tz; o, sync: Better
+  // To Do's settings and whether its marks go to Canvas, as L.build takes them, so a row is done as the list says.
   // Due that day, planned for it ("do on"), and the focus sessions on it, soonest first; whole days first.
   const KINDS = new Set(['assignment', 'quiz', 'discussion_topic', 'wiki_page', 'planner_note', 'assessment_request', 'sub_assignment']);
   // extra: rows other packages add for the day (the class schedule's classes, lib/classes.js), already in this shape.
-  const agenda = (L, { items = [], data, day, tz, extra = [] }) => {
+  const agenda = (L, { items = [], data, day, tz, extra = [], o = {}, sync = false }) => {
     const d = L.clean(data);
+    const done = (i, local) => L.isDone(i, o.done, sync ? undefined : local?.done);
     const rows = [...extra];
     const named = new Map();
     for (const i of items) {
@@ -565,7 +632,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
       const key = `${i.type}:${i.id}`;
       named.set(key, i);
       if (!i.at || (i.allDay ? Math.floor(i.at / DAY) : L.dayOf(i.at, tz)) !== day) continue;
-      rows.push({ key, kind: 'due', title: i.title, course: i.course, url: i.url, at: i.allDay ? null : i.at, done: L.isDone(i, 'auto', d.items[key]?.done) });
+      rows.push({ key, kind: 'due', title: i.title, course: i.course, url: i.url, at: i.allDay ? null : i.at, done: done(i, d.items[key]) });
     }
     for (const x of d.tasks) {
       named.set(`task:${x.id}`, x);
@@ -575,7 +642,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     for (const [key, local] of Object.entries(d.items)) {
       const what = named.get(key);
       if (!what) continue;
-      const base = { key, title: what.title, course: what.course || '', url: what.url || '', done: what.type ? L.isDone(what, 'auto', local.done) : !!what.done };
+      const base = { key, title: what.title, course: what.course || '', url: what.url || '', done: what.type ? done(what, local) : !!what.done };
       if (L.keyDay(local.on) === day) rows.push({ ...base, kind: 'plan', at: null });
       for (const s of local.sessions || []) if (L.dayOf(s.at, tz) === day) rows.push({ ...base, kind: 'session', at: s.at, min: s.min });
     }
@@ -605,7 +672,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     return `${REPO}/issues/new?${new URLSearchParams({ labels: 'bug', body })}`;
   };
 
-  return { SPEC, TILES, SIZES, course, COURSE_MAX, COURSE_TOTAL, mood, ticks, layout, fresh, kept, move, set, place, spot, EDGE, SNAP, BOARDS, WIDTH, MIN_W, MIN_H, GRID, GAP, snap, stretch, arrange, spotOf, reserve, front, bset, floating, corner, apply, mods, change, DASH, landing, music, IDLE, cleanTimer, len, left, start, pause, advance, clock, breath, quoteAt, NOTES_MAX, notesKey, NOTES_KEY, cleanNote, saveNote, links, agenda, browser, feedback };
+  return { SPEC, TILES, SIZES, course, COURSE_MAX, COURSE_TOTAL, mood, ticks, layout, fresh, kept, move, set, place, spot, EDGE, SNAP, BOARDS, WIDTH, MIN_W, MIN_H, GRID, GAP, snap, stretch, arrange, spotOf, reserve, front, bset, floating, corner, room, apply, mods, change, DASH, landing, music, IDLE, cleanTimer, len, left, start, pause, advance, clock, breath, quoteAt, NOTES_MAX, notesKey, NOTES_KEY, cleanNote, saveNote, PLACE_CID, placeChange, links, agenda, browser, feedback };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WIDGETS; else GZ_WIDGETS;

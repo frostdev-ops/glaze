@@ -102,7 +102,9 @@ test('the Mods tab says a widget with no code stays on this device, and offers i
   assert.deepEqual(E.lines(view(), t).map((l) => l.text), ['To Do — shows your to-dos and due dates, on this device only.', 'Grades — shows your grades and GPA, on this device only.', 'Courses — shows the names of your courses, on this device only.']);
   // With code, the words stay the ones that say it reads them.
   const code = view({ hooks: 'hooks.js' });
-  assert.deepEqual(E.lines(code, t).map((l) => l.text.split(' — ')[1].split(' ')[0]), ['reads', 'reads', 'reads']);
+  const coded = E.lines(code, t);
+  assert.deepEqual(coded.filter((l) => l.id !== 'code').map((l) => l.text.split(' — ')[1].split(' ')[0]), ['reads', 'reads', 'reads']);
+  assert.equal(coded.at(-1).id, 'code', 'and it says the code runs');
   assert.equal(E.plain(code), false);
   assert.equal(E.plain(view({ ui: { tiles: [{ id: 'a', name: 'A', sizes: ['m'], file: 'a.html' }] } })), false);
   assert.equal(E.plain(view({ ui: {} })), false);

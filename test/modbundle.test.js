@@ -267,7 +267,7 @@ test('mod.json: a full manifest comes back exactly as written, and checking it a
   const got = await man(full);
   assert.deepEqual(got.manifest, { ...BASE, ...full });
   assert.deepEqual(M.clean(structuredClone(got.manifest), got.files), got.manifest);
-  assert.deepEqual(M.caps(got.manifest), ['network:api.weather.gov', 'network:xn--bcher-kva.example', 'network:1.2.3.example', 'frame']);
+  assert.deepEqual(M.caps(got.manifest), ['network:api.weather.gov', 'network:xn--bcher-kva.example', 'network:1.2.3.example', 'code', 'frame']);
   assert.deepEqual(M.caps({ ...BASE, permissions: [{ id: 'grades', why: 'x' }], ui: { tiles: [{ id: 'a', name: 'A', sizes: ['s'] }] } }), ['grades']);
   for (const v of ['0.0.0', '1.2.3-beta.2', '1.0.0-rc-1.x', '999999.0.1']) assert.ok(await man({ version: v }), v);
 });
@@ -513,6 +513,7 @@ test('plan: TOFU on the key, newer versions only, prompts when permissions grow,
   const rec = (o = {}) => ({ id: 'aaaaaaaaaaaaaaaa', key: K1, hash: 'H1', version: '1.0.0', dev: false, manifest: P('grades'), ...o });
   const inc = (o = {}) => ({ id: 'aaaaaaaaaaaaaaaa', key: K1, hash: 'H2', version: '1.1.0', signed: true, manifest: P('grades'), ...o });
   const FRAME = { permissions: [], ui: { tiles: [{ id: 't', name: 'T', sizes: ['s'], file: 't.html' }] } };
+  const BLOCKS = { tiles: [{ id: 't', name: 'T', sizes: ['s'], blocks: [{ type: 'text', text: 'hi' }] }] };
   const DEV = { dev: true };
   const yes = (action, reason, newPermissions, prompt) => ({ action, reason, newPermissions, prompt });
   const no = (reason) => yes('refuse', reason, [], false);
@@ -521,13 +522,17 @@ test('plan: TOFU on the key, newer versions only, prompts when permissions grow,
   const BLOCKED = { blocked: 'Sends grades away.' };
   const rows = [
     ['first install', null, inc(), {}, yes('install', 'new', ['grades'], true)],
-    ['first install, frame UI', null, inc({ manifest: FRAME }), {}, yes('install', 'new', ['frame'], true)],
+    ['first install, frame UI', null, inc({ manifest: FRAME }), {}, yes('install', 'new', ['code', 'frame'], true)],
     ['unsigned without dev mode', null, inc({ signed: false }), {}, no('dev-off')],
     ['unsigned in dev mode', null, inc({ signed: false }), DEV, yes('install', 'dev', ['grades'], true)],
     ['newer, same permissions: quiet', rec(), inc(), {}, yes('update', 'newer', [], false)],
     ['newer, fewer permissions: quiet', rec({ manifest: P('grades', 'todo') }), inc(), {}, yes('update', 'newer', [], false)],
     ['newer, more permissions: prompt', rec(), inc({ manifest: P('grades', 'network:api.example.com') }), {}, yes('update', 'newer', ['network:api.example.com'], true)],
-    ['newer, now with frame UI: prompt', rec({ manifest: { permissions: [] } }), inc({ manifest: FRAME }), {}, yes('update', 'newer', ['frame'], true)],
+    ['newer, now with frame UI: prompt', rec({ manifest: { permissions: [] } }), inc({ manifest: FRAME }), {}, yes('update', 'newer', ['code', 'frame'], true)],
+    ['newer, a widget Glaze draws now has hooks: prompt', rec({ manifest: { ...P('todo'), ui: BLOCKS } }), inc({ manifest: { ...P('todo'), hooks: 'hooks.js' } }), {}, yes('update', 'newer', ['code'], true)],
+    ['newer, a widget now with a slot page: prompt', rec({ manifest: { ...P('todo'), ui: BLOCKS } }), inc({ manifest: { ...P('todo'), ui: { tiles: [{ id: 't', name: 'T', sizes: ['s'], file: 't.html' }] } } }), {}, yes('update', 'newer', ['code', 'frame'], true)],
+    ['newer, code already there: quiet', rec({ manifest: { ...P('todo'), hooks: 'hooks.js' } }), inc({ manifest: { ...P('todo'), hooks: 'other.js' } }), {}, yes('update', 'newer', [], false)],
+    ['newer, code dropped: quiet', rec({ manifest: { ...P('todo'), hooks: 'hooks.js' } }), inc({ manifest: { ...P('todo'), ui: BLOCKS } }), {}, yes('update', 'newer', [], false)],
     ['another key', rec(), inc({ key: K2 }), {}, no('key')],
     ['another id', rec(), inc({ id: 'bbbbbbbbbbbbbbbb' }), {}, no('id')],
     ['the same bundle again', rec(), inc({ hash: 'H1', version: '1.0.0' }), {}, no('same')],
@@ -679,6 +684,52 @@ test('broker: install, list, enable, disable, revoke, quiet and prompted updates
   assert.deepEqual(w.store.local.mods, [theirs.id]);
   assert.deepEqual(await install(v1), { ok: false, error: 'refused', reason: 'version' }, 'removal keeps the highest version');
   assert.equal((await install(v3)).action, 'install', 'the exact highest bundle can be reinstalled with a prompt');
+});
+
+test('broker: Remove clears what the mod stored, its private flag, nav switch and stop note by default, and keeps them when asked', async () => {
+  const w = worker();
+  const send = (m) => w.send({ type: 'glaze:mods', ...m }, EDITOR);
+  const v1 = await M.pack(FILES(), MANIFEST, AUTHOR);
+  const stash = (id, other) => Object.assign(w.store.local, {
+    [`modData:${id}`]: { grades: [{ percent: 91.5 }] }, [`modPrivate:${id}`]: true, [`modNavLayout:${id}`]: false,
+    modStops: { [id]: { why: 'error', at: 1 }, [other]: { why: 'error', at: 2 } },
+  });
+  const OTHER = 'bbbbbbbbbbbbbbbb';
+  const install = () => send({ op: 'install', zip: std(v1.bytes), hash: v1.hash, grants: ['network:api.weather.gov'], source: 'file' });
+  const own = (id) => [`modData:${id}`, `modPrivate:${id}`, `modNavLayout:${id}`];
+  assert.equal((await install()).ok, true);
+  stash(v1.id, OTHER);
+  Object.assign(w.store.local, { [`modData:${OTHER}`]: { keep: 1 } });
+  assert.equal((await send({ op: 'remove', id: v1.id })).ok, true);
+  assert.deepEqual(own(v1.id).filter((k) => k in w.store.local), [], 'its stored data, private flag and nav switch are gone');
+  assert.deepEqual(w.store.local.modStops, { [OTHER]: { why: 'error', at: 2 } }, 'only its own stop note goes');
+  assert.deepEqual(w.store.local[`modData:${OTHER}`], { keep: 1 }, 'another mod\'s data stays');
+
+  assert.equal((await install()).ok, true);
+  stash(v1.id, OTHER);
+  assert.equal((await send({ op: 'remove', id: v1.id, data: false })).ok, true);
+  assert.deepEqual(own(v1.id).filter((k) => k in w.store.local), own(v1.id), 'kept on request');
+  assert.ok(v1.id in w.store.local.modStops);
+  assert.deepEqual(await send({ op: 'remove', id: v1.id, data: 'no' }), { ok: false, error: 'bad' });
+});
+
+test('Remove can be retried when persisting the cleared stop note fails', async () => {
+  const id = 'aaaaaaaaaaaaaaaa', record = { id, files: {}, dev: true };
+  const store = { mods: [id], [`mod:${id}`]: record, [`modData:${id}`]: { grades: 1 }, modStops: { [id]: { why: 'error' } } };
+  let fail = true;
+  const local = {
+    get: async (key) => Object.fromEntries([].concat(key).map((k) => [k, store[k]])),
+    set: async (patch) => { if (fail && 'modStops' in patch) return false; Object.assign(store, structuredClone(patch)); return true; },
+    remove: async (keys) => { for (const k of [].concat(keys)) delete store[k]; return true; },
+  };
+  assert.equal((await M.change({ op: 'remove', id }, { local })).ok, false);
+  assert.ok(store[`mod:${id}`], 'a failed cleanup keeps the mod available for retry');
+  assert.deepEqual(store.mods, [id]);
+  fail = false;
+  assert.equal((await M.change({ op: 'remove', id }, { local })).ok, true);
+  assert.equal(store[`mod:${id}`], undefined);
+  assert.equal(store[`modData:${id}`], undefined);
+  assert.deepEqual(store.modStops, {});
 });
 
 test('broker: the blocklist (GZ_BLOCKLIST) stops installs, updates and turning a blocked mod back on; the list keeps its reason', async () => {
