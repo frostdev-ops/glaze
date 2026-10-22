@@ -298,6 +298,7 @@
   'Nickname': 'Surnom',
   'Not saved. Try again in a moment.': 'Non enregistré. Réessayez dans un instant.',
   'Too much to sync. Shorten a nickname or clear one.': 'Trop de données à synchroniser. Raccourcissez un surnom ou supprimez-en un.',
+  'Open Settings in its own tab.': 'Ouvrez les réglages dans leur propre onglet.',
   'Purple': 'Violet',
   'Cyan': 'Cyan',
   'Yellow': 'Jaune',

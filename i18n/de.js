@@ -298,6 +298,7 @@
   'Nickname': 'Spitzname',
   'Not saved. Try again in a moment.': 'Nicht gespeichert. Versuch es gleich noch einmal.',
   'Too much to sync. Shorten a nickname or clear one.': 'Zu viel zum Synchronisieren. Kürze einen Spitznamen oder lösche einen.',
+  'Open Settings in its own tab.': 'Öffne die Einstellungen in einem eigenen Tab.',
   'Purple': 'Lila',
   'Cyan': 'Cyan',
   'Yellow': 'Gelb',

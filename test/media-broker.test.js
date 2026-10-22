@@ -12,6 +12,7 @@ const B = require('../lib/modbroker.js');
 
 const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
 const slice = source.slice(source.indexOf('// Media for a Look (lib/media.js)'), source.indexOf("// Share keys and relay traffic"));
+const frames = source.slice(source.indexOf('// Frames the worker trusts, by what for.'), source.indexOf('const BROKER = {')); // trustedFrame, whose Settings frame none claimed here
 const spin = fs.readFileSync(path.join(__dirname, 'fixtures/media/spin.json'), 'utf8');
 const URL1 = 'https://cdn.example.com/spin.json';
 const OTHER = 'https://cdn.example.com/other.json';
@@ -28,9 +29,10 @@ const rig = async ({ worn = URL1, lms = 'https://school.instructure.com', instal
     fromEditor: (s) => s.id === 'glaze' && s.url?.split(/[?#]/)[0] === 'chrome-extension://glaze/options.html',
     fromLms: async (s) => (s.id === 'glaze' && s.tab && s.frameId === 0 && s.url?.startsWith(lms) ? lms : null),
     brokerArea: (name) => area(name === 'sync' ? sync : local2),
+    setTimeout, clearTimeout,
     fetch: async (u, i) => { fetched.push([u, i]); return new Response(spin, { status: 200 }); },
   });
-  vm.runInContext(`${slice}\nglobalThis.media = BROKER.media;`, ctx);
+  vm.runInContext(`${frames}\n${slice}\nglobalThis.media = BROKER.media;`, ctx);
   const ask = (m, s) => new Promise((res) => { for (const f of listeners) if (f(m, s, (r) => res(JSON.parse(JSON.stringify(r)))) === true) return; res('ignored'); });
   return { media: ctx.media, ask, fetched, sync };
 };

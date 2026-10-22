@@ -37,7 +37,8 @@ const editor = GZ_EDITOR.mount({ onRoute: (route) => followSection(route) });
 
 // Opened as a page of the school's site (features/settingspage.js): the same Settings, with Close and a way to its own tab.
 // The page around can't read this frame, but it could cover it and borrow a click, so what holds keys and grants (sharing,
-// mods, backups) asks for a tab of its own. The worker refuses those operations from a frame anyway.
+// mods, backups) asks for a tab of its own. The worker refuses those operations from a frame anyway; it trusts this frame, once
+// it has claimed its ticket, only for the writes that hold no keys or grants (nicknames, Look media, the pet library).
 const embedded = window.top !== window;
 if (embedded) {
   document.documentElement.setAttribute('data-embedded', '');
@@ -862,7 +863,8 @@ GZ_UI.load().then((s) => {
           flush();
           try {
             const result = await chrome.runtime.sendMessage({ type: 'glaze:courseName', id, name: nickname.value });
-            if (!result?.ok) return hint(t('Too much to sync. Shorten a nickname or clear one.'), true);
+            // The worker refuses a frame it doesn't know ('sender'): that is no size problem, and Settings in a tab of its own saves.
+            if (!result?.ok) return hint(result?.error === 'sender' ? t('Open Settings in its own tab.') : t('Too much to sync. Shorten a nickname or clear one.'), true);
             s.courses = result.courses; renderCourses(); refresh(); hint(t('Saved'));
           } catch { hint(t('Not saved. Try again in a moment.'), true); }
         });
