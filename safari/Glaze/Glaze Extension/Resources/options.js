@@ -1342,12 +1342,11 @@ GZ_UI.load().then((s) => {
   });
   takeOffer();
 
-  // ---- Look rotation's list and your own pointer: kept on this computer (storage.local), lib/lookx.js ----
+  // ---- Look rotation's list and your own pointer picture: kept on this computer (storage.local), lib/lookx.js ----
   let rotateLooks = [];
   const renderExtras = () => {
     $('#rotate-at').hidden = s.extras.rotate !== 'daily';
     $('#rotate-looks').hidden = s.extras.rotate === 'off';
-    $('#cursor-own').hidden = s.extras.cursor !== 'own';
   };
   const renderRotate = async () => {
     const tick = (id, colors, name) => {
@@ -1361,7 +1360,8 @@ GZ_UI.load().then((s) => {
   };
   const showCursor = () => local.get('cursorImg', (r) => { const i = $('#cursor-img'); i.hidden = !r?.cursorImg; if (r?.cursorImg) i.src = r.cursorImg; });
   $('#cursor-pick').addEventListener('click', () => $('#cursor-file').click());
-  // Read and scaled here, kept as PNG: SVG and anything else the browser can't draw as a bitmap is refused.
+  // Read and scaled here, kept as PNG: SVG and anything else the browser can't draw as a bitmap is refused. The picture is
+  // the Look's pointer from then on (x.pointer 'own'), saved like any of its parts.
   $('#cursor-file').addEventListener('change', async (e) => {
     const f = e.target.files[0];
     e.target.value = '';
@@ -1375,19 +1375,22 @@ GZ_UI.load().then((s) => {
     local.set({ cursorImg: c.toDataURL('image/png') }, () => {
       const err = chrome.runtime.lastError;
       if (err) return hint(t('Not saved: {error}', { error: err.message }), true);
-      s.extras.cursor = 'own';
-      fill();
-      save(['extras']);
       showCursor();
+      const next = GZ_EDITOR_X.put(s.parts, 'pointer', 'own');
+      if (!next) return;
+      s.parts = next;
+      preview();
+      save(['parts'], false, ['pointer']);
+      GZ_EDITOR_X.render();
     });
   });
+  showCursor();
   local.get('rotateLooks', (r) => { rotateLooks = Array.isArray(r?.rotateLooks) ? r.rotateLooks : []; renderRotate(); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.rotateLooks) rotateLooks = Array.isArray(changes.rotateLooks.newValue) ? changes.rotateLooks.newValue : [];
     if (changes.rotateLooks || changes.lookFavorites) renderRotate();
   });
-  showCursor();
 
   // ---- backup ----
   // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;

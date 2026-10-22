@@ -1,4 +1,4 @@
-importScripts('download.js', 'color.js', 'fonts.js', 'surfaces.js', '../defaults.js', 'history.js', 'cards.js', 'nav.js', 'nav-items.js', 'navlayout.js', 'motionx.js', 'parts.js', 'nav-store.js', 'todo.js', 'petbrain.js', 'pet.js', 'petsprites.js', 'remind.js', 'widgets.js', 'sidebar.js', 'lookparts.js', 'share.js', 'lookx.js', 'gradescope.js', 'doctext.js', 'folders.js', 'notes.js', 'calexport.js', 'gcal.js', 'coursetabs.js');
+importScripts('download.js', 'color.js', 'fonts.js', 'surfaces.js', '../defaults.js', 'lookset.js', 'history.js', 'cards.js', 'nav.js', 'nav-items.js', 'navlayout.js', 'motionx.js', 'parts.js', 'nav-store.js', 'todo.js', 'petbrain.js', 'pet.js', 'petsprites.js', 'remind.js', 'widgets.js', 'sidebar.js', 'lookparts.js', 'share.js', 'lookx.js', 'gradescope.js', 'doctext.js', 'folders.js', 'notes.js', 'calexport.js', 'gcal.js', 'coursetabs.js');
 
 // Cache packaged broker scripts at install; parse them on first use rather than every worker wake.
 const BROKER_FILES = {
@@ -149,14 +149,15 @@ const BROKER = {
     // which Reset everything sends with the rest.
     allow: async (m, s) => {
       if (!m.patch || typeof m.patch !== 'object' || Array.isArray(m.patch) || Object.keys(m.patch).some((k) => !Object.hasOwn(GZ_DEFAULTS, k) && !Object.hasOwn(GZ_SPEC, k) && k !== 'card')) return false;
-      if (m.partKeys !== undefined && (!fromEditor(s) || !Array.isArray(m.partKeys) || !m.partKeys.length || new Set(m.partKeys).size !== m.partKeys.length || m.partKeys.some((k) => !['bg', 'anim', 'fx', 'cursor', 'nav', 'rules'].includes(k)))) return false;
+      if (m.partKeys !== undefined && (!fromEditor(s) || !Array.isArray(m.partKeys) || !m.partKeys.length || new Set(m.partKeys).size !== m.partKeys.length || m.partKeys.some((k) => !['bg', 'anim', 'fx', 'cursor', 'pointer', 'type', 'nav', 'rules'].includes(k)))) return false;
       if (fromEditor(s) || (s.id === chrome.runtime.id && s.url?.split(/[?#]/)[0] === chrome.runtime.getURL('popup.html'))) return true;
-      // A page (the command palette's Look): only one of a site Glaze runs on.
-      return m.parts === null && Object.keys(m.patch).every((k) => ['version', 'colors', 'preset', 'auto', 'look', 'bg', 'card'].includes(k))
+      // A page (the command palette's Look): only one of a site Glaze runs on. It names a built-in Look for that Look's own
+      // parts, or none.
+      return m.parts === null && (m.look === undefined || GZ_LOOKS.some((L) => L.name === m.look)) && Object.keys(m.patch).every((k) => ['version', 'colors', 'preset', 'auto', 'look', 'bg', 'card'].includes(k))
         && !!await lmsPage(s);
     },
     run: async (m, area) => {
-      let parts = m.parts == null ? null : GZ_XPARTS.bundle(m.parts);
+      let parts = m.look !== undefined ? GZ_LOOK_PARTS(GZ_LOOKS.find((L) => L.name === m.look)) : m.parts == null ? null : GZ_XPARTS.bundle(m.parts);
       const patch = { ...m.patch };
       if (m.parts != null && (!parts || !GZ_XPARTS.same(parts, m.parts))) return { ok: false, error: 'bad' };
       // Builder edits merge in this queue, so another editor's background or motion parts survive.
@@ -353,8 +354,8 @@ const BROKER = {
           const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
           if (!same(now.extras, s.extras) || !same(st, rotateState) || !same(GZ_HISTORY.theme(now), GZ_HISTORY.theme(s)) || !same((await sync.get('lookX')).lookX, lookX)) return { ok: false, error: 'changed' };
         }
-        // The Look's parts go in with it, in the same write: a built-in Look has none, and a code brings its own or none.
-        if (patch && !await GZ_XPARTS.write({ sync, local }, got?.parts || null, { version: 2, ...patch })) return { ok: false };
+        // The Look's parts go in with it, in the same write: a built-in Look its own, and a code brings its own or none.
+        if (patch && !await GZ_XPARTS.write({ sync, local }, (L ? GZ_LOOK_PARTS(L) : got?.parts) || null, { version: 2, ...patch })) return { ok: false };
         if (!patch) r.state.turned = false;
       }
       return { ok: r.state === rotateState || await local.set({ rotateState: r.state }) };
@@ -1209,9 +1210,9 @@ chrome.runtime.onInstalled.addListener((d) => {
   serial(async () => { await seeded; await chrome.scripting.unregisterContentScripts(); await ensure(); });
   if (d?.reason === 'update') sweepMedia(true);
   moveChannelKeys().catch(() => {});
-  if (d?.reason === 'update') serial(perSite);
+  if (d?.reason === 'update') { serial(perSite); pointerToLook(); }
 });
-chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(false, true)).catch(() => {}); serial(ensure); moveChannelKeys().catch(() => {}); sweepMedia(); });
+chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(false, true)).catch(() => {}); serial(ensure); moveChannelKeys().catch(() => {}); sweepMedia(); pointerToLook(); });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && Object.keys(changes).some((k) => k.startsWith('starterOff:')))
     (brokerTurn ||= GZ_CARDS.queue())(() => resumeDefaults(true)).catch(() => {});
@@ -1226,6 +1227,20 @@ const dueBySite = ({ dueWeek, dueWeekAt, dueWeekFrom, ...patch }) => {
   } catch { /* old invalid source: discard it */ }
   return patch;
 };
+// Once, on the update that made the pointer part of the Look: the pointer chosen as a setting (extras.cursor) goes into the
+// parts of the Look being worn, so the student keeps it, and the setting goes. A Look that already has a pointer keeps its
+// own. Parts saved on another computer can't be written over unseen: the setting waits for the next start.
+const pointerToLook = () => (brokerTurn ||= GZ_CARDS.queue())(async () => {
+  const area = { sync: brokerArea('sync'), local: brokerArea('local') };
+  const { extras } = await area.sync.get('extras');
+  if (!extras || typeof extras !== 'object' || !Object.hasOwn(extras, 'cursor')) return;
+  const { cursor, ...rest } = extras;
+  const set = typeof cursor === 'string' && cursor !== 'off' && GZ_MX.POINTERS.includes(cursor) ? cursor : null;
+  const P = set ? await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local) : null;
+  if (P === undefined) return;
+  if (!set || P?.x?.pointer) return area.sync.set({ extras: rest });
+  await GZ_XPARTS.write(area, { ...P, x: { ...P?.x, pointer: set } }, { extras: rest });
+}).catch(() => {});
 // Once, on the update from 3.3.4: that one list goes under its site, and Ultra's one ten-minute gate for its course list
 // (seenCoursesAt) goes, now that each Ultra site has its own (`seenCoursesAt <origin>`, content-ultra.js record).
 const perSite = async () => {

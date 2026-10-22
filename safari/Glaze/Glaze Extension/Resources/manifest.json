@@ -142,6 +142,7 @@
         "assets/art/pets/*/reactions.webp",
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
+        "assets/art/cursors/*/*.svg",
         "features/lookx.css",
         "features/rules.css",
         "features/navlayout.css",

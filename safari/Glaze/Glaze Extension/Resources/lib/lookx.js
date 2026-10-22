@@ -18,9 +18,24 @@ var GZ_LX = globalThis.GZ_LX || (() => {
   // 'study/coffee' -> its name, for every bundled sticker.
   const BUNDLED = new Map(Object.entries(PACKS).flatMap(([p, names]) => names.map((n) => [`${p}/${slug(n)}`, n])));
   const file = (id) => `assets/art/stickers/${id}.webp`;
-  // The pointer sets (assets/art/cursors/<set>/default.png and pointer.png, 32 × 32): each one's hotspot, from
-  // assets/art/README.md. No set has a text cursor: text keeps the system's.
-  const CURSORS = { aqua: { default: [7, 2], pointer: [14, 2] }, lilac: { default: [7, 2], pointer: [14, 2] }, pearl: { default: [3, 2], pointer: [14, 2] } };
+  // The pointer sets (assets/art/cursors/<set>/, 32 × 32): each one's hotspot, from assets/art/README.md. A set drawn as SVG
+  // (`svg`) has default.svg and pointer.svg, with PNGs at 1x and 2x (default@2x.png) made from them for a browser that
+  // won't draw an SVG cursor; the first three sets are PNG only. No set has a text cursor: text keeps the system's.
+  const CURSORS = {
+    aqua: { default: [7, 2], pointer: [14, 2] }, lilac: { default: [7, 2], pointer: [14, 2] }, pearl: { default: [3, 2], pointer: [14, 2] },
+    aurora: { default: [4, 3], pointer: [12, 3], svg: true }, quill: { default: [4, 3], pointer: [12, 3], svg: true },
+    terminal: { default: [4, 3], pointer: [12, 3], svg: true }, lava: { default: [4, 3], pointer: [12, 3], svg: true },
+    neon: { default: [4, 3], pointer: [12, 3], svg: true }, clear: { default: [4, 3], pointer: [12, 3], svg: true },
+    lagoon: { default: [4, 3], pointer: [12, 3], svg: true }, rose: { default: [4, 3], pointer: [12, 3], svg: true },
+    ghost: { default: [4, 3], pointer: [12, 3], svg: true }, pumpkin: { default: [4, 3], pointer: [12, 3], svg: true },
+  };
+  // One cursor of a set as CSS: the SVG, then the PNGs (2x through image-set when the browser takes it, then 1x), then the
+  // system's own. A browser goes down the list until it has one it can draw. url(file) is the extension's address.
+  const cursorCss = (set, kind, url, imageSet = true) => {
+    const c = CURSORS[set], at = c[kind].join(' '), base = `assets/art/cursors/${set}/${kind}`;
+    if (!c.svg) return `url("${url(`${base}.png`)}") ${at}`;
+    return [`url("${url(`${base}.svg`)}") ${at}`, imageSet && `image-set(url("${url(`${base}.png`)}") 1x, url("${url(`${base}@2x.png`)}") 2x) ${at}`, `url("${url(`${base}.png`)}") ${at}`].filter(Boolean).join(', ');
+  };
 
   // ---- placements -------------------------------------------------------------------------------
   // A placement is { id, s: 'pack/name' | 'own:<id>', x: % of the page's width (its centre), y: px from the top, w: px, r: degrees }.
@@ -117,7 +132,7 @@ var GZ_LX = globalThis.GZ_LX || (() => {
     return { state: { mode, at: now, i, turned: true }, wear: i };
   };
 
-  return { PACKS, PACK_NAMES, BUNDLED, slug, file, CURSORS, MAX_ON_PAGE, ID, MOD, placement, clean, apply, quiet, pageKey, PAGE_KEY, DATA, IMG_MAX, IMGS_MAX, fit, imgIds, roomFor, RESET, EVERY, nextTurn, rotation, wearCode, turn, turned };
+  return { PACKS, PACK_NAMES, BUNDLED, slug, file, CURSORS, cursorCss, MAX_ON_PAGE, ID, MOD, placement, clean, apply, quiet, pageKey, PAGE_KEY, DATA, IMG_MAX, IMGS_MAX, fit, imgIds, roomFor, RESET, EVERY, nextTurn, rotation, wearCode, turn, turned };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_LX; else GZ_LX;

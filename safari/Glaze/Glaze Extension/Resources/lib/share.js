@@ -62,8 +62,10 @@ const GZ_SHARE = (() => {
       if (clean.x?.bg) {
         for (const key of ['shader', 'layers', 'media']) if (s.bg.kind !== key) delete clean.x.bg[key];
         if (!Object.keys(clean.x.bg).length) delete clean.x.bg;
-        if (!Object.keys(clean.x).length) delete clean.x;
       }
+      // The student's own pointer picture stays on their computer, like their stickers: the code goes without a pointer.
+      if (clean.x?.pointer === 'own') delete clean.x.pointer;
+      if (clean.x && !Object.keys(clean.x).length) delete clean.x;
       if (!files && String(clean.x?.bg?.media?.src).startsWith('file:')) fail('This theme’s background is a file kept on this computer, which a theme code can’t carry. Use a link to the file instead, or share this Look in a share session.');
       extra = Object.keys(clean).length ? clean : null;
       Object.assign(raw, extra);
