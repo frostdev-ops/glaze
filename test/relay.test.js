@@ -779,7 +779,7 @@ const doomed = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM doomed WHERE 
 const booked = (r) => r.db.prepare('SELECT blob FROM totals').get().blob;
 const blobRows = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM blobs WHERE sid = ?').get(sid).c;
 
-test('a file upload still in flight when its share is deleted (by the creator or by expiry) leaves nothing behind', async (t) => {
+test('creator deletion reclaims in-flight uploads; idle expiry waits for activity to finish', async (t) => {
   for (const [how, fail] of [['creator', false], ['creator', true], ['expiry', false]]) {
     const store = slow(t);
     const r = await up({ store });
@@ -790,11 +790,21 @@ test('a file upload still in flight when its share is deleted (by the creator or
     const upload = a.s.put(new Uint8Array(3000)).then(() => 'stored', (e) => e.status ?? e.message);
     await store.started;
     if (how === 'creator') assert.equal((await fetch(`${r.url}/s/${a.st.sid}`, { method: 'DELETE', headers: { authorization: `Bearer ${a.st.del}` } })).status, 204);
-    else r.db.prepare('UPDATE sessions SET touched = touched - 400 WHERE sid = ?').run(a.st.sid);
+    else {
+      r.db.prepare('UPDATE sessions SET touched = touched - 400 WHERE sid = ?').run(a.st.sid);
+      await r.expire();
+      assert.equal((await fetch(`${r.url}/s/${a.st.sid}`)).status, 200, 'an ongoing upload is use, not idle');
+      store.release();
+      assert.equal(await upload, 'stored');
+      // Once the upload has finished and nobody uses the share again, ordinary opt-in expiry reclaims it.
+      r.db.prepare('UPDATE sessions SET touched = touched - 400 WHERE sid = ?').run(a.st.sid);
+    }
     await r.expire();
     assert.equal((await fetch(`${r.url}/s/${a.st.sid}`)).status, 410, `${how} ${fail}`);
-    store.release(fail);
-    assert.equal(await upload, 410, `${how} ${fail}: the upload isn't acknowledged`);
+    if (how === 'creator') {
+      store.release(fail);
+      assert.equal(await upload, 410, `${how} ${fail}: the upload isn't acknowledged`);
+    }
     await r.expire();
     assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [0, 0], `${how} ${fail}`);
   }
@@ -1236,15 +1246,15 @@ test('a forwarded client address is trusted only from configured proxies, and on
   assert.deepEqual(await tries({ ipHeader: 'x-real-ip' }, ['not-an-address', 'also-not']), [201, 429]); // not an address: the peer counts
 });
 
-test('the number of sessions is capped, tombstones included, so the database stays bounded', async (t) => {
-  const r = await up({ maxSessions: 2 });
+test('the number of live sessions is capped; a deleted one leaves room at once, and its tombstone is pruned later', async (t) => {
+  const r = await up({ maxSessions: 2, full: 1 }); // isolate the hard live-session cap from the 95% safety margin
   t.after(() => r.close());
   const a = make(r), b = make(r), c = make(r);
   await a.s.sync();
   await b.s.sync();
   await assert.rejects(c.s.sync(), (e) => e.status === 507);
   await a.s.remove();
-  await assert.rejects(c.s.sync(), (e) => e.status === 507);
+  await c.s.sync();
 });
 
 test('SigV4 matches AWS\'s published test vectors', () => {

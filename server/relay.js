@@ -9,9 +9,10 @@
 //                                          IP_HEADER (the header the proxy puts the client's address in; for
 //                                          X-Forwarded-For its last entry), TRUSTED_PROXIES (the peers whose IP_HEADER
 //                                          counts, addresses or CIDRs; default this computer only), MAX_BYTES (5 GiB
-//                                          of batches), MAX_BLOB_BYTES (20 GiB of files), MAX_SESSIONS (500,000,
-//                                          deleted ones included). These cap what's stored, not the disk itself:
-//                                          leave room for the database's own overhead, its WAL and backups.
+//                                          of batches), MAX_BLOB_BYTES (20 GiB of files), MAX_SESSIONS (500,000 live
+//                                          ones). These cap what's stored, not the disk itself: leave room for the
+//                                          database's own overhead, its WAL and backups. New shares and writes are
+//                                          refused from 95% of each, and the log warns from 80%.
 //                                          Files go to Cloudflare R2 instead of BLOBS when R2_ACCOUNT_ID,
 //                                          R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET are set. SPOOL (DB
 //                                          plus .spool) is where file uploads wait, on disk, until they are checked.
@@ -44,11 +45,18 @@ const LIMIT = {
   op: 4 << 20, session: 50 << 20, body: 5600000 + 4096, page: 4 << 20, blob: (20 << 20) + 4096 + 28, blobs: 500 << 20, sub: 200, sockets: 8, frame: 16384, backlog: 65536,
   socketsAll: 10000, inflight: 64 << 20, inflightAll: 256 << 20, idle: 30e3, progress: 16384, bodyTime: 60e3,
 };
-// Per client address (an IPv6 /64): [burst, refilled over ms]. bytes counts what is written (every write's declared
-// body, charged before it is read, whatever its signature), down what is read.
-const RATE = { create: [30, 3600e3], write: [240, 60e3], read: [600, 60e3], bytes: [500 << 20, 3600e3], down: [2 ** 31, 3600e3] };
-const SID = /^[\w-]{22}$/, KEY = /^[\w-]{43}$/, SIG = /^[\w-]{86}$/, B64 = /^[\w-]+$/;
 const DAY = 864e5;
+// Per client (see IPV6): [burst, refilled over ms, at most this many times it for a wider IPv6 prefix]. bytes counts
+// what is written (every write's declared body, charged before it is read, whatever its signature) in an hour, stored
+// the same over a day, down what is read. A day's stored bytes bound how fast one client can fill the global caps: at
+// 1 GiB a day, one address (or one /48: no allocation stores more than an address) takes three days to bring the
+// default 5 GiB of batches to the operator's warning, and two weeks for the 20 GiB of files.
+const RATE = { create: [30, 3600e3], write: [240, 60e3], read: [600, 60e3], bytes: [500 << 20, 3600e3], stored: [2 ** 30, DAY, 1], down: [2 ** 31, 3600e3] };
+// Who a client is: an IPv4 address; for IPv6, its /64 (one subscriber's network, usually), and the /56 and /48 around it
+// with that many times an address's budgets (rates, sockets, bodies in flight). A client is held to every level, so the
+// 65,536 /64s of one /48 (which tunnel brokers give away) share four times one address's budgets, not 65,536 times.
+const IPV6 = [[64, 1], [56, 2], [48, 4]];
+const SID = /^[\w-]{22}$/, KEY = /^[\w-]{43}$/, SIG = /^[\w-]{86}$/, B64 = /^[\w-]+$/;
 const PAGE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Glaze share</title>
 <style>body{font:17px/1.5 system-ui,sans-serif;max-width:34em;margin:3em auto;padding:0 1em;color:#222;background:#fff}@media(prefers-color-scheme:dark){body{color:#eee;background:#161616}}</style>
 <h1>A Glaze share link</h1><p>Someone shared notes, a Look or a list with you through Glaze. To open it, copy this page's address and
@@ -132,7 +140,9 @@ const diskStore = (dir) => {
 };
 
 const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHeader = '', trustedProxies = '127.0.0.1/8,::1/128', maxBytes = 5 * 2 ** 30,
-  maxBlobBytes = 20 * 2 ** 30, maxSessions = 500000, expiryDays = 365, lease = 60e3, grace = 600e3, drain = 5000, rate = RATE, limit = LIMIT, spool = '' } = {}) => {
+  maxBlobBytes = 20 * 2 ** 30, maxSessions = 500000, expiryDays = 365, idleDays = 730, emptyDays = 2, tombDays = 365, full = 0.95, warn = 0.8,
+  lease = 60e3, grace = 600e3, drain = 5000, rate = RATE, limit = LIMIT, spool = '', healthDetails = true } = {}) => {
+  rate = { ...RATE, ...rate }; // a rate table from before a budget existed still has it
   // A busy timeout: --delete and a serving relay may write at the same moment.
   const db = new DatabaseSync(file, { timeout: 5000 });
   // A file's row is written before its object and counts from then on: `at` is set while it uploads (pending) and
@@ -150,18 +160,21 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     CREATE TABLE IF NOT EXISTS lease (id INTEGER PRIMARY KEY CHECK (id = 1), boot TEXT NOT NULL, seen INTEGER NOT NULL) STRICT;
     -- What's stored, kept by SQLite itself in the same transaction as every change, so every process (the serving relay,
     -- a --delete beside it, a relay that lost its lease) sees the same numbers: batches' bytes; files' bytes (a file
-    -- counts from its pending row until its row goes with its object, and a doomed key while it counts); and sessions
-    -- with their tombstones.
+    -- counts from its pending row until its row goes with its object, and a doomed key while it counts); and live
+    -- sessions (a tombstone stops counting when its session is deleted).
     CREATE TABLE IF NOT EXISTS totals (id INTEGER PRIMARY KEY CHECK (id = 1), log INTEGER NOT NULL, blob INTEGER NOT NULL, sessions INTEGER NOT NULL) STRICT;
     INSERT OR IGNORE INTO totals SELECT 1, (SELECT coalesce(sum(bytes), 0) FROM sessions),
-      (SELECT coalesce(sum(size), 0) FROM blobs) + (SELECT coalesce(sum(size * counted), 0) FROM doomed), (SELECT count(*) FROM sessions);
+      (SELECT coalesce(sum(size), 0) FROM blobs) + (SELECT coalesce(sum(size * counted), 0) FROM doomed), (SELECT count(*) FROM sessions WHERE gone IS NULL);
     CREATE TRIGGER IF NOT EXISTS blob_in AFTER INSERT ON blobs BEGIN UPDATE totals SET blob = blob + NEW.size; END;
     CREATE TRIGGER IF NOT EXISTS blob_out AFTER DELETE ON blobs BEGIN UPDATE totals SET blob = blob - OLD.size; END;
     CREATE TRIGGER IF NOT EXISTS doomed_in AFTER INSERT ON doomed BEGIN UPDATE totals SET blob = blob + NEW.size * NEW.counted; END;
     CREATE TRIGGER IF NOT EXISTS doomed_out AFTER DELETE ON doomed BEGIN UPDATE totals SET blob = blob - OLD.size * OLD.counted; END;
     CREATE TRIGGER IF NOT EXISTS doomed_count AFTER UPDATE OF counted ON doomed BEGIN UPDATE totals SET blob = blob + (NEW.counted - OLD.counted) * NEW.size; END;
     CREATE TRIGGER IF NOT EXISTS session_in AFTER INSERT ON sessions BEGIN UPDATE totals SET sessions = sessions + 1, log = log + NEW.bytes; END;
-    CREATE TRIGGER IF NOT EXISTS session_bytes AFTER UPDATE OF bytes ON sessions BEGIN UPDATE totals SET log = log + NEW.bytes - OLD.bytes; END;`);
+    CREATE TRIGGER IF NOT EXISTS session_bytes AFTER UPDATE OF bytes ON sessions BEGIN UPDATE totals SET log = log + NEW.bytes - OLD.bytes; END;
+    CREATE TRIGGER IF NOT EXISTS session_gone AFTER UPDATE OF gone ON sessions WHEN OLD.gone IS NULL AND NEW.gone IS NOT NULL BEGIN UPDATE totals SET sessions = sessions - 1; END;
+    CREATE TRIGGER IF NOT EXISTS session_out AFTER DELETE ON sessions BEGIN
+      UPDATE totals SET sessions = sessions - (OLD.gone IS NULL), log = log - OLD.bytes; END;`);
   const q = Object.fromEntries(Object.entries({
     get: 'SELECT * FROM sessions WHERE sid = ?',
     make: 'INSERT INTO sessions (sid, pub, del, expire, touched) VALUES (?, ?, ?, ?, ?)',
@@ -195,32 +208,98 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     // uploads it doesn't own (left by a relay that died or lost the lease), which it dooms.
     orphans: `SELECT b.sid, b.id, b.size, b.at FROM blobs b JOIN sessions s ON s.sid = b.sid
       WHERE (b.at IS NULL AND s.gone IS NOT NULL) OR (b.at IS NOT NULL AND $serving = 1 AND (b.owner IS NULL OR b.owner <> $boot)) LIMIT 1000`,
-    old: 'SELECT sid FROM sessions WHERE expire = 1 AND gone IS NULL AND touched < ?',
+    // Shares to delete: opted in to expiry and unused for expiryDays, or unused by anyone for idleDays.
+    old: 'SELECT sid FROM sessions WHERE gone IS NULL AND ((expire = 1 AND touched < ?) OR touched < ?)',
+    // Sessions nothing was ever written to (no batch, no file, not even a pending one) and nobody has used for a few
+    // days: nothing to lose, so they go whole, with no tombstone. Some at a time, so no transaction holds writes long.
+    empty: `DELETE FROM sessions WHERE sid IN (SELECT s.sid FROM sessions s WHERE s.gone IS NULL AND s.head = 0 AND s.base = 0 AND s.touched < ?
+      AND NOT EXISTS (SELECT 1 FROM blobs b WHERE b.sid = s.sid)
+      AND NOT EXISTS (SELECT 1 FROM doomed d WHERE d.sid = s.sid) LIMIT 1000)`,
+    // Tombstones past their grace whose files are all gone (a file's row is found through its session's).
+    prune: `DELETE FROM sessions WHERE sid IN (SELECT s.sid FROM sessions s WHERE s.gone IS NOT NULL AND s.gone < ?
+      AND NOT EXISTS (SELECT 1 FROM blobs b WHERE b.sid = s.sid)
+      AND NOT EXISTS (SELECT 1 FROM doomed d WHERE d.sid = s.sid) LIMIT 1000)`,
     totals: 'SELECT log, blob, sessions FROM totals WHERE id = 1',
   }).map(([k, sql]) => [k, db.prepare(sql)]));
   const tx = (f) => { db.exec('BEGIN IMMEDIATE'); try { const out = f(); db.exec('COMMIT'); return out; } catch (e) { db.exec('ROLLBACK'); throw e; } };
   // Read at each check, never cached: another process may have changed them.
   const used = () => q.totals.get();
   const today = () => Math.floor(Date.now() / DAY);
-
-  // ---- limits: token buckets per client address, in memory only --------------------------------------------------
-  const buckets = new Map();
-  const take = (ip, kind, cost = 1) => {
-    const [cap, per] = rate[kind], now = Date.now();
-    const b = buckets.get(ip) || buckets.set(ip, {}).get(ip);
-    const [tok, at] = b[kind] || [cap, now];
-    const left = Math.min(cap, tok + ((now - at) * cap) / per);
-    b[kind] = [left >= cost ? left - cost : left, now];
-    return left >= cost;
+  // ---- room: the global caps --------------------------------------------------------------------------------------
+  // New shares and writes are refused once they would take a cap past `full` of it (the rest is margin, never to be
+  // reached), and the operator is warned when one passes `warn`: [name in /health, totals column, what, setting, cap].
+  const ROOM = [['log', 'log', 'stored batches', 'MAX_BYTES', maxBytes], ['files', 'blob', 'stored files', 'MAX_BLOB_BYTES', maxBlobBytes],
+    ['sessions', 'sessions', 'live sessions', 'MAX_SESSIONS', maxSessions]];
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  const logged = {};
+  // One line per crossing, not per write: when a cap passes `warn`, and when it reaches `full` (or a write is refused
+  // there). Logged again only once usage has clearly dropped back below. `refused` is the totals column that refused.
+  const watch = (u, refused) => {
+    for (const [, k, what, env, cap] of ROOM) {
+      const share = u[k] / cap, now = refused === k || share >= full ? 2 : share >= warn ? 1 : 0, was = logged[k] || 0;
+      if (now > was) {
+        logged[k] = now;
+        console.warn(now === 2 ? `relay: ${what} have reached the ${pct(full)} of ${env} past which new shares and writes are refused (${u[k]} of ${cap}); make room or raise ${env}`
+          : `relay: ${what} passed ${pct(warn)} of ${env} (${u[k]} of ${cap}); from ${pct(full)} new shares and writes are refused`);
+      } else if (now < was && share < (was === 2 ? full : warn) - 0.05) logged[k] = now;
+    }
   };
-  // IPv4 as is; IPv6 by its /64, which one subscriber usually holds whole.
-  const keyOf = (ip) => {
-    ip = ip.replace(/^::ffff:(?=\d+\.)/, '');
-    if (!ip.includes(':')) return ip;
-    const [a, b = ''] = ip.split('%')[0].split('::');
+  // Version 1: totals count live sessions only, and every session keeps the last day anyone used it, for idle expiry.
+  // A database from before counted tombstones and recorded use only for opted-in shares. Recount it and give every
+  // live share the same conservative upgrade grace, including opted-in shares; do this only once.
+  const version = () => db.prepare('PRAGMA user_version').get().user_version;
+  if (version() < 1) tx(() => {
+    if (version() >= 1) return; // another process got there first
+    db.prepare('UPDATE sessions SET touched = max(touched, ?) WHERE gone IS NULL').run(today());
+    db.exec('UPDATE totals SET sessions = (SELECT count(*) FROM sessions WHERE gone IS NULL); PRAGMA user_version = 1');
+  });
+
+  // ---- limits: token buckets per client, in memory only -----------------------------------------------------------
+  // A client is a list of [key, scale]: every one of its keys must have the cost left (scale times the bucket), and all
+  // pay it, or none do. kinds may be several, paid together (a write's hourly and daily bytes).
+  const buckets = new Map();
+  const take = (who, kinds, cost = 1) => {
+    const now = Date.now(), plan = [];
+    for (const kind of [].concat(kinds)) {
+      const [cap, per, most = Infinity] = rate[kind];
+      for (const [key, wide] of who) {
+        const b = buckets.get(key) || {}, scale = Math.min(wide, most);
+        const [tok, at] = b[kind] || [cap * scale, now];
+        plan.push([b, kind, Math.min(cap * scale, tok + ((now - at) * cap * scale) / per), cap * scale, key]);
+      }
+    }
+    const ok = plan.every(([, , left]) => left >= cost);
+    // A refused request must not allocate state for each fresh /64 in an exhausted /48. Keep updates to existing
+    // buckets, but create new identities only when every aggregate budget admitted them.
+    for (const [b, kind, left, top, key] of plan) if (ok || buckets.has(key)) {
+      const dest = buckets.get(key) || buckets.set(key, b).get(key);
+      dest[kind] = [ok ? left - cost : left, now, top];
+    }
+    return ok;
+  };
+  // Counts of what a client holds at once (sockets, bodies in flight), at each of its keys, a wider prefix having at most
+  // `most` times an address's cap.
+  const over = (counts, who, cap, more = 1, most = Infinity) => who.some(([key, scale]) => (counts.get(key) || 0) + more > cap * Math.min(scale, most));
+  const hold = (counts, who, n) => { for (const [key] of who) { const left = (counts.get(key) || 0) + n; if (left > 0) counts.set(key, left); else counts.delete(key); } };
+  // IPv4 as is; IPv6 by its /64, /56 and /48 (see IPV6).
+  const keysOf = (ip) => {
+    ip = ip.toLowerCase().split('%')[0];
+    if (!ip.includes(':')) return [[ip, 1]];
+    // An IPv4 tail uses two IPv6 words, whether mapped or an ordinary IPv6 address. Normalize before expansion so
+    // dotted, hex, expanded and compressed IPv4-mapped spellings all charge the same IPv4 identity.
+    if (ip.includes('.')) {
+      const at = ip.lastIndexOf(':'), v4 = ip.slice(at + 1).split('.').map(Number);
+      ip = `${ip.slice(0, at + 1)}${((v4[0] << 8) | v4[1]).toString(16)}:${((v4[2] << 8) | v4[3]).toString(16)}`;
+    }
+    const [a, b = ''] = ip.split('::');
     const head = a ? a.split(':') : [], tail = b ? b.split(':') : [];
-    const all = ip.includes('::') ? [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail] : head;
-    return all.slice(0, 4).map((x) => parseInt(x, 16).toString(16)).join(':') + '::/64';
+    const all = (ip.includes('::') ? [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail] : head).map((x) => parseInt(x, 16) || 0);
+    if (all.slice(0, 5).every((x) => x === 0) && all[5] === 0xffff) return [[`${all[6] >> 8}.${all[6] & 255}.${all[7] >> 8}.${all[7] & 255}`, 1]];
+    return IPV6.map(([bits, scale]) => {
+      const words = all.slice(0, bits >> 4);
+      if (bits & 15) words.push(all[bits >> 4] & (0xffff << (16 - (bits & 15))) & 0xffff);
+      return [`${words.map((x) => x.toString(16)).join(':')}::/${bits}`, scale];
+    });
   };
   // The forwarded address counts only when the peer is one of the configured proxies and the value is an address;
   // otherwise the peer itself does. Setting IP_HEADER alone trusts nobody but this computer.
@@ -235,7 +314,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
   const clientOf = (req) => {
     const peer = bare(req.socket.remoteAddress || '');
     const fwd = ipHeader && net.isIP(peer) && trusted.check(peer, family(peer)) ? bare(String(req.headers[ipHeader] || '').split(',').pop().trim()) : '';
-    return keyOf(net.isIP(fwd) ? fwd : peer);
+    return keysOf(net.isIP(fwd) ? fwd : peer);
   };
   // A request target Node accepts can still be one URL refuses (`http://[`): that's a bad request, never a crash.
   const target = (req) => { try { return new URL(req.url, 'http://relay'); } catch { return null; } };
@@ -262,13 +341,13 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     // Before anything is written: Node stops handling this socket's errors once 'upgrade' is emitted, and a reset from
     // the client would otherwise be an unhandled 'error' that ends the process.
     sock.on('error', () => sock.destroy());
-    const ip = clientOf(req);
+    const who = clientOf(req);
     const key = req.headers['sec-websocket-key'];
     if (!serving) return refuse(sock, '503 Service Unavailable');
     if (target(req)?.pathname !== '/live' || String(req.headers.upgrade).toLowerCase() !== 'websocket' || typeof key !== 'string') return refuse(sock, '400 Bad Request');
     if (all.size + refusing.size >= limit.socketsAll) return refuse(sock, '503 Service Unavailable');
-    if ((perIp.get(ip) || 0) >= limit.sockets || !take(ip, 'read')) return refuse(sock, '429 Too Many Requests');
-    perIp.set(ip, (perIp.get(ip) || 0) + 1);
+    if (over(perIp, who, limit.sockets) || !take(who, 'read')) return refuse(sock, '429 Too Many Requests');
+    hold(perIp, who, 1);
     all.add(sock);
     const accept = crypto.createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
     sock.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
@@ -284,7 +363,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     const text = (s) => {
       let m;
       try { m = JSON.parse(s); } catch { return bye(1003); }
-      if (!take(ip, 'read')) return bye(1008);
+      if (!take(who, 'read')) return bye(1008);
       if (!Array.isArray(m?.sub) || m.sub.length > limit.sub || !m.sub.every((x) => typeof x === 'string' && SID.test(x))) return bye(1008);
       unsub(sock);
       sock.subs = new Set(m.sub);
@@ -320,8 +399,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       // A closing peer still owns its descriptor during the close grace. Release admission only at actual close,
       // otherwise invalid frames let it open replacements while thousands of old descriptors wait for their timers.
       all.delete(sock);
-      perIp.set(ip, perIp.get(ip) - 1);
-      if (!perIp.get(ip)) perIp.delete(ip);
+      hold(perIp, who, -1);
     });
     if (early?.length) onData(early); // bytes that came with the handshake
   };
@@ -350,6 +428,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     return f();
   });
   const uploading = new Set();
+  const active = new Map(); // session -> handlers still receiving, reading or waiting for their store
   let removing = Promise.resolve();
   // ---- doomed keys: an object no row wants, deleted durably -------------------------------------------------------
   // A lapsed lease doesn't prove its holder's store write has stopped (a paused process can resume; a bucket can finish
@@ -412,8 +491,28 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     removeFiles().catch(() => {}); // settles whatever happens (see chain); never left to reject unhandled
     return true;
   };
-  // Opt-in expiry: a session its creator asked to expire goes once nobody has read or written it for expiryDays.
-  const expire = async () => { for (const { sid } of q.old.all(today() - expiryDays)) remove(sid); return removeFiles(); };
+  // Expiry, which never takes a share anyone uses (any read or write counts, by any member): a session its creator asked
+  // to expire goes once nobody has used it for expiryDays, and any other once nobody has for idleDays. Both leave a
+  // tombstone. A session nothing was ever written to goes whole once unused for emptyDays: it holds nothing, and if
+  // its creator comes back, their device finds it unknown and registers it again (as after a restore from a backup).
+  // A tombstone goes after tombDays, once its files are gone: until then members learn their share was deleted, and its
+  // id can't be registered again. Then each cap's level is checked, so a relay that fills without writes still warns.
+  const expire = async () => {
+    const day = today();
+    // Long-running transfers are still use even if their admission day has passed. Refresh their clocks before
+    // selecting candidates; the predicate keeps durable activity writes to at most one per session per day.
+    write(() => { for (const sid of new Set([...active.keys(), ...subs.keys()])) {
+      const row = q.get.get(sid);
+      if (row && row.gone === null && row.touched < day) q.touch.run(day, sid, day);
+    } });
+    for (const { sid } of q.old.all(day - expiryDays, day - idleDays)) remove(sid);
+    await removeFiles();
+    return chain(() => {
+      while (write(() => q.empty.run(day - emptyDays)).changes === 1000);
+      while (write(() => q.prune.run(day - tombDays)).changes === 1000);
+      watch(used());
+    });
+  };
   // ---- the lease: one serving relay per database ------------------------------------------------------------------
   // listen() takes it (waiting out a dead holder's lease, refusing while a live one renews it), renews it every quarter
   // lease, and gives it back on close. Without it, nothing is reclaimed and no timers run: --backup and --delete
@@ -447,10 +546,10 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     timers.push(
       // Renewal between writes. A relay that stalls past its lease and finds it taken stops serving at once.
       setInterval(() => { try { write(() => {}); } catch {} }, lease / 4),
-      // Forget an address once every one of its buckets would be full again.
+      // Forget a client's key once every one of its buckets is full again (a day's bucket that was barely used is soon).
       setInterval(() => {
         const now = Date.now();
-        for (const [ip, b] of buckets) if (Object.entries(b).every(([k, [, at]]) => now - at >= rate[k][1])) buckets.delete(ip);
+        for (const [key, b] of buckets) if (Object.entries(b).every(([k, [tok, at, top]]) => now - at >= ((top - tok) * rate[k][1]) / top)) buckets.delete(key);
       }, 600e3),
       // Expiry every 6 hours; files left in the store (and reclaims whose grace is over) every `grace`.
       setInterval(() => { expire().catch(() => {}); }, 6 * 3600e3),
@@ -490,17 +589,17 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
   const inflight = new Map();
   let inflightAll = 0;
   const declared = (req) => (req.headers['transfer-encoding'] === undefined && /^\d{1,15}$/.test(req.headers['content-length'] ?? '') ? Number(req.headers['content-length']) : null);
-  const admit = (req, ip, ctx, cap, charge) => {
+  const admit = (req, who, ctx, cap, charge) => {
     const len = declared(req);
     if (len === null) return [411, 'length'];
     if (len > cap) return [413, 'big'];
-    const mine = inflight.get(ip) || 0;
-    if (mine + len > limit.inflight) return [429, 'rate'];
+    // Twice an address's room at most: four times it would let one /48 hold all of the relay's (64 MiB × 4 = 256 MiB).
+    if (over(inflight, who, limit.inflight, len, 2)) return [429, 'rate'];
     if (inflightAll + len > limit.inflightAll) return [503, 'busy'];
-    inflight.set(ip, mine + len);
+    hold(inflight, who, len);
     inflightAll += len;
-    ctx.release = () => { const left = inflight.get(ip) - len; if (left > 0) inflight.set(ip, left); else inflight.delete(ip); inflightAll -= len; };
-    if (charge && !take(ip, 'bytes', len)) return [429, 'rate'];
+    ctx.release = () => { hold(inflight, who, -len); inflightAll -= len; };
+    if (charge && !take(who, ['bytes', 'stored'], len)) return [429, 'rate'];
     return null;
   };
   // A file may take as long as it needs on a slow link, as long as it keeps moving: `progress` bytes every `idle` ms.
@@ -540,34 +639,39 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
   let downloading = 0;
   const disconnected = new WeakMap();
   const handle = async (req, res, ctx) => {
-    const ip = clientOf(req);
+    const who = clientOf(req);
     const url = target(req);
     if (!url) return send(res, 400, { error: 'bad' });
     // A relay that has lost its lease takes no more work, not even a health check.
     if (!serving) return send(res, 503, { error: 'not serving' });
     const look = req.method === 'GET' || req.method === 'HEAD';
     if (look && (url.pathname === '/' || url.pathname === '/j')) return send(res, 200, PAGE, 'text/html; charset=utf-8');
-    if (look && url.pathname === '/health') return send(res, 200, { ok: true });
+    // low: the caps past the warning line, for the operator's monitoring.
+    if (look && url.pathname === '/health') {
+      const u = healthDetails && used();
+      return send(res, 200, { ok: true, ...(healthDetails && { low: ROOM.filter(([, k, , , cap]) => u[k] >= cap * warn).map(([name]) => name) }) });
+    }
     if (req.method === 'POST' && url.pathname === '/s') {
-      if (!take(ip, 'create')) return send(res, 429, { error: 'rate' });
-      const no = admit(req, ip, ctx, limit.body, false);
+      if (!take(who, 'create')) return send(res, 429, { error: 'rate' });
+      const no = admit(req, who, ctx, limit.body, false);
       if (no) return send(res, no[0], { error: no[1] });
       const b = await json(req);
       if (!SID.test(b?.sid) || !KEY.test(b.pub) || !KEY.test(b.del)) return send(res, 400, { error: 'bad' });
       const [status, error] = write(() => {
         if (q.get.get(b.sid)) return [409, 'exists'];
         const u = used();
-        if (u.log >= maxBytes || u.sessions >= maxSessions) return [507, 'full'];
+        if (u.log >= maxBytes * full || u.sessions + 1 > maxSessions * full) { watch(u, u.log >= maxBytes * full ? 'log' : 'sessions'); return [507, 'full']; }
         q.make.run(b.sid, Buffer.from(b.pub, 'base64url'), Buffer.from(b.del, 'base64url'), b.expire === true ? 1 : 0, today());
         return [201];
       });
+      if (status === 201) watch(used());
       return send(res, status, error ? { error } : {});
     }
     const m = ROUTE.exec(url.pathname);
     const kind = !m ? null : m[3] ? { GET: 'getBlob', PUT: 'putBlob', DELETE: 'deleteBlob' }[req.method] : m[2] === 'trim' ? req.method === 'POST' && 'trim'
       : m[2] === 'expiry' ? req.method === 'POST' && 'expiry' : { GET: 'read', POST: 'append', DELETE: 'delete' }[req.method];
     if (!kind) return send(res, m ? 405 : 404, { error: m ? 'method' : 'unknown' });
-    if (!take(ip, kind === 'read' || kind === 'getBlob' ? 'read' : 'write')) return send(res, 429, { error: 'rate' });
+    if (!take(who, kind === 'read' || kind === 'getBlob' ? 'read' : 'write')) return send(res, 429, { error: 'rate' });
     const sid = m[1];
     // What would be refused whatever its body carried is refused before the body is admitted: an unknown or deleted
     // share, or a file without a signature, costs no room and no budget.
@@ -576,15 +680,20 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     if (known.gone) return send(res, 410, { error: 'gone' });
     if (kind === 'putBlob' && !sigOf(req.headers['x-glaze-sig'])) return send(res, 400, { error: 'bad' });
     const bodied = kind === 'putBlob' || kind === 'append' || kind === 'trim' || kind === 'expiry';
-    const no = bodied && admit(req, ip, ctx, kind === 'putBlob' ? limit.blob : limit.body, kind === 'putBlob' || kind === 'append');
+    const no = bodied && admit(req, who, ctx, kind === 'putBlob' ? limit.blob : limit.body, kind === 'putBlob' || kind === 'append');
     if (no) return send(res, no[0], { error: no[1] });
+    hold(active, [[sid, 1]], 1);
+    ctx.done = () => hold(active, [[sid, 1]], -1);
+    // Receiving a body is already activity: recording use only afterwards lets expiry delete its session while a
+    // legitimate slow upload is still arriving. The conditional write still records at most once per day.
+    if (known.touched < today()) write(() => q.touch.run(today(), sid, today()));
     // The body first, then the session as it is once the body is in: other requests may have changed it meanwhile.
     const b = kind === 'putBlob' ? await spooled(req) : bodied ? await json(req) : null;
     const row = q.get.get(sid);
     if (!row) return send(res, 404, { error: 'unknown' });
     if (row.gone) return send(res, 410, { error: 'gone' });
-    // The last day anyone used it, kept only for a session that can expire.
-    if (row.expire) write(() => q.touch.run(today(), sid, today()));
+    // The last day anyone used it, for expiry: written at most once a day.
+    if (row.touched < today()) write(() => q.touch.run(today(), sid, today()));
 
     if (kind === 'read') {
       const after = Number(url.searchParams.get('after') || 0);
@@ -602,7 +711,9 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
         size += o.op.length;
       }
       if (!out.more && seen === 1000) out.more = true;
-      if (!take(ip, 'down', size)) return send(res, 429, { error: 'rate' });
+      // How full the session's log is, so an editor can compact before it fills (older clients ignore it).
+      Object.assign(out, { used: row.bytes, limit: limit.session });
+      if (!take(who, 'down', size)) return send(res, 429, { error: 'rate' });
       return send(res, 200, out);
     }
     if (kind === 'append') {
@@ -612,10 +723,13 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (op.length > limit.op) return send(res, 413, { error: 'big' });
       if (b.n !== row.head + 1) return send(res, 409, { error: 'place', head: row.head });
       if (!signed(row.pub, sid, 'op', String(b.n), op, sig)) return send(res, 403, { error: 'signature' });
-      if (row.bytes + op.length > limit.session || used().log + op.length > maxBytes) return send(res, 507, { error: 'full' });
+      if (row.bytes + op.length > limit.session) return send(res, 507, { error: 'full' });
+      const u = used();
+      if (u.log + op.length > maxBytes * full) { watch(u, 'log'); return send(res, 507, { error: 'full' }); }
       write(() => { q.add.run(sid, b.n, op, sig); q.grow.run(b.n, op.length, sid); });
+      watch(used());
       ring(sid, { n: b.n });
-      return send(res, 201, { n: b.n });
+      return send(res, 201, { n: b.n, used: row.bytes + op.length, limit: limit.session });
     }
     if (kind === 'trim') {
       // An editor drops the batches up to `upto` after sending the whole state again past them. Signed over upto and
@@ -634,11 +748,14 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (!sig || b.length < 29) return send(res, 400, { error: 'bad' });
       if (q.blob.get(sid, m[3])) return send(res, 409, { error: 'exists' });
       if (!signed(row.pub, sid, 'blob', m[3], b, sig)) return send(res, 403, { error: 'signature' });
-      if (Number(q.blobBytes.get(sid).b) + b.length > limit.blobs || used().blob + b.length > maxBlobBytes) return send(res, 507, { error: 'full' });
+      if (Number(q.blobBytes.get(sid).b) + b.length > limit.blobs) return send(res, 507, { error: 'full' });
+      const u = used();
+      if (u.blob + b.length > maxBlobBytes * full) { watch(u, 'blob'); return send(res, 507, { error: 'full' }); }
       // On the books (a pending row this relay owns) before the store call: two uploads at once can't both take the last
       // room, and a file whose share is deleted meanwhile is never lost track of. No other process reclaims it.
       const key = `${sid}/${m[3]}`;
       write(() => q.addBlob.run(sid, m[3], b.length, Date.now(), boot));
+      watch(used());
       uploading.add(key);
       let failed = null;
       try { await store.put(key, b); } catch (e) { failed = e; } finally { uploading.delete(key); }
@@ -685,7 +802,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       // HTTP pipelining can start many reads on one connection before any response is writable. Bound the store reads
       // themselves too; otherwise the TCP cap alone doesn't bound open file descriptors or bucket requests.
       if (downloading >= limit.socketsAll) return send(res, 503, { error: 'busy' });
-      if (!take(ip, 'down', meta.size)) return send(res, 429, { error: 'rate' });
+      if (!take(who, 'down', meta.size)) return send(res, 429, { error: 'rate' });
       let peer = disconnected.get(req.socket);
       if (!peer) {
         peer = new AbortController();
@@ -729,7 +846,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (res.destroyed) return;
       if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'server' }); else res.destroy();
       if (!e.status) console.error('relay:', e.message);
-    }).finally(() => ctx.release?.());
+    }).finally(() => { ctx.release?.(); ctx.done?.(); });
     running.add(p);
     p.finally(() => running.delete(p));
   });
@@ -817,4 +934,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { relay, backup, LIMIT, RATE, sigv4, s3Store, diskStore, fromEnv };
+module.exports = { relay, backup, LIMIT, RATE, IPV6, sigv4, s3Store, diskStore, fromEnv };
