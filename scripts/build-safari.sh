@@ -12,6 +12,12 @@ fi
 identity=${SAFARI_SIGN_IDENTITY:-Developer ID Application: James Kueller (22AAZFMTV8)}
 team=${SAFARI_TEAM_ID:-22AAZFMTV8}
 version=$(node -p 'require("./manifest.json").version')
+out=release/$version
+# Deleting an older indexed build can make Safari remove the installed extension's data.
+if [ -e "$out/build/Glaze.app" ] || [ -L "$out/build/Glaze.app" ]; then
+  echo "build-safari: $out/build/Glaze.app must be removed with a Safari data backup before building." >&2
+  exit 1
+fi
 ./package.sh
 
 # Build from a copy, so the checked-in project's native code and any local Xcode edits stay as they are.
@@ -58,7 +64,6 @@ case "${SAFARI_UPDATE_PUBLIC_KEY:-}" in
 esac
 
 # Everything for this version goes in release/<version>/: downloads in github/, logs in build/.
-out=release/$version
 logs=$out/build/logs
 mkdir -p "$logs" "$out/github"
 if ! xcodebuild -project "$stage/Glaze/Glaze.xcodeproj" \
@@ -107,7 +112,7 @@ done
 codesign --verify --deep --strict --verbose=2 "$app"
 codesign -dv "$app" 2>&1 | grep -qx 'Identifier=io.frostdev.Glaze' && codesign -dv "$extension" 2>&1 | grep -qx 'Identifier=io.frostdev.Glaze.Extension' ||
   { echo "build-safari: the release copy isn't signed under Glaze's own ids" >&2; exit 1; }
-find "$app" -type f -perm -u+x | while IFS= read -r file; do
+find "$app" -type f | while IFS= read -r file; do
   if file -b "$file" | grep -q Mach-O && ! codesign -dvv "$file" 2>&1 | grep -qxF "Authority=$identity"; then
     echo "build-safari: $file is not signed with $identity" >&2
     exit 1
@@ -158,7 +163,6 @@ else
 fi
 
 # Only the downloads hold the app: an unpacked copy in release/ would be another Glaze to Safari.
-rm -rf "$out/build/Glaze.app"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$out/github/$name.zip"
 (cd "$out/github" && shasum -a 256 "$name.zip" > "$name.sha256")
 echo "Built $out/github/$name.zip"

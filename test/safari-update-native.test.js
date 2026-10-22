@@ -93,7 +93,7 @@ test('appcast helper validates before key lookup and preserves older release enc
     const writeInfo = (overrides = {}) => fs.writeFileSync(path.join(temp, 'fixture/Contents/Info.plist'),
       '<?xml version="1.0"?><plist version="1.0"><dict>' + Object.entries({ ...values, ...overrides }).map(([k, v]) => `<key>${k}</key><string>${v}</string>`).join('') + '</dict></plist>');
     writeInfo();
-    const stub = `#!${process.execPath}\nconst fs=require('node:fs'),path=require('node:path');\nconst args=process.argv.slice(2), name=path.basename(process.argv[1]);\nfs.appendFileSync(process.env.T17_LOG,name+' '+args.join(' ')+'\\n');\nif(name==='hdiutil'&&args[0]==='attach')fs.cpSync(process.env.T17_FIXTURE,path.join(args[args.indexOf('-mountpoint')+1],'Glaze.app'),{recursive:true});\nif(name==='generate_keys')console.log(${JSON.stringify(publicKey)});\nif(name==='sign_update')console.log(${JSON.stringify(signature)});\n`;
+    const stub = `#!${process.execPath}\nconst fs=require('node:fs'),path=require('node:path');\nconst args=process.argv.slice(2), name=path.basename(process.argv[1]);\nfs.appendFileSync(process.env.T17_LOG,name+' '+args.join(' ')+'\\n');\nif(name==='hdiutil'&&args[0]==='attach')fs.symlinkSync(process.env.T17_FIXTURE,path.join(args[args.indexOf('-mountpoint')+1],'Glaze.app'),'dir');\nif(name==='hdiutil'&&args[0]==='detach')fs.unlinkSync(path.join(args[args.length-1],'Glaze.app'));\nif(name==='generate_keys')console.log(${JSON.stringify(publicKey)});\nif(name==='sign_update')console.log(${JSON.stringify(signature)});\n`;
     for (const tool of ['xcrun', 'spctl', 'hdiutil', 'codesign', 'generate_keys', 'sign_update']) {
       fs.writeFileSync(path.join(temp, 'bin', tool), stub, { mode: 0o755 });
     }
