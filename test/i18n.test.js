@@ -70,7 +70,8 @@ const tableWords = [
   ...BG.EXAMPLES.map(([, label]) => label), ...BG.KINDS.map(([, label]) => label), ...BG.PRESETS.map(([label]) => label), ...BG.MEDIA_KINDS.map(([, label]) => label), ...BG.MEDIA_FITS.map(([, label]) => label),
   ...Object.values(M.MOMENTS), ...Object.values(M.EVENTS), ...Object.values(M.KEYS).map(([label]) => label),
   ...[M.ENTER, ...Object.values(M.PRESETS)].flatMap((ps) => Object.values(ps).map(([label]) => label)),
-  ...[...MX.SHAPES, ...MX.KINDS, ...MX.CURSORS, ...Object.keys(MX.EASES), ...XP.BLENDS].map(X.tokenName),
+  ...[...MX.SHAPES, ...MX.MARKS, ...MX.KINDS, ...MX.CURSORS, ...Object.keys(MX.EASES), ...XP.BLENDS].map(X.tokenName),
+  ...Object.values(M.POINTERS), ...Object.values(M.TYPES),
 ];
 const used = new Set([
   ...tableWords,
