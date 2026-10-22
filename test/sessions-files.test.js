@@ -98,7 +98,7 @@ const T0 = () => Date.now().toString(36).padStart(9, '0') + '000aaaaaaaa';
 const forge = async (url, text, ops, y = 'collection') => {
   const st = G.join(text, true), k = await G.keys({ sid: G.unb64(st.sid), seed: G.unb64(st.seed) });
   const { head } = await (await fetch(`${url}/s/${st.sid}?after=0`)).json();
-  const sealed = await G.seal(k, 'op', { y, o: ops }, String(head + 1));
+  const sealed = await G.seal(k, 'op', { y, o: ops }, String(head + 1), 1); // the staged relay advertises no v2
   const res = await fetch(`${url}/s/${st.sid}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ n: head + 1, ...sealed }) });
   assert.equal(res.ok, true, `the forged batch was taken (${res.status})`);
 };

@@ -1298,7 +1298,11 @@ test('a file delete requires its own editor signature bound to the session and f
   const url = `${r.url}/s/${a.st.sid}/b/${ref.id}`;
   assert.equal((await fetch(url, { method: 'DELETE', headers: { 'x-glaze-sig': 'A'.repeat(86) } })).status, 403);
   const k = await G.keys({ sid: G.unb64(a.st.sid), seed: G.unb64(a.st.seed) });
-  const sig = G.b64(new Uint8Array(await crypto.subtle.sign('Ed25519', k.sk, new TextEncoder().encode(`gzs1|${a.st.sid}|blob-delete|${ref.id}`))));
+  // Match the negotiated protocol: the staging gate defaults to gzs1, and enabled relays lock this client to gzs2.
+  const field = (x) => { const b = Buffer.from(x); const n = Buffer.alloc(4); n.writeUInt32BE(b.length); return [n, b]; };
+  const message = a.st.gzs === 2 ? Buffer.concat([Buffer.from('gzs2'), ...[a.st.sid, 'blob-delete', ref.id, ''].flatMap(field)])
+    : Buffer.from(`gzs1|${a.st.sid}|blob-delete|${ref.id}`);
+  const sig = G.b64(new Uint8Array(await crypto.subtle.sign('Ed25519', k.sk, message)));
   // A signature for another file cannot delete this one.
   const other = await a.s.put(new Uint8Array([4]));
   assert.equal((await fetch(`${r.url}/s/${a.st.sid}/b/${other.id}`, { method: 'DELETE', headers: { 'x-glaze-sig': sig } })).status, 403);
@@ -1307,4 +1311,6 @@ test('a file delete requires its own editor signature bound to the session and f
   assert.equal(store.m.has(`${a.st.sid}/${ref.id}`), false);
   assert.ok(store.m.has(`${a.st.sid}/${other.id}`));
   await a.s.removeFile(ref.id); // retries are harmless
+  // The hand-made signature does authenticate for its own file: the refusal above was about the file.
+  assert.equal((await fetch(url, { method: 'DELETE', headers: { 'x-glaze-sig': sig } })).status, 204);
 });

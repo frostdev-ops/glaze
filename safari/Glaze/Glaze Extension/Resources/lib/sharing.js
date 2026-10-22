@@ -37,18 +37,27 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
   const sha256 = async (bytes) => new Uint8Array(await S.digest('SHA-256', bytes));
 
   // ---- keys and links --------------------------------------------------------------------------------------------
-  // The session id is random, never derived from a key: the server knows it, and it tells nothing. An edit link carries
-  // the id and a 32-byte seed; the read secret and the signing key come from the seed. A read link carries the id, the
-  // read secret and the public key, so a reader can check everything but sign nothing.
+  // An edit link carries the session id and a 32-byte seed; the read secret and the signing key come from the seed. A
+  // read link carries the id, the read secret and the public key, so a reader can check everything but sign nothing.
+  // The id tells nothing the server doesn't know: it is random (a share made before ids were bound, or by a mod channel),
+  // or bound to the public key (createBound): BOUND, then the first 12 bytes of SHA-256('glaze share id' + public key).
+  // A relay that takes gzs2 lets only that key register a bound id, so a read link's holder can't take a share's id
+  // before its creator registers it. A random id never starts with BOUND.
   const hkdf = async (ikm, salt, info) => new Uint8Array(await S.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info: te.encode(info) },
     await S.importKey('raw', ikm, 'HKDF', false, ['deriveBits']), 256));
   const PKCS8 = Uint8Array.from([0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20]); // Ed25519 seed wrapper
+  const BOUND = Uint8Array.from([0x67, 0x7a, 0x62, 0x31]);
+  const signer = async (seed) => {
+    const sk = await S.importKey('pkcs8', cat(PKCS8, seed), { name: 'Ed25519' }, true, ['sign']);
+    return { sk, pub: unb64((await S.exportKey('jwk', sk)).x) };
+  };
+  const randomId = () => { let id; do id = rand(16); while (BOUND.every((x, i) => id[i] === x)); return b64(id); };
+  const boundId = async (pub) => b64(cat(BOUND, (await sha256(cat(te.encode('glaze share id'), pub))).subarray(0, 12)));
   const keys = async ({ sid, seed, secret, pub }) => {
     let sk = null;
     if (seed) {
       secret = await hkdf(seed, sid, 'glaze share 1 read');
-      sk = await S.importKey('pkcs8', cat(PKCS8, seed), { name: 'Ed25519' }, true, ['sign']);
-      pub = unb64((await S.exportKey('jwk', sk)).x);
+      ({ sk, pub } = await signer(seed));
     }
     const enc = await S.importKey('raw', await hkdf(secret, sid, 'glaze share 1 aes'), 'AES-GCM', false, ['encrypt', 'decrypt']);
     const vk = await S.importKey('raw', pub, { name: 'Ed25519' }, false, ['verify']);
@@ -82,21 +91,35 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
   // a random nonce, then signed with the nonce and ciphertext: the server checks the signature without the key. The
   // session id, the kind ('op') and the batch's place in the log are bound in as associated data and signed, so a
   // batch opens only as what, and where, its author sent it.
-  const aad = (sid, kind, extra) => te.encode(`gzs1|${sid}|${kind}|${extra}`);
-  const seal = async (k, kind, data, extra = '') => {
+  // Two formats for what is bound and signed (server/relay.js makes the same bytes). gzs1, which older versions write:
+  // `gzs1|<sid>|<kind>|<extra>`, then the data. Nothing ends `extra`, so where it is a batch's number and the data starts
+  // with a digit, a batch's signature also held at a longer number. gzs2: "gzs2", then the session id, the kind, the extra
+  // (a batch's number, a trim's end, a file's id, a create's expiry) and the data, each after its length in 4 bytes
+  // (big-endian), so no field can run into the next; its associated data is the same without the data. Readers take
+  // both; a session writes gzs2 once its relay says it takes it (session()).
+  const u32 = (n) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n); return b; };
+  const prefixed = (text) => { const b = te.encode(text); return cat(u32(b.length), b); };
+  const aad = (sid, kind, extra, v = 2) => (v === 2 ? cat(te.encode('gzs2'), prefixed(sid), prefixed(kind), prefixed(extra)) : te.encode(`gzs1|${sid}|${kind}|${extra}`));
+  const message = (sid, kind, extra, data, v = 2) => (v === 2 ? cat(aad(sid, kind, extra, 2), u32(data.length), data) : cat(aad(sid, kind, extra, 1), data));
+  const sign = async (k, bytes) => b64(new Uint8Array(await S.sign({ name: 'Ed25519' }, k.sk, bytes)));
+  const seal = async (k, kind, data, extra = '', v = 2) => {
     if (!k.sk) throw new Error('read-only');
     const json = te.encode(JSON.stringify(data));
     const body = new Uint8Array(Math.ceil((json.length + 1) / 256) * 256).fill(32);
     body.set(json);
-    const iv = rand(12), a = aad(k.sid, kind, extra);
+    const iv = rand(12), a = aad(k.sid, kind, extra, v);
     const blob = cat(iv, new Uint8Array(await S.encrypt({ name: 'AES-GCM', iv, additionalData: a }, k.enc, body)));
     if (blob.length > LIMIT.op) throw new Error('big');
-    return { op: b64(blob), sig: b64(new Uint8Array(await S.sign({ name: 'Ed25519' }, k.sk, cat(a, blob)))) };
+    return { op: b64(blob), sig: await sign(k, message(k.sid, kind, extra, blob, v)) };
   };
-  const open = async (k, kind, { op, sig }, extra = '') => {
-    const a = aad(k.sid, kind, extra), blob = unb64(op);
-    if (blob.length < 29 || !await S.verify({ name: 'Ed25519' }, k.vk, unb64(sig), cat(a, blob))) throw new Error('signature');
-    return JSON.parse(td.decode(await S.decrypt({ name: 'AES-GCM', iv: blob.subarray(0, 12), additionalData: a }, k.enc, blob.subarray(12))));
+  // Either format: no gzs1 message is a gzs2 one, so at most one verifies. `first`: the one to try first.
+  const open = async (k, kind, { op, sig }, extra = '', first = 2) => {
+    const blob = unb64(op), s = unb64(sig);
+    if (blob.length >= 29) for (const v of first === 2 ? [2, 1] : [1, 2]) {
+      if (!await S.verify({ name: 'Ed25519' }, k.vk, s, message(k.sid, kind, extra, blob, v))) continue;
+      return JSON.parse(td.decode(await S.decrypt({ name: 'AES-GCM', iv: blob.subarray(0, 12), additionalData: aad(k.sid, kind, extra, v) }, k.enc, blob.subarray(12))));
+    }
+    throw new Error('signature');
   };
 
   // ---- the clock and the merge -----------------------------------------------------------------------------------
@@ -248,11 +271,19 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
   // expire: the creator's opt-in for the relay to delete it after a year that nobody used it.
   const create = (type, { server: srv = SERVER, expire = false } = {}) => {
     if (!ADAPTERS[type]) throw new Error('type');
-    return { v: 1, type, server: srv, sid: b64(rand(16)), seed: b64(rand(32)), del: b64(rand(32)), expire: !!expire, made: false, ...fresh() };
+    return { v: 1, type, server: srv, sid: randomId(), seed: b64(rand(32)), del: b64(rand(32)), expire: !!expire, made: false, ...fresh() };
+  };
+  // The same with its id bound to its key (see keys and links): what a share made here uses. create() stays synchronous
+  // for a mod channel, which registers before its link is shown, so nobody else knows its id in time to take it.
+  const createBound = async (type, opts) => {
+    const st = create(type, opts);
+    st.sid = await boundId((await signer(unb64(st.seed))).pub);
+    return st;
   };
   // cursor: the newest batch merged; last: its signature, which the server must still have under that number; head:
-  // the newest the server had; stuck: a batch that failed its checks, tried again before it's skipped.
-  const fresh = () => ({ actor: [...rand(8)].map((x) => (x % 36).toString(36)).join(''), clock: [0, 0], cursor: 0, last: null, head: 0, base: 0, stuck: null, state: {}, pending: [], held: [], gone: false });
+  // the newest the server had; stuck: a batch that failed its checks, tried again before it's skipped. opens: the newest
+  // batch format this state was read with (gzs2); gzs: 2 once its relay has said it takes gzs2 (see session()).
+  const fresh = () => ({ actor: [...rand(8)].map((x) => (x % 36).toString(36)).join(''), clock: [0, 0], cursor: 0, last: null, head: 0, base: 0, stuck: null, state: {}, pending: [], held: [], gone: false, opens: 2 });
   // A session from a link someone sent. Its kind is learned from the first batch.
   const join = (text, dev = false) => {
     const p = parse(text, dev);
@@ -278,6 +309,20 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
     const url = (p = '') => `${st.server}/s/${st.sid}${p}`;
     const ad = () => ADAPTERS[st.type];
     const unpack = (x) => (x?.y === st.type || (!st.type && Object.hasOwn(ADAPTERS, x?.y) && (st.type = x.y)) ? x : null);
+    // The format this session writes in: gzs2 once its relay has said it takes it, else gzs1, which every relay takes.
+    // A relay advertises gzs2 on create/read/refusal only after the operator enables it. Before a v2 write succeeds,
+    // a refused capability probe can fall back to an older relay. An accepted v2 write (or a reported relay lock) pins
+    // the format: stripping a later capability/403 cannot obtain fresh signatures in the vulnerable legacy format.
+    const format = () => (st.locked || st.gzs === 2 ? 2 : 1);
+    const heard = (status, data) => {
+      if (!isObj(data)) return;
+      if (data.locked === true) st.locked = true;
+      if (data.gzs === 2) st.gzs = 2;
+      else if (!st.locked && (status === 403 || Array.isArray(data.ops))) delete st.gzs;
+    };
+    // A write refused for its format (gzs1 to a session that has taken gzs2, or gzs2 to a relay that doesn't take it):
+    // its answer has named the other one, which it is sent in once more.
+    const refused = (r, v) => r.status === 403 && format() !== v;
     // One request, its answer read (JSON, or bytes up to cap) within the time allowed: `timeout` in all. A file's
     // (`file`) is allowed to take as long as it keeps moving: a download's clock starts again with every piece that
     // arrives, so a slow link is not cut off for being slow, only for going quiet. A fetch shows no progress while a body
@@ -294,23 +339,30 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
         moved?.();
         const body = r.status === 204 || init.method === 'HEAD' ? new Uint8Array() : await bytesOf(r, cap, moved);
         let data = body;
-        if (as === 'json') try { data = JSON.parse(td.decode(body) || 'null'); } catch { data = null; }
+        if (as === 'json') { try { data = JSON.parse(td.decode(body) || 'null'); } catch { data = null; } heard(r.status, data); }
         return { ok: r.ok, status: r.status, data, size: body.length };
       } finally { clearTimeout(timer); signal?.removeEventListener('abort', stop); }
     };
     const post = (u, body, method = 'POST') => call(u, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    // Signed by the session's key, over its delete token's hash and expiry, in gzs2 (an older relay ignores the
+    // signature). A relay that takes gzs2 lets nobody else make a bound id, and answers a create it already has, from the
+    // same key with the same delete hash, as made: one whose answer was lost can be sent again.
     const register = async (kk) => {
-      const r = await post(`${st.server}/s`, { sid: st.sid, pub: b64(kk.pub), del: b64(await sha256(unb64(st.del))), expire: !!st.expire });
+      const del = await sha256(unb64(st.del));
+      const sig = kk.sk ? await sign(kk, message(kk.sid, 'create', st.expire ? '1' : '0', del)) : undefined;
+      const r = await post(`${st.server}/s`, { sid: st.sid, pub: b64(kk.pub), del: b64(del), expire: !!st.expire, ...(sig && { sig }) });
       if (!r.ok) throw fail('create', r);
+      if (sig && st.gzs === 2) st.locked = true;
       st.made = true;
     };
     // A batch into the next place in the log, signed for that place. Another device may take it first: then the next.
     const push = async (kk, batch) => {
       for (let i = 0; i < LIMIT.tries; i++) {
-        const n = st.head + 1;
-        const r = await post(url(), { n, ...await seal(kk, 'op', { y: st.type, o: batch }, String(n)) });
+        const n = st.head + 1, v = format();
+        const r = await post(url(), { n, ...await seal(kk, 'op', { y: st.type, o: batch }, String(n), v) });
         if (r.status === 409 && Number.isSafeInteger(r.data?.head)) { st.head = r.data.head; continue; }
-        if (r.ok) st.head = n;
+        if (refused(r, v)) continue;
+        if (r.ok) { st.head = n; if (v === 2) st.locked = true; }
         return r;
       }
       throw fail('busy');
@@ -322,8 +374,13 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
       // when the server commits the trim but its reply is lost.
       await checkpoint?.();
       const upto = st.cursor;
-      const sig = b64(new Uint8Array(await S.sign({ name: 'Ed25519' }, kk.sk, cat(aad(kk.sid, 'trim', String(upto)), unb64(st.last)))));
-      const r = await post(url('/trim'), { upto, sig });
+      let r;
+      for (let i = 0; i < 2; i++) {
+        const v = format();
+        r = await post(url('/trim'), { upto, sig: await sign(kk, message(kk.sid, 'trim', String(upto), unb64(st.last), v)) });
+        if (r.ok && v === 2) st.locked = true;
+        if (!refused(r, v)) break;
+      }
       if (r.ok) st.base = upto;
       return r.ok;
     };
@@ -384,13 +441,20 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
             if (kk.sk) st.pending.push(...everything(st));
             continue;
           }
+          // A state an older version kept may have skipped gzs2 batches, which it couldn't open, as failing their checks.
+          // On a relay that takes gzs2 (where they can be), it reads the log again from the trim, once: merging again
+          // what it has merged changes nothing.
+          if (st.opens !== 2 && (page.gzs === 2 || page.locked === true)) {
+            st.opens = 2;
+            if (st.cursor > page.base) { Object.assign(st, { cursor: 0, last: null, stuck: null }); continue; }
+          }
           const from = st.cursor;
           for (const o of page.ops) {
             // Strictly in order: the next batch is the one after the cursor, or after the trim when the cursor is
             // behind it. Anything else (a page reordered, a hole) stops here, and the next sync reads again from the
             // first missing batch: the cursor never passes a batch this device hasn't had.
             if (o?.n !== Math.max(st.cursor, page.base) + 1 || o.n > page.head) { halt = true; out.more = true; break; }
-            const x = typeof o.op === 'string' && typeof o.sig === 'string' ? await open(kk, 'op', o, String(o.n)).then(unpack, () => null) : null;
+            const x = typeof o.op === 'string' && typeof o.sig === 'string' ? await open(kk, 'op', o, String(o.n), format()).then(unpack, () => null) : null;
             if (!x) {
               // A batch that fails its checks: tried again on the next two syncs (a store that was briefly wrong),
               // then skipped, so one bad batch can't stop a session for good.
@@ -435,16 +499,23 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
       const kk = await key();
       if (!kk.sk) throw new Error('read-only');
       if (!st.made) await register(kk);
-      const id = b64(rand(16)), a = aad(kk.sid, 'blob', id), iv = rand(12);
+      const id = b64(rand(16));
       const body = new Uint8Array(Math.max(1, Math.ceil(bytes.length / FILE_PAD)) * FILE_PAD);
       body.set(bytes);
-      const blob = cat(iv, new Uint8Array(await S.encrypt({ name: 'AES-GCM', iv, additionalData: a }, kk.enc, body)));
-      if (blob.length > LIMIT.blob) throw new Error('big');
-      const sig = b64(new Uint8Array(await S.sign({ name: 'Ed25519' }, kk.sk, cat(a, blob))));
-      const r = await call(url(`/b/${id}`), { method: 'PUT', headers: { 'content-type': 'application/octet-stream', 'x-glaze-sig': sig }, body: blob }, 1 << 20, 'json', { up: blob.length });
-      if (!r.ok) throw fail('file', r);
-      return { id, h: b64(await sha256(blob)), s: bytes.length };
+      for (let i = 0; ; i++) {
+        const v = format(), a = aad(kk.sid, 'blob', id, v), iv = rand(12);
+        const blob = cat(iv, new Uint8Array(await S.encrypt({ name: 'AES-GCM', iv, additionalData: a }, kk.enc, body)));
+        if (blob.length > LIMIT.blob) throw new Error('big');
+        const sig = await sign(kk, message(kk.sid, 'blob', id, blob, v));
+        const r = await call(url(`/b/${id}`), { method: 'PUT', headers: { 'content-type': 'application/octet-stream', 'x-glaze-sig': sig, 'x-glaze-gzs': String(v) }, body: blob }, 1 << 20, 'json', { up: blob.length });
+        if (!i && refused(r, v)) continue;
+        if (!r.ok) throw fail('file', r);
+        if (v === 2) st.locked = true;
+        return { id, h: b64(await sha256(blob)), s: bytes.length };
+      }
     });
+    // A file is sealed in the format its uploader wrote then, which its reference doesn't say: the one this session
+    // writes now is tried first. The hash in the reference has already vouched for the bytes.
     const get = async (ref) => {
       if (!isObj(ref) || !B.test(ref.id) || !H.test(ref.h) || !Number.isSafeInteger(ref.s) || ref.s < 0 || ref.s > LIMIT.blob - 28) throw new Error('file');
       const kk = await key();
@@ -452,7 +523,11 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
       const r = await call(url(`/b/${ref.id}`), {}, cap, 'bytes', {});
       if (!r.ok) throw fail('file', r);
       if (b64(await sha256(r.data)) !== ref.h) throw new Error('signature');
-      const plain = await S.decrypt({ name: 'AES-GCM', iv: r.data.subarray(0, 12), additionalData: aad(kk.sid, 'blob', ref.id) }, kk.enc, r.data.subarray(12));
+      let plain, failure;
+      for (const v of format() === 2 ? [2, 1] : [1, 2]) {
+        try { plain = await S.decrypt({ name: 'AES-GCM', iv: r.data.subarray(0, 12), additionalData: aad(kk.sid, 'blob', ref.id, v) }, kk.enc, r.data.subarray(12)); break; } catch (e) { failure ||= e; }
+      }
+      if (!plain) throw failure;
       return new Uint8Array(plain, 0, ref.s);
     };
     return {
@@ -466,9 +541,14 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
         const kk = await key();
         if (!kk.sk) throw new Error('read-only');
         if (typeof id !== 'string' || !B.test(id)) throw new Error('file');
-        const sig = b64(new Uint8Array(await S.sign('Ed25519', kk.sk, aad(kk.sid, 'blob-delete', id))));
-        const r = await call(url(`/b/${id}`), { method: 'DELETE', headers: { 'x-glaze-sig': sig } });
-        if (!r.ok && r.status !== 404) throw fail('file', r);
+        for (let i = 0; ; i++) {
+          const v = format();
+          const r = await call(url(`/b/${id}`), { method: 'DELETE', headers: { 'x-glaze-sig': await sign(kk, message(kk.sid, 'blob-delete', id, new Uint8Array(), v)) } });
+          if (!i && refused(r, v)) continue;
+          if (!r.ok && r.status !== 404) throw fail('file', r);
+          if (r.ok && v === 2) st.locked = true;
+          return;
+        }
       }),
       link: async (editable) => link(st.server, await key(), editable && !!st.seed),
       // An editor compacts once the log runs LIMIT.compact batches past its last trim: it sends the whole state again
@@ -522,7 +602,7 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
     return { close: () => { closed = true; clearTimeout(timer); clearTimeout(quiet); ws?.close(); } };
   };
 
-  return { SERVER, LIMIT, ADAPTERS, b64, unb64, keys, supported, server, link, parse, seal, open, merge, view, edit, flat, everything, create, join, exportKeys, importKeys, session, live };
+  return { SERVER, LIMIT, ADAPTERS, b64, unb64, keys, supported, server, link, parse, seal, open, merge, view, edit, flat, everything, create, createBound, join, exportKeys, importKeys, session, live };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_SHARING;

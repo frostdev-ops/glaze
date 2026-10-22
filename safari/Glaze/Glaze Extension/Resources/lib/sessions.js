@@ -637,7 +637,8 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
               check(m.ids.every((id) => ids.has(id)), 'missing');
             }
           }
-          r = { st: C.create('collection', { server, expire: m.expire === true }), title: m.title.trim(), name: str(m.name, 60) || '…', kind: m.kind,
+          // Its id bound to its key: a read link handed out before the first sync can't be used to take the id.
+          r = { st: await C.createBound('collection', { server, expire: m.expire === true }), title: m.title.trim(), name: str(m.name, 60) || '…', kind: m.kind,
             bind: { key: m.key, folder: m.folder || '', wholeFolder: !!m.folder, map: dict(Object.fromEntries((m.ids || []).map((id) => [id, id]))), files: dict() } };
         } else if (m.op === 'join') {
           const st = joined;

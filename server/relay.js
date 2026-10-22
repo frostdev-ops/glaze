@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 // Glaze's share relay (spike S6). It keeps share sessions as sealed batches and encrypted files, and rings the devices
 // that follow them. It can't read either: Glaze encrypts everything with a key from the share link's # part, which
-// browsers don't send. It checks every write's signature against the session's public key, so only edit links write,
-// and each batch is signed for its place in the log, so nothing can be replayed. No accounts, no cookies, no request
-// logs; client addresses live in memory only, for rate limits, and go once their limits refill.
+// browsers don't send. Batch, trim and file writes verify signatures against the session's public key; creator-only
+// operations check the delete token, while legacy creation is unsigned. Each batch is signed for its place in the
+// log. In gzs2 that is one place only, so no batch can be replayed or
+// moved. gzs1, the format older versions sign, also held a batch's signature at longer numbers when its bytes start
+// with a digit, so anyone who can read a session could put a copy of a batch (one no member can open) in a later place
+// of its log. GZS2=1 enables v2 (off for staged deployment). A session takes gzs1 only until it has taken a gzs2 write;
+// disabling the gate never unlocks it. A session whose writers never update stays open to
+// that (server/README.md). No accounts, no cookies, no request logs; client addresses live in memory only, for rate
+// limits, and go once their limits refill.
 // Node's built-ins only (node:sqlite: Node 22.13 or later). One command, behind a TLS reverse proxy:
 //   node server/relay.js                   PORT (8787), HOST (127.0.0.1), DB (./share.db), BLOBS (./share-blobs),
 //                                          IP_HEADER (the header the proxy puts the client's address in; for
@@ -141,7 +147,9 @@ const diskStore = (dir) => {
 
 const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHeader = '', trustedProxies = '127.0.0.1/8,::1/128', maxBytes = 5 * 2 ** 30,
   maxBlobBytes = 20 * 2 ** 30, maxSessions = 500000, expiryDays = 365, idleDays = 730, emptyDays = 2, tombDays = 365, full = 0.95, warn = 0.8,
-  lease = 60e3, grace = 600e3, drain = 5000, rate = RATE, limit = LIMIT, spool = '', healthDetails = true } = {}) => {
+  lease = 60e3, grace = 600e3, drain = 5000, rate = RATE, limit = LIMIT, spool = '', healthDetails = true, gzs2 = process.env.GZS2 === '1' } = {}) => {
+  // Deploy robustness/quota fixes before changing any shared session's write protocol. Locks survive gate rollback.
+  const capability = gzs2 ? { gzs: 2 } : {};
   rate = { ...RATE, ...rate }; // a rate table from before a budget existed still has it
   // A busy timeout: --delete and a serving relay may write at the same moment.
   const db = new DatabaseSync(file, { timeout: 5000 });
@@ -150,9 +158,11 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
   // `doomed` holds the keys that may hold an object no row wants: an upload that didn't commit (it failed, or its relay
   // lost the lease, or another relay reclaimed it). Recorded before anything is deleted, deleted again on a schedule
   // that outlasts any write still in flight, and dropped only after the last delete. No bucket listing is needed.
+  // A session's `gzs` is the newest signature format it has taken (1 or 2): once 2, it takes no gzs1 (see formatOf).
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;
     CREATE TABLE IF NOT EXISTS sessions (sid TEXT PRIMARY KEY, pub BLOB, del BLOB, expire INTEGER NOT NULL DEFAULT 0, touched INTEGER NOT NULL,
-      head INTEGER NOT NULL DEFAULT 0, base INTEGER NOT NULL DEFAULT 0, base_sig BLOB, bytes INTEGER NOT NULL DEFAULT 0, gone INTEGER) STRICT;
+      head INTEGER NOT NULL DEFAULT 0, base INTEGER NOT NULL DEFAULT 0, base_sig BLOB, bytes INTEGER NOT NULL DEFAULT 0, gone INTEGER,
+      gzs INTEGER NOT NULL DEFAULT 1) STRICT;
     CREATE TABLE IF NOT EXISTS ops (sid TEXT NOT NULL, n INTEGER NOT NULL, op BLOB NOT NULL, sig BLOB NOT NULL, PRIMARY KEY (sid, n)) STRICT, WITHOUT ROWID;
     CREATE TABLE IF NOT EXISTS blobs (sid TEXT NOT NULL, id TEXT NOT NULL, size INTEGER NOT NULL, at INTEGER, owner TEXT, PRIMARY KEY (sid, id)) STRICT, WITHOUT ROWID;
     CREATE TABLE IF NOT EXISTS doomed (sid TEXT NOT NULL, id TEXT NOT NULL, size INTEGER NOT NULL, since INTEGER NOT NULL, next INTEGER NOT NULL,
@@ -175,9 +185,29 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     CREATE TRIGGER IF NOT EXISTS session_gone AFTER UPDATE OF gone ON sessions WHEN OLD.gone IS NULL AND NEW.gone IS NOT NULL BEGIN UPDATE totals SET sessions = sessions - 1; END;
     CREATE TRIGGER IF NOT EXISTS session_out AFTER DELETE ON sessions BEGIN
       UPDATE totals SET sessions = sessions - (OLD.gone IS NULL), log = log - OLD.bytes; END;`);
+  const tx = (f) => { db.exec('BEGIN IMMEDIATE'); try { const out = f(); db.exec('COMMIT'); return out; } catch (e) { db.exec('ROLLBACK'); throw e; } };
+  const today = () => Math.floor(Date.now() / DAY);
+  // Migrations, before the statements below are prepared (they name what a migration adds).
+  // Version 1: totals count live sessions only, and every session keeps the last day anyone used it, for idle expiry.
+  // A database from before counted tombstones and recorded use only for opted-in shares. Recount it and give every
+  // live share the same conservative upgrade grace, including opted-in shares; do this only once.
+  const version = () => db.prepare('PRAGMA user_version').get().user_version;
+  if (version() < 1) tx(() => {
+    if (version() >= 1) return; // another process got there first
+    db.prepare('UPDATE sessions SET touched = max(touched, ?) WHERE gone IS NULL').run(today());
+    db.exec('UPDATE totals SET sessions = (SELECT count(*) FROM sessions WHERE gone IS NULL); PRAGMA user_version = 1');
+  });
+  // Version 2: every session keeps the newest signature format it has taken (gzs); those from before have taken gzs1
+  // only. A database made new has the column already.
+  if (version() < 2) tx(() => {
+    if (version() >= 2) return;
+    if (!db.prepare('PRAGMA table_info(sessions)').all().some((c) => c.name === 'gzs')) db.exec('ALTER TABLE sessions ADD COLUMN gzs INTEGER NOT NULL DEFAULT 1');
+    db.exec('PRAGMA user_version = 2');
+  });
   const q = Object.fromEntries(Object.entries({
     get: 'SELECT * FROM sessions WHERE sid = ?',
-    make: 'INSERT INTO sessions (sid, pub, del, expire, touched) VALUES (?, ?, ?, ?, ?)',
+    make: 'INSERT INTO sessions (sid, pub, del, expire, touched, gzs) VALUES (?, ?, ?, ?, ?, ?)',
+    gzs2: 'UPDATE sessions SET gzs = 2 WHERE sid = ? AND gzs <> 2',
     touch: 'UPDATE sessions SET touched = ? WHERE sid = ? AND touched < ?',
     expiry: 'UPDATE sessions SET expire = ?, touched = ? WHERE sid = ?',
     add: 'INSERT INTO ops (sid, n, op, sig) VALUES (?, ?, ?, ?)',
@@ -221,10 +251,8 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       AND NOT EXISTS (SELECT 1 FROM doomed d WHERE d.sid = s.sid) LIMIT 1000)`,
     totals: 'SELECT log, blob, sessions FROM totals WHERE id = 1',
   }).map(([k, sql]) => [k, db.prepare(sql)]));
-  const tx = (f) => { db.exec('BEGIN IMMEDIATE'); try { const out = f(); db.exec('COMMIT'); return out; } catch (e) { db.exec('ROLLBACK'); throw e; } };
   // Read at each check, never cached: another process may have changed them.
   const used = () => q.totals.get();
-  const today = () => Math.floor(Date.now() / DAY);
   // ---- room: the global caps --------------------------------------------------------------------------------------
   // New shares and writes are refused once they would take a cap past `full` of it (the rest is margin, never to be
   // reached), and the operator is warned when one passes `warn`: [name in /health, totals column, what, setting, cap].
@@ -244,15 +272,6 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       } else if (now < was && share < (was === 2 ? full : warn) - 0.05) logged[k] = now;
     }
   };
-  // Version 1: totals count live sessions only, and every session keeps the last day anyone used it, for idle expiry.
-  // A database from before counted tombstones and recorded use only for opted-in shares. Recount it and give every
-  // live share the same conservative upgrade grace, including opted-in shares; do this only once.
-  const version = () => db.prepare('PRAGMA user_version').get().user_version;
-  if (version() < 1) tx(() => {
-    if (version() >= 1) return; // another process got there first
-    db.prepare('UPDATE sessions SET touched = max(touched, ?) WHERE gone IS NULL').run(today());
-    db.exec('UPDATE totals SET sessions = (SELECT count(*) FROM sessions WHERE gone IS NULL); PRAGMA user_version = 1');
-  });
 
   // ---- limits: token buckets per client, in memory only -----------------------------------------------------------
   // A client is a list of [key, scale]: every one of its keys must have the cost left (scale times the bucket), and all
@@ -627,14 +646,40 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
   };
   const bytes = (s) => (typeof s === 'string' && B64.test(s) ? Buffer.from(s, 'base64url') : null);
   const sigOf = (s) => (typeof s === 'string' && SIG.test(s) ? Buffer.from(s, 'base64url') : null);
-  // What a signature covers: Glaze's prefix, the session, the kind, its place (a batch's number, a trim's end, a file's
-  // id), then the bytes. The same function makes it in lib/sharing.js.
-  const signed = (pub, sid, kind, extra, data, sig) => {
+  // What a signature covers: the session, the kind, its place (a batch's number, a trim's end, a file's id, a create's
+  // expiry), then the bytes, in one of two formats; lib/sharing.js makes the same. gzs1, which older versions write:
+  // `gzs1|<sid>|<kind>|<extra>`, then the bytes. Nothing ends `extra`, so a batch's signature over bytes that start with
+  // a digit also held at a longer number: a read link's holder could take a later place in the log with a copy no member
+  // can open. gzs2: "gzs2", then sid, kind, extra and the bytes, each after its length in 4 bytes (big-endian).
+  const field = (x) => { const b = Buffer.isBuffer(x) ? x : Buffer.from(x); const n = Buffer.alloc(4); n.writeUInt32BE(b.length); return [n, b]; };
+  const message = (v, sid, kind, extra, data) => (v === 2 ? Buffer.concat([Buffer.from('gzs2'), ...[sid, kind, extra, data].flatMap(field)])
+    : Buffer.concat([Buffer.from(`gzs1|${sid}|${kind}|${extra}`), data]));
+  const publicKey = (pub) => crypto.createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(pub).toString('base64url') }, format: 'jwk' });
+  const verifies = (v, pub, sid, kind, extra, data, sig) => {
     try {
-      const key = crypto.createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(pub).toString('base64url') }, format: 'jwk' });
-      return crypto.verify(null, Buffer.concat([Buffer.from(`gzs1|${sid}|${kind}|${extra}`), data]), key, sig);
+      return crypto.verify(null, message(v, sid, kind, extra, data), publicKey(pub), sig);
     } catch { return false; }
   };
+  // The format a write to a session is signed in, or 0 for none it takes. A session that has taken gzs2 takes no gzs1:
+  // once every member that writes to it is updated, the splice is closed for it. One that hasn't is tried in gzs1 first,
+  // as its writers are older versions until one of them is updated.
+  const formatOf = (row, sid, kind, extra, data, sig, hint) => {
+    // Uploaders name their format to avoid hashing/copying a 20MiB body twice. The hint selects a verifier, never
+    // authorizes a write. Untagged legacy requests still work; each attempt shares one imported public key.
+    const versions = row.gzs === 2 ? (gzs2 && hint !== '1' ? [2] : [])
+      : hint === '1' ? [1] : hint === '2' ? (gzs2 ? [2] : []) : gzs2 ? [1, 2] : [1];
+    if (!versions.length) return 0;
+    try { const key = publicKey(row.pub); for (const v of versions) if (crypto.verify(null, message(v, sid, kind, extra, data), key, sig)) return v; } catch {}
+    return 0;
+  };
+  // A write taken in gzs2, in the transaction that takes it: from then on, the session takes gzs2 only.
+  const took = (row, v) => { if (v === 2 && row.gzs !== 2) q.gzs2.run(row.sid); };
+  // A share id bound to a key (lib/sharing.js createBound): these four bytes, then the first 12 of SHA-256('glaze share
+  // id' + the public key). With v2 enabled only that key makes a new bound id, signed. An unregistered old random id
+  // has the prefix once in 2^32 and cannot be made after enablement; existing rows keep their own keys.
+  const BOUND = Buffer.from([0x67, 0x7a, 0x62, 0x31]);
+  const bound = (sid) => Buffer.from(sid, 'base64url').subarray(0, 4).equals(BOUND);
+  const boundTo = (sid, pub) => Buffer.from(sid, 'base64url').subarray(4).equals(crypto.createHash('sha256').update('glaze share id').update(pub).digest().subarray(0, 12));
   const ROUTE = /^\/s\/([\w-]{22})(?:\/(trim|expiry)|\/b\/([\w-]{22}))?$/;
   let downloading = 0;
   const disconnected = new WeakMap();
@@ -651,21 +696,38 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       const u = healthDetails && used();
       return send(res, 200, { ok: true, ...(healthDetails && { low: ROOM.filter(([, k, , , cap]) => u[k] >= cap * warn).map(([name]) => name) }) });
     }
+    // A create: unsigned, as older versions send it, or signed with the session's key in gzs2 over the delete token's hash
+    // and the expiry it asks for. A bound id is made only signed, by its own key. A create the relay already has, from
+    // the same key with the same delete hash, is answered as made (200): one whose answer was lost is sent again. The
+    // answer says the relay takes gzs2, which is how an extension knows to write it.
     if (req.method === 'POST' && url.pathname === '/s') {
       if (!take(who, 'create')) return send(res, 429, { error: 'rate' });
       const no = admit(req, who, ctx, limit.body, false);
       if (no) return send(res, no[0], { error: no[1] });
       const b = await json(req);
-      if (!SID.test(b?.sid) || !KEY.test(b.pub) || !KEY.test(b.del)) return send(res, 400, { error: 'bad' });
+      if (!SID.test(b?.sid) || !KEY.test(b.pub) || !KEY.test(b.del) || (gzs2 && b.sig !== undefined && !sigOf(b.sig))) return send(res, 400, { error: 'bad', ...capability });
+      // While staged, creation has exactly legacy authorization: the optional new field is ignored, not accepted as
+      // a v2 write. Enabled signed creation verifies/locks in the same transaction as inserting the session.
+      const pub = Buffer.from(b.pub, 'base64url'), del = Buffer.from(b.del, 'base64url'), sig = gzs2 && b.sig !== undefined && sigOf(b.sig);
+      if (sig && !verifies(2, pub, b.sid, 'create', b.expire === true ? '1' : '0', del, sig)) return send(res, 403, { error: 'signature', ...capability });
       const [status, error] = write(() => {
-        if (q.get.get(b.sid)) return [409, 'exists'];
+        const row = q.get.get(b.sid);
+        if (row) {
+          // Both compared whole, in constant time; a tombstone keeps neither, so its id is never made again.
+          const same = row.gone === null && [[row.pub, pub], [row.del, del]].map(([x, y]) => !!x && x.length === y.length && crypto.timingSafeEqual(x, y)).every(Boolean);
+          if (!same) return [409, 'exists'];
+          if (gzs2) took(row, sig ? 2 : 1);
+          return [200];
+        }
+        // Existing rows already own their id. Reserve the bound namespace only for *new* registrations at enablement.
+        if (gzs2 && bound(b.sid) && !(sig && boundTo(b.sid, pub))) return [403, 'bound'];
         const u = used();
         if (u.log >= maxBytes * full || u.sessions + 1 > maxSessions * full) { watch(u, u.log >= maxBytes * full ? 'log' : 'sessions'); return [507, 'full']; }
-        q.make.run(b.sid, Buffer.from(b.pub, 'base64url'), Buffer.from(b.del, 'base64url'), b.expire === true ? 1 : 0, today());
+        q.make.run(b.sid, pub, del, b.expire === true ? 1 : 0, today(), gzs2 && sig ? 2 : 1);
         return [201];
       });
       if (status === 201) watch(used());
-      return send(res, status, error ? { error } : {});
+      return send(res, status, error ? { error, ...capability } : { ...capability });
     }
     const m = ROUTE.exec(url.pathname);
     const kind = !m ? null : m[3] ? { GET: 'getBlob', PUT: 'putBlob', DELETE: 'deleteBlob' }[req.method] : m[2] === 'trim' ? req.method === 'POST' && 'trim'
@@ -679,6 +741,8 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     if (!known) return send(res, 404, { error: 'unknown' });
     if (known.gone) return send(res, 410, { error: 'gone' });
     if (kind === 'putBlob' && !sigOf(req.headers['x-glaze-sig'])) return send(res, 400, { error: 'bad' });
+    if (kind === 'putBlob' && ((!gzs2 && (known.gzs === 2 || req.headers['x-glaze-gzs'] === '2'))
+      || (known.gzs === 2 && req.headers['x-glaze-gzs'] === '1'))) return send(res, 403, { error: 'signature', ...capability });
     const bodied = kind === 'putBlob' || kind === 'append' || kind === 'trim' || kind === 'expiry';
     const no = bodied && admit(req, who, ctx, kind === 'putBlob' ? limit.blob : limit.body, kind === 'putBlob' || kind === 'append');
     if (no) return send(res, no[0], { error: no[1] });
@@ -711,8 +775,9 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
         size += o.op.length;
       }
       if (!out.more && seen === 1000) out.more = true;
-      // How full the session's log is, so an editor can compact before it fills (older clients ignore it).
-      Object.assign(out, { used: row.bytes, limit: limit.session });
+      // How full the session's log is, so an editor can compact before it fills, and that this relay takes gzs2 (older
+      // clients ignore both).
+      Object.assign(out, { used: row.bytes, limit: limit.session, locked: row.gzs === 2, ...capability });
       if (!take(who, 'down', size)) return send(res, 429, { error: 'rate' });
       return send(res, 200, out);
     }
@@ -722,11 +787,12 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (!op || !sig || op.length < 29 || !Number.isSafeInteger(b.n)) return send(res, 400, { error: 'bad' });
       if (op.length > limit.op) return send(res, 413, { error: 'big' });
       if (b.n !== row.head + 1) return send(res, 409, { error: 'place', head: row.head });
-      if (!signed(row.pub, sid, 'op', String(b.n), op, sig)) return send(res, 403, { error: 'signature' });
+      const v = formatOf(row, sid, 'op', String(b.n), op, sig);
+      if (!v) return send(res, 403, { error: 'signature', ...capability });
       if (row.bytes + op.length > limit.session) return send(res, 507, { error: 'full' });
       const u = used();
       if (u.log + op.length > maxBytes * full) { watch(u, 'log'); return send(res, 507, { error: 'full' }); }
-      write(() => { q.add.run(sid, b.n, op, sig); q.grow.run(b.n, op.length, sid); });
+      write(() => { q.add.run(sid, b.n, op, sig); q.grow.run(b.n, op.length, sid); took(row, v); });
       watch(used());
       ring(sid, { n: b.n });
       return send(res, 201, { n: b.n, used: row.bytes + op.length, limit: limit.session });
@@ -738,23 +804,25 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (!sig || !Number.isSafeInteger(b.upto)) return send(res, 400, { error: 'bad' });
       const last = b.upto > row.base && b.upto <= row.head ? q.at.get(sid, b.upto)?.sig : null;
       if (!last) return send(res, 409, { error: 'stale' });
-      if (!signed(row.pub, sid, 'trim', String(b.upto), Buffer.from(last), sig)) return send(res, 403, { error: 'signature' });
+      const v = formatOf(row, sid, 'trim', String(b.upto), Buffer.from(last), sig);
+      if (!v) return send(res, 403, { error: 'signature', ...capability });
       const freed = Number(q.upto.get(sid, b.upto).b);
-      write(() => { q.drop.run(sid, b.upto); q.trim.run(b.upto, last, freed, sid); });
+      write(() => { q.drop.run(sid, b.upto); q.trim.run(b.upto, last, freed, sid); took(row, v); });
       return send(res, 200, { base: b.upto });
     }
     if (kind === 'putBlob') {
       const sig = sigOf(req.headers['x-glaze-sig']);
       if (!sig || b.length < 29) return send(res, 400, { error: 'bad' });
       if (q.blob.get(sid, m[3])) return send(res, 409, { error: 'exists' });
-      if (!signed(row.pub, sid, 'blob', m[3], b, sig)) return send(res, 403, { error: 'signature' });
+      const v = formatOf(row, sid, 'blob', m[3], b, sig, req.headers['x-glaze-gzs']);
+      if (!v) return send(res, 403, { error: 'signature', ...capability });
       if (Number(q.blobBytes.get(sid).b) + b.length > limit.blobs) return send(res, 507, { error: 'full' });
       const u = used();
       if (u.blob + b.length > maxBlobBytes * full) { watch(u, 'blob'); return send(res, 507, { error: 'full' }); }
       // On the books (a pending row this relay owns) before the store call: two uploads at once can't both take the last
       // room, and a file whose share is deleted meanwhile is never lost track of. No other process reclaims it.
       const key = `${sid}/${m[3]}`;
-      write(() => q.addBlob.run(sid, m[3], b.length, Date.now(), boot));
+      write(() => { q.addBlob.run(sid, m[3], b.length, Date.now(), boot); took(row, v); });
       watch(used());
       uploading.add(key);
       let failed = null;
@@ -785,13 +853,14 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     }
     if (kind === 'deleteBlob') {
       const sig = sigOf(req.headers['x-glaze-sig']);
-      if (!sig || !signed(row.pub, sid, 'blob-delete', m[3], Buffer.alloc(0), sig)) return send(res, 403, { error: 'signature' });
+      const v = sig ? formatOf(row, sid, 'blob-delete', m[3], Buffer.alloc(0), sig) : 0;
+      if (!v) return send(res, 403, { error: 'signature', ...capability });
       const meta = q.blob.get(sid, m[3]);
-      if (!meta) return send(res, 204, '');
+      if (!meta) { if (v === 2 && row.gzs !== 2) write(() => took(row, v)); return send(res, 204, ''); }
       if (meta.at !== null) return send(res, 409, { error: 'uploading' });
       // Track a failed store delete for the same reconciliation used by abandoned uploads.
       const now = Date.now();
-      write(() => { q.dropBlob.run(sid, m[3]); q.doom.run(sid, m[3], meta.size, now, now); });
+      write(() => { q.dropBlob.run(sid, m[3]); q.doom.run(sid, m[3], meta.size, now, now); took(row, v); });
       await store.del(`${sid}/${m[3]}`);
       write(() => q.undoom.run(sid, m[3]));
       return send(res, 204, '');
@@ -827,7 +896,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     // expiry and delete: the creator's token, whose hash the session keeps
     const token = bytes(/^Bearer ([\w-]{43})$/.exec(req.headers.authorization || '')?.[1]);
     const hash = token && crypto.createHash('sha256').update(token).digest();
-    if (!hash || !crypto.timingSafeEqual(hash, Buffer.from(row.del))) return send(res, 403, { error: 'token' });
+    if (!hash || !crypto.timingSafeEqual(hash, Buffer.from(row.del))) return send(res, 403, { error: 'token', ...capability });
     if (kind === 'expiry') {
       if (typeof b?.on !== 'boolean') return send(res, 400, { error: 'bad' });
       write(() => q.expiry.run(b.on ? 1 : 0, today(), sid));
@@ -905,6 +974,7 @@ const backup = async (file, dest) => {
 };
 
 const fromEnv = (env) => ({
+  gzs2: env.GZS2 === '1',
   db: env.DB || 'share.db',
   ipHeader: (env.IP_HEADER || '').toLowerCase(),
   trustedProxies: env.TRUSTED_PROXIES || undefined,
