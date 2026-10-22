@@ -235,7 +235,14 @@ var GZ_EDITOR_XBG = globalThis.GZ_EDITOR_XBG || (() => {
   };
   const takeLink = (input, note) => {
     const v = input.value.trim();
-    if (!v) { if (mediaOf()) writeBg({ media: null }); say(note, ''); drawTuning(); drawKept(); return; }
+    if (!v) {
+      // Emptying the box takes out a link. A file in use has no link (the box is empty while it plays), so it stays.
+      if (mediaOf() && !mediaOf().src.startsWith('file:')) writeBg({ media: null });
+      say(note, linkNote());
+      drawTuning();
+      drawKept();
+      return;
+    }
     const url = GZ_XPARTS.MEDIA.url(v);
     if (!url) return say(note, tr('That isn’t a link Glaze can use. It must start with https:// and name a website.'));
     input.value = url;
@@ -255,7 +262,9 @@ var GZ_EDITOR_XBG = globalThis.GZ_EDITOR_XBG || (() => {
     try { b64 = await b64Of(file); } catch { return say(mediaFileSay, tr('Couldn’t read that file.')); }
     say(mediaFileSay, tr('Checking the file…'));
     const r = await askWorker({ op: 'put', kind: mediaKind, b64 });
-    if (!r?.ok) return say(mediaFileSay, r?.error === 'full' ? tr('There isn’t room to keep it. Remove a file below first.') : r?.error === 'type' ? tr('Glaze can’t play that file as this kind.') : r?.error === 'big' ? tr('That file is too big for this kind (the most is {max}).', { max: mb(cap) }) : tr('Glaze couldn’t keep that file.'));
+    if (!r?.ok) return say(mediaFileSay, r?.error === 'full' ? tr('There isn’t room to keep it. Remove a file below first.') : r?.error === 'type' ? tr('Glaze can’t play that file as this kind.')
+      : r?.error === 'meta' ? tr('Glaze can’t take the location and device details out of that file, so it won’t keep it. Save a copy without them and try again.')
+      : r?.error === 'big' ? tr('That file is too big for this kind (the most is {max}).', { max: mb(cap) }) : tr('Glaze couldn’t keep that file.'));
     say(mediaFileSay, '');
     if (!setMedia({ type: mediaKind, src: `file:${r.h}` })) return say(mediaFileSay, tr('That file can’t be saved.'));
     say(document.getElementById('x-media-note'), linkNote());
@@ -301,7 +310,7 @@ var GZ_EDITOR_XBG = globalThis.GZ_EDITOR_XBG || (() => {
     mediaFileSay = X.status();
     say(note, linkNote());
     mediaControls.replaceChildren(
-      X.select({ label: tr('Kind'), value: mediaKind, options: MEDIA_KINDS.map(([k, label]) => [k, tr(label)]), on: (k) => { mediaKind = k; mediaFile.accept = MEDIA_ACCEPT[k]; if (mediaOf()) setMedia({ type: k }); } }),
+      X.select({ label: tr('Kind'), value: mediaKind, options: MEDIA_KINDS.map(([k, label]) => [k, tr(label)]), on: (k) => { mediaKind = k; mediaFile.accept = MEDIA_ACCEPT[k]; } }), // what the next link or file is; the current one keeps its type
       el('label', { class: 'field wide' }, el('span', {}, tr('Link to the file')), link), note,
       el('label', { class: 'field wide' }, el('span', {}, tr('Or a file from this computer')), mediaFile), mediaFileSay,
       mediaTune,
@@ -326,7 +335,13 @@ var GZ_EDITOR_XBG = globalThis.GZ_EDITOR_XBG || (() => {
     const s = d.gzMediaState;
     if (!s) return null;
     if (s.state === 'ready') return tr('The preview is playing it.');
-    return s.why === 'file' ? tr('That file isn’t on this computer, so the gradient shows instead.') : s.why === 'empty' ? '' : tr('The preview couldn’t load it, so the gradient shows instead. Check the link, or whether this browser plays that format.');
+    if (s.why === 'file') return tr('That file isn’t on this computer, so the gradient shows instead.');
+    if (s.why === 'empty') return '';
+    if (s.why === 'limits') {
+      const L = GZ_MEDIA.LIMIT.bg;
+      return tr('Glaze won’t play that file: it is over the limits for a background ({video} for a video, {image} for a picture, {side} pixels a side) or isn’t a video or picture it can check. The gradient shows instead.', { video: mb(L.video), image: mb(L.image.bytes), side: L.image.side });
+    }
+    return tr('The preview couldn’t load it, so the gradient shows instead. Check the link, or whether this browser plays that format.');
   };
 
   const mount = (api) => {

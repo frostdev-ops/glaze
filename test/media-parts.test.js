@@ -150,7 +150,8 @@ test('describe says what a media Look plays, and where it loads from', () => {
   assert.deepEqual(d({ type: 'video', src: 'https://cdn.example.com/a.webm' }), [{ why: 'Plays a video behind your pages, loaded from {host}.', vars: { host: 'cdn.example.com' } }]);
   assert.deepEqual(d({ type: 'image', src: 'https://a.example.org/x.webp' }), [{ why: 'Plays an animated picture behind your pages, loaded from {host}.', vars: { host: 'a.example.org' } }]);
   assert.deepEqual(d({ type: 'lottie', src: 'https://xn--bcher-kva.example/a.json' }), [{ why: 'Plays an animation behind your pages, loaded from {host}.', vars: { host: 'xn--bcher-kva.example' } }]);
-  assert.deepEqual(d({ type: 'video', src: `file:${HASH}` }), [{ why: 'Plays a video behind your pages, from a file that came with it.', vars: undefined }]);
+  // A `file:` is a name: a pasted code brings no file, so the line does not say one came with it (test/look-media-share.test.js).
+  assert.deepEqual(d({ type: 'video', src: `file:${HASH}` }), [{ why: 'Plays a video behind your pages from a file it names. If that file isn’t on this computer, the gradient shows instead.', vars: undefined }]);
   assert.equal(X.KIND_WORD.media, 'a video or animation background');
   assert.deepEqual(X.describe({ x: { cursor: { kind: 'glow' } } }).map((n) => n.why), ['Adds a cursor effect.']);
 });

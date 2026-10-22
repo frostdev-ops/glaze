@@ -115,7 +115,10 @@ const movingAvif = (w, h, n) => Uint8Array.from([...ftyp('avis', 'avif'), ...met
 test('AVIF: the real animated file is read, and the walker follows boxes to their ends', () => {
   const real = M.check(fx('anim.avif'), 'bg');
   assert.deepEqual([real.type, real.mime, real.w, real.h, real.frames, real.animated], ['image', 'image/avif', 48, 48, 3, true]);
-  eq(real.bytes, fx('anim.avif'));
+  // Kept without the names an encoder left in its boxes (test/media-metadata.test.js), and the same length: nothing moved.
+  assert.equal(real.bytes.length, fx('anim.avif').length);
+  assert.doesNotMatch(Buffer.from(real.bytes).toString('latin1'), /PictureHandler|Lavc/);
+  eq(M.check(real.bytes, 'bg').bytes, real.bytes);
   const still = M.avif(stillAvif(64, 32), M.LIMIT.bg.image);
   assert.deepEqual([still.w, still.h, still.frames, still.animated], [64, 32, 1, false]);
   const moving = M.avif(movingAvif(64, 32, 12), M.LIMIT.bg.image);
@@ -146,11 +149,15 @@ test('AVIF that is not whole, not a picture or over a limit is refused', () => {
 });
 
 // ---- video --------------------------------------------------------------------------------------------------------------
-test('WebM and MP4: real files are known by their first bytes and boxes, and kept as they came', () => {
+test('WebM and MP4: real files are known by their first bytes and boxes, and kept without the names an encoder left', () => {
   for (const [f, mime] of [['clip.webm', 'video/webm'], ['clip.mp4', 'video/mp4']]) {
     const got = M.check(fx(f), 'bg');
     assert.deepEqual([got.type, got.mime], ['video', mime], f);
-    eq(got.bytes, fx(f));
+    assert.equal(got.bytes.length, fx(f).length, `${f}: the same length`);
+    assert.doesNotMatch(Buffer.from(got.bytes).toString('latin1'), /Lavf|VideoHandler/, f);
+    eq(M.check(got.bytes, 'bg').bytes, got.bytes); // cleaning twice changes nothing
+    // The reader itself judges the file as it came.
+    eq(M.video(fx(f)).bytes, fx(f));
   }
   assert.equal(M.check(fx('clip.webm'), 'sticker'), null, 'a sticker is never a video');
 });

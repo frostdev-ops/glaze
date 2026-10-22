@@ -147,7 +147,7 @@ test('page parts name a carried file by its mod, which is the only file the medi
   assert.equal(X.over(null, parts).bg.media.src, `mod:${OTHER}/spin.json`, 'the first in the student\'s order wins');
   const v = await B.page({ op: 'media', src: `mod:${ID}/media/loop.webm` }, e);
   assert.deepEqual([v.ok, v.kind, v.mime], [true, 'video', 'video/webm']);
-  assert.deepEqual(Buffer.from(v.b64, 'base64'), Buffer.from(fx('clip.webm')));
+  assert.deepEqual(Buffer.from(v.b64, 'base64'), Buffer.from(M.check(fx('clip.webm'), 'bg').bytes), 'cleaned, metadata and all');
   const l = await B.page({ op: 'media', src: `mod:${OTHER}/spin.json` }, e);
   assert.deepEqual([l.ok, l.kind, l.json.w, l.canvases], [true, 'lottie', 200, 1]);
   // A code mod's override may name its own declared file only, and the page gets its mod: spelling.

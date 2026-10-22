@@ -1115,7 +1115,8 @@ GZ_UI.load().then((s) => {
   $('#share-copy').addEventListener('click', async () => {
     const { cards } = await new Promise((res) => chrome.storage.sync.get('cards', (r) => res(r || {})));
     let code;
-    try { code = await GZ_SHARE.encode(s, cards, s.parts); } catch (e) { return hint(t(e.why || e.message, e.vars), true); }
+    // A pasted code can't bring a file kept on this computer (only a share session can), so a Look that needs one is refused here.
+    try { code = await GZ_SHARE.encode(s, cards, s.parts, { files: false }); } catch (e) { return hint(t(e.why || e.message, e.vars), true); }
     try { await navigator.clipboard.writeText(code); hint(t('Theme code copied.')); } catch { $('#share-code').value = code; $('#share-code').select(); hint(t('Copy the code from the box.')); }
   });
   // from: the gallery Look the code came with ({ name, author }), or null for a pasted code.

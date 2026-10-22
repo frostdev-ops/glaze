@@ -363,6 +363,19 @@ test('worker: a page gets the worn Look\'s kept file, and no other; the editor\'
   assert.deepEqual(await w.ask({ type: 'glaze:keptFile', h: put.h }, { ...page, url: 'https://evil.example/' }), { ok: false, error: 'sender' });
 });
 
+test('worker: a kept Lottie request cannot read a file the worn Look does not name', async () => {
+  const w = worker({ local: { canvas: ['https://school.instructure.com/*'] } });
+  const r = await w.ask({ type: 'glaze:media', op: 'put', kind: 'lottie', b64: M.std(fx('spin.json')) }, editor);
+  assert.equal(r.ok, true);
+  w.sync.lookX = await lookX(r.h, 'lottie');
+  assert.equal((await w.ask({ type: 'glaze:keptFile', h: r.h }, page)).ok, true, 'control: the actual worker recognizes the approved LMS caller');
+  assert.equal((await w.ask({ type: 'glaze:lottie', src: `file:${r.h}` }, page)).ok, true);
+  w.sync.lookX = '';
+  const answer = await w.ask({ type: 'glaze:lottie', src: `file:${r.h}` }, page);
+  assert.deepEqual([answer.ok, answer.error], [false, 'bad'], 'this path must enforce the same worn-file boundary');
+  assert.equal((await w.ask({ type: 'glaze:lottie', src: `file:${r.h}` }, editor)).ok, true, 'the trusted editor can preview it');
+});
+
 test('worker: only the editor keeps, cancels and resets; Reset everything takes every kept file', async () => {
   const w = worker();
   const r = await w.ask({ type: 'glaze:media', op: 'put', kind: 'image', b64: M.std(fx('anim.webp')) }, editor);

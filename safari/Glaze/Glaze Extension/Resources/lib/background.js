@@ -626,28 +626,50 @@ const sweepMedia = (update = false) => (brokerTurn ||= GZ_CARDS.queue())(async (
   if (update) await migrateMedia(area);
   if (!before && !mediaHistory.size) return GZ_MEDIA.collect(area, { decode: GZ_SHARE.decode });
 }).catch(() => {});
-// A Lottie animation for a page's background (lib/scene-media.js): the cleaned JSON of a kept file, or of the address the
-// worn Look or an eligible installed mod names (a fetch with no cookies, no referrer, no redirect and a size cap, so it is not in the broker's queue, which a
-// slow host would hold up). The editor's preview may try any address the editor is showing.
 // The editor and its preview frame: Glaze's own pages, trusted with any address the editor shows, and with installed mods' parts.
 const fromPreview = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && [chrome.runtime.getURL('options.html'), chrome.runtime.getURL('preview.html')].includes(s.url.split(/[?#]/)[0]);
+const mediaDownloads = new Map(); // shared only while loading; never a cache of completed base64 files
+// A file for a page's background from an address (lib/scene-media.js), for the address the worn Look or an eligible installed mod
+// names as `type`, and no other; the editor's preview may try any address the editor is showing. A fetch with no cookies, no
+// referrer, no redirect and a size cap, so it is not in the broker's queue, which a slow host would hold up.
+const mediaFetch = async (s, op, type) => {
+  if (!globalThis.GZ_MEDIA) importScripts('media.js');
+  const free = fromPreview(s);
+  const site = free ? null : await fromLms(s);
+  if (!free && !site) return { ok: false, error: 'sender' };
+  const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
+  const allow = async (src) => {
+    const worn = free ? null : (await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media;
+    if (free || (worn?.src === src && worn.type === type)) return true;
+    if (!globalThis.GZ_MODBROKER) importScripts('modapi.js', 'modwidget.js', 'modbroker.js');
+    const answer = await GZ_MODBROKER.page({ op: 'parts' }, { site, local: area.local,
+      blocklist: async () => (await area.local.get('modsBlocklist')).modsBlocklist?.list });
+    return (answer.parts || []).some((p) => p.bg?.media?.type === type && p.bg.media.src === src);
+  };
+  const env = { fetch: (u, i) => fetch(u, i), allow };
+  // Kept Lottie returns before the loader's network allow check; apply the same worn-source boundary here too.
+  if (op.op === 'lottie' && typeof op.src === 'string' && op.src.startsWith('file:') && !await allow(op.src)) return { ok: false, error: 'bad' };
+  if (op.op !== 'remote') return GZ_MEDIA.change(op, area, env);
+  if (!['video', 'image'].includes(type) || GZ_XPARTS.MEDIA.url(op.src) !== op.src || !await allow(op.src)) return { ok: false, error: 'bad' };
+  const key = `${type}\n${op.src}`;
+  if (mediaDownloads.has(key)) return mediaDownloads.get(key);
+  // Per-file caps still multiply by open tabs. Admit at most two distinct downloads, with no waiting queue retaining callers.
+  if (mediaDownloads.size >= 2) return { ok: false, error: 'network' };
+  const task = GZ_MEDIA.change(op, area, { ...env, allow: async () => true }).finally(() => mediaDownloads.delete(key));
+  mediaDownloads.set(key, task);
+  return task;
+};
+// A Lottie animation for a page's background: the cleaned JSON of a kept file, or of the address allowed above.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:lottie') return;
-  (async () => {
-    if (!globalThis.GZ_MEDIA) importScripts('media.js');
-    const free = fromPreview(s);
-    const site = free ? null : await fromLms(s);
-    if (!free && !site) return { ok: false, error: 'sender' };
-    const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
-    return GZ_MEDIA.change({ op: 'lottie', src: m.src }, area, { fetch: (u, i) => fetch(u, i),
-      allow: async (src) => {
-        if (free || (await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media?.src === src) return true;
-        if (!globalThis.GZ_MODBROKER) importScripts('modapi.js', 'modwidget.js', 'modbroker.js');
-        const answer = await GZ_MODBROKER.page({ op: 'parts' }, { site, local: area.local,
-          blocklist: async () => (await area.local.get('modsBlocklist')).modsBlocklist?.list });
-        return (answer.parts || []).some((p) => p.bg?.media?.type === 'lottie' && p.bg.media.src === src);
-      } });
-  })().then(reply, () => reply({ ok: false, error: 'failed' }));
+  mediaFetch(s, { op: 'lottie', src: m.src }, 'lottie').then(reply, () => reply({ ok: false, error: 'failed' }));
+  return true;
+});
+// A video or an animated picture at an address, fetched here and cleaned like a kept file (lib/media.js remote), so the page
+// plays a checked copy under the same size, frame and pixel limits and never loads the address itself.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:remoteMedia') return;
+  mediaFetch(s, { op: 'remote', src: m.src, kind: m.kind }, m.kind).then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;
 });
 // Share keys and relay traffic are confined to the worker, Settings and the Notes share panel. Loading this broker

@@ -36,12 +36,16 @@ class El {
   getContext() { return { drawImage: (...a) => this.env.draws.push([this, ...a]) }; }
   get offsetWidth() { return this.env.width; }
   get offsetHeight() { return this.env.height; }
-  get naturalWidth() { return 640; }
-  get naturalHeight() { return 360; }
+  get naturalWidth() { return this.env.natural[0]; }
+  get naturalHeight() { return this.env.natural[1]; }
 }
 
-exports.env = ({ preview = false, storage = {}, ask = async () => ({ ok: true, json: { w: 10, h: 10 }, canvases: 1 }), decodeFails = false, lottieDelayed = false, bitmapWait = null } = {}) => {
-  const env = { width: 1280, height: 800, made: [], srcs: [], draws: [], blobs: [], revoked: [], posted: [], messages: [], timers: [], listeners: {}, docListeners: {}, decodeFails, anims: [], lottieOk: true, digests: 0, storageReads: 0 };
+// What the worker answers by default: a Lottie file's cleaned JSON, or a video or picture fetched from an address ('glaze:remoteMedia').
+const answer = async (m) => (m?.type === 'glaze:remoteMedia'
+  ? { ok: true, type: m.kind, mime: m.kind === 'video' ? 'video/webm' : 'image/webp', b64: Buffer.from(Uint8Array.from({ length: 300 }, (_, i) => i & 255)).toString('base64') }
+  : { ok: true, json: { w: 10, h: 10 }, canvases: 1 });
+exports.env = ({ preview = false, storage = {}, ask = answer, decodeFails = false, lottieDelayed = false, bitmapWait = null, natural = [640, 360] } = {}) => {
+  const env = { natural, width: 1280, height: 800, made: [], srcs: [], draws: [], blobs: [], revoked: [], posted: [], messages: [], timers: [], listeners: {}, docListeners: {}, decodeFails, anims: [], lottieOk: true, digests: 0, storageReads: 0 };
   const document = {
     hidden: false,
     createElement: (tag) => new El(tag, env),
