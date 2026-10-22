@@ -31,7 +31,7 @@ class El {
 // The editor page with the section's static parts, the settings `s` and storage.local holding `local`.
 const editor = (s, local = {}) => {
   const ids = Object.fromEntries(['pointer-tiles', 'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look'].map((id) => [id, new El(id === 'pointer-tiles' ? 'div' : 'p')]));
-  const saved = [], previews = [], hints = [], changed = [];
+  const saved = [], previews = [], hints = [], changed = [], reads = [];
   let picked = null;
   const context = vm.createContext({
     console, JSON, Object, Array, String, Promise, setTimeout,
@@ -47,7 +47,12 @@ const editor = (s, local = {}) => {
       runtime: { lastError: null },
       storage: {
         local: {
-          get: (k, cb) => setTimeout(() => cb(Object.fromEntries([].concat(k).filter((x) => x in local).map((x) => [x, local[x]])))),
+          get: (k, cb) => {
+            const result = Object.fromEntries([].concat(k).filter((x) => x in local).map((x) => [x, local[x]]));
+            const answer = () => cb(result);
+            reads.push(answer);
+            setTimeout(() => { if (!context.holdReads) answer(); });
+          },
           set: (v, cb) => setTimeout(() => { for (const [k, x] of Object.entries(v)) { changed.push(k); local[k] = x; } cb?.(); }),
           remove: (k, cb) => setTimeout(() => { delete local[k]; changed.push(k); cb?.(); }),
         },
@@ -67,7 +72,7 @@ const editor = (s, local = {}) => {
   const shows = (v) => card(v).children[1].children.map((c) => c.src || (c.tagName === 'SVG' ? 'system' : c.className === 'pt-none' ? 'none' : '?'));
   const said = (v) => (card(v).children[3].hidden ? '' : card(v).children[3].textContent);
   const choose = (v) => { const r = radio(v); r.checked = true; r.fire('change'); };
-  return { ids, cards, card, radio, shows, said, choose, saved, previews, hints, changed, local, context, picked: () => picked, render: () => context.GZ_EDITOR_X.render() };
+  return { ids, cards, card, radio, shows, said, choose, saved, previews, hints, changed, reads, local, context, picked: () => picked, render: () => context.GZ_EDITOR_X.render() };
 };
 const settings = (extras = {}, parts = { x: { pointer: 'pumpkin', cursor: { kind: 'flicker' } } }) => ({ ...G.GZ_SANITIZE({ extras }), parts: structuredClone(parts) });
 
@@ -241,6 +246,17 @@ test('a picture added or removed in another tab shows here; one that is no bitma
   e.context.storageChanged({ cursorImg: { newValue: 'data:image/png;base64,dHdv' } }, 'sync');
   assert.deepEqual(e.shows('own'), ['none'], 'only this device\'s storage');
   assert.equal(s.extras.pointer, 'aqua', 'a picture arriving does not choose it');
+});
+
+test('an initial picture read cannot overwrite a newer storage change in the editor', () => {
+  for (const next of ['data:image/png;base64,dHdv', undefined]) {
+    const e = editor(settings(), { cursorImg: 'data:image/png;base64,b25l' });
+    e.context.holdReads = true;
+    e.context.storageChanged({ cursorImg: { newValue: next } }, 'local');
+    e.reads[0]();
+    assert.deepEqual(e.shows('own'), next ? [next, next] : ['none']);
+    assert.equal(e.ids['pointer-remove'].hidden, !next);
+  }
 });
 
 test('the section: in the Look tab\'s links, a carrier for the cards, the picture\'s controls and the animation switch', () => {
