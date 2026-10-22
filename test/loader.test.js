@@ -14,11 +14,11 @@ const settle = () => new Promise(setImmediate);
 const ID = 'glaze-test-id';
 
 // The worker with Chrome stubbed: every onMessage listener, and the executeScript calls it makes.
-const worker = (execute = () => Promise.resolve([{ result: true }]), protocol = 'chrome-extension:') => {
+const worker = (execute = (o) => Promise.resolve([{ result: /typeof GZ_I18N|window\.__gzGlaze/.test(String(o.func)) ? false : true }]), protocol = 'chrome-extension:', local = {}) => {
   const listeners = [];
   const injected = [], asked = [];
   const none = { addListener() {} };
-  const area = { get: () => Promise.resolve({}), set: () => Promise.resolve() };
+  const area = { get: (k) => Promise.resolve(Object.fromEntries([].concat(k ?? []).filter((x) => x in local).map((x) => [x, local[x]]))), set: () => Promise.resolve() };
   const context = vm.createContext({
     URL, console, setTimeout, clearTimeout,
     importScripts: (file) => vm.runInContext(read(path.join('lib', file)), context),
@@ -51,7 +51,7 @@ test('an allowlisted file runs in the asking frame only, and the reply waits for
 });
 
 test('a Canvas page found by the detector gets Glaze in that page, not whatever its tab has gone on to', async () => {
-  const w = worker();
+  const w = worker(undefined, undefined, { canvas: ['https://canvas.school.edu/*'] }); // a site the student approved (WP-C2)
   w.send('canvas', { id: ID, tab: { id: 7 }, frameId: 0, url: 'https://canvas.school.edu/courses/1', documentId: 'doc-1' });
   await settle();
   assert.deepEqual(w.injected[0].target, { tabId: 7, documentIds: ['doc-1'] });

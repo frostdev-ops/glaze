@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-20_
+_Last updated: 2026-10-22_
 
 ## User-installed mods
 
@@ -15,15 +15,16 @@ information, including your IP address. Information rendered on a school page is
 
 Installed bundles, grants, settings, per-mod storage, author trust pins and runtime stop status stay in device-local
 extension storage. The optional mod-development tools also keep your author signing key there; protect exported
-key backups. Removing a mod removes its installed bundle and editor settings. Per-mod storage and its private-data classification remain
-on this device for a reinstall; its author/version trust pin remains until you explicitly clear it. Channel traffic and the optional signed blocklist are described below. Glaze adds no analytics
+key backups. Removing a mod removes its installed bundle and editor settings and, by default, the data it stored, its
+private-data classification, its navigation-layout switch and the note of why it was stopped; untick **Remove its stored
+data too** to keep those on this device for a reinstall. Its author/version trust pin remains until you explicitly clear it. Channel traffic and the optional signed blocklist are described below. Glaze adds no analytics
 or default notifications for mods.
 
 With **nav.read**, a mod can read Glaze's visible navigation items and course menu: ids, labels (including course
 names and names you typed), icons, unread badges, groups, the active item and bar placement, plus events when the bar
 changes, you navigate, expand or collapse it, or open or close its phone sheet. The model omits link addresses.
 Glaze treats this as personal data, like courses, to-dos and grades: it reaches only the mod's Worker, disables its
-frame UI, and keeps the private-data classification locally for a reinstall. A separately granted network host can
+frame UI, and keeps the private-data classification locally (until you remove the mod, unless you keep its data). A separately granted network host can
 receive it. **nav.items** lets a mod add, update or remove up to eight items of its own, with labels, icons and badges;
 links must stay on the school site's origin, or an item can send the mod an action when clicked. **nav.layout** lets
 it propose a bar layout while it runs, without saving over yours. **Use my own** keeps that mod's layouts off in
@@ -66,7 +67,9 @@ A mod installed from a channel link is checked against that link's relay when th
 at most daily while a page runs it; **Stop following** or removing the mod ends this. An author's **Publish to a
 channel** uploads the signed mod to their selected relay. Both are encrypted share-session requests without cookies,
 referrer or student identifiers; the relay sees what it sees for any session (described below). The check state stays
-in device-local storage. The install prompt and followed mod name the relay host. After publishing a newer version,
+in device-local storage. The edit key of a channel you publish (`modChannelOwn:<id>`) is kept in the `vault` store of
+the worker-only `glaze-sharing` database, not in `storage.local`, where a page's script could read it; Export all does
+not carry it. The install prompt and followed mod name the relay host. After publishing a newer version,
 Glaze requests deletion of the previous bundle file, best effort; older relays without file deletion retain it until
 session deletion or expiry. Recipients and operator backups may keep copies.
 
@@ -82,19 +85,28 @@ The worker keeps session keys, creator delete tokens, merge state, unsent change
 
 Selected notes/folders, their pictures and attachments, a Look, or selected custom tasks and their steps/plans are encrypted on this device before going to `https://share.frostdev.io`. Account/site identifiers and LMS assignments are not carrier fields. Decrypted remote content is still untrusted: Notes HTML is sanitized, Look codes decoded/validated and custom tasks/plans cleaned before use. Joining first keeps a separate local session; an explicit copy into a chosen existing local account creates fresh IDs, preserving existing work. Viewer copies are detached; editable copies follow changes. Use this Look opens the existing editor preview (including its external font/image notices); only Apply changes your theme. All local app copies survive pause, leave, session deletion and expiry.
 
-The relay receives ciphertext and necessary metadata: random session/file identifiers, public verification keys, signatures, padded sizes, batch numbers, connection/request times, the expiry choice and a hash of the creator's delete token. The delete token itself is sent only when authorizing creator actions. Network infrastructure can see the device IP and timing; the relay operator's configured limits/backups apply, including Cloudflare on the default relay. The relay cannot read note text, filenames, task content, Looks, member names or encryption keys. The default relay stores encrypted files in Cloudflare R2; custom operators can use disk or R2. R2 credentials stay server-side and are never in the extension. Editing-device aliases and last-seen times are encrypted content, self-chosen, not verified identity or access controls. View-only devices cannot sign presence writes.
+The relay receives ciphertext and necessary metadata: session and file identifiers, public verification keys, signatures, padded sizes, batch numbers, connection/request times, the expiry choice, the last day anyone used the session (so it can expire) and a hash of the creator's delete token. File identifiers are random. The identifier of a new Notes, To Do or Look share is derived from the share's public verification key (a fixed prefix and part of a SHA-256 of the key), which the relay already receives, so it tells the relay nothing more; mod channels and shares made by earlier versions use random session identifiers. The delete token itself is sent only when authorizing creator actions. Network infrastructure can see the device IP and timing; the relay operator's configured limits/backups apply, including Cloudflare on the default relay. The default relay limits each client (an IPv4 address, or an IPv6 address's network prefix) to a daily amount of new stored data, 1 GiB, as well as hourly and per-minute request limits, and it refuses new shares and writes when it is nearly full. Its counters reset when the relay restarts; they limit new stored data per day, not a lifetime storage quota, so continued uploads can still fill shared capacity over several days. Operators and infrastructure may keep network logs. People behind one shared network address (a campus, say) share a client's limits, so shares may go offline for a while when many of them sync at once. A custom relay sets its own limits. The relay cannot read note text, filenames, task content, Looks, member names or encryption keys. The default relay stores encrypted files in Cloudflare R2; custom operators can use disk or R2. R2 credentials stay server-side and are never in the extension. Editing-device aliases and last-seen times are encrypted content, self-chosen, not verified identity or access controls. View-only devices cannot sign presence writes.
+
+The updated signing format is staged: relays enable it with `GZS2=1`, off by default. Updated clients use it only after the relay advertises support; once a session accepts an updated-format write, older members must update to keep using that session. Until enablement, compatible legacy-format writes remain in use. Deriving an identifier from its public key does not by itself mean a relay enforces that binding; mod channels still use random identifiers.
 
 Invite keys live in the link fragment, which browsers do not send in HTTP requests. Glaze leads with pasting into its extension pages (settings or the Notes share panel) and renders no invite in LMS DOM/storage. Opening an invite in a browser can retain its fragment in history or expose it to a changed landing page; keep links private. Settings and the share panel have a no-referrer policy. No new `/j` page script is installed by S6b.
 
-Sessions remain until creator deletion unless the creator opts into deletion after a year unused. Relay deletion does not erase device copies or older operator/infrastructure backups. Removing a note/file from a session is narrower: old encrypted log data may remain until compaction and files remain until session deletion/expiry; recipients keep copies. Removing one recipient requires a fresh session and link. Re-upload retained files is an explicit recovery action after a relay restore; it republishes encrypted references from bytes this device still has. No analytics, accounts, remote configuration or server credentials are introduced.
+The creator can delete a session at any time. Otherwise, on the default relay, a share nobody has used for two years is deleted (one year if its creator chose deletion after a year unused), and a share that was created but never written to is removed after two unused days. Any read or write by any member counts as use; active requests and live subscriptions keep a share in use. Expiry applies after inactivity, not simply because a share is old. Deleting or expiring a share (other than one never written to) leaves a marker (its identifier and the day, no content) for a year, so members learn it was deleted. Relay deletion does not erase device copies or older operator/infrastructure backups. Removing a note/file from a session is narrower: old encrypted log data may remain until an editor's Glaze compacts the log (it does so once the log runs 200 batches past its last trim, or when the relay says it is full), and recipients keep their copies. Once a change is accepted, editors' devices also delete the relay's copies of files the share no longer uses (replaced or removed attachments, changed Look media, re-uploads), best effort: a delete that fails is retried on a later sync, and older relays without file deletion keep those files until session deletion/expiry. Removing one recipient requires a fresh session and link. Re-upload retained files is an explicit recovery action after a relay restore; it republishes encrypted references from bytes this device still has. No analytics, accounts, remote configuration or server credentials are introduced.
 
 ## What Glaze stores
+
+Settings backups omit kept background file bytes. Restoring on the same computer can reuse a file the worker still keeps;
+if that file is missing, the background falls back to a gradient and the import explains why. Keep original media files
+separately. On older browsers without `storage.local.getKeys`, unknown legacy background files cannot be listed, reset or
+collected until a saved reference or direct request discovers them; Reset removes current and discoverable kept media,
+not those unknown legacy copies or unrelated stickers.
 
 - **Glaze navigation** (Canvas, Blackboard Ultra and Moodle, on by default): Glaze draws its own bar from the
   site's own navigation, which stays in the page, hidden. Its settings sync in `navbar` (placement, style, rail state,
   course behavior, logo choice) and the capped `navbarItems` item (names, icons, groups, hidden items, phone tabs, up to
   eight links, Glaze's own items and widgets). To draw the bar before a site's menu arrives, the last items read on that
-  site (their ids, names up to 80 characters and paths, at most 20) are kept per site as `navbarSeen:<origin>` in local
+  site (their ids, names up to 80 characters and paths, at most 20) are kept per site and user as
+  `navbarSeen:<site-root>:<user-id-or-name>` in local
   storage, on this device only. Opening one of the site's own menus as a Glaze panel asks your own school site, with
   your existing session, for what that menu itself shows: on Canvas your favorite or active courses, groups, account
   links, recent history, admin accounts or the school's help links (`/api/v1/users/self/favorites/courses`,
@@ -145,7 +157,9 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   sizes, order, widths and music link). A new install starts with pet, timer, notes and quote tiles on both Dashboards,
   course cards added once their list arrives, and To Do and Glaze settings in the first account's sidebar. Notes and
   pet switches start on locally unless a saved preference says otherwise; updates keep existing choices, including
-  empty layouts. The initial settings item in navigation is also a local fallback. Edited feature switches and
+  empty layouts. `starterTouched` notes, on this device only, which starter Dashboards (Canvas's and Ultra's) you have
+  arranged, so a removal synced from another device never changes a board you edited here. The initial settings item in
+  navigation is also a local fallback. Edited feature switches and
   navigation choices sync normally. Separate `starterOff:*` booleans sync removals and re-additions so defaults do not
   return: board/widget choices, empty-board and course-card choices. Course-card keys include the school origin and
   course id; sidebar To Do/settings keys (`starterOff:sidebar:<lms>:<origin>/<uid>:<widget>`) include the origin and
@@ -171,12 +185,12 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
 
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
   background, motion, light/dark schedule, course colour and extras choices, and what you set for a course in its course menu:
-  its colour, look, tint and the **nickname you type for it**. When Chrome sync is on, these follow
-  your own account between devices. Safari keeps them on this device only.
+  its colour, look, tint and the **nickname you type for it**. When Chrome sync (or Firefox Sync) is on, these follow
+  your own account between devices, through Google's or Mozilla's servers. Safari keeps them on this device only.
 - **Your GPA choices** (Canvas and Blackboard, the GPA Extra), in `chrome.storage.sync` as their own small item: for each
   course you change, its site's address and course id with the credits, honors/AP level, grading
   scale you typed and whether it counts. Nothing is stored for a course you leave as it is. It follows
-  your account like your settings; Safari keeps it on this device only.
+  your account like your settings, in Chrome sync or Firefox Sync; Safari keeps it on this device only.
 - **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard
   lists it and which of Ultra's ten colour slots it is in (with its site's address and course code, so Gradescope
   courses can be placed with it), so the editor can list them for you to
@@ -188,8 +202,11 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   current scores returned by Canvas. It is reused for less than a minute, after the profile reader confirms the
   account, and replaced after a successful fresh read; saving a Canvas nickname or color removes it. The minute is
   its reuse window, not a deletion deadline: the stored copy can remain until the tab closes. The school page's own
-  code can read this storage. It is not put in browser sync or sent elsewhere. The existing `gz-settings` session
-  copy of presentation settings also includes the sidebar title and review preferences; course nicknames are omitted.
+  code can read this storage. It is not put in browser sync or sent elsewhere. The `gz-settings` session copy of
+  presentation settings, which lets the next page of the tab paint in your palette at once, holds only what that first
+  paint shows (colours, look, background and navigation styling, motion and extras switches, whether course tint is on and how strong). It
+  leaves out course names and nicknames, picture and link addresses, preset names, the sidebar title and review
+  preferences.
 - **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
 - **Which course items you've seen**, in `chrome.storage.local`, on this device only: for each course
@@ -233,19 +250,26 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   your browser; nothing is uploaded.
 - **What's due this week**, in `chrome.storage.local`, on this device only: the title, course and due
   time of each item due in the next seven days, from Blackboard's own To Do list (or Canvas's planner, or Moodle's Timeline),
-  and the address of the site it came from, so the popup can list them. It is replaced each time it's
+  and the address of the site it came from, so the popup can list them. It is kept per school site
+  (`dueWeek:<origin>`), so two schools in one browser don't overwrite each other, and replaced each time it's
   fetched.
 - **What you type in Blackboard's editors** (the "Back up what you type" Extra, on by default), in
-  `chrome.storage.local`, on this device only. While you write a post, reply, journal entry, message or
-  assignment text, Glaze keeps a copy so it can offer it back if the page reloads or your session times
-  out before it's posted. Each copy is deleted once the post shows up on the page, when you clear the
-  editor or dismiss the offer, and after 14 days at most. Switching the Extra off deletes them all. The
-  text is never sent anywhere.
+  `chrome.storage.local`, on this device only, per school site and signed-in student. While you write a post,
+  reply, journal entry, message or assignment text, Glaze keeps a copy so it can offer it back if the page
+  reloads or your session times out before it's posted. To know whose copy it is, Ultra asks your own
+  Blackboard site who you are (`/learn/api/v1/users/me`, shared with the other extras), and keeps nothing until
+  that answers; another account on the same browser is never offered your copies. A copy an earlier page kept
+  isn't written over by what you type now: it stays beside the new text until you restore it, dismiss it, it
+  posts or it expires, with at most three per editor (the oldest goes when another is saved). Copies are deleted when the matching post appears, when you dismiss their offer, or after 14 days. Clearing the editor
+  deletes this page's new copy; unresolved older copies remain available. Switching the Extra off deletes them all. Copies kept by earlier versions without a site or an
+  account (Ultra's) can't be tied to anyone, so they are no longer offered and the next cleanup deletes them.
+  The text is never sent anywhere.
 - **Supported new Canvas Inbox drafts**, in `chrome.storage.local`, on this device only: the message
   body, subject, site's address, signed-in user's id, course id and recipient ids. Backup covers new
   messages to individual users in uniquely named courses, with a subject and selected recipients;
   replies and group recipients are not backed up. Copies are kept until a matching sent message is
-  confirmed, the body is cleared or the offer dismissed, or 14 days pass. Switching the Extra off deletes
+  confirmed, their offer is dismissed, or 14 days pass. Clearing the body removes this page's new copy, while unresolved
+  older copies remain available. Switching the Extra off deletes
   them. Canvas's own editor recovery and its own what-if scores stay with Canvas.
 - **Better To Do** (Canvas and Blackboard, on by default), in `chrome.storage.local`, on this device only, per Canvas
   or Blackboard site and signed-in user id: the tasks you add (title, course, due date, notes), the steps, "do on" days
@@ -324,8 +348,11 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   Canvas files, pages and module items are kept as their address and title only; the file itself is never copied. A note
   or folder in the trash is deleted for good after 30 days, or when you empty the trash; its id and the time are kept
   30 days more, so a change still on its way from another tab can't bring it back. A step that fails (a deletion
-  interrupted, say) is finished the next time Notes opens, so nothing deleted stays behind. Glaze doesn't ask for unlimited
-  storage, so the browser may clear this storage if the device runs very short of space: **Export all** saves a copy
+  interrupted, say) is finished the next time Notes opens, so nothing deleted stays behind. Glaze never stores a
+  shortened note: a note too long to keep whole (over 2 MB of text, or more than 100,000 elements) is refused with a
+  visible warning when you save, import, duplicate, export, paste or sync it, never cut. Glaze asks the browser for
+  `unlimitedStorage` (see Permissions), so this storage isn't cleared to free space; where a browser withholds that, it
+  may clear it if the device runs very short, so **Export all** saves a copy
   (a zip of Markdown files, the pictures and attachments, and the notes as HTML for importing back) through your
   browser's own download, and **Import** reads such a zip on your device.
 - **Reminders and streak** (Canvas and Blackboard, off by default), in `chrome.storage.local`, on this device only, per
@@ -510,6 +537,15 @@ you import) are bundled. It makes requests in these cases:
   New input, closing the palette, or switching search or Glaze off cancels pending search reads. Content links use
   the native redirect; announcement/discussion results open the course tool list only after you choose one.
   Search itself marks nothing read.
+- **File previews on Blackboard Ultra** (while Glaze is on; no separate switch). Ultra opens a file preview in
+  Blackboard's document viewer, at an address that holds a ticket good for about two minutes, and keeps that address,
+  so a preview opened later is refused. When a preview's viewer address is for a file that is still converting, or its
+  ticket has run out or is about to, Glaze asks your own Blackboard site again for a fresh one: it re-requests the page's
+  own `/learn/api/` addresses that last brought a viewer address (the five newest, newest first, stopping at the first
+  that returns the same document), with your existing session, never following a redirect. It asks once when the preview
+  appears and then, while the address is still not a finished one, about every 15 seconds, at most twenty more times
+  (five minutes) per preview. The answers are read in memory only for the document's new viewer address; nothing is
+  stored or sent anywhere else. Turning Glaze off stops it.
 - **On Canvas.** At most every ten minutes, Glaze asks your own Canvas site for your planner items for the
   next seven days, the same list Canvas's own planner and To Do list show, and keeps what's still to do as
   the due list above. On the Dashboard (Grades on course cards) and when you open the command palette, it
@@ -659,8 +695,13 @@ you import) are bundled. It makes requests in these cases:
 - **A course's nickname and color on Canvas** (the course card's menu). Only when you change one there, Glaze saves it
   in Canvas as Canvas's own card menu does: one request to your own Canvas site (`PUT` or, to clear a nickname, `DELETE`
   `/api/v1/users/self/course_nicknames/<course>`; `PUT /api/v1/users/self/colors/course_<course>` with the color) and
-  the page's own CSRF token. These and the ticks above are the only changes Glaze makes to any site. To show the
-  nickname, the menu reads the course list Canvas's Dashboard already asks for.
+  the page's own CSRF token. To show the nickname, the menu reads the course list Canvas's Dashboard already asks for.
+- **Signing out from Glaze's Canvas bar, and Moodle's Edit mode.** Only when you click it. **Sign out** in the account
+  panel of Glaze's bar on Canvas sends what Canvas's own Sign out sends: `DELETE /logout` to your own Canvas site, with
+  the page's own CSRF token, then takes you to the login page. On Moodle, the bar's **Edit mode** switch operates
+  Moodle's own control (it flips Moodle's checkbox, so Moodle's script does what it always does, or submits Moodle's
+  form if that script hasn't started), and only on your click. On Ultra and Moodle, Sign out is the site's own link.
+  These, the nickname and color edits and the ticks above are the only changes Glaze makes to any site.
 - **Dashboard notes and widgets** (Canvas; widgets on by default, with the fresh-install starter layout above). The notes and widgets that need your account ask your own Canvas site for your profile (user id
   and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
   items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one
@@ -678,14 +719,14 @@ you import) are bundled. It makes requests in these cases:
   On Blackboard Ultra, it asks your own Ultra site who is signed in and for your course list, and **Blackboard link**
   lists a course's content items you can open now from Blackboard's public contents API (each kept to its title, folder and link):
   read-only GETs that never follow a redirect and stop when you close the picker. Only the link and title you pick go
-  in the note. Glaze also keeps the address of each Ultra site it has started on (storage.local `ultra`), so only those
-  sites' pages may save notes, Better To Do's tasks and plans, reminders and class schedules.
-- **Music widget** (Canvas, off by default). Glaze contacts no music service until you press **Load player**, on each
+  in the note. Glaze also keeps the address of each Ultra site you approved (storage.local `ultra`; sites on blackboard.com
+  need no approval), so only those sites' pages may save notes, Better To Do's tasks and plans, reminders and class schedules.
+- **Music widget** (Canvas and Blackboard Ultra, off by default). Glaze contacts no music service until you press **Load player**, on each
   page. Then your browser loads that service's player inside the widget, from **Spotify** (`open.spotify.com`),
   **YouTube** or **YouTube Music** (both from `www.youtube-nocookie.com`, YouTube's privacy-enhanced mode) or **Apple
   Music** (`embed.music.apple.com`), and that service works as it does on any site that embeds its player: it sees
   what you play, your IP address and its own cookies, under its own privacy policy. Spotify and Apple Music get no
-  referrer; YouTube's player won't play without one, so it gets your Canvas site's origin (`https://` and the host
+  referrer; YouTube's player won't play without one, so it gets your Canvas or Blackboard site's origin (`https://` and the host
   name, no page path). The player's address is built by Glaze from the parts of your link it checked (a track,
   album, playlist or video id); your link is not sent anywhere else. Glaze has no analytics, so nobody else learns
   what you listen to.
@@ -721,13 +762,24 @@ you import) are bundled. It makes requests in these cases:
   anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
-- **Video, animated picture or animation background.** If a Look's background is a video, an animated picture or a Lottie
-  animation named by an `https://` link on a public website, your browser loads it from that site when a page is shown,
-  like a background image, and that site sees an ordinary request. A Lottie file is fetched by Glaze's background
-  worker instead, with no cookies, no referrer, no redirects and at most 1 MiB, because a page may not read other sites'
-  files. The editor, and the preview of a theme code, name the site before you apply the Look. A Look can also name a file
-  kept on your computer by its SHA-256; such a file reaches you only through a share session (encrypted end to end, like a
-  shared note's file) or because you chose it in the editor, and Reset everything removes it.
+- **Video, animated picture or animation background.** If a Look's background is a video, an animated picture (WebP or
+  AVIF) or a Lottie animation named by an `https://` link on a public website, Glaze's background worker fetches it when
+  a page is shown, not the page itself, with no cookies, no referrer and no redirects, and hands the page a cleaned
+  copy. The site sees an ordinary request for the file. The worker fetches only the address the worn Look (or an
+  installed mod) names; the editor's preview may fetch one it is showing. A file is capped at 12 MiB for a video, 6 MiB
+  for a picture and 1 MiB for a Lottie file, and a video or picture at 4096 pixels on a side; a file past the limits is
+  refused and the Look shows its fallback. The file is read, never run, and nothing fetched this way is stored. MP4,
+  WebM and AVIF files have location, device, time, title and program details removed from the file’s container
+  before new files are kept or shared. The encoded stream and visible pixels remain; this is not a forensic guarantee
+  that all identifying information is gone. New files whose containers cannot be cleaned safely are refused.
+  Files saved before 3.3.5 that cannot be cleaned stay on this device and are not shared. The editor, and the preview of a theme code, name the site before you apply the Look. A
+  Look can also name a file kept on your computer by its SHA-256; such a file reaches you only through a share session
+  (encrypted end to end, like a shared note's file), the gallery, or because you chose it in the editor. Kept files are
+  held in a database only Glaze's background worker opens (`glaze-media`), with a small index (`lookMediaIndex`) in
+  `storage.local`, up to 48 MiB in all. A file from the gallery or a share is held as pending until you use or save
+  the Look, and goes if you cancel, pick another code or close the editor; a file no Look, favorite, history entry or
+  rotation names is cleaned up. Settings lists the kept files, and Reset everything removes current and discoverable kept files (stickers and other
+  local data stay). A theme code can't carry a kept file, so Copy theme code asks you to use a link or a share instead.
 - **Sidebar pictures.** A sidebar picture linked by `https://` is loaded by your browser from that host when
   shown. The editor also reads it for its contrast warning when the host permits that; the preview of a theme
   code names its sidebar image host before you apply it. Files selected from your device cause no upload.
@@ -743,6 +795,17 @@ you import) are bundled. It makes requests in these cases:
   or browsing history is sent. Frostdev.io and GitHub receive the update requests and ordinary
   connection information such as your IP address. The Mac App Store and iPhone/iPad apps include no
   Sparkle updater; their updates come through the App Store.
+
+**How often Glaze asks your school's site.** Selected bulk reads (course gradebooks and content through Ultra's card
+readers, and Canvas's collapsed module lists) share a queue per document, grouped by school site: at most three requests at a time, with visible work first. Separate tabs and frames have independent queues. This limit does not cover every
+school request: identity, memberships and due-date exceptions, and other page/planner readers, use their existing paths.
+For queued reads, a 429 or server error (5xx) pauses that queue. Ultra's queued fetches use the site's `Retry-After` header, otherwise for
+2 seconds, doubling with each further error up to ten minutes; the ten-minute cap also applies to the header's delay.
+Canvas's module-list adapter does not expose a failed response's `Retry-After` header, so it uses the fallback delay.
+A queued 401 stops that queue until the document's page address changes. The queue does not retry failed work itself;
+the card readers cache failures for a minute before another pass may ask again. Canvas follows its API's same-origin
+`Link` header for paged lists. An incomplete content read marks nothing as new, and Download all refuses to save part of
+a module.
 
 The extension's own links are opened only when you click them: the footer link to the project's GitHub page, "Open the
 gallery" in the editor (see below), and **Report a problem** (the editor, and What Glaze can do on Canvas), which opens a
@@ -770,7 +833,9 @@ website's own form, which you fill in yourself; Glaze takes no part in it.
 
 ## Recognizing Canvas and Moodle
 
-To recognize Canvas and Moodle on any school's domain, Glaze checks the head of each https page for Canvas's own stylesheet link or the keywords line Moodle writes into every page ("moodle, …"), and stops at the page body. For Moodle it also checks the page id and layout Moodle puts on the body tag itself, so a page that merely mentions Moodle is left alone. Nothing is read beyond that, and nothing leaves the browser. When it finds either, it remembers that site so it can style it from the start next time.
+To recognize Canvas and Moodle on a school's own domain, Glaze checks the head of each https page for Canvas's own stylesheet link or the keywords line Moodle writes into every page ("moodle, …"), and stops at the page body. For Moodle it also checks the page id and layout Moodle puts on the body tag itself, so a page that merely mentions Moodle is left alone. Nothing is read beyond that, and nothing leaves the browser.
+
+A page that looks like Canvas, Moodle or Blackboard Ultra proves nothing about the site, so Glaze asks first. On a site it doesn't know, it shows a small bar on the page: **Use Glaze on example.edu?** Until you press **Yes**, nothing is registered, read from the site's API or recorded, and Glaze does not theme the site or run any of its features there; it never asks while Glaze is off. **Yes** adds the site to a list in the extension's local storage (`canvas`, `moodle` or `ultra`) so Glaze styles it from the start next time. **Not now** stops the question on that site for a week (the time is kept in `askLater`, for the 50 sites most recently put off). Canvas on `instructure.com` and Blackboard Ultra on `blackboard.com` are Glaze's from the start, and sites Glaze already ran on before it asked stay on the list. **Settings → Backup and privacy → Sites** lists the sites you said yes to, each with **Remove**, which stops Glaze there and forgets the courses and due dates it read from that site (your notes and tasks stay); **Reset everything** clears the list and the Not nows.
 
 ## Permissions
 
@@ -782,11 +847,15 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
   never in the LMS page. The reader page is web-accessible so an import can open it in a frame; it reads a file only
   with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
   make it read anything.
-- `identity` (Chrome only, optional) — asked for only when you press Connect in Google Calendar sync, and removed on
-  Disconnect. It lets Chrome sign Glaze in to Google Calendar with the Google account in your browser; Chrome shows no
-  warning for it. Glaze never asks for `identity.email` and never sees your password.
-- `unlimitedStorage` — so the browser never clears your notes, pictures and attachments to free space. Nothing more is
-  stored or sent because of it; Chrome shows no warning for it.
+- `identity` (Chrome only, optional) — not requested by released builds while Google Calendar sync is switched off
+  at build time (`ON` in `lib/gcal.js`): the Chrome, Firefox and Safari packaging scripts remove it, with the OAuth
+  client, from the manifest they ship. In a build that enables the sync it is asked for only when you press Connect in
+  Google Calendar sync, and removed on Disconnect. It lets Chrome sign Glaze in to Google Calendar with the Google
+  account in your browser; Chrome shows no warning for it. Glaze never asks for `identity.email` and never sees your
+  password.
+- `unlimitedStorage` — requested at install, so the browser doesn't clear your notes, pictures, attachments and the
+  files kept for Look backgrounds to free space. Nothing more is stored or sent because of it; Chrome shows no warning
+  for it.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is
@@ -797,12 +866,17 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
   separate small script applies the palette and, if you switch them on, your marks on documents.
 - Host access to all sites (`<all_urls>`) and `scripting` — Canvas also runs on schools' own domains, and Moodle always does.
   Content scripts still match HTTPS pages only. The wider form is what Chrome requires for one thing: course tabs on
-  Blackboard Ultra take a picture of the Blackboard tab you're on (only while it is the tab on screen) and show it the
-  instant you click back to that course, while Blackboard opens the live page under it. Pictures stay in memory
+  Blackboard Ultra and Canvas take a picture of the tab you're on (only while it is the tab on screen) and show it the
+  instant you click back to that course, while the school opens the live page under it. Pictures stay in memory
   (storage.session), are never written to disk or sent anywhere, and go when the browser closes, on sign-out, or when
   Glaze or course tabs are switched off.
-  The check described above runs on https pages for that reason; when it finds Canvas or Moodle, Glaze styles that
-  site, and only that site, the same way. The hostname is kept in the extension's local storage on your device.
+  The check described above runs on https pages for that reason. When it finds Canvas or Moodle on a school's own
+  domain, Glaze asks you first; only after you say yes does it style that site, and only that site, the same way, and
+  the site's address is then kept in the extension's local storage on your device.
+  On a site you approved, Glaze reads the school's pages and makes the requests described above with your existing
+  session. It writes to a site only on your own click: a planner tick (if you switched "Tick off in Canvas too" on), a
+  Canvas course nickname or color, Sign out in Glaze's Canvas bar and Moodle's Edit mode switch in its bar; Glaze
+  never changes grades, submits work or sends messages.
   The same host access lets the gallery script above run on `https://frostdev.io/glaze/looks`, and, only while
   "Gradescope in To Do" is on, Glaze's Gradescope script run on `https://www.gradescope.com` and its background worker
   read Gradescope course pages; neither adds a permission. It also covers Google Calendar sync's requests to
@@ -832,5 +906,5 @@ admin@frostdev.io
 
 Hidden folder/module IDs and the Show hidden folders switch are stored in `storage.local`, separately for each HTTPS site, known Ultra account and course. No titles or content are stored. Limits are 500 IDs per course, 200 account/course records and 256 KiB across them. Unknown identity or failed storage leaves the outline untouched. The feature makes no requests, including no profile request; it reuses only the existing page identity cache. Export all includes validated records; imports retain their account/site/course keys and ignore malformed records without replacing existing choices. Only your own clicks or keyboard activation save a choice. The brief status and Undo are held only in memory, cleared on navigation, account changes or disabling, and store no additional data. Undo changes only the folder just hidden. Search, Download all, progress and new-item counts are unaffected.
 
-The settings editor remembers its last tab in device-local `editorTab`. Its previews are authored synthetic pages inside the extension, with no school account or LMS request. They reuse Glaze’s styles and local feature helpers. Existing notices still apply when you deliberately select a web font or linked image. Preference resets keep local notes/tasks, stored pictures, bookmarks and share keys; they do not erase device data.
+The settings editor remembers its last tab in device-local `editorTab`. Its previews are authored synthetic pages inside the extension, with no school account or LMS request. They reuse Glaze’s styles and local feature helpers. Existing notices still apply when you deliberately select a web font or linked image. Preference resets keep local notes/tasks, stickers, bookmarks and share keys, but Reset everything removes current and discoverable files kept for Look backgrounds, subject to the older-browser limit described above.
 Blackboard nicknames edited here use the same synced course-name fields as the course-card menu. Selecting a preview course does not store any additional course data.

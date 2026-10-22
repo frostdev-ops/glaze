@@ -55,16 +55,37 @@
     // pixels, 'canvas.size' { slot, w, h, dpr } when that changes). What it holds goes to the page as a picture after each
     // animation frame and on commit(slot); a canvas can't be handed across processes without taking the page down with it.
     // Animation frames come from Glaze here, and stop while the page or the slot is hidden or motion is off ('canvas.pause').
+    // Only a canvas drawn on since its last picture is sent (its context marks it; commit(slot) forces one), so a mod with
+    // several canvases and one animation loop doesn't send a picture of every canvas on every frame.
     const canvases = new Map(), sizes = new Map();
     let paused = false;
     const ship = (slot) => {
       const k = canvases.get(slot);
-      if (!k || paused) return;
+      if (!k || paused || !k.dirty) return;
       if (k.busy) { k.again = true; return; }
       k.busy = true;
-      createImageBitmap(k.c).then((bm) => post({ frame: slot, bm }, [bm]), () => {}).finally(() => { k.busy = false; if (k.again) { k.again = false; ship(slot); } });
+      k.dirty = false;
+      createImageBitmap(k.c).then((bm) => post({ frame: slot, bm }, [bm]), () => { k.dirty = true; }).finally(() => { k.busy = false; if (k.again) { k.again = false; ship(slot); } });
     };
-    const fit = (slot) => { const k = canvases.get(slot), s = sizes.get(slot); if (k && s && (k.c.width !== s.w || k.c.height !== s.h)) { k.c.width = s.w; k.c.height = s.h; } };
+    const fit = (slot) => { const k = canvases.get(slot), s = sizes.get(slot); if (k && s && (k.c.width !== s.w || k.c.height !== s.h)) { k.c.width = s.w; k.c.height = s.h; k.dirty = true; } };
+    // The context the mod draws with, passing every call and assignment through and noting that the canvas changed.
+    const watch = (k, ctx) => {
+      if (!ctx || typeof ctx !== 'object') return ctx;
+      // getContext returns the same context each time; drawing code may use that identity.
+      if (k.contexts.has(ctx)) return k.contexts.get(ctx);
+      const fns = new Map();
+      const proxy = new Proxy(ctx, {
+        get: (t, key) => {
+          const v = Reflect.get(t, key, t);
+          if (typeof v !== 'function') return v;
+          if (!fns.has(v)) fns.set(v, (...args) => { k.dirty = true; return v.apply(t, args); });
+          return fns.get(v);
+        },
+        set: (t, key, v) => { k.dirty = true; return Reflect.set(t, key, v, t); },
+      });
+      k.contexts.set(ctx, proxy);
+      return proxy;
+    };
     if (typeof document === 'undefined') {
       let next = 1, timer = 0;
       const queue = new Map(), held = new Map();
@@ -89,19 +110,25 @@
         for (const [id, f] of held) queue.set(id, f);
         held.clear();
         if (queue.size && !timer) timer = setTimeout(tick, 16);
-        for (const slot of canvases.keys()) ship(slot);
+        // Pictures sent while paused were dropped, so everything is shown afresh.
+        for (const [slot, k] of canvases) { k.dirty = true; ship(slot); }
       }]);
-      inner.set('canvas.size', [(d) => { if (typeof d?.slot === 'string' && Number.isInteger(d.w) && Number.isInteger(d.h)) { sizes.set(d.slot, d); fit(d.slot); } }]);
+      inner.set('canvas.size', [(d) => { if (typeof d?.slot === 'string' && Number.isInteger(d.w) && Number.isInteger(d.h)) { sizes.set(d.slot, d); fit(d.slot); ship(d.slot); } }]);
     }
     const ui = Object.freeze({
       render: (slot, tree) => call('ui.render', slot, tree === undefined ? null : tree),
       canvas: (slot) => {
         if (typeof OffscreenCanvas !== 'function' || typeof document !== 'undefined') return Promise.reject(new Error('canvas is for Workers'));
         slot = String(slot);
-        if (!canvases.has(slot)) { const s = sizes.get(slot); canvases.set(slot, { c: new OffscreenCanvas(s?.w || 300, s?.h || 150), busy: false, again: false }); }
+        if (!canvases.has(slot)) {
+          const s = sizes.get(slot), k = { c: new OffscreenCanvas(s?.w || 300, s?.h || 150), busy: false, again: false, dirty: false, contexts: new WeakMap() };
+          const getContext = k.c.getContext;
+          k.c.getContext = (...args) => { k.dirty = true; return watch(k, getContext.apply(k.c, args)); };
+          canvases.set(slot, k);
+        }
         return Promise.resolve(canvases.get(slot).c);
       },
-      commit: (slot) => ship(String(slot)),
+      commit: (slot) => { const k = canvases.get(String(slot)); if (k) { k.dirty = true; ship(String(slot)); } },
     });
     const glaze = Object.freeze({
       call,
@@ -162,15 +189,25 @@
     const bitmap = d.bm instanceof ImageBitmap;
     if (!m) { if (bitmap) d.bm.close(); return; }
     const now = performance.now();
-    if (now - m.since >= 1000) { m.since = now; m.messages = 0; }
-    if (++m.messages > RATE) { if (bitmap) d.bm.close(); return stop(id, 'error'); }
     // A picture of one of the Worker's canvases, for its slot on the page (only pixels: an ImageBitmap carries nothing else).
+    // Pictures have a budget per canvas, so several animated canvases don't use up the mod's message rate.
     if (bitmap) {
-      const size = m.sizes.get(d.frame);
-      if (via !== 'worker' || m.paused || !size || d.bm.width !== size.w || d.bm.height !== size.h || now - (m.painted.get(d.frame) ?? -Infinity) < 1000 / 60) return d.bm.close();
-      m.painted.set(d.frame, now);
-      return up.postMessage({ frame: d.frame, mod: id, bm: d.bm }, [d.bm]);
+      const slot = typeof d.frame === 'string' ? d.frame : '', size = m.sizes.get(slot);
+      if (via !== 'worker' || !size) {
+        d.bm.close();
+        if (now - m.since >= 1000) { m.since = now; m.messages = 0; }
+        return ++m.messages > RATE ? stop(id, 'error') : undefined;
+      }
+      const w = m.budget.get(slot) || { since: now, n: 0 };
+      if (now - w.since >= 1000) { w.since = now; w.n = 0; }
+      m.budget.set(slot, w);
+      if (++w.n > RATE) { d.bm.close(); return stop(id, 'error'); }
+      if (m.paused || d.bm.width !== size.w || d.bm.height !== size.h || now - (m.painted.get(slot) ?? -Infinity) < 1000 / 60) return d.bm.close();
+      m.painted.set(slot, now);
+      return up.postMessage({ frame: slot, mod: id, bm: d.bm }, [d.bm]);
     }
+    if (now - m.since >= 1000) { m.since = now; m.messages = 0; }
+    if (++m.messages > RATE) return stop(id, 'error');
     if (Number.isSafeInteger(d.pong)) return send({ pong: d.pong, mod: id });
     if (Number.isSafeInteger(d.id) && typeof d.call === 'string' && d.call.length <= 64 && Array.isArray(d.args)) {
       const reply = (error) => channel(m, via)?.postMessage({ id: d.id, ok: false, error });
@@ -232,7 +269,7 @@
   };
   const start = (mod) => {
     if (!isObj(mod) || typeof mod.id !== 'string' || mods.has(mod.id)) return;
-    const m = { worker: null, frames: new Map(), pending: new Set(), since: performance.now(), messages: 0, paused: true, sizes: new Map(), painted: new Map() };
+    const m = { worker: null, frames: new Map(), pending: new Set(), since: performance.now(), messages: 0, paused: true, sizes: new Map(), painted: new Map(), budget: new Map() };
     mods.set(mod.id, m);
     if (typeof mod.worker === 'string') {
       workerUrl ||= URL.createObjectURL(new Blob([`(${isolateWorker})();(${glazeClient})(self);`], { type: 'text/javascript' }));

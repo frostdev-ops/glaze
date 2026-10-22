@@ -6,7 +6,7 @@ const D = require('../defaults.js');
 const ext = process.env.EXT || path.join(__dirname, '..');
 const out = process.argv[2] || path.join(ext, 'scratch/b9/shots');
 const fixture = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-folders.html'), 'utf8');
-const chromePath = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 (async () => {
   fs.mkdirSync(out, { recursive: true });
@@ -14,7 +14,7 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
   let context;
   try {
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(temp, 'profile'), { executablePath: chromePath, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', hasTouch: true, isMobile: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1'] });
+    context = await chromium.launchPersistentContext(path.join(temp, 'profile'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', hasTouch: true, isMobile: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1'] });
     context.setDefaultTimeout(8000);
     let requests = 0;
     await context.route('**/*', (r) => {

@@ -1,44 +1,46 @@
-# Chrome Web Store listing — Glaze 3.0.4 (Spanish)
+# Chrome Web Store listing — Glaze 3.3.5 (Spanish)
 
 ## Short summary (132 character maximum)
 
-Dale otro estilo a Blackboard Ultra, Canvas y Moodle: paletas, fuentes y fondos, más un To Do mejor, widgets y extras prácticos.
+Dale otro estilo a Blackboard Ultra, Canvas y Moodle, con tu aspecto y navegación, más un To Do mejor, widgets y extras de estudio.
 
 ## Detailed description
 
-Haz que Blackboard Ultra, Canvas y Moodle se sientan tuyos. Glaze da un nuevo estilo a tus cursos con paletas, fuentes, fondos y movimiento, y añade herramientas para planificar y estudiar justo donde haces tus trabajos del curso. Funciona en cualquier escuela que use Blackboard Ultra, Canvas o Moodle, incluso en el dominio propio de una escuela. Lo que Glaze guarda se queda en tu dispositivo.
+Haz que Blackboard Ultra, Canvas y Moodle se sientan tuyos. Glaze da un nuevo estilo a tus cursos con paletas, fuentes, fondos y movimiento, y añade herramientas para planificar y estudiar justo donde haces tus trabajos del curso. Funciona en cualquier escuela que use Blackboard Ultra, Canvas o Moodle, incluso en el dominio propio de una escuela, donde pregunta antes de activar un sitio aún no aprobado. Sin cuenta ni analíticas. Tus cursos, calificaciones, notas y tareas se quedan en tu dispositivo; tus ajustes siguen la sincronización de tu navegador si está activada; compartir es opcional y va cifrado.
 
-NOVEDADES DE 3.0.4
+NOVEDADES DE 3.3.5
+
+• En un dominio propio de una escuela aún no aprobado, Glaze pregunta antes de funcionar; los ajustes muestran los sitios propios aprobados, con Quitar.
+• Un estilo compartido muestra lo que cambia antes de usarlo: cada elemento de navegación que oculta, adónde lleva cada enlace y las partes de la página que modifica. Se rechazan los estilos de otras personas que ocultarían Cerrar sesión o disfrazarían un enlace.
+• Las lecturas masivas seleccionadas se dosifican por documento y sitio escolar y esperan si el sitio está ocupado.
+• Los vídeos e imágenes de fondo enlazados tienen límites de tamaño. De los nuevos archivos de vídeo y AVIF se eliminan los metadatos del contenedor; los archivos anteriores quedan solo en este dispositivo si no se pueden limpiar y no se comparten.
+• Las notas compartidas siguen sincronizándose mientras escribes.
+• En Moodle, la barra de Glaze conserva el interruptor del modo de edición y los enlaces de menú propios de tu escuela.
+• Correcciones en calificaciones y promedio, pestañas de cursos, notas, el temporizador de enfoque, mascotas, documentos, lectores de pantalla e idiomas que se escriben de derecha a izquierda.
+
+DE 3.3
+
+• Navegación de Glaze en Blackboard Ultra, Canvas y Moodle, activada por defecto: una barra lateral o superior en lugar de la navegación del sitio, flotante o integrada, y una barra inferior en el teléfono. Cambia el nombre de los elementos, reordénalos, oculta o añade los tuyos (hasta ocho enlaces propios), elige tus cuatro pestañas del teléfono y mantén en ella las pestañas de cursos. Si la desactivas, vuelve la navegación del sitio.
+• Una barra lateral en Canvas y Blackboard Ultra: la barra lateral propia de la página y los widgets que acoplas debajo, en una columna en ventanas anchas y en un cajón en las estrechas.
+• Pestañas de cursos también en Canvas, cada curso con su propia página activa, y oculta los módulos que no usas, igual que puedes ocultar carpetas en Blackboard.
+• Revisión de documentos en páginas de trabajos entregados: encabezados compactos, comentarios desplegables, pantalla completa y enfoque en el documento. Las páginas que puedes editar se quedan como las hizo el sitio.
+• Las instalaciones nuevas empiezan con un Tablero con hábitat de mascota, temporizador de concentración, notas, citas y tus tarjetas de curso, y los ajustes de Glaze en la barra. Los diseños guardados y lo que quitaste se quedan como lo elegiste. Las tarjetas de curso de Canvas también pueden ser widgets.
+• Los ajustes se abren como una página del sitio de tu escuela, con vista previa en vivo.
+
+DE 3.0.4
 
 • Mods: añade fondos, animaciones, widgets, diseños de navegación y ajustes de página creados por otras personas, desde un código, un enlace, un archivo o la galería. Cada mod muestra lo que lee y por qué antes de que lo añadas, y se ejecuta en un entorno aislado.
 • Crea tu propio widget para el tablero o la barra, sin código.
 • Los estilos pueden tener como fondo un vídeo en bucle, una imagen animada o una animación Lottie.
 
-DE 3.0.3
-
-• Elige un solo personaje de mascota para el hábitat, el compañero de estudio, el distintivo de navegación de Blackboard y la mascota de las tarjetas de curso. Sus controles de visibilidad siguen siendo independientes, y el progreso se queda con la cuenta de tu escuela.
-• El Gato y el Conejito originales se suman al selector de personajes. Las mascotas reaccionan a las sesiones de concentración y a las tareas completadas, respetan la reducción de movimiento y se pausan mientras están ocultas.
-• Las vistas previas de archivos de Blackboard renuevan los tickets del visor caducados y reintentan mientras se convierten los archivos subidos.
-
-DE 3.0.2
-
-• Mucho más rápido en Blackboard Ultra: los clics, el paso del cursor y los cambios de página ya no hacen que el navegador vuelva a calcular el estilo de toda la página, y las páginas reciben el tema antes.
-• Las pestañas de cursos vuelven a mantener hasta cuatro páginas activas en cualquier ordenador, y las ocultas ya no se cierran por inactividad.
-
-NOVEDADES DE 3.0.1
-
-• Controla la opacidad, el tinte, el granulado, el color y la intensidad de la sombra, y los bordes de las superficies. Cada superficie de contenido sigue las esquinas redondeadas de tu estilo, incluidos los estilos propios de cada curso y los controles de documentos.
-• Siete mascotas animadas, entre ellas la gota de Glaze y Rime, además de la importación local de paquetes de mascotas de ChatGPT. Se conservan tu XP y tus decoraciones. El movimiento se pausa mientras está oculto y respeta la reducción de movimiento y el movimiento de Glaze desactivado.
-• Pestañas de cursos de Blackboard más ligeras y menos actualizaciones en segundo plano. Las páginas editadas siguen protegidas. Los fondos sólidos omiten el desenfoque de cristal.
-
-NOVEDADES DE 3.0
+DE 3.0
 
 • Blackboard Ultra tiene un Tablero de Glaze y widgets que puedes colocar donde quieras: Better To Do, notas, una agenda, un temporizador de concentración y tus tarjetas de curso como widgets que puedes mover, cambiar de tamaño y contraer.
 • Pestañas de cursos en Blackboard: cada curso que abres tiene su pestaña, como en un navegador. Hasta cuatro se mantienen activas, así que una pestaña vuelve exactamente como la dejaste: la página abierta, lo que escribiste y hasta dónde te desplazaste.
 • Busca dentro de tus cursos con Ctrl+K (⌘K en Mac) y oculta las carpetas que no usas.
 • Cambia el aspecto de la navegación de Blackboard: logotipo, tamaños y espaciado, elementos reordenados u ocultos y tus propios enlaces.
 • Moodle: los mismos estilos, además de tu nota total del curso en cada tarjeta de curso, lo que vence esta semana y atajos de teclado.
-• Un editor de ajustes en ocho pestañas, con búsqueda y vista previa en vivo con ancho de escritorio o de teléfono.
+• Un editor de ajustes en diez pestañas, con búsqueda y vista previa en vivo con ancho de escritorio o de teléfono.
 
 TU ASPECTO
 
@@ -56,7 +58,7 @@ PLANIFICA Y ESTUDIA EN BLACKBOARD ULTRA Y CANVAS
 • Tareas en las tarjetas de curso, recordatorios de entregas dentro de la página (nunca notificaciones del navegador) y una racha opcional, cada uno desactivado hasta que lo actives.
 • Exporta tus fechas de entrega y tus planes como archivo de calendario (.ics) para Google Calendar, Outlook o Apple Calendar.
 • Importa tu horario de clases o el programa de un curso desde un PDF, una foto, un archivo de Word, una página web o texto pegado. Glaze lo lee en tu dispositivo y te muestra todo para que lo revises antes de guardar nada.
-• Notas con carpetas, texto con formato, imágenes y adjuntos. Widgets: una agenda, un temporizador de concentración, citas, música, un ejercicio de respiración y un compañero de estudio. Estadísticas de tu trimestre y un hábitat para mascotas. Desactivado por defecto.
+• Notas con carpetas, texto con formato, imágenes y adjuntos. Widgets: una agenda, un temporizador de concentración, citas, música, un ejercicio de respiración y un compañero de estudio. Estadísticas de tu trimestre (desactivadas hasta que las actives) y un hábitat para mascotas. Las instalaciones nuevas empiezan con las notas, la mascota y algunos widgets activados; tus elecciones actuales se mantienen.
 • Tareas de Gradescope en Better To Do, si lo activas.
 
 EXTRAS EN BLACKBOARD ULTRA
@@ -82,20 +84,23 @@ EN MOODLE
 
 • El tema de Glaze sobre el tema Boost de Moodle (Moodle 5, y 4.x donde su marcado es el mismo): Tablero, Mis cursos, páginas de curso y de actividad, calificaciones, calendario, mensajes y la página de inicio de sesión.
 • Tu nota total del curso en cada tarjeta de curso, lo que vence esta semana según tu Línea de tiempo, un tinte y un estilo por curso, y atajos de teclado.
+• Navegación de Glaze, con el interruptor del modo de edición de Moodle y los enlaces de menú propios de tu escuela en la barra.
 
 EN TODAS PARTES
 
-Pulsa Ctrl+K (⌘K en Mac) para saltar a cursos, páginas, ajustes de Glaze y trabajo por entregar. La ventana emergente mantiene a mano los controles rápidos. En Blackboard y Canvas, Lo que Glaze puede hacer enumera cada extra con su interruptor. Exporta e importa todos tus ajustes como archivo.
+Pulsa Ctrl+K (⌘K en Mac) para saltar a cursos, páginas, ajustes de Glaze y trabajo por entregar. En un dominio propio de una escuela que aún no esté aprobado, Glaze pregunta «¿Usar Glaze en este sitio?» y no hace nada allí hasta que dices que sí; los ajustes enumeran esos sitios y pueden quitarlos. La ventana emergente mantiene a mano los controles rápidos. En Blackboard y Canvas, Lo que Glaze puede hacer enumera cada extra con su interruptor. Exporta e importa todos tus ajustes como archivo.
+
+Canvas en instructure.com y Ultra en blackboard.com son automáticos; las aprobaciones anteriores se conservan.
 
 SESIONES COMPARTIDAS OPCIONALES
 
-Comparte con tus compañeros de clase notas seleccionadas, archivos, un estilo o tus propias tareas. Todo se cifra en tu dispositivo antes de salir, a través del servidor de retransmisión de frostdev.io o de uno que alojes tú. Compartir permanece desactivado hasta que crees una sesión o te unas a una, y Glaze funciona por completo sin ello.
+Comparte con tus compañeros de clase notas seleccionadas, archivos, un estilo o tus propias tareas. Todo se cifra en tu dispositivo antes de salir, a través del servidor de retransmisión de frostdev.io o de uno que alojes tú. Compartir permanece desactivado hasta que crees una sesión o te unas a una, y Glaze funciona por completo sin ello. En el servidor de retransmisión de frostdev.io, una sesión compartida que nadie ha usado en dos años se elimina.
 
 Las ayudas de Glaze no cambian calificaciones, no entregan trabajos ni envían mensajes. Las notas hipotéticas son hipotéticas y se quedan en tu dispositivo.
 
 PRIVACIDAD
 
-Sin analíticas, sin anuncios y sin cuenta. Los ajustes se quedan en tu navegador y siguen la sincronización de Chrome si la tienes activada. Los datos de los cursos, los registros de calificaciones, las notas, las tareas, tu posición, la lista de entregas y las copias de lo que escribes se quedan en tu dispositivo. Glaze lee tu propio sitio de Blackboard, Canvas o Moodle con la sesión que ya tienes abierta. Las fuentes web y las imágenes de fondo que elijas hacen solicitudes de red normales. Las imágenes de las pestañas de cursos se quedan en la memoria y nunca se envían a ningún sitio. Las sesiones compartidas, solo si las usas, envían contenido cifrado que el servidor de retransmisión no puede leer. Glaze no recopila ni vende tus trabajos, calificaciones, credenciales ni historial de navegación. Política completa: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+Sin analíticas, sin anuncios y sin cuenta. Los ajustes se quedan en tu navegador y siguen la sincronización de Chrome o de Firefox si la tienes activada (incluyen apodos de cursos, opciones de GPA y algunos identificadores de escuela, curso y cuenta; Safari los guarda en el dispositivo). Los datos de los cursos, los registros de calificaciones, las notas, las tareas, tu posición, la lista de entregas y las copias de lo que escribes se quedan en tu dispositivo. Glaze lee tu propio sitio de Blackboard, Canvas o Moodle con la sesión que ya tienes abierta y escribe en él solo cuando tú lo pides (una marca en el planificador, un apodo o un color de Canvas, cerrar sesión, el modo de edición de Moodle). Las fuentes web y las imágenes de fondo que elijas hacen solicitudes de red normales; los vídeos y animaciones enlazados los descarga el proceso de fondo de Glaze sin cookies, referente ni redirecciones (12 MiB de vídeo, 6 MiB de imagen, 1 MiB de Lottie; lados de vídeo/imagen de hasta 4096 píxeles). Los metadatos identificativos se eliminan del contenedor del archivo; los flujos codificados y los píxeles visibles permanecen. Los archivos guardados antes de 3.3.5 que no pueden limpiarse permanecen en este dispositivo y no se comparten. Las imágenes de las pestañas de cursos se quedan en la memoria y nunca se envían a ningún sitio. Las sesiones compartidas y los canales de mods, solo si los usas, envían contenido cifrado que el servidor de retransmisión no puede leer. Glaze no recopila ni vende tus trabajos, calificaciones, credenciales ni historial de navegación. Un mod con acceso a datos de cursos y a la red puede enviar esos datos a hosts autorizados. Política completa: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
 Código abierto (MIT): https://github.com/frostdev-ops/glaze
 

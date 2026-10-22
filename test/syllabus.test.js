@@ -314,6 +314,122 @@ test('keys and task ids', () => {
   assert.match(S.taskId('12345678901234567890', { day: '2026-10-14', title: 'x' }), /^[\w-]{1,40}$/, 'fits lib/todo.js task ids');
 });
 
+// ACA-3: a date row has an id of its own, so editing its day or title is the same row and the same To Do task.
+test('a date row\'s task id is its own, not its day and title', () => {
+  const row = { id: 'k3j9a', title: 'Midterm exam', day: '2026-10-12', kind: 'exam' };
+  assert.equal(S.taskId('42', row), 'syl-42-k3j9a');
+  assert.equal(S.taskId('42', { ...row, day: '2026-10-14' }), S.taskId('42', row), 'a new day is the same task');
+  assert.equal(S.taskId('42', { ...row, title: 'Midterm 1' }), S.taskId('42', row), 'a new title is the same task');
+  assert.notEqual(S.taskId('42', { ...row, id: 'p0' }), S.taskId('42', row), 'another row is another task');
+  assert.match(S.taskId('12345678901234567890', { ...row, id: 'abcdefghij' }), /^[\w-]{1,40}$/, 'the longest fits lib/todo.js task ids');
+});
+
+test('ids: a row keeps a good id, is told apart from its twin, matches the same row in the record, else gets the id its day and title always made', () => {
+  const quiz = { title: 'Quiz', day: '2026-10-05', kind: 'due' };
+  const [a, b] = S.ids([quiz, { ...quiz, day: '2026-10-12' }]);
+  assert.match(a.id, /^[a-z\d]{1,10}$/);
+  assert.notEqual(a.id, b.id);
+  assert.equal(S.taskId('7', a), S.taskId('7', quiz), 'a record from before ids keeps the task it made');
+  assert.deepEqual(S.ids([a, b]), [a, b], 'ids it has are kept');
+  const [x, y] = S.ids([quiz, quiz]);
+  assert.notEqual(x.id, y.id, 'two rows alike still have two ids');
+  assert.equal(x.id, a.id, 'the first of them is the one every earlier version made');
+  const [p, q] = S.ids([{ ...quiz, id: 'q1' }, { ...quiz, day: '2026-10-12', id: 'q1' }]);
+  assert.deepEqual([p.id, q.id === 'q1'], ['q1', false], 'an id another row has is not kept twice');
+  assert.notEqual(S.ids([{ ...quiz, id: 'Not Valid!' }])[0].id, 'Not Valid!');
+  // A review of a fresh read, against what is kept: the same day and title is the same row; another day is another row.
+  const was = [{ ...quiz, id: 'zz9' }];
+  assert.equal(S.ids([quiz], was)[0].id, 'zz9');
+  assert.notEqual(S.ids([{ ...quiz, day: '2026-10-19' }], was)[0].id, 'zz9');
+  assert.equal(S.ids([{ ...quiz, id: 'mine' }], was)[0].id, 'mine', 'an id the row already has wins');
+  assert.deepEqual(S.ids([], was), []);
+});
+
+test('syllabus task ids for the longest accepted Ultra course still fit the To Do contract', () => {
+  const T = require('../lib/todo.js');
+  const cid = '_12345678901234567890_12345678901234567890';
+  const row = { id: 'abcdefghij', title: 'Exam', day: '2026-11-20' };
+  const id = S.taskId(cid, row), data = T.clean({});
+  assert.match(id, /^[\w-]{1,40}$/);
+  T.edit(data, ['importTask', { id, title: row.title, due: { day: row.day }, cid }]);
+  assert.equal(data.tasks.length, 1);
+  assert.equal(S.taskId(cid, { ...row, title: 'Edited', day: '2026-11-21' }), id);
+});
+
+test('tidy keeps a date\'s id, once, and makes none up', () => {
+  const dates = [{ title: 'A', day: '2026-11-20', id: 'a1' }, { title: 'B', day: '2026-11-21', id: 'a1' }, { title: 'C', day: '2026-11-22', id: 'bad id' }, { title: 'D', day: '2026-11-23' }];
+  assert.deepEqual(S.tidy({ prof: { name: 'x' }, dates }).dates, [
+    { title: 'A', day: '2026-11-20', kind: 'other', id: 'a1' }, { title: 'B', day: '2026-11-21', kind: 'other' },
+    { title: 'C', day: '2026-11-22', kind: 'other' }, { title: 'D', day: '2026-11-23', kind: 'other' }]);
+  const rec = S.tidy({ prof: { name: 'x' }, dates: [{ title: 'A', day: '2026-11-20', id: 'a1' }] });
+  assert.deepEqual(S.tidy(rec), rec, 'idempotent');
+});
+
+// What a save does to To Do (taskEdits): was is the record before, now the one being saved, picked the ids ticked "Add to To Do".
+const edits = (o) => S.taskEdits({ cid: '42', note: 'From your syllabus', at: 5, picked: new Set(), tasks: [], ...o });
+const row = (id, title, day) => ({ id, title, day, kind: 'exam' });
+const have = (id, more = {}) => ({ id: `syl-42-${id}`, title: 'x', cid: '42', due: { day: '2026-10-12' }, done: 0, ...more });
+const imp = (id, title, day) => ['importTask', { id: `syl-42-${id}`, title, cid: '42', due: { day }, notes: 'From your syllabus', done: 0, at: 5 }];
+
+test('a ticked date is added, or brought up to date where its task is already', () => {
+  const r = row('a', 'Midterm exam', '2026-10-12');
+  assert.deepEqual(edits({ now: [r], picked: new Set(['a']) }), [imp('a', 'Midterm exam', '2026-10-12')]);
+  assert.deepEqual(edits({ was: [r], now: [r], picked: new Set(['a']), tasks: [have('a')] }), [imp('a', 'Midterm exam', '2026-10-12')], 'ticked again: the same task');
+  assert.deepEqual(edits({ now: [r] }), [], 'not ticked: nothing');
+});
+
+test('a date edited in the record moves its task with it, ticked or not, and only if there is one', () => {
+  const was = [row('a', 'Midterm exam', '2026-10-12'), row('b', 'Final', '2026-12-14')];
+  const now = [row('a', 'Midterm exam', '2026-10-14'), row('b', 'Final', '2026-12-14')];
+  assert.deepEqual(edits({ was, now, tasks: [have('a'), have('b')] }), [imp('a', 'Midterm exam', '2026-10-14')], 'the one that changed, in place');
+  assert.deepEqual(edits({ was, now: [row('a', 'Midterm exam 1', '2026-10-12'), was[1]], tasks: [have('a')] }), [imp('a', 'Midterm exam 1', '2026-10-12')], 'a new title too');
+  assert.deepEqual(edits({ was, now, tasks: [have('b')] }), [], 'no task for it: none made without a tick');
+  assert.deepEqual(edits({ was, now, picked: new Set(['a']), tasks: [] }), [imp('a', 'Midterm exam', '2026-10-14')], 'a tick adds it');
+  assert.deepEqual(edits({ was, now: was, tasks: [have('a', { due: { day: '2026-10-20' } })] }), [], 'a task the student moved stays where they put it while the date is as it was');
+});
+
+test('a date taken out of the record takes its task, unless the student has done it', () => {
+  const was = [row('a', 'Midterm exam', '2026-10-12'), row('b', 'Final', '2026-12-14'), row('c', 'Paper', '2026-11-20')];
+  assert.deepEqual(edits({ was, now: [was[2]], tasks: [have('a'), have('b', { done: 7000 }), have('c')] }), [['dropTask', 'syl-42-a']], 'a done one stays, and so does a kept date\'s');
+  assert.deepEqual(edits({ was, now: [], tasks: [] }), [], 'no task there: nothing to drop');
+  assert.deepEqual(edits({ was: undefined, now: [], tasks: [have('a')] }), [], 'no record before: nothing known to be gone');
+});
+
+test('a record from before ids: its dates have the ids their tasks were made with', () => {
+  const old = [{ title: 'Midterm exam', day: '2026-10-12', kind: 'exam' }, { title: 'Final', day: '2026-12-14', kind: 'exam' }];
+  const made = old.map((d) => S.taskId('42', d)); // as the earlier version made them
+  const [first, second] = S.ids(old);
+  assert.deepEqual([S.taskId('42', first), S.taskId('42', second)], made);
+  // Editing the first one's day in the dialog (it keeps its id), and dropping the second:
+  const out = S.taskEdits({ cid: '42', note: 'n', at: 5, picked: new Set(), was: old, now: [{ ...first, day: '2026-10-14' }],
+    tasks: made.map((id) => ({ id, title: 'x', cid: '42', due: { day: '2026-10-12' }, done: 0 })) });
+  assert.deepEqual(out, [['importTask', { id: made[0], title: 'Midterm exam', cid: '42', due: { day: '2026-10-14' }, notes: 'n', done: 0, at: 5 }], ['dropTask', made[1]]]);
+});
+
+// The audit's scenario (r9), through the caller's path: the professor moves the midterm, the student edits it and saves again.
+test('moving a saved date and saving again leaves one task, not two (ACA-3)', async () => {
+  const T = require('../lib/todo.js');
+  const store = {};
+  const area = { local: { get: async (ks) => Object.fromEntries(ks.map((k) => [k, store[k]])), set: async (o) => { Object.assign(store, o); return true; } } };
+  const key = 'todo:https://x.instructure.com/7';
+  const save = (was, now, picked) => T.change({ key, edits: S.taskEdits({ cid: '42', note: 'From your syllabus', at: 1, was, now, picked: new Set(picked), tasks: store[key]?.tasks }) }, area);
+  const v1 = S.ids([{ title: 'Midterm exam', day: '2026-10-12', kind: 'exam' }]);
+  await save(undefined, v1, [v1[0].id]);
+  assert.deepEqual(store[key].tasks.map((x) => [x.title, x.due]), [['Midterm exam', { day: '2026-10-12' }]]);
+  await T.change({ key, edits: [['addStep', `task:${S.taskId('42', v1[0])}`, { id: 's1', title: 'Review' }]] }, area);
+  const v2 = [{ ...v1[0], day: '2026-10-14' }];
+  await save(v1, v2, [v2[0].id]);
+  assert.deepEqual(store[key].tasks.map((x) => [x.title, x.due]), [['Midterm exam', { day: '2026-10-14' }]], 'one task, on the new day');
+  assert.equal(store[key].items[`task:${S.taskId('42', v1[0])}`].subs[0].title, 'Review', 'with its steps');
+  // The student edits the title and the day, without ticking anything: it still moves.
+  const v3 = [{ ...v2[0], title: 'Midterm 1', day: '2026-10-16' }];
+  await save(v2, v3, []);
+  assert.deepEqual(store[key].tasks.map((x) => [x.title, x.due]), [['Midterm 1', { day: '2026-10-16' }]]);
+  // And the row removed: the task goes.
+  await save(v3, [], []);
+  assert.deepEqual(store[key].tasks, []);
+});
+
 test('a scale keeps its ranges; overlaps, gaps and letters out of order make it a guess, never sure', () => {
   const sc = (text) => S.extract(`Grading scale\n${text}`).scale;
   const fine = sc('A 90-100\nB 80-89.99\nC 70-79.99\nF below 70');
@@ -372,6 +488,35 @@ test('a weight block that does not add up to 100 is shown whole, marked to check
   assert.deepEqual(S.extract('Grading\nHomework 40%\nExams 60%').weights.issues, []);
 });
 
+// ACA-7: a course with no term dates has no start to place a year-less date by; today stands in for it.
+test('with no term start known, a year-less date takes the year nearest today, and a past one is not a sure one', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 });
+  const on = (y, m, d) => t.mock.timers.setTime(Date.UTC(y, m - 1, d, 12));
+  const rows = (text, opts) => S.extract(text, opts).dates.map((x) => [x.title, x.day, x.conf]);
+  on(2026, 10, 21);
+  assert.deepEqual(rows('Exam 1: September 1\nExam 2: October 23\nFinal exam: December 16'), [
+    ['Exam 1', '2026-09-01', 'check'], ['Exam 2', '2026-10-23', 'sure'], ['Final exam', '2026-12-16', 'sure']], 'September stays in 2026: not a year late as a sure one');
+  assert.deepEqual(rows('Quiz: September 20\nExam: August 5\nMidterm: January 12\nExam: May 5'), [
+    ['Quiz', '2026-09-20', 'sure'], ['Exam', '2026-08-05', 'check'], ['Midterm', '2027-01-12', 'sure'], ['Exam', '2026-05-05', 'check']], 'within 45 days back: as before; further back: this year\'s, to check; next January: next year');
+  assert.deepEqual(rows('Exam: September 1, 2026\nFinal: Jan 12, 2027\nQuiz 9/1/2026', { md: true }), [['Exam', '2026-09-01', 'sure'], ['Final', '2027-01-12', 'sure'], ['Quiz', '2026-09-01', 'check']], 'a year written is the year');
+  assert.deepEqual(rows('Quiz 9/1', { md: true }), [['Quiz', '2026-09-01', 'check']]);
+  assert.deepEqual(rows('Final exam: December 15-17'), [['Final exam', '2026-12-15', 'check']], 'a range is still a guess');
+  assert.deepEqual(S.extract('Exam 1: September 1', {}).dates.map((x) => x.day), ['2026-09-01'], 'an options object with no start is the same as none');
+  assert.deepEqual(S.extract('Exam 1: September 1', { start: undefined }).dates.map((x) => x.day), ['2026-09-01']);
+  assert.deepEqual(S.extract('Exam 1: September 1', { start: NaN }).dates.map((x) => x.day), ['2026-09-01']);
+  // Just after New Year, last month's date is last year's; next month's is this year's.
+  on(2027, 1, 5);
+  assert.deepEqual(rows('Exam: December 10\nExam: January 20\nExam: March 3\nExam: November 2'), [
+    ['Exam', '2026-12-10', 'sure'], ['Exam', '2027-01-20', 'sure'], ['Exam', '2027-03-03', 'sure'], ['Exam', '2026-11-02', 'check']]);
+  // Late in a year, January is next year's.
+  on(2026, 12, 20);
+  assert.deepEqual(rows('Exam: December 1\nExam: January 12\nExam: November 2'), [['Exam', '2026-12-01', 'sure'], ['Exam', '2027-01-12', 'sure'], ['Exam', '2026-11-02', 'check']]);
+  assert.deepEqual(rows('Exam: February 30'), [], 'no such day in any year');
+  // A term start that is known keeps the rule that serves a term across New Year.
+  assert.deepEqual(rows('Exam 1: Dec 10\nExam 2: Jan 21', { start: FALL }), [['Exam 1', '2026-12-10', 'sure'], ['Exam 2', '2027-01-21', 'sure']]);
+  assert.deepEqual(rows('Exam 1: Jan 20\nExam 2: Mar 3', { start: SPRING }), [['Exam 1', '2027-01-20', 'sure'], ['Exam 2', '2027-03-03', 'sure']]);
+});
+
 test('date ranges and numeric dates that read either way are guesses', () => {
   const d = (text, md) => S.extract(text, { start: FALL, md }).dates.map((x) => [x.title, x.day, x.end, x.conf]);
   assert.deepEqual(d('Final exam: December 15-17'), [['Final exam', '2026-12-15', '2026-12-17', 'check']]);
@@ -395,20 +540,28 @@ test('a damaged stored date is dropped, not thrown on', () => {
   assert.deepEqual(S.tidy({ prof: { name: 'x' }, dates: [{ title: 'Bad', day: '2026-99-99' }, { title: 'Good', day: '2026-11-20' }] }).dates, [{ title: 'Good', day: '2026-11-20', kind: 'other' }]);
 });
 
-test('a date saved again to Better To Do keeps whether it was done, and its steps', () => {
+// ACA-3: this used to send importTask a second time with the same id and a new day and title, which the caller could never
+// do (its ids were made from the day and title). A saved row keeps its id now, so the edits come from the caller's own path.
+test('a date edited and saved again to Better To Do keeps whether it was done, and its steps', () => {
   const T = require('../lib/todo.js');
-  const task = { id: 'syl-25-abc', title: 'Midterm exam', cid: '25', due: { day: '2026-11-04' }, notes: 'From your syllabus', at: 1 };
+  const [r] = S.ids([{ title: 'Midterm exam', day: '2026-11-04', kind: 'exam' }]);
+  const id = S.taskId('25', r);
+  const send = (d, o) => { for (const e of S.taskEdits({ cid: '25', note: 'From your syllabus', at: 1, picked: new Set(), ...o })) T.edit(d, e); };
   const d = T.clean({});
-  T.edit(d, ['importTask', task]);
-  T.edit(d, ['taskDone', 'syl-25-abc', 5000]);
-  T.edit(d, ['addStep', 'task:syl-25-abc', { id: 's1', title: 'Review chapter 3' }]);
-  T.edit(d, ['importTask', { ...task, title: 'Midterm exam 1', due: { day: '2026-11-05' } }]);
+  send(d, { now: [r], picked: new Set([r.id]), tasks: [] });
+  T.edit(d, ['taskDone', id, 5000]);
+  T.edit(d, ['addStep', `task:${id}`, { id: 's1', title: 'Review chapter 3' }]);
+  const moved = { ...r, title: 'Midterm exam 1', day: '2026-11-05' };
+  send(d, { was: [r], now: [moved], picked: new Set([r.id]), tasks: d.tasks });
   const out = T.clean(d);
-  assert.equal(out.tasks.length, 1);
+  assert.equal(out.tasks.length, 1, 'one task, not one for each version of the row');
   assert.equal(out.tasks[0].done, 5000, 'still done');
   assert.equal(out.tasks[0].title, 'Midterm exam 1');
   assert.deepEqual(out.tasks[0].due, { day: '2026-11-05' });
-  assert.equal(out.items['task:syl-25-abc'].subs[0].title, 'Review chapter 3');
-  T.edit(d, ['importTask', { ...task, id: 'syl-25-new', done: 9 }]);
-  assert.equal(T.clean(d).tasks.find((x) => x.id === 'syl-25-new').done, 0, 'a new one starts not done');
+  assert.equal(out.items[`task:${id}`].subs[0].title, 'Review chapter 3');
+  const fresh = { ...r, id: 'brandnew', title: 'Paper' };
+  send(d, { was: [moved], now: [moved, fresh], picked: new Set(['brandnew']), tasks: d.tasks });
+  T.edit(d, ['importTask', { id: 'syl-25-new', title: 'x', cid: '25', due: { day: '2026-11-06' }, done: 9 }]);
+  assert.equal(T.clean(d).tasks.find((x) => x.id === 'syl-25-brandnew').done, 0, 'a new one starts not done');
+  assert.equal(T.clean(d).tasks.find((x) => x.id === 'syl-25-new').done, 0, 'whatever the caller says');
 });

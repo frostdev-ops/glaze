@@ -115,7 +115,10 @@ const movingAvif = (w, h, n) => Uint8Array.from([...ftyp('avis', 'avif'), ...met
 test('AVIF: the real animated file is read, and the walker follows boxes to their ends', () => {
   const real = M.check(fx('anim.avif'), 'bg');
   assert.deepEqual([real.type, real.mime, real.w, real.h, real.frames, real.animated], ['image', 'image/avif', 48, 48, 3, true]);
-  eq(real.bytes, fx('anim.avif'));
+  // Kept without the names an encoder left in its boxes (test/media-metadata.test.js), and the same length: nothing moved.
+  assert.equal(real.bytes.length, fx('anim.avif').length);
+  assert.doesNotMatch(Buffer.from(real.bytes).toString('latin1'), /PictureHandler|Lavc/);
+  eq(M.check(real.bytes, 'bg').bytes, real.bytes);
   const still = M.avif(stillAvif(64, 32), M.LIMIT.bg.image);
   assert.deepEqual([still.w, still.h, still.frames, still.animated], [64, 32, 1, false]);
   const moving = M.avif(movingAvif(64, 32, 12), M.LIMIT.bg.image);
@@ -146,11 +149,15 @@ test('AVIF that is not whole, not a picture or over a limit is refused', () => {
 });
 
 // ---- video --------------------------------------------------------------------------------------------------------------
-test('WebM and MP4: real files are known by their first bytes and boxes, and kept as they came', () => {
+test('WebM and MP4: real files are known by their first bytes and boxes, and kept without the names an encoder left', () => {
   for (const [f, mime] of [['clip.webm', 'video/webm'], ['clip.mp4', 'video/mp4']]) {
     const got = M.check(fx(f), 'bg');
     assert.deepEqual([got.type, got.mime], ['video', mime], f);
-    eq(got.bytes, fx(f));
+    assert.equal(got.bytes.length, fx(f).length, `${f}: the same length`);
+    assert.doesNotMatch(Buffer.from(got.bytes).toString('latin1'), /Lavf|VideoHandler/, f);
+    eq(M.check(got.bytes, 'bg').bytes, got.bytes); // cleaning twice changes nothing
+    // The reader itself judges the file as it came.
+    eq(M.video(fx(f)).bytes, fx(f));
   }
   assert.equal(M.check(fx('clip.webm'), 'sticker'), null, 'a sticker is never a video');
 });
@@ -275,43 +282,51 @@ test('Lottie from bytes: UTF-8 text that is JSON, with a byte-order mark and whi
 });
 
 // ---- the files this computer keeps --------------------------------------------------------------------------------------
-const area = (data = {}) => ({
-  data,
-  get: async (keys) => Object.fromEntries((keys === null ? Object.keys(data) : [].concat(keys)).filter((k) => k in data).map((k) => [k, structuredClone(data[k])])),
-  set: async (patch) => { Object.assign(data, structuredClone(patch)); return true; },
-  remove: async (keys) => { for (const k of [].concat(keys)) delete data[k]; return true; },
+// storage.local (data: the index) and the worker's files store (files: its records, by hash), as lib/background.js gives them.
+const area = (data = {}, records = new Map()) => ({
+  data, records,
+  local: {
+    get: async (keys) => Object.fromEntries([].concat(keys).filter((k) => k in data).map((k) => [k, structuredClone(data[k])])),
+    set: async (patch) => { Object.assign(data, structuredClone(patch)); return true; },
+    remove: async (keys) => { for (const k of [].concat(keys)) delete data[k]; return true; },
+  },
+  files: {
+    get: async (h) => structuredClone(records.get(h)), put: async (h, v) => { records.set(h, structuredClone(v)); },
+    del: async (hs) => { for (const h of hs) records.delete(h); }, keys: async () => [...records.keys()],
+  },
 });
 const b64 = (bytes) => M.std(bytes);
 
 test('put keeps the cleaned file under its own SHA-256, list shows it and drop takes it away', async () => {
   const local = area();
-  const r = await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, { local });
+  const r = await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, local);
   assert.equal(r.ok, true);
   assert.deepEqual([r.type, r.mime, r.size, r.width, r.height, r.frames], ['image', 'image/webp', 210, 48, 48, 3]);
   assert.equal(r.h, M.b64u(require('node:crypto').createHash('sha256').update(fx('anim.webp')).digest()));
-  assert.deepEqual(Object.keys(local.data), [`lookMedia:${r.h}`]);
+  assert.deepEqual([...local.records.keys()], [r.h]);
+  assert.deepEqual(Object.keys(local.data[M.INDEX]), [r.h]);
   assert.equal(M.fileOf(`file:${r.h}`), r.h);
   assert.equal((await M.read(local, r.h)).mime, 'image/webp');
-  assert.deepEqual((await M.change({ op: 'list' }, { local })).files, [{ h: r.h, t: 'image/webp', size: 210 }]);
+  assert.deepEqual((await M.change({ op: 'list' }, local)).files, [{ h: r.h, t: 'image/webp', size: 210 }]);
   // The same file again is the same entry.
-  assert.equal((await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, { local })).h, r.h);
-  assert.equal(Object.keys(local.data).length, 1);
-  assert.deepEqual(await M.change({ op: 'drop', h: r.h }, { local }), { ok: true });
-  assert.deepEqual(local.data, {});
+  assert.equal((await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, local)).h, r.h);
+  assert.equal(local.records.size, 1);
+  assert.deepEqual(await M.change({ op: 'drop', h: r.h }, local), { ok: true });
+  assert.deepEqual([local.data, local.records.size], [{}, 0]);
   assert.equal(await M.read(local, r.h), null);
 });
 
 test('put names a file by what Glaze keeps: a WebP with metadata is stored without it', async () => {
   const local = area();
   const dirty = riff(vp8x(0x08, 16, 16), vp8l(16, 16), chunk('EXIF', [1, 2, 3]));
-  const r = await M.change({ op: 'put', kind: 'image', b64: b64(dirty) }, { local });
+  const r = await M.change({ op: 'put', kind: 'image', b64: b64(dirty) }, local);
   assert.equal(r.size, riff(vp8x(0, 16, 16), vp8l(16, 16)).length);
-  assert.equal(M.unstd(local.data[`lookMedia:${r.h}`].b).length, r.size);
+  assert.equal(M.unstd(local.records.get(r.h).b).length, r.size);
 });
 
 test('put refuses what is not what it says, too big, a wrong kind, or no room', async () => {
   const local = area();
-  const put = (m) => M.change({ op: 'put', ...m }, { local });
+  const put = (m) => M.change({ op: 'put', ...m }, local);
   assert.equal((await put({ kind: 'video', b64: b64(fx('anim.webp')) })).error, 'type', 'a picture sent as a video');
   assert.equal((await put({ kind: 'image', b64: b64(fx('clip.webm')) })).error, 'type', 'a video sent as a picture');
   assert.equal((await put({ kind: 'lottie', b64: b64(fx('still.webp')) })).error, 'type');
@@ -323,35 +338,38 @@ test('put refuses what is not what it says, too big, a wrong kind, or no room', 
   assert.equal((await put({ kind: 'image', b64: 'A'.repeat(Math.ceil(M.LIMIT.bg.image.bytes * 4 / 3) + 100) })).error, 'big');
   assert.equal((await put({ kind: 'lottie', b64: 'A'.repeat(Math.ceil(M.LIMIT.bg.lottie * 4 / 3) + 100) })).error, 'big');
   assert.equal((await put({ kind: 'video', b64: 'A'.repeat(Math.ceil(M.LIMIT.bg.video * 4 / 3) + 100) })).error, 'big');
-  assert.equal((await M.change({ op: 'nope' }, { local })).error, 'bad');
-  assert.equal((await M.change({ op: 'drop', h: 'short' }, { local })).error, 'bad');
-  assert.deepEqual(local.data, {}, 'nothing was kept');
+  assert.equal((await M.change({ op: 'nope' }, local)).error, 'bad');
+  assert.equal((await M.change({ op: 'drop', h: 'short' }, local)).error, 'bad');
+  assert.deepEqual([local.data, local.records.size], [{}, 0], 'nothing was kept');
   // expect: bytes that are not the file a Look names are not kept.
   assert.equal((await put({ kind: 'image', b64: b64(fx('anim.webp')), expect: 'A'.repeat(43) })).error, 'hash');
-  assert.deepEqual(local.data, {});
+  assert.deepEqual([local.data, local.records.size], [{}, 0]);
   const r = await put({ kind: 'image', b64: b64(fx('anim.webp')) });
   assert.equal((await put({ kind: 'image', b64: b64(fx('anim.webp')), expect: r.h })).ok, true);
   // No room: the total of what is kept, less the file being replaced.
-  const full = area({ 'lookMedia:other': { t: 'video/webm', b: 'A'.repeat(Math.ceil(M.LIMIT.total * 4 / 3) - 100) } });
-  assert.equal((await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, { local: full })).error, 'full');
-  full.data[`lookMedia:${r.h}`] = { t: 'image/webp', b: b64(fx('anim.webp')) };
-  assert.equal((await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, { local: full })).ok, true, 'replacing a file needs no more room');
-  const failing = { ...area(), set: async () => false };
-  assert.equal((await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, { local: failing })).error, 'write');
+  const full = area({ [M.INDEX]: { ['B'.repeat(43)]: { t: 'video/webm', n: M.LIMIT.total - 100, at: 1 } } }, new Map([['B'.repeat(43), { t: 'video/webm', b: 'AAAA' }]]));
+  assert.equal((await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, full)).error, 'full');
+  full.data[M.INDEX][r.h] = { t: 'image/webp', n: 210, at: 1 };
+  full.records.set(r.h, { t: 'image/webp', b: b64(fx('anim.webp')) });
+  assert.equal((await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, full)).ok, true, 'replacing a file needs no more room');
+  const failing = area();
+  failing.local.set = async () => false;
+  assert.equal((await M.change({ op: 'put', kind: 'image', b64: b64(fx('anim.webp')) }, failing)).error, 'write');
+  assert.equal(failing.records.size, 0, 'a file whose index could not be written is not left behind');
 });
 
-test('a kept file is checked again when it is read: by its name, its type and its contents', async () => {
+test('a kept file is checked again when the worker reads it: by its name, its type and its contents', async () => {
   const local = area();
-  const r = await M.change({ op: 'put', kind: 'video', b64: b64(fx('clip.webm')) }, { local });
-  const key = `lookMedia:${r.h}`, rec = local.data[key];
+  const r = await M.change({ op: 'put', kind: 'video', b64: b64(fx('clip.webm')) }, local);
+  const rec = local.records.get(r.h);
   assert.ok(await M.read(local, r.h));
-  local.data[key] = { ...rec, t: 'video/mp4' };
+  local.records.set(r.h, { ...rec, t: 'video/mp4' });
   assert.equal(await M.read(local, r.h), null, 'its type is not what it holds');
-  local.data[key] = { ...rec, b: M.std(fx('clip.mp4')) };
+  local.records.set(r.h, { ...rec, b: M.std(fx('clip.mp4')) });
   assert.equal(await M.read(local, r.h), null, 'another file under this name');
-  local.data[key] = { ...rec, b: '!!' };
+  local.records.set(r.h, { ...rec, b: '!!' });
   assert.equal(await M.read(local, r.h), null);
-  local.data[key] = 'text';
+  local.records.set(r.h, 'text');
   assert.equal(await M.read(local, r.h), null);
   assert.equal(await M.read(local, 'nope'), null);
   assert.equal(await M.read(local, 'A'.repeat(43)), null, 'not there');
@@ -362,13 +380,13 @@ test('a kept file is checked again when it is read: by its name, its type and it
 
 test('lottie: a kept file answers with its cleaned JSON; an address only when allowed, with no redirect, within a size, as Lottie', async () => {
   const local = area();
-  const put = await M.change({ op: 'put', kind: 'lottie', b64: b64(fx('spin.json')) }, { local });
-  const got = await M.change({ op: 'lottie', src: `file:${put.h}` }, { local });
+  const put = await M.change({ op: 'put', kind: 'lottie', b64: b64(fx('spin.json')) }, local);
+  const got = await M.change({ op: 'lottie', src: `file:${put.h}` }, local);
   assert.equal(got.ok, true);
   assert.equal(got.json.w, 200);
-  assert.equal((await M.change({ op: 'lottie', src: `file:${'A'.repeat(43)}` }, { local })).error, 'missing');
-  const video = await M.change({ op: 'put', kind: 'video', b64: b64(fx('clip.webm')) }, { local });
-  assert.equal((await M.change({ op: 'lottie', src: `file:${video.h}` }, { local })).error, 'missing', 'a video is not an animation');
+  assert.equal((await M.change({ op: 'lottie', src: `file:${'A'.repeat(43)}` }, local)).error, 'missing');
+  const video = await M.change({ op: 'put', kind: 'video', b64: b64(fx('clip.webm')) }, local);
+  assert.equal((await M.change({ op: 'lottie', src: `file:${video.h}` }, local)).error, 'missing', 'a video is not an animation');
 
   const url = 'https://cdn.example.com/anim.json';
   const calls = [];
@@ -376,7 +394,7 @@ test('lottie: a kept file answers with its cleaned JSON; an address only when al
     const bytes = new TextEncoder().encode(body);
     return { ok: init.ok ?? true, status: init.status ?? 200, type: init.type ?? 'basic', headers: new Headers(init.headers), body: new Response(bytes).body };
   };
-  const run = (src, reply, allow = async () => true) => M.change({ op: 'lottie', src }, { local }, { allow, fetch: async (u, i) => { calls.push([u, i]); if (reply instanceof Error) throw reply; return reply; } });
+  const run = (src, reply, allow = async () => true) => M.change({ op: 'lottie', src }, local, { allow, fetch: async (u, i) => { calls.push([u, i]); if (reply instanceof Error) throw reply; return reply; } });
   const fine = await run(url, response(text('spin.json')));
   assert.equal(fine.ok, true);
   assert.deepEqual(calls[0][0], url);
@@ -396,7 +414,7 @@ test('lottie: a kept file answers with its cleaned JSON; an address only when al
   assert.equal((await run(url, response('{"not":"lottie"}'))).error, 'type');
   assert.equal((await run(url, response('<html>'))).error, 'type');
   assert.equal((await run(url, response(JSON.stringify({ ...good(), layers: [layer({ ty: 5 })] })))).error, 'type', 'a text layer');
-  assert.equal((await M.change({ op: 'lottie', src: url }, { local }, { allow: async () => true })).error, 'bad', 'no fetch given');
+  assert.equal((await M.change({ op: 'lottie', src: url }, local, { allow: async () => true })).error, 'bad', 'no fetch given');
 });
 
 test('check refuses what is not a media file, and the limits for a sticker are tighter than for a background', () => {
@@ -461,14 +479,14 @@ test('Lottie bounds multiplied repeaters, animated endpoints, stars and parent c
 
 test('put returns a refusal for base64 with an impossible length', async () => {
   const local = area();
-  assert.equal((await M.change({ op: 'put', kind: 'image', b64: 'A' }, { local })).ok, false);
+  assert.equal((await M.change({ op: 'put', kind: 'image', b64: 'A' }, local)).ok, false);
   assert.deepEqual(local.data, {});
 });
 
 test('a kept Lottie cannot bypass cleaning by naming unclean bytes with their own hash', async () => {
   const bytes = new TextEncoder().encode(JSON.stringify({ ...good(), fonts: { list: [{ fPath: 'https://evil.example/f.woff', fOrigin: 'u' }] } }));
-  const h = await M.sha(bytes), local = area({ [`lookMedia:${h}`]: { t: 'application/json', b: b64(bytes) } });
-  const r = await M.change({ op: 'lottie', src: `file:${h}` }, { local });
+  const h = await M.sha(bytes), local = area({}, new Map([[h, { t: 'application/json', b: b64(bytes) }]]));
+  const r = await M.change({ op: 'lottie', src: `file:${h}` }, local);
   assert.equal(r.json?.fonts, undefined);
   if (r.ok) assert.equal(await M.sha(new TextEncoder().encode(JSON.stringify(r.json))), h);
 });

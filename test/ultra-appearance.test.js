@@ -25,7 +25,8 @@ test('ordinary Ultra mutation flushes refresh late cards and replacement navigat
     createElement: (t) => new El(t), createElementNS: (_, t) => new El(t), createTextNode: () => new El('#text'),
     createTreeWalker: () => ({ nextNode: () => null }), createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({}) }),
     addEventListener() {}, removeEventListener() {}, fonts: { load: () => Promise.resolve([]), add() {} } };
-  const area = () => ({ get: (k, cb) => (cb ? cb({}) : Promise.resolve({})), set: (o, cb) => { cb?.(); return Promise.resolve(); }, remove: (k, cb) => { cb?.(); return Promise.resolve(); } });
+  // school.test: an Ultra site the student said yes to (lib/background.js approved).
+  const area = () => ({ get: (k, cb) => (cb ? cb({ ultra: ['https://school.test'] }) : Promise.resolve({})), set: (o, cb) => { cb?.(); return Promise.resolve(); }, remove: (k, cb) => { cb?.(); return Promise.resolve(); } });
   const location = { protocol: 'https:', origin: 'https://school.test', pathname: '/ultra/stream', href: 'https://school.test/ultra/stream', search: '', hash: '' };
   let paints = 0, navs = 0, loads = [];
   const c = vm.createContext({ document, console, Intl, URL, URLSearchParams, TextEncoder, structuredClone, crypto: require('node:crypto').webcrypto, location,

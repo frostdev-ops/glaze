@@ -332,19 +332,18 @@ test('fresh Dashboard auto-fill commits through the worker on each site, with si
 });
 
 
-test('a first Ultra assessment waits for its pending site registration before migrating the fresh dock', async () => {
+// WP-C2: a page's own report no longer registers its site ('glaze:ultra' is gone); the student's yes does, before Glaze
+// starts on the site's pages (content.js waits for it), so a first page never races its registration.
+test('a first Ultra assessment migrates the fresh dock once the student approved its site, and not before', async () => {
   const w = worker({ local: { ultra: [] } });
   w.installed[0]({ reason: 'install' }); await settle();
   const sender = at(`${ULTRA}/ultra/courses/_1_1/outline/assessment/_2_1/overview`);
-  w.slow.ultra = true;
+  assert.deepEqual(await w.send(sb(uKey(), [{ op: 'migrate' }]), sender), { ok: false, error: 'sender' }, 'a site never approved');
   await w.send({ type: 'glaze:ultra' }, sender); await settle();
-  assert.equal(w.registrations.length, 1);
-  let ended = false;
-  const pending = w.send(sb(uKey(), [{ op: 'migrate' }]), sender).then((r) => { ended = true; return r; });
-  await settle();
-  assert.equal(ended, false, 'migration waits for the validated Ultra report, rather than returning an empty dock');
-  w.slow.ultra = false; w.registrations.shift()();
-  const r = await pending;
+  assert.deepEqual(w.store.local.ultra, [], 'reporting itself approves nothing');
+  assert.deepEqual(await w.send({ type: 'glaze:consent', op: 'yes', kind: 'ultra' }, sender), { ok: true });
+  assert.deepEqual(w.store.local.ultra, [ULTRA]);
+  const r = await w.send(sb(uKey(), [{ op: 'migrate' }]), sender);
   assert.equal(r.ok, true);
   assert.deepEqual(S.docked(r.rec).map((x) => x.id), ['todo', 'settings']);
 });
@@ -442,7 +441,9 @@ test('removing fresh defaults is respected on another device, including sync arr
   for (const fn of second.changed) fn(changes, 'sync');
   await settle();
   assert.equal(second.store.local[cKey()].dest.settings, 'off');
-  assert.ok(!second.store.local.widgetLayout.boards.cdash.some((x) => x.on));
+  // The flags remove the starters the other device removed. They never removed this device's own course cards: the other
+  // device's emptied Dashboard says nothing about a school it may not even use (WP-C3, CORE-5).
+  assert.deepEqual(second.store.local.widgetLayout.boards.cdash.filter((x) => x.on).map((x) => x.id), [`course:${CANVAS}/1`]);
   assert.ok(second.store.local.widgetLayout.filled.includes('cdash'));
 });
 

@@ -272,6 +272,12 @@ test("a mod's items are checked: name, icon, address, badge, place; one owner ca
   for (let i = 0; i < 8; i++) ui.add('many', { id: `i${i}`, label: `Item ${i}` });
   assert.equal(ui.add('many', { id: 'i8', label: 'Ninth' }), false, 'at most eight a mod');
   assert.equal(ui.remove('countdown', 'next'), true);
+  // Nothing a mod adds passes for Glaze's own items (NAV-8): not their icons, nor their names, however spelled.
+  for (const bad of [{ id: 'a', label: 'Glaze settings', icon: 'glaze' }, { id: 'a', label: 'Glaze settings' }, { id: 'a', label: ' SIGN  out ' }, { id: 'a', label: 'Abmelden' }, { id: 'a', label: 'Log-out' },
+    { id: 'a', label: 'Due', icon: 'glaze' }, { id: 'a', label: 'Due', icon: 'signout' }]) assert.equal(ui.add('countdown', bad), false, JSON.stringify(bad));
+  assert.equal(ui.add('countdown', { id: 'next', label: 'Next due', icon: 'gear' }), true);
+  assert.equal(ui.update('countdown', 'next', { label: 'Glaze  Settings' }), false);
+  assert.equal(ui.update('countdown', 'next', { icon: 'signout' }), false);
 });
 
 test('a navbar control saves only its edit, preserving a pin from another tab', () => {
@@ -301,12 +307,13 @@ test('a navbar edit batched with Look parts merges in the worker queue too', asy
 test("the editor lists every item where the bar puts it, hidden ones too, with the phone's tabs", () => {
   const E = require('../lib/editor-navbar.js');
   const ids = (gs) => gs.map((g) => g.items.map((i) => i.id));
-  assert.deepEqual(ids(E.rows({})), [['institution-page', 'stream', 'course', 'organization', 'calendar', 'messages', 'grades'], ['tools']]);
-  assert.deepEqual(E.rows({}).flatMap((g) => g.items).filter((i) => i.tab).map((i) => i.id), ['institution-page', 'course', 'calendar', 'messages']);
+  // Every LMS's items (WP-N2, NAV-4): Ultra's, Canvas's and Moodle's, in the default groups' order.
+  assert.deepEqual(ids(E.rows({})), [['institution-page', 'dashboard', 'home', 'stream', 'course', 'organization', 'groups', 'calendar', 'messages', 'notifications', 'grades'], ['tools', 'history', 'help', 'admin']]);
+  assert.deepEqual(E.rows({}).flatMap((g) => g.items).filter((i) => i.tab).map((i) => i.id), ['institution-page', 'dashboard', 'course', 'calendar', 'messages'], "each LMS's four: Ultra's Institution page, Canvas's and Moodle's Dashboard");
   const prefs = { items: { stream: { hidden: true, label: 'Feed' }, tools: { icon: 'star' } }, groups: [{ label: 'Daily', items: ['calendar', 'stream'] }, { items: [] }, { items: ['tools'] }], tabs: ['calendar'], glaze: ['notes'], links: [{ id: 'aaaaaaaaaaaa', n: 'Wiki', u: 'https://wiki.test/' }] };
   const gs = E.rows(prefs);
   assert.deepEqual(gs.map((g) => g.label), ['Daily', '', '']);
-  assert.deepEqual(ids(gs), [['calendar', 'stream', 'institution-page', 'course', 'organization', 'messages', 'grades'], [], ['tools', 'link:aaaaaaaaaaaa', 'glaze:notes']], 'an empty group stays to drop into');
+  assert.deepEqual(ids(gs), [['calendar', 'stream', 'institution-page', 'dashboard', 'home', 'course', 'organization', 'groups', 'messages', 'notifications', 'grades', 'history', 'help', 'admin'], [], ['tools', 'link:aaaaaaaaaaaa', 'glaze:notes']], 'an empty group stays to drop into');
   const stream = gs[0].items[1];
   assert.deepEqual([stream.hidden, stream.name], [true, 'Feed'], 'hidden, still listed in its place');
   assert.equal(gs[2].items[0].icon, 'star');

@@ -367,7 +367,8 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
   // Esc closes; Tab stays inside; arrows walk a group; Enter in the nickname field saves it.
   const ARROWS = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1, Home: -2, End: 2 };
   document.addEventListener('keydown', (e) => {
-    if (!menu) return;
+    // Not an IME's keys: its Enter picks a candidate (Safari: keyCode 229 after compositionend), its Escape cancels it.
+    if (!menu || e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); return; }
     if (!(e.target instanceof Element) || !menu.box.contains(e.target)) return;
     if (e.key === 'Enter' && e.target === menu.nick) { e.preventDefault(); if (commitNick()) saveEdits(); return; }
@@ -379,7 +380,8 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       return;
     }
     const g = e.target.closest('[data-roving]');
-    const step = ARROWS[e.key];
+    // Left and Right follow the reading direction: in a right-to-left page the row runs the other way.
+    const step = ARROWS[e.key] * (g && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && getComputedStyle(g).direction === 'rtl' ? -1 : 1);
     if (!g || !step || e.altKey || e.ctrlKey || e.metaKey) return;
     const items = [...g.querySelectorAll('button, input')];
     // Up and down move a row: as many along as the first row holds.

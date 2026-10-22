@@ -65,7 +65,7 @@ var GZ_KEYS = globalThis.GZ_KEYS || (() => {
   // What has focus, through open shadow roots: typing in Glaze's bar or its panels, the document's listeners see the
   // bar's host as the target, so content.js hands such keys over too. Focus goes back there too, not to the host.
   const focused = () => { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a; };
-  const inside = () => { const a = focused(); return a !== document.activeElement && (typing(a) || !ultra && !!a?.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')); };
+  const inside = () => { for (let a = focused(); a && a !== document.activeElement; a = a.getRootNode?.().host) if (typing(a) || a.closest?.(`${ultra ? '' : '[role="dialog"]:not(#gz-keys), '}[role="menu"], [role="menubar"], [role="listbox"], [role="grid"], [role="tree"], [role="combobox"]`)) return true; return false; };
   const key = (e) => {
     if (e.key === 'Escape' && keysBox && !typing(e.target)) { e.preventDefault(); closeKeys(); return; }
     if (!ultra && e.key === 'Shift') return; // g then Shift+? must keep its prefix.

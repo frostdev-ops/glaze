@@ -20,7 +20,9 @@
 
 Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right
 where you do your coursework. It works at any school on Blackboard Ultra, Canvas or Moodle, including on a school's own
-domain. No account, no analytics: what Glaze keeps stays on your device.
+domain, where it asks before enabling a site it has not already approved. No account, no analytics. Your courses, grades, notes and tasks stay on your device.
+Your settings, including course nicknames, GPA choices and some school/course/account identifiers, follow Chrome or Firefox sync if you have it on (Safari keeps
+them on the device). Sharing is optional and encrypted on your device before it leaves.
 
 - **Your look:** palettes, fonts, frosted glass, gradients, animated scenes and video backgrounds, a color or Look per
   course, styled course cards, stickers and pointers. Share a Look as one line of text, or browse the free
@@ -29,8 +31,10 @@ domain. No account, no analytics: what Glaze keeps stays on your device.
   timetable, and calendar export (.ics).
 - **Know your grades:** what-if calculators that follow your course's own rules, a GPA with past terms, trends and a goal,
   and syllabus import.
-- **Your dashboard:** widgets you place anywhere (notes, agenda, focus timer, music, your course cards), course tabs on
-  Blackboard, and Ctrl/⌘K search across your courses.
+- **Your dashboard:** widgets you place anywhere (notes, agenda, focus timer, music, your course cards), a sidebar on
+  Canvas and Blackboard, course tabs on both, and Ctrl/⌘K search across your courses.
+- **Your navigation:** Glaze's own bar on all three sites, a side rail or a top bar, with items you can rename, reorder,
+  hide and add to. Turn it off and the site's own comes back.
 - **Pets:** a [study buddy that grows across semesters](docs/pet-habitat.md), with learned routines and six needs meters,
   habitats you decorate, draggable toys, smooth reactions and calm wandering with favorite perches.
 - **Mods:** backgrounds, animations, widgets and page tweaks made by others, each showing what it reads and why before you

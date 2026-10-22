@@ -15,7 +15,7 @@ require('../lib/coursetabs.js'); require('../lib/nav.js'); // their settings, so
 
 const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-navbar-'));
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 
 let checks = 0, fails = 0;
@@ -28,7 +28,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
   const errors = [];
   try {
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { executablePath: CHROME, headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US',
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US',
       args: [`--disable-extensions-except=${src}`, `--load-extension=${src}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));

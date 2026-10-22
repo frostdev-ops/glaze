@@ -25,9 +25,11 @@ const page = ({ protocol = 'https:', pathname = '/ultra', body = null, marker = 
   };
   const window = {};
   window.top = frame ? {} : window;
-  const location = { protocol, pathname };
+  // Blackboard's own host: Ultra there needs no yes first (WP-C2), so the head gate is all these pages decide.
+  const location = { protocol, pathname, hostname: 'school.blackboard.com', origin: `${protocol}//school.blackboard.com` };
   const done = vm.runInNewContext(full === true ? source : full === 'body' ? bodyGate : gate, {
     window, document, location, GZ_COLOR: {}, GZ_DEFAULTS: {},
+    chrome: { storage: { local: { get: (key, cb) => cb({ [key]: ['https://school.blackboard.com/*', 'https://school.blackboard.com'] }) } } },
     matchMedia: () => ({}), CSS: { supports: () => false },
     MutationObserver: class {
       constructor(fn) { this.fn = fn; observer = this; }
@@ -106,7 +108,7 @@ test('the body-time Ultra guard keeps the preview and requires a head base on si
 
 test('Canvas tool frames wait for the body and create no sheet without the application wrapper', async () => {
   const p = page({ marker: canvas, frame: true }, true);
-  await Promise.resolve();
+  await new Promise(setImmediate);
   assert.equal(p.window.started, undefined);
   p.document.body = {};
   p.listeners.get('DOMContentLoaded')();
@@ -117,7 +119,7 @@ test('Canvas tool frames wait for the body and create no sheet without the appli
 
 test('Canvas application frames can start after body validation; the top page still starts in head', async () => {
   const framed = page({ marker: canvas, frame: true, application: true }, 'body');
-  await Promise.resolve();
+  await new Promise(setImmediate);
   assert.equal(framed.window.started, undefined);
   framed.document.body = {};
   framed.listeners.get('DOMContentLoaded')();
@@ -147,7 +149,7 @@ test('Moodle is Moodle by the keywords meta its core writes in every head; its f
   await p.done;
   assert.equal(p.window.started, 'moodle');
   const framed = page({ pathname: '/h5p/embed.php', marker: moodle, frame: true }, 'body');
-  await Promise.resolve();
+  await new Promise(setImmediate);
   assert.equal(framed.window.started, undefined);
   framed.document.body = {};
   framed.listeners.get('DOMContentLoaded')();

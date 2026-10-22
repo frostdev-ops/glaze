@@ -167,6 +167,8 @@ test('the page frame survives list changes and is outside the four-course frame 
   assert.equal(p.frames.size, 5); assert.ok(p.frames.has('page')); assert.equal(p.frames.has('12'), false);
   for (const [cid, f] of p.frames) if (cid !== 'page') f.dirty = true;
   assert.equal(p.api.room(), false); assert.equal(p.frames.size, 5); assert.ok(p.frames.has('page'));
+  // (Frames with unsaved work outlive another browser tab's list: coursetabs-keep.test.js.)
+  for (const [cid, f] of p.frames) if (cid !== 'page') f.dirty = false;
   p.api.onStore({ key: { newValue: { tabs: [{ cid: '16' }] } } }, 'local');
   assert.deepEqual([...p.frames.keys()], ['page', '16']);
 });

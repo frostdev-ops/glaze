@@ -60,7 +60,7 @@ test('Moodle panels use session-authenticated same-origin POST and reject failed
   const requests = [];
   const logout = { href: root + '/login/logout.php?sesskey=local-test-key%20%2B%26' };
   const context = vm.createContext({ URL, AbortSignal, location: { href: root + '/my/', origin: 'https://school.test' },
-    document: { querySelector: () => ({ querySelector: () => logout }) },
+    document: { querySelector: () => ({ querySelector: () => logout, querySelectorAll: () => [] }) },
     fetch: async (url, options) => { requests.push([new URL(url), options]); return { ok: true, json: async () => [{ data: { notifications: [] } }] }; } });
   vm.runInContext(fs.readFileSync(require.resolve('../features/navbar-moodle.js'), 'utf8'), context);
   const adapter = context.GZ_NAVBAR_MOODLE({ t: (s) => s });
@@ -95,8 +95,14 @@ test('the injected factory ends on a serializable acknowledgement for the worker
 });
 
 test('only a registered Moodle top frame can use its narrow pin permission', async () => {
-  const source = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
-  const from = vm.runInNewContext(source.match(/const fromMoodle = ([\s\S]*?)\n};/)[0] + '\nfromMoodle;', { URL, chrome: { runtime: { id: 'ext' }, storage: { local: { get: async () => ({ moodle: ['https://school.test/*'] }) } } } });
+  // The real worker, whose one check for an approved site (approved) fromMoodle asks.
+  const none = { addListener() {} };
+  const context = vm.createContext({ URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto,
+    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
+    chrome: { runtime: { id: 'ext', getURL: (p = '') => `chrome-extension://ext/${p}`, getManifest: () => require('../manifest.json'), onMessage: none, onInstalled: none, onStartup: none, onConnect: none },
+      storage: { local: { get: async () => ({ moodle: ['https://school.test/*'] }) }, sync: { get: async () => ({}) }, onChanged: none } } });
+  vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), context);
+  const from = vm.runInContext('fromMoodle', context);
   const sender = { id: 'ext', tab: {}, frameId: 0, url: root + '/my/' };
   assert.equal(await from(sender), 'https://school.test');
   for (const change of [{ id: 'other' }, { frameId: 1 }, { tab: null }, { url: 'https://other.test/' }, { url: 'http://school.test/' }, { url: 'about:blank' }]) assert.equal(await from({ ...sender, ...change }), null);

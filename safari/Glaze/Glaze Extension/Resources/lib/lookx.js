@@ -92,10 +92,16 @@ var GZ_LX = globalThis.GZ_LX || (() => {
     const list = Array.isArray(chosen) ? chosen.filter((v) => typeof v === 'string' && (v.startsWith('glaze1:') ? v.length <= 4000 && fav(v) : v.startsWith('glaze2:') ? v.length <= 20000 && fav(v) : looks.includes(v))) : [];
     return list.length ? [...new Set(list)] : [...looks];
   };
-  // The settings to save for wearing a decoded theme code (lib/share.js) over `s`, as "Use this theme" does, minus card styles.
+  // The settings to save for wearing a decoded theme code (lib/share.js) over `s`, as "Use this theme" does (options.js), minus
+  // card styles (written through the cards queue) and the code's parts (the worker writes them in the same call). Every other
+  // group the code carries goes in: a code that carries none leaves the student's own as they are.
   const wearCode = (s, got) => {
     const colors = got.colors;
-    return { colors, preset: G.GZ_MATCH_PRESET(colors, s.presets), auto: { ...s.auto, on: false }, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg } };
+    const share = typeof GZ_SHARE !== 'undefined' ? GZ_SHARE : require('./share.js');
+    return {
+      colors, preset: G.GZ_MATCH_PRESET(colors, s.presets), auto: { ...s.auto, on: false }, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg },
+      nav: share.nav(s.nav, got.nav || {}), navbar: { ...s.navbar, ...got.navbar }, sidebar: { ...s.sidebar, ...got.sidebar },
+    };
   };
   // Did the stored state change because the Look turned (not because the clock started or the mode changed)?
   const turned = (was, now) => now?.turned === true && Number.isInteger(now.i) && now.i >= 0 && (!was || typeof was === 'object') && (!was || now.at !== was.at || now.i !== was.i || now.mode !== was.mode);

@@ -45,16 +45,44 @@ var GZ_ZIP = globalThis.GZ_ZIP || (() => {
     return [...parts, ...central, le([0x06054b50, 4], [0, 2], [0, 2], [files.length, 2], [files.length, 2], [cdSize, 4], [offset, 4], [0, 2])];
   };
 
-  // A title as one path segment every system can unpack: no separators, reserved or control
-  // characters, no trailing dot or space (Windows), not too long.
-  const safeName = (s) => String(s || '').replace(/[\u0000-\u001f\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').slice(0, 120).replace(/[. ]+$/, '').trim() || 'Untitled';
+  // A title as one path segment every system can unpack: no separators, reserved or control characters, no trailing dot or
+  // space (Windows), not too long. A long name is cut in its base so it keeps its extension (".pdf" decides what opens it),
+  // never inside a surrogate pair (half an emoji isn't valid UTF-8), and a base Windows reserves ("CON", "nul.txt", "COM1")
+  // gets an underscore in front.
+  const MAX = 120;
+  const RESERVED = /^(?:con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])(?:\.|$)/i;
+  const clip = (s, n) => { const c = s.charCodeAt(n - 1); return s.length <= n ? s : s.slice(0, c >= 0xd800 && c < 0xdc00 ? n - 1 : n); };
+  const safeName = (s) => {
+    const name = String(s || '').replace(/[\u0000-\u001f\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim();
+    const ext = /\.[^.\s]{1,16}$/.exec(name)?.[0] || '';
+    const raw = name.slice(0, name.length - ext.length).replace(/[. ]+$/, '');
+    const prefix = RESERVED.test(raw + ext) ? '_' : '';
+    const base = clip(raw, MAX - ext.length - prefix.length).replace(/[. ]+$/, '');
+    const safe = base + ext;
+    return !safe ? 'Untitled' : prefix + safe;
+  };
   // A path not yet in `taken` (case-insensitive, as on Windows and macOS): "a.pdf", "a (2).pdf", …
+  // Directories reserve their path too; a renamed directory is shared by every later file under it.
+  const directories = new WeakMap();
   const unique = (path, taken) => {
-    const [, base, ext] = path.match(/^(.*?)(\.[^./]*)?$/);
-    let p = path;
-    for (let n = 2; taken.has(p.toLowerCase()); n++) p = `${base} (${n})${ext || ''}`;
-    taken.add(p.toLowerCase());
-    return p;
+    if (!directories.has(taken)) directories.set(taken, new Map());
+    const dirs = directories.get(taken), parts = path.split('/');
+    let parent = '', original = '';
+    for (let i = 0; i < parts.length; i++) {
+      const dir = i < parts.length - 1, name = parts[i];
+      original += `${name.toLowerCase()}/`;
+      if (dir && dirs.has(original)) { parent = dirs.get(original); continue; }
+      const [, base, ext = ''] = name.match(/^(.*?)(\.[^.\s]{1,16})?$/);
+      let p = parent + name;
+      for (let n = 2; taken.has(p.toLowerCase()) || taken.has(p.toLowerCase() + '/'); n++) {
+        const suffix = ` (${n})`;
+        p = parent + clip(base, MAX - suffix.length - ext.length).replace(/[. ]+$/, '') + suffix + ext;
+      }
+      taken.add(p.toLowerCase() + (dir ? '/' : ''));
+      if (!dir) return p;
+      parent = p + '/';
+      dirs.set(original, parent);
+    }
   };
 
   // An unmet view requirement wins over another reference to the same attachment in this module.

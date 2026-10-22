@@ -38,6 +38,11 @@ const join = async (link, opts) => device(G.join(link, true), opts);
 const ids = (v) => Object.keys(v).sort();
 const rows = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM ops WHERE sid = ?').get(sid).c;
 const tmp = (t) => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-relay-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Polls until check() is true or ms pass; returns the last answer, so a test asserts on it.
+const until = async (check, ms = 2000) => { const end = Date.now() + ms; for (;;) { const ok = await check(); if (ok || Date.now() > end) return ok; await sleep(25); } };
+const handshake = (p, key = true) => `GET ${p} HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n${key ? 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n' : ''}Sec-WebSocket-Version: 13\r\n\r\n`;
+const connections = (r) => new Promise((resolve, reject) => r.server.getConnections((e, n) => (e ? reject(e) : resolve(n))));
 
 test('two devices that edited offline converge; a conflict keeps both texts', async (t) => {
   const r = await up();
@@ -272,10 +277,12 @@ test('limits: batch size, session size, request rates and subscriptions', async 
   a.local.n1.html = `<p>${'x'.repeat(3000)}</p>`;
   await assert.rejects(a.pump(), (e) => e.status === 413);
   a.st.pending = [];
-  // Each of these seals to about 1.8 KB: three fit in the session's 6,000 bytes, the fourth doesn't.
+  // Each of these seals to about 1.8 KB: three fit in the session's 6,000 bytes, the fourth doesn't. The log is full,
+  // so that send compacts it: trimmed to what this device has read, with the whole state (one note) after the trim.
   for (let i = 0; i < 3; i++) { a.local.n1.html = `<p>${String(i).repeat(1500)}</p>`; await a.pump(); }
   a.local.n1.html = `<p>${'y'.repeat(1500)}</p>`;
-  await assert.rejects(a.pump(), (e) => e.status === 507);
+  await a.pump();
+  assert.deepEqual([a.st.base, a.st.head, rows(r, a.st.sid)], [4, 5, 1]);
   const big = await fetch(`${r.url}/s/${a.st.sid}`, { method: 'POST', body: JSON.stringify({ n: 9, op: 'A'.repeat(9000), sig: 'A'.repeat(86) }) }).catch(() => ({ status: 'reset' }));
   assert.equal(big.status, 413);
   const made = [];
@@ -288,6 +295,29 @@ test('limits: batch size, session size, request rates and subscriptions', async 
   const c = make(r);
   // (A note's longest HTML, 2 MiB of characters, fits; three-byte characters can pass the batch cap.)
   assert.deepEqual(await c.s.edit({ long: { title: 'Long', html: `<p>${'€'.repeat(1500000)}</p>` } }), { n: 1, big: ['long'] });
+});
+
+test('a full log (507) makes room: trimmed to what the sender read, the state sent after it; a member behind catches up', async (t) => {
+  const r = await up({ limit: { ...LIMIT, session: 8000 } });
+  t.after(() => r.close());
+  const a = make(r);
+  a.local = { n1: { title: 'one', html: '<p>1</p>' }, n2: { title: 'two', html: '' } };
+  await a.pump();
+  const late = await join(await a.s.link(false));
+  await late.pump(); // and then reads nothing while the log fills and is trimmed past it
+  for (let i = 0; i < 8; i++) { a.local.n2.html = `<p>${String(i).repeat(1500)}</p>`; await a.pump(); }
+  assert.ok(a.st.base > late.st.cursor, `trimmed to ${a.st.base}`);
+  assert.equal(a.st.pending.length, 0);
+  await late.pump();
+  assert.deepEqual(late.local, a.local);
+  // A state that can't fit even in an empty log: one try at making room per sync, then 507 with the state still queued.
+  for (let i = 3; i <= 7; i++) a.local[`n${i}`] = { title: `${i}`, html: `<p>${String(i).repeat(1500)}</p>` };
+  const pushes = () => r.db.prepare('SELECT head FROM sessions WHERE sid = ?').get(a.st.sid).head;
+  await assert.rejects(a.pump(), (e) => e.status === 507);
+  assert.ok(a.st.pending.flat().some((o) => o.e === 'n7'));
+  const head = pushes();
+  await assert.rejects(a.pump(), (e) => e.status === 507);
+  assert.equal(pushes(), head, 'nothing more lands');
 });
 
 test('a request refused whatever it carries is answered before its body is read', { timeout: 10000 }, async (t) => {
@@ -337,6 +367,219 @@ test('subscriptions leave nothing behind when a socket moves to other sessions a
   ws.close();
   await new Promise((resolve) => setTimeout(resolve, 100));
   assert.equal(r.subs.size, 0);
+});
+
+// A relay in its own process, so a crash shows as an exit code rather than taking the test runner down with it.
+const relayProcess = async (t) => {
+  const dir = tmp(t);
+  const code = `const { relay, diskStore } = require(${JSON.stringify(path.join(__dirname, '..', 'server', 'relay.js'))});
+    relay({ db: ${JSON.stringify(path.join(dir, 'share.db'))}, store: diskStore(${JSON.stringify(path.join(dir, 'blobs'))}) })
+      .listen(0, '127.0.0.1').then((a) => console.log('PORT', a.port));`;
+  const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => p.kill());
+  let out = '', err = '';
+  p.stderr.on('data', (d) => { err += d; });
+  const port = await new Promise((resolve, reject) => {
+    p.stdout.on('data', (d) => { out += d; const m = /PORT (\d+)/.exec(out); if (m) resolve(Number(m[1])); });
+    p.on('exit', (c) => reject(new Error(`relay exited ${c}: ${err}`)));
+  });
+  return { p, port, url: `http://127.0.0.1:${port}`, err: () => err };
+};
+
+test('SHR-1: a refused WebSocket upgrade that the client resets does not take the relay down', { timeout: 20000 }, async (t) => {
+  const c = await relayProcess(t);
+  // The client resets once the refusal arrives ('answer'), or straight after sending ('now').
+  const reset = (p, when, key = true) => new Promise((resolve) => {
+    const s = net.connect(c.port, '127.0.0.1', () => { s.write(handshake(p, key)); if (when === 'now') setImmediate(() => s.resetAndDestroy()); });
+    s.once('data', () => s.resetAndDestroy());
+    s.on('error', () => {});
+    s.on('close', resolve);
+  });
+  for (const [p, key] of [['/nope', true], ['/', true], ['/live', false]]) for (const when of ['answer', 'now']) await reset(p, when, key);
+  assert.equal(c.p.exitCode, null, `the relay exited: ${c.err()}`);
+  // 429: the address's sockets are all taken, and one more is refused.
+  const open = [];
+  t.after(() => { for (const ws of open) ws.close(); });
+  for (let i = 0; i < LIMIT.sockets; i++) {
+    const ws = new WebSocket(`ws://127.0.0.1:${c.port}/live`);
+    open.push(ws);
+    await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
+  }
+  for (let i = 0; i < 5; i++) await reset('/live', 'answer');
+  await sleep(300);
+  assert.equal(c.p.exitCode, null, `the relay exited: ${c.err()}`);
+  assert.equal((await fetch(`${c.url}/health`)).status, 200);
+});
+
+test('SHR-1: refused upgrades are closed at once, even while the client keeps sending; a global cap bounds live sockets', { timeout: 20000 }, async (t) => {
+  const clients = [];
+  const r = await up({ ipHeader: 'x-real-ip', limit: { ...LIMIT, socketsAll: 3 } });
+  r.server.on('connection', (s) => clients.push(s)); // teardown also closes descriptors leaked by the archived relay
+  t.after(() => { for (const s of clients) s.destroy(); return r.close(); });
+  // Ten refused upgrades, each followed by 4 MB the relay never reads and a FIN that can't be sent until it does.
+  const stuffed = [];
+  t.after(() => { for (const s of stuffed) s.destroy(); });
+  for (let i = 0; i < 10; i++) {
+    const s = net.connect(r.port, '127.0.0.1', () => { s.write(handshake('/nope') + 'x'.repeat(4 << 20)); s.end(); });
+    s.on('error', () => {});
+    s.resume();
+    stuffed.push(s);
+    clients.push(s);
+  }
+  assert.equal(await until(async () => (await connections(r)) === 0), true, `${await connections(r)} refused sockets still open`);
+  // Live sockets from three addresses fill the relay-wide cap; a fourth address is refused until one closes.
+  const status = (ip) => new Promise((resolve, reject) => {
+    const s = net.connect(r.port, '127.0.0.1', () => s.write(handshake('/live').replace('Host: x\r\n', `Host: x\r\nX-Real-IP: ${ip}\r\n`)));
+    clients.push(s);
+    let got = '';
+    s.on('data', (d) => { got += d; if (got.includes('\r\n')) resolve({ s, line: got.split('\r\n')[0] }); });
+    // macOS resets a socket the accept-time cap closes; Linux closes it cleanly. Both are a refusal before headers.
+    s.on('error', (e) => (e.code === 'ECONNRESET' ? resolve({ s, line: got.split('\r\n')[0] }) : reject(e)));
+    s.on('close', () => resolve({ s, line: got.split('\r\n')[0] }));
+    t.after(() => s.destroy());
+  });
+  const live = [];
+  for (const ip of ['203.0.113.1', '203.0.113.2', '203.0.113.3']) live.push(await status(ip));
+  assert.deepEqual(live.map((x) => x.line.split(' ')[1]), ['101', '101', '101']);
+  assert.match((await status('203.0.113.4')).line, /^(?:HTTP\/1\.1 503 |$)/); // accept-time cap may close before headers
+  live[0].s.destroy();
+  assert.equal(await until(async () => / 101 /.test((await status('203.0.113.5')).line)), true);
+});
+
+test('SHR-1: a request refused before its body is read has its connection closed, not left holding the body', { timeout: 10000 }, async (t) => {
+  const r = await up();
+  t.after(() => r.close());
+  const id = () => crypto.randomBytes(16).toString('base64url');
+  const ended = await new Promise((resolve) => {
+    const s = net.connect(r.port, '127.0.0.1', () => s.write(`PUT /s/${id()}/b/${id()} HTTP/1.1\r\nHost: relay\r\nX-Glaze-Sig: ${'A'.repeat(86)}\r\nContent-Length: ${20 << 20}\r\n\r\n`));
+    let got = '';
+    s.on('data', (d) => { got += d; });
+    s.on('error', () => {});
+    s.on('close', () => resolve(got.split('\r\n')[0]));
+    setTimeout(() => { resolve('still open'); s.destroy(); }, 2000);
+  });
+  assert.match(ended, / 404 /);
+});
+
+test('SHR-6: upload bodies in flight are capped per address and overall, spooled to disk, and charged before they are read', { timeout: 20000 }, async (t) => {
+  const dir = tmp(t);
+  const spool = path.join(dir, 'spool');
+  const r = await up({ ipHeader: 'x-real-ip', spool, limit: { ...LIMIT, inflight: 250000, inflightAll: 350000 } });
+  t.after(() => r.close());
+  const a = make(r);
+  a.local = { n1: { title: 'x', html: '' } };
+  await a.pump();
+  const id = () => crypto.randomBytes(16).toString('base64url');
+  // An unsigned upload that declares 100,000 bytes, sends half of them and waits: answered at once, or held.
+  const held = [];
+  t.after(() => { for (const s of held) s.destroy(); });
+  const hold = (ip, len = 100000) => new Promise((resolve) => {
+    const s = net.connect(r.port, '127.0.0.1', () => s.write(`PUT /s/${a.st.sid}/b/${id()} HTTP/1.1\r\nHost: x\r\nX-Real-IP: ${ip}\r\nX-Glaze-Sig: ${'A'.repeat(86)}\r\nContent-Length: ${len}\r\n\r\n${'x'.repeat(len / 2)}`));
+    let got = '';
+    s.on('data', (d) => { got += d; });
+    s.on('error', () => {});
+    held.push(s);
+    setTimeout(() => resolve(/^HTTP\/1\.1 (\d+)/.exec(got)?.[1] ?? 'held'), 300);
+  });
+  // One address: two fit in its 250,000 bytes, the rest are refused before anything is read.
+  const one = [];
+  for (let i = 0; i < 6; i++) one.push(await hold('203.0.113.1'));
+  assert.deepEqual(one, ['held', 'held', '429', '429', '429', '429']);
+  // Another address fits once more in the relay's 350,000 bytes; then the relay is full for everyone.
+  assert.deepEqual([await hold('203.0.113.2'), await hold('203.0.113.2'), await hold('203.0.113.3')], ['held', '503', '503']);
+  // What's held is on disk, not in memory: one spool file per held upload.
+  assert.equal(await until(() => fs.readdirSync(spool).filter((f) => f.endsWith('.part')).length === 3), true, `spool: ${fs.readdirSync(spool)}`);
+  // Clients that give up release their room and their spool files.
+  for (const s of held.splice(0)) s.destroy();
+  assert.equal(await until(() => fs.readdirSync(spool).length === 0), true, `spool: ${fs.readdirSync(spool)}`);
+  assert.equal(await until(async () => (await hold('203.0.113.3')) === 'held'), true);
+
+  // A body without a declared length is refused (411), and one declared over the cap is refused before it's read (413).
+  const answer = (head) => new Promise((resolve) => {
+    const s = net.connect(r.port, '127.0.0.1', () => s.write(head));
+    let got = '';
+    s.on('data', (d) => { got += d; if (got.includes('\r\n')) { s.destroy(); resolve(got.split('\r\n')[0]); } });
+    s.on('error', () => resolve('reset'));
+    setTimeout(() => { s.destroy(); resolve('no answer'); }, 2000);
+  });
+  assert.match(await answer(`PUT /s/${a.st.sid}/b/${id()} HTTP/1.1\r\nHost: x\r\nX-Real-IP: 203.0.113.9\r\nX-Glaze-Sig: ${'A'.repeat(86)}\r\nTransfer-Encoding: chunked\r\n\r\n1000\r\n`), / 411 /);
+  assert.match(await answer(`PUT /s/${a.st.sid}/b/${id()} HTTP/1.1\r\nHost: x\r\nX-Real-IP: 203.0.113.9\r\nX-Glaze-Sig: ${'A'.repeat(86)}\r\nContent-Length: ${LIMIT.blob + 1}\r\n\r\n`), / 413 /);
+  assert.match(await answer(`POST /s/${a.st.sid} HTTP/1.1\r\nHost: x\r\nX-Real-IP: 203.0.113.9\r\nContent-Length: ${LIMIT.body + 1}\r\n\r\n`), / 413 /);
+
+  // Uploads with bad signatures pay for their bytes like any other: the budget is charged from the declared length.
+  const r2 = await up({ rate: { ...RATE, bytes: [150000, 3600e3] } });
+  t.after(() => r2.close());
+  const b = make(r2);
+  b.local = { n1: { title: 'x', html: '' } };
+  await b.pump();
+  const bogus = () => fetch(`${r2.url}/s/${b.st.sid}/b/${id()}`, { method: 'PUT', headers: { 'x-glaze-sig': 'A'.repeat(86) }, body: Buffer.alloc(100000) }).then((x) => x.status);
+  assert.deepEqual([await bogus(), await bogus()], [403, 429]);
+});
+
+test('SHR-6: files are read back from the store as a stream, never whole in memory', async (t) => {
+  const { Readable } = require('node:stream');
+  const base = memory();
+  // A store whose reads are streams, as the disk and R2 stores' now are.
+  const store = { ...base, get: async (k) => { const b = await base.get(k); return b && Readable.from([b.subarray(0, 100), b.subarray(100)]); } };
+  const r = await up({ store });
+  t.after(() => r.close());
+  const a = make(r);
+  const pic = crypto.getRandomValues(new Uint8Array(9000));
+  const ref = await a.s.put(pic);
+  assert.deepEqual(Buffer.from(await a.s.get(ref)), Buffer.from(pic));
+  // The disk store hands back a stream too, and nothing for a key it doesn't hold.
+  const dir = tmp(t);
+  const disk = diskStore(dir);
+  await disk.put('s/k', Buffer.from('bytes'));
+  const got = await disk.get('s/k');
+  assert.equal(typeof got.pipe, 'function');
+  assert.equal(Buffer.concat(await got.toArray()).toString(), 'bytes');
+  assert.equal(await disk.get('s/none'), null);
+});
+
+test('SHR-7: a file upload on a slow link is not cut while it progresses; a stalled one is; other bodies keep a total limit', { timeout: 20000 }, async (t) => {
+  const r = await up({ limit: { ...LIMIT, idle: 400, progress: 1024, bodyTime: 600 } });
+  t.after(() => r.close());
+  // Node's own request timeout counts the whole upload: it would cut a 20 MiB file on a slow link at 60 s.
+  assert.equal(r.server.requestTimeout, 0);
+  assert.ok(r.server.headersTimeout > 0 && r.server.headersTimeout <= 30e3, `headersTimeout ${r.server.headersTimeout}`);
+  assert.ok(r.server.timeout > 0, 'idle sockets time out');
+  // A real, signed upload sent 2 KiB every 100 ms: longer than both the idle window and the other bodies' total limit.
+  const trickle = (u, init) => new Promise((resolve, reject) => {
+    const body = Buffer.from(init.body);
+    const req = http.request(u, { method: 'PUT', headers: { ...init.headers, 'content-length': body.length } }, (res) => {
+      const parts = [];
+      res.on('data', (d) => parts.push(d));
+      res.on('end', () => resolve(new Response(Buffer.concat(parts), { status: res.statusCode })));
+    });
+    req.on('error', reject);
+    let at = 0;
+    const step = () => { if (at >= body.length) return req.end(); req.write(body.subarray(at, at += 2048)); setTimeout(step, 100); };
+    step();
+  });
+  const a = device(G.create('notes', { server: r.url }), { fetch: (u, init) => (init?.method === 'PUT' ? trickle(u, init) : fetch(u, init)) });
+  a.local = { n1: { title: 'x', html: '' } };
+  await a.pump();
+  const t0 = Date.now();
+  const ref = await a.s.put(crypto.getRandomValues(new Uint8Array(20000)));
+  assert.ok(Date.now() - t0 > 1000, `took ${Date.now() - t0} ms`);
+  assert.equal((await a.s.get(ref)).length, 20000);
+  // Half a file, then nothing: cut once the idle window passes without progress.
+  const id = () => crypto.randomBytes(16).toString('base64url');
+  const cut = (head, drip) => new Promise((resolve) => {
+    const t1 = Date.now();
+    const s = net.connect(r.port, '127.0.0.1', () => s.write(head));
+    const timer = drip && setInterval(() => s.write('x'), 100);
+    s.on('error', () => {});
+    s.on('close', () => { clearInterval(timer); resolve(Date.now() - t1); });
+    s.resume();
+    setTimeout(() => s.destroy(), 5000);
+  });
+  const stalled = await cut(`PUT /s/${a.st.sid}/b/${id()} HTTP/1.1\r\nHost: x\r\nX-Glaze-Sig: ${'A'.repeat(86)}\r\nContent-Length: 30000\r\n\r\n${'x'.repeat(10000)}`);
+  assert.ok(stalled < 2000, `a stalled upload was cut after ${stalled} ms`);
+  // A batch that keeps dripping is still cut at its total limit.
+  const dripping = await cut(`POST /s/${a.st.sid} HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\n\r\n{`, true);
+  assert.ok(dripping < 2000, `a dripping batch was cut after ${dripping} ms`);
 });
 
 test('sync has a budget: a relay that never finishes, keeps changing its story, stalls or floods is stopped', async () => {
@@ -537,7 +780,7 @@ const doomed = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM doomed WHERE 
 const booked = (r) => r.db.prepare('SELECT blob FROM totals').get().blob;
 const blobRows = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM blobs WHERE sid = ?').get(sid).c;
 
-test('a file upload still in flight when its share is deleted (by the creator or by expiry) leaves nothing behind', async (t) => {
+test('creator deletion reclaims in-flight uploads; idle expiry waits for activity to finish', async (t) => {
   for (const [how, fail] of [['creator', false], ['creator', true], ['expiry', false]]) {
     const store = slow(t);
     const r = await up({ store });
@@ -548,11 +791,21 @@ test('a file upload still in flight when its share is deleted (by the creator or
     const upload = a.s.put(new Uint8Array(3000)).then(() => 'stored', (e) => e.status ?? e.message);
     await store.started;
     if (how === 'creator') assert.equal((await fetch(`${r.url}/s/${a.st.sid}`, { method: 'DELETE', headers: { authorization: `Bearer ${a.st.del}` } })).status, 204);
-    else r.db.prepare('UPDATE sessions SET touched = touched - 400 WHERE sid = ?').run(a.st.sid);
+    else {
+      r.db.prepare('UPDATE sessions SET touched = touched - 400 WHERE sid = ?').run(a.st.sid);
+      await r.expire();
+      assert.equal((await fetch(`${r.url}/s/${a.st.sid}`)).status, 200, 'an ongoing upload is use, not idle');
+      store.release();
+      assert.equal(await upload, 'stored');
+      // Once the upload has finished and nobody uses the share again, ordinary opt-in expiry reclaims it.
+      r.db.prepare('UPDATE sessions SET touched = touched - 400 WHERE sid = ?').run(a.st.sid);
+    }
     await r.expire();
     assert.equal((await fetch(`${r.url}/s/${a.st.sid}`)).status, 410, `${how} ${fail}`);
-    store.release(fail);
-    assert.equal(await upload, 410, `${how} ${fail}: the upload isn't acknowledged`);
+    if (how === 'creator') {
+      store.release(fail);
+      assert.equal(await upload, 410, `${how} ${fail}: the upload isn't acknowledged`);
+    }
     await r.expire();
     assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [0, 0], `${how} ${fail}`);
   }
@@ -882,6 +1135,63 @@ test('a deleted share\'s files stop counting, also after a restart, and after a 
   await d.s.put(new Uint8Array(4000));
 });
 
+test('SHR-11: a database error while removing files is logged; the relay keeps running and later removals still happen', { timeout: 10000 }, async (t) => {
+  const store = memory();
+  const r = await up({ store });
+  // The archived relay's rejected cleanup chain also leaves close() pending. Keep that expected red failure from
+  // wedging the test runner's teardown; close() still closes its server and clears its timers before the failed await.
+  t.after(() => Promise.race([r.close(), sleep(200)]));
+  const unhandled = [];
+  const onUnhandled = (e) => unhandled.push(e);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.off('unhandledRejection', onUnhandled));
+  const logged = t.mock.method(console, 'error', () => {});
+  const a = make(r);
+  a.local = { n1: { title: 'x', html: '' } };
+  await a.pump();
+  await a.s.put(new Uint8Array(100));
+  // Standing in for a full disk: the file row can't be deleted.
+  r.db.exec("CREATE TRIGGER fail_blob_delete BEFORE DELETE ON blobs BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END;");
+  assert.equal(await a.s.remove(), true);
+  await r.flush();
+  await sleep(50);
+  assert.deepEqual(unhandled.map((e) => e.message), []);
+  assert.ok(logged.mock.calls.some((c) => /disk is full/.test(c.arguments.join(' '))), 'the error is logged');
+  assert.equal(blobRows(r, a.st.sid), 1);
+  // The disk has room again: the next sweep removes the file, and so do later deletions.
+  r.db.exec('DROP TRIGGER fail_blob_delete');
+  await r.expire();
+  assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [0, 0]);
+  const b = make(r);
+  await b.s.put(new Uint8Array(100));
+  await b.s.remove();
+  await r.expire();
+  assert.deepEqual([store.m.size, blobRows(r, b.st.sid)], [0, 0]);
+  assert.equal((await fetch(`${r.url}/health`)).status, 200);
+});
+
+test('SHR-13: half-written .part files are swept when the relay starts, and go with their key', async (t) => {
+  const dir = tmp(t);
+  const blobs = path.join(dir, 'blobs'), spool = path.join(dir, 'spool');
+  const sid = 'S'.repeat(22), id = 'I'.repeat(22), kept = 'K'.repeat(22);
+  fs.mkdirSync(path.join(blobs, sid), { recursive: true });
+  fs.mkdirSync(spool);
+  // Left by a relay that crashed mid-write: the disk store's own temporary file, and an upload's spool file.
+  fs.writeFileSync(path.join(blobs, sid, `${id}.part`), 'half');
+  fs.writeFileSync(path.join(blobs, sid, kept), 'a stored file');
+  fs.writeFileSync(path.join(spool, 'upload.part'), 'half');
+  const store = diskStore(blobs);
+  const r = await up({ db: path.join(dir, 'share.db'), store, spool });
+  t.after(() => r.close());
+  await r.flush(); // the store's sweep runs in the background once the relay serves
+  assert.deepEqual(fs.readdirSync(path.join(blobs, sid)), [kept]);
+  assert.deepEqual(fs.readdirSync(spool), []);
+  // Deleting a key also deletes a .part beside it.
+  fs.writeFileSync(path.join(blobs, sid, `${id}.part`), 'half again');
+  await store.del(`${sid}/${id}`);
+  assert.deepEqual(fs.readdirSync(path.join(blobs, sid)), [kept]);
+});
+
 test('catch-up applies batches strictly in order: a reordered or gapped page never moves the cursor past a missing batch', async (t) => {
   const r = await up({ limit: { ...LIMIT, page: 1 } }); // one batch per page: catch-up over many pages
   t.after(() => r.close());
@@ -937,15 +1247,15 @@ test('a forwarded client address is trusted only from configured proxies, and on
   assert.deepEqual(await tries({ ipHeader: 'x-real-ip' }, ['not-an-address', 'also-not']), [201, 429]); // not an address: the peer counts
 });
 
-test('the number of sessions is capped, tombstones included, so the database stays bounded', async (t) => {
-  const r = await up({ maxSessions: 2 });
+test('the number of live sessions is capped; a deleted one leaves room at once, and its tombstone is pruned later', async (t) => {
+  const r = await up({ maxSessions: 2, full: 1 }); // isolate the hard live-session cap from the 95% safety margin
   t.after(() => r.close());
   const a = make(r), b = make(r), c = make(r);
   await a.s.sync();
   await b.s.sync();
   await assert.rejects(c.s.sync(), (e) => e.status === 507);
   await a.s.remove();
-  await assert.rejects(c.s.sync(), (e) => e.status === 507);
+  await c.s.sync();
 });
 
 test('SigV4 matches AWS\'s published test vectors', () => {
@@ -989,7 +1299,11 @@ test('a file delete requires its own editor signature bound to the session and f
   const url = `${r.url}/s/${a.st.sid}/b/${ref.id}`;
   assert.equal((await fetch(url, { method: 'DELETE', headers: { 'x-glaze-sig': 'A'.repeat(86) } })).status, 403);
   const k = await G.keys({ sid: G.unb64(a.st.sid), seed: G.unb64(a.st.seed) });
-  const sig = G.b64(new Uint8Array(await crypto.subtle.sign('Ed25519', k.sk, new TextEncoder().encode(`gzs1|${a.st.sid}|blob-delete|${ref.id}`))));
+  // Match the negotiated protocol: the staging gate defaults to gzs1, and enabled relays lock this client to gzs2.
+  const field = (x) => { const b = Buffer.from(x); const n = Buffer.alloc(4); n.writeUInt32BE(b.length); return [n, b]; };
+  const message = a.st.gzs === 2 ? Buffer.concat([Buffer.from('gzs2'), ...[a.st.sid, 'blob-delete', ref.id, ''].flatMap(field)])
+    : Buffer.from(`gzs1|${a.st.sid}|blob-delete|${ref.id}`);
+  const sig = G.b64(new Uint8Array(await crypto.subtle.sign('Ed25519', k.sk, message)));
   // A signature for another file cannot delete this one.
   const other = await a.s.put(new Uint8Array([4]));
   assert.equal((await fetch(`${r.url}/s/${a.st.sid}/b/${other.id}`, { method: 'DELETE', headers: { 'x-glaze-sig': sig } })).status, 403);
@@ -998,4 +1312,6 @@ test('a file delete requires its own editor signature bound to the session and f
   assert.equal(store.m.has(`${a.st.sid}/${ref.id}`), false);
   assert.ok(store.m.has(`${a.st.sid}/${other.id}`));
   await a.s.removeFile(ref.id); // retries are harmless
+  // The hand-made signature does authenticate for its own file: the refusal above was about the file.
+  assert.equal((await fetch(url, { method: 'DELETE', headers: { 'x-glaze-sig': sig } })).status, 204);
 });

@@ -368,12 +368,18 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     if (!b || typeof b.src !== 'string') return null;
     return { type: b.type, src: b.src, path: b.src.startsWith('./') ? X().MEDIA.mod(b.src) : null };
   };
-  // What a manifest asks the student to consent to: declared permissions, its own frame, and a remote background's host
-  // ('bgfile' for one it carries: nothing is asked of a site, but the prompt says so).
+  // Manifest entry points mean code (as lib/blocklist.js counts them): hooks, or a page of its own in any slot.
+  const hasCode = (m) => {
+    const file = (v) => typeof v === 'string' && v.length > 0;
+    return file(m?.hooks) || [...(m?.ui?.tiles || []), ...(m?.ui?.rail || []), m?.ui?.nav, m?.ui?.background].some((s) => file(s?.file));
+  };
+  // What a manifest asks the student to consent to: declared permissions, its own code ('code': an update that adds code to
+  // a widget Glaze drew itself has to ask again), its own frame, and a remote background's host ('bgfile' for one it
+  // carries: nothing is asked of a site, but the prompt says so).
   const caps = (m) => {
     const slots = [...(m.ui?.tiles || []), ...(m.ui?.rail || []), m.ui?.nav, m.ui?.background];
     const media = m.parts?.bg?.media?.src;
-    return [...(m.permissions || []).map((p) => p.id), ...(slots.some((s) => s?.file) ? ['frame'] : []),
+    return [...(m.permissions || []).map((p) => p.id), ...(hasCode(m) ? ['code'] : []), ...(slots.some((s) => s?.file) ? ['frame'] : []),
       ...(typeof media === 'string' && media.startsWith('https:') ? [`media:${new URL(media).hostname}`] : []), ...(bgMedia(m)?.path ? ['bgfile'] : [])];
   };
 
@@ -507,7 +513,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
   // installed: the stored record (or null); incoming: read()'s answer; dev: dev mode is on; blocked: what the blocklist
   // says about incoming (lib/blocklist.js: its reason, or '' when it isn't blocked; the caller asks, since the list lives
   // in storage). → { action: 'install'|'update'|'refuse', reason, newPermissions, prompt }, plus `blocked` when that is
-  // why. newPermissions: what the student hasn't been asked about ('frame' included); an install always prompts, an
+  // why. newPermissions: what the student hasn't been asked about ('code' and 'frame' included); an install always prompts, an
   // update only when that list isn't empty. trust: the separate author pin and highest signed version/hash, kept after removal.
   const plan = (installed, incoming, { dev = false, blocked = '', trust = null } = {}) => {
     const no = (reason) => ({ action: 'refuse', reason, newPermissions: [], prompt: false });
@@ -617,7 +623,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
       if (m.source === 'gallery') await local.remove('modOffer');
       return { ok: true, action: p.action, mod: summary(record) };
     }
-    if (!OPS.includes(m.op) || typeof m.id !== 'string' || !ID.test(m.id)) return { ok: false, error: 'bad' };
+    if (!OPS.includes(m.op) || typeof m.id !== 'string' || !ID.test(m.id) || (m.data !== undefined && typeof m.data !== 'boolean')) return { ok: false, error: 'bad' };
     const r = await get(m.id);
     if (m.op === 'clearTrust') return r ? { ok: false, error: 'installed' } : { ok: await local.remove(trustSlot(m.id)) };
     if (!r) return { ok: false, error: 'missing' };
@@ -648,8 +654,14 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     }
     if (m.op === 'remove') {
       const kept = await trust(r.id, r);
-      if (!await local.set({ ...(kept && { [trustSlot(r.id)]: kept }), mods: (await index()).filter((x) => x !== r.id) })) return { ok: false, error: 'write' };
-      return { ok: await local.remove([slot(r.id), `modChannel:${r.id}`, replaceSlot(r.id)]) };
+      // What the mod stored (modData: its cache, perhaps of grades), whether it held personal data (modPrivate), its nav
+      // layout switch and the note of why it was stopped go too unless the student keeps them: `data: false`.
+      const own = m.data === false ? [] : [`modData:${r.id}`, `modPrivate:${r.id}`, `modNavLayout:${r.id}`];
+      const stops = own.length ? (await local.get('modStops')).modStops : null;
+      // Persist the stop-note cleanup before deleting the record, so a failed write can still be retried from its card.
+      if (!await local.set({ ...(kept && { [trustSlot(r.id)]: kept }), mods: (await index()).filter((x) => x !== r.id),
+        ...(isObj(stops) && r.id in stops && { modStops: Object.fromEntries(Object.entries(stops).filter(([k]) => k !== r.id)) }) })) return { ok: false, error: 'write' };
+      return { ok: await local.remove([slot(r.id), `modChannel:${r.id}`, replaceSlot(r.id), ...own]) };
     }
     return { ok: true, zip: std(archive(Object.fromEntries(Object.entries(r.files).map(([k, v]) => [k, unstd(v)])))), name: r.manifest?.name || '' };
   };
@@ -692,7 +704,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     } catch (e) { return { error: e.why || "That mod file is damaged, or isn't a Glaze mod.", vars: e.vars || {}, at: Date.now() }; }
   };
 
-  return { CAP, TYPES, DATA, PREFIX, OPS, GALLERY, fromGallery, offer, std, type, slug, base32, compare, unzip, archive, check, clean, bgMedia, caps, prompt, digest, modId, verify, bundle, read, encode, decode,
+  return { CAP, TYPES, DATA, PREFIX, OPS, GALLERY, fromGallery, offer, std, type, slug, base32, compare, unzip, archive, check, clean, bgMedia, hasCode, caps, prompt, digest, modId, verify, bundle, read, encode, decode,
     canSign, makeKey, keyPair, backup, restore, pack, plan, change };
 })();
 

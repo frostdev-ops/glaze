@@ -9,7 +9,7 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const ext = process.env.EXT || path.resolve(__dirname, '..');
 const M = require(path.join(ext, 'lib/modbundle.js'));
-const chromePath = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const LMS = 'https://school.example.test';
 const enc = new TextEncoder();
 const std = (b) => Buffer.from(b).toString('base64');
@@ -33,7 +33,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
 
     await require('./wait-for-browser.js')();
     watchdog = setTimeout(() => { console.log('FAIL timed out after 120 s'); process.exitCode = 1; context?.close().finally(() => { fs.rmSync(scratch, { recursive: true, force: true }); process.exit(1); }); }, 120000);
-    context = await chromium.launchPersistentContext(scratch, { executablePath: chromePath, headless: true, locale: 'en-US',
+    context = await chromium.launchPersistentContext(scratch, { ...chromeLaunch, headless: true, locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await context.route('**/*', (route) => {
       const url = route.request().url();

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.3.4",
+  "version": "3.3.5",
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [
@@ -132,7 +132,7 @@
     },
     {
       "matches": [
-        "https://canvadocs.instructure.com/*"
+        "https://*.instructure.com/*"
       ],
       "js": [
         "lib/ink.js",

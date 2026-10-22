@@ -199,7 +199,8 @@ a.widget[aria-disabled="true"] { cursor: default; }
 /* Where its label shows, a count follows the label instead of covering it: at the open rail's row end, inline on the top bar. */
 .rail[data-open] .item .badge, .topbar:not([data-compact]) .titems .item .badge, .tsub .item .badge { position: static; flex: none; box-shadow: none; }
 .rail[data-open] .item .badge { margin-inline-start: auto; }
-.topbar[data-compact] .titems .label { display: none; }
+/* Visually hidden, never display: none: a label that isn't rendered is no part of the item's name, and the icon alone has none. */
+.topbar[data-compact] .titems .label { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .topbar .item[data-over], .tsep[hidden], .tmore[hidden] { display: none; }
 .tsep { flex: none; width: 1px; height: 22px; margin: 0 4px; background: var(--nb-line); }
 .tind {

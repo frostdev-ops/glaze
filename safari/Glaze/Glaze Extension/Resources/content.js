@@ -34,6 +34,17 @@
     document.addEventListener('DOMContentLoaded', look);
     look();
   });
+  // The all-host Ultra entry can also encounter spoofed Canvas/Moodle markup. Gate the detected kind, not just Ultra.
+  const yes = (list) => Array.isArray(list) && list.includes(site === 'ultra' ? location.origin : `${location.origin}/*`);
+  const known = location.protocol === 'https:' && !location.port && (site === 'ultra' ? /\.blackboard\.com$/.test(location.hostname) : site === 'canvas' && /(^|\.)instructure\.com$/.test(location.hostname));
+  if (site && !isPreview && !known
+    && !await new Promise((res) => { try { chrome.storage.local.get(site, (r) => res(yes(r?.[site]))); } catch { res(false); } })) {
+    globalThis.GZ_SITE_ULTRA?.sheets?.splice(0).forEach((l) => l.remove());
+    if (window.top === window) try { chrome.runtime.sendMessage(site).catch(() => {}); } catch { /* reloaded */ }
+    await new Promise((res) => { try { chrome.storage.onChanged.addListener(function on(c, area) {
+      if (area === 'local' && yes(c[site]?.newValue)) { chrome.storage.onChanged.removeListener?.(on); res(); }
+    }); } catch { /* reloaded: stays out */ } });
+  }
   if (site !== 'ultra') globalThis.GZ_SITE_ULTRA?.sheets?.forEach((l) => l.remove());
   if (!site) return;
   const ultra = site === 'ultra';
@@ -303,21 +314,20 @@
   // its planner (GZ_CANVAS_DUE_WEEK), for the command palette and the popup (which can't ask the site, so it
   // reads what's kept here). Asked once a page load and at most every ten minutes, like the course list, which
   // names each Ultra item's course (a Canvas item brings its own, and its address, which Ultra's never do).
+  // Kept per site (`dueWeek:<origin>`): another site's items (Blackboard and Canvas, or two schools) open nothing here.
   let dueSoon = null;
+  const DUE = `dueWeek:${location.origin}`;
   const dueWeek = () => (dueSoon ||= new Promise((res) => {
-    try { chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'dueWeekFrom'], res); } catch { res({}); }
+    try { chrome.storage.local.get(DUE, (r) => res(r?.[DUE])); } catch { res(); }
   }).then((r) => {
     const now = Date.now();
-    // A list kept by another site (someone with Blackboard and Canvas, or two schools' Canvas, open) is no use
-    // here: its items open nothing, or the wrong school's. Even an empty one says nothing about this site.
-    const other = r?.dueWeekFrom !== location.origin;
-    const kept = other ? [] : r?.dueWeek || [];
-    if (!other && now - (r?.dueWeekAt || 0) < 600000) return kept;
+    const kept = Array.isArray(r?.list) ? r.list : [];
+    if (now - (r?.at || 0) < 600000) return kept;
     const at = (days) => new Date(now + days * 864e5).toISOString();
     const ask = ultra ? api(`/calendars/todo/studentItems?since=${at(0)}&until=${at(7)}`).then((j) => GZ_DUE_WEEK(j, now))
       : moodle ? moodleIn().then((m) => m.due(now)) : capi(`/planner/items?start_date=${at(0)}&end_date=${at(7)}&per_page=100`).then((j) => GZ_CANVAS_DUE_WEEK(j, now));
     return ask.then((list) => {
-      try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now(), dueWeekFrom: location.origin }); } catch { /* reloaded */ }
+      try { chrome.storage.local.set({ [DUE]: { at: Date.now(), list } }); } catch { /* reloaded */ }
       return list;
     }, () => kept);
   }));
@@ -857,15 +867,16 @@
   };
   // Expired copies go; with backup off, all copies go. Top frame only.
   const tidyDrafts = () => {
-    if (window.top !== window) return;
+    if (window.top !== window || !settings.enabled) return;
     const sweep = (s, all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
-      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }, () => {});
+      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (settings.enabled && old.length) s.remove(old); }, () => {});
     };
     local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => {
+      if (!settings.enabled) return;
       if (ks) return s.get(ks.filter((k) => k.startsWith('draft:')), (all) => sweep(s, all));
       // Without key listing everything is read, local artwork too: at most once a day, so old copies still go.
-      s.get('draftsSwept', (r) => { if (!(r?.draftsSwept > Date.now() - 864e5)) { s.set({ draftsSwept: Date.now() }); s.get(null, (all) => sweep(s, all)); } });
+      s.get('draftsSwept', (r) => { if (settings.enabled && !(r?.draftsSwept > Date.now() - 864e5)) { s.set({ draftsSwept: Date.now() }); s.get(null, (all) => sweep(s, all)); } });
     }).catch(() => {}));
   };
 
@@ -903,11 +914,14 @@
     b.addEventListener('click', onClick);
     return b;
   };
+  let darkSave = 0;
   const setDark = (v) => {
+    const save = ++darkSave;
     settings = { ...settings, enhance: { ...settings.enhance, docPages: v } };
     setAttr('data-gz-enhance-docPages', v);
     syncDocTools();
-    try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
+    // Only this field, on what is stored: this tab's copy has every default filled in.
+    try { chrome.storage.sync.get('enhance', (r) => chrome.runtime.lastError || save !== darkSave || chrome.storage.sync.set({ enhance: { ...r.enhance, docPages: v } })); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
     // Read-only review is independently lazy, including when the reading tools are off.
@@ -926,16 +940,17 @@
   // "g" then a letter goes somewhere, "/" searches, "?" lists them: features/keys.js, loaded on the first key that
   // starts one while the switch is on, then handed every key. Top frame only.
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
-  // Whether a key is one for the shortcuts: switched on, no modifier, not typing, and on Canvas and Moodle not repeated, not
+  // Whether a key is one for the shortcuts: switched on, no modifier, not typing or composing, not in a menu, list, grid or tree
+  // (type-ahead: a dialog too on Canvas and Moodle, but Ultra's courses are dialogs), and on Canvas and Moodle not repeated, not
   // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too, and Moodle's pages).
-  const keyOn = (e) => !!chrome.runtime?.id && !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target)
-    && (ultra || !(e.defaultPrevented || e.repeat || !(moodle || GZ_PAGE.canvasKeys(location.pathname)) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')));
+  const keyOn = (e) => !!chrome.runtime?.id && !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && e.keyCode !== 229
+    && !(e.path || e.composedPath?.() || [e.target]).some((el) => typing(el) || el?.closest?.(`${ultra ? '' : '[role="dialog"]:not(#gz-keys), '}[role="menu"], [role="menubar"], [role="listbox"], [role="grid"], [role="tree"], [role="combobox"]`)) && (ultra || !(e.defaultPrevented || e.repeat || !(moodle || GZ_PAGE.canvasKeys(location.pathname))));
   let keysWaiting = null; // the keys pressed while keys.js loads, as they were: handed over in order when it's in
   if (solo) {
     document.addEventListener('keydown', (e) => {
       if (!chrome.runtime?.id) return;
       if (globalThis.GZ_KEYS) return GZ_KEYS.key(e);
-      const was = { key: e.key, target: e.target, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, repeat: e.repeat, at: Date.now(), preventDefault() {}, stopImmediatePropagation() {} };
+      const was = { key: e.key, target: e.target, path: e.composedPath?.(), isComposing: e.isComposing, keyCode: e.keyCode, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, repeat: e.repeat, at: Date.now(), preventDefault() {}, stopImmediatePropagation() {} };
       if (keysWaiting) {
         // What keys.js does at once with a "?" (Ultra's list; Canvas's g then ?, so Canvas's own help stays shut),
         // which can't wait for the file.
@@ -1342,6 +1357,8 @@
     vars.clear();
     attrs.clear();
   };
+  // Ultra's early sheets enable() hasn't taken: off, they'd style the page with no palette.
+  const early = () => globalThis.GZ_SITE_ULTRA?.sheets?.splice(0).forEach((l) => l.remove());
 
   const enable = () => {
     if (notUltra) return;
@@ -1372,7 +1389,8 @@
     onBody(async () => {
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
-      if (!ultra) await ready;
+      // The sweep fetches, records and registers the site: not on defaults.
+      await ready;
       // The site's part still on its way: the theme is on already; the sweep and the extras wait for it.
       if (partIn) await partIn;
       if (!links.length) return;
@@ -1397,6 +1415,7 @@
     unmenu();
     for (const l of links) l.remove();
     links = [];
+    early();
     armFlip();
     X.syncTodo();
     X.syncCardTasks();
@@ -1424,7 +1443,7 @@
   const I = { C, html, isPreview, solo, tabFrame, need, t, locale, api, capi, canvasCourseKey, canvasCourseId, courseId, celebrate, markDue, drawProgress, cardBadge, KIND,
     cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled, setVar, setAttr,
     setCourseList: (all) => { courseList = all; X.paintCourses(); syncCourseMenu(); reapply(); },
-    get settings() { return settings; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
+    get settings() { return settings; }, get ready() { return ready; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
     get courseList() { return courseList; }, get worn() { return worn; } };
   const part = { ultra: 'GZ_SITE_ULTRA', canvas: 'GZ_SITE_CANVAS' }[site];
   const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
@@ -1477,10 +1496,16 @@
       if (n !== settingsRead) return settingsPending;
       lookX = raw?.lookX;
       const s = GZ_SANITIZE(raw, fresh);
-      // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
-      try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
+      try { sessionStorage.setItem(KEPT, JSON.stringify(firstPaint(s))); } catch { /* blocked or full */ }
       return s;
     }));
+  };
+  // The page can read this copy: only what first paint shows anyway, no names, addresses or course maps.
+  const firstPaint = (s) => {
+    const { image, ...bg } = s.bg, { u, i, ...nav } = s.nav, { title, ...sidebar } = s.sidebar, { harmonize, tint, strength } = s.courses;
+    const pal = (n) => ({ name: n, colors: GZ_PRESET(s.auto[n], s.presets) || s.colors });
+    return { enabled: s.enabled, colors: s.colors, auto: { ...s.auto, light: 'light', dark: 'dark' }, presets: [pal('light'), pal('dark')], look: s.look, bg, nav, sidebar,
+      navbar: s.navbar, motion: s.motion, enhance: s.enhance, declutter: s.declutter, extras: s.extras, footer: s.footer, courses: { harmonize, tint, strength } };
   };
   // The previous palette covers storage latency, avoiding a dark flash with a light look.
   const KEPT = 'gz-settings';
@@ -1497,6 +1522,7 @@
     else enable();
   });
   if (on(settings)) enable();
+  else early();
   // Load parts after the theme, only when present.
   const partsIn = (m) => {
     if (solo && !isPreview && (m || lookX || globalThis.GZ_XPARTS_PAGE)) need('features/lookparts.js', () => globalThis.GZ_XPARTS_PAGE).then(() => GZ_XPARTS_PAGE.read(), () => {});

@@ -422,6 +422,9 @@ function GZ_ULTRA_RAIL(X) {
     bottom.append(...mods.map((m) => m.el));
     readLocal(); drawWidgets();
   };
+  // A worn Look's link that leaves the site says where it goes (lib/navlayout.js away), so its "Grades" can't pass for the
+  // school's own; the student's own links (no layout) are theirs.
+  const linkName = (l) => { const host = layout ? L.away(l, location.origin) : ''; return host ? `${l.n} · ${X.t('From {name}', { name: host })}` : l.n; };
   // A Look's layout (x.nav, from GZ_CTX.parts) stands in for the student's own items while that Look is worn; Canvas and
   // Moodle have only that. Turning Glaze off or taking the Look off puts the native nav back exactly (restore).
   const pick = () => {
@@ -476,7 +479,8 @@ function GZ_ULTRA_RAIL(X) {
         if (X.site === 'moodle') a.setAttribute('role', 'menuitem');
         const parent = [...captured.values()][0]?.mark.parentNode || list; custom.set(l.id, { a, unit: unit(a, l.id), parent });
       }
-      a.href = l.u; a.target = l.tab ? '_blank' : '_self'; a.rel = l.tab ? 'noopener noreferrer' : ''; a.title = l.n; a.setAttribute('aria-label', l.n);
+      const name = linkName(l);
+      a.href = l.u; a.target = l.tab ? '_blank' : '_self'; a.rel = l.tab ? 'noopener noreferrer' : ''; a.title = name; a.setAttribute('aria-label', name);
       setText(a.lastElementChild, l.n);
       if (a.dataset.icon !== l.i) { a.firstElementChild.replaceWith(icon(l.i)); a.dataset.icon = l.i; }
     }

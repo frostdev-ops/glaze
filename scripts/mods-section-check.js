@@ -16,7 +16,7 @@ const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 
 const ext = fs.realpathSync(path.join(__dirname, '..'));
-const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const M = require(path.join(ext, 'lib/modbundle.js'));
 const enc = new TextEncoder();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -64,7 +64,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
 
     await require('./wait-for-browser.js')();
     watchdog = setTimeout(() => { console.log('FAIL timed out after 180 s'); context?.close().finally(() => { server?.close(); fs.rmSync(tmp, { recursive: true, force: true }); process.exit(1); }); }, 180000);
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { executablePath: chrome, headless: true, locale: 'en-US', acceptDownloads: true, viewport: { width: 1200, height: 900 },
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...chromeLaunch, headless: true, locale: 'en-US', acceptDownloads: true, viewport: { width: 1200, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, `--ignore-certificate-errors-spki-list=${spki}`, '--disable-background-networking', '--disable-component-update', '--no-proxy-server',
         `--host-resolver-rules=MAP frostdev.io 127.0.0.1:${port}, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1`] });
     context.setDefaultTimeout(10000);

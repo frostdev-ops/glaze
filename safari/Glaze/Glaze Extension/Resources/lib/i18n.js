@@ -9,6 +9,7 @@ const GZ_I18N = (() => {
   const EN = {
     '{n} items · {done} done': { one: '{n} item · {done} done', other: '{n} items · {done} done' },
     'Course progress: {done} of {n} items complete': { one: 'Course progress: {done} of {n} item complete', other: 'Course progress: {done} of {n} items complete' },
+    '{n} new': { one: '{n} new', other: '{n} new' },
     '{n} new items': { one: '{n} new item', other: '{n} new items' },
     '{n} new grades: open the gradebook': { one: '{n} new grade: open the gradebook', other: '{n} new grades: open the gradebook' },
     '{n} new items: open the course': { one: '{n} new item: open the course', other: '{n} new items: open the course' },
@@ -18,8 +19,20 @@ const GZ_I18N = (() => {
     'Out of reach: full marks on the {n} items left would make {pct}.': { one: 'Out of reach: full marks on the {n} item left would make {pct}.', other: 'Out of reach: full marks on the {n} items left would make {pct}.' },
     "You'd need about {pct} on each of the {n} items left.": { one: "You'd need about {pct} on the item left.", other: "You'd need about {pct} on each of the {n} items left." },
     'Saved {n} files': { one: 'Saved {n} file', other: 'Saved {n} files' },
+    '{n} failed': { one: '{n} failed', other: '{n} failed' },
+    '{n} unopened left out': { one: '{n} unopened left out', other: '{n} unopened left out' },
+    '{n} fonts': { one: '{n} font', other: '{n} fonts' },
     '{n} settings': { one: '{n} setting', other: '{n} settings' },
     'Downloads {fonts} (web fonts).': { one: 'Downloads {fonts} (a web font).', other: 'Downloads {fonts} (web fonts).' },
+    'Hides {n} parts of your school pages: {parts}.': { one: 'Hides {n} part of your school pages: {parts}.', other: 'Hides {n} parts of your school pages: {parts}.' },
+    'Makes {n} parts of your school pages see-through: {parts}.': { one: 'Makes {n} part of your school pages see-through: {parts}.', other: 'Makes {n} parts of your school pages see-through: {parts}.' },
+    'Changes how {n} parts of your school pages look: {parts}.': { one: 'Changes how {n} part of your school pages looks: {parts}.', other: 'Changes how {n} parts of your school pages look: {parts}.' },
+    'Brings {n} course card styles for your Canvas Dashboard.': { one: 'Brings {n} course card style for your Canvas Dashboard.', other: 'Brings {n} course card styles for your Canvas Dashboard.' },
+    '{n} card styles from a theme take turns on the cards that have no style of their own.': { one: '{n} card style from a theme takes turns on the cards that have no style of their own.', other: '{n} card styles from a theme take turns on the cards that have no style of their own.' },
+    '{name}: {n} layers.': { one: '{name}: {n} layer.', other: '{name}: {n} layers.' },
+    'Layers {n} animated backgrounds.': { one: 'Layers {n} animated background.', other: 'Layers {n} animated backgrounds.' },
+    'Changes {n} animations.': { one: 'Changes {n} animation.', other: 'Changes {n} animations.' },
+    'Plays effects for {n} events.': { one: 'Plays effects for {n} event.', other: 'Plays effects for {n} events.' },
   };
 
   // The languages Glaze has besides English, one catalogue each in i18n/. The extension's own pages load them

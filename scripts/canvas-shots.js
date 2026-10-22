@@ -62,7 +62,6 @@ const root = path.join(__dirname, '..');
 let BASE = 'http://localhost:3000';
 let CREDS = path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
 let LMS = 'canvas';
-const CHROME = path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
 const COURSES = { bio: 'BIO 1100', eng: 'ENG 1100', math: 'MATH 1350', hist: 'HIST 2010' };
 // Pages loaded at once.
 const TABS = 2;
@@ -449,7 +448,7 @@ const eachTab = async (tabs, items, fn) => {
   const ext = path.join(tmp, 'ext');
   devCopy(ext);
 
-  const exe = process.env.CHROME || (fs.existsSync(CHROME) ? CHROME : null);
+  const exe = require('./check-env.js').chromePath();
   const context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
     ...(exe ? { executablePath: exe } : { channel: 'chromium' }), headless: true, viewport: size, deviceScaleFactor: 1,
     colorScheme: 'dark', reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',

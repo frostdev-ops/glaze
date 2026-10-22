@@ -112,7 +112,7 @@ const page = ({ frame = '', body = false, marker = true, wrapper = true, cached 
   const c = vm.createContext({
     document: doc, console, Intl, URL, URLSearchParams, TextEncoder, structuredClone,
     crypto: require('node:crypto').webcrypto, Date: AuditDate,
-    location: { protocol: 'https:', origin: 'https://school.instructure.com', pathname, href: `https://school.instructure.com${pathname}`, search: '', hash: '' },
+    location: { protocol: 'https:', origin: 'https://school.instructure.com', hostname: 'school.instructure.com', pathname, href: `https://school.instructure.com${pathname}`, search: '', hash: '' },
     navigator: { language: 'en' }, Element: El, HTMLElement: El, Node: El, SVGElement: class {}, NodeFilter: { SHOW_TEXT: 4 },
     getComputedStyle: (el) => {
       events.push(['style', el]);

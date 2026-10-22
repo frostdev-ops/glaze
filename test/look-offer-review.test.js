@@ -20,7 +20,7 @@ const offer = async (code) => {
   const context = vm.createContext({
     GZ_SHARE: S, GZ_XPARTS: X, GZ_PARTS: P, GZ_SANITIZE: G.GZ_SANITIZE, GZ_MATCH_PRESET: G.GZ_MATCH_PRESET,
     GZ_CARDS: K, GZ_FONTS: F, GZ_I18N: { ui: () => 'en', locale: () => 'en' },
-    s: G.GZ_SANITIZE(), offer: null, from: null, URL, Intl,
+    s: G.GZ_SANITIZE(), offer: null, from: null, offerFile: '', offerGeneration: 0, letGo() {}, URL, Intl,
     $: (id) => controls[id], document: { createElement: () => ({}) }, fontName: (f) => f.name,
     t: (s, vars) => s.replace(/\{(\w+)(?:\|\w+)?\}/g, (_, k) => vars[k]),
     endOffer() {}, hint: (...xs) => hints.push(xs), preview() {}, GZ_UI: { paint: (s) => paints.push(s) },

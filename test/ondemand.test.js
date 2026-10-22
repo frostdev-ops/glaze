@@ -206,11 +206,11 @@ for (const gone of Object.keys(AFTER)) {
     });
     const listeners = {};
     const ctx = vm.createContext({ solo: false, tabFrame: '',
-      ultra: true, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/ultra/courses/_1_1/outline' },
+      ultra: true, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { origin: 'https://bb.school.test', pathname: '/ultra/courses/_1_1/outline' },
       document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => null, querySelectorAll: () => [],
         body: {}, createTreeWalker: () => ({ nextNode: () => null }) }, // the page's text, where a sent post would show: none here
       NodeFilter: { SHOW_ELEMENT: 1, SHOW_TEXT: 4 },
-      chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
+      chrome: { storage: { local: { set: (v) => saved.push(v), get: (k, cb) => cb({}), remove() {} } } },
       need: (file) => (loads.find((l) => l.file === file) || loads[loads.push({ file, p: later() }) - 1]).p, // one request a file, as need() does
       setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, window: {}, globalThis: null,
     });
@@ -238,13 +238,13 @@ for (const gone of Object.keys(AFTER)) {
     await settle();
     assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js', 'features/drafts.js'], 'then the backup itself');
     ctx.GZ_CTX = { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local,
-      draftEditor: '.ql-editor[contenteditable="true"]', draftAt: ctx.api.draftAt };
+      draftEditor: '.ql-editor[contenteditable="true"]', draftAt: ctx.api.draftAt, account: () => Promise.resolve('_7_1') };
     vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
     loads[1].p.resolve();
     await settle();
     t.run();
     assert.equal(saved.length, 1, 'the paste is kept once the module arrives, without another input');
-    assert.deepEqual(Object.keys(saved[0]), ['draft:/ultra/courses/_1_1/outline#_12_3/ed1'], 'under the page and post it was written on');
+    assert.deepEqual(Object.keys(saved[0]), ['draft:ultra:https://bb.school.test/_7_1/ultra/courses/_1_1/outline#_12_3/ed1'], 'under the site, the account, and the page and post it was written on');
     assert.equal(Object.values(saved[0])[0].text, text);
   });
 }
@@ -464,7 +464,7 @@ for (const gone of ['never', 'before the files arrive', 'while the account is as
     const ctx = vm.createContext({ solo: false, tabFrame: '',
       ultra: false, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/conversations', origin: 'https://school.test' },
       document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: (s) => (s === SEL ? editor : null), querySelectorAll: () => [] },
-      chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
+      chrome: { storage: { local: { set: (v) => saved.push(v), get: (k, cb) => cb({}), remove() {} } } },
       need: (file) => { const p = later(); loads.push({ file, p }); return p; },
       setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, Promise, window: {}, globalThis: null,
     });

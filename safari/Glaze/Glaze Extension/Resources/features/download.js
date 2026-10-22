@@ -97,6 +97,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
         ({ skipped, failed: unavailable } = r);
       } else {
         const items = await moduleItems(cid, fid, true); // Refresh requirements at the click; a preview can be a minute old.
+        if (items.complete === false) throw new Error('Incomplete Canvas module');
         skipped = GZ_ZIP.canvasUnopened(items).size;
         for (const id of GZ_ZIP.canvasFiles(items)) {
           ctl.signal.throwIfAborted();
@@ -145,38 +146,54 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
       setTimeout(() => { if (jobs.get(fid) === job) { jobs.delete(fid); paintDl(fid); } }, 6000);
     }
   };
-  let canvasDlChecked = new WeakMap();
+  // Canvas: a module gets its button from the rows Canvas drew (a File row is `.attachment`), with no request. Only a
+  // collapsed module that drew none (Canvas may draw them as it opens) is asked about: once a page, through the site's
+  // queue (lib/lmsq.js), those on screen first; a failed answer may be asked again a minute later. Nothing is asked again
+  // on a timer: the click reads the list afresh.
+  let canvasAsked = new Map(); // `${cid}/${module id}` → { at, files (undefined until answered), pending }
+  const placeCanvas = (item, header, fid, files) => {
+    const old = document.getElementById(`gz-dl-${fid}`);
+    if (!files) return old?.remove();
+    if (old) return;
+    const b = document.createElement('button');
+    b.type = 'button'; b.id = `gz-dl-${fid}`; b.className = 'gz-dl'; b.title = t("Download all: save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.");
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!e.isTrusted) return;
+      const j = jobs.get(fid);
+      if (j && !j.done) j.ctl.abort(); else download(fid, item.querySelector('.name')?.textContent.trim());
+    });
+    header.append(b); paintDl(fid);
+  };
   const sync = () => {
     if (!ultra) {
       const cid = canvasCourseId();
       if (!ctx.settings().enhance.download || typeof chrome.runtime.connect !== 'function' || !cid || !/^\/courses\/\d+(?:\/modules)?\/?$/.test(location.pathname)) {
         for (const j of jobs.values()) j.ctl.abort();
         for (const b of document.querySelectorAll('.gz-dl')) b.remove();
-        for (const item of document.querySelectorAll('.context_module')) canvasDlChecked.delete(item);
+        canvasAsked.clear();
         return;
       }
       for (const item of document.querySelectorAll('.context_module[data-module-id]')) {
         const fid = item.dataset.moduleId;
-        if (!/^\d+$/.test(fid)) continue;
-        const header = item.querySelector('.ig-header');
-        if (!header || Date.now() - (canvasDlChecked.get(item) || 0) < 60000) continue;
-        canvasDlChecked.set(item, Date.now());
-        // A collapsed or paginated module need not have its File rows in the DOM yet.
-        moduleItems(cid, fid).then((list) => {
-          if (!ctx.on() || !ctx.settings().enhance.download || !item.isConnected || canvasCourseId() !== cid) { canvasDlChecked.delete(item); return; }
-          const old = document.getElementById(`gz-dl-${fid}`);
-          if (!list.some((c) => c.type === 'File')) return old?.remove();
-          if (old) return;
-          const b = document.createElement('button');
-          b.type = 'button'; b.id = `gz-dl-${fid}`; b.className = 'gz-dl'; b.title = t("Download all: save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.");
-          b.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (!e.isTrusted) return;
-            const j = jobs.get(fid);
-            if (j && !j.done) j.ctl.abort(); else download(fid, item.querySelector('.name')?.textContent.trim());
-          });
-          header.append(b); paintDl(fid);
-        }).catch(() => {});
+        const header = /^\d+$/.test(fid) && item.querySelector('.ig-header');
+        if (!header) continue;
+        if (item.querySelector('.context_module_item') || !item.classList?.contains('collapsed_module')) {
+          placeCanvas(item, header, fid, !!item.querySelector('.context_module_item.attachment'));
+          continue;
+        }
+        const k = `${cid}/${fid}`, asked = canvasAsked.get(k);
+        if (asked && (asked.pending || asked.files !== undefined || Date.now() - asked.at < 60000)) { placeCanvas(item, header, fid, asked.files); continue; }
+        const a = { at: Date.now(), pending: true };
+        canvasAsked.set(k, a);
+        const prio = item.getBoundingClientRect().top < innerHeight ? 0 : 1;
+        need('lib/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.run(() => {
+          if (!ctx.on() || !ctx.settings().enhance.download || !item.isConnected || canvasCourseId() !== cid) throw new Error('stale');
+          return moduleItems(cid, fid);
+        }, prio)).then((list) => { a.files = list.some((c) => c.type === 'File'); }, () => {}).finally(() => {
+          a.pending = false;
+          if (ctx.on() && ctx.settings().enhance.download && item.isConnected && canvasCourseId() === cid && canvasAsked.get(k) === a) sync();
+        });
       }
       return;
     }
@@ -209,7 +226,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
   return {
     sync,
     // Glaze switched off: what is still being fetched stops.
-    stop: () => { for (const j of jobs.values()) j.ctl.abort(); canvasDlChecked = new WeakMap(); },
+    stop: () => { for (const j of jobs.values()) j.ctl.abort(); canvasAsked = new Map(); },
   };
 })();
 

@@ -37,7 +37,7 @@
   const confirmHost = (server) => (server === state.defaultRelay && server === state.relay) || confirm(server === state.defaultRelay
     ? t('This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?', { host: new URL(server).host, selected: new URL(state.relay).host })
     : t('This share is hosted on {host}, not frostdev.io. Connect to this server? Glaze cannot vouch for its operator.', { host: new URL(server).host }));
-  const names = { pending: 'Changes saved locally, waiting to send', live: 'Up to date', offline: 'Offline — local copy kept', gone: 'Deleted on the relay — local copy kept', incomplete: 'More changes remain. Sync again.' };
+  const names = { pending: 'Changes saved locally, waiting to send', live: 'Up to date', offline: 'Offline — local copy kept', big: 'Too big to sync — local copy kept', gone: 'Deleted on the relay — local copy kept', incomplete: 'More changes remain. Sync again.' };
   const copy = async (link) => {
     try { await navigator.clipboard.writeText(link); say('Invite copied. Keep it private.'); }
     catch { say('Could not copy the invite. Try again.', true); }
@@ -224,7 +224,7 @@
         const r = await send('notesImport', { key, json: JSON.stringify({ format: raw.format, version: raw.version, site: raw.site, folders: data.folders, files: data.files, notes: data.notes.slice(i, i + 5) }) });
         done += r.done; skipped += r.skipped;
       }
-      nb([t('Notes and share keys imported locally. Resume to reconnect.'), t('Notes imported: {n}', { n: done }), skipped && t('Skipped, already here and not older: {n}', { n: skipped })].filter(Boolean).join(' · '));
+      nb([t('Notes and share keys imported locally. Resume to reconnect.'), t('Notes imported: {n}', { n: done }), skipped && t('Skipped (already up to date or too large): {n}', { n: skipped })].filter(Boolean).join(' · '));
     });
   });
   $('#nb-export').addEventListener('click', (e) => {

@@ -17,7 +17,7 @@ const G = require('../defaults.js');
 
 const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '..')); // the id is made from the real path
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-nav-layout-'));
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const CANVAS = 'https://nav.school.instructure.com', MOODLE = 'https://moodle.school.test';
 const A = 'library0000a';
 const LINK = { id: A, n: 'Library', u: 'https://library.example.edu/', i: 'book' };
@@ -46,7 +46,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
   let ctx;
   try {
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { executablePath: CHROME, headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());

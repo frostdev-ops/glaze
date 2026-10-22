@@ -87,7 +87,7 @@ chooses what to allow, and can take any of it back later. A call without its gra
 | `grades` | `glaze.grades()` and the `grade` event. |
 | `nav.read` | `glaze.nav.model()` and the `nav.change`, `nav.navigate`, `nav.expand`, `nav.collapse` and `nav.sheet` events. Glaze's bar shows course names and unread counts, so this is personal data. |
 | `nav.items` | `glaze.nav.add()`, `glaze.nav.update()` and `glaze.nav.remove()`: up to 8 items of the mod's own in Glaze's bar, and the `nav.action` event. |
-| `nav.layout` | `glaze.nav.layout()`: a layout proposed over the student's while the mod runs. |
+| `nav.layout` | `glaze.nav.layout()`, a layout returned from `glaze.nav.items()`, and a `nav` in `glaze.look.override()`: a layout proposed over the student's while the mod runs. Its links go only to pages of the school's site. |
 | `network:<host>` | `glaze.fetch()` to `https://<host>/`. The host is a lowercase DNS name with at least two labels: no port, wildcard, address or local name, and subdomains don't count. At most 8. |
 
 `why` is one line of at most 280 characters.
@@ -98,6 +98,11 @@ chooses what to allow, and can take any of it back later. A call without its gra
 - **Glaze adds its own warnings** to the prompt: personal data together with a network host ("could send your grades to
   ..."), a page of its own (it can contact other sites, which learn the student's address and when they use it), unsigned
   (Dev), not reviewed, and Chrome only.
+- **Code is a permission of its own.** A mod with `hooks` or a slot `file` is listed as "Runs its author's code". An update
+  that adds code to a mod that had none (a widget made of blocks) asks again, even with the same permissions, and a
+  followed channel waits for the student's review.
+- **Removing a mod** asks whether to remove its stored data too (on by default): what it saved with `glaze.storage`, its
+  private-data mark, its navigation-layout switch and its stop note. Keep it, and a mod with the same id finds it again.
 
 ### `replaces`
 
@@ -255,24 +260,30 @@ Where a row says Worker, a frame UI can't use it (personal data goes to Workers 
 | `glaze.ui.canvas(slot)` | The slot's `canvas` component as an `OffscreenCanvas`. Worker. | |
 | `glaze.ui.commit(slot)` | Sends the canvas to the page now. Worker. | |
 | `glaze.cards.decorate(fn)` | `fn(courses)` gets `[{ id, name }]` for the cards on the page and returns `{ [courseId]: { badge, accent, note } }` (or a promise of it; `{}` clears). Applied on the next pass. Worker. | `courses` |
-| `glaze.nav.items(fn)` | `fn(items)` gets `[{ id, label }]`, the items of Glaze's bar (or of the older rail), and returns a nav layout to stand in for the student's own, or nothing. The first mod in the student's order to give one wins. | |
+| `glaze.nav.items(fn)` | `fn(items)` gets `[{ id, label }]`, the page's own items shown in Glaze's bar (or the older rail), each with Glaze's English name for it (`course` is `Courses`), and returns a nav layout to stand in for the student's own, or nothing. The first mod in the student's order to give one wins. Returning a layout needs `nav.layout`; returning nothing needs no permission. Glaze refusing the layout stops the mod, as an error thrown in `fn` would. | `nav.layout` for a layout |
 | `glaze.nav.model()` | Glaze's bar: `{ place, items: [{ id, label, icon, badge, active, group }], groups: [{ label, items: [id] }], course: { name, items } \| null, active }`, hidden items left out, no addresses, at most 64 items; `null` where the bar isn't drawn. Worker. | `nav.read` |
-| `glaze.nav.add(item)` | One of the mod's own items in the bar: `{ id, label, icon?, href \| action, badge?, group \| slot }`. `id` as slot ids; `label` one line of at most 40; `icon` one of the bar's (else the link icon); `href` a page of the school's site this page is on, nothing else; `action: true` sends `nav.action` on a click instead; `badge` a number or at most 4 characters; `group` a group's label or place (0 to 7), or `slot` `top` or `bottom`. At most 8; the same `id` replaces. They show with the mod's name and go when it stops. | `nav.items` |
+| `glaze.nav.add(item)` | One of the mod's own items in the bar: `{ id, label, icon?, href \| action, badge?, group \| slot }`. `id` as slot ids; `label` one line of at most 40, and not the name of Glaze's own settings or sign-out items in any of Glaze's languages, compared without case, spaces or punctuation (`Glaze settings`, `Sign out`, `Log out`, `Abmelden`, ...; refused with `args`); `icon` one of the bar's except `glaze` and `signout`, which only Glaze's own items wear (else the link icon); `href` a page of the school's site this page is on, nothing else; `action: true` sends `nav.action` on a click instead; `badge` a number or at most 4 characters; `group` a group's label or place (0 to 7), or `slot` `top` or `bottom`. At most 8; the same `id` replaces. They show with the mod's name and go when it stops. | `nav.items` |
 | `glaze.nav.update(id, patch)` | Changes one of its own items; the patch has the same keys, without `id`. | `nav.items` |
 | `glaze.nav.remove(id)` | Removes one of its own items. | `nav.items` |
-| `glaze.nav.layout(patch)` | A nav layout proposed over the student's while the mod runs, never saved; `null` withdraws it. `place` `left` or `top` moves the bar. The student's own choices win where they made them, as with a worn Look; the first mod in the student's order wins. The bar says "Arranged by" the mod with **Use my own**, which keeps that mod's layouts off until the student lets it again in **Settings → Navigation items**. | `nav.layout` |
+| `glaze.nav.layout(patch)` | A nav layout proposed over the student's while the mod runs, never saved; `null` withdraws it. Its links must be pages of the school's site, below. `place` `left` or `top` moves the bar. The student's own choices win where they made them, as with a worn Look; the first mod in the student's order wins. The bar says "Arranged by" the mod with **Use my own**, which keeps that mod's layouts off until the student lets it again in **Settings → Navigation items**. | `nav.layout` |
 | `glaze.nav.go(id)` | Opens a bar item (or its panel) as a click on it would. Only for the mod whose `nav` replacement is on, in its Worker, within a second of a click in its tree-drawn `nav` slot. One click allows one call. Destinations must be on the current school's origin; the student's and worn Looks' off-site HTTPS links still work when clicked directly. | |
 | `glaze.palette.commands(list)` | `[{ id, title, hint?, run }]` for Ctrl+K, at most 16; `run()` is called here when the student picks it. | |
 | `glaze.rules.set(rules)` | Page rules, below; `[]` clears. | |
 | `glaze.effects.play(kind, options?)` | A particle effect: `kind` is `burst`, `confetti`, `rain`, `ring` or `sprite`. Options: `count` 1 to 60, `shapes` (up to 4 of `dot` `star` `snow` `heart` `leaf` `spark`), `c` (up to 6 colours), `spread` 0 to 360, `gravity` -2 to 2, `life` 200 to 2500 ms, `size` 2 to 48, `x` and `y` 0 to 1 (fractions of the window; 0.5 and 0.33 by default). One a mod every 200 ms; none with motion off or the page hidden. | |
-| `glaze.look.override(parts)` | Look parts laid over the student's Look while the mod runs, never saved; `null` removes them. The first mod in the student's order to give a part wins it; `rules` add up. Media `src` and `type` must exactly match `parts.bg.media` in the installed manifest; code can change its fit, dim and loop controls. Use `glaze.fetch` for network requests. | |
+| `glaze.look.override(parts)` | Look parts laid over the student's Look while the mod runs, never saved; `null` removes them. The first mod in the student's order to give a part wins it; `rules` add up. Media `src` and `type` must exactly match `parts.bg.media` in the installed manifest; code can change its fit, dim and loop controls. A `nav` is a nav layout from code, as `glaze.nav.layout()`'s, and needs `nav.layout`. Use `glaze.fetch` for network requests. | `nav.layout` for a `nav` |
 | `glaze.broadcast(data)` | To this mod's other Worker and frames on the page, as a `broadcast` event; not back to the sender. At most 64 KiB. | |
 
-**Nav layout** (`glaze.nav.items`, `parts.nav`): `{ place: 'left' | 'top' | 'bottom' | 'dock', groups: [{ label, items: [id] }]
+**Nav layout** (`glaze.nav.items`, `glaze.nav.layout`, `glaze.look.override`, `parts.nav`): `{ place: 'left' | 'top' | 'bottom' | 'dock', groups: [{ label, items: [id] }]
 (up to 6), hidden: [id], links: [{ id, n, u, i }] (up to 8), icons: { id: icon } }`. Ids are the navigation's own names
 (`course`, `calendar`, `grades`, ...), `link:<id>` for your own links (`id` is 12 characters of `a-z0-9`) or `w:clock`,
 `w:next`, `w:timer`, `w:pet`. Icons are `link` `book` `video` `chat` `doc` `calendar` `folder` `code` `star` `globe`. Unknown
-ids are dropped.
+ids are dropped. In a layout from code (the first three), each link's `u` must be an `http(s)` page of the school's site the
+page is on, the same rule as `glaze.nav.add`'s `href`; a link anywhere else refuses the whole call with `args`, so none of
+that layout applies. Otherwise its address could carry what the mod read off the site without a network permission. A
+bundle's static `parts.nav` carries no data of the student's, so its links may go to other sites.
+
+Reserved item names also compare compatibility characters, accents, and common Cyrillic/Greek lookalikes of Latin
+letters (for example, `Glаze settings` with Cyrillic `а`). This comparison does not change the displayed label.
 
 **Rules** (`glaze.rules.set`, `parts.rules`): `{ p, do, ... }` on a named part from `lib/parts.js` (`ultra.course-card.title`).
 `do` is `hide`, `show`, `move` (with `to`, the part to move beside, and `at`, `before` or `after`), `style` (with `st`: `bg`
@@ -299,7 +310,7 @@ ids are dropped.
 | `ui` | A button or input in a tree was used (a real click or change). | `{ slot, id, kind: 'click' \| 'change', value? }` |
 | `broadcast` | Another part of this mod called `glaze.broadcast`. | what it sent |
 | `cards` | The cards on the page changed (`courses`); `cards.decorate` answers this. | `{ courses: [{ id, name }] }` |
-| `nav.items` | The navigation changed; `nav.items` answers this. | `{ items: [{ id, label }] }` |
+| `nav.items` | The navigation changed; `nav.items` answers this. Every mod hears it, so it carries only the page's own items by id with Glaze's English names: not what the student renamed or added, not the account item, Glaze's own items or other mods' items (`glaze.nav.model()` reads the bar as drawn, with `nav.read`). | `{ items: [{ id, label }] }` |
 | `nav.change` | Glaze's bar changed (`nav.read`): ask `glaze.nav.model()`. | `{}` |
 | `nav.navigate` | The student used an item of the bar (`nav.read`). | `{ id }` |
 | `nav.expand` `nav.collapse` | The rail opened or closed (`nav.read`). | `{}` |
@@ -339,8 +350,9 @@ A slot is `tile:<id>` (a tile on the student's widget boards), `rail:<id>` (a wi
 
 **Canvas.** Render a tree with a `canvas`, then `const c = await glaze.ui.canvas(slot)` and draw with
 `requestAnimationFrame`. The canvas has the slot's width in device pixels (at most 2 a CSS pixel and 4096 a side) and
-Glaze resizes it as the slot changes. Its picture goes to the page after each animation frame, or on `glaze.ui.commit`,
-at most 60 a second. Frames stop while `canvas.pause` says so. Nothing animates with motion off.
+Glaze resizes it as the slot changes. Its picture goes to the page after each animation frame in which the mod drew on it
+(any call or assignment on the canvas's context counts; a context taken from `OffscreenCanvas.prototype` directly isn't
+seen, so call `glaze.ui.commit` after drawing with one), or on `glaze.ui.commit`, at most 60 a second. Frames stop while `canvas.pause` says so. Nothing animates with motion off.
 
 ## Limits
 
@@ -348,7 +360,7 @@ at most 60 a second. Frames stop while `canvas.pause` says so. Nothing animates 
 |---|---|
 | A bundle | 256 files, 2 MiB in all, 256 KiB of `.js`, `mod.json` 64 KiB |
 | A call | arguments 1 MiB as JSON, an answer 4 MiB, 64 calls waiting |
-| Messages | 240 a second from a mod (canvas pictures count); over that the mod is stopped |
+| Messages | 240 a second from a mod; over that the mod is stopped. Canvas pictures count against their own canvas, 240 a second each |
 | `glaze.storage` | 1 MiB per mod |
 | `glaze.fetch` | 15 s, 2 MiB back, no redirects |
 | `courses`, `todo`, `schedule`, `grades` | at most 500 items; `schedule` spans at most 60 days |

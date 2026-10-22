@@ -221,7 +221,6 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const post = (k, ops) => {
     if (framed) return globalThis.GZ_CTABS?.sidebar?.(k, ops, genOf()) || Promise.resolve(null);
     // The worker may have restarted before persisting the bootstrap's site report.
-    if (ultra) send({ type: 'glaze:ultra' });
     return send({ type: 'glaze:sidebar', key: k, ops });
   };
   // A change that finishes after the page moved on still counts (what is stored is adopted), but says nothing here.

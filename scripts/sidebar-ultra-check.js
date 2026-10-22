@@ -11,7 +11,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
   let browser;
   try {
     await require('./wait-for-browser.js')();
-    browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'), args: ['--host-resolver-rules=MAP * ~NOTFOUND'], chromiumSandbox: false });
+    browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'], chromiumSandbox: false });
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
     const shot = async (name) => { if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, `${name}.png`) }); } };
     await page.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/ultra/') ? r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }) : r.abort());

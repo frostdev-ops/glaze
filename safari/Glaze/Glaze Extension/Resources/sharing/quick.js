@@ -127,7 +127,7 @@
     try { await navigator.clipboard.writeText(link); say(edit ? 'Edit invite copied. Anyone with it can change this note. Keep it private.' : 'View invite copied. Keep it private.'); }
     catch { say('Could not copy the invite. Try again.', undefined, true); }
   };
-  const names = { pending: 'Changes saved locally, waiting to send', live: 'Up to date', offline: 'Offline — local copy kept', gone: 'Deleted on the relay — local copy kept', incomplete: 'More changes remain. Sync again.' };
+  const names = { pending: 'Changes saved locally, waiting to send', live: 'Up to date', offline: 'Offline — local copy kept', big: 'Too big to sync — local copy kept', gone: 'Deleted on the relay — local copy kept', incomplete: 'More changes remain. Sync again.' };
   const status = (s) => t(state.on ? names[s.status] || names.offline : 'Paused — local copy kept');
   const links = (s) => [button('Copy view invite', () => act(() => copy(s.sid, false))), s.edit && button('Copy edit invite', () => act(() => copy(s.sid, true)))].filter(Boolean);
   const stop = (s) => button(s.creator ? 'Stop sharing' : 'Leave', async () => {

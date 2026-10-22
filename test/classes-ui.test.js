@@ -162,8 +162,9 @@ test('writes say when they were asked for; a script\'s click does nothing', asyn
 // the write is queued; held there, a later Delete all from another tab finishes first. The Save, queued after it, must
 // not bring the course back: what counts is when each was pressed, checked inside the queue's turn.
 test('the worker: a Save held before the queue, then Delete all, then the Save: the course stays deleted', async () => {
-  const ID = 'glaze-test-id', SITE = 'https://school.instructure.com', K = C.storeKey(SITE, '3');
-  const data = { [K]: { courses: [{ id: '25', name: 'Biology', at: 100, periods: [{ days: [2], start: 810, end: 885 }] }] } };
+  // A school's own Canvas the student approved: its permission check reads the site list (Instructure's own hosts need none).
+  const ID = 'glaze-test-id', SITE = 'https://canvas.school.edu', K = C.storeKey(SITE, '3');
+  const data = { canvas: [`${SITE}/*`], [K]: { courses: [{ id: '25', name: 'Biology', at: 100, periods: [{ days: [2], start: 810, end: 885 }] }] } };
   const held = [];
   let holdNext = false;
   const local = {

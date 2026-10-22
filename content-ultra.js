@@ -7,21 +7,23 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
-  // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
+  // a page load and at most every ten minutes. Stored locally; nothing leaves the device. Each Ultra site has its own: two
+  // schools' records stay side by side, each with its own ten-minute gate (`seenCoursesAt <origin>`, as Moodle's).
   const record = () => {
-    // This site is Ultra (Glaze started here): the worker lets its pages keep their own data (lib/background.js fromUltra).
-    try { chrome.runtime.sendMessage({ type: 'glaze:ultra' }).catch(() => {}); } catch { /* reloaded */ }
+    const at = `seenCoursesAt ${location.origin}`;
     try {
-      chrome.storage.local.get('seenCoursesAt', (r) => {
-        if (Date.now() - (r?.seenCoursesAt || 0) < 600000) return;
+      chrome.storage.local.get(at, (r) => {
+        if (Date.now() - (r?.[at] || 0) < 600000) return;
         myCourses().then((ms) => {
           const seen = GZ_COURSES(ms);
           if (!Object.keys(seen).length) return;
           for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
           for (const m of ms) if (seen[m.courseId]) Object.assign(seen[m.courseId], { site: location.origin, code: String(m.course.displayId || '').slice(0, 80) });
           try { chrome.storage.local.get('seenCourses', (r) => {
-            const canvas = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k]) => k.includes(':')));
-            chrome.storage.local.set({ seenCourses: { ...canvas, ...seen }, seenCoursesAt: Date.now(), courseSlots });
+            // Canvas's and Moodle's (keyed by site) and other Ultra sites' stay; this site's go, with any kept before Ultra's
+            // records named their site.
+            const kept = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k, c]) => k.includes(':') || (c?.site && c.site !== location.origin)));
+            chrome.storage.local.set({ seenCourses: { ...kept, ...seen }, [at]: Date.now(), courseSlots });
           }); } catch { /* reloaded */ }
         });
       });
@@ -29,14 +31,31 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
 
   // ---- the gradebook --------------------------------------------------------------------------
-  // One /users/me for everything that asks at once; asked again only if it failed.
+  // One /users/me for everything that asks at once. A failure (this, a gradebook) is asked again after a minute, a 401
+  // (signed out) once the page changes.
   let meId = null;
-  const me = () => (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meId = null; throw e; }));
+  let meFailed = null;
+  const route = () => location.pathname + (location.search || '');
+  const failed = (e, at = route()) => ({ at: Date.now(), out: (e === 401 || /HTTP 401/.test(e?.message)) && at });
+  const askAgain = (f) => (f.out ? f.out !== route() : Date.now() - f.at >= 60000);
+  const me = () => {
+    if (meFailed && askAgain(meFailed)) meId = meFailed = null;
+    const at = route();
+    return (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meFailed = failed(e, at); throw e; }));
+  };
+  // Gradebooks and contents, fanned out over course cards: lib/ultra.js's reader through the site's queue (lib/lmsq.js).
+  const reader = () => need('lib/lmsq.js', () => globalThis.GZ_LMSQ).then(() => need('lib/ultra.js', () => globalThis.GZ_ULTRA))
+    .then(() => { const live = () => I.settings.enabled && !!I.links.length; return GZ_ULTRA.read({ origin: location.origin, live, f: (u, o) => GZ_LMSQ.fetch(u, o, 0, live) }); });
   const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete });
   // One page of memberships, shared by names and due-date exceptions.
   let memberships = null;
-  const myCourses = () => (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`))
-    .then((j) => covered(j.results || [], !j.paging?.nextPage)).catch(() => (memberships = null, covered([], false))));
+  let membershipsFailed = null;
+  const myCourses = () => {
+    if (membershipsFailed && askAgain(membershipsFailed)) memberships = membershipsFailed = null;
+    const at = route();
+    return (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`))
+      .then((j) => covered(j.results || [], !j.paging?.nextPage)).catch((e) => { membershipsFailed = failed(e, at); return covered([], false); }));
+  };
   // Planning (features/todo.js…), as Canvas's part: lib/ultra.js reads; each file loaded once on, asked again as it lands.
   const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
@@ -69,11 +88,11 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const books = new Map();
   const bookFor = (cid, late = false) => {
     let b = books.get(cid);
-    if (!b || (!b.pending && (Date.now() - b.at > 60000 || (late && !b.late)))) {
-      b = { key: '', ...b, at: Date.now(), pending: true };
+    if (!b || (!b.pending && (b.fail ? askAgain(b.fail) : Date.now() - b.at > 60000 || (late && !b.late)))) {
+      b = { key: '', ...b, at: Date.now(), route: route(), pending: true, fail: null };
       books.set(cid, b);
       // One page (200 grades); calculators reject an incomplete answer.
-      me().then((id) => api(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column,lastAttempt,submissionStatus`))
+      Promise.all([me(), reader()]).then(([id, r]) => r.get(`/learn/api/v1/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column,lastAttempt,submissionStatus`))
         .then((j) => (late || b.late ? lateIn(cid, j.results) : Promise.resolve(undefined)).then((lateCols) => {
           b.pending = false;
           const complete = !j.paging?.nextPage;
@@ -84,7 +103,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
           Object.assign(b, { grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results, locale()), key });
           onBook();
         }))
-        .catch(() => { b.pending = false; });
+        .catch((e) => { b.pending = false; b.fail = failed(e, b.route); });
     }
     return b;
   };
@@ -272,7 +291,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
     // Cards only count: nothing is marked seen until its gradebook is shown. Only on the Courses and
     // Grades pages themselves, not under a course opened over them.
-    // ponytail: the first 12 cards, one gradebook request each a minute; a long course list waits its turn.
+    // ponytail: the first 12 cards on screen, one gradebook request each a minute; a long course list waits its turn.
     // New content is counted only for courses opened before (there's nothing to compare with
     // otherwise), and asked for only while the card is on screen.
     if (!/^\/ultra\/(course|grades)\/?$/.test(location.pathname)) return;
@@ -283,14 +302,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         const id = idOf(card);
         const el = where(card);
         if (!id || !el) continue;
-        if (newgrades && n++ < 12) {
-          const b = bookFor(id);
-          cardBadge(el, id, b.results ? GZ_GRADES.fresh(b.results, seen[id]).ids.size : undefined);
-        }
-        if (!newcontent) continue;
         cardsInView.observe(el);
+        const b = newgrades && (inView.has(el) && n++ < 12 ? bookFor(id) : books.get(id));
+        if (b) cardBadge(el, id, b.results ? GZ_GRADES.fresh(b.results, seen[id]).ids.size : undefined);
+        if (!newcontent) continue;
         const items = seenItems[id] && (inView.has(el) ? courseItems(id) : contents.get(id))?.items;
-        cardBadge(el, id, GZ_GRADES.newItems(items, seenItems[id]).ids.size, 'items');
+        cardBadge(el, id, GZ_GRADES.newItems(...against(id, items)).ids.size, 'items');
       }
     }
   };
@@ -301,18 +318,24 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // everything; an item is seen once its row has been on the page (the badge stays for that visit), so
   // what's in a folder only once it's unfolded. Kept on this device (storage.local, seenContent).
   // ponytail: "on the page", not on screen; a long outline's last rows count as seen unscrolled.
-  // The course's items come from one request, shared with the command palette and asked again after
-  // five minutes at most, with only the fields used. Courses past 200 items show the first 200.
+  // The course's items come from one paged read (ten pages of 200 at most), shared with the command palette and
+  // asked again after five minutes at most, with only the fields used.
   const contents = new Map(); // cid → { at, p, items }
   const courseItems = (cid) => {
     let c = contents.get(cid);
     if (!c || Date.now() - c.at > 300000) {
       c = { at: Date.now(), items: c?.items };
-      c.p = api(`/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,availability.available,links,contentHandler.isBbPage`, '/learn/api/public/v1')
-        .then((j) => { c.items = (j.results || []).filter((i) => i.availability?.available !== 'No'); renderNew(); return c.items; }, () => c.items || []);
+      c.p = reader().then((r) => r.list(`/learn/api/public/v1/courses/${cid}/contents`, 'id,parentId,title,availability.available,links,contentHandler.isBbPage', true))
+        .then((j) => { c.items = covered(j.items.filter((i) => i.availability?.available !== 'No'), j.complete); renderNew(); return c.items; }, () => c.items || []);
       contents.set(cid, c);
     }
     return c;
+  };
+  // What they're compared with: nothing after a read that stopped short (items it couldn't reach may slide into it), and
+  // a fresh start over a record kept before reads were paged (no '+'), which saw only the first 200.
+  const against = (cid, items) => {
+    const kept = seenItems[cid];
+    return items?.complete === false ? [null, kept] : [items, !kept?.includes('+') ? undefined : kept];
   };
   const shownItems = new Map(); // cid → content ids badged on this page
   let jump = null; // { under (a folder id, or null for the whole course), at, opened (folder ids) }
@@ -320,7 +343,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     const rows = document.querySelectorAll('.content-list-item[data-content-id]');
     const c = rows.length && courseItems(cid);
     if (!c?.items) return;
-    const { ids, seen: now, inside } = GZ_GRADES.newItems(c.items, seenItems[cid], new Set([...rows].map((r) => r.dataset.contentId)));
+    const { ids, seen: was, inside } = GZ_GRADES.newItems(...against(cid, c.items), new Set([...rows].map((r) => r.dataset.contentId)));
+    const now = c.items.complete !== false && was && !was.includes('+') ? [...was, '+'] : was;
     const set = shownItems.get(cid) || new Set();
     for (const id of ids) set.add(id);
     shownItems.set(cid, set);
@@ -386,8 +410,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   if (window.top === window) try {
     const epoch = floatEpoch;
-    chrome.storage.local.get('widgetLayout', (r) => { if (!chrome.runtime.lastError && epoch === floatEpoch) floatsIn(r?.widgetLayout); });
-    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { floatEpoch++; floatsIn(ch.widgetLayout.newValue); } });
+    // Not on a fresh tab's defaults: Glaze may be off.
+    chrome.storage.local.get('widgetLayout', (r) => { const go = () => epoch === floatEpoch && floatsIn(r?.widgetLayout); if (!chrome.runtime.lastError) Promise.resolve().then(() => I.ready).then(go, go); });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { const epoch = ++floatEpoch; Promise.resolve().then(() => I.ready).then(() => { if (epoch === floatEpoch) floatsIn(ch.widgetLayout.newValue); }, () => {}); } });
   } catch { /* extension reloaded */ }
 
   // Course tabs load on demand; extras.css first reserves their cached place and size.
@@ -419,7 +444,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       if (replaying || !I.observer || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       if (html.getAttribute('data-gz-motion') === 'off' || html.hasAttribute('data-gz-no-enter')) return;
       const link = e.target instanceof Element && e.target.closest(PAGE_LINKS);
-      if (!link || link.matches('[aria-current="page"], .active')) return;
+      // Native fragment actions and Sign Out must keep their trusted click for later listeners (course tabs included).
+      if (!link || link.matches('[aria-current="page"], .active') || /^#|^$|(?:^|\/)logout(?:[/?#]|$)|[?&](?:action|event)=logout(?:[&#]|$)/i.test((link.getAttribute('href') || '').trim())) return;
       // Ultra gets the click inside the transition, once the old page has been captured.
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -748,7 +774,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 });
 
 // Known Ultra entry: arm before asynchronous head detection lets the parser reach <body>.
-if (/html/.test(document.contentType) && !document.body && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
+if (/html/.test(document.contentType) && !document.body && location.protocol === 'https:' && !location.port && /\.blackboard\.com$/.test(location.hostname) && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
   GZ_SITE_ULTRA.sheets = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => {
     const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = chrome.runtime.getURL(f);
     l.setAttribute('blocking', 'render');

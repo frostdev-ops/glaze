@@ -3,6 +3,9 @@
 # gcloud mints a short-lived token by impersonating the publisher's service account: no key file.
 # Listing text, screenshots and privacy answers are not in the API; edit those in the dashboard.
 #   sh scripts/publish-chrome.sh [zip]     CWS_NO_PUBLISH=1 uploads without submitting.
+# With no zip it packages a fresh checkout of the committed HEAD (as CI does for a tag) and refuses a working tree with
+# uncommitted or untracked files, so it packages the same committed sources as the tag build. ZIP timestamps can differ;
+# recovery publication must attach these exact local bytes and their matching checksum to the draft GitHub release.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
@@ -12,7 +15,16 @@ item=${CWS_EXTENSION_ID:-jmmaeoajomodnbnlmdikjooalmcilooh}
 account=${CWS_SERVICE_ACCOUNT:-cws-publisher@frostdev-507119.iam.gserviceaccount.com}
 version=$(node -p 'require("./manifest.json").version')
 zip=${1:-}
-if [ -z "$zip" ]; then ./package.sh; zip="dist/glaze-v$version.zip"; fi
+if [ -z "$zip" ]; then
+  . "$root/scripts/clean-source.sh"
+  glaze_require_clean "$root" publish-chrome
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  src=$work/glaze
+  glaze_checkout_head "$root" "$src"
+  (cd "$src" && DIST="$root/dist" ./package.sh)
+  zip="dist/glaze-v$version.zip"
+fi
 [ -f "$zip" ] || { echo "publish-chrome: no package at $zip" >&2; exit 1; }
 
 token=$(gcloud auth print-access-token --verbosity=error --impersonate-service-account="$account" \

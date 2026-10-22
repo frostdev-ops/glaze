@@ -20,6 +20,11 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const LANGS = globalThis.GZ_LANGS;
 const files = fs.readdirSync(path.join(root, 'i18n'));
 const squash = (s) => s.replace(/\s+/g, ' ').trim();
+// The code Glaze ships to a browser (not the catalogues, which every key appears in, nor the tests).
+const CODE = [...fs.readdirSync(root).filter((f) => /\.(js|html)$/.test(f)), ...['lib', 'features', 'sharing'].flatMap((d) => fs.readdirSync(path.join(root, d)).filter((f) => /\.(js|html)$/.test(f)).map((f) => `${d}/${f}`))];
+// Preserve quoted URLs while dropping comments; literal tables are evidence for dynamic callers, not proof of reachability.
+const withoutComments = (js) => js.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m, q) => q ? m : ' ');
+const literalsOf = (js) => [...withoutComments(js).matchAll(/(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g)].filter((m) => !m[2].includes('${')).map((m) => m[2].replace(/\\(.)/g, '$1'));
 
 // The English Glaze writes, as far as it can be found: the pages' own text, the first argument of
 // every t() or tr() call, and the tables shown through t(). Lists inside code (content.js's page names, say)
@@ -31,6 +36,7 @@ const fromHtml = (html) => {
   return out.filter((s) => /\p{L}/u.test(s));
 };
 const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
+  js = withoutComments(js);
   const out = [];
   for (const m of js.matchAll(calls)) {
     // The argument after the matched prefix, up to a comma or bracket at its own depth; every plain string in it.
@@ -75,6 +81,9 @@ const used = new Set([
   ...fromJs(read('lib/scene.js'), /\bmessage:\s*/g),
   ...['sharing/quick.html', 'options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
+  // Helpers that translate their own label argument (t() inside add() and check()).
+  ...fromJs(read('features/docreview.js'), /\badd\('button',\s*[^,]+,\s*/g),
+  ...fromJs(read('lib/editor-navbar.js'), /\bcheck\(/g),
   // A mod bundle's refusals are translated by the editor's t(error.why, error.vars) (lib/editor-mods.js).
   ...fromJs(read('lib/modbundle.js'), /\bfail\(/g),
   // Import failures are translated by the editor's t(error.message).
@@ -101,8 +110,24 @@ test('every language has every key, and nothing else', () => {
 });
 
 test('every key is still used', () => {
-  const src = squash([...JS, 'lib/modbundle.js', 'lib/lookx.js', 'lib/grades.js', 'lib/gradecalc.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html', 'sharing/quick.html'].map(read).join(' '));
-  for (const k of keys) assert.ok(used.has(k) || src.includes(k), `"${k}" is in no source file`);
+  // A key is used when it is a whole string literal somewhere in the shipped code (a table, a helper's label, a
+  // page), not when its text happens to occur inside a longer string: "Extras" is inside many sentences.
+  const literals = new Set(CODE.flatMap((f) => literalsOf(read(f).replace(/<!--[\s\S]*?-->/g, ''))));
+  for (const k of keys) assert.ok(used.has(k) || literals.has(k), `"${k}" is in no t() or tr() call, page or table`);
+});
+
+test('review: stale-key evidence ignores comments and substrings but retains dynamic table literals', () => {
+  const source = `const labels = { a: 'Live', b: "Canvas" }; t(labels[k]); // 'Stale'
+    /* t('Also stale') */ t('Live longer'); const url = 'https://school.test/';`;
+  const literals = new Set(literalsOf(source));
+  assert.ok(literals.has('Live') && literals.has('Canvas') && literals.has('https://school.test/'));
+  assert.ok(!literals.has('Stale') && !literals.has('Also stale') && !literals.has('longer'));
+  assert.deepEqual(fromJs(source), ['Live longer']);
+});
+
+test('no shipped file points at a DECISIONS.md the repo does not have', () => {
+  // A comment that cites a file the repo lacks sends the reader nowhere: say what it means instead.
+  for (const f of [...CODE, ...files.map((x) => `i18n/${x}`), 'test/gcal.test.js', 'test/gradecalc-parity.test.js']) assert.ok(!read(f).includes('DECISIONS.md'), `${f} cites DECISIONS.md`);
 });
 
 test('translations keep their placeholders, and counts have an other form', () => {
@@ -118,6 +143,31 @@ test('translations keep their placeholders, and counts have an other form', () =
     }
   }
   for (const [k, v] of Object.entries(I.EN)) assert.equal(v.other, k);
+});
+
+test('every count key has English singular and plural forms', () => {
+  // English is the key itself, so a count key with no EN entry prints its plural for every number: "1 fonts".
+  const counts = new Set(Object.values(LANGS).flatMap((cat) => Object.keys(cat).filter((k) => typeof cat[k] === 'object')));
+  for (const k of counts) {
+    assert.ok(I.EN[k]?.one && I.EN[k]?.other, `lib/i18n.js EN has no singular and plural for "${k}"`);
+  }
+  assert.equal(I.t('{n} fonts', { n: 1 }), '1 font');
+  assert.equal(I.t('{n} fonts', { n: 2 }), '2 fonts');
+  assert.equal(I.t('Changes {n} animations.', { n: 1 }), 'Changes 1 animation.');
+  assert.equal(I.t('{name}: {n} layers.', { n: 1, name: 'Sky' }), 'Sky: 1 layer.');
+});
+
+test('review: one card style still applies to all unstyled cards', () => {
+  assert.equal(I.t('{n} card styles from a theme take turns on the cards that have no style of their own.', { n: 1 }), '1 card style from a theme takes turns on the cards that have no style of their own.');
+});
+
+test('review: all English count forms select one only for one and preserve interpolation and locale fallback', () => {
+  const fill = (text, values, loc) => text.replace(/\{(\w+)\}/g, (_, k) => typeof values[k] === 'number' ? new Intl.NumberFormat(loc, { maximumFractionDigits: 2 }).format(values[k]) : values[k]);
+  for (const [key, forms] of Object.entries(I.EN)) for (const n of [0, 1, 2, 1.5, 1234]) {
+    const values = { n, done: 1, got: 1, pct: '50%', name: 'Sky', parts: 'Header', fonts: 'Inter' };
+    const expected = forms[n === 1 ? 'one' : 'other'];
+    for (const loc of ['en', 'en-GB', 'ja', 'invalid tag']) assert.equal(I.t(key, values, loc), fill(expected, values, loc.startsWith('en') ? loc : 'en'), `${key} n=${n} ${loc}`);
+  }
 });
 
 test('every catalogue is loaded wherever Glaze speaks', () => {
@@ -150,7 +200,7 @@ test('lookup, placeholders and plurals', () => {
 });
 
 test('Look part descriptions use singular and plural catalogue forms', () => {
-  for (const key of ['{name}: {n} layers.', 'Layers {n} animated backgrounds.', 'Changes {n} animations.', 'Plays effects for {n} events.', 'Changes how {n} parts of your school pages look.']) {
+  for (const key of ['{name}: {n} layers.', 'Layers {n} animated backgrounds.', 'Changes {n} animations.', 'Plays effects for {n} events.', 'Hides {n} parts of your school pages: {parts}.', 'Makes {n} parts of your school pages see-through: {parts}.', 'Changes how {n} parts of your school pages look: {parts}.']) {
     for (const lang of I.CODES) {
       const cat = LANGS[lang];
       for (const n of [1, 2]) {

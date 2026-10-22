@@ -3,7 +3,7 @@
 // sessions' own. The relay's sealing only says the file came from whoever holds the
 // channel's edit key: a bundle is taken only as lib/modbundle.js would take a file installed by hand (its own author
 // signature, the pinned key, a higher version, a prompt when it asks for more, the blocklist).
-// Worker only. storage.local: `modChannelOwn:<id>` the author's session (edit key) for a mod they publish;
+// Worker only. The worker's vault keeps `modChannelOwn:<id>`, the author's session (edit key) for a mod they publish;
 // `modChannel:<id>` a followed mod's last check { tried, at, seen, error, pending: { zip, hash, version } }. The followed
 // read link is the mod record's own `channel`.
 var GZ_MODCHANNEL = globalThis.GZ_MODCHANNEL || (() => {

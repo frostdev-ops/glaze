@@ -249,6 +249,30 @@ test('review: malformed markup costs linear time', () => {
   assert.throws(() => D.html('x'.repeat(100), { limits: { text: 50 } }), /too large/);
 });
 
+// Reading the end of a string that has just been appended to flattens it, so a scanner that looked back at its own output
+// after every token took quadratic time: 3 s for a 16,000-paragraph Word file and 11 s for 1.6 MB of pretty-printed HTML.
+test('import: a 16,000-paragraph Word file and 1.6 MB of pretty-printed HTML extract in well under a second', async () => {
+  const para = (i) => `<w:p><w:r><w:t xml:space="preserve">Week ${i}: reading chapter ${i % 30} and the lecture notes for this topic </w:t></w:r></w:p>`;
+  const xml = `<?xml version="1.0"?><w:document xmlns:w="x"><w:body>${Array.from({ length: 16000 }, (_, i) => para(i)).join('')}</w:body></w:document>`;
+  const bytes = zipOf({ 'word/document.xml': xml });
+  let t0 = performance.now();
+  const out = await D.docx(bytes);
+  const docxMs = performance.now() - t0;
+  assert.equal(out.split('\n').length, 16000);
+  assert.ok(out.startsWith('Week 0: reading chapter 0 and the lecture notes for this topic\nWeek 1:') && out.endsWith('Week 15999: reading chapter 9 and the lecture notes for this topic'));
+  assert.ok(docxMs < 1000, `docx took ${docxMs.toFixed(0)} ms`);
+
+  const n = 20000;
+  const page = '<html><body><table>\n' + Array.from({ length: n }, (_, i) => `  <tr>\n    <td>BIO ${i} </td>\n    <td>Mon 9:00 </td>\n  </tr>\n`).join('') + '</table>' + Array.from({ length: n }, (_, i) => `<p>Line ${i} </p>\n`).join('') + '</body></html>';
+  assert.ok(page.length > 1.5e6);
+  t0 = performance.now();
+  const text = D.html(page);
+  const htmlMs = performance.now() - t0;
+  const lines = text.split('\n');
+  assert.deepEqual([lines[0], lines[n - 1], lines[n], lines.at(-1), lines.length], ['BIO 0\tMon 9:00', `BIO ${n - 1}\tMon 9:00`, 'Line 0', `Line ${n - 1}`, 2 * n]);
+  assert.ok(htmlMs < 1000, `html took ${htmlMs.toFixed(0)} ms`);
+});
+
 test('review: relationship and slide attributes in either quote style, with spaces around "="', async () => {
   const deck = zipOf({
     'ppt/presentation.xml': "<p:presentation xmlns:p='p' xmlns:r='r'><p:sldIdLst><p:sldId id='256' r:id = 'rId7'/><p:sldId id='257' r:id='rId9'/></p:sldIdLst></p:presentation>",

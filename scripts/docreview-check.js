@@ -3,10 +3,10 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const G = require('../defaults.js');
-const root = path.resolve(__dirname, '..'), lock = '/private/tmp/claude-501/glaze-heavy.lock';
+const root = path.resolve(__dirname, '..'), lock = require('./check-env.js').lockPath();
 const out = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docreview-evidence-')));
 const origin = 'https://review.blackboard.com', route = '/ultra/courses/_1_1/assessment/_2_1/overview/student-submission-view';
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 let css, js;
 let fixture;
 let held = false, ctx, tmp, checks = 0;
@@ -34,7 +34,7 @@ const reachable = (f, selector) => f.locator(selector).evaluateAll((es) => es.le
     css = fs.readFileSync(path.join(root, 'features/docreview.css'), 'utf8'); js = fs.readFileSync(path.join(root, 'features/docreview.js'), 'utf8');
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docreview-profile-'));
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(tmp, { executablePath: CHROME, headless: true, bypassCSP: true, viewport: { width: 1800, height: 987 }, reducedMotion: 'reduce' });
+    ctx = await chromium.launchPersistentContext(tmp, { ...chromeLaunch, headless: true, bypassCSP: true, viewport: { width: 1800, height: 987 }, reducedMotion: 'reduce' });
     await ctx.route(origin + '/**', (r) => {
       const u = new URL(r.request().url());
       if (u.pathname === '/docreview.css') return r.fulfill({ contentType: 'text/css', body: css });

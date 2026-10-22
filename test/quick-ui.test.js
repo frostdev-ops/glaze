@@ -293,8 +293,8 @@ test('quick custom-relay confirmation cancels before joining and disables contro
 
 test('quick non-Notes invites are retained for Settings without attaching them to Notes', async (t) => {
   const server = await start(t), creator = device(t, server), joined = device(t, server), key = 'todo:https://school.instructure.com/5';
-  await creator.local.set({ [key]: T.clean({ tasks: [{ id: 'task-1', title: 'Read chapter' }] }) });
-  const { sid } = await creator.send('create', { kind: 'todo', title: 'Tasks', key, ids: ['task-1'] });
+  await creator.local.set({ [key]: T.clean({ tasks: [{ id: '3f9a1c0e-7b42', title: 'Read chapter' }] }) });
+  const { sid } = await creator.send('create', { kind: 'todo', title: 'Tasks', key, ids: ['3f9a1c0e-7b42'] });
   const link = (await creator.send('link', { sid })).link, p = await page(joined);
   p.get('invite').value = link; p.click('join'); p.click('ask-yes');
   await until(() => p.get('status').textContent.includes('not for notes'));
@@ -320,6 +320,14 @@ test('quick offline Join retains its keys and appears after the promised Setting
   assert.ok(p.button('Leave'));
   const session = (await joined.send('list')).sessions[0];
   assert.match((await N.run({ key: NK, op: 'load', id: session.notes[0] }, { local: joined.local }, joined.notes)).html, /Kept note/);
+});
+
+test('a share too big to sync says so in the panel, not Offline', async (t) => {
+  const server = await start(t), d = device(t, server), { id, sid } = await sharedNote(d);
+  // What the worker keeps after a sync that could not hold what it read (lib/sessions.js update()).
+  await d.db.put('sessions', sid, { ...await d.db.get('sessions', sid), status: 'big', error: 'state' });
+  const p = await page(d, { note: id });
+  assert.equal(p.get('note-state').textContent, 'Shared · Too big to sync — local copy kept');
 });
 
 test('a scoped panel sees and acts on only its Notes account, and shares only its own note', async (t) => {

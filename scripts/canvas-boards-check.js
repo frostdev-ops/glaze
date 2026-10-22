@@ -13,7 +13,7 @@ const W = require('../lib/widgets.js');
 let ext = process.env.EXT || path.join(__dirname, '..');
 const local = process.env.CANVAS_LOCAL === '1';
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-canvas-boards-'));
-const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const O = local ? 'http://localhost:3000' : 'https://board.school.instructure.com';
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const fixture = (name) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', name), 'utf8');
@@ -64,7 +64,7 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
       ext = fs.realpathSync(ext);
     }
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { executablePath: CHROME, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, ...(!local ? ['--host-resolver-rules=MAP * ~NOTFOUND'] : [])],
     });
     if (!local) await ctx.route('**/*', (route) => {

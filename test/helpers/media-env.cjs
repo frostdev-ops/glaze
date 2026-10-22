@@ -36,12 +36,16 @@ class El {
   getContext() { return { drawImage: (...a) => this.env.draws.push([this, ...a]) }; }
   get offsetWidth() { return this.env.width; }
   get offsetHeight() { return this.env.height; }
-  get naturalWidth() { return 640; }
-  get naturalHeight() { return 360; }
+  get naturalWidth() { return this.env.natural[0]; }
+  get naturalHeight() { return this.env.natural[1]; }
 }
 
-exports.env = ({ preview = false, storage = {}, ask = async () => ({ ok: true, json: { w: 10, h: 10 }, canvases: 1 }), decodeFails = false, lottieDelayed = false, bitmapWait = null } = {}) => {
-  const env = { width: 1280, height: 800, made: [], srcs: [], draws: [], blobs: [], revoked: [], posted: [], messages: [], timers: [], listeners: {}, docListeners: {}, decodeFails, anims: [], lottieOk: true };
+// What the worker answers by default: a Lottie file's cleaned JSON, or a video or picture fetched from an address ('glaze:remoteMedia').
+const answer = async (m) => (m?.type === 'glaze:remoteMedia'
+  ? { ok: true, type: m.kind, mime: m.kind === 'video' ? 'video/webm' : 'image/webp', b64: Buffer.from(Uint8Array.from({ length: 300 }, (_, i) => i & 255)).toString('base64') }
+  : { ok: true, json: { w: 10, h: 10 }, canvases: 1 });
+exports.env = ({ preview = false, storage = {}, ask = answer, decodeFails = false, lottieDelayed = false, bitmapWait = null, natural = [640, 360] } = {}) => {
+  const env = { natural, width: 1280, height: 800, made: [], srcs: [], draws: [], blobs: [], revoked: [], posted: [], messages: [], timers: [], listeners: {}, docListeners: {}, decodeFails, anims: [], lottieOk: true, digests: 0, storageReads: 0 };
   const document = {
     hidden: false,
     createElement: (tag) => new El(tag, env),
@@ -62,13 +66,13 @@ exports.env = ({ preview = false, storage = {}, ask = async () => ({ ok: true, j
   };
   // WebCrypto's digest finishes on a thread of its own, after a test's short wait on a busy machine; the same SHA-256
   // made here resolves with the page's other promises, before any wait ends.
-  const subtle = { digest: async (alg, data) => { const b = crypto.createHash('sha256').update(data).digest(); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); } };
+  const subtle = { digest: async (alg, data) => { env.digests++; const b = crypto.createHash('sha256').update(data).digest(); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); } };
   const ctx = vm.createContext({
     document, Image: function Image() { return new El('img', env); }, Blob, atob, btoa, console, Promise, JSON, Object, Array, Uint8Array, String, Number, Math, Error, crypto: { subtle },
     createImageBitmap: async () => { await bitmapWait; return { width: 640, height: 360, close() { env.bitmapClosed = true; } }; },
     chrome: {
       runtime: { getURL: (f) => f, lastError: null, sendMessage: (m, cb) => { env.messages.push(m); ask(m).then(cb); } },
-      storage: { local: { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in storage).map((x) => [x, storage[x]])) } },
+      storage: { local: { get: async (k) => (env.storageReads++, Object.fromEntries([].concat(k).filter((x) => x in storage).map((x) => [x, storage[x]]))) } },
     },
     URL: { createObjectURL: (b) => { const u = `blob:glaze/${env.blobs.length}`; env.blobs.push([u, b.size, b.type]); return u; }, revokeObjectURL: (u) => env.revoked.push(u) },
     location: { protocol: preview ? 'chrome-extension:' : 'https:', origin: 'chrome-extension://glaze' },

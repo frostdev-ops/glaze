@@ -195,6 +195,29 @@ test('rotation: a favorite brings its parts with it, a built-in Look clears them
 });
 
 // ---- the page -------------------------------------------------------------------------------------------------------
+test('rotation refuses legacy outside favorites that hide critical controls without restricting own Look storage', async () => {
+  const G = require('../defaults.js'), X = require('../lib/lookparts.js'), S = require('../lib/share.js');
+  const parts = { x: { nav: { hidden: ['logout'] } } };
+  const code = await S.encode(G.GZ_SANITIZE({}), {}, parts);
+  const packed = await X.pack(parts);
+  const w = worker({ rotateLooks: [code], lookFavorites: [{ code, name: 'Legacy' }], rotateState: { mode: '6h 08:00', at: 1, i: -1 } }, { ...G.GZ_SANITIZE({ extras: { rotate: '6h' } }), lookX: packed });
+  assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
+  assert.equal(w.sync.lookX, packed, 'refused favorite leaves own worn Look intact');
+  assert.equal(w.local.rotateState.turned, false);
+  assert.deepEqual((await S.decode(code)).parts, parts, 'own code still decodes');
+});
+
+test('rotation: a favorite brings its navigation bar, sidebar look and sidebar colours too, and leaves what is the student\u2019s', async () => {
+  const G = require('../defaults.js'), S = require('../lib/share.js');
+  const code = await S.encode(G.GZ_SANITIZE({ navbar: { place: 'top', badges: false }, sidebar: { surface: 'solid' }, nav: { k: 'solid', c: '#224466' } }), {}, null);
+  const w = worker({ rotateLooks: [code], lookFavorites: [{ code, name: 'Bar' }], rotateState: { mode: '6h 08:00', at: 1, i: -1 } },
+    G.GZ_SANITIZE({ extras: { rotate: '6h' }, navbar: { on: false, rail: 'icons' }, sidebar: { open: 'drawer' } }));
+  assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
+  assert.deepEqual([w.sync.navbar.place, w.sync.navbar.badges, w.sync.navbar.on, w.sync.navbar.rail], ['top', false, false, 'icons']);
+  assert.deepEqual([w.sync.sidebar.surface, w.sync.sidebar.open], ['solid', 'drawer']);
+  assert.deepEqual([w.sync.nav.k, w.sync.nav.c], ['solid', '#224466']);
+});
+
 class El {
   constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, parent: null, style: {}, id: '' }); }
   get classList() { const el = this; return { toggle: (c, on) => { el[`class:${c}`] = on; }, contains: (c) => !!el[`class:${c}`] }; }
@@ -464,13 +487,16 @@ test('backup restore stores or clears parts in the same sync write as its Look, 
   assert.deepEqual(w.sync, before);
 });
 
-test('picking a popup palette clears the old Look parts in its saved keys', () => {
+test('picking a palette in the popup or the editor keeps the Look’s parts; picking a whole Look replaces them', () => {
   const G = require('../defaults.js');
   const w = worker(), u = ui(w);
   const s = { ...structuredClone(G.GZ_DEFAULTS), parts: { x: { cursor: { kind: 'glow' } } } };
   const keys = w.context.UI.pickPreset(s, 'Frost', G.GZ_PRESET('Frost'));
-  assert.equal(s.parts, null);
-  assert.ok(keys.includes('parts'));
+  assert.deepEqual(s.parts, { x: { cursor: { kind: 'glow' } } }, 'a palette is not a Look: a typed colour keeps the extras, and so does a swatch');
+  assert.ok(!keys.includes('parts'), 'and they are not rewritten');
+  const looked = w.context.UI.pickLook(s, G.GZ_LOOKS[0]);
+  assert.equal(s.parts, null, 'a whole Look brings its own extras, or none');
+  assert.ok(looked.includes('parts'));
 });
 
 
@@ -542,7 +568,7 @@ test('a partial Look nav patch preserves personal pictures through the parts quo
 
 
 test('the queued Look writer limits page callers to theme changes and refuses arbitrary storage keys', async () => {
-  const w = worker();
+  const w = worker({ moodle: ['https://moodle.example.edu/*'] }); // a Moodle the student approved (lib/background.js approved)
   const message = { type: 'glaze:look', parts: null, patch: { colors: { '--gz-accent': '#123456' } } };
   const denied = { ok: false, error: 'sender' };
   assert.deepEqual(await w.send(message, { id: 'other', tab: {}, url: `${SITE}/courses/1` }), denied);
@@ -551,6 +577,8 @@ test('the queued Look writer limits page callers to theme changes and refuses ar
   assert.deepEqual(await w.send({ ...message, patch: JSON.parse('{"__proto__":{}}') }, w.editor), denied);
   assert.deepEqual(w.sync, {});
   const moodle = { id: 'glaze', tab: {}, url: 'https://moodle.example.edu/my/' };
+  assert.deepEqual(await w.send(message, { ...moodle, url: 'https://shop.example/' }), denied, 'not from a tab where only lib/detect.js runs (WP-C2)');
+  assert.deepEqual(w.sync, {});
   assert.deepEqual(await w.send(message, moodle), { ok: true });
   assert.equal(w.sync.lookX, '');
   const popup = { id: 'glaze', url: 'chrome-extension://x/popup.html' };
@@ -558,7 +586,7 @@ test('the queued Look writer limits page callers to theme changes and refuses ar
 });
 
 
-test('a command palette palette choice clears the previous Look parts through the shared writer', async () => {
+test('a command palette palette choice preserves the previous Look parts like popup and editor swatches', async () => {
   const X = require('../lib/lookparts.js');
   const w = worker({}, { lookX: await X.pack({ x: { cursor: { kind: 'glow' } } }) });
   ui(w);
@@ -567,7 +595,7 @@ test('a command palette palette choice clears the previous Look parts through th
   const palettes = source.split('\n').find((line) => line.includes('...GZ_ALL_PRESETS(s.presets).map')).trim().slice(3, -1);
   vm.runInContext(`(() => { const s = GZ_DEFAULTS, t = (s) => s; ${store}; (${palettes})[0].run(); })()`, w.context);
   await tick(30);
-  assert.equal(w.sync.lookX, '');
+  assert.deepEqual(await X.unpack(w.sync.lookX), { x: { cursor: { kind: 'glow' } } });
 });
 
 test('rotation does not announce a favorite that could not be decoded or worn', async () => {

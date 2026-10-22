@@ -10,17 +10,39 @@ const m = require('../manifest.json');
 const D = require('../defaults.js');
 
 const root = path.join(__dirname, '..');
-const DOCS = ['https://canvadocs.instructure.com/*'];
+const DOCS = ['https://canvadocs.instructure.com/*']; // what Canvas's own entry leaves out: the US host
+// The viewer entry matches every instructure.com host, so the regional ones (canvadocs-syd, canvadocs-eu…) get it too; the
+// script keeps to canvadocs hostnames itself. Match patterns can't say "canvadocs-*", and a list of regions would go stale.
+const VIEWER_MATCHES = ['https://*.instructure.com/*'];
 const entry = m.content_scripts.find((c) => c.js.includes('features/docviewer.js'));
 
 test('canvadocs gets its own small script in every frame, and not the first content script', () => {
-  assert.deepEqual(entry.matches, DOCS);
+  assert.deepEqual(entry.matches, VIEWER_MATCHES);
   assert.deepEqual(entry.js, ['lib/ink.js', 'lib/surfaces.js', 'features/docviewer.js']);
   assert.equal(entry.all_frames, true, 'the viewer is always framed');
   assert.equal(entry.run_at, 'document_start');
   const glaze = m.content_scripts.filter((x) => x.js.includes('content.js'));
   assert.deepEqual(glaze.find((c) => c.js.includes('content-canvas.js')).exclude_matches, DOCS);
   assert.ok(glaze.find((c) => c.js.includes('content-ultra.js')).exclude_matches.includes('https://*.instructure.com/*'), 'nor does Ultra\'s: no instructure.com host');
+});
+
+// Chrome's match pattern for one scheme://host/path: "*." in front of the host is any subdomain of it.
+const matchesHost = (pattern, host) => { const h = /^https:\/\/([^/]+)\//.exec(pattern)[1]; return h.startsWith('*.') ? host.endsWith(h.slice(1)) : host === h; };
+const runViewer = (hostname) => {
+  const ctx = vm.createContext({ document: { contentType: 'text/html', documentElement: {} }, top: {}, location: { hostname }, parent: {}, GZ_INK: {}, URL }); // no Canvas page named: it stops after the hostname gate
+  ctx.window = ctx;
+  vm.runInContext(fs.readFileSync(path.join(root, 'features/docviewer.js'), 'utf8'), ctx);
+  return ctx.__gzDocs === true;
+};
+test('regional DocViewer hosts get the viewer script, and it keeps to canvadocs hostnames', () => {
+  const hosts = ['canvadocs.instructure.com', 'canvadocs-syd.instructure.com', 'canvadocs-eu-west-1.instructure.com'];
+  for (const host of hosts) {
+    assert.ok(entry.matches.some((p) => matchesHost(p, host)), `${host} is matched by the viewer entry`);
+    assert.equal(runViewer(host), true, `${host} runs it`);
+  }
+  // The wider match reaches every Canvas frame; the script must stand down on all of them.
+  for (const host of ['school.instructure.com', 'canvadocs.instructure.com.evil.example', 'evil-canvadocs.instructure.com', 'canvadocs-.example.com']) assert.equal(runViewer(host), false, `${host} does not`);
+  assert.ok(!DOCS.some((p) => matchesHost(p, 'canvadocs-syd.instructure.com')), 'Canvas\'s entry only skips the US host: the page side bails on the others');
 });
 
 // A ratchet, as the first script's: lib/ink.js and features/docviewer.js as W9 left them (with the review's fixes), plus about 2%.
@@ -36,9 +58,10 @@ const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', 
   const frame = { closed: false, postMessage: (msg, origin) => sent.push({ msg, origin }) };
   const iframe = { src, contentWindow: frame };
   const later = new Set();
+  const timers = [];
   const settings = D.GZ_SANITIZE({ enhance: { docTheme: true, docPages: 'dim', docInk: true, toggles: true } });
   const ctx = vm.createContext({
-    URL, URLSearchParams, JSON, Object, String, Array, location: new URL(href), window: {}, IntersectionObserver: class { observe() {} },
+    URL, URLSearchParams, JSON, Object, String, Array, Math, setTimeout: (f, ms) => timers.push({ f, ms }), location: new URL(href), window: {}, IntersectionObserver: class { observe() {} },
     GZ_COLORS: [['--gz-surface'], ['--gz-ink']], GZ_COURSE_LOOK: D.GZ_COURSE_LOOK,
     document: {
       documentElement: { style: { getPropertyValue: (v) => ({ '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa', '--gz-surface-course': '#445566' })[v] }, matches: () => false, removeAttribute() {} },
@@ -50,7 +73,7 @@ const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', 
     profile: () => { ctx.profiles = (ctx.profiles || 0) + 1; return profile(); } };
   vm.runInContext(fs.readFileSync(path.join(root, 'features/docs.js'), 'utf8'), ctx);
   const ask = (data, origin = 'https://canvadocs.instructure.com', source = frame) => ctx.GZ_DOCS.ask({ data, origin, source });
-  return { sent, ask, frame, iframe, docs: ctx.GZ_DOCS, later, settings, ctx };
+  return { sent, ask, frame, iframe, docs: ctx.GZ_DOCS, later, settings, ctx, timers };
 };
 
 test('Canvas\'s part (content-canvas.js) loads features/docs.js for a canvadocs frame\'s question only, and hands it the message', async () => {
@@ -91,16 +114,60 @@ test('the file comes from the page when the frame\'s address has no session blob
   assert.equal(sent[0].msg.user, '');
 });
 
-test('with no user in the blob, Canvas names you; signed out is "anon"; any other failure is no one', async () => {
+test('with no user in the blob, Canvas names you; only a signed-out answer is "anon"; any other failure is no one', async () => {
   const src = 'https://canvadocs.instructure.com/1/sessions/x/view';
   for (const [profile, want] of [[() => Promise.resolve({ id: '170000000000077' }), '170000000000077'], [() => Promise.reject(401), 'anon'],
-    [() => Promise.reject(403), 'anon'], [() => Promise.reject(500), ''], [() => Promise.reject(new TypeError('offline')), ''], [() => Promise.resolve({}), '']]) {
+    [() => Promise.reject(403), ''], [() => Promise.reject(429), ''], [() => Promise.reject(500), ''], [() => Promise.reject(new TypeError('offline')), ''], [() => Promise.resolve({}), '']]) {
     const { sent, ask } = page({ src, href: 'https://school.instructure.com/courses/1/files/77', profile });
     ask({ gz: 'docs?' });
     assert.equal(sent[0].msg.user, '', 'not known yet: no one');
     await new Promise(setImmediate);
     assert.equal(sent.at(-1).msg.user, want, String(want));
   }
+});
+
+// Canvas answers a throttled or forbidden read with 403 as well; filing a student's marks under the site's shared "anon"
+// key for that would show them on (and mix them with) every signed-out viewer's, and lose them once the read works.
+test('a throttled or forbidden profile read files nothing under "anon", and is asked again later until it answers', async () => {
+  const src = 'https://canvadocs.instructure.com/1/sessions/x/view';
+  const answers = [() => Promise.reject(403), () => Promise.reject(429), () => Promise.resolve({ id: '170000000000077' })];
+  const { sent, ask, timers, ctx } = page({ src, href: 'https://school.instructure.com/courses/1/files/77', profile: () => (answers[ctx.profiles - 1] || answers.at(-1))() });
+  ask({ gz: 'docs?' });
+  await new Promise(setImmediate);
+  assert.deepEqual([ctx.profiles, sent.at(-1).msg.user, timers.length], [1, '', 1], 'no one for now; one retry waiting');
+  for (const send of sent) assert.notEqual(send.msg.user, 'anon');
+  const waits = [timers.at(-1).ms];
+  assert.ok(waits[0] >= 10000, `a pause before asking again (${waits[0]} ms)`);
+  timers.pop().f();
+  await new Promise(setImmediate);
+  assert.deepEqual([ctx.profiles, sent.at(-1).msg.user, timers.length], [2, '', 1], 'throttled again: still no one, and it waits longer');
+  waits.push(timers.at(-1).ms);
+  assert.ok(waits[1] > waits[0], `backs off (${waits})`);
+  timers.pop().f();
+  await new Promise(setImmediate);
+  assert.deepEqual([ctx.profiles, sent.at(-1).msg.user, timers.length], [3, '170000000000077', 0], 'answered: the marks are the student\'s, and nothing more is asked');
+  ask({ gz: 'docs?' });
+  await new Promise(setImmediate);
+  assert.equal(ctx.profiles, 4, 'a new question from the frame starts over');
+});
+
+test('signed out (401) is final: "anon", and Canvas is not asked again', async () => {
+  const { sent, ask, timers, ctx } = page({ src: 'https://canvadocs.instructure.com/1/sessions/x/view', href: 'https://school.instructure.com/courses/1/files/77', profile: () => Promise.reject(401) });
+  ask({ gz: 'docs?' });
+  await new Promise(setImmediate);
+  assert.deepEqual([sent.at(-1).msg.user, ctx.profiles, timers.length], ['anon', 1, 0]);
+});
+
+test('an unreadable profile answer retries, and a detached viewer stops retrying', async () => {
+  const p = page({ src: 'https://canvadocs.instructure.com/1/sessions/x/view', profile: () => Promise.resolve({}) });
+  p.ask({ gz: 'docs?' });
+  await new Promise(setImmediate);
+  assert.equal(p.timers.length, 1, 'no user id is unknown, not a permanent empty identity');
+  p.ctx.document.getElementsByTagName = () => [];
+  p.timers.pop().f();
+  await new Promise(setImmediate);
+  assert.equal(p.ctx.profiles, 1, 'the removed frame never asks again');
+  assert.equal(p.later.size, 0, 'the removed frame no longer waits for words');
 });
 
 test('an answer still on its way for the frame\'s earlier file (its profile, its words) is dropped once the frame asks again', async () => {

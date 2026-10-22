@@ -65,3 +65,31 @@ test('each site\'s native items get the shared names', () => {
     ['dashboard', 'dashboard', 'course', 'home', 'home', '', '', 'admin', '', '', '']);
   for (const id of [...Object.values({ a: L.canvas('global_nav_courses_link'), b: L.moodle('/my/') })]) assert.ok(L.NATIVE.includes(id));
 });
+
+// The one rule for links a mod's code supplies (lib/modapi.js nav.add, the broker's code-supplied layouts, the bar's own
+// check): a page of the school's site the tab is on.
+test('onSite: a link from a mod\'s code is a page of the school\'s site; offsite lists a layout\'s links that are not', () => {
+  const site = 'https://school.test';
+  assert.equal(L.onSite('/ultra/grades?x=1', site), 'https://school.test/ultra/grades?x=1', 'resolved against the site');
+  assert.equal(L.onSite('https://school.test/a#b', site), 'https://school.test/a#b');
+  for (const u of ['https://evil.test/', '//evil.test/x', 'http://school.test/', 'https://school.test:444/', 'https://u:p@school.test/', 'javascript:alert(1)', 'blob:https://school.test/x',
+    'https://school.test.evil.test/', `https://school.test/${'x'.repeat(520)}`, '', null, 7]) assert.equal(L.onSite(u, site), '', String(u));
+  for (const origin of [null, '', 7]) assert.equal(L.onSite('https://school.test/', origin), '', 'no site, no page of it');
+  const nav = L.clean({ hidden: ['grades'], links: [link(A, { u: 'https://school.test/a' }), link(B, { u: 'https://b.test/' })] });
+  assert.deepEqual(L.offsite(nav, site).map((l) => l.id), [B]);
+  assert.deepEqual(L.offsite(nav, null).map((l) => l.id), [A, B], 'with no site, every link is elsewhere');
+  assert.deepEqual(L.offsite(L.clean({ hidden: ['grades'] }), site), []);
+  assert.deepEqual(L.offsite(null, site), []);
+});
+
+test('Glaze\'s own names for the native items, and the names and icons only Glaze\'s own items may have', () => {
+  for (const id of L.NATIVE.filter((x) => !['profile', 'glaze'].includes(x))) assert.equal(typeof L.NAMES[id], 'string', id);
+  assert.ok(!Object.hasOwn(L.NAMES, 'profile'), 'the account item is the student\'s name: a mod hears nothing of it');
+  assert.deepEqual(L.RESERVED.icons, ['glaze', 'signout']);
+  for (const name of ['Glaze settings', 'glaze SETTINGS', ' Glaze  settings. ', 'Glaze​settings', 'ＧＬＡＺＥ settings', '⚙ Glaze settings', 'Sign out →', 'Sign out', 'Sign-Out', 'signout', 'Log out', 'LOGOUT', 'Réglages de Glaze', 'Reglages de Glaze', 'Configurações do Glaze', 'Uitloggen'])
+    assert.equal(L.reserved(name), true, name);
+  for (const name of ['Settings', 'Glaze', 'Sign up', 'Logbook', '', '...', null]) assert.equal(L.reserved(name), false, String(name));
+  assert.equal(L.reserved('Déconnexion'), false);
+  assert.equal(L.reserved('déconnexion ', ['Déconnexion', '', undefined]), true, 'and the names this page gives them');
+  assert.equal(L.reserved('—', ['', '-']), false, 'a name of nothing matches nothing');
+});

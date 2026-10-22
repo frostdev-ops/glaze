@@ -1,5 +1,5 @@
 // Glaze in Canvas's document viewer, DocViewer: Instructure's canvadocs app on its own host, always in a frame of a Canvas
-// page. Its own manifest entry (with lib/ink.js) in every frame on a canvadocs host; the first content script stays off them.
+// page. Its own manifest entry (with lib/ink.js) on all of instructure.com, regional canvadocs hosts too; it checks the host.
 // (1) The palette: the viewer's background, toolbar and thumbnails in Glaze's colors. The pages stay as the document has
 // them, or are dimmed or inverted in a dark palette (enhance.docPages). The toolbar is themed only while it holds nothing
 // but the page, zoom, rotate and full-screen controls, so a signed-in student's annotation tools keep Canvas's own look.
