@@ -300,12 +300,15 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     row.append(label, days, from, '–', to, loc, x(name, () => { row.remove(); list.querySelector('input')?.focus(); }), tag, src);
     return row;
   };
-  const dateRow = (list, d, n, saved, todo) => {
+  // kept: the record this review began from, whose ids a new row mustn't take (lib/syllabus.js ids).
+  const dateRow = (list, d, n, saved, todo, kept) => {
     const name = d.title || t('Date {n}', { n });
     const title = attr(text(d.title, { maxLength: 200, className: 'gz-syl-label' }), { 'aria-label': t('What') });
     const day = attr(make('input', { type: 'date', value: d.day || '' }), { 'aria-label': t('Date') });
     const kind = attr(make('select', {}, ...[['exam', 'Exam'], ['due', 'Due'], ['other', 'Other']].map(([v, k]) => make('option', { value: v, textContent: t(k), selected: d.kind === v }))), { 'aria-label': t('Kind') });
     const row = attr(make('div', { className: 'gz-syl-row gz-syl-date' }), { role: 'group', 'aria-label': name });
+    // The row's own id, from the first review of it: its To Do task follows the row through edits.
+    row.dataset.id = d.id || L.newId([...list.children].map((r) => r.dataset.id).concat((kept?.dates || []).map((x) => x.id)));
     const add = todo && make('label', { className: 'gz-syl-todo' }, make('input', { type: 'checkbox', className: 'gz-syl-task' }), ` ${t('Add to To Do')}`);
     const [tag, src] = note(title, d.conf, d.src, saved || !d.src);
     row.append(title, day, kind, add || '', x(name, () => { row.remove(); list.querySelector('input')?.focus(); }), tag, src);
@@ -322,6 +325,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const review = (r, read) => {
     const w = opened; // the course this dialog is for, whatever the page shows by the time it is saved
     const box = dlg; // and the dialog: a save that finishes after another opened leaves that one open
+    const kept = w === who ? rec : null; // what is kept for it as this review begins: To Do follows the changes from it
     const saved = !!r.saved;
     const p = r.prof;
     const say = status();
@@ -333,7 +337,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const blank = { label: '', days: [], start: '', end: '', location: '' };
     const hours = rows(t('Office hours'), r.hours, (l, m, n) => timeRow(l, m, n, saved), blank);
     const meets = rows(t('Class times'), r.meetings, (l, m, n) => timeRow(l, m, n, saved), blank);
-    const dates = rows(t('Important dates'), r.dates, (l, d, n) => dateRow(l, d, n, saved, todo), { title: '', day: '', kind: 'exam' });
+    const dates = rows(t('Important dates'), L.ids(r.dates, kept?.dates), (l, d, n) => dateRow(l, d, n, saved, todo, kept), { title: '', day: '', kind: 'exam' });
     const scale = text(r.scale.value ? r.scale.value.map(([l, v]) => `${l} ${v}`).join(', ') : '', { maxLength: 300, placeholder: 'A 93, A- 90, B+ 87, …' });
     // Used for the GPA without asking only when it's sure: a guess, or ranges that overlap or leave gaps, wait for a tick.
     const issues = r.scale.issues || [];
@@ -362,7 +366,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       const all = [...times(hours), ...times(meets)];
       const wrong = all.find((m) => !m.days.length || !m.start || !m.end || m.end <= m.start);
       if (wrong) return bad(wrong.row.querySelector(wrong.days.length ? '.gz-syl-start' : '.gz-syl-days input'), t('Give each time a day, a start and an end after it.'));
-      const ds = [...dates.querySelectorAll('.gz-syl-row')].map((row) => ({ row, title: row.querySelector('.gz-syl-label').value.trim(), day: row.querySelector('input[type="date"]').value, kind: row.querySelector('select').value, task: !!row.querySelector('.gz-syl-task')?.checked }));
+      const ds = [...dates.querySelectorAll('.gz-syl-row')].map((row) => ({ row, id: row.dataset.id, title: row.querySelector('.gz-syl-label').value.trim(), day: row.querySelector('input[type="date"]').value, kind: row.querySelector('select').value, task: !!row.querySelector('.gz-syl-task')?.checked }));
       const noDate = ds.find((d) => !d.title || !d.day);
       if (noDate) return bad(noDate.row.querySelector(noDate.title ? 'input[type="date"]' : '.gz-syl-label'), t('Give each date a name and a day.'));
       const strip = ({ row, ...m }) => m;
@@ -377,8 +381,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       const notes = [];
       const scaleSaid = useScale.checked && sc.length ? await gpaScale(C, sc, w) : '';
       if (scaleSaid) notes.push(scaleSaid);
-      const tasks = ds.filter((d) => d.task);
-      if (tasks.length && !await addTasks(tasks, w)) notes.push(t('The dates could not be added to To Do.'));
+      if (!await syncTasks(w, kept?.dates, out.dates, new Set(ds.filter((d) => d.task).map((d) => d.id)))) notes.push(t('The dates could not be added to To Do.'));
       if (notes.length) { say.textContent = `${t('Saved.')} ${notes.join(' ')}`; return; }
       if (dlg !== box) return;
       dlg.close();
@@ -411,11 +414,13 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const r = await send({ type: 'glaze:gpa', key: `${ultra ? 'ultra' : 'canvas'}:${location.origin}/${w.cid}`, patch: { s: C.schemeText(sc) } });
     return r?.ok ? '' : r?.error === 'full' ? t('Not saved: too many course settings are stored. Clear a course you no longer need.') : t('The scale could not be given to your GPA.');
   };
-  // Dates become the student's own To Do tasks (lib/todo.js importTask), one id per date and title, so saving again updates
-  // them and keeps whether they're done and their steps.
-  const addTasks = async (list, w) => {
+  // Dates become the student's own To Do tasks (lib/todo.js importTask), one for each row of the record: what a save does to
+  // them is lib/syllabus.js taskEdits (a row ticked is added or brought up to date, an edited row moves its task, a row taken
+  // out takes it). was, now: the record's dates before and as saved; picked: the ids of the rows ticked. A second Save of one
+  // review (the first one told of a problem) works out the same changes again, which do nothing twice.
+  const syncTasks = async (w, was, now, picked) => {
     const key = `todo:${location.origin}/${w.uid}`;
-    const edits = list.map((d) => ['importTask', { id: L.taskId(w.cid, d), title: d.title, cid: w.cid, due: { day: d.day }, notes: t('From your syllabus'), done: 0, at: Date.now() }]);
+    const edits = L.taskEdits({ cid: w.cid, was, now, picked, tasks: (await get('local', key))?.tasks, note: t('From your syllabus'), at: Date.now() });
     for (let i = 0; i < edits.length; i += 20) if (!(await send({ type: 'glaze:todo', key, edits: edits.slice(i, i + 20) }))?.ok) return false;
     return true;
   };
