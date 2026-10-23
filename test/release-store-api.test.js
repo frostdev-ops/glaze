@@ -48,6 +48,17 @@ const withGcloud = async (fn, { token = 'cws-token', fail = false } = {}) => {
   try { return await fn(dir); } finally { process.env.PATH = saved; fs.rmSync(dir, { recursive: true, force: true }); }
 };
 
+// The listings in the repository, for the manifest's version, are the text every store test sends.
+const repo = path.join(__dirname, '..');
+let listings;
+test.before(async () => {
+  const { readListings } = await import('../scripts/store-listings.mjs');
+  listings = readListings((file) => fs.readFileSync(path.join(repo, file), 'utf8'), JSON.parse(fs.readFileSync(path.join(repo, 'manifest.json'), 'utf8')).version);
+  appleManifest.listings = listings;
+});
+const LANGS = ['en', 'de', 'es', 'fr', 'nl', 'pt-BR'];
+const byLocale = (key, pick) => Object.fromEntries(LANGS.map((l) => [listings[l][key], pick(listings[l])]));
+
 const env = { CWS_PUBLISHER_ID: 'pub-1', CWS_EXTENSION_ID: 'ext-1', CWS_SERVICE_ACCOUNT: 'sa@example.iam.gserviceaccount.com', AMO_ADDON_ID: 'glaze@frostdev.io', AMO_JWT_ISSUER: 'user:1:2', AMO_JWT_SECRET: 'amo-secret', ASC_BUNDLE_ID: 'io.example.App', ASC_KEY_ID: 'KEY123', ASC_ISSUER_ID: 'issuer-uuid' };
 const b64json = (part) => JSON.parse(Buffer.from(part, 'base64url').toString());
 
@@ -120,7 +131,20 @@ test('request reports a non-JSON reply without echoing it', async () => {
 test('request lets a refused redirect or a dropped connection through as the failure it is', async () => {
   const { request } = await load();
   stubFetch(() => { throw new TypeError('fetch failed'); });
-  await assert.rejects(request('https://store.example/v1', 't'), /fetch failed/);
+  await assert.rejects(request('https://store.example/v1', 'transport-token'), /fetch failed/);
+});
+
+test('request removes its generated authorization token from HTTP and transport errors', async () => {
+  const { request } = await load();
+  const token = 'synthetic-generated-token';
+  for (const handler of [() => reply({ detail: `Rejected Bearer ${token}` }, 401), () => { throw new Error(`Connection refused for ${token}`); }]) {
+    stubFetch(handler);
+    await assert.rejects(request('https://store.example/v1', token), error => {
+      assert.ok(!error.message.includes(token), 'authorization token leaked in an error that can enter a receipt');
+      assert.match(error.message, /\[redacted\]/);
+      return true;
+    });
+  }
 });
 
 // ---- tokens and paths ----
@@ -338,7 +362,7 @@ test('submitChrome fails when the upload is not accepted, and when the store doe
 const firefoxManifest = (dir, sha = 'c'.repeat(64)) => {
   const upload = path.join(dir, 'glaze-v3.3.4-firefox.zip'), source = path.join(dir, 'glaze-v3.3.4-source.zip');
   fs.writeFileSync(upload, 'firefox-package'); fs.writeFileSync(source, 'firefox-source');
-  return { version: '3.3.4', notes: 'What changed', files: { firefox: { path: upload, sha256: sha }, firefoxSource: { path: source, sha256: 'd'.repeat(64) } } };
+  return { version: '3.3.4', notes: 'What changed', listings, files: { firefox: { path: upload, sha256: sha }, firefoxSource: { path: source, sha256: 'd'.repeat(64) } } };
 };
 const AMO = '/api/v5/addons/';
 const amoApi = (over = {}) => route({
@@ -347,6 +371,8 @@ const amoApi = (over = {}) => route({
   [`GET ${AMO}upload/upload-1/`]: { processed: true, valid: true, validation: {} },
   [`POST ${AMO}addon/glaze%40frostdev.io/versions/`]: { id: 77, file: { status: 'unreviewed' } },
   [`PATCH ${AMO}addon/glaze%40frostdev.io/versions/77/`]: {},
+  // The live listing already matches the sources unless a test says otherwise.
+  [`GET ${AMO}addon/glaze%40frostdev.io/`]: () => reply({ summary: byLocale('amoLocale', (l) => l.firefox.summary), description: byLocale('amoLocale', (l) => l.firefox.description) }),
   ...over,
 });
 
@@ -364,7 +390,7 @@ test('submitFirefox uploads the package as a listed upload, waits for validation
     assert.equal(version.body.get('upload'), 'upload-1');
     assert.equal(version.body.get('source').name, 'glaze-v3.3.4-source.zip');
     const notes = bodyOf(calls.find((c) => c.method === 'PATCH'));
-    assert.equal(notes.release_notes['en-US'], 'What changed');
+    assert.deepEqual(notes.release_notes, byLocale('amoLocale', (l) => l.firefox.notes), 'each language\'s own notes, not the changelog');
     assert.match(notes.approval_notes, /reviewer\/rebuild\.py verify/);
     assert.deepEqual(receipt, { uploadId: 'upload-1', versionId: 77, packageSHA256: manifest.files.firefox.sha256, state: 'unreviewed', submitted: true });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -436,6 +462,61 @@ test('submitFirefox lets an unexpected AMO error through instead of treating it 
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+// AMO answers with the description as it renders it: links wrapped through its redirector, quotes as entities.
+const rendered = (text) => text.replace(/&/g, '&amp;').replace(/'/g, '&#39;')
+  .replace(/https:\/\/[^\s<]+[^\s<.,;)]/g, (url) => `<a href="https://prod.outgoing.prod.webservices.mozgcp.net/v1/abc/${encodeURIComponent(url)}" rel="nofollow">${url}</a>`);
+
+test('submitFirefox updates the add-on summary and description only in the languages that differ', async () => {
+  const { submitFirefox } = await load(), dir = scratch();
+  try {
+    const live = {
+      summary: { ...byLocale('amoLocale', () => 'An older summary.'), 'pt-BR': listings['pt-BR'].firefox.summary },
+      description: { 'en-US': rendered(listings.en.firefox.description) },
+    };
+    stubFetch(amoApi({ [`GET ${AMO}addon/glaze%40frostdev.io/`]: live, [`PATCH ${AMO}addon/glaze%40frostdev.io/`]: {} }));
+    const receipt = {};
+    await submitFirefox(env, firefoxManifest(dir), receipt, saver());
+    const patch = calls.filter((c) => c.method === 'PATCH' && c.url.endsWith('/addon/glaze%40frostdev.io/'));
+    assert.equal(patch.length, 1);
+    const body = bodyOf(patch[0]);
+    assert.deepEqual(Object.keys(body).sort(), ['description', 'summary'], 'nothing else on the add-on is touched');
+    assert.deepEqual(Object.keys(body.summary), ['en-US', 'de', 'es-ES', 'fr', 'nl'], 'pt-BR already matches');
+    assert.equal(body.summary.de, listings.de.firefox.summary);
+    assert.deepEqual(Object.keys(body.description), ['de', 'es-ES', 'fr', 'nl', 'pt-BR'], 'the rendered English text matches its source');
+    assert.equal(body.description.fr, listings.fr.firefox.description);
+    assert.equal(receipt.submitted, true);
+    const order = calls.filter((c) => c.method === 'PATCH').map((c) => (c.url.endsWith('/versions/77/') ? 'version' : 'add-on'));
+    assert.deepEqual(order, ['version', 'add-on'], 'notes first, then the listing');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('submitFirefox is not recorded as submitted when the listing update fails, so a rerun repeats it', async () => {
+  const { submitFirefox } = await load(), dir = scratch();
+  try {
+    stubFetch(amoApi({ [`GET ${AMO}addon/glaze%40frostdev.io/`]: { summary: {}, description: {} }, [`PATCH ${AMO}addon/glaze%40frostdev.io/`]: () => reply({ summary: ['too long'] }, 400) }));
+    const receipt = {};
+    await assert.rejects(submitFirefox(env, firefoxManifest(dir), receipt, saver()), /HTTP 400/);
+    assert.ok(!receipt.submitted);
+    assert.equal(receipt.versionId, 77, 'the version is kept for the rerun');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the Firefox dry run reads only, and reports notes, summaries and descriptions per language', async () => {
+  const { syncFirefoxListing } = await load();
+  stubFetch(amoApi({
+    [`GET ${AMO}addon/glaze%40frostdev.io/`]: { summary: byLocale('amoLocale', (l) => l.firefox.summary), description: { 'en-US': 'Old text' } },
+    [`GET ${AMO}addon/glaze%40frostdev.io/versions/3.3.8/`]: () => reply({ detail: 'not found' }, 404),
+  }));
+  const changes = await syncFirefoxListing(env, listings, { write: false, version: '3.3.8' });
+  assert.ok(calls.every((c) => c.method === 'GET'), calls.map((c) => c.method).join());
+  const of = (locale, field) => changes.find((c) => c.locale === locale && c.field === field)?.action;
+  assert.equal(of('en-US', 'summary'), 'same');
+  assert.equal(of('en-US', 'description'), 'change');
+  assert.equal(of('de', 'description'), 'add');
+  for (const l of LANGS) assert.equal(of(listings[l].amoLocale, 'release notes'), 'add', l);
+  assert.ok(changes.every((c) => c.store === 'Firefox'));
+});
+
 // ---- App Store Connect ----
 
 const BUILD = { id: 'build-1', attributes: { version: '20261022120000', processingState: 'VALID', expired: false } };
@@ -447,35 +528,155 @@ const appleApi = (over = {}) => route({
 });
 const queryOf = (call) => decodeURIComponent(new URL(call.url).search);
 
-test('submitApple submits a new version released once approved, with the English notes only, then confirms the review state', async () => {
+const REVIEW = {
+  'GET /apps/app-1/reviewSubmissions?filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,IN_REVIEW,UNRESOLVED_ISSUES,CANCELING,COMPLETING&limit=200': { data: [] },
+  'POST /reviewSubmissions': { data: { id: 'sub-1', attributes: { state: 'READY_FOR_REVIEW' } } },
+  'POST /reviewSubmissionItems': {},
+  'PATCH /reviewSubmissions/sub-1': {},
+  'GET /reviewSubmissions/sub-1': { data: { id: 'sub-1', attributes: { state: 'WAITING_FOR_REVIEW' } } },
+};
+// The live record today: English only, on a live app info and a new editable one that a new version brings.
+const EN_INFO = { id: 'ail-en', attributes: { locale: 'en-US', name: 'Glaze for Safari', subtitle: 'Your courses, your colors', privacyPolicyUrl: 'https://example.test/privacy', privacyChoicesUrl: null } };
+const enVersionLocale = (over = {}) => ({ id: 'loc-en', attributes: { locale: 'en-US', description: listings.en.apple.description, keywords: listings.en.apple.keywords, promotionalText: 'An older promotional text.', whatsNew: 'Older notes', supportUrl: 'https://example.test/support', marketingUrl: 'https://example.test/glaze', ...over } });
+const created = (type) => (call) => { const a = bodyOf(call).data.attributes; return reply({ data: { id: `${type}-${a.locale}`, attributes: a } }, 201); };
+
+test('submitApple submits a new version released once approved, with every language\'s listing and notes, then confirms the review state', async () => {
   const { submitApple } = await load(), { dir, env: e } = appleEnv();
   try {
     const posts = [];
     stubFetch(appleApi({
       'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [] },
-      'POST /appStoreVersions': (call) => { posts.push(bodyOf(call)); return reply({ data: { id: 'ver-1', attributes: { releaseType: 'AFTER_APPROVAL' } } }); },
+      'POST /appStoreVersions': (call) => { posts.push(bodyOf(call)); return reply({ data: { id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION', releaseType: 'AFTER_APPROVAL' } } }); },
       'PATCH /appStoreVersions/ver-1': {},
       'PATCH /appStoreVersions/ver-1/relationships/build': {},
-      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [{ id: 'loc-en', attributes: { locale: 'en-US' } }, { id: 'loc-de', attributes: { locale: 'de-DE' } }] },
-      'PATCH /appStoreVersionLocalizations/loc-en': {},
-      'GET /apps/app-1/reviewSubmissions?filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,IN_REVIEW,UNRESOLVED_ISSUES,CANCELING,COMPLETING&limit=200': { data: [] },
-      'POST /reviewSubmissions': { data: { id: 'sub-1', attributes: { state: 'READY_FOR_REVIEW' } } },
-      'POST /reviewSubmissionItems': {},
-      'PATCH /reviewSubmissions/sub-1': {},
-      'GET /reviewSubmissions/sub-1': { data: { id: 'sub-1', attributes: { state: 'WAITING_FOR_REVIEW' } } },
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }, { id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
+      'GET /appInfos/info-1/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+      'POST /appInfoLocalizations': created('ail'),
+      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
+      'POST /appStoreVersionLocalizations': created('loc'),
+      'PATCH /appStoreVersionLocalizations/*': {},
+      ...REVIEW,
     }));
     const receipt = {};
     await submitApple(e, appleManifest, receipt, saver());
     assert.deepEqual(posts[0].data.attributes, { platform: 'MAC_OS', versionString: '3.3.4', releaseType: 'AFTER_APPROVAL' });
     const release = calls.find((c) => c.method === 'PATCH' && c.url.endsWith('/appStoreVersions/ver-1'));
     assert.equal(bodyOf(release).data.attributes.releaseType, 'AFTER_APPROVAL', 'released as soon as Apple approves it');
-    const patched = calls.filter((c) => c.method === 'PATCH' && c.url.includes('/appStoreVersionLocalizations/'));
-    assert.deepEqual(patched.map((c) => c.url.split('/').pop()), ['loc-en'], 'only English notes change');
-    assert.equal(bodyOf(patched[0]).data.attributes.whatsNew, 'Notes for Apple');
+    const others = LANGS.filter((l) => l !== 'en');
+    // App info: the five missing languages are added to the editable app info, with English's privacy policy URL.
+    const infos = calls.filter((c) => c.method === 'POST' && c.url.endsWith('/appInfoLocalizations')).map(bodyOf);
+    assert.deepEqual(infos.map((b) => b.data.attributes.locale), others.map((l) => listings[l].appleLocale));
+    for (const [i, l] of others.entries()) {
+      assert.deepEqual(infos[i].data.attributes, { locale: listings[l].appleLocale, name: listings[l].apple.name, subtitle: listings[l].apple.subtitle, privacyPolicyUrl: 'https://example.test/privacy' });
+      assert.deepEqual(infos[i].data.relationships.appInfo.data, { type: 'appInfos', id: 'info-1' });
+    }
+    assert.ok(!calls.some((c) => c.url.includes('/appInfos/info-live') || c.url.includes('/appInfoLocalizations/ail-en')), 'the live app info and the matching English name are left alone');
+    // Version: the same five languages, with English's support and marketing URLs.
+    const versions = calls.filter((c) => c.method === 'POST' && c.url.endsWith('/appStoreVersionLocalizations')).map(bodyOf);
+    assert.deepEqual(versions.map((b) => b.data.attributes.locale), others.map((l) => listings[l].appleLocale));
+    for (const [i, l] of others.entries()) {
+      const { description, keywords, promotionalText } = listings[l].apple;
+      assert.deepEqual(versions[i].data.attributes, { locale: listings[l].appleLocale, description, keywords, promotionalText, supportUrl: 'https://example.test/support', marketingUrl: 'https://example.test/glaze' });
+      assert.deepEqual(versions[i].data.relationships.appStoreVersion.data, { type: 'appStoreVersions', id: 'ver-1' });
+    }
+    const patches = calls.filter((c) => c.method === 'PATCH' && c.url.includes('/appStoreVersionLocalizations/'));
+    const english = patches.filter((c) => c.url.endsWith('/loc-en')).map((c) => bodyOf(c).data.attributes);
+    assert.deepEqual(english, [{ promotionalText: listings.en.apple.promotionalText }, { whatsNew: listings.en.apple.whatsNew }], 'only what differs, and What\'s New on its own');
+    const notes = Object.fromEntries(patches.map((c) => [c.url.split('/').pop(), bodyOf(c).data.attributes.whatsNew]).filter(([, v]) => v));
+    assert.deepEqual(notes, Object.fromEntries(LANGS.map((l) => [l === 'en' ? 'loc-en' : `loc-${listings[l].appleLocale}`, listings[l].apple.whatsNew])));
+    const lastListingWrite = calls.findLastIndex((c) => /Localizations/.test(c.url) && c.method !== 'GET');
+    assert.ok(lastListingWrite < calls.findIndex((c) => c.method === 'POST' && c.url.endsWith('/reviewSubmissions')), 'the listing is complete before review is requested');
     const submitted = calls.filter((c) => c.method === 'PATCH' && c.url.endsWith('/reviewSubmissions/sub-1'));
     assert.deepEqual(bodyOf(submitted[0]).data.attributes, { submitted: true });
     assert.deepEqual(receipt.MAC_OS, { versionId: 'ver-1', submissionId: 'sub-1', state: 'WAITING_FOR_REVIEW', submitted: true });
     assert.equal(receipt.submitted, true);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('without an editable app info, existing version languages can still be brought up to date', async () => {
+  const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    stubFetch(route({
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] },
+      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale({ whatsNew: listings.en.apple.whatsNew })] },
+      'PATCH /appStoreVersionLocalizations/loc-en': {},
+    }));
+    const changes = await syncAppleListing(e, 'app-1', 'MAC_OS', { id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION' } }, { en: listings.en });
+    assert.deepEqual(calls.filter((c) => c.method !== 'GET').map((c) => `${c.method} ${c.url.split('/v1')[1]}`), ['PATCH /appStoreVersionLocalizations/loc-en']);
+    assert.equal(changes.find((c) => c.field === 'name and subtitle').action, 'skip');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a version in review is never edited', async () => {
+  const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    stubFetch(() => reply({ data: [] }));
+    for (const state of ['WAITING_FOR_REVIEW', 'IN_REVIEW', 'PENDING_DEVELOPER_RELEASE', 'READY_FOR_DISTRIBUTION']) {
+      const changes = await syncAppleListing(e, 'app-1', 'MAC_OS', { id: 'ver-1', attributes: { appVersionState: state } }, listings, { write: false });
+      assert.ok(changes.length && changes.every((c) => c.action === 'skip'), state);
+      await assert.rejects(syncAppleListing(e, 'app-1', 'MAC_OS', { id: 'ver-1', attributes: { appVersionState: state } }, listings), /not editable/);
+    }
+    assert.ok(calls.every((c) => c.method === 'GET'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('with no live version yet (a first release still in review), the Apple dry run compares with the newest one', async () => {
+  const { previewAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    stubFetch(appleApi({
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.3.8': { data: [] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&limit=20': { data: [{ id: 'ver-first', attributes: { appVersionState: 'WAITING_FOR_REVIEW', versionString: '3.3.5' } }] },
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'WAITING_FOR_REVIEW' } }] },
+      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+      'GET /appStoreVersions/ver-first/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
+    }));
+    const changes = await previewAppleListing(e, 'IOS', '3.3.8', listings);
+    assert.ok(calls.every((c) => c.method === 'GET'));
+    const english = changes.filter((c) => c.locale === 'en-US');
+    assert.deepEqual(english.filter((c) => c.action !== 'same').map((c) => `${c.field} ${c.action}`), ['promotional text change', "What's New change"], 'English is compared, not created');
+    assert.ok(!changes.some((c) => c.field === 'screenshots' && c.locale === 'en-US'), 'the primary language keeps its own screenshots');
+    assert.match(changes.find((c) => c.locale === 'nl-NL' && c.field === 'screenshots').action, /^en-US's/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a language created where no English exists yet is not told to borrow its own screenshots', async () => {
+  const { previewAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    stubFetch(appleApi({
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.3.8': { data: [] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&limit=20': { data: [] },
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] },
+      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+    }));
+    const changes = await previewAppleListing(e, 'IOS', '3.3.8', listings);
+    assert.ok(!changes.some((c) => c.field === 'screenshots' && c.locale === 'en-US'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the Apple dry run compares with the live version when this one does not exist yet, and reads only', async () => {
+  const { previewAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    const table = (versions) => appleApi({
+      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.8': { data: [] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&limit=20': { data: versions },
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] },
+      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+      'GET /appStoreVersions/ver-live/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
+    });
+    stubFetch(table([{ id: 'ver-live', attributes: { appVersionState: 'READY_FOR_DISTRIBUTION', versionString: '3.3.7' } }]));
+    const changes = await previewAppleListing(e, 'MAC_OS', '3.3.8', listings);
+    assert.ok(calls.every((c) => c.method === 'GET'), 'nothing is written');
+    const of = (locale, field) => changes.find((c) => c.locale === locale && c.field === field);
+    assert.equal(of('en-US', 'name').action, 'same');
+    assert.equal(of('en-US', 'promotional text').action, 'change');
+    assert.equal(of('en-US', "What's New").action, 'change');
+    for (const field of ['name', 'subtitle', 'description', 'keywords', 'promotional text', "What's New"]) assert.equal(of('fr-FR', field).action, 'create', field);
+    assert.match(of('fr-FR', 'screenshots').action, /en-US/);
+    assert.ok(changes.every((c) => c.store === 'Apple MAC_OS'));
+    // A platform's first release has no What's New.
+    stubFetch(table([]));
+    const first = await previewAppleListing(e, 'MAC_OS', '3.3.8', listings);
+    assert.deepEqual(first.find((c) => c.locale === 'de-DE' && c.field === "What's New"), { store: 'Apple MAC_OS', locale: 'de-DE', field: "What's New", action: 'skip', detail: 'first release' });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -525,7 +726,8 @@ test('submitApple tells a first platform release (no What\'s New field) from any
       'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [{ id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION', releaseType: 'AFTER_APPROVAL' } }] },
       'PATCH /appStoreVersions/ver-1': {},
       'PATCH /appStoreVersions/ver-1/relationships/build': {},
-      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [{ id: 'loc-en', attributes: { locale: 'en-US' } }] },
+      'GET /apps/app-1/appInfos': { data: [] },
+      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale({ promotionalText: listings.en.apple.promotionalText })] },
       'PATCH /appStoreVersionLocalizations/loc-en': refusal,
       'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&limit=2': history,
       'GET /apps/app-1/reviewSubmissions?filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,IN_REVIEW,UNRESOLVED_ISSUES,CANCELING,COMPLETING&limit=200': { data: [] },
@@ -536,10 +738,10 @@ test('submitApple tells a first platform release (no What\'s New field) from any
     });
     stubFetch(appleApi(table({ data: [{ id: 'ver-1' }] })));
     const receipt = {};
-    await submitApple(e, appleManifest, receipt, saver());
+    await submitApple(e, { ...appleManifest, listings: { en: listings.en } }, receipt, saver());
     assert.equal(receipt.MAC_OS.state, 'IN_REVIEW', 'the first release carries on without What\'s New');
     stubFetch(appleApi(table({ data: [{ id: 'ver-0' }, { id: 'ver-1' }] })));
-    await assert.rejects(submitApple(e, appleManifest, {}, saver()), (error) => error.status === 409 && /whatsNew/.test(error.message));
+    await assert.rejects(submitApple(e, { ...appleManifest, listings: { en: listings.en } }, {}, saver()), (error) => error.status === 409 && /whatsNew/.test(error.message));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -551,6 +753,7 @@ test('submitApple starts a new review for a rejected version instead of adopting
       'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [{ id: 'ver-1', attributes: { appVersionState: 'REJECTED', releaseType: 'AFTER_APPROVAL' } }] },
       'PATCH /appStoreVersions/ver-1': {},
       'PATCH /appStoreVersions/ver-1/relationships/build': {},
+      'GET /apps/app-1/appInfos': { data: [] },
       'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [{ id: 'loc-en', attributes: { locale: 'en-US' } }] },
       'PATCH /appStoreVersionLocalizations/loc-en': {},
       'GET /apps/app-1/reviewSubmissions*': { data: [{ id: 'old', attributes: { state: 'COMPLETE' } }] },
@@ -561,9 +764,88 @@ test('submitApple starts a new review for a rejected version instead of adopting
       'GET /reviewSubmissions/sub-2': { data: { id: 'sub-2', attributes: { state: 'WAITING_FOR_REVIEW' } } },
     }));
     const receipt = {};
-    await submitApple(e, appleManifest, receipt, saver());
+    await submitApple(e, { ...appleManifest, listings: { en: listings.en } }, receipt, saver());
     assert.ok(!calls.some((c) => c.url.includes('/reviewSubmissions/old/')), 'the finished review is not read, let alone reused');
     assert.equal(receipt.MAC_OS.submissionId, 'sub-2');
     assert.equal(receipt.MAC_OS.submitted, true);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Apple listing writes fail closed when the version state is missing or unknown', async () => {
+  const { syncAppleListing, submitApple } = await load(), { dir, env: e } = appleEnv();
+  try {
+    for (const state of [undefined, 'FUTURE_STATE', 'WAITING_FOR_EXPORT_COMPLIANCE']) {
+      const version = { id: 'ver-1', attributes: { appVersionState: state } };
+      stubFetch(() => reply({ data: [] }));
+      await assert.rejects(syncAppleListing(e, 'app-1', 'MAC_OS', version, listings), /not editable/);
+      assert.equal(calls.length, 0, 'the state guard precedes all listing requests');
+      stubFetch(appleApi({
+        'GET /apps/app-1/appStoreVersions*': { data: [version] },
+        'GET /apps/app-1/reviewSubmissions*': { data: [] },
+        'PATCH /appStoreVersions/ver-1': {},
+      }));
+      await assert.rejects(submitApple(e, appleManifest, {}, saver()), /not editable/);
+      assert.ok(calls.every(c => c.method === 'GET'), 'no release type or build changes before the guard');
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('an existing Apple review draft synchronizes every locale before submission and resumes partial updates', async () => {
+  const { submitApple } = await load(), { dir, env: e } = appleEnv();
+  try {
+    const infoLocales = [EN_INFO], versionLocales = [enVersionLocale()];
+    let failed = false;
+    const table = {
+      'GET /apps/app-1/appStoreVersions*': { data: [{ id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION', releaseType: 'AFTER_APPROVAL' } }] },
+      'GET /apps/app-1/reviewSubmissions*': { data: [{ id: 'draft', attributes: { state: 'READY_FOR_REVIEW' } }] },
+      'GET /reviewSubmissions/draft/items*': { data: [{ relationships: { appStoreVersion: { data: { id: 'ver-1' } } } }] },
+      'GET /appStoreVersions/ver-1/build': { data: { id: BUILD.id } },
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
+      'GET /appInfos/info-1/appInfoLocalizations?limit=200': () => reply({ data: infoLocales }),
+      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': () => reply({ data: versionLocales }),
+      'POST /appInfoLocalizations': call => {
+        const attributes = bodyOf(call).data.attributes;
+        assert.ok(!infoLocales.some(l => l.attributes.locale === attributes.locale), 'no repeated locale creation');
+        const item = { id: `info-${attributes.locale}`, attributes }; infoLocales.push(item);
+        return reply({ data: item });
+      },
+      'POST /appStoreVersionLocalizations': call => {
+        const attributes = bodyOf(call).data.attributes;
+        if (attributes.locale === 'es-ES' && !failed) { failed = true; return reply({ error: 'temporary localization failure' }, 503); }
+        assert.ok(!versionLocales.some(l => l.attributes.locale === attributes.locale), 'no repeated locale creation');
+        const item = { id: `loc-${attributes.locale}`, attributes }; versionLocales.push(item);
+        return reply({ data: item });
+      },
+      'PATCH /appStoreVersionLocalizations/*': call => {
+        Object.assign(versionLocales.find(l => call.url.endsWith(`/${l.id}`)).attributes, bodyOf(call).data.attributes);
+        return reply({});
+      },
+      'PATCH /reviewSubmissions/draft': {},
+      'GET /reviewSubmissions/draft': { data: { id: 'draft', attributes: { state: 'WAITING_FOR_REVIEW' } } },
+    };
+    const receipt = {};
+    stubFetch(appleApi(table));
+    await assert.rejects(submitApple(e, appleManifest, receipt, saver()), /HTTP 503/);
+    assert.ok(!receipt.submitted);
+    assert.ok(!calls.some(c => c.method === 'PATCH' && c.url.endsWith('/reviewSubmissions/draft')));
+    stubFetch(appleApi(table));
+    await submitApple(e, appleManifest, receipt, saver());
+    assert.deepEqual(versionLocales.map(l => l.attributes.locale), LANGS.map(l => listings[l].appleLocale));
+    for (const l of LANGS) assert.equal(versionLocales.find(v => v.attributes.locale === listings[l].appleLocale).attributes.whatsNew, listings[l].apple.whatsNew);
+    assert.ok(calls.findIndex(c => c.method === 'PATCH' && c.url.endsWith('/reviewSubmissions/draft')) > calls.findLastIndex(c => /Localizations/.test(c.url) && c.method !== 'GET'));
+    assert.equal(receipt.submitted, true);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Apple cannot silently omit required languages when app info is not editable', async () => {
+  const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    stubFetch(route({
+      'GET /apps/app-1/appInfos': { data: [] },
+      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
+      'PATCH /appStoreVersionLocalizations/loc-en': {},
+    }));
+    await assert.rejects(syncAppleListing(e, 'app-1', 'MAC_OS', { id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION' } }, listings), /app info is not editable.*de-DE/);
+    assert.ok(calls.every(c => c.method === 'GET'), 'detect missing languages before partial metadata writes');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
