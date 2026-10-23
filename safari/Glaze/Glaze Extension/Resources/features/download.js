@@ -85,14 +85,19 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     f.className = 'gz-dl-allow';
     f.title = t('Allow {host}', { host });
     f.src = `${chrome.runtime.getURL('features/allow.html')}#${host}`;
-    const done = (yes) => { removeEventListener('message', heard); signal.removeEventListener('abort', stop); f.remove(); resolve(yes); };
+    const channel = new MessageChannel();
+    const done = (yes) => { channel.port1.close(); channel.port2.close(); signal.removeEventListener('abort', stop); f.remove(); resolve(yes); };
     const heard = (e) => {
-      if (e.source !== f.contentWindow || e.data?.gzAllow !== host) return;
+      if (e.data?.gzAllow !== host) return;
       if (Array.isArray(e.data.size)) { const [w, h] = e.data.size; if (w > 0 && h > 0) { f.style.width = `${Math.ceil(w)}px`; f.style.height = `${Math.ceil(h)}px`; } return; }
       done(e.data.ok === true);
     };
     const stop = () => done(false);
-    addEventListener('message', heard);
+    // The reply port belongs only to this frame, including on Firefox where window messages hide source.
+    channel.port1.onmessage = heard;
+    f.addEventListener('load', () => {
+      f.contentWindow.postMessage({ gzAllow: host }, chrome.runtime.getURL('').replace(/\/$/, ''), [channel.port2]);
+    }, { once: true });
     signal.addEventListener('abort', stop, { once: true });
     b.after(f);
   });

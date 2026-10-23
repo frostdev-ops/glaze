@@ -9,7 +9,13 @@
   const button = document.getElementById('allow');
   // A plain public host name, as the worker writes it: no scheme, port, path, wildcard or address.
   if (!/^(?=.{4,253}$)([a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+[a-z][a-z\d-]{0,62}$/.test(host)) { button.hidden = true; return; }
-  const tell = (m) => parent.postMessage({ gzAllow: host, ...m }, '*');
+  let port;
+  const tell = (m) => port?.postMessage({ gzAllow: host, ...m });
+  addEventListener('message', (e) => {
+    if (port || e.data?.gzAllow !== host || !e.ports?.[0]) return;
+    port = e.ports[0];
+    requestAnimationFrame(() => tell({ size: [document.body.scrollWidth, document.body.scrollHeight] }));
+  });
   button.textContent = t('Allow {host}', { host });
   let asking = false;
   button.addEventListener('click', (e) => {
@@ -20,6 +26,4 @@
     new Promise((res) => res(chrome.permissions.request({ origins: [`https://${host}/*`] })))
       .then((yes) => tell({ ok: yes === true }), () => tell({ ok: false }));
   });
-  // Its size, for the page to fit the frame to the button.
-  requestAnimationFrame(() => tell({ size: [document.body.scrollWidth, document.body.scrollHeight] }));
 })();

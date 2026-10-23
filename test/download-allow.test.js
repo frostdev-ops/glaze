@@ -150,15 +150,15 @@ test('review: Allow answers use a private frame port when Firefox reports a null
 // ---- the frame ------------------------------------------------------------------------------------------------------------
 const frame = ({ hash = `#${CDN}`, request = async () => true, manifest = { host_permissions: [] } } = {}) => {
   const button = new El('button'), asked = [], told = [];
-  let active = false;
+  let active = false, heard;
   const document = { getElementById: (id) => (id === 'allow' ? button : null), documentElement: new El('html'), body: { scrollWidth: 120, scrollHeight: 26 } };
   const g = { document, location: { hash }, console, Promise, URL, decodeURIComponent, navigator: { language: 'en' }, Intl, Object, Array, String, Number, JSON, Math, Error,
-    parent: { postMessage: (m, o) => told.push([JSON.parse(JSON.stringify(m)), o]) }, addEventListener(t, f) { if (t === 'message') this.heard = f; }, requestAnimationFrame: (f) => f(),
+    parent: { postMessage: (m, o) => told.push([JSON.parse(JSON.stringify(m)), o]) }, addEventListener(t, f) { if (t === 'message') heard = f; }, requestAnimationFrame: (f) => f(),
     chrome: { runtime: { getManifest: () => manifest }, permissions: { request: (o) => { asked.push([[...o.origins], active]); return request(o); } } } };
   g.globalThis = g;
   vm.createContext(g);
   for (const f of ['lib/i18n.js', 'features/allow.js']) vm.runInContext(read(f), g);
-  g.heard?.({ data: { gzAllow: decodeURIComponent(hash.slice(1)) }, ports: [{ postMessage: (m) => told.push([JSON.parse(JSON.stringify(m)), '*']) }] });
+  heard?.({ data: { gzAllow: decodeURIComponent(hash.slice(1)) }, ports: [{ postMessage: (m) => told.push([JSON.parse(JSON.stringify(m)), '*']) }] });
   const click = (isTrusted = true) => { active = true; for (const f of button.listeners.click || []) f({ isTrusted }); active = false; };
   return { button, asked, told, click };
 };
