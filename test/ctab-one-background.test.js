@@ -136,7 +136,7 @@ test('the page under a course frame keeps its scene moving', () => {
 
 test('content.js tells a frame what its background is made of: the page publishes it on <html>', () => {
   assert.match(source, /setAttr\('data-gz-bg-key', on\(settings\)/);
-  assert.match(source, /JSON\.stringify\(\[s\.bg, colors, partsOf\(\)\?\.bg, html\.getAttribute\('data-gz-motion'\)\]\)/);
+  assert.match(source, /JSON\.stringify\(\[s\.bg, colors, partsOf\(\)\?\.bg, html\.getAttribute\('data-gz-motion'\),/);
 });
 
 // ---- lib/scene-host.js --------------------------------------------------------------------------------------------
@@ -294,4 +294,17 @@ test('sharing race: disabling a frame clears the sharing marker held by its page
   vm.runInContext(source.slice(source.indexOf('  const disable = () => {'), source.indexOf('  const reapply =')) + '; disable();', r.ctx);
   assert.equal(r.log.asked.at(-1)[0], false, 'disable revokes sharing in the parent too');
   assert.ok(!r.attrs.has('data-gz-through'));
+});
+
+test('sharing signature: aurora includes its surface paint and frost', () => {
+  const r = rig({ kind: 'aurora', bg: 'aurora' });
+  r.ctx.worn.look = { surfaceCustom: true, surfaceColor: '#123456', surfaceTint: 0, surfaceTintSource: 'accent', surfaceFrost: 0 };
+  r.ctx.surfaceCourse = () => '#aabbcc';
+  let key = sign(r);
+  for (const [k, v] of [['surfaceColor', '#abcdef'], ['surfaceTint', 20], ['surfaceTintSource', 'course'], ['surfaceFrost', 25]]) {
+    r.ctx.worn.look[k] = v;
+    const next = sign(r);
+    assert.notEqual(next, key, k + ' changes the painted aurora');
+    key = next;
+  }
 });

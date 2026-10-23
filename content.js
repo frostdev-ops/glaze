@@ -1019,7 +1019,7 @@
   const sceneModule = () => (bgKind() === 'media' ? 'lib/scene-media.js' : 'lib/scene.js');
   const sceneSig = () => JSON.stringify([bgKind(), worn.bg.scene, partsOf()?.bg]);
   let modBg = null;
-  // A course tab's frame wearing the page's background shows the page's through it (lib/scene-host.js through).
+  // Matching frames share the page's background.
   let bgSig = '', thru = false;
   const syncThrough = () => {
     if (!tabFrame) {
@@ -1051,7 +1051,7 @@
     sceneCanvas = null;
     if (!tabFrame) syncThrough();
   };
-  // Load failures retry after 1 s, 5 s, then every 30 s while shown. Drawing failures get three tries per Look.
+  // Retry loads after 1 s, 5 s, then 30 s while shown; drawing gets three tries per Look.
   const retryScene = (key, error, recover = true) => {
     console.warn('[Glaze] Background startup failed', error);
     const tries = (sceneRetry?.tries || 0) + 1;
@@ -1064,7 +1064,7 @@
       retry.timer = 0; sceneFailed = false; syncScene();
     }, [1000, 5000][tries - 1] || 30000);
   };
-  // A startup owns its waits. Abandoned or timed out, it still hears late answers, but keeps no timers.
+  // Abandoned startups still hear late answers, without keeping timers.
   const sceneWait = (p, gone, got = sceneAgain) => new Promise((ok, no) => {
     let waiting = true;
     const cancel = () => { waiting = false; clearTimeout(timer); };
@@ -1077,7 +1077,7 @@
     const p = need(file, ready, false), gone = () => { if (loading.get(file) === p) loading.delete(file); };
     return sceneWait(p, gone);
   };
-  // A late answer or a page back on screen can start now; keep its retry count.
+  // Late answers and returning pages retry now, keeping the count.
   const sceneAgain = () => {
     if (scene && !scenePending) return;
     sceneUnwait(); clearTimeout(sceneRetry?.timer); sceneFailed = false;
@@ -1128,7 +1128,7 @@
         sceneCanvas.setAttribute('aria-hidden', 'true');
         placeScene();
         sceneFile = file;
-        // A dropped context gets a new canvas; a minute shown without interruption earns new tries.
+        // Replace lost canvases; a minute shown earns new tries.
         const at = Date.now();
         scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, (why) => {
           if (why === 'dropped' && Date.now() - Math.max(at, sceneShown) > 60000) sceneRetry = null;
@@ -1344,12 +1344,11 @@
     setAttr('data-gz-depth', String(s.look.depth));
     X.paintNav(s.nav);
     X.paintTabs();
-    // Background: the kind is an attribute, the picture and its dim/blur are vars. An image that
-    // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
+    // Kind is an attribute; picture, dim and blur are vars. Failed images fall back to the gradient.
     const kind = bgKind() === 'image' && !s.bg.image ? 'gradient' : bgKind();
     setAttr('data-gz-bg', kind);
     setAttr('data-gz-scene', kind === 'scene' && s.bg.scene);
-    // A scene's gradient fallback (until it draws, or without WebGL) takes its dim from intensity.
+    // Scene fallbacks take their dim from intensity.
     const look = (kind === 'scene' || kind === 'shader' || kind === 'layers' || kind === 'media') && GZ_SCENE_LOOK(s.bg.intensity);
     setVar('--gz-bg-dim', `${look ? Math.round(look.dim * 100) : s.bg.dim}%`);
     setVar('--gz-bg-blur', `${look ? 0 : s.bg.blur}px`);
@@ -1360,9 +1359,9 @@
     else setAttr('data-gz-bg-failed', false);
     // Motion: the system's reduced-motion setting wins over the level unless told otherwise.
     setAttr('data-gz-motion', s.motion.followSystem && calmMQ.matches ? 'off' : s.motion.level);
-    // What the background is made of: a course tab's frame wearing the same shows the page's (syncThrough).
+    // What the background is made of: settings, colors and parts.
     let h = 2166136261;
-    for (const c of JSON.stringify([s.bg, colors, partsOf()?.bg, html.getAttribute('data-gz-motion')])) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    for (const c of JSON.stringify([s.bg, colors, partsOf()?.bg, html.getAttribute('data-gz-motion'), bgKind() === 'aurora' && [s.look.surfaceCustom && s.look.surfaceColor, s.look.surfaceTint, s.look.surfaceTintSource === 'course' && surfaceCourse(), s.look.surfaceFrost]])) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
     bgSig = (h >>> 0).toString(36);
     if (s.motion.level === 'expressive') need('features/light.js', () => globalThis.GZ_LIGHT).catch(() => {}); // the pointer light
     moveParts();
