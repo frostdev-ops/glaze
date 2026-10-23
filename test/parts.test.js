@@ -521,3 +521,15 @@ test('what a label covers on a board card is readable as the real text, and a ni
   assert.equal(R.real(plain), 'Biology', 'features/coursecards.js compares its own text with this, not with the label');
   assert.equal(nicked.texts()[0].data, 'Bio (mine)', "the student's nickname is theirs");
 });
+
+test('board card piece moves use the board container and restore the original order', () => {
+  const { body, wear } = page('ultra', ultraTile);
+  const title = body.querySelector(ON_BOARD['ultra.course-card.title']);
+  const code = body.querySelector(ON_BOARD['ultra.course-card.id']);
+  wear([{ p: 'ultra.course-card.id', do: 'move', to: 'ultra.course-card.title', at: 'before' }]);
+  assert.equal(title.previousElementSibling, code, 'move the board code before its own title');
+  wear(null);
+  assert.equal(title.nextElementSibling, code, 'put the code back after its title');
+  wear([{ p: 'ultra.course-card.id', do: 'move', to: 'ultra.course-card.status', at: 'before' }]);
+  assert.equal(title.nextElementSibling, code, 'a destination absent from board cards does nothing');
+});
