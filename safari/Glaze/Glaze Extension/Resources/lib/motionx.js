@@ -44,8 +44,13 @@ var GZ_MX = globalThis.GZ_MX || (() => {
     u.skew && `skew(${fmt(s.kx ?? 0)}deg,${fmt(s.ky ?? 0)}deg)`, u.sc && `scale(${fmt(s.sc ?? 1)})`].filter(Boolean).join(' ');
   const filter = (s, u) => [u.bl && `blur(${fmt(s.bl ?? 0)}px)`, u.br && `brightness(${fmt(s.br ?? 1)})`, u.sa && `saturate(${fmt(s.sa ?? 1)})`,
     u.hu && `hue-rotate(${fmt(s.hu ?? 0)}deg)`].filter(Boolean).join(' ');
+  // Without a skew the same motion goes on the individual translate, rotate and scale properties, which compose in that
+  // order: a finished entrance stays attached to its element, and one that owns transform keeps the card's hover lift
+  // (a transform transition) off the compositor for good (motion.css).
+  const parts = (s, u) => (u.skew ? `transform:${transform(s, u)}` : [u.move && `translate:${fmt(s.x ?? 0)}px ${fmt(s.y ?? 0)}px`, u.rot && `rotate:${fmt(s.r ?? 0)}deg`,
+    u.sc && `scale:${fmt(s.sc ?? 1)}`].filter(Boolean).join(';'));
   // A stop sets only the properties it names: the rest blend between the stops around it.
-  const declare = (s, u) => [has(s, TF) && `transform:${transform(s, u)}`, 'o' in s && `opacity:${fmt(s.o)}`, has(s, FL) && `filter:${filter(s, u)}`].filter(Boolean).join(';');
+  const declare = (s, u) => [has(s, TF) && parts(s, u), 'o' in s && `opacity:${fmt(s.o)}`, has(s, FL) && `filter:${filter(s, u)}`].filter(Boolean).join(';');
   // A delay is a hold on the first stop: the knobs' users (card staggers) set animation-delay themselves, which would
   // replace one given in the shorthand.
   const frames = (list, ms, delay) => {

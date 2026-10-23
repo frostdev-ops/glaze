@@ -14,7 +14,6 @@
   --gz-enter-tile: var(--gz-x-enter-tile, none);
   --gz-rail-open: var(--gz-x-rail-open, none);
   --gz-t-page: 0.28s;
-  --gz-reveal-blur: 8px;
   --gz-tip-in: var(--gz-x-tip-in, gz-tip 0.16s var(--gz-ease) backwards);
   --gz-stagger: var(--gz-x-stagger, 0.05s);
   --gz-lift: var(--gz-x-lift, translateY(-2px));
@@ -36,7 +35,7 @@ html[data-gz-motion="expressive"] {
   --gz-enter: var(--gz-x-enter, gz-rise 0.8s var(--gz-spring) backwards);
   --gz-enter-panel: var(--gz-x-enter-panel, gz-focus 0.45s var(--gz-ease) backwards);
   --gz-t-page: 0.42s;
-  --gz-reveal-blur: 14px;
+  --gz-reveal-scale: 1.015; /* the next page settles in from a touch closer (canvas.css, moodle.css) */
   --gz-tip-in: var(--gz-x-tip-in, gz-tip 0.34s var(--gz-spring) backwards);
   --gz-stagger: var(--gz-x-stagger, 0.07s);
   --gz-lift: var(--gz-x-lift, translateY(-4px) scale(1.01));
@@ -65,13 +64,18 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
   html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-ambient: paused; }
 }
 
-@keyframes gz-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes gz-rise { from { opacity: 0; transform: translateY(18px) scale(0.98); } to { opacity: 1; transform: none; } }
-/* Panels: Ultra already slides them in (a transform transition), so Glaze only fades them;
-   a transform here would fight Ultra's. Expressive adds a blur-to-sharp focus, still no transform. */
+/* Entrances move with the individual translate and scale properties, never transform. A finished entrance stays
+   attached to its element, and while one owns transform Chrome keeps every later transform transition there (a card's
+   hover lift) off the compositor, for the life of the page. They also add to a transform Ultra or Popper positions
+   an element with, instead of replacing it for the length of the animation. Nothing animates filter: a blur can
+   never run on the compositor, and these play just as Ultra is busy building what they reveal. */
+@keyframes gz-in { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: none; } }
+@keyframes gz-rise { from { opacity: 0; translate: 0 18px; scale: 0.98; } to { opacity: 1; translate: none; scale: none; } }
+/* Panels: Ultra already slides them in (a transform transition), so Glaze only fades them. Expressive adds depth,
+   the panel settling up to full size as it comes: scale composes with Ultra's slide. */
 @keyframes gz-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes gz-focus { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: none; } }
-@keyframes gz-tip { from { opacity: 0; transform: translateY(var(--gz-tip-dy, 4px)) scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes gz-focus { from { opacity: 0; scale: 0.985; } to { opacity: 1; scale: none; } }
+@keyframes gz-tip { from { opacity: 0; translate: 0 var(--gz-tip-dy, 4px); scale: 0.94; } to { opacity: 1; translate: none; scale: none; } }
 
 /* Entrances: pages fade up, panels fade in while Ultra slides them, cards stagger. With the
    enter knobs at none the delays are 0 too, so nothing waits invisible. Fill is backwards, never
@@ -87,6 +91,23 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 /* Tooltips grow from the side they point at. */
 :is(.tooltip, span.enhanced-tooltip, .ms-Tooltip, .gz-tip) { animation: var(--gz-tip-in); }
 .gz-tip[data-side="bottom"] { --gz-tip-dy: -4px; }
+/* Glaze's own dialogs settle in and fall away, and their backdrops fade, rather than cutting in one frame. Both ways
+   are transitions from @starting-style, held on screen while closing by display and overlay (allow-discrete). Only
+   where overlay exists: without it a closing modal leaves the top layer at once and would flash at its place in the
+   page. --gz-t is 0s with motion Off, transitions switched off and (before content.js runs) reduced motion. A dialog
+   with its own entrance (--gz-tip-in) plays that instead: an animation outranks a transition while it runs. */
+@supports (overlay: auto) {
+  dialog:is(#gz-ce, #gz-cl, #gz-hub, #gz-ccm, #gz-nt, #gz-rm, #gz-ics, #gz-ins, #gz-syl-dlg, .gz-game-dialog) {
+    transition: opacity var(--gz-t) var(--gz-ease), scale var(--gz-t) var(--gz-ease), display var(--gz-t) allow-discrete, overlay var(--gz-t) allow-discrete;
+    &:not([open]) { opacity: 0; scale: 0.97; }
+    &::backdrop { transition: opacity var(--gz-t) var(--gz-ease), display var(--gz-t) allow-discrete, overlay var(--gz-t) allow-discrete; }
+    &:not([open])::backdrop { opacity: 0; }
+  }
+  @starting-style {
+    dialog:is(#gz-ce, #gz-cl, #gz-hub, #gz-ccm, #gz-nt, #gz-rm, #gz-ics, #gz-ins, #gz-syl-dlg, .gz-game-dialog)[open] { opacity: 0; scale: 0.97; }
+    dialog:is(#gz-ce, #gz-cl, #gz-hub, #gz-ccm, #gz-nt, #gz-rm, #gz-ics, #gz-ins, #gz-syl-dlg, .gz-game-dialog)[open]::backdrop { opacity: 0; }
+  }
+}
 .element-card, .content-list-item { animation: var(--gz-enter); }
 /* Dashboard tiles enter on a Look's say-so; the rail's items play theirs each time a collapsed rail opens. */
 .gz-w { animation: var(--gz-enter-tile); }

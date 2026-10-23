@@ -18,7 +18,7 @@ const KNOB = {
   'stagger': `\\d+ms`, 'lift': `(?:${FNS}|none)`, 'hover-filter': FNS, 'hover-t': `\\d+ms`, 'hover-ease': EASE, 'press': NUM,
 };
 for (const k of ['enter-page', 'enter-panel', 'enter-tile', 'rail-open', 'tip-in']) KNOB[k] = KNOB.enter;
-const KEYFRAME_DECL = new RegExp(`^(?:transform:${FNS}|opacity:${NUM}|filter:${FNS})$`);
+const KEYFRAME_DECL = new RegExp(`^(?:transform:${FNS}|translate:${NUM}px ${NUM}px|rotate:${NUM}deg|scale:${NUM}|opacity:${NUM}|filter:${FNS})$`);
 // Throws unless `css` is made only of the shapes compile writes: keyframes of known properties and :root knobs of known forms.
 const assertSafe = (css) => {
   const roots = css.match(/:root\{[^{}]*\}$/);
@@ -49,7 +49,7 @@ test('an entrance becomes one @keyframes and the knob that reads it', () => {
   const css = M.compile({ 'card.enter': ENTER });
   assertSafe(css);
   const name = css.match(/@keyframes (gz-x-[0-9a-z]+)/)[1];
-  assert.equal(css, `@keyframes ${name}{0%{transform:translate(0px,20px);opacity:0}100%{transform:translate(0px,0px);opacity:1}}:root{--gz-x-enter:${name} 500ms var(--gz-spring) backwards;--gz-x-stagger:80ms}`);
+  assert.equal(css, `@keyframes ${name}{0%{translate:0px 20px;opacity:0}100%{translate:0px 0px;opacity:1}}:root{--gz-x-enter:${name} 500ms var(--gz-spring) backwards;--gz-x-stagger:80ms}`);
 });
 
 test('each moment feeds the knob motion.css reads for it, and motion.css reads every one', () => {
@@ -92,10 +92,17 @@ test('a delay is a hold on the first stop, so a staggered card keeps it', () => 
   assert.match(css, /--gz-x-enter-page:gz-x-[0-9a-z]+ 800ms /);
 });
 
-test('a stop sets only what it names, and every transform lists the same functions', () => {
+test('a stop sets only what it names, and every stop that moves sets each part the animation uses', () => {
   const css = M.compile({ 'panel.enter': { s: [{ at: 0, x: -30, r: -20, o: 0 }, { at: 0.5, sc: 1.2 }, { at: 1, x: 0, r: 0, sc: 1, o: 1 }] } });
   assertSafe(css);
-  assert.match(css, /0%\{transform:translate\(-30px,0px\) rotate\(-20deg\) scale\(1\);opacity:0\}50%\{transform:translate\(0px,0px\) rotate\(0deg\) scale\(1\.2\)\}100%\{transform:translate\(0px,0px\) rotate\(0deg\) scale\(1\);opacity:1\}/);
+  assert.match(css, /0%\{translate:-30px 0px;rotate:-20deg;scale:1;opacity:0\}50%\{translate:0px 0px;rotate:0deg;scale:1\.2\}100%\{translate:0px 0px;rotate:0deg;scale:1;opacity:1\}/);
+  assert.doesNotMatch(css, /transform:/, 'an entrance without a skew never owns transform: the hover lift is a transform transition');
+});
+
+test('a skew has no property of its own, so an entrance with one keeps a transform listing the same functions', () => {
+  const css = M.compile({ 'card.enter': { s: [{ at: 0, x: -30, kx: 10, o: 0 }, { at: 0.5, sc: 1.2 }, { at: 1, x: 0, kx: 0, sc: 1, o: 1 }] } });
+  assertSafe(css);
+  assert.match(css, /0%\{transform:translate\(-30px,0px\) skew\(10deg,0deg\) scale\(1\);opacity:0\}50%\{transform:translate\(0px,0px\) skew\(0deg,0deg\) scale\(1\.2\)\}100%\{transform:translate\(0px,0px\) skew\(0deg,0deg\) scale\(1\);opacity:1\}/);
 });
 
 test('filters list the same functions in every stop that has one', () => {
