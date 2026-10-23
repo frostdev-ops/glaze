@@ -474,7 +474,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   // lists them (settings extras.pointer, defaults.js); their own picture only once there is one (ready(), asked as the
   // palette opens).
   const POINTERS = { look: "The Look's pointer", off: 'System pointer', aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal',
-    lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', own: 'Your own picture' };
+    lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', frostdev: 'Frostdev', own: 'Your own picture' };
   let ownPic = false;
   const ready = async () => { ownPic = !!(await get('cursorImg')).cursorImg; };
   const cmds = () => {

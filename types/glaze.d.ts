@@ -488,7 +488,7 @@ interface GlazeRules {
   set(rules: GlazeRule[]): Promise<unknown>;
 }
 
-type GlazeEffectKind = 'burst' | 'confetti' | 'rain' | 'ring' | 'sprite';
+type GlazeEffectKind = 'burst' | 'confetti' | 'rain' | 'ring' | 'sprite' | 'contour';
 type GlazeShape = 'dot' | 'star' | 'snow' | 'heart' | 'leaf' | 'spark';
 
 interface GlazeEffectOptions {
