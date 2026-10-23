@@ -269,6 +269,6 @@ test('RTL: injected Ultra UI uses logical sides, and the progress fill grows fro
   }
   assert.match(rule(tabs, '#gz-ctabs .gz-ctab {'), /padding-inline:\s*11px 6px/);
   const narrow = tabs.slice(tabs.indexOf('@media (max-width: 700px)'));
-  assert.match(rule(narrow, '#gz-ctabs .gz-ctabs-note {'), /inset-inline-end:\s*6px/);
+  assert.match(rule(narrow, '#gz-ctabs .gz-ctabs-note {'), /inset-inline-end:\s*calc\(var\(--gz-float-end, 12px\) \+ 6px\)/);
   assert.doesNotMatch(rule(narrow, '#gz-ctabs .gz-ctabs-note {'), /[^-]right:/);
 });
