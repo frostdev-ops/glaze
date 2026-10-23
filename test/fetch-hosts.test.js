@@ -48,7 +48,7 @@ const SITES = {
     { at: 'fetch: (url, init) => fetch(url, init),', kind: 'via', to: 'lib/gcal.js', exact: true },
     { at: 'fetch(chrome.runtime.getURL(`icons/icon', kind: 'extension' },
     { at: "credentials: 'include', redirect: 'error'", kind: 'asked', flow: 'Gradescope: the Settings switch asks for www.gradescope.com', guard: /reachable\(GZ_GRADESCOPE\.HOST\)/ },
-    { at: "redirect: 'follow', cache: 'no-store', signal: ctl.signal", kind: 'asked', flow: 'Canvas Download all: the page\'s Allow frame (features/allow.html) for the file server', guard: /if \(!await reachable\(url\)\)/ },
+    { at: "redirect: wide ? 'follow' : 'manual', cache: 'no-store', signal: ctl.signal", kind: 'asked', flow: 'Canvas Download all: the page\'s Allow frame (features/allow.html) for the file server', guard: /if \(!await reachable\(url\)\)/ },
   ],
   'lib/media.js': [
     // The worker's mediaFetch, the one caller of these two, checks the host before it hands the address over.

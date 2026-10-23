@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const G = require('../defaults.js');
 const env = require('./check-env.js');
-const ext = env.staged(process.env.EXT || path.join(__dirname, '..'), []);
+const ext = env.staged(process.env.EXT || path.join(__dirname, '..'), ['https://files.redirect.test/*']);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const O = 'https://school.instructure.com', A = 'files.cdn-a.test', B = 'files.cdn-b.test', C = 'files.cdn-c.test';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-download-'));
@@ -21,7 +21,7 @@ const PAGE = fixture('canvas-modules.html').replace(/<script\b[^>]*>[\s\S]*?<\/s
   .replace(/class="context_module_item (?!student-view attachment)/g, 'class="context_module_item attachment '); // a File row in each module: its button
 // Each module one file: 73 on A (asked for, allowed), 74 on C (asked for, refused), 75 on A redirecting to B.
 const FILES = { 73: { id: 9, name: 'notes.pdf', url: `https://${A}/9/notes.pdf?sig=a`, body: 'notes-pdf-bytes' }, 74: { id: 10, name: 'slides.pdf', url: `https://${C}/10/slides.pdf?sig=c`, body: 'slides' },
-  75: { id: 11, name: 'lab.pdf', url: `https://${A}/redirect/11?sig=r`, body: 'lab' } };
+  75: { id: 11, name: 'lab.pdf', url: 'https://files.redirect.test/redirect/11?sig=r', body: 'lab' } };
 const byId = Object.fromEntries(Object.values(FILES).map((f) => [f.id, f]));
 const api = (u) => {
   const m = /^\/api\/v1\/courses\/25\/modules\/(\d+)\/items$/.exec(u.pathname);
@@ -50,7 +50,7 @@ const until = async (fn, label, ms = 10000) => { const end = Date.now() + ms; fo
       if (u.origin === O && u.pathname.startsWith('/api/v1/')) apiAsked.push(u.pathname + u.search);
       if (u.origin === O && u.pathname.startsWith('/api/v1/')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(api(u)) });
       if (u.origin === O && u.pathname === '/courses/25/modules') return route.fulfill({ contentType: 'text/html', body: PAGE });
-      if ([A, B, C].includes(u.hostname)) {
+      if ([A, B, C, 'files.redirect.test'].includes(u.hostname)) {
         fetched.push(u.href);
         if (u.pathname.startsWith('/redirect/')) return route.fulfill({ status: 302, headers: { location: `https://${B}/11/lab.pdf?sig=b` } });
         const f = Object.values(FILES).find((x) => new URL(x.url).pathname === u.pathname) || (u.hostname === B && byId[11]);
@@ -133,16 +133,28 @@ const until = async (fn, label, ms = 10000) => { const end = Date.now() + ms; fo
     await hover(74);
     await shot('download-3-refused');
 
-    // 3. A redirect from A (granted) to B, a host Glaze doesn't hold.
+    // Real host access for the redirect's start (not the stand-in grant): inspect browser filtering directly.
+    const probe = await sw.evaluate(async () => {
+      const u = 'https://files.redirect.test/redirect/11?sig=probe';
+      const r = await fetch(u, { redirect: 'manual', credentials: 'omit' });
+      let follow;
+      try { await fetch(u, { redirect: 'follow', credentials: 'omit' }); follow = 'unexpected success'; } catch (e) { follow = String(e); }
+      return { type: r.type, status: r.status, url: r.url, location: r.headers.get('location'), follow };
+    });
+    console.log('redirect probe: ' + JSON.stringify(probe));
+    ok(probe.type === 'opaqueredirect' && probe.status === 0 && !probe.url && probe.location === null && /Failed to fetch/.test(probe.follow), 'manual hides the redirect host and following the unheld host fails CORS');
+    fetched.length = 0;
+    // 3. A redirect from a truly held start to B, a host Glaze doesn't hold.
     await hover(75);
     await page.click('#gz-dl-75');
-    const end = await until(async () => { const t = await label(75); return /Download failed|Saved|failed/.test(t) || allowFrame() ? t || 'frame' : null; }, 'the redirect file');
+    const end = await until(async () => { const t = await label(75); return /Redirected file|Download failed|Saved|failed/.test(t) || allowFrame() ? t || 'frame' : null; }, 'the redirect file');
     const asked = allowFrame();
     console.log(`redirect ${A} → ${B}: ${asked ? `the frame asks for ${asked.url().split('#')[1]}` : `no frame for ${B}; the panel says "${end}"`}; requests: ${fetched.filter((u) => /redirect|cdn-b/.test(u)).join(', ')}`);
     // An extension's fetch never sees where a redirect goes (redirect: 'manual' gives an opaque answer with no Location), so the
     // worker can't name B to ask for it: the file fails with the panel's error. (Here A's grant is the check's stand-in, so
     // the 302 itself is a CORS answer too; with a real grant for A, B answers on CORS alone.)
-    ok(!asked && end === 'Download failed', `a redirect to a host Glaze lacks: not asked for (the worker can't see it); the file fails ("${end}")`);
+    ok(!asked && end === 'Redirected file: download it from Canvas', `a redirect to a host Glaze lacks: not asked for (the worker can't see it); the file fails ("${end}")`);
+    ok(!fetched.some((u) => u.includes(B)), 'the narrowed worker never follows the redirect to the unheld host');
     await hover(75);
     await shot('download-4-redirect');
     ok(errors.length === 0, `no page errors (${errors.join(' | ')})`);

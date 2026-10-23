@@ -2222,7 +2222,10 @@ chrome.runtime.onConnect.addListener((port) => {
         return;
       }
       fresh();
-      const r = await fetch(url, { credentials: 'omit', redirect: 'follow', cache: 'no-store', signal: ctl.signal });
+      // A manual redirect hides Location (opaqueredirect). Refuse it explicitly: following could reach an unheld host.
+      const wide = chrome.runtime.getManifest().host_permissions?.includes('<all_urls>');
+      const r = await fetch(url, { credentials: 'omit', redirect: wide ? 'follow' : 'manual', cache: 'no-store', signal: ctl.signal });
+      if (r.type === 'opaqueredirect' || r.status >= 300 && r.status < 400) throw new Error('redirect');
       if (!r.ok || !GZ_DOWNLOAD.url(r.url, dev)) throw new Error('response');
       GZ_DOWNLOAD.bytes(used, Number(r.headers.get('content-length') || 0));
       const reader = r.body?.getReader();
@@ -2243,7 +2246,7 @@ chrome.runtime.onConnect.addListener((port) => {
       } finally { await reader.cancel().catch(() => {}); }
       send({ type: 'done' });
     })().catch((e) => {
-      send({ type: 'error', code: ['limit', 'url', 'sender', 'response'].includes(e.message) ? e.message : 'network' });
+      send({ type: 'error', code: ['limit', 'url', 'sender', 'response', 'redirect'].includes(e.message) ? e.message : 'network' });
     }).finally(() => { clearTimeout(stall); busy = false; });
   });
 });

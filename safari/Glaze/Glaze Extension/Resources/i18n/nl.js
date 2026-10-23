@@ -1,7 +1,8 @@
 // Dutch for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).nl = {
-  "Activity Stream": "Activiteitenstream",
+
+  "Redirected file: download it from Canvas": "Omgeleid bestand: download het vanuit Canvas",  "Activity Stream": "Activiteitenstream",
   "Timeline dates": "Tijdlijndatums",
   "Due dates when available": "Inleverdatums indien beschikbaar",
   "Posted dates": "Plaatsingsdatums",

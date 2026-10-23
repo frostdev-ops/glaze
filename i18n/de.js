@@ -1,7 +1,8 @@
 // German for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).de = {
-  "Activity Stream": "Aktivitätsstream",
+
+  "Redirected file: download it from Canvas": "Weitergeleitete Datei: Lade sie in Canvas herunter",  "Activity Stream": "Aktivitätsstream",
   "Timeline dates": "Zeitleistendaten",
   "Due dates when available": "Fälligkeit, wenn verfügbar",
   "Posted dates": "Veröffentlichungsdaten",

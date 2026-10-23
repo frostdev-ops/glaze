@@ -54,7 +54,8 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
         for (const c of pending.chunks) { data.set(c, at); at += c.length; }
         pending.resolve(data); pending = null;
       } else if (m.type === 'error') {
-        if (m.code === 'limit') pending.reject(Object.assign(new Error('limit'), { limit: true })); else pending.resolve(null);
+        if (m.code === 'redirect') pending.reject(Object.assign(new Error(t('Redirected file: download it from Canvas')), { said: true }));
+        else if (m.code === 'limit') pending.reject(Object.assign(new Error('limit'), { limit: true })); else pending.resolve(null);
         pending = null;
       }
     });
