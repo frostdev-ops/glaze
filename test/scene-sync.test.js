@@ -24,14 +24,15 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
   let failScene = null;
   const canvas = (tag) => ({ tag, remove() { log.removed++; }, setAttribute() {}, parentNode: null });
   const ctx = vm.createContext({
-    solo, ultra: false, isPreview: false, loading: new Map(), docId: 'fixture-document', location: { protocol: 'https:', pathname: '/' },
+    solo, tabFrame: '', ultra: false, isPreview: false, addEventListener() {}, loading: new Map(), docId: 'fixture-document', location: { protocol: 'https:', pathname: '/' },
     settings: { enabled, enhance: { quizLight: true } }, links: [1], hid: () => false, palette: { '--gz-surface-2': '#202030', '--gz-accent': '#abcdef' },
-    html: { hasAttribute: () => false, getAttribute: () => 'normal' },
+    setAttr() {},
+    html: { hasAttribute: () => false, getAttribute: () => 'normal', toggleAttribute() {} },
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
     document: { hidden: false, body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, getElementById: () => null, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
     chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async (m) => {
-      const file = m.files[0], ran = () => { if (file === 'lib/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() { log.placements++; }, clear() {} }; };
+      const file = m.files[0], ran = () => { if (file === 'lib/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() { log.placements++; }, clear() {}, pointer() {} }; };
       log.needs.push(file);
       // A request the worker sits on: answered (the file run, ok) only when the test calls log.answers[i].
       if (file === 'lib/glsl.js' ? glslHangs-- > 0 : hostHangs-- > 0) {
@@ -49,7 +50,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
       if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure'));
       return Promise.resolve(mod);
     },
-    need: (file, ready) => { if (file === 'lib/scene-host.js') { ctx.GZ_SCENE_HOST = { place() {}, clear() {} }; return Promise.resolve(); } log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
+    need: (file, ready) => { if (file === 'lib/scene-host.js') { ctx.GZ_SCENE_HOST = { place() {}, clear() {}, pointer() {} }; return Promise.resolve(); } log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
     applySettings: () => ctx.api.syncScene(), // the settings paint finishes by syncing the scene
     GZ_CTX: { parts: () => ctx.parts },
     parts, GZ_GLSL: glsl ? {} : undefined,

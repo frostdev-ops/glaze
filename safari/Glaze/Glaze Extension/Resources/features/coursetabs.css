@@ -120,3 +120,5 @@ html[data-gz-motion="off"] #gz-ctabs-frames[data-turning]::after { animation: no
 html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
 /* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
 html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }
+/* A see-through frame (content.js data-gz-through) shows the page under it, whose own strip would show through. */
+html[data-gz-ctab-framed]:has(> body > #gz-ctabs-frames > iframe[data-gz-through]) #gz-ctabs { visibility: hidden !important; }

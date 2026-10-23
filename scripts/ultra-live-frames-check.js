@@ -51,10 +51,11 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     });
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     const settings = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: G.GZ_SANITIZE({}).tabs };
-    await opts.evaluate(async ({ settings, key }) => {
+    await opts.evaluate(async ({ settings, key, site }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
+      await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (lib/background.js approved)
       await chrome.storage.local.set({ [key]: { tabs: Array.from({ length: 6 }, (_, i) => ({ cid: `_${101 + i}_1`, name: `Synthetic course ${i + 1}`, path: `/ultra/courses/_${101 + i}_1/outline`, top: 0, at: i, pin: false })) } });
-    }, { settings, key });
+    }, { settings, key, site });
     const saved = () => opts.evaluate(async (key) => (await chrome.storage.local.get(key))[key]?.tabs, key);
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     const tab = (f, cid) => f.locator(`#gz-ctabs [data-course-id="${cid}"]`);

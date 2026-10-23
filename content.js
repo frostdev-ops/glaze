@@ -1019,7 +1019,22 @@
   const sceneModule = () => (bgKind() === 'media' ? 'lib/scene-media.js' : 'lib/scene.js');
   const sceneSig = () => JSON.stringify([bgKind(), worn.bg.scene, partsOf()?.bg]);
   let modBg = null;
+  // A course tab's frame wearing the page's background shows the page's through it (lib/scene-host.js through).
+  let bgSig = '', thru = false;
+  const syncThrough = () => {
+    if (!tabFrame) {
+      setAttr('data-gz-bg-key', on(settings) && !!links.length && !modBg && !html.hasAttribute('data-gz-bg-failed') && (!sceneKind() || !!scene) && bgSig || false);
+      return false;
+    }
+    const bg = html.getAttribute('data-gz-bg'), H = globalThis.GZ_SCENE_HOST;
+    const want = !!bg && bg !== 'solid' && !modBg && on(settings) && !!links.length;
+    if (want && !H) need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).then(() => { if (globalThis.GZ_SCENE_HOST) syncScene(); }, () => {});
+    const now = !!H?.through(want && bgSig, ultra, hid(), syncScene);
+    if (now !== thru) { thru = now; html.toggleAttribute('data-gz-through', now); }
+    return now;
+  };
   const placeScene = () => {
+    if (tabFrame) { const was = thru; if (syncThrough() !== was) return syncScene(); }
     const c = modBg || sceneCanvas;
     if (c && globalThis.GZ_SCENE_HOST?.place(c, ultra)) scene?.draw();
   };
@@ -1030,9 +1045,11 @@
     sceneFailed = false;
     scene?.stop();
     scene = null;
+    globalThis.GZ_SCENE_HOST?.pointer(null);
     globalThis.GZ_SCENE_HOST?.clear(sceneCanvas);
     sceneCanvas?.remove();
     sceneCanvas = null;
+    if (!tabFrame) syncThrough();
   };
   // Load failures retry after 1 s, 5 s, then every 30 s while shown. Drawing failures get three tries per Look.
   const retryScene = (key, error, recover = true) => {
@@ -1077,12 +1094,13 @@
       colors: GZ_BG_COLORS(worn.bg.colors, palette),
       dim,
       amount,
-      speed: html.hasAttribute('data-gz-ctab-framed') ? 0 : pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
+      speed: pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
     };
   };
   const syncScene = () => {
     // An extension reload leaves the last frame in place.
     if (!chrome.runtime?.id) return;
+    if (syncThrough()) return stopScene();
     const key = sceneSig();
     if (sceneRetry && sceneRetry.key !== key) { clearTimeout(sceneRetry.timer); sceneRetry = null; sceneFailed = false; }
     if (scenePending && scenePending.key !== key) sceneUnwait();
@@ -1093,7 +1111,7 @@
     const file = sceneModule();
     if (scene && sceneFile !== file) stopScene();
     const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL;
-    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); } catch (error) { retryScene(key, error, false); } return; }
+    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); GZ_SCENE_HOST.pointer(scene); if (!tabFrame) syncThrough(); } catch (error) { retryScene(key, error, false); } return; }
     if (!modBg && !sceneLoad[file]) { const p = sceneLoad[file] = import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { if (sceneLoad[file] === p) delete sceneLoad[file]; throw error; }); }
     const load = !modBg && sceneLoad[file];
     const pending = scenePending = { key, cancel: [] };
@@ -1102,6 +1120,7 @@
       if (!on(settings) || !chrome.runtime?.id || !links.length || document.hidden || hid() || key !== sceneSig()) { scenePending = null; return; }
       if (modBg) { scenePending = null; return placeScene(); }
       if (sceneBad === key || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
+      if (syncThrough()) return stopScene();
       pending.draw = true;
       if (!scene) {
         sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');
@@ -1117,7 +1136,9 @@
         });
       }
       scene.update(sceneOpts());
+      GZ_SCENE_HOST.pointer(scene);
       scenePending = null;
+      if (!tabFrame) syncThrough();
     }).catch((error) => { if (scenePending === pending) retryScene(key, error, !pending.draw); });
   };
   document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
@@ -1242,7 +1263,7 @@
     probed = url;
     setAttr('data-gz-bg-failed', false);
     const img = new Image();
-    img.onerror = () => { if (probed === url) setAttr('data-gz-bg-failed', true); };
+    img.onerror = () => { if (probed === url && bgKind() === 'image') { setAttr('data-gz-bg-failed', true); syncScene(); } };
     img.src = url;
   };
 
@@ -1339,6 +1360,10 @@
     else setAttr('data-gz-bg-failed', false);
     // Motion: the system's reduced-motion setting wins over the level unless told otherwise.
     setAttr('data-gz-motion', s.motion.followSystem && calmMQ.matches ? 'off' : s.motion.level);
+    // What the background is made of: a course tab's frame wearing the same shows the page's (syncThrough).
+    let h = 2166136261;
+    for (const c of JSON.stringify([s.bg, colors, partsOf()?.bg, html.getAttribute('data-gz-motion'), bgKind() === 'aurora' && [s.look.surfaceCustom && s.look.surfaceColor, s.look.surfaceTint, s.look.surfaceTintSource === 'course' && surfaceCourse(), s.look.surfaceFrost]])) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    bgSig = (h >>> 0).toString(36);
     if (s.motion.level === 'expressive') need('features/light.js', () => globalThis.GZ_LIGHT).catch(() => {}); // the pointer light
     moveParts();
     setAttr('data-gz-no-trans', !s.motion.transitions);
@@ -1451,6 +1476,7 @@
     unmenu();
     for (const l of links) l.remove();
     links = [];
+    syncThrough();
     early();
     armFlip();
     X.syncTodo();
