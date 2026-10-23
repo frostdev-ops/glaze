@@ -27,17 +27,17 @@ const popup = ({ url = 'https://bb.school.edu/ultra/stream', tabId = 7, hosts = 
     return elements.get(sel);
   };
   const calls = [], changed = new Set(), observed = [];
-  let gesture = false;
+  let gesture = false, access = held;
   const local = { ...lists };
   const chrome = {
     runtime: {
       id: 'glaze', getManifest: () => ({ host_permissions: hosts, optional_host_permissions: ['https://*/*'] }), getURL: (p) => `chrome-extension://glaze/${p}`,
-      sendMessage: (m) => { calls.push(['send', m, gesture]); return Promise.resolve(reply); }, lastError: null,
+      sendMessage: (m) => { calls.push(['send', m, gesture]); return typeof reply === 'function' ? reply(m) : Promise.resolve(reply); }, lastError: null,
     },
     tabs: { query: async () => [{ id: tabId, url }], create() {} },
     permissions: {
-      contains: async ({ origins }) => { calls.push(['contains', origins]); return held; },
-      request: ({ origins }) => { calls.push(['request', origins, gesture]); return Promise.resolve(granted); },
+      contains: async ({ origins }) => { calls.push(['contains', origins]); return access; },
+      request: ({ origins }) => { calls.push(['request', origins, gesture]); if (granted) access = true; return Promise.resolve(granted); },
       ...(hostAccess ? { addHostAccessRequest: (o) => { calls.push(['hostAccess', o]); return Promise.resolve(); } } : {}),
     },
     scripting: { executeScript: (o) => { calls.push(['exec', o]); return execFails ? Promise.reject(new Error('Cannot access contents of the page')) : Promise.resolve([{ result: kind }]); } },
@@ -211,4 +211,62 @@ test('popup.html loads the site parser and the detector before popup.js, and has
   assert.ok(at('<script src="lib/site.js"></script>') < at('<script src="popup.js"></script>'));
   assert.ok(at('<script src="lib/detect.js"></script>') < at('<script src="popup.js"></script>'));
   assert.match(html, /<header class="top">[\s\S]*?<\/header>\s*<button type="button" id="here" class="primary here" hidden><\/button>\s*<main class="tiles">/);
+});
+
+
+test('popup: a late failed worker reply or lost channel leaves a granted button ready to retry', async () => {
+  for (const rejected of [false, true]) {
+    let answer, fail;
+    const reply = new Promise((resolve, reject) => { answer = resolve; fail = reject; });
+    const p = popup({ reply });
+    await tick();
+    p.click();
+    await tick();
+    assert.equal(p.el('#here').getAttribute('aria-disabled'), 'true', 'wait for the worker while the popup remains open');
+    if (rejected) fail(Error('Message port closed')); else answer({ ok: false });
+    await tick();
+    assert.equal(p.el('#here').getAttribute('aria-disabled'), null);
+    assert.equal(p.el('#here').hidden, false);
+    p.calls.length = 0;
+    p.click();
+    assert.deepEqual(p.calls.map(([t]) => t), ['send', 'request']);
+  }
+});
+
+test('popup: regranting a listed site hides the row without needing a storage change', async () => {
+  let answer;
+  const p = popup({ lists: { ultra: ['https://bb.school.edu'] }, reply: new Promise((resolve) => { answer = resolve; }) });
+  await tick();
+  assert.equal(p.el('#here').hidden, false, 'listed but no host permission');
+  p.click();
+  await tick();
+  assert.equal(p.el('#here').hidden, false, 'the worker has not answered yet');
+  answer({ ok: true });
+  await tick();
+  assert.equal(p.el('#here').hidden, true, 'already listed, so approve writes no list change');
+});
+
+test('popup: approval may arrive before a late worker reply', async () => {
+  let answer;
+  const p = popup({ reply: new Promise((resolve) => { answer = resolve; }) });
+  await tick();
+  p.click();
+  p.local.ultra = ['https://bb.school.edu'];
+  p.change({ ultra: { newValue: p.local.ultra } }, 'local');
+  await tick();
+  assert.equal(p.el('#here').hidden, true);
+  answer({ ok: true });
+  await tick();
+  assert.equal(p.el('#here').hidden, true);
+});
+
+test('popup: dismissing the prompt readies the button even while the worker is still answering', async () => {
+  const p = popup({ granted: false, reply: new Promise(() => {}) });
+  await tick();
+  p.click();
+  await tick();
+  assert.equal(p.el('#here').getAttribute('aria-disabled'), null);
+  p.calls.length = 0;
+  p.click();
+  assert.deepEqual(p.calls.map(([t]) => t), ['send', 'request']);
 });
