@@ -61,6 +61,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     const id = extensionId(ext);
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
+    await opts.evaluate(async () => { await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'] }); });
     const settings = G.GZ_SANITIZE({ preset: 'Paper', colors: G.GZ_PRESET('Paper'), motion: { level: 'off' } });
     // Settings only: the Look's parts are saved by wear(), and a write here must not take them away.
     const store = (s) => opts.evaluate(async (s) => { await chrome.storage.sync.set(s); }, s);

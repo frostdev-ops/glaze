@@ -160,6 +160,7 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
     const opts = await ctx.newPage();
     opts.on('pageerror', (e) => errors.push(`editor: ${e}`));
     await opts.goto(`chrome-extension://${id}/options.html`);
+    await opts.evaluate(async () => { await chrome.storage.local.set({ ultra: ['https://ultra.school.test'], moodle: ['https://strict.moodle.test/*', 'https://open.moodle.test/*'] }); });
     const baseStore = () => { const { nav, ...patch } = BASE; return opts.evaluate((p) => chrome.storage.sync.set(p), patch); };
     await baseStore();
     await opts.reload();

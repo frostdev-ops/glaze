@@ -99,6 +99,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     const sw = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
+    await opts.evaluate(async () => { await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'] }); });
     const inject = async (url, x) => {
       const r = await opts.evaluate((parts) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:look', parts, patch: { version: 2 } }, res)), x && { x });
       if (!r?.ok) throw new Error(`FAIL the Look was not saved: ${JSON.stringify(r)}`);

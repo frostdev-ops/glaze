@@ -52,7 +52,7 @@ const MODES = {
     await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
     const page = await ctx.newPage();
     const run = async (name, card, preset, width) => {
-      await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); },
+      await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); },
         { ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === preset)[1], preset, card });
       await page.setViewportSize({ width, height: 900 });
       await page.goto('https://bb.school.test/ultra/course');

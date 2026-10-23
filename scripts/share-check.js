@@ -63,6 +63,7 @@ const click = async (page, locator, dwell = 750) => {
     const look = G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, G.GZ_LOOKS.find((l) => l.name === 'Aurora Night'));
     await settings.evaluate(async ({ patch, relayURL }) => {
       await chrome.storage.sync.set({ ...patch, enhance: { ...patch.enhance, notes: true }, shareRelay: relayURL });
+      await chrome.storage.local.set({ ultra: ['https://bb.school.test'] });
     }, { patch: { ...G.GZ_DEFAULTS, ...look }, relayURL });
     await settings.reload();
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));

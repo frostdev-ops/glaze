@@ -140,9 +140,10 @@ const listeners = async (cdp) => {
         blocked.push(u.href); return r.abort();
       });
       const opts = await context.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
-      await opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); }, D.GZ_DEFAULTS);
+      const reset = () => opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); await chrome.storage.local.set({ ultra: ['https://ultra.fixture.test'] }); }, D.GZ_DEFAULTS);
+      await reset();
       for (let rep = 0; rep < reps; rep++) {
-        if (rep) await opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); }, D.GZ_DEFAULTS);
+        if (rep) await reset();
         const page = await context.newPage(); const errors = [];
         page.on('pageerror', (e) => errors.push(e.message));
         await page.addInitScript(() => {
