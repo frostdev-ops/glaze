@@ -207,6 +207,22 @@ test('a box off screen is passed over, but not what it holds on screen (Ultra\'s
   assert.deepEqual(boxes.map((b) => b[5]), ['#121212ff', '#0d1b2eff', '#141414ff'], 'the panel, its header and its row; nothing of what is wholly off screen');
 });
 
+test('a large course still sketches visible content after thousands of off-screen rows without reading their styles', () => {
+  const doc = page([
+    ...Array.from({ length: 5000 }, (_, i) => ({ box: [0, 1000 + i * 40, 1000, 40], kids: [{ box: [0, 1000 + i * 40, 600, 30] }] })),
+    { box: [20, 30, 300, 60], css: { position: 'fixed', backgroundColor: 'rgb(1, 2, 3)' } },
+  ]);
+  let walked = 0, styles = 0;
+  const wrap = (el) => { const rect = el.getBoundingClientRect; el.getBoundingClientRect = () => { walked++; return rect(); }; el.children.forEach(wrap); };
+  wrap(doc.body);
+  const style = doc.defaultView.getComputedStyle;
+  doc.defaultView.getComputedStyle = (el) => { styles++; return style(el); };
+  const boxes = L.sketch(doc, { w: 1000, h: 800, colour: hexOf });
+  assert.deepEqual(boxes, [[20, 30, 300, 60, 'b', '#010203ff', 0]], 'the visible box cannot be lost to an element-count cap');
+  assert.equal(walked, 5002, 'each off-screen subtree is pruned at its row');
+  assert.equal(styles, 2, 'only the body and the visible box need computed styles');
+});
+
 test('the stand-in draws a sketch: boxes in their colours and radii, text lines as rounded bars, the course name as its one text', () => {
   const s = { size: [1000, 800], name: 'Computer Science I', boxes: [[40, 100, 600, 300, 'b', '#ffffffff', 12], [20, 15, 220, 30, 'n', '#141414ff', 30], [60, 120, 500, 50, 't', '#141414ff', 30], [900, 12, 80, 36, 'c', '#ff8800ff', 8], [700, 100, 200, 150, 'i', '#14141433', 0], [20, 300, 400, 28, 'h', '#202020ff', 28]] };
   const d = L.drawn(s);
