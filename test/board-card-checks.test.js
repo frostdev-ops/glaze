@@ -25,3 +25,24 @@ test('Ultra native card check enables its school and keeps the native page visib
   });
   await assert.rejects(result, (e) => e === stop);
 });
+
+test('Moodle title restoration ignores a resweep of unrelated course menu buttons', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/rules-check.js'), 'utf8');
+  const line = source.split('\n').find((l) => l.includes('const moodleCards ='));
+  let late = false;
+  const title = '<a class="coursename"><span class="multiline">Biology</span><span>Course is starred</span></a>';
+  const document = { querySelectorAll: (selector) => [{ outerHTML: selector === '.course-card .coursename' ? title : `${title}<button${late ? '' : ' data-gz-light=""'}></button>` }] };
+  const snapshot = vm.runInNewContext(`${line}; moodleCards`, { document, moodle: { evaluate: (fn) => fn() } });
+  const before = await snapshot(); late = true;
+  assert.equal(JSON.stringify(await snapshot()), JSON.stringify(before), 'menu theme tags are outside the title restore contract');
+});
+
+test('widget package checks explicitly select the fixture native navigation in both fresh profiles', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/widgets-builder-check.js'), 'utf8');
+  const code = source.slice(source.indexOf('    const seed ='), source.indexOf('    const tree ='));
+  const sync = {};
+  const seed = vm.runInNewContext(`${code}; seed`, { origin: 'https://127.0.0.1:1234', now: 1000,
+    chrome: { storage: { local: { clear: async () => {}, set: async () => {} }, sync: { set: async (s) => Object.assign(sync, s) } } } });
+  await seed({ evaluate: (fn, arg) => fn(arg) });
+  assert.equal(sync.navbar?.on, false, 'package parity must not depend on whether the editor ran in the profile');
+});
