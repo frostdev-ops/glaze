@@ -256,6 +256,45 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
     ok(await quiz.evaluate(() => !document.getElementById('gz-fx') && !document.querySelector('.gz-burst')), 'a quiz: a completion and the pointer draw nothing');
     await quiz.close();
 
+    // ---- the boards' course cards: Glaze's own, on the Courses page's board; the Look's card entrance plays on them too ----
+    console.log("\n-- the board's course cards --");
+    const W = require(path.join(root, 'lib/widgets.js'));
+    const lay = W.layout({ todo: true });
+    for (const b of ['courses', 'dash', 'pages']) for (const x of lay.boards[b]) x.on = false;
+    const cards = ['_100_1', '_101_1', '_102_1', '_103_1'].map((cid) => ({ id: `course:${SITE}/${cid}`, on: true, size: 's' }));
+    // Another tile between them: the stagger counts course cards only.
+    lay.boards.courses = [...lay.boards.courses.filter((x) => x.id !== 'timer'), ...cards.slice(0, 2), { id: 'timer', on: true, size: 's' }, ...cards.slice(2)];
+    await opts.evaluate((l) => chrome.storage.local.set({ widgetLayout: l }), W.layout(lay));
+    // The column board (the sidebar's dock would take the timer off the board).
+    const BOARD_SETTINGS = (motion) => { const st = ULTRA_SETTINGS(motion); return { ...st, enhance: { ...st.enhance, sidebar: false } }; };
+    await store(BOARD_SETTINGS(), PARTS);
+    const board = await ctx.newPage();
+    board.on('pageerror', (e) => errors.push(`board: ${e}`));
+    await board.goto(`${SITE}/ultra/course`);
+    const TILE = '.gz-w[data-tile^="course:"]';
+    await until(() => board.evaluate((sel) => document.querySelectorAll(sel).length === 4, TILE), 10000, "the board's course cards");
+    const tiles = () => board.evaluate((sel) => [...document.querySelectorAll(sel)].map((t) => { const s = getComputedStyle(t); return { name: s.animationName, delay: s.animationDelay }; }), TILE);
+    const bRoot = (n) => board.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), n);
+    await until(async () => (await bRoot('--gz-x-enter')).startsWith('gz-x-'), 8000, "the Look's entrance on the board page");
+    const cardName = (await bRoot('--gz-x-enter')).split(' ')[0], tileName = (await bRoot('--gz-x-enter-tile')).split(' ')[0];
+    const t1 = await tiles();
+    ok(t1.every((t) => t.name === `${tileName}, ${cardName}`), `each course card on the board plays the Look's card entrance after its tile's: ${t1[0].name}`);
+    ok(JSON.stringify(t1.map((t) => t.delay)) === JSON.stringify(['0s, 0s', '0s, 0.09s', '0s, 0.18s', '0s, 0.27s']), `staggered by the Look's 90 ms, course cards only: ${t1.map((t) => t.delay).join(' | ')}`);
+    ok(await board.evaluate(() => getComputedStyle(document.querySelector('.gz-w[data-tile="timer"]')).animationName) === tileName, 'another tile plays only the tile entrance');
+    await board.screenshot({ path: path.join(out, 'board-enter.png') });
+    for (const [label, settings, attr] of [['motion off', BOARD_SETTINGS({ level: 'off' }), null], ['the entrances switch off', BOARD_SETTINGS({ enter: false }), 'data-gz-no-enter']]) {
+      await store(settings);
+      await until(async () => board.evaluate((a) => (a ? document.documentElement.hasAttribute(a) : document.documentElement.getAttribute('data-gz-motion') === 'off'), attr), 6000, label);
+      const t = await tiles();
+      ok(t.every((x) => x.name === 'none, none'), `${label}: no entrance on the board's cards (${t[0].name})`);
+    }
+    await store(BOARD_SETTINGS(), null);
+    await until(async () => (await bRoot('--gz-x-enter')) === '', 6000, 'the Look off the board page');
+    ok((await tiles()).every((t) => t.name === 'none, none'), "without a Look, the board's cards keep still, as before");
+    await board.close();
+    await opts.evaluate(() => chrome.storage.local.remove('widgetLayout'));
+    await store(ULTRA_SETTINGS(), null);
+
     // ---- part 2: the options preview -----------------------------------------------------------------------------------------
     console.log('\n-- the options preview --');
     await store(ULTRA_SETTINGS({ level: 'subtle' }), null);

@@ -8,7 +8,7 @@ const W = require('../lib/widgets.js');
 const { El } = require('./stand-in-dom.js');
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
-const page = () => {
+const page = ({ more = {}, ctxMore = {} } = {}) => {
   let writes = 0, enabled = true, color = { color: '#ffe12b', own: true }, peek = { me: null, courses: null, books: new Map() };
   const reads = [], renders = [], waiting = [], local = {}, listeners = [];
   const doc = { createElement: (tag) => {
@@ -18,8 +18,8 @@ const page = () => {
   }, querySelectorAll: () => [] };
   const settings = D.GZ_SANITIZE({ enhance: { cardTasks: true, overall: true, coursemenu: true } });
   const ctx = { site: 'ultra', on: () => enabled, t: (s) => s, locale: () => 'en', nickOf: () => '', courseList: () => ({ _101_1: { name: 'Biology', site: 'https://bb.test', slot: '3' } }), courseColors: () => ({ _101_1: color }), canvasPeek: () => peek, settings: () => settings,
-    need: (file) => { assert.ok(['lib/todo.js', 'features/cards.js', 'features/cardtasks.js'].includes(file), `unexpected reader ${file}`); return file === 'features/cardtasks.js' ? new Promise((r) => waiting.push(r)) : Promise.resolve(); } };
-  const c = { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_TODO: { clean: (v) => v || {}, gradescope: () => () => [] }, GZ_CARD_UI: { paint() {} }, GZ_CARD_TASKS: { render: (...args) => renders.push(args) }, document: doc, location: { origin: 'https://bb.test' }, chrome: { runtime: { id: 'x' }, storage: { local: { get: (keys, cb) => reads.push(() => cb(local)) }, sync: { get: (keys, cb) => cb({}) }, onChanged: { addListener: (f) => listeners.push(f) } } }, URL, console };
+    need: (file) => { assert.ok(['lib/todo.js', 'features/cards.js', 'features/cardtasks.js'].includes(file), `unexpected reader ${file}`); return file === 'features/cardtasks.js' ? new Promise((r) => waiting.push(r)) : Promise.resolve(); }, ...ctxMore };
+  const c = { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_TODO: { clean: (v) => v || {}, gradescope: () => () => [] }, GZ_CARD_UI: { paint() {} }, GZ_CARD_TASKS: { render: (...args) => renders.push(args) }, document: doc, location: { origin: 'https://bb.test' }, chrome: { runtime: { id: 'x' }, storage: { local: { get: (keys, cb) => reads.push(() => cb(local)) }, sync: { get: (keys, cb) => cb({}) }, onChanged: { addListener: (f) => listeners.push(f) } } }, URL, console, ...more };
   const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../features/coursecards.js'), 'utf8'), c);
   ui.sync();
   const mount = (body = doc.createElement('div')) => ui.fill(body, { id: 'course:https://bb.test/_101_1', term: () => '' });
@@ -114,4 +114,69 @@ test("Canvas: a board's card is drawn as Canvas's own, from what its page shows,
   ui.sync(); tile.update();
   assert.equal(card.querySelector('.ic-DashboardCard__header_image').style.backgroundImage, '');
   tile.stop();
+});
+
+// ---- a Look's card rules on the board's cards (lib/parts.js names each piece, features/rules.js wears them) ----
+const P = require('../lib/parts.js');
+const tileOf = (doc) => { const tile = doc.createElement('section'), body = doc.createElement('div'); tile.className = 'gz-w'; body.className = 'gz-w-body'; tile.append(body); return { tile, body }; };
+
+test("Ultra: each course-card part's board piece is in the card the board draws, and only there", async () => {
+  const p = page(), { tile, body } = tileOf(p.body.doc);
+  p.mount(body); await settle();
+  const card = body.querySelector('article.gz-course-card');
+  const want = { 'ultra.course-card': card, 'ultra.course-card.banner': card.querySelector('.course-banner'), 'ultra.course-card.title': card.querySelector('a.course-title'), 'ultra.course-card.id': card.querySelector('.course-id') };
+  for (const [name, el] of Object.entries(want)) { assert.ok(P.get(name).b, `${name} names a board piece`); assert.deepEqual(tile.querySelectorAll(P.get(name).b), [el], name); }
+  for (const name of ['ultra.course-card.status', 'ultra.course-card.instructors']) assert.equal(P.get(name).b, '', `${name}: no such piece on a board card`);
+  // The Course cards dialog's small copies are not the board's cards.
+  const preview = p.body.doc.createElement('article');
+  preview.className = 'gz-course-card'; preview.setAttribute('data-gz-card-preview', '');
+  const pick = p.body.doc.createElement('label'); pick.className = 'gz-ccm-pick'; pick.append(preview);
+  assert.deepEqual(pick.querySelectorAll(P.get('ultra.course-card').b), []);
+});
+
+test("Canvas: each dashboard-card part's board piece is in the card the board draws", () => {
+  const doc = { createElement: (tag) => { const el = new El(tag, doc); el.style = {}; return el; }, querySelectorAll: () => [] };
+  const ctx = { site: 'canvas', on: () => true, t: (s) => s, nickOf: () => '', settings: () => D.GZ_SANITIZE({}), courseList: () => ({ 'canvas:https://canvas.test/27': { name: 'Calculus I', code: 'MATH 1350', canvas: true } }),
+    canvasCourses: () => new Promise(() => {}), need: () => Promise.resolve() };
+  const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../features/coursecards.js'), 'utf8'), { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS,
+    GZ_CARD_UI: { paint() {} }, document: doc, location: { origin: 'https://canvas.test' }, chrome: { runtime: { id: 'x' }, storage: { onChanged: { addListener() {} } } }, URL, console });
+  ui.sync();
+  const { tile, body } = tileOf(doc);
+  ui.fill(body, { id: 'course:https://canvas.test/27', term: () => '' });
+  const card = body.querySelector('.ic-DashboardCard');
+  const want = { 'canvas.dashboard-card': card, 'canvas.dashboard-card.image': card.querySelector('.ic-DashboardCard__header_image'), 'canvas.dashboard-card.title': card.querySelector('h2'),
+    'canvas.dashboard-card.subtitle': card.querySelector('.ic-DashboardCard__header-subtitle'), 'canvas.dashboard-card.term': card.querySelector('.ic-DashboardCard__header-term') };
+  for (const [name, el] of Object.entries(want)) { assert.ok(P.get(name).b, `${name} names a board piece`); assert.deepEqual(tile.querySelectorAll(P.get(name).b), [el], name); }
+  assert.equal(P.get('canvas.dashboard-card.menu').b, '', "Canvas's menu button: the board card has Glaze's instead");
+});
+
+test("a Look's label on a board card stays: the board writes its text only when the real one changed, then asks the rules back", async () => {
+  const rules = { syncs: 0, real: new Map() };
+  const p = page({ more: { GZ_RULES: { real: (el) => (rules.real.has(el) ? rules.real.get(el) : el.textContent), sync: () => { rules.syncs++; } } } });
+  await settle();
+  assert.ok(rules.syncs > 0, 'a mounted card asks for the rules');
+  const link = p.body.querySelector('a.course-title');
+  assert.equal(link.textContent, 'Biology');
+  link.textContent = 'Renamed'; rules.real.set(link, 'Biology'); // what features/rules.js leaves: its label over the real name
+  const before = rules.syncs;
+  p.tile.update(); p.ui.sync(); await settle();
+  assert.equal(link.textContent, 'Renamed', 'the label stays');
+  assert.equal(rules.syncs, before, 'nothing written, so no extra rules pass');
+  rules.real.set(link, 'Botany'); // the name under the label is no longer the course's
+  p.tile.update(); await settle();
+  assert.equal(link.textContent, 'Biology');
+  assert.ok(rules.syncs > before, 'a write asks the rules to put the label back');
+});
+
+test("a nickname on a board card is marked as one, so a Look's label leaves it (as on Ultra's own cards)", async () => {
+  let nick = 'Bio (mine)';
+  const p = page({ ctxMore: { nickOf: () => nick } });
+  await settle();
+  const link = p.body.querySelector('a.course-title');
+  assert.equal(link.textContent, 'Bio (mine)');
+  assert.equal(link.getAttribute('data-gz-nick'), '');
+  nick = '';
+  p.tile.update();
+  assert.equal(link.textContent, 'Biology');
+  assert.equal(link.getAttribute('data-gz-nick'), null);
 });
