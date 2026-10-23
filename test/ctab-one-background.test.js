@@ -308,3 +308,13 @@ test('sharing signature: aurora includes its surface paint and frost', () => {
     key = next;
   }
 });
+
+test('sharing: an old image error cannot invalidate a replacement background', () => {
+  const r = rig({ tabFrame: '', kind: 'image', bg: 'image' }), images = [];
+  r.ctx.setVar = () => {};
+  r.ctx.Image = class { constructor() { images.push(this); } };
+  const probe = source.slice(source.indexOf("  let probed = ''"), source.indexOf('  // Canvas page changes:'));
+  vm.runInContext(probe + "; probeImage('https://images.test/bg.png'); worn.bg.kind = 'gradient';", r.ctx);
+  images[0].onerror();
+  assert.ok(!r.attrs.has('data-gz-bg-failed'), 'an error from the previous background is ignored');
+});

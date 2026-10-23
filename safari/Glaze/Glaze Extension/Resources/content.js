@@ -1064,7 +1064,7 @@
       retry.timer = 0; sceneFailed = false; syncScene();
     }, [1000, 5000][tries - 1] || 30000);
   };
-  // Abandoned startups still hear late answers, without keeping timers.
+  // Abandoned startups hear late answers without timers.
   const sceneWait = (p, gone, got = sceneAgain) => new Promise((ok, no) => {
     let waiting = true;
     const cancel = () => { waiting = false; clearTimeout(timer); };
@@ -1263,7 +1263,7 @@
     probed = url;
     setAttr('data-gz-bg-failed', false);
     const img = new Image();
-    img.onerror = () => { if (probed === url) { setAttr('data-gz-bg-failed', true); syncScene(); } };
+    img.onerror = () => { if (probed === url && bgKind() === 'image') { setAttr('data-gz-bg-failed', true); syncScene(); } };
     img.src = url;
   };
 
