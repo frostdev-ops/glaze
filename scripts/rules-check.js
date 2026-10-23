@@ -9,7 +9,8 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const G = require('../defaults.js');
-const ext = process.env.EXT || path.join(__dirname, '..');
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://moodle.school.test/*']);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const CANVAS = 'https://rules.school.instructure.com', MOODLE = 'https://moodle.school.test';
@@ -98,6 +99,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     const sw = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
+    await opts.evaluate(async () => { await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'] }); });
     const inject = async (url, x) => {
       const r = await opts.evaluate((parts) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:look', parts, patch: { version: 2 } }, res)), x && { x });
       if (!r?.ok) throw new Error(`FAIL the Look was not saved: ${JSON.stringify(r)}`);

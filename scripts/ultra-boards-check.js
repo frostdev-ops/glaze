@@ -18,7 +18,8 @@ const zlib = require('zlib');
 const G = require('../defaults.js');
 require('../lib/widgets.js'); // its settings in GZ_SPEC
 
-const ext = process.env.EXT || path.join(__dirname, '..');
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-boards-'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const O = 'https://bb.school.test';
@@ -132,6 +133,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await chrome.storage.sync.clear();
       await chrome.storage.sync.set(s);
       if (local) { await chrome.storage.local.clear(); await chrome.storage.local.set(local); }
+      await chrome.storage.local.set({ ultra: ['https://bb.school.test'] });
     }, [s, local]);
     const layout = () => opts.evaluate(() => chrome.storage.local.get('widgetLayout').then((r) => r.widgetLayout));
     const page = await ctx.newPage();

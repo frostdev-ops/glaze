@@ -326,6 +326,7 @@ test('turning Notes on puts the Course notes hook into course homes already open
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      permissions: { contains: async () => true }, // the student granted every host (Chrome)
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener: (f) => changed.push(f) } },
       tabs: { query: async ({ url }) => tabs.filter((t) => url.some((p) => new RegExp(`^${p.replace(/[.?]/g, '\\$&').replace(/\*/g, '.*')}$`).test(t.url))) },
       scripting: {
@@ -356,7 +357,7 @@ test('turning Notes on puts the Course notes hook into course homes already open
   injected.length = 0;
   for (const f of listeners) f({ type: 'glaze:consent', op: 'yes', kind: 'canvas' }, found, () => {});
   await wait(20);
-  const canvasFirst = require('../manifest.json').content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*')).js; // Canvas's first script (B0b)
+  const canvasFirst = require('../manifest.json').content_scripts.find((c) => c.js.includes('content-canvas.js')).js; // Canvas's first script (B0b)
   assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, canvasFirst.filter((f) => f !== 'lib/i18n.js').join()], [8, 'features/notes-home.js']], 'lib/i18n.js came with the question');
   assert.ok(registered.find((s) => s.id === 'gz-notes-home').matches.includes('https://canvas.new.edu/courses/*'));
 });

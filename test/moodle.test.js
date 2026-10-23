@@ -87,7 +87,7 @@ test('the detector stays under 2 KB', () => {
 // ---- the background: a Moodle host, once the student says yes, is injected now and registered for good, in its own list --
 // Each LMS's first content script: Canvas's is the manifest's for *.instructure.com, with its part; Moodle's is the same
 // without it (B0b). Before the yes, the page gets only the question (WP-C2, features/consent.js), in Glaze's words.
-const CANVAS_FIRST = require('../manifest.json').content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*')).js;
+const CANVAS_FIRST = require('../manifest.json').content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
 const MOODLE_FIRST = CANVAS_FIRST.filter((f) => f !== 'content-canvas.js');
 const ASK = ['lib/i18n.js', 'features/consent.js'];
 const asked = (first) => first.filter((f) => f !== 'lib/i18n.js'); // the question brought Glaze's words in already
@@ -102,6 +102,7 @@ test('a Moodle host is asked about, then injected now and registered from then o
     chrome: {
       runtime: { id: 'id', getURL: (p = '') => `chrome-extension://id/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => { message ||= []; message.push(f); } }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, store[x]])), set: async (o) => Object.assign(store, o) }, sync: { get: async () => ({}) }, onChanged: none },
+      permissions: { contains: async () => true }, // the student granted every host (Chrome)
       scripting: {
         executeScript: async (o) => { injected.push(o); return [{ result: /typeof GZ_I18N|window\.__gzGlaze/.test(String(o.func)) ? false : {} }]; },
         getRegisteredContentScripts: async () => registered.map((id) => ({ id })),

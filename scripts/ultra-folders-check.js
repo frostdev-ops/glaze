@@ -3,7 +3,8 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const D = require('../defaults.js');
-const ext = process.env.EXT || path.join(__dirname, '..');
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const out = process.argv[2] || path.join(ext, 'scratch/b9/shots');
 const fixture = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-folders.html'), 'utf8');
 const chromeLaunch = require('./check-env.js').chromeLaunch();
@@ -28,7 +29,7 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     const settings = { ...D.GZ_DEFAULTS, enhance: Object.fromEntries(Object.keys(D.GZ_DEFAULTS.enhance).map((k) => [k, k === 'hideFolders'])) };
-    await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings);
+    await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); }, settings);
     const page = await context.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('https://bb.school.test/ultra/courses/_800_1/outline');

@@ -17,7 +17,8 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..')); // the id is made from the real path
+// A copy holding the schools' hosts, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://ultra.school.test/*', 'https://strict.moodle.test/*', 'https://open.moodle.test/*']); // the id is made from the real path
 const out = process.argv.slice(2).find((a) => !a.startsWith('--'));
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
 const G = require(path.join(ext, 'defaults.js'));
@@ -159,6 +160,7 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
     const opts = await ctx.newPage();
     opts.on('pageerror', (e) => errors.push(`editor: ${e}`));
     await opts.goto(`chrome-extension://${id}/options.html`);
+    await opts.evaluate(async () => { await chrome.storage.local.set({ ultra: ['https://ultra.school.test'], moodle: ['https://strict.moodle.test/*', 'https://open.moodle.test/*'] }); });
     const baseStore = () => { const { nav, ...patch } = BASE; return opts.evaluate((p) => chrome.storage.sync.set(p), patch); };
     await baseStore();
     await opts.reload();

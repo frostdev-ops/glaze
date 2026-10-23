@@ -36,7 +36,7 @@
   });
   // The all-host Ultra entry can also encounter spoofed Canvas/Moodle markup. Gate the detected kind, not just Ultra.
   const yes = (list) => Array.isArray(list) && list.includes(site === 'ultra' ? location.origin : `${location.origin}/*`);
-  const known = location.protocol === 'https:' && !location.port && (site === 'ultra' ? /\.blackboard\.com$/.test(location.hostname) : site === 'canvas' && /(^|\.)instructure\.com$/.test(location.hostname));
+  const known = GZ_BUILT_IN(site, location);
   if (site && !isPreview && !known
     && !await new Promise((res) => { try { chrome.storage.local.get(site, (r) => res(yes(r?.[site]))); } catch { res(false); } })) {
     globalThis.GZ_SITE_ULTRA?.sheets?.splice(0).forEach((l) => l.remove());

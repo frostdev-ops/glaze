@@ -126,7 +126,8 @@ test('the gallery content script runs only on the gallery, and the background ta
   const entry = m.content_scripts.find((c) => c.js.includes('lib/gallery.js'));
   assert.deepEqual(entry.matches, ['https://frostdev.io/glaze/looks', 'https://frostdev.io/glaze/looks/*', 'https://frostdev.io/glaze/mods', 'https://frostdev.io/glaze/mods/*']);
   assert.ok(!entry.all_frames);
-  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage'], 'no permission for the gallery');
+  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent'], 'no permission for the gallery');
+  assert.ok(m.host_permissions.includes('https://frostdev.io/*'), 'its host is held from the start');
   const w = worker();
   const code = 'glaze1:abc';
   for (const [url, frameId] of [['https://evil.example/glaze/looks/', 0], ['https://frostdev.io/glaze', 0], ['https://frostdev.io/glaze/looksevil', 0], ['https://frostdev.io/glaze/looksevil/', 0], ['http://frostdev.io/glaze/looks/', 0], ['https://frostdev.io.evil.example/glaze/looks/', 0], ['https://frostdev.io/glaze/looks/', 3], ['https://frostdev.io/glaze/mods/', 0], ['https://frostdev.io/glaze/mods', 0], [undefined, 0]]) {

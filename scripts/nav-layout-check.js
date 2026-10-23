@@ -15,7 +15,8 @@ const os = require('os');
 const crypto = require('crypto');
 const G = require('../defaults.js');
 
-const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '..')); // the id is made from the real path
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const src = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://moodle.school.test/*']); // the id is made from the real path
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-nav-layout-'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const CANVAS = 'https://nav.school.instructure.com', MOODLE = 'https://moodle.school.test';
@@ -60,6 +61,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     const id = extensionId(ext);
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
+    await opts.evaluate(async () => { await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'] }); });
     const settings = G.GZ_SANITIZE({ preset: 'Paper', colors: G.GZ_PRESET('Paper'), motion: { level: 'off' } });
     // Settings only: the Look's parts are saved by wear(), and a write here must not take them away.
     const store = (s) => opts.evaluate(async (s) => { await chrome.storage.sync.set(s); }, s);

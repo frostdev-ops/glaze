@@ -1,0 +1,213 @@
+{
+  "manifest_version": 3,
+  "name": "Glaze",
+  "version": "3.3.8",
+  "description": "__MSG_description__",
+  "default_locale": "en",
+  "permissions": [
+    "storage",
+    "scripting",
+    "unlimitedStorage"
+  ],
+  "optional_permissions": [
+    "identity"
+  ],
+  "oauth2": {
+    "client_id": "1071735898350-o14e1vjmrvkmrfl8bb8e8qbcpue5i5qq.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.app.created"
+    ]
+  },
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "minimum_chrome_version": "113",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "glaze@frostdev.io",
+      "strict_min_version": "140.0"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Glaze",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "lib/background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'"
+  },
+  "sandbox": {
+    "pages": [
+      "mods/host.html"
+    ]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*/ultra",
+        "https://*/ultra/*"
+      ],
+      "js": [
+        "lib/color.js",
+        "lib/i18n.js",
+        "lib/page.js",
+        "lib/grades.js",
+        "lib/fonts.js",
+        "lib/surfaces.js",
+        "defaults.js",
+        "lib/nav.js",
+        "content-ultra.js",
+        "content.js"
+      ],
+      "exclude_matches": [
+        "https://*.instructure.com/*"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://*.instructure.com/*"
+      ],
+      "js": [
+        "lib/color.js",
+        "lib/i18n.js",
+        "lib/page.js",
+        "lib/grades.js",
+        "lib/fonts.js",
+        "lib/surfaces.js",
+        "defaults.js",
+        "content-canvas.js",
+        "content.js"
+      ],
+      "exclude_matches": [
+        "https://canvadocs.instructure.com/*"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://*/*"
+      ],
+      "exclude_matches": [
+        "https://*/ultra",
+        "https://*/ultra/*",
+        "https://*.instructure.com/*"
+      ],
+      "js": [
+        "lib/detect.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://frostdev.io/glaze/looks",
+        "https://frostdev.io/glaze/looks/*",
+        "https://frostdev.io/glaze/mods",
+        "https://frostdev.io/glaze/mods/*"
+      ],
+      "js": [
+        "lib/gallery.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://*.instructure.com/*"
+      ],
+      "js": [
+        "lib/ink.js",
+        "lib/surfaces.js",
+        "features/docviewer.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "theme.css",
+        "motion.css",
+        "extras.css",
+        "canvas.css",
+        "moodle.css",
+        "fonts/*.woff2",
+        "assets/art/pets/*/sprites.webp",
+        "assets/art/pets/*/spritesheet.webp",
+        "assets/art/pets/*/reactions.webp",
+        "assets/art/stickers/*/*.webp",
+        "assets/art/cursors/*/*.png",
+        "assets/art/cursors/*/*.svg",
+        "features/lookx.css",
+        "features/rules.css",
+        "features/navlayout.css",
+        "features/navbar.css",
+        "features/apps.css",
+        "features/surfaces.css",
+        "features/coursetabs.css",
+        "features/sidebar.css",
+        "features/docreview.css",
+        "assets/logo.svg",
+        "assets/logo-dark.svg",
+        "icons/icon.svg"
+      ],
+      "matches": [
+        "https://*/*"
+      ],
+      "use_dynamic_url": true
+    },
+    {
+      "resources": [
+        "lib/scene.js",
+        "lib/three.min.js",
+        "lib/scene-media.js",
+        "lib/lottie/lottie_light_canvas.min.js",
+        "reader.html",
+        "fonts/*.woff2"
+      ],
+      "matches": [
+        "https://*/*"
+      ]
+    },
+    {
+      "resources": [
+        "sharing/quick.html",
+        "options.html",
+        "preview.html"
+      ],
+      "matches": [
+        "https://*/*"
+      ]
+    },
+    {
+      "resources": [
+        "mods/host.html",
+        "mods/boot.js"
+      ],
+      "matches": [
+        "https://*/*"
+      ],
+      "use_dynamic_url": true
+    }
+  ]
+}

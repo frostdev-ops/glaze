@@ -3,7 +3,8 @@
 // EXT selects the source checkout; hold the shared browser lock while running.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const G = require(path.join(ext, 'defaults.js')); require(path.join(ext, 'lib/coursetabs.js'));
 const site = 'https://bb.school.test', key = `ctabs:${site}:_42_1`;
 const out = process.argv[2];
