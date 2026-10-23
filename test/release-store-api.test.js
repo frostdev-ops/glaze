@@ -607,6 +607,39 @@ test('a version in review is never edited', async () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('with no live version yet (a first release still in review), the Apple dry run compares with the newest one', async () => {
+  const { previewAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    stubFetch(appleApi({
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.3.8': { data: [] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&limit=20': { data: [{ id: 'ver-first', attributes: { appVersionState: 'WAITING_FOR_REVIEW', versionString: '3.3.5' } }] },
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'WAITING_FOR_REVIEW' } }] },
+      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+      'GET /appStoreVersions/ver-first/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
+    }));
+    const changes = await previewAppleListing(e, 'IOS', '3.3.8', listings);
+    assert.ok(calls.every((c) => c.method === 'GET'));
+    const english = changes.filter((c) => c.locale === 'en-US');
+    assert.deepEqual(english.filter((c) => c.action !== 'same').map((c) => `${c.field} ${c.action}`), ['promotional text change', "What's New change"], 'English is compared, not created');
+    assert.ok(!changes.some((c) => c.field === 'screenshots' && c.locale === 'en-US'), 'the primary language keeps its own screenshots');
+    assert.match(changes.find((c) => c.locale === 'nl-NL' && c.field === 'screenshots').action, /^en-US's/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a language created where no English exists yet is not told to borrow its own screenshots', async () => {
+  const { previewAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    stubFetch(appleApi({
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.3.8': { data: [] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&limit=20': { data: [] },
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] },
+      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+    }));
+    const changes = await previewAppleListing(e, 'IOS', '3.3.8', listings);
+    assert.ok(!changes.some((c) => c.field === 'screenshots' && c.locale === 'en-US'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('the Apple dry run compares with the live version when this one does not exist yet, and reads only', async () => {
   const { previewAppleListing } = await load(), { dir, env: e } = appleEnv();
   try {
