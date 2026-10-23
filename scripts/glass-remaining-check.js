@@ -83,12 +83,12 @@ const OFFCANVAS = `<div class="bb-offcanvas-panel bb-offcanvas-right full active
       const base = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: rail, tabs: false, rail: 'icons' },
         enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place', ...(sidebar ? ['sidebar', 'notes', 'widgets'] : [])].includes(k)])) };
       const L = G.GZ_LOOKS.find((l) => l.name === look);
-      const settings = { ...base, ...G.GZ_LOOK_APPLY(base, L), motion: { ...base.motion, level: 'off' }, tabs: { ...G.GZ_SANITIZE({}).tabs, at }, ...extra };
+      const settings = { ...base, ...G.GZ_LOOK_APPLY(base, L), motion: { ...base.motion, level: 'off' }, tabs: { ...G.GZ_SANITIZE({}).tabs, at }, glassCheckCollapsed: !!process.env.COLLAPSED, ...extra };
       await opts.evaluate(async ({ settings, site, uid }) => {
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.session.clear();
         await chrome.storage.sync.set(settings);
         await chrome.storage.local.set({ ultra: [site], [`ctabs:${site}:${uid}`]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, at: i, top: 0 })) },
-          [`sidebar:ultra:${site}/${uid}`]: { v: 1, rev: 1, mig: 1, dock: [{ id: 'notes' }], dest: { notes: 'dock' } } });
+          [`sidebar:ultra:${site}/${uid}`]: { v: 1, rev: 1, mig: 1, open: !settings.glassCheckCollapsed, dock: [{ id: 'notes' }], dest: { notes: 'dock' } } });
       }, { settings, site, uid });
     };
     const go = async (p, ready = '#gz-ctabs [data-course-id="_102_1"]') => {
@@ -177,6 +177,11 @@ const OFFCANVAS = `<div class="bb-offcanvas-panel bb-offcanvas-right full active
           return { header: paint(h), strip: paint(s) };
         });
         check(aligned.header.every((v, i) => Math.abs(v - aligned.strip[i]) < 2), `${look} offcanvas: strip and header glass edges align`, aligned);
+        const side = await page.evaluate(() => {
+          const h = document.querySelector('.bb-offcanvas-panel.full .panel-header').getBoundingClientRect(), s = document.querySelector('#gz-sidebar').getBoundingClientRect();
+          return { headerBottom: h.bottom, sidebarTop: s.top, state: document.documentElement.dataset.gzSidebar };
+        });
+        check(['drawer', 'none'].includes(side.state) || side.sidebarTop >= side.headerBottom, `${look} offcanvas: sidebar starts below the header`, side);
         await shot(`offcanvas-${slug(look)}`);
       },
       async sticky(look) {
