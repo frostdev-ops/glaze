@@ -199,7 +199,9 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     await quiz.close();
 
     const moodle = await open(`${MOODLE}/my/`, '.block_calendar_month');
-    const moodleCards = () => moodle.evaluate(() => [...document.querySelectorAll('.course-card')].map((e) => e.outerHTML));
+    // The sweep may retag the menu button while the Look changes. Compare the title's full markup, including favourite
+    // status and both visible and screen-reader names; an unrelated menu's data-gz-light is not a label restore.
+    const moodleCards = () => moodle.evaluate(() => [...document.querySelectorAll('.course-card .coursename')].map((e) => e.outerHTML));
     const moodleBefore = await moodleCards();
     await inject(`${MOODLE}/my/`, { rules: [{ p: 'moodle.course-card.image', do: 'hide' }] });
     await seen(moodle, () => { const images = [...document.querySelectorAll('.course-card .card-img-top')]; return images.length && images.every((e) => e.hasAttribute('data-gz-r-hide')); }, null,
