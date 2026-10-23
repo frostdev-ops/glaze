@@ -40,20 +40,21 @@ const pack = (cwd) => {
   execFileSync('sh', ['scripts/package-firefox.sh', '--development'], { cwd, env: { ...env, DIST: dist }, stdio: 'pipe' });
   return path.join(dist, fs.readdirSync(dist).find((f) => f.endsWith('-firefox.zip')));
 };
-const fresh = unpack(process.env.PACKAGE ? path.resolve(process.env.PACKAGE) : pack(root), 'glaze');
 const OLD_REF = process.env.OLD_REF || 'v3.3.8';
-const oldSrc = path.join(tmp, 'old-src');
-fs.mkdirSync(oldSrc);
-execFileSync('sh', ['-c', `git -C "${root}" archive "${OLD_REF}" | tar -x -C "${oldSrc}"`]);
-const old = unpack(pack(oldSrc), 'glaze-old');
-fs.rmSync(oldSrc, { recursive: true, force: true });
-{
+let fresh, old;
+const packages = () => {
+  fresh = unpack(process.env.PACKAGE ? path.resolve(process.env.PACKAGE) : pack(root), 'glaze');
+  const oldSrc = path.join(tmp, 'old-src');
+  fs.mkdirSync(oldSrc);
+  execFileSync('sh', ['-c', `git -C "${root}" archive "${OLD_REF}" | tar -x -C "${oldSrc}"`]);
+  old = unpack(pack(oldSrc), 'glaze-old');
+  fs.rmSync(oldSrc, { recursive: true, force: true });
   // The old package as an older version, so the one under test is its update whatever its own version.
   const f = path.join(old, 'manifest.json'), m = JSON.parse(fs.readFileSync(f, 'utf8'));
   if (!m.host_permissions?.includes('<all_urls>')) throw new Error(`${OLD_REF} doesn't hold <all_urls>`);
   m.version = '3.3.7';
   fs.writeFileSync(f, JSON.stringify(m, null, 2));
-}
+};
 
 // ---- The schools ----------------------------------------------------------------------------------------------------
 const MODULES = fixture('canvas-modules.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
@@ -89,16 +90,21 @@ const site = (q, r) => {
   if (u.hostname === FILES && p === new URL(FILE.url).pathname) return send(200, 'application/pdf', FILE.body);
   return send(404, 'text/html', '<!doctype html><title>Not found</title>');
 };
-execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(tmp, 'key.pem'), '-out', path.join(tmp, 'cert.pem'), '-days', '2',
-  '-subj', '/CN=glaze-firefox-check', '-addext', `subjectAltName=${HOSTS.map((h) => `DNS:${h}`).join(',')}`], { stdio: 'pipe' });
-const schools = https.createServer({ key: fs.readFileSync(path.join(tmp, 'key.pem')), cert: fs.readFileSync(path.join(tmp, 'cert.pem')) }, site);
-const proxy = http.createServer((q, r) => { r.writeHead(502); r.end(); });
-proxy.on('connect', (q, sock, head) => {
-  const [host, port] = q.url.split(':');
-  if (!HOSTS.includes(host) || port !== '443') { sock.end('HTTP/1.1 502 Refused\r\n\r\n'); return; }
-  const up = net.connect(schools.address().port, '127.0.0.1', () => { sock.write('HTTP/1.1 200 Connection Established\r\n\r\n'); up.write(head); up.pipe(sock); sock.pipe(up); });
-  up.on('error', () => sock.destroy()); sock.on('error', () => up.destroy());
-});
+let schools, proxy;
+const serve = async () => {
+  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(tmp, 'key.pem'), '-out', path.join(tmp, 'cert.pem'), '-days', '2',
+    '-subj', '/CN=glaze-firefox-check', '-addext', `subjectAltName=${HOSTS.map((h) => `DNS:${h}`).join(',')}`], { stdio: 'pipe' });
+  schools = https.createServer({ key: fs.readFileSync(path.join(tmp, 'key.pem')), cert: fs.readFileSync(path.join(tmp, 'cert.pem')) }, site);
+  proxy = http.createServer((q, r) => { r.writeHead(502); r.end(); });
+  proxy.on('connect', (q, sock, head) => {
+    const [host, port] = q.url.split(':');
+    if (!HOSTS.includes(host) || port !== '443') { sock.end('HTTP/1.1 502 Refused\r\n\r\n'); return; }
+    const up = net.connect(schools.address().port, '127.0.0.1', () => { sock.write('HTTP/1.1 200 Connection Established\r\n\r\n'); up.write(head); up.pipe(sock); sock.pipe(up); });
+    up.on('error', () => sock.destroy()); sock.on('error', () => up.destroy());
+  });
+  await new Promise((r) => schools.listen(0, '127.0.0.1', r));
+  await new Promise((r) => proxy.listen(0, '127.0.0.1', r));
+};
 
 // ---- Firefox --------------------------------------------------------------------------------------------------------
 const downloads = path.join(tmp, 'downloads');
@@ -220,9 +226,9 @@ const registered = (b, c) => b.value(`browser.scripting.getRegisteredContentScri
 const noErrors = async (b, label) => { const e = await b.errors(); ok(e.length === 0, `${label}: no errors${e.length ? ` (${e.join(' | ')})` : ''}`); };
 
 const run = async () => {
+  packages();
   await require('./wait-for-browser.js')();
-  await new Promise((r) => schools.listen(0, '127.0.0.1', r));
-  await new Promise((r) => proxy.listen(0, '127.0.0.1', r));
+  await serve();
   const manifest = JSON.parse(fs.readFileSync(path.join(fresh, 'manifest.json'), 'utf8'));
 
   // Each browser session on its own: one that stops early still leaves the other to run.
@@ -355,6 +361,7 @@ const run = async () => {
     await b.click(mods, '#allow', [frame, '.gz-dl-allow']);
     const said = await until(async () => { const t = await b.value(`document.getElementById('gz-dl-73').textContent`, mods); return /^Saved 1 file|Download failed/.test(t) && t; }, 'the download to end');
     ok(said.startsWith('Saved 1 file') && await holds(b, settings, `https://${FILES}/*`), `the frame's own click: Firefox granted ${FILES} and the download went on ("${said}"; the frame's APIs: ${apis})`);
+    if (!said.startsWith('Saved')) return noErrors(b, 'Download all');
     ok(asked.includes(FILE.url), 'the worker fetched the file');
     const zip = await until(async () => fs.readdirSync(downloads).find((f) => f.endsWith('.zip')), 'the saved zip');
     const bytes = fs.readFileSync(path.join(downloads, zip));
@@ -412,8 +419,9 @@ const run = async () => {
 };
 
 const stop = () => { try { ff?.kill('SIGKILL'); } catch { /* gone */ } };
-process.on('SIGINT', () => { stop(); process.exit(130); });
-process.on('SIGTERM', () => { stop(); process.exit(143); });
+const quit = (code) => { stop(); fs.rmSync(tmp, { recursive: true, force: true }); process.exit(code); };
+process.on('SIGINT', () => quit(130));
+process.on('SIGTERM', () => quit(143));
 try {
   await run();
 } catch (e) {
@@ -421,7 +429,7 @@ try {
   failed.push(String(e.message || e));
 } finally {
   stop();
-  schools.close(); proxy.close();
+  schools?.close(); proxy?.close();
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 if (failed.length) process.exitCode = 1;
