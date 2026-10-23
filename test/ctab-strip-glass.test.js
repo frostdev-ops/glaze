@@ -61,3 +61,29 @@ test('tabs are soft rounded items, the current one marked as the rail marks its 
   assert.match(body(TABS, '#gz-ctabs .gz-ctab[aria-selected="true"]'), /var\(--gz-accent-hi[^;]*15%[^;]*transparent/);
   assert.match(body(TABS, '#gz-ctabs .gz-ctab:hover'), /var\(--gz-ink-muted\) 12%, transparent/);
 });
+
+test('Ultra\'s course header and its tools are one inset glass panel, no rule between them', () => {
+  const both = body(THEME, '.bb-course-navigation course-page-header > header, .bb-course-navigation bb-course-navigation > [class*="makeStylestoolbar"]');
+  const head = both + body(THEME, '.bb-course-navigation course-page-header > header');
+  const tools = both + body(THEME, '.bb-course-navigation bb-course-navigation > [class*="makeStylestoolbar"]');
+  for (const [name, b] of [['header', head], ['tools', tools]]) {
+    assert.match(b, /margin-inline:\s*var\(--gz-float-start[^;]*var\(--gz-float-end/, `${name}: inset like the strip`);
+    assert.match(b, /backdrop-filter:\s*blur\(var\(--gz-glass/, `${name}: glass`);
+    assert.match(b, /var\(--gz-border-line/, `${name}: the Look's line`);
+  }
+  assert.match(body(THEME, '.bb-course-navigation course-page-header > header'), /border-bottom:\s*0/, 'no rule under the header row');
+  assert.match(head, /border-radius:\s*var\(--gz-radius[^;]*var\(--gz-radius[^;]*0 0/, 'rounded on top');
+  assert.match(body(THEME, '.bb-course-navigation bb-course-navigation > [class*="makeStylestoolbar"]'), /border-top:\s*0/);
+  assert.match(tools, /border-radius:\s*0 0 var\(--gz-radius/, 'rounded below');
+  // The same gap from the window, or from the strip above, as the strip keeps.
+  assert.match(body(THEME, 'html:not([data-gz-ctabs~="above"]) div.bb-course-navigation'), /padding-top:\s*var\(--gz-float-gap/);
+  assert.match(body(THEME, 'html[data-gz-ctabs~="above"] .bb-course-navigation course-page-header > header'), /margin-top:\s*var\(--gz-float-gap/);
+  // Scrolled, the rows passing under the bars are veiled in the gaps, by a scroll-linked fade, not a blur.
+  const veil = body(THEME, 'div.bb-course-navigation::before');
+  assert.match(veil, /animation-timeline:\s*scroll\(\)/);
+  assert.doesNotMatch(veil, /backdrop-filter/);
+  // The strip between the rows: each row a panel of its own.
+  assert.ok(rules(THEME).some(([s, b]) => s.includes('[data-gz-ctabs~="between"]') && s.includes('course-page-header > header') && /border-radius:\s*var\(--gz-radius\) !important/.test(b)));
+  // The old full-width paint is gone from both rows.
+  assert.ok(!rules(THEME).some(([s, b]) => s.includes('.bb-course-navigation [class*="makeStylestoolbar"]') && !s.includes('course-page-header') && /border-bottom:\s*1px/.test(b)));
+});
