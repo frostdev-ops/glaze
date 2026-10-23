@@ -100,6 +100,14 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     }, [`data:image/png;base64,${through.toString('base64')}`, `data:image/png;base64,${under.toString('base64')}`]);
     console.log(JSON.stringify(diff));
     check(diff.mean < 1, `inside the frame's box the page's background shows unchanged (mean difference ${diff.mean.toFixed(2)} of 255, worst ${diff.worst.toFixed(0)})`);
+    await frame.locator('#gz-ctabs [data-course-id="_101_1"]').click();
+    await until(() => page.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctab-framed')));
+    await page.locator('.b8b-document').click();
+    await page.waitForSelector('.routed-scroll main');
+    await page.locator('#gz-ctabs [data-course-id="_102_1"]').click();
+    await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through')));
+    const routed = await page.locator('body > .routed-page.bb-offcanvas-container').evaluate((e) => getComputedStyle(e).visibility);
+    check(routed === 'hidden', `the covered routed page outside site-wrap stays hidden (${routed})`);
     check(errors.length === 0, 'no page errors');
     console.log(JSON.stringify({ checks: results.length }, null, 2));
   } finally {

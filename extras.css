@@ -563,7 +563,8 @@ html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:ha
 /* Native panel headers pull into their scroller's padding; after a tab row that would cover the subtitle. */
 #gz-ctabs[data-at="nested"] + :is(.panel-header, header) { margin-block-start: 0 !important; }
 /* The covered app keeps its layout, scroll and state without drawing its glass panels. The
-   scene moves outside it and freezes; its fallback stays too, so the shared navbar's gutters retain their background. */
-html[data-gz-ctab-framed] #site-wrap { visibility: hidden !important; }
+   scene moves outside it and keeps moving; its fallback stays too, so the shared navbar's gutters retain their background. */
+html[data-gz-ctab-framed] #site-wrap,
+html[data-gz-ctab-framed] > body > .routed-page.bb-offcanvas-container { visibility: hidden !important; }
 /* Native dialogs and notices can live inside the covered app and still sit above the frame. */
 html[data-gz-ctab-framed] #site-wrap :is(#gz-ctabs, #gz-footer, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"], .MuiModal-root, .MuiPopover-root, .MuiSnackbar-root):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *) { visibility: visible; }
