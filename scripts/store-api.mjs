@@ -341,17 +341,18 @@ export async function syncAppleListing(env, app, platform, version, listings, { 
         }
       }
     }
-    if (added.at(-1) === locale) note(locale, 'screenshots', `${primaryLocale}'s until ${locale} has its own`);
+    if (added.at(-1) === locale && locale !== primaryLocale) note(locale, 'screenshots', `${primaryLocale}'s until ${locale} has its own`);
   }
   return changes;
 }
 
-// The dry run for one platform: compares with this version if it exists, otherwise with the live one it will copy.
+// The dry run for one platform: compares with this version if it exists, otherwise with the one it will copy (the live
+// one, or the newest while none is live).
 export async function previewAppleListing(env, platform, versionString, listings) {
   const app = await appleApp(env);
   const target = (await apple(env, `/apps/${app}/appStoreVersions?filter[platform]=${platform}&filter[versionString]=${versionString}`)).data[0];
   const versions = (await apple(env, `/apps/${app}/appStoreVersions?filter[platform]=${platform}&limit=20`)).data;
-  const live = versions.find(v => ['READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(versionState(v)));
+  const live = versions.find(v => ['READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(versionState(v))) || versions[0];
   const firstRelease = target ? versions.length === 1 && versions[0].id === target.id : !versions.length;
   return syncAppleListing(env, app, platform, target || null, listings, { write: false, base: live, firstRelease });
 }
