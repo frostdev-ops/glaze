@@ -18,7 +18,7 @@ All notable changes to Glaze are documented here. The format follows
 - Chrome, Edge and Firefox: Glaze asks at install only for instructure.com, blackboard.com, moodlecloud.com, frostdev.io and its share relay, instead of every site. Installs from earlier versions keep the access they have. Safari is unchanged.
 - Removing a site in Settings → Sites also returns any browser grant for that exact site. All sites access stays.
 - Course tabs show a blurred stand-in drawn from a sketch of the course page while it loads, instead of a picture of the page. Glaze takes no screenshots.
-- Canvas's Download all asks for the school's file server the first time it's needed, Gradescope in To Do asks for gradescope.com when you turn it on, and a Look's picture, video or animation from another site, or a site a mod may reach, asks for that site when you add it.
+- On Chrome, Edge and Firefox, Canvas's Download all asks for the school's file server the first time it's needed; redirected files show an error asking you to download them from Canvas. Glaze cannot discover the redirect's host. Safari keeps its existing access model. Also, Gradescope in To Do asks for gradescope.com when you turn it on, and a Look's picture, video or animation from another site, or a site a mod may reach, asks for that site when you add it.
 
 ## [3.3.8] — 2026-10-23
 

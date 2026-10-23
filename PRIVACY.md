@@ -897,7 +897,8 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
 - Optional access to other sites (`https://*/*`, and `http://localhost` and `http://127.0.0.1` for local testing) — not
   granted at install. Glaze asks the browser for one site at a time, when you choose it:
   - your school's own Canvas, Blackboard Ultra or Moodle, as described in "Adding a school's own site";
-  - the school's file server for Canvas's Download all, the first time it's needed;
+  - the school's file server for Canvas's Download all, the first time it's needed; on Chrome, Edge and Firefox,
+    redirected files stop with an error asking you to download them from Canvas, because Glaze cannot discover the redirect's host;
   - `https://www.gradescope.com` when you turn on "Gradescope in To Do", for Glaze's Gradescope script there and its
     background worker's reads of Gradescope course pages;
   - the site of a picture, video or animation you add to a Look, or a site you let a mod reach, when you add it;

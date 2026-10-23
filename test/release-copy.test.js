@@ -68,6 +68,6 @@ test('review: Step 4 copy discloses redirected Download all files in every stage
   for (const [lang, term] of Object.entries({ '': 'redirected files', de: 'Weitergeleitete Dateien', es: 'archivos redirigidos', fr: 'fichiers redirigés', nl: 'omgeleide bestanden', 'pt-BR': 'arquivos redirecionados' })) {
     const file = `store/listing${lang ? `-${lang}` : ''}.md`;
     const block = staged.split(`## ${file}\n`)[1]?.split('\n## ')[0];
-    assert.ok(block?.includes(term), `${file}: redirected file limit`);
+    assert.ok(block?.toLowerCase().includes(term.toLowerCase()), `${file}: redirected file limit`);
   }
 });
