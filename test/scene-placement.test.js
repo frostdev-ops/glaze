@@ -10,20 +10,25 @@ test('the lazy script returns its API to the injection broker', () => {
 });
 
 const rig = () => {
-  const element = (name, parent = null) => ({
-    name, parentNode: parent, attrs: new Set(),
-    get parentElement() { return this.parentNode; },
-    append(c) { c.parentNode = this; }, getClientRects: () => [1],
-    setAttribute(k) { this.attrs.add(k); }, removeAttribute(k) { this.attrs.delete(k); },
-    hasAttribute(k) { return this.attrs.has(k); },
-    closest(selector) {
-      for (let p = this; p; p = p.parentNode) {
-        if (selector.includes('.bb-offcanvas-panel') && p.name === 'screen' || selector.includes('.course-content-container') && p.name === 'course'
-          || selector.includes('.routed-page') && p.name === 'routed') return p;
-      }
-      return null;
-    },
-  });
+  const element = (name, parent = null) => {
+    const e = {
+      name, parentNode: parent, attrs: new Set(), kids: [],
+      get parentElement() { return this.parentNode; },
+      get children() { return this.kids; },
+      append(c) { c.parentNode?.kids.splice(c.parentNode.kids.indexOf(c), 1); c.parentNode = this; this.kids.push(c); }, getClientRects: () => [1], getBoundingClientRect: () => ({ height: 1 }),
+      setAttribute(k) { this.attrs.add(k); }, removeAttribute(k) { this.attrs.delete(k); },
+      hasAttribute(k) { return this.attrs.has(k); },
+      closest(selector) {
+        for (let p = this; p; p = p.parentNode) {
+          if (selector.includes('.bb-offcanvas-panel') && p.name === 'screen' || selector.includes('.course-content-container') && p.name === 'course'
+            || selector.includes('.routed-page') && p.name === 'routed') return p;
+        }
+        return null;
+      },
+    };
+    parent?.kids.push(e);
+    return e;
+  };
   const body = element('body'), course = element('course', body), outline = element('outline', course);
   const tool = element('tool', outline), screen = element('screen', course), inner = element('inner', screen);
   course.querySelector = () => outline;
@@ -100,4 +105,10 @@ test('a layer over the course page counts as covering it; the course page, its t
   for (const [layers, covered] of cases) { r.c.layers = layers; assert.equal(H.covered(true), covered, layers.map((l) => l.name).join(' > ')); }
   assert.equal(H.covered(false), false);
   r.c.layers = [r.outline, r.screen]; r.c.framed = true; assert.equal(H.covered(true), false);
+});
+test('in a course tab, a routed page that is all the frame holds covers nothing; over another page it does', () => {
+  const r = rig(), H = r.c.GZ_SCENE_HOST;
+  const wrap = r.element('wrap'), routed = r.element('routed', wrap), panel = r.element('panel', routed);
+  r.c.layers = [panel]; assert.equal(H.covered(true), false);
+  r.element('base', wrap); assert.equal(H.covered(true), true);
 });

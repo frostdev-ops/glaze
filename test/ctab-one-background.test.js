@@ -60,7 +60,7 @@ const rig = ({ tabFrame = '_1_1', ultra = true, kind = 'scene', bg = 'scene', th
   const attrs = new Map([['data-gz-bg', bg], ['data-gz-motion', 'normal']]);
   if (framed) attrs.set('data-gz-ctab-framed', '');
   const html = { hasAttribute: (k) => attrs.has(k), getAttribute: (k) => attrs.get(k) ?? null, toggleAttribute: (k, v) => { if (v) attrs.set(k, ''); else attrs.delete(k); } };
-  const host = { place() { return false; }, clear() {}, pointer: (s) => log.pointer.push(s), through: (sig, u, hidden) => { log.asked.push([sig, u, hidden]); return !!sig && host.answer; }, answer: through };
+  const host = { place() { return false; }, clear() {}, share: (s) => log.pointer.push(s), clock: () => host.pageClock, through: (sig, u, hidden) => { log.asked.push([sig, u, hidden]); return !!sig && host.answer; }, answer: through };
   const ctx = vm.createContext({
     tabFrame, ultra, solo: true, isPreview: false, docId: 'd', location: { protocol: 'https:', pathname: '/' },
     settings: { enabled: true, enhance: { quizLight: true } }, links: [1], palette: { '--gz-surface-2': '#202030' },
@@ -143,7 +143,7 @@ test('content.js tells a frame what its background is made of: the page publishe
 const hostSource = read('lib/scene-host.js');
 // A frame (frame: true) under a page whose <html> carries key, or the page itself.
 const host = ({ frame = true, key = 'k1', layers = [] } = {}) => {
-  const listeners = new Map(), frames = [], posted = [], observed = [];
+  const listeners = new Map(), pageListeners = new Map(), frames = [], posted = [], observed = [], vars = {};
   const pageAttrs = new Map(key == null ? [] : [['data-gz-bg-key', key]]);
   const frameAttrs = new Set(), ownAttrs = new Set();
   const win = {}, iframe = { contentWindow: null, hidden: false, inert: false, style: {}, hasAttribute: (k) => k === 'data-gz-through', getBoundingClientRect: () => ({ left: 272, top: 10, width: 1008, height: 758 }) };
@@ -154,14 +154,16 @@ const host = ({ frame = true, key = 'k1', layers = [] } = {}) => {
     MutationObserver: class { constructor(fn) { this.fn = fn; } observe(n, o) { observed.push([n, o, this.fn]); } },
     document: {
       body: { name: 'body', setAttribute() {}, removeAttribute() {}, hasAttribute: () => false }, querySelectorAll: (s) => (s.includes('iframe') ? [iframe] : layers),
-      documentElement: { hasAttribute: () => false, toggleAttribute: (k, v) => { if (v) ownAttrs.add(k); else ownAttrs.delete(k); } },
+      documentElement: { hasAttribute: () => false, toggleAttribute: (k, v) => { if (v) ownAttrs.add(k); else ownAttrs.delete(k); },
+        own: new Map(), getAttribute(k) { return this.own.get(k) ?? null; }, setAttribute(k, v) { this.own.set(k, String(v)); }, removeAttribute(k) { this.own.delete(k); },
+        style: { setProperty: (k, v) => { vars[k] = v; } } },
     },
-    parent: { postMessage: (m, o) => posted.push([m, o]), document: { documentElement: { getAttribute: (k) => pageAttrs.get(k) ?? null, hasAttribute: (k) => pageAttrs.has(k) } } },
-    frameElement: frame ? { toggleAttribute: (k, v) => { if (v) frameAttrs.add(k); else frameAttrs.delete(k); } } : null,
+    parent: { innerWidth: 1280, innerHeight: 800, postMessage: (m, o) => posted.push([m, o]), addEventListener: (ev, fn) => pageListeners.set(ev, fn), removeEventListener: (ev) => pageListeners.delete(ev), document: { documentElement: { getAttribute: (k) => pageAttrs.get(k) ?? null, hasAttribute: (k) => pageAttrs.has(k) } } },
+    frameElement: frame ? { toggleAttribute: (k, v) => { if (v) frameAttrs.add(k); else frameAttrs.delete(k); }, getBoundingClientRect: () => ({ left: 272, top: 10 }) } : null,
   };
   ctx.window = ctx; ctx.top = frame ? {} : ctx;
   const H = vm.runInNewContext(hostSource, ctx);
-  return { H, listeners, frames, posted, observed, pageAttrs, frameAttrs, ownAttrs, win, iframe };
+  return { H, ctx, listeners, pageListeners, frames, posted, observed, pageAttrs, frameAttrs, ownAttrs, vars, win, iframe };
 };
 const json = (x) => JSON.parse(JSON.stringify(x));
 
@@ -182,9 +184,9 @@ test('scene host: a frame listens once, and hears the page change its background
   const h = host(); let again = 0;
   h.H.through('k1', true, false, () => again++); h.H.through('k1', true, false, () => again++);
   assert.equal(h.observed.length, 1);
-  assert.deepEqual(json(h.observed[0][1]), { attributeFilter: ['data-gz-bg-key'] });
+  assert.deepEqual(json(h.observed[0][1]), { attributeFilter: ['data-gz-bg-key', 'data-gz-scene-clock'] });
   h.observed[0][2](); assert.equal(again, 1);
-  assert.ok(h.listeners.has('pointermove'));
+  assert.ok(h.listeners.has('pointermove') && h.listeners.has('resize') && h.pageListeners.has('pointermove'));
 });
 
 test('scene host: a see-through frame forwards pointer moves once a frame, while the page\'s scene follows them', () => {
@@ -203,17 +205,17 @@ test('scene host: a see-through frame forwards pointer moves once a frame, while
 test('scene host: the page\'s scene hears its frames\' pointer moves, offset by where the frame sits', () => {
   const h = host({ frame: false }); const points = [];
   const scene = { follows: true, point: (x, y) => points.push([x, y]) };
-  h.H.pointer(scene); h.H.pointer(scene);
+  h.H.share(scene); h.H.share(scene);
   assert.ok(h.ownAttrs.has('data-gz-scene-pointer'));
   const relay = h.listeners.get('message');
   relay({ origin: 'https://lms', source: h.win, data: { gzScenePoint: [10, 20] } });
   relay({ origin: 'https://evil', source: h.win, data: { gzScenePoint: [1, 1] } });
   relay({ origin: 'https://lms', source: {}, data: { gzScenePoint: [1, 1] } });
   assert.deepEqual(points, [[282, 30]]);
-  h.H.pointer(null); assert.ok(!h.ownAttrs.has('data-gz-scene-pointer'));
+  h.H.share(null); assert.ok(!h.ownAttrs.has('data-gz-scene-pointer'));
   relay({ origin: 'https://lms', source: h.win, data: { gzScenePoint: [10, 20] } });
   assert.equal(points.length, 1);
-  const f = host(); f.H.pointer(scene); assert.ok(!f.ownAttrs.has('data-gz-scene-pointer') && !f.listeners.has('message'), 'a frame never relays');
+  const f = host(); f.H.share(scene); assert.ok(!f.ownAttrs.has('data-gz-scene-pointer') && !f.listeners.has('message'), 'a frame never relays');
 });
 
 
@@ -253,16 +255,17 @@ test('sharing: an image failure revokes the page signature immediately', () => {
 test('relay: malformed coordinates and hidden or opaque frames never move the scene', () => {
   const h = host({ frame: false }), points = [];
   const scene = { follows: true, point: (...p) => points.push(p) };
-  h.H.pointer(scene);
+  h.H.share(scene);
   const relay = (p) => h.listeners.get('message')({ origin: 'https://lms', source: h.win, data: { gzScenePoint: p } });
   for (const p of [[], [1], [1, 2, 3], ['1', 2], [null, 2], [NaN, 2], [Infinity, 2], [-1, 2], [1009, 2]]) relay(p);
   assert.deepEqual(points, [], 'invalid positions are ignored');
   h.iframe.hidden = true; relay([10, 20]);
   h.iframe.hidden = false; h.iframe.inert = true; relay([10, 20]);
   h.iframe.inert = false; h.iframe.style.visibility = 'hidden'; relay([10, 20]);
-  h.iframe.style.visibility = ''; h.iframe.hasAttribute = () => false; relay([10, 20]);
-  h.iframe.hasAttribute = () => true; scene.follows = false; relay([10, 20]);
-  assert.deepEqual(points, [], 'only a visible shared background following the pointer receives it');
+  h.iframe.style.visibility = ''; scene.follows = false; relay([10, 20]);
+  assert.deepEqual(points, [], 'only a visible frame, to a scene following the pointer');
+  scene.follows = true; h.iframe.hasAttribute = () => false; relay([10, 20]);
+  assert.deepEqual(json(points), [[282, 30]], 'a frame drawing its own background still moves the page\'s, around the rail');
 });
 
 test('relay: a queued pointer move is discarded when its frame hides before the next paint', () => {
@@ -317,4 +320,61 @@ test('sharing: an old image error cannot invalidate a replacement background', (
   vm.runInContext(probe + "; probeImage('https://images.test/bg.png'); worn.bg.kind = 'gradient';", r.ctx);
   images[0].onerror();
   assert.ok(!r.attrs.has('data-gz-bg-failed'), 'an error from the previous background is ignored');
+});
+
+// ---- a frame's own background, where and when the page's is -----------------------------------------------------------
+test('scene host: a frame learns where the page\'s viewport is, in its own pixels, and again on resize', () => {
+  const h = host(); h.H.through('k1', true, false, () => {});
+  assert.deepEqual({ ...h.vars }, { '--gz-vx': '-272px', '--gz-vy': '-10px', '--gz-vw': '1280px', '--gz-vh': '800px' });
+  h.ctx.parent.innerWidth = 1400; h.listeners.get('resize')();
+  assert.equal(h.vars['--gz-vw'], '1400px');
+});
+
+test('scene host: the page shares its scene\'s clock, and a frame reads it', () => {
+  const page = host({ frame: false }), scene = { follows: false, clock: { t: 12.5, at: 1700000000000 } };
+  const html = page.ctx.document.documentElement;
+  page.H.share(scene); assert.equal(html.getAttribute('data-gz-scene-clock'), '12.5,1700000000000');
+  page.H.share(null); assert.equal(html.getAttribute('data-gz-scene-clock'), null);
+  const f = host();
+  assert.equal(f.H.clock(), undefined);
+  f.pageAttrs.set('data-gz-scene-clock', '12.5,1700000000000'); assert.deepEqual(json(f.H.clock()), { t: 12.5, at: 1700000000000 });
+  for (const bad of ['', 'x,y', '1', '1,0']) { f.pageAttrs.set('data-gz-scene-clock', bad); assert.equal(f.H.clock(), undefined, bad); }
+});
+
+test('scene host: a frame\'s own scene follows the page\'s pointer too, while the frame shows', () => {
+  const h = host(), points = [], scene = { follows: true, point: (...p) => points.push(p) };
+  h.H.through(false, true, false, () => {}); h.H.share(scene);
+  const move = h.pageListeners.get('pointermove');
+  move({ clientX: 40, clientY: 50, pointerType: 'mouse' }); move({ clientX: 1, clientY: 1, pointerType: 'touch' });
+  h.H.through(false, true, true, () => {}); move({ clientX: 2, clientY: 2, pointerType: 'mouse' });
+  assert.deepEqual(json(points), [[40 - 272, 50 - 10]], 'in the frame\'s own pixels');
+});
+
+test('a frame drawing its own scene runs it on the page\'s clock; the page keeps its own', async () => {
+  const f = rig({ through: false }); f.host.pageClock = { t: 3, at: 1700000000000 };
+  f.api.syncScene(); await settle();
+  assert.deepEqual(json(f.api.sceneOpts().clock), { t: 3, at: 1700000000000 });
+  const p = rig({ tabFrame: '' }); p.host.pageClock = { t: 3, at: 1 };
+  assert.equal(p.api.sceneOpts().clock, undefined);
+});
+
+test('background layers and the scene sit on the viewport, or a frame\'s copy on the page\'s, with today\'s values outside frames', () => {
+  for (const f of ['extras.css', 'canvas.css']) {
+    const r = rules(f);
+    const layer = r.find(([s, b]) => s.startsWith('html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before') && /content:\s*""/.test(b))[1];
+    const scene = r.find(([s]) => s === '#gz-scene')[1];
+    for (const b of [layer, scene]) {
+      assert.match(b, /left:\s*calc\(var\(--gz-vx, 0px\) - var\(--gz-bg-blur, 0px\) \* 2\)/, f);
+      assert.match(b, /width:\s*calc\(var\(--gz-vw, 100%\) \+ var\(--gz-bg-blur, 0px\) \* 4\)/, f);
+      assert.match(b, /height:\s*calc\(var\(--gz-vh, 100%\) \+ var\(--gz-bg-blur, 0px\) \* 4\)/, f);
+      assert.doesNotMatch(b, /\binset:/, f);
+    }
+    const aurora = r.find(([s, b]) => s.includes('[data-gz-bg="aurora"]::before') && /animation:/.test(b))[1];
+    assert.match(aurora, /width:\s*calc\(var\(--gz-vw, 100%\) \* 1\.36\)/, f);
+    assert.match(aurora, /animation-delay:\s*calc\(var\(--gz-drift-at, 0s\) \* -1\)/, f);
+  }
+});
+
+test('content.js puts the aurora\'s drift on the wall clock once, while it drifts', () => {
+  assert.match(source, /if \(html\.getAttribute\('data-gz-motion'\) !== 'expressive'\) html\.style\.removeProperty\('--gz-drift-at'\);\n\s*else if \(!html\.style\.getPropertyValue\('--gz-drift-at'\)\) setVar\('--gz-drift-at', /);
 });
