@@ -98,6 +98,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     const sw = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
+    await opts.evaluate((m) => chrome.storage.local.set({ moodle: [`${m}/*`] }), MOODLE); // the student's yes to this Moodle site
     const inject = async (url, x) => {
       const r = await opts.evaluate((parts) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:look', parts, patch: { version: 2 } }, res)), x && { x });
       if (!r?.ok) throw new Error(`FAIL the Look was not saved: ${JSON.stringify(r)}`);
@@ -111,7 +112,12 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     };
 
     const dash = await open(`${CANVAS}/`, '.ic-DashboardCard');
-    const names = () => dash.evaluate(() => [...document.querySelectorAll('.ic-DashboardCard__header-title')].map((e) => e.textContent));
+    // A fresh Dashboard's board takes the course cards (Glaze's own, never a part's): the rules are for Canvas's, its card view.
+    const NATIVE = '.ic-DashboardCard:not([data-gz-tile-card])';
+    await until(dash, () => document.querySelector('.gz-course-native'), null, "Canvas: the board offers Canvas's course cards");
+    await dash.click('.gz-course-native');
+    await until(dash, (sel) => [...document.querySelectorAll(sel)].every((e) => e.getClientRects().length), NATIVE, "Canvas: Canvas's course cards show");
+    const names = () => dash.evaluate((sel) => [...document.querySelectorAll(`${sel} .ic-DashboardCard__header-title`)].map((e) => e.textContent), NATIVE);
     const real = await names();
     await inject(`${CANVAS}/`, { rules: [
       { p: 'canvas.dashboard-card.title', do: 'label', t: 'Relabelled' },
@@ -121,14 +127,14 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
       { p: 'canvas.global-nav.inbox', do: 'move', to: 'canvas.global-nav.dashboard', at: 'before' },
     ] });
     await until(dash, () => !!document.getElementById('gz-rules-css')?.sheet, null, 'Canvas: rules.css loads');
-    const c = await dash.evaluate(() => ({
-      titles: [...document.querySelectorAll('.ic-DashboardCard__header-title')].map((e) => e.textContent.trim()),
-      radius: getComputedStyle(document.querySelector('.ic-DashboardCard')).borderRadius,
+    const c = await dash.evaluate((sel) => ({
+      titles: [...document.querySelectorAll(`${sel} .ic-DashboardCard__header-title`)].map((e) => e.textContent.trim()),
+      radius: getComputedStyle(document.querySelector(sel)).borderRadius,
       todo: getComputedStyle(document.querySelector('#right-side .Sidebar__TodoListContainer')).display,
       help: getComputedStyle(document.querySelector('#global_nav_help_link').parentElement).display,
       order: [...document.querySelectorAll('#header .ic-app-header__menu-list > li > a[id]')].map((a) => a.id.replace(/^global_nav_|_link$/g, '')),
-    }));
-    ok(c.titles.every((t) => t === 'Relabelled'), 'Canvas: every card title is relabelled');
+    }), NATIVE);
+    ok(c.titles.length === 4 && c.titles.every((t) => t === 'Relabelled'), 'Canvas: every card title is relabelled');
     ok(c.radius === '20px', `Canvas: cards take their radius over canvas.css (${c.radius})`);
     ok(c.todo === 'none' && c.help === 'none', 'Canvas: the sidebar To Do and the Help item are hidden');
     ok(c.order.indexOf('conversations') === c.order.indexOf('dashboard') - 1, `Canvas: Inbox moved before Dashboard (${c.order.join(' ')})`);
