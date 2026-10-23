@@ -221,3 +221,13 @@ test('Canvas news: stale tabs patch only their field and visit ids only grow', (
     ...refreshed, seen: ['271', '280', '318'],
   }, "an older visit snapshot adds ids without forgetting another tab's ids");
 });
+
+
+test('review: category localizableTitle keys work with an already readable title', () => {
+  const rows = spanish();
+  rows[0].column.gradebookCategory = { title: 'Discussion', isUserDefined: false, localizableTitle: { languageKey: 'gradebook.category.discussion' } };
+  rows[4].column.gradebookCategory = { title: 'My discussion', isUserDefined: true, localizableTitle: { languageKey: 'gradebook.category.discussion' } };
+  const groups = C.model(rows).course.groups;
+  assert.deepEqual([groups[0].name, groups[0].sys], ['Discussion', true]);
+  assert.deepEqual([groups[1].name, groups[1].sys], ['My discussion', false]);
+});

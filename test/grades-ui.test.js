@@ -52,6 +52,7 @@ class El {
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
   removeAttribute(k) { delete this.attrs[k]; }
+  hasAttribute(k) { return k in this.attrs; }
   addEventListener(type, f) { (this.on[type] ||= []).push(f); }
   fire(type, isTrusted = true) { for (const f of this.on[type] || []) f({ type, isTrusted, target: this, preventDefault() {} }); }
   focus() { this.doc.activeElement = this; }
@@ -63,7 +64,9 @@ class El {
   close() { this.open = false; this.fire('close'); }
 }
 const page = () => {
-  const doc = { activeElement: null };
+  const doc = { activeElement: null, hidden: false };
+  doc.documentElement = new El('html', doc);
+  doc.addEventListener = (type, f) => doc.documentElement.addEventListener(type, f);
   doc.body = new El('body', doc);
   doc.createElement = (tag) => new El(tag, doc);
   doc.getElementById = (id) => doc.body.all((e) => e.id === id)[0] || null;
@@ -779,7 +782,9 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
   ctx = vm.createContext({
     document: doc, location: loc, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome, TextEncoder, fetch, Date: FixedDate, File: class File {}, AbortController,
-    GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES, setTimeout: (f, ms) => state.timers.push([f, ms]),
+    MutationObserver: class { observe() {} disconnect() {} },
+    GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
+    clearTimeout: (timer) => { const i = state.timers.indexOf(timer); if (i >= 0) state.timers.splice(i, 1); },
     GZ_CTX: {
       site: 'ultra', t: (k, v) => I.t(k, v, lang), locale: () => lang, need, settings: () => state.settings, on: () => true,
       courseId: () => loc.pathname.match(/\/courses\/(_\d+_\d+)/)?.[1], myCourses: () => Promise.resolve(ufix('memberships').results),
@@ -836,8 +841,10 @@ test("Ultra what-if: Ultra's own categories, titled with its language key, read 
     return p.box().all((e) => e.tagName === 'LEGEND').map((e) => e.children[0].textContent);
   };
   assert.deepEqual(await legends('en'), ['Assignment · 40%', 'Test · 40%', 'Discussion · 20%']);
-  require('../i18n/de.js');
-  assert.match((await legends('de'))[2], /^Diskussion · 20\s?%$/);
+  for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
+    require(`../i18n/${lang}.js`);
+    assert.equal((await legends(lang))[2], `${I.t('Discussion', {}, lang)} · ${I.pct(20, lang)}`);
+  }
 });
 
 // A read of the course's gradebook that fails (Ultra busy, the network gone for a moment), with no page gradebook to fall back on.
@@ -1281,4 +1288,75 @@ test('an Ultra page may change only its own site’s grade records, by its own i
   assert.equal((await send({ type: 'glaze:gpaterms', key: `gpaTerms:${UO}:_900_1`, op: 'goal', goal: { k: 'cum', v: 3.5 }, at, base: 0 }, from(`${UO}/ultra/grades`))).ok, true);
   assert.equal((await send({ type: 'glaze:insights', key: `insights:${UO}/_900_1`, op: 'clear', at }, from(`${UO}/ultra/course`))).ok, true);
   assert.deepEqual(Object.keys(store.data).sort(), [`gpaTerms:${UO}:_900_1`, `insights:${UO}/_900_1`, sylKey, UKEY, "ultra"].sort());
+});
+
+
+test('review: redraw toggle events do not reset the retry budget', async () => {
+  const p = flaky();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  const requests = () => p.state.asked.filter(([, , u]) => u.includes('gradebook/grades')).length;
+  p.box().fire('toggle'); // Native details queues this when a redraw restores open=true.
+  await settle(10);
+  assert.equal(requests(), 1, 'a redraw must not request the gradebook again');
+  for (const ms of [1000, 4000, 15000]) {
+    assert.deepEqual(p.state.timers.map(([, delay]) => delay), [ms]);
+    await later(p);
+    p.box().fire('toggle'); await settle(10);
+  }
+  assert.equal(requests(), 4);
+  assert.ok(byText(p.box(), 'Try again'));
+});
+
+for (const hidden of ['document', 'frame']) test(`review: retries pause in a hidden ${hidden}`, async () => {
+  const p = flaky();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  if (hidden === 'document') p.doc.hidden = true;
+  else p.doc.documentElement.setAttribute('data-gz-ctab-framed', '');
+  await later(p);
+  assert.equal(p.state.asked.length, 1, 'a hidden calculator must not retry');
+  assert.equal(p.state.timers.length, 0);
+  p.doc.hidden = false;
+  p.doc.documentElement.removeAttribute('data-gz-ctab-framed');
+  p.g.down = false;
+  p.UI.render(); await settle(10);
+  assert.equal(totals(p)[0], '88%');
+});
+
+test('review: leaving the course cancels its retry timer', async () => {
+  const p = flaky();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  p.loc.pathname = '/ultra/courses/_102_1/outline';
+  p.UI.render();
+  assert.equal(p.state.timers.length, 0, 'no timer retained for the old course');
+  p.loc.pathname = '/ultra/courses/_101_1/grades'; p.g.down = false;
+  p.UI.render(); await settle(10);
+  assert.equal(totals(p)[0], '88%');
+});
+
+test('review: partial gradebook recovery preserves current edits', async () => {
+  const p = ultraPage();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  await typeScore(p, '_603_1', 100);
+  assert.equal(totals(p)[1], '90%');
+  p.books._101_1 = Object.defineProperty(ufix('grades').results, 'complete', { value: false });
+  p.UI.render(); await settle(10);
+  p.books._101_1 = ufix('grades').results;
+  p.UI.render(); await settle(10);
+  assert.equal(totals(p)[1], '90%', 'the current what-if survives the partial answer');
+});
+
+test('review: category endpoint preserves teacher names and localizes system metadata', async () => {
+  const rows = ufix('grades').results;
+  const cats = [];
+  for (const r of rows) if (r.column.gradebookCategory) {
+    const c = r.column.gradebookCategory;
+    cats.push({ ...c, title: c.title === 'Discussion' ? 'DISCUSSION.NAME' : c.title, isUserDefined: c.title === 'Discussion' });
+    delete r.column.gradebookCategory;
+  }
+  require('../i18n/de.js');
+  const p = ultraPage({ books: { _101_1: rows }, lang: 'de', answers: { '/gradebook/categories': { results: cats } } });
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  const names = p.box().all((e) => e.tagName === 'LEGEND').map((e) => e.children[0].textContent);
+  assert.match(names[2], /^DISCUSSION\.NAME/);
+  assert.match(names[0], /^Aufgabe/);
 });

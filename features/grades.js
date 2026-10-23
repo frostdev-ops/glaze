@@ -130,7 +130,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     st.names = {};
     if (g.kind === 'weighted' && g.course.groups.some((x) => !x.name)) {
       const cats = await reader().all(`/learn/api/v1/courses/${st.cid}/gradebook/categories`).catch(() => []);
-      st.names = Object.fromEntries(cats.map((c) => [c?.id, String(c?.title || '').slice(0, 100)]));
+      st.names = Object.fromEntries(cats.map((c) => [c?.id, { title: String(c?.title || '').slice(0, 100), isUserDefined: c?.isUserDefined === true, localizableTitle: c?.localizableTitle }]));
     }
     return { g: GZ_ULTRA.grade(rows, [], st.names), book: b.results ? b.key : null };
   };
@@ -145,23 +145,39 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (r.gone.length) st.open = true;
     if (changed) keep(st);
   };
-  // Ultra: a load that failed is tried again on its own, a little later each time (AGAIN, ms), and at once when the page
-  // answers with the course's gradebook anew; after the last try it says so, with Try again. A gradebook answered only in
-  // part is an answer, not a failure: it's read again when the page's next answer comes. soon: another try is on its way;
-  // ripe: its time has come (it runs once the calculator is showing).
+  // Three retries; hidden calculators wait until shown. A new page answer can recover sooner.
   const AGAIN = [1000, 4000, 15000];
+  let away = false;
+  const shown = () => !away && !document.hidden && !document.documentElement.hasAttribute('data-gz-ctab-framed');
+  const here = (st) => live() && S().enhance.calc && shown() && GRADES.test(location.pathname) && courseHere() === st.cid;
+  const cancelRetry = (st) => { if (st.timer != null) clearTimeout(st.timer); st.timer = null; };
+  const pauseRetries = () => {
+    for (const st of W.values()) if (!here(st) && st.timer != null) { cancelRetry(st); st.ripe = true; }
+  };
+  if (ultra) {
+    const visibility = new MutationObserver(() => { pauseRetries(); if (shown()) whatIf(); });
+    const watch = () => visibility.observe(document.documentElement, { attributes: true, attributeFilter: ['data-gz-ctab-framed'] });
+    document.addEventListener('visibilitychange', () => { pauseRetries(); if (shown()) whatIf(); });
+    globalThis.addEventListener?.('pagehide', () => { away = true; pauseRetries(); visibility.disconnect(); });
+    globalThis.addEventListener?.('pageshow', () => { away = false; watch(); whatIf(); });
+    watch();
+  }
   const failed = (st, e) => {
     const n = (st.fails || 0) + 1;
     const partial = e?.code === 'incomplete';
-    const later = ultra && !partial && AGAIN[n - 1];
-    Object.assign(st, { status: 'failed', partial, fails: n, soon: !!later, ripe: false });
+    const later = ultra && !st.whole && !partial && AGAIN[n - 1];
+    Object.assign(st, { status: 'failed', partial, fails: n, soon: !!later, ripe: !!later });
     if (ultra) st.book = pageBook(st.cid).key;
-    if (later) setTimeout(() => { if (st.status === 'failed' && st.fails === n) { st.ripe = true; whatIf(); } }, later);
+    if (later && here(st)) {
+      st.ripe = false;
+      st.timer = setTimeout(() => { st.timer = null; st.ripe = true; whatIf(); }, later);
+    }
   };
   // Opened, or Try again: as if for the first time.
   const retry = (st) => { st.fails = 0; return load(st); };
   const load = (st) => {
     if (st.status === 'loading' || st.status === 'ready') return st.p;
+    cancelRetry(st);
     st.status = 'loading';
     st.partial = st.ripe = false;
     st.v++;
@@ -170,9 +186,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (ultra) {
       return (st.p = ultraGrade(st).then(({ g, book }) => {
         Object.assign(st, { g, course: g.course, book, scheme: C.SCHEME, period: null, truth: null, anon: false });
-        const r = C.reconcile(st.saved, st.course);
+        const r = C.reconcile(st.rec || st.saved, st.course);
         // Glaze 2.2's scores, saved against no grade (C.oldScores): those whose grade has come in are gone, with a word.
-        const old = C.oldScores({ [cid]: st.old }, cid);
+        const old = st.rec ? {} : C.oldScores({ [cid]: st.old }, cid);
         const was = C.reconcile({ s: old }, st.course);
         Object.assign(st, { rec: r.kept, what: r.what, gone: [...r.gone, ...was.gone], status: 'ready', fails: 0, soon: false });
         if (st.gone.length) st.open = true;
@@ -234,6 +250,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
 
   const whatIf = () => {
     const old = document.getElementById('gz-calc');
+    if (ultra) { pauseRetries(); if (!shown()) return; }
     // Canvas: above its table of grades. Ultra: under the overall grade, in the column beside the grades.
     const anchor = live() && S().enhance.calc && GRADES.test(location.pathname) && (ultra ? document.querySelector('aside.student-grade-overview') : document.getElementById('grades_summary'));
     if (!anchor) return old?.remove();
@@ -251,7 +268,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     }
     if (st.status === 'failed') {
       const b = ultra ? pageBook(cid) : {};
-      if (st.ripe || (b.results && b.key !== st.book)) load(st);
+      if (st.ripe || (b.results && b.key !== st.book)) return load(st);
     }
     const key = `${cid} ${st.v} ${locale()}`;
     if (old?.dataset.key === key && (ultra ? old.previousElementSibling === anchor : old.nextElementSibling === anchor)) return;
@@ -266,7 +283,12 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     summary.dataset.f = 'summary';
     const box = label(make('details', { id: 'gz-calc', open: st.open }, summary), t('What-if grade calculator'));
     // Opening it asks for the course's work; after a failure, opening it again (or Try again) asks once more.
-    box.addEventListener('toggle', () => { st.open = box.open; if (box.open && (st.status === 'idle' || st.status === 'failed')) retry(st); });
+    let opened = box.open;
+    box.addEventListener('toggle', () => {
+      if (!box.isConnected || box.open === opened) return;
+      st.open = opened = box.open;
+      if (box.open && (st.status === 'idle' || st.status === 'failed')) retry(st);
+    });
     if (st.status !== 'ready') {
       // Another try on its way is still loading.
       const gave = st.status === 'failed' && !st.soon;
