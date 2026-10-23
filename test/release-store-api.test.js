@@ -242,7 +242,7 @@ const chromeApi = (over = {}) => route({
   ...over,
 });
 
-test('submitChrome uploads the package bytes, then submits for staged publication and records the receipt', async () => {
+test('submitChrome uploads the package bytes, then submits it to go live once approved and records the receipt', async () => {
   const { submitChrome } = await load(), dir = scratch();
   try {
     const manifest = chromeManifest(dir), receipt = {}, save = saver();
@@ -252,7 +252,7 @@ test('submitChrome uploads the package bytes, then submits for staged publicatio
     assert.equal(upload.url, 'https://chromewebstore.googleapis.com/upload/v2/publishers/pub-1/items/ext-1:upload');
     assert.equal(upload.headers['Content-Type'], 'application/zip');
     assert.equal(Buffer.from(upload.body).toString(), 'PK-package-bytes');
-    assert.deepEqual(bodyOf(publish), { publishType: 'STAGED_PUBLISH', blockOnWarnings: true });
+    assert.deepEqual(bodyOf(publish), { publishType: 'DEFAULT_PUBLISH', blockOnWarnings: true });
     assert.deepEqual(receipt, { uploadState: 'SUCCEEDED', uploaded: true, packageSHA256: manifest.files.chrome.sha256, state: 'PENDING_REVIEW', submitted: true });
     assert.ok(save.count() >= 2, 'progress is saved between upload and submission');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -447,13 +447,13 @@ const appleApi = (over = {}) => route({
 });
 const queryOf = (call) => decodeURIComponent(new URL(call.url).search);
 
-test('submitApple submits a new version for manual release with the English notes only, then confirms the review state', async () => {
+test('submitApple submits a new version released once approved, with the English notes only, then confirms the review state', async () => {
   const { submitApple } = await load(), { dir, env: e } = appleEnv();
   try {
     const posts = [];
     stubFetch(appleApi({
       'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [] },
-      'POST /appStoreVersions': (call) => { posts.push(bodyOf(call)); return reply({ data: { id: 'ver-1', attributes: { releaseType: 'MANUAL' } } }); },
+      'POST /appStoreVersions': (call) => { posts.push(bodyOf(call)); return reply({ data: { id: 'ver-1', attributes: { releaseType: 'AFTER_APPROVAL' } } }); },
       'PATCH /appStoreVersions/ver-1': {},
       'PATCH /appStoreVersions/ver-1/relationships/build': {},
       'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [{ id: 'loc-en', attributes: { locale: 'en-US' } }, { id: 'loc-de', attributes: { locale: 'de-DE' } }] },
@@ -466,7 +466,9 @@ test('submitApple submits a new version for manual release with the English note
     }));
     const receipt = {};
     await submitApple(e, appleManifest, receipt, saver());
-    assert.deepEqual(posts[0].data.attributes, { platform: 'MAC_OS', versionString: '3.3.4', releaseType: 'MANUAL' });
+    assert.deepEqual(posts[0].data.attributes, { platform: 'MAC_OS', versionString: '3.3.4', releaseType: 'AFTER_APPROVAL' });
+    const release = calls.find((c) => c.method === 'PATCH' && c.url.endsWith('/appStoreVersions/ver-1'));
+    assert.equal(bodyOf(release).data.attributes.releaseType, 'AFTER_APPROVAL', 'released as soon as Apple approves it');
     const patched = calls.filter((c) => c.method === 'PATCH' && c.url.includes('/appStoreVersionLocalizations/'));
     assert.deepEqual(patched.map((c) => c.url.split('/').pop()), ['loc-en'], 'only English notes change');
     assert.equal(bodyOf(patched[0]).data.attributes.whatsNew, 'Notes for Apple');
@@ -500,7 +502,7 @@ test('submitApple stops on a build that is invalid or expired, and on a review d
     stubFetch(appleApi({ 'GET /builds*': { data: [{ ...BUILD, attributes: { ...BUILD.attributes, expired: true } }] } }));
     await assert.rejects(submitApple(e, appleManifest, {}, saver()), /is VALID or expired/);
     stubFetch(appleApi({
-      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [{ id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION', releaseType: 'MANUAL' } }] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [{ id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION', releaseType: 'AFTER_APPROVAL' } }] },
       'PATCH /appStoreVersions/ver-1': {},
       'PATCH /appStoreVersions/ver-1/relationships/build': {},
       'GET /appStoreVersions/ver-1/build': { data: { id: 'build-1' } },
@@ -520,7 +522,7 @@ test('submitApple tells a first platform release (no What\'s New field) from any
   try {
     const refusal = () => reply({ errors: [{ detail: "Attribute 'whatsNew' cannot be edited at this time" }] }, 409);
     const table = (history) => ({
-      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [{ id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION', releaseType: 'MANUAL' } }] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [{ id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION', releaseType: 'AFTER_APPROVAL' } }] },
       'PATCH /appStoreVersions/ver-1': {},
       'PATCH /appStoreVersions/ver-1/relationships/build': {},
       'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [{ id: 'loc-en', attributes: { locale: 'en-US' } }] },
@@ -546,7 +548,7 @@ test('submitApple starts a new review for a rejected version instead of adopting
   try {
     const old = 'GET /reviewSubmissions/old/items*';
     stubFetch(appleApi({
-      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [{ id: 'ver-1', attributes: { appVersionState: 'REJECTED', releaseType: 'MANUAL' } }] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.3.4': { data: [{ id: 'ver-1', attributes: { appVersionState: 'REJECTED', releaseType: 'AFTER_APPROVAL' } }] },
       'PATCH /appStoreVersions/ver-1': {},
       'PATCH /appStoreVersions/ver-1/relationships/build': {},
       'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [{ id: 'loc-en', attributes: { locale: 'en-US' } }] },
