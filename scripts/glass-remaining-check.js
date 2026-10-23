@@ -91,6 +91,7 @@ const OFFCANVAS = `<div class="bb-offcanvas-panel bb-offcanvas-right full active
         await chrome.storage.local.set({ ultra: [site], [`ctabs:${site}:${uid}`]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, at: i, top: 0 })) },
           [`sidebar:ultra:${site}/${uid}`]: { v: 1, rev: 1, mig: 1, open: !settings.glassCheckCollapsed, dock: [{ id: 'notes' }], dest: { notes: 'dock' } } });
       }, { settings, site, uid });
+      await require('./check-env.js').ultraReady(opts);
     };
     const go = async (p, ready = '#gz-ctabs [data-course-id="_102_1"]') => {
       await page.goto(site + p);

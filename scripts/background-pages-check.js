@@ -35,6 +35,7 @@ const check = (value,label) => { assert.ok(value,label); results.push(label); };
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ultra:[origin],[`sidebar:ultra:${origin}/${uid}`]:{v:1,rev:1,mig:1,dock:[{id:'notes'}],dest:{notes:'dock'}},[`ctabs:${origin}:${uid}`]:{tabs:[101,102].map((n,i)=>({cid:`_${n}_1`,name:`Course ${n}`,path:`/ultra/courses/_${n}_1/outline`,top:0,at:i,pin:true}))}});
     },{settings,origin,uid});
+    await require('./check-env.js').ultraReady(opts);
     const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
     page.on('console',m=>{if(m.text().startsWith('[Glaze] Background'))console.error(m.text());});
     const paths=['institution-page','course','stream','calendar','grades','messages',...['outline','calendar','announcements','engagement','grades','messages','groups/enrollments','achievements','document/_8110_1?view=content&state=view','assessment/_8120_1/overview','assessment/_8121_1/overview','outline/edit/document/_9001_1','outline/assessment/_9002_1/overview','outline/discussion/_9003_1'].map(p=>`courses/_101_1/${p}`)];

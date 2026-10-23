@@ -42,4 +42,19 @@ function staged(src, hosts, tmp = os.tmpdir()) {
   return to;
 }
 
-module.exports = { lockPath, chromePath, chromeLaunch, staged };
+// A storage write finishes before the worker's list-change handler has registered the script.
+const ultraReady = (page) => page.waitForFunction(async () => {
+  const first = chrome.runtime.getManifest().content_scripts.find((s) => s.js.includes('content-ultra.js'));
+  const scripts = await chrome.scripting.getRegisteredContentScripts();
+  const patterns = [...first.matches, ...scripts.filter((s) => s.js?.includes('content-ultra.js')).flatMap((s) => s.matches)];
+  const sites = (await chrome.storage.local.get('ultra')).ultra;
+  return Array.isArray(sites) && sites.length > 0 && sites.every((site) => {
+    const u = new URL(site);
+    return patterns.some((p) => {
+      const m = /^(https?:)\/\/([^/]+)\/ultra\/\*$/.exec(p);
+      return m && m[1] === u.protocol && (m[2] === '*' || m[2] === u.hostname || m[2].startsWith('*.') && (u.hostname === m[2].slice(2) || u.hostname.endsWith(m[2].slice(1))));
+    });
+  });
+}, null, { timeout: 10000 });
+
+module.exports = { lockPath, chromePath, chromeLaunch, staged, ultraReady };
