@@ -112,6 +112,7 @@ test('a sketch of the wrong shape is refused, field by field', async () => {
     { boxes: [[0, 0, 0, 10, 'b', '#102030ff', 0]] }, { boxes: [[0, 0, 10, 10, 'x', '#102030ff', 0]] },
     { boxes: [[0, 0, 10, 10, 'b', 'red', 0]] }, { boxes: [[0, 0, 10, 10, 'b', 'url(https://x.test/a.png)', 0]] }, { boxes: [[0, 0, 10, 10, 'b', '#102030', 0]] },
     { boxes: [[0, 0, 10, 10, 'b', '#102030ff', 6]] }, { boxes: [[0, 0, 10, 10, 'b', '#102030ff', -1]] }, { boxes: [[0, 0, 10, 10, 't', '#102030ff', 11]] },
+    ...['t', 'h', 'n'].flatMap((kind) => [0, 0.4].map((pitch) => ({ boxes: [[0, 0, 10, 10, kind, '#102030ff', pitch]] }))),
     { boxes: [[0, 0, 10, 10, 'n', '#102030ff', 10], [0, 20, 10, 10, 'n', '#102030ff', 10]] }, { name: '', boxes: [[0, 0, 10, 10, 'n', '#102030ff', 10]] },
     { boxes: [[0, 0, 10, 10, 'b', '#102030ff', '0']] }, { boxes: [[0, 0, 10, 10, 'b', '#102030ff', 0], null] }, { boxes: [{ 0: 0, 1: 0, 2: 10, 3: 10, 4: 'b', 5: '#102030ff', 6: 0, length: 7 }] },
     { shot: 'data:image/jpeg;base64,AAAA', boxes: undefined },
