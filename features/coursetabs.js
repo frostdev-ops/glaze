@@ -478,6 +478,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // the press, before Ultra starts changing the page. Ultra's sign-out (the main menu's "#" link) forgets them all.
   const onLeave = (e) => {
     if (!on || e.isTrusted === false) return;
+    if (e.type === 'keydown') {
+      if (e.key === 'Escape' && framed && !preview && ctx.site !== 'canvas') pass();
+      return;
+    }
     const el = e.target instanceof Element && e.target.closest('a[href], button, [role="button"], [role="link"]');
     if (!el || el.closest('#gz-ctabs')) return;
     const href = el.getAttribute('href') || '';
@@ -1696,6 +1700,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     document[f]('visibilitychange', onVisibility);
     document[f]('scroll', onScroll, { capture: true, passive: true });
     document[f]('click', onLeave, true);
+    document[f]('keydown', onLeave, true);
     document[f]('pointerdown', onLeave, true);
     if (ctx.site === 'canvas') { globalThis[f]('click', onCourseLink); document[f]('pointerdown', onPress, true); if (!framed && !preview) globalThis[f]('popstate', onPop); }
     globalThis[f]('pagehide', onHide);
