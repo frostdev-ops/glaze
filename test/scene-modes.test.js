@@ -648,6 +648,17 @@ test('topography follows the pointer over a course tab\'s frame too, relayed in 
   assert.equal(o.scene.follows, false);
 });
 
+test('topography reads the pointer against where its canvas sits, so a course tab\'s copy tilts with the page\'s', async () => {
+  // A frame's canvas spans the page's viewport: 272 px to the left of the frame, 1280 wide.
+  const e = engine({ latency: 1 }), w = watch(e, { getBoundingClientRect: () => ({ left: -272, top: 0, width: 1280, height: 900 }) });
+  w.scene.update({ ...base, name: 'topography' });
+  const m = e.made.materials[0];
+  w.scene.point(1280 - 272, 0);
+  await frames(e, 30);
+  const [x, y] = m.uniforms.uShift.value;
+  assert.ok(Math.abs(x * 1280 - 8) < 0.01 && Math.abs(y * 900 - 8) < 0.01, `the page's right edge, seen from the frame: ${x * 1280}, ${y * 900} px`);
+});
+
 test('topography stops following the pointer when the budget guard holds a still', async () => {
   const e = engine({ latency: 20 }), w = watch(e);
   const opts = { ...base, name: 'topography' };
