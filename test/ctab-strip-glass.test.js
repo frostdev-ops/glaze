@@ -153,7 +153,7 @@ test('a full off-canvas panel (an announcement) has a floating glass header and 
   const g = body(THEME, '#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before');
   glass(g, 'announcement header');
   assert.match(g, /inset-block:\s*var\(--gz-float-gap[^;]*\) 0/, 'a gap from the window\'s top');
-  assert.match(g, /inset-inline:\s*0 var\(--gz-float-end/, 'and from its end');
+  assert.match(g, /inset-inline:\s*var\(--gz-float-start[^;]*var\(--gz-float-end/, 'both edges match the strip at desktop and phone widths');
   assert.match(g, /z-index:\s*-1/);
   assert.match(g, /pointer-events:\s*none/);
   const edge = ruleWith(THEME, '#site-wrap .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *)', '> .bb-offcanvas-panel-wrap')[0];
