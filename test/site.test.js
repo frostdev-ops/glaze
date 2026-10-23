@@ -72,7 +72,7 @@ test('course sites near one that isn\'t: its homepage\'s links first, then the n
   const home = '<a href="http://bb.wpunj.edu/">Blackboard</a> <a href="https://apply.wpunj.edu/x">Apply</a> <a href="https://evil.example/bb">x</a> <a href="https://wpunj.instructure.com/">Canvas</a>';
   assert.deepEqual(S.linked(home, 'www.wpunj.edu'), ['bb.wpunj.edu', 'wpunj.instructure.com']);
   const f = net({ '*': 'down', 'https://www.wpunj.edu/': { status: 200, body: home, type: 'text/html' }, 'https://bb.wpunj.edu/': { status: 200 }, 'https://online.wpunj.edu/': { status: 200 } });
-  assert.deepEqual(await S.nearby(S.address('www.wpunj.edu'), { f, held: true }), ['bb.wpunj.edu', 'wpunj.instructure.com']);
+  assert.deepEqual(await S.nearby(S.address('www.wpunj.edu'), { f, held: true }), ['bb.wpunj.edu'], 'built-in hosts already run Glaze');
   assert.deepEqual(await S.nearby(S.address('wpunj.edu'), { f }), ['bb.wpunj.edu'], 'without the grant, only the names that exist');
   assert.ok(f.asked.filter(([u]) => !u.startsWith('https://www.')).every(([, o]) => o.mode === 'no-cors' && o.credentials === 'omit'), 'a name is only knocked on');
   // A domain that answers for any name gets no guesses.
@@ -193,4 +193,21 @@ test('required: the manifest\'s hosts, by scheme and host, wildcards included', 
   assert.equal(S.required(S.address('bb.school.edu'), R), false);
   assert.equal(S.required(S.address('bb.school.edu'), ['<all_urls>']), true);
   assert.equal(S.required(S.address('bb.school.edu'), ['*://*/*']), true);
+});
+
+
+test('nearby: listed sites and built-in hosts never displace unlisted suggestions', async () => {
+  const previous = globalThis.chrome;
+  globalThis.chrome = { storage: { local: { get: async () => ({
+    canvas: ['https://canvas.school.edu/*'], moodle: ['https://moodle.school.edu/*'],
+    ultra: ['https://bb.school.edu', 'not a URL'],
+  }) } } };
+  try {
+    const home = { status: 200, type: 'text/html', body: '<a href="https://canvas.school.edu/">Canvas</a> <a href="https://school.instructure.com/">Hosted</a> <a href="https://courses.school.edu/">Courses</a>' };
+    const f = net({ '*': 'down', 'https://www.school.edu/': home,
+      ...Object.fromEntries(['bb', 'canvas', 'moodle', 'learn', 'courses'].map((h) => [`https://${h}.school.edu/`, { status: 200 }])),
+    });
+    assert.deepEqual(await S.nearby(S.address('www.school.edu'), { f, held: true }), ['courses.school.edu', 'learn.school.edu']);
+    assert.deepEqual(await S.nearby(S.address('www.school.edu'), { f }), ['learn.school.edu', 'courses.school.edu']);
+  } finally { globalThis.chrome = previous; }
 });

@@ -128,7 +128,7 @@ const stub = (required) => {
     await gz(() => __gz.answer(true));
     check(await until(async () => (await state()).note, 15000), 'a school\'s main website is turned down');
     s = await state();
-    check(s.error === 'No course site at www.school.edu' && JSON.stringify(s.picks) === '["bb.school.edu","canvas.school.edu"]', `as no course site, with the one it links to first, then a course-site name on its domain (${JSON.stringify(s)})`);
+    check(s.error === 'No course site at www.school.edu' && JSON.stringify(s.picks) === '["bb.school.edu"]', `as no course site, offering only the unlisted course site (${JSON.stringify(s)})`);
     check(JSON.stringify(await gz(() => __gz.removed.at(-1))) === `["${WWW}/*"]`, 'its grant handed back');
     check(s.focus === 'bb.school.edu', 'the pick has focus');
     await shot('settings-5-no-course-site');
