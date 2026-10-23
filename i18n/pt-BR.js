@@ -1,7 +1,8 @@
 // Portuguese (Brazil) for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {})['pt-BR'] = {
-  "Activity Stream": "Fluxo de atividades",
+
+  "Redirected file: download it from Canvas": "Arquivo redirecionado: baixe-o pelo Canvas",  "Activity Stream": "Fluxo de atividades",
   "Timeline dates": "Datas da linha do tempo",
   "Due dates when available": "Prazos quando disponíveis",
   "Posted dates": "Datas de publicação",
@@ -3081,5 +3082,6 @@
   "No course site at {host}": "Nenhum site de cursos em {host}",
   "Can't reach {host}": "Não foi possível acessar {host}",
   "Checking {host}": "Verificando {host}",
-  "Use Glaze on {host}": "Usar o Glaze em {host}"
+  "Use Glaze on {host}": "Usar o Glaze em {host}",
+  "Allow {host}": "Permitir {host}"
 };

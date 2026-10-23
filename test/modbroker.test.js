@@ -28,7 +28,7 @@ const env = ({ site = SITE, record = rec(), local = {}, sync = {}, list = null, 
   const l = area({ [`mod:${ID}`]: record, mods: [ID], ...local });
   let turn = Promise.resolve();
   return {
-    site, local: l, sync: area(sync), fetch: fetch || (async () => { throw new Error('no fetch here'); }),
+    site, local: l, sync: area(sync), fetch: fetch || (async () => { throw new Error('no fetch here'); }), reach: async () => true,
     queue: (f) => (turn = turn.then(f, f)),
     keys: async () => Object.keys(l.data),
     record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`],
@@ -350,7 +350,7 @@ test('only Glaze\'s content script in the top frame of an LMS page it runs on, w
     runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, getManifest: () => ({ host_permissions: ['<all_urls>'] }) },
     storage: Object.fromEntries(['local', 'sync'].map((a) => [a, { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in store[a]).map((x) => [x, store[a][x]])) }])),
   };
-  const ctx = vm.createContext({ chrome, URL, GZ_LX: require('../lib/lookx.js'), GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, Promise });
+  const ctx = vm.createContext({ chrome, URL, GZ_LX: require('../lib/lookx.js'), GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../defaults.js').GZ_LOCAL_DEV, Promise });
   vm.runInContext(`${helpers}\n${mine}\nthis.fromLms = fromLms;`, ctx);
   const s = (url, over = {}) => ({ id: 'glaze', url, frameId: 0, tab: { id: 1, url }, ...over });
   const yes = { 'https://x.instructure.com/courses/1': 'https://x.instructure.com', 'https://canvas.school.edu/': 'https://canvas.school.edu', 'https://moodle.school.edu/my/': 'https://moodle.school.edu', 'https://bb.school.edu/ultra/course': 'https://bb.school.edu' };
@@ -439,7 +439,7 @@ for (const revoke of [{ [`mod:${ID}`]: { newValue: { enabled: false } } }, { mod
   const changes = [];
   const ctx = vm.createContext({
     GZ_MODBROKER: B, AbortController, DOMException, Map, Set, setTimeout, clearTimeout,
-    fromLms: async () => SITE, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
+    fromLms: async () => SITE, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
     fetch: async (url, init) => { signal = init.signal; return new Promise((r) => { finish = r; }); },
     chrome: { runtime: { onMessage: { addListener(f) { message = f; } } }, storage: { local: e.local, onChanged: { addListener(f) { changes.push(f); } } } },
   });
@@ -491,7 +491,7 @@ test('the worker cancels an in-flight declarative widget read on revocation', as
   const ctx = vm.createContext({
     GZ_MODBROKER: { ...B, page: async (m, env) => { signal = env.signal; return new Promise((r) => { finish = r; }); } },
     AbortController, DOMException, Map, Set, setTimeout, clearTimeout, brokerIn() {},
-    fromLms: async () => SITE, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
+    fromLms: async () => SITE, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
     chrome: { runtime: { onMessage: { addListener(f) { message = f; } } }, storage: { local: e.local, onChanged: { addListener(f) { changes.push(f); } } } },
   });
   vm.runInContext(code, ctx);

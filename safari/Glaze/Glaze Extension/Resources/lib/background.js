@@ -36,14 +36,28 @@ const ownOrigin = (o) => typeof o === 'string' && o.toLowerCase() === OWN_ORIGIN
 // ask here; Settings lists and removes them.
 const siteKey = (kind, u) => (kind === 'ultra' ? u.origin : `${u.origin}/*`);
 const granted = (pattern) => (async () => chrome.permissions.contains({ origins: [pattern] }))().catch(() => false);
-// A host the manifest lists (a dev build's localhost), or one of its optional hosts that was granted.
-const holds = async (pattern) => {
+// Whether the worker may fetch `url`: the manifest holds every site (Safari), or the browser holds its host (a required host,
+// a grant for it, or the every-site grant). Anywhere else a fetch fails on CORS, so the features that go there ask the student
+// first (Download all, Gradescope, Look media, mods' network hosts, a channel's relay) and the worker checks here before each.
+const reachable = async (url) => {
+  let u;
+  try { u = new URL(url); } catch { return false; }
+  if (chrome.runtime.getManifest().host_permissions?.includes('<all_urls>')) return true;
+  return /^https?:$/.test(u.protocol) && await granted(`${u.protocol}//${u.hostname}/*`);
+};
+const GZ_LOCAL_DEV = (kind, u) => u.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(u.hostname) && /^(canvas|moodle)$/.test(kind);
+// A local Canvas or Moodle (GZ_LOCAL_DEV) on a host Glaze holds: a scratch build's manifest entry, with or without
+// its port, or the optional localhost / 127.0.0.1 grant. Never Safari's <all_urls>: no dev build.
+const localHeld = async (u) => {
   const m = chrome.runtime.getManifest();
-  return !!m.host_permissions?.includes(pattern) || (!!m.optional_host_permissions?.includes(pattern) && await granted(pattern));
+  for (const p of [`http://${u.hostname}/*`, ...(u.port ? [`${u.origin}/*`] : [])]) {
+    if (m.host_permissions?.includes(p) || (m.optional_host_permissions?.includes(p) && await granted(p))) return true;
+  }
+  return false;
 };
 const approved = async (kind, u) => {
   if (!/^https?:$/.test(u.protocol)) return false;
-  if (kind === 'canvas' && u.hostname === 'localhost' && await holds('http://localhost/*')) return true;
+  if (GZ_LOCAL_DEV(kind, u)) return localHeld(u);
   if (u.protocol !== 'https:') return false;
   if (GZ_BUILT_IN(kind, u)) return true;
   const list = await chrome.storage.local.get(kind).then((r) => r[kind], () => null);
@@ -61,7 +75,7 @@ const fromCanvas = async (s) => {
 // proof, as a school's own Canvas host isn't (fromCanvas).
 // A sender's address. A course tab's frame (features/coursetabs.js) reports about:blank, the address of its first, empty
 // document: its own origin, with its tab's page on that origin, stands in.
-const addressOf = (s) => (s.frameId > 0 && s.url === 'about:blank' && /^(?:https:\/\/[^/]+|http:\/\/localhost(?::\d+)?)$/.test(s.origin || '') && s.tab?.url?.startsWith(`${s.origin}/`) ? s.tab.url : s.url);
+const addressOf = (s) => (s.frameId > 0 && s.url === 'about:blank' && /^(?:https:\/\/[^/]+|http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?)$/.test(s.origin || '') && s.tab?.url?.startsWith(`${s.origin}/`) ? s.tab.url : s.url);
 const ultraAt = (s) => {
   if (s.id !== chrome.runtime.id || !s.tab) return null;
   try { const u = new URL(addressOf(s)); return u.protocol === 'https:' && /^\/ultra(\/|$)/.test(u.pathname) ? u.origin : null; } catch { return null; }
@@ -660,8 +674,12 @@ const mediaFetch = async (s, op, type) => {
   const env = { fetch: (u, i) => fetch(u, i), allow };
   // Kept Lottie returns before the loader's network allow check; apply the same worn-source boundary here too.
   if (op.op === 'lottie' && typeof op.src === 'string' && op.src.startsWith('file:') && !await allow(op.src)) return { ok: false, error: 'bad' };
+  // An address on a host the browser doesn't hold would fail on CORS: refused here instead. The editor asks for a link's host
+  // as it takes it (lib/editor-xbg.js), and a mod's install for its background's (lib/editor-mods.js).
+  if (op.op === 'lottie' && typeof op.src === 'string' && /^https:/.test(op.src) && await allow(op.src) && !await reachable(op.src)) return { ok: false, error: 'host' };
   if (op.op !== 'remote') return GZ_MEDIA.change(op, area, env);
   if (!['video', 'image'].includes(type) || GZ_XPARTS.MEDIA.url(op.src) !== op.src || !await allow(op.src)) return { ok: false, error: 'bad' };
+  if (!await reachable(op.src)) return { ok: false, error: 'host' };
   const key = `${type}\n${op.src}`;
   if (mediaDownloads.has(key)) return mediaDownloads.get(key);
   // Per-file caps still multiply by open tabs. Admit at most two distinct downloads, with no waiting queue retaining callers.
@@ -1083,7 +1101,7 @@ const ensure = async () => {
   const gone = [...have].filter((id) => (/^https?:\/\//.test(id) && !sites.includes(id)) || (id.startsWith('ultra:') && !ultra.some((s) => s.id === id)) || (id === DETECTOR && !detect));
   if (gone.length) await chrome.scripting.unregisterContentScripts({ ids: gone });
   // Gradescope's own pages get Glaze only while Glaze and enhance.gradescope are on (lib/gradescope.js, features/gradescope.js).
-  const gs = await gradescopeOn();
+  const gs = await gradescopeOn() && await reachable(GZ_GRADESCOPE.HOST);
   if (gs && !have.has(GRADESCOPE.id)) await chrome.scripting.registerContentScripts([GRADESCOPE]);
   if (!gs && have.has(GRADESCOPE.id)) await chrome.scripting.unregisterContentScripts({ ids: [GRADESCOPE.id] });
   // The notes app's Course notes button (features/notes-home.js) on Canvas sites' course pages, only while Glaze and Notes
@@ -1121,6 +1139,13 @@ const notesHome = (canvas) => {
 };
 const GRADESCOPE = { id: 'gz-gradescope', matches: ['https://www.gradescope.com/*'], js: ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js'], runAt: 'document_idle', persistAcrossSessions: true };
 chrome.storage.onChanged.addListener((changes, area) => { if ((area === 'sync' && (changes.enhance || changes.enabled)) || (area === 'local' && (changes.canvas || changes.moodle || changes.ultra))) serial(ensure); });
+// Gradescope's switch turned off (Settings, Reset everything, another device): its grant goes back, as no other part of Glaze
+// reaches it and it isn't a required host. Glaze off as a whole keeps it, for when Glaze is on again.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync' || !changes.enhance) return;
+  const on = (v) => GZ_SANITIZE({ enhance: v }).enhance.gradescope;
+  if (on(changes.enhance.oldValue) && !on(changes.enhance.newValue)) GZ_SITE.handBack(GZ_SITE.address(GZ_GRADESCOPE.HOST)).catch(() => {});
+});
 // Defaults are an install transaction, independent of whether a page already wrote its layout or migrated its dock.
 // Its local intent survives worker restarts. Navigation uses a local fallback until a real sync preference is present.
 // Removals use separate sync keys: a device still starting up never uploads defaults over another device's choices.
@@ -1485,6 +1510,15 @@ const siteAt = (origin) => { const s = typeof origin === 'string' ? GZ_SITE.addr
 const siteFor = (pattern) => { const s = typeof pattern === 'string' && /^https?:\/\/[^/*]+\/\*$/.test(pattern) ? GZ_SITE.address(pattern.slice(0, -1)) : null; return s?.pattern === pattern ? s : null; };
 const holdsSite = (site) => chrome.runtime.getManifest().host_permissions?.includes('<all_urls>') || granted(site.pattern);
 const listedAs = async (u) => { const got = await chrome.storage.local.get(LMS); return LMS.find((k) => Array.isArray(got[k]) && got[k].includes(siteKey(k, u))) || null; };
+// Only local pages need this startup policy; regular HTTPS first scripts carry none of it.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:local') return;
+  let u;
+  try { u = new URL(addressOf(s)); } catch { reply(false); return; }
+  if (s.id !== chrome.runtime.id || !GZ_LOCAL_DEV(m.kind, u)) { reply(false); return; }
+  approved(m.kind, u).then(reply, () => reply(false));
+  return true;
+});
 const ADDERS = ['popup.html', 'features/welcome.html', 'options.html'];
 const fromAdder = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ADDERS.some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p))
   && extensionOrigin(s) && (!s.tab || s.frameId === 0);
@@ -1520,8 +1554,16 @@ const allowing = async (m, site) => {
 };
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:allow') return;
-  if (!fromAdder(s)) { reply({ ok: false, error: 'sender' }); return; }
+  // A feature may ask from embedded Settings too; adding a school still requires an editor tab.
+  const feature = m.op === 'feature';
+  const ownFeature = fromGlaze(s) && ADDERS.some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p));
+  if (!(feature ? ownFeature : fromAdder(s))) { reply({ ok: false, error: 'sender' }); return; }
   const site = siteAt(m.origin);
+  if (feature) {
+    if (!site) { reply({ ok: false, error: 'site' }); return; }
+    asking(site.pattern, {}).then(() => reply({ ok: true }), () => reply({ ok: false }));
+    return true;
+  }
   const ok = m.op === 'all' || (!!site && (m.op === 'ask' ? (m.kind === undefined && m.tabId === undefined) || (LMS.includes(m.kind) && Number.isInteger(m.tabId))
     : m.op === 'cancel' || m.op === 'yes' && LMS.includes(m.kind)));
   if (!ok) { reply({ ok: false, error: 'site' }); return; }
@@ -1535,7 +1577,7 @@ const granting = async (pattern) => {
   const site = siteFor(pattern);
   if (!site) return;
   const was = await askedFor(pattern);
-  if (was && !was.kind) return;
+  if (site.origin === GZ_GRADESCOPE.HOST || was && !was.kind) { await answered(pattern); return serial(ensure); }
   const u = new URL(site.origin);
   const tabs = was ? [await chrome.tabs.get(was.tabId).catch(() => ({}))] : await Promise.resolve().then(() => chrome.tabs.query({ url: pattern })).catch(() => []);
   let kind = was?.kind || await listedAs(u);
@@ -1652,7 +1694,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     try {
       // The editor's preview shows installed mods' parts and their background files as a page would (same checks, no code).
       const preview = m.type === 'glaze:modpage' && ['parts', 'media'].includes(m.op) && fromPreview(s);
-      const env = { site: preview ? 'editor' : await fromLms(s, m.type === 'glaze:modpage' && m.op === 'parts'), signal: control?.signal, local, sync: brokerArea('sync'), fetch: (u, i) => fetch(u, control ? { ...i, signal: control.signal } : i), queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
+      const env = { site: preview ? 'editor' : await fromLms(s, m.type === 'glaze:modpage' && m.op === 'parts'), signal: control?.signal, local, sync: brokerArea('sync'), fetch: (u, i) => fetch(u, control ? { ...i, signal: control.signal } : i), reach: reachable, queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
         keys: async () => (chrome.storage.local.getKeys ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))),
         record: (id) => modRead(`mod:${id}`), blocklist: () => modRead('modsBlocklist') };
       return await (m.type === 'glaze:mod' ? GZ_MODBROKER.handle(m, env) : GZ_MODBROKER.page(m, env));
@@ -1804,7 +1846,9 @@ const moveChannelKeys = async () => {
   }
   await chrome.storage.local.set({ [flag]: true });
 };
-const channelEnv = () => ({ local: channelLocal(), fetch: (u, i) => fetch(u, i), now: () => Date.now(), blocked, enqueue: queued,
+// A channel's relay is share.frostdev.io, a required host, or one of the student's own that the editor asked for (Read code);
+// one Glaze doesn't hold is refused before the request (lib/modchannel.js says 'network').
+const channelEnv = () => ({ local: channelLocal(), fetch: async (u, i) => { if (!await reachable(u)) throw new TypeError('host'); return fetch(u, i); }, now: () => Date.now(), blocked, enqueue: queued,
   install: (m) => GZ_MODBUNDLE.change(m, { local: brokerArea('local') }) });
 const channelCheck = (opts) => channels().check(channelEnv(), opts);
 chrome.runtime.onMessage.addListener((m, s, reply) => {
@@ -1965,6 +2009,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     };
     const yes = typeof m.key === 'string' && !!site && m.key.startsWith(`${site}/`);
     if (!to || !yes || !await allowed()) return { ok: false, error: 'sender' };
+    // Gradescope isn't a required host: its switch asked for it. Taken back, nothing is asked of it, nor counted as tried.
+    if (!await reachable(GZ_GRADESCOPE.HOST)) return { ok: false, error: 'host' };
     const due = await (brokerTurn ||= GZ_CARDS.queue())(async () => {
       const now = Date.now();
       const { gradescope, gsTried = {} } = await chrome.storage.local.get([GZ_GRADESCOPE.KEY, 'gsTried']);
@@ -2154,11 +2200,13 @@ chrome.runtime.onConnect.addListener((port) => {
     if (!trustedFrame(port.sender, 'download')) return port.disconnect();
     origin = new URL(port.sender.url);
   } catch { return port.disconnect(); }
-  // Production has HTTPS hosts only. The explicit localhost permission exists only in scratch builds.
-  const dev = origin.hostname === 'localhost' && chrome.runtime.getManifest().host_permissions.includes('http://localhost/*') ? origin.origin : '';
+  // Production has HTTPS hosts only; a local Canvas (GZ_LOCAL_DEV) only where Glaze holds its host, by the manifest of a
+  // scratch build or the optional localhost grant (approved).
+  const dev = GZ_LOCAL_DEV('canvas', origin) ? origin.origin : '';
   if (!GZ_DOWNLOAD.url(origin.href, dev)) return port.disconnect();
   const ready = approved('canvas', origin).catch(() => false);
   const ctl = new AbortController();
+  if (dev) ready.then((ok) => { if (!ok) { ctl.abort(); port.disconnect(); } });
   let used = 0, busy = false, ack = null, stall = 0;
   // An idle connection is not a download: fail a stalled fetch/stream after 45 seconds.
   const fresh = () => { clearTimeout(stall); stall = setTimeout(() => { ctl.abort(); ack?.(); port.disconnect(); }, 45000); };
@@ -2171,10 +2219,23 @@ chrome.runtime.onConnect.addListener((port) => {
     busy = true;
     (async () => {
       if (!await ready) throw new Error('sender');
-      fresh();
       const url = GZ_DOWNLOAD.url(m.url, dev);
       if (!url) throw new Error('url');
-      const r = await fetch(url, { credentials: 'omit', redirect: 'follow', cache: 'no-store', signal: ctl.signal });
+      // A file server Glaze doesn't hold (Canvas cloud keeps files on hosts of its own, never known ahead): the page shows
+      // Glaze's Allow frame for it (features/allow.html) and sends the file again once the student allowed it. Nothing is
+      // fetched until the browser holds the host, and nothing is kept but its grant. Noted as a feature's ask, so its grant
+      // isn't taken for a school's site (granting, below).
+      if (!await reachable(url)) {
+        const host = new URL(url).hostname;
+        await asking(`https://${host}/*`, {}).catch(() => {});
+        send({ type: 'ask', host });
+        return;
+      }
+      fresh();
+      // A manual redirect hides Location (opaqueredirect). Refuse it explicitly: following could reach an unheld host.
+      const wide = chrome.runtime.getManifest().host_permissions?.includes('<all_urls>');
+      const r = await fetch(url, { credentials: 'omit', redirect: wide ? 'follow' : 'manual', cache: 'no-store', signal: ctl.signal });
+      if (r.type === 'opaqueredirect' || r.status >= 300 && r.status < 400) throw new Error('redirect');
       if (!r.ok || !GZ_DOWNLOAD.url(r.url, dev)) throw new Error('response');
       GZ_DOWNLOAD.bytes(used, Number(r.headers.get('content-length') || 0));
       const reader = r.body?.getReader();
@@ -2195,7 +2256,7 @@ chrome.runtime.onConnect.addListener((port) => {
       } finally { await reader.cancel().catch(() => {}); }
       send({ type: 'done' });
     })().catch((e) => {
-      send({ type: 'error', code: ['limit', 'url', 'sender', 'response'].includes(e.message) ? e.message : 'network' });
+      send({ type: 'error', code: ['limit', 'url', 'sender', 'response', 'redirect'].includes(e.message) ? e.message : 'network' });
     }).finally(() => { clearTimeout(stall); busy = false; });
   });
 });

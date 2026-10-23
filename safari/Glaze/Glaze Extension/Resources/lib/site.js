@@ -2,8 +2,8 @@
 // (address), and once that host is held, whether it really is Blackboard, Canvas or Moodle (probe). A host that isn't one
 // gets suggestions for the one that is (nearby): course-site links on its own homepage, and the course-site names schools
 // use that exist on its domain. Allowing one from a click (allow) and handing its grant back (handBack) are here too, for
-// Glaze's first screen (features/welcome.js) and Settings' Sites; the popup and the worker use the rest. No DOM; classic
-// script; module.exports for node.
+// Glaze's first screen (features/welcome.js) and Settings' Sites, and asking for the hosts a feature reaches (reach); the
+// popup and the worker use the rest. No DOM; classic script; module.exports for node.
 var GZ_SITE = globalThis.GZ_SITE || (() => {
   const LOCAL = new Set(['localhost', '127.0.0.1']);
   const HOST = /^([a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+(?:[a-z]{2,63}|xn--[a-z\d-]{1,59})$/;
@@ -141,7 +141,27 @@ var GZ_SITE = globalThis.GZ_SITE || (() => {
     }, () => { cancel(); return { state: 'refused' }; }).catch(() => ({ state: 'failed' }));
   };
 
-  const api = { address, probe, nearby, linked, domainOf, required, handBack, tell, allow, SIGNS, WORDS };
+  // The hosts a feature fetches from the worker (Gradescope, a Look's media, a mod's network hosts, a channel's relay), asked
+  // for from the click in one of Glaze's pages that adds it, before anything is awaited: each by its https host (a local one
+  // over http), in one request. The worker hears each first, so its grant isn't taken for a school's site. Held already, the
+  // browser says yes with no prompt; where the manifest holds every site (Safari) there is nothing to ask. → whether all are
+  // held; false for an address that is no host to ask for.
+  const reach = (urls) => {
+    const c = globalThis.chrome;
+    const patterns = [].concat(urls).map((url) => {
+      try {
+        const u = new URL(url);
+        return u.protocol === 'https:' || (u.protocol === 'http:' && LOCAL.has(u.hostname)) ? `${u.protocol}//${u.hostname}/*` : null;
+      } catch { return null; }
+    });
+    if (patterns.some((p) => !p)) return Promise.resolve(false);
+    const origins = [...new Set(patterns)];
+    if (!origins.length || (c.runtime.getManifest().host_permissions || []).includes('<all_urls>')) return Promise.resolve(true);
+    for (const o of origins) tell({ op: 'feature', origin: o.slice(0, -2) });
+    return new Promise((res) => res(c.permissions.request({ origins }))).then((ok) => ok === true, () => false);
+  };
+
+  const api = { address, probe, nearby, linked, domainOf, required, handBack, tell, allow, reach, SIGNS, WORDS };
   return api;
 })();
 

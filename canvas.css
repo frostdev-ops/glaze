@@ -1462,6 +1462,8 @@ html[data-gz-raw-courses] [data-gz-course-color] { --gz-course: var(--gz-course-
 #gz-peek li[data-state="none"]::before { border: 0; width: 4px; height: 4px; background: var(--gz-ink-faint); }
 #gz-peek li[data-state="locked"]::before { border-radius: calc(var(--gz-radius, 12px) * 1 / 6); }
 #application .ig-header > .gz-dl { margin-left: auto; margin-right: 0.75rem; }
+/* Glaze's Allow frame beside it, for a file server Glaze doesn't hold yet (features/download.js, features/allow.html). */
+.gz-dl-allow { flex: none; align-self: center; width: 9rem; height: 26px; margin: 0 0.75rem 0 -0.25rem; border: 0; background: transparent; color-scheme: normal; }
 html:not([data-gz-enhance-previews]) #gz-peek { display: none; }
 /* ---- new grades/content and Canvas's native what-if scores ---- */
 #application .gz-new {

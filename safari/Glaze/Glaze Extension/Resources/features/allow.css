@@ -1,0 +1,14 @@
+/* Glaze's Allow frame (features/allow.html): its button and nothing else, in Glaze's own colours (the first screen's), so the
+   page around it can tell it is Glaze's. The frame is fitted to the button (features/download.js), its ground see-through. */
+@font-face { font-family: 'Inter'; src: url('../fonts/inter.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+body { display: inline-block; }
+button {
+  display: block; height: 26px; padding: 0 12px; margin: 0; white-space: nowrap; cursor: pointer;
+  font: 600 12px/26px Inter, ui-sans-serif, system-ui, sans-serif; color: #03131e; background: #27cdf1;
+  border: 0; border-radius: 999px; -webkit-font-smoothing: antialiased;
+}
+button:hover { background: #a6efff; }
+button:focus-visible { outline: 2px solid #1590c4; outline-offset: -2px; }
+button[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+[hidden] { display: none !important; }

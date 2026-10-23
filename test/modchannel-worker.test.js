@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const worker = (globals = {}) => {
+const worker = (globals = {}, permissions) => {
   const local = {};
   const area = (s) => ({
     get: async (k) => structuredClone(k == null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))),
@@ -20,6 +20,7 @@ const worker = (globals = {}) => {
         openOptionsPage: async () => { opened.push('options'); }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(local), sync: area({ enabled: true }), onChanged: { addListener() {} } },
       tabs: { query: async () => [] },
+      ...(permissions && { permissions }),
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
     },
   });
@@ -55,4 +56,20 @@ test('an invalid Check now id never expands into checking every mod', async () =
   assert.equal(calls, 0);
   assert.equal((await w.send({ type: 'glaze:modchannel', op: 'check' }, EDITOR)).ok, true);
   assert.equal(calls, 1);
+});
+
+// A channel on a relay of the student's own (a link names its server): reached only while Glaze holds that relay's host,
+// as Sharing's relays are (lib/sessions.js); Glaze's own relay is a required host.
+test('a channel on a relay Glaze does not hold is refused before any request; Glaze\'s own relay is always reached', async () => {
+  const fetched = [];
+  const held = new Set(require('../manifest.json').host_permissions);
+  const C = { latest: async (link, env) => { await env.fetch(`${link}/v1/x`, {}); return { bytes: new Uint8Array(), link }; } };
+  const w = worker({ GZ_MODCHANNEL: C, GZ_MODBUNDLE: { std: () => '' }, fetch: async (u) => { fetched.push(u); return new Response('{}'); } },
+    { contains: async ({ origins }) => origins.every((o) => held.has(o) || [...held].some((p) => p.startsWith('https://*.') && new URL(o.slice(0, -1)).hostname.endsWith(p.slice(9, -2)))) });
+  assert.equal((await w.send({ type: 'glaze:modchannel', op: 'follow', link: 'https://relay.school.example' }, EDITOR)).ok, false);
+  assert.deepEqual(fetched, [], 'no request to a relay the browser would refuse');
+  assert.equal((await w.send({ type: 'glaze:modchannel', op: 'follow', link: 'https://share.frostdev.io' }, EDITOR)).ok, true);
+  held.add('https://relay.school.example/*');
+  assert.equal((await w.send({ type: 'glaze:modchannel', op: 'follow', link: 'https://relay.school.example' }, EDITOR)).ok, true);
+  assert.deepEqual(fetched, ['https://share.frostdev.io/v1/x', 'https://relay.school.example/v1/x']);
 });

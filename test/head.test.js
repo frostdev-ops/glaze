@@ -28,7 +28,7 @@ const page = ({ protocol = 'https:', pathname = '/ultra', body = null, marker = 
   // Blackboard's own host: Ultra there needs no yes first (WP-C2), so the head gate is all these pages decide.
   const location = { protocol, pathname, hostname: 'school.blackboard.com', origin: `${protocol}//school.blackboard.com` };
   const done = vm.runInNewContext(full === true ? source : full === 'body' ? bodyGate : gate, {
-    window, document, location, GZ_COLOR: {}, GZ_DEFAULTS: {}, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN,
+    window, document, location, GZ_COLOR: {}, GZ_DEFAULTS: {}, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../defaults.js').GZ_LOCAL_DEV,
     chrome: { storage: { local: { get: (key, cb) => cb({ [key]: ['https://school.blackboard.com/*', 'https://school.blackboard.com'] }) } } },
     matchMedia: () => ({}), CSS: { supports: () => false },
     MutationObserver: class {

@@ -12,7 +12,9 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
   const ultra = ctx.site === 'ultra';
   const { t, locale, need, capi, canvasCourseId, courseId, courseItems, toggleOf, moduleItems } = ctx;
   const MAX_ZIP = 250 * 2 ** 20; // ponytail: the whole zip is built in memory; stream to disk if folders outgrow it
-  const canvasBytes = (signal) => {
+  // The worker's byte port. `ask(host)` → whether the student allowed a file server's host the worker doesn't hold yet
+  // ('ask'): yes, the file is asked for again, once per host; no, the download stops.
+  const canvasBytes = (signal, ask) => {
     const port = chrome.runtime.connect({ name: 'canvas-zip' });
     let pending = null, closed = false;
     const close = () => {
@@ -32,7 +34,18 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     port.onDisconnect.addListener(() => { if (chrome.runtime?.id) void chrome.runtime.lastError; if (!closed) { pending?.resolve(null); pending = null; close(); } });
     port.onMessage.addListener((m) => {
       if (!pending) return;
-      if (m.type === 'chunk') {
+      if (m.type === 'ask') {
+        const p = pending;
+        // Asked again for a host just allowed: the grant didn't hold. The file fails rather than asking forever.
+        if (p.asked.has(m.host)) { pending = null; p.resolve(null); return; }
+        p.asked.add(m.host);
+        ask(m.host).then((yes) => {
+          if (pending !== p) return;
+          if (yes) { post({ type: 'file', url: p.url }); return; }
+          pending = null;
+          p.reject(Object.assign(new Error('refused'), { refused: true }));
+        });
+      } else if (m.type === 'chunk') {
         const raw = atob(m.data), data = Uint8Array.from(raw, (c) => c.charCodeAt(0));
         pending.chunks.push(data); pending.size += data.length;
         post({ type: 'ack' });
@@ -41,13 +54,14 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
         for (const c of pending.chunks) { data.set(c, at); at += c.length; }
         pending.resolve(data); pending = null;
       } else if (m.type === 'error') {
-        if (m.code === 'limit') pending.reject(Object.assign(new Error('limit'), { limit: true })); else pending.resolve(null);
+        if (m.code === 'redirect') pending.reject(Object.assign(new Error(t('Redirected file: download it from Canvas')), { said: true }));
+        else if (m.code === 'limit') pending.reject(Object.assign(new Error('limit'), { limit: true })); else pending.resolve(null);
         pending = null;
       }
     });
     return { close, read: (url) => new Promise((resolve, reject) => {
       if (closed || signal.aborted) return reject(signal.reason || new DOMException('Aborted', 'AbortError'));
-      pending = { resolve, reject, chunks: [], size: 0 }; post({ type: 'file', url });
+      pending = { resolve, reject, chunks: [], size: 0, url, asked: new Set() }; post({ type: 'file', url });
     }) };
   };
   const jobs = new Map(); // folder id -> { ctl, label, pct, done }
@@ -62,11 +76,37 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     b.toggleAttribute('data-job', !!j);
     b.style.setProperty('--gz-pct', `${j?.done ? 0 : j?.pct || 0}%`);
   };
+  // Glaze's Allow frame (features/allow.html) beside a folder's button, for a host the worker can't reach yet: its one button
+  // asks the browser for that host. → whether it was allowed; no when the download stops first or the button is gone.
+  // Only the frame's own answer counts (a page can post anything); the worker checks the grant again either way.
+  const allowFrame = (fid, host, signal) => new Promise((resolve) => {
+    const b = document.getElementById(`gz-dl-${fid}`);
+    if (!b || signal.aborted) return resolve(false);
+    const f = document.createElement('iframe');
+    f.className = 'gz-dl-allow';
+    f.title = t('Allow {host}', { host });
+    f.src = `${chrome.runtime.getURL('features/allow.html')}#${host}`;
+    const channel = new MessageChannel();
+    const done = (yes) => { channel.port1.close(); channel.port2.close(); signal.removeEventListener('abort', stop); f.remove(); resolve(yes); };
+    const heard = (e) => {
+      if (e.data?.gzAllow !== host) return;
+      if (Array.isArray(e.data.size)) { const [w, h] = e.data.size; if (w > 0 && h > 0) { f.style.width = `${Math.ceil(w)}px`; f.style.height = `${Math.ceil(h)}px`; } return; }
+      done(e.data.ok === true);
+    };
+    const stop = () => done(false);
+    // The reply port belongs only to this frame, including on Firefox where window messages hide source.
+    channel.port1.onmessage = heard;
+    f.addEventListener('load', () => {
+      f.contentWindow.postMessage({ gzAllow: host }, chrome.runtime.getURL('').replace(/\/$/, ''), [channel.port2]);
+    }, { once: true });
+    signal.addEventListener('abort', stop, { once: true });
+    b.after(f);
+  });
   const download = async (fid, title) => {
     const cid = ultra ? courseId() : canvasCourseId();
     const ctl = new AbortController();
     const job = { ctl, label: t('Finding files · Cancel'), pct: 0 };
-    const bridge = ultra ? null : canvasBytes(ctl.signal);
+    const bridge = ultra ? null : canvasBytes(ctl.signal, (host) => allowFrame(fid, host, ctl.signal));
     jobs.set(fid, job);
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);
@@ -138,7 +178,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
       say(t('Saved {n} files', { n: out.length }) + left + (failed ? ` · ${t('{n} failed', { n: failed })}` : ''));
     } catch (e) {
-      say(ctl.signal.aborted ? t('Cancelled') : e.limit ? t('Too big: over {max}', { max: mb(MAX_ZIP) }) : e.said ? e.message : t('Download failed'));
+      say(ctl.signal.aborted ? t('Cancelled') : e.limit ? t('Too big: over {max}', { max: mb(MAX_ZIP) }) : e.said ? e.message : t('Download failed')); // refused at the Allow frame too
     } finally {
       bridge?.close();
       job.done = true;

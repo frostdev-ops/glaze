@@ -816,6 +816,9 @@ GZ_UI.load().then((s) => {
     const key = el.dataset.key;
     if (key === 'nav.size') el.addEventListener('change', () => { s.nav.detailed = false; pendingNav.add('detailed'); });
     if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
+    // Gradescope isn't a host Glaze holds from the start: switched on, it is asked for in this click; refused, the switch stays
+    // off. Switched off, the worker hands its grant back.
+    if (key === 'enhance.gradescope' && el.type === 'checkbox') { el.addEventListener('change', () => { const on = el.checked; el.checked = false; (on ? GZ_SITE.reach([GZ_GRADESCOPE.HOST]) : Promise.resolve(true)).then((held) => { if (!held) return; el.checked = on; set(key, on); refresh(); save([group(key)]); }); }); continue; }
     if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'look.surfaceCustom' && el.checked) seedSurface(); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { if (key.startsWith('nav.') && Object.hasOwn(N.dimensions(s.nav), key.slice(4))) { Object.assign(s.nav, N.dimensions(s.nav), { detailed: true }); for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k); } set(key, +el.value); refresh(); save([group(key)], true); });
@@ -1195,25 +1198,38 @@ GZ_UI.load().then((s) => {
   $('#share-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryCode(); });
   $('#share-cancel').addEventListener('click', () => { $('#share-code').value = ''; endOffer(); });
   // A code brings its own extras or none: the Look being left goes into History before the one below replaces it.
-  $('#share-apply').addEventListener('click', () => leaving());
   $('#share-apply').addEventListener('click', () => {
-    for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
-    s.card = offer.card;
-    s.nav = offer.nav;
-    // How Glaze's own navigation bar looks and sits (lib/share.js NAVBAR); whether it is on stays the student's.
-    s.navbar = { ...offer.navbar, on: s.navbar.on };
-    // The sidebar's appearance a Look brings (lib/share.js): its style, surface and corners only.
-    const sidebarLook = ['style', 'surface', 'radius'].some((k) => s.sidebar[k] !== offer.sidebar[k]);
-    if (sidebarLook) for (const k of ['style', 'surface', 'radius']) s.sidebar[k] = offer.sidebar[k];
-    pendingNav.clear();
-    // A theme's card styles take turns on the cards without their own (lib/cards.js).
-    const set = offer.cardSet;
-    if (set.length) cardsOp({ set });
-    $('#share-code').value = '';
-    endOffer(true); // its background file, if it brought one, is kept now
-    fill();
-    save([...GZ_HISTORY.KEYS, 'card', 'nav', 'navbar', ...sidebarLook ? ['sidebar'] : []]);
-    hint(t('Theme applied.'));
+    const chosen = offer, generation = offerGeneration;
+    if (!chosen) return;
+    const apply = () => {
+      if (offer !== chosen || generation !== offerGeneration) return;
+      leaving();
+      for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
+      s.card = offer.card;
+      s.nav = offer.nav;
+      // How Glaze's own navigation bar looks and sits (lib/share.js NAVBAR); whether it is on stays the student's.
+      s.navbar = { ...offer.navbar, on: s.navbar.on };
+      // The sidebar's appearance a Look brings (lib/share.js): its style, surface and corners only.
+      const sidebarLook = ['style', 'surface', 'radius'].some((k) => s.sidebar[k] !== offer.sidebar[k]);
+      if (sidebarLook) for (const k of ['style', 'surface', 'radius']) s.sidebar[k] = offer.sidebar[k];
+      pendingNav.clear();
+      // A theme's card styles take turns on the cards without their own (lib/cards.js).
+      const set = offer.cardSet;
+      if (set.length) cardsOp({ set });
+      $('#share-code').value = '';
+      endOffer(true); // its background file, if it brought one, is kept now
+      fill();
+      save([...GZ_HISTORY.KEYS, 'card', 'nav', 'navbar', ...sidebarLook ? ['sidebar'] : []]);
+      hint(t('Theme applied.'));
+    };
+    const src = chosen.parts?.x?.bg?.media?.src;
+    if (!src?.startsWith('https://')) return apply();
+    // A code can introduce remote media just as the link box can. Ask in Apply's click before changing this Look.
+    GZ_SITE.reach([src]).then((held) => {
+      if (offer !== chosen || generation !== offerGeneration) return;
+      if (!held) return hint(t('That link can’t be saved.'), true);
+      apply();
+    });
   });
 
   // ---- gallery, favorites and history: kept on this device (storage.local), lib/history.js ----

@@ -39,23 +39,27 @@ const UI = loadUi();
 
 // ---- LOOK-2: "Use this theme" ------------------------------------------------------------------------------------------
 // The code, previewed by tryCode and then applied by the "Use this theme" handler, both as options.js has them.
-const use = async (code, s = D.GZ_SANITIZE({})) => {
+const use = async (code, s = D.GZ_SANITIZE({}), answer = () => true) => {
   const tryCode = between(options, '  const tryCode =', "  $('#share-try').addEventListener");
   const start = options.indexOf("  $('#share-apply').addEventListener('click', () => {");
   const handler = options.slice(options.indexOf('{', start + 40) + 1, options.indexOf('  // ---- gallery, favorites and history')).replace(/\}\);\s*$/, '');
-  const saved = [], sets = [];
+  const saved = [], sets = [], asked = [], hints = [];
+  let active = false, history = 0;
   const controls = { '#share-code': { value: code }, '#share-offer': {}, '#share-what': { replaceChildren() {}, append() {} } };
   const context = vm.createContext({
     GZ_SHARE: S, GZ_XPARTS: X, GZ_PARTS: P, GZ_SANITIZE: D.GZ_SANITIZE, GZ_MATCH_PRESET: D.GZ_MATCH_PRESET, GZ_CARDS: K, GZ_FONTS: F, GZ_HISTORY: H,
     GZ_I18N: { ui: () => 'en', locale: () => 'en' }, s, offer: null, from: null, URL, Intl, pendingNav: new Set(),
     offerFile: '', offerGeneration: 0, letGo() {}, // WP-L2's pending offer file
     $: (id) => controls[id], document: { createElement: () => ({}) }, fontName: (f) => f.name, t: say,
-    endOffer() {}, hint() {}, preview() {}, fill() {}, cardsOp: (op) => sets.push(op), GZ_UI: { paint() {} }, save: (keys) => saved.push(keys),
+    endOffer() {}, hint: (...a) => hints.push(a), leaving: () => history++, GZ_SITE: { reach: (urls) => { asked.push([[...urls], active]); return Promise.resolve(answer(urls)); } }, preview() {}, fill() {}, cardsOp: (op) => sets.push(op), GZ_UI: { paint() {} }, save: (keys) => saved.push(keys),
   });
   await vm.runInContext(`${tryCode}\ntryCode();`, context);
   const offer = context.offer;
+  active = true;
   vm.runInContext(`(() => {${handler}})()`, context);
-  return { s, offer, saved: saved.flat(), sets };
+  active = false;
+  await tick();
+  return { s, offer, saved: saved.flat(), sets, asked, hints, context, history: () => history };
 };
 // A theme that sets something in every group a code can carry.
 const author = () => D.GZ_SANITIZE({
@@ -236,9 +240,8 @@ test('LOOK-3: the editor’s other changes of Look keep the Look left, too', () 
   assert.match(entry, /leaving\(\)/, 'wearing an entry from History');
   const reset = options.slice(options.indexOf("$('#reset-all').addEventListener"), options.indexOf('for (const button of $$(\'[data-reset-setting]\'))'));
   assert.match(reset, /leaving\(\)/, 'Reset everything');
-  const before = options.indexOf("$('#share-apply').addEventListener('click', () => leaving());"), apply = options.indexOf("$('#share-apply').addEventListener('click', () => {");
-  assert.ok(before > 0 && before < apply);
-  // "Use this theme" records before it applies: a listener ahead of the one that applies (whose text audit/navbarapply.js cuts out).
+  const apply = between(options, "  $('#share-apply').addEventListener('click', () => {", '  // ---- gallery, favorites and history');
+  assert.ok(apply.indexOf('leaving()') < apply.indexOf('s[k] = offer[k]') && apply.includes('const apply ='), 'permission must precede history and application');
 });
 
 // ---- LOOK-4: contrast, as the pages draw it ------------------------------------------------------------------------------
@@ -508,4 +511,33 @@ test('LOOK-13: Reset section takes the Look’s navigation layout, or its page t
   // The last of the Look’s extras: no parts at all.
   const last = run('look/rules', { x: { rules: full.x.rules } });
   assert.equal(last.s.parts, null);
+});
+
+
+test('review: applying a pasted Look asks for remote media in the click, and refusal changes neither Look nor history', async () => {
+  const src = 'https://media.example/rain.webm';
+  const code = await S.encode(D.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'video', src } } } });
+  for (const yes of [true, false]) {
+    const before = D.GZ_SANITIZE({ bg: { kind: 'solid' } });
+    const r = await use(code, before, () => yes);
+    assert.deepEqual(r.asked, [[[src], true]], 'host request starts in Apply click');
+    assert.equal(r.s.bg.kind, yes ? 'media' : 'solid');
+    assert.equal(r.history(), yes ? 1 : 0, 'refusal keeps history untouched');
+    assert.equal(r.saved.length > 0, yes);
+    if (!yes) assert.equal(r.hints.at(-1)[0], 'That link can’t be saved.');
+  }
+});
+
+test('review: a cancelled Look offer stays cancelled when its host permission answer arrives late', async () => {
+  let grant;
+  const code = await S.encode(D.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'video', src: 'https://media.example/rain.webm' } } } });
+  const r = await use(code, D.GZ_SANITIZE({ bg: { kind: 'solid' } }), () => new Promise((resolve) => { grant = resolve; }));
+  assert.equal(typeof grant, 'function');
+  r.context.offer = null;
+  r.context.offerGeneration++;
+  grant(true);
+  await tick();
+  assert.equal(r.s.bg.kind, 'solid');
+  assert.equal(r.saved.length, 0);
+  assert.equal(r.history(), 0);
 });

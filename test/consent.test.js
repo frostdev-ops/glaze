@@ -629,12 +629,12 @@ class Node {
   append(...n) { this.kids.push(...n); } appendChild(n) { this.kids.push(n); return n; } before() {} after() {} remove() { this.removed = true; }
   getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 }; } getClientRects() { return []; }
 }
-const ultraPage = ({ origin = 'https://evil.test', local = {}, frame = false, kind = 'ultra' } = {}) => {
+const ultraPage = ({ origin = 'https://evil.test', local = {}, frame = false, kind = 'ultra', localHeld = false } = {}) => {
   const sent = [], swept = [], fetched = [], writes = [], storeListeners = [];
   const html = new Node('html'); html.lang = 'en';
   const selector = kind === 'ultra' ? 'base[href*="/ultra/"]' : kind === 'moodle' ? 'meta[name="keywords"][content^="moodle,"]' : 'link[rel~="stylesheet"][href*="/dist/brandable_css/"]';
   const head = new Node('head'); head.querySelector = (sel) => (sel.includes(selector) ? { matches: (s) => s === selector } : null);
-  const body = new Node('body');
+  const body = new Node('body'); body.className = '';
   const document = { contentType: 'text/html', documentElement: html, head, body, readyState: 'interactive', hidden: false,
     querySelector: () => null, querySelectorAll: () => [], getElementById: () => null, getElementsByTagName: () => [],
     createElement: (t) => new Node(t), createElementNS: (_, t) => new Node(t), createTextNode: () => new Node('#text'),
@@ -653,7 +653,7 @@ const ultraPage = ({ origin = 'https://evil.test', local = {}, frame = false, ki
     performance: { now: () => 0 }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} }, innerHeight: 900, innerWidth: 1400,
     fetch: (url) => { fetched.push(String(url)); return Promise.resolve({ ok: true, url: origin, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: { get: () => null } }); },
     chrome: {
-      runtime: { id: ID, getURL: (p) => `chrome-extension://${ID}/${p}`, lastError: undefined, sendMessage: (m) => { sent.push(m); return Promise.resolve({ ok: false }); } },
+      runtime: { id: ID, getURL: (p) => `chrome-extension://${ID}/${p}`, lastError: undefined, sendMessage: (m) => { sent.push(m); return Promise.resolve(m?.type === 'glaze:local' ? localHeld : { ok: false }); } },
       storage: {
         sync: { get: (k, cb) => cb({}) },
         local: { get: (k, cb) => (cb ? cb(structuredClone(local)) : Promise.resolve(structuredClone(local))), set: (o, cb) => { writes.push(o); cb?.(); return Promise.resolve(); }, remove: (k, cb) => { cb?.(); return Promise.resolve(); } },
@@ -701,6 +701,24 @@ test('CORE-2: Ultra on Blackboard\'s own host, or on a site approved before, sta
     assert.ok(p.sheets().includes('theme.css'));
     assert.equal(p.swept.length, 1);
     assert.ok(!p.sent.includes('ultra'));
+  }
+});
+
+// A local Canvas or Moodle (http on localhost or 127.0.0.1) has content.js only where Glaze holds that host, and the worker
+// lets it through on that grant alone (lib/background.js approved): no list entry, as on the LMSs' own hosts. One rule,
+// the worker's held-grant policy, for both.
+test('a local Canvas or Moodle passes content.js\'s gate on its own host, as the worker\'s; Ultra there, or https, still waits', async () => {
+  for (const kind of ['canvas', 'moodle']) {
+    const p = ultraPage({ origin: 'http://localhost:8081', kind, localHeld: true });
+    await settle();
+    assert.ok(p.sent.some((m) => m?.type === 'glaze:local' && m.kind === kind), 'local startup asks the worker');
+    assert.ok(!p.sent.includes(kind), 'a held local site does not ask for school consent');
+  }
+  for (const [origin, kind] of [['http://localhost:8081', 'ultra'], ['https://localhost', 'moodle'], ['http://localhost.evil.test', 'moodle']]) {
+    const p = ultraPage({ origin, kind });
+    await settle();
+    assert.deepEqual(p.sheets(), [], `${origin} ${kind}`);
+    assert.ok(p.sent.includes(kind), `${origin} ${kind}: asks, as any unknown site does`);
   }
 });
 

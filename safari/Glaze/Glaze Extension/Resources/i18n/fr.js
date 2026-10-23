@@ -1,7 +1,8 @@
 // French for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).fr = {
-  "Activity Stream": "Flux d’activité",
+
+  "Redirected file: download it from Canvas": "Fichier redirigé : téléchargez-le depuis Canvas",  "Activity Stream": "Flux d’activité",
   "Timeline dates": "Dates de la chronologie",
   "Due dates when available": "Échéances si disponibles",
   "Posted dates": "Dates de publication",
@@ -3081,5 +3082,6 @@
   "No course site at {host}": "Aucun site de cours à {host}",
   "Can't reach {host}": "{host} est injoignable",
   "Checking {host}": "Vérification de {host}",
-  "Use Glaze on {host}": "Utiliser Glaze sur {host}"
+  "Use Glaze on {host}": "Utiliser Glaze sur {host}",
+  "Allow {host}": "Autoriser {host}"
 };

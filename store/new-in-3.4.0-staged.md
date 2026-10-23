@@ -10,8 +10,8 @@ Paste each block into the named listing. Keep both browser labels, including the
 
 NEW IN 3.4.0
 
-• Chrome: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed.
-• Firefox: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed.
+• Chrome: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
+• Firefox: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
 • Moodle on moodlecloud.com works from install.
 • Course tabs show a sketch of the course while it loads, instead of a picture of the page.
 
@@ -19,8 +19,8 @@ NEW IN 3.4.0
 
 NEU IN 3.4.0
 
-• Chrome: Glaze fordert bei der Installation Zugriff auf die LMS-Domains instructure.com, blackboard.com und moodlecloud.com sowie auf seine Galerie und seinen Freigabeserver an. Füge die Website deiner Schule über Glazes Schaltfläche in der Symbolleiste, den Tab bei der Installation oder Einstellungen › Websites hinzu. Alle herunterladen, Gradescope, Look-Medien und Netzwerkzugriffe von Mods fordern fehlende Zugriffsrechte bei Bedarf an.
-• Firefox: Glaze fordert bei der Installation Zugriff auf die LMS-Domains instructure.com, blackboard.com und moodlecloud.com sowie auf seine Galerie und seinen Freigabeserver an. Füge die Website deiner Schule über Glazes Schaltfläche in der Symbolleiste, den Tab bei der Installation oder Einstellungen › Websites hinzu. Alle herunterladen, Gradescope, Look-Medien und Netzwerkzugriffe von Mods fordern fehlende Zugriffsrechte bei Bedarf an.
+• Chrome: Glaze fordert bei der Installation Zugriff auf die LMS-Domains instructure.com, blackboard.com und moodlecloud.com sowie auf seine Galerie und seinen Freigabeserver an. Füge die Website deiner Schule über Glazes Schaltfläche in der Symbolleiste, den Tab bei der Installation oder Einstellungen › Websites hinzu. Alle herunterladen, Gradescope, Look-Medien und Netzwerkzugriffe von Mods fordern fehlende Zugriffsrechte bei Bedarf an. Weitergeleitete Dateien werden mit einer Fehlermeldung gestoppt; lade sie direkt in Canvas herunter.
+• Firefox: Glaze fordert bei der Installation Zugriff auf die LMS-Domains instructure.com, blackboard.com und moodlecloud.com sowie auf seine Galerie und seinen Freigabeserver an. Füge die Website deiner Schule über Glazes Schaltfläche in der Symbolleiste, den Tab bei der Installation oder Einstellungen › Websites hinzu. Alle herunterladen, Gradescope, Look-Medien und Netzwerkzugriffe von Mods fordern fehlende Zugriffsrechte bei Bedarf an. Weitergeleitete Dateien werden mit einer Fehlermeldung gestoppt; lade sie direkt in Canvas herunter.
 • Moodle auf moodlecloud.com funktioniert ab der Installation.
 • Kurs-Tabs zeigen beim Laden eine Skizze des Kurses statt eines Bildes der Seite.
 
@@ -28,8 +28,8 @@ NEU IN 3.4.0
 
 NOVEDADES DE 3.4.0
 
-• Chrome: Al instalarse, Glaze pide acceso a los dominios de las plataformas instructure.com, blackboard.com y moodlecloud.com, además de su galería y servidor de retransmisión. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña de instalación o Ajustes › Sitios. Descargar todo, Gradescope, los archivos multimedia de los Looks y las conexiones de red de los mods piden los permisos que falten cuando los necesitan.
-• Firefox: Al instalarse, Glaze pide acceso a los dominios de las plataformas instructure.com, blackboard.com y moodlecloud.com, además de su galería y servidor de retransmisión. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña de instalación o Ajustes › Sitios. Descargar todo, Gradescope, los archivos multimedia de los Looks y las conexiones de red de los mods piden los permisos que falten cuando los necesitan.
+• Chrome: Al instalarse, Glaze pide acceso a los dominios de las plataformas instructure.com, blackboard.com y moodlecloud.com, además de su galería y servidor de retransmisión. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña de instalación o Ajustes › Sitios. Descargar todo, Gradescope, los archivos multimedia de los Looks y las conexiones de red de los mods piden los permisos que falten cuando los necesitan. Los archivos redirigidos se detienen con un error que te pide descargarlos desde Canvas.
+• Firefox: Al instalarse, Glaze pide acceso a los dominios de las plataformas instructure.com, blackboard.com y moodlecloud.com, además de su galería y servidor de retransmisión. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña de instalación o Ajustes › Sitios. Descargar todo, Gradescope, los archivos multimedia de los Looks y las conexiones de red de los mods piden los permisos que falten cuando los necesitan. Los archivos redirigidos se detienen con un error que te pide descargarlos desde Canvas.
 • Moodle en moodlecloud.com funciona desde la instalación.
 • Las pestañas de cursos muestran un boceto del curso mientras carga, en lugar de una imagen de la página.
 
@@ -37,8 +37,8 @@ NOVEDADES DE 3.4.0
 
 NOUVEAUTÉS DE LA VERSION 3.4.0
 
-• Chrome : À l’installation, Glaze demande l’accès aux domaines des plateformes instructure.com, blackboard.com et moodlecloud.com, ainsi qu’à sa galerie et à son relais de partage. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet d’installation ou Réglages › Sites. Tout télécharger, Gradescope, les médias des Looks et les connexions réseau des mods demandent les autorisations manquantes au besoin.
-• Firefox : À l’installation, Glaze demande l’accès aux domaines des plateformes instructure.com, blackboard.com et moodlecloud.com, ainsi qu’à sa galerie et à son relais de partage. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet d’installation ou Réglages › Sites. Tout télécharger, Gradescope, les médias des Looks et les connexions réseau des mods demandent les autorisations manquantes au besoin.
+• Chrome : À l’installation, Glaze demande l’accès aux domaines des plateformes instructure.com, blackboard.com et moodlecloud.com, ainsi qu’à sa galerie et à son relais de partage. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet d’installation ou Réglages › Sites. Tout télécharger, Gradescope, les médias des Looks et les connexions réseau des mods demandent les autorisations manquantes au besoin. Les fichiers redirigés sont arrêtés avec une erreur vous invitant à les télécharger depuis Canvas.
+• Firefox : À l’installation, Glaze demande l’accès aux domaines des plateformes instructure.com, blackboard.com et moodlecloud.com, ainsi qu’à sa galerie et à son relais de partage. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet d’installation ou Réglages › Sites. Tout télécharger, Gradescope, les médias des Looks et les connexions réseau des mods demandent les autorisations manquantes au besoin. Les fichiers redirigés sont arrêtés avec une erreur vous invitant à les télécharger depuis Canvas.
 • Moodle sur moodlecloud.com fonctionne dès l’installation.
 • Les onglets de cours affichent une esquisse du cours pendant le chargement, au lieu d’une image de la page.
 
@@ -46,8 +46,8 @@ NOUVEAUTÉS DE LA VERSION 3.4.0
 
 NIEUW IN 3.4.0
 
-• Chrome: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten.
-• Firefox: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten.
+• Chrome: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten. Bij omgeleide bestanden verschijnt een foutmelding die je vraagt ze vanuit Canvas te downloaden.
+• Firefox: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten. Bij omgeleide bestanden verschijnt een foutmelding die je vraagt ze vanuit Canvas te downloaden.
 • Moodle op moodlecloud.com werkt vanaf de installatie.
 • Cursustabbladen tonen tijdens het laden een schets van de cursus in plaats van een afbeelding van de pagina.
 
@@ -55,7 +55,7 @@ NIEUW IN 3.4.0
 
 NOVO NA 3.4.0
 
-• Chrome: Na instalação, o Glaze pede acesso aos domínios das plataformas instructure.com, blackboard.com e moodlecloud.com, além da sua galeria e do seu servidor de compartilhamento. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba de instalação ou em Configurações › Sites. Baixar tudo, Gradescope, as mídias dos Looks e as conexões de rede dos mods pedem as permissões que faltam quando precisam delas.
-• Firefox: Na instalação, o Glaze pede acesso aos domínios das plataformas instructure.com, blackboard.com e moodlecloud.com, além da sua galeria e do seu servidor de compartilhamento. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba de instalação ou em Configurações › Sites. Baixar tudo, Gradescope, as mídias dos Looks e as conexões de rede dos mods pedem as permissões que faltam quando precisam delas.
+• Chrome: Na instalação, o Glaze pede acesso aos domínios das plataformas instructure.com, blackboard.com e moodlecloud.com, além da sua galeria e do seu servidor de compartilhamento. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba de instalação ou em Configurações › Sites. Baixar tudo, Gradescope, as mídias dos Looks e as conexões de rede dos mods pedem as permissões que faltam quando precisam delas. Os arquivos redirecionados são interrompidos com um erro que pede para baixá-los pelo Canvas.
+• Firefox: Na instalação, o Glaze pede acesso aos domínios das plataformas instructure.com, blackboard.com e moodlecloud.com, além da sua galeria e do seu servidor de compartilhamento. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba de instalação ou em Configurações › Sites. Baixar tudo, Gradescope, as mídias dos Looks e as conexões de rede dos mods pedem as permissões que faltam quando precisam delas. Os arquivos redirecionados são interrompidos com um erro que pede para baixá-los pelo Canvas.
 • Moodle em moodlecloud.com funciona desde a instalação.
 • As abas de cursos mostram um esboço do curso enquanto carregam, em vez de uma imagem da página.
