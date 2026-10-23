@@ -6,7 +6,7 @@ Dale otro estilo a Blackboard Ultra, Canvas y Moodle, con tu aspecto y navegaci�
 
 ## Detailed description
 
-Haz que Blackboard Ultra, Canvas y Moodle se sientan tuyos. Glaze da un nuevo estilo a tus cursos con paletas, fuentes, fondos y movimiento, y añade herramientas para planificar y estudiar justo donde haces tus trabajos del curso. Funciona en cualquier escuela que use Blackboard Ultra, Canvas o Moodle, incluso en el dominio propio de una escuela, una vez que lo permites. Sin cuenta ni analíticas. Tus cursos, calificaciones, notas y tareas se quedan en tu dispositivo; tus ajustes siguen la sincronización de tu navegador si está activada; compartir es opcional y va cifrado.
+Glaze da un nuevo estilo a tus cursos con paletas, fuentes, fondos y movimiento, y añade herramientas para planificar y estudiar justo donde haces tus trabajos del curso. Funciona en cualquier escuela que use Blackboard Ultra, Canvas o Moodle, incluso en el dominio propio de tu centro, cuando autorizas el acceso. Sin cuenta ni analíticas. Tus cursos, calificaciones, notas y tareas se quedan en tu dispositivo; tus ajustes siguen la sincronización de tu navegador si está activada; compartir es opcional y va cifrado.
 
 NOVEDADES DE 3.3.8
 
@@ -96,7 +96,7 @@ EN MOODLE
 
 EN TODAS PARTES
 
-Pulsa Ctrl+K (⌘K en Mac) para saltar a cursos, páginas, ajustes de Glaze y trabajo por entregar. Añade el dominio propio de una escuela desde el botón de Glaze en la barra de herramientas, la pestaña que Glaze abre al instalarse o Ajustes › Sitios: tu navegador pregunta una vez, y Glaze comprueba que es un sitio de cursos antes de guardarlo. Los ajustes enumeran esos sitios y pueden quitarlos. La ventana emergente mantiene a mano los controles rápidos. En Blackboard y Canvas, Lo que Glaze puede hacer enumera cada extra con su interruptor. Exporta e importa todos tus ajustes como archivo.
+Pulsa Ctrl+K (⌘K en Mac) para saltar a cursos, páginas, ajustes de Glaze y trabajo por entregar. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña que abre al instalarse o Ajustes › Sitios. La ventana emergente comprueba la página; las direcciones escritas se comprueban mediante las API del sitio después de que concedas acceso. Los ajustes enumeran esos sitios y pueden quitarlos. La ventana emergente mantiene a mano los controles rápidos. En Blackboard y Canvas, Lo que Glaze puede hacer enumera cada extra con su interruptor. Exporta e importa todos tus ajustes como archivo.
 
 Canvas en instructure.com, Ultra en blackboard.com y Moodle en moodlecloud.com son automáticos; las aprobaciones anteriores se conservan.
 

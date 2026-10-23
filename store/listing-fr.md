@@ -6,7 +6,7 @@ Changez le style de Blackboard Ultra, Canvas et Moodle, avec votre look et votre
 
 ## Detailed description
 
-Faites de Blackboard Ultra, Canvas et Moodle un espace à votre image. Glaze change le style de vos cours avec des palettes, des polices, des arrière-plans et des animations, et ajoute des outils pour planifier et étudier directement là où vous faites vos travaux de cours. Il fonctionne dans tous les établissements qui utilisent Blackboard Ultra, Canvas ou Moodle, y compris sur le domaine propre d’un établissement, une fois que vous l’autorisez. Ni compte ni outil d’analyse. Vos cours, vos résultats, vos notes personnelles et vos tâches restent sur votre appareil ; vos réglages suivent la synchronisation de votre navigateur si elle est activée ; le partage est facultatif et chiffré.
+Glaze change le style de vos cours avec des palettes, des polices, des arrière-plans et des animations, et ajoute des outils pour planifier et étudier directement là où vous faites vos travaux de cours. Il fonctionne dans tous les établissements qui utilisent Blackboard Ultra, Canvas ou Moodle, y compris sur le domaine propre d’un établissement, une fois que vous l’autorisez. Ni compte ni outil d’analyse. Vos cours, vos résultats, vos notes personnelles et vos tâches restent sur votre appareil ; vos réglages suivent la synchronisation de votre navigateur si elle est activée ; le partage est facultatif et chiffré.
 
 NOUVEAUTÉS DE LA VERSION 3.3.8
 
@@ -96,7 +96,7 @@ SUR MOODLE
 
 PARTOUT
 
-Appuyez sur Ctrl+K (⌘K sur Mac) pour aller à des cours, des pages, des réglages de Glaze et des travaux à rendre. Ajoutez le domaine propre d’un établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet que Glaze ouvre à l’installation ou Réglages › Sites : votre navigateur demande une fois, et Glaze vérifie qu’il s’agit d’un site de cours avant de le garder. Les réglages listent ces sites et peuvent les retirer. La fenêtre contextuelle garde les commandes rapides à portée de main. Sur Blackboard et Canvas, Ce que Glaze sait faire liste chaque extra avec son interrupteur. Exportez et importez tous vos réglages sous forme de fichier.
+Appuyez sur Ctrl+K (⌘K sur Mac) pour aller à des cours, des pages, des réglages de Glaze et des travaux à rendre. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet ouvert à l’installation ou Réglages › Sites. La fenêtre contextuelle vérifie la page ; les adresses saisies sont vérifiées via les API du site après votre autorisation. Les réglages listent ces sites et peuvent les retirer. La fenêtre contextuelle garde les commandes rapides à portée de main. Sur Blackboard et Canvas, Ce que Glaze sait faire liste chaque extra avec son interrupteur. Exportez et importez tous vos réglages sous forme de fichier.
 
 Canvas sur instructure.com, Ultra sur blackboard.com et Moodle sur moodlecloud.com sont automatiques ; les autorisations antérieures sont conservées.
 

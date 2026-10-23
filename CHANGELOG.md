@@ -8,7 +8,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- Chrome, Edge and Firefox: a tab on install for your school's own address. Glaze checks it's Blackboard, Canvas or Moodle before keeping it; anything else gets its access handed back, with up to two course sites nearby to pick instead. All sites gives Glaze every site at once, and Glaze then asks on each school's pages, as before.
+- Chrome, Edge and Firefox: a tab on install for your school's own address. Glaze checks it's Blackboard, Canvas or Moodle before keeping it. If no LMS answers, Glaze returns access granted by that attempt and offers up to two course sites nearby; access held beforehand stays. All sites gives Glaze every HTTPS site at once, and Glaze then asks on each new school's pages, as before.
 - Chrome, Edge and Firefox: Use Glaze on the site, in Glaze's toolbar popup on a school's own Blackboard, Canvas or Moodle page. On Chrome and Edge, Glaze's icon gets a dot on those pages.
 - Chrome, Edge and Firefox: Settings → Backup and privacy → Sites adds a site by its address, and a site granted in the browser's own extension menu is checked and taken the same way.
 - Moodle on moodlecloud.com works from install, like Canvas on instructure.com and Blackboard on blackboard.com.
@@ -16,7 +16,7 @@ All notable changes to Glaze are documented here. The format follows
 ### Changed
 
 - Chrome, Edge and Firefox: Glaze asks at install only for instructure.com, blackboard.com, moodlecloud.com, frostdev.io and its share relay, instead of every site. Installs from earlier versions keep the access they have. Safari is unchanged.
-- Removing a site in Settings → Sites also gives back the browser's access to it.
+- Removing a site in Settings → Sites also returns any browser grant for that exact site. All sites access stays.
 - Course tabs show a blurred stand-in drawn from a sketch of the course page while it loads, instead of a picture of the page. Glaze takes no screenshots.
 - Canvas's Download all asks for the school's file server the first time it's needed, Gradescope in To Do asks for gradescope.com when you turn it on, and a Look's picture, video or animation from another site, or a site a mod may reach, asks for that site when you add it.
 

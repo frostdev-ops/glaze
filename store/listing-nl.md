@@ -6,7 +6,7 @@ Geef Blackboard Ultra, Canvas en Moodle je eigen stijl en navigatie, plus een be
 
 ## Detailed description
 
-Maak Blackboard Ultra, Canvas en Moodle echt van jou. Glaze geeft je cursussen een nieuwe stijl met paletten, lettertypen, achtergronden en beweging, en voegt hulpmiddelen voor plannen en studeren toe precies waar je je cursuswerk doet. Het werkt op elke school die Blackboard Ultra, Canvas of Moodle gebruikt, ook op het eigen domein van een school, zodra je het toestaat. Geen account, geen analytics. Je cursussen, cijfers, notities en taken blijven op je apparaat; je instellingen volgen de synchronisatie van je browser als die aanstaat; delen is optioneel en versleuteld.
+Glaze geeft je cursussen een nieuwe stijl met paletten, lettertypen, achtergronden en beweging, en voegt hulpmiddelen voor plannen en studeren toe precies waar je je cursuswerk doet. Het werkt op elke school die Blackboard Ultra, Canvas of Moodle gebruikt, ook op het eigen domein van een school, zodra je het toestaat. Geen account, geen analytics. Je cursussen, cijfers, notities en taken blijven op je apparaat; je instellingen volgen de synchronisatie van je browser als die aanstaat; delen is optioneel en versleuteld.
 
 NIEUW IN 3.3.8
 
@@ -96,7 +96,7 @@ OP MOODLE
 
 OVERAL
 
-Druk op Ctrl+K (⌘K op een Mac) om naar cursussen, pagina's, Glaze-instellingen en werk met een deadline te springen. Voeg het eigen domein van een school toe via de knop van Glaze in de werkbalk, het tabblad dat Glaze bij installatie opent of Instellingen › Sites: je browser vraagt het één keer, en Glaze controleert of het een cursussite is voordat het die bewaart. De instellingen tonen die sites en kunnen ze verwijderen. De pop-up houdt snelle bediening binnen handbereik. Op Blackboard en Canvas toont Wat Glaze kan elke extra met de bijbehorende schakelaar. Exporteer en importeer al je instellingen als bestand.
+Druk op Ctrl+K (⌘K op een Mac) om naar cursussen, pagina's, Glaze-instellingen en werk met een deadline te springen. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het tabblad bij installatie of Instellingen › Sites. De pop-up controleert de pagina; ingetypte adressen worden via de API's van de site gecontroleerd nadat je toegang hebt gegeven. De instellingen tonen die sites en kunnen ze verwijderen. De pop-up houdt snelle bediening binnen handbereik. Op Blackboard en Canvas toont Wat Glaze kan elke extra met de bijbehorende schakelaar. Exporteer en importeer al je instellingen als bestand.
 
 Canvas op instructure.com, Ultra op blackboard.com en Moodle op moodlecloud.com werken automatisch; eerdere goedkeuringen blijven behouden.
 

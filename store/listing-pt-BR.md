@@ -6,7 +6,7 @@ Dê um novo visual ao Blackboard Ultra, Canvas e Moodle, com sua navegação, ma
 
 ## Detailed description
 
-Deixe o Blackboard Ultra, o Canvas e o Moodle com a sua cara. O Glaze dá um novo visual aos seus cursos com paletas, fontes, fundos e movimento, e traz ferramentas para planejar e estudar bem onde você faz seus trabalhos. Funciona em qualquer escola que use Blackboard Ultra, Canvas ou Moodle, inclusive em um domínio próprio da escola, depois que você o permite. Sem conta e sem análises de uso. Seus cursos, suas notas de avaliação, anotações e tarefas ficam no seu dispositivo; suas configurações acompanham a sincronização do navegador, se ela estiver ativada; compartilhar é opcional e criptografado.
+O Glaze dá um novo visual aos seus cursos com paletas, fontes, fundos e movimento, e traz ferramentas para planejar e estudar bem onde você faz seus trabalhos. Funciona em qualquer escola que use Blackboard Ultra, Canvas ou Moodle, inclusive no domínio próprio da sua escola, depois que você autoriza o acesso. Sem conta e sem análises de uso. Seus cursos, suas notas de avaliação, anotações e tarefas ficam no seu dispositivo; suas configurações acompanham a sincronização do navegador, se ela estiver ativada; compartilhar é opcional e criptografado.
 
 NOVO NA 3.3.8
 
@@ -96,7 +96,7 @@ NO MOODLE
 
 EM QUALQUER LUGAR
 
-Pressione Ctrl+K (⌘K no Mac) para ir direto a cursos, páginas, configurações do Glaze e trabalhos com prazo. Adicione o domínio próprio de uma escola pelo botão do Glaze na barra de ferramentas, pela aba que o Glaze abre ao ser instalado ou em Configurações › Sites: o navegador pergunta uma vez, e o Glaze verifica se é um site de cursos antes de guardá-lo. As configurações listam esses sites e podem removê-los. O pop-up mantém os controles rápidos à mão. No Blackboard e no Canvas, O que o Glaze faz lista cada extra com o respectivo interruptor. Exporte e importe todas as suas configurações como um arquivo.
+Pressione Ctrl+K (⌘K no Mac) para ir direto a cursos, páginas, configurações do Glaze e trabalhos com prazo. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba que ele abre ao ser instalado ou em Configurações › Sites. O pop-up verifica a página; os endereços digitados são verificados pelas APIs do site depois que você autoriza o acesso. As configurações listam esses sites e podem removê-los. O pop-up mantém os controles rápidos à mão. No Blackboard e no Canvas, O que o Glaze faz lista cada extra com o respectivo interruptor. Exporte e importe todas as suas configurações como um arquivo.
 
 Canvas em instructure.com, Ultra em blackboard.com e Moodle em moodlecloud.com são automáticos; as aprovações anteriores são mantidas.
 

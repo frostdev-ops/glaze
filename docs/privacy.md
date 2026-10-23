@@ -22,9 +22,10 @@ Glaze stores your settings in `chrome.storage.sync`, including the course nickna
 you set in a course's menu. These follow Chrome sync (or Firefox Sync) when it's on; Safari keeps them on this device only.
 
 Canvas on instructure.com, Blackboard on blackboard.com and Moodle on moodlecloud.com are automatic. A school's own
-site needs your yes first: on Chrome, Edge and Firefox the browser asks when you add it, and Glaze checks it's a course
-site before keeping it; with All sites, in Safari and on installs from before 3.4.0, Glaze asks on the page
-(**Use Glaze on example.edu?**) and registers, reads and records nothing from the site until you say Yes. **Settings →
+site needs your yes first: on Chrome, Edge and Firefox the popup checks the page, while an address added in the first-run
+tab or Settings is checked through the site's APIs after access is granted. Browser-menu grants are checked too; a failed
+check leaves that access unused. With All sites, in Safari and on installs from before 3.4.0, Glaze asks on unapproved
+course sites (**Use Glaze on example.edu?**) before theming them, reading their APIs or keeping course data. **Settings →
 Backup and privacy → Sites** lists your sites, with Remove, which also forgets the courses and due dates Glaze read there.
 See [Adding a school's own site](../PRIVACY.md#adding-a-schools-own-site).
 

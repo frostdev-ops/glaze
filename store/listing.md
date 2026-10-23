@@ -14,7 +14,7 @@ Productivity
 
 ## Detailed description
 
-Make Blackboard Ultra, Canvas and Moodle feel like yours. Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain once you allow it. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
+Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain once you allow it. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
 NEW IN 3.3.8
 
@@ -103,7 +103,7 @@ ON MOODLE
 
 EVERYWHERE
 
-Press Ctrl+K (⌘K on a Mac) to jump to courses, pages, Glaze settings and due work. Add a school's own domain from Glaze's toolbar button, the tab Glaze opens when installed, or Settings › Sites: your browser asks once, and Glaze checks it's a course site before keeping it. Settings lists those sites and can remove them. The popup keeps quick controls close. On Blackboard and Canvas, What Glaze can do lists every extra with its switch. Export and import all your settings as a file.
+Press Ctrl+K (⌘K on a Mac) to jump to courses, pages, Glaze settings and due work. Add your school's site from Glaze's toolbar button, the tab it opens at install, or Settings › Sites. The popup checks the page; typed addresses are checked through the site's APIs after you grant access. Settings lists those sites and can remove them. The popup keeps quick controls close. On Blackboard and Canvas, What Glaze can do lists every extra with its switch. Export and import all your settings as a file.
 
 Canvas on instructure.com, Ultra on blackboard.com and Moodle on moodlecloud.com are automatic; earlier approvals are kept.
 
@@ -135,7 +135,7 @@ Glaze customizes how Blackboard Ultra, Canvas and Moodle pages look and read, an
 
 ### storage
 
-Saves theme and extra settings in chrome.storage.sync, including user-set course nicknames, colors, tint and Looks; these follow Chrome sync when enabled. Local storage keeps course details, seen-grade and content records, the due list, Better To Do's own tasks and plans, the class schedule, reminder and streak state, widget layouts, hidden folders, supported draft backups, what-if scores and course positions, and the sites the user approved. Course tab sketches (a page's boxes and colours, no images) are kept only in chrome.storage.session (memory). Canvas badge records include site, account and course identifiers; some Ultra seen-grade/content records still use course ids without account scoping. Drafts expire after at most 14 days; switching backup off deletes them. Coursework records and draft text are not synced. See the privacy policy for each record's retention and removal behavior.
+Saves theme and extra settings in chrome.storage.sync, including user-set course nicknames, colors, tint and Looks; these follow Chrome sync when enabled. Local storage keeps course details, seen-grade and content records, the due list, Better To Do's own tasks and plans, the class schedule, reminder and streak state, widget layouts, hidden folders, supported draft backups, what-if scores and course positions, and the sites the user approved. Course tab sketches (boxes, colours and the course's name, with its page path) stay in page memory and chrome.storage.session (memory). Canvas badge records include site, account and course identifiers; some Ultra seen-grade/content records still use course ids without account scoping. Drafts expire after at most 14 days; switching backup off deletes them. Coursework records and draft text are not synced. See the privacy policy for each record's retention and removal behavior.
 
 ### unlimitedStorage
 
@@ -143,7 +143,7 @@ Notes, their pictures and attachments, course-card pictures and files kept for L
 
 ### Host access (1,000 character maximum)
 
-Glaze themes Blackboard Ultra, Canvas and Moodle and adds study tools. Required hosts are only their hosted domains (*.instructure.com, *.blackboard.com, *.moodlecloud.com) and Glaze's gallery and share relay (frostdev.io, share.frostdev.io). A school's own LMS domain is added one site at a time with chrome.permissions.request, after the user clicks Use Glaze on the site in the popup, or Allow on the first-run page or in Settings; Glaze checks it is Blackboard, Canvas or Moodle and hands the grant back if not. https://*/* is optional only, for this and for All sites on the first-run page, after which Glaze asks the user first on each new school's pages. Other optional hosts are asked for when a feature needs them: a file server for Canvas Download all, Gradescope, a Look's media host, a mod's granted host, a custom share relay. On allowed sites Glaze reads with the user's session and writes only on their click (planner ticks, Canvas nicknames and colors, Sign out, Moodle's Edit mode).
+Glaze themes Blackboard Ultra, Canvas and Moodle. Required hosts: *.instructure.com, *.blackboard.com, *.moodlecloud.com, frostdev.io (gallery) and share.frostdev.io (share relay). https://*/* is optional: the popup checks the page before offering Use Glaze on the site; the first-run and Settings address fields check LMS APIs after the user grants access, returning only a new grant if no LMS answers. Browser-menu grants are checked too; failed checks leave that access unused. All sites grants every HTTPS site; Glaze then asks the user first on each new school's pages. Other optional hosts are requested as needed: Canvas Download all file servers, Gradescope, Look media, mod network hosts and custom share relays. Local testing uses optional http://localhost/* and http://127.0.0.1/*. On allowed school sites Glaze reads with the user's session and writes only on their click (planner ticks, Canvas nicknames and colors, Sign out, Moodle's Edit mode).
 
 ### activeTab
 
