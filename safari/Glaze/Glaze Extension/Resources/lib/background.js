@@ -64,15 +64,6 @@ const approved = async (kind, u) => {
   return Array.isArray(list) && list.includes(siteKey(kind, u));
 };
 const canvasSite = (u) => approved('canvas', u);
-// Only local pages need this startup policy; regular HTTPS first scripts carry none of it.
-chrome.runtime.onMessage.addListener((m, s, reply) => {
-  if (m?.type !== 'glaze:local') return;
-  let u;
-  try { u = new URL(s.url); } catch { reply(false); return; }
-  if (s.id !== chrome.runtime.id || !GZ_LOCAL_DEV(m.kind, u)) { reply(false); return; }
-  approved(m.kind, u).then(reply, () => reply(false));
-  return true;
-});
 const fromCanvas = async (s) => {
   if (s.id !== chrome.runtime.id || !s.tab) return null;
   let u;
@@ -1519,6 +1510,15 @@ const siteAt = (origin) => { const s = typeof origin === 'string' ? GZ_SITE.addr
 const siteFor = (pattern) => { const s = typeof pattern === 'string' && /^https?:\/\/[^/*]+\/\*$/.test(pattern) ? GZ_SITE.address(pattern.slice(0, -1)) : null; return s?.pattern === pattern ? s : null; };
 const holdsSite = (site) => chrome.runtime.getManifest().host_permissions?.includes('<all_urls>') || granted(site.pattern);
 const listedAs = async (u) => { const got = await chrome.storage.local.get(LMS); return LMS.find((k) => Array.isArray(got[k]) && got[k].includes(siteKey(k, u))) || null; };
+// Only local pages need this startup policy; regular HTTPS first scripts carry none of it.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:local') return;
+  let u;
+  try { u = new URL(s.url); } catch { reply(false); return; }
+  if (s.id !== chrome.runtime.id || !GZ_LOCAL_DEV(m.kind, u)) { reply(false); return; }
+  approved(m.kind, u).then(reply, () => reply(false));
+  return true;
+});
 const ADDERS = ['popup.html', 'features/welcome.html', 'options.html'];
 const fromAdder = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ADDERS.some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p))
   && extensionOrigin(s) && (!s.tab || s.frameId === 0);

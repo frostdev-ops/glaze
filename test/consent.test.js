@@ -706,7 +706,7 @@ test('CORE-2: Ultra on Blackboard\'s own host, or on a site approved before, sta
 
 // A local Canvas or Moodle (http on localhost or 127.0.0.1) has content.js only where Glaze holds that host, and the worker
 // lets it through on that grant alone (lib/background.js approved): no list entry, as on the LMSs' own hosts. One rule,
-// defaults.js GZ_LOCAL_DEV, for both.
+// the worker's held-grant policy, for both.
 test('a local Canvas or Moodle passes content.js\'s gate on its own host, as the worker\'s; Ultra there, or https, still waits', async () => {
   for (const kind of ['canvas', 'moodle']) {
     const p = ultraPage({ origin: 'http://localhost:8081', kind, localHeld: true });
