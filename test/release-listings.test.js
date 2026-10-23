@@ -84,7 +84,7 @@ test('English App Store text is the copy live on the store, not a new one', asyn
   assert.equal(apple.keywords, 'blackboard,canvas,moodle,dark mode,themes,student,grades,notes,planner,study,safari,extension');
 });
 
-test('a bullet labelled with a browser goes only to that browser\'s store', async () => {
+test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listing', async () => {
   const { readListings } = await load();
   const de = real('store/listing-de.md'), fr = real('store/listing-fr.md');
   const block = (text, heading, bullets) => text.replace(`${heading}\n\n`, `${heading}\n\n${bullets}\n`);
@@ -94,6 +94,7 @@ test('a bullet labelled with a browser goes only to that browser\'s store', asyn
   }), version);
   const { firefox, apple, chrome } = listings.de;
   assert.ok(chrome.description.includes('• Chrome: nur Chrome.'), 'Chrome text is the listing exactly');
+  assert.ok(chrome.description.includes('• Firefox: nur Firefox.') && chrome.description.includes('• Safari: nur Safari.'), 'the Chrome paste kit retains the other browser labels too');
   assert.ok(firefox.notes.includes('nur Firefox') && !firefox.notes.includes('nur Chrome') && !firefox.notes.includes('nur Safari'));
   assert.ok(apple.whatsNew.includes('nur Safari') && !apple.whatsNew.includes('nur Chrome') && !apple.whatsNew.includes('nur Firefox'));
   assert.ok(firefox.notes.includes('Frostdev') && apple.whatsNew.includes('Frostdev'), 'unlabelled bullets go everywhere');
