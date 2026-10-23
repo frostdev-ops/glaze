@@ -132,8 +132,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     const store = (s, local) => opts.evaluate(async ([s, local]) => {
       await chrome.storage.sync.clear();
       await chrome.storage.sync.set(s);
-      if (local) { await chrome.storage.local.clear(); await chrome.storage.local.set(local); }
-      await chrome.storage.local.set({ ultra: ['https://bb.school.test'] });
+      if (local) { await chrome.storage.local.clear(); await chrome.storage.local.set({ ultra: ['https://bb.school.test'], ...local }); } else await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); // the student's yes to this Ultra site
     }, [s, local]);
     const layout = () => opts.evaluate(() => chrome.storage.local.get('widgetLayout').then((r) => r.widgetLayout));
     const page = await ctx.newPage();

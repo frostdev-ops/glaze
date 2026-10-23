@@ -20,7 +20,7 @@ const worker = (execute = (o) => Promise.resolve([{ result: /typeof GZ_I18N|wind
   const none = { addListener() {} };
   const area = { get: (k) => Promise.resolve(Object.fromEntries([].concat(k ?? []).filter((x) => x in local).map((x) => [x, local[x]]))), set: () => Promise.resolve() };
   const context = vm.createContext({
-    URL, console, setTimeout, clearTimeout, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN,
+    URL, console, setTimeout, clearTimeout, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, GZ_GCAL: { ON: false },
     importScripts: (file) => vm.runInContext(read(path.join('lib', file)), context),
     chrome: {
       runtime: {
@@ -48,6 +48,15 @@ test('an allowlisted file runs in the asking frame only, and the reply waits for
   assert.deepEqual(w.injected, [{ target: { tabId: 7, frameIds: [3] }, files: ['lib/zip.js'], injectImmediately: true }]);
   assert.deepEqual(await w.send({ type: 'glaze:load', files: ['i18n/de.js'] }, tab(0)), { ok: true });
   assert.deepEqual(w.injected[1].target, { tabId: 7, frameIds: [0] });
+});
+
+test('both Activity Stream modules load through the real worker handler on an approved Ultra page', async () => {
+  const w = worker(undefined, undefined, { ultra: ['https://bb.school.test'] });
+  const sender = { ...tab(0), url: 'https://bb.school.test/ultra/stream', documentId: 'STREAM-DOC' };
+  for (const file of ['features/stream.js', 'lib/stream.js']) {
+    assert.deepEqual(await w.send({ type: 'glaze:load', files: [file] }, sender), { ok: true });
+    assert.deepEqual(w.injected.at(-1), { target: { tabId: 7, documentIds: ['STREAM-DOC'] }, files: [file], injectImmediately: true });
+  }
 });
 
 test('a Canvas page found by the detector gets Glaze in that page, not whatever its tab has gone on to', async () => {

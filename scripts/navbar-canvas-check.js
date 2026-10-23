@@ -104,6 +104,7 @@ const api = async (route, method = 'GET', form) => {
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...chromeLaunch, headless: true, viewport: { width: 1440, height: 1000 }, locale: 'en-US', args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
     opts = await ctx.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
+    await opts.evaluate((o) => chrome.storage.local.set({ canvas: [`${o}/*`] }), local); // the student's yes to this Canvas site
     page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
     page.on('response', (r) => { if (r.url().startsWith(local + '/api/v1/') || r.url() === local + '/help_links') apiResults.push({ path: new URL(r.url()).pathname, status: r.status() }); });
     await page.goto(`chrome-extension://${extensionId(ext)}/preview.html?site=canvas`);

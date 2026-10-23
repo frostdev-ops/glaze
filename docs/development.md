@@ -29,8 +29,12 @@ preferences immediately; Blackboard's notification delivery settings are unchang
 
 The feature loads only on `/ultra/stream` routes. It reads the rendered deadline metadata,
 keeps Blackboard's original timestamp nodes, and restores the native display when disabled.
-`node --test test/stream.test.js` checks the date policy; `scripts/stream-check.js` checks
-redraws, settings persistence/failure, form isolation, narrow layouts and teardown.
+The settings section also selects an Activity Stream preview. `node --test test/stream.test.js`
+checks the date policy; `scripts/stream-check.js` checks automatic redraws, delayed saves,
+form isolation, accessible dates, narrow layouts and teardown. `scripts/stream-runtime-check.js`
+loads the real unpacked extension on a synthetic Ultra page and checks the worker allowlist,
+closed-root keyboard focus, storage notifications and all four editor preview controls.
+Both browser checks accept an optional evidence directory and use the shared browser lock.
 
 ## Building
 

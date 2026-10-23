@@ -11,6 +11,15 @@
   const samples = (s) => {
     for (const [kind, on] of [['widget', s.enhance.widgets], ['notes', s.enhance.notes], ['todo', s.enhance.todo]]) for (const tile of document.querySelectorAll(`[data-preview-${kind}]`)) tile.hidden = !on;
     for (const timer of document.querySelectorAll('[data-preview-timer]')) timer.textContent = GZ_WIDGETS.clock(s.widgets.work * 60000);
+    const due = document.querySelector('[data-preview-stream-due]');
+    if (due) {
+      const at = new Date(); at.setDate(at.getDate() + 2); at.setHours(23, 59, 0, 0);
+      const datetime = at.toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit', hour: 'numeric', minute: '2-digit' });
+      const timezone = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(at).find((p) => p.type === 'timeZoneName').value;
+      const values = JSON.stringify({ datetime, timezone }), text = `Due Date: ${datetime} (${timezone})`;
+      if (due.getAttribute('translate-values') !== values) due.setAttribute('translate-values', values);
+      if (due.textContent !== text) due.textContent = text;
+    }
   };
   const applyContext = () => {
     html.dataset.previewSite = site; html.dataset.previewViewport = context.viewport;
@@ -28,7 +37,7 @@
     if (e.origin !== location.origin || e.source !== parent || !e.data?.gzPreviewContext) return;
     const next = e.data.gzPreviewContext;
     if (next.site !== site) return;
-    context = { site, page: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'].includes(next.page) ? next.page : 'courses', viewport: next.viewport === 'phone' ? 'phone' : 'desktop' };
+    context = { site, page: ['courses', 'outline', 'dashboard', 'tabs', 'stream', 'document', 'quiz'].includes(next.page) ? next.page : 'courses', viewport: next.viewport === 'phone' ? 'phone' : 'desktop' };
     applyContext();
     if (site === 'moodle') { document.body.className = ['outline', 'tabs'].includes(context.page) ? 'pagelayout-course course-5' : 'pagelayout-mydashboard'; globalThis.GZ_NAVBAR_UI?.sync(); }
     if (site === 'canvas') globalThis.GZ_CTABS?.sync(settings.enabled && settings.enhance.tabs && context.page === 'tabs');
@@ -43,7 +52,7 @@
   });
   if (site === 'ultra') {
     // features/lookx.js shows the pointer worn (the student's, or the Look's), so hovering the preview uses it.
-    for (const file of ['content-ultra.js', 'content.js', 'features/coursetabs.js', 'features/cards.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-widgets.js', 'features/navbar.js', 'lib/lookx.js', 'features/lookx.js', 'features/rules.js', 'lib/motionx.js', 'features/motionx.js']) await load(file);
+    for (const file of ['content-ultra.js', 'content.js', 'lib/stream.js', 'features/stream.js', 'features/coursetabs.js', 'features/cards.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-widgets.js', 'features/navbar.js', 'lib/lookx.js', 'features/lookx.js', 'features/rules.js', 'lib/motionx.js', 'features/motionx.js']) await load(file);
     // The mock supplies the phone drawer shell; the actual rail code still owns labels, shrink and hover expansion.
     const menu = document.querySelector('#preview-menu'), drawer = document.querySelector('.MuiDrawer-root');
     const close = () => { html.removeAttribute('data-preview-nav-open'); drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); menu.setAttribute('aria-expanded', 'false'); menu.focus(); };
