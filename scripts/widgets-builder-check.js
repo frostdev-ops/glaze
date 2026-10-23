@@ -13,6 +13,7 @@ const { createHash, X509Certificate } = require('node:crypto');
 const ext = fs.realpathSync(path.resolve(process.env.EXT || path.join(__dirname, '..')));
 const chrome = require('./check-env.js').chromePath() || chromium.executablePath();
 const M = require(path.join(ext, 'lib/modbundle.js'));
+const W = require(path.join(ext, 'lib/widgets.js'));
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 12000) => {
   const end = Date.now() + ms;
@@ -246,7 +247,10 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
 
     // =============================== the page ===============================
     // The tile is placed on the floating surface the way "Float over every page" does.
-    const layout = { boards: { pages: [{ id: `m${mid.slice(0, 14)}0`, on: true, size: 'm' }] } };
+    // Store the complete layout the board saves, including its mod tile catalogue. The fresh staged profile's worker
+    // normalizes old/incomplete layouts before page-side declarations arrive; boards alone cannot declare a mod tile.
+    const layout = W.layout({ boards: { pages: [{ id: `m${mid.slice(0, 14)}0`, on: true, size: 'm' }] } },
+      { [`m${mid.slice(0, 14)}0`]: { size: 'm' } });
     await sw.evaluate((l) => chrome.storage.local.set({ widgetLayout: l }), layout);
     const record = (await local(`mod:${mid}`))[`mod:${mid}`];
     const trust = (await local(`modTrust:${mid}`))[`modTrust:${mid}`];
