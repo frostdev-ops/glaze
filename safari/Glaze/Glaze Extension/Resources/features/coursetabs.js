@@ -1670,10 +1670,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   let navWatch = null;
   // In a Canvas tab's frame: the room Glaze's bar takes on the page around (its words there, and the window's width),
-  // which this frame, filling the window under the bar, keeps too (canvas.css).
+  // which this frame, filling the window under the bar, keeps too (canvas.css). An Ultra tab's frame starts where that room
+  // ends, past the rail's gutter: the floating bars in it start at its edge (coursetabs.css --gz-float-start).
   const navRoom = () => {
-    if (!framed || ctx.site !== 'canvas') return;
+    if (!framed) return;
     let s = null; try { s = parent.getComputedStyle(parent.document.documentElement); } catch { return; }
+    if (ctx.site !== 'canvas') {
+      const v = parseFloat(s.getPropertyValue('--gz-navbar-left')) > 0 ? '0px' : '';
+      if (html.style.getPropertyValue('--gz-float-start') !== v) { if (v) html.style.setProperty('--gz-float-start', v); else html.style.removeProperty('--gz-float-start'); }
+      return;
+    }
     for (const k of ['--gz-navbar-left', '--gz-navbar-top']) {
       const v = s.getPropertyValue(k).trim();
       if (html.style.getPropertyValue(k) !== v) { if (v) html.style.setProperty(k, v); else html.style.removeProperty(k); }

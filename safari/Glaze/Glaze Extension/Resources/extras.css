@@ -553,7 +553,7 @@ html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a
 html[data-gz-ctabs] div.bb-course-navigation { height: auto !important; max-height: none !important; }
 html[data-gz-ctabs~="above"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
 html[data-gz-ctabs~="below"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h) !important; }
-html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) div:has(> .js-course-navigation) { margin-top: var(--gz-ctabs-h) !important; }
+html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) div:has(> .js-course-navigation) { margin-top: calc(var(--gz-ctabs-h) + var(--gz-float-gap, 12px)) !important; }
 html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
 /* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. */
 html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }

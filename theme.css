@@ -235,7 +235,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    The course header is a JSS-hashed <header> inside Ultra's course-page-header element, painted
    #262626 in every palette until 2.0. The #site-wrap-scoped selectors outrank the "*-header"
    catch-all further down, which used to paint these opaque and hide the blur. ---- */
-#site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header, .bb-course-navigation [class*="makeStylestoolbar"] {
+#site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"]:not(.bb-course-navigation *) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
   border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important;
@@ -245,6 +245,33 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 #site-wrap .base-header-tools { background: transparent !important; border: 0 !important; backdrop-filter: none; }
 /* The course header's toolbar is inset 16px inside it: a second glass box there showed square edges. */
 .bb-course-navigation course-page-header > header [class*="makeStylestoolbar"] { background: transparent !important; border: 0 !important; backdrop-filter: none; }
+/* The course's header and its tools row: one glass panel under the strip, inset as it is (features/coursetabs.css), the
+   current tool's underline kept and no rule between the rows. The bar's own box stays clear, so the background shows
+   around them; its top gap is the strip's when the strip is above. */
+html:not([data-gz-ctabs~="above"]) div.bb-course-navigation { padding-top: var(--gz-float-gap, 12px) !important; }
+.bb-course-navigation course-page-header > header, .bb-course-navigation bb-course-navigation > [class*="makeStylestoolbar"] {
+  box-sizing: border-box; width: auto !important; margin-inline: var(--gz-float-start, 12px) var(--gz-float-end, 12px) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: var(--gz-rest-shadow) !important;
+}
+.bb-course-navigation course-page-header > header { border-bottom: 0 !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important; }
+html[data-gz-ctabs~="above"] .bb-course-navigation course-page-header > header { margin-top: var(--gz-float-gap, 12px); }
+.bb-course-navigation bb-course-navigation > [class*="makeStylestoolbar"] { border-top: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
+/* The strip between the rows: each row a panel of its own. */
+html[data-gz-ctabs~="between"] .bb-course-navigation course-page-header > header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
+html[data-gz-ctabs~="between"] .bb-course-navigation bb-course-navigation > [class*="makeStylestoolbar"] { margin-top: var(--gz-float-gap, 12px); border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
+/* A backing keeps scrolled content out of the gaps. With scroll timelines it fades in over the first 48px;
+   older engines keep the backing visible, without another blur or scroll listener. */
+div.bb-course-navigation::before {
+  content: ""; position: absolute; z-index: -1; inset: 0 0 calc(var(--gz-float-gap, 12px) * -1); pointer-events: none;
+  background: var(--gz-surface-grain, none), var(--gz-surface-paint-2, var(--gz-surface-2)); mask-image: linear-gradient(#000 calc(100% - var(--gz-float-gap, 12px)), transparent);
+}
+@supports (animation-timeline: scroll()) {
+  div.bb-course-navigation::before {
+    opacity: 0; animation: gz-bar-veil linear both; animation-timeline: scroll(); animation-range: 0 48px;
+  }
+}
+@keyframes gz-bar-veil { to { opacity: 1; } }
 /* The outline's "Course Content" header is a box inside the content column, not a page header. */
 #site-wrap header.outline-header { box-sizing: border-box; padding-inline: 1rem !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
 
@@ -490,6 +517,16 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 
 /* Announcements (and other sortable tables): the search/guidance bar and read rows are white. */
 #site-wrap .guidance-wrapper { background: var(--gz-ground) !important; color: var(--gz-ink) !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: none !important; }
+/* A course tool's list toolbar (Announcements' count and search, Messages' New Message) is no band across the page: no
+   fill, no rule under it, and each control a pill on the background. */
+.course-announcement-layer > .guidance-wrapper, #site-wrap .course-announcement-layer > .guidance-wrapper, .messages-header, .messages-header > .summary { background: transparent !important; border-bottom: 0 !important; box-shadow: none !important; }
+:is(.course-announcement-layer > .guidance-wrapper > span, .course-announcement-layer > .guidance-wrapper #search-button, .messages-header .send-message-button) {
+  display: inline-flex; align-items: center; box-sizing: border-box; min-height: 32px; padding: 4px 12px !important; border-radius: 999px !important; color: var(--gz-ink) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: var(--gz-rest-shadow) !important;
+}
+.course-announcement-layer > .guidance-wrapper #search-button { justify-content: center; width: 36px; height: 36px; padding: 0 !important; }
+:is(.course-announcement-layer > .guidance-wrapper #search-button, .messages-header .send-message-button):hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-hi, var(--gz-accent)) 15%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 #site-wrap .guidance-wrapper input { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 #site-wrap table tr, #site-wrap table td { background: transparent !important; }
 #site-wrap table td { transition: background var(--gz-t) var(--gz-ease); }
@@ -1344,7 +1381,7 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] #main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }
   html[data-gz-navbar] #main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }
   /* A course, and a page Ultra routes in its place (an assignment's details and attempts, a document opened on its own). */
-  html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
+  html[data-gz-navbar] > body > .routed-page.bb-offcanvas-container, html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
   /* A course whose panel holds its section (.course-content-container > .panel-wrap > section.course, as in
      test/fixtures/ultra-course.html), and the item panels opened over it: absolute over the page, so nothing above moves
      them and the rail covered their first 40px. Not inside a course section that rule already keeps clear: twice the room. */

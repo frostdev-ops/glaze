@@ -41,6 +41,8 @@ For Ultra background clipping, run `NODE_PATH=/path/to/node_modules nice -n 15 n
 
 `scripts/ctab-background-check.js` opens a course tab over an animated background and checks that the frame draws none of its own: inside the frame's box the page's background shows unchanged, and the page's own tab strip doesn't show through. `EXT=<checkout>` runs it against other code.
 
+`scripts/ctab-strip-glass-check.js` checks computed strip, course-header and Announcements-pill styles across every built-in Look, placements, phone width, RTL and forced colors. Its header includes Ultra's hashed class; its frame has no base page or native nav. It also tests the scroll backing with the timeline support block disabled: older engines keep a static backing, while supporting engines fade it in over 48px. Run with `NODE_PATH=/path/to/node_modules nice node scripts/ctab-strip-glass-check.js /path/to/evidence`, holding the shared browser lock externally. It uses a temporary headless profile, accepts `EXT=<checkout>`, and writes screenshots and `results.json`; it does not verify a signed-in LMS or Safari.
+
 `scripts/navbar-check.js` checks Glaze's own navigation bar in the editor's Ultra preview: the drawer it stands in for,
 the room it keeps, items, badges and the current page, the icons rail's tooltips, peek and keyboard, right-to-left, the
 phone bar and its More sheet, and turning it off. Run it with the same `NODE_PATH` setup and an optional screenshots
