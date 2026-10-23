@@ -450,7 +450,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       e.preventDefault();
       e.stopImmediatePropagation();
       const from = location.href;
-      document.startViewTransition(async () => {
+      const vt = document.startViewTransition(async () => {
         replaying = true;
         link.click();
         replaying = false;
@@ -459,6 +459,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         // on the element rather than switched on <html>, so it can't restart when the mark goes.
         for (const el of document.querySelectorAll('.route-view-container, .panel-wrap')) el.setAttribute('data-gz-held', '');
       });
+      // A resize can abort it: handled.
+      for (const p of [vt.ready, vt.finished]) p.catch(() => {});
     }, true);
   }
 

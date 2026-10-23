@@ -211,8 +211,24 @@ const animations = (events) => {
         let during = false;
         if (document.startViewTransition) { await M.swap(() => { during = h.hasAttribute('data-gz-swap'); }); await wait(700); }
         result.swap = { vt: !!document.startViewTransition, during, after: h.hasAttribute('data-gz-swap') };
+        // An abandoned crossfade (skipped here; a resize does the same): the change lands once, the marker clears, and
+        // nothing reaches the page as an error (the page's pageerror listener above fails the run).
+        if (document.startViewTransition) {
+          const real = document.startViewTransition.bind(document);
+          let t = null, ran = 0;
+          document.startViewTransition = (u) => (t = real(u));
+          const going = M.swap(() => { ran++; });
+          document.startViewTransition = real;
+          t?.skipTransition();
+          await going; await wait(300);
+          result.abort = { started: !!t, ran, marker: h.hasAttribute('data-gz-swap') };
+        }
         return result;
       });
+      // A resize in the middle of a crossfade (the browser may abort it): no page errors either.
+      await page.evaluate(() => { globalThis.GZ_MOTION?.swap(() => document.documentElement.style.setProperty('--gz-probe', '1')); });
+      await page.waitForTimeout(50); await page.setViewportSize({ width: 900, height: 700 }); await page.waitForTimeout(500);
+      await page.setViewportSize({ width: 1280, height: 850 }); await page.waitForTimeout(300);
       await cdp2.send('Tracing.end'); await done2;
       const l = ui.lib;
       if (l.missing) problems.push(`${site}: lib/motion.js is not on the preview`);
@@ -222,6 +238,7 @@ const animations = (events) => {
         if (!l.inertWhileGoing || !l.exited) problems.push(`${site}: an exit should be inert while it goes, then removed`);
         if (l.off.animated || l.off.exitMs > 50 || !l.off.removed) problems.push(`${site}: at Off nothing may move (${JSON.stringify(l.off)})`);
         if (l.swap.vt && (!l.swap.during || l.swap.after)) problems.push(`${site}: swap should crossfade and clear its marker (${JSON.stringify(l.swap)})`);
+        if (l.abort && (!l.abort.started || l.abort.ran !== 1 || l.abort.marker)) problems.push(`${site}: an abandoned crossfade should still land once and clear its marker (${JSON.stringify(l.abort)})`);
       }
       ui.animations = {};
       for (const a of animations(events2)) {

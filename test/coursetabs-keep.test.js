@@ -242,17 +242,18 @@ test('the page-transition click handler leaves Ultra\'s own Sign Out to the page
   const ultra = read('content-ultra.js');
   const block = part('  if (solo && document.startViewTransition) {', '  // ---- course colors and tint', ultra);
   for (const [href, held] of [['/ultra/stream', true], ['#', false], ['#help', false], ['', false], ['/webapps/login/?action=logout', false], ['/ultra/logout', false], ['/ultra/courses/_7_1/outline?title=logout-policy', true]]) {
-    let listener, transitions = 0;
+    let listener, transitions = 0, handled = 0;
     class Element {}
     const link = Object.assign(new Element(), { matches: () => false, getAttribute: (k) => (k === 'href' ? href : null), click() {} });
     const target = Object.assign(new Element(), { closest: () => link });
     vm.runInNewContext(block, { solo: true, I: { observer: {} }, Element, html: { getAttribute: () => null, hasAttribute: () => false }, location: { href: 'https://bb.test/ultra/course' },
-      document: { startViewTransition: () => { transitions++; }, addEventListener: (type, fn, capture) => { if (type === 'click' && capture) listener = fn; } } });
+      document: { startViewTransition: () => { transitions++; const p = { catch: () => { handled++; } }; return { ready: p, finished: p }; }, addEventListener: (type, fn, capture) => { if (type === 'click' && capture) listener = fn; } } });
     const e = { target, button: 0, defaultPrevented: false, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.stopped = true; } };
     listener(e);
     assert.equal(e.prevented, held, href);
     assert.equal(e.stopped, held, `${href}: later capture listeners (course tabs' onLeave) see the trusted click`);
     assert.equal(transitions, held ? 1 : 0, href);
+    assert.equal(handled, held ? 2 : 0, `${href}: an aborted transition (a resize) rejects ready and finished, handled so the page sees no error`);
   }
 });
 
