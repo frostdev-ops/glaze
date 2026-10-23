@@ -144,58 +144,68 @@ void main() {
 }`;
 
 // Living topography, the frostdev.io splash terrain seen from above: fbm height under a slow two-octave domain warp, cut
-// into eight terraces in its own palette, deep pits to pale plateaus. Each plate carries a pale rim on its cut edge and
-// casts a narrow shadow onto the one below (a second height sample toward the light), and the terrain rises toward the
-// screen's edges so the reading area sits over the dark basin, misted toward the ground. A faint indigo glow drifts round
-// every 45 s. Its time starts 24 s in, the source's own still: motion off shows that frame. uShift is the pointer's
-// parallax, in screen units (lib/scene.js eases it).
+// into ten terraces of cut paper, a deep navy basin rising through cobalt and cyan to luminous ice. Light comes from the
+// top left: each plate's cut edge is lit where it faces it, and each plate drops a soft blue shadow onto the one below
+// (height sampled toward the light). The terrain rises toward the screen's edges so the reading area sits over the basin,
+// misted toward the ground. A faint indigo glow drifts round every 45 s. Its time starts 24 s in, the source's own still:
+// motion off shows that frame. uShift is the pointer's parallax, in screen units (lib/scene.js eases it).
 const TOPOGRAPHY = `${FLAT}
 uniform float uDim;
 uniform vec2 uShift;
+const float LV = 10.;
 vec3 tier(float i) {
-  vec3 c = vec3(.039, .086, .149);
-  c = mix(c, vec3(.071, .231, .4), step(.5, i));
-  c = mix(c, vec3(.18, .427, .706), step(1.5, i));
-  c = mix(c, vec3(.122, .561, .788), step(2.5, i));
-  c = mix(c, vec3(.373, .576, .671), step(3.5, i));
-  c = mix(c, vec3(.561, .651, .71), step(4.5, i));
-  c = mix(c, vec3(.769, .831, .863), step(5.5, i));
-  return mix(c, vec3(.918, .965, .976), step(6.5, i));
+  vec3 c = vec3(.02, .043, .086);
+  c = mix(c, vec3(.039, .102, .2), step(.5, i));
+  c = mix(c, vec3(.055, .173, .353), step(1.5, i));
+  c = mix(c, vec3(.078, .259, .498), step(2.5, i));
+  c = mix(c, vec3(.106, .373, .682), step(3.5, i));
+  c = mix(c, vec3(.118, .498, .812), step(4.5, i));
+  c = mix(c, vec3(.133, .635, .878), step(5.5, i));
+  c = mix(c, vec3(.298, .769, .933), step(6.5, i));
+  c = mix(c, vec3(.604, .875, .965), step(7.5, i));
+  return mix(c, vec3(.902, .973, .992), step(8.5, i));
 }
 // The source's fbm: steep falloff, so plates stay smooth and rounded.
 float tfbm(vec2 p) { float v = 0., a = .55; for (int i = 0; i < 4; i++) { v += a * noise(p); p = p * 2.02 + vec2(11.3, 7.9); a *= .45; } return v; }
 float fbm2(vec2 p) { return .55 * noise(p) + .2475 * noise(p * 2.02 + vec2(11.3, 7.9)); }
 // Height 0-1 at q (screen units from the centre), the warp shared by the samples of one pixel: a basin rising to the
-// screen's edges, steadier in the middle.
+// screen's edges, steadier in the middle, its rings bent by the same warp and a slow swirl so they sweep rather than nest.
 float height(vec2 q, vec2 warp, float t) {
-  float h = clamp((tfbm(q * 2.5 + vec2(3.1, 1.4) + warp + vec2(t * .6, -t * .25)) - .18) / .64, 0., 1.);
-  float r = smoothstep(.04, 1., length((q - vec2(-.02, .01)) * vec2(.62, 1.)));
-  return clamp(h * mix(.28, .5, r) + r * .95 - .05, 0., 1.);
+  float h = clamp((tfbm(q * 3. + vec2(3.1, 1.4) + warp + vec2(t * .6, -t * .25)) - .18) / .64, 0., 1.);
+  vec2 d = (q - vec2(-.02, .01) + (warp - .3) * .35) * vec2(.62, 1.);
+  float r = smoothstep(.04, .9, length(d + vec2(d.y, -d.x) * .25 * sin(d.x * 3. + t * 2.)));
+  return clamp(h * mix(.24, .55, r) + r * .98 - .07, 0., 1.);
 }
-// Plate lv at fraction f of its height band: lit along its own cut edge, shaded under the next one, and in the blue shadow
-// the plate above throws (a: that plate's height, sampled toward the light, in tiers). fa and fw: a's and the height's change
-// across a pixel, so no edge is narrower than one.
-vec3 plate(float lv, float f, float a, float fa, float fw) {
-  vec3 c = tier(lv) * (1.06 - .14 * f) * (1. - .3 * smoothstep(min(.8, 1. - 3. * fw), .995, f));
-  c += vec3(.09, .2, .25) * (1. - smoothstep(0., max(.1, 2. * fw), f)) * step(.5, lv);
-  float k = smoothstep(-.02 - fa, .15 + fa, a - lv - 1.);
-  return mix(c, c * vec3(.42, .55, .78), .5 * k);
+// Plate lv at fraction f of its band: its colour, a little brighter toward its lit cut edge and shaded under the next
+// plate; its rim, bright where the cut faces the light (lit, 0-1); and the soft shadow of the plate above (a: that plate's
+// height in tiers, sampled toward the light). fa and fw: a's and the height's change across a pixel, so no edge is
+// narrower than one.
+vec3 plate(float lv, float f, float lit, float a, float fa, float fw) {
+  float top = step(LV - 1.5, lv); // nothing stands above the highest plate
+  vec3 c = tier(lv) * (1.08 - .2 * f * (1. - top)) * (1. - .28 * (1. - top) * smoothstep(min(.75, 1. - 3. * fw), .995, f));
+  c += vec3(.16, .3, .36) * (.25 + .9 * lit) * (1. - smoothstep(0., max(.08, 2. * fw), f)) * step(.5, lv);
+  float k = smoothstep(-.05 - fa, .45 + fa, a - lv - 1.);
+  return mix(c, c * vec3(.3, .42, .68), .62 * k);
 }
 void main() {
   vec2 uv = vUv + uShift;
   vec2 q = (uv - .5) * vec2(uAspect, 1.);
   float t = (uTime + 24.) * .018;
-  vec2 p = q * 2.5 * 1.6;
+  vec2 p = q * 3. * 1.6;
   vec2 warp = .5 * vec2(fbm2(p + t), fbm2(p - t * 1.3 + 7.3));
   float h = height(q, warp, t);
-  float s = clamp(h * 8., 0., 7.999), i = floor(s), f = s - i, fw = min(fwidth(s), .5) + 1e-4;
-  float a = height(q + vec2(-.008, .011), warp, t) * 8., b = height(q + vec2(-.02, .027), warp, t) * 8.;
+  float s = clamp(h * LV, 0., LV - .001), i = floor(s), f = s - i, fw = min(fwidth(s), .5) + 1e-4;
+  // Which way the slope climbs on screen; a cut faces down it, lit when that is toward the top left.
+  vec2 up = vec2(dFdx(s), dFdy(s));
+  float lit = clamp(dot(-up / (length(up) + 1e-5), vec2(-.707, .707)), 0., 1.);
+  // (Under the top, so the highest plate casts onto the one below but never onto itself.)
+  float a = min(height(q + vec2(-.009, .012), warp, t) * LV, LV - .5), b = min(height(q + vec2(-.024, .032), warp, t) * LV, LV - .5);
   float fa = fwidth(a) + 1e-4;
   // Each cut anti-aliased whole: this plate against the one below it and the one above.
-  vec3 c = mix(plate(i - 1., 1., a, fa, fw), plate(i, f, a, fa, fw), smoothstep(-fw, fw, f));
-  c = mix(c, plate(i + 1., 0., a, fa, fw), smoothstep(-fw, fw, f - 1.));
+  vec3 c = mix(plate(i - 1., 1., lit, a, fa, fw), plate(i, f, lit, a, fa, fw), smoothstep(-fw, fw, f));
+  c = mix(c, plate(i + 1., 0., lit, a, fa, fw), smoothstep(-fw, fw, f - 1.) * step(i, LV - 1.5));
   // A wider, fainter shadow from further up the slope.
-  c = mix(c, c * vec3(.42, .55, .78), .35 * smoothstep(-.02 - fa, .15 + fa, b - i - 1.));
+  c = mix(c, c * vec3(.42, .55, .78), .4 * smoothstep(-.1 - fa, .6 + fa, b - i - 1.));
   float g = uTime * .1396;
   vec2 o = (uv - vec2(.5 + .34 * cos(g), .5 + .26 * sin(g))) * vec2(uAspect, 1.);
   c += vec3(.2, .16, .55) * exp(-dot(o, o) * 7.) * (.1 + .12 * uAmount);
