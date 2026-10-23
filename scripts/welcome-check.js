@@ -187,6 +187,14 @@ const stub = (required) => {
     await pause(3200);
     check(ph === await calm.evaluate(() => document.querySelector('#address').placeholder), 'reduced motion: the examples hold still');
     await shot(calm, 'wide-8-reduced-motion');
+    // Firefox can revoke required hosts. Re-allowing one must never hand it back when its probe fails.
+    await calm.evaluate(() => __gz.held.delete('https://*.instructure.com/*'));
+    await type(calm, 'school.instructure.com');
+    await calm.click('#go');
+    await pause(200);
+    await calm.evaluate(() => __gz.answer(true));
+    await calm.waitForFunction(() => !document.querySelector('#note').hidden, null, { timeout: 15000 });
+    check(await calm.evaluate(() => __gz.held.has('https://school.instructure.com/*') && !__gz.removed.flat().includes('https://school.instructure.com/*')), 'a required host re-granted on Firefox stays held after a failed probe');
     await calm.close();
 
     check(!errors.length, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
