@@ -75,7 +75,7 @@ const fromCanvas = async (s) => {
 // proof, as a school's own Canvas host isn't (fromCanvas).
 // A sender's address. A course tab's frame (features/coursetabs.js) reports about:blank, the address of its first, empty
 // document: its own origin, with its tab's page on that origin, stands in.
-const addressOf = (s) => (s.frameId > 0 && s.url === 'about:blank' && /^(?:https:\/\/[^/]+|http:\/\/localhost(?::\d+)?)$/.test(s.origin || '') && s.tab?.url?.startsWith(`${s.origin}/`) ? s.tab.url : s.url);
+const addressOf = (s) => (s.frameId > 0 && s.url === 'about:blank' && /^(?:https:\/\/[^/]+|http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?)$/.test(s.origin || '') && s.tab?.url?.startsWith(`${s.origin}/`) ? s.tab.url : s.url);
 const ultraAt = (s) => {
   if (s.id !== chrome.runtime.id || !s.tab) return null;
   try { const u = new URL(addressOf(s)); return u.protocol === 'https:' && /^\/ultra(\/|$)/.test(u.pathname) ? u.origin : null; } catch { return null; }
@@ -1514,7 +1514,7 @@ const listedAs = async (u) => { const got = await chrome.storage.local.get(LMS);
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:local') return;
   let u;
-  try { u = new URL(s.url); } catch { reply(false); return; }
+  try { u = new URL(addressOf(s)); } catch { reply(false); return; }
   if (s.id !== chrome.runtime.id || !GZ_LOCAL_DEV(m.kind, u)) { reply(false); return; }
   approved(m.kind, u).then(reply, () => reply(false));
   return true;
