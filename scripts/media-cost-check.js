@@ -81,12 +81,6 @@ const lottie = (n) => ({ v: '5.7.0', fr: 30, ip: 0, op: 90, w: 1280, h: 720, nm:
       await chrome.storage.sync.clear();
       await chrome.storage.sync.set({ ...defaults, bg, lookX, motion: { ...defaults.motion, level: motion, followSystem: false } });
     }, { defaults: D.GZ_DEFAULTS, bg: { ...D.GZ_DEFAULTS.bg, ...bg }, lookX, motion });
-    // The fixture's site approved and its Ultra script registered (lib/background.js ensure) before the first page.
-    await opts.evaluate((o) => chrome.storage.local.set({ ultra: [o] }), origin);
-    for (let i = 0; !(await opts.evaluate(() => chrome.scripting.getRegisteredContentScripts().then((l) => l.some((x) => x.id.startsWith('ultra:'))))); i++) {
-      if (i > 100) throw new Error('the fixture\'s Ultra script was never registered');
-      await sleep(100);
-    }
     // CPU seconds of every process of this profile, from ps (cputime is 0:12.34 or 1:02:03.45).
     const cpu = () => {
       const out = execFileSync('ps', ['-ax', '-o', 'time=,command='], { encoding: 'utf8', maxBuffer: 64 << 20 });
@@ -98,6 +92,12 @@ const lottie = (n) => ({ v: '5.7.0', fr: 30, ip: 0, op: 90, w: 1280, h: 720, nm:
       }
       return total;
     };
+    // The fixture's site approved and its Ultra script registered (lib/background.js ensure) before the first page.
+    await opts.evaluate((o) => chrome.storage.local.set({ ultra: [o] }), origin);
+    for (let i = 0; !(await opts.evaluate(() => chrome.scripting.getRegisteredContentScripts().then((l) => l.some((x) => x.id.startsWith('ultra:'))))); i++) {
+      if (i > 100) throw new Error('the fixture\'s Ultra script was never registered');
+      await sleep(100);
+    }
     const rows = [['plain background', null, 'subtle']];
     if (media['big.webm']) rows.push(['video 1280x720 VP9, playing', { type: 'video', src: `${origin}/media/big.webm`, fit: 'cover' }, 'subtle'], ['video, motion off', { type: 'video', src: `${origin}/media/big.webm` }, 'off']);
     if (media['anim.webp']) rows.push(['animated WebP 640x360 x 20, playing', { type: 'image', src: `${origin}/media/anim.webp`, fit: 'cover' }, 'subtle'], ['animated WebP, motion off', { type: 'image', src: `${origin}/media/anim.webp` }, 'off']);
