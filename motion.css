@@ -7,6 +7,7 @@
   --gz-spring: linear(0, 0.3538 4.1%, 0.6624 8.4%, 0.8613 12.6%, 0.9823 17%, 1.0407 21.6%, 1.0618 26.5%, 1.0532 32.2%, 1.0157 44.4%, 0.998 55.6%, 0.9954 66.9%, 1);
   --gz-t: 0.25s;
   --gz-t-slow: 0.5s;
+  --gz-t-move: 0.32s; /* Glaze's own things changing place: tabs, docked widgets, tiles (lib/motion.js flip) */
   --gz-enter: var(--gz-x-enter, gz-in 0.6s var(--gz-spring) backwards);
   --gz-enter-page: var(--gz-x-enter-page, gz-in 0.45s var(--gz-ease) backwards);
   --gz-enter-panel: var(--gz-x-enter-panel, gz-fade 0.3s var(--gz-ease) backwards);
@@ -31,6 +32,7 @@
 /* Expressive: bigger, bouncier, and the ambient background drifts. */
 html[data-gz-motion="expressive"] {
   --gz-t-slow: 0.7s;
+  --gz-t-move: 0.46s;
   --gz-spring: linear(0, 0.2 3%, 0.55 7.5%, 0.86 12%, 1.06 17%, 1.14 22%, 1.12 27%, 1.04 35%, 0.98 45%, 0.99 60%, 1);
   --gz-enter: var(--gz-x-enter, gz-rise 0.8s var(--gz-spring) backwards);
   --gz-enter-panel: var(--gz-x-enter-panel, gz-focus 0.45s var(--gz-ease) backwards);
@@ -46,7 +48,7 @@ html[data-gz-motion="expressive"] {
 }
 
 /* Off: nothing moves. The fine-tune switches zero one group each. */
-html[data-gz-motion="off"], html[data-gz-no-trans] { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; }
+html[data-gz-motion="off"], html[data-gz-no-trans] { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-t-move: 0s; }
 html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; }
 html[data-gz-motion="off"], html[data-gz-no-hover] { --gz-lift: none; --gz-nudge: none; --gz-press: none; --gz-pop: none; --gz-hover-shadow: none; --gz-hover-filter: none; --gz-card-hover-filter: none; }
 html[data-gz-motion="off"] { --gz-ambient: paused; }
@@ -61,7 +63,7 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 /* content.js maps the system setting to "off" unless the user opted out; this only covers the
    moment before it runs. */
 @media (prefers-reduced-motion: reduce) {
-  html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-ambient: paused; }
+  html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-t-move: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-ambient: paused; }
 }
 
 /* Entrances move with the individual translate and scale properties, never transform. A finished entrance stays
@@ -88,6 +90,11 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 /* Page changes: content.js holds the old page while Ultra builds the next, then the two crossfade. */
 ::view-transition-group(root) { animation-duration: var(--gz-t-page); animation-timing-function: var(--gz-ease); }
 [data-gz-held] { animation: none !important; }
+/* A change Glaze crossfades in place (lib/motion.js swap: a palette, the sidebar): a plain crossfade at the transitions'
+   pace, whatever a page change would do (Expressive's settle, canvas.css). Named parts (the rail) still glide. */
+html[data-gz-swap]::view-transition-group(root) { animation-duration: var(--gz-t); }
+html[data-gz-swap]::view-transition-new(root) { animation-name: gz-fade; }
+html[data-gz-swap]::view-transition-old(root), html[data-gz-swap]::view-transition-new(root) { mix-blend-mode: plus-lighter; }
 /* Tooltips grow from the side they point at. */
 :is(.tooltip, span.enhanced-tooltip, .ms-Tooltip, .gz-tip) { animation: var(--gz-tip-in); }
 .gz-tip[data-side="bottom"] { --gz-tip-dy: -4px; }

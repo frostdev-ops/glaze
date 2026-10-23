@@ -138,14 +138,105 @@ const animations = (events) => {
         h.dataset.gzMotion = 'expressive'; h.removeAttribute('data-gz-no-trans'); return results;
       });
       for (const r of instant) if (r.enter !== 1 || r.display !== 'none') problems.push(`${site}: dialog must be instant with ${r.mode} (${JSON.stringify(r)})`);
+
+      // WP-V2: Glaze's own UI moving (lib/motion.js). The course tabs for real where the preview draws them (Ultra's and
+      // Canvas's tabs page): a keyboard move glides them, a close leaves a fading copy that goes. The dock, the board and To
+      // Do don't draw in the previews: the same flip, exit and swap run on probe elements. Everything must composite, and
+      // nothing may move at Off.
+      const ui = { site };
+      const cdp2 = await context.newCDPSession(page), events2 = [];
+      cdp2.on('Tracing.dataCollected', (e) => events2.push(...e.value));
+      const done2 = new Promise((r) => cdp2.once('Tracing.tracingComplete', r));
+      await cdp2.send('Tracing.start', { categories: 'blink.animations,devtools.timeline', transferMode: 'ReportEvents' });
+      if (site !== 'moodle') {
+        await view('tabs');
+        await until(() => page.evaluate(() => document.querySelectorAll('#gz-ctabs .gz-ctab').length), (n) => n >= 3);
+        await page.waitForTimeout(300);
+        ui.tabs = await page.evaluate(async (closing) => {
+          const tabs = () => [...document.querySelectorAll('#gz-ctabs .gz-ctabs-list > .gz-ctab')];
+          // Two neighbours in the same group: a pinned tab moves only among the pinned.
+          const all = tabs(), ids = all.map((e) => e.dataset.courseId);
+          const i = all.findIndex((e, j) => all[j + 1] && e.hasAttribute('data-pin') === all[j + 1].hasAttribute('data-pin'));
+          if (i < 0) return { ids, pins: all.map((e) => e.hasAttribute('data-pin')) };
+          const first = all[i];
+          first.focus();
+          first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', shiftKey: true, bubbles: true }));
+          const moved = tabs().map((e) => e.dataset.courseId);
+          const gliding = tabs().filter((e) => e.getAnimations().some((a) => a.effect?.getKeyframes().some((k) => k.translate))).length;
+          await new Promise((r) => setTimeout(r, 700));
+          // Closing a tab: Ultra's preview only (Canvas's preview context has no ctx.acted, which a close reaches).
+          if (!closing) return { i, ids, moved, gliding };
+          const last = tabs().filter((e) => !e.hasAttribute('data-pin')).at(-1);
+          last.focus();
+          last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+          const ghosts = document.querySelectorAll('#gz-ctabs [data-gz-ghost]').length;
+          const ghostFocusable = [...document.querySelectorAll('#gz-ctabs [data-gz-ghost], #gz-ctabs [data-gz-ghost] *')].some((e) => e.matches('[data-course-id], [id]') || !e.closest('[inert]'));
+          await new Promise((r) => setTimeout(r, 700));
+          return { i, ids, moved, gliding, ghosts, ghostFocusable, ghostsAfter: document.querySelectorAll('[data-gz-ghost]').length, left: tabs().length };
+        }, site === 'ultra');
+        if (!ui.tabs.moved || ui.tabs.moved[ui.tabs.i + 1] !== ui.tabs.ids[ui.tabs.i]) problems.push(`${site}: Shift+Arrow did not move a tab (${JSON.stringify(ui.tabs)})`);
+        if (ui.tabs.gliding < 2) problems.push(`${site}: a moved tab and its neighbour should glide (${ui.tabs.gliding} did)`);
+        if (site === 'ultra' && (ui.tabs.ghosts !== 1 || ui.tabs.ghostFocusable)) problems.push(`${site}: a closed tab should leave one inert copy with no ids (${JSON.stringify(ui.tabs)})`);
+        if (ui.tabs.ghostsAfter) problems.push(`${site}: a closed tab's copy stayed`);
+        await view('courses');
+      }
+      ui.lib = await page.evaluate(async () => {
+        const M = globalThis.GZ_MOTION, h = document.documentElement, wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        if (!M) return { missing: true };
+        const box = document.createElement('div');
+        box.className = 'gz-probe';
+        Object.assign(box.style, { position: 'fixed', left: '300px', top: '120px', width: '220px', zIndex: '2147483000', display: 'grid', gap: '6px' });
+        const rows = ['a', 'b', 'c', 'd'].map((n) => Object.assign(document.createElement('div'), { className: `gz-probe-${n}`, textContent: n, style: 'height:30px;background:#345' }));
+        box.append(...rows); document.body.append(box);
+        const kids = () => [...box.children].filter((e) => !e.hasAttribute('data-gz-ghost'));
+        // A reorder (the dock's buttons), a removal with a copy (a closed tab, a ticked task), an exit (the toast).
+        M.flip(kids, () => box.prepend(rows[3]), {});
+        const moving = kids().filter((e) => e.getAnimations().length).length;
+        await wait(450); // a move done before its row goes: a target removed mid-move just stops, which the trace calls a failure
+        M.flip(kids, () => rows[1].remove(), { ghosts: true, container: box });
+        const ghost = box.querySelectorAll('[data-gz-ghost]').length;
+        const going = M.exit(rows[2]); // still gliding up from the removal: it must fade without leaving the compositor
+        const inertWhileGoing = rows[2].inert;
+        await going; await wait(500);
+        const result = { moving, ghost, inertWhileGoing, exited: !rows[2].isConnected, ghostsLeft: box.querySelectorAll('[data-gz-ghost]').length };
+        // Off: the same calls change the page and start nothing.
+        h.dataset.gzMotion = 'off';
+        M.flip(kids, () => box.append(rows[3]), { ghosts: true, container: box });
+        const off = kids().some((e) => e.getAnimations().length);
+        const t0 = performance.now(); await M.exit(rows[0]);
+        result.off = { animated: off, exitMs: Math.round(performance.now() - t0), removed: !rows[0].isConnected };
+        h.dataset.gzMotion = 'expressive';
+        box.remove();
+        // swap: a real crossfade where view transitions exist, its marker gone after.
+        let during = false;
+        if (document.startViewTransition) { await M.swap(() => { during = h.hasAttribute('data-gz-swap'); }); await wait(700); }
+        result.swap = { vt: !!document.startViewTransition, during, after: h.hasAttribute('data-gz-swap') };
+        return result;
+      });
+      await cdp2.send('Tracing.end'); await done2;
+      const l = ui.lib;
+      if (l.missing) problems.push(`${site}: lib/motion.js is not on the preview`);
+      else {
+        if (l.moving < 4) problems.push(`${site}: a reorder should glide every row (${l.moving})`);
+        if (l.ghost !== 1 || l.ghostsLeft) problems.push(`${site}: a removal should leave one copy that goes (${l.ghost}, ${l.ghostsLeft} left)`);
+        if (!l.inertWhileGoing || !l.exited) problems.push(`${site}: an exit should be inert while it goes, then removed`);
+        if (l.off.animated || l.off.exitMs > 50 || !l.off.removed) problems.push(`${site}: at Off nothing may move (${JSON.stringify(l.off)})`);
+        if (l.swap.vt && (!l.swap.during || l.swap.after)) problems.push(`${site}: swap should crossfade and clear its marker (${JSON.stringify(l.swap)})`);
+      }
+      ui.animations = {};
+      for (const a of animations(events2)) {
+        const k = `${a.failed ? 'main' : 'compositor'} ${a.name || '(script)'} @ ${a.node.slice(0, 40)}`;
+        ui.animations[k] = (ui.animations[k] || 0) + 1;
+        if (a.failed && /gz-ctab|probe|view-transition/i.test(a.node) && !PAINTED.test(a.name) && !a.name.startsWith('-ua-')) problems.push(`${site}: ${a.name || 'a script animation'} on ${a.node} ran on the main thread (compositeFailed ${a.failed}${a.props.length ? `: ${a.props}` : ''})`);
+      }
       const summary = {};
       for (const a of all) { const k = `${a.failed ? 'main' : 'compositor'} ${a.name}${a.props.length ? ` [${a.props}]` : ''}`; summary[k] = (summary[k] || 0) + 1; }
-      receipt[site] = { cardsHovered: cards.length, cardMoves: cardMoves.map((a) => `${a.name}:${a.failed ? 'main' : 'compositor'}`), placement, dialog, instant, animations: summary };
+      receipt[site] = { ui, cardsHovered: cards.length, cardMoves: cardMoves.map((a) => `${a.name}:${a.failed ? 'main' : 'compositor'}`), placement, dialog, instant, animations: summary };
       await page.close();
     }
     if (output) fs.writeFileSync(output, JSON.stringify({ source: ext, receipt, problems, errors }, null, 2));
     if (errors.length) problems.push(...errors);
     if (problems.length) throw Error(problems.join('\n'));
-    console.log(`Motion on 3 sites: entrances, hover lifts and dialogs composite or fade as they should.${output ? ` Receipt: ${output}` : ''}`);
+    console.log(`Motion on 3 sites: entrances, hover lifts, dialogs, tab moves and Glaze's own flips, exits and swaps composite or fade as they should.${output ? ` Receipt: ${output}` : ''}`);
   } finally { await context?.close(); fs.rmSync(scratch, { recursive: true, force: true }); }
 })().catch((e) => { console.error(e.message || e); process.exitCode = 1; });

@@ -1471,6 +1471,8 @@
   };
 
   const reapply = () => { if (settings.enabled && links.length) applySettings(); };
+  // New palettes and Looks crossfade in (lib/motion.js, where loaded).
+  const swap = (f) => (globalThis.GZ_MOTION?.swap || ((g) => g()))(f);
 
   // ---- the site's own part -------------------------------------------------------------------------
   // content-ultra.js or content-canvas.js is given what it needs from here (I; live state through getters), and puts
@@ -1604,12 +1606,12 @@
       settings = s;
       if (on(s) && !was) enable();
       else if (!on(s) && was) disable();
-      else if (on(s)) applySettings();
+      else if (on(s)) swap(applySettings);
       if (changes.enabled) modsIn(true);
     });
   });
   // Moodle's course is on <body>: its tint and look before that is drawn.
   if (moodle && !document.body) new MutationObserver((_, o) => document.body && (o.disconnect(), reapply())).observe(html, { childList: true });
-  darkMQ.addEventListener('change', reapply);
+  darkMQ.addEventListener('change', () => swap(reapply));
   calmMQ.addEventListener('change', reapply);
 })();

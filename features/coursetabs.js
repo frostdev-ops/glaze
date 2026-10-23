@@ -303,6 +303,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (strip.style.getPropertyValue('--gz-ctab-w') !== `${p.width}px`) strip.style.setProperty('--gz-ctab-w', `${p.width}px`);
     set(list, 'aria-label', t('Course tabs'));
     strip.querySelector('#gz-ctabs-hint').textContent = t('Delete closes a tab, P pins it, and Shift with an arrow key moves it.');
+    // A tab opened, closed, pinned or moved glides to its place, and a closed one fades where it was (lib/motion.js);
+    // not on the first drawing of the strip, which has nothing to come from.
+    const motion = list.children.length ? globalThis.GZ_MOTION : null;
+    if (motion) motion.flip(() => [...list.children], () => fill(rows, cur, p), { ghosts: true, container: strip, within: list });
+    else fill(rows, cur, p);
+    inView();
+    mark();
+  };
+  // The tabs themselves: each course's element kept from the last drawing (or a new one), in the rows' order.
+  const fill = (rows, cur, p) => {
     const old = new Map([...list.children].map((e) => [e.dataset.courseId, e]));
     const focused = list.contains(document.activeElement) ? document.activeElement.dataset.courseId : null;
     const roving = focused || (rows.some((r) => r.cur) ? cur : rows[0]?.cid);
@@ -332,8 +342,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       list.replaceChildren(...els);
       if (focused) list.querySelector(`[data-course-id="${focused}"]`)?.focus({ preventScroll: true });
     }
-    inView();
-    mark();
   };
   // The strip's word: why a tab closed, or what a pin or a move did. Gone again after a few seconds.
   let sayTimer = 0;

@@ -233,8 +233,10 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   };
   const hide = () => {
     const had = live?.contains(document.activeElement);
-    live?.replaceChildren();
     if (had) document.querySelector('#gz-todo .gz-rm-bell, #gz-todo .gz-rm-streak')?.focus({ preventScroll: true });
+    // The toast sinks back as it fades (lib/motion.js), after the focus has left it: a going toast can't hold it.
+    if (live && globalThis.GZ_MOTION) for (const e of [...live.children]) GZ_MOTION.exit(e, { to: { translate: '0 8px' } });
+    else live?.replaceChildren();
   };
   // A class about to start, with the notes app on: its course's notes, a new note ready (features/notes.js).
   const notesFor = (e) => (e.cat === 'class' && en().notes && e.url?.match(/^\/courses\/(\d+)$/)?.[1]) || '';
