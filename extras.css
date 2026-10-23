@@ -65,7 +65,7 @@ html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.
     radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
     var(--gz-surface-paint-2, var(--gz-surface-2));
   animation: gz-aurora 42s ease-in-out infinite alternate;
-  animation-play-state: var(--gz-ambient);
+  animation-play-state: var(--gz-drift);
 }
 /* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
 html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before,
@@ -84,6 +84,10 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) .course-content-container > .panel-wr
 /* A narrower/shorter scroller must not paint a second fallback over the shell's scene. Its
    content still clips normally; partial-width sheets retain their own opaque backgrounds. */
 html[data-gz-bg]:not([data-gz-bg="solid"]) [data-gz-scene-host] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { content: none; }
+/* A course tab's frame wearing the page's background (content.js data-gz-through) is see-through: the page under it draws
+   the one background, edge to edge around the rail. */
+html[data-gz-bg][data-gz-through] { background: transparent !important; }
+html[data-gz-through]::before, html[data-gz-through] :is(.panel-wrap, .bb-offcanvas-panel)::before { content: none; }
 #gz-scene {
   position: fixed;
   left: calc(var(--gz-bg-blur, 0px) * -2);

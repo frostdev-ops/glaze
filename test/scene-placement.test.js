@@ -27,7 +27,7 @@ const rig = () => {
   const body = element('body'), course = element('course', body), outline = element('outline', course);
   const tool = element('tool', outline), screen = element('screen', course), inner = element('inner', screen);
   course.querySelector = () => outline;
-  const c = { ultra: true, LAYERS: '', document: { body, documentElement: { hasAttribute: () => !!c.framed }, querySelectorAll: () => c.layers }, layers: [outline],
+  const c = { ultra: true, tabFrame: '', LAYERS: '', document: { body, documentElement: { hasAttribute: () => !!c.framed }, querySelectorAll: () => c.layers }, layers: [outline],
     sceneCanvas: element('canvas'), modBg: null, scene: { draw() {} } };
   vm.createContext(c); vm.runInContext(`${host}\n${source.slice(start, end)}globalThis.placeScene = placeScene;`, c);
   return { c, body, course, outline, tool, screen, inner, element };
@@ -93,4 +93,11 @@ test('a retained course tab keeps the shared navbar scene outside the hidden nat
   r.c.framed = false; r.c.placeScene();
   assert.equal(r.c.sceneCanvas.parentNode, r.course);
   assert.ok(!r.body.attrs.has('data-gz-scene-host'));
+});
+test('a layer over the course page counts as covering it; the course page, its tools and base pages do not', () => {
+  const r = rig(), H = r.c.GZ_SCENE_HOST, item = r.element('item', r.course), routed = r.element('routed', r.body);
+  const cases = [[[r.outline], false], [[r.outline, r.tool], false], [[], false], [[r.outline, r.screen, r.inner], true], [[r.outline, item], true], [[r.element('panel', routed)], true]];
+  for (const [layers, covered] of cases) { r.c.layers = layers; assert.equal(H.covered(true), covered, layers.map((l) => l.name).join(' > ')); }
+  assert.equal(H.covered(false), false);
+  r.c.layers = [r.outline, r.screen]; r.c.framed = true; assert.equal(H.covered(true), false);
 });

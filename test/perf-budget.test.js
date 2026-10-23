@@ -162,6 +162,11 @@ const EN_PLURALS = 1187;
 // came), tries again once the page is back on screen, starts a scene whose WebGL context the browser took back again on a
 // new canvas, and starts without waiting for the site's part: 2363 bytes on every site. Measured against 74ac1e12.
 const SCENE_RECOVERY = 2363;
+// One background under course tabs (owner-approved raise, 2026-10-19 policy; seam reported 2026-10-22): content.js signs what the
+// background is made of, the page puts it on <html>, and a course tab's frame wearing the same draws none and is marked
+// see-through; the rest (the frame's check, pointer relay) is lib/scene-host.js, on demand: 1260 bytes on every site.
+// Measured against fc414dd3.
+const CTAB_ONE_BG = 1260;
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -170,7 +175,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY, budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG, budget = Math.round(baseline * 1.02);
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
