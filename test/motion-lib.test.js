@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const M = require('../lib/motion.js');
 
 const KNOBS = { '--gz-t-move': '0.32s', '--gz-t': '0.25s', '--gz-ease': 'cubic-bezier(0.22, 1, 0.36, 1)', '--gz-spring': 'linear(0, 1.06 26%, 1)', '--gz-enter': 'gz-in 0.6s ease backwards' };
-const env = ({ knobs = KNOBS, vt = false, busy = false, hidden = false } = {}) => {
+const env = ({ knobs = KNOBS, vt = false, busy = false, hidden = false, abort = false } = {}) => {
   const attrs = new Map();
   const runs = [];
   const html = {
@@ -16,7 +16,8 @@ const env = ({ knobs = KNOBS, vt = false, busy = false, hidden = false } = {}) =
   if (vt) doc.startViewTransition = (update) => {
     const t = { update, finished: null, updateCallbackDone: null };
     t.updateCallbackDone = Promise.resolve().then(update);
-    t.finished = t.updateCallbackDone.then(() => {});
+    t.finished = abort ? Promise.reject(new Error('InvalidStateError')) : t.updateCallbackDone.then(() => {});
+    t.ready = abort ? Promise.reject(new Error('InvalidStateError')) : t.updateCallbackDone;
     runs.push(t);
     return t;
   };
@@ -253,4 +254,47 @@ test('swap never crossfades inside a frame: a course tab\'s copy of the backgrou
     assert.equal(runs.length, 0);
     assert.equal(n, 1, 'it ran at once');
   } finally { delete globalThis.window; }
+});
+
+test('a crossfade the browser abandons still makes its change, clears its marker and rejects nothing unhandled', async () => {
+  const unhandled = [];
+  const on = (e) => unhandled.push(e);
+  process.on('unhandledRejection', on);
+  try {
+    const { html } = env({ vt: true, abort: true });
+    let n = 0;
+    await M.swap(() => { n++; });
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    assert.equal(n, 1);
+    assert.equal(html.attrs.has('data-gz-swap'), false);
+    assert.deepEqual(unhandled, []);
+  } finally { process.off('unhandledRejection', on); }
+});
+
+test('a copy left by something that went has no role, so nothing that looks for tabs or rows finds it', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'lib', 'motion.js'), 'utf8');
+  assert.match(src, /GHOSTLESS = \['id', 'role',/);
+});
+
+test('swap crossfades only right after someone acted on this page: while a transition runs the page takes no clicks', async () => {
+  const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const set = (v) => Object.defineProperty(globalThis, 'navigator', { value: v, configurable: true, writable: true });
+  try {
+    let { runs } = env({ vt: true });
+    set({ userActivation: { isActive: false } });
+    let n = 0;
+    M.swap(() => { n++; });
+    assert.equal(runs.length, 0, 'no one asked here: at once');
+    assert.equal(n, 1);
+    ({ runs } = env({ vt: true }));
+    set({ userActivation: { isActive: true } });
+    M.swap(() => { n++; });
+    assert.equal(runs.length, 1, 'a click or key here a moment ago: crossfade');
+    await runs[0].finished; await new Promise((r) => setImmediate(r)); // that one over before the next
+    ({ runs } = env({ vt: true }));
+    set({});
+    M.swap(() => { n++; });
+    assert.equal(runs.length, 1, 'a browser without the signal crossfades as before');
+  } finally { if (nav) Object.defineProperty(globalThis, 'navigator', nav); else delete globalThis.navigator; }
 });
