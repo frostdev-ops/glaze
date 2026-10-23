@@ -634,7 +634,7 @@ const ultraPage = ({ origin = 'https://evil.test', local = {}, frame = false, ki
   const html = new Node('html'); html.lang = 'en';
   const selector = kind === 'ultra' ? 'base[href*="/ultra/"]' : kind === 'moodle' ? 'meta[name="keywords"][content^="moodle,"]' : 'link[rel~="stylesheet"][href*="/dist/brandable_css/"]';
   const head = new Node('head'); head.querySelector = (sel) => (sel.includes(selector) ? { matches: (s) => s === selector } : null);
-  const body = new Node('body');
+  const body = new Node('body'); body.className = '';
   const document = { contentType: 'text/html', documentElement: html, head, body, readyState: 'interactive', hidden: false,
     querySelector: () => null, querySelectorAll: () => [], getElementById: () => null, getElementsByTagName: () => [],
     createElement: (t) => new Node(t), createElementNS: (_, t) => new Node(t), createTextNode: () => new Node('#text'),

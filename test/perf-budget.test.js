@@ -185,10 +185,8 @@ const FROSTDEV_LOOK = 408;
 // tells the worker each page Glaze starts in, from its top frame, so that tab shows Glaze's own icon over the lit one:
 // 204 bytes on every site. Measured against 5df16e13.
 const TOOLBAR_ICON = 204;
-// Local Canvas and Moodle alike (narrow host access Step 4; a named raise, as the owner approved for first scripts on
-// 2026-10-19): defaults.js's GZ_LOCAL_DEV, which content.js's gate shares with the worker's, so a local Moodle on a held
-// localhost grant starts as a local Canvas does: 295 bytes on every site. Measured against 11dfdd4a.
-const LOCAL_DEV = 295;
+// Local HTTP pages ask the worker for their held-grant policy; HTTPS pages only check their scheme.
+const LOCAL_DEV = 125; // measured against 11dfdd4a, excluding STREAM_FIX
 // Activity Stream's loading fix (0f5334d6, on main beside the narrow host access work; a named raise under the owner's
 // 2026-10-19 approval): content-ultra.js's Stream start (59 bytes) and content.js's hook for it (21, every site). Main fit it in
 // its 2% headroom, which the lit icon had already used here. Measured against 82ac5a42.
