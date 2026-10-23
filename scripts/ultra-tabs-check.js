@@ -15,7 +15,8 @@ const os = require('os');
 const G = require('../defaults.js');
 require('../lib/coursetabs.js');
 
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-tabs-'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 let PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-course.html'), 'utf8');

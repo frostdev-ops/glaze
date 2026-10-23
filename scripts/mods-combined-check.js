@@ -17,7 +17,8 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..')); // the id is made from the real path
+// A copy holding the schools' hosts, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://ultra.school.test/*', 'https://strict.moodle.test/*', 'https://open.moodle.test/*']); // the id is made from the real path
 const out = process.argv.slice(2).find((a) => !a.startsWith('--'));
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
 const G = require(path.join(ext, 'defaults.js'));

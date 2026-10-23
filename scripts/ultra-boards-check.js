@@ -18,7 +18,8 @@ const zlib = require('zlib');
 const G = require('../defaults.js');
 require('../lib/widgets.js'); // its settings in GZ_SPEC
 
-const ext = process.env.EXT || path.join(__dirname, '..');
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-boards-'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const O = 'https://bb.school.test';

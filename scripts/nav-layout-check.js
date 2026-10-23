@@ -15,7 +15,8 @@ const os = require('os');
 const crypto = require('crypto');
 const G = require('../defaults.js');
 
-const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '..')); // the id is made from the real path
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const src = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://moodle.school.test/*']); // the id is made from the real path
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-nav-layout-'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const CANVAS = 'https://nav.school.instructure.com', MOODLE = 'https://moodle.school.test';

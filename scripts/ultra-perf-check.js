@@ -107,7 +107,8 @@ const listeners = async (cdp) => {
   let context;
   try {
     for (const instrumented of [false, true]) {
-      let ext = source;
+      // The fixture's host, as the student's grant holds it (scripts/check-env.js staged).
+      let ext = instrumented ? '' : require('./check-env.js').staged(source, ['https://ultra.fixture.test/*']);
       if (instrumented) {
         ext = path.join(scratch, 'extension'); fs.mkdirSync(ext);
         const files = execFileSync('git', ['ls-files', '-z'], { cwd: source, encoding: 'utf8' }).split('\0').filter(Boolean);
@@ -116,7 +117,8 @@ const listeners = async (cdp) => {
         }
         fs.writeFileSync(path.join(ext, 'perf-shim.js'), `(${instrument.toString()})();`);
         const m = JSON.parse(fs.readFileSync(path.join(ext, 'manifest.json'), 'utf8'));
-        m.content_scripts.find((c) => c.matches.includes('https://*/ultra')).js.unshift('perf-shim.js');
+        m.content_scripts.find((c) => c.js.includes('content-ultra.js')).js.unshift('perf-shim.js');
+        m.host_permissions.push('https://ultra.fixture.test/*');
         fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
       }
       await require('./wait-for-browser.js')();

@@ -19,4 +19,27 @@ const chromePath = (env = process.env) => env.CHROME || undefined;
 // headless shell, which cannot load an extension; channel "chromium" is the full browser in new headless mode.
 const chromeLaunch = (env = process.env) => (chromePath(env) ? { executablePath: chromePath(env) } : { channel: 'chromium' });
 
-module.exports = { lockPath, chromePath, chromeLaunch };
+// A copy of the extension at `src` whose manifest also holds `hosts`: a school's own host, which Glaze reaches on Chrome
+// once the student grants it, and which a headless browser can't grant (its prompt has no answer there). Every file but the
+// manifest is a hard link to the source's (a plain copy across devices), so it is cheap: write nothing into it but the
+// manifest. It goes when the process exits. → its real path: Chrome derives an unpacked extension's id from it.
+function staged(src, hosts, tmp = os.tmpdir()) {
+  const from = fs.realpathSync(src);
+  const to = fs.realpathSync(fs.mkdtempSync(path.join(tmp, 'glaze-staged-')));
+  process.once('exit', () => fs.rmSync(to, { recursive: true, force: true }));
+  const link = (a, b) => {
+    for (const e of fs.readdirSync(a, { withFileTypes: true })) {
+      if (e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const x = path.join(a, e.name), y = path.join(b, e.name);
+      if (e.isDirectory()) { fs.mkdirSync(y); link(x, y); } else if (e.isFile()) { try { fs.linkSync(x, y); } catch { fs.copyFileSync(x, y); } }
+    }
+  };
+  link(from, to);
+  fs.rmSync(path.join(to, 'manifest.json'));
+  const m = JSON.parse(fs.readFileSync(path.join(from, 'manifest.json'), 'utf8'));
+  m.host_permissions = [...new Set([...(m.host_permissions || []), ...hosts])];
+  fs.writeFileSync(path.join(to, 'manifest.json'), JSON.stringify(m, null, 2));
+  return to;
+}
+
+module.exports = { lockPath, chromePath, chromeLaunch, staged };

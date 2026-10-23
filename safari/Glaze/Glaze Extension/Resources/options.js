@@ -1474,7 +1474,7 @@ GZ_UI.load().then((s) => {
   });
 
   // ---- Sites: the sites the student said yes to (lib/background.js approved), each with Remove, which only the worker does.
-  // Canvas's and Blackboard's own hosts are Glaze's anyway, so they aren't listed.
+  // Each LMS's own hosts (GZ_BUILT_IN) are Glaze's anyway, so they aren't listed.
   const KINDS = { canvas: 'Canvas', moodle: 'Moodle', ultra: 'Blackboard Ultra' };
   const siteSaid = (text) => { $('#site-status').textContent = text; };
   const renderSites = (r) => {
@@ -1482,7 +1482,7 @@ GZ_UI.load().then((s) => {
     for (const kind of Object.keys(KINDS)) for (const x of Array.isArray(r?.[kind]) ? r[kind] : []) {
       let u;
       try { u = new URL(String(x).replace(/\/\*$/, '')); } catch { continue; }
-      const automatic = !u.port && (kind === 'canvas' ? /(^|\.)instructure\.com$/.test(u.hostname) : kind === 'ultra' && /\.blackboard\.com$/.test(u.hostname));
+      const automatic = GZ_BUILT_IN(kind, u);
       if (u.protocol !== 'https:' || automatic) continue;
       sites.set(u.origin, [...new Set([...sites.get(u.origin) || [], t(KINDS[kind])])]);
     }

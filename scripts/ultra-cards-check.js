@@ -15,7 +15,8 @@ const crypto = require('crypto');
 const os = require('os');
 const G = require('../defaults.js');
 
-const ext = process.env.EXT || path.join(__dirname, '..');
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-cards-'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-courses.html'), 'utf8');
