@@ -118,3 +118,8 @@ test('beside Glaze\'s sidebar a course tool\'s header spans the window and only 
   assert.match(routed[0], /\[class\*="headerRoot"\]:not\(content-page-header \*, \[class\*="headerRoot"\] \*\)/);
   assert.match(routed[0], /:not\(:is\(main, \[role="main"\], article, \.routed-page-body, \.routed-scroll, \.panel-body\) \*\)/);
 });
+
+test('Gradebook\'s student overview draws no band or light line under the course header', () => {
+  const b = body(THEME, 'aside.student-grade-overview');
+  for (const [prop, v] of [['background', 'transparent'], ['border-bottom', '0'], ['box-shadow', 'none']]) assert.match(b, new RegExp(`${prop}:\\s*${v} !important`), prop);
+});
