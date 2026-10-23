@@ -119,7 +119,13 @@ GZ_UI.load().then((s) => {
     busy = true;
     b.setAttribute('aria-disabled', 'true');
     const told = GZ_SITE.tell({ op: 'ask', origin: site.origin, kind, tabId: tab.id });
-    (held ? told.then((r) => r?.ok) : new Promise((res) => res(chrome.permissions.request({ origins: [site.pattern] })))).then((ok) => { if (!ok) ready(); }, ready);
+    const requested = held ? Promise.resolve(true) : new Promise((res) => res(chrome.permissions.request({ origins: [site.pattern] })));
+    requested.then(async (ok) => {
+      if (!ok || !(await told)?.ok) { ready(); return; }
+      // Regranting a listed site need not write storage, so there may be no change event to finish this popup.
+      const r = await chrome.storage.local.get(LISTS);
+      if (listed(r) && await chrome.permissions.contains({ origins: [site.pattern] })) { done = true; show(); }
+    }).catch(ready);
   });
   show();
 })().catch(() => {});
