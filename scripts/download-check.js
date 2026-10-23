@@ -152,6 +152,7 @@ const until = async (fn, label, ms = 10000) => { const end = Date.now() + ms; fo
     process.exitCode = 1;
   } finally {
     await ctx?.close().catch(() => {});
-    fs.rmSync(path.join(tmp, 'profile'), { recursive: true, force: true });
+    // The profile always goes; the whole folder too when the screenshots went elsewhere.
+    fs.rmSync(out.startsWith(`${tmp}${path.sep}`) ? path.join(tmp, 'profile') : tmp, { recursive: true, force: true });
   }
 })();
