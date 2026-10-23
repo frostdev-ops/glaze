@@ -174,3 +174,10 @@ test('the worker asks the browser before reaching a feature host, and Safari\'s 
   assert.match(body, /<all_urls>/);
   assert.match(body, /granted\(/);
 });
+
+test('review: the font loader classification names every catalog file host', () => {
+  const entry = SITES['lib/fonts.js'][0];
+  const named = new Set(entry.hosts || [entry.host]);
+  const files = require('../lib/fonts.js').LIST.flatMap((f) => Object.values(f.files || {}));
+  for (const url of files) assert.ok(named.has(new URL(url).origin), `${url}: the font host is named`);
+});
