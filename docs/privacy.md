@@ -21,10 +21,13 @@ Private backups of settings and notes ZIPs include share keys and creator delete
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
 you set in a course's menu. These follow Chrome sync (or Firefox Sync) when it's on; Safari keeps them on this device only.
 
-On a school's own domain, Glaze asks first (**Use Glaze on example.edu?**) and registers, reads and records nothing from
-the site until you say Yes, unless it was already approved by an earlier version. Canvas on instructure.com and Blackboard on blackboard.com are automatic. **Settings → Backup
-and privacy → Sites** lists the sites you said yes to, with Remove, which also forgets the courses and due dates Glaze read
-there. See [Recognizing Canvas and Moodle](../PRIVACY.md#recognizing-canvas-and-moodle).
+Canvas on instructure.com, Blackboard on blackboard.com and Moodle on moodlecloud.com are automatic. A school's own
+site needs your yes first: on Chrome, Edge and Firefox the popup checks the page, while an address added in the first-run
+tab or Settings is checked through the site's APIs after access is granted. Browser-menu grants are checked too; a failed
+check leaves that access unused. With All sites, in Safari and on installs from before 3.4.0, Glaze asks on unapproved
+course sites (**Use Glaze on example.edu?**) before theming them, reading their APIs or keeping course data. **Settings →
+Backup and privacy → Sites** lists your sites, with Remove, which also forgets the courses and due dates Glaze read there.
+See [Adding a school's own site](../PRIVACY.md#adding-a-schools-own-site).
 
 The sidebar's title, style, page choices and other general settings sync too. Its width, open/fold state, To Do scope,
 dock order/heights, widget destinations and migration markers stay in local records keyed by LMS, school origin and
@@ -71,7 +74,7 @@ sending window, and accepts review requests only from the current visible same-a
 browser's own Fullscreen API on the existing viewer or its container.
 
 Your class schedule stays on your device: the file, page or text you import is read there and never uploaded, and a calendar link is read only when it is on your own Canvas or Blackboard site.
-Course tabs show an automatic short name by default, with common term/section wrappers removed and subject codes spaced. A nickname wins; full-name and code choices remain available, and the original name and code stay in the tooltip and accessible name. Tabs keep your list (each course's id and original name, where you were in it, pinned or not) on your device, per site and account; routed page and scroll changes are saved only after native content establishes the destination. Canvas's live frames also retain earlier pages' content and forms in memory; native scripts and requests can continue while hidden. Returning to a clean retained page can reload it from your school, and a link press can start loading before the click completes. Back/Forward history state holds frame/course ids and page URLs. The blurred JPEG pictures shown during first load can include any visible content on the Canvas or Blackboard tab and stay in memory only (the page and `chrome.storage.session` in Glaze's worker), are never written to disk, and are dropped when the browser closes, when you turn the tabs or Glaze off, or when another account signs in.
+Course tabs show an automatic short name by default, with common term/section wrappers removed and subject codes spaced. A nickname wins; full-name and code choices remain available, and the original name and code stay in the tooltip and accessible name. Tabs keep your list (each course's id and original name, where you were in it, pinned or not) on your device, per site and account; routed page and scroll changes are saved only after native content establishes the destination. Canvas's live frames also retain earlier pages' content and forms in memory; native scripts and requests can continue while hidden. Returning to a clean retained page can reload it from your school, and a link press can start loading before the click completes. Back/Forward history state holds frame/course ids and page URLs. The blurred stand-in shown during first load is drawn from a sketch of the page (its boxes and colours, with no text but the course's name and no images), not a picture of it. Sketches stay in memory only (the page and `chrome.storage.session` in Glaze's worker), are never written to disk, and are dropped when the browser closes, when you turn the tabs or Glaze off, or when another account signs in.
 Reminders, what you've snoozed or muted and your streak stay on your device as well, and so do your marks on documents; reminders show only inside Canvas and Blackboard pages, and Glaze has no notifications permission.
 With Gradescope in To Do on, Glaze reads your own Gradescope course pages (read-only, signed in as you) and keeps the assignments on your device; nothing from Gradescope goes anywhere else.
 It has no analytics. Glaze's writes anywhere are opt-in: with Better To Do's "Tick off in Canvas too" on, ticking an item

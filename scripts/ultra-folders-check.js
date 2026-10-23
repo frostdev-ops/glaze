@@ -145,8 +145,8 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     await page.evaluate(() => { history.pushState({}, '', `${location.origin}/ultra/courses/_800_1/outline`); document.body.append(document.createElement('div')); });
     await page.waitForFunction(() => document.querySelectorAll('.gz-folder-eye').length === 3);
     assert.deepEqual(errors, []);
-    // A fresh identity cache from course recording has no account ID of its own: B9 must stay absent.
-    await opts.evaluate(async () => chrome.storage.local.set({ seenCoursesAt: Date.now() }));
+    // A fresh identity cache from course recording (this site's gate) has no account ID of its own: B9 must stay absent.
+    await opts.evaluate(async () => chrome.storage.local.set({ 'seenCoursesAt https://bb.school.test': Date.now() }));
     await page.reload();
     await page.waitForTimeout(650);
     assert.equal(await page.locator('.gz-folder-eye, [data-gz-folder-hidden]').count(), 0, 'unknown user never sees another account record');

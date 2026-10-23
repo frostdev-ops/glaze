@@ -310,6 +310,7 @@ content-page-header > header, .routed-page.bb-offcanvas-container [class*="heade
 #activity-stream .gz-stream-date .date { display: block; }
 #activity-stream .gz-stream-date .date[hidden] { display: none !important; }
 #activity-stream .gz-stream-posted { font-size: .85em; color: var(--gz-ink-muted); }
+#activity-stream .gz-stream-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 #activity-stream [data-gz-stream-hidden], #activity-stream [data-gz-stream-empty] { display: none !important; }
 html[data-gz-stream-compact] #activity-stream .stream-item-container { margin-block-end: 12px !important; padding-block: 0 !important; }
 html[data-gz-stream-compact] #activity-stream .element-card { padding-block: 12px !important; min-height: 0 !important; }

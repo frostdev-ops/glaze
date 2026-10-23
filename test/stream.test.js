@@ -20,8 +20,21 @@ test('hiding encouragement never hides grade-risk warnings or unknown telemetry'
 });
 
 test('missing and invalid due dates safely retain the posted timestamp', () => {
-  for (const values of [null, {}, { datetime: 42 }, { datetime: '' }, { datetime: 'No due date' }, { datetime: '2/30/26, 11:59 PM' }]) assert.equal(S.date(values), null);
+  for (const values of [null, {}, { datetime: 42 }, { datetime: '' }, { datetime: 'No due date' }, { datetime: '2/30/26, 11:59 PM' },
+    { datetime: '10/25/26, 11:99 PM' }, { datetime: '10/25/26, 13:00 PM' }, { datetime: '10/25/26, 24:00' }]) assert.equal(S.date(values), null);
   assert.equal(S.json('{broken'), null); assert.equal(S.json(null), null);
+});
+
+test('US 24-hour deadlines retain their time in relative mode', () => {
+  assert.equal(S.date({ datetime: '10/23/26, 23:59' }, 'en-US', true, new Date(2026, 9, 23, 12)).label, 'in 12 hours');
+});
+
+test('a Stream module injected before bootstrap does not retain an unusable context', () => {
+  const vm = require('node:vm'), fs = require('node:fs');
+  const source = fs.readFileSync(require.resolve('../features/stream.js'), 'utf8');
+  const c = vm.createContext({ GZ_CTX: undefined });
+  assert.doesNotThrow(() => vm.runInContext(source, c));
+  assert.equal(c.GZ_STREAM_UI, undefined);
 });
 
 test('relative dates use the browser zone; an unrecognized/different zone keeps a calendar date', () => {

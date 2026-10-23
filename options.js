@@ -162,7 +162,7 @@ GZ_UI.load().then((s) => {
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
   const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
-  const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs'], canvas: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
+  const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs', 'stream'], canvas: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
   let previewSite = 'ultra', previewPage = 'outline', previewCourse = '', previewCollapsed = false, searchWasOn = false, beforeSearch = false;
   const sizePreview = () => {
     const phone = $('#preview-size').value === 'phone', width = phone ? 375 : 1280, height = phone ? 812 : 900;
@@ -202,7 +202,7 @@ GZ_UI.load().then((s) => {
   };
   followSection = (route) => {
     let site = previewSite, page = previewPage;
-    if (route.startsWith('blackboard/')) { site = 'ultra'; page = route.endsWith('/tabs') ? 'tabs' : route.endsWith('/dashboard') ? 'dashboard' : 'outline'; }
+    if (route.startsWith('blackboard/')) { site = 'ultra'; page = route.endsWith('/tabs') ? 'tabs' : route.endsWith('/dashboard') ? 'dashboard' : route.endsWith('/stream') ? 'stream' : 'outline'; }
     else if (route.startsWith('canvas/')) { site = 'canvas'; page = route.endsWith('/documents') ? 'document' : route.endsWith('/quizzes') ? 'quiz' : 'courses'; }
     else if (route.startsWith('moodle/')) { site = 'moodle'; page = 'courses'; }
     else if (route === 'look/courses') { site = 'ultra'; page = 'outline'; }
@@ -409,6 +409,7 @@ GZ_UI.load().then((s) => {
     outputs();
     for (const el of $$('#ultra-nav-editor input[type="range"][data-key]')) el.value = get(el.dataset.key);
     $('[data-key="auto.on"]').checked = s.auto.on;
+    $('[data-key="stream.relative"]').disabled = s.stream.dates === 'posted';
     $('[data-key="nav.detailed"]').checked = s.nav.detailed;
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;

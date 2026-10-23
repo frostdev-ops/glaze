@@ -1652,7 +1652,6 @@
   "Import notes and share keys": "Notizen und Freigabeschlüssel importieren",
   "Import restores keys locally. It connects only after you create, join or resume a session.": "Der Import stellt Schlüssel lokal wieder her. Eine Verbindung wird erst hergestellt, wenn du eine Sitzung erstellst, ihr beitrittst oder sie fortsetzt.",
   "Sites": "Websites",
-  "Glaze runs on Canvas at instructure.com and on Blackboard at blackboard.com. On a school's own address it asks first; these are the sites you said yes to.": "Glaze läuft auf Canvas unter instructure.com und auf Blackboard unter blackboard.com. Auf der eigenen Adresse einer Schule fragt es zuerst; hier stehen die Websites, denen du zugestimmt hast.",
   "No other sites yet.": "Noch keine weiteren Websites.",
   "Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.": "Wenn du eine Website entfernst, läuft Glaze dort nicht mehr und vergisst die Kurse und Fälligkeiten, die es dort gelesen hat; deine Notizen und Aufgaben bleiben. „Alles zurücksetzen“ leert diese Liste.",
   "Removed {site}. Glaze no longer runs there.": "{site} entfernt. Glaze läuft dort nicht mehr.",

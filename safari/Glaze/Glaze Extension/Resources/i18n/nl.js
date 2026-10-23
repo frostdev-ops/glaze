@@ -1652,7 +1652,6 @@
   "Import notes and share keys": "Notities en deelsleutels importeren",
   "Import restores keys locally. It connects only after you create, join or resume a session.": "Importeren herstelt sleutels lokaal. Er wordt pas verbinding gemaakt nadat je een sessie maakt, eraan deelneemt of deze hervat.",
   "Sites": "Sites",
-  "Glaze runs on Canvas at instructure.com and on Blackboard at blackboard.com. On a school's own address it asks first; these are the sites you said yes to.": "Glaze werkt op Canvas via instructure.com en op Blackboard via blackboard.com. Op het eigen adres van een school vraagt het eerst; dit zijn de sites waarvoor je ja hebt gezegd.",
   "No other sites yet.": "Nog geen andere sites.",
   "Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.": "Een site verwijderen stopt Glaze daar en vergeet de cursussen en deadlines die het daar heeft gelezen; je notities en taken blijven. Alles resetten leegt deze lijst.",
   "Removed {site}. Glaze no longer runs there.": "{site} verwijderd. Glaze werkt daar niet meer.",

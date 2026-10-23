@@ -1,15 +1,35 @@
 // Activity Stream display and a Glaze section beside Blackboard's own Stream notification controls.
 var GZ_STREAM_UI = globalThis.GZ_STREAM_UI || (() => {
-  const C = GZ_CTX, html = document.documentElement;
+  if (!globalThis.GZ_CTX) return;
+  const C = globalThis.GZ_CTX, html = document.documentElement, preview = /-extension:$/.test(location.protocol);
   const marks = new Map(), hidden = new Set(), empty = new Set();
-  let wanted = false, loading, clock, host, root, status, saving = false;
-  const current = () => wanted && C.on() && /^\/ultra\/stream(?:\/|$)/.test(location.pathname);
+  let wanted = false, loading, clock, host, root, status, saving = false, watched = null, queued = false, saved = null;
+  const current = () => wanted && C.on() && (preview ? html.dataset.previewPage === 'stream' : /^\/ultra\/stream(?:\/|$)/.test(location.pathname));
   const t = (s, vars) => C.t(s, vars);
-  const prefs = () => C.settings().stream || GZ_DEFAULTS.stream;
+  const prefs = () => {
+    const live = C.settings().stream || GZ_DEFAULTS.stream;
+    if (saved && saved.from !== live) saved = null;
+    return saved?.value || live;
+  };
+  // Blackboard can update metadata and text in place without a mutation the core observes.
+  const observer = new MutationObserver((records) => {
+    const changed = records.some((r) => !r.target.parentElement?.closest('.gz-stream-date') && !r.target.closest?.('.gz-stream-date')
+      && !(r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].every((n) => n.nodeType === 1 && n.matches('.gz-stream-date'))));
+    if (!changed || queued) return;
+    queued = true;
+    queueMicrotask(() => { queued = false; paint(); });
+  });
+  const watch = () => {
+    const stream = document.getElementById('activity-stream');
+    if (stream === watched) return;
+    observer.disconnect(); watched = stream;
+    if (stream) observer.observe(stream, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['analytics-context', 'translate-values'] });
+  };
   const attr = (e, k, v) => { if (e.getAttribute(k) !== v) e.setAttribute(k, v); };
   const unmark = (row, mark) => { mark.badge.remove(); mark.stamp.removeAttribute('data-gz-stream-date'); marks.delete(row); };
   const clear = () => {
     clearTimeout(clock); clock = null;
+    observer.disconnect(); watched = null; saved = null;
     for (const [row, mark] of marks) unmark(row, mark);
     for (const row of hidden) row.removeAttribute('data-gz-stream-hidden'); hidden.clear();
     for (const group of empty) group.removeAttribute('data-gz-stream-empty'); empty.clear();
@@ -21,9 +41,10 @@ var GZ_STREAM_UI = globalThis.GZ_STREAM_UI || (() => {
     if (!root) return;
     const s = prefs();
     for (const el of root.querySelectorAll('[data-key]')) {
-      if (el.type === 'checkbox') el.checked = s[el.dataset.key]; else el.value = s[el.dataset.key];
+      if (!saving) { if (el.type === 'checkbox') el.checked = s[el.dataset.key]; else el.value = s[el.dataset.key]; }
       el.disabled = saving || (el.dataset.key === 'relative' && s.dates === 'posted');
     }
+    root.querySelector('button').disabled = saving;
   };
   const section = () => {
     const panel = document.querySelector('#notification-settings #panel-stream');
@@ -55,21 +76,23 @@ var GZ_STREAM_UI = globalThis.GZ_STREAM_UI || (() => {
   const save = (patch) => {
     if (!current() || saving) return;
     saving = true; controls(); status.textContent = t('Saving…');
-    const source = host;
-    const finish = (error) => {
+    const source = host, from = C.settings().stream || GZ_DEFAULTS.stream;
+    const finish = (error, value) => {
       saving = false;
-      if (host !== source) { controls(); return; }
-      status.textContent = t(error ? 'Could not save. Try again.' : 'Saved'); controls();
+      if (!error) saved = { from, value };
+      paint();
+      if (host === source && status) status.textContent = t(error ? 'Could not save. Try again.' : 'Saved');
     };
     // Re-read only this settings group, so another editor's changes and every other preference survive.
     try { chrome.storage.sync.get('stream', (raw) => {
       if (chrome.runtime.lastError || !current()) return finish(true);
       const stream = GZ_SANITIZE({ stream: { ...prefs(), ...raw?.stream, ...patch } }).stream;
-      try { chrome.storage.sync.set({ stream }, () => finish(!!chrome.runtime.lastError)); } catch { finish(true); }
+      try { chrome.storage.sync.set({ stream }, () => finish(!!chrome.runtime.lastError, stream)); } catch { finish(true); }
     }); } catch { finish(true); }
   };
   const paint = () => {
     if (!current()) return clear();
+    watch();
     const s = prefs(), P = GZ_STREAM, now = new Date(), locale = C.locale();
     if (s.compact) attr(html, 'data-gz-stream-compact', ''); else html.removeAttribute('data-gz-stream-compact');
     const rows = new Set(document.querySelectorAll('#activity-stream .stream-item-container'));
@@ -90,7 +113,9 @@ var GZ_STREAM_UI = globalThis.GZ_STREAM_UI || (() => {
         const badge = document.createElement('span'); badge.className = 'gz-stream-date';
         const date = document.createElement('span'); date.className = 'date';
         const posted = document.createElement('span'); posted.className = 'date gz-stream-posted';
-        badge.append(date, posted); stamp.append(badge); mark = { stamp, badge, date, posted }; marks.set(row, mark);
+        date.setAttribute('aria-hidden', 'true'); posted.setAttribute('aria-hidden', 'true');
+        const accessible = document.createElement('span'); accessible.className = 'gz-stream-sr';
+        badge.append(date, posted, accessible); stamp.append(badge); mark = { stamp, badge, date, posted, accessible }; marks.set(row, mark);
       }
       const original = [...stamp.childNodes].filter((n) => n !== mark.badge);
       const fullPosted = original.map((n) => n.textContent).join(' ').replace(/\s+/g, ' ').trim();
@@ -101,7 +126,8 @@ var GZ_STREAM_UI = globalThis.GZ_STREAM_UI || (() => {
       if (mark.posted.textContent !== postedText) mark.posted.textContent = postedText;
       mark.posted.hidden = s.dates !== 'both' || !shortPosted;
       const full = `${t('Due {when}', { when: due.full })}${fullPosted ? ` · ${t('Posted {when}', { when: fullPosted })}` : ''}`;
-      attr(mark.badge, 'title', full); attr(mark.badge, 'aria-label', full); attr(stamp, 'data-gz-stream-date', s.dates);
+      if (mark.accessible.textContent !== full) mark.accessible.textContent = full;
+      attr(mark.badge, 'title', full); attr(stamp, 'data-gz-stream-date', s.dates);
     }
     for (const group of empty) if (!group.isConnected) { group.removeAttribute('data-gz-stream-empty'); empty.delete(group); }
     for (const group of document.querySelectorAll('#activity-stream .activity-group')) {

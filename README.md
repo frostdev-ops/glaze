@@ -20,7 +20,7 @@
 
 Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right
 where you do your coursework. It works at any school on Blackboard Ultra, Canvas or Moodle, including on a school's own
-domain, where it asks before enabling a site it has not already approved. No account, no analytics. Your courses, grades, notes and tasks stay on your device.
+domain once you allow it. No account, no analytics. Your courses, grades, notes and tasks stay on your device.
 Your settings, including course nicknames, GPA choices and some school/course/account identifiers, follow Chrome or Firefox sync if you have it on (Safari keeps
 them on the device). Sharing is optional and encrypted on your device before it leaves.
 

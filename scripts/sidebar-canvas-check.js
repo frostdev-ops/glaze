@@ -91,8 +91,10 @@ const layoutOk = async (name, width) => {
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...chromeLaunch, headless: true, viewport: { width: 1600, height: 1000 }, locale: LANG, reducedMotion: 'reduce', args: [`--lang=${LANG}`, `--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
     opts = await ctx.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
+    const yes = { canvas: [`${local}/*`] }; // the student's yes to this Canvas site
+    await opts.evaluate((y) => chrome.storage.local.set(y), yes);
     page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
-    const store = async (s, l) => { await opts.evaluate(async ([s, l]) => { await chrome.storage.sync.set(s); if (l) { await chrome.storage.local.clear(); await chrome.storage.local.set(l); } }, [s, l]); await page.waitForTimeout(250); };
+    const store = async (s, l) => { await opts.evaluate(async ([s, l]) => { await chrome.storage.sync.set(s); if (l) { await chrome.storage.local.clear(); await chrome.storage.local.set(l); } }, [s, l && { ...yes, ...l }]); await page.waitForTimeout(250); };
     const localGet = (k) => opts.evaluate((k) => chrome.storage.local.get(k), k);
     const credentials = Object.fromEntries(fs.readFileSync(credentialsFile, 'utf8').split(/\n/).filter((l) => /^[A-Z_]+=/.test(l)).map((l) => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1).replace(/^['"]|['"]$/g, '')]; }));
     console.log('local login: student');

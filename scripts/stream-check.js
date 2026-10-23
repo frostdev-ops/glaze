@@ -23,14 +23,18 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     for (const file of ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'lib/i18n.js', 'defaults.js', 'lib/page.js', 'lib/stream.js']) await page.addScriptTag({ path: path.join(root, file) });
     await page.evaluate(() => {
       document.querySelector('#invalid [translate-values]').setAttribute('translate-values', '{bad');
-      window.state = GZ_SANITIZE({}); window.saved = []; window.nativeEvents = 0; window.failSave = false;
+      window.state = GZ_SANITIZE({}); window.disk = structuredClone(state.stream); window.saved = []; window.nativeEvents = 0; window.failSave = false; window.holdSave = false; window.holdAck = false;
       const attach = Element.prototype.attachShadow;
       Element.prototype.attachShadow = function (opts) { const r = attach.call(this, opts); if (this.id === 'gz-stream-settings') window.settingsRoot = r; return r; };
       window.chrome = { runtime: { id: 'fixture' }, storage: { sync: {
-        get: (key, cb) => cb({ stream: state.stream }),
+        get: (key, cb) => cb({ stream: disk }),
         set: (values, cb) => {
-          if (failSave) { chrome.runtime.lastError = { message: 'quota' }; cb(); delete chrome.runtime.lastError; return; }
-          saved.push(values); state = GZ_SANITIZE({ ...state, ...values }); GZ_STREAM_UI.sync(true); cb();
+          const finish = () => {
+            if (failSave) { chrome.runtime.lastError = { message: 'quota' }; cb(); delete chrome.runtime.lastError; return; }
+            saved.push(values); disk = structuredClone(values.stream);
+            if (holdAck) window.ackSave = cb; else cb();
+          };
+          if (holdSave) window.finishSave = finish; else finish();
         },
       } } };
       window.GZ_CTX = { on: () => state.enabled, settings: () => state, locale: () => 'en-US', t: (s, v) => s.replace('{when}', v?.when || '') };
@@ -41,17 +45,32 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     await page.evaluate(() => GZ_STREAM_UI.sync(true));
     check(await page.locator('#deadline .gz-stream-date .date').first().textContent() === 'Due Oct 25', 'deadline notifications display the due date');
     check(await page.locator('#deadline .timestamp > div').isHidden(), 'the posted timestamp is visually replaced');
-    check((await page.locator('#deadline .gz-stream-date').getAttribute('aria-label')).includes('11:59 PM (EDT)'), 'the full deadline and zone remain accessible');
+    const accessible = await page.locator('#deadline .gz-stream-date').ariaSnapshot();
+    check(accessible.includes('11:59 PM (EDT)') && accessible.includes('9:30 AM'), 'the accessibility tree includes the full deadline, zone and posted time');
     check(await page.locator('#invalid .gz-stream-date,#content .gz-stream-date,#grade .gz-stream-date').count() === 0, 'invalid deadlines, content and grades retain posted dates');
     check(await page.evaluate(() => !document.querySelector('#gz-stream-settings').shadowRoot && !!settingsRoot.querySelector('select')), 'settings mount in a closed root in the native Stream tab');
     const control = async (selector) => (await page.evaluateHandle((sel) => settingsRoot.querySelector(sel), selector)).asElement();
     await (await control('select')).selectOption('both');
     check(await page.locator('#deadline .gz-stream-posted').isVisible(), 'both mode shows the posted date too');
+    check(await page.evaluate(() => state.stream.dates === 'smart' && settingsRoot.querySelector('select').value === 'both'), 'a successful save stays selected before content receives onChanged');
+    await page.evaluate(() => { holdSave = true; });
     await (await control('[data-key=compact]')).check();
+    check(await page.evaluate(() => settingsRoot.querySelector('[data-key=compact]').checked && settingsRoot.querySelector('[data-key=compact]').disabled && settingsRoot.querySelector('button').disabled), 'pending saves preserve the chosen value and disable reset');
+    await page.evaluate(() => { holdSave = false; finishSave(); });
+    check(await page.evaluate(() => settingsRoot.querySelector('[data-key=compact]').checked && !settingsRoot.querySelector('[data-key=compact]').disabled), 'the saved choice stays visible after a delayed callback');
     await (await control('[data-key=encouragement]')).uncheck();
     check(await page.locator('#kudos').isHidden() && await page.locator('#today').isHidden(), 'hidden encouragement leaves no empty group');
     check(await page.locator('#grade').isVisible() && await page.locator('#content').isVisible(), 'grades and content stay visible');
     check(await page.evaluate(() => nativeEvents === 0 && document.querySelector('#native').checked && saved.every((x) => Object.keys(x).join() === 'stream')), 'only Glaze preferences change, without native form events');
+    await page.evaluate(() => { holdAck = true; });
+    await (await control('[data-key=compact]')).click();
+    await page.evaluate(() => {
+      disk = { ...disk, dates: 'posted', compact: true };
+      state = GZ_SANITIZE({ ...state, stream: disk });
+      GZ_STREAM_UI.sync(true);
+      holdAck = false; ackSave();
+    });
+    check(await page.evaluate(() => settingsRoot.querySelector('select').value === 'posted' && settingsRoot.querySelector('[data-key=compact]').checked), 'an older save callback cannot mask a newer external settings update');
     await (await control('select')).selectOption('posted');
     check(await page.locator('#deadline .gz-stream-date').count() === 0 && await page.locator('#deadline .timestamp > div').isVisible(), 'posted mode restores the original timestamp');
     check(await (await control('[data-key=relative]')).isDisabled(), 'relative dates disable in posted mode');
@@ -64,11 +83,21 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     await page.evaluate(() => {
       document.querySelector('#deadline .timestamp > div').innerHTML = '<span class="date">Oct 22, 2026</span>';
       document.querySelector('#deadline [translate-values]').setAttribute('translate-values', JSON.stringify({ datetime: '10/28/26, 11:59 PM', timezone: 'EDT' }));
-      GZ_STREAM_UI.sync(true);
     });
-    check(await page.locator('#deadline .gz-stream-date .date').first().textContent() === 'Due Oct 28' && await page.locator('#deadline .gz-stream-date').count() === 1, 'redraws update the existing badge without duplication');
+    await page.waitForFunction(() => document.querySelector('#deadline .gz-stream-date .date')?.textContent === 'Due Oct 28');
+    check(await page.locator('#deadline .gz-stream-date').count() === 1, 'metadata-only redraws automatically update the existing badge');
+    await (await control('select')).selectOption('both');
+    await page.evaluate(() => { document.querySelector('#deadline .timestamp > div .date').firstChild.data = 'Oct 23, 2026'; });
+    await page.waitForFunction(() => document.querySelector('#deadline .gz-stream-posted')?.textContent === 'Posted Oct 23, 2026');
+    check(true, 'native text-node updates automatically refresh posted dates');
+    await page.evaluate(() => document.querySelector('#deadline [analytics-context]').setAttribute('analytics-context', '{"streamType":"CO:CO_AVAIL"}'));
+    await page.waitForSelector('#deadline .gz-stream-date', { state: 'detached' });
+    check(true, 'an event-type change automatically restores the posted timestamp');
     await page.evaluate(() => GZ_STREAM_UI.sync(false));
     check(await page.locator('#gz-stream-settings,.gz-stream-date,[data-gz-stream-date],[data-gz-stream-hidden],[data-gz-stream-empty]').count() === 0, 'turning Glaze off removes all stream UI and markers');
+    await page.evaluate(() => document.querySelector('#deadline [analytics-context]').setAttribute('analytics-context', '{"streamType":"GB:DUE"}'));
+    await page.waitForTimeout(80);
+    check(await page.locator('#deadline .gz-stream-date').count() === 0, 'the stream observer stays disconnected while disabled');
     await page.evaluate(() => { GZ_STREAM_UI.sync(true); history.pushState({}, '', '/ultra/course'); GZ_STREAM_UI.sync(true); });
     check(await page.locator('#gz-stream-settings,.gz-stream-date').count() === 0, 'SPA navigation cleans up the stream');
     await page.evaluate(() => { history.pushState({}, '', '/ultra/stream'); GZ_STREAM_UI.sync(true); });
