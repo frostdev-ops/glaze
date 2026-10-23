@@ -14,6 +14,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
   // Ultra's course-color-1…10 in order, by hue, for the swatches' names.
   const TONES = ['Purple', 'Cyan', 'Yellow', 'Orange', 'Mint', 'Pink', 'Green', 'Teal', 'Magenta', 'Blue'];
   let menu = null; // { box, btn, cid, nick, edited, note, custom, reset, tint, grid, sw, looks } while the popover is open
+  let fading = null; // a closed menu may paint briefly, but must not duplicate the next menu's ids/label targets
 
   // -- edits: painted here at once, saved a moment later --
   // Each edit is kept by what it changes and applied again to the settings at save time, so one that an echo of an
@@ -240,6 +241,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     return true;
   };
   const closeMenu = (refocus = true, teardown = false) => {
+    if (teardown) { fading?.remove(); fading = null; }
     const m = menu;
     if (!m) return true;
     if (teardown) menu = null; // no dialog to keep when its card or the extra has gone
@@ -247,7 +249,8 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     if (canvas) colored.get(numOf(m.cid))?.save?.();
     menu = null;
     // It fades as it closes (lib/motion.js); at once when its card or the extra has gone with it.
-    if (teardown || !globalThis.GZ_MOTION) m.box.remove(); else GZ_MOTION.exit(m.box);
+    if (teardown || !globalThis.GZ_MOTION) m.box.remove();
+    else { fading?.remove(); fading = m.box; GZ_MOTION.exit(m.box).then(() => { if (fading === m.box) fading = null; }); }
     m.btn.setAttribute('aria-expanded', 'false');
     if (refocus && m.btn.isConnected) m.btn.focus({ preventScroll: true });
     return true;
@@ -261,6 +264,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const real = ctx.courseList()[cid]?.name;
     if (!real) return;
     if (!closeMenu(false)) return;
+    fading?.remove(); fading = null;
     const name = nickOf(cid) || real;
     const box = make('div', { id: 'gz-cm' });
     for (const [k, v] of [['role', 'dialog'], ['aria-modal', 'true'], ['aria-label', t(moodle ? 'Tint and look for {name}' : 'Colour and look for {name}', { name })]]) box.setAttribute(k, v);

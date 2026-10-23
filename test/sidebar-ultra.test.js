@@ -15,6 +15,20 @@ const W = require('../lib/widgets.js');
 const S = require('../lib/sidebar.js');
 const { page, record, natives, unmoved, settle, read, KEY, O, CARD } = require('./sidebar-ultra-page.js');
 
+test('two sidebar toggles before a snapshot callback compute their states in update order', async () => {
+  const p = page({ at: 'outline' });
+  p.c.sidebarSettings = { open: 'expanded' };
+  let pending;
+  p.c.GZ_MOTION = { swap(update) { pending?.(); pending = update; } };
+  await p.pass();
+  assert.equal(p.mode(), 'expanded');
+  p.fire(p.$('.gz-sb-toggle'), 'click');
+  p.fire(p.$('.gz-sb-toggle'), 'click');
+  pending(); pending = null;
+  assert.equal(p.mode(), 'expanded', 'two rapid toggles restore the original layout');
+  assert.equal(p.doc.activeElement, p.$('.gz-sb-toggle'));
+});
+
 test('each kind of Ultra page: its own column dressed in place, or Glaze\'s own where there is none or only a layer', async () => {
   for (const [at, family, host, cls] of [['courses', 'courses', 'native', 'todo-panel'], ['outline', 'outline', 'native', 'outline-actions'], ['detail', 'detail', 'native', 'outline-actions'], ['stream', 'other', 'glaze', null]]) {
     const p = page({ at, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });

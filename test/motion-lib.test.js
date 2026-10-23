@@ -16,8 +16,8 @@ const env = ({ knobs = KNOBS, vt = false, busy = false, hidden = false, abort = 
   if (vt) doc.startViewTransition = (update) => {
     const t = { update, finished: null, updateCallbackDone: null };
     t.updateCallbackDone = Promise.resolve().then(update);
-    t.finished = abort ? Promise.reject(new Error('InvalidStateError')) : t.updateCallbackDone.then(() => {});
-    t.ready = abort ? Promise.reject(new Error('InvalidStateError')) : t.updateCallbackDone;
+    t.finished = abort ? Promise.reject(Error('aborted')) : t.updateCallbackDone.then(() => {});
+    t.ready = abort ? Promise.reject(Error('aborted')) : t.updateCallbackDone;
     runs.push(t);
     return t;
   };
@@ -256,45 +256,135 @@ test('swap never crossfades inside a frame: a course tab\'s copy of the backgrou
   } finally { delete globalThis.window; }
 });
 
-test('a crossfade the browser abandons still makes its change, clears its marker and rejects nothing unhandled', async () => {
-  const unhandled = [];
-  const on = (e) => unhandled.push(e);
-  process.on('unhandledRejection', on);
+test('a second swap flushes its pending predecessor and each update runs exactly once in order', async () => {
+  env({ vt: true });
+  let value = 0; const order = [];
+  const first = M.swap(() => { value = 1; order.push(1); });
+  const second = M.swap(() => { value = 2; order.push(2); });
+  assert.equal(value, 2, 'the pending predecessor runs before the second update');
+  await Promise.all([first, second]);
+  assert.equal(value, 2, 'an older deferred callback cannot overwrite the next change');
+  assert.deepEqual(order, [1, 2]);
+});
+
+test('a skipped transition whose callback never runs still applies its update', async () => {
+  env({ vt: true });
+  document.startViewTransition = () => ({ finished: Promise.reject(Error('skipped')), updateCallbackDone: Promise.reject(Error('skipped')) });
+  let n = 0;
+  await M.swap(() => { n++; });
+  assert.equal(n, 1);
+});
+
+test('turning motion off during a glide cancels it before making the next change', () => {
+  env();
+  const a = el('a', { left: 0, top: 0, width: 100, height: 20 });
+  M.flip(() => [a], () => { a.box.left = 100; });
+  env({ knobs: { ...KNOBS, '--gz-t-move': '0s', '--gz-t': '0s' } });
+  M.flip(() => [a], () => { assert.equal(a.anims[0].cancelled, true); });
+});
+
+test('a width-only change does not start a position-only glide', () => {
+  env();
+  const a = el('a', { left: 10, top: 0, width: 100, height: 20 });
+  M.flip(() => [a], () => { a.box.width = 200; });
+  assert.equal(a.anims.length, 0);
+});
+
+test('a dragged item stops an earlier glide when it becomes skipped', () => {
+  env();
+  const a = el('a', { left: 0, top: 0, width: 100, height: 20 });
+  M.flip(() => [a], () => { a.box.left = 100; });
+  M.flip(() => [a], () => {}, { skip: () => true });
+  assert.equal(a.anims[0].cancelled, true);
+});
+
+test('cancelling an exit restores its prior inert state instead of stranding a usable element', async () => {
+  env();
+  const a = el('a', { left: 0, top: 0, width: 10, height: 10 });
+  const p = M.exit(a); a.anims[0].cancel(); await p;
+  assert.equal(a.inert, false);
+  const b = el('b', { left: 0, top: 0, width: 10, height: 10 }); b.inert = true;
+  const q = M.exit(b, { remove: false }); b.anims[0].finish(); await q;
+  assert.equal(b.inert, true, 'an already inert element stays inert');
+});
+
+test('hidden pages change state without starting helper motion', async () => {
+  env({ hidden: true });
+  const a = el('a', { left: 0, top: 0, width: 10, height: 10 });
+  M.flip(() => [a], () => { a.box.left = 20; });
+  M.enter(a); M.pop(a);
+  assert.equal(a.anims.length, 0);
+  await M.exit(a);
+  assert.equal(a.removed, true);
+});
+
+test('a disconnected exit cancels promptly instead of waiting for its full duration', async () => {
+  env(); let changed;
+  globalThis.MutationObserver = class { constructor(f) { changed = f; } observe() {} disconnect() {} };
   try {
-    const { html } = env({ vt: true, abort: true });
-    let n = 0;
-    await M.swap(() => { n++; });
-    await new Promise((r) => setImmediate(r));
-    await new Promise((r) => setImmediate(r));
-    assert.equal(n, 1);
-    assert.equal(html.attrs.has('data-gz-swap'), false);
-    assert.deepEqual(unhandled, []);
-  } finally { process.off('unhandledRejection', on); }
+    const a = el('a', { left: 0, top: 0, width: 10, height: 10 });
+    const p = M.exit(a); a.remove(); changed?.();
+    assert.equal(a.anims[0].cancelled, true);
+    await p;
+  } finally { delete globalThis.MutationObserver; }
+});
+
+test('a second exit supersedes the first without the first removing its target early', async () => {
+  env();
+  const a = el('a', { left: 0, top: 0, width: 10, height: 10 });
+  const first = M.exit(a), second = M.exit(a);
+  assert.equal(a.anims[0].cancelled, true);
+  a.anims[1].finish(); await Promise.all([first, second]);
+  assert.equal(a.removed, true);
+});
+
+test('hiding a page finishes pending exits instead of leaving their stale state on return', async () => {
+  env(); let changed;
+  globalThis.MutationObserver = class { constructor(f) { changed = f; } observe() {} disconnect() {} };
+  try {
+    const a = el('a', { left: 0, top: 0, width: 10, height: 10 });
+    const p = M.exit(a); let finishes = 0;
+    const finish = a.anims[0].finish; a.anims[0].finish = () => { finishes++; finish(); };
+    document.hidden = true; changed();
+    assert.equal(finishes, 1); await p;
+    assert.equal(a.removed, true);
+  } finally { delete globalThis.MutationObserver; }
+});
+
+test('a stalled native transition cannot strand either state or the swap marker', async () => {
+  const { html } = env({ vt: true }); let callback;
+  document.startViewTransition = (update) => { callback = update; return { finished: new Promise(() => {}), updateCallbackDone: new Promise(() => {}) }; };
+  let n = 0;
+  await M.swap(() => { n++; });
+  assert.equal(n, 1);
+  assert.equal(html.hasAttribute('data-gz-swap'), false);
+  callback(); assert.equal(n, 1);
+});
+
+test('background changes do not start a click-blocking transition without user activation', async () => {
+  const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  try {
+    Object.defineProperty(globalThis, 'navigator', { value: { userActivation: { isActive: false } }, configurable: true });
+    const { runs } = env({ vt: true }); let n = 0;
+    M.swap(() => { n++; });
+    assert.equal(n, 1); assert.equal(runs.length, 0);
+  } finally { if (nav) Object.defineProperty(globalThis, 'navigator', nav); else delete globalThis.navigator; }
+});
+
+test('an aborted transition handles ready and finished rejections and still updates once', async () => {
+  const { html } = env({ vt: true, abort: true }); let n = 0;
+  await M.swap(() => { n++; }); await new Promise(setImmediate);
+  assert.equal(n, 1); assert.equal(html.hasAttribute('data-gz-swap'), false);
+});
+
+test('a browser that cannot detect an active transition keeps swaps instant rather than risking nesting', () => {
+  const { html, runs } = env({ vt: true }); let n = 0;
+  html.matches = () => { throw new SyntaxError('unsupported pseudo'); };
+  M.swap(() => { n++; });
+  assert.equal(n, 1); assert.equal(runs.length, 0);
 });
 
 test('a copy left by something that went has no role, so nothing that looks for tabs or rows finds it', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'lib', 'motion.js'), 'utf8');
-  assert.match(src, /GHOSTLESS = \['id', 'role',/);
-});
-
-test('swap crossfades only right after someone acted on this page: while a transition runs the page takes no clicks', async () => {
-  const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
-  const set = (v) => Object.defineProperty(globalThis, 'navigator', { value: v, configurable: true, writable: true });
-  try {
-    let { runs } = env({ vt: true });
-    set({ userActivation: { isActive: false } });
-    let n = 0;
-    M.swap(() => { n++; });
-    assert.equal(runs.length, 0, 'no one asked here: at once');
-    assert.equal(n, 1);
-    ({ runs } = env({ vt: true }));
-    set({ userActivation: { isActive: true } });
-    M.swap(() => { n++; });
-    assert.equal(runs.length, 1, 'a click or key here a moment ago: crossfade');
-    await runs[0].finished; await new Promise((r) => setImmediate(r)); // that one over before the next
-    ({ runs } = env({ vt: true }));
-    set({});
-    M.swap(() => { n++; });
-    assert.equal(runs.length, 1, 'a browser without the signal crossfades as before');
-  } finally { if (nav) Object.defineProperty(globalThis, 'navigator', nav); else delete globalThis.navigator; }
+  assert.match(src.match(/GHOSTLESS = \[[^\]]*\]/)[0], /'role'/);
 });

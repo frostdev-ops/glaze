@@ -116,8 +116,14 @@ const animations = (events) => {
         d.showModal(); await frame();
         const enter = Number(getComputedStyle(d).opacity);
         await new Promise((r) => setTimeout(r, 400));
-        d.close(); await frame();
+        d.close(); getComputedStyle(d).display;
+        // Sample the real closing transitions at their midpoint. A loaded runner can deliver two rAFs before the
+        // transition's first tick (opacity still 1), or after its whole duration; neither diagnoses the stylesheet.
+        const closingAnimations = d.getAnimations().filter((a) => a.transitionProperty);
+        for (const a of closingAnimations) { a.pause(); a.currentTime = a.effect.getTiming().duration / 2; }
+        await frame();
         const closing = { shown: shown(d), opacity: Number(getComputedStyle(d).opacity) };
+        for (const a of closingAnimations) a.play();
         await new Promise((r) => setTimeout(r, 600));
         const after = shown(d); d.remove();
         return { supports: CSS.supports('overlay', 'auto'), enter, closing, after };
@@ -163,19 +169,29 @@ const animations = (events) => {
           first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', shiftKey: true, bubbles: true }));
           const moved = tabs().map((e) => e.dataset.courseId);
           const gliding = tabs().filter((e) => e.getAnimations().some((a) => a.effect?.getKeyframes().some((k) => k.translate))).length;
+          const focusAfterMove = document.activeElement === first;
+          const rovingStops = tabs().filter((e) => e.tabIndex === 0).length;
+          await new Promise((r) => setTimeout(r, 80)); // begin a drag while the keyboard reorder is still gliding
+          const dragged = tabs()[i], neighbour = tabs()[i + 1], a = dragged.getBoundingClientRect(), b = neighbour.getBoundingClientRect();
+          dragged.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 71, button: 0, clientX: a.x + 12, bubbles: true }));
+          dragged.dispatchEvent(new PointerEvent('pointermove', { pointerId: 71, clientX: b.right - 2, bubbles: true }));
+          const dragGliding = dragged.getAnimations().some((a) => a.effect?.getKeyframes().some((k) => k.translate));
+          dragged.dispatchEvent(new PointerEvent('pointerup', { pointerId: 71, bubbles: true }));
           await new Promise((r) => setTimeout(r, 700));
           // Closing a tab: Ultra's preview only (Canvas's preview context has no ctx.acted, which a close reaches).
-          if (!closing) return { i, ids, moved, gliding };
+          if (!closing) return { i, ids, moved, gliding, dragGliding, focusAfterMove, rovingStops };
           const last = tabs().filter((e) => !e.hasAttribute('data-pin')).at(-1);
           last.focus();
           last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
           const ghosts = document.querySelectorAll('#gz-ctabs [data-gz-ghost]').length;
-          const ghostFocusable = [...document.querySelectorAll('#gz-ctabs [data-gz-ghost], #gz-ctabs [data-gz-ghost] *')].some((e) => e.matches('[data-course-id], [id]') || !e.closest('[inert]'));
+          const ghostFocusable = [...document.querySelectorAll('#gz-ctabs [data-gz-ghost], #gz-ctabs [data-gz-ghost] *')].some((e) => e.matches('[data-course-id], [data-focus], [id], [role="tab"]') || !e.closest('[inert]'));
           await new Promise((r) => setTimeout(r, 700));
-          return { i, ids, moved, gliding, ghosts, ghostFocusable, ghostsAfter: document.querySelectorAll('[data-gz-ghost]').length, left: tabs().length };
+          return { i, ids, moved, gliding, dragGliding, focusAfterMove, rovingStops, ghosts, ghostFocusable, ghostsAfter: document.querySelectorAll('[data-gz-ghost]').length, left: tabs().length };
         }, site === 'ultra');
         if (!ui.tabs.moved || ui.tabs.moved[ui.tabs.i + 1] !== ui.tabs.ids[ui.tabs.i]) problems.push(`${site}: Shift+Arrow did not move a tab (${JSON.stringify(ui.tabs)})`);
         if (ui.tabs.gliding < 2) problems.push(`${site}: a moved tab and its neighbour should glide (${ui.tabs.gliding} did)`);
+        if (ui.tabs.dragGliding) problems.push(`${site}: the dragged tab must not glide under the pointer`);
+        if (!ui.tabs.focusAfterMove || ui.tabs.rovingStops !== 1) problems.push(`${site}: a tab move lost focus or its single roving stop`);
         if (site === 'ultra' && (ui.tabs.ghosts !== 1 || ui.tabs.ghostFocusable)) problems.push(`${site}: a closed tab should leave one inert copy with no ids (${JSON.stringify(ui.tabs)})`);
         if (ui.tabs.ghostsAfter) problems.push(`${site}: a closed tab's copy stayed`);
         await view('courses');

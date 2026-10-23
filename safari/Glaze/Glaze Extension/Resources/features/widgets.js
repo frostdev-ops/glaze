@@ -825,7 +825,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (next ? el.nextElementSibling === next : home.lastElementChild === el) return;
         // The tiles it passes glide aside (lib/motion.js), and so does it into its new place.
         const seat = () => seatAfter(home, el, next ? next.previousElementSibling : home.lastElementChild);
-        if (globalThis.GZ_MOTION) GZ_MOTION.flip(list, seat, { enter: false }); else seat();
+        if (globalThis.GZ_MOTION) GZ_MOTION.flip(list, seat, { enter: false, skip: (e) => e === el }); else seat();
       };
       const up = (ev) => {
         for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) document.removeEventListener(k, f);
