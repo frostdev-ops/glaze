@@ -209,7 +209,7 @@ test('Ultra board metadata reads native course text beneath Look labels', async 
   const title = { textContent: 'From the Look' }, code = { textContent: 'Labelled code' };
   const p = page({ more: { GZ_RULES: { real: (el) => el === title ? 'Botany' : el === code ? 'BIO-101' : el.textContent, sync() {} } } });
   await settle();
-  p.body.doc.querySelectorAll = () => [{ dataset: { courseId: '_101_1' }, closest: () => null,
+  p.body.doc.querySelectorAll = () => [{ dataset: { courseId: '_101_1' }, closest: () => null, querySelectorAll: () => [],
     querySelector: (selector) => selector.includes('course-title') ? title : selector === '.course-id' ? code : null }];
   p.ui.sync(); await settle();
   assert.equal(p.ui.list()[0].name, 'Botany', 'Look labels must not become course metadata');
