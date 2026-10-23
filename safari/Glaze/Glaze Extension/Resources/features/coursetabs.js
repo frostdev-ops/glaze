@@ -1750,12 +1750,22 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         const ids = ['course_id', 'courseId'].flatMap((k) => q.getAll(k));
         const redirect = location.pathname === '/ultra/redirect' && ids.every((id) => !id || id === framed);
         const panel = !cid && !location.pathname.startsWith('/ultra/courses/') && ids.length > 0 && ids.every((id) => id === framed);
-        if (redirect || panel) return;
+        if (redirect) return;
+        if (panel) { under = location.pathname; return; }
+        // Closing such a panel, Ultra goes to the page it opened it under (/ultra/stream): the frame goes back to where it
+        // was in its course instead, in place of that page in history.
+        if (under && !ids.length && under.startsWith(location.pathname + '/')) {
+          under = '';
+          const to = location.origin + (lastPath || `/ultra/courses/${framed}/outline`);
+          try { history.replaceState(null, '', to); dispatchEvent(new PopStateEvent('popstate', { state: null })); } catch { location.replace(to); }
+          return;
+        }
       }
       const url = location.pathname + location.search + (ctx.site === 'canvas' ? location.hash || '' : '');
       if (awayFrom !== url) { awayFrom = url; toTop('away', { url }); }
       return;
     }
+    under = '';
     // This page going somewhere itself while a frame covers it (its menu, Back): it is what shows now. Ultra keeps one
     // copy of a course, this page's; Canvas keeps the frame's earlier pages too, including work left in them. On Ultra a
     // course whose frame holds unsaved work is that frame instead, shown when this page goes there (moving within it too).
@@ -1786,6 +1796,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     lay();
     if (cid && !preview && !showing) later();
   };
+  let under = ''; // (pass) the address of a panel of the frame's course open under another page
   const sync = (want) => {
     if (gone) return;
     if (signedOut) want = false;
