@@ -264,7 +264,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     for (const x of m.boxes) {
       const b = Array.isArray(x) && x.length === 7 ? inside(x) : null;
       const text = b && 'thn'.includes(x[4]), r = b && whole(x[6], 0, text ? b[3] : Math.floor(Math.min(b[2], b[3]) / 2));
-      if (!b || typeof x[4] !== 'string' || x[4].length !== 1 || !KINDS.includes(x[4]) || typeof x[5] !== 'string' || !/^#[0-9a-f]{8}$/.test(x[5]) || r === null) return null;
+      if (!b || typeof x[4] !== 'string' || x[4].length !== 1 || !KINDS.includes(x[4]) || typeof x[5] !== 'string' || !/^#[0-9a-f]{8}$/.test(x[5]) || r === null || (text && r < 1)) return null;
       boxes.push([...b, x[4], x[5], r]);
     }
     if (boxes.filter((b) => b[4] === 'n').length > (name ? 1 : 0)) return null;
