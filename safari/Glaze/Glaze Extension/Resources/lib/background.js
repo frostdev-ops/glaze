@@ -1061,7 +1061,7 @@ const ensure = async () => {
   const own = (kind) => listed(kind).filter((site) => !builtInHost(kind, site));
   const canvas = on ? listed('canvas') : [], sites = on ? [...new Set([...own('canvas'), ...own('moodle')])] : [];
   // Ultra sites stay registered while Glaze is off, as the manifest's Ultra entry does: content.js keeps to the switch.
-  const ultra = ultraEverywhere() ? [] : [...new Set(own('ultra'))].map(ultraScript);
+  const ultra = ultraEverywhere() ? [] : [...new Set(own('ultra').map(hostOf))].map(ultraScript);
   const have = new Set((await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
   const todo = [...sites.filter((id) => !have.has(id)).map((id) => script(id, canvas.includes(id) ? 'canvas' : 'moodle')), ...ultra.filter((s) => !have.has(s.id))];
   if (todo.length) await chrome.scripting.registerContentScripts(todo);

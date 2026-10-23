@@ -286,19 +286,19 @@ test('approved Ultra sites get Ultra\'s first content script on their /ultra pag
   const w = worker({ local: { canvas: [`${A}/*`], ultra: [B, P, 'https://school.blackboard.com', B] } });
   w.installed[0]({ reason: 'update' });
   await settle();
-  assert.deepEqual(w.ultra(), [`ultra:${P}`, `ultra:${B}`], 'once each; Blackboard\'s own host has the manifest\'s entry');
+  assert.deepEqual(w.ultra(), ['ultra:https://bb.port.edu', `ultra:${B}`], 'once each; Blackboard\'s own host has the manifest\'s entry');
   assert.deepEqual(w.hosts(), [`${A}/*`], 'apart from Canvas\'s and Moodle\'s ids');
   const reg = w.registered.find((s) => s.id === `ultra:${B}`);
   assert.deepEqual(reg, { id: `ultra:${B}`, matches: [`${B}/ultra`, `${B}/ultra/*`], js: ULTRA_FIRST, runAt: 'document_start', allFrames: true, persistAcrossSessions: true });
-  assert.deepEqual(w.registered.find((s) => s.id === `ultra:${P}`).matches, ['https://bb.port.edu/ultra', 'https://bb.port.edu/ultra/*'], 'no port in a match pattern');
+  assert.deepEqual(w.registered.find((s) => s.id === 'ultra:https://bb.port.edu').matches, ['https://bb.port.edu/ultra', 'https://bb.port.edu/ultra/*'], 'no port in a match pattern');
   // A yes on another Ultra site registers it too; nothing is registered twice.
   const C = 'https://bb.other.edu';
   assert.deepEqual(await w.send(yes('ultra'), page(`${C}/ultra/course`)), { ok: true });
-  assert.deepEqual(w.ultra(), [`ultra:${C}`, `ultra:${P}`, `ultra:${B}`].sort());
+  assert.deepEqual(w.ultra(), [`ultra:${C}`, 'ultra:https://bb.port.edu', `ultra:${B}`].sort());
   assert.equal(w.registered.length, new Set(w.registered.map((s) => s.id)).size);
   // Settings' Remove unregisters that site's /ultra pages and keeps the rest.
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: B }, editor), { ok: true });
-  assert.deepEqual(w.ultra(), [`ultra:${C}`, `ultra:${P}`]);
+  assert.deepEqual(w.ultra(), [`ultra:${C}`, 'ultra:https://bb.port.edu']);
   assert.deepEqual(w.hosts(), [`${A}/*`]);
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'reset' }, editor), { ok: true });
   assert.deepEqual(w.registered.filter((s) => /^(https|ultra):/.test(s.id)), []);
