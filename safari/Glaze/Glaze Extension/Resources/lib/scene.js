@@ -852,17 +852,20 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
   // more than 16 for good, counting stopped ones until they are collected (each course tab shown again starts a new one).
   // Not back in 3 s, it is 'dropped', once on screen (a new context from a hidden page could take one that is showing).
   let lostAt = 0, lostTimer = 0;
+  const syncFollow = () => follow(!!def?.parallax && speed > 0 && !still && !document.hidden && !lostAt);
   const dropped = () => { if (lostAt && !document.hidden) fail('dropped'); };
   const onLost = () => {
     if (def?.custom) return fail('lost', [{ line: 0, message: 'The graphics context was lost while drawing this shader. One that takes the GPU too long does that.' }]);
     lostAt = performance.now(); clearTimeout(lostTimer); lostTimer = setTimeout(dropped, 3000);
+    syncFollow();
   };
-  const onRestored = () => { lostAt = 0; clearTimeout(lostTimer); g?.rest(); onResize(); };
+  const onRestored = () => { lostAt = 0; clearTimeout(lostTimer); syncFollow(); g?.rest(); onResize(); };
   canvas.addEventListener('webglcontextlost', onLost);
   canvas.addEventListener('webglcontextrestored', onRestored);
   // Back from a hidden tab (which draws nothing) the first frames are cold. The page's own pace can't tell: on a CPU
   // renderer every frame is seconds apart.
   const onShow = () => {
+    syncFollow();
     if (document.hidden) return;
     if (lostAt && performance.now() - lostAt >= 3000) return dropped();
     g?.rest(); onResize();
@@ -879,6 +882,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
   const apply = (lv) => {
     scale = lv.scale;
     still = !!lv.still;
+    syncFollow();
     canvas.style.visibility = ''; // out of the probe
     needsSize = true;
     draw();
@@ -1024,7 +1028,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
       } else [U.uC1, U.uC2, U.uC3].forEach((u, i) => u.value.set(o.colors[i]).lerp(U.uGround.value, o.dim));
       U.uAmount.value = o.amount;
       U.uDim.value = o.dim;
-      follow(!!def.parallax && !layers && speed > 0);
+      syncFollow();
       renderer.setClearColor(U.uGround.value);
       needsSize = true;
       if (wantsLoop() && !raf) { last = performance.now(); raf = requestAnimationFrame(tick); }

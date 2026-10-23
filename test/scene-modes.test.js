@@ -629,3 +629,35 @@ test('topography: its own terrain, dimmed like the rest, following the pointer b
   o.scene.update(layersOf([{ k: 'scene', name: 'topography' }]));
   assert.equal(other.listeners.has('pointermove'), false, 'nor topography as a layer');
 });
+
+test('topography stops following the pointer when the budget guard holds a still', async () => {
+  const e = engine({ latency: 20 }), w = watch(e);
+  const opts = { ...base, name: 'topography' };
+  w.scene.update(opts); await e.pump();
+  await frames(e, 30);
+  assert.ok(w.steps.some((s) => s.still), 'the guard reached a still frame');
+  assert.equal(e.frames.size, 0);
+  assert.equal(e.listeners.has('pointermove'), false, 'a still does not listen');
+  w.scene.update(opts);
+  assert.equal(e.listeners.has('pointermove'), false, 'a settings refresh cannot rearm the guarded still');
+  w.scene.stop();
+});
+
+test('topography follows only while visible and its graphics context is available', async () => {
+  const e = engine({ latency: 1 }), w = watch(e);
+  w.scene.update({ ...base, name: 'topography' }); await e.pump();
+  e.document.hidden = true;
+  e.docListeners.get('visibilitychange')();
+  assert.equal(e.listeners.has('pointermove'), false, 'hidden pages do not listen');
+  e.document.hidden = false;
+  e.docListeners.get('visibilitychange')(); await e.pump();
+  assert.equal(e.listeners.has('pointermove'), true, 'visible animation resumes following');
+  e.gl.lost = true;
+  e.canvasListeners.get('webglcontextlost')();
+  assert.equal(e.listeners.has('pointermove'), false, 'a lost context does not listen');
+  e.gl.lost = false;
+  e.canvasListeners.get('webglcontextrestored')(); await e.pump();
+  assert.equal(e.listeners.has('pointermove'), true, 'restored animation resumes following');
+  w.scene.stop();
+  assert.equal(e.listeners.has('pointermove'), false);
+});
