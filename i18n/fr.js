@@ -3071,5 +3071,12 @@
   "Form": "Formulaire",
   "Survey": "Sondage",
   "Blog": "Blog",
-  "Wiki": "Wiki"
+  "Wiki": "Wiki",
+  "School address": "Adresse de ton établissement",
+  "Allow": "Autoriser",
+  "All sites": "Tous les sites",
+  "Another school": "Autre établissement",
+  "Not a web address": "Ce n’est pas une adresse web",
+  "Allowed {host}": "{host} autorisé",
+  "All sites allowed": "Tous les sites autorisés"
 };
