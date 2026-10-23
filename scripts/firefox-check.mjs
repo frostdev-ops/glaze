@@ -160,7 +160,8 @@ const browser = (send, log) => {
   const b = {
     send, value, tree, log,
     find: async (prefix) => (await tree()).find((c) => c.url.startsWith(prefix))?.context,
-    frame: async (prefix) => flat(await tree()).find((c) => c.url.startsWith(prefix))?.context,
+    // A frame in the tab `top` whose address starts with `prefix`.
+    frame: async (top, prefix) => flat((await tree()).filter((c) => c.context === top).flatMap((c) => c.children || [])).find((c) => c.url.startsWith(prefix))?.context,
     count: async (prefix) => (await tree()).filter((c) => c.url.startsWith(prefix)).length,
     // A tab, opened as the browser's own UI would (BiDi may not navigate to moz-extension: addresses).
     open: async (url) => {
@@ -184,10 +185,10 @@ const browser = (send, log) => {
         box = [box[0] + f[0], box[1] + f[1]];
       }
       await send('input.performActions', { context, actions: [{ type: 'pointer', id: 'mouse', parameters: { pointerType: 'mouse' }, actions: [{ type: 'pointerMove', x: Math.round(box[0]), y: Math.round(box[1]) }, { type: 'pause', duration: 50 }, { type: 'pointerDown', button: 0 }, { type: 'pointerUp', button: 0 }] }] });
-      await send('input.releaseActions', { context });
+      await send('input.releaseActions', { context }).catch(() => {}); // a page the click closed
     },
     hover: async (context, selector) => {
-      const box = await value(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`, context);
+      const box = await value(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`, context);
       await send('input.performActions', { context, actions: [{ type: 'pointer', id: 'mouse', parameters: { pointerType: 'mouse' }, actions: [{ type: 'pointerMove', x: Math.round(box[0]), y: Math.round(box[1]) }] }] });
     },
     keys: async (context, keys) => {
@@ -224,8 +225,10 @@ const run = async () => {
   await new Promise((r) => proxy.listen(0, '127.0.0.1', r));
   const manifest = JSON.parse(fs.readFileSync(path.join(fresh, 'manifest.json'), 'utf8'));
 
+  // Each browser session on its own: one that stops early still leaves the other to run.
+  const session = (label, body) => firefox(label, body).catch((e) => { console.error(e.stack || String(e)); failed.push(`${label}: ${e.message || e}`); });
   // 1. A new install.
-  await firefox('install', async (b) => {
+  await session('install', async (b) => {
     await b.install(fresh);
     const welcome = await until(() => b.find(`${EXT}features/welcome.html`), 'the first-run tab');
     ok(welcome, 'the first-run tab opens on install');
@@ -261,7 +264,8 @@ const run = async () => {
     const canvas = await b.open(`${CANVAS}/courses/25`);
     await pause(800);
     ok((await b.sheets(canvas)).length === 0, 'a Canvas site nobody approved has no Glaze');
-    const tabId = await b.value(`browser.tabs.query({ url: '${CANVAS}/*' }).then((t) => t[0].id)`, welcome);
+    // Its tab, as the popup finds it: the active one (Firefox hides the address of a tab on a host Glaze doesn't hold).
+    const tabId = await b.value(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then((t) => t[0].id)`, welcome);
     const popup = await b.open(`${EXT}popup.html`);
     await b.value(`(() => { const x = document.createElement('button'); x.id = 'gz-check'; x.textContent = 'Use Glaze'; x.style.cssText = 'position:fixed;left:10px;top:10px;width:120px;height:40px;z-index:9'; document.body.append(x);
       x.addEventListener('click', () => { GZ_SITE.tell({ op: 'ask', origin: '${CANVAS}', kind: 'canvas', tabId: ${tabId} }); browser.permissions.request({ origins: ['${CANVAS}/*'] }); window.close(); }); return 1; })()`, popup);
@@ -338,44 +342,50 @@ const run = async () => {
     await until(() => b.value(`document.querySelectorAll('.gz-dl').length >= 1 && !!document.getElementById('gz-dl-73')`, mods), 'Download all buttons');
     await b.hover(mods, '#context_module_73 .ig-header');
     await b.click(mods, '#gz-dl-73');
-    const frame = await until(() => b.frame(`${EXT}features/allow.html`), 'the Allow frame');
+    const frame = await until(() => b.frame(mods, `${EXT}features/allow.html`), 'the Allow frame');
     ok(await b.value('location.hash', frame) === `#${FILES}`, `the module's header shows Glaze's Allow frame for ${FILES}`);
     await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}'`, frame), 'its button');
     ok(!asked.some((u) => u.includes(FILES)), 'nothing fetched from the file server before the grant');
     // The page's own word, to the content script's window and to the frame: neither counts.
     await b.value(`(postMessage({ gzAllow: '${FILES}', ok: true }, '*'), document.querySelector('.gz-dl-allow').contentWindow.postMessage({ gzAllow: '${FILES}', ok: true }, '*'), 1)`, mods);
     await pause(1500);
-    ok(!!await b.frame(`${EXT}features/allow.html`) && !asked.some((u) => u.includes(FILES)), 'a message the page posts, saying yes, is ignored: the frame stays and nothing is fetched');
+    ok(!!await b.frame(mods, `${EXT}features/allow.html`) && !asked.some((u) => u.includes(FILES)), 'a message the page posts, saying yes, is ignored: the frame stays and nothing is fetched');
+    // Firefox gives an extension page framed in a web page only some APIs: whether the frame can ask at all.
+    const apis = await b.value(`Object.keys(chrome).sort().join(', ')`, frame);
     await b.click(mods, '#allow', [frame, '.gz-dl-allow']);
-    await until(async () => /^Saved 1 file/.test(await b.value(`document.getElementById('gz-dl-73').textContent`, mods)), 'the zip');
-    ok(await holds(b, settings, `https://${FILES}/*`), `the frame's own click: Firefox granted ${FILES}`);
+    const said = await until(async () => { const t = await b.value(`document.getElementById('gz-dl-73').textContent`, mods); return /^Saved 1 file|Download failed/.test(t) && t; }, 'the download to end');
+    ok(said.startsWith('Saved 1 file') && await holds(b, settings, `https://${FILES}/*`), `the frame's own click: Firefox granted ${FILES} and the download went on ("${said}"; the frame's APIs: ${apis})`);
     ok(asked.includes(FILE.url), 'the worker fetched the file');
     const zip = await until(async () => fs.readdirSync(downloads).find((f) => f.endsWith('.zip')), 'the saved zip');
     const bytes = fs.readFileSync(path.join(downloads, zip));
     ok(bytes.includes(Buffer.from(FILE.name)) && bytes.includes(Buffer.from(FILE.body)), `and the zip saved with ${FILE.name} (${zip}, ${bytes.length} bytes)`);
-    ok(!await b.frame(`${EXT}features/allow.html`), 'the frame is gone');
+    ok(!await b.frame(mods, `${EXT}features/allow.html`), 'the frame is gone');
     await noErrors(b, 'Download all');
   });
 
   // 2. An update from a package that holds every site (v3.3.8): the student's sites and their grant stay.
   asked.length = 0;
-  await firefox('update', async (b) => {
+  await session('update', async (b) => {
     await b.install(old);
     await pause(2000);
     ok(await b.count(EXT) === 0, `${OLD_REF} opens no first-run tab`);
     const canvas = await b.open(`${CANVAS}/courses/25`);
-    const yes = async (c, sheet) => {
+    // The card's Yes: it goes once the worker took the answer.
+    const yes = async (c) => {
       await until(() => b.card(c), 'the card');
       await pause(1200);
-      await b.keys(c, ['']);
-      await b.keys(c, ['']);
-      await until(async () => (sheet ? (await b.sheets(c)).includes(sheet) : (await b.sheets(c)).length > 0), `Glaze after Yes (${sheet || 'any sheet'})`);
+      await b.keys(c, ['\uE004']); // Tab: the card is the page's first stop
+      await b.keys(c, ['\uE007']); // Enter on its Yes (the card's shadow root is closed)
+      await until(async () => !await b.card(c), 'the card to take the answer');
     };
-    await yes(canvas, 'canvas.css');
+    await yes(canvas);
     ok(true, `${OLD_REF}: a Canvas site approved on its card`);
     const ultra = await b.open(`${BB}/ultra/courses/_101_1/outline`);
-    await yes(ultra, 'theme.css');
+    await yes(ultra);
     ok(true, `${OLD_REF}: a Blackboard site approved on its card`);
+    // What the old version itself logged is its own, not the update's.
+    const was = await b.errors();
+    if (was.length) console.log(`note ${OLD_REF} logged: ${was.join(' | ')}`);
     await b.install(fresh);
     await pause(3000);
     ok(await b.count(`${EXT}features/welcome.html`) === 0, 'the update opens no first-run tab');
@@ -395,6 +405,7 @@ const run = async () => {
     ok(!await b.card(canvas) && !await b.card(ultra), 'both keep Glaze, with no card');
     const moodle = await b.open(`${MOODLE}/course/view.php?id=2`);
     await yes(moodle);
+    await until(async () => (await b.sheets(moodle)).length > 0, 'Glaze on the new school');
     ok((await lists(b, control)).moodle?.includes(`${MOODLE}/*`), 'with the all-site grant, a new school is added from its card');
     await noErrors(b, 'the update');
   });
