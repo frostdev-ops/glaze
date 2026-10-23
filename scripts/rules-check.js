@@ -251,13 +251,26 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
       { p: 'ultra.course-card', do: 'hide' },
       { p: 'ultra.course-card.banner', do: 'style', st: { bg: '#331144' } },
       { p: 'ultra.course-card.id', do: 'style', st: { fg: '#ff8800' } },
+      { p: 'ultra.course-card.id', do: 'move', to: 'ultra.course-card.title', at: 'before' },
       { p: 'ultra.course-card.status', do: 'hide' },
     ] });
     await until(ub, (sel) => [...document.querySelectorAll(`${sel} .course-title`)].every((e) => e.textContent.trim() === 'My favourite'), BOARD.ultra, "Ultra: the board's card titles take the label");
+    await ub.waitForTimeout(300);
+    const ultraChurn = await ub.evaluate((sel) => new Promise((resolve) => {
+      let writes = 0;
+      const watch = new MutationObserver((records) => { writes += records.length; });
+      for (const c of document.querySelectorAll(sel)) {
+        watch.observe(c.querySelector('.course-title'), { childList: true, characterData: true, subtree: true });
+        watch.observe(c.closest('.gz-w').querySelector('.gz-w-head'), { childList: true, characterData: true, subtree: true });
+      }
+      setTimeout(() => { watch.disconnect(); resolve(writes); }, 1000);
+    }), BOARD.ultra);
+    ok(ultraChurn === 0, `Ultra: the labelled board settles (${ultraChurn} changes in 1 s)`);
     const u = await ultraCards();
     ok(u.every((c) => c.title === 'My favourite'), "Ultra: every board card's title is relabelled");
     ok(u.every((c) => c.radius === '24px' && c.border === '3px solid'), `Ultra: board cards take the card's radius and border (${u[0].radius}, ${u[0].border})`);
     ok(u.every((c) => c.banner === 'rgb(51, 17, 68)' && c.code === 'rgb(255, 136, 0)'), `Ultra: the board card's picture and code take theirs (${u[0].banner}, ${u[0].code})`);
+    ok(await ub.evaluate((sel) => [...document.querySelectorAll(sel)].every((c) => c.querySelector('.course-id').nextElementSibling === c.querySelector('.course-title')), BOARD.ultra), 'Ultra: a code moves before its own board title');
     ok(u.every((c, i) => c.shown !== 'none' && c.menu === ultraReal[i].menu), `Ultra: a board card is never hidden, and its course menu stays as it was (${u[0].shown}, ${u[0].menu})`);
     ok(u.every((c, i) => c.head === ultraReal[i].head && c.tags === 0), `Ultra: the tile's own header and pieces take nothing (${u.map((c) => c.head).join(', ')})`);
     ok(await ub.evaluate(() => [...document.querySelectorAll('article.course-element-card .course-status')].every((e) => e.hasAttribute('data-gz-r-hide'))

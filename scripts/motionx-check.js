@@ -26,6 +26,10 @@ const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-moti
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const PAGE = fs.readFileSync(path.join(root, 'test/fixtures/ultra-courses.html'), 'utf8');
 const SITE = 'https://bb.school.test';
+const CANVAS = 'https://motion.school.instructure.com';
+const CANVAS_PAGE = fs.readFileSync(path.join(root, 'test/fixtures/canvas-dashboard-cards.html'), 'utf8')
+  .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
+  .replaceAll('http://localhost:3000', CANVAS).replace(/https?:\/\/canvas\.instructure\.com/g, CANVAS);
 const POLICY = "default-src 'self'; style-src 'self'; script-src 'self' 'unsafe-inline'; img-src * data: blob:";
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 // Await actual values: installed Playwright does not await an async waitForFunction predicate.
@@ -68,6 +72,11 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
+      if (u.origin === CANVAS) {
+        if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: CANVAS_PAGE });
+        if (u.pathname.startsWith('/api/v1/')) return route.fulfill({ contentType: 'application/json', body: '[]' });
+        return route.abort();
+      }
       if (u.origin === SITE && u.pathname.startsWith('/ultra')) return route.fulfill({ contentType: 'text/html', body: PAGE, headers: { 'content-security-policy': POLICY } });
       if (u.origin === SITE && u.pathname.startsWith('/learn/api/')) return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
       external.push(route.request().url());
@@ -283,6 +292,7 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
     const order = await board.evaluate(() => [...document.querySelector('.gz-w[data-tile="timer"]').parentElement.children].map((e) => (e.dataset.tile?.startsWith('course:') ? 'card' : e.dataset.tile)).filter(Boolean).join(' '));
     ok(/timer.*card/.test(order) && JSON.stringify(t1.map((t) => t.delay)) === JSON.stringify(['0s, 0s', '0s, 0.09s', '0s, 0.18s', '0s, 0.27s']), `staggered by the Look's 90 ms, course cards only (${order}): ${t1.map((t) => t.delay).join(' | ')}`);
     ok(await board.evaluate(() => getComputedStyle(document.querySelector('.gz-w[data-tile="timer"]')).animationName) === tileName, 'another tile plays only the tile entrance');
+    ok(await board.evaluate(() => [...document.querySelectorAll('.gz-w-body > .gz-course-card')].every((c) => getComputedStyle(c).animationName === 'none')), 'Ultra: no second entrance on the inner card');
     await board.screenshot({ path: path.join(out, 'board-enter.png') });
     for (const [label, settings, attr] of [['motion off', BOARD_SETTINGS({ level: 'off' }), null], ['the entrances switch off', BOARD_SETTINGS({ enter: false }), 'data-gz-no-enter']]) {
       await store(settings);
@@ -290,10 +300,38 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
       const t = await tiles();
       ok(t.every((x) => x.name.split(', ').every((n) => n === 'none')), `${label}: no entrance on the board's cards (${t[0].name})`);
     }
+    await board.emulateMedia({ reducedMotion: 'reduce' });
+    await store(BOARD_SETTINGS({ followSystem: true }));
+    await until(() => board.evaluate(() => document.documentElement.dataset.gzMotion === 'off'), 6000, 'Ultra board follows reduced motion');
+    ok((await tiles()).every((t) => t.name.split(', ').every((n) => n === 'none')), 'Ultra: reduced motion stops board entrances');
     await store(BOARD_SETTINGS(), null);
     await until(async () => (await bRoot('--gz-x-enter')) === '', 6000, 'the Look off the board page');
     ok((await tiles()).every((t) => t.name.split(', ').every((n) => n === 'none')), "without a Look, the board's cards keep still, as before");
     await board.close();
+    // Canvas uses the same tile entrance, while apps.css suppresses its native card entrance inside the tile.
+    const canvasLayout = W.layout({});
+    canvasLayout.boards.cdash = ['27', '25', '28', '26'].map((cid) => ({ id: `course:${CANVAS}/${cid}`, on: true, size: 's' }));
+    await opts.evaluate((l) => chrome.storage.local.set({ widgetLayout: l }), canvasLayout);
+    await store(BOARD_SETTINGS(), PARTS);
+    const canvasBoard = await ctx.newPage();
+    canvasBoard.on('pageerror', (e) => errors.push(`canvas: ${e}`));
+    await canvasBoard.goto(`${CANVAS}/`);
+    await until(() => canvasBoard.evaluate((sel) => document.querySelectorAll(sel).length === 4, TILE), 10000, 'Canvas board course cards');
+    const canvasNames = () => canvasBoard.evaluate((sel) => [...document.querySelectorAll(sel)].map((t) => getComputedStyle(t).animationName), TILE);
+    await until(async () => (await canvasNames()).every((n) => n === `${tileName}, ${cardName}`), 6000, 'Canvas board Look entrance');
+    ok(true, 'Canvas: the board plays the tile and card entrances');
+    ok(await canvasBoard.evaluate(() => [...document.querySelectorAll('.ic-DashboardCard[data-gz-tile-card]')].every((c) => getComputedStyle(c).animationName === 'none')), 'Canvas: no second entrance on the inner card');
+    await canvasBoard.evaluate(() => document.documentElement.setAttribute('data-gz-vt-in', ''));
+    ok((await canvasNames()).every((n) => n.split(', ').at(-1) === 'none'), 'Canvas: a page-change transition suppresses the card entrance');
+    await canvasBoard.evaluate(() => document.documentElement.removeAttribute('data-gz-vt-in'));
+    await canvasBoard.emulateMedia({ reducedMotion: 'reduce' });
+    await store(BOARD_SETTINGS({ followSystem: true }));
+    await until(() => canvasBoard.evaluate(() => document.documentElement.dataset.gzMotion === 'off'), 6000, 'Canvas board follows reduced motion');
+    ok((await canvasNames()).every((n) => n.split(', ').every((a) => a === 'none')), 'Canvas: reduced motion stops board entrances');
+    await store(BOARD_SETTINGS(), null);
+    await until(async () => (await canvasNames()).every((n) => n.split(', ').every((a) => a === 'none')), 6000, 'Canvas board without a Look');
+    ok(true, 'Canvas: without a Look, the board keeps still');
+    await canvasBoard.close();
     await opts.evaluate(() => chrome.storage.local.remove('widgetLayout'));
     await store(ULTRA_SETTINGS(), null);
 
