@@ -87,3 +87,15 @@ test('Ultra\'s course header and its tools are one inset glass panel, no rule be
   // The old full-width paint is gone from both rows.
   assert.ok(!rules(THEME).some(([s, b]) => s.includes('.bb-course-navigation [class*="makeStylestoolbar"]') && !s.includes('course-page-header') && /border-bottom:\s*1px/.test(b)));
 });
+
+test('Ultra\'s list toolbar (Announcements: its count and search) has no band; each control is a pill', () => {
+  // Ultra's own rule under it goes, also where #site-wrap's guidance rule (other tools' bars) would reach it.
+  const bar = body(THEME, '.course-announcement-layer > .guidance-wrapper, #site-wrap .course-announcement-layer > .guidance-wrapper, .messages-header, .messages-header > .summary');
+  assert.match(bar, /border-bottom:\s*0 !important/);
+  assert.match(bar, /background:\s*transparent/);
+  const pill = rules(THEME).find(([s]) => s.includes('.guidance-wrapper > span') && s.includes('#search-button'));
+  assert.ok(pill, 'a pill rule for the count and the search button');
+  assert.match(pill[1], /border-radius:\s*999px/);
+  assert.match(pill[1], /border:\s*1px solid var\(--gz-border-line/);
+  assert.match(pill[1], /var\(--gz-surface-paint/);
+});

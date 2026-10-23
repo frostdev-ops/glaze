@@ -515,6 +515,16 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 
 /* Announcements (and other sortable tables): the search/guidance bar and read rows are white. */
 #site-wrap .guidance-wrapper { background: var(--gz-ground) !important; color: var(--gz-ink) !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: none !important; }
+/* A course tool's list toolbar (Announcements' count and search, Messages' New Message) is no band across the page: no
+   fill, no rule under it, and each control a pill on the background. */
+.course-announcement-layer > .guidance-wrapper, #site-wrap .course-announcement-layer > .guidance-wrapper, .messages-header, .messages-header > .summary { background: transparent !important; border-bottom: 0 !important; box-shadow: none !important; }
+:is(.course-announcement-layer > .guidance-wrapper > span, .course-announcement-layer > .guidance-wrapper #search-button, .messages-header .send-message-button) {
+  display: inline-flex; align-items: center; box-sizing: border-box; min-height: 32px; padding: 4px 12px !important; border-radius: 999px !important; color: var(--gz-ink) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: var(--gz-rest-shadow) !important;
+}
+.course-announcement-layer > .guidance-wrapper #search-button { justify-content: center; width: 36px; height: 36px; padding: 0 !important; }
+:is(.course-announcement-layer > .guidance-wrapper #search-button, .messages-header .send-message-button):hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-hi, var(--gz-accent)) 15%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 #site-wrap .guidance-wrapper input { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 #site-wrap table tr, #site-wrap table td { background: transparent !important; }
 #site-wrap table td { transition: background var(--gz-t) var(--gz-ease); }
