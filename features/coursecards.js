@@ -109,8 +109,9 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       nativeCards.set(id, el);
       const group = el.closest('.term-group, .course-org-list');
       const heading = group?.previousElementSibling?.matches('.course-card-term-name') ? group.previousElementSibling : group?.querySelector('.course-card-term-name');
-      cards.set(id, { ...cards.get(id), id, name: el.querySelector('.js-course-title-element, .course-title')?.textContent.trim() || cards.get(id)?.name || id,
-        code: el.querySelector('.course-id')?.textContent.trim() || '', term: heading?.textContent.trim() || cards.get(id)?.term || '' });
+      const text = (node) => node ? (globalThis.GZ_RULES?.real(node) ?? node.textContent).trim() : '';
+      cards.set(id, { ...cards.get(id), id, name: text(el.querySelector('.js-course-title-element, .course-title')) || cards.get(id)?.name || id,
+        code: text(el.querySelector('.course-id')), term: text(heading) || cards.get(id)?.term || '' });
     }
     const peek = ctx.canvasPeek();
     watch(peek.courses, (rows) => {
