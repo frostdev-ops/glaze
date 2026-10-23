@@ -3071,5 +3071,15 @@
   "Form": "Formulário",
   "Survey": "Pesquisa",
   "Blog": "Blog",
-  "Wiki": "Wiki"
+  "Wiki": "Wiki",
+  "School address": "Endereço da sua escola",
+  "Allow": "Permitir",
+  "All sites": "Todos os sites",
+  "Another school": "Outra escola",
+  "Not a web address": "Não é um endereço da web",
+  "Allowed {host}": "{host} permitido",
+  "All sites allowed": "Todos os sites permitidos",
+  "No course site at {host}": "Nenhum site de cursos em {host}",
+  "Can't reach {host}": "Não foi possível acessar {host}",
+  "Checking {host}": "Verificando {host}"
 };
