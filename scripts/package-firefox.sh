@@ -57,11 +57,13 @@ for (const entry of m.web_accessible_resources || []) delete entry.use_dynamic_u
 // installs (default_area, Firefox's own key). The hosts stay Chrome's: built-in ones required, a school's own asked for.
 m.permissions = m.permissions.filter((p) => p !== 'declarativeContent');
 m.action = { ...m.action, default_area: 'navbar' };
-const hostAccess = /^(\s*)const hostAccess = typeof chrome\.permissions\.addHostAccessRequest === 'function' \? .*$/m;
-const popupJs = fs.readFileSync(popup, 'utf8');
-if (!hostAccess.test(popupJs)) throw new Error('popup.js: the extensions-menu line to leave out has changed');
-fs.writeFileSync(popup, popupJs.replace(hostAccess, '$1const hostAccess = null;'));
-if (fs.readFileSync(popup, 'utf8').includes('addHostAccessRequest')) throw new Error('popup.js still names addHostAccessRequest');
+if (fs.existsSync(popup)) {
+  const hostAccess = /^(\s*)const hostAccess = typeof chrome\.permissions\.addHostAccessRequest === 'function' \? .*$/m;
+  const popupJs = fs.readFileSync(popup, 'utf8');
+  if (!hostAccess.test(popupJs)) throw new Error('popup.js: the extensions-menu line to leave out has changed');
+  fs.writeFileSync(popup, popupJs.replace(hostAccess, '$1const hostAccess = null;'));
+  if (fs.readFileSync(popup, 'utf8').includes('addHostAccessRequest')) throw new Error('popup.js still names addHostAccessRequest');
+}
 // Code mods need Chrome: no sandbox page, no sandbox CSP and none of its files. content.js starts code mods
 // only where the manifest has the sandbox; declarative widgets (features/modwidgets.js, drawn by features/modui.js) run here.
 delete m.sandbox;
