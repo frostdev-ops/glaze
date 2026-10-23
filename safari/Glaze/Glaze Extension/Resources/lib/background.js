@@ -1053,9 +1053,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // approved such a site (approved, above), Glaze goes onto its host for good, so its pages are themed from the first paint as
 // on *.instructure.com. Its LMS's list in storage.local is what registers it again: not every browser honors
 // persistAcrossSessions, and an update may clear registrations or change Glaze's file list.
+// The manifest's content script entries, each file by its path in the package: Firefox's getManifest gives each one as its
+// full address.
+const packaged = (f) => (f.startsWith(chrome.runtime.getURL('')) ? f.slice(chrome.runtime.getURL('').length) : f);
+const contentScripts = () => chrome.runtime.getManifest().content_scripts.map((c) => ({ ...c, js: (c.js || []).map(packaged) }));
 // Each LMS's own first content script: Canvas's is the manifest's for *.instructure.com, Moodle's the same without Canvas's
 // part (content-canvas.js). A host on both lists gets Canvas's, which holds all of Moodle's.
-const entryWith = (file) => chrome.runtime.getManifest().content_scripts.find((c) => c.js.includes(file));
+const entryWith = (file) => contentScripts().find((c) => c.js.includes(file));
 const canvasEntry = () => entryWith('content-canvas.js');
 const glaze = (lms) => canvasEntry().js.filter((f) => lms === 'canvas' || f !== 'content-canvas.js');
 // Browser match patterns cannot name a port. The content startup and every worker trust check still use the exact origin.
@@ -1076,7 +1080,7 @@ const serial = (f) => (queue = queue.then(f).catch(console.warn));
 // grant kept from before 3.4.0), it registers lib/detect.js itself, so the question (features/consent.js) asks on each
 // school's pages as Safari's does. The built-in hosts have Glaze already.
 const DETECTOR = 'gz-detect';
-const staticDetector = () => chrome.runtime.getManifest().content_scripts.some((c) => c.js.length === 1 && c.js[0] === 'lib/detect.js');
+const staticDetector = () => contentScripts().some((c) => c.js.length === 1 && c.js[0] === 'lib/detect.js');
 const builtInHosts = () => (chrome.runtime.getManifest().host_permissions || []).filter((p) => /^https:\/\/\*\.[^/]+\/\*$/.test(p) && LMS.some((k) => GZ_BUILT_IN(k, new URL(p.replace('*.', 'x.').slice(0, -1)))));
 const detector = () => ({ id: DETECTOR, matches: [ALL_SITES], excludeMatches: builtInHosts(), js: ['lib/detect.js'], runAt: 'document_start', persistAcrossSessions: true });
 const ensure = async () => {

@@ -103,11 +103,13 @@ GZ_UI.load().then((s) => {
   const b = $('#here');
   b.textContent = t('Use Glaze on {host}', { host: site.host });
   let on = (await chrome.storage.sync.get('enabled')).enabled !== false, done = false, busy = false, menu = false;
+  // The extensions menu's Allow entry for a tab (Chrome 133+). The Firefox package leaves this line out: Firefox has none.
+  const hostAccess = typeof chrome.permissions.addHostAccessRequest === 'function' ? (tabId) => chrome.permissions.addHostAccessRequest({ tabId }) : null;
   const show = () => {
     b.hidden = done || !on;
-    if (b.hidden || held || menu || typeof chrome.permissions.addHostAccessRequest !== 'function') return;
+    if (b.hidden || held || menu || !hostAccess) return;
     menu = true;
-    Promise.resolve().then(() => chrome.permissions.addHostAccessRequest({ tabId: tab.id })).catch(() => {});
+    Promise.resolve().then(() => hostAccess(tab.id)).catch(() => {});
   };
   const ready = () => { busy = false; b.removeAttribute('aria-disabled'); };
   chrome.storage.onChanged.addListener((c, area) => {

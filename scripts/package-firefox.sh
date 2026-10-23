@@ -36,10 +36,10 @@ cat > "$stage/lib/firefox-background.js" <<'JS'
 // Firefox runs the background as an event page: the manifest already loads every script the worker would import.
 globalThis.importScripts = () => {};
 JS
-node - "$stage/manifest.json" "$stage/lib/background.js" "$development" "$branch" "$commit" "$dirty" <<'JS'
+node - "$stage/manifest.json" "$stage/lib/background.js" "$stage/popup.js" "$development" "$branch" "$commit" "$dirty" <<'JS'
 const fs = require('fs');
 const path = require('path');
-const [file, background, development, branch, commit, dirty] = process.argv.slice(2);
+const [file, background, popup, development, branch, commit, dirty] = process.argv.slice(2);
 const m = JSON.parse(fs.readFileSync(file, 'utf8'));
 if (development === 'true') m.name = `${m.name} (Firefox development)`;
 fs.writeFileSync(path.join(path.dirname(file), 'glaze-build.json'), JSON.stringify({ target: 'firefox', development: development === 'true', branch, commit, dirty: dirty === 'true' }, null, 2) + '\n');
@@ -52,6 +52,16 @@ delete m.oauth2;
 m.optional_permissions = (m.optional_permissions || []).filter((p) => p !== 'identity');
 if (!m.optional_permissions.length) delete m.optional_permissions;
 for (const entry of m.web_accessible_resources || []) delete entry.use_dynamic_url;
+// Firefox has no declarativeContent (Chrome's lit button) and no addHostAccessRequest; AMO's linter flags both, the second
+// even behind popup.js's check, so the Firefox popup goes without that line. The button starts on the toolbar for new
+// installs (default_area, Firefox's own key). The hosts stay Chrome's: built-in ones required, a school's own asked for.
+m.permissions = m.permissions.filter((p) => p !== 'declarativeContent');
+m.action = { ...m.action, default_area: 'navbar' };
+const hostAccess = /^(\s*)const hostAccess = typeof chrome\.permissions\.addHostAccessRequest === 'function' \? .*$/m;
+const popupJs = fs.readFileSync(popup, 'utf8');
+if (!hostAccess.test(popupJs)) throw new Error('popup.js: the extensions-menu line to leave out has changed');
+fs.writeFileSync(popup, popupJs.replace(hostAccess, '$1const hostAccess = null;'));
+if (fs.readFileSync(popup, 'utf8').includes('addHostAccessRequest')) throw new Error('popup.js still names addHostAccessRequest');
 // Code mods need Chrome: no sandbox page, no sandbox CSP and none of its files. content.js starts code mods
 // only where the manifest has the sandbox; declarative widgets (features/modwidgets.js, drawn by features/modui.js) run here.
 delete m.sandbox;
