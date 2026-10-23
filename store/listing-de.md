@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.7 (German)
+# Chrome Web Store listing — Glaze 3.3.8 (German)
 
 ## Short summary (132 character maximum)
 
@@ -8,7 +8,16 @@ Gestalte Blackboard Ultra, Canvas und Moodle mit eigenem Look und eigener Naviga
 
 Blackboard Ultra, Canvas und Moodle sollen sich wie deine eigenen anfühlen. Glaze gestaltet deine Kurse mit Paletten, Schriften, Hintergründen und Bewegung neu und ergänzt Werkzeuge zum Planen und Lernen genau dort, wo du deine Kursarbeit erledigst. Es funktioniert an jeder Schule, die Blackboard Ultra, Canvas oder Moodle nutzt, auch auf der eigenen Domain einer Schule, wo es vor dem Aktivieren einer noch nicht genehmigten Website fragt. Kein Konto, keine Analysen. Deine Kurse, Noten, Notizen und Aufgaben bleiben auf deinem Gerät; deine Einstellungen folgen der Synchronisierung deines Browsers, wenn sie eingeschaltet ist; das Teilen ist optional und verschlüsselt.
 
-NEU IN 3.3.7
+NEU IN 3.3.8
+
+• Frostdev, ein neuer Look: eine lebendige Topografie in eisigem Licht, die sich mit deinem Mauszeiger neigt, mit eigenen Mauszeigern und Kontureffekten.
+• Glazes eigene Elemente bewegen sich: Kurs-Tabs, Widgets, Aufgaben und Ordner gleiten an ihren neuen Platz, und ein Wechsel von Palette oder Look wird überblendet.
+• Blackboard: Die Kurs-Tab-Leiste und die Kopfzeilen von Kursen und Inhalten schweben als Glas, und Werkzeugseiten wie das Notenbuch nutzen die volle Breite.
+• Blackboard: ein durchgehender Hintergrund hinter Kurs-Tabs, ohne Naht, auch bei geöffnetem Inhalt.
+• Blackboard: Wer eine Mitteilung in einem Kurs-Tab schließt, landet wieder im Kurs, und Tabs lassen sich wechseln, während einer noch lädt.
+• Blackboard: Was-wäre-wenn-Noten laden in Kurs-Tabs zuverlässig und zeigen die Namen der Kategorien.
+
+AUS 3.3.6
 
 • Jeder mitgelieferte Look hat seinen eigenen Mauszeiger, eine Animation darum, einen Tippeffekt und eigene Effekte für erledigte Aufgaben, Noten und Serien.
 • Tippeffekte: kleine Partikel an der Einfügemarke beim Tippen. Sie lesen nie, was du tippst, und erscheinen nie in Passwort- oder Kartenfeldern, bei Tests oder mit ausgeschalteter Bewegung.

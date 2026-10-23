@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.7
+# Chrome Web Store listing — Glaze 3.3.8
 
 ## Name
 
@@ -16,7 +16,16 @@ Productivity
 
 Make Blackboard Ultra, Canvas and Moodle feel like yours. Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain, where it asks before enabling a site it has not already approved. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
-NEW IN 3.3.7
+NEW IN 3.3.8
+
+• Frostdev, a new Look: a living topography in cut-ice light that tilts with your pointer, with its own pointers and contour effects.
+• Glaze's own parts move: course tabs, widgets, to-dos and folders glide to their new places, and changing a palette or Look crossfades.
+• Blackboard: the course tab strip and the course and item headers float as glass, and tool pages like Gradebook use the full width.
+• Blackboard: one continuous background behind course tabs, with no seam, even with an item open.
+• Blackboard: closing an announcement in a course tab returns to the course, and tabs can be switched while one is still loading.
+• Blackboard: What-if grades load reliably in course tabs and show category names.
+
+FROM 3.3.6
 
 • Every built-in Look has its own pointer, an animation around it, a typing effect and its own effects for finishing work, grades and streaks.
 • Typing effects: small particles at the caret as you type. They never read what you type and never appear in password or card fields, on quizzes or with motion off.

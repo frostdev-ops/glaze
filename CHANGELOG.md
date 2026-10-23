@@ -4,6 +4,27 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.8] — 2026-10-23
+
+### Added
+
+- Frostdev, a new built-in Look: a living topography in cut-ice light that tilts with the pointer, the Frostdev pointer set, and contour effects with flake and shard marks.
+- Glaze's own parts move: course tabs, widgets, to-dos, folders and reminders glide to their new places and fade out when removed, and changing a palette, a Look or the Sidebar's width crossfades. Nothing moves with motion off, transitions off or reduced motion.
+
+### Changed
+
+- Blackboard: the course tab strip, the course header and the headers of items you open (documents, discussions, announcements) float as glass panels; counts and search get pill backgrounds. Canvas's breadcrumb row matches.
+- Blackboard: tool pages such as Gradebook and Calendar run the tab strip and course header the full width, with the Sidebar under them, instead of leaving an empty corner.
+- Entrances, tooltips and dialogs animate on the graphics card, so they stay smooth on busy pages; dialogs fade out as they close.
+
+### Fixed
+
+- Blackboard: a course tab shows one continuous background with the page around it, with no seam at its edge, also with an item open.
+- Blackboard: closing an announcement opened in a course tab goes back to the course's Announcements, instead of taking the window to the Activity Stream.
+- Blackboard and Canvas: course tabs can be switched or closed while one is still loading.
+- Blackboard: no line down the Courses and Organizations pages, no band or bright line under Gradebook's header, and the open Announcements search is a pill.
+- Blackboard: the What-if calculator in a course tab no longer stops at "Glaze couldn't load this course's scores", retries on its own, and shows category names such as Discussion.
+
 ## [3.3.7] — 2026-10-22
 
 ### Fixed

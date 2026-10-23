@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.7 (French)
+# Chrome Web Store listing — Glaze 3.3.8 (French)
 
 ## Short summary (132 character maximum)
 
@@ -8,7 +8,16 @@ Changez le style de Blackboard Ultra, Canvas et Moodle, avec votre look et votre
 
 Faites de Blackboard Ultra, Canvas et Moodle un espace à votre image. Glaze change le style de vos cours avec des palettes, des polices, des arrière-plans et des animations, et ajoute des outils pour planifier et étudier directement là où vous faites vos travaux de cours. Il fonctionne dans tous les établissements qui utilisent Blackboard Ultra, Canvas ou Moodle, y compris sur le domaine propre d’un établissement, où il demande avant d’activer un site qui n’est pas déjà approuvé. Ni compte ni outil d’analyse. Vos cours, vos résultats, vos notes personnelles et vos tâches restent sur votre appareil ; vos réglages suivent la synchronisation de votre navigateur si elle est activée ; le partage est facultatif et chiffré.
 
-NOUVEAUTÉS DE LA VERSION 3.3.7
+NOUVEAUTÉS DE LA VERSION 3.3.8
+
+• Frostdev, un nouveau Look : une topographie vivante sous une lumière de glace taillée, qui s'incline avec votre pointeur, avec ses propres pointeurs et effets de contour.
+• Les éléments de Glaze bougent : les onglets de cours, les widgets, les tâches et les dossiers glissent vers leur nouvelle place, et changer de palette ou de Look se fait en fondu.
+• Blackboard : la barre des onglets de cours et les en-têtes des cours et des éléments flottent comme du verre, et les pages d'outils comme le carnet de notes utilisent toute la largeur.
+• Blackboard : un fond continu derrière les onglets de cours, sans raccord visible, même avec un élément ouvert.
+• Blackboard : fermer une annonce dans un onglet de cours ramène au cours, et on peut changer d'onglet pendant qu'un autre se charge encore.
+• Blackboard : les notes hypothétiques se chargent de façon fiable dans les onglets de cours et affichent le nom des catégories.
+
+DE LA VERSION 3.3.6
 
 • Chaque Look fourni a son propre pointeur, une animation autour, un effet de frappe et ses propres effets pour les travaux terminés, les notes et les séries.
 • Effets de frappe : de petites particules au curseur de texte pendant que vous tapez. Ils ne lisent jamais ce que vous tapez et n'apparaissent jamais dans les champs de mot de passe ou de carte, pendant les tests ou avec les animations désactivées.

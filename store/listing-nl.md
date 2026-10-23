@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.7 (Dutch)
+# Chrome Web Store listing — Glaze 3.3.8 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -8,7 +8,16 @@ Geef Blackboard Ultra, Canvas en Moodle je eigen stijl en navigatie, plus een be
 
 Maak Blackboard Ultra, Canvas en Moodle echt van jou. Glaze geeft je cursussen een nieuwe stijl met paletten, lettertypen, achtergronden en beweging, en voegt hulpmiddelen voor plannen en studeren toe precies waar je je cursuswerk doet. Het werkt op elke school die Blackboard Ultra, Canvas of Moodle gebruikt, ook op het eigen domein van een school, waar het vraagt voordat het een nog niet goedgekeurde site inschakelt. Geen account, geen analytics. Je cursussen, cijfers, notities en taken blijven op je apparaat; je instellingen volgen de synchronisatie van je browser als die aanstaat; delen is optioneel en versleuteld.
 
-NIEUW IN 3.3.7
+NIEUW IN 3.3.8
+
+• Frostdev, een nieuwe Look: een levende topografie in licht van geslepen ijs die meekantelt met je aanwijzer, met eigen aanwijzers en contoureffecten.
+• Glaze's eigen onderdelen bewegen: cursustabbladen, widgets, taken en mappen glijden naar hun nieuwe plek, en een ander palet of een andere Look kiezen gaat met een overgang.
+• Blackboard: de balk met cursustabbladen en de koppen van cursussen en items zweven als glas, en hulpmiddelpagina's zoals het cijferoverzicht gebruiken de volle breedte.
+• Blackboard: één doorlopende achtergrond achter cursustabbladen, zonder naad, ook met een item open.
+• Blackboard: een mededeling sluiten in een cursustabblad brengt je terug naar de cursus, en je kunt van tabblad wisselen terwijl er een nog laadt.
+• Blackboard: wat-als-cijfers laden betrouwbaar in cursustabbladen en tonen de namen van categorieën.
+
+UIT 3.3.6
 
 • Elke meegeleverde Look heeft een eigen aanwijzer, een animatie eromheen, een type-effect en eigen effecten voor afgerond werk, cijfers en reeksen.
 • Type-effecten: kleine deeltjes bij de tekstcursor terwijl je typt. Ze lezen nooit wat je typt en verschijnen nooit in wachtwoord- of kaartvelden, bij toetsen of met beweging uit.
