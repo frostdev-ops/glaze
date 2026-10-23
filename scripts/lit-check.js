@@ -116,6 +116,6 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     process.exitCode = 1;
   } finally {
     await ctx?.close().catch(() => {});
-    fs.rmSync(path.join(tmp, 'profile'), { recursive: true, force: true });
+    fs.rmSync(process.argv[2] ? tmp : path.join(tmp, 'profile'), { recursive: true, force: true });
   }
 })();
