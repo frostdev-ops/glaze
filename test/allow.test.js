@@ -424,3 +424,13 @@ test('a dismissed first-run request releases its intent so a later browser-menu 
   assert.deepEqual(w.store.local.canvas, [`${C}/*`]);
   assert.deepEqual(w.sites(), [`${C}/*`]);
 });
+
+
+test('a first-run cancellation preserves a popup intent for the same host', async () => {
+  const w = worker({ tabs: [{ id: 6, url: `${BBS}/ultra/stream` }] });
+  await w.send(allow('ask', { origin: BBS, kind: 'ultra', tabId: 6 }), popup);
+  await w.send(allow('cancel', { origin: BBS }), welcome);
+  await w.grant(`${BBS}/*`);
+  assert.deepEqual(w.store.local.ultra, [BBS]);
+  assert.deepEqual(w.fetched, [], 'the popup intent still supplies the LMS it detected');
+});

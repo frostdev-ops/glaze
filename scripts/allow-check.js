@@ -32,11 +32,14 @@ const stub = () => {
   if (!location.pathname.endsWith('/features/welcome.html')) return;
   const held = new Set(['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*']);
   const covers = (o) => [...held].some((p) => p === o || (p.startsWith('https://*.') && o.startsWith('https://') && new URL(o.replace('/*', '/')).hostname.endsWith(p.slice(10, -2))));
-  globalThis.__gz = { asked: [], removed: [] };
+  globalThis.__gz = { asked: [], removed: [], accept: true };
+  const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+  chrome.runtime.sendMessage = (m) => send(m).then((r) => { if (m.op === 'cancel') __gz.cancelled = r.ok; return r; });
   chrome.permissions.contains = async ({ origins = [] }) => origins.every(covers);
   chrome.permissions.request = async ({ origins = [] }) => {
     if (!navigator.userActivation.isActive) throw new Error('This function must be called during a user gesture');
     __gz.asked.push(origins);
+    if (!__gz.accept) return false;
     origins.forEach((o) => held.add(o));
     return true;
   };
@@ -90,7 +93,19 @@ const stub = () => {
     await w.waitForSelector('#address');
     await w.type('#address', 'bb.school.edu', { delay: 20 });
     await pause(300);
+    await sw.evaluate(() => {
+      const probe = GZ_SITE.probe;
+      GZ_SITE.probe = async (...args) => {
+        globalThis.__checking = true;
+        await new Promise((resolve) => { globalThis.__finishCheck = resolve; });
+        GZ_SITE.probe = probe;
+        return probe(...args);
+      };
+    });
     await w.click('#go');
+    check(await until(() => sw.evaluate(() => globalThis.__checking === true)), 'the worker is running its second check');
+    check(await w.evaluate(() => document.querySelector('#go').hasAttribute('data-busy') && document.querySelector('.bar').dataset.state !== 'done'), 'Open waits for the worker to register the site');
+    await sw.evaluate(() => globalThis.__finishCheck());
     check(await until(() => w.evaluate(() => document.querySelector('.bar').dataset.state === 'done'), 15000), 'the first screen checks the site and settles on it');
     const local = () => sw.evaluate(() => chrome.storage.local.get(['canvas', 'moodle', 'ultra']));
     const ids = () => sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id).sort());
@@ -107,6 +122,15 @@ const stub = () => {
     check(await until(async () => (await sw.evaluate(() => __icons)).some((o) => o.tabId === tabId && o.path?.['16'])), `and Glaze's own toolbar icon for its tab (${JSON.stringify(await sw.evaluate(() => __icons))})`);
     check((await sw.evaluate(() => __icons)).every((o) => Number.isInteger(o.tabId)), 'never an icon without a tab');
     if (out) { fs.mkdirSync(out, { recursive: true }); await p.screenshot({ path: path.join(out, 'first-run-site.png') }); }
+
+    const declined = await ctx.newPage();
+    await declined.goto(welcomeUrl);
+    await declined.fill('#address', 'canvas.school.edu');
+    await declined.evaluate(() => { __gz.accept = false; });
+    await pause(300);
+    await declined.click('#go');
+    check(await until(() => declined.evaluate(() => __gz.cancelled === true)), 'dismissing the prompt releases the first-run intent');
+    await declined.close();
 
     // 3. Grants from Chrome's own menus: a Canvas site with a tab open there, then a school's main website.
     const c = await ctx.newPage();
