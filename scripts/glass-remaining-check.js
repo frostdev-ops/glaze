@@ -183,6 +183,16 @@ const OFFCANVAS = `<div class="bb-offcanvas-panel bb-offcanvas-right full active
         });
         check(['drawer', 'none'].includes(side.state) || side.sidebarTop >= side.headerBottom, `${look} offcanvas: sidebar starts below the header`, side);
         await shot(`offcanvas-${slug(look)}`);
+        if (side.state === 'drawer') {
+          const launch = page.locator('#gz-sb-launch');
+          await launch.focus(); await page.keyboard.press('Enter');
+          await page.waitForSelector('html[data-gz-sidebar-open]');
+          const drawer = await page.locator('#gz-sidebar').evaluate((e) => ({ top: e.getBoundingClientRect().top, focus: e.contains(document.activeElement) }));
+          check(drawer.top >= side.headerBottom && drawer.focus, `${look} offcanvas: keyboard opens the drawer below the header`, drawer);
+          await shot(`offcanvas-drawer-${slug(look)}`);
+          await page.keyboard.press('Escape');
+          check(await launch.evaluate((e) => document.activeElement === e && !document.documentElement.hasAttribute('data-gz-sidebar-open')), `${look} offcanvas: Escape closes the drawer and restores focus`);
+        }
       },
       async sticky(look) {
         await setup(look); await go('/ultra/courses/_101_1/announcements');
@@ -237,7 +247,7 @@ const OFFCANVAS = `<div class="bb-offcanvas-panel bb-offcanvas-right full active
         await pause(2500);
         await page.evaluate(() => { scrollTo(0, 0); for (const e of document.querySelectorAll('#drawer-layout-content, #application, #wrapper')) e.scrollTop = 0; });
         await pause(300);
-        
+
         const m = await page.evaluate(() => {
           const row = document.querySelector('.ic-app-nav-toggle-and-crumbs'), s = document.querySelector('#gz-ctabs');
           if (!row) return null;
