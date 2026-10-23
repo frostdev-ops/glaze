@@ -28,7 +28,7 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     const settings = { ...D.GZ_DEFAULTS, enhance: Object.fromEntries(Object.keys(D.GZ_DEFAULTS.enhance).map((k) => [k, k === 'hideFolders'])) };
-    await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings);
+    await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); }, settings);
     const page = await context.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('https://bb.school.test/ultra/courses/_800_1/outline');
@@ -144,8 +144,8 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     await page.evaluate(() => { history.pushState({}, '', `${location.origin}/ultra/courses/_800_1/outline`); document.body.append(document.createElement('div')); });
     await page.waitForFunction(() => document.querySelectorAll('.gz-folder-eye').length === 3);
     assert.deepEqual(errors, []);
-    // A fresh identity cache from course recording has no account ID of its own: B9 must stay absent.
-    await opts.evaluate(async () => chrome.storage.local.set({ seenCoursesAt: Date.now() }));
+    // A fresh identity cache from course recording (this site's gate) has no account ID of its own: B9 must stay absent.
+    await opts.evaluate(async () => chrome.storage.local.set({ 'seenCoursesAt https://bb.school.test': Date.now() }));
     await page.reload();
     await page.waitForTimeout(650);
     assert.equal(await page.locator('.gz-folder-eye, [data-gz-folder-hidden]').count(), 0, 'unknown user never sees another account record');
