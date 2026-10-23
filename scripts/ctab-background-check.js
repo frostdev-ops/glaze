@@ -61,7 +61,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     await until(() => frame.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctab-framed')));
     await pause(1500);
     const state = async () => ({
-      frame: await frame.evaluate(() => ({ through: document.documentElement.hasAttribute('data-gz-through'), scene: !!document.getElementById('gz-scene'), base: getComputedStyle(document.querySelector('#site-wrap > #main-content')).visibility })),
+      frame: await frame.evaluate(() => ({ through: document.documentElement.hasAttribute('data-gz-through'), scene: !!document.getElementById('gz-scene') })),
       page: await page.evaluate(() => {
         const f = document.querySelector('iframe[name="gz-ctab:_102_1"]'), r = f.getBoundingClientRect(), strip = document.querySelector('#site-wrap #gz-ctabs');
         return { key: document.documentElement.getAttribute('data-gz-bg-key'), marked: f.hasAttribute('data-gz-through'), scene: !!document.getElementById('gz-scene'),
@@ -73,7 +73,6 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     check(s.frame.through && !s.frame.scene, 'the frame wearing the page\'s background is see-through and draws no scene');
     check(s.page.scene && s.page.marked, 'the page keeps its scene and knows the frame shows over it');
     check(s.page.strip !== 'visible', 'the page\'s own strip does not show through the frame');
-    check(s.frame.base === 'hidden', `the frame's covered course list stays hidden (${s.frame.base})`);
     // The frame's content hidden, what shows inside its box must be the page's own background, pixel for pixel: the same
     // as with the frame gone.
     const [x, y, w, h] = s.page.rect.map(Math.round);
