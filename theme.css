@@ -470,8 +470,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
   .base-header, .course-groups-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"],
   .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"],
-  .bb-offcanvas-panel.full .panel-header.simple-header) {
+  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"]) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
   backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
@@ -480,6 +479,16 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 }
 #site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
   .bb-offcanvas-panel.full .panel-header.simple-header) :is(.panel-title, .editable-title-container) { background: transparent !important; }
+/* A full panel over the page (an announcement opened from a course): its header is a floating glass panel like the course
+   header, inset from the window's top and end; the header's own box keeps Ultra's place (it pulls into the panel's
+   padding), so the glass is drawn inside it. The panel's own edge draws no line. */
+#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header { position: relative; isolation: isolate; background: transparent !important; backdrop-filter: none; border: 0 !important; box-shadow: none !important; }
+#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before {
+  content: ""; position: absolute; z-index: -1; inset-block: var(--gz-float-gap, 12px) 0; inset-inline: 0 var(--gz-float-end, 12px); pointer-events: none;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
+#site-wrap .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *), #site-wrap .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { border-inline-start: 0 !important; box-shadow: none !important; }
 #site-wrap .reply-form, #site-wrap .new-comment, #site-wrap .bb-editor-root, #site-wrap .bb-editor-container, #site-wrap .editor-content-container, #site-wrap .ql-editor, #site-wrap .ql-container, #site-wrap .ql-toolbar, #site-wrap bb-message, #site-wrap .message-body, #site-wrap .comments { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 #site-wrap .lti-placement__root { background: transparent !important; }
 
@@ -895,7 +904,7 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
   .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"],
   #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header,
+  #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before,
   .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
   bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]), #site-wrap .outline-action-block,
   #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),

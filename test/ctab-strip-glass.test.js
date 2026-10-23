@@ -145,3 +145,18 @@ test('a routed page\'s breadcrumb row is a floating glass panel like the course 
   assert.match(sticky[1], /background:\s*transparent/);
   assert.ok(ruleWith(THEME, 'div.bb-course-navigation::before', '.routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)::before').length >= 2, 'veiled, with and without scroll timelines');
 });
+
+test('a full off-canvas panel (an announcement) has a floating glass header and no line at its edge', () => {
+  const head = body(THEME, '#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header');
+  assert.match(head, /background:\s*transparent !important/);
+  assert.match(head, /border:\s*0 !important/);
+  const g = body(THEME, '#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before');
+  glass(g, 'announcement header');
+  assert.match(g, /inset-block:\s*var\(--gz-float-gap[^;]*\) 0/, 'a gap from the window\'s top');
+  assert.match(g, /inset-inline:\s*0 var\(--gz-float-end/, 'and from its end');
+  assert.match(g, /z-index:\s*-1/);
+  assert.match(g, /pointer-events:\s*none/);
+  const edge = ruleWith(THEME, '#site-wrap .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *)', '> .bb-offcanvas-panel-wrap')[0];
+  assert.ok(edge && /border-inline-start:\s*0 !important/.test(edge[1]) && /box-shadow:\s*none !important/.test(edge[1]), 'no edge line on the panel or its wrap');
+  assert.ok(ruleWith(THEME, 'html[data-gz-bg="solid"]', '.panel-header.simple-header::before').length, 'no blur over a solid background');
+});
