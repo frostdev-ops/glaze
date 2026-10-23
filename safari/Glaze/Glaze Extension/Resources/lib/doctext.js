@@ -102,7 +102,10 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
       out = raw;
     } else {
       // The declared size can lie, so the stream is cut off as soon as it passes it.
-      const reader = new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+      // Written straight in, not through a Blob's stream: Safari's content scripts refuse that stream's chunks here.
+      const inflate = new DecompressionStream('deflate-raw'), writer = inflate.writable.getWriter();
+      writer.write(new Uint8Array(raw)).then(() => writer.close()).catch(() => {});
+      const reader = inflate.readable.getReader();
       const parts = [];
       let n = 0;
       try {

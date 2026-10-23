@@ -157,7 +157,7 @@ test('rotation: a favorite still decoding when the student turns rotation off or
   assert.equal(w.local.rotateState.i, 0);
 });
 
-test('rotation: a favorite brings its parts with it, a built-in Look clears them, and parts changed meanwhile drop the turn', { timeout: 10000 }, async () => {
+test('rotation: a favorite brings its parts with it, a built-in Look its own, and parts changed meanwhile drop the turn', { timeout: 10000 }, async () => {
   const G = require('../defaults.js');
   const X = require('../lib/lookparts.js');
   const parts = { x: { cursor: { kind: 'glow' } } };
@@ -187,11 +187,12 @@ test('rotation: a favorite brings its parts with it, a built-in Look clears them
   ({ w, r } = await favorite(parts, (x) => { x.sync.lookX = 'x1:changed'; }));
   assert.deepEqual(r, { ok: false, error: 'changed' });
   assert.equal(w.sync.lookX, 'x1:changed');
-  // Built-in Looks have no parts.
+  // A built-in Look brings its own parts.
   w = worker({ rotateState: due }, await settings());
   assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
   assert.equal(w.sync.bg.kind, 'scene');
-  assert.equal(w.sync.lookX, '');
+  const worn = await X.unpack(w.sync.lookX);
+  assert.ok(require('../defaults.js').GZ_LOOKS.some((L) => X.same(worn, require('../lib/lookset.js')(L))), JSON.stringify(worn)?.slice(0, 200));
 });
 
 // ---- the page -------------------------------------------------------------------------------------------------------
@@ -242,7 +243,10 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
   html.style.removeProperty = (k) => { delete html.style[k]; };
   const blobs = new Set();
   let b = 0;
-  const settings = { extras: { cursor: 'off', stickers: true, rotate: 'off', at: '08:00' } };
+  const settings = { extras: { stickers: true, rotate: 'off', at: '08:00' } };
+  let parts = null; // the worn Look's parts, as GZ_CTX.parts() hands them
+  let on = true, partsOn = true, courseLook = null;
+  const docOn = {}, changed = [], synced = []; // the document's listeners; storage.onChanged's; what went to storage.sync
   const held = []; // storage reads made to wait: { keys, release }
   let hold = () => false;
   const timers = new Map();
@@ -255,22 +259,23 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
     setTimeout: (f, ms) => { const id = ++n; timers.set(id, ms); fns.set(id, f); return id; }, clearTimeout: (id) => { timers.delete(id); fns.delete(id); },
     addEventListener: (type, f) => { (win[type] ||= []).push(f); }, innerWidth: 1000, innerHeight: 800,
     location: { origin: SITE, pathname },
-    document: { documentElement: html, head, body, createElement: (t) => new El(t), getElementById: (id) => html.find(id), addEventListener() {}, hidden: false },
+    document: { documentElement: html, head, body, createElement: (t) => new El(t), getElementById: (id) => html.find(id), addEventListener: (t, f) => { (docOn[t] ||= []).push(f); }, hidden: false },
     chrome: {
       runtime: { getURL: (f) => `chrome-extension://x/${f}`, sendMessage: (m, cb) => send(structuredClone(m), cb) },
       storage: {
-        onChanged: { addListener() {} },
-        sync: { set() {} },
+        onChanged: { addListener: (f) => changed.push(f) },
+        sync: { set: (v) => synced.push(structuredClone(v)) },
         local: {
           get: (keys, cb) => {
-            const answer = () => cb(structuredClone(keys === null ? local : Object.fromEntries([].concat(keys).filter((k) => k in local).map((k) => [k, local[k]]))));
+            const answer = (snapshot) => cb(structuredClone(snapshot || (keys === null ? local : Object.fromEntries([].concat(keys).filter((k) => k in local).map((k) => [k, local[k]])))));
             if (hold(keys)) held.push({ keys, release: answer }); else setTimeout(answer);
           },
         },
       },
     },
     GZ_MATCH_PRESET: () => null,
-    GZ_CTX: { t: (k) => k, need: () => Promise.resolve(), settings: () => settings, on: () => true, solo: true },
+    CSS: { supports: () => true },
+    GZ_CTX: { t: (k) => k, need: (file) => { if (file === 'lib/lookset.js') assert.equal(vm.runInContext(read(file), context)?.ready, true, 'the worker requires a serializable completion value'); return Promise.resolve(); }, settings: () => settings, parts: () => parts, partsOn: (pointer) => on && (pointer || partsOn), courseLook: () => courseLook, on: () => on, solo: true },
   });
   context.window = context;
   context.top = context;
@@ -280,7 +285,8 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
   // Runs the timers due now (the 300 ms save; not rotation's ten-minute one).
   const runTimers = () => { for (const [id, f] of [...fns]) if (timers.get(id) <= 1000) { timers.delete(id); fns.delete(id); f(); } };
   const fire = (type, e = {}) => { for (const f of win[type] || []) f(e); };
-  return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; } };
+  return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; }, wear: (x) => { parts = x; },
+    setOn: (v) => { on = v; }, setPartsOn: (v) => { partsOn = v; }, setCourseLook: (v) => { courseLook = v; partsOn = !v; }, emit: (t) => { for (const f of docOn[t] || []) f({ type: t }); }, stored: (c) => { for (const f of changed) f(c, 'local'); }, local, synced };
 };
 
 test('page: a picture read that answers after Hide doesn\'t draw the stickers back', async () => {
@@ -342,7 +348,7 @@ test('page: Place stickers with Show stickers off opens sticker mode with its la
 test('page: own sticker and pointer pictures reach the page as blob: addresses, never data: URLs', async () => {
   const data = `data:image/png;base64,${Buffer.from('not really a png').toString('base64')}`;
   const p = page({ [KEY]: [sticker('a', 'own:pic1'), sticker('b')], 'stkImg:pic1': data, cursorImg: data });
-  p.settings.extras = { ...p.settings.extras, cursor: 'own' };
+  p.wear({ pointer: 'own' });
   await p.lx.sync();
   for (let i = 0; i < 5; i++) await tick();
   const text = JSON.stringify((function walk(e) { return { a: e.attrs, s: e.style, src: e.src, kids: e.children.map(walk) }; })(p.html));
@@ -351,12 +357,229 @@ test('page: own sticker and pointer pictures reach the page as blob: addresses, 
   const img = p.body.find('gz-stickers').children[0].children[0];
   assert.match(img.src, /^blob:x\//);
   assert.equal(p.blobs.size, 2, 'the sticker and the pointer');
-  // Pointer off: its address is revoked.
-  p.settings.extras = { ...p.settings.extras, cursor: 'off' };
+  // A Look without a pointer: its address is revoked.
+  p.wear({ cursor: { kind: 'glow' } });
   await p.lx.sync();
   await tick();
   assert.equal(p.blobs.size, 1);
   assert.equal(p.html.style['--gz-cursor'], undefined);
+});
+
+test('page: the Look\'s pointer set is the system\'s cursor, its SVG first with the PNGs after, and goes with the Look', async () => {
+  const p = page({});
+  p.wear({ pointer: 'pumpkin' });
+  await p.lx.sync();
+  await tick();
+  assert.equal(p.html.style['--gz-cursor'], 'url("chrome-extension://x/assets/art/cursors/pumpkin/default.svg") 4 3, image-set(url("chrome-extension://x/assets/art/cursors/pumpkin/default.png") 1x, url("chrome-extension://x/assets/art/cursors/pumpkin/default@2x.png") 2x) 4 3, url("chrome-extension://x/assets/art/cursors/pumpkin/default.png") 4 3, auto');
+  assert.match(p.html.style['--gz-cursor-pointer'], /pumpkin\/pointer\.svg"\) 12 3, .*, pointer$/);
+  assert.ok('data-gz-cursor' in p.html.attrs);
+  p.wear(null);
+  await p.lx.sync();
+  await tick();
+  assert.equal(p.html.style['--gz-cursor'], undefined);
+  assert.equal(p.blobs.size, 0, 'a set is the extension\'s file, never a blob');
+});
+
+// The student's pointer (settings extras.pointer) over the Look's: what --gz-cursor says, as a set's name, 'own' or none.
+const shown = (p) => {
+  const c = p.html.style['--gz-cursor'];
+  if (c === undefined) return 'data-gz-cursor' in p.html.attrs ? 'broken' : 'system';
+  return /^url\("blob:/.test(c) ? 'own' : c.match(/cursors\/(\w+)\/default\./)?.[1] || c;
+};
+const choose = async (p, pointer) => { p.settings.extras = { ...p.settings.extras, pointer }; await p.lx.sync(); await settle(); };
+
+test('page: the student\'s pointer wins over the Look\'s; The Look\'s pointer gives the Look\'s back', async () => {
+  const data = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
+  const p = page({ cursorImg: data });
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'look' };
+  p.wear({ pointer: 'pumpkin', cursor: { kind: 'flicker' } });
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'pumpkin', 'the Look\'s, by default');
+  await choose(p, 'aqua');
+  assert.equal(shown(p), 'aqua', 'a set over the Look\'s');
+  assert.match(p.html.style['--gz-cursor-pointer'], /cursors\/aqua\/pointer\.png"\) 14 2, pointer$/, 'its hand where the page is clickable');
+  await choose(p, 'off');
+  assert.equal(shown(p), 'system', 'System pointer: none of Glaze\'s, whatever the Look has');
+  assert.equal(p.html.style['--gz-cursor-pointer'], undefined);
+  await choose(p, 'own');
+  assert.equal(shown(p), 'own', 'their picture, as a blob: address');
+  assert.equal(p.blobs.size, 1);
+  await choose(p, 'look');
+  assert.equal(shown(p), 'pumpkin', 'back to the Look\'s');
+  assert.equal(p.blobs.size, 0, 'the picture\'s address revoked');
+});
+
+test('page: the student\'s pointer stays through a change of Look; the Look\'s follows it', async () => {
+  const p = page({});
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'lava' };
+  p.wear({ pointer: 'pumpkin' });
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'lava');
+  // Another Look is worn (features/lookparts.js fires glaze:parts): the choice stays.
+  p.wear({ pointer: 'ghost' });
+  p.emit('glaze:parts');
+  await settle();
+  assert.equal(shown(p), 'lava');
+  p.wear(null);
+  p.emit('glaze:parts');
+  await settle();
+  assert.equal(shown(p), 'lava', 'a Look without a pointer or any parts: still the student\'s');
+  // Following the Look again: each Look's own, and none for a Look without.
+  await choose(p, 'look');
+  assert.equal(shown(p), 'system');
+  p.wear({ pointer: 'ghost' });
+  p.emit('glaze:parts');
+  await settle();
+  assert.equal(shown(p), 'ghost');
+});
+
+test('page: the personal pointer wins on course Looks, and following the Look uses that course\'s pointer', async () => {
+  const p = page({});
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'neon' };
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'neon');
+  p.setCourseLook('Library');
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'neon', 'the personal override also wins on a course Look');
+  await choose(p, 'look');
+  assert.equal(shown(p), 'quill', 'the course Look, not the global Look');
+  p.setCourseLook('Graveyard');
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'ghost', 'changing courses follows their respective Looks');
+  await choose(p, 'off');
+  assert.equal(shown(p), 'system');
+  await choose(p, 'neon');
+  p.setCourseLook(null);
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'neon');
+  // Glaze turned off (disable() calls sync()): the attribute and both variables go.
+  p.setOn(false);
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'system');
+  assert.ok(!('data-gz-cursor' in p.html.attrs) && p.html.style['--gz-cursor-pointer'] === undefined);
+  p.setOn(true);
+  await p.lx.sync();
+  await settle();
+  assert.equal(shown(p), 'neon');
+});
+
+test('page: no custom pointer on quiz or quiet pages, including an override with no Look parts', async () => {
+  for (const pathname of ['/courses/1/quizzes/2/take', '/ultra/courses/_1_1/assessment/_2_1/attempt', '/courses/1/external_tools/2', '/mod/quiz/attempt.php']) {
+    const p = page({}, pathname);
+    await choose(p, 'neon');
+    assert.equal(shown(p), 'system', pathname);
+    assert.equal(p.html.style['--gz-cursor-pointer'], undefined);
+    p.location.pathname = '/courses/1';
+    await p.lx.sync();
+    await settle();
+    assert.equal(shown(p), 'neon');
+  }
+});
+
+test('page: a new picture of their own is shown at once while it is the pointer worn, and not read otherwise', async () => {
+  const one = `data:image/png;base64,${Buffer.from('one').toString('base64')}`, two = `data:image/png;base64,${Buffer.from('two').toString('base64')}`;
+  const p = page({ cursorImg: one });
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'own' };
+  await p.lx.sync();
+  await settle();
+  const first = p.html.style['--gz-cursor'];
+  assert.equal(shown(p), 'own');
+  p.local.cursorImg = two;
+  p.stored({ cursorImg: { oldValue: one, newValue: two } });
+  await settle();
+  assert.equal(shown(p), 'own');
+  assert.notEqual(p.html.style['--gz-cursor'], first, 'the new picture');
+  assert.equal(p.blobs.size, 1, 'the old address revoked');
+  // Removed: the system's pointer, not a broken one.
+  delete p.local.cursorImg;
+  p.stored({ cursorImg: { oldValue: two } });
+  await settle();
+  assert.equal(shown(p), 'system');
+  assert.equal(p.blobs.size, 0);
+  // Wearing a set, a new picture is not even read.
+  await choose(p, 'rose');
+  let reads = 0;
+  p.holdWhen((keys) => { if ([].concat(keys).includes('cursorImg')) reads++; return false; });
+  p.stored({ cursorImg: { newValue: one } });
+  await settle();
+  assert.equal(reads, 0);
+  assert.equal(shown(p), 'rose');
+});
+
+test('page: a stale own-picture read cannot undo removal or survive a pagehide and restore', async () => {
+  const img = 'data:image/png;base64,b25l';
+  const p = page({ cursorImg: img });
+  p.settings.extras = { ...p.settings.extras, stickers: false, pointer: 'own' };
+  p.holdWhen((keys) => keys === 'cursorImg');
+  await p.lx.sync();
+  assert.equal(p.held.length, 1);
+  delete p.local.cursorImg;
+  p.stored({ cursorImg: { oldValue: img } });
+  assert.equal(p.held.length, 2);
+  p.held[1].release({});
+  await settle();
+  p.held[0].release({ cursorImg: img });
+  await settle();
+  assert.equal(shown(p), 'system', 'the removed picture must not reappear');
+  assert.equal(p.blobs.size, 0);
+
+  p.local.cursorImg = img;
+  await p.lx.sync();
+  const old = p.held.at(-1);
+  p.fire('pagehide');
+  p.fire('pageshow', { persisted: true });
+  await settle();
+  const current = p.held.at(-1);
+  current.release({ cursorImg: img });
+  await settle();
+  const restored = p.html.style['--gz-cursor'];
+  old.release({});
+  await settle();
+  assert.equal(p.html.style['--gz-cursor'], restored, 'a read from the previous page lifetime cannot clear the restored pointer');
+  assert.equal(p.blobs.size, 1);
+});
+
+test('palette: a Pointer: entry for every choice the setting takes, the current one marked, and the animation switch', async () => {
+  const G = require('../defaults.js');
+  const p = page({});
+  p.settings.extras = { ...G.GZ_DEFAULTS.extras, pointer: 'lava' };
+  await p.lx.ready();
+  const pointers = () => [...p.lx.cmds()].filter((c) => c.label === 'Pointer: {name}');
+  const chosen = (list) => list.map((c) => { c.run(); return p.synced.at(-1).extras.pointer; });
+  // No picture of their own yet: every other choice, in the editor's order.
+  assert.deepEqual(chosen(pointers()), G.GZ_SPEC.extras.pointer[1].filter((v) => v !== 'own'));
+  assert.deepEqual(pointers().map((c) => c.hint), pointers().map((c, i) => (G.GZ_SPEC.extras.pointer[1][i] === 'lava' ? 'Current' : 'Glaze')));
+  // Each writes only the pointer into the extras the page has, nothing of the Look's.
+  pointers()[0].run();
+  assert.deepEqual(JSON.parse(JSON.stringify(p.synced.at(-1))), { version: 2, extras: { ...G.GZ_DEFAULTS.extras, pointer: 'look' } });
+  // With a picture: it too.
+  p.local.cursorImg = 'data:image/png;base64,AAAA';
+  await p.lx.ready();
+  assert.deepEqual(chosen(pointers()), G.GZ_SPEC.extras.pointer[1]);
+  // The pointer's animation: one switch, saying which way it goes.
+  const anim = p.lx.cmds().find((c) => /^Turn (off|on) \{name\|lower\}$/.test(c.label) && (c.run(), p.synced.at(-1).extras.pointerAnim === false));
+  assert.equal(anim.label, 'Turn off {name|lower}');
+  p.settings.extras = { ...p.settings.extras, pointerAnim: false };
+  const on = p.lx.cmds().filter((c) => c.label === 'Turn on {name|lower}');
+  assert.equal(on.length, 1);
+  on[0].run();
+  assert.equal(p.synced.at(-1).extras.pointerAnim, true);
+});
+
+test('palette: a pointer command preserves settings changed since the palette opened', () => {
+  const G = require('../defaults.js'), p = page({});
+  p.settings.extras = { ...G.GZ_DEFAULTS.extras };
+  const command = p.lx.cmds().filter((c) => c.label === 'Pointer: {name}')[2]; // Aqua
+  p.settings.extras = { ...p.settings.extras, pointerAnim: false, stickers: false, rotate: 'daily', at: '10:30' };
+  command.run();
+  assert.deepEqual(p.synced.at(-1).extras, { ...p.settings.extras, pointer: 'aqua' });
 });
 
 // A tab on a computer whose worker is the real one (lib/background.js), in sticker mode on `path`.
@@ -402,7 +625,8 @@ test('page: a move still waiting to be saved when the page changes in place is s
 test('page: a pointer picture read that answers after the page is hidden makes no blob: address', async () => {
   const data = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
   const p = page({ cursorImg: data });
-  p.settings.extras = { ...p.settings.extras, stickers: false, cursor: 'own' };
+  p.settings.extras = { ...p.settings.extras, stickers: false };
+  p.wear({ pointer: 'own' });
   p.holdWhen((keys) => [].concat(keys).includes('cursorImg'));
   p.lx.sync();
   for (let i = 0; i < 20 && !p.held.length; i++) await tick();
@@ -495,8 +719,18 @@ test('picking a palette in the popup or the editor keeps the Look’s parts; pic
   assert.deepEqual(s.parts, { x: { cursor: { kind: 'glow' } } }, 'a palette is not a Look: a typed colour keeps the extras, and so does a swatch');
   assert.ok(!keys.includes('parts'), 'and they are not rewritten');
   const looked = w.context.UI.pickLook(s, G.GZ_LOOKS[0]);
-  assert.equal(s.parts, null, 'a whole Look brings its own extras, or none');
+  assert.deepEqual(JSON.parse(JSON.stringify(s.parts)), require('../lib/lookset.js')(G.GZ_LOOKS[0]), 'a whole Look brings its own extras');
   assert.ok(looked.includes('parts'));
+});
+
+test('the student\'s pointer and its animation switch stay through every way of changing Look; only the Look\'s parts change', () => {
+  const G = require('../defaults.js');
+  const w = worker(), u = ui(w);
+  const s = { ...structuredClone(G.GZ_SANITIZE({ extras: { pointer: 'lava', pointerAnim: false } })), parts: { x: { pointer: 'ghost' } } };
+  const keys = [...w.context.UI.pickLook(s, G.GZ_LOOKS.find((L) => L.name === 'Pumpkin Patch')), ...w.context.UI.pickPreset(s, 'Frost', G.GZ_PRESET('Frost'))];
+  assert.equal(JSON.parse(JSON.stringify(s.parts)).x.pointer, 'pumpkin', 'the new Look\'s own pointer');
+  assert.deepEqual([s.extras.pointer, s.extras.pointerAnim], ['lava', false]);
+  assert.ok(!keys.includes('extras'), 'and the setting is not even rewritten');
 });
 
 

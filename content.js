@@ -258,10 +258,12 @@
     const r = el?.getBoundingClientRect();
     document.dispatchEvent(new CustomEvent('glaze:moment', { detail: r?.width ? { name, x: r.left + r.width / 2, y: r.top + r.height / 2 } : { name } }));
   };
-  // A Look with animations, effects or a pointer effect (GZ_CTX.parts()) brings features/motionx.js in.
+  // A Look with animations, effects, a pointer effect (unless the student turned it off) or a typing effect (GZ_CTX.parts())
+  // brings features/motionx.js in, and a pointer, the Look's or the student's own choice of one, features/lookx.js.
   const moveParts = () => {
-    const p = GZ_CTX.parts();
-    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
+    const p = GZ_CTX.parts(), x = settings.extras;
+    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerAnim || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
+    if (globalThis.GZ_LOOKX || (x.pointer === 'look' ? p?.pointer || lookHere() : x.pointer !== 'off' && partsOn(true))) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
   };
   document.addEventListener('glaze:parts', moveParts);
   // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed. The dots are
@@ -352,7 +354,7 @@
   const docId = crypto.randomUUID();
   globalThis.__gzDoc = docId;
   const loading = new Map(); // file -> promise
-  const need = (file, ready) => {
+  const need = (file, ready, retry = true) => {
     if (!loading.has(file)) {
       const p = ready() ? Promise.resolve() : isPreview ? Promise.reject(new Error('not in the preview'))
         : Promise.resolve().then(() => {
@@ -362,7 +364,7 @@
           if (!r?.ok) throw new Error(r?.error || 'not loaded');
           if (!ready()) throw new Error('ran, but not ready');
         });
-      p.catch(() => { if (chrome.runtime?.id) setTimeout(() => { if (loading.get(file) === p) loading.delete(file); }, 60000); });
+      if (retry) p.catch(() => { if (chrome.runtime?.id) setTimeout(() => { if (loading.get(file) === p) loading.delete(file); }, 60000); });
       loading.set(file, p);
     }
     return loading.get(file);
@@ -1008,7 +1010,7 @@
   const sceneFrame = solo || location.protocol !== 'https:';
   let scene = null, sceneCanvas = null, sceneFile = '';
   const sceneLoad = {};
-  let sceneLoadId = 0;
+  let sceneLoadId = 0, sceneShown = 0;
   let sceneFailed = false, sceneRetry = null, scenePending = null;
   let sceneBad = '';
   const partsOf = () => globalThis.GZ_CTX?.parts() ?? null;
@@ -1021,9 +1023,10 @@
     const c = modBg || sceneCanvas;
     if (c && globalThis.GZ_SCENE_HOST?.place(c, ultra)) scene?.draw();
   };
+  const sceneUnwait = () => { scenePending?.cancel.forEach((f) => f()); scenePending = null; };
   const stopScene = () => {
     clearTimeout(sceneRetry?.timer);
-    sceneRetry = scenePending = null;
+    sceneUnwait(); sceneRetry = null;
     sceneFailed = false;
     scene?.stop();
     scene = null;
@@ -1031,17 +1034,37 @@
     sceneCanvas?.remove();
     sceneCanvas = null;
   };
-  // Retry startup twice. sceneBad still blocks refused shaders and over-budget scenes.
-  const retryScene = (key, error) => {
+  // Load failures retry after 1 s, 5 s, then every 30 s while shown. Drawing failures get three tries per Look.
+  const retryScene = (key, error, recover = true) => {
     console.warn('[Glaze] Background startup failed', error);
     const tries = (sceneRetry?.tries || 0) + 1;
     stopScene();
     sceneFailed = true;
     const retry = sceneRetry = { key, tries, timer: 0 };
-    if (tries < 3) retry.timer = setTimeout(() => {
+    if (!recover && tries >= 3) { sceneBad = key; return; }
+    if (!document.hidden && !hid()) retry.timer = setTimeout(() => {
       if (sceneRetry !== retry) return;
       retry.timer = 0; sceneFailed = false; syncScene();
-    }, tries === 1 ? 1000 : 5000);
+    }, [1000, 5000][tries - 1] || 30000);
+  };
+  // A startup owns its waits. Abandoned or timed out, it still hears late answers, but keeps no timers.
+  const sceneWait = (p, gone, got = sceneAgain) => new Promise((ok, no) => {
+    let waiting = true;
+    const cancel = () => { waiting = false; clearTimeout(timer); };
+    const timer = setTimeout(() => { gone(); cancel(); no(Error('no answer')); }, 10000);
+    scenePending.cancel.push(cancel);
+    p.then((v) => { if (waiting) { cancel(); ok(v); } else got(v); }, (error) => { gone(); if (waiting) { cancel(); no(error); } });
+  });
+  const sceneNeed = (file, ready) => {
+    if (ready()) return Promise.resolve();
+    const p = need(file, ready, false), gone = () => { if (loading.get(file) === p) loading.delete(file); };
+    return sceneWait(p, gone);
+  };
+  // A late answer or a page back on screen can start now; keep its retry count.
+  const sceneAgain = () => {
+    if (scene && !scenePending) return;
+    sceneUnwait(); clearTimeout(sceneRetry?.timer); sceneFailed = false;
+    syncScene();
   };
   const sceneOpts = () => {
     const { dim, amount, pace } = GZ_SCENE_LOOK(worn.bg.intensity);
@@ -1062,32 +1085,43 @@
     if (!chrome.runtime?.id) return;
     const key = sceneSig();
     if (sceneRetry && sceneRetry.key !== key) { clearTimeout(sceneRetry.timer); sceneRetry = null; sceneFailed = false; }
-    if (scenePending && scenePending.key !== key) scenePending = null;
-    if (!modBg && (!settings.enabled || !links.length || !sceneKind() || !sceneFrame || !document.body || hid() || sceneBad === key)) return stopScene();
+    if (scenePending && scenePending.key !== key) sceneUnwait();
+    if (!on(settings) || !links.length || !document.body || (!modBg && (!sceneKind() || !sceneFrame || sceneBad === key))) return stopScene();
+    if (hid()) { const retry = sceneRetry; stopScene(); sceneRetry = retry; return; }
+    if (document.hidden) { sceneUnwait(); clearTimeout(sceneRetry?.timer); return; }
     if (sceneFailed || scenePending) return;
     const file = sceneModule();
     if (scene && sceneFile !== file) stopScene();
     const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL;
-    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); } catch (error) { retryScene(key, error); } return; }
-    if (!modBg) sceneLoad[file] ||= import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { delete sceneLoad[file]; throw error; });
-    const pending = scenePending = { key };
-    Promise.all([!modBg && sceneLoad[file], need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).catch(error => { loading.delete('lib/scene-host.js'); throw error; }), !modBg && wait && need('lib/glsl.js', () => globalThis.GZ_GLSL).catch(() => {})]).then(([mod]) => {
+    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); } catch (error) { retryScene(key, error, false); } return; }
+    if (!modBg && !sceneLoad[file]) { const p = sceneLoad[file] = import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { if (sceneLoad[file] === p) delete sceneLoad[file]; throw error; }); }
+    const load = !modBg && sceneLoad[file];
+    const pending = scenePending = { key, cancel: [] };
+    Promise.all([load && sceneWait(load, () => { if (sceneLoad[file] === load) delete sceneLoad[file]; }, () => { if (sceneLoad[file] !== load) { sceneLoad[file] = load; sceneAgain(); } }), sceneNeed('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST), !modBg && wait && sceneNeed('lib/glsl.js', () => globalThis.GZ_GLSL)]).then(([mod]) => {
       if (scenePending !== pending) return;
+      if (!on(settings) || !chrome.runtime?.id || !links.length || document.hidden || hid() || key !== sceneSig()) { scenePending = null; return; }
       if (modBg) { scenePending = null; return placeScene(); }
-      if (!settings.enabled || sceneBad === key || !chrome.runtime?.id || !links.length || hid() || key !== sceneSig() || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
+      if (sceneBad === key || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
+      pending.draw = true;
       if (!scene) {
         sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');
         sceneCanvas.id = 'gz-scene';
         sceneCanvas.setAttribute('aria-hidden', 'true');
         placeScene();
         sceneFile = file;
-        scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, (why) => { if (why === 'module') retryScene(sceneSig(), why); else { sceneBad = sceneSig(); stopScene(); } });
+        // A dropped context gets a new canvas; a minute shown without interruption earns new tries.
+        const at = Date.now();
+        scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, (why) => {
+          if (why === 'dropped' && Date.now() - Math.max(at, sceneShown) > 60000) sceneRetry = null;
+          if (why === 'module' || why === 'dropped') retryScene(sceneSig(), why, why === 'module'); else { sceneBad = sceneSig(); stopScene(); }
+        });
       }
       scene.update(sceneOpts());
       scenePending = null;
-    }).catch((error) => { if (scenePending === pending) retryScene(key, error); });
+    }).catch((error) => { if (scenePending === pending) retryScene(key, error, !pending.draw); });
   };
   document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) sceneShown = Date.now(); if (!document.hidden && sceneFailed) sceneAgain(); else syncScene(); });
 
   // ---- course colors and tint ------------------------------------------------------------------
   // Every course its own color (GZ_COURSE_COLORS), worked out from the course list recordCourses
@@ -1345,11 +1379,12 @@
   const onSchedule = () => (links.length && worn.auto.on && worn.auto.mode === 'schedule' ? worn.auto : null);
   const armFlip = () => {
     if (onSchedule() || globalThis.GZ_SCHEDULE) need('features/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
-    // The pointer, Look rotation and this page's stickers (features/lookx.js) load once one is in use.
+    // Look rotation and this page's stickers (features/lookx.js) load once one is in use; the Look's pointer brings it too
+    // (moveParts).
     if (globalThis.GZ_LOOKX) return GZ_LOOKX.sync();
     const k = `stk:${location.origin}${location.pathname.replace(/(.)\/+$/, '$1')}`, x = settings.extras;
-    if (!links.length || !x.stickers && x.cursor === 'off' && x.rotate === 'off') return;
-    local((l) => l.get(k, (r) => { if (x.cursor !== 'off' || x.rotate !== 'off' || x.stickers && r?.[k]?.length) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
+    if (!links.length || !x.stickers && x.rotate === 'off') return;
+    local((l) => l.get(k, (r) => { if (x.rotate !== 'off' || x.stickers && r?.[k]?.length) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);
@@ -1391,8 +1426,9 @@
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
       // The sweep fetches, records and registers the site: not on defaults.
       await ready;
-      // The site's part still on its way: the theme is on already; the sweep and the extras wait for it.
-      if (partIn) await partIn;
+      // The site's part still on its way: the theme is on already, and so is the background (its answer may never come); the
+      // sweep and the extras wait for it.
+      if (partIn) { if (on(settings)) syncScene(); await partIn; }
       if (!links.length) return;
       if (!on(settings)) return disable();
       startSweep();
@@ -1468,6 +1504,7 @@
   document.addEventListener('glaze:parts', () => { if (links.length) X.syncNav(); });
 
   // This frame's helpers for lazy features; site helpers resolve when called.
+  const partsOn = (pointer = false) => on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz') && (pointer || !lookHere());
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, moment, gradeMoment, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
     account: () => (site === 'canvas' ? X.ctx.profile().then((p) => String(p.id)) : X.ctx.me()),
     // The palette, the keys, the course menu, the previews and Download all (W0c).
@@ -1476,8 +1513,9 @@
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    // Look parts stay off on courses with their own Look; changes fire `glaze:parts`.
-    parts: () => (on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz') && !lookHere() && (globalThis.GZ_MODS ? GZ_MODS.parts(globalThis.GZ_XPARTS_PAGE?.now() || null) : globalThis.GZ_XPARTS_PAGE?.now())) || null,
+    // Course Looks replace global parts; pointers resolve the course Look separately.
+    partsOn, courseLook: lookHere,
+    parts: () => (partsOn() && (globalThis.GZ_MODS ? GZ_MODS.parts(globalThis.GZ_XPARTS_PAGE?.now() || null) : globalThis.GZ_XPARTS_PAGE?.now())) || null,
     background: (el) => { stopScene(); if (modBg && modBg !== el) { globalThis.GZ_SCENE_HOST?.clear(modBg); modBg.remove(); } modBg = el || null; syncScene(); },
     canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => { syncScene(); if (full && !timer && !hid()) timer = setTimeout(flush); },
     ...Object.fromEntries(['me', 'canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });

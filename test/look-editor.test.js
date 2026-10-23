@@ -31,7 +31,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 
 // ui.js as the popup and the editor load it, over stand-in storage.
 const loadUi = (extra = {}) => {
-  const context = vm.createContext({ ...D, GZ_COLOR: C, GZ_CARDS: K, GZ_XPARTS: X, GZ_I18N: { t: say, ui: () => 'en' }, chrome: { storage: { sync: {}, local: {} } }, structuredClone, ...extra });
+  const context = vm.createContext({ ...D, GZ_COLOR: C, GZ_CARDS: K, GZ_XPARTS: X, GZ_LOOK_PARTS: require('../lib/lookset.js'), GZ_I18N: { t: say, ui: () => 'en' }, chrome: { storage: { sync: {}, local: {} } }, structuredClone, ...extra });
   vm.runInContext(`${read('ui.js')};globalThis.UI = GZ_UI;`, context);
   return context.UI;
 };
@@ -152,7 +152,7 @@ test('LOOK-3: a whole Look replaces the extras, with the Look left already in Hi
   const run = refreshed(s, { undo: () => { undone++; } });
   const aurora = D.GZ_LOOKS[0];
   run.picks.look(aurora);
-  assert.equal(s.parts, null, 'a Look is a whole choice: its extras go');
+  assert.deepEqual(s.parts, require('../lib/lookset.js')(aurora), 'a Look is a whole choice: its own extras replace the ones before');
   assert.deepEqual(run.log.slice(0, 2), ['leaving', 'save'], 'the Look being left is kept before anything changes');
   assert.equal(run.hints.length, 1);
   assert.match(run.hints[0][0], new RegExp(`${aurora.name} replaced this Look’s extras`));
@@ -216,7 +216,7 @@ test('LOOK-3: leaving a Look with extras records it in History at once, and its 
   assert.deepEqual(run.writes[0].theme.parts, was.parts, 'the shader typed a moment ago goes to the history queue');
   // The Look picked next.
   UI.pickLook(s, D.GZ_LOOKS[0]);
-  assert.equal(s.parts, null);
+  assert.deepEqual(s.parts, require('../lib/lookset.js')(D.GZ_LOOKS[0]));
   run.undo();
   assert.deepEqual(s.parts, was.parts);
   assert.deepEqual(s.colors, was.colors);

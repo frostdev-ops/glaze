@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.5 (French)
+# Chrome Web Store listing — Glaze 3.3.7 (French)
 
 ## Short summary (132 character maximum)
 
@@ -8,15 +8,14 @@ Changez le style de Blackboard Ultra, Canvas et Moodle, avec votre look et votre
 
 Faites de Blackboard Ultra, Canvas et Moodle un espace à votre image. Glaze change le style de vos cours avec des palettes, des polices, des arrière-plans et des animations, et ajoute des outils pour planifier et étudier directement là où vous faites vos travaux de cours. Il fonctionne dans tous les établissements qui utilisent Blackboard Ultra, Canvas ou Moodle, y compris sur le domaine propre d’un établissement, où il demande avant d’activer un site qui n’est pas déjà approuvé. Ni compte ni outil d’analyse. Vos cours, vos résultats, vos notes personnelles et vos tâches restent sur votre appareil ; vos réglages suivent la synchronisation de votre navigateur si elle est activée ; le partage est facultatif et chiffré.
 
-NOUVEAUTÉS DE LA VERSION 3.3.5
+NOUVEAUTÉS DE LA VERSION 3.3.7
 
-• Sur un domaine propre d’établissement pas encore approuvé, Glaze demande avant de s’activer ; les réglages listent les sites propres approuvés, avec Retirer.
-• Un style partagé montre ce qu’il change avant que vous l’utilisiez : chaque élément de navigation qu’il masque, la destination de chaque lien et les parties de la page qu’il modifie. Les styles d’autres personnes qui masqueraient la déconnexion ou déguiseraient un lien sont refusés.
-• Certaines lectures groupées sont espacées par document et site scolaire et attendent si le site est surchargé.
-• Les vidéos et images d’arrière-plan liées ont des limites de taille. Les métadonnées du conteneur sont retirées des nouveaux fichiers vidéo et AVIF ; les anciens fichiers restent sur cet appareil s’ils ne peuvent pas être nettoyés et ne sont pas partagés.
-• Les notes partagées restent synchronisées pendant que vous tapez.
-• Sur Moodle, la barre de Glaze conserve le commutateur du mode édition et les liens de menu propres à votre établissement.
-• Corrections pour les notes et la moyenne, les onglets de cours, les notes, le minuteur de concentration, les animaux, les documents, les lecteurs d’écran et les langues écrites de droite à gauche.
+• Chaque Look fourni a son propre pointeur, une animation autour, un effet de frappe et ses propres effets pour les travaux terminés, les notes et les séries.
+• Effets de frappe : de petites particules au curseur de texte pendant que vous tapez. Ils ne lisent jamais ce que vous tapez et n'apparaissent jamais dans les champs de mot de passe ou de carte, pendant les tests ou avec les animations désactivées.
+• Look › Pointeur : gardez le pointeur du Look, utilisez celui du système, choisissez l'un des pointeurs de Glaze ou une image à vous, et activez ou désactivez l'animation du pointeur.
+• Safari : les réglages ouverts dans une page de cours ne s'affichent plus vides, et les animations et effets des Looks se chargent de nouveau sur les pages de cours.
+• Le fond animé d'un onglet de cours ne reste plus bloqué sur sa version floue provisoire.
+• Blackboard : une annonce ouverte dans un onglet de cours s'y affiche, au lieu d'une erreur de page introuvable.
 
 DE LA VERSION 3.3
 

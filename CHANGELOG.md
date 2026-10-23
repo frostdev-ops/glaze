@@ -4,6 +4,31 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.7] — 2026-10-22
+
+### Fixed
+
+- Blackboard: opening an announcement in a course tab shows it in that tab, instead of a "We can't find that page" error.
+- Includes everything in 3.3.6, which was not released to the stores.
+
+## [3.3.6] — 2026-10-22
+
+### Added
+
+- Every built-in Look has its own pointer set (an arrow and a hand), an animation around the pointer, a typing effect and its own effects for completing, submitting, grades, streaks, the focus timer and Look rotation. Choosing a Look puts them all on; a Look code carries them.
+- Typing effects: small particles at the caret as you type. They never read what you type, and never run in password, card or one-time-code fields, while composing, on quizzes or with motion off.
+- Look › Pointer: keep the Look's pointer, use the system pointer, pick any of Glaze's pointer sets or a picture of your own, and turn the pointer animation on or off. Your choice stays when you change Looks, applies on courses with their own Look, and is never put in a Look or a theme code.
+
+### Changed
+
+- The pointer is part of the Look. A pointer chosen under the old setting moves into the Look you're wearing, once.
+
+### Fixed
+
+- Safari: Settings opened inside a Blackboard, Canvas or Moodle page no longer shows a blank panel.
+- Safari: a Look's animations, effects, pointer animation, navigation and page tweaks load on course pages again, and reading Word and PowerPoint files there works.
+- A course tab's animated background no longer stays on its blurred stand-in when a load stalls, and comes back after the browser takes its graphics away.
+
 ## [3.3.5] — 2026-10-22
 
 ### Added

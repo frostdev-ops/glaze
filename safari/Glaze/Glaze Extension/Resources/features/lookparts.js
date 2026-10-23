@@ -22,10 +22,10 @@ var GZ_XPARTS_PAGE = globalThis.GZ_XPARTS_PAGE || (() => {
     || /\/(quizzes|external_tools|assessment|attempt|lti)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(location.pathname);
   // A packed string as { x, m }. What the cleaners stand on is on demand too, asked for only when the parts need it: the
   // nav cleaner (lib/navlayout.js; the worker brings lib/nav.js and lib/nav-items.js before it) for a nav, and the motion
-  // tables (lib/motionx.js) for animations, effects, a cursor or a layer's particles.
+  // tables (lib/motionx.js) for animations, effects, a pointer, a cursor effect, typing or a layer's particles.
   const libs = async (x) => {
     if (x?.nav && !globalThis.GZ_NAV_LAYOUT) await globalThis.GZ_CTX.need('lib/navlayout.js', () => globalThis.GZ_NAV_LAYOUT);
-    if ((x?.anim || x?.fx || x?.cursor || x?.bg?.layers) && !globalThis.GZ_MX) await globalThis.GZ_CTX.need('lib/motionx.js', () => globalThis.GZ_MX);
+    if ((x?.anim || x?.fx || x?.cursor || x?.pointer || x?.type || x?.bg?.layers) && !globalThis.GZ_MX) await globalThis.GZ_CTX.need('lib/motionx.js', () => globalThis.GZ_MX);
     if (x?.rules && !globalThis.GZ_PARTS) await globalThis.GZ_CTX.need('lib/parts.js', () => globalThis.GZ_PARTS);
   };
   const unpack = async (packed) => {

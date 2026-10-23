@@ -12,12 +12,12 @@ const source = fs.readFileSync(file, 'utf8').replace(/^import \{[\s\S]*?\} from 
 
 // latency: how long the fake GPU takes to finish a frame, in the fake clock's milliseconds (a number, or a function of the
 // draw count and the drawing buffer's [width, height], so a test can make cost follow the pixels). Nothing in the VM moves
-// on its own: the test calls pump() to run the guard's MessageChannel ticks, each one 1 ms of fake time, and tick() to run
-// an animation frame.
+// on its own: the test calls pump() to run the guard's MessageChannel ticks, each one 1 ms of fake time, tick() to run
+// an animation frame, and advance() to move the clock, running the timers that come due.
 exports.engine = ({ latency = null, glsl = null, preview = false, submitMs = 0 } = {}) => {
   let next = 0, now = 1000, draws = 0, renderer = null;
   const posted = []; // what the page above (the editor, when preview is true) is told
-  const frames = new Map(), listeners = new Map(), canvasListeners = new Map(), docListeners = new Map(), queue = [];
+  const frames = new Map(), listeners = new Map(), canvasListeners = new Map(), docListeners = new Map(), queue = [], timers = new Map();
   const counts = { draws: 0, disposed: 0, lost: 0, geometry: 0, material: 0 };
   const made = { materials: [], attributes: [], renderOrder: [], clears: 0, fences: 0, deletedFences: 0, closedPorts: 0 };
   class Color { constructor() { this.hex = ''; this.mixed = 0; } set(c) { this.hex = c; return this; } lerp(_, t) { this.mixed = t; return this; } }
@@ -48,6 +48,7 @@ exports.engine = ({ latency = null, glsl = null, preview = false, submitMs = 0 }
     requestAnimationFrame: (fn) => { frames.set(++next, fn); return next; }, cancelAnimationFrame: (id) => frames.delete(id),
     addEventListener: (event, fn) => listeners.set(event, fn), removeEventListener: (event) => listeners.delete(event),
     innerWidth: 1280, innerHeight: 900, performance: { now: () => now }, queueMicrotask, console,
+    setTimeout: (fn, ms = 0) => { timers.set(++next, { fn, at: now + ms }); return next; }, clearTimeout: (id) => timers.delete(id),
     document: { hidden: false, addEventListener: (event, fn) => docListeners.set(event, fn), removeEventListener: (event) => docListeners.delete(event) },
     location: { protocol: preview ? 'chrome-extension:' : 'https:', origin: 'chrome-extension://glaze' }, window: {}, parent: { postMessage: (m, origin) => posted.push([m, origin]) },
     MessageChannel: class { constructor() { const port1 = { close() { made.closedPorts++; } }; this.port1 = port1; this.port2 = { close() { made.closedPorts++; }, postMessage: () => queue.push(() => port1.onmessage?.()) }; } },
@@ -70,7 +71,11 @@ exports.engine = ({ latency = null, glsl = null, preview = false, submitMs = 0 }
     },
     // The next animation frame, dt ms after the last.
     tick(dt = 34) { const [id, fn] = [...frames][0]; frames.delete(id); now += dt; fn(now); },
-    advance(ms) { now += ms; },
+    advance(ms) {
+      now += ms;
+      for (const [id, t] of [...timers].sort((a, b) => a[1].at - b[1].at)) if (t.at <= now && timers.delete(id)) t.fn();
+    },
+    timers,
     get now() { return now; },
     get renderer() { return renderer; },
   };

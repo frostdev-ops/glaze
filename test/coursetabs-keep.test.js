@@ -211,6 +211,32 @@ test('redirect link clicks and passes agree: conflicting or repeated course iden
   }
 });
 
+test('in a frame, a panel of its own course that Ultra opens under another page stays; another course\'s or none leaves', () => {
+  const cases = [['/ultra/stream/announcement-detail', '?courseId=_2_1&announcementId=_5_1', false], ['/ultra/stream/announcement-detail', '?courseId=_3_1&announcementId=_5_1', true],
+    ['/ultra/stream/announcement-detail', '?courseId=_2_1&courseId=_3_1', true], ['/ultra/stream', '', true], ['/ultra/stream/announcement-detail', '?announcementId=_5_1', true]];
+  for (const [pathname, search, away] of cases) {
+    const sent = [];
+    const location = { pathname, search, hash: '', href: `https://bb.test${pathname}${search}` };
+    const c = vm.createContext({ on: true, framed: '_2_1', PAGE: 'page', preview: false, ctx: { site: 'ultra' }, location, URLSearchParams, awayFrom: '', here: () => undefined, observeView() {},
+      toTop: (op, m) => sent.push([op, m.url]), showing: '', frames: new Map(), loaded: true, last: '_2_1', lastPath: '', flag() {}, place() {}, draw() {}, lay() {}, later() {}, moved() {},
+    });
+    vm.runInContext(part('  const pass = ', '  const sync = ') + '\npass();', c);
+    assert.deepEqual(sent, away ? [['away', `${pathname}${search}`]] : [], pathname + search);
+  }
+  const block = part("  if (framed && !preview && ctx.site !== 'canvas') document.addEventListener('click'", '  if (framed && !preview) {');
+  for (const [pathname, search, away] of cases) {
+    let listener; const sent = [];
+    class Anchor {}
+    const a = Object.assign(new Anchor(), { href: `https://bb.test${pathname}${search}`, getAttribute: () => `${pathname}${search}`, hasAttribute: (k) => k === 'href' });
+    vm.runInNewContext(block, { framed: '_2_1', preview: false, ctx: { site: 'ultra' }, on: true, HTMLAnchorElement: Anchor, URL,
+      location: { origin: 'https://bb.test', href: 'https://bb.test/ultra/courses/_2_1/announcements' }, document: { addEventListener: (_, f) => { listener = f; } },
+      toTop: (op, m) => sent.push([op, m.url]),
+    });
+    listener({ isTrusted: true, composedPath: () => [a], preventDefault() {}, stopImmediatePropagation() {} });
+    assert.deepEqual(sent, away ? [['away', `${pathname}${search}`]] : [], `click ${pathname}${search}`);
+  }
+});
+
 // content-ultra.js's page-transition click handler (WP-U1 touches only this block there).
 test('the page-transition click handler leaves Ultra\'s own Sign Out to the page and to course tabs', () => {
   const ultra = read('content-ultra.js');

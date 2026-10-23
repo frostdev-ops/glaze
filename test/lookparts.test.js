@@ -513,6 +513,28 @@ test('glaze2 limits: 20,000 characters and 48 KiB of JSON; glaze1 keeps 4,000 an
   assert.ok((await S.encode(mine, undefined, { x: { bg: { shader: { src: SHADER } } } })).length < 1500);
 });
 
+test('the student\'s pointer choice is theirs: a code of their Look is the same with or without it, and none can bring one', async () => {
+  const look = { x: { pointer: 'pumpkin', cursor: { kind: 'flicker' } } };
+  for (const pointer of ['off', 'aqua', 'lava', 'own']) {
+    const s = { ...mine, extras: { ...mine.extras, pointer, pointerAnim: false } };
+    // The Look's own pointer and its animation go in the code; the student's choice and switch don't.
+    const code = await S.encode(s, undefined, look);
+    assert.equal(code, await S.encode(mine, undefined, look), `${pointer}: the code is the one without the choice`);
+    const got = await S.decode(code);
+    assert.ok(X.same(got.parts, look), JSON.stringify(got.parts));
+    assert.ok(!('extras' in got));
+    // A Look without parts: a glaze1 code, no pointer in it at all.
+    const plain = await S.encode(s, undefined, null);
+    assert.equal(plain, await S.encode(mine, undefined, null), `${pointer}: glaze1`);
+    assert.equal((await S.decode(plain)).parts, null);
+  }
+  // A code that tries to bring a pointer choice is refused whole, in either form.
+  for (const prefix of ['glaze1:', 'glaze2:']) {
+    await assert.rejects(S.decode(await make(prefix, { c: C, extras: { pointer: 'lava' } })), /newer Glaze/);
+    await assert.rejects(S.decode(await make(prefix, { c: C, e: { pointer: 'lava' } })), /newer Glaze/);
+  }
+});
+
 test('encode refuses parts that decode would refuse, so a copied code always works', async () => {
   for (const x of [{ cursor: { kind: 'glow', size: 99 } }, { bg: { media: { type: 'video' } } }, { cursor: { kind: 'glow', c: ['#AABBCC'] } }, { anim: {} }, { nope: 1 }]) {
     await assert.rejects(S.encode(mine, undefined, { x }), /extras Glaze can't put in a code/, JSON.stringify(x));
@@ -589,4 +611,10 @@ test('a committed clear succeeds even if removing its unused local copy fails', 
   const local = { remove: async () => false };
   assert.equal(await X.write({ sync, local }, null, { bg: { kind: 'solid' } }), true);
   assert.deepEqual(sync.data, { lookX: '', bg: { kind: 'solid' } });
+});
+
+test('packing writes bytes straight into the compression stream, never through a Blob stream (Safari content scripts refuse its chunks)', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/lookparts.js'), 'utf8');
+  assert.doesNotMatch(src, /\.stream\(\)\.pipeThrough/);
+  assert.match(src, /writer\.write\(new Uint8Array\(bytes\)\)/);
 });

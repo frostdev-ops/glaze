@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.5 (Dutch)
+# Chrome Web Store listing — Glaze 3.3.7 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -8,15 +8,14 @@ Geef Blackboard Ultra, Canvas en Moodle je eigen stijl en navigatie, plus een be
 
 Maak Blackboard Ultra, Canvas en Moodle echt van jou. Glaze geeft je cursussen een nieuwe stijl met paletten, lettertypen, achtergronden en beweging, en voegt hulpmiddelen voor plannen en studeren toe precies waar je je cursuswerk doet. Het werkt op elke school die Blackboard Ultra, Canvas of Moodle gebruikt, ook op het eigen domein van een school, waar het vraagt voordat het een nog niet goedgekeurde site inschakelt. Geen account, geen analytics. Je cursussen, cijfers, notities en taken blijven op je apparaat; je instellingen volgen de synchronisatie van je browser als die aanstaat; delen is optioneel en versleuteld.
 
-NIEUW IN 3.3.5
+NIEUW IN 3.3.7
 
-• Op een nog niet goedgekeurde eigen schoolsite vraagt Glaze eerst toestemming; de instellingen tonen goedgekeurde eigen sites met Verwijderen.
-• Een gedeelde Look laat zien wat hij verandert voordat je hem gebruikt: elk navigatie-item dat hij verbergt, waar elke link heen gaat en de paginadelen die hij aanpast. Looks van anderen die Uitloggen zouden verbergen of een link zouden vermommen, worden geweigerd.
-• Geselecteerde bulkverzoeken worden per document en schoolsite gedoseerd en wachten als de site het druk heeft.
-• Voor gelinkte achtergrondvideo’s en -afbeeldingen gelden groottelimieten. Uit nieuwe video- en AVIF-bestanden wordt containermetadata verwijderd; niet opschoonbare oudere bestanden blijven lokaal en worden niet gedeeld.
-• Gedeelde notities blijven synchroniseren terwijl je typt.
-• Op Moodle houdt de balk van Glaze de schakelaar voor de bewerkmodus en de eigen menulinks van je school.
-• Verbeteringen voor cijfers en gemiddelde, cursustabbladen, notities, de focustimer, huisdieren, documenten, schermlezers en talen die van rechts naar links worden geschreven.
+• Elke meegeleverde Look heeft een eigen aanwijzer, een animatie eromheen, een type-effect en eigen effecten voor afgerond werk, cijfers en reeksen.
+• Type-effecten: kleine deeltjes bij de tekstcursor terwijl je typt. Ze lezen nooit wat je typt en verschijnen nooit in wachtwoord- of kaartvelden, bij toetsen of met beweging uit.
+• Look › Aanwijzer: houd de aanwijzer van de Look, gebruik die van het systeem, kies een van Glazes aanwijzers of een eigen afbeelding, en zet de aanwijzeranimatie aan of uit.
+• Safari: instellingen binnen een cursuspagina openen niet meer leeg, en animaties en effecten van Looks laden weer op cursuspagina's.
+• De bewegende achtergrond van een cursustab blijft niet meer hangen op zijn wazige tijdelijke versie.
+• Blackboard: een mededeling die je in een cursustab opent, verschijnt daar in plaats van een foutmelding dat de pagina niet bestaat.
 
 UIT 3.3
 

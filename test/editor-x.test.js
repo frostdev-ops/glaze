@@ -74,6 +74,16 @@ test('the Ultra preview accepts settings and parts only from its editor parent a
   assert.deepEqual(writes, [data.gzPreviewParts]);
 });
 
+test('the preview saying why its background stopped: a context the browser took back is not a shader the device refused', () => {
+  const source = read('lib/editor-xbg.js'), a = source.indexOf('  const sceneSays = (d) => {'), b = source.indexOf('\n  };\n', a);
+  assert.ok(a > 0 && b > a);
+  const says = vm.runInContext(`(() => { const tr = (s) => s;\n${source.slice(a, b + 5)}\nreturn sceneSays; })()`, vm.createContext({}));
+  const lost = 'The graphics stopped while drawing this: showing the gradient.';
+  assert.equal(says({ gzSceneFailed: { why: 'lost' } }), lost);
+  assert.equal(says({ gzSceneFailed: { why: 'dropped' } }), lost);
+  assert.equal(says({ gzSceneFailed: { why: 'compile' } }), "This device couldn't draw the shader: showing the gradient.");
+});
+
 test('compiler reports are accepted only from the preview frame at the same origin', () => {
   const handlers = [], accepted = [], frame = { contentWindow: {} }, origin = 'chrome-extension://fixture';
   const ctx = vm.createContext({ document: { getElementById: () => null }, location: { origin }, addEventListener: (_, fn) => handlers.push(fn) });
@@ -198,12 +208,13 @@ test('the page carries the builders in the sections their settings live in, with
   assert.match(section('look/background'), /data-kinds="gradient aurora scene shader layers"><span>Colors/);
   assert.match(section('look/background'), /data-kinds="scene shader layers"><span>Intensity/);
   assert.match(section('look/motion'), /<div id="x-motion" class="group"><\/div>/);
+  assert.match(section('look/pointer'), /<div class="seg pt-cards" role="radiogroup" aria-labelledby="heading-look-pointer" aria-describedby="pointer-note" id="pointer-tiles" data-setting-owner="extras\.pointer"><\/div>/);
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);
-  for (const [a, b] of [['lib/motionx.js', 'lib/editor-x.js'], ['lib/lookparts.js', 'lib/editor-x.js'], ['lib/glsl.js', 'lib/editor-xbg.js'], ['lib/media.js', 'lib/editor-xbg.js'], ['lib/editor-x.js', 'lib/editor-xbg.js'], ['lib/editor-x.js', 'lib/editor-xmotion.js'], ['lib/editor-xmotion.js', 'options.js'], ['lib/editor-xbg.js', 'options.js']]) {
+  for (const [a, b] of [['lib/motionx.js', 'lib/editor-x.js'], ['lib/lookparts.js', 'lib/editor-x.js'], ['lib/glsl.js', 'lib/editor-xbg.js'], ['lib/media.js', 'lib/editor-xbg.js'], ['lib/editor-x.js', 'lib/editor-xbg.js'], ['lib/editor-x.js', 'lib/editor-xmotion.js'], ['lib/editor-xmotion.js', 'options.js'], ['lib/editor-xbg.js', 'options.js'], ['lib/lookx.js', 'options.js'], ['lib/editor-xmotion.js', 'lib/editor-pointer.js'], ['lib/editor-pointer.js', 'options.js']]) {
     assert.ok(at(a) > 0 && at(a) < at(b), `${a} loads before ${b}`);
   }
   const js = read('options.js');
-  assert.match(js, /GZ_EDITOR_X\.mount\(\{ s, save, preview, t, frame \}\)/);
+  assert.match(js, /GZ_EDITOR_X\.mount\(\{ s, save, preview, t, frame, hint \}\)/);
   assert.match(js.split('const refresh = () => {')[1].split('};')[0], /GZ_EDITOR_X\.render\(\);/);
   // Builders never save on their own: only through the editor's save() and the Look's parts key.
   for (const f of ['lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js']) assert.doesNotMatch(read(f), /chrome\.storage|GZ_UI\.save|innerHTML|insertAdjacentHTML/, f);
@@ -227,4 +238,21 @@ test('the media builder offers exactly the kinds and fits the cleaner has, each 
   // The editor sends the worker the field `kind`: the message's own `type` names it to the worker.
   assert.match(read('lib/editor-xbg.js'), /askWorker\(\{ op: 'put', kind: mediaKind, b64 \}\)/);
   assert.match(read('lib/editor-xbg.js'), /\{ type: 'glaze:media', \.\.\.m \}/);
+});
+
+test('the event builder offers the canvas marks and shows the Look\'s selected marks', () => {
+  const MX = require('../lib/motionx.js'), checks = [];
+  let builder;
+  const node = () => ({ dataset: {}, querySelector: node, append() {}, closest: () => null, childElementCount: 0, replaceChildren() {} });
+  const host = node();
+  const context = vm.createContext({ document: { getElementById: (id) => id === 'x-motion' ? host : null },
+    GZ_MX: MX, GZ_EDITOR_X: {
+      add: (b) => { builder = b; }, tr: (s) => s, tokenName: (s) => s,
+      el: (tag, props) => { if (tag === 'input' && props.type === 'checkbox') checks.push(props); return node(); },
+      select: node, slider: node, colors: node, button: node, status: node, motionNote: () => '',
+    } });
+  vm.runInContext(read('lib/editor-xmotion.js'), context);
+  builder.mount({ s: { parts: { x: { fx: { complete: { kind: 'sprite', shapes: ['ghost'] } } } } } });
+  for (const shape of MX.DRAWN) assert.ok(checks.some((c) => c['data-focus'] === `fx-complete-${shape}`), shape);
+  assert.equal(checks.find((c) => c['data-focus'] === 'fx-complete-ghost').checked, true);
 });

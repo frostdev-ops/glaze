@@ -50,7 +50,7 @@ const ANIM = {
 const FX = { complete: { kind: 'confetti', count: 40, shapes: ['star', 'heart', 'dot'], c: ['accent', '#ff8800', 'ok'], spread: 120, gravity: 1, life: 900, size: 10 } };
 const CURSOR = { kind: 'trail', c: ['accent', 'warn'], size: 12, len: 12, fade: 400 };
 const PARTS = { anim: ANIM, fx: FX, cursor: CURSOR };
-const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, motion: { ...G.GZ_DEFAULTS.motion, level: 'expressive', followSystem: false, ...motion } });
+const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_DEFAULTS.enhance, footer: false }, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, motion: { ...G.GZ_DEFAULTS.motion, level: 'expressive', followSystem: false, ...motion } });
 
 (async () => {
   fs.mkdirSync(out, { recursive: true });
@@ -76,6 +76,7 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, motion: { ...G.GZ_D
     const opts = await ctx.newPage();
     opts.on('pageerror', (e) => errors.push(`options: ${e}`));
     await opts.goto(`chrome-extension://${id}/options.html`);
+    await opts.evaluate((origin) => chrome.storage.local.set({ ultra: [origin] }), SITE);
     // The Look as the editor saves it: settings and parts in one write (lib/background.js BROKER.look). `parts` is the Look's x;
     // either argument left out keeps what was saved last.
     const worn = { settings: ULTRA_SETTINGS(), parts: null };
@@ -93,7 +94,7 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, motion: { ...G.GZ_D
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(`page: ${e}`));
     await page.goto(`${SITE}/ultra/course`);
-    await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion'));
+    await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion') && getComputedStyle(document.documentElement).getPropertyValue('--gz-ease').trim());
     const root$ = (name) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name);
     const card = () => page.evaluate(() => { const c = document.querySelector('article.element-card'); const s = getComputedStyle(c); return { name: s.animationName, duration: s.animationDuration, running: c.getAnimations().length }; });
     const canvas = () => page.evaluate(() => { const c = document.getElementById('gz-fx'); return c && { aria: c.getAttribute('aria-hidden'), events: getComputedStyle(c).pointerEvents, position: getComputedStyle(c).position, parent: c.parentElement?.tagName }; });

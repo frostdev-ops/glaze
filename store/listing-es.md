@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.5 (Spanish)
+# Chrome Web Store listing — Glaze 3.3.7 (Spanish)
 
 ## Short summary (132 character maximum)
 
@@ -8,15 +8,14 @@ Dale otro estilo a Blackboard Ultra, Canvas y Moodle, con tu aspecto y navegaci�
 
 Haz que Blackboard Ultra, Canvas y Moodle se sientan tuyos. Glaze da un nuevo estilo a tus cursos con paletas, fuentes, fondos y movimiento, y añade herramientas para planificar y estudiar justo donde haces tus trabajos del curso. Funciona en cualquier escuela que use Blackboard Ultra, Canvas o Moodle, incluso en el dominio propio de una escuela, donde pregunta antes de activar un sitio aún no aprobado. Sin cuenta ni analíticas. Tus cursos, calificaciones, notas y tareas se quedan en tu dispositivo; tus ajustes siguen la sincronización de tu navegador si está activada; compartir es opcional y va cifrado.
 
-NOVEDADES DE 3.3.5
+NOVEDADES DE 3.3.7
 
-• En un dominio propio de una escuela aún no aprobado, Glaze pregunta antes de funcionar; los ajustes muestran los sitios propios aprobados, con Quitar.
-• Un estilo compartido muestra lo que cambia antes de usarlo: cada elemento de navegación que oculta, adónde lleva cada enlace y las partes de la página que modifica. Se rechazan los estilos de otras personas que ocultarían Cerrar sesión o disfrazarían un enlace.
-• Las lecturas masivas seleccionadas se dosifican por documento y sitio escolar y esperan si el sitio está ocupado.
-• Los vídeos e imágenes de fondo enlazados tienen límites de tamaño. De los nuevos archivos de vídeo y AVIF se eliminan los metadatos del contenedor; los archivos anteriores quedan solo en este dispositivo si no se pueden limpiar y no se comparten.
-• Las notas compartidas siguen sincronizándose mientras escribes.
-• En Moodle, la barra de Glaze conserva el interruptor del modo de edición y los enlaces de menú propios de tu escuela.
-• Correcciones en calificaciones y promedio, pestañas de cursos, notas, el temporizador de enfoque, mascotas, documentos, lectores de pantalla e idiomas que se escriben de derecha a izquierda.
+• Cada Look incluido tiene su propio puntero, una animación a su alrededor, un efecto al escribir y sus propios efectos para tareas terminadas, calificaciones y rachas.
+• Efectos al escribir: pequeñas partículas en el cursor de texto mientras escribes. Nunca leen lo que escribes ni aparecen en campos de contraseña o tarjeta, en exámenes ni con el movimiento desactivado.
+• Look › Puntero: conserva el puntero del Look, usa el del sistema, elige cualquiera de los punteros de Glaze o una imagen tuya, y activa o desactiva la animación del puntero.
+• Safari: la configuración dentro de una página del curso ya no se abre en blanco, y las animaciones y efectos de los Looks vuelven a cargarse en las páginas del curso.
+• El fondo animado de una pestaña de curso ya no se queda en su versión desenfocada provisional.
+• Blackboard: un anuncio abierto en una pestaña de curso se muestra ahí, en lugar de un error de página no encontrada.
 
 DE 3.3
 
