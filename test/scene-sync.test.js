@@ -26,6 +26,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
   const ctx = vm.createContext({
     solo, tabFrame: '', ultra: false, isPreview: false, addEventListener() {}, loading: new Map(), docId: 'fixture-document', location: { protocol: 'https:', pathname: '/' },
     settings: { enabled, enhance: { quizLight: true } }, links: [1], hid: () => false, palette: { '--gz-surface-2': '#202030', '--gz-accent': '#abcdef' },
+    setAttr() {},
     html: { hasAttribute: () => false, getAttribute: () => 'normal', toggleAttribute() {} },
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],

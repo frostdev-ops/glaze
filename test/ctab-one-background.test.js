@@ -63,6 +63,7 @@ const rig = ({ tabFrame = '_1_1', ultra = true, kind = 'scene', bg = 'scene', th
   const ctx = vm.createContext({
     tabFrame, ultra, solo: true, isPreview: false, docId: 'd', location: { protocol: 'https:', pathname: '/' },
     settings: { enabled: true, enhance: { quizLight: true } }, links: [1], palette: { '--gz-surface-2': '#202030' },
+    setAttr: (k, v) => { if (v === false) attrs.delete(k); else attrs.set(k, v); },
     hid: () => !!tabFrame && attrs.has('data-gz-ctab-framed'), html,
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
@@ -133,7 +134,7 @@ test('the page under a course frame keeps its scene moving', () => {
 });
 
 test('content.js tells a frame what its background is made of: the page publishes it on <html>', () => {
-  assert.match(source, /if \(!tabFrame\) setAttr\('data-gz-bg-key', bgSig\);/);
+  assert.match(source, /setAttr\('data-gz-bg-key', on\(settings\)/);
   assert.match(source, /JSON\.stringify\(\[s\.bg, colors, partsOf\(\)\?\.bg, html\.getAttribute\('data-gz-motion'\)\]\)/);
 });
 
@@ -211,4 +212,37 @@ test('scene host: the page\'s scene hears its frames\' pointer moves, offset by 
   relay({ origin: 'https://lms', source: h.win, data: { gzScenePoint: [10, 20] } });
   assert.equal(points.length, 1);
   const f = host(); f.H.pointer(scene); assert.ok(!f.ownAttrs.has('data-gz-scene-pointer') && !f.listeners.has('message'), 'a frame never relays');
+});
+
+
+const sign = (r) => vm.runInContext('{ const s = worn, colors = palette; ' + source.slice(source.indexOf('    // What the background is made of:'), source.indexOf("    if (s.motion.level === 'expressive')")) + '; bgSig; }', r.ctx);
+
+test('sharing: a page advertises only an available background, revoking it for mods, failures and disable', async () => {
+  const r = rig({ tabFrame: '' }), key = sign(r);
+  r.api.syncScene();
+  assert.ok(!r.attrs.has('data-gz-bg-key'), 'a pending scene is not shared');
+  await settle();
+  assert.equal(r.attrs.get('data-gz-bg-key'), key, 'a running scene is shared');
+  vm.runInContext('modBg = { remove() {} }; syncScene();', r.ctx);
+  assert.ok(!r.attrs.has('data-gz-bg-key'), 'a mod background is not shared');
+  vm.runInContext('modBg = null; syncScene();', r.ctx); await settle();
+  assert.equal(r.attrs.get('data-gz-bg-key'), key);
+  vm.runInContext('sceneBad = sceneSig(); stopScene();', r.ctx);
+  assert.ok(!r.attrs.has('data-gz-bg-key'), 'a failed scene is not shared');
+  vm.runInContext("sceneBad = ''; syncScene();", r.ctx); await settle();
+  assert.equal(r.attrs.get('data-gz-bg-key'), key);
+  r.ctx.settings.enabled = false; r.api.syncScene();
+  assert.ok(!r.attrs.has('data-gz-bg-key'), 'a disabled page is not shared');
+});
+
+test('sharing: an image failure revokes the page signature immediately', () => {
+  const r = rig({ tabFrame: '', kind: 'image', bg: 'image' }), key = sign(r);
+  const probe = source.slice(source.indexOf("  let probed = ''"), source.indexOf('  // Canvas page changes:'));
+  const images = [];
+  r.ctx.setVar = () => {};
+  r.ctx.Image = class { constructor() { images.push(this); } };
+  vm.runInContext(probe + "; probeImage('https://images.test/bg.png'); syncScene();", r.ctx);
+  assert.equal(r.attrs.get('data-gz-bg-key'), key);
+  images[0].onerror();
+  assert.ok(!r.attrs.has('data-gz-bg-key'), 'a failed image cannot replace a working image in the frame');
 });

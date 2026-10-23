@@ -1022,7 +1022,10 @@
   // A course tab's frame wearing the page's background shows the page's through it (lib/scene-host.js through).
   let bgSig = '', thru = false;
   const syncThrough = () => {
-    if (!tabFrame) return false;
+    if (!tabFrame) {
+      setAttr('data-gz-bg-key', on(settings) && !!links.length && !modBg && !html.hasAttribute('data-gz-bg-failed') && (!sceneKind() || !!scene) && bgSig || false);
+      return false;
+    }
     const bg = html.getAttribute('data-gz-bg'), H = globalThis.GZ_SCENE_HOST;
     const want = !!bg && bg !== 'solid' && !modBg && on(settings) && !!links.length;
     if (want && !H) need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).then(() => { if (globalThis.GZ_SCENE_HOST) syncScene(); }, () => {});
@@ -1046,6 +1049,7 @@
     globalThis.GZ_SCENE_HOST?.clear(sceneCanvas);
     sceneCanvas?.remove();
     sceneCanvas = null;
+    if (!tabFrame) syncThrough();
   };
   // Load failures retry after 1 s, 5 s, then every 30 s while shown. Drawing failures get three tries per Look.
   const retryScene = (key, error, recover = true) => {
@@ -1107,7 +1111,7 @@
     const file = sceneModule();
     if (scene && sceneFile !== file) stopScene();
     const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL;
-    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); GZ_SCENE_HOST.pointer(scene); } catch (error) { retryScene(key, error, false); } return; }
+    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); GZ_SCENE_HOST.pointer(scene); if (!tabFrame) syncThrough(); } catch (error) { retryScene(key, error, false); } return; }
     if (!modBg && !sceneLoad[file]) { const p = sceneLoad[file] = import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { if (sceneLoad[file] === p) delete sceneLoad[file]; throw error; }); }
     const load = !modBg && sceneLoad[file];
     const pending = scenePending = { key, cancel: [] };
@@ -1133,6 +1137,7 @@
       scene.update(sceneOpts());
       GZ_SCENE_HOST.pointer(scene);
       scenePending = null;
+      if (!tabFrame) syncThrough();
     }).catch((error) => { if (scenePending === pending) retryScene(key, error, !pending.draw); });
   };
   document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
@@ -1257,7 +1262,7 @@
     probed = url;
     setAttr('data-gz-bg-failed', false);
     const img = new Image();
-    img.onerror = () => { if (probed === url) setAttr('data-gz-bg-failed', true); };
+    img.onerror = () => { if (probed === url) { setAttr('data-gz-bg-failed', true); syncScene(); } };
     img.src = url;
   };
 
@@ -1358,7 +1363,6 @@
     let h = 2166136261;
     for (const c of JSON.stringify([s.bg, colors, partsOf()?.bg, html.getAttribute('data-gz-motion')])) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
     bgSig = (h >>> 0).toString(36);
-    if (!tabFrame) setAttr('data-gz-bg-key', bgSig);
     if (s.motion.level === 'expressive') need('features/light.js', () => globalThis.GZ_LIGHT).catch(() => {}); // the pointer light
     moveParts();
     setAttr('data-gz-no-trans', !s.motion.transitions);
