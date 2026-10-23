@@ -565,7 +565,7 @@ html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding
 /* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. */
 html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }
 html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h); }
-html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas)); }
+html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: transparent; }
 #gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
 /* Native panel headers pull into their scroller's padding; after a tab row that would cover the subtitle. */
 #gz-ctabs[data-at="nested"] + :is(.panel-header, header) { margin-block-start: 0 !important; }

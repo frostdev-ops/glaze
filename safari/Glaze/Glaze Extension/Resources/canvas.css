@@ -1574,6 +1574,27 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
   position: sticky; top: 0; z-index: 11; /* above ordinary page content */
   background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas));
 }
+/* On the breadcrumb row, as on Ultra's course header: the row itself is clear (a backing comes up behind it as the page
+   scrolls under it), the strip floats over it, and the breadcrumbs sit on an inset glass panel of their own, a gap from
+   the strip. The strip spans the row's padding (24px), so its bar and the panel line up. */
+#application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) { background: transparent; backdrop-filter: none; border-bottom: 0; padding-block: 0 var(--gz-float-gap, 12px); row-gap: var(--gz-float-gap, 12px); }
+#application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs[data-at="canvas-below"]) { padding-block: var(--gz-float-gap, 12px); row-gap: 0; }
+#application .ic-app-nav-toggle-and-crumbs > #gz-ctabs { flex-basis: calc(100% + 48px); margin-inline: -24px; }
+#application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs)::after {
+  content: ""; position: absolute; z-index: -1; inset-block: calc(var(--gz-ctabs-h, 52px) + var(--gz-float-gap, 12px)) var(--gz-float-gap, 12px); inset-inline: var(--gz-float-start, 12px) var(--gz-float-end, 12px); pointer-events: none;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius, 12px); box-shadow: var(--gz-rest-shadow, none);
+}
+#application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs[data-at="canvas-below"])::after { inset-block: var(--gz-float-gap, 12px) calc(var(--gz-ctabs-h, 52px) + var(--gz-float-gap, 12px)); }
+#application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs)::before {
+  content: ""; position: absolute; z-index: -2; inset: 0 0 calc(var(--gz-float-gap, 12px) * -1); pointer-events: none;
+  background: var(--gz-surface-grain, none), var(--gz-surface-paint-2, var(--gz-surface-2)); mask-image: linear-gradient(#000 calc(100% - var(--gz-float-gap, 12px)), transparent);
+}
+@supports (animation-timeline: scroll()) {
+  #application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs)::before { opacity: 0; animation: gz-bar-veil linear both; animation-timeline: scroll(); animation-range: 0 48px; }
+}
+@keyframes gz-bar-veil { to { opacity: 1; } }
+html[data-gz-bg="solid"] #application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs)::after { backdrop-filter: none; }
 /* Let native dialogs and popovers in the main content rise above the sticky row. */
 .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) ~ #main,
 #mobile-header:has(> #gz-ctabs) ~ #wrapper #main { z-index: auto; }

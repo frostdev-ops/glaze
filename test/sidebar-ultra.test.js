@@ -701,9 +701,10 @@ test('an assignment overview gets the assignment family and Glaze\'s own column;
     await wide.pass();
     assert.equal(wide.mode(), w - 200 - 480 - 16 >= 900 ? 'expanded' : 'drawer', `${w} at 480`);
   }
-  // The course's absolute tool panel ends at the column's edge and the gap (features/sidebar.css).
+  // The course's absolute tool panel keeps the column's room and the gap for its content; its header spans the window
+  // (features/sidebar.css).
   const css = read('features/sidebar.css');
-  assert.match(css, /html\[data-gz-sb-fixed\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*inset-inline-end: var\(--gz-sb-room\) !important/);
+  assert.match(css, /html\[data-gz-sb-fixed\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*padding-inline-end: var\(--gz-sb-room\) !important/);
   assert.match(css, /html\[data-gz-sidebar="expanded"\] \{ --gz-sb-room: calc\(var\(--gz-sidebar-w\) \+ 16px \+ var\(--gz-sb-inset, 0px\) \+ var\(--gz-sb-safe, 0px\)\); \}/);
 });
 

@@ -80,7 +80,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // Full routed documents/overviews have neither the course bar nor the old panel wrappers. Peek stays excluded.
   const routed = () => [...document.querySelectorAll('.routed-page.bb-offcanvas-container:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)')]
     .filter((e) => shown(e) && !e.querySelector('.bb-course-navigation')).pop() || null;
-  const routedHeader = (page) => page.querySelector('[class*="panelHeaderContainerRoot"], .panel-header, header') || page.querySelector('h1');
+  // Its breadcrumb row (content-page-header) comes first: the strip sits at that row on every routed page.
+  const crumbsOf = (page) => page.querySelector('content-page-header > header');
+  const routedHeader = (page) => crumbsOf(page) || page.querySelector('[class*="panelHeaderContainerRoot"], .panel-header, header') || page.querySelector('h1');
   // An assignment's overview has no main: its body (learning-module-panel-view.routed-page-body) holds the content.
   const routedMain = (page) => page && (page.querySelector('main[class*="contentGridArea"], main, [role="main"]') || page.querySelector('.routed-page-body'));
   // A URL or header change cannot prove that Ultra replaced the outgoing content. Require a populated main and a
@@ -135,13 +137,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (r) return spot(a, strip.nextElementSibling === r, () => r.before(strip));
       return spot('above', strip.parentElement === bar && !strip.previousElementSibling, () => bar.prepend(strip));
     }
-    // An item opened over the course: at its panel's header, before it (above) or after it.
-    if (here() && top) {
+    // An item opened over the course: at its panel's header, before it (above) or after it. A routed page's own panel (a
+    // discussion's, under the page's breadcrumb row) is not over the course: the strip goes at that row, as below.
+    const page = here() && routed(), crumbs = page && top && page.contains(top) && crumbsOf(page);
+    if (here() && top && !(crumbs && !top.contains(crumbs))) {
       const hd = top.querySelector('.panel-header, header');
       if (!hd) return spot('nested', top.firstElementChild === strip, () => top.prepend(strip));
       return a === 'above' ? spot('nested', strip.nextElementSibling === hd, () => hd.before(strip)) : spot('nested', strip.previousElementSibling === hd, () => hd.after(strip));
     }
-    const page = here() && routed();
     if (page) {
       const hd = routedHeader(page);
       if (!hd) return spot('routed', page.firstElementChild === strip, () => page.prepend(strip));

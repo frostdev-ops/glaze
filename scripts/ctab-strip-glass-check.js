@@ -64,13 +64,15 @@ const measure = (p) => p.evaluate(() => {
     await shot(fallback, 'without-scroll-timelines'); await fallback.close();
     const page = await ctx.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
-    const setup = async (look, at = 'above') => {
+    const setup = async (look, at = 'above', sidebar = false) => {
       const base = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: true, tabs: false, rail: 'icons' },
-        enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])) };
+        enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place', ...(sidebar ? ['sidebar', 'notes', 'widgets'] : [])].includes(k)])) };
       const settings = { ...base, ...G.GZ_LOOK_APPLY(base, look), motion: { ...base.motion, level: 'off' }, tabs: { ...G.GZ_SANITIZE({}).tabs, at } };
       await opts.evaluate(async ({ settings, key, site }) => {
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.session.clear();
-        await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site], [key]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, at: i, top: 0 })) } });
+        await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site], [key]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, at: i, top: 0 })) },
+          // A docked widget, so the sidebar has something to show.
+          [`sidebar:ultra:${site}/_42_1`]: { v: 1, rev: 1, mig: 1, dock: [{ id: 'notes' }], dest: { notes: 'dock' } } });
       }, { settings, key, site });
       await page.goto(`${site}/ultra/courses/_101_1/outline`);
       await page.locator('#gz-ctabs [data-course-id="_102_1"]').waitFor();
@@ -115,12 +117,34 @@ const measure = (p) => p.evaluate(() => {
       }
       await shot(page, mode);
     }
+    // Beside Glaze's own sidebar, a tool page's header (the strip and the course bar) spans the window as on Content, and a
+    // routed page's header row too; only the content keeps the column's room, and the column starts under the header.
+    await page.setViewportSize({ width: 1528, height: 1000 });
+    for (const dir of ['ltr', 'rtl']) {
+      await setup(look, 'above', true);
+      await page.evaluate((dir) => { document.documentElement.dir = dir; }, dir);
+      await page.locator('.js-course-calendar-tool').click();
+      await page.waitForSelector('html[data-gz-sb-tool][data-gz-sidebar="expanded"]', { state: 'attached' }); await pause(400);
+      const room = (sel) => page.evaluate((sel) => {
+        const r = (s) => { const e = document.querySelector(s), b = e.getBoundingClientRect(); return [b.left, b.top, b.right, b.bottom].map(Math.round); };
+        return { header: r(sel.header), content: r(sel.content), side: r('#gz-sidebar'), vw: innerWidth, rtl: document.documentElement.dir === 'rtl' };
+      }, sel);
+      const spans = (m) => (m.rtl ? m.header[0] <= 13 : m.header[2] >= m.vw - 13) && m.side[1] >= m.header[3] && (m.rtl ? m.content[0] >= m.side[2] : m.content[2] <= m.side[0]);
+      const tool = await room({ header: 'course-page-header > header', content: 'section.course > .route-view-container' });
+      check(spans(tool), `${dir} tool page beside the sidebar: the course header spans the window, the column starts under it, the content keeps clear`, tool);
+      await shot(page, `sidebar-tool-${dir}`);
+      await page.locator('.js-course-outline-tool').click(); await page.waitForSelector('.b8b-document');
+      await page.locator('.b8b-document').evaluate((e) => e.click());
+      await page.waitForSelector('#gz-ctabs[data-at="routed"]'); await page.waitForSelector('html[data-gz-sidebar="expanded"]:not([data-gz-sb-tool])', { state: 'attached' }); await pause(400);
+      const routed = await room({ header: '.routed-page [class*="headerRoot"]', content: '.routed-page main' });
+      check(spans(routed), `${dir} routed page beside the sidebar: its header row spans the window, the reading keeps clear`, routed);
+      await shot(page, `sidebar-routed-${dir}`);
+    }
+    await page.setViewportSize({ width: 1280, height: 800 });
     await setup(look);
     await page.locator('#gz-ctabs [data-course-id="_102_1"]').click();
     const frame = await until(() => Promise.resolve(page.frames().find((f) => f.name() === 'gz-ctab:_102_1')));
     await frame.waitForSelector('#gz-ctabs');
-    await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through') && !document.documentElement.hasAttribute('data-gz-ctab-framed')));
-    await until(() => page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed') && document.querySelector('iframe[data-gz-through]')));
     // A real course frame has no base page or native nav under the course.
     await frame.evaluate(() => {
       document.querySelector('#main-content')?.remove(); document.querySelector('.MuiDrawer-paper')?.remove();
@@ -129,6 +153,8 @@ const measure = (p) => p.evaluate(() => {
       const inner = document.createElement('div'); inner.className = 'inner-wrap';
       content.replaceWith(inner); inner.append(course); course.append(content); course.classList.add('bb-offcanvas-container');
     });
+    await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through') && !document.documentElement.hasAttribute('data-gz-ctab-framed')));
+    await until(() => page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed') && document.querySelector('iframe[data-gz-through]')));
     await pause(300);
     const f = await measure(frame);
     check(f.border === '0px' && f.paints[0] === f.paints[1], 'see-through frame keeps the joined course panel', f);

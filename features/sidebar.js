@@ -137,7 +137,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         return Math.max(0, Math.round((rtl() ? innerWidth - r.right : r.left) + pad));
       },
       headers() {
-        const headers = new Set(document.querySelectorAll('div.bb-course-navigation, .routed-page > content-page-header, .route-view-container > content-page-header'));
+        const headers = new Set(document.querySelectorAll('div.bb-course-navigation, .routed-page > content-page-header, .route-view-container > content-page-header, .bb-offcanvas-panel.full .panel-header.simple-header, .course-content-container > .panel-wrap > .panel-header'));
         // Full routed documents/assessments use a panel header instead of content-page-header. Stay within that
         // shell, outside its content: a document's own headings and article headers are not navigation.
         for (const page of document.querySelectorAll('.routed-page.bb-offcanvas-container')) {
