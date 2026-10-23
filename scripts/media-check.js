@@ -13,11 +13,14 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+const origin = 'https://ultra.fixture.test';
+// A staged copy holding the fixture's host, as a student's grant for their school's Ultra would (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(path.join(__dirname, '..'), [`${origin}/*`]);
 const out = process.argv[2] && path.resolve(process.argv[2]);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const origin = 'https://ultra.fixture.test';
+// Another host, which the staged copy doesn't hold: a Look's address there is refused before any request.
+const ELSEWHERE = 'https://media.elsewhere.test';
 const D = require(path.join(ext, 'defaults.js'));
 const P = require(path.join(ext, 'lib/lookparts.js'));
 const fixtures = path.join(ext, 'test/fixtures/media');
@@ -83,7 +86,12 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     });
     const look = (media) => P.pack({ x: { bg: { media } } });
     const url = (f) => `${origin}/media/${f}`;
-    const open = async () => { const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message)); await page.goto(`${origin}/ultra/stream`); await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-font')); return page; };
+    // The fixture's site approved (storage.local ultra) and its Ultra script registered before each page.
+    const approve = async () => {
+      await opts.evaluate((o) => chrome.storage.local.get('ultra').then((r) => (r.ultra || []).includes(o) || chrome.storage.local.set({ ultra: [...(r.ultra || []), o] })), origin);
+      await require('./check-env.js').ultraReady(opts);
+    };
+    const open = async () => { await approve(); const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message)); await page.goto(`${origin}/ultra/stream`); await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-font')); return page; };
     const shot = async (page, name) => { if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, `${name}.png`) }); } };
     // The colour at a point of the page, from a screenshot (decoded in the extension's page: a canvas reads pixels back).
     const pixel = async (page, x, y) => {
@@ -281,6 +289,8 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
       ['a file that is not on this computer', { type: 'video', src: `file:${'A'.repeat(43)}` }],
       ['a picture that is not a picture', { type: 'image', src: url('clip.webm') }],
       ['a Lottie address that is not Lottie', { type: 'lottie', src: url('clip.webm') }],
+      ['a video on a host Glaze doesn\'t hold', { type: 'video', src: `${ELSEWHERE}/media/clip.webm` }],
+      ['a Lottie address on a host Glaze doesn\'t hold', { type: 'lottie', src: `${ELSEWHERE}/media/spin.json` }],
     ]) {
       await store({ kind: 'media' }, await look(media));
       page = await open();
@@ -289,6 +299,7 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
       check(`${why}: no background element is left, the gradient shows`, gone === true && (await page.evaluate(() => document.documentElement.getAttribute('data-gz-bg'))) === 'media', JSON.stringify(gone));
       await page.close();
     }
+    check('a host Glaze doesn\'t hold is never asked for the file (refused before the request)', !blocked.some((u) => u.startsWith(ELSEWHERE)), blocked.filter((u) => u.startsWith(ELSEWHERE)).join(' '));
 
     // ---- the editor ---------------------------------------------------------------------------------------------------
     await wipe();

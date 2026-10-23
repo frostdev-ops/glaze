@@ -8,7 +8,8 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), https = require('node:https');
 const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
-const ext = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+// A staged copy holding the loopback Ultra's host (https on 127.0.0.1), as a student's grant for their school would.
+const ext = require('./check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '..')), ['https://127.0.0.1/*']);
 const chrome = require('./check-env.js').chromePath() || chromium.executablePath();
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
@@ -130,7 +131,7 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
       await chrome.storage.local.set({ ultra: [origin], mods: mods.map((m) => m.id), modOrder: [ID.data, ID.rail, ID.nav], ...Object.fromEntries(mods.map((m) => [`mod:${m.id}`, m])),
         [`modReplace:${ID.data}`]: { 'effect:complete': true }, [`modSettings:${ID.data}`]: { plant: 'Cactus' },
         widgetLayout: { boards: { pages: [{ id: `m${ID.data.slice(0, 14)}0`, on: true, size: 'm' }] } }, ...over });
-    }, { origin, mods: MODS(), ID, over });
+    }, { origin, mods: MODS(), ID, over }).then(() => delay(300)).then(() => until(() => sw.evaluate(() => chrome.scripting.getRegisteredContentScripts().then((l) => l.some((x) => x.id.startsWith('ultra:')))), 'the loopback Ultra registered'));
 
     for (const mode of ['strict', 'permissive']) {
       console.log(`-- ${mode} page policy`);

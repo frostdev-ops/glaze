@@ -11,10 +11,11 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const { execFileSync, spawnSync } = require('node:child_process');
 
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+const origin = 'https://ultra.fixture.test';
+// A staged copy holding the fixture's host, as a student's grant for their school's Ultra would (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(path.join(__dirname, '..'), [`${origin}/*`]);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const origin = 'https://ultra.fixture.test';
 const D = require(path.join(ext, 'defaults.js'));
 const P = require(path.join(ext, 'lib/lookparts.js'));
 const M = require(path.join(ext, 'lib/media.js'));
@@ -80,6 +81,12 @@ const lottie = (n) => ({ v: '5.7.0', fr: 30, ip: 0, op: 90, w: 1280, h: 720, nm:
       await chrome.storage.sync.clear();
       await chrome.storage.sync.set({ ...defaults, bg, lookX, motion: { ...defaults.motion, level: motion, followSystem: false } });
     }, { defaults: D.GZ_DEFAULTS, bg: { ...D.GZ_DEFAULTS.bg, ...bg }, lookX, motion });
+    // The fixture's site approved and its Ultra script registered (lib/background.js ensure) before the first page.
+    await opts.evaluate((o) => chrome.storage.local.set({ ultra: [o] }), origin);
+    for (let i = 0; !(await opts.evaluate(() => chrome.scripting.getRegisteredContentScripts().then((l) => l.some((x) => x.id.startsWith('ultra:'))))); i++) {
+      if (i > 100) throw new Error('the fixture\'s Ultra script was never registered');
+      await sleep(100);
+    }
     // CPU seconds of every process of this profile, from ps (cputime is 0:12.34 or 1:02:03.45).
     const cpu = () => {
       const out = execFileSync('ps', ['-ax', '-o', 'time=,command='], { encoding: 'utf8', maxBuffer: 64 << 20 });
@@ -96,7 +103,10 @@ const lottie = (n) => ({ v: '5.7.0', fr: 30, ip: 0, op: 90, w: 1280, h: 720, nm:
     if (media['anim.webp']) rows.push(['animated WebP 640x360 x 20, playing', { type: 'image', src: `${origin}/media/anim.webp`, fit: 'cover' }, 'subtle'], ['animated WebP, motion off', { type: 'image', src: `${origin}/media/anim.webp` }, 'off']);
     rows.push(['Lottie, 8 layers, playing', { type: 'lottie', src: `${origin}/media/small.json`, fit: 'cover' }, 'subtle'], ['Lottie, 8 layers, motion off', { type: 'lottie', src: `${origin}/media/small.json` }, 'off'],
       ['Lottie, 300 layers (the limit is 500), playing', { type: 'lottie', src: `${origin}/media/heavy.json`, fit: 'cover' }, 'subtle'], ['Lottie, 300 layers, motion off', { type: 'lottie', src: `${origin}/media/heavy.json` }, 'off']);
-    // Keeping options.html open would animate its preview too and charge that work to the hidden LMS tab.
+    // Keeping options.html open would animate its preview too and charge that work to the hidden LMS tab. Glaze's first screen,
+    // which opens on install, goes too.
+    require('./check-env.js').noFirstRun(context);
+    for (let i = 0; context.pages().some((p) => p.url().startsWith('chrome-extension:')) && i < 100; i++) await sleep(100);
     if (context.pages().some((p) => p.url().startsWith('chrome-extension:'))) throw new Error('an extension preview would contaminate the CPU sample');
     const WINDOW = 6000;
     for (const [name, spec, motion] of rows) {

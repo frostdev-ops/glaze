@@ -7,10 +7,11 @@
 // One browser at a time (wait while another agent's run is up); it deletes its own profile when it is done.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
-const ext = process.env.EXT || path.resolve(__dirname, '..');
+const LMS = 'https://school.example.test';
+// A staged copy holding the LMS fixture's host, as a student's grant would: the check runs a script in its tab.
+const ext = require('./check-env.js').staged(process.env.EXT || path.resolve(__dirname, '..'), [`${LMS}/*`]);
 const M = require(path.join(ext, 'lib/modbundle.js'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
-const LMS = 'https://school.example.test';
 const enc = new TextEncoder();
 const std = (b) => Buffer.from(b).toString('base64');
 const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Date.now() < end && !fn()) await new Promise((r) => setTimeout(r, 40)); };
