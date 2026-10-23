@@ -478,6 +478,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // the press, before Ultra starts changing the page. Ultra's sign-out (the main menu's "#" link) forgets them all.
   const onLeave = (e) => {
     if (!on || e.isTrusted === false) return;
+    if (e.type === 'keydown') {
+      if (e.key === 'Escape' && framed && !preview && ctx.site !== 'canvas') pass();
+      return;
+    }
     const el = e.target instanceof Element && e.target.closest('a[href], button, [role="button"], [role="link"]');
     if (!el || el.closest('#gz-ctabs')) return;
     const href = el.getAttribute('href') || '';
@@ -485,6 +489,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       signOut();
       return;
     }
+    // Remember a panel before its close handler routes away, even between throttled passes.
+    if (framed && !preview && ctx.site !== 'canvas' && e.type === 'click') pass();
     const cid = ctx.courseId();
     if (framed || showing || !cid || e.type !== 'pointerdown') return;
     if (el.closest('course-page-header, .MuiDrawer-paper, #base_tools') || (href.startsWith('/') && !href.includes(`/courses/${cid}/`))) shoot();
@@ -1694,6 +1700,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     document[f]('visibilitychange', onVisibility);
     document[f]('scroll', onScroll, { capture: true, passive: true });
     document[f]('click', onLeave, true);
+    document[f]('keydown', onLeave, true);
     document[f]('pointerdown', onLeave, true);
     if (ctx.site === 'canvas') { globalThis[f]('click', onCourseLink); document[f]('pointerdown', onPress, true); if (!framed && !preview) globalThis[f]('popstate', onPop); }
     globalThis[f]('pagehide', onHide);
@@ -1750,12 +1757,22 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         const ids = ['course_id', 'courseId'].flatMap((k) => q.getAll(k));
         const redirect = location.pathname === '/ultra/redirect' && ids.every((id) => !id || id === framed);
         const panel = !cid && !location.pathname.startsWith('/ultra/courses/') && ids.length > 0 && ids.every((id) => id === framed);
-        if (redirect || panel) return;
+        if (redirect) return;
+        if (panel) { under = location.pathname; return; }
+        // Closing such a panel, Ultra goes to the page it opened it under (/ultra/stream): the frame goes back to where it
+        // was in its course instead, in place of that page in history.
+        if (under && !ids.length && under.startsWith(location.pathname + '/')) {
+          under = '';
+          const to = location.origin + (lastPath || `/ultra/courses/${framed}/outline`);
+          try { history.replaceState(null, '', to); dispatchEvent(new PopStateEvent('popstate', { state: null })); } catch { location.replace(to); }
+          return;
+        }
       }
       const url = location.pathname + location.search + (ctx.site === 'canvas' ? location.hash || '' : '');
       if (awayFrom !== url) { awayFrom = url; toTop('away', { url }); }
       return;
     }
+    under = '';
     // This page going somewhere itself while a frame covers it (its menu, Back): it is what shows now. Ultra keeps one
     // copy of a course, this page's; Canvas keeps the frame's earlier pages too, including work left in them. On Ultra a
     // course whose frame holds unsaved work is that frame instead, shown when this page goes there (moving within it too).
@@ -1786,6 +1803,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     lay();
     if (cid && !preview && !showing) later();
   };
+  let under = ''; // (pass) the address of a panel of the frame's course open under another page
   const sync = (want) => {
     if (gone) return;
     if (signedOut) want = false;

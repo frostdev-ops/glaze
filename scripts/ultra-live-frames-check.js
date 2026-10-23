@@ -80,14 +80,15 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     check(await f2.evaluate(() => document.querySelectorAll('#gz-ctabs').length === 1 && !document.querySelector('#gz-footer')), 'one strip and no duplicate footer inside a live frame');
     await tab(f2, '_106_1').click({ noWaitAfter: true });
     await until(async () => stalledSixth.length && await page.locator('iframe[name="gz-ctab:_106_1"]').count());
-    // Let both bounded attempts time out while another tab is selected.
-    await tab(page, '_101_1').focus(); await page.keyboard.press('Enter');
+    // Both bounded attempts time out on screen. The covered page's strip is out of reach under a frame, so the student
+    // leaves through the stalled tab's own Go back, then comes back to the tab.
     await until(() => Promise.resolve(stalledSixth.length === 2));
-    await pause(8200);
+    await page.locator('.gz-ctabs-retry').getByRole('button', { name: 'Go back', exact: true }).click({ timeout: 20000 });
+    await until(() => page.evaluate(() => !document.querySelector('#gz-ctabs-frames[data-on]')));
     await tab(page, '_106_1').click({ noWaitAfter: true });
     const retry = page.locator('.gz-ctabs-retry').getByRole('button', { name: 'Retry', exact: true });
     await retry.waitFor({ state: 'visible' });
-    check(await retry.evaluate((e) => { const r = e.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === e; }), 'a tab that stalled while hidden exposes a clickable foreground Retry control');
+    check(await retry.evaluate((e) => { const r = e.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === e; }), 'a stalled tab left and opened again exposes a clickable foreground Retry control');
     if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, 'stalled-course.png') }); }
     await retry.click({ noWaitAfter: true });
     const f6 = await ready('_106_1');

@@ -25,6 +25,8 @@
     /ultra/courses/<cid>/document/_8112_1?view=content&state=view   full routed document, main itself scrolls
     /ultra/courses/<cid>/assessment/_8120_1/overview?courseId=<cid> full routed cached Assignment
     /ultra/courses/<cid>/assessment/_8121_1/overview?courseId=<cid> full routed Test (never restored)
+    /ultra/stream/announcement-detail?courseId=<cid>&announcementId=_7001_1   the Announcements tool's "Week 7": a full
+        off-canvas panel over the stream page; its Close goes to /ultra/stream, as Ultra's does
 
   Timing, as Ultra's async views: a different course (or base page -> course) replaces .course-content-container at
   once with the bar and a .spinner in .route-view-container, and the page replaces the spinner 350 ms later. Same
@@ -69,6 +71,7 @@
   .panel-header h1 { margin: 0; font-size: 20px; }
   .panel-header a { font-size: 24px; line-height: 1; color: inherit; text-decoration: none; }
   .panel-body { padding: 16px; max-width: 720px; }
+  .bb-offcanvas-panel.full { position: absolute; top: 0; right: 0; bottom: 0; left: 220px; z-index: 20; overflow-y: auto; background: Canvas; color: CanvasText; }
 
   /* The course's top bar: two rows of 47px (94px), sticky inside the panel. */
   .bb-course-navigation { position: sticky; top: 0; z-index: 10; background: Canvas; }
@@ -209,7 +212,8 @@
     }
     const t = TOOLS.find((x) => x[0] === tool);
     if (!t) return '<h2>Page not found</h2>';
-    return `<h2>${t[2]}</h2>` + Array.from({ length: 30 }, (_, i) => `<div class="tool-row">${t[2]} item ${i + 1} for ${c.name}</div>`).join('');
+    const notices = tool === 'announcement' ? `<announcement-list><a class="list-item-title" href="/ultra/stream/announcement-detail?courseId=${c.id}&amp;announcementId=_7001_1">Week 7</a></announcement-list>` : '';
+    return `<h2>${t[2]}</h2>` + notices + Array.from({ length: 30 }, (_, i) => `<div class="tool-row">${t[2]} item ${i + 1} for ${c.name}</div>`).join('');
   }
 
   function secondPanel(c, kind) {
@@ -223,7 +227,7 @@
   function parse(path) {
     const seg = path.split('/').filter(Boolean).slice(1); // drop "ultra"
     const course = seg[0] === 'courses' && COURSES.find((c) => c.id === seg[1]);
-    if (!course) return { base: seg[0] || 'stream' };
+    if (!course) return { base: seg[0] || 'stream', notice: seg[0] === 'stream' && seg[1] === 'announcement-detail' };
     const t = seg[2] ? TOOLS.find((x) => x[1].split('/')[0] === seg[2]) : TOOLS[0];
     const tool = t && t[0];
     let nested = null;
@@ -328,9 +332,17 @@
     load(350);
   }
 
+  // An announcement of a course, over the stream page (Ultra opens it there from the course's Announcements).
+  function notice(show) {
+    $(':scope > .bb-offcanvas-panel.full', site)?.remove();
+    const c = show && COURSES.find((x) => x.id === new URLSearchParams(location.search).get('courseId'));
+    if (c) site.append(el('bb-offcanvas-panel full', `<div class="panel-header"><button class="js-close-announcement" type="button" aria-label="Close">×</button><div><div>Course Announcements</div><h1>Week 7</h1></div></div><div class="panel-body"><p>Invented announcement for ${c.name}.</p></div>`));
+  }
+
   function render() {
     window.__renders++;
     const r = parse(location.pathname);
+    notice(r.notice);
     if (!r.course) { closeCourse(); drawBase(r.base); return; }
     if (r.full) { openFull(r); return; }
     if (S.tool === 'full') closeCourse();
@@ -358,6 +370,7 @@
       return;
     }
     if (t.closest('.js-start-attempt')) { window.__attempts++; return; }
+    if (t.closest('.js-close-announcement')) { history.pushState(null, '', location.origin + '/ultra/stream'); render(); return; }
     const a = t.closest('a[href]');
     if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const href = a.getAttribute('href');
