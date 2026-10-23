@@ -127,11 +127,11 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
     };
     const install = (over = {}) => sw.evaluate(async ({ origin, mods, ID, over }) => {
       await chrome.storage.local.clear();
-      await chrome.storage.sync.set({ enabled: true, enhance: {}, motion: { level: 'subtle' } });
+      await chrome.storage.sync.set({ enabled: true, enhance: { sidebar: false }, motion: { level: 'subtle' } });
       await chrome.storage.local.set({ ultra: [origin], mods: mods.map((m) => m.id), modOrder: [ID.data, ID.rail, ID.nav], ...Object.fromEntries(mods.map((m) => [`mod:${m.id}`, m])),
         [`modReplace:${ID.data}`]: { 'effect:complete': true }, [`modSettings:${ID.data}`]: { plant: 'Cactus' },
-        widgetLayout: { boards: { pages: [{ id: `m${ID.data.slice(0, 14)}0`, on: true, size: 'm' }] } }, ...over });
-    }, { origin, mods: MODS(), ID, over }).then(() => delay(300)).then(() => until(() => sw.evaluate(() => chrome.scripting.getRegisteredContentScripts().then((l) => l.some((x) => x.id.startsWith('ultra:')))), 'the loopback Ultra registered'));
+        widgetLayout: GZ_WIDGETS.layout({ tiles: [{ id: `m${ID.data.slice(0, 14)}0`, size: 'm' }], boards: { pages: [{ id: `m${ID.data.slice(0, 14)}0`, on: true, size: 'm' }] } }, { [`m${ID.data.slice(0, 14)}0`]: { size: 'm' } }), ...over });
+    }, { origin, mods: MODS(), ID, over }).then(() => delay(300)).then(() => until(() => sw.evaluate(() => chrome.scripting.getRegisteredContentScripts().then((l) => l.some((x) => x.id.startsWith('ultra:')) || chrome.runtime.getManifest().content_scripts.some((x) => x.js.includes('content-ultra.js') && x.matches.includes('https://*/ultra/*')))), 'the loopback Ultra registered'));
 
     for (const mode of ['strict', 'permissive']) {
       console.log(`-- ${mode} page policy`);
@@ -148,7 +148,10 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
       const where = await until(() => stored(ID.data, 'page'), 'page event');
       ok(where.site === 'ultra' && where.kind === 'courses', `on('page') ${JSON.stringify(where)}`);
       // The tile, drawn in a closed root: its button, its picture and its canvas.
-      let t = await until(async () => { const x = await tree(page); return x.all.some((n) => n.nodeName === 'BUTTON' && x.text(n) === 'Water') && x; }, 'tile button');
+      let t = await until(async () => { const x = await tree(page); return x.all.some((n) => n.nodeName === 'BUTTON' && x.text(n) === 'Water') && x; }, 'tile button').catch(async (e) => {
+        console.error('tile diagnostics', JSON.stringify(await sw.evaluate(() => chrome.storage.local.get(['widgetLayout', 'freshDefaults']))), JSON.stringify(await inPage(page, () => ({ widgets: !!globalThis.GZ_WIDGET_UI, enhance: GZ_CTX.settings().enhance }))));
+        throw e;
+      });
       const button = t.all.find((n) => n.nodeName === 'BUTTON' && t.text(n) === 'Water');
       ok(button.shadow === 'closed', 'the tree is in a closed shadow root');
       ok(t.all.some((n) => n.nodeName === 'CANVAS' && t.attr(n, 'aria-label') === 'Leaf' && t.attr(n, 'role') === 'img'), 'its picture is drawn on a canvas, labelled');

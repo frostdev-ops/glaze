@@ -15,7 +15,7 @@ const assert = require('node:assert/strict');
 
 const origin = 'https://ultra.fixture.test';
 // A staged copy holding the fixture's host, as a student's grant for their school's Ultra would (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(path.join(__dirname, '..'), [`${origin}/*`]);
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${origin}/*`]);
 const out = process.argv[2] && path.resolve(process.argv[2]);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -208,7 +208,7 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     for (let i = 0; i < 14; i++) { colours.push(await pixel(page, 900, 600)); await sleep(60); }
     const frames = new Set(colours.map((c) => FRAMES.findIndex((f) => near(f, c, 30))).filter((i) => i >= 0));
     check('  it moves: the screen shows more than one of its frames over a second', frames.size >= 2, JSON.stringify(colours));
-    check('  it is an img of the address, with no referrer', (await isolated(page, "(() => { const i = document.querySelector('#gz-scene img'); return i && i.referrerPolicy + ' ' + i.currentSrc.endsWith('/media/anim.webp') + ' ' + i.naturalWidth; })()")) === 'no-referrer true 48', 'img');
+    check('  it is an img of the worker-cleaned blob, with no referrer', (await isolated(page, "(() => { const i = document.querySelector('#gz-scene img'); return i && i.referrerPolicy + ' ' + i.currentSrc.startsWith('blob:') + ' ' + i.naturalWidth; })()")) === 'no-referrer true 48', 'img');
     await shot(page, 'image');
     await page.close();
 
@@ -507,4 +507,5 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
   console.log(JSON.stringify({ chrome: process.env.CHROME || "Playwright's bundled Chromium", passed: results.length - bad.length, failed: bad.length, failures: bad }, null, 1));
   for (const r of results) console.log(`${r.ok ? 'ok  ' : 'FAIL'} ${r.name}`);
   if (failure) { console.error(failure); process.exitCode = 1; } else process.exitCode = bad.length ? 1 : 0;
+  console.log(`${results.length - bad.length} checks passed; ${bad.length} failed${failure ? '; ' + failure.message : ''}`);
 })().catch((e) => { console.error(e); process.exitCode = 1; });
