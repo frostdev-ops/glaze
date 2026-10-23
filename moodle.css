@@ -242,7 +242,7 @@ html[data-gz-bg="aurora"]::before {
     radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-bg-3) 28%, transparent), transparent 70%),
     radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
     var(--gz-surface-paint-2, var(--gz-surface-2));
-  animation: gz-aurora 42s ease-in-out infinite alternate; animation-play-state: var(--gz-ambient);
+  animation: gz-aurora 42s ease-in-out infinite alternate; animation-play-state: var(--gz-drift);
 }
 /* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
 html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before { will-change: transform; }

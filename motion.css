@@ -25,7 +25,8 @@
   --gz-hover-filter: brightness(1.08);
   --gz-card-hover-filter: var(--gz-x-hover-filter, none); /* a hovered card's own filter, set by a Look's card.hover */
   --gz-t-hover: var(--gz-x-hover-t, var(--gz-t-slow)); /* how long a card takes to reach its hover state */
-  --gz-ambient: paused;
+  --gz-drift: paused; /* the background's own drift (an aurora) */
+  --gz-ambient: var(--gz-drift);
   --gz-card-transition: transform var(--gz-t-hover) var(--gz-x-hover-ease, var(--gz-spring)), box-shadow var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease), filter var(--gz-t-hover) var(--gz-ease);
 }
 
@@ -43,16 +44,17 @@ html[data-gz-motion="expressive"] {
   --gz-nudge: translateX(5px);
   --gz-press: var(--gz-x-press, 0.93);
   --gz-pop: scale(1.3) rotate(-8deg);
-  --gz-ambient: running;
+  --gz-drift: running;
 }
 
 /* Off: nothing moves. The fine-tune switches zero one group each. */
 html[data-gz-motion="off"], html[data-gz-no-trans] { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; }
 html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; }
 html[data-gz-motion="off"], html[data-gz-no-hover] { --gz-lift: none; --gz-nudge: none; --gz-press: none; --gz-pop: none; --gz-hover-shadow: none; --gz-hover-filter: none; --gz-card-hover-filter: none; }
-html[data-gz-motion="off"] { --gz-ambient: paused; }
-/* The page under a course tab's frame, and a frame while hidden: nobody sees it, so nothing drifts. The entrances
-   stay: switching them off and on again replays every card's on uncovering. */
+html[data-gz-motion="off"] { --gz-drift: paused; }
+/* The page under a course tab's frame, and a frame while hidden: nobody sees it, so nothing drifts but the page's
+   background, which shows around the rail and through a frame wearing it. The entrances stay: switching them off and on
+   again replays every card's on uncovering. */
 html[data-gz-ctab-framed] { --gz-ambient: paused; }
 /* Touch screens: :hover sticks to whatever was tapped last, so a tapped card would stay lifted. Nothing
    lifts on hover there; press feedback stays. */
@@ -62,7 +64,7 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 /* content.js maps the system setting to "off" unless the user opted out; this only covers the
    moment before it runs. */
 @media (prefers-reduced-motion: reduce) {
-  html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-ambient: paused; }
+  html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-drift: paused; }
 }
 
 @keyframes gz-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

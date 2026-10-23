@@ -210,7 +210,7 @@ html[data-gz-bg="aurora"]::before {
     radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
     var(--gz-surface-paint-2, var(--gz-surface-2));
   animation: gz-aurora 42s ease-in-out infinite alternate;
-  animation-play-state: var(--gz-ambient);
+  animation-play-state: var(--gz-drift);
 }
 /* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
 html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before { will-change: transform; }
@@ -234,6 +234,10 @@ html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before { will-change: tr
 /* No blur set, no filter: even blur(0) gives the layer an offscreen copy on the GPU. Every element is a style
    container, so this reads the --gz-bg-blur content.js sets on <html>. */
 @container style(--gz-bg-blur: 0px) { html::before, #gz-scene { filter: none; } }
+/* A course tab's frame wearing the page's background (content.js data-gz-through) is see-through: the page under it draws
+   the one background, edge to edge around the rail. */
+html[data-gz-bg][data-gz-through] { background: transparent !important; }
+html[data-gz-through]::before { content: none; }
 
 /* ---- ground ---- */
 html, body, #drawer-layout-content, #drawer-layout-mount-point, #application, #wrapper, #main, #not_right_side,
@@ -1574,7 +1578,7 @@ html[data-gz-ctabs]:not([data-gz-ctabs~="nav"]) #sticky-container { top: var(--g
 :is(html[data-gz-enhance-tabs]:not([data-gz-ctabs]), html[data-gz-ctabs]:not([data-gz-ctabs~="nav"])) .ic-app-nav-toggle-and-crumbs:is(:has(#breadcrumbs a[href*="/courses/"]), html[data-gz-ctabs~="page"] *):not(:has(> #gz-ctabs)) { flex-wrap: wrap; height: auto; }
 :is(html[data-gz-enhance-tabs]:not([data-gz-ctabs]), html[data-gz-ctabs]:not([data-gz-ctabs~="nav"])) .ic-app-nav-toggle-and-crumbs:is(:has(#breadcrumbs a[href*="/courses/"]), html[data-gz-ctabs~="page"] *):not(:has(> #gz-ctabs))::before { content: ""; order: -1; flex: 0 0 100%; height: var(--gz-ctabs-h, 40px); }
 html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .ic-app-nav-toggle-and-crumbs:not(:has(> #gz-ctabs))::before { order: 99; }
-html[data-gz-ctab-framed] :is(#application, #drawer-layout-mount-point, #gz-scene) { visibility: hidden !important; }
+html[data-gz-ctab-framed] :is(#application, #drawer-layout-mount-point) { visibility: hidden !important; }
 html[data-gz-ctab-framed] #application :is(#gz-ctabs, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"]) { visibility: visible; }
 /* A visible course frame owns scrolling. Exhausting its native scroller must not wheel the covered document or drawer. */
 html[data-gz-ctab-framed], html[data-gz-ctab-framed] #drawer-layout-content { overflow-y: hidden !important; }
