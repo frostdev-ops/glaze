@@ -485,6 +485,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       signOut();
       return;
     }
+    // Remember a panel before its close handler routes away, even between throttled passes.
+    if (framed && !preview && ctx.site !== 'canvas' && e.type === 'click') pass();
     const cid = ctx.courseId();
     if (framed || showing || !cid || e.type !== 'pointerdown') return;
     if (el.closest('course-page-header, .MuiDrawer-paper, #base_tools') || (href.startsWith('/') && !href.includes(`/courses/${cid}/`))) shoot();
