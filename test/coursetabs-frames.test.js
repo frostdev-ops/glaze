@@ -403,6 +403,9 @@ test('the stand-in: a sketch drawn at once over a frame still loading, blurred u
   assert.ok(drawn.some((e) => /left:40px;top:100px;width:600px;height:300px;background:#ffffffff;border-radius:12px/.test(e.style.cssText)));
   assert.deepEqual(drawn.filter((e) => e.textContent).map((e) => e.textContent), ['Computer Science I'], 'the course name, the one text');
   assert.equal(c.pic, box);
+  const page = parts.find((e) => e.className === 'p');
+  assert.equal(page.attrs['aria-hidden'], 'true', 'the decorative course name is hidden from screen readers; only Loading… is announced');
+  assert.ok(!parts.some((e) => e.attrs.tabindex !== undefined || ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(e.tagName)), 'the stand-in has no focusable controls');
 });
 
 test('closing the surrounding course keeps the next course’s existing edited frame', () => {
