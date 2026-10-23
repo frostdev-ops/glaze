@@ -45,10 +45,13 @@ test('clearing parent reservations clears frame overrides; top pages and other s
   const h = reservation(); h.parentValues.set('--gz-navbar-left', '272px'); h.navRoom();
   assert.equal(h.ownValues.get('--gz-navbar-left'), '272px');
   h.parentValues.clear(); h.navRoom(); assert.equal(h.ownValues.has('--gz-navbar-left'), false);
-  for (const [framed, site] of [['', 'canvas'], ['12', 'ultra']]) {
-    const other = reservation(framed, site); other.parentValues.set('--gz-navbar-left', '272px'); other.navRoom();
-    assert.deepEqual(other.writes, []);
-  }
+  const top = reservation('', 'canvas'); top.parentValues.set('--gz-navbar-left', '272px'); top.navRoom();
+  assert.deepEqual(top.writes, []);
+  // An Ultra frame keeps its own room: it only learns that it starts past the bar's gutter, for the floating bars in it.
+  const ultra = reservation('12', 'ultra'); ultra.parentValues.set('--gz-navbar-left', '272px'); ultra.navRoom();
+  assert.deepEqual(ultra.writes, [['--gz-float-start', '0px']]);
+  ultra.navRoom(); assert.equal(ultra.writes.length, 1, 'same room causes no frame style mutation');
+  ultra.parentValues.clear(); ultra.navRoom(); assert.equal(ultra.ownValues.has('--gz-float-start'), false);
 });
 
 test('frame room observes parent style and navbar words and disconnects on disable', () => {
