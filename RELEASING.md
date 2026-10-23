@@ -179,7 +179,7 @@ Each release brings the listings in English, German, Spanish, French, Dutch and 
 | Store | Source | What the release sets |
 | --- | --- | --- |
 | Chrome | `store/listing*.md` | Nothing: the API has no listing method. It writes `release/<v>/chrome-web-store/listing-<lang>.txt` to paste in the dashboard. |
-| Firefox | `store/listing*.md` | Release notes in every language; summary and description where they differ. The description leaves out the older "FROM …" blocks (AMO shows each version's notes). |
+| Firefox | `store/listing*.md`, with privacy from `store/firefox*.md` | Release notes in every language; summary and description where they differ. The description leaves out the older "FROM …" blocks (AMO shows each version's notes). Firefox privacy describes Firefox sync and excludes executable mod permissions. |
 | Apple | `store/app-store*.md` | Name and subtitle, description, keywords, promotional text and What's New, per platform version submitted. Missing languages are created with English's privacy policy, support and marketing URLs. |
 
 Release notes in every store and language are that language's "NEW IN <version>" block; a language without one stops
@@ -191,6 +191,9 @@ Apple keywords are limited to 100 UTF-8 bytes; promotional text may be omitted f
 
 `node scripts/store-release.mjs listings` reads the stores and prints, per store and language, what a release would
 change. It writes nothing.
+Submission stops on an unknown or noneditable Apple version state, or if required languages cannot be added because
+app info is not editable. An existing editable review draft receives the same listing sync before submission; a retry
+reads the localizations already created, so partial updates resume without duplicating them.
 
 ### Source isolation and Firefox review
 

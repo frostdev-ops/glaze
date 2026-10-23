@@ -1,16 +1,16 @@
-// Store listing text, one source per language: store/listing*.md (Chrome's format) for Chrome and Firefox, and
+// Store listing text: store/listing*.md for shared copy and notes, store/firefox*.md for Firefox privacy, and
 // store/app-store*.md for Apple. Everything is checked before a release builds or sends anything.
 import fs from 'node:fs';
 import path from 'node:path';
 
 // "NEW IN <version>" in each language heads the release notes for that version.
 export const LANGUAGES = {
-  en: { amoLocale: 'en-US', appleLocale: 'en-US', newIn: 'NEW IN' },
-  de: { amoLocale: 'de', appleLocale: 'de-DE', newIn: 'NEU IN' },
-  es: { amoLocale: 'es-ES', appleLocale: 'es-ES', newIn: 'NOVEDADES DE' },
-  fr: { amoLocale: 'fr', appleLocale: 'fr-FR', newIn: 'NOUVEAUTÉS DE LA VERSION' },
-  nl: { amoLocale: 'nl', appleLocale: 'nl-NL', newIn: 'NIEUW IN' },
-  'pt-BR': { amoLocale: 'pt-BR', appleLocale: 'pt-BR', newIn: 'NOVO NA' },
+  en: { amoLocale: 'en-US', appleLocale: 'en-US', newIn: 'NEW IN', privacyHeading: 'PRIVACY' },
+  de: { amoLocale: 'de', appleLocale: 'de-DE', newIn: 'NEU IN', privacyHeading: 'DATENSCHUTZ' },
+  es: { amoLocale: 'es-ES', appleLocale: 'es-ES', newIn: 'NOVEDADES DE', privacyHeading: 'PRIVACIDAD' },
+  fr: { amoLocale: 'fr', appleLocale: 'fr-FR', newIn: 'NOUVEAUTÉS DE LA VERSION', privacyHeading: 'CONFIDENTIALITÉ' },
+  nl: { amoLocale: 'nl', appleLocale: 'nl-NL', newIn: 'NIEUW IN', privacyHeading: 'PRIVACY' },
+  'pt-BR': { amoLocale: 'pt-BR', appleLocale: 'pt-BR', newIn: 'NOVO NA', privacyHeading: 'PRIVACIDADE' },
 };
 const suffix = lang => lang === 'en' ? '' : `-${lang}`;
 const LIMITS = {
@@ -72,6 +72,7 @@ export function readListings(read, version, stores = ['chrome', 'firefox', 'appl
       else if (length > max) problems.push(`${file}: ${name} is ${length} ${bytes ? 'bytes' : 'characters'}; ${limits.label} allows ${max}`);
       if (store === 'apple' && OTHER_BROWSERS.test(value || '')) problems.push(`${file}: ${name} names another browser (${OTHER_BROWSERS.exec(value)[0]})`);
       if (store === 'firefox' && field !== 'summary' && /[*_`]|^\s*(?:#|>|[-+] |\d+\. )/m.test(value || '')) problems.push(`${file}: ${name} has Markdown that AMO would render`);
+      if (store === 'firefox' && /\b(?:Chrome|Chromium|Safari|Microsoft Edge)\b/i.test(value || '')) problems.push(`${file}: ${name} names another browser`);
     }
   };
   for (const [lang, codes] of Object.entries(LANGUAGES)) {
@@ -83,7 +84,12 @@ export function readListings(read, version, stores = ['chrome', 'firefox', 'appl
     if (!notes) problems.push(`${file}: no "${heading}" block in the detailed description`);
     if (stores.includes('chrome')) { entry.chrome = chrome; check(file, 'chrome', chrome); }
     if (stores.includes('firefox') && notes) {
-      entry.firefox = { summary: chrome.summary, description: chrome.description && amoDescription(chrome.description, heading), notes: forBrowser(notes, 'Firefox') };
+      const firefoxFile = `store/firefox${suffix(lang)}.md`, privacy = sections(read(firefoxFile)).privacy;
+      const paragraphs = chrome.description.split('\n\n'), index = paragraphs.indexOf(codes.privacyHeading);
+      if (index < 0 || !paragraphs[index + 1]) problems.push(`${file}: no ${codes.privacyHeading} paragraph`);
+      if (!privacy) problems.push(`${firefoxFile}: privacy is missing`);
+      if (index >= 0 && privacy) paragraphs[index + 1] = privacy;
+      entry.firefox = { summary: chrome.summary, description: amoDescription(paragraphs.join('\n\n'), heading), notes: forBrowser(notes, 'Firefox') };
       check(file, 'firefox', entry.firefox);
     }
     if (stores.includes('apple')) {

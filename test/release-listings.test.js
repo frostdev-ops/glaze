@@ -145,6 +145,16 @@ test('App Store promotional text is optional in a source', async () => {
   assert.equal(readListings(readWith({ [file]: changed }), version, ['apple']).fr.apple.promotionalText, undefined);
 });
 
+for (const lang of LANGS) test(`${lang}: Firefox privacy describes Firefox and excludes executable mod permissions`, async () => {
+  const { readListings } = await load();
+  const { firefox } = readListings(real, version, ['firefox'])[lang];
+  assert.ok(!/\b(?:Chrome|Chromium|Safari|Microsoft Edge)\b/i.test(firefox.description), 'Firefox copy names another browser');
+  const file = `store/firefox${lang === 'en' ? '' : `-${lang}`}.md`;
+  const privacy = section(real(file), 'Privacy');
+  assert.ok(firefox.description.includes(privacy), 'use the Firefox-specific privacy source');
+  assert.ok(!/\bmod\b/i.test(privacy), 'Firefox runs no downloaded mod JavaScript');
+});
+
 test('the Chrome paste kit holds each language\'s exact summary and description, one file per language', async () => {
   const { readListings, writeChromeKit } = await load();
   const listings = readListings(real, version), dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-kit-'));
