@@ -145,10 +145,25 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (r.gone.length) st.open = true;
     if (changed) keep(st);
   };
+  // Ultra: a load that failed is tried again on its own, a little later each time (AGAIN, ms), and at once when the page
+  // answers with the course's gradebook anew; after the last try it says so, with Try again. A gradebook answered only in
+  // part is an answer, not a failure: it's read again when the page's next answer comes. soon: another try is on its way;
+  // ripe: its time has come (it runs once the calculator is showing).
+  const AGAIN = [1000, 4000, 15000];
+  const failed = (st, e) => {
+    const n = (st.fails || 0) + 1;
+    const partial = e?.code === 'incomplete';
+    const later = ultra && !partial && AGAIN[n - 1];
+    Object.assign(st, { status: 'failed', partial, fails: n, soon: !!later, ripe: false });
+    if (ultra) st.book = pageBook(st.cid).key;
+    if (later) setTimeout(() => { if (st.status === 'failed' && st.fails === n) { st.ripe = true; whatIf(); } }, later);
+  };
+  // Opened, or Try again: as if for the first time.
+  const retry = (st) => { st.fails = 0; return load(st); };
   const load = (st) => {
     if (st.status === 'loading' || st.status === 'ready') return st.p;
     st.status = 'loading';
-    st.partial = false;
+    st.partial = st.ripe = false;
     st.v++;
     whatIf();
     const { cid, row } = st;
@@ -159,11 +174,11 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         // Glaze 2.2's scores, saved against no grade (C.oldScores): those whose grade has come in are gone, with a word.
         const old = C.oldScores({ [cid]: st.old }, cid);
         const was = C.reconcile({ s: old }, st.course);
-        Object.assign(st, { rec: r.kept, what: r.what, gone: [...r.gone, ...was.gone], status: 'ready' });
+        Object.assign(st, { rec: r.kept, what: r.what, gone: [...r.gone, ...was.gone], status: 'ready', fails: 0, soon: false });
         if (st.gone.length) st.open = true;
         if (r.gone.length) keep(st);
         if (Object.keys(old).length) migrate(st, old, Object.keys(was.kept.s));
-      }, (e) => { st.status = 'failed'; st.partial = e.code === 'incomplete'; }).then(() => { st.v++; whatIf(); }));
+      }, (e) => failed(st, e)).then(() => { st.v++; whatIf(); }));
     }
     return (st.p = Promise.all([
       getAll(`/courses/${cid}/assignment_groups?include[]=assignments&include[]=submission&exclude_response_fields[]=description&exclude_response_fields[]=rubric&per_page=100`),
@@ -183,9 +198,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const anon = st.course.groups.some((g) => g.items.some((i) => i.anon));
       st.anon = anon && st.truth?.[1] != null && C.round2(C.calc(st.course, {}, { period: st.period, anon: true }).final) === st.truth[1];
       const r = C.reconcile(st.saved, st.course);
-      Object.assign(st, { rec: r.kept, what: r.what, gone: r.gone, status: 'ready' });
+      Object.assign(st, { rec: r.kept, what: r.what, gone: r.gone, status: 'ready', fails: 0, soon: false });
       if (r.gone.length) { st.open = true; keep(st); }
-    }, () => { st.status = 'failed'; }).then(() => { st.v++; whatIf(); }));
+    }, (e) => failed(st, e)).then(() => { st.v++; whatIf(); }));
   };
   const keep = (st) => {
     st.what = C.whatOf(st.rec);
@@ -230,9 +245,13 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (ultra && st.status === 'ready') {
       const b = pageBook(cid);
       if (b.results && b.key !== st.book) {
-        if (b.results.complete === false) Object.assign(st, { status: 'failed', partial: true, v: st.v + 1 });
+        if (b.results.complete === false) Object.assign(st, { status: 'failed', partial: true, book: b.key, soon: false, v: st.v + 1 });
         else rebuild(st, b.results, b.key);
       }
+    }
+    if (st.status === 'failed') {
+      const b = ultra ? pageBook(cid) : {};
+      if (st.ripe || (b.results && b.key !== st.book)) load(st);
     }
     const key = `${cid} ${st.v} ${locale()}`;
     if (old?.dataset.key === key && (ultra ? old.previousElementSibling === anchor : old.nextElementSibling === anchor)) return;
@@ -247,14 +266,16 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     summary.dataset.f = 'summary';
     const box = label(make('details', { id: 'gz-calc', open: st.open }, summary), t('What-if grade calculator'));
     // Opening it asks for the course's work; after a failure, opening it again (or Try again) asks once more.
-    box.addEventListener('toggle', () => { st.open = box.open; if (box.open && (st.status === 'idle' || st.status === 'failed')) load(st); });
+    box.addEventListener('toggle', () => { st.open = box.open; if (box.open && (st.status === 'idle' || st.status === 'failed')) retry(st); });
     if (st.status !== 'ready') {
-      box.append(make('p', { className: 'gz-calc-note', textContent: st.partial ? t('Some scores could not be read. The calculator needs the complete gradebook.') : st.status === 'failed' ? t("Glaze couldn't load this course's scores.") : t('Loading your scores…') }));
-      if (st.status === 'failed') {
-        const retry = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Try again') });
-        retry.dataset.f = 'retry';
-        retry.addEventListener('click', () => { st.focus = 'summary'; load(st); });
-        box.append(retry);
+      // Another try on its way is still loading.
+      const gave = st.status === 'failed' && !st.soon;
+      box.append(make('p', { className: 'gz-calc-note', textContent: st.partial ? t('Some scores could not be read. The calculator needs the complete gradebook.') : gave ? t("Glaze couldn't load this course's scores.") : t('Loading your scores…') }));
+      if (gave) {
+        const button = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Try again') });
+        button.dataset.f = 'retry';
+        button.addEventListener('click', () => { st.focus = 'summary'; retry(st); });
+        box.append(button);
       }
       return box;
     }
