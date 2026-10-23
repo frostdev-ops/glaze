@@ -19,7 +19,10 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
 
 // Runs before the page's own scripts: what is held (the built-in hosts, and whatever the check grants), each request
 // parked until the check answers it, and every message the page sends the worker.
-const stub = () => {
+const stub = (required) => {
+  // Staged hosts stand in for optional grants; the page still sees the product's actual required hosts.
+  const manifest = chrome.runtime.getManifest.bind(chrome.runtime);
+  chrome.runtime.getManifest = () => ({ ...manifest(), host_permissions: required });
   const held = new Set(['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*']);
   const covers = (o) => held.has('https://*/*') && o.startsWith('https://') || [...held].some((p) => p === o || (p.startsWith('https://*.') && (o.startsWith('https://') && new URL(o.replace('/*', '/')).hostname.endsWith(p.slice(10, -2)))));
   const added = new Set(), removed = new Set();
@@ -46,7 +49,7 @@ const stub = () => {
       headless: true, viewport: { width: 1440, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
-    await ctx.addInitScript(stub);
+    await ctx.addInitScript(stub, require('../manifest.json').host_permissions);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
