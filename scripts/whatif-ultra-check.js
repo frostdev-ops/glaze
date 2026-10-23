@@ -37,7 +37,7 @@ const calc = async (where) => {
   }, shut));
 };
 (async () => {
-  let ctx;
+  let ctx, failBooks = false, bookReads = 0;
   try {
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
@@ -52,7 +52,10 @@ const calc = async (where) => {
       if (u.origin === site && u.pathname.startsWith('/ultra')) return route.fulfill({ contentType: 'text/html', body: html });
       if (u.origin === site && u.pathname === '/learn/api/v1/users/me') return json({ id: user });
       if (u.origin === site && u.pathname === `/learn/api/v1/users/${user}/memberships`) return json(fixture('ultra-memberships.json'));
-      if (u.origin === site && /^\/learn\/api\/v1\/courses\/_10\d_1\/gradebook\/grades$/.test(u.pathname)) return json(grades);
+      if (u.origin === site && /^\/learn\/api\/v1\/courses\/_10\d_1\/gradebook\/grades$/.test(u.pathname)) {
+        bookReads++;
+        return failBooks ? route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) : json(grades);
+      }
       if (u.origin === site && u.pathname.startsWith('/learn/api/')) return json({ results: [] });
       if (u.origin === 'https://cdn.school.test' && u.pathname.endsWith('.css')) return route.fulfill({ contentType: 'text/css', body: '' });
       return route.abort();
@@ -81,6 +84,26 @@ const calc = async (where) => {
     console.log(JSON.stringify(framed));
     check(!/couldn't load/.test(framed.shut + framed.text) && framed.totals[0] === '88%', `in a course tab's frame the calculator loads too (${framed.totals.join(', ')})`);
     check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
+    await page.close();
+    await opts.evaluate(async () => { const { enhance } = await chrome.storage.sync.get('enhance'); await chrome.storage.sync.set({ enhance: { ...enhance, tabs: false } }); });
+    failBooks = true;
+    const retryPage = await ctx.newPage();
+    retryPage.on('pageerror', (e) => errors.push(String(e)));
+    await retryPage.goto(`${site}/ultra/courses/_101_1/grades`);
+    await retryPage.evaluate(() => { const a = document.createElement('aside'); a.className = 'student-grade-overview'; document.body.append(a); });
+    await retryPage.waitForSelector('#gz-calc');
+    await pause(1500);
+    const before = bookReads;
+    await retryPage.locator('#gz-calc summary').evaluate((e) => e.click());
+    await pause(400);
+    check(bookReads - before === 1, `native details redraw does not retry immediately (${bookReads - before} reads)`);
+    await retryPage.getByRole('button', { name: 'Try again', exact: true }).waitFor({ timeout: 25000 });
+    check(bookReads - before === 4, `automatic retries stop after four attempts (${bookReads - before} reads)`);
+    failBooks = false;
+    await retryPage.getByRole('button', { name: 'Try again', exact: true }).evaluate((e) => e.click());
+    await until(() => retryPage.locator('#gz-calc dd').first().textContent().then((s) => s === '88%').catch(() => false));
+    check(bookReads - before === 5, 'Try again recovers with one request');
+    check(errors.length === 0, `no page errors after retries (${errors.join(' | ')})`);
     console.log(JSON.stringify({ checks: results.length }));
   } finally {
     await ctx?.close(); fs.rmSync(tmp, { recursive: true, force: true });
