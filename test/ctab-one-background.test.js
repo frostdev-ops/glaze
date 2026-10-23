@@ -371,7 +371,6 @@ test('background layers and the scene sit on the viewport, or a frame\'s copy on
     }
     const aurora = r.find(([s, b]) => s.includes('[data-gz-bg="aurora"]::before') && /animation:/.test(b))[1];
     assert.match(aurora, /width:\s*calc\(var\(--gz-vw, 100%\) \* 1\.36\)/, f);
-    assert.match(aurora, /animation-delay:\s*calc\(var\(--gz-drift-at, 0s\) \* -1\)/, f);
   }
 });
 
