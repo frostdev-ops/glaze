@@ -1274,7 +1274,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       style.textContent = `.p{position:absolute;top:${-view.y}px;left:${-view.x}px;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}.p>div{position:absolute;overflow:hidden;white-space:nowrap}
 .s{position:absolute;top:50%;left:50%;width:2.25rem;height:2.25rem;margin:-1.125rem;box-sizing:border-box;border-radius:50%;border:3px solid color-mix(in srgb,var(--gz-ink,#fff) 25%,transparent);border-top-color:var(--gz-accent,#6fdcff);animation:r .8s linear infinite}
 @keyframes r{to{transform:rotate(1turn)}}:host([data-still]) .s{animation:none}`;
-      page.className = 'p';
+      page.className = 'p'; page.setAttribute('aria-hidden', 'true');
       for (const d of L.drawn(snap)) {
         const e = document.createElement('div');
         e.style.cssText = `left:${d.x}px;top:${d.y}px;width:${d.w}px;height:${d.h}px;` + (d.text ? `color:${d.ink};font:600 ${d.size}px/${d.line}px var(--gz-font-head,var(--gz-font,sans-serif))` : `background:${d.bg};border-radius:${d.r}px`);
