@@ -594,6 +594,7 @@ test('the Course notes button costs the first script nothing: the worker registe
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener() {} },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      permissions: { contains: async () => true }, // the student granted every host (Chrome)
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener: (f) => changed.push(f) } },
       scripting: {
         getRegisteredContentScripts: async () => registered,

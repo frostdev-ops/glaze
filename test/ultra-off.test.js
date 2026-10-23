@@ -110,11 +110,12 @@ const page = ({ cached = null, raw = {}, local = {}, pathname = '/ultra/course',
   };
 };
 // Work Glaze must not do while it is off: Ultra's API, the course list, the due list, registering the site, and loading
-// the features that do those (the sidebar's To Do, the widgets, the Dashboard's landing).
+// the features that do those (the sidebar's To Do, the widgets, the Dashboard's landing). Glaze's own toolbar icon for the
+// tab ('glaze:here') is none of those.
 const traces = (p) => ({
   requests: p.requests,
   loads: p.sent.filter((m) => m?.type === 'glaze:load').flatMap((m) => m.files),
-  messages: p.sent.filter((m) => m?.type !== 'glaze:load').map((m) => m.type),
+  messages: p.sent.filter((m) => m?.type !== 'glaze:load' && m?.type !== 'glaze:here').map((m) => m.type),
   local: p.writes.filter(([area]) => area === 'local').flatMap(([, keys]) => keys).filter((k) => /^(dueWeek|dueWeekAt|dueWeekFrom|seenCourses|seenCoursesAt|courseSlots|ultra)$/.test(k)),
   sweeping: p.sweeping(),
 });

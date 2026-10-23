@@ -311,6 +311,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
         onInstalled: { addListener: (f) => listeners.installed = f }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area('local', store.local), sync: area('sync', store.sync), onChanged: { addListener: (f) => heard.push(f) } },
       identity,
+      permissions: { contains: async () => true }, // the student granted every host (Chrome)
       tabs: { query: async () => [] },
       scripting: {
         getRegisteredContentScripts: async () => registered,

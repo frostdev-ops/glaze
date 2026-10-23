@@ -19,7 +19,10 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
 
 // Runs before the page's own scripts: what is held (the built-in hosts, and whatever the check grants), each request
 // parked until the check answers it, and every message the page sends the worker.
-const stub = () => {
+const stub = (required) => {
+  // Staged hosts stand in for optional grants; the page still sees the product's actual required hosts.
+  const manifest = chrome.runtime.getManifest.bind(chrome.runtime);
+  chrome.runtime.getManifest = () => ({ ...manifest(), host_permissions: required });
   const held = new Set(['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*']);
   const covers = (o) => held.has('https://*/*') && o.startsWith('https://') || [...held].some((p) => p === o || (p.startsWith('https://*.') && (o.startsWith('https://') && new URL(o.replace('/*', '/')).hostname.endsWith(p.slice(10, -2)))));
   const added = new Set(), removed = new Set();
@@ -34,7 +37,7 @@ const stub = () => {
   chrome.permissions.onAdded = { addListener: (f) => added.add(f) };
   chrome.permissions.onRemoved = { addListener: (f) => removed.add(f) };
   const send = chrome.runtime.sendMessage.bind(chrome.runtime);
-  chrome.runtime.sendMessage = (m, ...rest) => { __gz.sent.push(m); return m?.type === 'glaze:allow' ? Promise.resolve() : send(m, ...rest); };
+  chrome.runtime.sendMessage = (m, ...rest) => { __gz.sent.push(m); return m?.type === 'glaze:allow' ? Promise.resolve({ ok: true }) : send(m, ...rest); };
 };
 
 (async () => {
@@ -46,7 +49,7 @@ const stub = () => {
       headless: true, viewport: { width: 1440, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
-    await ctx.addInitScript(stub);
+    await ctx.addInitScript(stub, require('../manifest.json').host_permissions);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
@@ -184,6 +187,14 @@ const stub = () => {
     await pause(3200);
     check(ph === await calm.evaluate(() => document.querySelector('#address').placeholder), 'reduced motion: the examples hold still');
     await shot(calm, 'wide-8-reduced-motion');
+    // Firefox can revoke required hosts. Re-allowing one must never hand it back when its probe fails.
+    await calm.evaluate(() => __gz.held.delete('https://*.instructure.com/*'));
+    await type(calm, 'school.instructure.com');
+    await calm.click('#go');
+    await pause(200);
+    await calm.evaluate(() => __gz.answer(true));
+    await calm.waitForFunction(() => !document.querySelector('#note').hidden, null, { timeout: 15000 });
+    check(await calm.evaluate(() => __gz.held.has('https://school.instructure.com/*') && !__gz.removed.flat().includes('https://school.instructure.com/*')), 'a required host re-granted on Firefox stays held after a failed probe');
     await calm.close();
 
     check(!errors.length, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);

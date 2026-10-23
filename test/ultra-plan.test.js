@@ -149,7 +149,7 @@ const worker = ({ sessionFail = null } = {}) => {
       tabs: { onRemoved: { addListener: (f) => removed.push(f) } },
       permissions: { contains: async () => true }, // the student granted every host (Chrome)
       storage: { session: Object.fromEntries(Object.entries(area(store.session)).map(([k, f]) => [k, (...a) => { if (sessionFail === k) throw Error('storage unavailable'); return f(...a); }])), local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
-      scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
+      scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {}, executeScript: async () => [{ result: true }] }, // the page has Glaze already
     },
   });
   vm.runInContext(read('lib/background.js'), context);
