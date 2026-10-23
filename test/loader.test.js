@@ -276,5 +276,17 @@ test('a feature that reads GZ_CTX as it loads keeps nothing when it lands before
 test('a course-tab feature request includes its library in the same injection', async () => {
   const w = worker();
   await w.send({ type: 'glaze:load', files: ['features/coursetabs.js'] }, { ...tab(), documentId: 'A' });
-  assert.deepEqual(w.injected[0].files, ['lib/coursetabs.js', 'features/coursetabs.js']);
+  assert.deepEqual(w.injected[0].files, ['lib/coursetabs.js', 'lib/motion.js', 'features/coursetabs.js']);
+});
+
+test('a feature that moves gets lib/motion.js ahead of it in the same injection, and only those do', async () => {
+  for (const f of ['features/widgets.js', 'features/todo.js', 'features/reminders.js', 'features/coursemenu.js', 'features/folders.js', 'features/sidebar.js']) {
+    const w = worker();
+    await w.send({ type: 'glaze:load', files: [f] }, { ...tab(), documentId: 'A' });
+    const files = w.injected[0].files;
+    assert.ok(files.indexOf('lib/motion.js') >= 0 && files.indexOf('lib/motion.js') < files.indexOf(f), `${f}: ${files}`);
+  }
+  const w = worker();
+  await w.send({ type: 'glaze:load', files: ['lib/folders.js'] }, { ...tab(), documentId: 'A' });
+  assert.deepEqual(w.injected[0].files, ['lib/folders.js']);
 });

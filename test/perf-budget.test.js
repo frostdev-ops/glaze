@@ -168,6 +168,10 @@ const SCENE_RECOVERY = 2363;
 // pointer relay) is lib/scene-host.js, on demand: 1762 bytes on every site. Measured against fc414dd3. A frame drawing its
 // own background takes the page's clock, and the aurora drifts on the wall clock: 456 more, measured against 6f177a52.
 const CTAB_ONE_BG = 2218;
+// Crossfaded palettes and Looks (WP-V2; owner-approved raise, 2026-10-23): content.js hands a settings change and the
+// system's light/dark switch to lib/motion.js's swap where a feature has loaded it, else applies them at once: 159 bytes on
+// every site. Measured against 27f83a1.
+const UI_SWAP = 159;
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -176,7 +180,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG, budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG, budget = Math.round(baseline * 1.02) + UI_SWAP;
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -307,6 +311,13 @@ const STYLE_READS = [
   ['content.js', 'getComputedStyle(document.documentElement)', 1], // the palette's ink, once per highlighted element
   // One element, on its first hover or focus; one element under the pointer, to see if its text is cut short.
   ['content.js', 'getComputedStyle(el)', 2],
+  // WP-V2 (lib/motion.js): the root's motion knobs, once per flip/exit/enter/pop/swap call; the one element an exit fades
+  // (its opacity to start from); a ghost's container, once per element that left a flip; and the subtree of that ghost,
+  // a detached copy of one removed item, swept once to strip its ids and actions before it is shown.
+  ['lib/motion.js', 'getComputedStyle(document.documentElement)', 1],
+  ['lib/motion.js', 'getComputedStyle(el)', 1],
+  ['lib/motion.js', 'getComputedStyle(container)', 1],
+  ['lib/motion.js', "querySelectorAll('*')", 1],
 ];
 
 test('no new whole-page style reads or element sweeps beyond the reviewed ones', () => {
