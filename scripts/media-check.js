@@ -495,6 +495,25 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     await sleep(2000);
     check('  the preview shows no background from it', await ged.evaluate(() => !document.getElementById('preview')?.contentDocument?.querySelector('#gz-scene img, #gz-scene video')), 'scene');
 
+    // A pasted Look code can bring remote media too. Apply must ask in its click and leave the Look alone on refusal.
+    const applyPage = await context.newPage();
+    await applyPage.goto(`chrome-extension://${id}/options.html#look/palette`);
+    await applyPage.evaluate(() => {
+      globalThis.__hostRequests = [];
+      chrome.permissions.request = (o) => { __hostRequests.push([o.origins, navigator.userActivation.isActive]); return Promise.resolve(false); };
+    });
+    const codeWithMedia = await S.encode(D.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'video', src: `${ELSEWHERE}/media/clip.webm` } } } });
+    await applyPage.locator('#share-code').fill(codeWithMedia);
+    await applyPage.locator('#share-try').click();
+    await applyPage.locator('#share-apply').waitFor({ state: 'visible' });
+    const beforeApply = await applyPage.evaluate(() => chrome.storage.sync.get(['lookX', 'bg']));
+    await applyPage.locator('#share-apply').click();
+    await applyPage.waitForFunction(() => __hostRequests.length === 1);
+    check('pasted Look Apply asks for its remote media host inside the click', await applyPage.evaluate((host) => JSON.stringify(__hostRequests) === JSON.stringify([[[host + '/*'], true]]), ELSEWHERE));
+    await sleep(200);
+    check('refused pasted Look media: the Look stays as it was', JSON.stringify(await applyPage.evaluate(() => chrome.storage.sync.get(['lookX', 'bg']))) === JSON.stringify(beforeApply));
+    await applyPage.close();
+
     assert.deepEqual(errors, [], `page errors: ${errors.join(' | ')}`);
     assert.deepEqual(blocked.filter((u) => !/ultra-cdn\.invalid/.test(u)), [], 'no request left the fixture');
   } catch (e) {
