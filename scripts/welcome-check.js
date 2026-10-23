@@ -7,7 +7,8 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+// The schools the check allows stand in the staged copy's host_permissions: the page's own requests to them need the real grant.
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.edu/*', 'https://www.school.edu/*', 'https://bb.nowhere.edu/*']);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-welcome-'));
 const out = process.argv[2] || path.join(tmp, 'shots');

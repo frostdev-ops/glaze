@@ -59,14 +59,15 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     document.dispatchEvent(new CustomEvent('glaze:moment', { detail: { name: 'complete', x: r.left + r.width / 2, y: r.top + r.height / 2 } }));
   };
 
-  // Example addresses take turns in the empty field, one for each LMS, until the student types.
+  // Example addresses take turns in the empty field, one for each LMS, for three rounds or until the student types.
   const EXAMPLES = ['canvas.school.edu', 'bb.school.edu', 'moodle.school.edu'];
-  let shown = 0;
-  const turn = setInterval(() => {
-    if (input.value || still.matches) return;
+  let shown = 0, turns = 0, turn = 0;
+  const next = () => {
+    if (input.value || still.matches || document.hidden || ++turns > EXAMPLES.length * 3) return;
     input.setAttribute('data-swap', '');
-    setTimeout(() => { shown = (shown + 1) % EXAMPLES.length; input.placeholder = EXAMPLES[shown]; input.removeAttribute('data-swap'); }, 450);
-  }, 2800);
+    turn = setTimeout(() => { shown = (shown + 1) % EXAMPLES.length; input.placeholder = EXAMPLES[shown]; input.removeAttribute('data-swap'); turn = setTimeout(next, 2800); }, 450);
+  };
+  turn = setTimeout(next, 2800);
 
   let site = null, held = false, allHeld = false, busy = false, done = null, ask = 0, pasted = null;
   const typed = () => { const s = address(input.value); return s && !s.path && pasted?.origin === s.origin ? { ...s, path: pasted.path } : s; };
@@ -154,7 +155,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   };
 
   input.addEventListener('input', () => {
-    clearInterval(turn);
+    clearTimeout(turn);
     clear();
     check();
   });

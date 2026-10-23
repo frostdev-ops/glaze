@@ -3071,5 +3071,15 @@
   "Form": "Formulier",
   "Survey": "Enquête",
   "Blog": "Blog",
-  "Wiki": "Wiki"
+  "Wiki": "Wiki",
+  "School address": "Adres van je school",
+  "Allow": "Toestaan",
+  "All sites": "Alle sites",
+  "Another school": "Andere school",
+  "Not a web address": "Geen webadres",
+  "Allowed {host}": "{host} toegestaan",
+  "All sites allowed": "Alle sites toegestaan",
+  "No course site at {host}": "Geen cursussite op {host}",
+  "Can't reach {host}": "{host} is niet bereikbaar",
+  "Checking {host}": "{host} controleren"
 };
