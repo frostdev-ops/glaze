@@ -1120,6 +1120,7 @@
       if (!on(settings) || !chrome.runtime?.id || !links.length || document.hidden || hid() || key !== sceneSig()) { scenePending = null; return; }
       if (modBg) { scenePending = null; return placeScene(); }
       if (sceneBad === key || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
+      if (syncThrough()) return stopScene();
       pending.draw = true;
       if (!scene) {
         sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');
@@ -1475,6 +1476,7 @@
     unmenu();
     for (const l of links) l.remove();
     links = [];
+    syncThrough();
     early();
     armFlip();
     X.syncTodo();

@@ -273,3 +273,25 @@ test('relay: a queued pointer move is discarded when its frame hides before the 
   h.frames[0]();
   assert.deepEqual(h.posted, [], 'no stale move after a tab switch');
 });
+
+test('sharing race: the page becomes available while the frame waits for its scene module', async () => {
+  const r = rig({ through: false }); let finish;
+  r.ctx.importScene = () => new Promise((ok) => { finish = () => ok({ start: () => { r.log.starts++; return { update() {}, stop() {} }; } }); });
+  r.api.syncScene();
+  r.host.answer = true; finish(); await settle();
+  assert.equal(r.log.starts, 0, 'a newly shared frame never starts its abandoned scene');
+  assert.ok(r.attrs.has('data-gz-through'));
+});
+
+test('sharing race: disabling a frame clears the sharing marker held by its page', () => {
+  const r = rig(); r.api.syncScene();
+  Object.assign(r.ctx, {
+    links: [{ remove() {} }], moodle: false,
+    X: new Proxy({}, { get: () => () => {} }),
+    ...Object.fromEntries(['hideTip', 'unmenu', 'early', 'armFlip', 'syncPageFade', 'stopSweep', 'syncRules', 'clearSettings', 'syncDocTools', 'syncFooter'].map((k) => [k, () => {}])),
+  });
+  r.ctx.document.querySelectorAll = () => [];
+  vm.runInContext(source.slice(source.indexOf('  const disable = () => {'), source.indexOf('  const reapply =')) + '; disable();', r.ctx);
+  assert.equal(r.log.asked.at(-1)[0], false, 'disable revokes sharing in the parent too');
+  assert.ok(!r.attrs.has('data-gz-through'));
+});
