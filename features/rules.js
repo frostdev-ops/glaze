@@ -146,8 +146,11 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
   // tries, rather than the two of them moving it on every pass.
   const move = (el, m, part, d) => {
     if (d.move?.to !== m.to || d.move?.at !== m.at) { d.moves = 0; d.move = m; }
-    const box = el.parentElement?.closest(part.in);
-    const to = box && [...box.querySelectorAll(GZ_PARTS.get(m.to).s)].find((b) => b !== el && !b.contains(el) && !el.contains(b));
+    const board = el.closest(GZ_PARTS.BOARD[ctx.site] || ':not(*)');
+    const box = board || el.parentElement?.closest(part.in);
+    const target = GZ_PARTS.get(m.to);
+    const selector = board ? target.b : target.s;
+    const to = box && selector && [...box.querySelectorAll(selector)].find((b) => b !== el && !b.contains(el) && !el.contains(b) && (!board || !ownIn(b, board)));
     if (!to || (m.at === 'before' ? to.previousElementSibling : to.nextElementSibling) === el || d.moves > 3) return;
     if (!d.mark) { d.mark = document.createComment('gz-rule'); el.before(d.mark); }
     d.moves++;
