@@ -25,17 +25,21 @@ export function chromeToken(env) {
 }
 
 export async function request(url, token, method = 'GET', body, headers = {}, scheme = 'Bearer') {
+  const hideToken = text => String(text).split(token).join('[redacted]');
   const json = body && !(body instanceof FormData) && !(body instanceof Uint8Array);
-  const response = await fetch(url, {
+  let response, text;
+  try {
+    response = await fetch(url, {
     method, redirect: 'error', signal: AbortSignal.timeout(120000),
     headers: { Authorization: `${scheme} ${token}`, ...(json ? { 'Content-Type': 'application/json' } : {}), ...headers },
     body: json ? JSON.stringify(body) : body,
-  });
-  const text = await response.text();
+    });
+    text = await response.text();
+  } catch (error) { throw new Error(hideToken(error.message)); }
   let result;
   try { result = text ? JSON.parse(text) : {}; } catch { throw new Error(`${new URL(url).hostname}: non-JSON response (HTTP ${response.status})`); }
   if (!response.ok) {
-    const error = new Error(`${new URL(url).hostname}: HTTP ${response.status}: ${JSON.stringify(result).slice(0, 3000)}`);
+    const error = new Error(`${new URL(url).hostname}: HTTP ${response.status}: ${hideToken(JSON.stringify(result)).slice(0, 3000)}`);
     error.status = response.status;
     throw error;
   }

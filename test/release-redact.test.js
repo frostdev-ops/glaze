@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const load = () => import('../scripts/store-release.mjs');
 const SECRET = { ASC_KEY_ID: 'KEYXYZ7788', ASC_ISSUER_ID: 'issuer-5c1e-4b7a', AMO_JWT_ISSUER: 'user:999:42', SPARKLE_BIN: '/opt/sparkle-private/bin', SAFARI_TEAM_ID: 'TEAMQ12345' };
@@ -55,4 +56,25 @@ test('credentials given in the environment instead of the file are hidden too', 
     if (saved === undefined) delete process.env.ASC_ISSUER_ID; else process.env.ASC_ISSUER_ID = saved;
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+for (const logging of [false, true]) test(`child stdout and stderr redact split credentials with a log file: ${logging}`, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-child-redact-'));
+  try {
+    const config = path.join(dir, 'stores.env'), log = path.join(dir, 'step.log');
+    fs.writeFileSync(config, 'AMO_JWT_SECRET=synthetic-child-secret\n');
+    const child = `process.stdout.write('normal stdout: ' + process.env.AMO_JWT_SECRET.slice(0, 8));
+      setTimeout(() => { process.stdout.write(process.env.AMO_JWT_SECRET.slice(8));
+        process.stderr.write('normal stderr: ' + process.argv[2]); }, 20);`;
+    const harness = `import { environment, options, run } from ${JSON.stringify(require('node:url').pathToFileURL(path.join(__dirname, '../scripts/store-release.mjs')).href)};
+      const env = environment(options(['plan', '--config', ${JSON.stringify(config)}]));
+      await run(process.execPath, ['-e', ${JSON.stringify(child)}, '--', '--token', 'synthetic-flag-secret'], ${JSON.stringify(dir)}, env, ${logging ? JSON.stringify(log) : 'undefined'});`;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], { encoding: 'utf8', env: { ...process.env, AMO_JWT_SECRET: 'synthetic-child-secret' } });
+    assert.equal(result.status, 0, result.stderr);
+    const output = result.stdout + result.stderr + (logging ? fs.readFileSync(log, 'utf8') : '');
+    assert.ok(!output.includes('synthetic-child-secret'), 'child stdout leaked configured credential');
+    assert.ok(!output.includes('synthetic-flag-secret'), 'child stderr leaked credential flag value');
+    // stdout and stderr may interleave in a shared file, including between an ordinary prefix and its value.
+    assert.ok(output.includes('normal ') && (output.match(/\[redacted\]/g) || []).length >= 2, 'ordinary output and redaction markers survive');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

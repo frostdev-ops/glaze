@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { parseEnv } from 'node:util';
 import { spawn, execFileSync } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 import { appleApp, appleBuild, amo, chromeStatus, submitChrome, submitFirefox, submitApple, syncFirefoxListing, previewAppleListing } from './store-api.mjs';
 import { readListings, writeChromeKit, describeChanges } from './store-listings.mjs';
 import { publicPreflight, preparePublic, publishPublic, withIsolatedEnv, artifactPath } from './public-release.mjs';
@@ -129,13 +130,40 @@ async function doctor(opt, env, remote = true) {
   return failures === 0;
 }
 export async function run(command, args, cwd, env, log) {
+  // Tools can echo credentials passed as flags even when they are absent from stores.env.
+  for (let i = 0; i < args.length; i++) {
+    const arg = String(args[i]), flag = arg.split('=')[0];
+    const value = CREDENTIAL_FLAGS.has(flag) ? (arg.includes('=') ? arg.slice(flag.length + 1) : args[i + 1]) : null;
+    if (value) secrets.add(String(value));
+  }
   const line = commandLine(command, args);
   console.log(`Running ${line}`);
   const fd = log ? fs.openSync(log, 'w', 0o600) : null;
   try {
     if (fd !== null) fs.writeSync(fd, `$ ${line}\n`);
     await new Promise((resolve, reject) => {
-      const child = spawn(command, args, { cwd, env, stdio: fd === null ? ['ignore', 'inherit', 'inherit'] : ['ignore', fd, fd] });
+      const child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+      // Retain enough text to catch a credential split across chunks, and decode UTF-8 across chunk boundaries.
+      const keep = Math.max(1, ...[...secrets].map(value => value.length)) - 1;
+      for (const [stream, output] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
+        const decoder = new StringDecoder('utf8');
+        let pending = '';
+        const flush = (end = false) => {
+          let cut = end ? pending.length : Math.max(0, pending.length - keep), previous;
+          do {
+            previous = cut;
+            for (const value of secrets) {
+              const start = cut ? pending.lastIndexOf(value, cut - 1) : -1;
+              if (start >= 0 && start + value.length > cut) cut = start;
+            }
+          } while (cut !== previous);
+          const text = redact(pending.slice(0, cut));
+          pending = pending.slice(cut);
+          if (text) { if (fd === null) output.write(text); else fs.writeSync(fd, text); }
+        };
+        stream.on('data', chunk => { pending += decoder.write(chunk); flush(); });
+        stream.once('end', () => { pending += decoder.end(); flush(true); });
+      }
       const stop = signal => child.kill(signal);
       const interrupt = () => stop('SIGINT');
       const terminate = () => stop('SIGTERM');

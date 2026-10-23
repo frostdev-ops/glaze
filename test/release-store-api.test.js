@@ -131,7 +131,20 @@ test('request reports a non-JSON reply without echoing it', async () => {
 test('request lets a refused redirect or a dropped connection through as the failure it is', async () => {
   const { request } = await load();
   stubFetch(() => { throw new TypeError('fetch failed'); });
-  await assert.rejects(request('https://store.example/v1', 't'), /fetch failed/);
+  await assert.rejects(request('https://store.example/v1', 'transport-token'), /fetch failed/);
+});
+
+test('request removes its generated authorization token from HTTP and transport errors', async () => {
+  const { request } = await load();
+  const token = 'synthetic-generated-token';
+  for (const handler of [() => reply({ detail: `Rejected Bearer ${token}` }, 401), () => { throw new Error(`Connection refused for ${token}`); }]) {
+    stubFetch(handler);
+    await assert.rejects(request('https://store.example/v1', token), error => {
+      assert.ok(!error.message.includes(token), 'authorization token leaked in an error that can enter a receipt');
+      assert.match(error.message, /\[redacted\]/);
+      return true;
+    });
+  }
 });
 
 // ---- tokens and paths ----
