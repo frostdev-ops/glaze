@@ -743,7 +743,7 @@ class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_N
 // the page's nth storage.local read (of keys) fails, as Chrome's do (runtime.lastError, no answer). loc: the page's
 // address, which the test may change (Ultra moves between pages in one document).
 const bookIds = new WeakMap();
-const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {}, held = { on: false, queue: [] }, failGet = () => false } = {}) => {
+const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {}, held = { on: false, queue: [] }, failGet = () => false, lazy = false } = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.body.append(/\/outline/.test(path) ? el(doc, 'aside', { className: 'outline-actions' }, el(doc, 'div', { className: 'js-details-and-actions outline-action-block' }), el(doc, 'div', { className: 'conditional-block' }))
@@ -754,7 +754,10 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
   store.send ||= serviceWorker(store);
   const sender = { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${UO}${path}` };
   let ctx;
-  const need = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
+  const now = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
+  // lazy: a file not here yet comes from the worker a turn later, as content.js's need() has it (lib/ultra.js is here:
+  // content-ultra.js read the page's gradebook with it).
+  const need = (f, ready) => (!lazy || ready() ? now(f, ready) : new Promise((res) => setImmediate(res)).then(() => now(f, ready)));
   const fetch = (url, o) => {
     state.asked.push([o?.method, o?.redirect, url.replace(UO, '')]);
     const body = Object.entries(answers).find(([k]) => url.includes(k))?.[1];
@@ -782,7 +785,7 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
       bookFor: (cid) => (books[cid] ? { results: books[cid], key: `k${cid}:${bookKey(books[cid])}` } : { key: '' }),
     },
   });
-  vm.runInContext(read('lib/gradecalc.js'), ctx);
+  if (lazy) vm.runInContext(read('lib/ultra.js'), ctx); else vm.runInContext(read('lib/gradecalc.js'), ctx);
   vm.runInContext(read('features/grades.js'), ctx);
   const release = () => { held.on = false; while (held.queue.length) held.queue.shift()(); };
   return { doc, state, store, ctx, loc, books, held, release, UI: ctx.GZ_GRADES_UI, box: () => doc.getElementById('gz-calc'), gpa: () => doc.getElementById('gz-gpa') };
@@ -811,6 +814,16 @@ test("Ultra what-if: under the overall grade, by the course's own recipe (Blackb
   assert.match(p.box().textContent, /Assignment · 40%/);
   assert.match(p.box().textContent, /Blackboard never sees these scores/);
   assert.deepEqual(p.state.asked, [], 'nothing asked of Ultra: the page had the gradebook');
+});
+
+test("Ultra what-if: the page's gradebook in hand before lib/gradecalc.js has come still loads", async () => {
+  const p = ultraPage({ lazy: true });
+  p.UI.render();
+  await settle(20);
+  assert.doesNotMatch(p.box().textContent, /couldn't load/);
+  await open(p);
+  await settle(10);
+  assert.deepEqual(totals(p), ['88%', '88%', '64%']);
 });
 
 test('GZ-01: a partial page gradebook never becomes an authoritative what-if calculation', async () => {

@@ -120,8 +120,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // → { g: GZ_ULTRA.grade(), book: the page's answer it came from (its key), or null }.
   const reader = () => GZ_ULTRA.read({ origin: location.origin, live: () => live() });
   const pageBook = (cid) => (GRADES.test(location.pathname) && courseHere() === cid ? X.bookFor(cid) : {});
+  // lib/ultra.js's grade() works through lib/gradecalc.js, so both are in before it runs: the page's gradebook is often
+  // in hand before lib/gradecalc.js has come.
   const ultraGrade = async (st) => {
-    await ultraIn();
+    await Promise.all([ultraIn(), calcIn()]);
     const b = pageBook(st.cid);
     const rows = b.results || await reader().grades(st.cid, st.me.user_id);
     const g = GZ_ULTRA.grade(rows);
@@ -151,7 +153,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     whatIf();
     const { cid, row } = st;
     if (ultra) {
-      return (st.p = Promise.all([ultraGrade(st), calcIn()]).then(([{ g, book }]) => {
+      return (st.p = ultraGrade(st).then(({ g, book }) => {
         Object.assign(st, { g, course: g.course, book, scheme: C.SCHEME, period: null, truth: null, anon: false });
         const r = C.reconcile(st.saved, st.course);
         // Glaze 2.2's scores, saved against no grade (C.oldScores): those whose grade has come in are gone, with a word.
