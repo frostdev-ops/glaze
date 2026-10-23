@@ -110,10 +110,12 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   };
   const clear = () => { note.hidden = true; picks.replaceChildren(); if (bar.dataset.state === 'bad') delete bar.dataset.state; };
   const hold = (on) => { busy = on; go.toggleAttribute('data-busy', on); input.readOnly = on || !!done; };
+  const cancel = (s) => chrome.runtime.sendMessage({ type: 'glaze:allow', op: 'cancel', origin: s.origin }).catch(() => {});
   const settle = async (s, found) => {
     // Open only once the worker has checked the site and registered its first page.
     const approved = await chrome.runtime.sendMessage({ type: 'glaze:allow', op: 'yes', origin: s.origin, kind: found.kind, url: found.url }).catch(() => null);
     if (!approved?.ok) {
+      cancel(s);
       held = false;
       hold(false);
       render();
@@ -149,7 +151,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     hold(true);
     chrome.runtime.sendMessage({ type: 'glaze:allow', op: 'ask', origin: s.origin }).catch(() => {});
     chrome.permissions.request({ origins: [s.pattern] }).then(async (ok) => {
-      if (!ok) { hold(false); input.focus(); return; }
+      if (!ok) { cancel(s); hold(false); input.focus(); return; }
       said.textContent = t('Checking {host}', { host: s.host });
       const found = await probe(s);
       if (typeof found === 'object') return settle(s, found);
@@ -159,7 +161,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
       hold(false);
       tell(t(found === 'none' ? 'No course site at {host}' : "Can't reach {host}", { host: s.host }), hosts);
       (picks.firstChild || input).focus();
-    }, () => { hold(false); });
+    }, () => { cancel(s); hold(false); });
   };
 
   input.addEventListener('input', () => {

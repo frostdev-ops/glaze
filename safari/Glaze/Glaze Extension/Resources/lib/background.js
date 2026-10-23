@@ -1463,6 +1463,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // - 'ask', no kind (the first screen): once granted, the page checks the site itself (lib/site.js probe) and says what it
 //   found ('yes'), or hands the grant back. The grant waits for it.
 // - 'ask' with a kind and a tab (the popup, whose tab showed the kind): approved and into that tab once the host is held.
+// - 'cancel': the first screen's prompt was dismissed; a later browser grant checks the site itself.
 // - 'yes': checked again here (a page's word alone never says what a site is), then approved. The browser's prompt was the
 //   student's yes, so no card.
 // - 'all': every https site, and the detector with it (ensure).
@@ -1497,6 +1498,11 @@ const intoTabs = (kind, site, tabs) => {
 };
 const allowing = async (m, site) => {
   if (m.op === 'all') return serial(ensure);
+  if (m.op === 'cancel') {
+    const was = await askedFor(site.pattern);
+    if (was && !was.kind) await answered(site.pattern);
+    return;
+  }
   const u = new URL(site.origin);
   if (m.op === 'ask' && !m.kind) return asking(site.pattern, {});
   if (m.op === 'ask') {
@@ -1517,7 +1523,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (!fromAdder(s)) { reply({ ok: false, error: 'sender' }); return; }
   const site = siteAt(m.origin);
   const ok = m.op === 'all' || (!!site && (m.op === 'ask' ? (m.kind === undefined && m.tabId === undefined) || (LMS.includes(m.kind) && Number.isInteger(m.tabId))
-    : m.op === 'yes' && LMS.includes(m.kind)));
+    : m.op === 'cancel' || m.op === 'yes' && LMS.includes(m.kind)));
   if (!ok) { reply({ ok: false, error: 'site' }); return; }
   allowing(m, site).then((r) => reply({ ok: r !== false }), () => reply({ ok: false }));
   return true;
