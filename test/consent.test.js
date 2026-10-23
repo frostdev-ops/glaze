@@ -704,6 +704,22 @@ test('CORE-2: Ultra on Blackboard\'s own host, or on a site approved before, sta
   }
 });
 
+// A local Canvas or Moodle (http on localhost or 127.0.0.1) has content.js only where Glaze holds that host, and the worker
+// lets it through on that grant alone (lib/background.js approved): no list entry, as on the LMSs' own hosts. One rule,
+// defaults.js GZ_LOCAL_DEV, for both.
+test('a local Canvas or Moodle passes content.js\'s gate on its own host, as the worker\'s; Ultra there, or https, still waits', async () => {
+  const { GZ_LOCAL_DEV: L } = require('../defaults.js');
+  for (const [u, kind] of [['http://localhost:8081/my/', 'moodle'], ['http://127.0.0.1:8081/', 'moodle'], ['http://localhost:3000/courses/1', 'canvas'], ['http://localhost/', 'canvas']]) assert.equal(L(kind, new URL(u)), true, `${kind} ${u}`);
+  for (const [u, kind] of [['http://localhost:8081/ultra/', 'ultra'], ['https://localhost/', 'moodle'], ['http://localhost.evil.test/', 'moodle'], ['http://school.edu/', 'canvas'], ['http://127.0.0.2/', 'canvas'], ['http://localhost/', null]]) assert.equal(L(kind, new URL(u)), false, `${kind} ${u}`);
+  assert.match(read('content.js'), /const known = GZ_BUILT_IN\(site, location\) \|\| GZ_LOCAL_DEV\(site, location\);/);
+  for (const [origin, kind] of [['http://localhost:8081', 'ultra'], ['https://localhost', 'moodle'], ['http://localhost.evil.test', 'moodle']]) {
+    const p = ultraPage({ origin, kind });
+    await settle();
+    assert.deepEqual(p.sheets(), [], `${origin} ${kind}`);
+    assert.ok(p.sent.includes(kind), `${origin} ${kind}: asks, as any unknown site does`);
+  }
+});
+
 test('review: unknown /ultra pages claiming Canvas or Moodle also remain passive', async () => {
   for (const kind of ['canvas', 'moodle']) {
     const p = ultraPage({ kind });
