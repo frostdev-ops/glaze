@@ -8,7 +8,7 @@ const read = (f) => fs.readFileSync(require.resolve(`../${f}`), 'utf8');
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 
 // Run the real decoration hook and popover with controlled Canvas responses and timers.
-const page = () => {
+const page = ({ motion = false } = {}) => {
   const doc = { cookie: '_csrf_token=page-token' }, requests = [], timers = new Map(), events = [], editors = [];
   let timerId = 0;
   const make = (tag, props = {}, ...kids) => {
@@ -42,6 +42,7 @@ const page = () => {
   doc.querySelectorAll = (s) => s === '.ic-DashboardCard:not([data-gz-tile-card])' ? cards.filter((c) => c.isConnected && !c.hasAttribute('data-gz-tile-card')) : all(s);
   const courses = { [cid]: { name: 'Biology', canvas: true, color: '#123456' } }, settings = D.GZ_SANITIZE({});
   const c = vm.createContext({ ...D, GZ_COLOR: require('../lib/color.js'), GZ_WIDGETS: require('../lib/widgets.js'), GZ_CARD_UI: { paint() {} }, URL, structuredClone,
+    GZ_MOTION: motion ? { exit: (el) => { el.inert = true; return new Promise(() => {}); } } : undefined,
     document: doc, Element: El, Node: El, location: { origin }, innerWidth: 1200, innerHeight: 900,
     setTimeout: (f) => { timers.set(++timerId, f); return timerId; }, clearTimeout: (id) => timers.delete(id),
     addEventListener() {}, matchMedia: () => ({ matches: false }), requestAnimationFrame: () => 0,
@@ -67,6 +68,13 @@ const page = () => {
 test('Canvas native and board cards have distinct menu ids', () => {
   const p = page(), buttons = p.cards.map((card) => card.querySelector(':scope > .gz-cm-btn'));
   assert.equal(new Set(buttons.map((b) => b.id)).size, 2);
+});
+
+test('reopening a course menu during its exit leaves only one set of ids and label targets', async () => {
+  const p = page({ motion: true }); await p.open();
+  p.ui.close(); await p.open(p.cards[1]);
+  assert.equal(p.doc.querySelectorAll('#gz-cm').length, 1);
+  assert.equal(p.doc.querySelectorAll('#gz-cm-nick').length, 1);
 });
 
 test('the course menu passes its board opener to the card style dialog', async () => {

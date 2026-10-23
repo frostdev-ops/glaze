@@ -314,12 +314,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     toggle = button('', () => {
       if (mode === 'drawer') closeDrawer();
       else {
-        const v = !isOpen();
         // Set to start each page expanded or collapsed (sidebar.open), the choice holds on this page only. The page,
         // reflowed round the new width, crossfades in (lib/motion.js swap) rather than jumping.
-        const change = () => { if (['expanded', 'collapsed'].includes(cfg().open)) { openHere = v; layout(); } else op([{ op: 'open', v }]); toggle.focus(); };
+        const change = () => {
+          const v = !isOpen();
+          if (['expanded', 'collapsed'].includes(cfg().open)) { openHere = v; layout(); } else op([{ op: 'open', v }]);
+          say(t(v ? 'Sidebar expanded.' : 'Sidebar collapsed.')); toggle.focus();
+        };
         if (globalThis.GZ_MOTION) GZ_MOTION.swap(change); else change();
-        say(t(v ? 'Sidebar expanded.' : 'Sidebar collapsed.'));
       }
     }, { className: 'gz-sb-icon gz-sb-toggle' });
     live = make('p', { className: 'gz-sr', textContent: live0 || '' });

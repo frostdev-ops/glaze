@@ -309,7 +309,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // A tab opened, closed, pinned or moved glides to its place, and a closed one fades where it was (lib/motion.js);
     // not on the first drawing of the strip, which has nothing to come from.
     const motion = list.children.length ? globalThis.GZ_MOTION : null;
-    if (motion) motion.flip(() => [...list.children], () => fill(rows, cur, p), { ghosts: true, container: strip, within: list });
+    if (motion) motion.flip(() => [...list.children], () => fill(rows, cur, p), { ghosts: true, container: strip, within: list, skip: (e) => drag?.on && e.dataset.courseId === drag.cid });
     else fill(rows, cur, p);
     inView();
     mark();
@@ -1598,7 +1598,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (el && !e.button && !e.target.closest('.gz-ctab-x, .gz-ctab-pin')) {
       drag = { el, cid: el.dataset.courseId, x: e.clientX, id: e.pointerId, on: false };
       // About to leave what is on screen for another course's: its picture, now, before anything changes.
-      if (el.dataset.courseId !== (showing || ctx.courseId())) shoot();
+      if (!preview && el.dataset.courseId !== (showing || here())) shoot();
     }
   };
   const onMove = (e) => {
