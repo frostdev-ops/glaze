@@ -941,7 +941,7 @@
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them: features/keys.js, loaded on the first key that
   // starts one while the switch is on, then handed every key. Top frame only.
-  const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+  const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, #gz-stream-settings, [contenteditable]:not([contenteditable="false"])'));
   // Whether a key is one for the shortcuts: switched on, no modifier, not typing or composing, not in a menu, list, grid or tree
   // (type-ahead: a dialog too on Canvas and Moodle, but Ultra's courses are dialogs), and on Canvas and Moodle not repeated, not
   // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too, and Moodle's pages).

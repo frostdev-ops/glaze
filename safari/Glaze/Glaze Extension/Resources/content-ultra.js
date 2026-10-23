@@ -65,7 +65,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const sidebarHere = () => !!top()?.sidebar && I.settings.sidebar?.ultra !== false && /^\/ultra(\/|$)/.test(location.pathname);
   const sidebarOn = () => sidebarHere() && (globalThis.GZ_SIDEBAR_UI?.enabled?.() ?? !I.settings.sidebar?.off?.length);
   const syncSidebar = () => load(sidebarHere, 'features/sidebar.js', 'GZ_SIDEBAR_UI');
-  const syncStream = () => load(() => I.links.length && I.settings.enabled && solo && /^\/ultra\/stream(?:\/|$)/.test(location.pathname), 'features/stream.js', 'GZ_STREAM_UI');
+  const syncStream = () => load(() => I.links.length && (isPreview ? globalThis.GZ_STREAM_UI && html.dataset.previewPage === 'stream' : solo && /^\/ultra\/stream(?:\/|$)/.test(location.pathname)), 'features/stream.js', 'GZ_STREAM_UI');
   const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()), 'features/todo.js', 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
