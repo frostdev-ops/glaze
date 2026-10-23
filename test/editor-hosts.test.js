@@ -35,7 +35,7 @@ test('reach: one request for every host, inside the click, the worker told first
   p.state.active = false;
   assert.equal(await r, true);
   assert.deepEqual(p.asked, [[['https://api.weather.gov/*', 'https://media.example/*'], true]]);
-  assert.deepEqual(p.sent.map((m) => [m.type, m.op, m.origin]), [['glaze:allow', 'ask', 'https://api.weather.gov'], ['glaze:allow', 'ask', 'https://media.example']],
+  assert.deepEqual(p.sent.map((m) => [m.type, m.op, m.origin]), [['glaze:allow', 'feature', 'https://api.weather.gov'], ['glaze:allow', 'feature', 'https://media.example']],
     'the worker hears they are a feature\'s hosts, not schools to look at');
   // Refused, or the browser threw (no gesture): no.
   for (const answer of [() => false, () => { throw new Error('This function must be called during a user gesture'); }]) {

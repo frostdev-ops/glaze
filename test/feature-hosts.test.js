@@ -186,3 +186,30 @@ test('a local Moodle and a local Canvas run alike on a held localhost or 127.0.0
     assert.equal((await w.send(rail(), { ...page, url, tab: { id: 3, url } })).ok, false, url);
   }
 });
+
+test('review: embedded Settings feature grants never probe the feature as a school', async () => {
+  const fetched = [];
+  const w = worker({ fetch: async (u) => { fetched.push(u); throw Error('unexpected LMS probe'); } });
+  const embedded = { ...editor, frameId: 12, tab: { id: 7, url: `${CANVAS}/courses/25` } };
+  for (const origin of ['https://www.gradescope.com', 'https://media.example']) {
+    assert.deepEqual(await w.send({ type: 'glaze:allow', op: 'feature', origin }, embedded), { ok: true });
+    const pattern = `${origin}/*`;
+    w.grants.add(pattern);
+    for (const f of w.perms.added) f({ origins: [pattern] });
+    await w.settle();
+  }
+  assert.deepEqual(fetched, [], 'feature hosts are not LMS candidates');
+  assert.deepEqual(await w.send({ type: 'glaze:allow', op: 'feature', origin: 'https://media.example' }, course()), { ok: false, error: 'sender' });
+  assert.deepEqual(await w.send({ type: 'glaze:allow', op: 'ask', origin: 'https://school.example' }, embedded), { ok: false, error: 'sender' }, 'embedding does not authorize adding a school');
+});
+
+test('review: a browser-menu Gradescope grant does not probe LMS APIs and refreshes registration', async () => {
+  const fetched = [];
+  const w = worker({ fetch: async (u) => { fetched.push(u); throw Error('unexpected LMS probe'); } });
+  await turn(w, { gradescope: true });
+  w.grants.add(GS);
+  for (const f of w.perms.added) f({ origins: [GS] });
+  await w.settle();
+  assert.deepEqual(fetched, []);
+  assert.equal(w.registered.has('gz-gradescope'), true);
+});
