@@ -61,7 +61,7 @@ const OFFCANVAS = `<div class="bb-offcanvas-panel bb-offcanvas-right full active
   fs.mkdirSync(out, { recursive: true });
   try {
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require(path.join(ext, 'scripts/check-env.js')).chromeLaunch(), headless: true,
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true,
       viewport: { width: W, height: H }, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     await ctx.route('**/*', (route) => {

@@ -145,8 +145,6 @@ const measure = (p) => p.evaluate(() => {
     await page.locator('#gz-ctabs [data-course-id="_102_1"]').click();
     const frame = await until(() => Promise.resolve(page.frames().find((f) => f.name() === 'gz-ctab:_102_1')));
     await frame.waitForSelector('#gz-ctabs');
-    await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through') && !document.documentElement.hasAttribute('data-gz-ctab-framed')));
-    await until(() => page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed') && document.querySelector('iframe[data-gz-through]')));
     // A real course frame has no base page or native nav under the course.
     await frame.evaluate(() => {
       document.querySelector('#main-content')?.remove(); document.querySelector('.MuiDrawer-paper')?.remove();
@@ -155,6 +153,8 @@ const measure = (p) => p.evaluate(() => {
       const inner = document.createElement('div'); inner.className = 'inner-wrap';
       content.replaceWith(inner); inner.append(course); course.append(content); course.classList.add('bb-offcanvas-container');
     });
+    await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through') && !document.documentElement.hasAttribute('data-gz-ctab-framed')));
+    await until(() => page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed') && document.querySelector('iframe[data-gz-through]')));
     await pause(300);
     const f = await measure(frame);
     check(f.border === '0px' && f.paints[0] === f.paints[1], 'see-through frame keeps the joined course panel', f);
