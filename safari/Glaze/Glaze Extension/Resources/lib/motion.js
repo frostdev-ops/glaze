@@ -75,7 +75,7 @@ var GZ_MOTION = globalThis.GZ_MOTION || (() => {
     return out;
   };
   // A copy of what left, where it was: never focusable, never read out, never matched as the real thing.
-  const GHOSTLESS = ['id', 'name', 'for', 'href', 'data-course-id', 'data-tile', 'data-id', 'data-key', 'data-focus', 'data-act', 'aria-selected', 'aria-current', 'aria-labelledby', 'aria-describedby', 'aria-controls'];
+  const GHOSTLESS = ['id', 'role', 'name', 'for', 'href', 'data-course-id', 'data-tile', 'data-id', 'data-key', 'data-focus', 'data-act', 'aria-selected', 'aria-current', 'aria-labelledby', 'aria-describedby', 'aria-controls'];
   const ghost = (container, el, box, k) => {
     const c = el.cloneNode(true);
     for (const e of [c, ...c.querySelectorAll('*')]) {
@@ -132,14 +132,18 @@ var GZ_MOTION = globalThis.GZ_MOTION || (() => {
   // without view transitions, with transitions off, in a hidden page, under a course tab's frame or inside any frame (a
   // course tab's draws its own copy of the page's background, placed and clocked to match it: a crossfade of its root alone
   // would show a seam), or while another transition runs (Ultra's page change, content-ultra.js, which a second one would
-  // cut short), it runs now. Resolves once it has run.
+  // cut short), it runs now. And only when someone has just acted on this page (the browser's transient user activation:
+  // a click or key here in the last few seconds): while a transition runs, the page takes no clicks at all, so a change
+  // nobody here asked for (the options tab, another device, the system's light and dark) lands at once, clickable at once.
+  // Resolves once it has run.
   let swapping = null;
   const busy = () => { try { return document.documentElement.matches(':active-view-transition'); } catch { return false; } };
   const framed = () => { try { return typeof window !== 'undefined' && window.top !== window; } catch { return true; } };
+  const asked = () => (typeof navigator === 'undefined' || !navigator.userActivation ? true : navigator.userActivation.isActive);
   const swap = (update) => {
     const html = typeof document !== 'undefined' && document.documentElement;
     const k = html && knobs();
-    if (!k || !k.fade || swapping || typeof document.startViewTransition !== 'function' || document.hidden || html.hasAttribute('data-gz-ctab-framed') || framed() || busy()) {
+    if (!k || !k.fade || swapping || typeof document.startViewTransition !== 'function' || document.hidden || html.hasAttribute('data-gz-ctab-framed') || framed() || !asked() || busy()) {
       update();
       return Promise.resolve();
     }
@@ -149,7 +153,11 @@ var GZ_MOTION = globalThis.GZ_MOTION || (() => {
       t = document.startViewTransition(update);
     } catch { html.removeAttribute('data-gz-swap'); update(); return Promise.resolve(); }
     swapping = t;
-    t.finished.finally(() => { if (swapping === t) { swapping = null; html.removeAttribute('data-gz-swap'); } });
+    // A transition the browser abandons (the window resized, the page hidden) rejects ready and finished: handled here,
+    // so none of it reaches the page as an unhandled rejection. The update itself still runs (updateCallbackDone).
+    const done = () => { if (swapping === t) { swapping = null; html.removeAttribute('data-gz-swap'); } };
+    t.ready.catch(() => {});
+    t.finished.then(done, done);
     return t.updateCallbackDone.catch(() => {});
   };
 
