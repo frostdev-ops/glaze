@@ -99,6 +99,8 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 @supports (overlay: auto) {
   dialog:is(#gz-ce, #gz-cl, #gz-hub, #gz-ccm, #gz-nt, #gz-rm, #gz-ics, #gz-ins, #gz-syl-dlg, .gz-game-dialog) {
     transition: opacity var(--gz-t) var(--gz-ease), scale var(--gz-t) var(--gz-ease), display var(--gz-t) allow-discrete, overlay var(--gz-t) allow-discrete;
+    /* Some dialogs also use the tooltip entrance; zero transition time alone would leave that animation running. */
+    html[data-gz-no-trans] & { animation: none; }
     &:not([open]) { opacity: 0; scale: 0.97; }
     &::backdrop { transition: opacity var(--gz-t) var(--gz-ease), display var(--gz-t) allow-discrete, overlay var(--gz-t) allow-discrete; }
     &:not([open])::backdrop { opacity: 0; }
