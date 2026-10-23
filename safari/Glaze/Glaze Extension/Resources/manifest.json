@@ -105,7 +105,11 @@
         "content.js"
       ],
       "run_at": "document_start",
-      "all_frames": true
+      "all_frames": true,
+      "exclude_matches": [
+        "https://*/ultra",
+        "https://*/ultra/*"
+      ]
     },
     {
       "matches": [

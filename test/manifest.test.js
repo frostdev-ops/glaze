@@ -84,7 +84,7 @@ test('Safari keeps 3.3.8\'s access: every host, Ultra on /ultra anywhere and the
   const as338 = now.content_scripts.filter((c) => !c.matches.includes('https://*.moodlecloud.com/*'))
     .map((c) => (c === detector ? { ...c, exclude_matches: c.exclude_matches.filter((p) => p !== 'https://*.moodlecloud.com/*') } : c));
   assert.deepEqual(as338, then.content_scripts);
-  assert.deepEqual(now.content_scripts.find((c) => c.matches.includes('https://*.moodlecloud.com/*')), moodle);
+  assert.deepEqual(now.content_scripts.find((c) => c.matches.includes('https://*.moodlecloud.com/*')), { ...moodle, exclude_matches: ['https://*/ultra', 'https://*/ultra/*'] });
 });
 
 test('the 3.3.8 manifest fixture is the tagged release\'s', (t) => {

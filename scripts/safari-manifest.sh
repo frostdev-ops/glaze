@@ -37,6 +37,8 @@ for i, entry in enumerate(scripts):
     if 'content-ultra.js' in entry['js']:
         rest = {k: v for k, v in entry.items() if k not in ('matches', 'js', 'exclude_matches')}
         scripts[i] = {'matches': ['https://*/ultra', 'https://*/ultra/*'], 'js': entry['js'], 'exclude_matches': ['https://*.instructure.com/*'], **rest}
+    elif 'https://*.moodlecloud.com/*' in entry['matches']:
+        entry['exclude_matches'] = ['https://*/ultra', 'https://*/ultra/*']
 if not any(entry['js'] == ['lib/detect.js'] for entry in scripts):
     at = max(i for i, entry in enumerate(scripts) if entry['js'][-1] == 'content.js') + 1
     scripts.insert(at, {'matches': ['https://*/*'], 'exclude_matches': ['https://*/ultra', 'https://*/ultra/*', 'https://*.instructure.com/*', 'https://*.moodlecloud.com/*'], 'js': ['lib/detect.js'], 'run_at': 'document_start'})
