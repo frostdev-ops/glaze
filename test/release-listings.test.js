@@ -131,6 +131,20 @@ test('only the selected stores\' sources are required', async () => {
   assert.ok(listings.de.firefox.notes);
 });
 
+test('App Store keyword limits count UTF-8 bytes before any store requests', async () => {
+  const { readListings } = await load();
+  const file = 'store/app-store-fr.md';
+  const changed = real(file).replace(/(## Keywords[^\n]*\n\n)[^\n]+/, `$1${'é'.repeat(51)}`);
+  assert.throws(() => readListings(readWith({ [file]: changed }), version, ['apple']), /keywords is 102 bytes; the App Store allows 100/);
+});
+
+test('App Store promotional text is optional in a source', async () => {
+  const { readListings } = await load();
+  const file = 'store/app-store-fr.md';
+  const changed = real(file).replace(/## Promotional text[^\n]*\n[\s\S]*?(?=## Keywords)/, '');
+  assert.equal(readListings(readWith({ [file]: changed }), version, ['apple']).fr.apple.promotionalText, undefined);
+});
+
 test('the Chrome paste kit holds each language\'s exact summary and description, one file per language', async () => {
   const { readListings, writeChromeKit } = await load();
   const listings = readListings(real, version), dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-kit-'));

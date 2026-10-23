@@ -65,8 +65,11 @@ export function readListings(read, version, stores = ['chrome', 'firefox', 'appl
     const limits = LIMITS[store];
     for (const [field, value] of Object.entries(text)) {
       const [name, max] = limits[field];
+      if (store === 'apple' && field === 'promotionalText' && !value) continue;
+      const bytes = store === 'apple' && field === 'keywords';
+      const length = value ? (bytes ? Buffer.byteLength(value, 'utf8') : value.length) : 0;
       if (!value) problems.push(`${file}: ${name} is missing`);
-      else if (value.length > max) problems.push(`${file}: ${name} is ${value.length} characters; ${limits.label} allows ${max}`);
+      else if (length > max) problems.push(`${file}: ${name} is ${length} ${bytes ? 'bytes' : 'characters'}; ${limits.label} allows ${max}`);
       if (store === 'apple' && OTHER_BROWSERS.test(value || '')) problems.push(`${file}: ${name} names another browser (${OTHER_BROWSERS.exec(value)[0]})`);
       if (store === 'firefox' && field !== 'summary' && /[*_`]|^\s*(?:#|>|[-+] |\d+\. )/m.test(value || '')) problems.push(`${file}: ${name} has Markdown that AMO would render`);
     }

@@ -187,6 +187,7 @@ the release before anything is built. A bullet labelled with a browser ("Safari:
 `CHANGELOG.md`, or `--notes FILE`, is for GitHub and the website. Apple's text is edited only while its version and app
 info are being prepared, never in review; a new language shows the English screenshots until it has its own, and
 Apple has no What's New field for a platform's first release.
+Apple keywords are limited to 100 UTF-8 bytes; promotional text may be omitted from a source.
 
 `node scripts/store-release.mjs listings` reads the stores and prints, per store and language, what a release would
 change. It writes nothing.
