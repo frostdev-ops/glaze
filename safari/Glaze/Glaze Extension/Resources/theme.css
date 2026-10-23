@@ -235,7 +235,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    The course header is a JSS-hashed <header> inside Ultra's course-page-header element, painted
    #262626 in every palette until 2.0. The #site-wrap-scoped selectors outrank the "*-header"
    catch-all further down, which used to paint these opaque and hide the blur. ---- */
-#site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"]:not(.bb-course-navigation *) {
+#site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"]:not(.bb-course-navigation *, content-page-header > *) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
   border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important;
@@ -260,18 +260,27 @@ html[data-gz-ctabs~="above"] .bb-course-navigation course-page-header > header {
 /* The strip between the rows: each row a panel of its own. */
 html[data-gz-ctabs~="between"] .bb-course-navigation course-page-header > header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
 html[data-gz-ctabs~="between"] .bb-course-navigation bb-course-navigation > [class*="makeStylestoolbar"] { margin-top: var(--gz-float-gap, 12px); border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
-/* A backing keeps scrolled content out of the gaps. With scroll timelines it fades in over the first 48px;
-   older engines keep the backing visible, without another blur or scroll listener. */
-div.bb-course-navigation::before {
+/* A backing keeps scrolled content out of the gaps, under the course bar and a routed page's sticky header. With scroll
+   timelines it fades in over the first 48px; older engines keep the backing visible, without another blur or scroll listener. */
+div.bb-course-navigation::before, .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)::before {
   content: ""; position: absolute; z-index: -1; inset: 0 0 calc(var(--gz-float-gap, 12px) * -1); pointer-events: none;
   background: var(--gz-surface-grain, none), var(--gz-surface-paint-2, var(--gz-surface-2)); mask-image: linear-gradient(#000 calc(100% - var(--gz-float-gap, 12px)), transparent);
 }
 @supports (animation-timeline: scroll()) {
-  div.bb-course-navigation::before {
+  div.bb-course-navigation::before, .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)::before {
     opacity: 0; animation: gz-bar-veil linear both; animation-timeline: scroll(); animation-range: 0 48px;
   }
 }
 @keyframes gz-bar-veil { to { opacity: 1; } }
+/* A routed page (a document, a discussion, an assignment): its breadcrumb row, or its header's title row where it has no
+   breadcrumbs, is a panel of its own under the strip, inset as the course header is. A discussion's title panel keeps a
+   gap from it. */
+content-page-header > header, .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"] {
+  box-sizing: border-box; width: auto !important; margin-block: var(--gz-float-gap, 12px) 0 !important; margin-inline: var(--gz-float-start, 12px) var(--gz-float-end, 12px) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; box-shadow: var(--gz-rest-shadow) !important;
+}
+#site-wrap .discussion-container .panel-header.panel-header-directive.has-controls { margin-block-start: var(--gz-float-gap, 12px) !important; }
 /* The outline's "Course Content" header is a box inside the content column, not a page header. */
 #site-wrap header.outline-header { box-sizing: border-box; padding-inline: 1rem !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
 
@@ -308,8 +317,9 @@ div.bb-course-navigation::before {
 .content-list-item a, .content-list-item [role=button] { color: var(--gz-ink) !important; }
 .content-list-item a:hover { color: var(--gz-accent) !important; }
 aside, .todo-panel { background: var(--gz-ground) !important; border-left: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
-/* A course gradebook's student header is an <aside> too, but not a side panel. */
-aside.student-grade-overview { border-left: 0 !important; }
+/* A course gradebook's student header is an <aside> too, but not a side panel: no ground behind it, and none of Ultra's
+   rules (a 5px one under it, a light one drawn above it as a shadow) as a band under the course header. */
+aside.student-grade-overview { background: transparent !important; border-left: 0 !important; border-bottom: 0 !important; box-shadow: none !important; }
 /* Table header bands (the gradebook's) end in rounded corners; collapsed tables ignore border-radius. */
 #site-wrap thead:has(.MuiTableCell-head) { clip-path: inset(0 round var(--gz-radius-sm)); }
 .MuiAccordion-root { overflow: hidden; }
@@ -460,8 +470,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
   .base-header, .course-groups-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"],
   .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"],
-  .bb-offcanvas-panel.full .panel-header.simple-header) {
+  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"]) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
   backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
@@ -470,6 +479,16 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 }
 #site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
   .bb-offcanvas-panel.full .panel-header.simple-header) :is(.panel-title, .editable-title-container) { background: transparent !important; }
+/* A full panel over the page (an announcement opened from a course): its header is a floating glass panel like the course
+   header, inset from the window's top and end; the header's own box keeps Ultra's place (it pulls into the panel's
+   padding), so the glass is drawn inside it. The panel's own edge draws no line. */
+#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header { position: relative; isolation: isolate; background: transparent !important; backdrop-filter: none; border: 0 !important; box-shadow: none !important; }
+#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before {
+  content: ""; position: absolute; z-index: -1; inset-block: var(--gz-float-gap, 12px) 0; inset-inline: 0 var(--gz-float-end, 12px); pointer-events: none;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
+#site-wrap .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *), #site-wrap .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { border-inline-start: 0 !important; box-shadow: none !important; }
 #site-wrap .reply-form, #site-wrap .new-comment, #site-wrap .bb-editor-root, #site-wrap .bb-editor-container, #site-wrap .editor-content-container, #site-wrap .ql-editor, #site-wrap .ql-container, #site-wrap .ql-toolbar, #site-wrap bb-message, #site-wrap .message-body, #site-wrap .comments { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 #site-wrap .lti-placement__root { background: transparent !important; }
 
@@ -528,6 +547,15 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 .course-announcement-layer > .guidance-wrapper #search-button { justify-content: center; width: 36px; height: 36px; padding: 0 !important; }
 :is(.course-announcement-layer > .guidance-wrapper #search-button, .messages-header .send-message-button):hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-hi, var(--gz-accent)) 15%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 #site-wrap .guidance-wrapper input { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
+/* Search open: the field takes the count's and the button's place, as a pill like them, with no band behind it. */
+.course-announcement-layer #announcement-search { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+.course-announcement-layer #announcement-search .search-input-wrap {
+  box-sizing: border-box; min-height: 36px; padding-inline: 12px 4px !important; border-radius: 999px !important; color: var(--gz-ink) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: var(--gz-rest-shadow) !important;
+}
+.course-announcement-layer #announcement-search .search-input-wrap:focus-within { border-color: var(--gz-accent) !important; outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+.course-announcement-layer #announcement-search .search-input-wrap input { background: transparent !important; border: 0 !important; box-shadow: none !important; outline: none; color: var(--gz-ink) !important; }
 #site-wrap table tr, #site-wrap table td { background: transparent !important; }
 #site-wrap table td { transition: background var(--gz-t) var(--gz-ease); }
 #site-wrap table tr.is-read, #site-wrap table tr.announcement-item-row.is-read, #site-wrap table tr.is-read td { background: transparent !important; color: var(--gz-ink-muted) !important; }
@@ -881,10 +909,11 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
 }
 /* Over a solid background the glass on the nav, the headers and these panels blurs a flat colour: nothing to see, and
    a GPU layer each. Same fill. */
-html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header,
+html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header, content-page-header > header,
+  .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"],
   #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header,
+  #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before,
   .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
   bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]), #site-wrap .outline-action-block,
   #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),
