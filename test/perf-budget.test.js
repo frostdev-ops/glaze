@@ -165,8 +165,9 @@ const SCENE_RECOVERY = 2363;
 // One background under course tabs (owner-approved raise, 2026-10-19 policy; seam reported 2026-10-22): content.js signs what the
 // background is made of, the page puts it on <html>, and a course tab's frame wearing the same draws none and is marked
 // see-through, and the page withholds its signature until its background is on screen; the rest (the frame's check,
-// pointer relay) is lib/scene-host.js, on demand: 1762 bytes on every site. Measured against fc414dd3.
-const CTAB_ONE_BG = 1762;
+// pointer relay) is lib/scene-host.js, on demand: 1762 bytes on every site. Measured against fc414dd3. A frame drawing its
+// own background takes the page's clock, and the aurora drifts on the wall clock: 456 more, measured against 6f177a52.
+const CTAB_ONE_BG = 2218;
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;

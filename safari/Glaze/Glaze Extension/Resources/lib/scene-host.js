@@ -2,7 +2,9 @@
 // Loaded with animated backgrounds only; partial-width sheets keep their own backgrounds.
 var GZ_SCENE_HOST = (() => {
   const layers = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
-  // [shell, over]: over when the shell is a layer over the page (an off-canvas panel, an item, a routed page).
+  // Something of the page shows beside a shell, under it.
+  const beneath = (shell) => [...shell.parentElement.children].some((c) => c !== shell && c.getClientRects().length && c.getBoundingClientRect().height > 0);
+  // [shell, over]: over when the shell is a layer over the page (an off-canvas panel, an item, a routed page over another).
   const find = (ultra) => {
     // Retained tabs hide the native course's ancestors, while the shared navbar stays visible.
     if (ultra && document.documentElement.hasAttribute('data-gz-ctab-framed')) return [document.body, false];
@@ -12,29 +14,42 @@ var GZ_SCENE_HOST = (() => {
     const routed = layer?.closest('.routed-page.bb-offcanvas-container');
     // Legacy item panels are siblings of the course scroller, without an off-canvas shell.
     const item = layer?.parentElement === course && course && course.querySelector('.panel-wrap') !== layer;
-    const over = layer?.closest('.bb-offcanvas-panel') || (item ? layer : null) || (!course && routed);
-    return [over || course || layer || document.body, !!over];
+    const off = layer?.closest('.bb-offcanvas-panel');
+    const shell = off || (item ? layer : course) || routed || layer || document.body;
+    // In a course tab a routed page (a discussion) is all the frame holds: it covers nothing.
+    return [shell, !!off || !!item || (shell === routed && beneath(routed))];
   };
   const home = (ultra) => find(ultra)[0];
   const hosts = new WeakMap();
-  // A course tab's frame wearing the page's background (content.js syncThrough) lets it show through, unless a layer covers
-  // its course page. While it shows, the page hides its own strip under it (features/coursetabs.css) and its scene hears the
-  // pointer moving over the frame, for its parallax.
-  let shown = false, armed = false, pointAt = null, followed = null, relaying = false;
+  // A course tab's frame (content.js syncThrough). Wearing the page's background with no layer over its course page, it lets
+  // the page's show through, and the page hides its own strip under it (features/coursetabs.css). Drawing one of its own, it
+  // draws it where the page's is (--gz-vx/vy/vw/vh: the page's viewport in the frame's pixels) and on the page's clock. The
+  // scenes of both hear the pointer over both, for their parallax.
+  let shown = false, visible = false, armed = false, pointAt = null, followed = null, relaying = false, at = [0, 0];
   const pageRoot = () => { try { return parent.document.documentElement; } catch { return null; } };
+  const view = () => {
+    try {
+      const r = frameElement.getBoundingClientRect(), s = document.documentElement.style;
+      at = [r.left, r.top];
+      s.setProperty('--gz-vx', `${-r.left}px`); s.setProperty('--gz-vy', `${-r.top}px`);
+      s.setProperty('--gz-vw', `${parent.innerWidth}px`); s.setProperty('--gz-vh', `${parent.innerHeight}px`);
+    } catch { /* left the page */ }
+  };
   const forward = (e) => {
-    if (!shown || e.pointerType === 'touch' || !pageRoot()?.hasAttribute('data-gz-scene-pointer')) return;
+    if (!visible || e.pointerType === 'touch' || !pageRoot()?.hasAttribute('data-gz-scene-pointer')) return;
     if (!pointAt) requestAnimationFrame(() => {
-      if (shown && pageRoot()?.hasAttribute('data-gz-scene-pointer')) parent.postMessage({ gzScenePoint: pointAt }, location.origin);
+      if (visible && pageRoot()?.hasAttribute('data-gz-scene-pointer')) parent.postMessage({ gzScenePoint: pointAt }, location.origin);
       pointAt = null;
     });
     pointAt = [e.clientX, e.clientY];
   };
+  // The page's pointer, for a frame's own scene: scene.point takes its own window's pixels.
+  const fromPage = (e) => { if (visible && e.pointerType !== 'touch' && followed?.follows) followed.point?.(e.clientX - at[0], e.clientY - at[1]); };
   const relay = (e) => {
     const p = e.data?.gzScenePoint;
     if (e.origin !== location.origin || !followed?.follows || !followed?.point || !Array.isArray(p) || p.length !== 2 || !p.every(Number.isFinite)) return;
     const f = [...document.querySelectorAll('#gz-ctabs-frames > iframe')].find((x) => x.contentWindow === e.source);
-    if (!f || f.hidden || f.inert || f.style.visibility === 'hidden' || !f.hasAttribute('data-gz-through')) return;
+    if (!f || f.hidden || f.inert || f.style.visibility === 'hidden') return;
     const r = f.getBoundingClientRect();
     if (r.width > 0 && r.height > 0 && p[0] >= 0 && p[0] <= r.width && p[1] >= 0 && p[1] <= r.height) followed.point(p[0] + r.left, p[1] + r.top);
   };
@@ -50,19 +65,32 @@ var GZ_SCENE_HOST = (() => {
     through(sig, ultra, hidden, again) {
       if (!armed && pageRoot()) {
         armed = true;
+        view();
+        addEventListener('resize', view);
         addEventListener('pointermove', forward, { passive: true });
-        new MutationObserver(() => again()).observe(pageRoot(), { attributeFilter: ['data-gz-bg-key'] });
+        parent.addEventListener('pointermove', fromPage, { passive: true });
+        addEventListener('pagehide', () => { try { parent.removeEventListener('pointermove', fromPage); } catch { /* gone */ } });
+        new MutationObserver(() => again()).observe(pageRoot(), { attributeFilter: ['data-gz-bg-key', 'data-gz-scene-clock'] });
       }
       const on = !!sig && pageRoot()?.getAttribute('data-gz-bg-key') === sig && !find(ultra)[1];
-      shown = on && !hidden;
+      visible = !hidden;
+      shown = on && visible;
       try { frameElement?.toggleAttribute('data-gz-through', shown); } catch { /* left the page */ }
       return on;
     },
-    // The page's scene, for its frames' pointer moves: whether it follows them is on <html> for the frames to read.
-    pointer(scene) {
-      if (window.top !== window) return;
+    // A frame's own scene runs on the page's clock (lib/scene.js opts.clock), when the page has one.
+    clock() {
+      const [t, at] = (pageRoot()?.getAttribute('data-gz-scene-clock') || '').split(',').map(Number);
+      return Number.isFinite(t) && at > 0 ? { t, at } : undefined;
+    },
+    // This document's scene. The page shares its clock and whether it follows the pointer on <html>, for its frames; a
+    // frame's follows the page's pointer.
+    share(scene) {
       followed = scene;
-      document.documentElement.toggleAttribute('data-gz-scene-pointer', !!scene?.follows);
+      if (window.top !== window) return;
+      const html = document.documentElement, c = scene?.clock, at = c ? `${c.t},${c.at}` : null;
+      html.toggleAttribute('data-gz-scene-pointer', !!scene?.follows);
+      if (at === null) html.removeAttribute('data-gz-scene-clock'); else if (html.getAttribute('data-gz-scene-clock') !== at) html.setAttribute('data-gz-scene-clock', at);
       if (scene && !relaying) { relaying = true; addEventListener('message', relay); }
     },
     place(element, ultra) {
