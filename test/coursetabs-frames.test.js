@@ -408,6 +408,35 @@ test('the stand-in: a sketch drawn at once over a frame still loading, blurred u
   assert.ok(!parts.some((e) => e.attrs.tabindex !== undefined || ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(e.tagName)), 'the stand-in has no focusable controls');
 });
 
+test('the stand-in keeps Canvas navigation room, window matching, still motion and each reveal gesture', () => {
+  const { El } = require('./stand-in-dom.js');
+  for (const site of ['ultra', 'canvas']) for (const motion of ['off', 'expressive']) for (const event of ['wheel', 'pointerdown', 'touchstart']) {
+    const doc = { activeElement: null };
+    doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
+    const host = new El('div', doc); doc.body.append(host);
+    host.box = { x: 220, y: 52, left: 220, top: 52, width: 780, height: 748 };
+    const f = { url: '/ultra/courses/_2_1/outline', ready: false, el: { style: { visibility: 'hidden' } } };
+    const snap = { cid: '_2_1', path: f.url, size: [1000, 800], name: '', boxes: [] };
+    let revealed = 0;
+    const c = vm.createContext({ PAGE: 'page', L, showing: '_2_1', frames: new Map([['_2_1', f]]), pic: null, snaps: new Map([['_2_1', snap]]), unpicture() { revealed++; }, keep() {},
+      safePath: L.safe, split: (p) => [p, ''], send: () => { throw new Error('kept already'); }, document: { createElement: (t) => new El(t, doc) },
+      html: { getAttribute: () => motion, hasAttribute: () => site === 'canvas' }, ctx: { site }, host, innerWidth: 1000, innerHeight: 800, t: (x) => x, f });
+    vm.runInContext(part('  const fits = ', '  let capTimer = ') + part('  const picture = ', '  const unpicture = ') + "\npicture('_2_1', f);", c);
+    const box = host.children[0], style = box.shadowForTest.children.find((e) => e.tagName === 'STYLE');
+    assert.equal(box.hasAttribute('data-still'), motion === 'off');
+    assert.match(style.textContent, /:host\(\[data-still\]\) \.s\{animation:none\}/);
+    assert.ok(style.textContent.includes(site === 'canvas' ? 'top:-52px;left:-220px' : 'top:0px;left:0px'), 'the whole-window sketch aligns with its host');
+    assert.deepEqual(box.listeners.map((x) => x.type), ['wheel', 'pointerdown', 'touchstart']);
+    assert.equal(f.el.style.visibility, 'hidden');
+    box.dispatchEvent({ type: event });
+    assert.equal(f.el.style.visibility, '', `${site}/${motion}/${event}: reveal the frame`);
+    assert.equal(revealed, 2, 'clear the old stand-in at entry, then reveal on the gesture');
+    host.replaceChildren(); c.pic = null; snap.size = [999, 800];
+    vm.runInContext("picture('_2_1', f);", c);
+    assert.equal(host.children.length, 0, 'a mismatched window size never draws the stand-in');
+  }
+});
+
 test('closing the surrounding course keeps the next course’s existing edited frame', () => {
   const drops = [], routes = [], visits = [];
   const shut = vm.runInNewContext(part('  const shut = ', '  const pinTab = ') + '\nshut;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
