@@ -72,7 +72,7 @@ const SITES = {
     { at: 'env.fetch(`${env.api || API}', kind: 'open', host: 'https://www.googleapis.com', why: 'Google Calendar API, CORS for any origin; behind GZ_GCAL.ON (off)' },
     { at: 'env.fetch(env.revoke || REVOKE', kind: 'open', host: 'https://oauth2.googleapis.com', why: 'token revocation, CORS for any origin; behind GZ_GCAL.ON (off)' },
   ],
-  'lib/fonts.js': [{ at: 'const get = (url, as) => fetch(url', kind: 'open', host: 'https://fonts.googleapis.com', why: 'Google Fonts CSS and its fonts.gstatic.com files answer every origin' }],
+  'lib/fonts.js': [{ at: 'const get = (url, as) => fetch(url', kind: 'open', host: 'https://fonts.googleapis.com', hosts: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net'], why: 'Google Fonts CSS, fonts.gstatic.com and the jsDelivr catalog files answer every origin' }],
   'options.js': [{ at: 'fetch(GZ_FONTS.cssUrl(name, false)', kind: 'open', host: 'https://fonts.googleapis.com', why: 'whether a typed Google font exists' }],
   'lib/site.js': [
     { at: 'const probe = async (site, f = fetch)', kind: 'asked', flow: 'a school\'s site: probed once its grant is held (lib/site.js allow, the worker\'s glaze:allow and onAdded)', guard: /permissions\.request\(\{ origins: \[site\.pattern\] \}\)/, after: true },
