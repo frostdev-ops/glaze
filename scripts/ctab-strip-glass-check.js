@@ -47,6 +47,21 @@ const measure = (p) => p.evaluate(() => {
       return route.abort();
     });
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
+    // Simulate an engine rejecting the scroll-timeline @supports block. No polyfill or runtime reads.
+    const fallback = await ctx.newPage();
+    const css = fs.readFileSync(path.join(ext, 'theme.css'), 'utf8').replace('@supports (animation-timeline: scroll())', '@supports (glaze-no-scroll: unsupported)');
+    await fallback.setContent(`<style>${css}</style><style>
+      :root { --gz-surface: #fff; --gz-surface-2: #eee; --gz-line: #999; --gz-radius: 12px; --gz-glass: 0px; }
+      body { margin: 0; } .scroller { height: 400px; overflow: auto; }
+      .bb-course-navigation { position: sticky; top: 0; z-index: 1; }
+      header, bb-course-navigation > div { padding: 16px; } .row { height: 40px; }
+    </style><div class="scroller"><div class="bb-course-navigation"><course-page-header><header>Course header</header></course-page-header>
+      <bb-course-navigation><div class="makeStylestoolbar-test">Content · Calendar · Announcements</div></bb-course-navigation></div>
+      ${'<div class="row">Course content scrolling beneath the header</div>'.repeat(30)}</div>`);
+    await fallback.evaluate(() => { document.querySelector('.scroller').scrollTop = 180; });
+    const backing = await fallback.locator('.bb-course-navigation').evaluate((e) => { const s = getComputedStyle(e, '::before'); return [s.content, s.opacity]; });
+    check(backing[0] === '""' && backing[1] === '1', 'without scroll timelines the backing still veils content in header gaps', backing);
+    await shot(fallback, 'without-scroll-timelines'); await fallback.close();
     const page = await ctx.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
     const setup = async (look, at = 'above') => {
@@ -70,6 +85,11 @@ const measure = (p) => p.evaluate(() => {
       await shot(page, look.name.toLowerCase().replaceAll(' ', '-'));
     }
     const look = G.GZ_LOOKS.find((l) => l.name === 'Aurora Night');
+    await setup(look);
+    check((await measure(page)).veil[1] === '0', 'scroll timeline leaves the background visible at the top');
+    await page.locator('.course-content-container > .panel-wrap').evaluate((e) => { e.scrollTop = 200; }); await pause(200);
+    check((await measure(page)).veil[1] === '1', 'scroll timeline veils content after 48px');
+    await shot(page, 'scrolled');
     for (const at of ['above', 'between', 'below', 'page']) {
       await setup(look, at);
       const m = await measure(page);

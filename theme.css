@@ -260,13 +260,15 @@ html[data-gz-ctabs~="above"] .bb-course-navigation course-page-header > header {
 /* The strip between the rows: each row a panel of its own. */
 html[data-gz-ctabs~="between"] .bb-course-navigation course-page-header > header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
 html[data-gz-ctabs~="between"] .bb-course-navigation bb-course-navigation > [class*="makeStylestoolbar"] { margin-top: var(--gz-float-gap, 12px); border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
-/* Scrolled, the course passes under the floating bars: over its first 48px a veil of the page's ground comes up behind them,
-   so rows don't show in the gaps. Without scroll-linked animation the gaps stay clear. */
+/* A backing keeps scrolled content out of the gaps. With scroll timelines it fades in over the first 48px;
+   older engines keep the backing visible, without another blur or scroll listener. */
+div.bb-course-navigation::before {
+  content: ""; position: absolute; z-index: -1; inset: 0 0 calc(var(--gz-float-gap, 12px) * -1); pointer-events: none;
+  background: var(--gz-surface-grain, none), var(--gz-surface-paint-2, var(--gz-surface-2)); mask-image: linear-gradient(#000 calc(100% - var(--gz-float-gap, 12px)), transparent);
+}
 @supports (animation-timeline: scroll()) {
   div.bb-course-navigation::before {
-    content: ""; position: absolute; z-index: -1; inset: 0 0 calc(var(--gz-float-gap, 12px) * -1); pointer-events: none; opacity: 0;
-    background: var(--gz-surface-grain, none), var(--gz-surface-paint-2, var(--gz-surface-2)); mask-image: linear-gradient(#000 calc(100% - var(--gz-float-gap, 12px)), transparent);
-    animation: gz-bar-veil linear both; animation-timeline: scroll(); animation-range: 0 48px;
+    opacity: 0; animation: gz-bar-veil linear both; animation-timeline: scroll(); animation-range: 0 48px;
   }
 }
 @keyframes gz-bar-veil { to { opacity: 1; } }
