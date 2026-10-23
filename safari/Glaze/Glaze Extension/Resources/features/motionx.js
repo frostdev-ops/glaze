@@ -325,7 +325,7 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
     } else if (cur.kind === 'contour' && far(anchor, ptr, Math.max(12, cur.size))) {
       anchor = { ...ptr };
       dust = alive(dust);
-      if (dust.length < Math.min(6, cur.len)) { const d = GZ_MX.contour(cur, ptr.x, ptr.y); dust.push(d); engine.add([d], true); }
+      if (dust.length < Math.min(3, cur.len)) { const d = GZ_MX.contour(cur, ptr.x, ptr.y); dust.push(d); engine.add([d], true); }
     } else if (cur.kind === 'ripple' && far(anchor, ptr, 64)) {
       anchor = { ...ptr };
       engine.add([GZ_MX.ripple(cur, ptr.x, ptr.y)], true);

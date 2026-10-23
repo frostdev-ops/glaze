@@ -420,3 +420,21 @@ test('changing Looks discards typing queued by the previous Look', async () => {
   x.tick();
   assert.equal(x.canvases.length, 0, 'the new Look starts without the previous key');
 });
+
+test('the contour pointer keeps at most three live rings, even with a longer imported part', async () => {
+  const x = feature({ parts: { cursor: { kind: 'contour', len: 24, size: 22, fade: 650 } } });
+  const made = [], original = M.contour;
+  M.contour = (...args) => { const p = original(...args); made.push(p); return p; };
+  try {
+    await x.api.sync();
+    for (let i = 0; i < 12; i++) {
+      x.handlers.pointermove({ pointerType: 'mouse', clientX: 40 + i * 30, clientY: 100 });
+      x.tick();
+      assert.ok(made.filter(M.alive).length <= 3, 'at most three live contour rings');
+    }
+    assert.equal(made.filter(M.alive).length, 3, 'the capped effect still draws');
+    for (let i = 0; i < 60; i++) x.tick();
+    assert.equal(x.queue.size, 0, 'nothing at rest');
+    assert.equal(x.canvases.at(-1).isConnected, false);
+  } finally { M.contour = original; x.api.off(); }
+});
