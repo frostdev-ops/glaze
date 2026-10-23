@@ -317,6 +317,9 @@ content-page-header > header, .routed-page.bb-offcanvas-container [class*="heade
 .content-list-item a, .content-list-item [role=button] { color: var(--gz-ink) !important; }
 .content-list-item a:hover { color: var(--gz-accent) !important; }
 aside, .todo-panel { background: var(--gz-ground) !important; border-left: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
+/* The base pages' To Do column (Courses, Organizations): no rule beside it, as the outline's column, or an empty one draws a
+   line down the page. As the sidebar (features/sidebar.css) it keeps the sidebar's edge. */
+html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) div.todo-panel, html div.todo-panel:not([data-gz-sidebar-host]) { border-left: 0 !important; }
 /* A course gradebook's student header is an <aside> too, but not a side panel: no ground behind it, and none of Ultra's
    rules (a 5px one under it, a light one drawn above it as a shadow) as a band under the course header. */
 aside.student-grade-overview { background: transparent !important; border-left: 0 !important; border-bottom: 0 !important; box-shadow: none !important; }
