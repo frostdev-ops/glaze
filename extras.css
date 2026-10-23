@@ -88,6 +88,8 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) [data-gz-scene-host] :is(.panel-wrap,
    the one background, edge to edge around the rail. */
 html[data-gz-bg][data-gz-through] { background: transparent !important; }
 html[data-gz-through]::before, html[data-gz-through] :is(.panel-wrap, .bb-offcanvas-panel)::before { content: none; }
+/* The course panel also covers its own base page inside the frame. */
+html[data-gz-through] #site-wrap:has(> [class*="course-content-container"]) > #main-content { visibility: hidden !important; }
 #gz-scene {
   position: fixed;
   left: calc(var(--gz-bg-blur, 0px) * -2);
