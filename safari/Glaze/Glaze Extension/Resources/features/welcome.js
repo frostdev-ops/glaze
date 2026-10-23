@@ -110,7 +110,17 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   };
   const clear = () => { note.hidden = true; picks.replaceChildren(); if (bar.dataset.state === 'bad') delete bar.dataset.state; };
   const hold = (on) => { busy = on; go.toggleAttribute('data-busy', on); input.readOnly = on || !!done; };
-  const settle = (s, found) => {
+  const settle = async (s, found) => {
+    // Open only once the worker has checked the site and registered its first page.
+    const approved = await chrome.runtime.sendMessage({ type: 'glaze:allow', op: 'yes', origin: s.origin, kind: found.kind, url: found.url }).catch(() => null);
+    if (!approved?.ok) {
+      held = false;
+      hold(false);
+      render();
+      tell(t("Can't reach {host}", { host: s.host }));
+      input.focus();
+      return;
+    }
     done = { ...s, ...found };
     input.value = s.host;
     kindTag.textContent = NAMES[found.kind];
@@ -121,8 +131,6 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     render();
     go.focus();
     bloom($('.lead'));
-    // The worker puts Glaze on the site from its first page.
-    chrome.runtime.sendMessage({ type: 'glaze:allow', op: 'yes', origin: s.origin, kind: found.kind, url: found.url }).catch(() => {});
   };
   const again = () => {
     done = null;

@@ -34,7 +34,7 @@ const stub = () => {
   chrome.permissions.onAdded = { addListener: (f) => added.add(f) };
   chrome.permissions.onRemoved = { addListener: (f) => removed.add(f) };
   const send = chrome.runtime.sendMessage.bind(chrome.runtime);
-  chrome.runtime.sendMessage = (m, ...rest) => { __gz.sent.push(m); return m?.type === 'glaze:allow' ? Promise.resolve() : send(m, ...rest); };
+  chrome.runtime.sendMessage = (m, ...rest) => { __gz.sent.push(m); return m?.type === 'glaze:allow' ? Promise.resolve({ ok: true }) : send(m, ...rest); };
 };
 
 (async () => {
