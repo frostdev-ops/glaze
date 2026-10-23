@@ -27,7 +27,7 @@ test('the page wears the Frostdev Look from its definition, and asks only from a
 
 
 // Run the shipped page while the worker's second check is pending: a quick Open must never race registration.
-const screen = () => {
+const screen = ({ granted = true } = {}) => {
   const vm = require('node:vm');
   const elements = new Map();
   const element = (name) => {
@@ -57,7 +57,7 @@ const screen = () => {
         messages.push(m);
         return m.op === 'yes' ? new Promise((r) => { answer = r; }) : Promise.resolve({ ok: true });
       } },
-      permissions: { contains: async () => false, request: async () => true },
+      permissions: { contains: async () => false, request: async () => granted },
     },
   });
   vm.runInContext(require('node:fs').readFileSync(require('node:path').join(__dirname, '../features/welcome.js'), 'utf8'), context);
@@ -91,4 +91,15 @@ test('first screen does not report success when the worker rejects the second ch
   assert.notEqual(s.element('.bar').dataset.state, 'done');
   assert.equal(s.element('#go').attributes.has('data-busy'), false, 'the student can retry');
   assert.equal(s.element('#note').hidden, false, 'a failed approval is visible');
+});
+
+
+test('a dismissed first-run prompt tells the worker to stop waiting for its page', async () => {
+  const s = screen({ granted: false });
+  await tick();
+  s.element('#address').value = 'bb.school.edu';
+  s.element('#site').handlers.submit({ preventDefault() {} });
+  await tick();
+  assert.deepEqual(s.messages.map((m) => m.op), ['ask', 'cancel']);
+  assert.equal(s.element('#go').attributes.has('data-busy'), false);
 });

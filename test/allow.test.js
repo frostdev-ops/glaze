@@ -412,3 +412,15 @@ test('lib/detect.js reports Ultra on an /ultra page by its base, as content.js k
   assert.deepEqual(run(`${BBS}/ultra/course`, null), []);
   assert.ok(fs.statSync(path.join(root, 'lib/detect.js')).size < 2048);
 });
+
+
+test('a dismissed first-run request releases its intent so a later browser-menu grant is probed', async () => {
+  const C = 'https://canvas.school.edu';
+  const w = worker({ net: { [`${C}/api/v1/users/self`]: CANVAS }, tabs: [{ id: 5, url: `${C}/courses/1` }] });
+  await w.send(allow('ask', { origin: C }), welcome);
+  await w.send(allow('cancel', { origin: C }), welcome);
+  await w.grant(`${C}/*`);
+  assert.ok(w.fetched.includes(`${C}/api/v1/users/self`), 'the browser-menu grant is checked instead of waiting for a page that stopped asking');
+  assert.deepEqual(w.store.local.canvas, [`${C}/*`]);
+  assert.deepEqual(w.sites(), [`${C}/*`]);
+});
