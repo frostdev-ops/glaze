@@ -79,7 +79,7 @@ test('Ultra\'s course header and its tools are one inset glass panel, no rule be
   assert.match(body(THEME, 'html:not([data-gz-ctabs~="above"]) div.bb-course-navigation'), /padding-top:\s*var\(--gz-float-gap/);
   assert.match(body(THEME, 'html[data-gz-ctabs~="above"] .bb-course-navigation course-page-header > header'), /margin-top:\s*var\(--gz-float-gap/);
   // Scrolled, the rows passing under the bars are veiled in the gaps, by a scroll-linked fade, not a blur.
-  const veil = body(THEME, 'div.bb-course-navigation::before');
+  const veil = ruleWith(THEME, 'div.bb-course-navigation::before').map(([, b]) => b).join(';');
   assert.match(veil, /animation-timeline:\s*scroll\(\)/);
   assert.doesNotMatch(veil, /backdrop-filter/);
   // The strip between the rows: each row a panel of its own.
@@ -102,6 +102,13 @@ test('Ultra\'s list toolbar (Announcements: its count and search) has no band; e
 
 const SIDEBAR = 'features/sidebar.css', CANVAS = 'canvas.css';
 const ruleWith = (file, ...parts) => rules(file).filter(([s]) => parts.every((p) => s.includes(p)));
+const glass = (b, what) => {
+  assert.match(b, /color-mix\(in srgb, var\(--gz-surface-paint[^;]*var\(--gz-glass-mix/, `${what}: the Look's surface at its glass mix`);
+  assert.match(b, /backdrop-filter:\s*blur\(var\(--gz-glass/, `${what}: glass`);
+  assert.match(b, /border:\s*1px solid var\(--gz-border-line/, `${what}: the Look's line`);
+  assert.match(b, /border-radius:\s*var\(--gz-radius/, `${what}: rounded`);
+};
+
 test('beside Glaze\'s sidebar a course tool\'s header spans the window and only its content keeps the column\'s room', () => {
   // The owner's empty corner: the tool panel was narrowed (inset-inline-end), so the strip and course bar stopped short
   // of the window and nothing filled the column above the sidebar.
@@ -122,4 +129,19 @@ test('beside Glaze\'s sidebar a course tool\'s header spans the window and only 
 test('Gradebook\'s student overview draws no band or light line under the course header', () => {
   const b = body(THEME, 'aside.student-grade-overview');
   for (const [prop, v] of [['background', 'transparent'], ['border-bottom', '0'], ['box-shadow', 'none']]) assert.match(b, new RegExp(`${prop}:\\s*${v} !important`), prop);
+});
+
+test('a routed page\'s breadcrumb row is a floating glass panel like the course header, its title a gap below', () => {
+  const row = body(THEME, 'content-page-header > header, .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"]');
+  assert.ok(row, 'the routed header row rule');
+  glass(row, 'breadcrumb row');
+  assert.match(row, /margin-inline:\s*var\(--gz-float-start[^;]*var\(--gz-float-end/, 'inset like the strip');
+  assert.match(row, /margin-block:\s*var\(--gz-float-gap[^;]*\) 0/, 'a gap from the strip');
+  // The full-width band rule for Ultra's hashed headers leaves the breadcrumb row to it.
+  assert.ok(rules(THEME).some(([s]) => s.includes('#site-wrap header[class*="makeStylesheader-"]:not(.bb-course-navigation *, content-page-header > *)')));
+  assert.match(body(THEME, '#site-wrap .discussion-container .panel-header.panel-header-directive.has-controls'), /margin-block-start:\s*var\(--gz-float-gap/);
+  // The sticky routed header holding the strip is clear, with the course bar's veil behind it, not a filled band.
+  const sticky = ruleWith('extras.css', '.routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)')[0];
+  assert.match(sticky[1], /background:\s*transparent/);
+  assert.ok(ruleWith(THEME, 'div.bb-course-navigation::before', '.routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)::before').length >= 2, 'veiled, with and without scroll timelines');
 });

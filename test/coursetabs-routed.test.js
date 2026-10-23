@@ -42,6 +42,32 @@ test('the strip goes before/after the full routed header without moving native c
   }
 });
 
+test('on a routed page the strip sits above its breadcrumb row, also when the item is a panel under that row', () => {
+  // A routed discussion: content-page-header (the breadcrumbs) and, under it, the discussion in a panel whose own header
+  // is its title. The strip goes before the breadcrumb row, as on a routed document, not between it and the title.
+  for (const at of ['above', 'below']) {
+    const strip = {}, crumbs = { tag: 'crumbs' }, title = { tag: 'title' };
+    const layer = { querySelector: () => title, contains: (e) => e === title, firstElementChild: title };
+    const page = { contains: (e) => e === layer || e === crumbs || e === title, firstElementChild: crumbs,
+      querySelector: (sel) => (sel.startsWith('content-page-header') ? crumbs : sel.includes('h1') ? null : title) };
+    let put = '';
+    for (const e of [crumbs, title]) { e.before = () => { put = `before ${e.tag}`; }; e.after = () => { put = `after ${e.tag}`; }; }
+    const home = vm.runInNewContext(part('  const crumbsOf = ', '  // A URL or header change') + part('  const home = ', '  const place = ') + '\nhome;', {
+      ctx: { site: 'ultra' }, strip, P: () => ({ at }), courseBar: () => null, topLayer: () => layer, shown: () => false,
+      here: () => '_71_1', routed: () => page, loaded: true, tabs: [{}], spot: (at, ok, put) => ({ at, ok, put }),
+    });
+    const place = home(); assert.equal(place.at, 'routed', at); place.put();
+    assert.equal(put, at === 'above' ? 'before crumbs' : 'after crumbs');
+  }
+  // A panel opened over a course (no routed page around it) keeps its place at the panel's header.
+  const strip = {}, title = { before() {}, after() {} }, layer = { querySelector: () => title, contains: () => true, firstElementChild: title };
+  const home = vm.runInNewContext(part('  const crumbsOf = ', '  // A URL or header change') + part('  const home = ', '  const place = ') + '\nhome;', {
+    ctx: { site: 'ultra' }, strip, P: () => ({ at: 'above' }), courseBar: () => null, topLayer: () => layer, shown: () => false,
+    here: () => '_71_1', routed: () => null, loaded: true, tabs: [{}], spot: (at, ok, put) => ({ at, ok, put }),
+  });
+  assert.equal(home().at, 'nested');
+});
+
 test('a routed content scroller need not contain the strip to save its position', () => {
   const sc = { scrollTop: 610, contains: () => false }, tab = { cid: '_71_1' }; let saves = 0;
   vm.runInNewContext(part('  const onScroll = ', '  // ---- pictures') + '\nonScroll({target:sc});', {

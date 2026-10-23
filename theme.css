@@ -235,7 +235,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    The course header is a JSS-hashed <header> inside Ultra's course-page-header element, painted
    #262626 in every palette until 2.0. The #site-wrap-scoped selectors outrank the "*-header"
    catch-all further down, which used to paint these opaque and hide the blur. ---- */
-#site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"]:not(.bb-course-navigation *) {
+#site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"]:not(.bb-course-navigation *, content-page-header > *) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
   border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important;
@@ -260,18 +260,27 @@ html[data-gz-ctabs~="above"] .bb-course-navigation course-page-header > header {
 /* The strip between the rows: each row a panel of its own. */
 html[data-gz-ctabs~="between"] .bb-course-navigation course-page-header > header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
 html[data-gz-ctabs~="between"] .bb-course-navigation bb-course-navigation > [class*="makeStylestoolbar"] { margin-top: var(--gz-float-gap, 12px); border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
-/* A backing keeps scrolled content out of the gaps. With scroll timelines it fades in over the first 48px;
-   older engines keep the backing visible, without another blur or scroll listener. */
-div.bb-course-navigation::before {
+/* A backing keeps scrolled content out of the gaps, under the course bar and a routed page's sticky header. With scroll
+   timelines it fades in over the first 48px; older engines keep the backing visible, without another blur or scroll listener. */
+div.bb-course-navigation::before, .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)::before {
   content: ""; position: absolute; z-index: -1; inset: 0 0 calc(var(--gz-float-gap, 12px) * -1); pointer-events: none;
   background: var(--gz-surface-grain, none), var(--gz-surface-paint-2, var(--gz-surface-2)); mask-image: linear-gradient(#000 calc(100% - var(--gz-float-gap, 12px)), transparent);
 }
 @supports (animation-timeline: scroll()) {
-  div.bb-course-navigation::before {
+  div.bb-course-navigation::before, .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)::before {
     opacity: 0; animation: gz-bar-veil linear both; animation-timeline: scroll(); animation-range: 0 48px;
   }
 }
 @keyframes gz-bar-veil { to { opacity: 1; } }
+/* A routed page (a document, a discussion, an assignment): its breadcrumb row, or its header's title row where it has no
+   breadcrumbs, is a panel of its own under the strip, inset as the course header is. A discussion's title panel keeps a
+   gap from it. */
+content-page-header > header, .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"] {
+  box-sizing: border-box; width: auto !important; margin-block: var(--gz-float-gap, 12px) 0 !important; margin-inline: var(--gz-float-start, 12px) var(--gz-float-end, 12px) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; box-shadow: var(--gz-rest-shadow) !important;
+}
+#site-wrap .discussion-container .panel-header.panel-header-directive.has-controls { margin-block-start: var(--gz-float-gap, 12px) !important; }
 /* The outline's "Course Content" header is a box inside the content column, not a page header. */
 #site-wrap header.outline-header { box-sizing: border-box; padding-inline: 1rem !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
 
@@ -882,7 +891,8 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
 }
 /* Over a solid background the glass on the nav, the headers and these panels blurs a flat colour: nothing to see, and
    a GPU layer each. Same fill. */
-html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header,
+html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header, content-page-header > header,
+  .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"],
   #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
   #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header,
