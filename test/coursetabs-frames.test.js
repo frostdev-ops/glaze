@@ -357,23 +357,52 @@ test('signing out (the site\'s link or Glaze\'s bar) drops every picture, and a 
   }
 });
 
-test('a screenshot delayed across an in-page course switch is forgotten instead of cached under the old course', async () => {
+test('a sketch delayed across an in-page course switch is forgotten instead of cached under the old course', async () => {
   const doc = { body: {}, querySelectorAll: () => [] }; const sent = [], kept = [];
   let current = { cid: '_2_1', path: '/ultra/courses/_2_1/outline', doc, frame: {} }, resolve;
+  const drawn = { size: [1000, 800], top: 0, name: 'Spanish 110', strip: null, boxes: [[0, 0, 1000, 60, 'b', '#102030ff', 0]] };
   const shoot = vm.runInNewContext(part('  let shooting = ', '  const keep = ') + '\nshoot;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     surface: () => current, on: true, signedOut: false, framed: '', preview: false,
     ctx: { holding: () => false }, document: { visibilityState: 'visible', querySelectorAll: () => [] },
     performance: { now: () => 1000 }, safePath: (p) => p, split: (s) => [s, ''], loading: () => false, pic: null,
     innerWidth: 1000, innerHeight: 800, requestAnimationFrame: (fn) => fn(), setTimeout: (fn) => fn(),
-    send: (m) => { sent.push(m); return m.op === 'shot' ? new Promise((r) => { resolve = r; }) : Promise.resolve(); },
+    sketchOf: (cid, d, frame) => (cid === '_2_1' && d === doc && frame === current.frame ? drawn : null),
+    send: (m) => { sent.push(m); return m.op === 'sketch' ? new Promise((r) => { resolve = r; }) : Promise.resolve(); },
     keep: (s) => kept.push(s),
   });
   const result = shoot(); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(JSON.parse(JSON.stringify(sent[0])), { op: 'sketch', cid: '_2_1', path: '/ultra/courses/_2_1/outline', ...drawn }, 'the page sends its own sketch; the worker takes no picture');
   current = { ...current, cid: '_3_1', path: '/ultra/courses/_3_1/outline' };
   resolve({ snap: { cid: '_2_1', path: '/ultra/courses/_2_1/outline' } });
   assert.equal(await result, null);
   assert.equal(kept.length, 0);
   assert.equal(sent.at(-1).op, 'forget');
+});
+
+test('the stand-in: a sketch drawn at once over a frame still loading, blurred under the spinner, with no picture in it', () => {
+  const { El } = require('./stand-in-dom.js');
+  const doc = { activeElement: null };
+  doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
+  const host = new El('div', doc); doc.body.append(host);
+  const f = { url: '/ultra/courses/_2_1/outline', ready: false, el: { style: { visibility: 'hidden' } } };
+  const snap = { cid: '_2_1', path: f.url, size: [1000, 800], name: 'Computer Science I',
+    boxes: [[40, 100, 600, 300, 'b', '#ffffffff', 12], [20, 15, 220, 30, 'n', '#141414ff', 30], [60, 120, 500, 50, 't', '#141414ff', 30]] };
+  const c = vm.createContext({ PAGE: 'page', L, showing: '_2_1', frames: new Map([['_2_1', f]]), pic: null, snaps: new Map([['_2_1', snap]]), unpicture() {}, keep() {},
+    fits: () => true, send: () => { throw new Error('kept already'); }, document: { createElement: (t) => new El(t, doc) },
+    html: { getAttribute: () => null, hasAttribute: () => false }, ctx: { site: 'ultra' }, host, innerWidth: 1000, innerHeight: 800, t: (x) => x, f });
+  vm.runInContext(part('  const picture = ', '  const unpicture = ') + "\npicture('_2_1', f);", c);
+  const box = host.children[0];
+  assert.equal(box?.className, 'gz-ctabs-pic', 'in at once: nothing to decode');
+  const all = (e) => [e, ...(e.children || []).flatMap(all)];
+  const parts = all(box.shadowForTest).filter((e) => e instanceof El);
+  assert.ok(!parts.some((e) => e.tagName === 'IMG'), 'no picture');
+  assert.ok(parts.some((e) => e.attrs.role === 'progressbar' && e.attrs['aria-label'] === 'Loading…'), 'the spinner, as before');
+  assert.match(parts.find((e) => e.tagName === 'STYLE').textContent, /filter:blur\(6px\) brightness\(\.9\)/, 'the same blur');
+  const drawn = parts.filter((e) => e.tagName === 'DIV' && /left:/.test(e.style.cssText || ''));
+  assert.equal(drawn.length, L.drawn(snap).length, 'every part of the sketch drawn');
+  assert.ok(drawn.some((e) => /left:40px;top:100px;width:600px;height:300px;background:#ffffffff;border-radius:12px/.test(e.style.cssText)));
+  assert.deepEqual(drawn.filter((e) => e.textContent).map((e) => e.textContent), ['Computer Science I'], 'the course name, the one text');
+  assert.equal(c.pic, box);
 });
 
 test('closing the surrounding course keeps the next course’s existing edited frame', () => {

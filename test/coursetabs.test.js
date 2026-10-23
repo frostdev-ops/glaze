@@ -97,7 +97,116 @@ test('the snapshot cache: the least recently kept go first past the total', () =
   assert.deepEqual(L.fit([['a', 3, 1], ['b', 3, 2]], 7), []);
   assert.deepEqual(L.fit([['a', 9, 5]], 7), ['a']);
   assert.deepEqual(L.fit([['old', 3, 1], ['new', 3, 1]], 3), ['old'], 'same-millisecond captures still evict the older insertion');
-  assert.ok(L.SNAP_ONE < L.SNAP_ALL && L.SNAP_ALL <= 8e6, 'the pictures fit storage.session (10 MB) with room to spare');
+  assert.ok(L.SNAP_ONE < L.SNAP_ALL && L.SNAP_ALL <= 1e6, 'sized for sketches, well inside storage.session (10 MB)');
+});
+
+// A page for sketch(): elements with boxes and computed styles, text nodes with their lines, hit testing by position
+// (fixed elements over the rest, later over earlier).
+const page = (spec, { w = 1000, h = 800 } = {}) => {
+  const all = [];
+  const doc = {
+    defaultView: { innerWidth: w, innerHeight: h, getComputedStyle: (el) => ({ display: 'block', visibility: 'visible', opacity: '1', position: 'static', overflowX: 'visible', overflowY: 'visible',
+      backgroundColor: 'rgba(0, 0, 0, 0)', backgroundImage: 'none', color: 'rgb(20, 20, 20)', borderTopWidth: '0px', borderTopStyle: 'none', borderTopColor: 'rgb(0, 0, 0)',
+      borderTopLeftRadius: '0px', fontSize: '16px', fontWeight: '400', fill: 'rgb(0, 0, 0)', ...el.css }) },
+    createRange: () => ({ n: null, selectNodeContents(n) { this.n = n; }, getClientRects() { return (this.n.lines || []).map(rect); } }),
+    elementFromPoint: (x, y) => {
+      const at = all.filter((e) => e.css.display !== 'none' && e.css.visibility !== 'hidden' && !e.css.pointer && inside(e.box, x, y));
+      return [...at.filter((e) => !fixed(e)), ...at.filter(fixed)].at(-1) || null;
+    },
+  };
+  const rect = ([x, y, bw, bh]) => ({ left: x, top: y, right: x + bw, bottom: y + bh, width: bw, height: bh, x, y });
+  const inside = (b, x, y) => b && x >= b[0] && x < b[0] + b[2] && y >= b[1] && y < b[1] + b[3];
+  const fixed = (e) => { for (let p = e; p; p = p.parentElement) if (p.css.position === 'fixed') return true; return false; };
+  const make = (x, parent = null) => {
+    if (typeof x === 'string' || x.text !== undefined) return { nodeType: 3, textContent: typeof x === 'string' ? x : x.text, lines: x.lines, parentElement: parent };
+    const el = { nodeType: 1, tagName: (x.tag || 'div').toUpperCase(), css: x.css || {}, box: x.box, cls: x.cls || '', role: x.role || null, parentElement: parent,
+      getBoundingClientRect: () => rect(x.box || [0, 0, 0, 0]), getAttribute: (k) => (k === 'role' ? el.role : k === 'class' ? el.cls : null),
+      matches: (sel) => sel.split(',').some((q) => q.trim().startsWith('.') && el.cls.split(' ').includes(q.trim().slice(1))),
+      contains: (o) => { for (let p = o; p; p = p.parentElement) if (p === el) return true; return false; } };
+    all.push(el);
+    el.childNodes = (x.kids || []).map((k) => make(k, el));
+    el.children = el.childNodes.filter((k) => k.nodeType === 1);
+    return el;
+  };
+  doc.body = make({ tag: 'body', box: [0, 0, w, h], kids: spec });
+  doc.documentElement = { nodeType: 1 };
+  return doc;
+};
+const hexOf = (css) => {
+  const m = String(css).match(/^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/);
+  if (!m) return null;
+  const a = m[4] === undefined ? 1 : Number(m[4]);
+  return a ? '#' + [m[1], m[2], m[3], Math.round(a * 255)].map((v) => Number(v).toString(16).padStart(2, '0')).join('') : null;
+};
+
+test('a sketch: the page\'s boxes in the window, clipped to it, in paint order, and no text but the course name', () => {
+  const name = 'Computer Science I';
+  const doc = page([
+    { tag: 'main', box: [0, 0, 1000, 2400], kids: [
+      // Under the fixed header: covered, so not drawn.
+      { box: [0, 0, 1000, 40], css: { backgroundColor: 'rgb(0, 200, 0)' } },
+      { cls: 'card', box: [40, 100, 600, 300], css: { backgroundColor: 'rgb(255, 255, 255)', borderTopLeftRadius: '12px' }, kids: [
+        { tag: 'p', box: [60, 120, 500, 80], kids: [{ text: 'secret words of the page, three lines of them', lines: [[60, 120, 500, 20], [60, 150, 500, 20], [60, 180, 300, 20]] }] },
+      ] },
+      { tag: 'img', box: [700, 100, 200, 150], css: { color: 'rgb(20, 20, 20)' } },
+      { box: [40, 700, 600, 300], css: { backgroundColor: 'rgb(30, 60, 90)' } },
+      { box: [-50, 420, 200, 50], css: { backgroundColor: 'rgb(90, 60, 30)' } },
+      { box: [40, 900, 600, 300], css: { backgroundColor: 'rgb(1, 2, 3)' }, kids: [{ text: 'below the fold', lines: [[60, 920, 200, 20]] }] },
+      { box: [300, 500, 100, 100], css: { backgroundColor: 'rgb(255, 0, 0)', visibility: 'hidden' } },
+      { box: [300, 500, 100, 100], css: { display: 'none' }, kids: [{ box: [300, 500, 100, 100], css: { backgroundColor: 'rgb(255, 0, 1)' }, kids: [{ text: 'none', lines: [[300, 500, 50, 20]] }] }] },
+      { cls: 'gz-tip', box: [500, 450, 120, 30], css: { backgroundColor: 'rgb(255, 0, 2)' }, kids: [{ text: 'tip', lines: [[505, 455, 30, 20]] }] },
+      // A scroller: what it holds shows inside it only.
+      { box: [650, 400, 300, 200], css: { overflowY: 'auto' }, kids: [{ box: [650, 350, 300, 100], css: { backgroundColor: 'rgb(7, 8, 9)' } }] },
+      ...Array.from({ length: 80 }, (_, i) => ({ tag: 'li', box: [700 + i % 4 * 70, 620 + Math.floor(i / 4) * 8, 60, 6], css: { backgroundColor: 'rgb(100, 100, 100)' } })),
+    ] },
+    { tag: 'header', box: [0, 0, 1000, 60], css: { position: 'fixed', backgroundColor: 'rgb(16, 32, 48)' }, kids: [
+      { tag: 'h1', box: [20, 10, 400, 40], kids: [{ text: ` ${name} `, lines: [[20, 15, 220, 30]] }] },
+      { tag: 'button', box: [900, 12, 80, 36], css: { backgroundColor: 'rgb(255, 136, 0)', borderTopLeftRadius: '8px' }, kids: [{ text: 'Menu', lines: [[915, 20, 40, 20]] }] },
+    ] },
+  ]);
+  const boxes = L.sketch(doc, { w: 1000, h: 800, name, colour: hexOf, skip: (el) => el.matches('.gz-tip') });
+  const find = (c) => boxes.filter((b) => b[5] === c), at = (c) => boxes.findIndex((b) => b[5] === c);
+  assert.ok(boxes.length <= L.BOXES, `${boxes.length} boxes`);
+  for (const [x, y, bw, bh, k, c, r] of boxes) {
+    assert.ok([x, y, bw, bh, r].every(Number.isInteger) && x >= 0 && y >= 0 && bw > 0 && bh > 0 && x + bw <= 1000 && y + bh <= 800, `inside the window: ${[x, y, bw, bh]}`);
+    assert.ok('btichn'.includes(k) && /^#[0-9a-f]{8}$/.test(c));
+  }
+  assert.ok(!/secret|Menu|fold|tip|none/.test(JSON.stringify(boxes)), 'no text of the page');
+  assert.deepEqual(boxes.filter((b) => b[4] === 'n'), [[20, 15, 220, 30, 'n', '#141414ff', 30]], 'the course name, as its one text');
+  assert.deepEqual(find('#ffffffff'), [[40, 100, 600, 300, 'b', '#ffffffff', 12]]);
+  assert.deepEqual(boxes.filter((b) => b[4] === 't' && b[0] === 60), [[60, 120, 500, 50, 't', '#141414ff', 30], [60, 180, 300, 20, 't', '#141414ff', 20]], 'a paragraph\'s even lines in one box with their pitch; its last line alone');
+  assert.deepEqual(find('#ff8800ff'), [[900, 12, 80, 36, 'c', '#ff8800ff', 8]], 'a control');
+  assert.ok(boxes.some((b) => b[4] === 't' && b[0] === 915 && boxes.indexOf(b) > at('#ff8800ff')), 'its label a bar over it');
+  assert.equal(boxes.filter((b) => b[4] === 'i').length, 1);
+  assert.deepEqual(find('#1e3c5aff'), [[40, 700, 600, 100, 'b', '#1e3c5aff', 0]], 'clipped at the window\'s bottom');
+  assert.deepEqual(find('#5a3c1eff'), [[0, 420, 150, 50, 'b', '#5a3c1eff', 0]], 'and its left');
+  assert.deepEqual(find('#070809ff'), [[650, 400, 300, 50, 'b', '#070809ff', 0]], 'clipped to its scroller');
+  for (const c of ['#00c800ff', '#010203ff', '#ff0000ff', '#ff0001ff', '#ff0002ff']) assert.deepEqual(find(c), [], `${c}: covered, past the window, hidden, not displayed or Glaze's tip`);
+  assert.ok(at('#102030ff') > at('#ffffffff') && at('#102030ff') > at('#1e3c5aff'), 'the fixed header is drawn over what scrolls under it');
+  assert.ok(at('#ff8800ff') > at('#102030ff'), 'and its button over it');
+  assert.ok(find('#646464ff').length < 80 && boxes.length === L.BOXES, 'past the limit, the smallest boxes go');
+});
+
+test('a sketch in a tab\'s frame is placed where the frame is in the window', () => {
+  const doc = page([{ box: [0, 0, 500, 300], css: { backgroundColor: 'rgb(1, 1, 1)' } }], { w: 800, h: 700 });
+  assert.deepEqual(L.sketch(doc, { w: 1000, h: 800, dx: 200, dy: 100, colour: hexOf }), [[200, 100, 500, 300, 'b', '#010101ff', 0]]);
+});
+
+test('the stand-in draws a sketch: boxes in their colours and radii, text lines as rounded bars, the course name as its one text', () => {
+  const s = { size: [1000, 800], name: 'Computer Science I', boxes: [[40, 100, 600, 300, 'b', '#ffffffff', 12], [20, 15, 220, 30, 'n', '#141414ff', 30], [60, 120, 500, 50, 't', '#141414ff', 30], [900, 12, 80, 36, 'c', '#ff8800ff', 8], [700, 100, 200, 150, 'i', '#14141433', 0], [20, 300, 400, 28, 'h', '#202020ff', 28]] };
+  const d = L.drawn(s);
+  assert.deepEqual(d.filter((x) => x.text), [{ x: 20, y: 15, w: 220, h: 30, ink: '#141414ff', text: 'Computer Science I', size: 25, line: 30 }]);
+  assert.deepEqual(d.filter((x) => !x.text && [40, 900, 700].includes(x.x)).map(({ x, y, w, h, bg, r }) => [x, y, w, h, bg, r]), [[40, 100, 600, 300, '#ffffffff', 12], [900, 12, 80, 36, '#ff8800ff', 8], [700, 100, 200, 150, '#14141433', 0]]);
+  const bars = d.filter((x) => x.x === 60);
+  assert.equal(bars.length, 2, 'one bar a line');
+  for (const [i, b] of bars.entries()) {
+    assert.ok(b.y > 120 + i * 30 && b.y + b.h < 120 + i * 30 + 20 && b.w === 500 && b.r * 2 === b.h, `a rounded bar inside line ${i}: ${JSON.stringify(b)}`);
+    assert.equal(b.bg.slice(0, 7), '#141414');
+    assert.ok(parseInt(b.bg.slice(7), 16) < 255, 'lighter than the ink: glyphs cover only part of a line');
+  }
+  const head = d.filter((x) => x.x === 20 && x.y >= 300);
+  assert.ok(head.length === 1 && head[0].h > bars[0].h * 28 / 30 && parseInt(head[0].bg.slice(7), 16) >= parseInt(bars[0].bg.slice(7), 16), 'a heading\'s bar is bolder');
+  assert.equal(L.drawn({ ...s, name: '' }).filter((x) => x.text).length, 0, 'no name, no text');
 });
 
 test('wired up: loadable on demand, in the worker and the editor, and both sites load the shared manager on demand', () => {
