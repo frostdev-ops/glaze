@@ -179,6 +179,7 @@ export async function submitApple(env, manifest, receipt, save) {
     if (!version) {
       version = (await apple(env, '/appStoreVersions', 'POST', document('appStoreVersions', { platform, versionString: manifest.version, releaseType: 'AFTER_APPROVAL' }, { app: resource('apps', app) }))).data;
     }
+    if (!EDITABLE.includes(versionStateOf(version))) throw new Error(`Apple ${platform}: version is ${versionStateOf(version) || 'unknown'}; not editable.`);
     state.versionId = version.id;
     save();
     const submissions = await apple(env, `/apps/${app}/reviewSubmissions?filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,IN_REVIEW,UNRESOLVED_ISSUES,CANCELING,COMPLETING&limit=200`);
@@ -194,6 +195,7 @@ export async function submitApple(env, manifest, receipt, save) {
       }
     }
     if (submission) {
+      if (submission.attributes.state !== 'READY_FOR_REVIEW') throw new Error(`Apple submission ${submission.id}: ${submission.attributes.state}; not editable.`);
       const linked = await apple(env, `/appStoreVersions/${version.id}/build`);
       if (linked.data?.id !== builds.id) throw new Error(`Apple ${platform}: the existing review draft uses a different build.`);
       if (version.attributes.releaseType !== 'AFTER_APPROVAL') throw new Error(`Apple ${platform}: set this existing draft to release automatically after approval in App Store Connect before submitting.`);
@@ -201,9 +203,11 @@ export async function submitApple(env, manifest, receipt, save) {
     if (!submission) {
       await apple(env, `/appStoreVersions/${version.id}`, 'PATCH', document('appStoreVersions', { releaseType: 'AFTER_APPROVAL' }, {}, version.id));
       await apple(env, `/appStoreVersions/${version.id}/relationships/build`, 'PATCH', resource('builds', builds.id));
-      const locales = await apple(env, `/appStoreVersions/${version.id}/appStoreVersionLocalizations?limit=200`);
-      if (!locales.data.length) throw new Error(`Apple ${platform}: no listing localization. Complete metadata and screenshots in App Store Connect, then rerun submit.`);
-      for (const line of describeChanges((await syncAppleListing(env, app, platform, version, manifest.listings)).filter(c => c.action !== 'same'))) console.log(line);
+    }
+    const locales = await apple(env, `/appStoreVersions/${version.id}/appStoreVersionLocalizations?limit=200`);
+    if (!locales.data.length) throw new Error(`Apple ${platform}: no listing localization. Complete metadata and screenshots in App Store Connect, then rerun submit.`);
+    for (const line of describeChanges((await syncAppleListing(env, app, platform, version, manifest.listings)).filter(c => c.action !== 'same'))) console.log(line);
+    if (!submission) {
       // Reuse an empty draft left by an interrupted create/item response, without submitting unrelated items.
       if (state.submissionId) {
         const candidate = (await apple(env, `/reviewSubmissions/${state.submissionId}`)).data;
@@ -257,7 +261,7 @@ export async function syncFirefoxListing(env, listings, { write = true, version 
 
 // App info and version text can change only while a version is being prepared; never during or after review.
 const EDITABLE = ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED', 'METADATA_REJECTED', 'INVALID_BINARY', 'READY_FOR_REVIEW'];
-const versionState = version => version?.attributes?.appVersionState || version?.attributes?.appStoreState;
+const versionStateOf = version => version?.attributes?.appVersionState || version?.attributes?.appStoreState;
 const VERSION_FIELDS = [['description', 'description'], ['keywords', 'keywords'], ['promotionalText', 'promotional text']];
 const pick = (from, keys) => Object.fromEntries(keys.filter(key => from?.attributes?.[key]).map(key => [key, from.attributes[key]]));
 
@@ -269,9 +273,10 @@ const pick = (from, keys) => Object.fromEntries(keys.filter(key => from?.attribu
 export async function syncAppleListing(env, app, platform, version, listings, { write = true, base, firstRelease = false } = {}) {
   const store = `Apple ${platform}`, changes = [], langs = Object.values(listings);
   const note = (locale, field, action, detail) => changes.push({ store, locale, field, action, ...(detail ? { detail } : {}) });
-  const state = versionState(version);
-  if (state && !EDITABLE.includes(state)) {
-    for (const { appleLocale } of langs) note(appleLocale, 'listing', 'skip', `version is ${state}`);
+  const state = versionStateOf(version);
+  if ((version || write) && !EDITABLE.includes(state)) {
+    if (write) throw new Error(`Apple ${platform}: version is ${state || 'unknown'}; not editable.`);
+    for (const { appleLocale } of langs) note(appleLocale, 'listing', 'skip', `version is ${state || 'unknown'}`);
     return changes;
   }
   const infos = (await apple(env, `/apps/${app}/appInfos`)).data;
@@ -281,6 +286,8 @@ export async function syncAppleListing(env, app, platform, version, listings, { 
   const compared = version || base;
   const versionLocales = compared ? (await apple(env, `/appStoreVersions/${compared.id}/appStoreVersionLocalizations?limit=200`)).data : [];
   const find = (list, locale) => list.find(item => item.attributes.locale === locale);
+  const missing = langs.filter(l => !find(versionLocales, l.appleLocale)).map(l => l.appleLocale);
+  if (write && !info && missing.length) throw new Error(`Apple ${platform}: app info is not editable; cannot add ${missing.join(', ')}. Complete these languages in App Store Connect before submitting.`);
   const primaryInfo = find(infoLocales, 'en-US') || infoLocales[0], primary = find(versionLocales, 'en-US') || versionLocales[0];
   const primaryLocale = primary?.attributes.locale || 'en-US', added = [];
   let first = firstRelease;
@@ -352,7 +359,7 @@ export async function previewAppleListing(env, platform, versionString, listings
   const app = await appleApp(env);
   const target = (await apple(env, `/apps/${app}/appStoreVersions?filter[platform]=${platform}&filter[versionString]=${versionString}`)).data[0];
   const versions = (await apple(env, `/apps/${app}/appStoreVersions?filter[platform]=${platform}&limit=20`)).data;
-  const live = versions.find(v => ['READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(versionState(v))) || versions[0];
+  const live = versions.find(v => ['READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(versionStateOf(v))) || versions[0];
   const firstRelease = target ? versions.length === 1 && versions[0].id === target.id : !versions.length;
   return syncAppleListing(env, app, platform, target || null, listings, { write: false, base: live, firstRelease });
 }
