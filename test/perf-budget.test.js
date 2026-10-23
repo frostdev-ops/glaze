@@ -328,8 +328,8 @@ const STYLE_READS = [
   ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
   ['features/coursetabs.js', 'getComputedStyle(p)', 1], // the scroller above the course tabs, once a tab switch lands
   ['features/coursetabs.js', 'getComputedStyle(list)', 1], // the tab strip's direction, once per arrow key
-  // A course tab's sketch (lib/coursetabs.js sketch): the elements on screen only (a subtree wholly off it is not read), at most
-  // VISIT of them, when a sketch is taken (at most one each 0.6 s, each 15 s per page).
+  // A course tab's sketch (lib/coursetabs.js sketch): off-screen subtrees stop at their outer box, without reading their
+  // styles; visible content is never lost to an element-count cap. Captures run at most each 0.6 s, each 15 s per page.
   ['lib/coursetabs.js', 'getComputedStyle(el)', 1],
   ['features/insights.js', 'getComputedStyle(box)', 1], // Insights' dialog, once per saved picture, for its colors
   ['content.js', 'getComputedStyle(document.documentElement)', 1], // the palette's ink, once per highlighted element
