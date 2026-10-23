@@ -129,7 +129,7 @@ test('a replaced course-frame document schedules readiness before the navbar men
     L, PAGE: 'page', requestAnimationFrame() {}, nudge() {}, frames: new Map([['12', h.f]]), location: { origin }, ctx: { site: 'canvas' },
     showing: '12', waiting: '', performance: { now: () => now }, MutationObserver: class { observe() {} disconnect() {} },
     shown: () => true, loading: () => false, clearTimeout() {}, setTimeout: (fn) => { next = fn; },
-    clearSlow() {}, unpicture() {}, later() {}, GZ_NAVBAR_UI: { sync: () => synced++ },
+    clearSlow() {}, unpicture() {}, hoist() {}, later() {}, GZ_NAVBAR_UI: { sync: () => synced++ },
   });
   watch('12', h.f); assert.equal(synced, 0); now = 301; next();
   assert.equal(h.f.ready, true); assert.equal(synced, 1);

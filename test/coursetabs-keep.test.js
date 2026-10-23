@@ -170,7 +170,7 @@ test('while a frame covers the page, the page\'s own strip is inert: out of the 
   for (const site of ['ultra', 'canvas']) {
     const frames = new Map([['_2_1', { at: 0, ready: true, el: { style: {}, focus() {}, contentWindow: { postMessage() {} } } }]]);
     const strip = { inert: false, contains: () => false };
-    const c = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false, showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, frames, LIVE: 4,
+    const c = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false, showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, framed: '', frames, LIVE: 4,
       host: { toggleAttribute() {} }, strip, list: null, wait() {}, document: { activeElement: null }, location: { pathname: '/ultra/courses/_1_1/outline', search: '' }, ctx: { site, scene() {} },
       html: { toggleAttribute() {} }, sessionStorage: { setItem() {}, removeItem() {} }, hostIn() {}, lay() {}, clearSlow() {}, unpicture() {}, draw() {}, later() {}, Date,
     });

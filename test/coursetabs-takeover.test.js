@@ -56,6 +56,7 @@ test('a fresh copy of Glaze takes over the frames, strip and marks the old copy 
   p.html.setAttribute('data-gz-placing', '');
 
   // Glaze restarts: the old copy is cut off from the extension, and a new one runs in the same page.
+  const oldStrip = p.doc.getElementById('gz-ctabs');
   old.chrome.runtime.id = undefined;
   const fresh = glaze(p, local);
   fresh.api.sync(true);
@@ -72,7 +73,7 @@ test('a fresh copy of Glaze takes over the frames, strip and marks the old copy 
   // The old copy keeps its own references, but no longer puts anything back.
   p.bar.replaceChildren();
   old.api.held();
-  assert.equal(p.doc.querySelectorAll('#gz-ctabs').length, 0, 'the old copy\'s strip stays gone');
+  assert.ok(!oldStrip.isConnected && !p.doc.querySelectorAll('#gz-ctabs').includes(oldStrip), 'the old copy\'s strip stays gone');
 });
 
 test('a fresh copy that opens no frame leaves the page uncovered, as after a reload', async () => {

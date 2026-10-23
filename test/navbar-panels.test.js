@@ -167,7 +167,7 @@ test('a settled Canvas frame refreshes the shared course menu after navigation',
     performance: { now: () => now }, frames: new Map([['12', f]]), ctx: { site: 'canvas' }, location,
     L: { owns: () => true }, shown: () => true, loading: () => false,
     MutationObserver: class { observe() {} disconnect() {} }, clearTimeout() {}, setTimeout: (fn) => { next = fn; },
-    waiting: '', showing: '12', clearSlow() {}, unpicture() {}, later() {},
+    waiting: '', showing: '12', clearSlow() {}, unpicture() {}, hoist() {}, later() {},
     GZ_NAVBAR_UI: { sync: () => synced++ },
   });
   watch('12', f);

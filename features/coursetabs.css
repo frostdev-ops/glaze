@@ -107,6 +107,9 @@ html[data-gz-bg="solid"] #gz-ctabs::before, html[data-gz-bg="solid"] #gz-doc-too
 .gz-ctabs-retry { position: absolute; z-index: 2; top: 80px; left: 50%; transform: translateX(-50%); box-sizing: border-box; width: min(420px, calc(100% - 32px)); padding: 20px; border: 1px solid var(--gz-line); border-radius: var(--gz-radius, 12px); background: var(--gz-surface-grain, none), var(--gz-surface-paint, var(--gz-surface, Canvas)); color: var(--gz-ink, CanvasText); box-shadow: var(--gz-shadow); }
 .gz-ctabs-retry p { margin: 0 0 12px; }
 .gz-ctabs-retry button { font: inherit; margin-inline-end: 8px; padding: 6px 12px; cursor: pointer; }
+/* The page's strip over a tab's frame that has not drawn its own yet (features/coursetabs.js hoist): at the frame's top,
+   above its picture and its Retry, in reach. */
+#gz-ctabs-frames > #gz-ctabs { position: absolute; z-index: 4; top: 0; inset-inline: 0; }
 html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
 /* A Canvas course loading behind the page on screen (features/coursetabs.js reveal): a light sweeping along its tab. */
 #gz-ctabs .gz-ctab[data-loading]::before { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: 1px; background: linear-gradient(90deg, transparent, var(--gz-course, var(--gz-accent)), transparent) 0 0 / 40% 100% no-repeat; animation: gz-ctab-load 0.9s linear infinite; }
@@ -121,4 +124,4 @@ html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index:
 /* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
 html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }
 /* A see-through frame (content.js data-gz-through) shows the page under it, whose own strip would show through. */
-html[data-gz-ctab-framed]:has(> body > #gz-ctabs-frames > iframe[data-gz-through]) #gz-ctabs { visibility: hidden !important; }
+html[data-gz-ctab-framed]:has(> body > #gz-ctabs-frames > iframe[data-gz-through]) #gz-ctabs:not([data-at="over"]) { visibility: hidden !important; }

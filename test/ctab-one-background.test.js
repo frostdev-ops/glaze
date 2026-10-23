@@ -44,7 +44,7 @@ test('motion.css: covering a page pauses its ambient motion, not its background 
 });
 
 test('coursetabs.css: the covered page hides its own strip while a see-through frame shows', () => {
-  assert.ok(has('features/coursetabs.css', 'html[data-gz-ctab-framed]:has(> body > #gz-ctabs-frames > iframe[data-gz-through]) #gz-ctabs', /visibility:\s*hidden\s*!important/));
+  assert.ok(has('features/coursetabs.css', 'html[data-gz-ctab-framed]:has(> body > #gz-ctabs-frames > iframe[data-gz-through]) #gz-ctabs:not([data-at="over"])', /visibility:\s*hidden\s*!important/));
 });
 
 // ---- content.js -----------------------------------------------------------------------------------------------------
