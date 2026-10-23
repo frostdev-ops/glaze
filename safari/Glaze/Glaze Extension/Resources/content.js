@@ -1361,9 +1361,7 @@
     else setAttr('data-gz-bg-failed', false);
     // Motion: the system's reduced-motion setting wins over the level unless told otherwise.
     setAttr('data-gz-motion', s.motion.followSystem && calmMQ.matches ? 'off' : s.motion.level);
-    // The aurora drifts on the wall clock (its 84 s cycle), so a course tab's own copy keeps step with the page's.
-    if (html.getAttribute('data-gz-motion') !== 'expressive') html.style.removeProperty('--gz-drift-at');
-    else if (!html.style.getPropertyValue('--gz-drift-at')) setVar('--gz-drift-at', `${(((performance.timeOrigin || 0) + performance.now()) / 1000 % 84).toFixed(2)}s`);
+    if (kind === 'aurora') need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).then(() => globalThis.GZ_SCENE_HOST?.drift(html), () => {});
     // What the background is made of: a course tab's frame wearing the same shows the page's (syncThrough).
     let h = 2166136261;
     for (const c of JSON.stringify([s.bg, colors, partsOf()?.bg, html.getAttribute('data-gz-motion'), bgKind() === 'aurora' && [s.look.surfaceCustom && s.look.surfaceColor, s.look.surfaceTint, s.look.surfaceTintSource === 'course' && surfaceCourse(), s.look.surfaceFrost]])) h = Math.imul(h ^ c.charCodeAt(0), 16777619);

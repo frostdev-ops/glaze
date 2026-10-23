@@ -600,3 +600,15 @@ test('built-in scenes are what they were: their own scale, no probe, the canvas 
     assert.equal(e.made.materials[0].glslVersion, undefined, 'three\'s ESSL 3.00 wrapper, not the raw one');
   }
 });
+
+
+test('the guard holds the same still moment across settings refreshes and page clock updates', async () => {
+  const e = engine({ latency: 30 }), w = watch(e);
+  w.scene.update(base); await e.pump(); await frames(e, 40);
+  assert.ok(w.steps.at(-1).still);
+  const u = e.made.materials[0].uniforms.uTime;
+  const held = u.value;
+  e.advance(30000); w.scene.update({ ...base, amount: 0.8, clock: { t: 100, at: e.now } });
+  assert.equal(u.value, held, 'a held still must not jump forward on a settings refresh');
+  assert.equal(e.frames.size, 0);
+});

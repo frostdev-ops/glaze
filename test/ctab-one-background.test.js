@@ -149,9 +149,9 @@ const host = ({ frame = true, key = 'k1', layers = [] } = {}) => {
   const win = {}, iframe = { contentWindow: null, hidden: false, inert: false, style: {}, hasAttribute: (k) => k === 'data-gz-through', getBoundingClientRect: () => ({ left: 272, top: 10, width: 1008, height: 758 }) };
   iframe.contentWindow = win;
   const ctx = {
-    addEventListener: (ev, fn) => listeners.set(ev, fn), requestAnimationFrame: (fn) => frames.push(fn),
+    addEventListener: (ev, fn) => listeners.set(ev, fn), requestAnimationFrame: (fn) => frames.push(fn), cancelAnimationFrame: (id) => { frames[id - 1] = null; },
     location: { origin: 'https://lms' },
-    MutationObserver: class { constructor(fn) { this.fn = fn; } observe(n, o) { observed.push([n, o, this.fn]); } },
+    MutationObserver: class { constructor(fn) { this.fn = fn; } observe(n, o) { observed.push([n, o, this.fn, this]); } disconnect() { this.disconnected = true; } },
     document: {
       body: { name: 'body', setAttribute() {}, removeAttribute() {}, hasAttribute: () => false }, querySelectorAll: (s) => (s.includes('iframe') ? [iframe] : layers),
       documentElement: { hasAttribute: () => false, toggleAttribute: (k, v) => { if (v) ownAttrs.add(k); else ownAttrs.delete(k); },
@@ -335,7 +335,7 @@ test('scene host: the page shares its scene\'s clock, and a frame reads it', () 
   const html = page.ctx.document.documentElement;
   page.H.share(scene); assert.equal(html.getAttribute('data-gz-scene-clock'), '12.5,1700000000000');
   page.H.share(null); assert.equal(html.getAttribute('data-gz-scene-clock'), null);
-  const f = host();
+  const f = host(); f.H.through('k1', true, false, () => {});
   assert.equal(f.H.clock(), undefined);
   f.pageAttrs.set('data-gz-scene-clock', '12.5,1700000000000'); assert.deepEqual(json(f.H.clock()), { t: 12.5, at: 1700000000000 });
   for (const bad of ['', 'x,y', '1', '1,0']) { f.pageAttrs.set('data-gz-scene-clock', bad); assert.equal(f.H.clock(), undefined, bad); }
@@ -375,6 +375,45 @@ test('background layers and the scene sit on the viewport, or a frame\'s copy on
   }
 });
 
-test('content.js puts the aurora\'s drift on the wall clock once, while it drifts', () => {
-  assert.match(source, /if \(html\.getAttribute\('data-gz-motion'\) !== 'expressive'\) html\.style\.removeProperty\('--gz-drift-at'\);\n\s*else if \(!html\.style\.getPropertyValue\('--gz-drift-at'\)\) setVar\('--gz-drift-at', /);
+test('content.js aligns aurora animations through the lazy host', () => {
+  assert.match(source, /if \(kind === 'aurora'\) need\('lib\/scene-host.js'/);
+  assert.match(source, /GZ_SCENE_HOST\?\.drift\(html\)/);
+});
+
+
+test('scene host: a different Look keeps its own clock when the page changes speed or restarts', () => {
+  const h = host(); h.H.through('k2', true, false, () => {});
+  h.pageAttrs.set('data-gz-scene-clock', '12,1700000000000');
+  assert.equal(h.H.clock(), undefined, 'a different Look must not adopt the page clock');
+  h.H.through('k1', true, false, () => {});
+  assert.deepEqual(json(h.H.clock()), { t: 12, at: 1700000000000 });
+  h.pageAttrs.set('data-gz-scene-clock', '0,1700000005000');
+  assert.deepEqual(json(h.H.clock()), { t: 0, at: 1700000005000 }, 'a matching Look adopts a restarted scene');
+});
+
+test('scene host: an opaque frame follows a move without a resize, then stops measuring while hidden', () => {
+  const h = host(); let changed = 0;
+  h.H.through('k2', true, false, () => changed++);
+  h.ctx.frameElement.getBoundingClientRect = () => ({ left: 120, top: 60 });
+  const tick = h.frames.find(Boolean);
+  assert.equal(typeof tick, 'function', 'a visible opaque frame tracks its position');
+  tick();
+  assert.equal(h.vars['--gz-vx'], '-120px'); assert.equal(h.vars['--gz-vy'], '-60px');
+  assert.equal(changed, 1, 'the scene redraws at the new geometry');
+  h.H.through('k2', true, true, () => changed++);
+  const count = h.frames.length; h.frames.at(-1)?.();
+  assert.equal(h.frames.length, count, 'no frame loop while hidden');
+  h.H.through(false, true, false, () => changed++);
+  assert.equal(h.frames.length, count, 'no frame loop when the background is disabled');
+});
+
+test('scene host: pagehide disconnects the parent observer and pageshow restores the subscription', () => {
+  const h = host(); let changed = 0;
+  h.H.through('k1', true, false, () => changed++);
+  h.listeners.get('pagehide')();
+  assert.equal(h.observed[0][3].disconnected, true, 'the parent must not retain the departing frame');
+  assert.ok(!h.pageListeners.has('pointermove'));
+  h.listeners.get('pageshow')();
+  assert.ok(h.pageListeners.has('pointermove'), 'BFCache restores pointer following');
+  assert.equal(h.observed.length, 2, 'the parent is observed again');
 });

@@ -100,6 +100,16 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     const own = await box('course', true);
     check(own.mean < 2, `the frame's own background matches the page's inside its box (mean difference ${own.mean.toFixed(2)} of 255, worst ${own.worst.toFixed(0)})`);
     if (out) await page.screenshot({ path: path.join(out, 'course-tab.png') });
+    // Moving a fixed-size frame must move its backdrop by the opposite amount, even without a resize event.
+    await page.evaluate(() => { document.querySelector('iframe[name="gz-ctab:_102_1"]').style.transform = 'translate(35px, 12px)'; });
+    await pause(250);
+    const moved = await frame.evaluate(() => {
+      const r = frameElement.getBoundingClientRect(), s = document.documentElement.style;
+      return [r.left + parseFloat(s.getPropertyValue('--gz-vx')), r.top + parseFloat(s.getPropertyValue('--gz-vy'))];
+    });
+    check(moved.every((v) => Math.abs(v) < 0.1), `a frame moving without resizing keeps its background aligned (${moved})`);
+    await page.evaluate(() => { document.querySelector('iframe[name="gz-ctab:_102_1"]').style.transform = ''; });
+    await pause(250);
     // 2. A routed page that is all the frame holds: the frame is see-through, the page's background shows unchanged.
     await frame.locator('.b8b-document').click();
     await frame.waitForSelector('.routed-scroll main');
@@ -126,6 +136,28 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     await until(() => page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed')) && frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through')));
     const routed = await page.locator('body > .routed-page.bb-offcanvas-container').evaluate((e) => getComputedStyle(e).visibility);
     check(routed === 'hidden', `the covered routed page outside site-wrap stays hidden (${routed})`);
+    // A later item creates a fresh CSS animation. Its inherited delay alone cannot put it at the page's moment.
+    await opts.evaluate(async () => {
+      const s = await chrome.storage.sync.get(['bg', 'motion']);
+      await chrome.storage.sync.set({ bg: { ...s.bg, kind: 'aurora' }, motion: { ...s.motion, level: 'expressive', followSystem: false } });
+    });
+    await until(() => page.evaluate(() => document.documentElement.getAttribute('data-gz-bg') === 'aurora'));
+    await pause(1200);
+    await page.evaluate(() => {
+      const panel = document.createElement('div'); panel.id = 'late-aurora'; panel.className = 'bb-offcanvas-panel full';
+      Object.assign(panel.style, { position: 'fixed', inset: '0', pointerEvents: 'none' }); document.body.append(panel);
+    });
+    await until(() => page.evaluate(() => {
+      const a = document.getElementById('late-aurora').getAnimations({ subtree: true }).find((a) => a.animationName === 'gz-aurora');
+      return a && !a.pending && a.currentTime > 0;
+    }));
+    const phase = await page.evaluate(() => {
+      const html = document.documentElement, panel = document.getElementById('late-aurora');
+      const time = (e) => e.getAnimations({ subtree: true }).find((a) => a.animationName === 'gz-aurora' && a.effect.target === e)?.effect.getComputedTiming().progress;
+      return [time(html), time(panel)];
+    });
+    check(phase.every(Number.isFinite) && Math.abs(phase[0] - phase[1]) < 0.0001, `a later item's aurora shares the page's phase (${phase})`);
+    await page.evaluate(() => document.getElementById('late-aurora').remove());
     check(errors.length === 0, 'no page errors');
     console.log(JSON.stringify({ checks: results.length }, null, 2));
   } finally {

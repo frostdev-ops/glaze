@@ -218,7 +218,7 @@ html[data-gz-bg="aurora"]::before {
     var(--gz-surface-paint-2, var(--gz-surface-2));
   animation: gz-aurora 42s ease-in-out infinite alternate;
   animation-play-state: var(--gz-drift);
-  animation-delay: calc(var(--gz-drift-at, 0s) * -1); /* on the wall clock (content.js), so a frame's copy keeps step */
+  animation-delay: calc(var(--gz-drift-at, 0s) * -1); /* optional phase; lib/scene-host.js aligns running copies on the wall clock */
 }
 /* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
 html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before { will-change: transform; }

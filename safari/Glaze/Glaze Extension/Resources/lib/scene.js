@@ -756,7 +756,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
   let clock = { t: 0, at: 0 };
   const wall = () => (performance.timeOrigin || 0) + performance.now();
   const timeNow = () => (clock.at ? clock.t + ((wall() - clock.at) / 1000) * speed : clock.t);
-  const setTime = () => { const t = timeNow(); for (const p of parts) p.u.uTime.value = t * p.rate; };
+  const setTime = () => { if (still) return; const t = timeNow(); for (const p of parts) p.u.uTime.value = t * p.rate; };
 
   // A background that can't be shown. The scene stops on the next microtask (three calls onShaderError from inside render(),
   // and nothing may be disposed under it), then the caller hears why.
