@@ -396,11 +396,11 @@ html:not([data-gz-dark-theme]) #application #section-tabs li a.active { color: v
 html:not([data-gz-motion="off"], [data-gz-no-enter]) #header { view-transition-name: gz-rail; }
 html:not([data-gz-motion="off"], [data-gz-no-enter]) #left-side { view-transition-name: gz-course-nav; }
 ::view-transition-group(*) { animation-duration: var(--gz-t-page); animation-timing-function: var(--gz-ease); }
-/* Expressive: the new page also resolves from a blur. Replacing the UA's animation drops its plus-lighter blend,
-   without which the two half-faded pages let what is under them show through mid-fade: set it here. */
-html[data-gz-motion="expressive"]::view-transition-new(root) { animation-name: gz-vt-focus; }
+/* Expressive: the new page also settles in from a touch closer (a scale composites; a blur would not). Replacing the
+   UA's animation drops its plus-lighter blend, without which the two half-faded pages let what is under them show through mid-fade: set it here. */
+html[data-gz-motion="expressive"]::view-transition-new(root) { animation-name: gz-vt-settle; }
 html[data-gz-motion="expressive"]::view-transition-old(root), html[data-gz-motion="expressive"]::view-transition-new(root) { mix-blend-mode: plus-lighter; }
-@keyframes gz-vt-focus { from { opacity: 0; filter: blur(var(--gz-reveal-blur)); } }
+@keyframes gz-vt-settle { from { opacity: 0; scale: var(--gz-reveal-scale, 1); } }
 /* A page revealed inside the transition is brought in by it (content.js marks it): its own fade-up and the
    cards' stagger would be a second movement. */
 :root[data-gz-vt-in] { --gz-enter-page: none; --gz-enter: none; --gz-stagger: 0s; }
