@@ -147,7 +147,8 @@ test('a check that wants only its own tabs closes Glaze\'s first screen, open al
     p.waitForURL = async (re) => { await later; if (!re.test(p.at)) throw Error('timeout'); };
     return p;
   };
-  const open = [tab(welcome), tab('about:blank')];
+  let landOpen;
+  const open = [tab(welcome), tab('about:blank', new Promise((r) => { landOpen = r; }))];
   let onPage;
   noFirstRun({ pages: () => open, on: (e, f) => { if (e === 'page') onPage = f; } });
   let land;
@@ -155,7 +156,9 @@ test('a check that wants only its own tabs closes Glaze\'s first screen, open al
   onPage(late);
   onPage(mine);
   late.at = welcome;
+  open[1].at = welcome;
+  landOpen();
   land();
   await new Promise(setImmediate);
-  assert.deepEqual([...open, late, mine].map((p) => p.closed), [true, false, true, false]);
+  assert.deepEqual([...open, late, mine].map((p) => p.closed), [true, true, true, false]);
 });
