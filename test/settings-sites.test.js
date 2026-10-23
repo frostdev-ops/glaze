@@ -182,3 +182,15 @@ test('Settings: the add form sits in Sites, above the list, in the Backup panel 
   assert.ok(read('options.js').includes("['backup', 'Backup and privacy']"), 'embedded Settings gates the Backup panel to its own tab');
   assert.ok(html.indexOf('<script src="lib/site.js"></script>') > 0 && html.indexOf('<script src="lib/site.js"></script>') < html.indexOf('<script src="options.js"></script>'));
 });
+
+
+test('Settings add: retrying a listed site during an outage preserves its existing grant and list', async () => {
+  const s = sites({ lists: { canvas: ['https://canvas.school.edu/*'] }, held: ['https://canvas.school.edu/*'], found: 'unreachable' });
+  s.add('canvas.school.edu');
+  await tick();
+  assert.equal(s.nodes['#site-error'].textContent, "Can't reach canvas.school.edu");
+  assert.ok(s.has.has('https://canvas.school.edu/*'));
+  assert.ok(!s.ops().includes('remove'));
+  s.refresh();
+  assert.deepEqual(s.rows(), [['canvas.school.edu', 'Canvas']]);
+});

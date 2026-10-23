@@ -211,3 +211,29 @@ test('nearby: listed sites and built-in hosts never displace unlisted suggestion
     assert.deepEqual(await S.nearby(S.address('www.school.edu'), { f }), ['learn.school.edu', 'courses.school.edu']);
   } finally { globalThis.chrome = previous; }
 });
+
+
+test('allow: a failed check preserves grants held before the request, including Firefox match patterns', async () => {
+  for (const pattern of ['https://www.school.edu/*', '*://www.school.edu/*', 'https://*.school.edu/*', '<all_urls>']) {
+    for (const answered of [true, false]) {
+      const b = browser({ held: [pattern] });
+      const f = net(answered ? { '*': 'down', 'https://www.school.edu/': WWW_HOME, 'https://www.school.edu/*': { status: 404 } } : { '*': 'down' });
+      const r = await b.click(() => S.allow(S.address('www.school.edu'), { f }));
+      assert.equal(r.state, answered ? 'none' : 'unreachable');
+      assert.ok(!b.ops().includes('remove'), `${pattern}, answered=${answered}: existing access stays`);
+      assert.ok(b.has.has(pattern));
+    }
+  }
+});
+
+test('allow: unreadable prior grants cannot authorize handing a grant back', async () => {
+  for (const getAll of [() => { throw Error('unavailable'); }, () => Promise.reject(Error('unavailable'))]) {
+    const b = browser();
+    const read = chrome.permissions.getAll;
+    let first = true;
+    chrome.permissions.getAll = () => { if (first) { first = false; return getAll(); } return read(); };
+    const r = await b.click(() => S.allow(S.address('www.school.edu'), { f: net({ '*': 'down' }) }));
+    assert.equal(r.state, 'unreachable');
+    assert.ok(!b.ops().includes('remove'));
+  }
+});
