@@ -9,8 +9,8 @@ const fixture = fs.readFileSync(path.join(root, 'test/fixtures/ultra-course.html
   let ctx, tmp;
   const results = [];
   try {
-    await require('./wait-for-browser.js')();
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sketch-cost-'));
+    await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(tmp, { ...require('./check-env.js').chromeLaunch(), headless: true,
       viewport: { width: 1280, height: 860 }, args: ['--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await ctx.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/ultra/')
