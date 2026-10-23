@@ -32,9 +32,9 @@ const sites = ({ lists = {}, hosts = NARROW, held = [], granted = true, found = 
       },
     },
     permissions: {
-      request: ({ origins }) => { calls.push(['request', origins, gesture]); if (granted) origins.forEach((o) => has.add(o)); return Promise.resolve(granted); },
+      request: ({ origins }) => { calls.push(['request', [...origins], gesture]); if (granted) origins.forEach((o) => has.add(o)); return Promise.resolve(granted); },
       getAll: async () => ({ origins: [...has] }),
-      remove: async ({ origins }) => { calls.push(['remove', origins]); origins.forEach((o) => has.delete(o)); return true; },
+      remove: async ({ origins }) => { calls.push(['remove', [...origins]]); origins.forEach((o) => has.delete(o)); return true; },
     },
   };
   const ctx = vm.createContext({ URL, Object, Array, Set, Map, Promise, AbortSignal, document: { createElement: mk }, $: (s) => nodes[s], chrome,

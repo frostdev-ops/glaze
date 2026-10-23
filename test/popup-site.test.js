@@ -9,6 +9,8 @@ const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const { GZ_BUILT_IN } = require('../defaults.js');
 const NARROW = ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*'];
+// Objects made in the popup's context, as plain data.
+const plain = (x) => JSON.parse(JSON.stringify(x));
 const tick = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 
 const popup = ({ url = 'https://bb.school.edu/ultra/stream', tabId = 7, hosts = NARROW, held = false, lists = {}, kind = 'ultra', enabled = true,
@@ -62,7 +64,7 @@ const popup = ({ url = 'https://bb.school.edu/ultra/stream', tabId = 7, hosts = 
     el, calls, observed, context, local,
     click: () => { gesture = true; try { el('#here').handlers.click?.({ isTrusted: true }); } finally { gesture = false; } },
     change: (c, area) => { for (const f of changed) f(c, area); },
-    of: (type) => calls.filter(([t]) => t === type),
+    of: (type) => plain(calls.filter(([t]) => t === type)),
   };
 };
 
@@ -72,15 +74,15 @@ test('popup: an LMS tab Glaze holds nothing for gets one button, and the request
   const row = p.el('#here');
   assert.equal(row.hidden, false, 'the row shows');
   assert.equal(row.textContent, 'Use Glaze on bb.school.edu');
-  const [[, ran]] = p.of('exec');
-  assert.deepEqual(ran.target, { tabId: 7 }, 'the detector runs in that tab, top frame only');
+  const [[, ran]] = p.calls.filter(([t]) => t === 'exec');
+  assert.deepEqual(plain(ran.target), { tabId: 7 }, 'the detector runs in that tab, top frame only');
   assert.equal(ran.func, p.context.GZ_DETECT, 'the detector is lib/detect.js\'s own');
   assert.deepEqual(p.of('hostAccess').map(([, o]) => o), [{ tabId: 7 }], 'Chrome keeps an Allow entry for the tab in its menu');
   p.calls.length = 0;
   p.click();
   assert.deepEqual(p.calls.map(([t]) => t), ['send', 'request'], 'the worker first, then the browser\'s prompt, nothing between');
-  assert.deepEqual(p.calls[0][1], { type: 'glaze:allow', op: 'ask', origin: 'https://bb.school.edu', kind: 'ultra', tabId: 7 });
-  assert.deepEqual(p.calls[1][1], ['https://bb.school.edu/*']);
+  assert.deepEqual(plain(p.calls[0][1]), { type: 'glaze:allow', op: 'ask', origin: 'https://bb.school.edu', kind: 'ultra', tabId: 7 });
+  assert.deepEqual(plain(p.calls[1][1]), ['https://bb.school.edu/*']);
   assert.equal(p.calls[1][2], true, 'the request is made inside the click itself');
   await tick();
   assert.equal(row.hidden, false, 'the row stays until the worker has the site');
@@ -113,7 +115,7 @@ test('popup: a host already held but not on its LMS\'s list asks the worker only
   p.click();
   await tick();
   assert.deepEqual(p.calls.map(([t]) => t), ['send']);
-  assert.deepEqual(p.calls[0][1], { type: 'glaze:allow', op: 'ask', origin: 'https://moodle.school.edu', kind: 'moodle', tabId: 7 });
+  assert.deepEqual(plain(p.calls[0][1]), { type: 'glaze:allow', op: 'ask', origin: 'https://moodle.school.edu', kind: 'moodle', tabId: 7 });
 });
 
 test('popup: nothing is added where Glaze already runs or where the tab is no LMS', async () => {
@@ -126,7 +128,7 @@ test('popup: nothing is added where Glaze already runs or where the tab is no LM
     ['an answer that is no LMS name', { kind: 'blackboard' }, true],
     ['a browser page', { url: 'chrome://extensions/' }, false],
     ['a plain http school page', { url: 'http://www.school.edu/' }, false],
-    ['no address at all', { url: undefined }, false],
+    ['no address at all', { url: '' }, false],
     ['Safari\'s manifest, which holds every site', { hosts: ['<all_urls>'] }, false],
   ];
   for (const [why, o, detects] of cases) {
@@ -151,8 +153,8 @@ test('popup: local Canvas on this computer is offered by its own origin', async 
   assert.equal(p.el('#here').textContent, 'Use Glaze on localhost');
   p.calls.length = 0;
   p.click();
-  assert.deepEqual(p.calls[0][1].origin, 'http://localhost:3000');
-  assert.deepEqual(p.calls[1][1], ['http://localhost/*']);
+  assert.equal(p.calls[0][1].origin, 'http://localhost:3000');
+  assert.deepEqual(plain(p.calls[1][1]), ['http://localhost/*']);
 });
 
 test('popup: Firefox has no addHostAccessRequest, and the row works without it', async () => {
