@@ -112,3 +112,29 @@ test('the development guide names no machine-specific path and documents the ove
   assert.match(doc, /GLAZE_LOCK/);
   assert.match(doc, /`CHROME`/);
 });
+
+test('school-host readiness waits for Ultra registration, with static entries and ports respected', async () => {
+  const { ultraReady } = require('../scripts/check-env.js');
+  assert.equal(typeof ultraReady, 'function', 'a stored approval must not race the first navigation');
+  let predicate;
+  await ultraReady({ waitForFunction: async (fn) => { predicate = fn; } });
+  const vm = require('node:vm');
+  let matches = ['https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*'], registered = [];
+  const context = vm.createContext({ URL, chrome: {
+    runtime: { getManifest: () => ({ content_scripts: [{ js: ['content-ultra.js'], matches }] }) },
+    storage: { local: { get: async () => ({ ultra: ['https://bb.school.test:8443'] }) } },
+    scripting: { getRegisteredContentScripts: async () => registered },
+  } });
+  const ready = () => vm.runInContext(`(${predicate.toString()})()`, context);
+  assert.equal(await ready(), false, 'the local write is visible before the worker registers it');
+  registered = [{ js: ['content-canvas.js'], matches: ['https://bb.school.test/*'] }];
+  assert.equal(await ready(), false, 'another LMS bundle does not make Ultra ready');
+  registered.push({ js: ['content-ultra.js'], matches: ['https://bb.school.test/ultra', 'https://bb.school.test/ultra/*'] });
+  assert.equal(await ready(), true, 'the portless registration covers the approved port');
+  registered = []; matches = ['https://*/ultra', 'https://*/ultra/*'];
+  assert.equal(await ready(), true, 'Safari has its static entry already');
+});
+
+test('the first-load glass and background checks wait for their listed Ultra fixture', () => {
+  for (const name of ['glass-remaining', 'background-pages']) assert.match(fs.readFileSync(path.join(scripts, `${name}-check.js`), 'utf8'), /await require\('\.\/check-env\.js'\)\.ultraReady\(opts\)/, name);
+});
