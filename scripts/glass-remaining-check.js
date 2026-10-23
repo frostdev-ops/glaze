@@ -153,7 +153,7 @@ const OFFCANVAS = `<div class="bb-offcanvas-panel bb-offcanvas-right full active
           const s = document.querySelector('#gz-ctabs'), c = document.querySelector('content-page-header > header'), t = document.querySelector('.discussion-container .panel-header');
           const r = (e) => { const b = e.getBoundingClientRect(); return [b.x, b.y, b.right, b.bottom].map(Math.round); };
           return { at: s?.dataset.at, strip: s && r(s), crumbs: r(c), title: r(t), stripBeforeCrumbs: !!s && !!(s.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING),
-            crumbsPaint: [getComputedStyle(c).borderTopLeftRadius, getComputedStyle(c).marginRight], titlePaint: [getComputedStyle(t).borderTopLeftRadius, getComputedStyle(t).marginTop] };
+            crumbsPaint: [getComputedStyle(c).borderTopLeftRadius, getComputedStyle(c).marginInlineEnd], titlePaint: [getComputedStyle(t).borderTopLeftRadius, getComputedStyle(t).marginTop] };
         });
         check(m.stripBeforeCrumbs && m.strip[3] <= m.crumbs[1], `${look} discussion: the strip sits above the breadcrumb row`, m);
         check(m.crumbsPaint[0] !== '0px' && m.crumbsPaint[1] !== '0px', `${look} discussion: the breadcrumb row is an inset rounded panel`, m.crumbsPaint);
