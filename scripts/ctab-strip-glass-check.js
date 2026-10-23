@@ -97,11 +97,23 @@ const measure = (p) => p.evaluate(() => {
     await page.locator('.course-content-container > .panel-wrap').evaluate((e) => { e.scrollTop = 200; }); await pause(200);
     check((await measure(page)).veil[1] === '1', 'scroll timeline veils content after 48px');
     await shot(page, 'scrolled');
-    for (const at of ['above', 'between', 'below', 'page']) {
+    for (const at of ['above', 'between', 'below']) {
       await setup(look, at);
       const m = await measure(page);
       check(at === 'between' ? m.border === '1px' && m.tools[1] > m.strip[1] + m.strip[3] : m.border === '0px', `${at}: the header divider matches placement`, m);
       await shot(page, at);
+    }
+    for (const [mode, selector] of [['routed', '.b8b-document'], ['nested', 'a[href*="/outline/edit/document/"]'], ['page', '[data-analytics-id="course.header.home"]']]) {
+      await setup(look);
+      await page.locator(selector).evaluate((e) => e.click());
+      await page.waitForSelector(`#gz-ctabs[data-at="${mode}"]`); await pause(300);
+      const room = await page.locator('#gz-ctabs').evaluate((e) => ({ x: e.getBoundingClientRect().x, rail: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gz-navbar-left')) }));
+      check(room.x >= room.rail, `${mode}: the strip stays beside the rail`, room);
+      if (mode === 'routed') {
+        const link = await page.locator('.routed-page [class*="panelHeaderContainerRoot"] a').evaluate((e) => { const r = e.getBoundingClientRect(); return e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); });
+        check(link, 'routed: the return link receives pointer input');
+      }
+      await shot(page, mode);
     }
     await setup(look);
     await page.locator('#gz-ctabs [data-course-id="_102_1"]').click();

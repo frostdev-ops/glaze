@@ -1381,7 +1381,7 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] #main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }
   html[data-gz-navbar] #main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }
   /* A course, and a page Ultra routes in its place (an assignment's details and attempts, a document opened on its own). */
-  html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
+  html[data-gz-navbar] > body > .routed-page.bb-offcanvas-container, html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
   /* A course whose panel holds its section (.course-content-container > .panel-wrap > section.course, as in
      test/fixtures/ultra-course.html), and the item panels opened over it: absolute over the page, so nothing above moves
      them and the rail covered their first 40px. Not inside a course section that rule already keeps clear: twice the room. */
