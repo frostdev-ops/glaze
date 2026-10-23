@@ -30,7 +30,8 @@
 .gz-w :is(button, input, select, textarea, a, [tabindex]):focus-visible, :is(#gz-hub, #gz-ccm, .gz-tour) :is(button, input, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 .gz-w-head { display: flex; align-items: center; gap: 0.35rem; min-width: 0; padding-inline-end: 4.5rem; }
 :is(#gz-dash, #gz-float, #gz-room) .gz-w-head h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gz-w-tools { position: absolute; top: 0.45rem; inset-inline-end: 0.5rem; display: flex; align-items: center; gap: 0.15rem; }
+/* Over the resize corner, which comes up beside them on a folded tile. */
+.gz-w-tools { position: absolute; z-index: 1; top: 0.45rem; inset-inline-end: 0.5rem; display: flex; align-items: center; gap: 0.15rem; }
 .gz-w-tools:empty { display: none; }
 /* Float, Remove and Fold stay in the heading row, so editing adds no height. */
 :is(#gz-room, #gz-dash[data-board])[data-editing] .gz-w:not([data-float]) .gz-w-head { padding-inline-end: 6rem; }
