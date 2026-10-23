@@ -61,8 +61,9 @@ const ultraReady = (page) => page.waitForFunction(async () => {
 // counts on its own tabs alone closes it, now or when it opens.
 const noFirstRun = (ctx) => {
   const close = (p) => { if (/^chrome-extension:\/\/[a-p]{32}\/features\/welcome\.html/.test(p.url())) p.close().catch(() => {}); };
-  ctx.pages().forEach(close);
-  ctx.on('page', (p) => { close(p); p.waitForURL(/\/features\/welcome\.html/, { timeout: 10000 }).then(() => close(p), () => {}); });
+  const watch = (p) => { close(p); p.waitForURL(/\/features\/welcome\.html/, { timeout: 10000 }).then(() => close(p), () => {}); };
+  ctx.pages().forEach(watch);
+  ctx.on('page', watch);
 };
 
 module.exports = { lockPath, chromePath, chromeLaunch, staged, ultraReady, noFirstRun };
