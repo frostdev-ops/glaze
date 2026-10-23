@@ -6,7 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const read = (f) => fs.readFileSync(require.resolve(`../${f}`), 'utf8');
+const path = require('node:path');
+const read = (f) => fs.readFileSync(path.join(process.env.GZ_CTAB_REPO || path.join(__dirname, '..'), f), 'utf8');
 const rules = (f) => [...read(f).replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, sel, body]) => [sel.trim(), body]);
 const has = (f, sel, prop) => rules(f).some(([s, b]) => s.split(/,(?![^(]*\))/).some((x) => x.trim() === sel) && prop.test(b));
 
@@ -145,13 +146,14 @@ const host = ({ frame = true, key = 'k1', layers = [] } = {}) => {
   const listeners = new Map(), frames = [], posted = [], observed = [];
   const pageAttrs = new Map(key == null ? [] : [['data-gz-bg-key', key]]);
   const frameAttrs = new Set(), ownAttrs = new Set();
-  const win = {};
+  const win = {}, iframe = { contentWindow: null, hidden: false, inert: false, style: {}, hasAttribute: (k) => k === 'data-gz-through', getBoundingClientRect: () => ({ left: 272, top: 10, width: 1008, height: 758 }) };
+  iframe.contentWindow = win;
   const ctx = {
     addEventListener: (ev, fn) => listeners.set(ev, fn), requestAnimationFrame: (fn) => frames.push(fn),
     location: { origin: 'https://lms' },
     MutationObserver: class { constructor(fn) { this.fn = fn; } observe(n, o) { observed.push([n, o, this.fn]); } },
     document: {
-      body: { name: 'body', setAttribute() {}, removeAttribute() {}, hasAttribute: () => false }, querySelectorAll: (s) => (s.includes('iframe') ? [{ contentWindow: win, getBoundingClientRect: () => ({ left: 272, top: 10 }) }] : layers),
+      body: { name: 'body', setAttribute() {}, removeAttribute() {}, hasAttribute: () => false }, querySelectorAll: (s) => (s.includes('iframe') ? [iframe] : layers),
       documentElement: { hasAttribute: () => false, toggleAttribute: (k, v) => { if (v) ownAttrs.add(k); else ownAttrs.delete(k); } },
     },
     parent: { postMessage: (m, o) => posted.push([m, o]), document: { documentElement: { getAttribute: (k) => pageAttrs.get(k) ?? null, hasAttribute: (k) => pageAttrs.has(k) } } },
@@ -159,7 +161,7 @@ const host = ({ frame = true, key = 'k1', layers = [] } = {}) => {
   };
   ctx.window = ctx; ctx.top = frame ? {} : ctx;
   const H = vm.runInNewContext(hostSource, ctx);
-  return { H, listeners, frames, posted, observed, pageAttrs, frameAttrs, ownAttrs, win };
+  return { H, listeners, frames, posted, observed, pageAttrs, frameAttrs, ownAttrs, win, iframe };
 };
 const json = (x) => JSON.parse(JSON.stringify(x));
 
@@ -245,4 +247,29 @@ test('sharing: an image failure revokes the page signature immediately', () => {
   assert.equal(r.attrs.get('data-gz-bg-key'), key);
   images[0].onerror();
   assert.ok(!r.attrs.has('data-gz-bg-key'), 'a failed image cannot replace a working image in the frame');
+});
+
+
+test('relay: malformed coordinates and hidden or opaque frames never move the scene', () => {
+  const h = host({ frame: false }), points = [];
+  const scene = { follows: true, point: (...p) => points.push(p) };
+  h.H.pointer(scene);
+  const relay = (p) => h.listeners.get('message')({ origin: 'https://lms', source: h.win, data: { gzScenePoint: p } });
+  for (const p of [[], [1], [1, 2, 3], ['1', 2], [null, 2], [NaN, 2], [Infinity, 2], [-1, 2], [1009, 2]]) relay(p);
+  assert.deepEqual(points, [], 'invalid positions are ignored');
+  h.iframe.hidden = true; relay([10, 20]);
+  h.iframe.hidden = false; h.iframe.inert = true; relay([10, 20]);
+  h.iframe.inert = false; h.iframe.style.visibility = 'hidden'; relay([10, 20]);
+  h.iframe.style.visibility = ''; h.iframe.hasAttribute = () => false; relay([10, 20]);
+  h.iframe.hasAttribute = () => true; scene.follows = false; relay([10, 20]);
+  assert.deepEqual(points, [], 'only a visible shared background following the pointer receives it');
+});
+
+test('relay: a queued pointer move is discarded when its frame hides before the next paint', () => {
+  const h = host(); h.H.through('k1', true, false, () => {});
+  h.pageAttrs.set('data-gz-scene-pointer', '');
+  h.listeners.get('pointermove')({ clientX: 10, clientY: 20, pointerType: 'mouse' });
+  h.H.through('k1', true, true, () => {});
+  h.frames[0]();
+  assert.deepEqual(h.posted, [], 'no stale move after a tab switch');
 });
