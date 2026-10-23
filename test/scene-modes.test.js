@@ -630,6 +630,24 @@ test('topography: its own terrain, dimmed like the rest, following the pointer b
   assert.equal(other.listeners.has('pointermove'), false, 'nor topography as a layer');
 });
 
+test('topography follows the pointer over a course tab\'s frame too, relayed in the page\'s pixels, and says so', async () => {
+  const e = engine({ latency: 1 }), w = watch(e);
+  w.scene.update({ ...base, name: 'topography' });
+  const m = e.made.materials[0];
+  assert.equal(w.scene.follows, true);
+  w.scene.point(1280, 0);
+  await frames(e, 30);
+  const [x, y] = m.uniforms.uShift.value;
+  assert.ok(Math.abs(x * 1280 - 8) < 0.01 && Math.abs(y * 900 - 8) < 0.01, `settled at the edge: ${x * 1280}, ${y * 900} px`);
+  w.scene.update({ ...base, name: 'topography', speed: 0 });
+  assert.equal(w.scene.follows, false);
+  w.scene.point(0, 900); await frames(e, 3);
+  assert.deepEqual(plain(m.uniforms.uShift.value), [0, 0], 'not while still');
+  const other = engine({ latency: 1 }), o = watch(other);
+  o.scene.update(base);
+  assert.equal(o.scene.follows, false);
+});
+
 test('topography stops following the pointer when the budget guard holds a still', async () => {
   const e = engine({ latency: 20 }), w = watch(e);
   const opts = { ...base, name: 'topography' };

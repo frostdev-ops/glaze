@@ -828,11 +828,11 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
   let needsSize = true;
   // The pointer's parallax: where it is headed (screen units), and whether the scene listens at all.
   let aim = [0, 0], following = false;
-  const onPoint = (e) => {
-    if (e.pointerType === 'touch') return;
+  const point = (x, y) => {
     const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight;
-    aim = [((e.clientX / innerWidth) * 2 - 1) * (PARALLAX / w), -((e.clientY / innerHeight) * 2 - 1) * (PARALLAX / h)];
+    aim = [((x / innerWidth) * 2 - 1) * (PARALLAX / w), -((y / innerHeight) * 2 - 1) * (PARALLAX / h)];
   };
+  const onPoint = (e) => { if (e.pointerType !== 'touch') point(e.clientX, e.clientY); };
   const follow = (on) => {
     if (on === following) return;
     following = on;
@@ -1037,5 +1037,8 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
     },
     draw,
     stop,
+    // The pointer over a course tab's frame, in this page's pixels (lib/scene-host.js relays it), while the scene follows.
+    point: (x, y) => { if (following) point(x, y); },
+    get follows() { return following; },
   };
 };
