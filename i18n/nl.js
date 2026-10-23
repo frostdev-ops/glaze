@@ -3078,5 +3078,8 @@
   "Another school": "Andere school",
   "Not a web address": "Geen webadres",
   "Allowed {host}": "{host} toegestaan",
-  "All sites allowed": "Alle sites toegestaan"
+  "All sites allowed": "Alle sites toegestaan",
+  "No course site at {host}": "Geen cursussite op {host}",
+  "Can't reach {host}": "{host} is niet bereikbaar",
+  "Checking {host}": "{host} controleren"
 };

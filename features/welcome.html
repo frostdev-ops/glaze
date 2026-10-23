@@ -31,9 +31,10 @@
         <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.4 4.4L19 7.3"/></svg>
       </span>
       <input id="address" type="text" inputmode="url" enterkeyhint="go" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" placeholder="canvas.school.edu" aria-describedby="error">
+      <span id="kind" class="kind" translate="no" hidden></span>
       <button id="go" type="submit" class="primary"><span class="label">Allow</span><svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg><span class="spin" aria-hidden="true"></span></button>
     </div>
-    <p id="error" class="error" role="alert" hidden>Not a web address</p>
+    <div id="note" class="note" role="alert" hidden><p id="error"></p><div id="picks" class="picks"></div></div>
   </form>
   <div class="more rise">
     <button id="all" type="button" class="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9S9.4 5.7 12 3z"/></svg><svg class="check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.4 4.4L19 7.3"/></svg><span>All sites</span></button>
@@ -67,6 +68,7 @@
 <script src="../lib/lookset.js"></script>
 <script src="../lib/motionx.js"></script>
 <script src="../lib/lookx.js"></script>
+<script src="../lib/site.js"></script>
 <script src="welcome.js"></script>
 </body>
 </html>

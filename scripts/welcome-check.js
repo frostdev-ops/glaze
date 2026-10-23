@@ -1,7 +1,8 @@
 // Glaze's first screen (features/welcome.html) through each of its states, in headless Chrome with the real unpacked
 // extension. The browser's permission prompt can't be answered headless, so chrome.permissions is the check's: it decides
-// what is held and answers each request when the check says. Screenshots of every state, wide and narrow, go to the
-// evidence directory.
+// what is held and answers each request when the check says. The schools are the check's too: bb.school.edu answers as
+// Blackboard does, www.school.edu is a school's main website linking to it, and nothing else exists. Screenshots of every
+// state, wide and narrow, go to the evidence directory.
 // NODE_PATH=<installed playwright> node scripts/welcome-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -21,13 +22,14 @@ const stub = () => {
   const held = new Set(['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*']);
   const covers = (o) => held.has('https://*/*') && o.startsWith('https://') || [...held].some((p) => p === o || (p.startsWith('https://*.') && (o.startsWith('https://') && new URL(o.replace('/*', '/')).hostname.endsWith(p.slice(10, -2)))));
   const added = new Set(), removed = new Set();
-  globalThis.__gz = { held, asked: [], sent: [], answer: null };
+  globalThis.__gz = { held, asked: [], sent: [], removed: [], answer: null };
   chrome.permissions.contains = async ({ origins = [] }) => origins.every(covers);
   chrome.permissions.request = ({ origins = [] }) => new Promise((resolve) => {
     if (!navigator.userActivation.isActive) throw new Error('This function must be called during a user gesture');
     __gz.asked.push(origins);
     __gz.answer = (ok) => { if (ok) { origins.forEach((o) => held.add(o)); added.forEach((f) => f({ origins })); } resolve(ok); };
   });
+  chrome.permissions.remove = async ({ origins = [] }) => { __gz.removed.push(origins); origins.forEach((o) => held.delete(o)); removed.forEach((f) => f({ origins })); return true; };
   chrome.permissions.onAdded = { addListener: (f) => added.add(f) };
   chrome.permissions.onRemoved = { addListener: (f) => removed.add(f) };
   const send = chrome.runtime.sendMessage.bind(chrome.runtime);
@@ -44,11 +46,21 @@ const stub = () => {
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
     await ctx.addInitScript(stub);
+    await ctx.route('**/*', (route) => {
+      const u = new URL(route.request().url());
+      if (u.protocol === 'chrome-extension:') return route.continue();
+      if (u.host === 'bb.school.edu' && u.pathname === '/learn/api/public/v1/system/version') return route.fulfill({ contentType: 'application/json', body: '{"learn":{"major":4001,"minor":2,"patch":0}}' });
+      if (u.host === 'bb.school.edu') return route.fulfill({ status: 302, headers: { location: 'https://bb.school.edu/ultra' } });
+      if (u.host === 'www.school.edu' && u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: '<!doctype html><a href="http://bb.school.edu/">Blackboard</a> <a href="https://apply.school.edu/">Apply</a>' });
+      if (u.host === 'www.school.edu') return route.fulfill({ status: 404, contentType: 'text/html', body: '<!doctype html><title>Not found</title>' });
+      return route.abort();
+    });
     const url = `chrome-extension://${id}/features/welcome.html`;
     const open = async (viewport, motion = 'no-preference') => {
       const page = await ctx.newPage();
       page.on('pageerror', (e) => errors.push(String(e)));
-      page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+      // The check knocks on school sites that don't exist; the browser logs each miss. A file of Glaze's own that fails still counts.
+      page.on('console', (m) => { if (m.type() === 'error' && !(m.text().startsWith('Failed to load resource') && !m.location().url.startsWith('chrome-extension:'))) errors.push(m.text()); });
       await page.setViewportSize(viewport);
       await page.emulateMedia({ reducedMotion: motion });
       await page.goto(url);
@@ -58,7 +70,7 @@ const stub = () => {
     };
     const state = (page) => page.evaluate(() => ({
       act: document.querySelector('#go').dataset.act, label: document.querySelector('#go .label').textContent, bar: document.querySelector('.bar').dataset.state || '',
-      disabled: document.querySelector('#go').getAttribute('aria-disabled'), error: !document.querySelector('#error').hidden, readOnly: document.querySelector('#address').readOnly,
+      disabled: document.querySelector('#go').getAttribute('aria-disabled'), error: !document.querySelector('#note').hidden, readOnly: document.querySelector('#address').readOnly,
       focus: document.activeElement?.id, all: document.querySelector('#all').getAttribute('aria-pressed'), another: !document.querySelector('#another').hidden,
       said: document.querySelector('#said').textContent, busy: document.querySelector('#go').hasAttribute('data-busy'),
     }));
@@ -110,10 +122,12 @@ const stub = () => {
       await page.click('#go');
       await pause(200);
       await page.evaluate(() => globalThis.__gz.answer(true));
-      await pause(450);
+      await page.waitForFunction(() => document.querySelector('.bar').dataset.state === 'done', null, { timeout: 8000 });
+      await pause(300);
       s = await state(page);
-      check(s.bar === 'done' && s.act === 'open' && s.focus === 'go' && s.another && s.said === 'Allowed bb.school.edu', `${w}: granted, the bar settles and Open has focus`);
-      check(JSON.stringify(await page.evaluate(() => globalThis.__gz.sent.at(-1))) === '{"type":"glaze:allow","origin":"https://bb.school.edu"}', `${w}: the worker hears which site`);
+      check(s.bar === 'done' && s.act === 'open' && s.focus === 'go' && s.another && s.said === 'Allowed bb.school.edu', `${w}: granted and checked, the bar settles and Open has focus`);
+      check(await page.evaluate(() => !document.querySelector('#kind').hidden && document.querySelector('#kind').textContent === 'Blackboard'), `${w}: it names the LMS it found`);
+      check(JSON.stringify(await page.evaluate(() => globalThis.__gz.sent.slice(-2))) === JSON.stringify([{ type: 'glaze:allow', op: 'ask', origin: 'https://bb.school.edu' }, { type: 'glaze:allow', op: 'yes', origin: 'https://bb.school.edu', kind: 'ultra', url: 'https://bb.school.edu/' }]), `${w}: the worker hears the site is coming, then what it is`);
       await shot(page, `${w}-6-granted`);
       await pause(900);
       await shot(page, `${w}-6b-granted-settled`);
@@ -122,6 +136,33 @@ const stub = () => {
       await pause(300);
       s = await state(page);
       check(s.focus === 'address' && s.act === 'none' && !s.another, `${w}: Another school starts over`);
+
+      // The school's main website instead of its course site.
+      await type(page, 'www.school.edu');
+      await page.click('#go');
+      await pause(200);
+      await page.evaluate(() => globalThis.__gz.answer(true));
+      await page.waitForFunction(() => !document.querySelector('#note').hidden, null, { timeout: 15000 });
+      await pause(300);
+      check(await page.evaluate(() => document.querySelector('#error').textContent) === 'No course site at www.school.edu', `${w}: a site that isn't a course site is turned down`);
+      check(JSON.stringify(await page.evaluate(() => globalThis.__gz.removed.at(-1))) === '["https://www.school.edu/*"]', `${w}: and its grant is handed back`);
+      check(JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#picks .pick')].map((b) => b.textContent))) === '["bb.school.edu"]', `${w}: the course site it links to is offered`);
+      check(await page.evaluate(() => document.activeElement?.classList.contains('pick')), `${w}: and has focus`);
+      await shot(page, `${w}-6c-not-a-course-site`);
+      await page.click('#picks .pick');
+      await pause(200);
+      check(JSON.stringify(await page.evaluate(() => globalThis.__gz.asked.at(-1))) === '["https://bb.school.edu/*"]', `${w}: picking it asks for that site`);
+      await page.evaluate(() => globalThis.__gz.answer(true));
+      await page.waitForFunction(() => document.querySelector('.bar').dataset.state === 'done', null, { timeout: 8000 });
+      check(await page.inputValue('#address') === 'bb.school.edu', `${w}: and it settles there`);
+      await page.click('#another');
+      await type(page, 'bb.nowhere.edu');
+      await page.click('#go');
+      await pause(200);
+      await page.evaluate(() => globalThis.__gz.answer(true));
+      await page.waitForFunction(() => !document.querySelector('#note').hidden, null, { timeout: 15000 });
+      check(await page.evaluate(() => document.querySelector('#error').textContent) === "Can't reach bb.nowhere.edu" && JSON.stringify(await page.evaluate(() => globalThis.__gz.removed.at(-1))) === '["https://bb.nowhere.edu/*"]', `${w}: a site that doesn't answer is turned down, its grant handed back`);
+      await page.fill('#address', '');
 
       await page.click('#all');
       await pause(200);

@@ -3078,5 +3078,8 @@
   "Another school": "Outra escola",
   "Not a web address": "Não é um endereço da web",
   "Allowed {host}": "{host} permitido",
-  "All sites allowed": "Todos os sites permitidos"
+  "All sites allowed": "Todos os sites permitidos",
+  "No course site at {host}": "Nenhum site de cursos em {host}",
+  "Can't reach {host}": "Não foi possível acessar {host}",
+  "Checking {host}": "Verificando {host}"
 };

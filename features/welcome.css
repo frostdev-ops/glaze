@@ -15,7 +15,7 @@
 *, ::before, ::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { height: 100%; background: var(--gz-surface-2); cursor: var(--arrow); -webkit-text-size-adjust: 100%; }
 body {
-  min-height: 100%; display: grid; grid-template-rows: 1fr auto; place-items: center;
+  min-height: 100%; display: grid; grid-template-rows: 1fr auto; place-items: start center;
   font: 400 16px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; color: var(--gz-ink);
   -webkit-font-smoothing: antialiased; overflow-x: hidden;
 }
@@ -46,7 +46,7 @@ main::before {
   background: radial-gradient(42rem 26rem at 50% 46%, rgb(6 13 24 / 0.62), rgb(6 13 24 / 0.28) 55%, transparent 80%);
 }
 
-main { width: min(100% - 2.5rem, 36rem); padding: 12vh 0 4vh; display: flex; flex-direction: column; align-items: stretch; gap: 1.25rem; }
+main { width: min(100% - 2.5rem, 36rem); padding: max(8vh, 50vh - 13.5rem) 0 4vh; display: flex; flex-direction: column; align-items: stretch; gap: 1.25rem; }
 
 /* The wordmark, set as frostdev.io sets its own: the mark glowing beside a tight, heavy name. */
 .brand {
@@ -124,11 +124,21 @@ input:read-only { color: var(--gz-ink); }
 input:focus-visible { outline: none; }
 .primary:focus-visible { outline-offset: 2px; }
 
-/* Under the bar without moving anything: the row below keeps its room for it. */
-form { position: relative; }
-.error { position: absolute; inset: calc(100% + 0.55rem) 0 auto; text-align: center; font-size: 0.9rem; font-weight: 500; color: var(--gz-err); }
-
-.more { display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.6rem; }
+/* What went wrong, and the course sites to pick instead. Below the bar, so nothing above it moves. */
+.note { margin-top: 0.85rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem 0.6rem; text-align: center; }
+.note p { font-size: 0.92rem; font-weight: 500; color: var(--gz-err); }
+.picks { display: contents; }
+.pick {
+  display: inline-flex; align-items: center; gap: 0.35rem; height: 2.1rem; padding: 0 0.6rem 0 0.85rem; border-radius: 999px;
+  font-size: 0.9rem; font-weight: 600; color: var(--gz-accent-hi); background: rgb(39 205 241 / 0.1); border: 1px solid rgb(39 205 241 / 0.45);
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.15s var(--ease);
+}
+.pick:hover { background: rgb(39 205 241 / 0.18); border-color: var(--gz-accent); }
+.pick:active { transform: scale(0.97); }
+.pick .arrow { display: block; width: 0.95rem; height: 0.95rem; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+/* The LMS the site turned out to be, beside its address. */
+.kind { flex: none; margin-right: 0.35rem; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.01em; color: var(--gz-ok); background: rgb(120 223 192 / 0.1); border: 1px solid rgb(120 223 192 / 0.3); }
+.more { display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
 .ghost {
   display: inline-flex; align-items: center; gap: 0.5rem; height: 2.5rem; padding: 0 1rem; border-radius: 999px;
   font-size: 0.9rem; font-weight: 500; color: var(--gz-ink-muted);
@@ -167,7 +177,8 @@ form.rise { animation-delay: 0.08s; }
 @keyframes rise-brand { from { opacity: 0; transform: translateY(12px); } }
 
 @media (max-width: 560px) {
-  main { padding-top: 9vh; }
+  main { padding-top: max(7vh, 50vh - 14rem); }
+  .kind { order: 1; margin-left: auto; }
   .bar { flex-wrap: wrap; height: auto; padding: 0.4rem; row-gap: 0.4rem; }
   .bar input { height: 3rem; }
   .primary { width: 100%; }
