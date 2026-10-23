@@ -587,10 +587,11 @@ test('Settings lists the sites said yes to, with their LMS and a Remove only the
   const block = src.slice(src.indexOf('  // ---- Sites:'), src.indexOf('\n', src.indexOf('  const readSites')));
   const nodes = {}, sent = [];
   const mk = (tag) => Object.assign(el(), { tagName: tag.toUpperCase(), attrs: {}, on: {}, setAttribute(k, v) { this.attrs[k] = v; }, addEventListener(t, f) { this.on[t] = f; }, focus() { this.focused = true; } });
-  for (const id of ['#site-list', '#site-empty', '#site-status', '#heading-backup-sites']) nodes[id] = mk('x');
+  for (const id of ['#site-list', '#site-empty', '#site-status', '#heading-backup-sites', '#site-add', '#site-address', '#site-allow', '#site-note', '#site-error', '#site-picks']) nodes[id] = mk('x');
   const lists = { canvas: ['https://canvas.school.edu/*', 'https://school.instructure.com/*', 'https://both.school.edu/*'], moodle: ['https://moodle.school.edu/*', 'https://both.school.edu/*'], ultra: ['https://bb.school.edu', 'https://school.blackboard.com', 'nonsense'] };
   const ctx = vm.createContext({ URL, Object, Array, Set, Map, document: { createElement: mk }, $: (s) => nodes[s], t: (k, v) => require('../lib/i18n.js').t(k, v, 'en'), GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN,
-    chrome: { storage: { local: { get: (k, cb) => cb(structuredClone(lists)) } }, runtime: { sendMessage: async (m) => { sent.push(plain(m)); return { ok: true }; } } } });
+    GZ_SITE: { address: require('../lib/site.js').address, handBack: async () => false },
+    chrome: { storage: { local: { get: (k, cb) => cb(structuredClone(lists)) } }, runtime: { getManifest: () => ({ host_permissions: [] }), sendMessage: async (m) => { sent.push(plain(m)); return { ok: true }; } } } });
   vm.runInContext(`${block}; this.readSites = readSites;`, ctx);
   ctx.readSites();
   const rows = nodes['#site-list'].children;

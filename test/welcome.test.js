@@ -16,13 +16,14 @@ test('the page wears the Frostdev Look from its definition, and asks only from a
   const js = fs.readFileSync(path.join(__dirname, '../features/welcome.js'), 'utf8');
   assert.match(js, /GZ_LOOKS\.find\(\(l\) => l\.name === 'Frostdev'\)/);
   assert.match(js, /GZ_LOOK_PARTS\(\{ name: 'Frostdev' \}\)/);
-  // Every request sits in a click or submit handler, before any await.
+  // Every request sits in a click or submit handler, before any await: All sites here, a school through lib/site.js allow
+  // (shared with Settings → Sites), which asks first thing.
   const requests = [...js.matchAll(/chrome\.permissions\.request\(/g)].length;
-  assert.equal(requests, 2);
+  assert.equal(requests, 1);
   assert.doesNotMatch(js, /await[^;\n]*\n?[^;\n]*chrome\.permissions\.request/);
+  assert.match(js, /\ballow\(s, \{ checking: /, 'a school goes through lib/site.js allow');
+  assert.doesNotMatch(js, /chrome\.permissions\.remove\(/, 'lib/site.js hands a grant back, not the page');
   assert.doesNotMatch(js, /\bfetch\(|XMLHttpRequest|WebSocket/, 'the page itself fetches nothing: only lib/site.js, at the sites the student names');
-  // A site that isn't a course site gives its grant back.
-  assert.match(js, /chrome\.permissions\.remove\(\{ origins: \[s\.pattern\] \}\)/);
 });
 
 
@@ -43,14 +44,13 @@ const screen = ({ granted = true, found = { kind: 'ultra', url: 'https://bb.scho
     });
     return elements.get(name);
   };
-  const messages = [], removed = [];
+  const messages = [], removed = [], held = new Set();
   let answer;
   const context = vm.createContext({
     document: { querySelector: element, documentElement: element('html'), body: element('body'), createElement: element, dispatchEvent() {} },
     URL,
     matchMedia: () => ({ matches: true, addEventListener() {} }),
     GZ_I18N: { t: (s) => s, ui() {}, page() {} },
-    GZ_SITE: { address: require('../lib/site.js').address, probe: async () => found, nearby: async () => [] },
     GZ_LOOKS: [{ name: 'Frostdev', colors: {}, bg: {} }], GZ_LOOK_PARTS: () => ({}),
     setTimeout() {}, clearTimeout() {}, CustomEvent: class {},
     chrome: {
@@ -58,10 +58,18 @@ const screen = ({ granted = true, found = { kind: 'ultra', url: 'https://bb.scho
         messages.push(m);
         return m.op === 'yes' ? new Promise((r) => { answer = r; }) : Promise.resolve({ ok: true });
       } },
-      permissions: { contains: async () => false, request: async () => granted, remove: async (p) => { removed.push(...p.origins); } },
+      permissions: {
+        contains: async () => false, getAll: async () => ({ origins: [...held] }),
+        request: async ({ origins }) => { if (granted) origins.forEach((o) => held.add(o)); return granted; },
+        remove: async (p) => { removed.push(...p.origins); p.origins.forEach((o) => held.delete(o)); },
+      },
     },
   });
-  vm.runInContext(require('node:fs').readFileSync(require('node:path').join(__dirname, '../features/welcome.js'), 'utf8'), context);
+  const read = (f) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', f), 'utf8');
+  // As welcome.html loads it, with the school's answers the test's.
+  vm.runInContext(read('lib/site.js'), context);
+  Object.assign(context.GZ_SITE, { probe: async () => found, nearby: async () => [] });
+  vm.runInContext(read('features/welcome.js'), context);
   return { element, messages, removed, reply: (r) => answer(r) };
 };
 const tick = () => new Promise(setImmediate);
