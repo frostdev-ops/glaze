@@ -19,7 +19,7 @@ const ID = 'glaze';
 const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
 const MOODLE_FIRST = CANVAS_FIRST.filter((f) => f !== 'content-canvas.js');
 const ULTRA_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-ultra.js')).js;
-const BUILT_IN = ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*'];
+const BUILT_IN = ['https://*.blackboard.com/*', 'https://*.instructure.com/*', 'https://*.moodlecloud.com/*'];
 const SAFARI = (() => {
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-allow-safari-'));
   try {
@@ -323,6 +323,12 @@ test('only Glaze\'s own pages, each in a page of its own, may add a site; never 
   assert.deepEqual(await w.send(allow('drop', { origin: BBS }), welcome), { ok: false, error: 'site' });
 });
 
+test('Safari: a grant from its own settings adds no site by itself; its card still asks', async () => {
+  const w = worker({ m: SAFARI, dc: false, net: { [`${BBS}/learn/api/public/v1/system/version`]: BB }, tabs: [{ id: 6, url: `${BBS}/ultra/stream` }] });
+  await w.grant(`${BBS}/*`);
+  assert.deepEqual([w.store.local.ultra, w.fetched, w.files()], [undefined, [], []]);
+});
+
 test('first run: Glaze\'s first screen opens once on install, never on an update, and never on Safari\'s manifest', async () => {
   const w = worker();
   await w.install('install');
@@ -341,7 +347,7 @@ test('the lit icon: on install and update Glaze\'s rules become three, each ligh
     await w.install(reason);
     assert.ok(w.removedRules >= 1, `${reason}: the old rules go first`);
     assert.equal(w.rules.length, 3, reason);
-    assert.deepEqual(w.rules.map((r) => r.conditions.map((c) => c.matcher)), [
+    assert.deepEqual(plain(w.rules.map((r) => r.conditions.map((c) => c.matcher))), [
       [{ css: ['div#application.ic-app'] }],
       [{ css: ['body[id^="page-"][class*="pagelayout-"][class*="path-"]'] }],
       [{ pageUrl: { pathPrefix: '/ultra', schemes: ['https'] }, css: ['div#site-wrap.off-canvas-wrap'] }],

@@ -1,7 +1,8 @@
 // Glaze on a school's own Ultra host and on MoodleCloud, headless, with Chrome's narrow manifest: the real extension, a staged
 // copy holding https://bb.school.test (the student's grant), synthetic Ultra and Moodle pages, no outside network. An Ultra
-// site on the list is registered on its /ultra pages and gets Glaze where its host is held, not where it isn't; MoodleCloud
-// gets Glaze's Moodle bundle from the manifest's own entry, with nothing registered for it.
+// site on the list is registered on its /ultra pages while its host is held, and gets Glaze there; one whose host isn't held
+// stays on the list, unregistered, and gets nothing; MoodleCloud gets Glaze's Moodle bundle from the manifest's own entry,
+// with nothing registered for it.
 // NODE_PATH=<installed playwright> nice node scripts/registered-hosts-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -46,8 +47,8 @@ const sheets = (page) => page.evaluate(() => [...document.querySelectorAll('link
     check(JSON.stringify(access) === '[true,false,true]', 'the staged copy holds the school\'s host and MoodleCloud, not the other site');
     await opts.evaluate(async (list) => { await chrome.storage.local.set({ ultra: list }); }, [held, other]);
     const ids = () => opts.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id).sort());
-    const want = [`ultra:${other}`, `ultra:${held}`].sort();
-    check(await until(async () => JSON.stringify((await ids()).filter((x) => x.startsWith('ultra:'))) === JSON.stringify(want)), `both listed Ultra sites are registered (${(await ids()).join(', ')})`);
+    const want = [`ultra:${held}`];
+    check(await until(async () => JSON.stringify((await ids()).filter((x) => x.startsWith('ultra:'))) === JSON.stringify(want)), `the listed Ultra site whose host is held is registered, the other not (${(await ids()).join(', ')})`);
     const reg = await opts.evaluate(async (x) => (await chrome.scripting.getRegisteredContentScripts({ ids: [x] }))[0], `ultra:${held}`);
     check(JSON.stringify(reg.matches) === JSON.stringify([`${held}/ultra`, `${held}/ultra/*`]) && reg.js.at(-1) === 'content.js' && reg.js.includes('content-ultra.js') && reg.allFrames && reg.runAt === 'document_start', 'on its /ultra pages, with Ultra\'s first content script');
 
@@ -58,7 +59,7 @@ const sheets = (page) => page.evaluate(() => [...document.querySelectorAll('link
 
     await page.goto(`${other}/ultra/courses/_101_1/outline`);
     await page.waitForLoadState('load'); await pause(1500);
-    check((await sheets(page)).length === 0, 'the same page on a host not held gets nothing, though its site is registered');
+    check((await sheets(page)).length === 0, 'the same page on a host not held gets nothing, though its site is listed');
 
     await page.goto(`${moodle}/my/`);
     check(await until(async () => (await sheets(page)).includes('moodle.css')), 'MoodleCloud\'s page gets Glaze\'s Moodle sheets');
@@ -67,8 +68,8 @@ const sheets = (page) => page.evaluate(() => [...document.querySelectorAll('link
     check(!(await ids()).some((x) => x.includes('moodlecloud')), 'from the manifest\'s entry: nothing is registered for MoodleCloud');
     if (out) await page.screenshot({ path: path.join(out, 'moodlecloud.png') });
 
-    await opts.evaluate(async (list) => { await chrome.storage.local.set({ ultra: list }); }, [held]);
-    check(await until(async () => JSON.stringify((await ids()).filter((x) => x.startsWith('ultra:'))) === JSON.stringify([`ultra:${held}`])), 'a site taken off the list loses its registration');
+    await opts.evaluate(async (list) => { await chrome.storage.local.set({ ultra: list }); }, [other]);
+    check(await until(async () => JSON.stringify((await ids()).filter((x) => x.startsWith('ultra:'))) === '[]'), 'a site taken off the list loses its registration');
     check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
     console.log(JSON.stringify({ checks: results.length, errors }, null, 2));
   } finally {

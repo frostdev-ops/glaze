@@ -138,3 +138,24 @@ test('school-host readiness waits for Ultra registration, with static entries an
 test('the first-load glass and background checks wait for their listed Ultra fixture', () => {
   for (const name of ['glass-remaining', 'background-pages']) assert.match(fs.readFileSync(path.join(scripts, `${name}-check.js`), 'utf8'), /await require\('\.\/check-env\.js'\)\.ultraReady\(opts\)/, name);
 });
+
+test('a check that wants only its own tabs closes Glaze\'s first screen, open already or opening later', async () => {
+  const { noFirstRun } = require('../scripts/check-env.js');
+  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
+  const tab = (url, later) => {
+    const p = { at: url, closed: false, url: () => p.at, close: async () => { p.closed = true; } };
+    p.waitForURL = async (re) => { await later; if (!re.test(p.at)) throw Error('timeout'); };
+    return p;
+  };
+  const open = [tab(welcome), tab('about:blank')];
+  let onPage;
+  noFirstRun({ pages: () => open, on: (e, f) => { if (e === 'page') onPage = f; } });
+  let land;
+  const late = tab('about:blank', new Promise((r) => { land = r; })), mine = tab('https://bb.school.test/ultra/');
+  onPage(late);
+  onPage(mine);
+  late.at = welcome;
+  land();
+  await new Promise(setImmediate);
+  assert.deepEqual([...open, late, mine].map((p) => p.closed), [true, false, true, false]);
+});

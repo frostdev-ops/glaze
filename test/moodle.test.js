@@ -32,7 +32,7 @@ const tag = (src) => {
   return el;
 };
 // detect.js on a page: its head as parsed so far, then its body. Returns what it told the background.
-const detect = (html, { glazed = false, type = 'text/html' } = {}) => {
+const detect = (html, { glazed = false, type = 'text/html', url = 'https://school.test/' } = {}) => {
   const head = html.slice(0, html.search(/<body[\s>]/));
   const els = [...head.matchAll(/<(?:link|meta|base)\b[^>]*>/gi)].map((m) => tag(m[0]));
   const said = [];
@@ -43,7 +43,7 @@ const detect = (html, { glazed = false, type = 'text/html' } = {}) => {
     addEventListener() {}, removeEventListener() {},
   };
   vm.runInNewContext(read('lib/detect.js'), {
-    document, window: { __gzGlaze: glazed },
+    document, location: new URL(url), window: { __gzGlaze: glazed },
     chrome: { runtime: { sendMessage: (m) => said.push(m), lastError: null } },
     MutationObserver: class { constructor(fn) { observer = this; this.fn = fn; } observe() { this.on = true; } disconnect() { this.on = false; } },
   });
@@ -60,7 +60,8 @@ test('the detector finds Moodle by its keywords meta and its body, and Canvas by
   for (const f of fs.readdirSync(dir).filter((x) => /^canvas-.*\.html$/.test(x) && x !== 'canvas-docviewer.html')) {
     assert.deepEqual(detect(fs.readFileSync(path.join(dir, f), 'utf8')).said, ['canvas'], f);
   }
-  assert.deepEqual(detect(fs.readFileSync(path.join(dir, 'ultra-boot.html'), 'utf8')).said, []);
+  assert.deepEqual(detect(fs.readFileSync(path.join(dir, 'ultra-boot.html'), 'utf8')).said, [], 'Ultra\'s markup off an /ultra page');
+  assert.deepEqual(detect(fs.readFileSync(path.join(dir, 'ultra-boot.html'), 'utf8'), { url: 'https://bb.school.test/ultra/stream' }).said, ['ultra'], 'and on one');
 });
 
 test('the detector never takes a page that only talks about Moodle', () => {
@@ -122,8 +123,9 @@ test('a Moodle host is asked about, then injected now and registered from then o
   assert.deepEqual(files().at(-1), asked(MOODLE_FIRST), 'Moodle\'s whole first content script, into that page: no Canvas part');
   assert.deepEqual(plain(store.moodle), ['https://moodle.school.edu/*']);
   assert.deepEqual(plain(store.canvas), ['https://canvas.school.edu/*'], 'the Canvas list (which Download all trusts) is untouched');
-  assert.deepEqual(registered.sort(), ['https://canvas.school.edu/*', 'https://moodle.school.edu/*']);
-  assert.deepEqual(plain(lists), { 'https://canvas.school.edu/*': CANVAS_FIRST, 'https://moodle.school.edu/*': MOODLE_FIRST }, 'each host its own LMS\'s list');
+  // Every host granted: the detector too (lib/detect.js, registered while the worker holds https://*/*).
+  assert.deepEqual(registered.sort(), ['gz-detect', 'https://canvas.school.edu/*', 'https://moodle.school.edu/*']);
+  assert.deepEqual(plain(lists), { 'gz-detect': ['lib/detect.js'], 'https://canvas.school.edu/*': CANVAS_FIRST, 'https://moodle.school.edu/*': MOODLE_FIRST }, 'each host its own LMS\'s list');
   assert.ok(CANVAS_FIRST.includes('content-canvas.js') && !MOODLE_FIRST.includes('content-canvas.js') && MOODLE_FIRST.at(-1) === 'content.js');
   await send('moodle', 'https://moodle.school.edu/course/view.php?id=2');
   assert.deepEqual(files().at(-1), MOODLE_FIRST, 'an approved host whose page lacks Glaze gets it at once, unasked');

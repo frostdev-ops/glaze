@@ -98,7 +98,8 @@ test('CORE-2: spoofed Canvas, Moodle and Ultra markup on an unknown site gets th
   await settle();
   assert.deepEqual(w.registered, [], 'no host registered');
   assert.deepEqual(w.store.local, {}, 'no site on a list, nothing recorded');
-  assert.deepEqual(w.files(), [ASK, ASK, ['features/consent.js']], 'the question in Glaze\'s words; nothing of Glaze itself');
+  // On Chrome an Ultra page off Blackboard's hosts reports through lib/detect.js, which has none of Glaze's words.
+  assert.deepEqual(w.files(), [ASK, ASK, ASK], 'the question in Glaze\'s words; nothing of Glaze itself');
   assert.deepEqual(w.ran.filter((r) => r.func?.includes('.show(')).map((r) => r.args[0]), ['canvas', 'moodle', 'ultra']);
   assert.ok(w.ran.every((r) => r.target.documentIds?.[0] === 'doc-1'), 'into the page that asked');
   // The spoofed Ultra site is no Ultra page to the broker: it can't write Glaze's records for its "own" accounts.
@@ -113,9 +114,14 @@ test('CORE-2: spoofed Canvas, Moodle and Ultra markup on an unknown site gets th
   await settle();
   assert.equal(w.ran.length, n);
   assert.deepEqual(w.store.local, {});
+  // Safari's Ultra entry has content.js, and its words, in every /ultra page already.
+  const safari = worker({ m: SAFARI });
+  await safari.send('ultra', page('https://evil.test/ultra/'));
+  await settle();
+  assert.deepEqual(safari.files(), [['features/consent.js']]);
 });
 
-test('CORE-2: the student\'s yes approves the site, registers it and puts Glaze in that page; an Ultra page then starts by itself', async () => {
+test('CORE-2: the student\'s yes approves the site, registers it and puts Glaze in that page; on Safari an Ultra page then starts by itself', async () => {
   const w = worker();
   const shop = page('https://shop.test/products/1');
   await w.send('canvas', shop);
@@ -127,12 +133,18 @@ test('CORE-2: the student\'s yes approves the site, registers it and puts Glaze 
   assert.deepEqual(w.registered.find((s) => s.id === 'https://shop.test/*').js, CANVAS_FIRST);
   assert.deepEqual(w.files().at(-1), CANVAS_FIRST.filter((f) => f !== 'lib/i18n.js'), 'Glaze into the page, but for the words the question brought');
   assert.deepEqual(w.ran.filter((r) => r.files).at(-1).target, { tabId: 7, documentIds: ['doc-1'] });
-  // Ultra: on the list, and nothing injected (its content.js is in the page, waiting for the list).
+  // Ultra: on the list, and Ultra's first content script into that page (on Chrome nothing of Glaze waits there).
   const bb = page('https://bb.school.edu/ultra/course');
   const n = w.files().length;
   assert.deepEqual(await w.send(yes('ultra'), bb), { ok: true });
+  await settle();
   assert.deepEqual(w.store.local.ultra, ['https://bb.school.edu']);
-  assert.equal(w.files().length, n);
+  assert.deepEqual(w.files().slice(n), [ULTRA_FIRST.filter((f) => f !== 'lib/i18n.js')]);
+  // Safari: nothing injected (its content.js is in the page, waiting for the list).
+  const safari = worker({ m: SAFARI });
+  assert.deepEqual(await safari.send(yes('ultra'), bb), { ok: true });
+  await settle();
+  assert.deepEqual([safari.store.local.ultra, safari.files()], [['https://bb.school.edu'], []]);
   assert.equal((await w.send({ type: 'glaze:notes', key: 'notes:https://bb.school.edu/_5_1', text: 'hi', at: 1 }, bb)).ok, true, 'its pages now keep their own data');
   // A yes only counts from a page's top frame, over https, for an LMS Glaze knows (and Ultra's from /ultra).
   for (const [s, kind] of [[page('https://a.test/', { frameId: 1 }), 'canvas'], [page('http://a.test/'), 'canvas'], [page('https://a.test/webapps/x'), 'ultra'],

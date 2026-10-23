@@ -47,6 +47,8 @@
   }
   if (site !== 'ultra') globalThis.GZ_SITE_ULTRA?.sheets?.forEach((l) => l.remove());
   if (!site) return;
+  // Glaze's toolbar icon for this tab (lib/background.js).
+  if (window.top === window && !isPreview) try { chrome.runtime.sendMessage({ type: 'glaze:here' }).catch(() => {}); } catch { /* reloaded */ }
   const ultra = site === 'ultra';
   const moodle = site === 'moodle';
 
