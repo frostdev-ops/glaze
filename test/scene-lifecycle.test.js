@@ -28,3 +28,21 @@ test('standalone promo callers keep their still frame and resize behavior', () =
   e.listeners.get('resize')(); assert.equal(e.counts.draws, 2);
   scene.stop(); assert.equal(e.counts.disposed, 1);
 });
+
+test('a scene\'s time follows the wall clock from its anchor, and a new speed starts from the time reached', () => {
+  const e = engine(), scene = e.start({}); scene.update(opts);
+  const u = () => e.made.materials[0].uniforms.uTime.value;
+  assert.deepEqual({ ...scene.clock }, { t: 0, at: 1000 });
+  e.tick(340); assert.ok(Math.abs(u() - 0.34) < 1e-9, u());
+  scene.update({ ...opts, speed: 2 });
+  assert.ok(Math.abs(u() - 0.34) < 1e-9, 'no jump');
+  e.tick(100); assert.ok(Math.abs(u() - 0.54) < 1e-9, u());
+});
+
+test('a course tab\'s scene takes the page\'s clock and shows the page\'s moment', () => {
+  const e = engine(), scene = e.start({});
+  scene.update({ ...opts, clock: { t: 5, at: 900 } });
+  const u = () => e.made.materials[0].uniforms.uTime.value;
+  assert.ok(Math.abs(u() - 5.1) < 1e-9, `drawn at once at the page's time: ${u()}`);
+  e.tick(400); assert.ok(Math.abs(u() - 5.5) < 1e-9, u());
+});

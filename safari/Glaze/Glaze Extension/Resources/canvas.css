@@ -192,7 +192,11 @@ html[data-gz-bg]:is([data-gz-bg="scene"], [data-gz-bg="shader"], [data-gz-bg="la
 html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before {
   content: "";
   position: fixed;
-  inset: calc(var(--gz-bg-blur, 0px) * -2);
+  /* The viewport, or in a course tab's frame the page's (lib/scene-host.js --gz-vx/vy/vw/vh), so its copy lines up. */
+  left: calc(var(--gz-vx, 0px) - var(--gz-bg-blur, 0px) * 2);
+  top: calc(var(--gz-vy, 0px) - var(--gz-bg-blur, 0px) * 2);
+  width: calc(var(--gz-vw, 100%) + var(--gz-bg-blur, 0px) * 4);
+  height: calc(var(--gz-vh, 100%) + var(--gz-bg-blur, 0px) * 4);
   z-index: -1;
   pointer-events: none;
   background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain), var(--gz-bg-art);
@@ -202,7 +206,10 @@ html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before {
    the GPU slides the already-painted layer instead of repainting gradients every frame; the layer
    is oversized so the drift never shows an edge. */
 html[data-gz-bg="aurora"]::before {
-  inset: -18%;
+  left: calc(var(--gz-vx, 0px) - var(--gz-vw, 100%) * .18);
+  top: calc(var(--gz-vy, 0px) - var(--gz-vh, 100%) * .18);
+  width: calc(var(--gz-vw, 100%) * 1.36);
+  height: calc(var(--gz-vh, 100%) * 1.36);
   background: var(--gz-surface-grain, none), linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
     radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-bg-1) 46%, transparent), transparent 70%),
     radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-bg-2) 36%, transparent), transparent 70%),
@@ -211,6 +218,7 @@ html[data-gz-bg="aurora"]::before {
     var(--gz-surface-paint-2, var(--gz-surface-2));
   animation: gz-aurora 42s ease-in-out infinite alternate;
   animation-play-state: var(--gz-drift);
+  animation-delay: calc(var(--gz-drift-at, 0s) * -1); /* optional phase; lib/scene-host.js aligns running copies on the wall clock */
 }
 /* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
 html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before { will-change: transform; }
@@ -223,10 +231,10 @@ html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before { will-change: tr
    Until it draws, or without WebGL, the ::before shows the gradient. Drawn small and stretched. */
 #gz-scene {
   position: fixed;
-  left: calc(var(--gz-bg-blur, 0px) * -2);
-  top: calc(var(--gz-bg-blur, 0px) * -2);
-  width: calc(100% + var(--gz-bg-blur, 0px) * 4);
-  height: calc(100% + var(--gz-bg-blur, 0px) * 4);
+  left: calc(var(--gz-vx, 0px) - var(--gz-bg-blur, 0px) * 2);
+  top: calc(var(--gz-vy, 0px) - var(--gz-bg-blur, 0px) * 2);
+  width: calc(var(--gz-vw, 100%) + var(--gz-bg-blur, 0px) * 4);
+  height: calc(var(--gz-vh, 100%) + var(--gz-bg-blur, 0px) * 4);
   z-index: -1;
   pointer-events: none;
   filter: blur(var(--gz-bg-blur, 0px));

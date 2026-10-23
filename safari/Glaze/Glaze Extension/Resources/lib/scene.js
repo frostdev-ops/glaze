@@ -724,6 +724,9 @@ const tell = (m) => { if (/-extension:$/.test(location.protocol) && parent !== w
 // 'lost' (a student's shader, and the GL context went), 'budget' (over budget at the last step) or 'empty' (nothing to
 // draw); or 'dropped' (a built-in scene or layers whose context the browser took and never gave back), which a new canvas
 // can show again. errors: [{ line, message }], lines in the student's own source. info: { level, ms } for 'budget'.
+//   clock: { t, at }: the scene is t seconds in at wall-clock time `at` (ms since the epoch), moving at speed from there; a
+//   course tab's frame takes the page's (scene.clock), so its copy of the background shows the same moment. Omitted, the
+//   scene keeps its own, starting at 0.
 // onStep({ level, scale, still, ms, why }) hears every step the guard takes, so an editor can say what happened: level 0 is
 // the best, one past the last is the gradient, ms is what was measured.
 export const start = (canvas, live = () => true, onFail = () => {}, onStep = () => {}) => {
@@ -750,6 +753,10 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
   let stopped = false;
   let failed = false;
   let needsSize = true;
+  let clock = { t: 0, at: 0 };
+  const wall = () => (performance.timeOrigin || 0) + performance.now();
+  const timeNow = () => (clock.at ? clock.t + ((wall() - clock.at) / 1000) * speed : clock.t);
+  const setTime = () => { if (still) return; const t = timeNow(); for (const p of parts) p.u.uTime.value = t * p.rate; };
 
   // A background that can't be shown. The scene stops on the next microtask (three calls onShaderError from inside render(),
   // and nothing may be disposed under it), then the caller hears why.
@@ -825,8 +832,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
     if (document.hidden) return;
     raf = requestAnimationFrame(tick);
     if (now - last < 1000 / FPS - 1 || g?.busy) return;
-    const dt = (Math.min(now - last, 100) / 1000) * speed;
-    for (const p of parts) p.u.uTime.value += dt * p.rate;
+    setTime();
     last = now;
     draw();
     if (!wantsLoop() && raf) { cancelAnimationFrame(raf); raf = 0; }
@@ -881,6 +887,9 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
     update(o) {
       if (stopped || failed) return;
       if (!live()) return freeze();
+      // A new speed starts from the time reached at the old one.
+      if (o.clock) clock = { t: +o.clock.t || 0, at: +o.clock.at || 0 };
+      else if (!clock.at || o.speed !== speed) clock = { t: timeNow(), at: wall() };
       speed = o.speed;
       const shader = o.kind === 'shader' ? o.x?.bg?.shader?.src : null;
       const layers = o.kind === 'layers' && Array.isArray(o.x?.bg?.layers) ? o.x.bg.layers.filter((l) => l && LAYER_KINDS.includes(l.k)).slice(0, 4) : null;
@@ -929,6 +938,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
       } else [U.uC1, U.uC2, U.uC3].forEach((u, i) => u.value.set(o.colors[i]).lerp(U.uGround.value, o.dim));
       U.uAmount.value = o.amount;
       renderer.setClearColor(U.uGround.value);
+      setTime();
       needsSize = true;
       if (wantsLoop() && !raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
       if (!wantsLoop() && raf) { cancelAnimationFrame(raf); raf = 0; }
@@ -936,5 +946,6 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
     },
     draw,
     stop,
+    get clock() { return { ...clock }; },
   };
 };

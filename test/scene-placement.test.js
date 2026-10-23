@@ -10,24 +10,29 @@ test('the lazy script returns its API to the injection broker', () => {
 });
 
 const rig = () => {
-  const element = (name, parent = null) => ({
-    name, parentNode: parent, attrs: new Set(),
-    get parentElement() { return this.parentNode; },
-    append(c) { c.parentNode = this; }, getClientRects: () => [1],
-    setAttribute(k) { this.attrs.add(k); }, removeAttribute(k) { this.attrs.delete(k); },
-    hasAttribute(k) { return this.attrs.has(k); },
-    closest(selector) {
-      for (let p = this; p; p = p.parentNode) {
-        if (selector.includes('.bb-offcanvas-panel') && p.name === 'screen' || selector.includes('.course-content-container') && p.name === 'course'
-          || selector.includes('.routed-page') && p.name === 'routed') return p;
-      }
-      return null;
-    },
-  });
+  const element = (name, parent = null) => {
+    const e = {
+      name, parentNode: parent, attrs: new Set(), kids: [],
+      get parentElement() { return this.parentNode; },
+      get children() { return this.kids; },
+      append(c) { c.parentNode?.kids.splice(c.parentNode.kids.indexOf(c), 1); c.parentNode = this; this.kids.push(c); }, getClientRects: () => [1], getBoundingClientRect: () => ({ width: 1280, height: 800 }),
+      setAttribute(k) { this.attrs.add(k); }, removeAttribute(k) { this.attrs.delete(k); },
+      hasAttribute(k) { return this.attrs.has(k); },
+      closest(selector) {
+        for (let p = this; p; p = p.parentNode) {
+          if (selector.includes('.bb-offcanvas-panel') && p.name === 'screen' || selector.includes('.course-content-container') && p.name === 'course'
+            || selector.includes('.routed-page') && p.name === 'routed') return p;
+        }
+        return null;
+      },
+    };
+    parent?.kids.push(e);
+    return e;
+  };
   const body = element('body'), course = element('course', body), outline = element('outline', course);
   const tool = element('tool', outline), screen = element('screen', course), inner = element('inner', screen);
   course.querySelector = () => outline;
-  const c = { ultra: true, tabFrame: '', LAYERS: '', document: { body, documentElement: { hasAttribute: () => !!c.framed }, querySelectorAll: () => c.layers }, layers: [outline],
+  const c = { getComputedStyle: (e) => ({ visibility: e.visibility || 'visible' }), ultra: true, tabFrame: '', LAYERS: '', document: { body, documentElement: { hasAttribute: () => !!c.framed }, querySelectorAll: () => c.layers }, layers: [outline],
     sceneCanvas: element('canvas'), modBg: null, scene: { draw() {} } };
   vm.createContext(c); vm.runInContext(`${host}\n${source.slice(start, end)}globalThis.placeScene = placeScene;`, c);
   return { c, body, course, outline, tool, screen, inner, element };
@@ -95,9 +100,30 @@ test('a retained course tab keeps the shared navbar scene outside the hidden nat
   assert.ok(!r.body.attrs.has('data-gz-scene-host'));
 });
 test('a layer over the course page counts as covering it; the course page, its tools and base pages do not', () => {
-  const r = rig(), H = r.c.GZ_SCENE_HOST, item = r.element('item', r.course), routed = r.element('routed', r.body);
-  const cases = [[[r.outline], false], [[r.outline, r.tool], false], [[], false], [[r.outline, r.screen, r.inner], true], [[r.outline, item], true], [[r.element('panel', routed)], true]];
+  const r = rig(), H = r.c.GZ_SCENE_HOST, item = r.element('item', r.course);
+  const cases = [[[r.outline], false], [[r.outline, r.tool], false], [[], false], [[r.outline, r.screen, r.inner], true], [[r.outline, item], true]];
   for (const [layers, covered] of cases) { r.c.layers = layers; assert.equal(H.covered(true), covered, layers.map((l) => l.name).join(' > ')); }
+  const routed = r.element('routed', r.body); r.c.layers = [r.element('panel', routed)]; assert.equal(H.covered(true), true, 'a routed page over the course');
   assert.equal(H.covered(false), false);
   r.c.layers = [r.outline, r.screen]; r.c.framed = true; assert.equal(H.covered(true), false);
+});
+test('in a course tab, a course or routed page that is all the frame holds covers nothing; over a base page it does', () => {
+  const r = rig(), H = r.c.GZ_SCENE_HOST;
+  const wrap = r.element('wrap'), routed = r.element('routed', wrap), panel = r.element('panel', routed);
+  r.c.layers = [panel]; assert.equal(H.covered(true), false);
+  r.element('base', wrap); assert.equal(H.covered(true), true);
+  r.c.layers = [r.outline]; assert.equal(H.covered(true), false, 'the course alone');
+  r.element('base', r.body); assert.equal(H.covered(true), true, 'a base page beside the course');
+});
+
+
+test('a routed page alone stays see-through beside screen-reader regions and hidden base content', () => {
+  const r = rig(), wrap = r.element('wrap'), routed = r.element('routed', wrap);
+  r.c.layers = [r.element('panel', routed)];
+  const live = r.element('aria-live', wrap); live.getBoundingClientRect = () => ({ width: 1, height: 1 });
+  assert.equal(r.c.GZ_SCENE_HOST.covered(true), false, 'a one-pixel live region is not a base page');
+  const base = r.element('base', wrap); base.visibility = 'hidden';
+  assert.equal(r.c.GZ_SCENE_HOST.covered(true), false, 'hidden content does not need an opaque cover');
+  base.visibility = 'visible';
+  assert.equal(r.c.GZ_SCENE_HOST.covered(true), true);
 });
