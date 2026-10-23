@@ -1,5 +1,5 @@
-// Canvas's Download all on a file server Glaze doesn't hold, headless: the real extension (a staged copy whose manifest is the
-// shipped one, so it holds none of the file hosts) on the saved Modules page under an invented Canvas cloud host, its API and
+// Canvas's Download all on a file server Glaze doesn't hold, headless: the real extension (a staged copy holding only the redirect probe's start
+// in addition to the shipped hosts, so it holds none of the three permission-test hosts) on the saved Modules page under an invented Canvas cloud host, its API and
 // file servers answered by the check; all else aborts and DNS resolves nowhere. The worker meets the host, the module's header
 // shows Glaze's Allow frame, and the check answers the frame's chrome.permissions.request (headless can't answer the browser's
 // prompt). Allowed, the check also stands in for the grant in the worker (its chrome.permissions.contains says yes for that
@@ -63,7 +63,7 @@ const until = async (fn, label, ms = 10000) => { const end = Date.now() + ms; fo
       enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), download: true } }));
     // The browser's real answer for each host, before the check stands in for any grant.
     const held = (h) => sw.evaluate((p) => chrome.permissions.contains({ origins: [p] }), `https://${h}/*`);
-    ok(!await held(A) && !await held(B) && !await held(C), 'the staged copy holds none of the file servers');
+    ok(!await held(A) && !await held(B) && !await held(C), 'the staged copy holds none of the three permission-test file servers');
     // Stand-in for the student's grant: the worker's contains says yes for the hosts the check grants, else the browser's answer.
     await sw.evaluate(() => {
       const P = chrome.permissions, real = P.contains.bind(P);
@@ -142,17 +142,15 @@ const until = async (fn, label, ms = 10000) => { const end = Date.now() + ms; fo
       return { type: r.type, status: r.status, url: r.url, location: r.headers.get('location'), follow };
     });
     console.log('redirect probe: ' + JSON.stringify(probe));
-    ok(probe.type === 'opaqueredirect' && probe.status === 0 && !probe.url && probe.location === null && /Failed to fetch/.test(probe.follow), 'manual hides the redirect host and following the unheld host fails CORS');
+    ok(probe.type === 'opaqueredirect' && probe.status === 0 && probe.url === 'https://files.redirect.test/redirect/11?sig=probe' && probe.location === null && /Failed to fetch/.test(probe.follow), 'manual hides the redirect host and following the unheld host fails CORS');
     fetched.length = 0;
     // 3. A redirect from a truly held start to B, a host Glaze doesn't hold.
     await hover(75);
     await page.click('#gz-dl-75');
     const end = await until(async () => { const t = await label(75); return /Redirected file|Download failed|Saved|failed/.test(t) || allowFrame() ? t || 'frame' : null; }, 'the redirect file');
     const asked = allowFrame();
-    console.log(`redirect ${A} → ${B}: ${asked ? `the frame asks for ${asked.url().split('#')[1]}` : `no frame for ${B}; the panel says "${end}"`}; requests: ${fetched.filter((u) => /redirect|cdn-b/.test(u)).join(', ')}`);
-    // An extension's fetch never sees where a redirect goes (redirect: 'manual' gives an opaque answer with no Location), so the
-    // worker can't name B to ask for it: the file fails with the panel's error. (Here A's grant is the check's stand-in, so
-    // the 302 itself is a CORS answer too; with a real grant for A, B answers on CORS alone.)
+    console.log(`redirect files.redirect.test → ${B}: ${asked ? `the frame asks for ${asked.url().split('#')[1]}` : `no frame for ${B}; the panel says "${end}"`}; requests: ${fetched.filter((u) => /redirect|cdn-b/.test(u)).join(', ')}`);
+    // The real-grant probe above confirms that Location is hidden. The narrowed worker refuses that redirect.
     ok(!asked && end === 'Redirected file: download it from Canvas', `a redirect to a host Glaze lacks: not asked for (the worker can't see it); the file fails ("${end}")`);
     ok(!fetched.some((u) => u.includes(B)), 'the narrowed worker never follows the redirect to the unheld host');
     await hover(75);

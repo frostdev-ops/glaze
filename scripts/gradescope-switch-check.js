@@ -21,13 +21,19 @@ const until = async (fn, label, ms = 10000) => { const end = Date.now() + ms; fo
 
 (async () => {
   let ctx;
-  const errors = [];
+  const errors = [], probed = [];
   try {
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     env.noFirstRun(ctx);
-    await ctx.route('**/*', (route) => (new URL(route.request().url()).protocol === 'chrome-extension:' ? route.continue() : route.abort()));
+    await ctx.route('**/*', (route) => {
+      const u = new URL(route.request().url());
+      if (u.protocol === 'chrome-extension:') return route.continue();
+      if (u.hostname === 'www.gradescope.com') probed.push(u.href);
+      if (u.href === 'https://school.instructure.com/embed') return route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' });
+      return route.abort();
+    });
     const sw = ctx.serviceWorkers().find((w) => w.url().startsWith(`chrome-extension://${id}/`)) || await ctx.waitForEvent('serviceworker', { predicate: (w) => w.url().startsWith(`chrome-extension://${id}/`) });
     ok(!await sw.evaluate((p) => chrome.permissions.contains({ origins: [p] }), GS), 'the staged copy doesn\'t hold www.gradescope.com');
     // Stand-in for the grant in the worker, for Gradescope only; everything else is the browser's own answer.
@@ -80,6 +86,35 @@ const until = async (fn, label, ms = 10000) => { const end = Date.now() + ms; fo
     ok(await until(() => sw.evaluate((gs) => __gz.removed.includes(gs), GS), 'handed back'), 'and the Gradescope grant is handed back (permissions.remove)');
     ok((await calls()).length === 2, 'switching off asks nothing');
     await shot('gradescope-3-off-again');
+    // Embedded Settings: claim a real worker ticket from a content script in this Canvas tab.
+    const lms = await ctx.newPage();
+    await lms.goto('https://school.instructure.com/embed');
+    const tabId = await sw.evaluate(() => chrome.tabs.query({ url: 'https://school.instructure.com/embed' }).then((t) => t[0].id));
+    const ticket = await sw.evaluate(async (tabId) => {
+      const [r] = await chrome.scripting.executeScript({ target: { tabId }, func: () => chrome.runtime.sendMessage({ type: 'glaze:settings-ticket' }) });
+      return r.result.ticket;
+    }, tabId);
+    await lms.evaluate((url) => { const f = document.createElement('iframe'); f.src = url; f.style.cssText = 'width:1200px;height:850px'; document.body.append(f); }, `chrome-extension://${id}/options.html?t=${ticket}#study/todo`);
+    const embedded = await until(async () => lms.frames().find((f) => f.url().includes('/options.html')), 'embedded Settings');
+    await until(() => embedded.evaluate(() => document.documentElement.hasAttribute('data-embed-ok')), 'claimed frame');
+    await embedded.evaluate(() => {
+      globalThis.__gzEmbedded = [];
+      const send = chrome.runtime.sendMessage.bind(chrome.runtime), intents = [];
+      chrome.runtime.sendMessage = (m, ...args) => { const p = send(m, ...args); if (m.type === 'glaze:allow') intents.push(p); return p; };
+      chrome.permissions.request = (o) => {
+        __gzEmbedded.push([o.origins, navigator.userActivation.isActive]);
+        return Promise.all(intents).then((r) => { __gzEmbedded.push(r); return true; });
+      };
+    });
+    await sw.evaluate(() => { __gz.held = true; });
+    await embedded.locator('label.check', { has: embedded.locator('input[data-key="enhance.gradescope"]') }).click();
+    await until(() => stored(), 'embedded on');
+    await sw.evaluate(() => granting('https://www.gradescope.com/*'));
+    ok(probed.length === 0, 'embedded Settings: granting Gradescope probes no LMS APIs');
+    ok(await embedded.evaluate(() => __gzEmbedded.length === 2 && __gzEmbedded[0][1] && __gzEmbedded[1].every((r) => r.ok)), 'embedded Settings requests Gradescope from the click');
+    await embedded.locator('label.check', { has: embedded.locator('input[data-key="enhance.gradescope"]') }).click();
+    await until(async () => !await stored() && !(await registered()).includes('gz-gradescope'), 'embedded off');
+    await lms.close();
     ok(errors.length === 0, `no page errors (${errors.join(' | ')})`);
     console.log(`${checks} checks passed; screenshots in ${out}`);
   } catch (e) {
