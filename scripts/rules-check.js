@@ -156,7 +156,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
       setTimeout(() => { mo.disconnect(); res(n); }, 1500);
     }));
     ok(churn === 0 && (await boardCards()).every((c) => c.title === 'Relabelled'), `Canvas: the labelled board settles (${churn} changes in 1.5 s) and keeps its labels`);
-    await dash.screenshot({ path: path.join(out, 'canvas-board-look.png') });
+    await dash.screenshot({ path: path.join(out, 'canvas-board-look.png'), fullPage: true });
     await dash.click('.gz-course-native');
     await until(dash, (sel) => [...document.querySelectorAll(sel)].every((e) => e.getClientRects().length), NATIVE, "Canvas: Canvas's course cards show");
     const c = await dash.evaluate((sel) => ({
@@ -171,7 +171,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     ok(c.radius === '20px', `Canvas: cards take their radius over canvas.css (${c.radius})`);
     ok(c.todo === 'none' && c.help === 'none', 'Canvas: the sidebar To Do and the Help item are hidden');
     ok(c.order.indexOf('conversations') === c.order.indexOf('dashboard') - 1, `Canvas: Inbox moved before Dashboard (${c.order.join(' ')})`);
-    await dash.screenshot({ path: path.join(out, 'canvas-own-cards-look.png') });
+    await dash.screenshot({ path: path.join(out, 'canvas-own-cards-look.png'), fullPage: true });
     await inject(`${CANVAS}/`, null);
     await until(dash, () => !document.getElementById('gz-rules-css'), null, 'Canvas: rules come off');
     ok(JSON.stringify(await names()) === JSON.stringify(real), 'Canvas: titles come back exactly');
@@ -256,7 +256,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     ok(u.every((c) => c.title === 'My favourite'), "Ultra: every board card's title is relabelled");
     ok(u.every((c) => c.radius === '24px' && c.border === '3px solid'), `Ultra: board cards take the card's radius and border (${u[0].radius}, ${u[0].border})`);
     ok(u.every((c) => c.banner === 'rgb(51, 17, 68)' && c.code === 'rgb(255, 136, 0)'), `Ultra: the board card's picture and code take theirs (${u[0].banner}, ${u[0].code})`);
-    ok(u.every((c) => c.shown !== 'none' && c.menu && c.menu !== 'none'), 'Ultra: a board card is never hidden, and its course menu stays');
+    ok(u.every((c, i) => c.shown !== 'none' && c.menu === ultraReal[i].menu), `Ultra: a board card is never hidden, and its course menu stays as it was (${u[0].shown}, ${u[0].menu})`);
     ok(u.every((c, i) => c.head === ultraReal[i].head && c.tags === 0), `Ultra: the tile's own header and pieces take nothing (${u.map((c) => c.head).join(', ')})`);
     ok(await ub.evaluate(() => [...document.querySelectorAll('article.course-element-card .course-status')].every((e) => e.hasAttribute('data-gz-r-hide'))
       && [...document.querySelectorAll('article.course-element-card .course-title')].every((e) => e.textContent.trim() === 'My favourite')), "Ultra: its own cards (behind the board) take the same rules");

@@ -454,7 +454,7 @@ test("each course-card part names its piece on the boards' cards, or none; the e
   for (const p of P.PARTS.values()) if (p.b) assert.ok(p.b.startsWith(BOARD[p.site]) && !/[{};]/.test(p.b), p.name);
   // The editor's list is the same: no new part, no new field.
   assert.deepEqual(Object.keys(P.list('ultra')[0]), ['name', 'label', 'hide', 'text', 'move', 'st']);
-  assert.ok(!P.list('canvas').some((p) => /board/i.test(p.name)));
+  assert.ok(!['ultra', 'canvas'].some((site) => P.list(site).some((p) => /(^|[.-])board/.test(p.name))));
 });
 
 // A board tile (features/widgets.js tileEl) holding its card, built as features/coursecards.js builds each.

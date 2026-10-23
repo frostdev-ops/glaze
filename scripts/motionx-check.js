@@ -258,6 +258,7 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
 
     // ---- the boards' course cards: Glaze's own, on the Courses page's board; the Look's card entrance plays on them too ----
     console.log("\n-- the board's course cards --");
+    await page.close(); // done with: a settings change under it (the sidebar's) would crossfade a page nobody sees
     const W = require(path.join(root, 'lib/widgets.js'));
     const lay = W.layout({ todo: true });
     for (const b of ['courses', 'dash', 'pages']) for (const x of lay.boards[b]) x.on = false;
@@ -279,18 +280,19 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
     const cardName = (await bRoot('--gz-x-enter')).split(' ')[0], tileName = (await bRoot('--gz-x-enter-tile')).split(' ')[0];
     const t1 = await tiles();
     ok(t1.every((t) => t.name === `${tileName}, ${cardName}`), `each course card on the board plays the Look's card entrance after its tile's: ${t1[0].name}`);
-    ok(JSON.stringify(t1.map((t) => t.delay)) === JSON.stringify(['0s, 0s', '0s, 0.09s', '0s, 0.18s', '0s, 0.27s']), `staggered by the Look's 90 ms, course cards only: ${t1.map((t) => t.delay).join(' | ')}`);
+    const order = await board.evaluate(() => [...document.querySelector('.gz-w[data-tile="timer"]').parentElement.children].map((e) => (e.dataset.tile?.startsWith('course:') ? 'card' : e.dataset.tile)).filter(Boolean).join(' '));
+    ok(/timer.*card/.test(order) && JSON.stringify(t1.map((t) => t.delay)) === JSON.stringify(['0s, 0s', '0s, 0.09s', '0s, 0.18s', '0s, 0.27s']), `staggered by the Look's 90 ms, course cards only (${order}): ${t1.map((t) => t.delay).join(' | ')}`);
     ok(await board.evaluate(() => getComputedStyle(document.querySelector('.gz-w[data-tile="timer"]')).animationName) === tileName, 'another tile plays only the tile entrance');
     await board.screenshot({ path: path.join(out, 'board-enter.png') });
     for (const [label, settings, attr] of [['motion off', BOARD_SETTINGS({ level: 'off' }), null], ['the entrances switch off', BOARD_SETTINGS({ enter: false }), 'data-gz-no-enter']]) {
       await store(settings);
       await until(async () => board.evaluate((a) => (a ? document.documentElement.hasAttribute(a) : document.documentElement.getAttribute('data-gz-motion') === 'off'), attr), 6000, label);
       const t = await tiles();
-      ok(t.every((x) => x.name === 'none, none'), `${label}: no entrance on the board's cards (${t[0].name})`);
+      ok(t.every((x) => x.name.split(', ').every((n) => n === 'none')), `${label}: no entrance on the board's cards (${t[0].name})`);
     }
     await store(BOARD_SETTINGS(), null);
     await until(async () => (await bRoot('--gz-x-enter')) === '', 6000, 'the Look off the board page');
-    ok((await tiles()).every((t) => t.name === 'none, none'), "without a Look, the board's cards keep still, as before");
+    ok((await tiles()).every((t) => t.name.split(', ').every((n) => n === 'none')), "without a Look, the board's cards keep still, as before");
     await board.close();
     await opts.evaluate(() => chrome.storage.local.remove('widgetLayout'));
     await store(ULTRA_SETTINGS(), null);

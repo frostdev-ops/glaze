@@ -12,8 +12,11 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
   // Rules stay off whole quiz and tool routes, including their overview and entry pages.
   const quiet = () => GZ_LX.quiet(location.pathname, document) || /\/(quizzes|external_tools)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(location.pathname)
     || (ctx.site === 'ultra' && /\/(assessment|attempt|lti)(\/|$)/.test(location.pathname));
-  // Glaze's own pieces are never a part's, and nothing that holds Glaze settings is hidden.
+  // Glaze's own pieces are never a part's, and nothing that holds Glaze settings is hidden. The boards' course cards are
+  // the exception lib/parts.js names (a part's b): Glaze's, drawn from the LMS's card, so a Look's card rules reach them, but
+  // never a Glaze piece inside one.
   const OWN = '[id^="gz-"], [class^="gz-"], [class*=" gz-"]';
+  const ownIn = (el, card) => { for (let e = el; e && e !== card; e = e.parentElement) if (e.matches(OWN)) return true; return false; };
   const GLAZE_ITEM = 'a[href="#glaze"]';
   const CONTROL = 'a[href], button, input, select, textarea, summary, [contenteditable], [role="button"], [tabindex]';
 
@@ -31,18 +34,31 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
     const p = n.parentElement;
     if (p?.dataset.gzReal === r.mine) p.dataset.gzReal = r.real;
   };
-  // The element's first text that isn't Glaze's. Kept once found, so a label that changes swaps the same text.
+  // The element's first text that isn't Glaze's (in it: a board card's own is all inside Glaze's board). Kept once found,
+  // so a label that changes swaps the same text.
   const textOf = (el, was) => {
     if (was && el.contains(was)) return was;
-    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.data.trim() && !n.parentElement?.closest(OWN) ? 1 : 3) });
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (n) => {
+      const own = n.data.trim() ? n.parentElement?.closest(OWN) : el;
+      return !own || !el.contains(own) ? 1 : 3;
+    } });
     return walk.nextNode();
+  };
+  // What the page wrote under the labels: el's text with each label's put back (features/coursecards.js writes its card's
+  // text only when this isn't it already, so it doesn't write over a label on every pass).
+  const real = (el) => {
+    let s = '';
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: () => 1 });
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) { const r = labels.get(n); s += r && n.data === r.mine ? r.real : n.data; }
+    return s;
   };
   const label = (el, text, was) => {
     const n = textOf(el, was);
     if (!n) return null;
     let r = labels.get(n);
-    // A course's nickname (content-ultra.js) is the student's own: it wins, before or after the label.
-    if (n.parentElement?.dataset.gzReal !== undefined) {
+    // A course's nickname (content-ultra.js; a board card marks its own, features/coursecards.js) is the student's own: it
+    // wins, before or after the label.
+    if (n.parentElement?.dataset.gzReal !== undefined || n.parentElement?.dataset.gzNick !== undefined) {
       if (r) { unlabel(n, r); labels.delete(n); }
       return null;
     }
@@ -96,22 +112,25 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
   };
   // Each part's elements on the page now, with what its end state asks of them; an element two parts name takes both.
   const want = (plan) => {
-    const els = new Map();
+    const els = new Map(), card = GZ_PARTS.BOARD[ctx.site];
+    const add = (el, s, part, board) => {
+      const w = els.get(el) || { hide: false, vars: {}, st: [], t: '', move: null, part, board };
+      els.set(el, w);
+      if (s.hide) w.hide = true;
+      Object.assign(w.vars, s.vars);
+      w.st.push(...Object.keys(s.st));
+      if (s.t) w.t = s.t;
+      if (s.move) w.move = s.move;
+    };
     for (const [name, s] of plan) {
       const part = GZ_PARTS.get(name);
-      for (const el of document.querySelectorAll(part.s)) {
-        if (el.closest(OWN)) continue;
-        const w = els.get(el) || { hide: false, vars: {}, st: [], t: '', move: null, part };
-        els.set(el, w);
-        if (s.hide) w.hide = true;
-        Object.assign(w.vars, s.vars);
-        w.st.push(...Object.keys(s.st));
-        if (s.t) w.t = s.t;
-        if (s.move) w.move = s.move;
-      }
+      for (const el of document.querySelectorAll(part.s)) if (!el.closest(OWN)) add(el, s, part, false);
+      if (part.b) for (const el of document.querySelectorAll(part.b)) if (!ownIn(el, el.closest(card))) add(el, s, part, el.matches(card));
       for (const f of s.fonts) GZ_FONTS.load(f);
     }
     for (const [el, w] of els) {
+      // A board's card itself stays: hidden or faded, its tile would be left on the board, empty.
+      if (w.board) { w.hide = false; delete w.vars['--gz-r-o']; w.st = w.st.filter((k) => k !== 'o'); }
       const paints = w.st.includes('fg') || w.st.includes('bg');
       if ((w.hide || w.st.includes('o') || paints) && (el.matches(GLAZE_ITEM) || el.querySelector(GLAZE_ITEM)
         || [...el.querySelectorAll(OWN)].some((node) => node.matches(CONTROL) || node.querySelector(CONTROL)))) {
@@ -164,6 +183,6 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
     if (!plan?.size) return clear();
     apply(plan);
   };
-  return { sync };
+  return { sync, real };
 })();
 GZ_RULES;

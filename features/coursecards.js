@@ -18,7 +18,15 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     for (const id of order) { const c = cards.get(id); if (!c) continue; const rows = groups.get(c.term || '') || []; rows.push({ ...c, key: `course:${location.origin}/${id}` }); groups.set(c.term || '', rows); }
     return [...groups.values()].flat();
   };
-  const setText = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+  // A Look's card rules reach these cards too (features/rules.js): a label stays over what is written here until that
+  // changes, and what is written gets the rules back at once (on Ultra the board's changes start no pass of their own).
+  let ruling = false;
+  const rules = () => {
+    if (ruling || !globalThis.GZ_RULES) return;
+    ruling = true;
+    Promise.resolve().then(() => { ruling = false; globalThis.GZ_RULES?.sync(); });
+  };
+  const setText = (el, text) => { if (el.textContent !== text && globalThis.GZ_RULES?.real(el) !== text) { el.textContent = text; rules(); } };
   const render = () => { if (live()) { for (const x of mounted) x(); if (pick) syncPicker(); } };
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
@@ -179,6 +187,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
         if (copy) actions?.replaceWith(copy); else actions?.remove();
         if (copy && !actions) card.append(copy);
         actions = copy || null;
+        rules();
       }
       // Written only when what it comes from changed (a style read back is normalized, so it isn't compared).
       const look = JSON.stringify([c.image, c.color]);
@@ -190,7 +199,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       }
     };
     let painted = '', rowFrom = '', actions = null;
-    mounted.add(update); update();
+    mounted.add(update); update(); rules();
     ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (alive && live()) GZ_CARD_UI.paint(); }, () => {});
     return { update, wake: update, stop: () => { alive = false; mounted.delete(update); } };
   };
@@ -221,6 +230,9 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       if (!alive || !live()) return;
       const c = cards.get(id), name = title(api.id);
       setText(link, name); const full = [c?.name, c?.code].filter(Boolean).join(' · '); if (link.title !== full) link.title = full;
+      // A nickname is the student's own: marked, so a Look's label leaves it (as content-ultra.js's on Ultra's cards).
+      const nick = !!ctx.nickOf(id);
+      if (link.hasAttribute('data-gz-nick') !== nick) link.toggleAttribute('data-gz-nick', nick);
       setText(term, c?.term || api.term() || ''); setText(code, c?.code || '');
       if (card.getAttribute('aria-label') !== name) card.setAttribute('aria-label', name);
       const label = ctx.t('Colour and look for {name}', { name });
@@ -248,7 +260,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       } else card.querySelector('.gz-ct')?.remove();
     };
     if (!mounted.size && uid && L) read();
-    mounted.add(update); update();
+    mounted.add(update); update(); rules();
     ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (alive && live()) GZ_CARD_UI.paint(); }, () => {});
     return { update, wake: update, stop: () => { alive = false; mounted.delete(update); } };
   };
