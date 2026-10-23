@@ -226,3 +226,15 @@ test('review: narrowed downloads refuse opaque redirects before following an unk
   assert.deepEqual(modes, ['manual']);
   assert.deepEqual(posted(port), [{ type: 'error', code: 'redirect' }]);
 });
+
+test('review: local startup uses the retained Canvas frame origin on localhost and 127.0.0.1', async () => {
+  for (const host of ['localhost', '127.0.0.1']) {
+    const origin = `http://${host}:3000`;
+    const sender = course({ url: 'about:blank', frameId: 3, origin, tab: { id: 7, url: `${origin}/courses/25` } });
+    const w = worker({ grants: new Set([`http://${host}/*`]) });
+    assert.equal(await w.send({ type: 'glaze:local', kind: 'canvas' }, sender), true, host);
+    w.grants.clear();
+    assert.equal(await w.send({ type: 'glaze:local', kind: 'canvas' }, sender), false, `${host}: grant removed`);
+    assert.equal(await w.send({ type: 'glaze:local', kind: 'ultra' }, sender), false);
+  }
+});
