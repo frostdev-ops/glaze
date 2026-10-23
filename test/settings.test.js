@@ -232,7 +232,7 @@ test('course tint never costs a contrast pair, and at full strength is the cours
 });
 
 test('looks apply cleanly: every value is one Glaze accepts, contrast holds, and the look reads as on', () => {
-  assert.equal(G.GZ_LOOKS.length, 10);
+  assert.equal(G.GZ_LOOKS.length, 11);
   const mine = G.GZ_SANITIZE({ look: { tooltips: false, scale: 1.2, font: 'mono' }, bg: { image: 'https://example.com/a.jpg', kind: 'image' }, auto: { on: true } });
   for (const L of G.GZ_LOOKS) {
     const s = { ...mine, ...G.GZ_LOOK_APPLY(mine, L) };
@@ -329,4 +329,17 @@ test('dark documents, a switch up to 2.2, become inverted documents; a choice ma
   assert.equal(pages({ darkDocs: true, docPages: 'plain' }), 'plain');
   assert.equal(pages({ docPages: 'sepia' }), 'plain');
   assert.ok(!('darkDocs' in G.GZ_SANITIZE({ enhance: { darkDocs: true } }).enhance));
+});
+
+test('Frostdev leads the built-in Looks: its own palette, Geist with Manrope headings, and the topography scene; a new student keeps Frost', () => {
+  const L = G.GZ_LOOKS[0];
+  assert.equal(L.name, 'Frostdev');
+  assert.equal(L.palette, null, 'its own palette, not a preset');
+  assert.deepEqual(G.GZ_COLORS.map(([v]) => L.colors[v]), ['#27cdf1', '#a6efff', '#123b54', '#03131e', '#102338', '#060d18', '#ecf5fa', '#aec4d5', '#829eb5', '#2b465d', '#4d6f8a', '#78dfc0', '#ffd18c', '#ffa7b2']);
+  assert.ok(G.GZ_CONTRAST(L.colors).every((r) => r.pass));
+  assert.deepEqual(L.look, { font: 'geist', head: 'manrope', radius: 16, glass: 18, depth: 2, surfaceOpacity: 90 });
+  assert.equal(L.bg.scene, 'topography');
+  const s = G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, L) });
+  assert.deepEqual([s.bg.kind, s.bg.scene, s.look.font, s.look.head], ['scene', 'topography', 'geist', 'manrope'], 'every value survives the sanitizer');
+  assert.deepEqual([G.GZ_DEFAULTS.preset, G.GZ_DEFAULTS.bg.kind, G.GZ_DEFAULTS.bg.scene, G.GZ_DEFAULTS.look.font], ['Frost', 'solid', 'mist', 'system']);
 });

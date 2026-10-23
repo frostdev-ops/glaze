@@ -52,8 +52,8 @@ YOUR LOOK
 
 • Pick a palette, edit all fourteen colors, save your own palettes, or pair light and dark palettes with your system's appearance or a schedule.
 • Choose fonts for text, headings and code, including Lexend and OpenDyslexic, about forty more, or any Google Font by name. Adjust text size, line height, spacing, rounded corners, depth and frosted glass.
-• Use a solid background, a linear, radial, conic or mesh gradient, an aurora, your own image link, or one of ten animated scenes. One Intensity slider sets how much a scene stands out.
-• Apply one of ten Looks: a matching palette, fonts, shape and background in one click, including the Halloween Looks Graveyard and Pumpkin Patch. Share a Look as a one-line theme code that previews before it applies, or browse free Looks at frostdev.io/glaze/looks.
+• Use a solid background, a linear, radial, conic or mesh gradient, an aurora, your own image link, or one of eleven animated scenes. One Intensity slider sets how much a scene stands out.
+• Apply one of eleven Looks: a matching palette, fonts, shape and background in one click, including the Halloween Looks Graveyard and Pumpkin Patch. Share a Look as a one-line theme code that previews before it applies, or browse free Looks at frostdev.io/glaze/looks.
 • Give a course its own color, tint or Look. Style course cards with a color, gradient or picture, and add bookmarks to them.
 • Place stickers on course pages, pick a pointer set, or let Glaze rotate through your favorite Looks.
 • Choose Off, Subtle or Expressive motion. Glaze follows your reduced-motion setting by default, and animated scenes pause in background tabs.

@@ -17,6 +17,7 @@ const {
 ColorManagement.enabled = false;
 
 const FPS = 30;
+const PARALLAX = 8; // css px a scene that follows the pointer moves at most, settling in about 250 ms
 // uAmount is the intensity slider, 0-1: every scene reads it as how much it may stand out.
 const COMMON = `
 uniform float uTime, uAspect, uPx, uAmount;
@@ -140,6 +141,78 @@ void main() {
     c = mix(c, uC2, amt(exp(up * 12.) * .35));
   }
   gl_FragColor = vec4(dither(c), 1.);
+}`;
+
+// Living topography, the frostdev.io splash terrain seen from above: fbm height under a slow two-octave domain warp, cut
+// into ten terraces of cut paper, a deep navy basin rising through cobalt and cyan to luminous ice. Light comes from the
+// top left: each plate's cut edge is lit where it faces it, and each plate drops a soft blue shadow onto the one below
+// (height sampled toward the light). The terrain rises toward the screen's edges so the reading area sits over the basin,
+// misted toward the ground. A faint indigo glow drifts round every 45 s. Its time starts 24 s in, the source's own still:
+// motion off shows that frame. uShift is the pointer's parallax, in screen units (lib/scene.js eases it).
+const TOPOGRAPHY = `${FLAT}
+uniform float uDim;
+uniform vec2 uShift;
+const float LV = 10.;
+vec3 tier(float i) {
+  vec3 c = vec3(.02, .043, .086);
+  c = mix(c, vec3(.039, .102, .2), step(.5, i));
+  c = mix(c, vec3(.055, .173, .353), step(1.5, i));
+  c = mix(c, vec3(.078, .259, .498), step(2.5, i));
+  c = mix(c, vec3(.106, .373, .682), step(3.5, i));
+  c = mix(c, vec3(.118, .498, .812), step(4.5, i));
+  c = mix(c, vec3(.133, .635, .878), step(5.5, i));
+  c = mix(c, vec3(.298, .769, .933), step(6.5, i));
+  c = mix(c, vec3(.604, .875, .965), step(7.5, i));
+  return mix(c, vec3(.902, .973, .992), step(8.5, i));
+}
+// The source's fbm: steep falloff, so plates stay smooth and rounded.
+float tfbm(vec2 p) { float v = 0., a = .55; for (int i = 0; i < 4; i++) { v += a * noise(p); p = p * 2.02 + vec2(11.3, 7.9); a *= .45; } return v; }
+float fbm2(vec2 p) { return .55 * noise(p) + .2475 * noise(p * 2.02 + vec2(11.3, 7.9)); }
+// Height 0-1 at q (screen units from the centre), the warp shared by the samples of one pixel: a basin rising to the
+// screen's edges, steadier in the middle, its rings bent by the same warp and a slow swirl so they sweep rather than nest.
+float height(vec2 q, vec2 warp, float t) {
+  float h = clamp((tfbm(q * 3. + vec2(3.1, 1.4) + warp + vec2(t * .6, -t * .25)) - .18) / .64, 0., 1.);
+  vec2 d = (q - vec2(-.02, .01) + (warp - .3) * .35) * vec2(.62, 1.);
+  float r = smoothstep(.04, .9, length(d + vec2(d.y, -d.x) * .25 * sin(d.x * 3. + t * 2.)));
+  return clamp(h * mix(.24, .55, r) + r * .98 - .07, 0., 1.);
+}
+// Plate lv at fraction f of its band: its colour, a little brighter toward its lit cut edge and shaded under the next
+// plate; its rim, bright where the cut faces the light (lit, 0-1); and the soft shadow of the plate above (a: that plate's
+// height in tiers, sampled toward the light). fa and fw: a's and the height's change across a pixel, so no edge is
+// narrower than one.
+vec3 plate(float lv, float f, float lit, float a, float fa, float fw) {
+  float top = step(LV - 1.5, lv); // nothing stands above the highest plate
+  vec3 c = tier(lv) * (1.08 - .2 * f * (1. - top)) * (1. - .28 * (1. - top) * smoothstep(min(.75, 1. - 3. * fw), .995, f));
+  c += vec3(.16, .3, .36) * (.25 + .9 * lit) * (1. - smoothstep(0., max(.08, 2. * fw), f)) * step(.5, lv);
+  float k = smoothstep(-.05 - fa, .45 + fa, a - lv - 1.);
+  return mix(c, c * vec3(.3, .42, .68), .62 * k);
+}
+void main() {
+  vec2 uv = vUv + uShift;
+  vec2 q = (uv - .5) * vec2(uAspect, 1.);
+  float t = (uTime + 24.) * .018;
+  vec2 p = q * 3. * 1.6;
+  vec2 warp = .5 * vec2(fbm2(p + t), fbm2(p - t * 1.3 + 7.3));
+  float h = height(q, warp, t);
+  float s = clamp(h * LV, 0., LV - .001), i = floor(s), f = s - i, fw = min(fwidth(s), .5) + 1e-4;
+  // Which way the slope climbs on screen; a cut faces down it, lit when that is toward the top left.
+  vec2 up = vec2(dFdx(s), dFdy(s));
+  float lit = clamp(dot(-up / (length(up) + 1e-5), vec2(-.707, .707)), 0., 1.);
+  // (Under the top, so the highest plate casts onto the one below but never onto itself.)
+  float a = min(height(q + vec2(-.009, .012), warp, t) * LV, LV - .5), b = min(height(q + vec2(-.024, .032), warp, t) * LV, LV - .5);
+  float fa = fwidth(a) + 1e-4;
+  // Each cut anti-aliased whole: this plate against the one below it and the one above.
+  vec3 c = mix(plate(i - 1., 1., lit, a, fa, fw), plate(i, f, lit, a, fa, fw), smoothstep(-fw, fw, f));
+  c = mix(c, plate(i + 1., 0., lit, a, fa, fw), smoothstep(-fw, fw, f - 1.) * step(i, LV - 1.5));
+  // A wider, fainter shadow from further up the slope.
+  c = mix(c, c * vec3(.42, .55, .78), .4 * smoothstep(-.1 - fa, .6 + fa, b - i - 1.));
+  float g = uTime * .1396;
+  vec2 o = (uv - vec2(.5 + .34 * cos(g), .5 + .26 * sin(g))) * vec2(uAspect, 1.);
+  c += vec3(.2, .16, .55) * exp(-dot(o, o) * 7.) * (.1 + .12 * uAmount);
+  // The reading area sits in mist.
+  float well = 1. - smoothstep(.1, .6, length((uv - vec2(.52, .5)) * vec2(uAspect * .55, 1.)));
+  c = mix(c, uGround, .42 * well);
+  gl_FragColor = vec4(dither(mix(c, uGround, uDim)), 1.);
 }`;
 
 // Halloween: two little night scenes drawn from shapes, each a signed distance (negative inside) that
@@ -708,6 +781,8 @@ const SCENES = {
   horizon: flat(0.5, HORIZON),
   graveyard: flat(0.6, GRAVEYARD),
   pumpkins: flat(0.6, PUMPKINS),
+  // Follows the pointer a little (at most PARALLAX css px), while it animates.
+  topography: { ...flat(0.5, TOPOGRAPHY), parallax: true },
   waves: { scale: 0.5, make: (m) => [new Points(grid(), m(WAVES, DOT, true)), perspective(1.1, 0, -1.5)] },
   dust: { scale: 0.5, make: (m) => [new Points(motes(), m(DUST, DOT, true)), perspective(0, 0, -2)] },
 };
@@ -735,6 +810,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
   const U = {
     uTime: { value: 0 }, uAspect: { value: 1 }, uPx: { value: 1 }, uAmount: { value: 0.5 },
     uGround: { value: new Color() }, uC1: { value: new Color() }, uC2: { value: new Color() }, uC3: { value: new Color() },
+    uDim: { value: 0 }, uShift: { value: [0, 0] },
   };
   const material = (vertexShader, fragmentShader, transparent = false) => new ShaderMaterial({ uniforms: U, vertexShader, fragmentShader, transparent, depthTest: false, depthWrite: false });
   // A student's shader is ESSL 1.00 (glslVersion '100' on a raw material: three adds only `#version 100`), so ANGLE applies
@@ -757,6 +833,21 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
   const wall = () => (performance.timeOrigin || 0) + performance.now();
   const timeNow = () => (clock.at ? clock.t + ((wall() - clock.at) / 1000) * speed : clock.t);
   const setTime = () => { if (still) return; const t = timeNow(); for (const p of parts) p.u.uTime.value = t * p.rate; };
+  // The pointer's parallax: where it is headed (screen units), and whether the scene listens at all.
+  let aim = [0, 0], following = false;
+  // x, y in this window's pixels, read against where the canvas sits: in a course tab's frame it spans the page's viewport.
+  const point = (x, y) => {
+    const r = canvas.getBoundingClientRect?.() || { left: 0, top: 0, width: canvas.clientWidth || innerWidth, height: canvas.clientHeight || innerHeight };
+    if (!r.width || !r.height) return;
+    aim = [(((x - r.left) / r.width) * 2 - 1) * (PARALLAX / r.width), -(((y - r.top) / r.height) * 2 - 1) * (PARALLAX / r.height)];
+  };
+  const onPoint = (e) => { if (e.pointerType !== 'touch') point(e.clientX, e.clientY); };
+  const follow = (on) => {
+    if (on === following) return;
+    following = on;
+    (on ? addEventListener : removeEventListener)('pointermove', onPoint, { passive: true });
+    if (!on) { aim = [0, 0]; U.uShift.value = [0, 0]; }
+  };
 
   // A background that can't be shown. The scene stops on the next microtask (three calls onShaderError from inside render(),
   // and nothing may be disposed under it), then the caller hears why.
@@ -770,17 +861,20 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
   // more than 16 for good, counting stopped ones until they are collected (each course tab shown again starts a new one).
   // Not back in 3 s, it is 'dropped', once on screen (a new context from a hidden page could take one that is showing).
   let lostAt = 0, lostTimer = 0;
+  const syncFollow = () => follow(!!def?.parallax && speed > 0 && !still && !document.hidden && !lostAt);
   const dropped = () => { if (lostAt && !document.hidden) fail('dropped'); };
   const onLost = () => {
     if (def?.custom) return fail('lost', [{ line: 0, message: 'The graphics context was lost while drawing this shader. One that takes the GPU too long does that.' }]);
     lostAt = performance.now(); clearTimeout(lostTimer); lostTimer = setTimeout(dropped, 3000);
+    syncFollow();
   };
-  const onRestored = () => { lostAt = 0; clearTimeout(lostTimer); g?.rest(); onResize(); };
+  const onRestored = () => { lostAt = 0; clearTimeout(lostTimer); syncFollow(); g?.rest(); onResize(); };
   canvas.addEventListener('webglcontextlost', onLost);
   canvas.addEventListener('webglcontextrestored', onRestored);
   // Back from a hidden tab (which draws nothing) the first frames are cold. The page's own pace can't tell: on a CPU
   // renderer every frame is seconds apart.
   const onShow = () => {
+    syncFollow();
     if (document.hidden) return;
     if (lostAt && performance.now() - lostAt >= 3000) return dropped();
     g?.rest(); onResize();
@@ -797,6 +891,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
   const apply = (lv) => {
     scale = lv.scale;
     still = !!lv.still;
+    syncFollow();
     canvas.style.visibility = ''; // out of the probe
     needsSize = true;
     draw();
@@ -833,6 +928,10 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
     raf = requestAnimationFrame(tick);
     if (now - last < 1000 / FPS - 1 || g?.busy) return;
     setTime();
+    if (following) {
+      const k = 1 - Math.exp(-Math.min(now - last, 100) / 80), [x, y] = U.uShift.value;
+      U.uShift.value = [x + (aim[0] - x) * k, y + (aim[1] - y) * k];
+    }
     last = now;
     draw();
     if (!wantsLoop() && raf) { cancelAnimationFrame(raf); raf = 0; }
@@ -853,6 +952,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
     g?.kill(); // a late reading would resize the canvas, and the last frame with it
     cancelAnimationFrame(raf); raf = 0;
     removeEventListener('resize', onResize);
+    follow(false);
     canvas.removeEventListener('webglcontextlost', onLost);
     canvas.removeEventListener('webglcontextrestored', onRestored);
     clearTimeout(lostTimer);
@@ -864,6 +964,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
     g?.kill();
     cancelAnimationFrame(raf); raf = 0;
     removeEventListener('resize', onResize);
+    follow(false);
     canvas.removeEventListener('webglcontextlost', onLost);
     canvas.removeEventListener('webglcontextrestored', onRestored);
     clearTimeout(lostTimer);
@@ -937,6 +1038,8 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
         });
       } else [U.uC1, U.uC2, U.uC3].forEach((u, i) => u.value.set(o.colors[i]).lerp(U.uGround.value, o.dim));
       U.uAmount.value = o.amount;
+      U.uDim.value = o.dim;
+      syncFollow();
       renderer.setClearColor(U.uGround.value);
       setTime();
       needsSize = true;
@@ -946,6 +1049,10 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
     },
     draw,
     stop,
+    // The pointer over the other document (a course tab's frame, or the page around it), in this window's pixels
+    // (lib/scene-host.js passes it on), while the scene follows.
+    point: (x, y) => { if (following) point(x, y); },
+    get follows() { return following; },
     get clock() { return { ...clock }; },
   };
 };

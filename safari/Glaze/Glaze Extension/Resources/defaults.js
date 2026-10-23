@@ -56,7 +56,7 @@ const GZ_SPEC = {
     // The gradient's shape: style, direction (degrees), blend (100 melts the colors together, 0 is
     // hard bands) and spread (how much of the screen the change of color covers, in %).
     style: ['linear', ['linear', 'radial', 'conic', 'mesh']], angle: [135, [0, 360]], blend: [100, [0, 100]], spread: [100, [20, 200]],
-    scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins']], intensity: [50, [0, 100]],
+    scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins', 'topography']], intensity: [50, [0, 100]],
   },
   nav: {
     k: ['default', ['default', 'solid', 'gradient', 'image']], c: ['#243447', 'hex'], d: ['#57748c', 'hex'], a: [135, [0, 360]],
@@ -107,7 +107,7 @@ const GZ_SPEC = {
   docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
   // features/lookx.js. pointer: the student's over every Look's (x.pointer): 'look' wears the Look's, 'off' the system's,
   // 'own' their picture (on this device). pointerAnim: the Look's pointer animation (x.cursor). Never in a Look or its code.
-  extras: { pointer: ['look', ['look', 'off', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'own']], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
+  extras: { pointer: ['look', ['look', 'off', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own']], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
   // lib/blocklist.js
   mods: { blocklist: [true, 'bool'] },
@@ -287,6 +287,10 @@ const GZ_ALL_PRESETS = (custom = []) => [...GZ_PRESETS, ...custom.map((p) => [p.
 // look and background value (what it doesn't name goes back to the default), so one look never keeps
 // another's leftovers; tooltips, hints and a background image's address stay the user's.
 const GZ_LOOKS = [
+  ['Frostdev', GZ_PALETTE(
+    '#27cdf1', '#a6efff', '#123b54', '#03131e',
+    '#102338', '#060d18', '#ecf5fa', '#aec4d5', '#829eb5', '#2b465d', '#4d6f8a',
+    '#78dfc0', '#ffd18c', '#ffa7b2'), { font: 'geist', head: 'manrope', radius: 16, glass: 18, depth: 2, surfaceOpacity: 90 }, { kind: 'scene', scene: 'topography', intensity: 75, colors: ['#1f8fc9', '#2e6db4', '#5f93ab'] }],
   ['Aurora Night', 'Midnight', { font: 'outfit', radius: 16, glass: 16, depth: 2 }, { kind: 'scene', scene: 'borealis', intensity: 55 }],
   ['Library', 'Paper', { font: 'literata', head: 'fraunces', radius: 6, density: 'roomy', leading: 1.7, glass: 0 }, { kind: 'solid' }],
   ['Terminal', 'Forest', { font: 'jetbrains-mono', radius: 2, density: 'compact', glass: 0, depth: 0 }, { kind: 'solid' }],
