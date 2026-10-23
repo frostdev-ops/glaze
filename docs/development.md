@@ -17,6 +17,21 @@ plus that site's own part, `content-ultra.js` on Blackboard Ultra and `content-c
 has no part; it is themed by `content.js` and `moodle.css`. Everything else, from the command palette to the
 grade calculators, loads on demand from `features/` the first time a page needs it.
 
+## Activity Stream
+
+Blackboard's Stream notification settings contain a Glaze section, also available at
+Settings → Blackboard → Activity Stream. Timeline dates default to due dates for deadline
+notifications and posted dates for other updates. Choose posted dates or both, relative due
+dates, compact cards, and whether encouragement appears. The exact deadline and time zone
+remain available on the date's accessible label and hover title. Relative dates fall back to
+calendar dates if Blackboard's zone differs from the browser's. These controls save Glaze
+preferences immediately; Blackboard's notification delivery settings are unchanged.
+
+The feature loads only on `/ultra/stream` routes. It reads the rendered deadline metadata,
+keeps Blackboard's original timestamp nodes, and restores the native display when disabled.
+`node --test test/stream.test.js` checks the date policy; `scripts/stream-check.js` checks
+redraws, settings persistence/failure, form isolation, narrow layouts and teardown.
+
 ## Building
 
 ```sh

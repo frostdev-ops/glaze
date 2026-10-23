@@ -304,6 +304,16 @@ content-page-header > header, .routed-page.bb-offcanvas-container [class*="heade
 /* Activity Stream: Ultra's full-width white hover overlay sits behind the themed card.
    Keep the card's own hover treatment; the colour sweep cannot reach pseudo-elements. */
 #site-wrap .activity-stream .stream-item::before { background: none !important; }
+/* Keep Angular's timestamp nodes alive so posted dates continue updating underneath the due-date view. */
+#activity-stream .timestamp[data-gz-stream-date] > :not(.gz-stream-date) { display: none !important; }
+#activity-stream .gz-stream-date { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; font-style: normal; }
+#activity-stream .gz-stream-date .date { display: block; }
+#activity-stream .gz-stream-date .date[hidden] { display: none !important; }
+#activity-stream .gz-stream-posted { font-size: .85em; color: var(--gz-ink-muted); }
+#activity-stream [data-gz-stream-hidden], #activity-stream [data-gz-stream-empty] { display: none !important; }
+html[data-gz-stream-compact] #activity-stream .stream-item-container { margin-block-end: 12px !important; padding-block: 0 !important; }
+html[data-gz-stream-compact] #activity-stream .element-card { padding-block: 12px !important; min-height: 0 !important; }
+html[data-gz-stream-compact] #activity-stream .activity-group-title { margin-block: 16px !important; }
 /* Courses grid: the banner is the card's top, not its left. */
 .multi-column-view .course-banner { border-radius: calc(var(--gz-radius) - calc(var(--gz-radius, 12px) * 1 / 12)) calc(var(--gz-radius) - calc(var(--gz-radius, 12px) * 1 / 12)) 0 0 !important; }
 /* Ultra's 4px frame around each top-level outline card drew a second, squarer outline outside it. */

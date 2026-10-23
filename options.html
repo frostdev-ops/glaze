@@ -857,7 +857,7 @@
 <p class="desc">Switching tabs shows a still copy of the course as you last saw it at once, then Blackboard's live page fades in. The copies stay in memory and are never written to disk; they go when the browser closes, when you turn the tabs or Glaze off, or when someone else signs in. Glaze never opens or loads a course in the background.</p>
 </section>
 </div>
-<div id="panel-blackboard" role="tabpanel" aria-labelledby="tab-blackboard" data-editor-panel="blackboard" hidden><nav class="section-links" aria-label="Sections"><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a><a href="#blackboard/dashboard" data-editor-alias>Dashboard</a><a href="#blackboard/folders" data-editor-alias>Hidden folders</a><a href="#blackboard/declutter" data-editor-alias>Declutter</a></nav>
+<div id="panel-blackboard" role="tabpanel" aria-labelledby="tab-blackboard" data-editor-panel="blackboard" hidden><nav class="section-links" aria-label="Sections"><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a><a href="#blackboard/dashboard" data-editor-alias>Dashboard</a><a href="#blackboard/stream" data-editor-alias>Activity Stream</a><a href="#blackboard/folders" data-editor-alias>Hidden folders</a><a href="#blackboard/declutter" data-editor-alias>Declutter</a></nav>
 <section id="bb-navigation" data-editor-section="blackboard/nav" data-sites="Blackboard Ultra" aria-labelledby="heading-blackboard-nav">
 <p class="section-path" data-editor-breadcrumb><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a></p><div class="section-heading"><h2 id="heading-blackboard-nav">Blackboard navigation</h2></div>
 <p class="desc section-note">Arrange the rail, its labels, branding, links and widgets.</p><p class="site-scope" translate="no">Blackboard Ultra</p>
@@ -910,6 +910,13 @@
 <label class="check"><input type="checkbox" data-key="widgets.land"><span>Open Blackboard on the dashboard</span>
             <span class="desc">Off by default. When Blackboard Ultra opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></label>
 <a href="#study/widgets" data-editor-alias>Notes and widgets</a>
+</section>
+<section id="bb-stream" data-editor-section="blackboard/stream" data-sites="Blackboard Ultra" aria-labelledby="heading-blackboard-stream">
+<div class="section-heading"><h2 id="heading-blackboard-stream">Activity Stream</h2><button type="button" class="section-reset" data-reset-section="blackboard/stream">Reset section</button></div>
+<label class="field"><span>Timeline dates</span><select data-key="stream.dates"><option value="smart">Due dates when available</option><option value="posted">Posted dates</option><option value="both">Due and posted dates</option></select></label>
+<label class="check"><input type="checkbox" data-key="stream.relative"><span>Relative due dates</span></label>
+<label class="check"><input type="checkbox" data-key="stream.compact"><span>Compact cards</span></label>
+<label class="check"><input type="checkbox" data-key="stream.encouragement"><span>Show encouragement</span></label>
 </section>
 <section id="bb-folders" data-editor-section="blackboard/folders" data-sites="Blackboard Ultra · Canvas" aria-labelledby="heading-blackboard-folders">
 <p class="section-path" data-editor-breadcrumb><a href="#blackboard/folders" data-editor-alias>Hidden folders</a></p><div class="section-heading"><h2 id="heading-blackboard-folders">Hidden folders</h2><button type="button" class="section-reset" data-reset-section="blackboard/folders">Reset section</button></div>

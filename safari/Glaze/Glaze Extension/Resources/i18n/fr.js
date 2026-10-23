@@ -1,6 +1,17 @@
 // French for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).fr = {
+  "Activity Stream": "Flux d’activité",
+  "Timeline dates": "Dates de la chronologie",
+  "Due dates when available": "Échéances si disponibles",
+  "Posted dates": "Dates de publication",
+  "Due and posted dates": "Échéances et publications",
+  "Relative due dates": "Échéances relatives",
+  "Compact cards": "Cartes compactes",
+  "Show encouragement": "Afficher les encouragements",
+  "Posted {when}": "Publié {when}",
+  "Could not save. Try again.": "Impossible d’enregistrer. Réessayez.",
+  "Saving…": "Enregistrement…",
   "Document review": "Lecture des documents",
   "Compact submission header": "En-tête de remise compact",
   "Full-screen document button": "Bouton de document en plein écran",

@@ -1,6 +1,17 @@
 // Dutch for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).nl = {
+  "Activity Stream": "Activiteitenstream",
+  "Timeline dates": "Tijdlijndatums",
+  "Due dates when available": "Inleverdatums indien beschikbaar",
+  "Posted dates": "Plaatsingsdatums",
+  "Due and posted dates": "Inlever- en plaatsingsdatums",
+  "Relative due dates": "Relatieve inleverdatums",
+  "Compact cards": "Compacte kaarten",
+  "Show encouragement": "Aanmoedigingen tonen",
+  "Posted {when}": "Geplaatst {when}",
+  "Could not save. Try again.": "Opslaan mislukt. Probeer het opnieuw.",
+  "Saving…": "Opslaan…",
   "Document review": "Documenten bekijken",
   "Compact submission header": "Compacte inleveringskop",
   "Full-screen document button": "Knop voor document op volledig scherm",
