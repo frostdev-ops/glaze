@@ -92,6 +92,16 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     await until(async () => await where(f) === '/ultra/courses/_102_1/announcements');
     await pause(500);
     check(page.url() === `${site}/ultra/courses/_101_1/outline` && await shown(), 'a second panel opened from the first closes back into the tab');
+    // Ultra can replace the panel entry on close as well as push a new one.
+    await f.click('announcement-list a.list-item-title');
+    await f.waitForSelector('.js-close-announcement');
+    await f.evaluate(() => document.querySelector('.js-close-announcement').addEventListener('click', (e) => {
+      e.stopImmediatePropagation(); history.replaceState(null, '', location.origin + '/ultra/stream');
+      dispatchEvent(new PopStateEvent('popstate'));
+    }));
+    await f.click('.js-close-announcement');
+    await until(async () => await where(f) === '/ultra/courses/_102_1/announcements' && await f.locator('announcement-list a.list-item-title').count());
+    check(await shown() && await f.evaluate(() => performance.timeOrigin) === birth, 'a replaceState close returns through the router without reloading');
     // A real move away still takes the window there.
     await f.click('#site-wrap a[href="/ultra/stream"]');
     await until(async () => page.url() === `${site}/ultra/stream` && !await shown());

@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const source = fs.readFileSync(path.join(__dirname, '../features/coursetabs.js'), 'utf8');
+const source = fs.readFileSync(path.join(process.env.EXT || path.join(__dirname, '..'), 'features/coursetabs.js'), 'utf8');
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const origin = 'https://bb.test';
 
@@ -13,8 +13,11 @@ const frame = (framed = '_2_1') => {
   const sent = [], routed = [];
   const location = { origin, pathname: '', search: '', hash: '' };
   const at = (url) => { const u = new URL(url, origin); Object.assign(location, { pathname: u.pathname, search: u.search, href: u.href }); };
+  class Element { closest() { return this; } getAttribute() { return ''; } }
+  const button = new Element(); button.closest = (s) => s === 'a[href], button, [role="button"], [role="link"]' ? button : null;
   const c = vm.createContext({
-    on: true, framed, PAGE: 'page', preview: false, ctx: { site: 'ultra' }, location, URL, URLSearchParams, awayFrom: '',
+    Element,
+    on: true, framed, PAGE: 'page', preview: false, ctx: { site: 'ultra', courseId: () => '_2_1' }, location, URL, URLSearchParams, awayFrom: '',
     here: () => location.pathname.match(/\/ultra\/courses\/(_\d+_\d+)\//)?.[1], observeView() {}, showing: '', frames: new Map(), loaded: false,
     last: '', lastPath: '', restored: true, flag() {}, place() {}, draw() {}, lay() {}, later() {}, moved() {},
     toTop: (op, m) => sent.push([op, m.url]),
@@ -24,7 +27,8 @@ const frame = (framed = '_2_1') => {
   });
   c.pass = vm.runInContext(part('  const pass = ', '  const sync = ') + '\npass;', c);
   const go = (url) => { at(url); c.pass(); };
-  return { go, sent, routed, location };
+  const leave = vm.runInContext(part('  const onLeave = ', '  // ---- live tabs') + '\nonLeave;', c);
+  return { go, sent, routed, location, at, close: () => leave({ type: 'click', isTrusted: true, target: button }) };
 };
 const COURSE = '/ultra/courses/_2_1/announcements', ANN = '/ultra/stream/announcement-detail?courseId=_2_1&announcementId=_5_1';
 
@@ -79,4 +83,25 @@ test('a frame that came in on the panel itself closes to its course', () => {
   f.go(ANN); f.go('/ultra/stream');
   assert.deepEqual(f.sent, []);
   assert.deepEqual(f.routed, [['replace', origin + '/ultra/courses/_2_1/outline'], ['popstate']]);
+});
+
+
+test('closing before the next scan still remembers the panel', () => {
+  const f = frame();
+  f.go(COURSE); f.at(ANN); f.close(); f.go('/ultra/stream');
+  assert.deepEqual(f.sent, [], 'a fast close must not eject the course tab');
+  assert.equal(f.location.pathname, COURSE);
+});
+
+test('a panel under Calendar closes to its course without a prior scan', () => {
+  const f = frame();
+  f.go(COURSE); f.at('/ultra/calendar/event-detail?course_id=_2_1'); f.close(); f.go('/ultra/calendar');
+  assert.deepEqual(f.sent, []);
+  assert.equal(f.location.pathname, COURSE);
+});
+
+test('leaving a panel for the Ultra root is a real move away', () => {
+  const f = frame();
+  f.go(COURSE); f.go(ANN); f.go('/ultra');
+  assert.deepEqual(f.sent, [['away', '/ultra']]);
 });
