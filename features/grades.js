@@ -335,7 +335,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         const x = r.groups[g.id]?.current;
         gOut.textContent = x?.possible > 0 ? show((x.score / x.possible) * 100) : '–';
       });
-      const legend = make('legend', {}, make('span', { textContent: course.weighted ? `${g.name} · ${GZ_I18N.pct(g.weight, locale())}` : g.name }), gOut);
+      // Ultra's own categories (sys) in the student's language.
+      const heading = g.sys ? t(g.name) : g.name;
+      const legend = make('legend', {}, make('span', { textContent: course.weighted ? `${heading} · ${GZ_I18N.pct(g.weight, locale())}` : heading }), gOut);
       const list = make('ul');
       const count = (id, name) => {
         const c = label(make('input', { type: 'checkbox', checked: !rec.h.includes(id) }), t('Count {name}', { name }));

@@ -3046,5 +3046,13 @@
   "You see {name} instead, your own choice:": "Jij ziet in plaats daarvan {name}, je eigen keuze:",
   "Your own picture, kept on this computer: a theme code of this Look goes without it.": "Je eigen afbeelding, bewaard op deze computer: een themacode van deze Look gaat zonder.",
   "Worn with this Look, and in a theme code of it. Drawn by your system so it never lags; text fields keep the usual text cursor.": "Hoort bij deze Look en zit in de themacode ervan. Getekend door je systeem zodat hij nooit achterloopt; tekstvelden houden de gewone tekstcursor.",
-  "Pointer: {name}": "Aanwijzer: {name}"
+  "Pointer: {name}": "Aanwijzer: {name}",
+  "Journal": "Dagboek",
+  "Attendance": "Aanwezigheid",
+  "Homework": "Huiswerk",
+  "Presentation": "Presentatie",
+  "Form": "Formulier",
+  "Survey": "Enquête",
+  "Blog": "Blog",
+  "Wiki": "Wiki"
 };

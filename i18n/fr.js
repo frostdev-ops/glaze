@@ -3046,5 +3046,13 @@
   "You see {name} instead, your own choice:": "Vous voyez {name} à la place, votre propre choix :",
   "Your own picture, kept on this computer: a theme code of this Look goes without it.": "Votre propre image, gardée sur cet ordinateur : un code de thème de ce Look part sans elle.",
   "Worn with this Look, and in a theme code of it. Drawn by your system so it never lags; text fields keep the usual text cursor.": "Porté avec ce Look, et dans son code de thème. Dessiné par votre système pour ne jamais être à la traîne ; les champs de texte gardent le curseur de texte habituel.",
-  "Pointer: {name}": "Pointeur : {name}"
+  "Pointer: {name}": "Pointeur : {name}",
+  "Journal": "Journal",
+  "Attendance": "Présence",
+  "Homework": "Devoir maison",
+  "Presentation": "Présentation",
+  "Form": "Formulaire",
+  "Survey": "Sondage",
+  "Blog": "Blog",
+  "Wiki": "Wiki"
 };

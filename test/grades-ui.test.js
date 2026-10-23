@@ -743,7 +743,7 @@ class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_N
 // the page's nth storage.local read (of keys) fails, as Chrome's do (runtime.lastError, no answer). loc: the page's
 // address, which the test may change (Ultra moves between pages in one document).
 const bookIds = new WeakMap();
-const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {}, held = { on: false, queue: [] }, failGet = () => false, lazy = false, failAsk = () => false } = {}) => {
+const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {}, held = { on: false, queue: [] }, failGet = () => false, lazy = false, failAsk = () => false, lang = 'en' } = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.body.append(/\/outline/.test(path) ? el(doc, 'aside', { className: 'outline-actions' }, el(doc, 'div', { className: 'js-details-and-actions outline-action-block' }), el(doc, 'div', { className: 'conditional-block' }))
@@ -781,7 +781,7 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome, TextEncoder, fetch, Date: FixedDate, File: class File {}, AbortController,
     GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES, setTimeout: (f, ms) => state.timers.push([f, ms]),
     GZ_CTX: {
-      site: 'ultra', t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', need, settings: () => state.settings, on: () => true,
+      site: 'ultra', t: (k, v) => I.t(k, v, lang), locale: () => lang, need, settings: () => state.settings, on: () => true,
       courseId: () => loc.pathname.match(/\/courses\/(_\d+_\d+)/)?.[1], myCourses: () => Promise.resolve(ufix('memberships').results),
       bookFor: (cid) => (books[cid] ? { results: books[cid], key: `k${cid}:${bookKey(books[cid])}` } : { key: '' }),
     },
@@ -825,6 +825,19 @@ test("Ultra what-if: the page's gradebook in hand before lib/gradecalc.js has co
   await open(p);
   await settle(10);
   assert.deepEqual(totals(p), ['88%', '88%', '64%']);
+});
+
+test("Ultra what-if: Ultra's own categories, titled with its language key, read as their names in the student's language", async () => {
+  const rows = ufix('grades').results;
+  for (const r of rows) if (r.column.gradebookCategory?.title === 'Discussion') r.column.gradebookCategory.title = 'DISCUSSION.NAME';
+  const legends = async (lang) => {
+    const p = ultraPage({ books: { _101_1: rows }, lang });
+    p.UI.render(); await settle(10); await open(p); await settle(10);
+    return p.box().all((e) => e.tagName === 'LEGEND').map((e) => e.children[0].textContent);
+  };
+  assert.deepEqual(await legends('en'), ['Assignment · 40%', 'Test · 40%', 'Discussion · 20%']);
+  require('../i18n/de.js');
+  assert.match((await legends('de'))[2], /^Diskussion · 20\s?%$/);
 });
 
 // A read of the course's gradebook that fails (Ultra busy, the network gone for a moment), with no page gradebook to fall back on.
