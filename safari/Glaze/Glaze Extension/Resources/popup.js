@@ -82,6 +82,48 @@ GZ_UI.load().then((s) => {
   render();
 });
 
+// Use Glaze on {host}: where the browser asks for each site (no <all_urls>; Safari has it), opening the popup gives it
+// the tab (activeTab). An http(s) tab Glaze can't run on yet (its host not held, or held but not on its LMS's list) has
+// lib/detect.js's check run in it; an LMS gets one button. Its click tells the worker the site, the LMS and the tab, then
+// asks the browser for the host in the same click (held already: the worker approves from the message). The worker
+// finishes when the grant comes (permissions.onAdded), as the popup may close under the prompt; open still, the button
+// goes once the site is on its list. Chrome 133+ also keeps an Allow entry for the tab in its extensions menu.
+(async () => {
+  if (chrome.runtime.getManifest().host_permissions?.includes('<all_urls>')) return;
+  const LISTS = ['canvas', 'moodle', 'ultra'];
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const site = GZ_SITE.address(tab?.url || '');
+  if (!site || !Number.isInteger(tab.id) || new URL(tab.url).origin !== site.origin) return;
+  const u = new URL(site.origin);
+  const listed = (r) => LISTS.some((k) => Array.isArray(r?.[k]) && r[k].includes(k === 'ultra' ? site.origin : `${site.origin}/*`));
+  const held = await chrome.permissions.contains({ origins: [site.pattern] }).catch(() => false);
+  if (held && (LISTS.some((k) => GZ_BUILT_IN(k, u)) || listed(await chrome.storage.local.get(LISTS)))) return;
+  const kind = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: GZ_DETECT }).then((r) => r?.[0]?.result, () => null);
+  if (!LISTS.includes(kind)) return;
+  const b = $('#here');
+  b.textContent = t('Use Glaze on {host}', { host: site.host });
+  let on = (await chrome.storage.sync.get('enabled')).enabled !== false, done = false, busy = false, menu = false;
+  const show = () => {
+    b.hidden = done || !on;
+    if (b.hidden || held || menu || typeof chrome.permissions.addHostAccessRequest !== 'function') return;
+    menu = true;
+    Promise.resolve().then(() => chrome.permissions.addHostAccessRequest({ tabId: tab.id })).catch(() => {});
+  };
+  const ready = () => { busy = false; b.removeAttribute('aria-disabled'); };
+  chrome.storage.onChanged.addListener((c, area) => {
+    if (area === 'sync' && c.enabled) { on = c.enabled.newValue !== false; show(); }
+    if (area === 'local' && LISTS.some((k) => k in c)) chrome.storage.local.get(LISTS).then((r) => { if (listed(r)) { done = true; show(); } });
+  });
+  b.addEventListener('click', () => {
+    if (busy || done) return;
+    busy = true;
+    b.setAttribute('aria-disabled', 'true');
+    const told = GZ_SITE.tell({ op: 'ask', origin: site.origin, kind, tabId: tab.id });
+    (held ? told.then((r) => r?.ok) : new Promise((res) => res(chrome.permissions.request({ origins: [site.pattern] })))).then((ok) => { if (!ok) ready(); }, ready);
+  });
+  show();
+})().catch(() => {});
+
 // Due this week, as Blackboard, Canvas or Moodle last told the content script (the popup can't ask them): the count and
 // the next three, to read. Each site keeps its own list (content.js dueWeek, `dueWeek:<origin>`): the one of the site in this
 // tab, or else every site's, each item with its site's name. A list over a day old is left out; it would miss what was

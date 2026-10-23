@@ -3081,5 +3081,6 @@
   "All sites allowed": "Alle Websites erlaubt",
   "No course site at {host}": "Keine Kursseite unter {host}",
   "Can't reach {host}": "{host} ist nicht erreichbar",
-  "Checking {host}": "{host} wird geprüft"
+  "Checking {host}": "{host} wird geprüft",
+  "Use Glaze on {host}": "Glaze auf {host} verwenden"
 };

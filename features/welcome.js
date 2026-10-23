@@ -10,20 +10,12 @@ var GZ_WELCOME = globalThis.GZ_WELCOME || (() => {
   // The button: nothing to do yet ('none', shown as a dimmed Allow), Glaze can already reach the site ('open'), or it must
   // ask first ('allow').
   const act = (site, held) => (!site ? 'none' : held ? 'open' : 'allow');
-  const required = (site, patterns) => {
-    const u = new URL(site.origin);
-    return patterns.some((p) => {
-      if (p === '<all_urls>') return true;
-      const [, scheme, host] = /^(\*|https?):\/\/([^/:]+)(?::\d+)?\//.exec(p) || [];
-      return (scheme === '*' || `${scheme}:` === u.protocol) && (host === '*' || host === u.hostname || host?.startsWith('*.') && (u.hostname === host.slice(2) || u.hostname.endsWith(host.slice(1))));
-    });
-  };
-  return { act, required };
+  return { act };
 })();
 
 if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
-  const { act, required } = GZ_WELCOME;
-  const { address, probe, nearby } = GZ_SITE;
+  const { act } = GZ_WELCOME;
+  const { address } = GZ_SITE;
   const html = document.documentElement;
   const $ = (s) => document.querySelector(s);
   const form = $('#site'), bar = $('.bar'), input = $('#address'), go = $('#go'), label = go.querySelector('.label');
@@ -118,19 +110,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   };
   const clear = () => { note.hidden = true; picks.replaceChildren(); if (bar.dataset.state === 'bad') delete bar.dataset.state; };
   const hold = (on) => { busy = on; go.toggleAttribute('data-busy', on); input.readOnly = on || !!done; };
-  const cancel = (s) => chrome.runtime.sendMessage({ type: 'glaze:allow', op: 'cancel', origin: s.origin }).catch(() => {});
-  const settle = async (s, found) => {
-    // Open only once the worker has checked the site and registered its first page.
-    const approved = await chrome.runtime.sendMessage({ type: 'glaze:allow', op: 'yes', origin: s.origin, kind: found.kind, url: found.url }).catch(() => null);
-    if (!approved?.ok) {
-      cancel(s);
-      held = false;
-      hold(false);
-      render();
-      tell(t("Can't reach {host}", { host: s.host }));
-      input.focus();
-      return;
-    }
+  const settle = (s, found) => {
     done = { ...s, ...found };
     input.value = s.host;
     kindTag.textContent = NAMES[found.kind];
@@ -152,25 +132,21 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     check();
     input.focus();
   };
-  // Allow: the browser's prompt opens from the click that called this, so nothing is awaited before the request. Granted,
-  // the site is checked; a site that isn't Blackboard, Canvas or Moodle gives its grant back at once (after its own
-  // homepage was read for links), and the student gets the course sites nearby to pick.
+  // Allow (lib/site.js, as Settings → Sites does): the browser's prompt opens from the click that called this. Granted, the
+  // site is checked; Open only once the worker has checked it too and registered its first page. A site that isn't
+  // Blackboard, Canvas or Moodle gives its grant back at once, and the student gets the course sites nearby to pick.
   const allow = (s) => {
     hold(true);
-    chrome.runtime.sendMessage({ type: 'glaze:allow', op: 'ask', origin: s.origin }).catch(() => {});
-    chrome.permissions.request({ origins: [s.pattern] }).then(async (ok) => {
-      if (!ok) { cancel(s); hold(false); input.focus(); return; }
-      said.textContent = t('Checking {host}', { host: s.host });
-      const found = await probe(s);
-      if (typeof found === 'object') return settle(s, found);
-      const hosts = await nearby(s, { held: found === 'none' });
-      cancel(s);
-      if (!required(s, chrome.runtime.getManifest().host_permissions || [])) await chrome.permissions.remove({ origins: [s.pattern] }).catch(() => {});
-      held = false;
+    GZ_SITE.allow(s, { checking: () => { said.textContent = t('Checking {host}', { host: s.host }); } }).then((r) => {
+      if (r.state === 'done') return settle(s, { kind: r.kind, url: r.url });
       hold(false);
-      tell(t(found === 'none' ? 'No course site at {host}' : "Can't reach {host}", { host: s.host }), hosts);
+      if (r.state === 'refused') { input.focus(); return; }
+      held = false;
+      render();
+      if (r.state === 'failed') { tell(t("Can't reach {host}", { host: s.host })); input.focus(); return; }
+      tell(t(r.state === 'none' ? 'No course site at {host}' : "Can't reach {host}", { host: s.host }), r.hosts);
       (picks.firstChild || input).focus();
-    }, () => { cancel(s); hold(false); });
+    });
   };
 
   input.addEventListener('input', () => {
