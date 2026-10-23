@@ -312,6 +312,23 @@ test('approved Ultra sites stay registered while Glaze is off, as the manifest\'
   assert.deepEqual([w.ultra(), w.hosts()], [[`ultra:${B}`], []]);
 });
 
+test('Ultra approvals on two ports share one script and removing either keeps the other working', async () => {
+  const host = 'https://bb.ports.edu', port = `${host}:8443`;
+  const w = worker({ local: { ultra: [port, host] } });
+  w.installed[0]({ reason: 'update' });
+  await settle();
+  const scripts = () => w.registered.filter((s) => s.id.startsWith('ultra:'));
+  assert.equal(scripts().length, 1, 'portless browser matches must not inject the same bundle twice');
+  assert.deepEqual(scripts()[0].matches, [`${host}/ultra`, `${host}/ultra/*`]);
+  for (const origin of [port, host]) assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page(`${origin}/ultra/course`)), { ok: true });
+  assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: host }, editor), { ok: true });
+  assert.equal(scripts().length, 1);
+  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page(`${port}/ultra/course`)), { ok: true });
+  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page(`${host}/ultra/course`)), denied);
+  assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: port }, editor), { ok: true });
+  assert.deepEqual(scripts(), []);
+});
+
 test('a list changed in storage registers what it now holds', async () => {
   const w = worker();
   const area = w.store.local;

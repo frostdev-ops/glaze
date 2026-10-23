@@ -93,6 +93,21 @@ test('the 3.3.8 manifest fixture is the tagged release\'s', (t) => {
   assert.equal(fs.readFileSync(path.join(__dirname, 'fixtures/manifest-v3.3.8.json'), 'utf8'), tagged);
 });
 
+test('Safari runs exactly one first bundle on MoodleCloud, including Ultra paths', () => {
+  const entries = safari(m).content_scripts.filter((c) => c.js.includes('content.js'));
+  const matches = (p, url) => {
+    const [, host, pathname] = /^https:\/\/([^/]+)(\/.*)$/.exec(p), u = new URL(url);
+    const hostOK = host === '*' || host === u.hostname || host.startsWith('*.') && (u.hostname === host.slice(2) || u.hostname.endsWith(host.slice(1)));
+    const pathRE = new RegExp('^' + pathname.split('*').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
+    return u.protocol === 'https:' && hostOK && pathRE.test(u.pathname);
+  };
+  for (const host of ['school.moodlecloud.com', 'moodlecloud.com']) for (const pathname of ['/my/', '/ultra', '/ultra/', '/ultra/course', '/ultralookalike']) {
+    const url = `https://${host}${pathname}`;
+    const first = entries.filter((c) => c.matches.some((p) => matches(p, url)) && !c.exclude_matches?.some((p) => matches(p, url)));
+    assert.equal(first.length, 1, `${url} must not redeclare the shared bundle's globals`);
+  }
+});
+
 test('Safari manifest rewriting adds native messaging once and preserves unrelated fields', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-safari-manifest-'));
   const file = path.join(dir, 'manifest.json');
