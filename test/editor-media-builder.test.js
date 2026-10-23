@@ -190,3 +190,20 @@ test('a file whose location and device details cannot be taken out is not kept, 
   await choose();
   assert.ok(status().some((t) => /can’t play that file as this kind/.test(t)), 'another refusal is still its own');
 });
+
+test('review: an older permission answer cannot replace a newer media choice with the same URL', async () => {
+  const answers = [];
+  const r = rig({ parts: withFile, answer: () => new Promise((resolve) => answers.push(resolve)) });
+  await r.settle();
+  typeLink(r, LINK);
+  pickKind(r, 'image');
+  typeLink(r, LINK);
+  answers[1](true);
+  await r.settle();
+  assert.equal(r.media().type, 'image');
+  const writes = r.writes.length;
+  answers[0](true);
+  await r.settle();
+  assert.equal(r.media().type, 'image', 'the older video choice stays superseded');
+  assert.equal(r.writes.length, writes, 'the late answer writes nothing');
+});
