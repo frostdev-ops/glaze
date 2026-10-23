@@ -26,7 +26,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     ruling = true;
     Promise.resolve().then(() => { ruling = false; globalThis.GZ_RULES?.sync(); });
   };
-  const setText = (el, text) => { if (el.textContent !== text && globalThis.GZ_RULES?.real(el) !== text) { el.textContent = text; rules(); } };
+  const setText = (el, text) => { if ((globalThis.GZ_RULES?.real(el) ?? el.textContent) !== text) { el.textContent = text; rules(); } };
   const render = () => { if (live()) { for (const x of mounted) x(); if (pick) syncPicker(); } };
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
@@ -232,7 +232,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       setText(link, name); const full = [c?.name, c?.code].filter(Boolean).join(' · '); if (link.title !== full) link.title = full;
       // A nickname is the student's own: marked, so a Look's label leaves it (as content-ultra.js's on Ultra's cards).
       const nick = !!ctx.nickOf(id);
-      if (link.hasAttribute('data-gz-nick') !== nick) link.toggleAttribute('data-gz-nick', nick);
+      if (link.hasAttribute('data-gz-nick') !== nick) { link.toggleAttribute('data-gz-nick', nick); rules(); }
       setText(term, c?.term || api.term() || ''); setText(code, c?.code || '');
       if (card.getAttribute('aria-label') !== name) card.setAttribute('aria-label', name);
       const label = ctx.t('Colour and look for {name}', { name });
