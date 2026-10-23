@@ -191,3 +191,13 @@ test('the Allow frame: an address that is no plain host gets no button and asks 
     assert.deepEqual(f.asked, [], hash);
   }
 });
+
+test('review: a redirected file gives an actionable panel error instead of a generic failure', async () => {
+  const p = page();
+  p.button().click();
+  await settle();
+  p.say({ type: 'error', code: 'redirect' });
+  await settle();
+  assert.equal(p.button().textContent, 'Redirected file: download it from Canvas');
+  assert.deepEqual(p.saved, []);
+});

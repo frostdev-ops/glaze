@@ -213,3 +213,16 @@ test('review: a browser-menu Gradescope grant does not probe LMS APIs and refres
   assert.deepEqual(fetched, []);
   assert.equal(w.registered.has('gz-gradescope'), true);
 });
+
+test('review: narrowed downloads refuse opaque redirects before following an unknown host', async () => {
+  const modes = [];
+  const w = worker({ grants: new Set([`https://${CDN}/*`]), fetch: async (u, init) => {
+    modes.push(init.redirect);
+    return { type: 'opaqueredirect', ok: false, url: '', headers: new Headers() };
+  } });
+  const { port, say } = w.connect('canvas-zip', course());
+  say({ type: 'file', url: `https://${CDN}/redirect` });
+  await w.settle();
+  assert.deepEqual(modes, ['manual']);
+  assert.deepEqual(posted(port), [{ type: 'error', code: 'redirect' }]);
+});
