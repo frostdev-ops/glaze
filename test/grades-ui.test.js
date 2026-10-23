@@ -52,6 +52,7 @@ class El {
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
   removeAttribute(k) { delete this.attrs[k]; }
+  hasAttribute(k) { return k in this.attrs; }
   addEventListener(type, f) { (this.on[type] ||= []).push(f); }
   fire(type, isTrusted = true) { for (const f of this.on[type] || []) f({ type, isTrusted, target: this, preventDefault() {} }); }
   focus() { this.doc.activeElement = this; }
@@ -63,7 +64,9 @@ class El {
   close() { this.open = false; this.fire('close'); }
 }
 const page = () => {
-  const doc = { activeElement: null };
+  const doc = { activeElement: null, hidden: false };
+  doc.documentElement = new El('html', doc);
+  doc.addEventListener = (type, f) => doc.documentElement.addEventListener(type, f);
   doc.body = new El('body', doc);
   doc.createElement = (tag) => new El(tag, doc);
   doc.getElementById = (id) => doc.body.all((e) => e.id === id)[0] || null;
@@ -743,20 +746,24 @@ class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_N
 // the page's nth storage.local read (of keys) fails, as Chrome's do (runtime.lastError, no answer). loc: the page's
 // address, which the test may change (Ultra moves between pages in one document).
 const bookIds = new WeakMap();
-const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {}, held = { on: false, queue: [] }, failGet = () => false } = {}) => {
+const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {}, held = { on: false, queue: [] }, failGet = () => false, lazy = false, failAsk = () => false, lang = 'en' } = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.body.append(/\/outline/.test(path) ? el(doc, 'aside', { className: 'outline-actions' }, el(doc, 'div', { className: 'js-details-and-actions outline-action-block' }), el(doc, 'div', { className: 'conditional-block' }))
     : path.includes('/courses/') ? el(doc, 'div', { className: 'grades-list' }, el(doc, 'aside', { className: 'student-grade-overview' }), el(doc, 'div', { className: 'student-tabs' }))
     : el(doc, 'div', { id: 'body-content' }, el(doc, 'div', { className: 'base-grades' }, el(doc, 'div', { className: 'carousel' }, el(doc, 'div', { id: 'container-term-current' })))));
-  const state = { settings: { enabled: true, enhance: { gpaPlus: true, ...enhance } }, asked: [] };
+  const state = { settings: { enabled: true, enhance: { gpaPlus: true, ...enhance } }, asked: [], timers: [] };
   store.data.ultra ||= [UO]; // a site Glaze has found to be Ultra (lib/background.js fromUltra)
   store.send ||= serviceWorker(store);
   const sender = { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${UO}${path}` };
   let ctx;
-  const need = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
+  const now = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
+  // lazy: a file not here yet comes from the worker a turn later, as content.js's need() has it (lib/ultra.js is here:
+  // content-ultra.js read the page's gradebook with it).
+  const need = (f, ready) => (!lazy || ready() ? now(f, ready) : new Promise((res) => setImmediate(res)).then(() => now(f, ready)));
   const fetch = (url, o) => {
     state.asked.push([o?.method, o?.redirect, url.replace(UO, '')]);
+    if (failAsk(url)) return Promise.resolve({ ok: false, status: 503 });
     const body = Object.entries(answers).find(([k]) => url.includes(k))?.[1];
     return Promise.resolve(body ? { ok: true, text: async () => JSON.stringify(body) } : { ok: false, status: 404 });
   };
@@ -775,14 +782,16 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
   ctx = vm.createContext({
     document: doc, location: loc, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome, TextEncoder, fetch, Date: FixedDate, File: class File {}, AbortController,
-    GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES,
+    MutationObserver: class { observe() {} disconnect() {} },
+    GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
+    clearTimeout: (timer) => { const i = state.timers.indexOf(timer); if (i >= 0) state.timers.splice(i, 1); },
     GZ_CTX: {
-      site: 'ultra', t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', need, settings: () => state.settings, on: () => true,
+      site: 'ultra', t: (k, v) => I.t(k, v, lang), locale: () => lang, need, settings: () => state.settings, on: () => true,
       courseId: () => loc.pathname.match(/\/courses\/(_\d+_\d+)/)?.[1], myCourses: () => Promise.resolve(ufix('memberships').results),
       bookFor: (cid) => (books[cid] ? { results: books[cid], key: `k${cid}:${bookKey(books[cid])}` } : { key: '' }),
     },
   });
-  vm.runInContext(read('lib/gradecalc.js'), ctx);
+  if (lazy) vm.runInContext(read('lib/ultra.js'), ctx); else vm.runInContext(read('lib/gradecalc.js'), ctx);
   vm.runInContext(read('features/grades.js'), ctx);
   const release = () => { held.on = false; while (held.queue.length) held.queue.shift()(); };
   return { doc, state, store, ctx, loc, books, held, release, UI: ctx.GZ_GRADES_UI, box: () => doc.getElementById('gz-calc'), gpa: () => doc.getElementById('gz-gpa') };
@@ -811,6 +820,71 @@ test("Ultra what-if: under the overall grade, by the course's own recipe (Blackb
   assert.match(p.box().textContent, /Assignment · 40%/);
   assert.match(p.box().textContent, /Blackboard never sees these scores/);
   assert.deepEqual(p.state.asked, [], 'nothing asked of Ultra: the page had the gradebook');
+});
+
+test("Ultra what-if: the page's gradebook in hand before lib/gradecalc.js has come still loads", async () => {
+  const p = ultraPage({ lazy: true });
+  p.UI.render();
+  await settle(20);
+  assert.doesNotMatch(p.box().textContent, /couldn't load/);
+  await open(p);
+  await settle(10);
+  assert.deepEqual(totals(p), ['88%', '88%', '64%']);
+});
+
+test("Ultra what-if: Ultra's own categories, titled with its language key, read as their names in the student's language", async () => {
+  const rows = ufix('grades').results;
+  for (const r of rows) if (r.column.gradebookCategory?.title === 'Discussion') r.column.gradebookCategory.title = 'DISCUSSION.NAME';
+  const legends = async (lang) => {
+    const p = ultraPage({ books: { _101_1: rows }, lang });
+    p.UI.render(); await settle(10); await open(p); await settle(10);
+    return p.box().all((e) => e.tagName === 'LEGEND').map((e) => e.children[0].textContent);
+  };
+  assert.deepEqual(await legends('en'), ['Assignment · 40%', 'Test · 40%', 'Discussion · 20%']);
+  for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
+    require(`../i18n/${lang}.js`);
+    assert.equal((await legends(lang))[2], `${I.t('Discussion', {}, lang)} · ${I.pct(20, lang)}`);
+  }
+});
+
+// A read of the course's gradebook that fails (Ultra busy, the network gone for a moment), with no page gradebook to fall back on.
+const flaky = (o) => { const g = { down: true }; return Object.assign(ultraPage({ books: {}, answers: { 'gradebook/grades': ufix('grades') }, failAsk: (u) => g.down && u.includes('gradebook/grades'), ...o }), { g }); };
+const later = async (p) => { const [f] = p.state.timers.shift(); f(); await settle(10); };
+
+test('Ultra what-if: a read that fails is tried again on its own, still loading meanwhile', async () => {
+  const p = flaky();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  assert.match(p.box().textContent, /Loading your scores/);
+  assert.equal(byText(p.box(), 'Try again'), undefined);
+  assert.deepEqual(p.state.timers.map(([, ms]) => ms), [1000]);
+  p.g.down = false;
+  await later(p);
+  assert.deepEqual(totals(p), ['88%', '88%', '64%']);
+  assert.deepEqual(p.state.timers, []);
+});
+
+test('Ultra what-if: one that keeps failing is tried three more times, then says so, and Try again still works', async () => {
+  const p = flaky();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  for (let i = 0; i < 3; i++) await later(p);
+  assert.match(p.box().textContent, /Glaze couldn't load this course's scores\./);
+  assert.deepEqual(p.state.timers, [], 'no more tries of its own');
+  assert.equal(p.state.asked.filter(([, , u]) => u.includes('gradebook/grades')).length, 4);
+  p.g.down = false;
+  byText(p.box(), 'Try again').fire('click');
+  await settle(10);
+  assert.deepEqual(totals(p), ['88%', '88%', '64%']);
+});
+
+test("Ultra what-if: after a failure, the page's gradebook coming in loads it at once", async () => {
+  const p = flaky();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  p.books._101_1 = ufix('grades').results;
+  p.UI.render(); await settle(10);
+  assert.deepEqual(totals(p), ['88%', '88%', '64%']);
+  p.state.timers.shift()?.[0]();
+  await settle(10);
+  assert.deepEqual(totals(p), ['88%', '88%', '64%'], 'the try that was on its way does nothing');
 });
 
 test('GZ-01: a partial page gradebook never becomes an authoritative what-if calculation', async () => {
@@ -1214,4 +1288,75 @@ test('an Ultra page may change only its own site’s grade records, by its own i
   assert.equal((await send({ type: 'glaze:gpaterms', key: `gpaTerms:${UO}:_900_1`, op: 'goal', goal: { k: 'cum', v: 3.5 }, at, base: 0 }, from(`${UO}/ultra/grades`))).ok, true);
   assert.equal((await send({ type: 'glaze:insights', key: `insights:${UO}/_900_1`, op: 'clear', at }, from(`${UO}/ultra/course`))).ok, true);
   assert.deepEqual(Object.keys(store.data).sort(), [`gpaTerms:${UO}:_900_1`, `insights:${UO}/_900_1`, sylKey, UKEY, "ultra"].sort());
+});
+
+
+test('review: redraw toggle events do not reset the retry budget', async () => {
+  const p = flaky();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  const requests = () => p.state.asked.filter(([, , u]) => u.includes('gradebook/grades')).length;
+  p.box().fire('toggle'); // Native details queues this when a redraw restores open=true.
+  await settle(10);
+  assert.equal(requests(), 1, 'a redraw must not request the gradebook again');
+  for (const ms of [1000, 4000, 15000]) {
+    assert.deepEqual(p.state.timers.map(([, delay]) => delay), [ms]);
+    await later(p);
+    p.box().fire('toggle'); await settle(10);
+  }
+  assert.equal(requests(), 4);
+  assert.ok(byText(p.box(), 'Try again'));
+});
+
+for (const hidden of ['document', 'frame']) test(`review: retries pause in a hidden ${hidden}`, async () => {
+  const p = flaky();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  if (hidden === 'document') p.doc.hidden = true;
+  else p.doc.documentElement.setAttribute('data-gz-ctab-framed', '');
+  await later(p);
+  assert.equal(p.state.asked.length, 1, 'a hidden calculator must not retry');
+  assert.equal(p.state.timers.length, 0);
+  p.doc.hidden = false;
+  p.doc.documentElement.removeAttribute('data-gz-ctab-framed');
+  p.g.down = false;
+  p.UI.render(); await settle(10);
+  assert.equal(totals(p)[0], '88%');
+});
+
+test('review: leaving the course cancels its retry timer', async () => {
+  const p = flaky();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  p.loc.pathname = '/ultra/courses/_102_1/outline';
+  p.UI.render();
+  assert.equal(p.state.timers.length, 0, 'no timer retained for the old course');
+  p.loc.pathname = '/ultra/courses/_101_1/grades'; p.g.down = false;
+  p.UI.render(); await settle(10);
+  assert.equal(totals(p)[0], '88%');
+});
+
+test('review: partial gradebook recovery preserves current edits', async () => {
+  const p = ultraPage();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  await typeScore(p, '_603_1', 100);
+  assert.equal(totals(p)[1], '90%');
+  p.books._101_1 = Object.defineProperty(ufix('grades').results, 'complete', { value: false });
+  p.UI.render(); await settle(10);
+  p.books._101_1 = ufix('grades').results;
+  p.UI.render(); await settle(10);
+  assert.equal(totals(p)[1], '90%', 'the current what-if survives the partial answer');
+});
+
+test('review: category endpoint preserves teacher names and localizes system metadata', async () => {
+  const rows = ufix('grades').results;
+  const cats = [];
+  for (const r of rows) if (r.column.gradebookCategory) {
+    const c = r.column.gradebookCategory;
+    cats.push({ ...c, title: c.title === 'Discussion' ? 'DISCUSSION.NAME' : c.title, isUserDefined: c.title === 'Discussion' });
+    delete r.column.gradebookCategory;
+  }
+  require('../i18n/de.js');
+  const p = ultraPage({ books: { _101_1: rows }, lang: 'de', answers: { '/gradebook/categories': { results: cats } } });
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  const names = p.box().all((e) => e.tagName === 'LEGEND').map((e) => e.children[0].textContent);
+  assert.match(names[2], /^DISCUSSION\.NAME/);
+  assert.match(names[0], /^Aufgabe/);
 });

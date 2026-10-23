@@ -73,6 +73,8 @@ const tableWords = [
   ...[M.ENTER, ...Object.values(M.PRESETS)].flatMap((ps) => Object.values(ps).map(([label]) => label)),
   ...[...MX.SHAPES, ...MX.MARKS, ...MX.KINDS, ...MX.CURSORS, ...Object.keys(MX.EASES), ...XP.BLENDS].map(X.tokenName),
   ...Object.values(M.POINTERS), ...Object.values(M.TYPES), ...Object.values(PTR.NAMES),
+  // Ultra's own gradebook categories, named in the what-if calculator (features/grades.js).
+  ...Object.values(require('../lib/gradecalc.js').ULTRA_CATS),
 ];
 const used = new Set([
   ...tableWords,

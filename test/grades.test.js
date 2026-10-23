@@ -46,6 +46,18 @@ test('weighted overall: reproduces Blackboard, then answers what-ifs', () => {
   assert.equal(m.need(50).share, 0, 'already there with zeros on the rest');
 });
 
+test("Ultra's own categories, titled with its language key, read as their names; a teacher's own stays as titled", () => {
+  const cat = (title, own = false) => ({ gradebookCategory: { title, isUserDefined: own } });
+  const rows = spanish();
+  for (const [i, c] of [[0, cat('DISCUSSION.NAME')], [4, cat('SELF_AND_PEER.NAME')], [7, cat('Exam.name', true)], [8, cat('Final project', true)]]) Object.assign(rows[i].column, c);
+  // The empty category has no item to name it: its title from Ultra's list of categories (features/grades.js names).
+  const m = C.model(rows, { _6_1: 'QUIZ.NAME' });
+  assert.equal(m.kind, 'weighted');
+  assert.deepEqual(m.course.groups.map((x) => [x.name, x.sys]),
+    [['Discussion', true], ['Self and peer', false], ['', false], ['Exam.name', false], ['Final project', false], ['Quiz', true]]);
+  assert.ok(Object.values(C.ULTRA_CATS).includes('Assignment'));
+});
+
 test('exempt items leave the calculation; equal weighting averages the items', () => {
   const f = weights([['c_1', 50, { mode: 'equal' }], ['c_2', 50]]);
   const rows = [g('_1_1', 10, 10), g('_1_1', 100, 50), g('_2_1', 100, 80), g('_2_1', 100, 0, { isExempt: true }), overall(f, 77.5)];
@@ -208,4 +220,14 @@ test('Canvas news: stale tabs patch only their field and visit ids only grow', (
   assert.deepEqual(R.canvasNewsRecord(refreshed, { seen: ['271', '318'] }), {
     ...refreshed, seen: ['271', '280', '318'],
   }, "an older visit snapshot adds ids without forgetting another tab's ids");
+});
+
+
+test('review: category localizableTitle keys work with an already readable title', () => {
+  const rows = spanish();
+  rows[0].column.gradebookCategory = { title: 'Discussion', isUserDefined: false, localizableTitle: { languageKey: 'gradebook.category.discussion' } };
+  rows[4].column.gradebookCategory = { title: 'My discussion', isUserDefined: true, localizableTitle: { languageKey: 'gradebook.category.discussion' } };
+  const groups = C.model(rows).course.groups;
+  assert.deepEqual([groups[0].name, groups[0].sys], ['Discussion', true]);
+  assert.deepEqual([groups[1].name, groups[1].sys], ['My discussion', false]);
 });

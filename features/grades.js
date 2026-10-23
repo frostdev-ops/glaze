@@ -120,15 +120,17 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // → { g: GZ_ULTRA.grade(), book: the page's answer it came from (its key), or null }.
   const reader = () => GZ_ULTRA.read({ origin: location.origin, live: () => live() });
   const pageBook = (cid) => (GRADES.test(location.pathname) && courseHere() === cid ? X.bookFor(cid) : {});
+  // lib/ultra.js's grade() works through lib/gradecalc.js, so both are in before it runs: the page's gradebook is often
+  // in hand before lib/gradecalc.js has come.
   const ultraGrade = async (st) => {
-    await ultraIn();
+    await Promise.all([ultraIn(), calcIn()]);
     const b = pageBook(st.cid);
     const rows = b.results || await reader().grades(st.cid, st.me.user_id);
     const g = GZ_ULTRA.grade(rows);
     st.names = {};
     if (g.kind === 'weighted' && g.course.groups.some((x) => !x.name)) {
       const cats = await reader().all(`/learn/api/v1/courses/${st.cid}/gradebook/categories`).catch(() => []);
-      st.names = Object.fromEntries(cats.map((c) => [c?.id, String(c?.title || '').slice(0, 100)]));
+      st.names = Object.fromEntries(cats.map((c) => [c?.id, { title: String(c?.title || '').slice(0, 100), isUserDefined: c?.isUserDefined === true, localizableTitle: c?.localizableTitle }]));
     }
     return { g: GZ_ULTRA.grade(rows, [], st.names), book: b.results ? b.key : null };
   };
@@ -143,25 +145,56 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (r.gone.length) st.open = true;
     if (changed) keep(st);
   };
+  // Three retries; hidden calculators wait until shown. A new page answer can recover sooner.
+  const AGAIN = [1000, 4000, 15000];
+  let away = false;
+  const shown = () => !away && !document.hidden && !document.documentElement.hasAttribute('data-gz-ctab-framed');
+  const here = (st) => live() && S().enhance.calc && shown() && GRADES.test(location.pathname) && courseHere() === st.cid;
+  const cancelRetry = (st) => { if (st.timer != null) clearTimeout(st.timer); st.timer = null; };
+  const pauseRetries = () => {
+    for (const st of W.values()) if (!here(st) && st.timer != null) { cancelRetry(st); st.ripe = true; }
+  };
+  if (ultra) {
+    const visibility = new MutationObserver(() => { pauseRetries(); if (shown()) whatIf(); });
+    const watch = () => visibility.observe(document.documentElement, { attributes: true, attributeFilter: ['data-gz-ctab-framed'] });
+    document.addEventListener('visibilitychange', () => { pauseRetries(); if (shown()) whatIf(); });
+    globalThis.addEventListener?.('pagehide', () => { away = true; pauseRetries(); visibility.disconnect(); });
+    globalThis.addEventListener?.('pageshow', () => { away = false; watch(); whatIf(); });
+    watch();
+  }
+  const failed = (st, e) => {
+    const n = (st.fails || 0) + 1;
+    const partial = e?.code === 'incomplete';
+    const later = ultra && !st.whole && !partial && AGAIN[n - 1];
+    Object.assign(st, { status: 'failed', partial, fails: n, soon: !!later, ripe: !!later });
+    if (ultra) st.book = pageBook(st.cid).key;
+    if (later && here(st)) {
+      st.ripe = false;
+      st.timer = setTimeout(() => { st.timer = null; st.ripe = true; whatIf(); }, later);
+    }
+  };
+  // Opened, or Try again: as if for the first time.
+  const retry = (st) => { st.fails = 0; return load(st); };
   const load = (st) => {
     if (st.status === 'loading' || st.status === 'ready') return st.p;
+    cancelRetry(st);
     st.status = 'loading';
-    st.partial = false;
+    st.partial = st.ripe = false;
     st.v++;
     whatIf();
     const { cid, row } = st;
     if (ultra) {
-      return (st.p = Promise.all([ultraGrade(st), calcIn()]).then(([{ g, book }]) => {
+      return (st.p = ultraGrade(st).then(({ g, book }) => {
         Object.assign(st, { g, course: g.course, book, scheme: C.SCHEME, period: null, truth: null, anon: false });
-        const r = C.reconcile(st.saved, st.course);
+        const r = C.reconcile(st.rec || st.saved, st.course);
         // Glaze 2.2's scores, saved against no grade (C.oldScores): those whose grade has come in are gone, with a word.
-        const old = C.oldScores({ [cid]: st.old }, cid);
+        const old = st.rec ? {} : C.oldScores({ [cid]: st.old }, cid);
         const was = C.reconcile({ s: old }, st.course);
-        Object.assign(st, { rec: r.kept, what: r.what, gone: [...r.gone, ...was.gone], status: 'ready' });
+        Object.assign(st, { rec: r.kept, what: r.what, gone: [...r.gone, ...was.gone], status: 'ready', fails: 0, soon: false });
         if (st.gone.length) st.open = true;
         if (r.gone.length) keep(st);
         if (Object.keys(old).length) migrate(st, old, Object.keys(was.kept.s));
-      }, (e) => { st.status = 'failed'; st.partial = e.code === 'incomplete'; }).then(() => { st.v++; whatIf(); }));
+      }, (e) => failed(st, e)).then(() => { st.v++; whatIf(); }));
     }
     return (st.p = Promise.all([
       getAll(`/courses/${cid}/assignment_groups?include[]=assignments&include[]=submission&exclude_response_fields[]=description&exclude_response_fields[]=rubric&per_page=100`),
@@ -181,9 +214,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const anon = st.course.groups.some((g) => g.items.some((i) => i.anon));
       st.anon = anon && st.truth?.[1] != null && C.round2(C.calc(st.course, {}, { period: st.period, anon: true }).final) === st.truth[1];
       const r = C.reconcile(st.saved, st.course);
-      Object.assign(st, { rec: r.kept, what: r.what, gone: r.gone, status: 'ready' });
+      Object.assign(st, { rec: r.kept, what: r.what, gone: r.gone, status: 'ready', fails: 0, soon: false });
       if (r.gone.length) { st.open = true; keep(st); }
-    }, () => { st.status = 'failed'; }).then(() => { st.v++; whatIf(); }));
+    }, (e) => failed(st, e)).then(() => { st.v++; whatIf(); }));
   };
   const keep = (st) => {
     st.what = C.whatOf(st.rec);
@@ -217,6 +250,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
 
   const whatIf = () => {
     const old = document.getElementById('gz-calc');
+    if (ultra) { pauseRetries(); if (!shown()) return; }
     // Canvas: above its table of grades. Ultra: under the overall grade, in the column beside the grades.
     const anchor = live() && S().enhance.calc && GRADES.test(location.pathname) && (ultra ? document.querySelector('aside.student-grade-overview') : document.getElementById('grades_summary'));
     if (!anchor) return old?.remove();
@@ -228,9 +262,13 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (ultra && st.status === 'ready') {
       const b = pageBook(cid);
       if (b.results && b.key !== st.book) {
-        if (b.results.complete === false) Object.assign(st, { status: 'failed', partial: true, v: st.v + 1 });
+        if (b.results.complete === false) Object.assign(st, { status: 'failed', partial: true, book: b.key, soon: false, v: st.v + 1 });
         else rebuild(st, b.results, b.key);
       }
+    }
+    if (st.status === 'failed') {
+      const b = ultra ? pageBook(cid) : {};
+      if (st.ripe || (b.results && b.key !== st.book)) return load(st);
     }
     const key = `${cid} ${st.v} ${locale()}`;
     if (old?.dataset.key === key && (ultra ? old.previousElementSibling === anchor : old.nextElementSibling === anchor)) return;
@@ -245,14 +283,21 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     summary.dataset.f = 'summary';
     const box = label(make('details', { id: 'gz-calc', open: st.open }, summary), t('What-if grade calculator'));
     // Opening it asks for the course's work; after a failure, opening it again (or Try again) asks once more.
-    box.addEventListener('toggle', () => { st.open = box.open; if (box.open && (st.status === 'idle' || st.status === 'failed')) load(st); });
+    let opened = box.open;
+    box.addEventListener('toggle', () => {
+      if (!box.isConnected || box.open === opened) return;
+      st.open = opened = box.open;
+      if (box.open && (st.status === 'idle' || st.status === 'failed')) retry(st);
+    });
     if (st.status !== 'ready') {
-      box.append(make('p', { className: 'gz-calc-note', textContent: st.partial ? t('Some scores could not be read. The calculator needs the complete gradebook.') : st.status === 'failed' ? t("Glaze couldn't load this course's scores.") : t('Loading your scores…') }));
-      if (st.status === 'failed') {
-        const retry = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Try again') });
-        retry.dataset.f = 'retry';
-        retry.addEventListener('click', () => { st.focus = 'summary'; load(st); });
-        box.append(retry);
+      // Another try on its way is still loading.
+      const gave = st.status === 'failed' && !st.soon;
+      box.append(make('p', { className: 'gz-calc-note', textContent: st.partial ? t('Some scores could not be read. The calculator needs the complete gradebook.') : gave ? t("Glaze couldn't load this course's scores.") : t('Loading your scores…') }));
+      if (gave) {
+        const button = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Try again') });
+        button.dataset.f = 'retry';
+        button.addEventListener('click', () => { st.focus = 'summary'; retry(st); });
+        box.append(button);
       }
       return box;
     }
@@ -312,7 +357,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         const x = r.groups[g.id]?.current;
         gOut.textContent = x?.possible > 0 ? show((x.score / x.possible) * 100) : '–';
       });
-      const legend = make('legend', {}, make('span', { textContent: course.weighted ? `${g.name} · ${GZ_I18N.pct(g.weight, locale())}` : g.name }), gOut);
+      // Ultra's own categories (sys) in the student's language.
+      const heading = g.sys ? t(g.name) : g.name;
+      const legend = make('legend', {}, make('span', { textContent: course.weighted ? `${heading} · ${GZ_I18N.pct(g.weight, locale())}` : heading }), gOut);
       const list = make('ul');
       const count = (id, name) => {
         const c = label(make('input', { type: 'checkbox', checked: !rec.h.includes(id) }), t('Count {name}', { name }));
