@@ -102,6 +102,15 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     await f.click('.js-close-announcement');
     await until(async () => await where(f) === '/ultra/courses/_102_1/announcements' && await f.locator('announcement-list a.list-item-title').count());
     check(await shown() && await f.evaluate(() => performance.timeOrigin) === birth, 'a replaceState close returns through the router without reloading');
+    await f.click('announcement-list a.list-item-title');
+    await f.waitForSelector('.js-close-announcement');
+    await f.evaluate(() => document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      history.replaceState(null, '', location.origin + '/ultra/stream'); dispatchEvent(new PopStateEvent('popstate'));
+    }, { once: true }));
+    await f.locator('.js-close-announcement').focus(); await page.keyboard.press('Escape');
+    await until(async () => await where(f) === '/ultra/courses/_102_1/announcements' && await f.locator('announcement-list a.list-item-title').count());
+    check(await shown() && await f.evaluate(() => performance.timeOrigin) === birth, 'a keyboard close keeps the course tab without reloading');
     // A real move away still takes the window there.
     await f.click('#site-wrap a[href="/ultra/stream"]');
     await until(async () => page.url() === `${site}/ultra/stream` && !await shown());
