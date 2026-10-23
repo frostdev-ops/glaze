@@ -13,6 +13,8 @@
   --gz-enter-panel: var(--gz-x-enter-panel, gz-fade 0.3s var(--gz-ease) backwards);
   /* Dashboard tiles and the rail's items as it opens: nothing moves unless a Look says how. */
   --gz-enter-tile: var(--gz-x-enter-tile, none);
+  /* The boards' course cards: a Look's card entrance, after their tile's; nothing of Glaze's own without one. */
+  --gz-enter-card: var(--gz-x-enter, none);
   --gz-rail-open: var(--gz-x-rail-open, none);
   --gz-t-page: 0.28s;
   --gz-tip-in: var(--gz-x-tip-in, gz-tip 0.16s var(--gz-ease) backwards);
@@ -50,7 +52,7 @@ html[data-gz-motion="expressive"] {
 
 /* Off: nothing moves. The fine-tune switches zero one group each. */
 html[data-gz-motion="off"], html[data-gz-no-trans] { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-t-move: 0s; }
-html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; }
+html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-enter-card: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; }
 html[data-gz-motion="off"], html[data-gz-no-hover] { --gz-lift: none; --gz-nudge: none; --gz-press: none; --gz-pop: none; --gz-hover-shadow: none; --gz-hover-filter: none; --gz-card-hover-filter: none; }
 html[data-gz-motion="off"] { --gz-drift: paused; }
 /* The page under a course tab's frame, and a frame while hidden: nobody sees it, so nothing drifts but the page's
@@ -65,7 +67,7 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 /* content.js maps the system setting to "off" unless the user opted out; this only covers the
    moment before it runs. */
 @media (prefers-reduced-motion: reduce) {
-  html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-t-move: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-drift: paused; }
+  html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-t-move: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-enter-card: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-drift: paused; }
 }
 
 /* Entrances move with the individual translate and scale properties, never transform. A finished entrance stays
@@ -120,8 +122,16 @@ html[data-gz-swap]::view-transition-old(root), html[data-gz-swap]::view-transiti
   }
 }
 .element-card, .content-list-item { animation: var(--gz-enter); }
-/* Dashboard tiles enter on a Look's say-so; the rail's items play theirs each time a collapsed rail opens. */
+/* Dashboard tiles enter on a Look's say-so; the rail's items play theirs each time a collapsed rail opens. A course card's
+   tile (features/coursecards.js) is the board's card: it also plays the Look's card entrance, staggered among the course
+   cards as the LMS's are, never delaying its tile's. */
 .gz-w { animation: var(--gz-enter-tile); }
+.gz-w[data-tile^="course:"] { animation: var(--gz-enter-tile), var(--gz-enter-card); }
+.gz-w[data-tile^="course:"]:nth-child(2 of [data-tile^="course:"]) { animation-delay: 0s, calc(var(--gz-stagger) * 1); }
+.gz-w[data-tile^="course:"]:nth-child(3 of [data-tile^="course:"]) { animation-delay: 0s, calc(var(--gz-stagger) * 2); }
+.gz-w[data-tile^="course:"]:nth-child(4 of [data-tile^="course:"]) { animation-delay: 0s, calc(var(--gz-stagger) * 3); }
+.gz-w[data-tile^="course:"]:nth-child(5 of [data-tile^="course:"]) { animation-delay: 0s, calc(var(--gz-stagger) * 4); }
+.gz-w[data-tile^="course:"]:nth-child(n+6 of [data-tile^="course:"]) { animation-delay: 0s, calc(var(--gz-stagger) * 5); }
 html[data-gz-nav-expanded] :is(nav#base_tools, nav[class*="makeStylesnavigation"]) a, body.primary-nav-expanded #header .ic-app-header__menu-list-link { animation: var(--gz-rail-open); }
 .element-card:nth-child(2), .content-list-item:nth-child(2) { animation-delay: calc(var(--gz-stagger) * 1); }
 .element-card:nth-child(3), .content-list-item:nth-child(3) { animation-delay: calc(var(--gz-stagger) * 2); }

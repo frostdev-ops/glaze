@@ -433,3 +433,103 @@ test('show removes the rule hide without changing the LMS inline display', () =>
   off();
   assert.deepEqual([...foot.style.vars], [['display', 'grid']]);
 });
+
+// ---- the boards' course cards (features/coursecards.js): Glaze's own, drawn from the LMS's -------------------------------
+const BOARD = { ultra: '.gz-w-body > article.gz-course-card', canvas: '.gz-w-body > .ic-DashboardCard[data-gz-tile-card]' };
+const ON_BOARD = {
+  'ultra.course-card': BOARD.ultra, 'ultra.course-card.banner': `${BOARD.ultra} .course-banner`, 'ultra.course-card.title': `${BOARD.ultra} .course-title`,
+  'ultra.course-card.id': `${BOARD.ultra} .course-id`, 'ultra.course-card.status': '', 'ultra.course-card.instructors': '',
+  'canvas.dashboard-card': BOARD.canvas, 'canvas.dashboard-card.image': `${BOARD.canvas} .ic-DashboardCard__header_image`,
+  'canvas.dashboard-card.title': `${BOARD.canvas} .ic-DashboardCard__header-title`, 'canvas.dashboard-card.subtitle': `${BOARD.canvas} .ic-DashboardCard__header-subtitle`,
+  'canvas.dashboard-card.term': `${BOARD.canvas} .ic-DashboardCard__header-term`, 'canvas.dashboard-card.actions': `${BOARD.canvas} .ic-DashboardCard__action-container`,
+  'canvas.dashboard-card.menu': '',
+};
+
+test("each course-card part names its piece on the boards' cards, or none; the editor's names stay the LMS's", () => {
+  assert.deepEqual({ ...P.BOARD }, BOARD);
+  for (const [name, b] of Object.entries(ON_BOARD)) assert.equal(P.get(name).b, b, name);
+  // Every other part, Moodle's cards among them (Moodle has no board), has no piece there.
+  for (const p of P.PARTS.values()) if (!Object.hasOwn(ON_BOARD, p.name)) assert.equal(p.b, '', p.name);
+  // Board pieces sit inside a board's card only: a board selector never reaches the LMS's own page.
+  for (const p of P.PARTS.values()) if (p.b) assert.ok(p.b.startsWith(BOARD[p.site]) && !/[{};]/.test(p.b), p.name);
+  // The editor's list is the same: no new part, no new field.
+  assert.deepEqual(Object.keys(P.list('ultra')[0]), ['name', 'label', 'hide', 'text', 'move', 'st']);
+  assert.ok(!['ultra', 'canvas'].some((site) => P.list(site).some((p) => /(^|[.-])board/.test(p.name))));
+});
+
+// A board tile (features/widgets.js tileEl) holding its card, built as features/coursecards.js builds each.
+const ultraTile = (el, s, title = 'Biology') => el([], [
+  el([], [el([], ['BIOLOGY'])], { className: 'gz-w-head' }),
+  el([], [el(BOARD.ultra, [
+    el(ON_BOARD['ultra.course-card.banner'], [], { className: 'course-banner' }),
+    el([], [el([], ['Fall 2026'], { className: 'gz-course-term' }), el(ON_BOARD['ultra.course-card.title'], [title], { className: 'course-title', href: '/ultra/courses/_101_1/outline' }),
+      el(ON_BOARD['ultra.course-card.id'], ['BIO-101'], { className: 'course-id' }), el([], ['A'], { className: 'gz-course-grade' })], { className: 'element-details' }),
+    el([], ['⋯'], { className: 'gz-cm-btn', tagName: 'BUTTON' }),
+  ], { className: 'gz-course-card' })], { className: 'gz-w-body' }),
+], { className: 'gz-w' });
+const ultraNative = (el, s) => el(s('ultra.course-card'), [el(s('ultra.course-card.banner'), []), el(s('ultra.course-card.title'), ['Biology']), el(s('ultra.course-card.status'), ['Open'])]);
+
+test("a Look's card rules reach the board's cards as the LMS's: the card, its picture, title and code", () => {
+  const { body, wear, off, sheet } = page('ultra', (el, s) => el([], [ultraNative(el, s), ultraTile(el, s)]));
+  const [native, tile] = body.children;
+  const card = tile.querySelector(BOARD.ultra), banner = tile.querySelector(ON_BOARD['ultra.course-card.banner']);
+  const title = tile.querySelector(ON_BOARD['ultra.course-card.title']), code = tile.querySelector(ON_BOARD['ultra.course-card.id']);
+  wear([
+    { p: 'ultra.course-card', do: 'style', st: { r: 24, bc: 'accent', bw: 3 } },
+    { p: 'ultra.course-card.banner', do: 'style', st: { bg: '#331144' } },
+    { p: 'ultra.course-card.title', do: 'label', t: 'My favourite' },
+    { p: 'ultra.course-card.id', do: 'style', st: { fg: 'accent' } },
+    { p: 'ultra.course-card.status', do: 'hide' },
+  ]);
+  assert.ok(sheet());
+  for (const c of [native, card]) {
+    assert.equal(c.getAttribute('data-gz-r-st'), 'r bc bw');
+    assert.equal(c.style.getPropertyValue('--gz-r-r'), '24px');
+  }
+  assert.equal(banner.style.getPropertyValue('--gz-r-bg'), '#331144');
+  assert.equal(title.texts()[0].data, 'My favourite', "the board card's title is relabelled");
+  assert.equal(code.getAttribute('data-gz-r-st'), 'fg');
+  // The board's own pieces stay Glaze's: its header, term, grade and menu take nothing; status has no piece there.
+  for (const e of tile.all()) if (![card, banner, title, code].includes(e)) assert.deepEqual([e.attrs, [...e.style.vars]], [{}, []], e.className);
+  assert.equal(tile.texts()[0].data, 'BIOLOGY', "the tile's header keeps its name");
+  off();
+  for (const e of [card, banner, code]) assert.deepEqual([e.attrs, [...e.style.vars]], [{}, []]);
+  assert.equal(title.texts()[0].data, 'Biology');
+});
+
+test("on a board, the whole card is never hidden or faded (the tile would stay, empty); its pieces may be", () => {
+  const { body, wear } = page('canvas', (el, s) => el([], [el([], [el([], [el(BOARD.canvas, [
+    el(ON_BOARD['canvas.dashboard-card.image'], []), el(ON_BOARD['canvas.dashboard-card.title'], [el([], ['Calculus I'])]),
+  ])], { className: 'gz-w-body' })], { className: 'gz-w' }), el(s('canvas.dashboard-card'), ['Calculus I'])]));
+  const [tile, native] = body.children;
+  const card = tile.querySelector(BOARD.canvas), image = tile.querySelector(ON_BOARD['canvas.dashboard-card.image']);
+  wear([{ p: 'canvas.dashboard-card', do: 'hide' }, { p: 'canvas.dashboard-card', do: 'style', st: { o: 40, r: 12 } }, { p: 'canvas.dashboard-card.image', do: 'hide' }]);
+  assert.equal(native.hasAttribute('data-gz-r-hide'), true, "Canvas's own card hides as before");
+  assert.equal(native.style.getPropertyValue('--gz-r-o'), '0.4');
+  assert.equal(card.hasAttribute('data-gz-r-hide'), false);
+  assert.equal(card.style.getPropertyValue('--gz-r-o'), '');
+  assert.equal(card.style.getPropertyValue('--gz-r-r'), '12px', 'the rest of its style stays');
+  assert.equal(image.hasAttribute('data-gz-r-hide'), true, "the card's picture hides");
+});
+
+test('what a label covers on a board card is readable as the real text, and a nickname shown there wins', () => {
+  const { body, wear, R } = page('ultra', (el, s) => el([], [ultraTile(el, s, 'Biology'), ultraTile(el, s, 'Bio (mine)')]));
+  const [plain, nicked] = body.children.map((t) => t.querySelector(ON_BOARD['ultra.course-card.title']));
+  nicked.dataset.gzNick = '';
+  wear([{ p: 'ultra.course-card.title', do: 'label', t: 'Renamed' }]);
+  assert.equal(plain.texts()[0].data, 'Renamed');
+  assert.equal(R.real(plain), 'Biology', 'features/coursecards.js compares its own text with this, not with the label');
+  assert.equal(nicked.texts()[0].data, 'Bio (mine)', "the student's nickname is theirs");
+});
+
+test('board card piece moves use the board container and restore the original order', () => {
+  const { body, wear } = page('ultra', ultraTile);
+  const title = body.querySelector(ON_BOARD['ultra.course-card.title']);
+  const code = body.querySelector(ON_BOARD['ultra.course-card.id']);
+  wear([{ p: 'ultra.course-card.id', do: 'move', to: 'ultra.course-card.title', at: 'before' }]);
+  assert.equal(title.previousElementSibling, code, 'move the board code before its own title');
+  wear(null);
+  assert.equal(title.nextElementSibling, code, 'put the code back after its title');
+  wear([{ p: 'ultra.course-card.id', do: 'move', to: 'ultra.course-card.status', at: 'before' }]);
+  assert.equal(title.nextElementSibling, code, 'a destination absent from board cards does nothing');
+});
