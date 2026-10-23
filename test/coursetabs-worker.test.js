@@ -143,8 +143,8 @@ test('the picture broker rejects another origin, subframes and other courses\' a
   assert.equal(await w.send(sketch(), { url: 'https://other.test/private' }), null, 'a sender off the site');
 });
 
-// Enough of the largest sketches to pass the total.
-const many = Math.ceil(L.SNAP_ALL / 4000) + 20;
+// Enough big sketches to pass the total (each kept a little larger than its message's JSON less the op).
+const many = Math.ceil(L.SNAP_ALL / (JSON.stringify(big('_1_1')).length - 20)) + 20;
 
 test('concurrent sketches stay inside the shared total cap', async () => {
   const w = worker();

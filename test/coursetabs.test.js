@@ -109,9 +109,10 @@ const page = (spec, { w = 1000, h = 800 } = {}) => {
       backgroundColor: 'rgba(0, 0, 0, 0)', backgroundImage: 'none', color: 'rgb(20, 20, 20)', borderTopWidth: '0px', borderTopStyle: 'none', borderTopColor: 'rgb(0, 0, 0)',
       borderTopLeftRadius: '0px', fontSize: '16px', fontWeight: '400', fill: 'rgb(0, 0, 0)', ...el.css }) },
     createRange: () => ({ n: null, selectNodeContents(n) { this.n = n; }, getClientRects() { return (this.n.lines || []).map(rect); } }),
-    elementFromPoint: (x, y) => {
+    elementFromPoint: (x, y) => doc.elementsFromPoint(x, y)[0] || null,
+    elementsFromPoint: (x, y) => {
       const at = all.filter((e) => e.css.display !== 'none' && e.css.visibility !== 'hidden' && !e.css.pointer && inside(e.box, x, y));
-      return [...at.filter((e) => !fixed(e)), ...at.filter(fixed)].at(-1) || null;
+      return [...at.filter((e) => !fixed(e)), ...at.filter(fixed)].reverse();
     },
   };
   const rect = ([x, y, bw, bh]) => ({ left: x, top: y, right: x + bw, bottom: y + bh, width: bw, height: bh, x, y });
@@ -190,6 +191,20 @@ test('a sketch: the page\'s boxes in the window, clipped to it, in paint order, 
 test('a sketch in a tab\'s frame is placed where the frame is in the window', () => {
   const doc = page([{ box: [0, 0, 500, 300], css: { backgroundColor: 'rgb(1, 1, 1)' } }], { w: 800, h: 700 });
   assert.deepEqual(L.sketch(doc, { w: 1000, h: 800, dx: 200, dy: 100, colour: hexOf }), [[200, 100, 500, 300, 'b', '#010101ff', 0]]);
+});
+
+test('a box off screen is passed over, but not what it holds on screen (Ultra\'s course panel, placed over the page)', () => {
+  const doc = page([
+    { cls: 'course-content-container', box: [0, 828, 1000, 860], kids: [
+      { cls: 'panel', box: [220, 0, 780, 800], css: { position: 'absolute', backgroundColor: 'rgb(18, 18, 18)' }, kids: [
+        { box: [240, 60, 700, 40], css: { backgroundColor: 'rgb(13, 27, 46)' } },
+        { tag: 'p', box: [250, 200, 300, 20], kids: [{ text: 'row', lines: [[250, 200, 300, 20]] }] },
+      ] },
+    ] },
+    { box: [0, 900, 1000, 400], css: { backgroundColor: 'rgb(1, 2, 3)' }, kids: [{ box: [0, 900, 100, 100], css: { backgroundColor: 'rgb(4, 5, 6)' } }] },
+  ]);
+  const boxes = L.sketch(doc, { w: 1000, h: 800, colour: hexOf });
+  assert.deepEqual(boxes.map((b) => b[5]), ['#121212ff', '#0d1b2eff', '#141414ff'], 'the panel, its header and its row; nothing of what is wholly off screen');
 });
 
 test('the stand-in draws a sketch: boxes in their colours and radii, text lines as rounded bars, the course name as its one text', () => {

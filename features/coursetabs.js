@@ -6,8 +6,8 @@
 // an item opened over the course (a document, a discussion), at that panel's header; outside a course, above the page.
 // A tab picked from the strip runs as a live page of its own, in a frame over this page (live tabs, below), kept running
 // while hidden: what was typed, an upload under way, open folders and the scroll are there again when it is picked again.
-// While a tab's frame first loads, a picture of how that course's page last looked covers it (the worker takes pictures
-// of the tab on screen; memory and storage.session only, never disk). Nothing is fetched or opened in the background.
+// While a tab's frame first loads, a stand-in drawn from a sketch of how that course's page last looked covers it (this page
+// sketches what is on screen; memory and storage.session only, never disk). Nothing is fetched or opened in the background.
 // The list is kept per site and account (storage.local ctabs:<origin>:<uid>); identity comes from the site's existing
 // once-per-page reader (Canvas's profile or Ultra's /users/me).
 // Classic script, through GZ_CTX; a second injection keeps the first.
@@ -49,7 +49,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
 
   const local = (fn) => { try { if (chrome.runtime?.id) fn(chrome.storage.local); } catch { /* extension reloaded under the tab */ } };
   const key = () => L.storeKey(location.origin, who);
-  // The worker keeps snapshots across reloads (lib/background.js 'glaze:snap'), for this site and account only.
+  // The worker keeps sketches across reloads (lib/background.js 'glaze:snap'), for this site and account only.
   const send = (m) => {
     if (preview || framed || !who || !chrome.runtime?.id) return Promise.resolve(null);
     try { const sent = epoch; return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:snap', uid: who, born: performance.timeOrigin, epoch, ...m })).then((r) => m.op === 'hello' || sent === epoch ? r : null, () => null); } catch { return Promise.resolve(null); }
@@ -403,11 +403,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
 
   // ---- pictures ------------------------------------------------------------------------------------------------
-  // How a course's page looked, to the pixel: a picture of the browser tab, which the worker takes (lib/background.js
-  // 'shot') while this tab is the one on screen, of whichever page is showing (this one or a tab's frame), once it has
-  // finished building, without a tip of Glaze's. Taken as the student is about to leave it (a press on a tab or on a link
-  // out of the course), and after it changes, scrolls or stays, at most each 15 s per page; at most one each 0.6 s (the browser
-  // allows two a second). Shown only while a tab's frame first loads, at the window size it was taken at.
+  // How a course's page looked: a sketch (lib/coursetabs.js sketch) of whichever page is showing (this one or a tab's frame),
+  // taken here while this tab is the one on screen, once the page has finished building, without a tip of Glaze's; the
+  // worker keeps it (lib/background.js 'sketch'). Taken as the student is about to leave it (a press on a tab or on a link out
+  // of the course), and after it changes, scrolls or stays, at most each 15 s per page; at most one each 0.6 s. Shown, as a
+  // stand-in, only while a tab's frame first loads, at the window size it was taken at.
   // The page's own markers only: Glaze's panels in it (its To Do, widgets) load on their own time.
   const loading = (el) => !!el && [...el.querySelectorAll('.spinner, path[class*="makeStylesindeterminateSvg-"], .MuiSkeleton-root' + (ctx.site === 'canvas' ? ', .loading, [aria-busy="true"]' : ''))]
     .some((e) => shown(e) && !e.closest('[id^="gz-"], [class^="gz-"], [class*=" gz-"]'));
@@ -427,6 +427,32 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       return { doc, frame: f.el };
     } catch { return null; }
   };
+  // The page on screen as lib/coursetabs.js sketches it, in this window: a frame's where the frame is. Its colours as
+  // painted, through a one-pixel canvas (any CSS colour the page computes: rgb, color-mix's, oklch's).
+  let paint = null;
+  const hexes = new Map();
+  const hexOf = (css) => {
+    if (!hexes.has(css)) {
+      if (hexes.size > 500) hexes.clear();
+      paint ||= Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
+      paint.clearRect(0, 0, 1, 1); paint.fillStyle = '#0000'; paint.fillStyle = css; paint.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = paint.getImageData(0, 0, 1, 1).data;
+      hexes.set(css, a < 8 ? null : '#' + [r, g, b, a].map((v) => v.toString(16).padStart(2, '0')).join(''));
+    }
+    return hexes.get(css);
+  };
+  const sketchOf = (cid, doc, frame) => {
+    try {
+      const at = frame ? frame.el.getBoundingClientRect() : { x: 0, y: 0 }, tab = tabs.find((x) => x.cid === cid);
+      const bar = doc.getElementById('gz-ctabs'), r = shown(bar) && bar.getBoundingClientRect();
+      const x = r && Math.max(0, Math.round(r.left + at.x)), y = r && Math.max(0, Math.round(r.top + at.y));
+      const strip = r && Math.min(innerWidth, Math.round(r.right + at.x)) > x && Math.min(innerHeight, Math.round(r.bottom + at.y)) > y
+        ? [x, y, Math.min(innerWidth, Math.round(r.right + at.x)) - x, Math.min(innerHeight, Math.round(r.bottom + at.y)) - y] : null;
+      const name = (tab?.name || '').replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 200);
+      const boxes = L.sketch(doc, { w: innerWidth, h: innerHeight, dx: Math.round(at.x), dy: Math.round(at.y), name, colour: hexOf, skip: (el) => el.matches('.gz-tip, #gz-ctabs-frames, #gz-ctabs-say') });
+      return { size: [innerWidth, innerHeight], top: Math.round(tab?.top || 0), name, strip, boxes };
+    } catch { return null; }
+  };
   let shooting = null, shotAt = -1e9;
   const shoot = () => {
     if (shooting) return shooting;
@@ -439,18 +465,15 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (bar ? otherCourse(bar, cid) : !routed()) return Promise.resolve(null);
     }
     shotAt = performance.now();
-    // Glaze's tip is not part of the page: hidden for the moment of the picture, a frame before it is taken.
-    const tips = [...document.querySelectorAll('.gz-tip'), ...doc.querySelectorAll('.gz-tip')];
-    for (const tip of tips) tip.style.visibility = 'hidden';
     const same = () => { const next = surface(); return on && next.cid === cid && next.path === path && next.doc === doc; };
     shooting = new Promise((ok) => requestAnimationFrame(() => setTimeout(ok)))
-      .then(() => same() ? send({ op: 'shot', cid, path, strip: null, size: [innerWidth, innerHeight] }) : null)
+      .then(() => { const s = same() && sketchOf(cid, doc, frame); return s ? send({ op: 'sketch', cid, path, ...s }) : null; })
       .then((x) => {
         if (!same()) { if (x?.snap) send({ op: 'forget', cid }); return null; }
         if (x?.snap?.cid === cid && x.snap.path === path) keep(x.snap);
         return x?.snap || null;
       }, () => null)
-      .finally(() => { shooting = null; for (const tip of tips) tip.style.visibility = ''; });
+      .finally(() => { shooting = null; });
     return shooting;
   };
   const keep = (s) => {
@@ -1095,7 +1118,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // Canvas: a frame still loading with no picture of its page stays off screen and the page on screen stays put, its tab
   // marked as loading, until the frame is ready, as a browser keeps a page until the next one can be drawn. With a picture
   // it shows at once, under that picture, as on Ultra.
-  let waiting = '', primed = '';
+  let waiting = '';
   const mark = () => { for (const e of list?.children || []) { set(e, 'data-loading', e.dataset.courseId === waiting ? '' : null); set(e, 'aria-busy', e.dataset.courseId === waiting ? 'true' : null); } };
   const wait = (cid) => {
     if (waiting === cid) return;
@@ -1114,17 +1137,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
     const f = cid && frames.get(cid);
     if (!f || f.ready || f.slow) return show(cid);
-    // The picture decoded first, so the switch goes straight from this page to it, with no bare ground between.
+    // Its stand-in drawn at once, so the switch goes straight from this page to it, with no bare ground between.
     const go = (s) => {
-      if (turn !== showTurn || waiting !== cid || frames.get(cid) !== f || !fits(s, f.url)) return;
+      if (turn !== showTurn || waiting !== cid || frames.get(cid) !== f || f.ready || f.slow || !fits(s, f.url)) return;
       keep(s);
-      const img = new Image();
-      img.src = s.shot;
-      img.decode().catch(() => {}).then(() => {
-        if (turn !== showTurn || waiting !== cid || frames.get(cid) !== f || f.ready || f.slow || !fits(s, f.url)) return;
-        primed = s.shot;
-        show(cid);
-      });
+      show(cid);
     };
     const s = snaps.get(cid);
     if (s) go(s); else if (cid !== PAGE) send({ op: 'get', cid }).then((r) => { if (r?.snap?.cid === cid) go(r.snap); });
@@ -1240,7 +1257,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     el.inert = true;
     return el;
   };
-  // The picture over a frame still loading (taken at this window size and menu width), else the frame as it loads.
+  // The stand-in over a frame still loading (sketched at this window size and menu width), else the frame as it loads: the
+  // sketch's boxes in their colours and corners, its lines of text as bars, its course name, over the page's own background.
   const picture = (cid, f) => {
     unpicture(true);
     const s = snaps.get(cid);
@@ -1248,23 +1266,28 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (showing !== cid || frames.get(cid) !== f || f.ready || f.slow || pic || !fits(snap, f.url)) { if (showing === cid && !f.ready && !pic) f.el.style.visibility = ''; return; }
       const box = document.createElement('div');
       box.className = 'gz-ctabs-pic';
-      const img = Object.assign(document.createElement('img'), { src: snap.shot, alt: '', draggable: false });
-      // A Canvas frame sits inside the navigation's room; crop that same room from the full-window picture.
+      // A Canvas frame sits inside the navigation's room; the sketch is of the whole window, so it moves by that room.
       const view = ctx.site === 'canvas' && html.hasAttribute('data-gz-navbar') ? host.getBoundingClientRect() : { x: 0, y: 0 };
-      // Blurred, with a spinner over it: a picture of the page, not the page, until the page itself is ready.
+      // Blurred, with a spinner over it: a sketch of the page, not the page, until the page itself is ready.
       const root = box.attachShadow({ mode: 'closed' });
-      const style = document.createElement('style'), spinner = document.createElement('div');
-      style.textContent = `img{position:absolute;top:${-view.y}px;left:${-view.x}px;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}
+      const style = document.createElement('style'), spinner = document.createElement('div'), page = document.createElement('div');
+      style.textContent = `.p{position:absolute;top:${-view.y}px;left:${-view.x}px;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}.p>div{position:absolute;overflow:hidden;white-space:nowrap}
 .s{position:absolute;top:50%;left:50%;width:2.25rem;height:2.25rem;margin:-1.125rem;box-sizing:border-box;border-radius:50%;border:3px solid color-mix(in srgb,var(--gz-ink,#fff) 25%,transparent);border-top-color:var(--gz-accent,#6fdcff);animation:r .8s linear infinite}
 @keyframes r{to{transform:rotate(1turn)}}:host([data-still]) .s{animation:none}`;
+      page.className = 'p';
+      for (const d of L.drawn(snap)) {
+        const e = document.createElement('div');
+        e.style.cssText = `left:${d.x}px;top:${d.y}px;width:${d.w}px;height:${d.h}px;` + (d.text ? `color:${d.ink};font:600 ${d.size}px/${d.line}px var(--gz-font-head,var(--gz-font,sans-serif))` : `background:${d.bg};border-radius:${d.r}px`);
+        if (d.text) e.textContent = d.text;
+        page.append(e);
+      }
       spinner.className = 's'; spinner.setAttribute('role', 'progressbar'); spinner.setAttribute('aria-label', t('Loading…'));
       root.append(style, spinner);
-      root.prepend(img);
+      root.prepend(page);
       if (html.getAttribute('data-gz-motion') === 'off') box.toggleAttribute('data-still', true);
       for (const ev of ['wheel', 'pointerdown', 'touchstart']) box.addEventListener(ev, () => { f.el.style.visibility = ''; unpicture(); }, { passive: true });
       pic = box;
-      // Decoded already (reveal): in at once, in the same frame as the switch.
-      if (snap.shot === primed && host) host.append(box); else img.decode().catch(() => {}).then(() => { if (pic === box && host) host.append(box); });
+      host?.append(box);
     };
     if (s) put(s);
     else if (cid === PAGE) put(null);
@@ -1281,7 +1304,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const show = async (cid) => {
     const me = ++showTurn;
     if (ctx.site === 'canvas') wait(cid);
-    if (cid === showing) { if (ctx.site === 'canvas') { wait(''); primed = ''; } return; }
+    if (cid === showing) { if (ctx.site === 'canvas') wait(''); return; }
     // A picture of what goes under, if one is being taken (the press on a tab starts one), finishes first: taken after the
     // switch, it would be of the wrong page.
     if (shooting) await Promise.race([shooting, new Promise((r) => setTimeout(r, 200))]);
@@ -1309,7 +1332,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     clearSlow();
     unpicture(true);
     if (f && !f.ready) { if (f.slow) slowFrame(cid, f); else picture(cid, f); }
-    primed = '';
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
     hoist();
     ctx.scene();
@@ -1857,7 +1879,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       clearSlow();
       showing = '';
       waiting = '';
-      primed = '';
       host?.remove();
       host = null;
       html.removeAttribute('data-gz-ctab-framed');
@@ -1895,7 +1916,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (next <= epoch) return;
     epoch = next;
     snaps.clear();
-    primed = '';
     unpicture(true);
   };
   const hello = async () => {
