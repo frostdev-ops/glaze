@@ -37,12 +37,13 @@ test('Moodle title restoration ignores a resweep of unrelated course menu button
   assert.equal(JSON.stringify(await snapshot()), JSON.stringify(before), 'menu theme tags are outside the title restore contract');
 });
 
-test('widget package checks explicitly select the fixture native navigation in both fresh profiles', async () => {
+test('the widget fixture keeps its floating mod through worker layout normalization', () => {
+  const W = require('../lib/widgets.js');
   const source = fs.readFileSync(path.join(__dirname, '../scripts/widgets-builder-check.js'), 'utf8');
-  const code = source.slice(source.indexOf('    const seed ='), source.indexOf('    const tree ='));
-  const sync = {};
-  const seed = vm.runInNewContext(`${code}; seed`, { origin: 'https://127.0.0.1:1234', now: 1000,
-    chrome: { storage: { local: { clear: async () => {}, set: async () => {} }, sync: { set: async (s) => Object.assign(sync, s) } } } });
-  await seed({ evaluate: (fn, arg) => fn(arg) });
-  assert.equal(sync.navbar?.on, false, 'package parity must not depend on whether the editor ran in the profile');
+  const code = source.slice(source.indexOf('    const layout ='), source.indexOf('    await sw.evaluate((l)'));
+  const mid = 'abcdefghijklmnop';
+  const layout = vm.runInNewContext(`${code}; layout`, { mid, W });
+  const kept = W.layout(layout, W.mods(layout));
+  assert.equal(kept.boards.pages.find((t) => t.id === `m${mid.slice(0, 14)}0`)?.on, true,
+    'fresh-profile normalization must retain the floating tile before the page declares its mods');
 });
