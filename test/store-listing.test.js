@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
+const justification = (text, heading) => text.split(`### ${heading}\n\n`)[1]?.split(/^### |^## /m)[0].trim();
 const manifest = JSON.parse(read('manifest.json'));
 const [major, minor, patch] = manifest.version.split('.');
 const listings = fs.readdirSync(path.join(root, 'store')).filter((f) => /^listing(?:-[\w-]+)?\.md$/.test(f));
@@ -46,7 +47,8 @@ test('BLD-4: the English listing fits the store limits it states', () => {
   const text = read('store/listing.md');
   const short = /## Short summary \(132 character maximum\)\n\n(.+)\n/.exec(text)[1];
   assert.ok(short.length <= 132, `short summary is ${short.length} characters`);
-  const host = /### Host access \(1,000 character maximum\)\n\n(.+)\n/.exec(text)[1];
+  const host = justification(text, 'Host access (1,000 character maximum)');
+  assert.ok(host, 'the host access justification is present');
   assert.ok(host.length <= 1000, `host access justification is ${host.length} characters`);
   const remote = /## Remote code \(1,000 character maximum\)\n\n(.+)\n/.exec(text)[1];
   assert.ok(remote.length <= 1000, `remote code statement is ${remote.length} characters`);
@@ -58,14 +60,14 @@ test('BLD-4: the English listing fits the store limits it states', () => {
 
 test('BLD-6: the host-access justification names opt-in writes and the narrow hosts, not only reads', () => {
   const text = read('store/listing.md');
-  const host = /### Host access[^\n]*\n\n(.+)\n/.exec(text)[1];
+  const host = justification(text, 'Host access (1,000 character maximum)');
   assert.ok(!/read-only/i.test(host), 'it no longer says the requests are read-only');
   assert.match(host, /writes only on (?:their|the user's) click/);
   assert.match(host, /Sign out/);
   assert.match(host, /asks the user first/);
   // The manifest's own hosts, each named; every site beyond them is optional, asked for one at a time.
   for (const p of manifest.host_permissions) assert.ok(host.includes(p.replace(/^https:\/\//, '').replace(/\/\*$/, '')), `names ${p}`);
-  for (const p of manifest.optional_host_permissions.filter((x) => x.startsWith('https://'))) assert.ok(host.includes(p), `names optional ${p}`);
+  for (const p of manifest.optional_host_permissions) assert.ok(host.includes(p), `names optional ${p}`);
   assert.match(host, /optional/);
   assert.ok(!/<all_urls>|captureVisibleTab/.test(text), 'nothing in the listing cites all-site access or tab screenshots');
 });
@@ -73,7 +75,12 @@ test('BLD-6: the host-access justification names opt-in writes and the narrow ho
 test('BLD-6: every permission the manifest asks for at install has a justification', () => {
   const text = read('store/listing.md');
   const justified = text.slice(text.indexOf('## Permission justifications'), text.indexOf('## Remote code'));
-  for (const p of manifest.permissions) assert.match(justified, new RegExp(`^### ${p}$`, 'm'), `${p} is justified`);
+  for (const p of manifest.permissions) {
+    assert.match(justified, new RegExp(`^### ${p}$`, 'm'), `${p} has a heading`);
+    const body = justification(justified, p);
+    assert.ok(body, `${p} has a justification`);
+    assert.ok(body.length <= 1000, `${p} justification is ${body.length} characters`);
+  }
 });
 
 test('BLD-2: the README does not promise that everything stays on the device', () => {
