@@ -180,3 +180,27 @@ test("a nickname on a board card is marked as one, so a Look's label leaves it (
   assert.equal(link.textContent, 'Biology');
   assert.equal(link.getAttribute('data-gz-nick'), null);
 });
+
+test('a course renamed to the visible Look label still replaces the underlying name', async () => {
+  let courseName = 'Biology', labelled;
+  const p = page({ ctxMore: { courseList: () => ({ _101_1: { name: courseName, site: 'https://bb.test' } }) },
+    more: { GZ_RULES: { real: (el) => el === labelled ? 'Biology' : el.textContent, sync() {} } } });
+  await settle();
+  labelled = p.body.querySelector('a.course-title');
+  labelled.textContent = 'Botany';
+  const oldNode = labelled.children[0];
+  courseName = 'Botany'; p.ui.sync(); await settle();
+  assert.notEqual(labelled.children[0], oldNode, 'replace the labelled node so removing the Look cannot restore Biology');
+});
+
+test('nickname changes reconcile a label even when the nickname equals its underlying name', async () => {
+  let nick = '', labelled, syncs = 0;
+  const p = page({ ctxMore: { nickOf: () => nick }, more: { GZ_RULES: {
+    real: (el) => el === labelled ? 'Biology' : el.textContent, sync: () => { syncs++; },
+  } } });
+  await settle();
+  labelled = p.body.querySelector('a.course-title'); labelled.textContent = 'Renamed';
+  const before = syncs;
+  nick = 'Biology'; p.tile.update(); await settle();
+  assert.ok(syncs > before, 'the nickname marker must trigger rules even when no text changes');
+});
