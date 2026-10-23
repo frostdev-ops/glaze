@@ -547,6 +547,15 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 .course-announcement-layer > .guidance-wrapper #search-button { justify-content: center; width: 36px; height: 36px; padding: 0 !important; }
 :is(.course-announcement-layer > .guidance-wrapper #search-button, .messages-header .send-message-button):hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-hi, var(--gz-accent)) 15%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 #site-wrap .guidance-wrapper input { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
+/* Search open: the field takes the count's and the button's place, as a pill like them, with no band behind it. */
+.course-announcement-layer #announcement-search { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+.course-announcement-layer #announcement-search .search-input-wrap {
+  box-sizing: border-box; min-height: 36px; padding-inline: 12px 4px !important; border-radius: 999px !important; color: var(--gz-ink) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: var(--gz-rest-shadow) !important;
+}
+.course-announcement-layer #announcement-search .search-input-wrap:focus-within { border-color: var(--gz-accent) !important; outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+.course-announcement-layer #announcement-search .search-input-wrap input { background: transparent !important; border: 0 !important; box-shadow: none !important; outline: none; color: var(--gz-ink) !important; }
 #site-wrap table tr, #site-wrap table td { background: transparent !important; }
 #site-wrap table td { transition: background var(--gz-t) var(--gz-ease); }
 #site-wrap table tr.is-read, #site-wrap table tr.announcement-item-row.is-read, #site-wrap table tr.is-read td { background: transparent !important; color: var(--gz-ink-muted) !important; }

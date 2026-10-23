@@ -160,3 +160,14 @@ test('a full off-canvas panel (an announcement) has a floating glass header and 
   assert.ok(edge && /border-inline-start:\s*0 !important/.test(edge[1]) && /box-shadow:\s*none !important/.test(edge[1]), 'no edge line on the panel or its wrap');
   assert.ok(ruleWith(THEME, 'html[data-gz-bg="solid"]', '.panel-header.simple-header::before').length, 'no blur over a solid background');
 });
+
+test('Announcements with search open: no band behind the field, which is a pill like the closed toolbar', () => {
+  const row = body(THEME, '.course-announcement-layer #announcement-search');
+  assert.match(row, /background:\s*transparent !important/, 'beats the light-fill sweep\'s data-gz-light paint');
+  const pill = body(THEME, '.course-announcement-layer #announcement-search .search-input-wrap');
+  assert.match(pill, /border-radius:\s*999px/);
+  assert.match(pill, /border:\s*1px solid var\(--gz-border-line/);
+  assert.match(pill, /var\(--gz-surface-paint/);
+  assert.match(body(THEME, '.course-announcement-layer #announcement-search .search-input-wrap input'), /background:\s*transparent !important/);
+  assert.match(body(THEME, '.course-announcement-layer #announcement-search .search-input-wrap:focus-within'), /outline:\s*2px solid var\(--gz-accent/, 'keyboard focus shows on the pill');
+});
