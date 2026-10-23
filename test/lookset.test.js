@@ -13,6 +13,12 @@ const L = require('../lib/lookx.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 
+test('the store listing counts the available built-in scenes and Looks', () => {
+  const listing = read('store/listing.md'), counts = { ten: 10, eleven: 11 };
+  assert.equal(counts[listing.match(/one of (\w+) animated scenes/)[1]], G.GZ_SPEC.bg.scene[1].length, 'the advertised scene count');
+  assert.equal(counts[listing.match(/one of (\w+) Looks/)[1]], G.GZ_LOOKS.length, 'the advertised Look count');
+});
+
 test('every built-in Look has a full set: its own pointer, the pointer\'s animation, a typing effect and every event', () => {
   const sets = new Set();
   for (const look of G.GZ_LOOKS) {
