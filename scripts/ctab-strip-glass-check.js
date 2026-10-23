@@ -83,6 +83,13 @@ const measure = (p) => p.evaluate(() => {
       check(m.border === '0px' && m.paints[0] === m.paints[1] && m.shadows[0] === m.shadows[1], `${look.name}: captured course header joins the tools without a seam`, m);
       check(m.header[0] === m.tools[0] && m.header[2] === m.tools[2], `${look.name}: header and tools align`);
       await shot(page, look.name.toLowerCase().replaceAll(' ', '-'));
+      await page.locator('section.course > .route-view-container').evaluate((e) => {
+        e.innerHTML = '<div class="course-announcement-layer"><div class="guidance-wrapper" style="display:flex;justify-content:space-between;padding:16px"><span>19 Total</span><div class="header-actions-menu__item"><button class="MuiButtonBase-root MuiIconButton-root" id="search-button" aria-label="Search announcements">⌕</button></div></div></div>';
+      });
+      const pills = await page.locator('.guidance-wrapper').evaluate((e) => [e, e.querySelector('span'), e.querySelector('button')].map((n) => { const s = getComputedStyle(n); return [s.borderBottomWidth, s.borderRadius, s.backdropFilter]; }));
+      check(pills[0][0] === '0px' && pills.slice(1).every((p) => p[0] === '1px' && p[1] === '999px' && p[2] === 'none'), `${look.name}: count and search are pills without another blur`, pills);
+      await page.locator('#search-button').focus();
+      await shot(page, look.name.toLowerCase().replaceAll(' ', '-') + '-pills');
     }
     const look = G.GZ_LOOKS.find((l) => l.name === 'Aurora Night');
     await setup(look);
@@ -103,7 +110,13 @@ const measure = (p) => p.evaluate(() => {
     await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through') && !document.documentElement.hasAttribute('data-gz-ctab-framed')));
     await until(() => page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed') && document.querySelector('iframe[data-gz-through]')));
     // A real course frame has no base page or native nav under the course.
-    await frame.evaluate(() => { document.querySelector('#main-content')?.remove(); document.querySelector('.MuiDrawer-paper')?.remove(); });
+    await frame.evaluate(() => {
+      document.querySelector('#main-content')?.remove(); document.querySelector('.MuiDrawer-paper')?.remove();
+      const content = document.querySelector('.course-content-container'), course = content.querySelector('section.course');
+      course.replaceWith(...course.childNodes);
+      const inner = document.createElement('div'); inner.className = 'inner-wrap';
+      content.replaceWith(inner); inner.append(course); course.append(content); course.classList.add('bb-offcanvas-container');
+    });
     await pause(300);
     const f = await measure(frame);
     check(f.border === '0px' && f.paints[0] === f.paints[1], 'see-through frame keeps the joined course panel', f);
