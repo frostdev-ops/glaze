@@ -415,3 +415,7 @@ test('Ultra\'s :has() rules keep a small change from restyling the whole page', 
     assert.ok(/[.#[]/.test(anchor) || !BROAD.has(anchor.trim().toLowerCase()), `${f}:${h.line} ${h.compound}:has(${h.arg}) before a combinator is tried on every ${anchor.trim() || 'element'}`);
   }
 });
+
+test('review: local development policy is loaded by the worker, outside every first content script', () => {
+  assert.doesNotMatch(read('defaults.js'), /GZ_LOCAL_DEV/, 'local developer policy belongs in the worker');
+});

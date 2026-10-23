@@ -629,7 +629,7 @@ class Node {
   append(...n) { this.kids.push(...n); } appendChild(n) { this.kids.push(n); return n; } before() {} after() {} remove() { this.removed = true; }
   getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 }; } getClientRects() { return []; }
 }
-const ultraPage = ({ origin = 'https://evil.test', local = {}, frame = false, kind = 'ultra' } = {}) => {
+const ultraPage = ({ origin = 'https://evil.test', local = {}, frame = false, kind = 'ultra', localHeld = false } = {}) => {
   const sent = [], swept = [], fetched = [], writes = [], storeListeners = [];
   const html = new Node('html'); html.lang = 'en';
   const selector = kind === 'ultra' ? 'base[href*="/ultra/"]' : kind === 'moodle' ? 'meta[name="keywords"][content^="moodle,"]' : 'link[rel~="stylesheet"][href*="/dist/brandable_css/"]';
@@ -653,7 +653,7 @@ const ultraPage = ({ origin = 'https://evil.test', local = {}, frame = false, ki
     performance: { now: () => 0 }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} }, innerHeight: 900, innerWidth: 1400,
     fetch: (url) => { fetched.push(String(url)); return Promise.resolve({ ok: true, url: origin, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: { get: () => null } }); },
     chrome: {
-      runtime: { id: ID, getURL: (p) => `chrome-extension://${ID}/${p}`, lastError: undefined, sendMessage: (m) => { sent.push(m); return Promise.resolve({ ok: false }); } },
+      runtime: { id: ID, getURL: (p) => `chrome-extension://${ID}/${p}`, lastError: undefined, sendMessage: (m) => { sent.push(m); return Promise.resolve(m?.type === 'glaze:local' ? localHeld : { ok: false }); } },
       storage: {
         sync: { get: (k, cb) => cb({}) },
         local: { get: (k, cb) => (cb ? cb(structuredClone(local)) : Promise.resolve(structuredClone(local))), set: (o, cb) => { writes.push(o); cb?.(); return Promise.resolve(); }, remove: (k, cb) => { cb?.(); return Promise.resolve(); } },
@@ -708,10 +708,12 @@ test('CORE-2: Ultra on Blackboard\'s own host, or on a site approved before, sta
 // lets it through on that grant alone (lib/background.js approved): no list entry, as on the LMSs' own hosts. One rule,
 // defaults.js GZ_LOCAL_DEV, for both.
 test('a local Canvas or Moodle passes content.js\'s gate on its own host, as the worker\'s; Ultra there, or https, still waits', async () => {
-  const { GZ_LOCAL_DEV: L } = require('../defaults.js');
-  for (const [u, kind] of [['http://localhost:8081/my/', 'moodle'], ['http://127.0.0.1:8081/', 'moodle'], ['http://localhost:3000/courses/1', 'canvas'], ['http://localhost/', 'canvas']]) assert.equal(L(kind, new URL(u)), true, `${kind} ${u}`);
-  for (const [u, kind] of [['http://localhost:8081/ultra/', 'ultra'], ['https://localhost/', 'moodle'], ['http://localhost.evil.test/', 'moodle'], ['http://school.edu/', 'canvas'], ['http://127.0.0.2/', 'canvas'], ['http://localhost/', null]]) assert.equal(L(kind, new URL(u)), false, `${kind} ${u}`);
-  assert.match(read('content.js'), /const known = GZ_BUILT_IN\(site, location\) \|\| GZ_LOCAL_DEV\(site, location\);/);
+  for (const kind of ['canvas', 'moodle']) {
+    const p = ultraPage({ origin: 'http://localhost:8081', kind, localHeld: true });
+    await settle();
+    assert.ok(p.sent.some((m) => m?.type === 'glaze:local' && m.kind === kind), 'local startup asks the worker');
+    assert.ok(!p.sent.includes(kind), 'a held local site does not ask for school consent');
+  }
   for (const [origin, kind] of [['http://localhost:8081', 'ultra'], ['https://localhost', 'moodle'], ['http://localhost.evil.test', 'moodle']]) {
     const p = ultraPage({ origin, kind });
     await settle();
