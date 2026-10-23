@@ -133,9 +133,9 @@ the full environment, real home, credential variables or SSH agent. Use a separa
 when tooling must be prevented from reading host secrets. The `web-ext` transitive dependency tree is not yet locked;
 its top-level version pin and filtered environment do not make that tree reproducible.
 
-Chrome is submitted with staged publication, and Apple versions use manual release after approval.
-AMO listed submissions may become public as soon as Mozilla approves them. GitHub and website publication
-do not wait for store approval. The command does not install an app or change permanent `dev/firefox`.
+Every store publishes a submission as soon as its review approves it: Chrome with default publication, Apple
+versions with release after approval, Firefox listed versions on approval. GitHub and website publication do not wait
+for store approval. The command does not install an app or change permanent `dev/firefox`.
 
 ### Credentials
 

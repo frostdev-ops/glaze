@@ -38,8 +38,7 @@ const usage = `Usage: node scripts/store-release.mjs [release|doctor|plan|build|
   --notes FILE        Plain-text release notes (default current CHANGELOG.md entry).
   --help               Show this help.
 
-Chrome is staged and Apple uses manual release after approval. Firefox listed submissions
-may publish as soon as AMO approves them. See RELEASING.md for credentials and recovery.`;
+Every store publishes as soon as its review approves the submission. See RELEASING.md for credentials and recovery.`;
 const expand = value => value.startsWith('~/') ? path.join(os.homedir(), value.slice(2)) : value;
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));

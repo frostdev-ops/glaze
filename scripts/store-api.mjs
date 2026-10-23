@@ -100,12 +100,12 @@ export async function submitChrome(env, manifest, receipt, save) {
     receipt.packageSHA256 = manifest.files.chrome.sha256;
     save();
   }
-  const result = await request(`${api}:publish`, chromeToken(env), 'POST', { publishType: 'STAGED_PUBLISH', blockOnWarnings: true });
+  const result = await request(`${api}:publish`, chromeToken(env), 'POST', { publishType: 'DEFAULT_PUBLISH', blockOnWarnings: true });
   if (!['PENDING_REVIEW', 'STAGED', 'PUBLISHED'].includes(result.state)) throw new Error(`Chrome returned ${result.state}; submission not confirmed.`);
   receipt.state = result.state;
   receipt.submitted = true;
   save();
-  console.log(`Chrome: ${result.state}; held for publication after approval.`);
+  console.log(`Chrome: ${result.state}; goes live once approved.`);
 }
 
 export async function submitFirefox(env, manifest, receipt, save) {
@@ -175,7 +175,7 @@ export async function submitApple(env, manifest, receipt, save) {
       state.submitted = true; state.state = versionState; save(); continue;
     }
     if (!version) {
-      version = (await apple(env, '/appStoreVersions', 'POST', document('appStoreVersions', { platform, versionString: manifest.version, releaseType: 'MANUAL' }, { app: resource('apps', app) }))).data;
+      version = (await apple(env, '/appStoreVersions', 'POST', document('appStoreVersions', { platform, versionString: manifest.version, releaseType: 'AFTER_APPROVAL' }, { app: resource('apps', app) }))).data;
     }
     state.versionId = version.id;
     save();
@@ -194,10 +194,10 @@ export async function submitApple(env, manifest, receipt, save) {
     if (submission) {
       const linked = await apple(env, `/appStoreVersions/${version.id}/build`);
       if (linked.data?.id !== builds.id) throw new Error(`Apple ${platform}: the existing review draft uses a different build.`);
-      if (version.attributes.releaseType !== 'MANUAL') throw new Error(`Apple ${platform}: change this existing draft to manual release in App Store Connect before submitting.`);
+      if (version.attributes.releaseType !== 'AFTER_APPROVAL') throw new Error(`Apple ${platform}: set this existing draft to release automatically after approval in App Store Connect before submitting.`);
     }
     if (!submission) {
-      await apple(env, `/appStoreVersions/${version.id}`, 'PATCH', document('appStoreVersions', { releaseType: 'MANUAL' }, {}, version.id));
+      await apple(env, `/appStoreVersions/${version.id}`, 'PATCH', document('appStoreVersions', { releaseType: 'AFTER_APPROVAL' }, {}, version.id));
       await apple(env, `/appStoreVersions/${version.id}/relationships/build`, 'PATCH', resource('builds', builds.id));
       const locales = await apple(env, `/appStoreVersions/${version.id}/appStoreVersionLocalizations?limit=200`);
       if (!locales.data.length) throw new Error(`Apple ${platform}: no listing localization. Complete metadata and screenshots in App Store Connect, then rerun submit.`);
@@ -232,7 +232,7 @@ export async function submitApple(env, manifest, receipt, save) {
     if (!['WAITING_FOR_REVIEW', 'IN_REVIEW', 'COMPLETING', 'COMPLETE'].includes(state.state)) throw new Error(`Apple submission ${submission.id}: ${state.state}; submission not confirmed.`);
     state.submitted = true;
     save();
-    console.log(`Apple ${platform}: ${state.state}; manual release after approval.`);
+    console.log(`Apple ${platform}: ${state.state}; released once approved.`);
   }
   receipt.submitted = true;
   save();
