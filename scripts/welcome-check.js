@@ -28,6 +28,7 @@ const stub = (required) => {
   const added = new Set(), removed = new Set();
   globalThis.__gz = { held, asked: [], sent: [], removed: [], answer: null };
   chrome.permissions.contains = async ({ origins = [] }) => origins.every(covers);
+  chrome.permissions.getAll = async () => ({ origins: [...held] });
   chrome.permissions.request = ({ origins = [] }) => new Promise((resolve) => {
     if (!navigator.userActivation.isActive) throw new Error('This function must be called during a user gesture');
     __gz.asked.push(origins);

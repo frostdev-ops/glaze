@@ -1497,6 +1497,9 @@ GZ_UI.load().then((s) => {
         remove.disabled = true;
         const done = await chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'remove', origin }).catch(() => null);
         if (!done?.ok) { remove.disabled = false; siteSaid(t('Not saved. Try again in a moment.')); return; }
+        // And the browser's grant for it, where the student gave one for exactly this site (lib/site.js handBack).
+        const site = GZ_SITE.address(origin);
+        if (site?.origin === origin) await GZ_SITE.handBack(site);
         siteSaid(t('Removed {site}. Glaze no longer runs there.', { site: host }));
         $('#heading-backup-sites').focus({ preventScroll: true });
       });
@@ -1506,6 +1509,47 @@ GZ_UI.load().then((s) => {
     }));
     $('#site-empty').hidden = sites.size > 0;
   };
+  // Add a site, the first screen's way (lib/site.js allow): the browser's prompt from the submit itself, then the check;
+  // a course site is listed with its LMS, anything else has its grant handed back, with the course sites nearby to pick.
+  // Where Glaze holds every site (Safari), a school's own site is added from its pages' card instead.
+  const addForm = $('#site-add'), addInput = $('#site-address'), addGo = $('#site-allow');
+  addForm.hidden = !!chrome.runtime.getManifest().host_permissions?.includes('<all_urls>');
+  let adding = false;
+  const addSaid = (text = '', hosts = []) => {
+    $('#site-error').textContent = text;
+    $('#site-picks').replaceChildren(...hosts.map((h) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: h });
+      b.setAttribute('translate', 'no');
+      b.addEventListener('click', (e) => { if (!e.isTrusted || adding) return; addInput.value = h; addSite(GZ_SITE.address(h)); });
+      return b;
+    }));
+    $('#site-note').hidden = !text;
+  };
+  const addSite = (site) => {
+    adding = true;
+    addInput.readOnly = true;
+    addGo.setAttribute('aria-busy', 'true');
+    addSaid();
+    siteSaid('');
+    GZ_SITE.allow(site, { checking: () => siteSaid(t('Checking {host}', { host: site.host })) }).then((r) => {
+      adding = false;
+      addInput.readOnly = false;
+      addGo.removeAttribute('aria-busy');
+      siteSaid(r.state === 'done' ? t('Allowed {host}', { host: site.host }) : '');
+      if (r.state === 'done') { addInput.value = ''; addInput.focus(); return; }
+      if (r.state === 'refused') { addInput.focus(); return; }
+      addSaid(t(r.state === 'none' ? 'No course site at {host}' : "Can't reach {host}", { host: site.host }), r.hosts);
+      ($('#site-picks').children[0] || addInput).focus();
+    });
+  };
+  addForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!e.isTrusted || adding) return;
+    const site = GZ_SITE.address(addInput.value);
+    if (!site) { addSaid(t('Not a web address')); return; }
+    addSite(site);
+  });
+  addInput.addEventListener('input', () => addSaid());
   const readSites = () => chrome.storage.local.get(Object.keys(KINDS), renderSites);
   readSites();
   chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && Object.keys(KINDS).some((k) => k in c)) readSites(); });

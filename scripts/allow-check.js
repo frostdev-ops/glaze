@@ -36,6 +36,7 @@ const stub = () => {
   const send = chrome.runtime.sendMessage.bind(chrome.runtime);
   chrome.runtime.sendMessage = (m) => send(m).then((r) => { if (m.op === 'cancel') __gz.cancelled = r.ok; return r; });
   chrome.permissions.contains = async ({ origins = [] }) => origins.every(covers);
+  chrome.permissions.getAll = async () => ({ origins: [...held] });
   chrome.permissions.request = async ({ origins = [] }) => {
     if (!navigator.userActivation.isActive) throw new Error('This function must be called during a user gesture');
     __gz.asked.push(origins);
