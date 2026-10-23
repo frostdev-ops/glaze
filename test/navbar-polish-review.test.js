@@ -129,7 +129,7 @@ test('a course frame follows the parent navigation placement and disconnects whe
   const c = vm.createContext({ framed: '_2_1', on: true, strip, navWatch: null, P: () => ({ at: 'nav', size: 'large' }), loaded: true, tabs: [{}],
     parent: { document: { documentElement: { getAttribute: () => words } } },
     html: { getAttribute: () => flag, setAttribute: (_, v) => { flag = v; } }, sessionStorage: { getItem: () => null, setItem() {} },
-    keepClear() {}, home: () => ({ at: 'above', ok: false, put: () => { connected = true; } }),
+    keepClear() {}, bare: () => false, home: () => ({ at: 'above', ok: false, put: () => { connected = true; } }),
     MutationObserver: class { constructor(fn) { this.fn = fn; observer = this; } observe() { this.active = true; } disconnect() { this.active = false; } },
     document: { addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {},
     onScroll() {}, onLeave() {}, onHide() {}, onShow() {}, lay() {}, onResize() {}, measureRow() {}, navRoom() {}, handOn() {}, ctx: { site: 'ultra' }, chrome: { runtime: {} },

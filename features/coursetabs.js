@@ -181,7 +181,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const place = () => {
     if (!on || !strip) return;
     if (hosted()) { keepClear(null); strip.remove(); return; }
-    const w = home();
+    // Over a tab's frame that has not drawn its own strip yet: at the frame's top, in reach (hoist).
+    const w = bare() ? spot('over', strip.parentElement === host, () => host.append(strip)) : home();
     keepClear(w?.clear || null);
     measureRow(w?.at.startsWith('canvas-') ? w.clear : null);
     if (!w) { strip.remove(); return; }
@@ -1005,6 +1006,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (f && f !== g) { f.el.style.visibility = 'hidden'; f.el.inert = true; f.el.contentWindow?.postMessage({ gzCtab: 'visible', on: false }, location.origin); }
     if (g.slow) { g.ready = false; watch(cid, g); }
     if (showing !== cid) return;
+    hoist();
     g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: g.ready }, location.origin);
     if (focused) g.el.focus();
     globalThis.GZ_PET_WORLD?.refresh();
@@ -1173,9 +1175,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         f.stale = null;
         if (waiting === cid && showing !== cid) { show(cid); return; }
         if (waiting === cid) wait('');
-        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); f.el.contentWindow?.postMessage({ gzCtab: 'visible', on: true }, location.origin); nudge(f); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
+        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); hoist(); f.el.contentWindow?.postMessage({ gzCtab: 'visible', on: true }, location.origin); nudge(f); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
         return;
       }
+      // Its own strip drawn (a slow page shown as it loads) or gone again: this page's leaves it, or comes back over it.
+      if (showing === cid) hoist();
       if (now - t0 > 8000 && !f.slow) {
         if (d?.location.href === 'about:blank' && d.body && !d.body.childElementCount && !f.dirty && !f.retried) {
           f.retried = true;
@@ -1307,18 +1311,33 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (f && !f.ready) { if (f.slow) slowFrame(cid, f); else picture(cid, f); }
     primed = '';
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
-    // The covered page's strip stays drawn under the frame (extras.css), but out of reach: the frame has its own.
-    if (strip) strip.inert = !!cid;
+    hoist();
     ctx.scene();
     for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI', 'GZ_DOCREVIEW']) globalThis[n]?.cover?.();
     globalThis.GZ_PET_WORLD?.refresh();
     try { if (cid) sessionStorage.setItem('gz-ctabs-shown', cid); else sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
     keepPage();
-    // Keyboard focus goes with it: into the frame, or back to this page's strip.
-    if (f) f.el.focus();
+    // Keyboard focus goes with it: into the frame (over one not drawn yet, to its tab), or back to this page's strip.
+    if (f && strip?.parentElement === host) { if (!strip.contains(document.activeElement)) (list.querySelector(`[data-course-id="${cid}"]`) || f.el).focus({ preventScroll: true }); }
+    else if (f) f.el.focus();
     else if (back) list?.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
     draw();
     later();
+  };
+  // The frame on screen before it has drawn its own strip: under its picture, blank, or slow. This page's strip goes over
+  // it until then (place), in reach. Over a drawn frame it stays drawn under it (extras.css), out of reach: the frame has its own.
+  const bare = () => {
+    const f = !framed && showing && frames.get(showing);
+    if (!f || f.ready) return false;
+    try { return !!pic || f.el.style.visibility === 'hidden' || !shown(f.el.contentDocument?.getElementById('gz-ctabs')); } catch { return true; }
+  };
+  const hoist = () => {
+    if (!strip || framed) return;
+    const over = bare(), had = strip.contains(document.activeElement);
+    strip.inert = !!showing && !over;
+    if (over !== (strip.parentElement === host)) place();
+    // Its focus goes on into the frame now drawn, as a pick of a drawn frame takes it there.
+    if (had && strip.inert) frames.get(showing)?.el.focus();
   };
   // A tab: its frame, or this page when it is that course. From a frame, the pick goes to the page around it.
   const visit = (cid) => {

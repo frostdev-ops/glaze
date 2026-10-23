@@ -16,7 +16,7 @@ const loadingFrame = () => {
   const frames = new Map([['_2_1', f]]);
   const c = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false, L, ctx: { site: 'ultra' }, frames, showing: '_2_1', location: { origin }, performance: { now: () => now },
     MutationObserver: class { observe() {} disconnect() {} }, loading: () => false, shown: (el) => !!el, waiting: '', wait() {},
-    unpicture() {}, later() {}, clearSlow() {}, slowFrame: () => notices.push('slow'), t: (s) => s,
+    unpicture() {}, later() {}, clearSlow() {}, hoist() {}, slowFrame: () => notices.push('slow'), t: (s) => s,
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
   });
   const watch = vm.runInContext(part('  const watch = ', '  const open = ') + '\nwatch;', c);
@@ -405,7 +405,7 @@ test('closing the open course’s tab by its keys gives focus to the next tab on
     draw: () => list.replaceChildren(...c.tabs.map((x) => tab(x.cid))),
     // Leaving the closed course's page, Ultra takes its bar away for a moment: the strip, and focus, with it.
     route: () => { strip.remove(); doc.activeElement = doc.body; },
-    hosted: () => false, keepClear() {}, measureRow() {}, home: () => ({ ok: strip.isConnected, at: 'nested', put: () => bar.append(strip) }) });
+    hosted: () => false, bare: () => false, keepClear() {}, measureRow() {}, home: () => ({ ok: strip.isConnected, at: 'nested', put: () => bar.append(strip) }) });
   vm.runInContext(part('  const place = ', '  // From content-ultra.js') + part('  let handTo = ', '  const pinTab = ') + '\nglobalThis.place = place; globalThis.shut = shut;', c);
   c.draw(); list.querySelector('[data-course-id="_2_1"]').focus();
   c.shut('_2_1', true);
