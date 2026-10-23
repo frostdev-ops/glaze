@@ -246,7 +246,8 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     if ((!commitNick(m) || !saveEdits()) && !teardown) return false;
     if (canvas) colored.get(numOf(m.cid))?.save?.();
     menu = null;
-    m.box.remove();
+    // It fades as it closes (lib/motion.js); at once when its card or the extra has gone with it.
+    if (teardown || !globalThis.GZ_MOTION) m.box.remove(); else GZ_MOTION.exit(m.box);
     m.btn.setAttribute('aria-expanded', 'false');
     if (refocus && m.btn.isConnected) m.btn.focus({ preventScroll: true });
     return true;
