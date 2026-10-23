@@ -27,7 +27,7 @@ test('the page wears the Frostdev Look from its definition, and asks only from a
 
 
 // Run the shipped page while the worker's second check is pending: a quick Open must never race registration.
-const screen = ({ granted = true } = {}) => {
+const screen = ({ granted = true, found = { kind: 'ultra', url: 'https://bb.school.edu/' }, patterns = [] } = {}) => {
   const vm = require('node:vm');
   const elements = new Map();
   const element = (name) => {
@@ -43,25 +43,26 @@ const screen = ({ granted = true } = {}) => {
     });
     return elements.get(name);
   };
-  const messages = [];
+  const messages = [], removed = [];
   let answer;
   const context = vm.createContext({
     document: { querySelector: element, documentElement: element('html'), body: element('body'), createElement: element, dispatchEvent() {} },
+    URL,
     matchMedia: () => ({ matches: true, addEventListener() {} }),
     GZ_I18N: { t: (s) => s, ui() {}, page() {} },
-    GZ_SITE: { address: require('../lib/site.js').address, probe: async () => ({ kind: 'ultra', url: 'https://bb.school.edu/' }) },
+    GZ_SITE: { address: require('../lib/site.js').address, probe: async () => found, nearby: async () => [] },
     GZ_LOOKS: [{ name: 'Frostdev', colors: {}, bg: {} }], GZ_LOOK_PARTS: () => ({}),
     setTimeout() {}, clearTimeout() {}, CustomEvent: class {},
     chrome: {
-      runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, sendMessage: (m) => {
+      runtime: { id: 'glaze', getManifest: () => ({ host_permissions: patterns }), getURL: (p) => `chrome-extension://glaze/${p}`, sendMessage: (m) => {
         messages.push(m);
         return m.op === 'yes' ? new Promise((r) => { answer = r; }) : Promise.resolve({ ok: true });
       } },
-      permissions: { contains: async () => false, request: async () => granted },
+      permissions: { contains: async () => false, request: async () => granted, remove: async (p) => { removed.push(...p.origins); } },
     },
   });
   vm.runInContext(require('node:fs').readFileSync(require('node:path').join(__dirname, '../features/welcome.js'), 'utf8'), context);
-  return { element, messages, reply: (r) => answer(r) };
+  return { element, messages, removed, reply: (r) => answer(r) };
 };
 const tick = () => new Promise(setImmediate);
 
@@ -102,4 +103,25 @@ test('a dismissed first-run prompt tells the worker to stop waiting for its page
   await tick();
   assert.deepEqual(s.messages.map((m) => m.op), ['ask', 'cancel']);
   assert.equal(s.element('#go').attributes.has('data-busy'), false);
+});
+
+
+test('a failed first-run probe never hands back a required host, including a Firefox re-grant', async () => {
+  for (const patterns of [['https://*.instructure.com/*'], ['https://school.instructure.com/*'], ['<all_urls>']]) {
+    const s = screen({ found: 'none', patterns });
+    await tick();
+    s.element('#address').value = 'school.instructure.com';
+    s.element('#site').handlers.submit({ preventDefault() {} });
+    await tick();
+    assert.deepEqual(s.removed, [], patterns.join(', '));
+  }
+});
+
+test('a failed first-run probe still hands back an optional host', async () => {
+  const s = screen({ found: 'none', patterns: ['https://*.instructure.com/*'] });
+  await tick();
+  s.element('#address').value = 'www.school.edu';
+  s.element('#site').handlers.submit({ preventDefault() {} });
+  await tick();
+  assert.deepEqual(s.removed, ['https://www.school.edu/*']);
 });
