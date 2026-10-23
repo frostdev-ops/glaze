@@ -171,3 +171,16 @@ test('Announcements with search open: no band behind the field, which is a pill 
   assert.match(body(THEME, '.course-announcement-layer #announcement-search .search-input-wrap input'), /background:\s*transparent !important/);
   assert.match(body(THEME, '.course-announcement-layer #announcement-search .search-input-wrap:focus-within'), /outline:\s*2px solid var\(--gz-accent/, 'keyboard focus shows on the pill');
 });
+
+test('Canvas: the breadcrumb row the strip floats in is clear, its breadcrumbs an inset glass panel', () => {
+  const row = body(CANVAS, '#application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs)');
+  assert.match(row, /background:\s*transparent/);
+  assert.match(row, /border-bottom:\s*0/);
+  const panel = body(CANVAS, '#application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs)::after');
+  glass(panel, 'breadcrumb panel');
+  assert.match(panel, /inset-inline:\s*var\(--gz-float-start[^;]*var\(--gz-float-end/);
+  assert.match(panel, /inset-block:\s*calc\(var\(--gz-ctabs-h[^;]*\+ var\(--gz-float-gap/, 'under the strip, a gap from it');
+  assert.match(body(CANVAS, '#application .ic-app-nav-toggle-and-crumbs > #gz-ctabs'), /margin-inline:\s*-24px/, 'the strip spans the row\'s padding, so bar and panel line up');
+  assert.match(body(CANVAS, '#application .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs[data-at="canvas-below"])::after'), /inset-block:\s*var\(--gz-float-gap/);
+  assert.ok(ruleWith(CANVAS, '.ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs)::before').some(([, b]) => /animation-timeline:\s*scroll\(\)/.test(b)), 'a veil comes up as the page scrolls under it');
+});
