@@ -1,0 +1,113 @@
+// Computed glass styles against Ultra's captured header structure, including its hashed class.
+// NODE_PATH=<playwright> nice node scripts/ctab-strip-glass-check.js [evidence directory]
+// EXT selects the source checkout; hold the shared browser lock while running.
+const { chromium } = require('playwright');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
+const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const G = require(path.join(ext, 'defaults.js')); require(path.join(ext, 'lib/coursetabs.js'));
+const site = 'https://bb.school.test', key = `ctabs:${site}:_42_1`;
+const out = process.argv[2];
+let html = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-course.html'), 'utf8')
+  .replace('.bb-course-navigation { position: sticky; top: 0; z-index: 10; background: Canvas; }', '.bb-course-navigation { position: sticky; top: 0; z-index: 10; }')
+  .replace('.panel-wrap { position: absolute; top: 0; right: 0; bottom: 0; left: 220px;', '.panel-wrap { position: absolute; top: 0; right: 0; bottom: 0; left: 0;')
+  .replace('#main-content { height: 100%; margin-left: 220px;', '#main-content { height: 100%; margin-left: 0;')
+  .replace('`<div class="bb-course-navigation"><bb-course-navigation>`', '`<div class="bb-course-navigation">`')
+  .replace('`<course-page-header><header>`', '`<course-page-header><header class="makeStylesheader-0-2-704">`')
+  .replace('`</header></course-page-header>`', '`</header></course-page-header><bb-course-navigation>`');
+const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
+const results = [];
+const check = (value, label, actual) => { results.push({ pass: !!value, label, actual }); console.log(`${value ? 'ok' : 'FAIL'} ${label}${actual === undefined ? '' : ': ' + JSON.stringify(actual)}`); };
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (fn) => { for (let i = 0; i < 150; i++) { const v = await fn(); if (v) return v; await pause(100); } throw Error('condition timed out'); };
+const shot = async (p, name) => { if (out) await p.screenshot({ path: path.join(out, name + '.png') }); };
+const measure = (p) => p.evaluate(() => {
+  const header = document.querySelector('course-page-header > header'), tools = document.querySelector('bb-course-navigation > [class*="makeStylestoolbar"]');
+  const h = getComputedStyle(header), t = getComputedStyle(tools), strip = document.querySelector('#gz-ctabs'), s = getComputedStyle(strip, '::before');
+  const box = (e) => { const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; };
+  const v = getComputedStyle(document.querySelector('div.bb-course-navigation'), '::before');
+  return { header: box(header), tools: box(tools), strip: box(strip), inset: [s.left, s.right], border: h.borderBottomWidth,
+    paints: [h.backgroundColor, t.backgroundColor], shadows: [h.boxShadow, t.boxShadow], veil: [v.content, v.opacity],
+    filters: [h.backdropFilter, t.backdropFilter, s.backdropFilter], glass: getComputedStyle(document.documentElement).getPropertyValue('--gz-glass').trim() };
+});
+(async () => {
+  let ctx;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-strip-glass-'));
+  try {
+    if (out) fs.mkdirSync(out, { recursive: true });
+    await require('./wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true,
+      viewport: { width: 1280, height: 800 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
+    await ctx.route('**/*', (route) => {
+      const u = new URL(route.request().url());
+      if (u.protocol === 'chrome-extension:') return route.continue();
+      if (u.origin === site && u.pathname.startsWith('/ultra')) return route.fulfill({ contentType: 'text/html', body: html });
+      if (u.origin === site && u.pathname.endsWith('/users/me')) return route.fulfill({ contentType: 'application/json', body: '{"id":"_42_1"}' });
+      if (u.origin === site && u.pathname.includes('/learn/api/')) return route.fulfill({ contentType: 'application/json', body: '{"results":[]}' });
+      if (u.hostname === 'cdn.school.test') return route.fulfill({ contentType: 'text/css', body: '' });
+      return route.abort();
+    });
+    const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
+    const page = await ctx.newPage();
+    const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
+    const setup = async (look, at = 'above') => {
+      const base = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: true, tabs: false, rail: 'icons' },
+        enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])) };
+      const settings = { ...base, ...G.GZ_LOOK_APPLY(base, look), motion: { ...base.motion, level: 'off' }, tabs: { ...G.GZ_SANITIZE({}).tabs, at } };
+      await opts.evaluate(async ({ settings, key, site }) => {
+        await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.session.clear();
+        await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site], [key]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, at: i, top: 0 })) } });
+      }, { settings, key, site });
+      await page.goto(`${site}/ultra/courses/_101_1/outline`);
+      await page.locator('#gz-ctabs [data-course-id="_102_1"]').waitFor();
+      await until(() => page.evaluate(() => !document.querySelector('.spinner') && !!document.querySelector('#gz-navbar')));
+      await pause(250);
+    };
+    for (const look of G.GZ_LOOKS) {
+      await setup(look);
+      const m = await measure(page);
+      check(m.border === '0px' && m.paints[0] === m.paints[1] && m.shadows[0] === m.shadows[1], `${look.name}: captured course header joins the tools without a seam`, m);
+      check(m.header[0] === m.tools[0] && m.header[2] === m.tools[2], `${look.name}: header and tools align`);
+      await shot(page, look.name.toLowerCase().replaceAll(' ', '-'));
+    }
+    const look = G.GZ_LOOKS.find((l) => l.name === 'Aurora Night');
+    for (const at of ['above', 'between', 'below', 'page']) {
+      await setup(look, at);
+      const m = await measure(page);
+      check(at === 'between' ? m.border === '1px' && m.tools[1] > m.strip[1] + m.strip[3] : m.border === '0px', `${at}: the header divider matches placement`, m);
+      await shot(page, at);
+    }
+    await setup(look);
+    await page.locator('#gz-ctabs [data-course-id="_102_1"]').click();
+    const frame = await until(() => Promise.resolve(page.frames().find((f) => f.name() === 'gz-ctab:_102_1')));
+    await frame.waitForSelector('#gz-ctabs');
+    await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through') && !document.documentElement.hasAttribute('data-gz-ctab-framed')));
+    await until(() => page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed') && document.querySelector('iframe[data-gz-through]')));
+    // A real course frame has no base page or native nav under the course.
+    await frame.evaluate(() => { document.querySelector('#main-content')?.remove(); document.querySelector('.MuiDrawer-paper')?.remove(); });
+    await pause(300);
+    const f = await measure(frame);
+    check(f.border === '0px' && f.paints[0] === f.paints[1], 'see-through frame keeps the joined course panel', f);
+    check(f.inset[0] === '0px' && f.inset[1] === '12px', 'frame starts after the parent rail gutter', f.inset);
+    check(await page.locator('#site-wrap #gz-ctabs').evaluate((e) => getComputedStyle(e).visibility === 'hidden'), 'covered page strip cannot ghost through');
+    await shot(page, 'frame');
+    await page.setViewportSize({ width: 375, height: 812 }); await pause(500);
+    const phone = await measure(frame);
+    check(phone.inset.join() === '12px,12px', 'phone frame restores both window gaps', phone.inset);
+    await shot(page, 'phone-frame');
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.evaluate(() => { document.documentElement.dir = 'rtl'; });
+    await frame.evaluate(() => { document.documentElement.dir = 'rtl'; }); await pause(500);
+    const rtl = await measure(frame);
+    check(rtl.inset.join() === '12px,0px', 'RTL frame insets mirror the rail', rtl.inset);
+    await shot(page, 'rtl-frame');
+    await page.emulateMedia({ forcedColors: 'active' });
+    check(await frame.locator('#gz-ctabs [aria-selected="true"]').evaluate((e) => getComputedStyle(e).borderTopWidth === '2px'), 'forced colors preserve the selected tab edge');
+    await shot(page, 'forced-colors');
+    check(errors.length === 0, 'no page errors', errors);
+  } finally {
+    await ctx?.close(); fs.rmSync(tmp, { recursive: true, force: true });
+    if (out) fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(results, null, 2) + '\n');
+  }
+  const failed = results.filter((r) => !r.pass).length;
+  console.log(`${results.length - failed} ok, ${failed} failed`); process.exitCode = failed ? 1 : 0;
+})().catch((e) => { console.error(e); process.exitCode = 1; });

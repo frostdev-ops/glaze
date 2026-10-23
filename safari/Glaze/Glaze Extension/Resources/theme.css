@@ -235,7 +235,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    The course header is a JSS-hashed <header> inside Ultra's course-page-header element, painted
    #262626 in every palette until 2.0. The #site-wrap-scoped selectors outrank the "*-header"
    catch-all further down, which used to paint these opaque and hide the blur. ---- */
-#site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"] {
+#site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"]:not(.bb-course-navigation *) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
   border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important;
