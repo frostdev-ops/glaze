@@ -61,3 +61,13 @@ test('3.3.8 versions agree and the exact pure notes transform fits Apple', () =>
   assert.ok(result.length <= 3000, `AMO: ${result.length} characters`);
   assert.ok(!result.includes('## [3.3.7]'));
 });
+
+test('review: Step 4 copy discloses redirected Download all files in every staged language', () => {
+  for (const file of ['PRIVACY.md', 'CHANGELOG.md', 'store/listing.md']) assert.match(read(file), /redirected files/i, file);
+  const staged = read('store/new-in-3.4.0-staged.md');
+  for (const [lang, term] of Object.entries({ '': 'redirected files', de: 'Weitergeleitete Dateien', es: 'archivos redirigidos', fr: 'fichiers redirigés', nl: 'omgeleide bestanden', 'pt-BR': 'arquivos redirecionados' })) {
+    const file = `store/listing${lang ? `-${lang}` : ''}.md`;
+    const block = staged.split(`## ${file}\n`)[1]?.split('\n## ')[0];
+    assert.ok(block?.includes(term), `${file}: redirected file limit`);
+  }
+});
