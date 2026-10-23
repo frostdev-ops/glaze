@@ -40,7 +40,7 @@ const page = () => {
   const capi = async (p) => (p === '/files/9' ? { id: 9, display_name: 'notes.pdf', size: 3 } : p === '/files/9/public_url' ? { public_url: `https://${CDN}/files/9/notes.pdf?token=a` } : null);
   const ctx = { site: 'canvas', t: (s, v = {}) => s.replace(/\{(\w+)\}/g, (_, k) => String(v[k])), locale: () => 'en', capi, canvasCourseId: () => '25', courseId: () => null,
     settings: () => ({ enhance: { download: true } }), on: () => true, moduleItems: async () => [{ type: 'File', content_id: '9' }] };
-  const g = { GZ_CTX: ctx, document, location: { pathname: '/courses/25/modules', origin: ORIGIN }, innerHeight: 900, console, Promise, URL, Map, Set, WeakMap, Uint8Array, Blob, Error, Object, Array, String, Number, Math, JSON, Intl, atob, btoa, DOMException, AbortController,
+  const g = { GZ_CTX: ctx, document, location: { pathname: '/courses/25/modules', origin: ORIGIN }, innerHeight: 900, console, Promise, URL, Map, Set, WeakMap, Uint8Array, Uint16Array, Uint32Array, DataView, ArrayBuffer, TextEncoder, Blob, Error, Object, Array, String, Number, Math, JSON, Intl, atob, btoa, DOMException, AbortController,
     setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {}, encodeURIComponent,
     URL: Object.assign(function (...a) { return new URL(...a); }, { createObjectURL: () => 'blob:x', revokeObjectURL() {} }),
     addEventListener: (t, f) => (listeners[t] ||= []).push(f), removeEventListener: (t, f) => { listeners[t] = (listeners[t] || []).filter((x) => x !== f); },
@@ -135,8 +135,8 @@ const frame = ({ hash = `#${CDN}`, request = async () => true, manifest = { host
   let active = false;
   const document = { getElementById: (id) => (id === 'allow' ? button : null), documentElement: new El('html'), body: { scrollWidth: 120, scrollHeight: 26 } };
   const g = { document, location: { hash }, console, Promise, URL, decodeURIComponent, navigator: { language: 'en' }, Intl, Object, Array, String, Number, JSON, Math, Error,
-    parent: { postMessage: (m, o) => told.push([m, o]) }, addEventListener() {}, requestAnimationFrame: (f) => f(),
-    chrome: { runtime: { getManifest: () => manifest }, permissions: { request: (o) => { asked.push([o.origins, active]); return request(o); } } } };
+    parent: { postMessage: (m, o) => told.push([JSON.parse(JSON.stringify(m)), o]) }, addEventListener() {}, requestAnimationFrame: (f) => f(),
+    chrome: { runtime: { getManifest: () => manifest }, permissions: { request: (o) => { asked.push([[...o.origins], active]); return request(o); } } } };
   g.globalThis = g;
   vm.createContext(g);
   for (const f of ['lib/i18n.js', 'features/allow.js']) vm.runInContext(read(f), g);

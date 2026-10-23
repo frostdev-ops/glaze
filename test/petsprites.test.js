@@ -49,7 +49,7 @@ test('pet library writes are restricted to the top-level editor; LMS reads need 
   const local = { ultra: ['https://school.test'] }, sync = { enhance: { pet: true } };
   const chrome = { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, getManifest: () => ({ host_permissions: ['<all_urls>'] }) },
     storage: { local: { get: async () => local }, sync: { get: async () => sync } } };
-  const allow = vm.runInNewContext(`${setup} BROKER.petSprites.allow`, { chrome, URL, GZ_PET: P, GZ_SANITIZE: require('../defaults.js').GZ_SANITIZE, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN });
+  const allow = vm.runInNewContext(`${setup} BROKER.petSprites.allow`, { chrome, URL, GZ_PET: P, GZ_SANITIZE: require('../defaults.js').GZ_SANITIZE, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../defaults.js').GZ_LOCAL_DEV });
   const editor = { id: 'glaze', frameId: 0, origin: 'chrome-extension://glaze', url: 'chrome-extension://glaze/options.html#look/pets' };
   assert.equal(await allow({ op: 'import' }, editor), true);
   assert.equal(await allow({ op: 'delete' }, { ...editor, frameId: 1 }), false);

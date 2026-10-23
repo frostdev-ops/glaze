@@ -21,7 +21,7 @@ const pageChrome = ({ answer = () => true, manifest = { host_permissions: ['http
   const chrome = {
     runtime: { id: 'glaze', getManifest: () => manifest, lastError: null,
       sendMessage: async (m) => { sent.push(m); return m.op === 'list' ? { ok: true, mods: list } : respond(m); } },
-    permissions: { request: (o) => { asked.push([o.origins, state.active]); return Promise.resolve(answer(o.origins)); } },
+    permissions: { request: (o) => { asked.push([[...o.origins], state.active]); return Promise.resolve(answer(o.origins)); } },
   };
   return { chrome, asked, sent, state };
 };
@@ -152,8 +152,8 @@ test('a network permission switched on later is asked for in its click; refused,
   }
 });
 
-test('a mod channel on a relay of one\'s own: its host is asked for in Read code\'s click before the channel is followed', async () => {
-  for (const [link, yes, want] of [['https://relay.school.example/j#1.r.abc', true, [['https://relay.school.example/*'], true]], ['https://relay.school.example/j#1.r.abc', false, [['https://relay.school.example/*'], true]], ['https://share.frostdev.io/j#1.r.abc', true, null]]) {
+test('a mod channel\'s relay is asked for in Read code\'s click before the channel is followed (Glaze\'s own is held: no prompt)', async () => {
+  for (const [link, yes, want] of [['https://relay.school.example/j#1.r.abc', true, [['https://relay.school.example/*'], true]], ['https://relay.school.example/j#1.r.abc', false, [['https://relay.school.example/*'], true]], ['https://share.frostdev.io/j#1.r.abc', true, [['https://share.frostdev.io/*'], true]]]) {
     const rig = pageChrome({ answer: () => yes, respond: async () => ({ ok: false, error: 'network' }) });
     const e = editor(rig);
     e.$('mod-code').value = link;

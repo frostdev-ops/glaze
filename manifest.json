@@ -204,7 +204,8 @@
       "resources": [
         "sharing/quick.html",
         "options.html",
-        "preview.html"
+        "preview.html",
+        "features/allow.html"
       ],
       "matches": [
         "https://*/*"

@@ -51,8 +51,9 @@ const SITES = {
     { at: "redirect: 'follow', cache: 'no-store', signal: ctl.signal", kind: 'asked', flow: 'Canvas Download all: the page\'s Allow frame (features/allow.html) for the file server', guard: /if \(!await reachable\(url\)\)/ },
   ],
   'lib/media.js': [
-    { at: 'AbortSignal.timeout(LIMIT.fetch)', kind: 'asked', flow: 'a Lottie link: the editor asked for its host (lib/editor-xbg.js), or a mod\'s install did', guard: /if \(!await env\.reach\(url\)\)/ },
-    { at: 'AbortSignal.timeout(WAIT[kind])', kind: 'asked', flow: 'a video or picture link: the editor asked for its host (lib/editor-xbg.js), or a mod\'s install did', guard: /if \(!await env\.reach\(url\)\)/ },
+    // The worker's mediaFetch, the one caller of these two, checks the host before it hands the address over.
+    { at: 'AbortSignal.timeout(LIMIT.fetch)', kind: 'asked', flow: 'a Lottie link: the editor asked for its host (lib/editor-xbg.js), or a mod\'s install did', in: 'lib/background.js', guard: /op\.op === 'lottie' && [^\n]*!await reachable\(op\.src\)\) return \{ ok: false, error: 'host' \}/ },
+    { at: 'AbortSignal.timeout(WAIT[kind])', kind: 'asked', flow: 'a video or picture link: the editor asked for its host (lib/editor-xbg.js), or a mod\'s install did', in: 'lib/background.js', guard: /if \(!await reachable\(op\.src\)\) return \{ ok: false, error: 'host' \}/ },
     { at: 'fetch(`${GALLERY}${h}`', kind: 'required', host: 'https://frostdev.io', literal: "'https://frostdev.io/glaze/looks/api/media/'" },
   ],
   'lib/modbundle.js': [{ at: 'fetch(`${GALLERY}${g.id}', kind: 'required', host: 'https://frostdev.io', literal: "'https://frostdev.io/glaze/mods/api/mods/'" }],
@@ -146,8 +147,9 @@ test('each classification holds: required hosts are the manifest\'s, asked-for c
       }
       if (e.kind === 'asked') {
         assert.ok(e.flow, `${where}: the flow that asks is named`);
-        // The check stands before the call in the same function (or, for the probe, the request that precedes it).
-        const span = e.after ? src : src.slice(Math.max(0, at - 4000), at + e.at.length + 400);
+        // The check stands before the call in the same function (or in its one caller, `in`; or, for the probe, the request
+        // that precedes it).
+        const span = e.in ? read(e.in) : e.after ? src : src.slice(Math.max(0, at - 4000), at + e.at.length + 400);
         assert.match(span, e.guard, `${where}: ${e.guard} before the call`);
       }
       if (e.kind === 'page') assert.ok(!ext.has(f), `${where}: ${f} runs in the worker or an extension page`);

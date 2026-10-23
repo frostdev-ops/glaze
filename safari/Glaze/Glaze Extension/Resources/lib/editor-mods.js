@@ -109,6 +109,12 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
   };
   // An update keeps what the student granted before and adds what the prompt showed as new; an install grants all it asks.
   const grantsFor = (view, before, fresh) => (view.permissions || []).map((p) => p.id).filter((p) => !before || fresh.includes(p) || before.grants?.[p]);
+  // The hosts the worker fetches for a mod with these grants, which the browser must hold too: its network:<host> grants and
+  // an https background its parts name. As addresses, for lib/site.js reach.
+  const hostsFor = (view, grants) => [
+    ...grants.filter((g) => typeof g === 'string' && g.startsWith('network:')).map((g) => `https://${g.slice(8)}/`),
+    ...[view.parts?.bg?.media?.src].filter((src) => typeof src === 'string' && src.startsWith('https://')),
+  ];
   // The broker's refusals ({ error, reason, why, vars, blocked }) in words.
   const refusal = (r, t) => {
     if (r?.error === 'bundle') return t(r.why || "That mod file is damaged, or isn't a Glaze mod.", r.vars || {});
@@ -164,7 +170,10 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
       const p = pending;
       pending = null;
       if (!p) return;
-      if (!installing) { if (p.channel) await channel({ op: 'dismiss', id: p.got.id }); if (p.source === 'gallery') await send({ op: 'dismissOffer', zip: std(p.bytes) }); await takeOffer(); return; }
+      // The hosts it reaches, asked for in Install's click (held): refused, it isn't installed.
+      const refused = installing && !await p.held;
+      if (refused) say($('mods-said'), refusal({ error: 'host' }, t), true);
+      if (!installing || refused) { if (p.channel) await channel({ op: 'dismiss', id: p.got.id }); if (p.source === 'gallery') await send({ op: 'dismissOffer', zip: std(p.bytes) }); await takeOffer(); return; }
       const r = await send({ op: 'install', zip: std(p.bytes), hash: p.got.hash, grants: grantsFor(p.got.manifest, p.before, p.fresh), source: p.source, ...(p.channel && { channel: p.channel }) });
       if (p.channel) await channel({ op: 'dismiss', id: p.got.id });
       say($('mods-said'), r.ok ? t(r.action === 'update' ? 'Updated {name}.' : 'Installed {name}.', { name: p.got.prompt.name }) : refusal(r, t), !r.ok);
@@ -176,6 +185,8 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
     $('mod-prompt-install').addEventListener('click', (e) => {
       if (!e.isTrusted || !pending || !dialog.open) { e.preventDefault(); return; }
       confirmed = pending;
+      // In the click itself: the browser's prompt for the hosts it reaches needs it.
+      pending.held = GZ_SITE.reach(hostsFor(pending.got.manifest, grantsFor(pending.got.manifest, pending.before, pending.fresh)));
     });
     dialog.addEventListener('close', () => {
       if (dialog.open) return;
@@ -241,8 +252,10 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
     drop.addEventListener('drop', (e) => { e.preventDefault(); delete drop.dataset.drop; fromFile(e.dataTransfer.files[0]); });
     $('mod-code-read').addEventListener('click', async () => {
       const text = $('mod-code').value.trim();
-      // A mod channel's link: its newest bundle, through the same prompt; installing it follows the channel.
+      // A mod channel's link: its newest bundle, through the same prompt; installing it follows the channel. Its relay is
+      // asked for first, in this click (Glaze's own is held already: no prompt).
       if (/\/j#1\.[er]\./.test(text)) {
+        if (!await GZ_SITE.reach([text])) return say(addSaid, channelText('network', t), true);
         const r = await channel({ op: 'follow', link: text });
         if (!r.ok) return say(addSaid, channelText(r.error, t), true);
         if (await offerBytes(unstd(r.zip), 'link', addSaid, r.link)) $('mod-code').value = '';
@@ -319,7 +332,15 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
         if (l.id === 'code' || l.id === 'frame' || l.id === 'bgfile' || l.id.startsWith('media:')) return h('li', {}, h('span', { textContent: l.text }));
         const granted = !!rec.grants?.[l.id];
         return h('li', {}, h('label', { className: 'check' },
-          h('input', { type: 'checkbox', checked: granted, 'data-f': f(`perm:${l.id}`), onchange: (e) => act({ op: e.target.checked ? 'grant' : 'revoke', id, perm: l.id }).then(redraw) }),
+          h('input', { type: 'checkbox', checked: granted, 'data-f': f(`perm:${l.id}`), onchange: (e) => {
+            const on = e.target.checked;
+            // A network host switched on is asked for in this click, as at install; refused, it stays off.
+            (on ? GZ_SITE.reach(hostsFor({}, [l.id])) : Promise.resolve(true)).then((held) => {
+              if (held) return act({ op: on ? 'grant' : 'revoke', id, perm: l.id }).then(redraw);
+              e.target.checked = false;
+              say($('mods-said'), refusal({ error: 'host' }, t), true);
+            });
+          } }),
           h('span', { textContent: l.text }),
           l.why ? h('span', { className: 'desc mod-why' }, h('span', { className: 'mod-why-label', textContent: t('The author says:') }), ' ', h('q', { textContent: l.why })) : null));
       });
@@ -529,6 +550,6 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
     try { return t('Updates are checked at {host} about once a day', { host: new URL(link).host }); } catch { return ''; }
   };
 
-  return { DATA, permText, channelNotice, channelText, lines, hasCode, plain, warnings, sourceText, fingerprint, adds, value, settings, order, replaceLabel, winner, move, grantsFor, refusal, stopText, mount };
+  return { DATA, permText, channelNotice, channelText, lines, hasCode, plain, warnings, sourceText, fingerprint, adds, value, settings, order, replaceLabel, winner, move, grantsFor, hostsFor, refusal, stopText, mount };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MODSEDIT;

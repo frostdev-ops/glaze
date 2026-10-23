@@ -3082,5 +3082,6 @@
   "No course site at {host}": "Geen cursussite op {host}",
   "Can't reach {host}": "{host} is niet bereikbaar",
   "Checking {host}": "{host} controleren",
-  "Use Glaze on {host}": "Glaze gebruiken op {host}"
+  "Use Glaze on {host}": "Glaze gebruiken op {host}",
+  "Allow {host}": "{host} toestaan"
 };

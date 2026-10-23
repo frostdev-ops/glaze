@@ -246,11 +246,18 @@ var GZ_EDITOR_XBG = globalThis.GZ_EDITOR_XBG || (() => {
     const url = GZ_XPARTS.MEDIA.url(v);
     if (!url) return say(note, tr('That isn’t a link Glaze can use. It must start with https:// and name a website.'));
     input.value = url;
-    if (!setMedia({ type: mediaKind, src: url })) return say(note, tr('That link can’t be saved.'));
-    say(note, linkNote());
-    say(mediaSay, '');
-    drawTuning();
-    drawKept();
+    // The worker fetches the file (lib/media.js remote) and refuses a host the browser doesn't hold: asked for here, in the
+    // change that takes the link (a paste and Enter, or leaving the box), before anything is awaited (lib/site.js reach).
+    const kind = mediaKind;
+    GZ_SITE.reach([url]).then((held) => {
+      if (input.value !== url) return; // another link since: its own change takes it
+      if (!held) return say(note, tr('That link can’t be saved.'));
+      if (!setMedia({ type: kind, src: url })) return say(note, tr('That link can’t be saved.'));
+      say(note, linkNote());
+      say(mediaSay, '');
+      drawTuning();
+      drawKept();
+    });
   };
   const takeFile = async (input) => {
     const file = input.files[0];

@@ -309,7 +309,7 @@ test('the worker: who may write, the script on Gradescope only while on, and the
     if (!kept) res('ignored');
   });
   const settle = () => new Promise((r) => setTimeout(r, 5));
-  const toggle = async (on) => { store.sync.enhance = { gradescope: on }; for (const f of changed) f({ enhance: {} }, 'sync'); await settle(); };
+  const toggle = async (on) => { const was = store.sync.enhance; store.sync.enhance = { gradescope: on }; for (const f of changed) f({ enhance: { oldValue: was, newValue: store.sync.enhance } }, 'sync'); await settle(); };
   const gs = { id: 'glaze', tab: {}, frameId: 0, url: 'https://www.gradescope.com/courses/42' };
   const canvas = { id: 'glaze', tab: {}, url: 'https://school.instructure.com/' };
   const other = { ...canvas, url: 'https://other.instructure.com/' };

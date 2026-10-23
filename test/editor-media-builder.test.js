@@ -47,7 +47,7 @@ const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files
     document: doc, console, Promise, JSON, Object, Array, String, Number, Math, Error, Set, Map, URL, btoa, Uint8Array, ArrayBuffer, clearTimeout, setTimeout, CSS: { escape: (s) => s }, structuredClone,
     Option: function Option(text, value, d, selected) { const o = new El('option', doc); Object.assign(o, { text, value: value ?? text, selected: !!selected }); o.textContent = text; return o; },
     chrome: { runtime: { lastError: null, getManifest: () => ({ host_permissions: ['https://frostdev.io/*'] }), sendMessage: (m, cb) => { sent.push(m); const r = Promise.resolve(reply(m)); if (cb) r.then(cb); return r; } },
-      permissions: { request: (o) => { asked.push(o.origins); return Promise.resolve(answer(o.origins)); } } },
+      permissions: { request: (o) => { asked.push([...o.origins]); return Promise.resolve(answer(o.origins)); } } },
     location: { origin: 'chrome-extension://glaze' }, addEventListener: (t, f) => { (listeners[t] ||= []).push(f); },
     GZ_XPARTS: XP, GZ_MEDIA: MEDIA, GZ_SPEC: D.GZ_SPEC, GZ_COLORS: D.GZ_COLORS, GZ_MX: require('../lib/motionx.js'),
   });
