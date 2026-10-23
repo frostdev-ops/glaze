@@ -100,15 +100,18 @@ test('a retained course tab keeps the shared navbar scene outside the hidden nat
   assert.ok(!r.body.attrs.has('data-gz-scene-host'));
 });
 test('a layer over the course page counts as covering it; the course page, its tools and base pages do not', () => {
-  const r = rig(), H = r.c.GZ_SCENE_HOST, item = r.element('item', r.course), routed = r.element('routed', r.body);
-  const cases = [[[r.outline], false], [[r.outline, r.tool], false], [[], false], [[r.outline, r.screen, r.inner], true], [[r.outline, item], true], [[r.element('panel', routed)], true]];
+  const r = rig(), H = r.c.GZ_SCENE_HOST, item = r.element('item', r.course);
+  const cases = [[[r.outline], false], [[r.outline, r.tool], false], [[], false], [[r.outline, r.screen, r.inner], true], [[r.outline, item], true]];
   for (const [layers, covered] of cases) { r.c.layers = layers; assert.equal(H.covered(true), covered, layers.map((l) => l.name).join(' > ')); }
+  const routed = r.element('routed', r.body); r.c.layers = [r.element('panel', routed)]; assert.equal(H.covered(true), true, 'a routed page over the course');
   assert.equal(H.covered(false), false);
   r.c.layers = [r.outline, r.screen]; r.c.framed = true; assert.equal(H.covered(true), false);
 });
-test('in a course tab, a routed page that is all the frame holds covers nothing; over another page it does', () => {
+test('in a course tab, a course or routed page that is all the frame holds covers nothing; over a base page it does', () => {
   const r = rig(), H = r.c.GZ_SCENE_HOST;
   const wrap = r.element('wrap'), routed = r.element('routed', wrap), panel = r.element('panel', routed);
   r.c.layers = [panel]; assert.equal(H.covered(true), false);
   r.element('base', wrap); assert.equal(H.covered(true), true);
+  r.c.layers = [r.outline]; assert.equal(H.covered(true), false, 'the course alone');
+  r.element('base', r.body); assert.equal(H.covered(true), true, 'a base page beside the course');
 });

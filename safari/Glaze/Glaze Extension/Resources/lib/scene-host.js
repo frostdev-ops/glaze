@@ -16,8 +16,9 @@ var GZ_SCENE_HOST = (() => {
     const item = layer?.parentElement === course && course && course.querySelector('.panel-wrap') !== layer;
     const off = layer?.closest('.bb-offcanvas-panel');
     const shell = off || (item ? layer : course) || routed || layer || document.body;
-    // In a course tab a routed page (a discussion) is all the frame holds: it covers nothing.
-    return [shell, !!off || !!item || (shell === routed && beneath(routed))];
+    // A course or routed page that is all a course tab's frame holds covers nothing; over a base page it does.
+    const page = shell === course ? course.closest('.bb-offcanvas-container') || course : shell === routed ? routed : null;
+    return [shell, !!off || !!item || (!!page && beneath(page))];
   };
   const home = (ultra) => find(ultra)[0];
   const hosts = new WeakMap();

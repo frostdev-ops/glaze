@@ -1,5 +1,6 @@
-// One background under course tabs: a course tab's frame wearing the page's background shows the page's through it, so
-// the two never meet at a seam beside the rail. Real unpacked extension, headless Chrome, synthetic Ultra fixture.
+// One background under course tabs: a course tab's frame wearing the page's background shows the page's through it, or,
+// over a page of its own, draws its own where and when the page's is, so the two never meet at a seam beside the rail.
+// Real unpacked extension, headless Chrome, synthetic Ultra fixture.
 // NODE_PATH=<installed playwright> node scripts/ctab-background-check.js [evidence directory]
 // EXT=<another checkout> runs it against that code (a review checks what it judges, or the code before a fix).
 const { chromium } = require('playwright');
@@ -60,52 +61,69 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     await frame.waitForSelector('#gz-ctabs');
     await until(() => frame.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctab-framed')));
     await pause(1500);
-    const state = async () => ({
-      frame: await frame.evaluate(() => ({ through: document.documentElement.hasAttribute('data-gz-through'), scene: !!document.getElementById('gz-scene') })),
-      page: await page.evaluate(() => {
-        const f = document.querySelector('iframe[name="gz-ctab:_102_1"]'), r = f.getBoundingClientRect(), strip = document.querySelector('#site-wrap #gz-ctabs');
-        return { key: document.documentElement.getAttribute('data-gz-bg-key'), marked: f.hasAttribute('data-gz-through'), scene: !!document.getElementById('gz-scene'),
-          strip: strip ? getComputedStyle(strip).visibility : 'none', rect: [r.left, r.top, r.width, r.height] };
-      }),
-    });
-    const s = await state();
-    console.log(JSON.stringify(s));
-    check(s.frame.through && !s.frame.scene, 'the frame wearing the page\'s background is see-through and draws no scene');
-    check(s.page.scene && s.page.marked, 'the page keeps its scene and knows the frame shows over it');
-    check(s.page.strip !== 'visible', 'the page\'s own strip does not show through the frame');
-    // The frame's content hidden, what shows inside its box must be the page's own background, pixel for pixel: the same
-    // as with the frame gone.
-    const [x, y, w, h] = s.page.rect.map(Math.round);
+    const [x, y, w, h] = await page.evaluate(() => { const r = document.querySelector('iframe[name="gz-ctab:_102_1"]').getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); });
     const clip = { x, y, width: w, height: h };
-    await frame.evaluate(() => { document.body.style.visibility = 'hidden'; });
-    await pause(300);
-    const through = await page.screenshot({ clip });
-    await page.evaluate(() => { document.getElementById('gz-ctabs-frames').style.visibility = 'hidden'; });
-    await pause(300);
-    const under = await page.screenshot({ clip });
-    await page.evaluate(() => { document.getElementById('gz-ctabs-frames').style.visibility = ''; });
-    await frame.evaluate(() => { document.body.style.visibility = ''; });
-    if (out) {
-      fs.mkdirSync(out, { recursive: true });
-      fs.writeFileSync(path.join(out, 'frame-box-through.png'), through); fs.writeFileSync(path.join(out, 'frame-box-under.png'), under);
-      await pause(300); await page.screenshot({ path: path.join(out, 'course-tab.png') });
-    }
-    const diff = await opts.evaluate(async ([a, b]) => {
+    const compare = (a, b) => opts.evaluate(async ([a, b]) => {
       const load = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.src = src; });
       const [ia, ib] = await Promise.all([load(a), load(b)]);
       const px = (i) => { const c = new OffscreenCanvas(i.width, i.height), g = c.getContext('2d'); g.drawImage(i, 0, 0); return g.getImageData(0, 0, i.width, i.height).data; };
       const da = px(ia), db = px(ib); let sum = 0, worst = 0;
       for (let i = 0; i < da.length; i += 4) { const d = (Math.abs(da[i] - db[i]) + Math.abs(da[i + 1] - db[i + 1]) + Math.abs(da[i + 2] - db[i + 2])) / 3; sum += d; worst = Math.max(worst, d); }
       return { mean: sum / (da.length / 4), worst };
-    }, [`data:image/png;base64,${through.toString('base64')}`, `data:image/png;base64,${under.toString('base64')}`]);
-    console.log(JSON.stringify(diff));
-    check(diff.mean < 1, `inside the frame's box the page's background shows unchanged (mean difference ${diff.mean.toFixed(2)} of 255, worst ${diff.worst.toFixed(0)})`);
+    }, [`data:image/png;base64,${a.toString('base64')}`, `data:image/png;base64,${b.toString('base64')}`]);
+    // What the frame's box shows with the frame's content hidden (keep: the frame's own background, if it draws one),
+    // against the page alone.
+    const box = async (name, keep) => {
+      await frame.evaluate((keep) => {
+        document.body.style.visibility = 'hidden';
+        const shell = keep && document.getElementById('gz-scene')?.parentElement;
+        if (shell) { shell.style.visibility = 'visible'; for (const c of shell.children) if (c.id !== 'gz-scene') c.style.visibility = 'hidden'; }
+      }, keep);
+      await pause(300);
+      const inFrame = await page.screenshot({ clip });
+      await page.evaluate(() => { document.getElementById('gz-ctabs-frames').style.visibility = 'hidden'; });
+      await pause(300);
+      const pageOnly = await page.screenshot({ clip });
+      await page.evaluate(() => { document.getElementById('gz-ctabs-frames').style.visibility = ''; });
+      await frame.evaluate(() => { for (const e of document.querySelectorAll('[style*="visibility"]')) e.style.visibility = ''; });
+      if (out) { fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, `${name}-frame.png`), inFrame); fs.writeFileSync(path.join(out, `${name}-page.png`), pageOnly); }
+      const d = await compare(inFrame, pageOnly);
+      console.log(name, JSON.stringify(d));
+      return d;
+    };
+    const state = () => frame.evaluate(() => ({ through: document.documentElement.hasAttribute('data-gz-through'), scene: !!document.getElementById('gz-scene') }));
+    // 1. The fixture keeps a base page under the course (as Ultra can): the frame draws its own background, where and
+    //    when the page's is.
+    let s = await state();
+    console.log(JSON.stringify(s));
+    check(!s.through && s.scene, 'a course over a base page in the frame brings the frame\'s own scene');
+    const own = await box('course', true);
+    check(own.mean < 2, `the frame's own background matches the page's inside its box (mean difference ${own.mean.toFixed(2)} of 255, worst ${own.worst.toFixed(0)})`);
+    if (out) await page.screenshot({ path: path.join(out, 'course-tab.png') });
+    // 2. A routed page that is all the frame holds: the frame is see-through, the page's background shows unchanged.
+    await frame.locator('.b8b-document').click();
+    await frame.waitForSelector('.routed-scroll main');
+    await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through')));
+    await pause(1000);
+    s = await state();
+    const pageState = await page.evaluate(() => {
+      const f = document.querySelector('iframe[name="gz-ctab:_102_1"]'), strip = document.querySelector('#site-wrap #gz-ctabs');
+      return { marked: f.hasAttribute('data-gz-through'), scene: !!document.getElementById('gz-scene'), strip: strip ? getComputedStyle(strip).visibility : 'none' };
+    });
+    console.log(JSON.stringify({ s, pageState }));
+    check(s.through && !s.scene, 'a routed page alone in the frame is see-through and draws no scene');
+    check(pageState.scene && pageState.marked, 'the page keeps its scene and knows the frame shows over it');
+    check(pageState.strip !== 'visible', 'the page\'s own strip does not show through the frame');
+    const thru = await box('routed', false);
+    check(thru.mean < 1, `inside the frame's box the page's background shows unchanged (mean difference ${thru.mean.toFixed(2)} of 255, worst ${thru.worst.toFixed(0)})`);
+    if (out) await page.screenshot({ path: path.join(out, 'routed-tab.png') });
+    // 3. The page's own routed page, covered by a see-through frame, stays hidden.
     await frame.locator('#gz-ctabs [data-course-id="_101_1"]').click();
     await until(() => page.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctab-framed')));
     await page.locator('.b8b-document').click();
     await page.waitForSelector('.routed-scroll main');
     await page.locator('#gz-ctabs [data-course-id="_102_1"]').click();
-    await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through')));
+    await until(() => page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed')) && frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through')));
     const routed = await page.locator('body > .routed-page.bb-offcanvas-container').evaluate((e) => getComputedStyle(e).visibility);
     check(routed === 'hidden', `the covered routed page outside site-wrap stays hidden (${routed})`);
     check(errors.length === 0, 'no page errors');
