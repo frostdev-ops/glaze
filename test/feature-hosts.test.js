@@ -60,9 +60,9 @@ test('Download all: a host the manifest holds, or one the student holds through 
   }
 });
 
-test('Download all: a response that lands on another host is kept when the browser let it through', async () => {
+test('Download all on Safari: its every-site manifest preserves followed file redirects', async () => {
   const fetched = [];
-  const w = worker({ fetch: bytes('https://uploads.example-s3.amazonaws.com/9?sig=x', fetched), grants: new Set([`https://${CDN}/*`]) });
+  const w = worker({ manifest: (m) => { m.host_permissions = ['<all_urls>']; }, fetch: bytes('https://uploads.example-s3.amazonaws.com/9?sig=x', fetched) });
   const { port, say } = w.connect('canvas-zip', course());
   await w.settle();
   say({ type: 'file', url: `https://${CDN}/files/9` });
