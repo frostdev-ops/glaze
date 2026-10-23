@@ -128,11 +128,11 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     });
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
-    const store = (s, local) => opts.evaluate(async ([s, local]) => {
+    const store = (s, local) => opts.evaluate(async ([s, local, O]) => {
       await chrome.storage.sync.clear();
       await chrome.storage.sync.set(s);
-      if (local) { await chrome.storage.local.clear(); await chrome.storage.local.set(local); }
-    }, [s, local]);
+      if (local) { await chrome.storage.local.clear(); await chrome.storage.local.set({ ultra: [O], ...local }); } // the student's yes to this Ultra site
+    }, [s, local, O]);
     const layout = () => opts.evaluate(() => chrome.storage.local.get('widgetLayout').then((r) => r.widgetLayout));
     const page = await ctx.newPage();
     page.on('pageerror', (e) => { errors.push(e.stack || String(e)); console.error(e.stack || String(e)); });
