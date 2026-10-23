@@ -15,6 +15,20 @@ const W = require('../lib/widgets.js');
 const S = require('../lib/sidebar.js');
 const { page, record, natives, unmoved, settle, read, KEY, O, CARD } = require('./sidebar-ultra-page.js');
 
+test('two sidebar toggles before a snapshot callback compute their states in update order', async () => {
+  const p = page({ at: 'outline' });
+  p.c.sidebarSettings = { open: 'expanded' };
+  let pending;
+  p.c.GZ_MOTION = { swap(update) { pending?.(); pending = update; } };
+  await p.pass();
+  assert.equal(p.mode(), 'expanded');
+  p.fire(p.$('.gz-sb-toggle'), 'click');
+  p.fire(p.$('.gz-sb-toggle'), 'click');
+  pending(); pending = null;
+  assert.equal(p.mode(), 'expanded', 'two rapid toggles restore the original layout');
+  assert.equal(p.doc.activeElement, p.$('.gz-sb-toggle'));
+});
+
 test('each kind of Ultra page: its own column dressed in place, or Glaze\'s own where there is none or only a layer', async () => {
   for (const [at, family, host, cls] of [['courses', 'courses', 'native', 'todo-panel'], ['outline', 'outline', 'native', 'outline-actions'], ['detail', 'detail', 'native', 'outline-actions'], ['stream', 'other', 'glaze', null]]) {
     const p = page({ at, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
@@ -701,9 +715,10 @@ test('an assignment overview gets the assignment family and Glaze\'s own column;
     await wide.pass();
     assert.equal(wide.mode(), w - 200 - 480 - 16 >= 900 ? 'expanded' : 'drawer', `${w} at 480`);
   }
-  // The course's absolute tool panel ends at the column's edge and the gap (features/sidebar.css).
+  // The course's absolute tool panel keeps the column's room and the gap for its content; its header spans the window
+  // (features/sidebar.css).
   const css = read('features/sidebar.css');
-  assert.match(css, /html\[data-gz-sb-fixed\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*inset-inline-end: var\(--gz-sb-room\) !important/);
+  assert.match(css, /html\[data-gz-sb-fixed\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*padding-inline-end: var\(--gz-sb-room\) !important/);
   assert.match(css, /html\[data-gz-sidebar="expanded"\] \{ --gz-sb-room: calc\(var\(--gz-sidebar-w\) \+ 16px \+ var\(--gz-sb-inset, 0px\) \+ var\(--gz-sb-safe, 0px\)\); \}/);
 });
 

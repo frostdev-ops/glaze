@@ -17,6 +17,25 @@ plus that site's own part, `content-ultra.js` on Blackboard Ultra and `content-c
 has no part; it is themed by `content.js` and `moodle.css`. Everything else, from the command palette to the
 grade calculators, loads on demand from `features/` the first time a page needs it.
 
+## Activity Stream
+
+Blackboard's Stream notification settings contain a Glaze section, also available at
+Settings → Blackboard → Activity Stream. Timeline dates default to due dates for deadline
+notifications and posted dates for other updates. Choose posted dates or both, relative due
+dates, compact cards, and whether encouragement appears. The exact deadline and time zone
+remain available on the date's accessible label and hover title. Relative dates fall back to
+calendar dates if Blackboard's zone differs from the browser's. These controls save Glaze
+preferences immediately; Blackboard's notification delivery settings are unchanged.
+
+The feature loads only on `/ultra/stream` routes. It reads the rendered deadline metadata,
+keeps Blackboard's original timestamp nodes, and restores the native display when disabled.
+The settings section also selects an Activity Stream preview. `node --test test/stream.test.js`
+checks the date policy; `scripts/stream-check.js` checks automatic redraws, delayed saves,
+form isolation, accessible dates, narrow layouts and teardown. `scripts/stream-runtime-check.js`
+loads the real unpacked extension on a synthetic Ultra page and checks the worker allowlist,
+closed-root keyboard focus, storage notifications and all four editor preview controls.
+Both browser checks accept an optional evidence directory and use the shared browser lock.
+
 ## Building
 
 ```sh
@@ -35,9 +54,19 @@ Runs the tests for the colour, settings and page-text logic. Use Node 26, matchi
 
 The browser checks in `scripts/*-check.js` need Playwright (`NODE_PATH=/path/to/node_modules`, and `npx playwright install chromium` once). They launch Playwright's own Chromium; set `CHROME` to use another executable. `mods-api-check.js`, `mods-sandbox-check.js` and `widgets-builder-check.js` also use macOS's `sandbox-exec` and run only there. The three heaviest checks (`background-shell-check.js`, `background-pages-check.js` and `docreview-check.js`) take a lock directory so only one runs at a time: `glaze-heavy.lock` in the OS temp directory, or `GLAZE_LOCK` if set (`scripts/check-env.js` resolves both).
 
+For motion, run `NODE_PATH=/path/to/node_modules node scripts/motion-check.js [receipt.json]`. It traces every animation on the Ultra, Canvas and Moodle previews at Expressive and fails if an entrance, a card's hover lift or a loading pulse runs on the main thread instead of the compositor (a finished entrance that animates `transform` does that to the hover for the life of the page: entrances use `translate` and `scale`). It also checks that a Glaze dialog stays up while it fades out on closing. Paint-only effects are listed in the receipt but allowed.
+The check explicitly exercises positioned panel/tooltip and Look entrances and Moodle's loading pulse, requires their trace records, and retains failures even if a later sample recovers. It also checks final placement and instant dialogs with motion Off or transitions disabled. This Chromium check does not establish native Firefox or Safari behavior.
+Glaze's own UI uses the lazy `lib/motion.js`: local layout changes happen synchronously, then FLIP/exit motion follows. A native palette/sidebar crossfade may defer its update one frame for the old snapshot; consecutive swaps flush pending updates in order, and aborted/stalled captures still apply them once. Crossfades require recent activation on this page (where that signal exists), and are skipped in frames, hidden pages, with transitions off, or during another view transition. Unsolicited settings changes stay immediately clickable. Ghosts are inert and have no identifying attributes or roles; hidden/disconnected targets and interrupted moves release their animations.
+
 For Ultra background clipping, run `NODE_PATH=/path/to/node_modules nice -n 15 node scripts/ultra-panel-background-check.js` with Playwright available. It checks native off-canvas gutters, close-button clicks, scene continuity and scrolled headers at desktop/mobile widths in both text directions, plus partial-width sheet exclusions. Panel course tabs are checked above and below native headers with negative margins, at every strip size, so announcement labels stay exposed. An optional output directory saves screenshots.
 
 `scripts/background-shell-check.js` checks rendered pixels behind the navbar and sidebar across base pages, course tools and item panels, before and after scrolling, at desktop/mobile widths in both text directions. `scripts/background-pages-check.js` runs the unpacked extension and its contour renderer through Ultra's synthetic routes and retained course tabs, then checks cleanup when switching to solid. Both accept an optional evidence directory and hold the shared lock described above; they use local fixtures, not a signed-in LMS. Scene placement (`lib/scene-host.js`) loads only when an animated or mod background needs it.
+
+`scripts/ctab-background-check.js` opens a course tab over an animated background and checks that the frame draws none of its own: inside the frame's box the page's background shows unchanged, and the page's own tab strip doesn't show through. `EXT=<checkout>` runs it against other code.
+
+`scripts/ctab-strip-glass-check.js` checks computed strip, course-header and Announcements-pill styles across every built-in Look, placements, phone width, RTL and forced colors. Its header includes Ultra's hashed class; its frame has no base page or native nav. It also tests the scroll backing with the timeline support block disabled: older engines keep a static backing, while supporting engines fade it in over 48px. Run with `NODE_PATH=/path/to/node_modules nice node scripts/ctab-strip-glass-check.js /path/to/evidence`, holding the shared browser lock externally. It uses a temporary headless profile, accepts `EXT=<checkout>`, and writes screenshots and `results.json`; it does not verify a signed-in LMS or Safari.
+
+`scripts/glass-remaining-check.js` checks tool and routed headers, Gradebook, routed discussions, announcement glass/search, over-course item headers and Canvas breadcrumbs. Run it like the strip check, with an evidence directory; optional scenario names and `--looks=Library,Clear` narrow it. `W=375 H=812`, `RTL=1`, `FORCED=1`, and `COLLAPSED=1` exercise narrow, mirrored, forced-color and collapsed states. Fixture changes stay inside the check. The strip check removes its synthetic base page before waiting for frame transparency: a frame over a base page intentionally paints its own aligned background. These are headless fixture checks, not live LMS or Safari verification.
 
 `scripts/navbar-check.js` checks Glaze's own navigation bar in the editor's Ultra preview: the drawer it stands in for,
 the room it keeps, items, badges and the current page, the icons rail's tooltips, peek and keyboard, right-to-left, the
@@ -86,9 +115,9 @@ sh scripts/build-safari.sh
 ```
 
 That packages the extension, copies it into a temporary copy of the project, and builds a universal
-app in `release/<version>/build/Glaze.app`, signed with the configured Developer ID. Override `SAFARI_SIGN_IDENTITY`
-and `SAFARI_TEAM_ID` to use a different identity. Safari only installs apps from outside the App Store
-when they are notarized, so pass a saved `notarytool` Keychain profile:
+app, signed with the configured Developer ID, into `release/<version>/github/` as a zip (and a disk image when
+notarized). Override `SAFARI_SIGN_IDENTITY` and `SAFARI_TEAM_ID` to use a different identity. Safari only installs
+apps from outside the App Store when they are notarized, so pass a saved `notarytool` Keychain profile:
 
 ```sh
 NOTARY_PROFILE=your-profile sh scripts/build-safari.sh

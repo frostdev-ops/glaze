@@ -3,11 +3,12 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', key = `ctabs:${site}:_42_1`;
 const G = require(path.join(ext, 'defaults.js')); require(path.join(ext, 'lib/coursetabs.js'));
 const html = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-course.html'), 'utf8')
-  .replace("{ id: '_105_1', name: 'Biology Lab', code: 'FA26-BIO120-01', color: 9 },", "{ id: '_105_1', name: 'Biology Lab', code: 'FA26-BIO120-01', color: 9 },\n{ id: '_106_1', name: 'Synthetic Sixth Course', code: 'CS106', color: 1 },");
+  .replace("{ id: '_105_1', name: 'Biology Lab', code: 'FA26-BIO120-01', color: 9 },", "{ id: '_105_1', name: 'Biology Lab', code: 'FA26-BIO120-01', color: 9 },\n{ id: '_106_1', name: 'Synthetic Sixth Course', code: 'CS106', color: 1 },\n{ id: '_107_1', name: 'Synthetic Seventh Course', code: 'CS107', color: 2 },");
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-live-frames-'));
 const out = process.argv[2];
@@ -18,6 +19,7 @@ const until = async (fn, ms = 12000) => {
   while (Date.now() - start < ms) { const value = await fn(); if (value) return value; await pause(80); }
   throw new Error('condition timed out');
 };
+const within = async (ms, fn) => { try { await until(fn, ms); return true; } catch { return false; } };
 const results = [], requests = [], errors = [];
 const check = (value, message) => { assert.ok(value, message); results.push(message); console.log(`ok ${message}`); };
 (async () => {
@@ -30,7 +32,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
     let uid = '_42_1', stallFirstCourse = true, stalledCourse = null;
-    const stalledSixth = [];
+    const stalledSixth = [], stalledSeventh = [];
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
@@ -42,6 +44,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
         if (u.pathname === '/ultra/courses/_106_1/outline' && route.request().isNavigationRequest() && stalledSixth.length < 2) {
           stalledSixth.push(route); return;
         }
+        if (u.pathname === '/ultra/courses/_107_1/outline' && route.request().isNavigationRequest()) { stalledSeventh.push(route); return; }
         return route.fulfill({ contentType: 'text/html', body: html });
       }
       if (u.origin === site && u.pathname.endsWith('/users/me')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ id: uid }), headers: { 'cache-control': 'no-store' } });
@@ -51,10 +54,12 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     });
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     const settings = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: G.GZ_SANITIZE({}).tabs };
-    await opts.evaluate(async ({ settings, key }) => {
+    await opts.evaluate(async ({ settings, key, site }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
-      await chrome.storage.local.set({ [key]: { tabs: Array.from({ length: 6 }, (_, i) => ({ cid: `_${101 + i}_1`, name: `Synthetic course ${i + 1}`, path: `/ultra/courses/_${101 + i}_1/outline`, top: 0, at: i, pin: false })) } });
-    }, { settings, key });
+      await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (lib/background.js approved)
+      // The seventh first: closed at once, its next tab is the page's own course.
+      await chrome.storage.local.set({ [key]: { tabs: [7, 1, 2, 3, 4, 5, 6].map((n, i) => ({ cid: `_${100 + n}_1`, name: `Synthetic course ${n}`, path: `/ultra/courses/_${100 + n}_1/outline`, top: 0, at: i, pin: false })) } });
+    }, { settings, key, site });
     const saved = () => opts.evaluate(async (key) => (await chrome.storage.local.get(key))[key]?.tabs, key);
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     const tab = (f, cid) => f.locator(`#gz-ctabs [data-course-id="${cid}"]`);
@@ -66,7 +71,23 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       await until(() => f.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctab-framed')));
       return f;
     };
+    // In reach: not inert, and what a click at its middle lands on.
+    const inReach = (f, cid) => tab(f, cid).evaluate((e) => { const r = e.getBoundingClientRect(); return !e.closest('[inert]') && e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }).catch(() => false);
+    const stripOver = () => page.evaluate(() => !!document.querySelector('#gz-ctabs-frames > #gz-ctabs'));
     await page.goto(`${site}/ultra/courses/_101_1/outline`); await tab(page, '_102_1').waitFor(); await pause(800);
+    // A course frame that never loads: the page's strip stays over it, in reach, with the focus on the tab picked; its
+    // keys close it at once.
+    await tab(page, '_107_1').click({ noWaitAfter: true });
+    await until(async () => stalledSeventh.length && await page.locator('iframe[name="gz-ctab:_107_1"]').count());
+    await pause(300);
+    if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, 'stalled-strip.png') }); }
+    check(await within(1000, async () => await stripOver() && await inReach(page, '_102_1')), "a stalled course frame leaves the page's strip over it and in reach");
+    check(await page.evaluate(() => document.activeElement?.dataset.courseId === '_107_1' && !!document.activeElement.closest('#gz-ctabs-frames > #gz-ctabs')), 'keyboard focus is on the picked tab in the strip, not in the blank frame');
+    let t0 = Date.now();
+    await page.keyboard.press('Delete');
+    check(await within(1000, () => page.evaluate(() => !document.querySelector('iframe[name="gz-ctab:_107_1"], #gz-ctabs-frames[data-on], #gz-ctabs [data-course-id="_107_1"]'))), `Delete closes the stalled tab from the strip within 1 s (${Date.now() - t0} ms)`);
+    check(await inReach(page, '_102_1') && !await stripOver(), "the page's strip is back in its place");
+    for (const held of stalledSeventh) await held.abort().catch(() => {});
     // Do not wait for the child navigation: its deliberately held request is the state under test.
     await tab(page, '_102_1').click({ noWaitAfter: true });
     await until(async () => stalledCourse && await page.locator('iframe[name="gz-ctab:_102_1"]').count());
@@ -79,14 +100,22 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     check(await f2.evaluate(() => document.querySelectorAll('#gz-ctabs').length === 1 && !document.querySelector('#gz-footer')), 'one strip and no duplicate footer inside a live frame');
     await tab(f2, '_106_1').click({ noWaitAfter: true });
     await until(async () => stalledSixth.length && await page.locator('iframe[name="gz-ctab:_106_1"]').count());
-    // Let both bounded attempts time out while another tab is selected.
-    await tab(page, '_101_1').focus(); await page.keyboard.press('Enter');
+    // Stalled on screen: another tab is a click away, and the stalled one keeps loading behind it.
+    check(await within(1000, async () => await stripOver() && await inReach(page, '_102_1')), "a stalled frame picked from another frame's strip has the page's strip over it");
+    t0 = Date.now();
+    await tab(page, '_102_1').click({ noWaitAfter: true, timeout: 1000 });
+    check(await within(1000, () => page.evaluate(() => { const f = document.querySelector('iframe[name="gz-ctab:_102_1"]'); return !!f && getComputedStyle(f).visibility === 'visible' && !document.querySelector('#gz-ctabs-frames > #gz-ctabs'); })), `switching from the stalled tab to a live one takes under 1 s (${Date.now() - t0} ms)`);
+    check(await page.locator('iframe[name="gz-ctab:_106_1"]').count() === 1, 'the stalled frame is kept loading');
+    await tab(f2, '_106_1').click({ noWaitAfter: true });
+    check(await within(1000, async () => await stripOver() && await inReach(page, '_102_1')), 'back on the stalled tab, still loading, the strip is over it again');
+    // Both bounded attempts time out on screen; its own Go back still leaves it, and the tab opens it again.
     await until(() => Promise.resolve(stalledSixth.length === 2));
-    await pause(8200);
+    await page.locator('.gz-ctabs-retry').getByRole('button', { name: 'Go back', exact: true }).click({ timeout: 20000 });
+    await until(() => page.evaluate(() => !document.querySelector('#gz-ctabs-frames[data-on]')));
     await tab(page, '_106_1').click({ noWaitAfter: true });
     const retry = page.locator('.gz-ctabs-retry').getByRole('button', { name: 'Retry', exact: true });
     await retry.waitFor({ state: 'visible' });
-    check(await retry.evaluate((e) => { const r = e.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === e; }), 'a tab that stalled while hidden exposes a clickable foreground Retry control');
+    check(await retry.evaluate((e) => { const r = e.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === e; }), 'a stalled tab left and opened again exposes a clickable foreground Retry control');
     if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, 'stalled-course.png') }); }
     await retry.click({ noWaitAfter: true });
     const f6 = await ready('_106_1');

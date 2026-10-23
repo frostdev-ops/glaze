@@ -150,9 +150,9 @@ the full environment, real home, credential variables or SSH agent. Use a separa
 when tooling must be prevented from reading host secrets. The `web-ext` transitive dependency tree is not yet locked;
 its top-level version pin and filtered environment do not make that tree reproducible.
 
-Chrome is submitted with staged publication, and Apple versions use manual release after approval.
-AMO listed submissions may become public as soon as Mozilla approves them. GitHub and website publication
-do not wait for store approval. The command does not install an app or change permanent `dev/firefox`.
+Every store publishes a submission as soon as its review approves it: Chrome with default publication, Apple
+versions with release after approval, Firefox listed versions on approval. GitHub and website publication do not wait
+for store approval. The command does not install an app or change permanent `dev/firefox`.
 
 ### Credentials
 
@@ -165,7 +165,8 @@ node scripts/store-release.mjs doctor
 ```
 
 Keep this file and Apple's private key outside the repository. The config is parsed as data (shell
-commands are never evaluated); exported environment variables override it. `--config /path/to/file.env`
+commands are never evaluated); exported environment variables override it. Logged commands, on the console and in
+`logs/`, show `[redacted]` for every value from this file, for credentials given in the environment and after credential flags. `--config /path/to/file.env`
 selects another file. Quoted values and paths with spaces work. `ASC_KEY_PATH` may be absolute, start
 with `~/`, or be relative to the config file. Never paste private keys or tokens into logs or chat.
 
@@ -184,12 +185,32 @@ The website main branch must already include `scripts/prepare-glaze-release.mjs`
 `src/data/glazeRelease.json` template support. Website wording distinguishes GitHub package versions
 from store approval rather than predicting which store version is live.
 
-Existing store listings, privacy answers, review contact/demo access, screenshots, agreements and export
-compliance must already be complete. Apple reuses the existing listing; English What's New is taken from
-the current changelog entry for updates. Apple does not allow that field for a platform's first release.
-To supply shorter or separately prepared notes (Apple's limit is 4,000
-characters), pass `--notes /path/to/notes.txt` on the first build. Other localizations stay unchanged.
-The store APIs report any missing submission requirements; they cannot bypass store review.
+Privacy answers, review contact/demo access, screenshots, agreements and export compliance must already be
+complete. The store APIs report any missing submission requirements; they cannot bypass store review.
+
+### Store listings
+
+Each release brings the listings in English, German, Spanish, French, Dutch and Brazilian Portuguese in line with
+`store/` at the release commit:
+
+| Store | Source | What the release sets |
+| --- | --- | --- |
+| Chrome | `store/listing*.md` | Nothing: the API has no listing method. It writes `release/<v>/chrome-web-store/listing-<lang>.txt` to paste in the dashboard. |
+| Firefox | `store/listing*.md`, with privacy from `store/firefox*.md` | Release notes in every language; summary and description where they differ. The description leaves out the older "FROM …" blocks (AMO shows each version's notes). Firefox privacy describes Firefox sync and excludes executable mod permissions. |
+| Apple | `store/app-store*.md` | Name and subtitle, description, keywords, promotional text and What's New, per platform version submitted. Missing languages are created with English's privacy policy, support and marketing URLs. |
+
+Release notes in every store and language are that language's "NEW IN <version>" block; a language without one stops
+the release before anything is built. A bullet labelled with a browser ("Safari: …") goes only to that browser's store.
+`CHANGELOG.md`, or `--notes FILE`, is for GitHub and the website. Apple's text is edited only while its version and app
+info are being prepared, never in review; a new language shows the English screenshots until it has its own, and
+Apple has no What's New field for a platform's first release.
+Apple keywords are limited to 100 UTF-8 bytes; promotional text may be omitted from a source.
+
+`node scripts/store-release.mjs listings` reads the stores and prints, per store and language, what a release would
+change. It writes nothing.
+Submission stops on an unknown or noneditable Apple version state, or if required languages cannot be added because
+app info is not editable. An existing editable review draft receives the same listing sync before submission; a retry
+reads the localizations already created, so partial updates resume without duplicating them.
 
 ### Source isolation and Firefox review
 
@@ -222,6 +243,7 @@ node scripts/store-release.mjs build                # store packages only; no pu
 node scripts/store-release.mjs build --stores chrome,firefox  # no Apple credentials needed
 node scripts/store-release.mjs submit               # resume stores only
 node scripts/store-release.mjs publish              # resume saved GitHub/website publication only
+node scripts/store-release.mjs listings             # what each store's listing would change; writes nothing
 node scripts/store-release.mjs release --apple-platforms MAC_OS  # omit iPhone/iPad
 ```
 

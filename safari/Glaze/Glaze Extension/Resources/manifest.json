@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.3.6",
+  "version": "3.3.8",
   "description": "Restyle Blackboard Ultra, Canvas and Moodle: palettes, fonts, backgrounds and motion, plus handy extras.",
   "default_locale": "en",
   "permissions": [
@@ -92,12 +92,34 @@
     },
     {
       "matches": [
+        "https://*.moodlecloud.com/*"
+      ],
+      "js": [
+        "lib/color.js",
+        "lib/i18n.js",
+        "lib/page.js",
+        "lib/grades.js",
+        "lib/fonts.js",
+        "lib/surfaces.js",
+        "defaults.js",
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "exclude_matches": [
+        "https://*/ultra",
+        "https://*/ultra/*"
+      ]
+    },
+    {
+      "matches": [
         "https://*/*"
       ],
       "exclude_matches": [
         "https://*/ultra",
         "https://*/ultra/*",
-        "https://*.instructure.com/*"
+        "https://*.instructure.com/*",
+        "https://*.moodlecloud.com/*"
       ],
       "js": [
         "lib/detect.js"
@@ -177,7 +199,8 @@
       "resources": [
         "sharing/quick.html",
         "options.html",
-        "preview.html"
+        "preview.html",
+        "features/allow.html"
       ],
       "matches": [
         "https://*/*"

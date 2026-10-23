@@ -62,8 +62,8 @@ test('first paint covers MUI and legacy nav, owns the logo image without replaci
   assert.doesNotMatch(css, /url\("(?:assets|icons)\/[^"]+\.svg"\)/, 'no logo by the extension address');
   assert.match(css, /data-gz-nav-brand/);
   const manifest = require('../manifest.json');
-  const ultra = manifest.content_scripts.find((c) => c.matches.includes('https://*/ultra')).js;
-  const canvas = manifest.content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*')).js;
+  const ultra = manifest.content_scripts.find((c) => c.js.includes('content-ultra.js')).js;
+  const canvas = manifest.content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
   assert.ok(ultra.includes('lib/nav.js')); assert.ok(!canvas.includes('lib/nav.js'));
 });
 

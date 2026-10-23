@@ -371,9 +371,10 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   assert.match(quick, /!e\.isTrusted/);
   assert.doesNotMatch(quick, /\bconfirm\(|parent\.|top\./, 'a framed panel asks inline and posts nothing to the page');
   assert.doesNotMatch(notes, /type: 'glaze:sessions'|op: 'link'/, 'the LMS world only frames the panel; it never asks the worker for a link');
-  // <all_urls> covers the default relay and a local one alike; an optional entry for either would be redundant.
-  assert.equal(require('../manifest.json').optional_host_permissions, undefined);
-  assert.deepEqual(require('../manifest.json').host_permissions, ['<all_urls>']);
+  // The default relay is held from the start; another https relay or a local one is asked for when it's set (lib/sessions-ui.js).
+  const m = require('../manifest.json');
+  assert.ok(m.host_permissions.includes('https://share.frostdev.io/*'));
+  for (const p of ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*']) assert.ok(m.optional_host_permissions.includes(p), p);
 });
 
 test('session worker accepts only exact extension pages; an LMS or another extension cannot ask for keys', async () => {

@@ -78,6 +78,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // (lib/sidebar.js resolve), the dock, this page's board, floating or nowhere, and the layout keeps every spot it had.
   // placedAt: each widget's, as last resolved; dockIds: the dock's tiles as drawn, in order.
   let side = null, sideWas = null, sideAccount = '', heard = false, placedAt = new Map(), dockIds = [];
+  let laid = ''; // the board last laid out, so its first layout places tiles without motion
   const sideNow = () => (ctx.settings().enhance.sidebar && globalThis.GZ_SIDEBAR_UI?.active?.() ? GZ_SIDEBAR_UI : null);
   const dockable = (id) => !W?.course(id);
   // Ultra's Courses page with the sidebar (owner, 2026-10-19): the dock replaces its column board. Its widgets are in the
@@ -821,7 +822,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const from = list().indexOf(el);
       const move = (ev) => {
         const next = list().find((c) => { if (c === el) return false; const r = c.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; }) || null;
-        if (next ? el.nextElementSibling !== next : home.lastElementChild !== el) seatAfter(home, el, next ? next.previousElementSibling : home.lastElementChild);
+        if (next ? el.nextElementSibling === next : home.lastElementChild === el) return;
+        // The tiles it passes glide aside (lib/motion.js), and so does it into its new place.
+        const seat = () => seatAfter(home, el, next ? next.previousElementSibling : home.lastElementChild);
+        if (globalThis.GZ_MOTION) GZ_MOTION.flip(list, seat, { enter: false, skip: (e) => e === el }); else seat();
       };
       const up = (ev) => {
         for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) document.removeEventListener(k, f);
@@ -1308,6 +1312,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const floatWatched = new Set();
   const teardown = (all = true) => {
     gesture?.cancel();
+    laid = '';
     for (const [id, x] of tiles) if (all || x.el.parentNode !== floats) { x.stop?.(); x.el.remove(); tiles.delete(id); }
     ro?.disconnect();
     floatRO?.disconnect();
@@ -1369,50 +1374,58 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       ro ||= new ResizeObserver(() => { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board && !asleep) layoutBoard(); }); });
       ro.observe(roomEl());
     }
-    for (const [id, x] of tiles) if ((!sleeping || onTop(x.el)) && !want.some((w) => w.id === id)) { if (gesture?.id === id) gesture.cancel(); x.stop?.(); x.el.remove(); tiles.delete(id); }
-    const last = new Map(); // home -> the tile placed last in it
-    for (const tile of want) {
-      if (sleeping && !tile.float) continue;
-      let x = tiles.get(tile.id);
-      const wasShown = x && shown(x.el);
-      let fresh = false;
-      if (!x) {
-        x = tileEl(tile.id);
+    // The dock's tiles glide to new places (moved by its buttons or arrow keys, one added or removed), and a new one
+    // settles in (lib/motion.js); not while a gesture moves them itself, nor in the dock's first drawing.
+    const dock = !sleeping && !gesture && side?.host()?.widgets;
+    const docked = () => (dock ? [...dock.children].filter((c) => c.dataset?.tile) : []);
+    const motion = dock && docked().length ? globalThis.GZ_MOTION : null;
+    const seat = () => {
+      for (const [id, x] of tiles) if ((!sleeping || onTop(x.el)) && !want.some((w) => w.id === id)) { if (gesture?.id === id) gesture.cancel(); x.stop?.(); x.el.remove(); tiles.delete(id); }
+      const last = new Map(); // home -> the tile placed last in it
+      for (const tile of want) {
+        if (sleeping && !tile.float) continue;
+        let x = tiles.get(tile.id);
+        const wasShown = x && shown(x.el);
+        let fresh = false;
+        if (!x) {
+          x = tileEl(tile.id);
+          x.el.toggleAttribute('data-float', !!tile.float);
+          Object.assign(x, (added.get(tile.id) || WIDGETS[tile.id] || GZ_COURSE_CARDS.fill)(x.body, api(tile.id)) || {});
+          tiles.set(tile.id, x);
+          fresh = true;
+        }
+        if (!sleeping) ro?.observe(x.el);
+        if (W.course(tile.id)) {
+          const name = nameOf(tile.id);
+          if (x.head.querySelector('h3').textContent !== name) { x.head.querySelector('h3').textContent = name; x.el.setAttribute('aria-label', name); }
+        }
+        x.el.dataset.size = tile.size;
         x.el.toggleAttribute('data-float', !!tile.float);
-        Object.assign(x, (added.get(tile.id) || WIDGETS[tile.id] || GZ_COURSE_CARDS.fill)(x.body, api(tile.id)) || {});
-        tiles.set(tile.id, x);
-        fresh = true;
+        x.el.toggleAttribute('data-fold', !!tile.fold);
+        // Its body as tall as it was resized to (else its content), scrolling inside. While a board is edited, its tiles
+        // are things to move (their content waits), each in the Tab order for the arrow keys; a floating one always is.
+        if (!gesture) { const h = tile.h ? `${tile.h}px` : ''; if (x.body.style.height !== h) x.body.style.height = h; }
+        const edit = editing && !tile.float && !tile.dock;
+        if (x.body.inert !== edit) x.body.inert = edit;
+        if (tile.float || edit) { x.el.setAttribute('tabindex', '0'); x.el.setAttribute('aria-description', t('Drag to move, or use the arrow keys')); }
+        else { x.el.removeAttribute('tabindex'); x.el.removeAttribute('aria-description'); }
+        x.el.toggleAttribute('data-dock', !!tile.dock);
+        if (tile.dock && !x.vsize) { x.vsize = vsize(x, tile.id); x.el.append(x.vsize); }
+        if (x.vsize) { x.vsize.hidden = !tile.dock || !!tile.fold; x.vsize.setAttribute('aria-valuenow', String(tile.h || Math.max(W.MIN_H, x.body.offsetHeight))); }
+        toolsFor(x, tile);
+        x.context?.();
+        if (board && !tile.float && !tile.dock) continue; // laid out below, in reading order
+        // In order, moving only what is out of place: a moved element loses focus (a note being typed).
+        const home = tile.float ? floats : tile.dock ? side.host()?.widgets : grid.querySelector('.gz-dash-grid');
+        if (!home) continue;
+        const prev = last.get(home);
+        if (x.el.parentNode !== home || x.el.previousElementSibling !== (prev || null)) seatAfter(home, x.el, prev);
+        last.set(home, x.el);
+        if (!tile.float) x.el.removeAttribute('style');
+        if ((fresh || !wasShown) && tile.float && sleeping) (x.resume || x.wake)?.();
       }
-      if (!sleeping) ro?.observe(x.el);
-      if (W.course(tile.id)) {
-        const name = nameOf(tile.id);
-        if (x.head.querySelector('h3').textContent !== name) { x.head.querySelector('h3').textContent = name; x.el.setAttribute('aria-label', name); }
-      }
-      x.el.dataset.size = tile.size;
-      x.el.toggleAttribute('data-float', !!tile.float);
-      x.el.toggleAttribute('data-fold', !!tile.fold);
-      // Its body as tall as it was resized to (else its content), scrolling inside. While a board is edited, its tiles
-      // are things to move (their content waits), each in the Tab order for the arrow keys; a floating one always is.
-      if (!gesture) { const h = tile.h ? `${tile.h}px` : ''; if (x.body.style.height !== h) x.body.style.height = h; }
-      const edit = editing && !tile.float && !tile.dock;
-      if (x.body.inert !== edit) x.body.inert = edit;
-      if (tile.float || edit) { x.el.setAttribute('tabindex', '0'); x.el.setAttribute('aria-description', t('Drag to move, or use the arrow keys')); }
-      else { x.el.removeAttribute('tabindex'); x.el.removeAttribute('aria-description'); }
-      x.el.toggleAttribute('data-dock', !!tile.dock);
-      if (tile.dock && !x.vsize) { x.vsize = vsize(x, tile.id); x.el.append(x.vsize); }
-      if (x.vsize) { x.vsize.hidden = !tile.dock || !!tile.fold; x.vsize.setAttribute('aria-valuenow', String(tile.h || Math.max(W.MIN_H, x.body.offsetHeight))); }
-      toolsFor(x, tile);
-      x.context?.();
-      if (board && !tile.float && !tile.dock) continue; // laid out below, in reading order
-      // In order, moving only what is out of place: a moved element loses focus (a note being typed).
-      const home = tile.float ? floats : tile.dock ? side.host()?.widgets : grid.querySelector('.gz-dash-grid');
-      if (!home) continue;
-      const prev = last.get(home);
-      if (x.el.parentNode !== home || x.el.previousElementSibling !== (prev || null)) seatAfter(home, x.el, prev);
-      last.set(home, x.el);
-      if (!tile.float) x.el.removeAttribute('style');
-      if ((fresh || !wasShown) && tile.float && sleeping) (x.resume || x.wake)?.();
-    }
+    };
+    if (motion) motion.flip(docked, seat); else seat();
     if (sleeping) { placeFloats(); return; }
     // Hide widgets (the Courses page only; editing shows them all).
     const away = board === 'courses' && hidden && !editing;
@@ -1503,16 +1516,23 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     area.toggleAttribute('data-stack', stacked);
     const parent = stacked || board !== 'courses' ? area : room;
     const focus = document.activeElement;
-    let prev = null;
-    for (const id of res.order) {
-      const { el } = tiles.get(id);
-      if (el.parentNode !== parent || el.previousElementSibling !== prev) seatAfter(parent, el, prev);
-      prev = el;
-      const a = res.at[id];
-      const z = String(1 + (cur(id)?.z || 0));
-      if (stacked) { if (el.style.left) el.removeAttribute('style'); continue; }
-      for (const [k, v] of Object.entries({ left: `${a.left}px`, top: `${a.top}px`, width: `${a.w}px`, zIndex: z })) if (el.style[k] !== v) el.style[k] = v;
-    }
+    const place = () => {
+      let prev = null;
+      for (const id of res.order) {
+        const { el } = tiles.get(id);
+        if (el.parentNode !== parent || el.previousElementSibling !== prev) seatAfter(parent, el, prev);
+        prev = el;
+        const a = res.at[id];
+        const z = String(1 + (cur(id)?.z || 0));
+        if (stacked) { if (el.style.left) el.removeAttribute('style'); continue; }
+        for (const [k, v] of Object.entries({ left: `${a.left}px`, top: `${a.top}px`, width: `${a.w}px`, zIndex: z })) if (el.style[k] !== v) el.style[k] = v;
+      }
+    };
+    // Tiles the board moves (one added, removed or resized, the room's width changing) glide there (lib/motion.js);
+    // not in a board's first layout, which would fly every tile in from where the page first put it.
+    const motion = laid === board ? globalThis.GZ_MOTION : null;
+    if (motion) motion.flip(() => res.order.map((id) => tiles.get(id).el), place, { enter: false }); else place();
+    laid = board;
     if (focus !== document.activeElement && focus?.isConnected) focus.focus({ preventScroll: true });
     const keep = stacked || boardless() ? '' : `${board === 'courses' ? W.reserve(Object.values(res.at), lines[0], lines[1], col.top) : res.bottom + W.GAP}px`;
     if (area.style.height !== keep) area.style.height = keep;

@@ -40,7 +40,11 @@ html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before,
 html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offcanvas-panel):where(:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *))::before {
   content: "";
   position: fixed;
-  inset: calc(var(--gz-bg-blur, 0px) * -2);
+  /* The viewport, or in a course tab's frame the page's (lib/scene-host.js --gz-vx/vy/vw/vh), so its copy lines up. */
+  left: calc(var(--gz-vx, 0px) - var(--gz-bg-blur, 0px) * 2);
+  top: calc(var(--gz-vy, 0px) - var(--gz-bg-blur, 0px) * 2);
+  width: calc(var(--gz-vw, 100%) + var(--gz-bg-blur, 0px) * 4);
+  height: calc(var(--gz-vh, 100%) + var(--gz-bg-blur, 0px) * 4);
   z-index: -1;
   pointer-events: none;
   background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain), var(--gz-bg-art);
@@ -57,7 +61,10 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap .content-list-item .conten
    is oversized so the drift never shows an edge. */
 html[data-gz-bg="aurora"]::before,
 html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before {
-  inset: -18%;
+  left: calc(var(--gz-vx, 0px) - var(--gz-vw, 100%) * .18);
+  top: calc(var(--gz-vy, 0px) - var(--gz-vh, 100%) * .18);
+  width: calc(var(--gz-vw, 100%) * 1.36);
+  height: calc(var(--gz-vh, 100%) * 1.36);
   background: var(--gz-surface-grain, none), linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
     radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-bg-1) 46%, transparent), transparent 70%),
     radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-bg-2) 36%, transparent), transparent 70%),
@@ -65,7 +72,7 @@ html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.
     radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
     var(--gz-surface-paint-2, var(--gz-surface-2));
   animation: gz-aurora 42s ease-in-out infinite alternate;
-  animation-play-state: var(--gz-ambient);
+  animation-play-state: var(--gz-drift);
 }
 /* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
 html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before,
@@ -84,12 +91,16 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) .course-content-container > .panel-wr
 /* A narrower/shorter scroller must not paint a second fallback over the shell's scene. Its
    content still clips normally; partial-width sheets retain their own opaque backgrounds. */
 html[data-gz-bg]:not([data-gz-bg="solid"]) [data-gz-scene-host] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { content: none; }
+/* A course tab's frame wearing the page's background (content.js data-gz-through) is see-through: the page under it draws
+   the one background, edge to edge around the rail. */
+html[data-gz-bg][data-gz-through] { background: transparent !important; }
+html[data-gz-through]::before, html[data-gz-through] :is(.panel-wrap, .bb-offcanvas-panel)::before { content: none; }
 #gz-scene {
   position: fixed;
-  left: calc(var(--gz-bg-blur, 0px) * -2);
-  top: calc(var(--gz-bg-blur, 0px) * -2);
-  width: calc(100% + var(--gz-bg-blur, 0px) * 4);
-  height: calc(100% + var(--gz-bg-blur, 0px) * 4);
+  left: calc(var(--gz-vx, 0px) - var(--gz-bg-blur, 0px) * 2);
+  top: calc(var(--gz-vy, 0px) - var(--gz-bg-blur, 0px) * 2);
+  width: calc(var(--gz-vw, 100%) + var(--gz-bg-blur, 0px) * 4);
+  height: calc(var(--gz-vh, 100%) + var(--gz-bg-blur, 0px) * 4);
   z-index: -1;
   pointer-events: none;
   filter: blur(var(--gz-bg-blur, 0px));
@@ -549,17 +560,18 @@ html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a
 html[data-gz-ctabs] div.bb-course-navigation { height: auto !important; max-height: none !important; }
 html[data-gz-ctabs~="above"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
 html[data-gz-ctabs~="below"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h) !important; }
-html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) div:has(> .js-course-navigation) { margin-top: var(--gz-ctabs-h) !important; }
+html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) div:has(> .js-course-navigation) { margin-top: calc(var(--gz-ctabs-h) + var(--gz-float-gap, 12px)) !important; }
 html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
 /* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. */
 html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }
 html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h); }
-html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas)); }
+html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: transparent; }
 #gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
 /* Native panel headers pull into their scroller's padding; after a tab row that would cover the subtitle. */
 #gz-ctabs[data-at="nested"] + :is(.panel-header, header) { margin-block-start: 0 !important; }
 /* The covered app keeps its layout, scroll and state without drawing its glass panels. The
-   scene moves outside it and freezes; its fallback stays too, so the shared navbar's gutters retain their background. */
-html[data-gz-ctab-framed] #site-wrap { visibility: hidden !important; }
+   scene moves outside it and keeps moving; its fallback stays too, so the shared navbar's gutters retain their background. */
+html[data-gz-ctab-framed] #site-wrap,
+html[data-gz-ctab-framed] > body > .routed-page.bb-offcanvas-container { visibility: hidden !important; }
 /* Native dialogs and notices can live inside the covered app and still sit above the frame. */
 html[data-gz-ctab-framed] #site-wrap :is(#gz-ctabs, #gz-footer, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"], .MuiModal-root, .MuiPopover-root, .MuiSnackbar-root):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *) { visibility: visible; }

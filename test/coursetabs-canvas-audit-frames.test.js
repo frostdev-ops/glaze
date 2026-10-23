@@ -1,4 +1,4 @@
-// Canvas audit: deterministic timers, document replacements and decoded-picture races, without a browser.
+// Canvas audit: deterministic timers, document replacements and stand-in races, without a browser.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
@@ -50,9 +50,9 @@ function canvasDocument(path, { busy = false, placing = false, empty = false } =
   });
 }
 
-function fixture({ nativePath = '/', saved = new Map(), stored, manualDecode = false } = {}) {
+function fixture({ nativePath = '/', saved = new Map(), stored } = {}) {
   let now = 1000, timerId = 0;
-  const timers = new Map(), observers = [], decodes = [], navigations = [], focused = [], notices = [], sent = [];
+  const timers = new Map(), observers = [], navigations = [], focused = [], notices = [], sent = [];
   const frames = new Map(), html = node('html'), host = node('div');
   const location = new URL(nativePath, origin);
   let entryKey = 0;
@@ -77,7 +77,7 @@ function fixture({ nativePath = '/', saved = new Map(), stored, manualDecode = f
     disconnect() { this.target = null; }
   }
   const tabs = L.clean(['12', '13', '14', '15', '16'].map((cid) => ({ cid, name: `Course ${cid}`, path: `/courses/${cid}` })), 'canvas');
-  const c = vm.createContext({ L, URL, PAGE: 'page', LIVE: 4, frames, host, html, document, location, history, navigation,
+  const c = vm.createContext({ L, URL, PAGE: 'page', requestAnimationFrame() {}, nudge() {}, LIVE: 4, frames, host, html, document, location, history, navigation,
     on: true, signedOut: false, framed: '', preview: false, showing: '', shownFrom: '', shooting: null, pic: null, showTurn: 0,
     closedCourse: '', navWatch: null, tabs, snaps: new Map(), strip: null, list: null, who: '42', loaded: true, last: undefined,
     ctx: { site: 'canvas', courseId: () => location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] || '', me: async () => '42', scene() {} },
@@ -88,7 +88,6 @@ function fixture({ nativePath = '/', saved = new Map(), stored, manualDecode = f
     sessionStorage: { getItem: (k) => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: (k) => saved.delete(k) },
     shown: (el) => !!el && el.isConnected !== false && el.visible !== false, loading: (el) => !!el?.busy,
     safePath: (...args) => args.length ? L.safe(...args) : L.safe(location.pathname, location.search),
-    Image: class { decode() { return manualDecode ? new Promise((resolve, reject) => decodes.push({ resolve, reject })) : Promise.resolve(); } },
     send: async (m) => { sent.push(m); return null; }, t: (s) => s, P: () => ({ place: true }),
     visitTab(cid) { if (!tabs.some((x) => x.cid === cid)) tabs.push(L.clean([{ cid }], 'canvas')[0]); },
     labelFor: (cid, name) => name, say: (msg) => notices.push(msg),
@@ -117,8 +116,8 @@ function fixture({ nativePath = '/', saved = new Map(), stored, manualDecode = f
     return doc;
   };
   const ready = (cid, path = `/courses/${cid}`, frame) => { const doc = load(cid, path, undefined, frame); tick(351); return doc; };
-  const snap = (cid, path = `/courses/${cid}`) => ({ cid, path, size: [1200, 800], shot: `data:image/jpeg;base64,${cid}`, n: 40, at: now });
-  return { api, c, frames, saved, focused, navigations, observers, notices, sent, decodes, document, tick, load, ready, snap };
+  const snap = (cid, path = `/courses/${cid}`) => ({ cid, path, size: [1200, 800], top: 0, name: '', strip: null, boxes: [[0, 0, 1200, 60, 'b', '#102030ff', 0]], n: 40, at: now });
+  return { api, c, frames, saved, focused, navigations, observers, notices, sent, document, tick, load, ready, snap };
 }
 
 test('a cold Canvas course waits for settled content before it changes the visible page or focus', async () => {
@@ -213,27 +212,19 @@ test('a Canvas user action stops delayed scroll restoration before it overwrites
   assert.equal(timers.length, 0);
 });
 
-test('a cached Canvas picture decoding after readiness cannot cover the ready document', async () => {
-  const p = fixture({ manualDecode: true }); p.c.snaps.set('12', p.snap('12'));
-  p.api.reveal('12'); assert.equal(p.decodes.length, 1);
-  p.ready('12'); p.decodes[0].resolve(); await flush();
-  assert.equal(p.c.showing, '12'); assert.equal(p.c.pic, null);
-  assert.equal(p.frames.get('12').el.style.visibility, '');
-  assert.deepEqual(p.focused, ['gz-ctab:12']);
-});
-
-test('a cached Canvas picture decoding after a newer selection cannot steal the screen', async () => {
-  const p = fixture({ manualDecode: true }); p.c.snaps.set('12', p.snap('12'));
-  p.api.reveal('12'); p.api.reveal('13'); p.ready('13');
-  p.decodes[0].resolve(); await flush();
+test('a cached Canvas sketch is drawn at once, under the switch, and a newer selection takes the screen from it', async () => {
+  const p = fixture(); p.c.snaps.set('12', p.snap('12'));
+  p.api.reveal('12'); await flush();
+  assert.equal(p.c.showing, '12'); assert.ok(p.c.pic?.isConnected, 'nothing to decode: in with the switch');
+  p.api.reveal('13'); p.ready('13'); await flush();
   assert.equal(p.c.showing, '13'); assert.equal(p.c.pic, null);
   assert.equal(p.frames.get('12').el.inert, true);
-  assert.deepEqual(p.focused, ['gz-ctab:13']);
+  assert.deepEqual(p.focused, ['gz-ctab:12', 'gz-ctab:13'], 'each shown in turn');
 });
 
-test('a decoded Canvas picture is removed when its loading document becomes ready', async () => {
-  const p = fixture({ manualDecode: true }); p.c.snaps.set('12', p.snap('12'));
-  p.api.reveal('12'); p.decodes[0].resolve(); await flush();
+test('a Canvas stand-in is removed when its loading document becomes ready', async () => {
+  const p = fixture(); p.c.snaps.set('12', p.snap('12'));
+  p.api.reveal('12'); await flush();
   assert.equal(p.c.showing, '12'); assert.ok(p.c.pic?.isConnected);
   const picture = p.c.pic;
   assert.equal(p.frames.get('12').ready, false);
@@ -408,7 +399,7 @@ test('a pending Canvas page redirected to another course retains its anchor and 
 
 test('Canvas frame pagehide must detach its observer from the surviving parent document', () => {
   const observers = [], parentRoot = {}, handlers = events(), document = events();
-  const c = vm.createContext({ framed: '12', preview: false, onPress() {}, onPop() {}, onStore() {}, ctx: { site: 'canvas' }, on: true, showing: '', PAGE: 'page', frames: new Map(),
+  const c = vm.createContext({ framed: '12', preview: false, onPress() {}, onPop() {}, onStore() {}, ctx: { site: 'canvas' }, on: true, showing: '', PAGE: 'page', requestAnimationFrame() {}, nudge() {}, frames: new Map(),
     parent: { document: { documentElement: parentRoot } }, navRoom() {}, bar: { place() {} },
     chrome: { runtime: { id: 'glaze' }, storage: { onChanged: { addListener() {}, removeListener() {} } } },
     document, location: { origin }, sessionStorage: { setItem() {} }, saveNow() {},
@@ -422,7 +413,7 @@ test('Canvas frame pagehide must detach its observer from the surviving parent d
   });
   vm.runInContext(part('  const keepPage = ', '  const onResize = ')
     + part('  let navWatch = ', '  // In a Canvas tab\'s frame')
-    + part('  const listen = ', '  const start = ') + '\nlisten(true);', c);
+    + part('  const onVisibility = ', '  const start = ') + '\nlisten(true);', c);
   assert.equal(observers.length, 1); assert.equal(observers[0].target, parentRoot);
   handlers.dispatch('pagehide', { persisted: true });
   assert.equal(observers[0].target, null, 'the parent survives frame navigation and must not retain the outgoing frame closure');

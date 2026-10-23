@@ -137,7 +137,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         return Math.max(0, Math.round((rtl() ? innerWidth - r.right : r.left) + pad));
       },
       headers() {
-        const headers = new Set(document.querySelectorAll('div.bb-course-navigation, .routed-page > content-page-header, .route-view-container > content-page-header'));
+        const headers = new Set(document.querySelectorAll('div.bb-course-navigation, .routed-page > content-page-header, .route-view-container > content-page-header, .bb-offcanvas-panel.full .panel-header.simple-header, .course-content-container > .panel-wrap > .panel-header'));
         // Full routed documents/assessments use a panel header instead of content-page-header. Stay within that
         // shell, outside its content: a document's own headings and article headers are not navigation.
         for (const page of document.querySelectorAll('.routed-page.bb-offcanvas-container')) {
@@ -314,10 +314,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     toggle = button('', () => {
       if (mode === 'drawer') closeDrawer();
       else {
-        const v = !isOpen();
-        // Set to start each page expanded or collapsed (sidebar.open), the choice holds on this page only.
-        if (['expanded', 'collapsed'].includes(cfg().open)) { openHere = v; layout(); } else op([{ op: 'open', v }]);
-        say(t(v ? 'Sidebar expanded.' : 'Sidebar collapsed.')); toggle.focus();
+        // Set to start each page expanded or collapsed (sidebar.open), the choice holds on this page only. The page,
+        // reflowed round the new width, crossfades in (lib/motion.js swap) rather than jumping.
+        const change = () => {
+          const v = !isOpen();
+          if (['expanded', 'collapsed'].includes(cfg().open)) { openHere = v; layout(); } else op([{ op: 'open', v }]);
+          say(t(v ? 'Sidebar expanded.' : 'Sidebar collapsed.')); toggle.focus();
+        };
+        if (globalThis.GZ_MOTION) GZ_MOTION.swap(change); else change();
       }
     }, { className: 'gz-sb-icon gz-sb-toggle' });
     live = make('p', { className: 'gz-sr', textContent: live0 || '' });

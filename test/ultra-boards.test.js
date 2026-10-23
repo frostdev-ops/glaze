@@ -1485,3 +1485,11 @@ test('a fresh first Dashboard fills when delayed course metadata arrives without
   for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), c.id);
   assert.ok(p.store.widgetLayout.filled.includes('dash'));
 });
+
+test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {
+  // Both are positioned children of the tile, the corner last; its 24px reach covered a folded tile's Unfold.
+  const css = read('features/apps.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const z = (sel) => [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(([, s]) => s.split(',').some((x) => x.trim() === sel))
+    .map(([, , body]) => /z-index:\s*(-?\d+)/.exec(body)?.[1]).filter(Boolean).map(Number).at(-1) ?? 0;
+  assert.ok(z('.gz-w-tools') > z('.gz-w-resize') && z('.gz-w-tools') > z('.gz-w-resize::before'), `tools ${z('.gz-w-tools')}, corner ${z('.gz-w-resize')}`);
+});

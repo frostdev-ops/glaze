@@ -15,7 +15,8 @@ const os = require('os');
 const crypto = require('crypto');
 const G = require('../defaults.js');
 
-const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '..')); // the id is made from the real path
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const src = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://moodle.school.test/*']); // the id is made from the real path
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-nav-layout-'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const CANVAS = 'https://nav.school.instructure.com', MOODLE = 'https://moodle.school.test';
@@ -60,10 +61,13 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     const id = extensionId(ext);
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
-    const settings = G.GZ_SANITIZE({ preset: 'Paper', colors: G.GZ_PRESET('Paper'), motion: { level: 'off' } });
+    await opts.evaluate(async () => { await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'] }); });
+    // The site's own nav: Glaze's bar (on by default, features/navbar.js) wears a layout in its place (test/navbar.test.js, navbar-check.js).
+    const settings = G.GZ_SANITIZE({ preset: 'Paper', colors: G.GZ_PRESET('Paper'), motion: { level: 'off' }, navbar: { on: false } });
     // Settings only: the Look's parts are saved by wear(), and a write here must not take them away.
     const store = (s) => opts.evaluate(async (s) => { await chrome.storage.sync.set(s); }, s);
     await store(settings);
+    await opts.evaluate((m) => chrome.storage.local.set({ moodle: [`${m}/*`] }), MOODLE); // the student's yes to this Moodle site
     const errors = [];
 
     // The Look's layout reaches a page as the editor gives it: the preview frame is sent the parts with its settings (each
@@ -211,7 +215,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
       const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(`moodle: ${e}`));
       await page.goto(MOODLE + '/my/');
       const LIST = '.primary-navigation ul.more-nav';
-      await until(page, `document.documentElement.style.getPropertyValue('--gz-ink') !== ''`, Boolean, 'Moodle: Glaze is on (the detector registered the host)');
+      await until(page, `document.documentElement.style.getPropertyValue('--gz-ink') !== ''`, Boolean, 'Moodle: Glaze is on (the student approved the host)');
       const pristine = await page.evaluate(async (l) => new DOMParser().parseFromString(await (await fetch('/my/')).text(), 'text/html').querySelector(l).outerHTML, LIST);
       await railChecks(page, LIST, pristine, 'Moodle');
       const nav = { place: 'bottom', groups: [{ label: 'Learn', items: ['course', 'w:next'] }], hidden: ['dashboard'], links: [LINK] };

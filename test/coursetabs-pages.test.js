@@ -116,8 +116,8 @@ function pages({ saved = new Map(), shooting = null } = {}) {
   });
   const api = vm.runInContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const pathOf = ', '  let showing = ') + part('  const drop = ', '  // Canvas loads a whole page')
     + part('  const openPage = ', '  // Canvas: a frame still loading')
-    + part("  let waiting = '', primed = '';", '  // A frame is shown once')
-    + part('  const watch = ', '  // The picture over a frame')
+    + part("  let waiting = '';", '  // A frame is shown once')
+    + part('  const watch = ', '  // The stand-in over a frame')
     + part('  const show = async (cid) => {', '  // A tab: its frame')
     + part('  const onStore = ', '  const onResize = ')
     + part('  const start = ', "  let awayFrom = '';")
@@ -263,7 +263,7 @@ test('a page URL that redirects off-site cannot repeatedly reload its own redire
     show: (cid) => shown.push(cid), wait() {}, say: (s) => notices.push(s),
   });
   vm.runInContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const drop = ', '  // Canvas loads a whole page')
-    + part('  const open = ', '  // The picture over a frame') + "\nopen(PAGE, '/external_tools/9');", c);
+    + part('  const open = ', '  // The stand-in over a frame') + "\nopen(PAGE, '/external_tools/9');", c);
   handlers.load(); assert.ok(frames.has('page'), 'the initial blank document is handled by the bounded load watcher');
   window.location = { get href() { throw new Error('cross-origin frame'); } };
   handlers.load(); handlers.load(); handlers.load();
@@ -278,7 +278,7 @@ test('course frames still recover to their course root after an off-site load on
     const el = { style: {}, contentWindow: { location: { origin: 'https://other.test' } },
       addEventListener: (event, fn) => { load = fn; }, set src(url) { srcs.push(url); },
     };
-    const open = vm.runInNewContext(part('  const open = ', '  // The picture over a frame') + '\nopen;', {
+    const open = vm.runInNewContext(part('  const open = ', '  // The stand-in over a frame') + '\nopen;', {
       L, PAGE: 'page', spare: new Map(), next: new Map(), popping: false, history: { state: null, replaceState() {}, pushState() {} }, tabs: [{ cid }], location: { origin }, document: { createElement: () => el }, frames,
       showing: cid, waiting: '', host: { prepend() {} }, watch() {}, say() {}, t: (s) => s,
     });

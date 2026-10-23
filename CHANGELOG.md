@@ -4,6 +4,50 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] — Unreleased
+
+### Added
+
+- Chrome, Edge and Firefox: a tab on install for your school's own address. Glaze checks it's Blackboard, Canvas or Moodle before keeping it. If no LMS answers, Glaze returns access granted by that attempt and offers up to two course sites nearby; access held beforehand stays. All sites gives Glaze every HTTPS site at once, and Glaze then asks on each new school's pages, as before.
+- Chrome, Edge and Firefox: Use Glaze on the site, in Glaze's toolbar popup on a school's own Blackboard, Canvas or Moodle page. On Chrome and Edge, Glaze's icon gets a dot on those pages.
+- Chrome, Edge and Firefox: Settings → Backup and privacy → Sites adds a site by its address, and a site granted in the browser's own extension menu is checked and taken the same way.
+- Moodle on moodlecloud.com works from install, like Canvas on instructure.com and Blackboard on blackboard.com.
+
+### Changed
+
+- Chrome, Edge and Firefox: Glaze asks at install only for instructure.com, blackboard.com, moodlecloud.com, frostdev.io and its share relay, instead of every site. Installs from earlier versions keep the access they have. Safari is unchanged.
+- Removing a site in Settings → Sites also returns any browser grant for that exact site. All sites access stays.
+- Course tabs show a blurred stand-in drawn from a sketch of the course page while it loads, instead of a picture of the page. Glaze takes no screenshots.
+- On Chrome, Edge and Firefox, Canvas's Download all asks for the school's file server the first time it's needed; redirected files show an error asking you to download them from Canvas. Glaze cannot discover the redirect's host. Safari keeps its existing access model. Gradescope in To Do asks for gradescope.com when you turn it on, and a Look's picture, video or animation from another site, or a site a mod may reach, asks for that site when you add it.
+
+## [3.3.8] — 2026-10-23
+
+### Added
+
+- Frostdev, a new built-in Look: a living topography in cut-ice light that tilts with the pointer, the Frostdev pointer set, and contour effects with flake and shard marks.
+- Glaze's own parts move: course tabs, widgets, to-dos, folders and reminders glide to their new places and fade out when removed, and changing a palette, a Look or the Sidebar's width crossfades. Nothing moves with motion off, transitions off or reduced motion.
+
+### Changed
+
+- Blackboard: the course tab strip, the course header and the headers of items you open (documents, discussions, announcements) float as glass panels; counts and search get pill backgrounds. Canvas's breadcrumb row matches.
+- Blackboard: tool pages such as Gradebook and Calendar run the tab strip and course header the full width, with the Sidebar under them, instead of leaving an empty corner.
+- Entrances, tooltips and dialogs animate on the graphics card, so they stay smooth on busy pages; dialogs fade out as they close.
+
+### Fixed
+
+- Blackboard: a course tab shows one continuous background with the page around it, with no seam at its edge, also with an item open.
+- Blackboard: closing an announcement opened in a course tab goes back to the course's Announcements, instead of taking the window to the Activity Stream.
+- Blackboard and Canvas: course tabs can be switched or closed while one is still loading.
+- Blackboard: no line down the Courses and Organizations pages, no band or bright line under Gradebook's header, and the open Announcements search is a pill.
+- Blackboard: the What-if calculator in a course tab no longer stops at "Glaze couldn't load this course's scores", retries on its own, and shows category names such as Discussion.
+
+## [3.3.7] — 2026-10-22
+
+### Fixed
+
+- Blackboard: opening an announcement in a course tab shows it in that tab, instead of a "We can't find that page" error.
+- Includes everything in 3.3.6, which was not released to the stores.
+
 ## [3.3.6] — 2026-10-22
 
 ### Added

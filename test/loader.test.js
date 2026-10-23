@@ -20,7 +20,7 @@ const worker = (execute = (o) => Promise.resolve([{ result: /typeof GZ_I18N|wind
   const none = { addListener() {} };
   const area = { get: (k) => Promise.resolve(Object.fromEntries([].concat(k ?? []).filter((x) => x in local).map((x) => [x, local[x]]))), set: () => Promise.resolve() };
   const context = vm.createContext({
-    URL, console, setTimeout, clearTimeout,
+    URL, console, setTimeout, clearTimeout, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../defaults.js').GZ_LOCAL_DEV, GZ_GCAL: { ON: false },
     importScripts: (file) => vm.runInContext(read(path.join('lib', file)), context),
     chrome: {
       runtime: {
@@ -48,6 +48,15 @@ test('an allowlisted file runs in the asking frame only, and the reply waits for
   assert.deepEqual(w.injected, [{ target: { tabId: 7, frameIds: [3] }, files: ['lib/zip.js'], injectImmediately: true }]);
   assert.deepEqual(await w.send({ type: 'glaze:load', files: ['i18n/de.js'] }, tab(0)), { ok: true });
   assert.deepEqual(w.injected[1].target, { tabId: 7, frameIds: [0] });
+});
+
+test('both Activity Stream modules load through the real worker handler on an approved Ultra page', async () => {
+  const w = worker(undefined, undefined, { ultra: ['https://bb.school.test'] });
+  const sender = { ...tab(0), url: 'https://bb.school.test/ultra/stream', documentId: 'STREAM-DOC' };
+  for (const file of ['features/stream.js', 'lib/stream.js']) {
+    assert.deepEqual(await w.send({ type: 'glaze:load', files: [file] }, sender), { ok: true });
+    assert.deepEqual(w.injected.at(-1), { target: { tabId: 7, documentIds: ['STREAM-DOC'] }, files: [file], injectImmediately: true });
+  }
 });
 
 test('a Canvas page found by the detector gets Glaze in that page, not whatever its tab has gone on to', async () => {
@@ -126,12 +135,11 @@ test('every loadable file ends on a value, which is how the worker knows it ran'
   }
 });
 
-// Each site's first content script: Ultra's and Canvas's from the manifest; Moodle's is Canvas's without its part, as
-// lib/background.js registers it. A site's part is loadable too, for a page whose list lacks it, and only there.
+// Each site's first content script, from the manifest: Ultra's, Canvas's and MoodleCloud's (Canvas's without its part, as
+// lib/background.js registers it for other Moodle hosts). A site's part is loadable too, for a page whose list lacks it, and only there.
 const firstScripts = () => {
-  const entry = (pattern) => manifest.content_scripts.find((c) => c.matches.includes(pattern)).js;
-  const canvas = entry('https://*.instructure.com/*');
-  return [entry('https://*/ultra'), canvas, canvas.filter((f) => f !== 'content-canvas.js')];
+  const entry = (has) => manifest.content_scripts.find(has).js;
+  return [entry((c) => c.js.includes('content-ultra.js')), entry((c) => c.js.includes('content-canvas.js')), entry((c) => c.matches.includes('https://*.moodlecloud.com/*'))];
 };
 const PARTS = ['content-ultra.js', 'content-canvas.js', 'lib/nav.js']; // Ultra's first-paint schema travels with its part on other registered hosts.
 test('every loadable file exists, is left out of the first content script, and is what content.js asks for', () => {
@@ -276,5 +284,17 @@ test('a feature that reads GZ_CTX as it loads keeps nothing when it lands before
 test('a course-tab feature request includes its library in the same injection', async () => {
   const w = worker();
   await w.send({ type: 'glaze:load', files: ['features/coursetabs.js'] }, { ...tab(), documentId: 'A' });
-  assert.deepEqual(w.injected[0].files, ['lib/coursetabs.js', 'features/coursetabs.js']);
+  assert.deepEqual(w.injected[0].files, ['lib/coursetabs.js', 'lib/motion.js', 'features/coursetabs.js']);
+});
+
+test('a feature that moves gets lib/motion.js ahead of it in the same injection, and only those do', async () => {
+  for (const f of ['features/widgets.js', 'features/todo.js', 'features/reminders.js', 'features/coursemenu.js', 'features/folders.js', 'features/sidebar.js']) {
+    const w = worker();
+    await w.send({ type: 'glaze:load', files: [f] }, { ...tab(), documentId: 'A' });
+    const files = w.injected[0].files;
+    assert.ok(files.indexOf('lib/motion.js') >= 0 && files.indexOf('lib/motion.js') < files.indexOf(f), `${f}: ${files}`);
+  }
+  const w = worker();
+  await w.send({ type: 'glaze:load', files: ['lib/folders.js'] }, { ...tab(), documentId: 'A' });
+  assert.deepEqual(w.injected[0].files, ['lib/folders.js']);
 });

@@ -75,7 +75,7 @@ session deletion or expiry. Recipients and operator backups may keep copies.
 
 ## Optional encrypted share sessions
 
-Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's settings or in the Notes share panel. That panel is an extension page framed inside the Notes view: the school page cannot read it, and it posts nothing to the page. Each opening gets a one-use ticket from the worker, bound to that tab, Notes account and note. It is delivered directly to the extension frame, never in a URL, and consumed by a runtime port. Closing, reloading or replacing the panel revokes that port; after a worker restart, close the panel and open Share again. The frame sits in a closed shadow root. The panel sees and acts on only that account's sessions. It can only list, create (that note), join, copy, leave or stop sessions; keys, backups and the relay setting stay in settings. Its action buttons require verified IntersectionObserver v2 visibility, full intersection and a stable button rectangle for at least half a second. Browsers without that protection keep the embedded actions disabled; use Glaze Settings for sharing there. Browser visibility observations are asynchronous, so native browser testing remains necessary for rapid parent-page layout changes. Glaze checks the selected origin's browser permission and requests it only if missing. Glaze's required `<all_urls>` access already covers the default relay, custom HTTPS relays and `http://localhost` or `http://127.0.0.1` relays for local testing, so none is declared separately. A browser prompt is only needed when the selected origin's access is missing or withheld. Device-local consent gates session traffic independently. Pause aborts requests and closes the live connections. Backup/key restore never enables sharing. No session connection runs without an open Notes, To Do or settings Sharing tab. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
+Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's settings or in the Notes share panel. That panel is an extension page framed inside the Notes view: the school page cannot read it, and it posts nothing to the page. Each opening gets a one-use ticket from the worker, bound to that tab, Notes account and note. It is delivered directly to the extension frame, never in a URL, and consumed by a runtime port. Closing, reloading or replacing the panel revokes that port; after a worker restart, close the panel and open Share again. The frame sits in a closed shadow root. The panel sees and acts on only that account's sessions. It can only list, create (that note), join, copy, leave or stop sessions; keys, backups and the relay setting stay in settings. Its action buttons require verified IntersectionObserver v2 visibility, full intersection and a stable button rectangle for at least half a second. Browsers without that protection keep the embedded actions disabled; use Glaze Settings for sharing there. Browser visibility observations are asynchronous, so native browser testing remains necessary for rapid parent-page layout changes. Glaze checks the selected origin's browser permission and requests it only if missing. Glaze's required access covers the default relay (`share.frostdev.io`); a custom relay, including `http://localhost` or `http://127.0.0.1` for local testing, is optional access asked for when you test it or create, join or resume a session there (Safari's all-site access already covers it). A browser prompt is only needed when the selected origin's access is missing or withheld. Device-local consent gates session traffic independently. Pause aborts requests and closes the live connections. Backup/key restore never enables sharing. No session connection runs without an open Notes, To Do or settings Sharing tab. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
 
 The Relay preference (`shareRelay`) is stored in browser sync, without credentials, and applies only to new sessions. Each existing session and backup key retains its own server. Entering or saving a relay URL makes no request and grants no host consent. **Test connection** explicitly sends a credential-free HTTP `GET /health` to the entered server, bounded to five seconds and 1 KiB of response, refusing redirects and suppressing the referrer; it does not save the URL or enable sharing. HTTP session requests also omit browser credentials and refuse redirects; live updates keep the existing native WebSocket transport. A custom-server invite names its host and requires confirmation in the extension before permission checks or joining. Device-local approved hosts (`shareHosts`) do not sync. Imported keys stay paused; Resume confirms previously unapproved hosts.
 
@@ -135,7 +135,7 @@ not those unknown legacy copies or unrelated stickers.
   only its style, surface and corners. Glaze reads the LMS's own side column and shows it in place; Ultra's assignment
   Grades / Attempts and submission Rubric are positioned visually, with their native controls still in place. The
   sidebar keeps none of those panels' text, grades, attempts or rubric content in extension storage and adds no
-  request for them. Course-tab pictures below can include visible panels. Docked notes, To Do, timers and pets use
+  request for them. Course-tab sketches below also keep the course's name and page location. Docked notes, To Do, timers and pets use
   their existing records below; moving or removing a widget keeps its data.
 - **Document review** (Canvas and Blackboard Ultra): Glaze reads the submitted-work page's structure, title, grade,
   feedback/rubric elements and the embedded viewer's address to recognize a supported read-only view. It changes
@@ -149,7 +149,7 @@ not those unknown legacy copies or unrelated stickers.
   surrounding page also checks that the frame is the current visible document for the same account and that it is
   showing a supported review. Full screen uses the browser's own Fullscreen API on the existing viewer frame or
   its container. Review makes no request to the viewer's origin or your school, and does not read inside the
-  external viewer. The separate annotation and course-tab picture features below keep their existing data.
+  external viewer. The separate annotation and course-tab stand-in features below keep their existing data.
 - **Fresh-install defaults**, in `chrome.storage.local`: `freshDefaults` records whether this was a new install and
   whether setup is pending, with the first sidebar account key and whether its settings tile was added;
   `freshDefaultAccount` keeps that first key too. `widgetLayout` keeps the starter layout and its starter/migration
@@ -437,13 +437,16 @@ not those unknown legacy copies or unrelated stickers.
   when no protected-page space is left. Back/Forward entries keep the frame/course id and page URL in browser history
   state. A page can start loading when you press its link, before the click completes; Glaze does not load unchosen
   courses in advance.
-  **Pictures for first load** are JPEG captures of the visible Canvas or Blackboard browser tab, kept only in page memory and
-  `chrome.storage.session` (the browser's in-memory extension storage), or worker memory where that API is unavailable.
-  Captures can include visible form text, media, Glaze tools and other content on that tab; they are blurred while shown.
-  Each picture is at most 3,000,000 data-URL characters and all pictures together at most 8,000,000, oldest first.
-  No picture is written to `storage.local`, sent to a server or prefetched. They are cleared on browser close, sign-out,
+  **Sketches for first load** are the shapes of a course page as it was on screen when you left it: up to 60 of its
+  boxes with their place, size, colour and corners (lines of text as bars, without the words), the course's name, the
+  window's size, the course's scroll and the place of Glaze's tab strip. No other page text or image data is copied.
+  Sketches are keyed by site, account and course, and also keep the relative page path (including permitted query
+  parameters) and the time they were made.
+  They are kept only in page memory and `chrome.storage.session` (the browser's in-memory extension storage), or worker
+  memory where that API is unavailable. Each sketch is at most 8,000 characters and all together at most 400,000, oldest
+  first. No sketch is written to `storage.local` or sent to a server. They are cleared on browser close, sign-out,
   account change or disabling tabs/Glaze. Session-only account metadata keeps up to 64 document/tab ids per site with
-  birth times and a cache generation, so an old top-level page cannot restore a previous account's pictures.
+  birth times and a cache generation, so an old top-level page cannot restore a previous account's sketches.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -464,6 +467,15 @@ Its built-in fonts, three.js (used by the
 animated backgrounds), lottie-web's light player (used for Lottie animations), pdf.js and the Tesseract OCR engine with its six language models (used to read PDFs and photos
 you import) are bundled. It makes requests in these cases:
 
+- **The site check** (Chrome, Edge and Firefox). When you add a school's own site (the first tab, Settings → Sites or
+  the browser's own menu), Glaze asks that site for three addresses that tell Blackboard, Canvas and Moodle apart:
+  Blackboard's public version (`/learn/api/public/v1/system/version`), Canvas's `/api/v1/users/self` and Moodle's web
+  services (`/webservice/rest/server.php?moodlewsrestformat=json`, also under the address's first folder), without cookies
+  and without following redirects. From the first tab or Settings, if the site isn't one, Glaze reads course-site links
+  on that site's homepage (fetched the same way) and checks whether the usual course-site names (bb, blackboard, canvas, moodle,
+  learn, lms, elearning, courses, mycourses) and one made-up name exist on the same domain. These last requests send no
+  cookies, may follow redirects and show Glaze only whether something answered. Glaze keeps the confirmed site's address
+  and LMS in its local site list; it keeps no response bodies from these checks.
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
   site for your list of courses, the same one Blackboard's Courses page asks for, with your existing
   session, and keeps each course's name and colour slot as above. Nothing is sent anywhere else.
@@ -472,9 +484,8 @@ you import) are bundled. It makes requests in these cases:
   reads above. A tab you pick from the strip opens that course's own-site address in a frame over the page, only
   when you pick it, and keeps it running while you're on another tab (four at most), as a browser keeps its tabs; it
   stops when you close the tab, sign out, or turn the tabs or Glaze off. While a tab's page first loads, a blurred
-  picture of how it last looked covers it: Glaze's worker takes pictures of the Canvas or Blackboard tab on screen (checking
-  before and after that it still is), keeps them in memory (storage.session, never on disk) and they go when the
-  browser closes, on sign-out, or when the tabs or Glaze are turned off. Showing one makes no requests. On Canvas,
+  stand-in drawn from the sketch above covers it. Glaze takes no pictures of your pages. Sketching and showing one make
+  no requests. On Canvas,
   a page in an already-running frame can start loading on a link press before the click completes, and returning
   to a retained clean page can reload it from your school. Glaze does not load unchosen courses in advance.
   Frames load your school’s own pages with your existing session; their native scripts and embeds make their own requests.
@@ -834,11 +845,18 @@ for the editor's preview; Glaze makes this request only then. A mod from the gal
 its signed bundle, downloaded when you click **Use in Glaze**. Sharing your own Look there is the
 website's own form, which you fill in yourself; Glaze takes no part in it.
 
-## Recognizing Canvas and Moodle
+## Adding a school's own site
 
-To recognize Canvas and Moodle on a school's own domain, Glaze checks the head of each https page for Canvas's own stylesheet link or the keywords line Moodle writes into every page ("moodle, …"), and stops at the page body. For Moodle it also checks the page id and layout Moodle puts on the body tag itself, so a page that merely mentions Moodle is left alone. Nothing is read beyond that, and nothing leaves the browser.
+Canvas on `*.instructure.com`, Blackboard Ultra on `*.blackboard.com` and Moodle on `*.moodlecloud.com` work from install. On Chrome, Edge and Firefox, there are four ways to add a school's own site. The browser asks for any access Glaze does not already hold:
 
-A page that looks like Canvas, Moodle or Blackboard Ultra proves nothing about the site, so Glaze asks first. On a site it doesn't know, it shows a small bar on the page: **Use Glaze on example.edu?** Until you press **Yes**, nothing is registered, read from the site's API or recorded, and Glaze does not theme the site or run any of its features there; it never asks while Glaze is off. **Yes** adds the site to a list in the extension's local storage (`canvas`, `moodle` or `ultra`) so Glaze styles it from the start next time. **Not now** stops the question on that site for a week (the time is kept in `askLater`, for the 50 sites most recently put off). Canvas on `instructure.com` and Blackboard Ultra on `blackboard.com` are Glaze's from the start, and sites Glaze already ran on before it asked stay on the list. **Settings → Backup and privacy → Sites** lists the sites you said yes to, each with **Remove**, which stops Glaze there and forgets the courses and due dates it read from that site (your notes and tasks stay); **Reset everything** clears the list and the Not nows.
+- **Use Glaze on example.edu** in Glaze's toolbar popup. Opening the popup lets Glaze into that one tab (`activeTab`), where it checks the page's head for Canvas's own stylesheet, the keywords line Moodle writes into every page ("moodle, …", with the page id and layout it puts on the body tag) or Blackboard Ultra's `/ultra/` base address on an `/ultra` page. The check reads only those markers and keeps no page content. On Chrome and Edge, Glaze's toolbar icon gets a dot on pages that look like Canvas, Moodle or Blackboard Ultra: the browser matches the page itself and does not report those rule matches to Glaze.
+- The school address field on the tab Glaze opens once when it's installed.
+- The school address field in **Settings → Backup and privacy → Sites**. Both address fields check for Blackboard, Canvas or Moodle after access is granted (see the site check under Network requests). If no LMS answers, Glaze offers up to two course sites nearby and returns access granted by that attempt; access held beforehand stays.
+- The browser's own extension menu or settings. Glaze checks a site granted there the same way and turns on if it's a course site; anything else keeps the access you gave, unused.
+
+**All sites** on that first tab gives Glaze every https site at once. Glaze then checks the markers above on https pages outside its built-in hosts and, on a course site it doesn't know, shows a small bar on the page: **Use Glaze on example.edu?** Until you press **Yes**, Glaze does not register its theme, read the site's API or keep course data there; it never asks while Glaze is off. **Not now** stops the question on that site for a week (the time is kept in `askLater`, for the 50 sites most recently put off). Installs from before 3.4.0 keep the all-site access they had. Safari lets you choose Glaze's sites in its own settings and uses the same in-page question on sites Glaze has not already approved.
+
+A site you add is kept in a list in the extension's local storage (`canvas`, `moodle` or `ultra`) so Glaze styles it from the start next time; sites Glaze already ran on before it asked stay on the list. **Settings → Backup and privacy → Sites** lists them, each with **Remove**, which stops Glaze there, returns any browser grant for that exact site and forgets the courses and due dates Glaze read from it (your notes and tasks stay). Broader grants such as All sites stay. **Reset everything** clears the list and the Not nows.
 
 ## Permissions
 
@@ -861,29 +879,39 @@ A page that looks like Canvas, Moodle or Blackboard Ultra proves nothing about t
   for it.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
-- Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is
-  self-hosted per institution on arbitrary domains, always under the `/ultra/` path, so the match
-  pattern cannot name a fixed host. Glaze reads and restyles the page in your browser only.
-- Host access to `https://*.instructure.com/*` — to apply the theme on Canvas, which Instructure hosts
-  for most schools under that domain, and in Canvas's document viewer on `canvadocs.instructure.com`, where a
-  separate small script applies the palette and, if you switch them on, your marks on documents.
-- Host access to all sites (`<all_urls>`) and `scripting` — Canvas also runs on schools' own domains, and Moodle always does.
-  Content scripts still match HTTPS pages only. The wider form is what Chrome requires for one thing: course tabs on
-  Blackboard Ultra and Canvas take a picture of the tab you're on (only while it is the tab on screen) and show it the
-  instant you click back to that course, while the school opens the live page under it. Pictures stay in memory
-  (storage.session), are never written to disk or sent anywhere, and go when the browser closes, on sign-out, or when
-  Glaze or course tabs are switched off.
-  The check described above runs on https pages for that reason. When it finds Canvas or Moodle on a school's own
-  domain, Glaze asks you first; only after you say yes does it style that site, and only that site, the same way, and
-  the site's address is then kept in the extension's local storage on your device.
-  On a site you approved, Glaze reads the school's pages and makes the requests described above with your existing
-  session. It writes to a site only on your own click: a planner tick (if you switched "Tick off in Canvas too" on), a
-  Canvas course nickname or color, Sign out in Glaze's Canvas bar and Moodle's Edit mode switch in its bar; Glaze
-  never changes grades, submits work or sends messages.
-  The same host access lets the gallery script above run on `https://frostdev.io/glaze/looks`, and, only while
-  "Gradescope in To Do" is on, Glaze's Gradescope script run on `https://www.gradescope.com` and its background worker
-  read Gradescope course pages; neither adds a permission. It also covers Google Calendar sync's requests to
-  `www.googleapis.com` and `oauth2.googleapis.com`.
+- `activeTab` (Chrome, Edge and Firefox) — when you open Glaze's toolbar popup, the browser lets Glaze into that one tab: the popup reads its
+  address and runs the check described in "Adding a school's own site", so it can offer **Use Glaze on** that site.
+  Chrome shows no warning for it.
+- `declarativeContent` (Chrome and Edge) — to put a dot on Glaze's toolbar icon on pages that look like Canvas, Moodle or
+  Blackboard Ultra. The browser matches the page against Glaze's rules itself and does not report those rule matches to Glaze.
+  Chrome shows no warning for it.
+- `scripting` — to start Glaze from the first page you open on a site you allowed, to run the popup's check in its tab,
+  and, with All sites, to run that check on https pages.
+- Host access to `https://*.instructure.com/*`, `https://*.blackboard.com/*` and `https://*.moodlecloud.com/*` — to apply
+  the theme on Canvas, Blackboard Ultra (its `/ultra` pages) and Moodle where Instructure, Blackboard and MoodleCloud host
+  them, and in Canvas's document viewer on `canvadocs.instructure.com`, where a separate small script applies the palette
+  and, if you switch them on, your marks on documents. Glaze reads and restyles the page in your browser only.
+- Host access to `https://frostdev.io/*` and `https://share.frostdev.io/*` — for the gallery script above on
+  `https://frostdev.io/glaze/looks` and `/glaze/mods`, the gallery's Looks and mods, the mod blocklist and optional
+  encrypted share sessions on the default relay.
+- Optional access to other sites (`https://*/*`, and `http://localhost` and `http://127.0.0.1` for local testing) — not
+  granted at install. Glaze asks the browser for one site at a time, when you choose it:
+  - your school's own Canvas, Blackboard Ultra or Moodle, as described in "Adding a school's own site";
+  - the school's file server for Canvas's Download all, the first time it's needed; on Chrome, Edge and Firefox,
+    redirected files stop with an error asking you to download them from Canvas, because Glaze cannot discover the redirect's host;
+  - `https://www.gradescope.com` when you turn on "Gradescope in To Do", for Glaze's Gradescope script there and its
+    background worker's reads of Gradescope course pages;
+  - the site of a picture, video or animation you add to a Look, or a site you let a mod reach, when you add it;
+  - a custom share relay, when you test it or create, join or resume a session there.
+  **All sites** asks for every https site at once. Access you remove in the browser's extension settings stops Glaze
+  there. Installs from before 3.4.0 keep the all-site access granted then.
+- In Safari, Glaze asks for all sites (`<all_urls>`) as before, and Safari asks you which sites it may use in its own
+  settings.
+
+On a site you allowed, Glaze reads the school's pages and makes the requests described above with your existing
+session. It writes to a site only on your own click: a planner tick (if you switched "Tick off in Canvas too" on), a
+Canvas course nickname or color, Sign out in Glaze's Canvas bar and Moodle's Edit mode switch in its bar; Glaze
+never changes grades, submits work or sends messages.
 
 ## Google user data
 

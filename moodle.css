@@ -242,7 +242,7 @@ html[data-gz-bg="aurora"]::before {
     radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-bg-3) 28%, transparent), transparent 70%),
     radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
     var(--gz-surface-paint-2, var(--gz-surface-2));
-  animation: gz-aurora 42s ease-in-out infinite alternate; animation-play-state: var(--gz-ambient);
+  animation: gz-aurora 42s ease-in-out infinite alternate; animation-play-state: var(--gz-drift);
 }
 /* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
 html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before { will-change: transform; }
@@ -285,9 +285,10 @@ html :is(.text-bg-primary, .text-bg-info) { background-color: var(--gz-accent) !
 html .text-bg-success { background-color: var(--gz-ok) !important; color: var(--gz-accent-ink) !important; }
 html .text-bg-warning { background-color: var(--gz-warn) !important; color: var(--gz-accent-ink) !important; }
 html .text-bg-danger { background-color: var(--gz-err) !important; color: var(--gz-accent-ink) !important; }
-/* Loading placeholders pulse between two literal greys. */
-html .bg-pulse-grey { animation-name: gz-pulse; animation-play-state: var(--gz-ambient, running); }
-@keyframes gz-pulse { 0%, 100% { background-color: var(--gz-band); } 50% { background-color: var(--gz-line); } }
+/* Loading placeholders (Moodle pulses two literal greys) breathe in the palette's line colour. Opacity, not
+   background-color: it composites, where a colour repaints every placeholder every frame for as long as it loads. */
+html .bg-pulse-grey { background-color: var(--gz-line); animation-name: gz-pulse; animation-play-state: var(--gz-ambient, running); }
+@keyframes gz-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
 html :is(.text-dark, .text-body, .text-black, .text-body-emphasis) { color: var(--gz-ink) !important; }
 html :is(.text-muted, .text-secondary, .text-body-secondary, .dimmed_text, .dimmed, .dimmed_category) { color: var(--gz-ink-muted) !important; }
 html .text-primary { color: var(--gz-on-soft) !important; }
@@ -696,9 +697,9 @@ html a:hover { color: var(--gz-on-soft); text-decoration: underline; }
 html:not([data-gz-motion="off"], [data-gz-no-enter]) .navbar.fixed-top { view-transition-name: gz-rail; }
 html:not([data-gz-motion="off"], [data-gz-no-enter]) #theme_boost-drawers-courseindex { view-transition-name: gz-course-nav; }
 ::view-transition-group(*) { animation-duration: var(--gz-t-page); animation-timing-function: var(--gz-ease); }
-html[data-gz-motion="expressive"]::view-transition-new(root) { animation-name: gz-vt-focus; }
+html[data-gz-motion="expressive"]::view-transition-new(root) { animation-name: gz-vt-settle; }
 html[data-gz-motion="expressive"]::view-transition-old(root), html[data-gz-motion="expressive"]::view-transition-new(root) { mix-blend-mode: plus-lighter; }
-@keyframes gz-vt-focus { from { opacity: 0; filter: blur(var(--gz-reveal-blur)); } }
+@keyframes gz-vt-settle { from { opacity: 0; scale: var(--gz-reveal-scale, 1); } }
 :root[data-gz-vt-in] { --gz-enter-page: none; --gz-enter: none; --gz-stagger: 0s; }
 
 /* ---- what Glaze draws itself ---- */

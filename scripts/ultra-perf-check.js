@@ -107,7 +107,8 @@ const listeners = async (cdp) => {
   let context;
   try {
     for (const instrumented of [false, true]) {
-      let ext = source;
+      // The fixture's host, as the student's grant holds it (scripts/check-env.js staged).
+      let ext = instrumented ? '' : require('./check-env.js').staged(source, ['https://ultra.fixture.test/*']);
       if (instrumented) {
         ext = path.join(scratch, 'extension'); fs.mkdirSync(ext);
         const files = execFileSync('git', ['ls-files', '-z'], { cwd: source, encoding: 'utf8' }).split('\0').filter(Boolean);
@@ -116,7 +117,8 @@ const listeners = async (cdp) => {
         }
         fs.writeFileSync(path.join(ext, 'perf-shim.js'), `(${instrument.toString()})();`);
         const m = JSON.parse(fs.readFileSync(path.join(ext, 'manifest.json'), 'utf8'));
-        m.content_scripts.find((c) => c.matches.includes('https://*/ultra')).js.unshift('perf-shim.js');
+        m.content_scripts.find((c) => c.js.includes('content-ultra.js')).js.unshift('perf-shim.js');
+        m.host_permissions.push('https://ultra.fixture.test/*');
         fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
       }
       await require('./wait-for-browser.js')();
@@ -138,9 +140,10 @@ const listeners = async (cdp) => {
         blocked.push(u.href); return r.abort();
       });
       const opts = await context.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
-      await opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); }, D.GZ_DEFAULTS);
+      const reset = () => opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); await chrome.storage.local.set({ ultra: ['https://ultra.fixture.test'] }); }, D.GZ_DEFAULTS);
+      await reset();
       for (let rep = 0; rep < reps; rep++) {
-        if (rep) await opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); }, D.GZ_DEFAULTS);
+        if (rep) await reset();
         const page = await context.newPage(); const errors = [];
         page.on('pageerror', (e) => errors.push(e.message));
         await page.addInitScript(() => {

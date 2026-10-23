@@ -7,7 +7,7 @@ const path = require('node:path');
 const manifest = require('../manifest.json');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 // The DocViewer's own entry matches instructure.com too (regional canvadocs hosts): this is Glaze's first script.
-const canvas = manifest.content_scripts.filter((s) => s.matches.includes('https://*.instructure.com/*') && s.js.includes('content.js'));
+const canvas = manifest.content_scripts.filter((s) => s.js.includes('content-canvas.js'));
 const css = read('canvas.css').replace(/\/\*[\s\S]*?\*\//g, '');
 
 test('Canvas has one all-frame document_start entry, ordered dependencies, site adapter, shared startup', () => {

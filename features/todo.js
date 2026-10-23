@@ -35,6 +35,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let fetchGen = -1;
   let drawn = '';
   let shown = new Map(); // key -> row, for every row the list drew
+  let doneWas = null; // the done count last drawn, so a change in it pops (render)
   const open = new Set(); // rows with their details open, and "show more" groups
   const shut = new Set(['done', 'graded', 'read']); // sections closed until opened
   let form = null, formAccount = ''; // the add/edit form's task: { id?, cid, … } or null; kept for this account across mounts
@@ -255,6 +256,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     more.setAttribute('aria-controls', `${firstIds.get(r.key)}-d`);
     more.setAttribute('aria-label', t('Plan {title}', { title: r.title }));
     const li = make('li', { className: 'gz-todo-item' }, check, make('div', { className: 'gz-todo-main' }, title, meta), more, first && open.has(r.key) && detail(r, id, now));
+    if (first) li.dataset.key = r.key; // what a redraw's motion follows it by (render)
     li.dataset.key = r.key;
     if (r.urgent) li.dataset.urgent = r.past ? 'past' : 'soon';
     if (r.done) li.dataset.done = '';
@@ -422,7 +424,14 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
         fold: true, draw: news, count: out.unread.length ? t('{n} unread', { n: out.unread.length }) : String(out.read.length),
       }));
     }
-    body.replaceChildren(...parts.filter(Boolean));
+    // A ticked task glides into Done (open) or fades where it was (Done closed), and the rest close up (lib/motion.js);
+    // not in the list's first drawing.
+    const rows = () => [...body.querySelectorAll('li.gz-todo-item[data-key]:not([data-gz-ghost])')];
+    const motion = rows().length ? globalThis.GZ_MOTION : null;
+    const fill = () => body.replaceChildren(...parts.filter(Boolean));
+    if (motion) motion.flip(rows, fill, { key: (e) => e.dataset.key, ghosts: true, container: body, within: body }); else fill();
+    if (doneWas !== null && out.count.done !== doneWas) globalThis.GZ_MOTION?.pop(head.querySelector('.gz-todo-count'));
+    doneWas = out.count.all > 0 ? out.count.done : null;
     if (cache) { box.hidden = false; box.setAttribute('data-ready', ''); mounted?.rendered?.(); }
     if (!was) return;
     const seen = (v) => { const e = box.querySelector(`[data-focus="${CSS.escape(v)}"]`); return e?.checkVisibility() ? e : null; };

@@ -45,10 +45,13 @@ test('clearing parent reservations clears frame overrides; top pages and other s
   const h = reservation(); h.parentValues.set('--gz-navbar-left', '272px'); h.navRoom();
   assert.equal(h.ownValues.get('--gz-navbar-left'), '272px');
   h.parentValues.clear(); h.navRoom(); assert.equal(h.ownValues.has('--gz-navbar-left'), false);
-  for (const [framed, site] of [['', 'canvas'], ['12', 'ultra']]) {
-    const other = reservation(framed, site); other.parentValues.set('--gz-navbar-left', '272px'); other.navRoom();
-    assert.deepEqual(other.writes, []);
-  }
+  const top = reservation('', 'canvas'); top.parentValues.set('--gz-navbar-left', '272px'); top.navRoom();
+  assert.deepEqual(top.writes, []);
+  // An Ultra frame keeps its own room: it only learns that it starts past the bar's gutter, for the floating bars in it.
+  const ultra = reservation('12', 'ultra'); ultra.parentValues.set('--gz-navbar-left', '272px'); ultra.navRoom();
+  assert.deepEqual(ultra.writes, [['--gz-float-start', '0px']]);
+  ultra.navRoom(); assert.equal(ultra.writes.length, 1, 'same room causes no frame style mutation');
+  ultra.parentValues.clear(); ultra.navRoom(); assert.equal(ultra.ownValues.has('--gz-float-start'), false);
 });
 
 test('frame room observes parent style and navbar words and disconnects on disable', () => {
@@ -63,7 +66,7 @@ test('frame room observes parent style and navbar words and disconnects on disab
 
 function navigation({ showing = '12', here = '5', count = 1, framed = '' } = {}) {
   const calls = [], frames = new Map(Array.from({ length: count }, (_, i) => [String(i + 12), {}]));
-  const context = vm.createContext({ L, URL, PAGE: 'page', on: true, framed, showing, frames,
+  const context = vm.createContext({ L, URL, PAGE: 'page', requestAnimationFrame() {}, nudge() {}, on: true, framed, showing, frames,
     ctx: { site: 'canvas' }, location: { origin }, here: () => here,
     openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
     route: (url) => calls.push(['route', url]), show: (cid) => calls.push(['show', cid]), toTop: (op, value) => calls.push([op, value.url]),
@@ -99,7 +102,7 @@ function messages(shown = 'page') {
   const f = { el: { contentWindow: frameWindow, contentDocument: doc, style: {} }, ready: true, accountDoc: doc };
   let listener, synced = 0, watched = 0, kept = 0;
   vm.runInNewContext(part('  let drawerFrom = ', '  const drawerOn = ') + part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), {
-    L, PAGE: 'page', framed: '', preview: false, showing: shown, on: true, ctx: { site: 'canvas' }, location: { origin },
+    L, PAGE: 'page', requestAnimationFrame() {}, nudge() {}, framed: '', preview: false, showing: shown, on: true, ctx: { site: 'canvas' }, location: { origin },
     frames: new Map([[shown, f]]), spare: new Map(), next: new Map(), who: '42',
     addEventListener: (_, fn) => { listener = fn; },
     GZ_NAVBAR_UI: { sync: () => synced++ }, watch: () => watched++, later() {}, keepPage: () => kept++,
@@ -123,10 +126,10 @@ test('a replaced course-frame document schedules readiness before the navbar men
   const doc = h.f.el.contentDocument;
   Object.assign(doc, { body: {}, querySelector: () => ({ childElementCount: 1 }), documentElement: { matches: () => false }, addEventListener() {}, removeEventListener() {} });
   const watch = vm.runInNewContext(part('  const canvasContent = ', '  let showing = ') + part('  const watch = (cid, f)', '  const open = (cid, url)') + '\nwatch;', {
-    L, PAGE: 'page', frames: new Map([['12', h.f]]), location: { origin }, ctx: { site: 'canvas' },
+    L, PAGE: 'page', requestAnimationFrame() {}, nudge() {}, frames: new Map([['12', h.f]]), location: { origin }, ctx: { site: 'canvas' },
     showing: '12', waiting: '', performance: { now: () => now }, MutationObserver: class { observe() {} disconnect() {} },
     shown: () => true, loading: () => false, clearTimeout() {}, setTimeout: (fn) => { next = fn; },
-    clearSlow() {}, unpicture() {}, later() {}, GZ_NAVBAR_UI: { sync: () => synced++ },
+    clearSlow() {}, unpicture() {}, hoist() {}, later() {}, GZ_NAVBAR_UI: { sync: () => synced++ },
   });
   watch('12', h.f); assert.equal(synced, 0); now = 301; next();
   assert.equal(h.f.ready, true); assert.equal(synced, 1);

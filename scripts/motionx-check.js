@@ -55,7 +55,7 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'motionx-'));
-  const ext = fs.realpathSync(root); // Chrome derives the id from the real path
+  const ext = require('./check-env.js').staged(root, [`${SITE}/*`]); // the school's host, as the student's grant holds it; the id comes from its real path
   const id = extensionId(ext);
   const external = [], errors = [];
   await require('./wait-for-browser.js')();

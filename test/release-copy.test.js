@@ -15,6 +15,20 @@ test('3.3.6 release claims keep typing effects private and the pointer choice ou
   assert.match(latest, /Safari: Settings opened inside/);
 });
 
+const fresh = {
+  '': ['Frostdev', 'switched while one is still loading', 'What-if'],
+  de: ['Frostdev', 'während einer noch lädt', 'Was-wäre-wenn'],
+  es: ['Frostdev', 'mientras una sigue cargando', 'hipotéticas'],
+  fr: ['Frostdev', "pendant qu'un autre se charge", 'hypothétiques'],
+  nl: ['Frostdev', 'terwijl er een nog laadt', 'wat-als'],
+  'pt-BR': ['Frostdev', 'enquanto uma ainda carrega', 'hipotéticas'],
+};
+for (const [lang, expected] of Object.entries(fresh)) test(`3.3.8 listing ${lang || 'en'} names the new Look, loading tabs and What-if grades`, () => {
+  const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
+  const block = text.slice(text.indexOf('3.3.8\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
+  for (const term of expected) assert.ok(block.includes(term), term);
+});
+
 const terms = {
   '': ['never read what you type', 'Look › Pointer', 'Safari: Settings'],
   de: ['lesen nie, was du tippst', 'Look › Mauszeiger', 'Safari: Die Einstellungen'],
@@ -29,9 +43,9 @@ for (const [lang, expected] of Object.entries(terms)) test(`3.3.6 listing ${lang
   for (const term of expected) assert.ok(block.includes(term), term);
 });
 
-test('3.3.6 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '3.3.6');
-  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.3.6');
+test('3.3.8 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '3.3.8');
+  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.3.8');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('scripts/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
@@ -44,5 +58,16 @@ test('3.3.6 versions agree and the exact pure notes transform fits Apple', () =>
   const result = notes(root);
   assert.ok(result.length <= 4000, `${result.length} characters`);
   assert.match(result, /^Added\n/);
-  assert.ok(!result.includes('## [3.3.5]'));
+  assert.ok(result.length <= 3000, `AMO: ${result.length} characters`);
+  assert.ok(!result.includes('## [3.3.7]'));
+});
+
+test('review: Step 4 copy discloses redirected Download all files in every staged language', () => {
+  for (const file of ['PRIVACY.md', 'CHANGELOG.md', 'store/listing.md']) assert.match(read(file), /redirected files/i, file);
+  const staged = read('store/new-in-3.4.0-staged.md');
+  for (const [lang, term] of Object.entries({ '': 'redirected files', de: 'Weitergeleitete Dateien', es: 'archivos redirigidos', fr: 'fichiers redirigés', nl: 'omgeleide bestanden', 'pt-BR': 'arquivos redirecionados' })) {
+    const file = `store/listing${lang ? `-${lang}` : ''}.md`;
+    const block = staged.split(`## ${file}\n`)[1]?.split('\n## ')[0];
+    assert.ok(block?.toLowerCase().includes(term.toLowerCase()), `${file}: redirected file limit`);
+  }
 });

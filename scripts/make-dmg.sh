@@ -1,6 +1,6 @@
 #!/bin/sh
 # Wrap a notarized Glaze.app in a signed, notarized disk image with a drag-to-Applications link.
-#   sh scripts/make-dmg.sh release/<version>/build/Glaze.app release/<version>/github/glaze-<version>-safari-macos.dmg
+#   sh scripts/make-dmg.sh path/to/Glaze.app release/<version>/github/glaze-<version>-safari-macos.dmg
 # Uses the same signing identity and notarization credentials as build-safari.sh.
 set -eu
 

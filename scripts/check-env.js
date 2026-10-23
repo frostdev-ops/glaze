@@ -19,4 +19,51 @@ const chromePath = (env = process.env) => env.CHROME || undefined;
 // headless shell, which cannot load an extension; channel "chromium" is the full browser in new headless mode.
 const chromeLaunch = (env = process.env) => (chromePath(env) ? { executablePath: chromePath(env) } : { channel: 'chromium' });
 
-module.exports = { lockPath, chromePath, chromeLaunch };
+// A copy of the extension at `src` whose manifest also holds `hosts`: a school's own host, which Glaze reaches on Chrome
+// once the student grants it, and which a headless browser can't grant (its prompt has no answer there). Every file but the
+// manifest is a hard link to the source's (a plain copy across devices), so it is cheap: write nothing into it but the
+// manifest. It goes when the process exits. → its real path: Chrome derives an unpacked extension's id from it.
+function staged(src, hosts, tmp = os.tmpdir()) {
+  const from = fs.realpathSync(src);
+  const to = fs.realpathSync(fs.mkdtempSync(path.join(tmp, 'glaze-staged-')));
+  process.once('exit', () => fs.rmSync(to, { recursive: true, force: true }));
+  const link = (a, b) => {
+    for (const e of fs.readdirSync(a, { withFileTypes: true })) {
+      if (e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const x = path.join(a, e.name), y = path.join(b, e.name);
+      if (e.isDirectory()) { fs.mkdirSync(y); link(x, y); } else if (e.isFile()) { try { fs.linkSync(x, y); } catch { fs.copyFileSync(x, y); } }
+    }
+  };
+  link(from, to);
+  fs.rmSync(path.join(to, 'manifest.json'));
+  const m = JSON.parse(fs.readFileSync(path.join(from, 'manifest.json'), 'utf8'));
+  m.host_permissions = [...new Set([...(m.host_permissions || []), ...hosts])];
+  fs.writeFileSync(path.join(to, 'manifest.json'), JSON.stringify(m, null, 2));
+  return to;
+}
+
+// A storage write finishes before the worker's list-change handler has registered the script.
+const ultraReady = (page) => page.waitForFunction(async () => {
+  const first = chrome.runtime.getManifest().content_scripts.find((s) => s.js.includes('content-ultra.js'));
+  const scripts = await chrome.scripting.getRegisteredContentScripts();
+  const patterns = [...first.matches, ...scripts.filter((s) => s.js?.includes('content-ultra.js')).flatMap((s) => s.matches)];
+  const sites = (await chrome.storage.local.get('ultra')).ultra;
+  return Array.isArray(sites) && sites.length > 0 && sites.every((site) => {
+    const u = new URL(site);
+    return patterns.some((p) => {
+      const m = /^(https?:)\/\/([^/]+)\/ultra\/\*$/.exec(p);
+      return m && m[1] === u.protocol && (m[2] === '*' || m[2] === u.hostname || m[2].startsWith('*.') && (u.hostname === m[2].slice(2) || u.hostname.endsWith(m[2].slice(1))));
+    });
+  });
+}, null, { timeout: 10000 });
+
+// Glaze opens its first screen (features/welcome.html) in a tab of its own when it is installed on Chrome. A check that
+// counts on its own tabs alone closes it, now or when it opens.
+const noFirstRun = (ctx) => {
+  const close = (p) => { if (/^chrome-extension:\/\/[a-p]{32}\/features\/welcome\.html/.test(p.url())) p.close().catch(() => {}); };
+  const watch = (p) => { close(p); p.waitForURL(/\/features\/welcome\.html/, { timeout: 10000 }).then(() => close(p), () => {}); };
+  ctx.pages().forEach(watch);
+  ctx.on('page', watch);
+};
+
+module.exports = { lockPath, chromePath, chromeLaunch, staged, ultraReady, noFirstRun };

@@ -17,7 +17,8 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..')); // the id is made from the real path
+// A copy holding the schools' hosts, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://ultra.school.test/*', 'https://strict.moodle.test/*', 'https://open.moodle.test/*']); // the id is made from the real path
 const out = process.argv.slice(2).find((a) => !a.startsWith('--'));
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
 const G = require(path.join(ext, 'defaults.js'));
@@ -40,7 +41,7 @@ const RULES = [
   { p: 'ultra.course-card.title', do: 'label', t: 'Mine' },
   { p: 'ultra.course-card', do: 'style', st: { r: 24, bw: 3, bc: 'accent', sh: 3 } },
   { p: 'ultra.nav.footer', do: 'hide' },
-  { p: 'ultra.nav', do: 'style', st: { bg: '#331144' } },
+  { p: 'ultra.nav', do: 'style', st: { bg: '#331144', fg: '#ffffff' } }, // readable: a colour that would hide Glaze's item gives way
   { p: 'ultra.course-card.id', do: 'style', st: { fg: 'accent' } },
   { p: 'ultra.courses.term', do: 'style', st: { fg: 'accent-hi' } },
   { p: 'ultra.course-card.status', do: 'hide' },
@@ -73,7 +74,8 @@ const X_PARTS = {
   nav: { place: 'top', groups: [{ label: 'Study', items: ['course', 'calendar', 'w:clock'] }, { label: 'Me', items: ['messages', `link:${LINK.id}`, 'profile'] }], hidden: ['help'], links: [LINK], icons: { calendar: 'star' } },
   rules: RULES,
 };
-const BASE = G.GZ_SANITIZE({ preset: 'Paper', colors: G.GZ_PRESET('Paper'), motion: { level: 'expressive', followSystem: false } });
+// The LMS's own nav: Glaze's bar (on by default) wears a layout in its place.
+const BASE = G.GZ_SANITIZE({ preset: 'Paper', colors: G.GZ_PRESET('Paper'), motion: { level: 'expressive', followSystem: false }, navbar: { on: false } });
 // The Look's palette is light like the base one (an accent of its own): a switch between a dark and a light palette re-tags the page's icons
 // (Glaze's own lift), which is not what the parts leave behind, and this check asks about the parts.
 const LOOK = G.GZ_SANITIZE({ colors: { ...G.GZ_PRESET('Paper'), '--gz-accent': '#7c3aed' }, look: { radius: 14 }, bg: { kind: 'shader' } });
@@ -159,6 +161,10 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
     const opts = await ctx.newPage();
     opts.on('pageerror', (e) => errors.push(`editor: ${e}`));
     await opts.goto(`chrome-extension://${id}/options.html`);
+    // The student's yes to the invented schools outside the built-in hosts, and the widget layout of a device Glaze was on
+    // before: a fresh Canvas Dashboard's board takes the course cards (Glaze's own, which rules and entrances leave alone).
+    await opts.evaluate(async () => { await chrome.storage.local.set({ ultra: ['https://ultra.school.test'], moodle: ['https://strict.moodle.test/*', 'https://open.moodle.test/*'] }); });
+    await opts.evaluate((o) => chrome.storage.local.set(o), { widgetLayout: require(path.join(ext, 'lib/widgets.js')).kept(false), ultra: SCENARIOS.filter((s) => s.site === 'ultra' && s.origin).map((s) => s.origin), moodle: SCENARIOS.filter((s) => s.site === 'moodle').map((s) => `${s.origin}/*`) });
     const baseStore = () => { const { nav, ...patch } = BASE; return opts.evaluate((p) => chrome.storage.sync.set(p), patch); };
     await baseStore();
     await opts.reload();
@@ -167,7 +173,9 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
     await opts.click('#share-try');
     await opts.waitForSelector('#share-offer:not([hidden])');
     const offer = await opts.evaluate(() => document.querySelector('#share-what').textContent);
-    check('the editor\'s offer names what the code brings', /shader/i.test(offer) && /sidebar/i.test(offer) && /20 parts/i.test(offer) && /cursor/i.test(offer), offer);
+    // Each rule's part by its name, and each text it writes word for word (lib/lookparts.js describe).
+    const offered = RULES.every((r) => offer.includes(PARTS.get(r.p).label)) && RULES.filter((r) => r.do === 'label').every((r) => offer.includes(`“${r.t}”`));
+    check('the editor\'s offer names what the code brings', /shader/i.test(offer) && /Rearranges the navigation/.test(offer) && offered && /cursor/i.test(offer), offer);
     await opts.click('#share-apply');
     const stored = await until(() => opts.evaluate(async () => { const r = await chrome.storage.sync.get(['lookX', 'bg']); return typeof r.lookX === 'string' && r.lookX.startsWith('x1:') ? { len: r.lookX.length, kind: r.bg?.kind } : null; }));
     check('using the code stores the parts in sync beside bg.kind shader', stored?.kind === 'shader', JSON.stringify(stored));
@@ -241,6 +249,10 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
           if (el.getAttribute('data-gz-aria') === '1') { el.removeAttribute('aria-label'); el.removeAttribute('data-gz-aria'); }
         }
         for (const n of copy.querySelectorAll('#gz-todo')) n.remove();
+        // The root's attributes in one order: one that goes and comes back (data-gz-bg-key while a scene starts) is put last.
+        const root = [...copy.attributes].map((a) => [a.name, a.value]).sort(([a], [b]) => (a < b ? -1 : 1));
+        for (const [n] of root) copy.removeAttribute(n);
+        for (const [n, v] of root) copy.setAttribute(n, v);
         // (A constructed stylesheet is not in the markup: its count goes on the end.)
         return copy.outerHTML.replace(/ style=""/g, '').replace(/ data-gz-(dark|light|hover|vh|fixed-bottom)=""/g, '') + `<!-- adopted: ${document.adoptedStyleSheets.length} -->`;
       }, !!sc.csp);

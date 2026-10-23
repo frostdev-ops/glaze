@@ -2,7 +2,8 @@
 // NODE_PATH=<playwright> nice -n 15 node scripts/background-pages-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.resolve(__dirname, '..'));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const root = require('./check-env.js').staged(process.env.EXT || path.resolve(__dirname, '..'), ['https://bb.school.test/*']);
 const G = require(path.join(root, 'defaults.js'));
 const id = [...crypto.createHash('sha256').update(root).digest('hex').slice(0,32)].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
 const origin = 'https://bb.school.test', uid = '_42_1', out = process.argv[2];
@@ -34,6 +35,7 @@ const check = (value,label) => { assert.ok(value,label); results.push(label); };
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ultra:[origin],[`sidebar:ultra:${origin}/${uid}`]:{v:1,rev:1,mig:1,dock:[{id:'notes'}],dest:{notes:'dock'}},[`ctabs:${origin}:${uid}`]:{tabs:[101,102].map((n,i)=>({cid:`_${n}_1`,name:`Course ${n}`,path:`/ultra/courses/_${n}_1/outline`,top:0,at:i,pin:true}))}});
     },{settings,origin,uid});
+    await require('./check-env.js').ultraReady(opts);
     const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
     page.on('console',m=>{if(m.text().startsWith('[Glaze] Background'))console.error(m.text());});
     const paths=['institution-page','course','stream','calendar','grades','messages',...['outline','calendar','announcements','engagement','grades','messages','groups/enrollments','achievements','document/_8110_1?view=content&state=view','assessment/_8120_1/overview','assessment/_8121_1/overview','outline/edit/document/_9001_1','outline/assessment/_9002_1/overview','outline/discussion/_9003_1'].map(p=>`courses/_101_1/${p}`)];
@@ -53,6 +55,8 @@ const check = (value,label) => { assert.ok(value,label); results.push(label); };
     await page.locator('#gz-navbar').getByRole('button',{name:'Course 102, pinned',exact:true}).click();
     const frame=await until(()=>Promise.resolve(page.frames().find(f=>f.name()==='gz-ctab:_102_1')));
     await until(()=>frame.locator('#gz-scene').count().then(Boolean));
+    // The scene can arrive before the tab's first document is ready to show.
+    await until(()=>frame.evaluate(()=>!document.documentElement.hasAttribute('data-gz-ctab-framed') && !document.querySelector('.spinner, [data-gz-placing]')));
     check(await page.locator('[data-gz-scene-host] > #gz-scene').count()===1,'retained course: parent keeps the shared navbar backdrop');
     check(await frame.locator('.course-content-container[data-gz-scene-host] > #gz-scene').count()===1,'retained course: foreground frame paints its full course shell');
     if(out)await page.screenshot({path:path.join(out,'retained-course.png')});
@@ -61,6 +65,9 @@ const check = (value,label) => { assert.ok(value,label); results.push(label); };
     await until(()=>page.evaluate(()=>document.querySelector('#gz-scene')?.width>300));
     await page.waitForTimeout(250);
     check(await frame.locator('.course-content-container[data-gz-scene-host] > #gz-scene').count()===1,'retained Gradebook: narrowed tool content keeps the full course backdrop');
+    const courseBackdrop=await frame.locator('#gz-scene').evaluate(c=>{const r=c.getBoundingClientRect();return {width:c.width,height:c.height,rect:[r.left,r.top,r.right,r.bottom],viewport:[innerWidth,innerHeight],visible:getComputedStyle(c).visibility};});
+    check(courseBackdrop.width>0 && courseBackdrop.height>0 && courseBackdrop.rect[0]<=0 && courseBackdrop.rect[1]<=0 && courseBackdrop.rect[2]>=courseBackdrop.viewport[0] && courseBackdrop.rect[3]>=courseBackdrop.viewport[1] && courseBackdrop.visible==='visible',`retained Gradebook: the frame canvas covers the full tool viewport (${JSON.stringify(courseBackdrop)})`);
+    if(out)fs.writeFileSync(path.join(out,'retained-course-backdrop.json'),JSON.stringify(courseBackdrop,null,2));
     check(await page.locator('[data-gz-scene-host] > #gz-scene').count()===1,'retained Gradebook: the outer navbar keeps its backdrop');
     const backdrop=await page.locator('#gz-scene').evaluate(c=>{const r=c.getBoundingClientRect();return {width:c.width,height:c.height,rect:[r.x,r.y,r.width,r.height],ancestors:[c,...function*(e){while(e){yield e;e=e.parentElement;}}(c.parentElement)].map(e=>({tag:e.tagName,cls:e.className,display:getComputedStyle(e).display,visible:getComputedStyle(e).visibility,clip:getComputedStyle(e).clipPath}))};});
     if(out)fs.writeFileSync(path.join(out,'retained-backdrop.json'),JSON.stringify(backdrop,null,2));

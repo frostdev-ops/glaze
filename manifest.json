@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.3.6",
+  "version": "3.3.8",
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [
     "storage",
     "scripting",
-    "unlimitedStorage"
+    "unlimitedStorage",
+    "activeTab",
+    "declarativeContent"
   ],
   "optional_permissions": [
     "identity"
@@ -19,7 +21,16 @@
     ]
   },
   "host_permissions": [
-    "<all_urls>"
+    "https://*.instructure.com/*",
+    "https://*.blackboard.com/*",
+    "https://*.moodlecloud.com/*",
+    "https://frostdev.io/*",
+    "https://share.frostdev.io/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "minimum_chrome_version": "113",
   "browser_specific_settings": {
@@ -63,8 +74,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*/ultra",
-        "https://*/ultra/*"
+        "https://*.blackboard.com/ultra",
+        "https://*.blackboard.com/ultra/*"
       ],
       "js": [
         "lib/color.js",
@@ -77,9 +88,6 @@
         "lib/nav.js",
         "content-ultra.js",
         "content.js"
-      ],
-      "exclude_matches": [
-        "https://*.instructure.com/*"
       ],
       "run_at": "document_start",
       "all_frames": true
@@ -107,17 +115,20 @@
     },
     {
       "matches": [
-        "https://*/*"
-      ],
-      "exclude_matches": [
-        "https://*/ultra",
-        "https://*/ultra/*",
-        "https://*.instructure.com/*"
+        "https://*.moodlecloud.com/*"
       ],
       "js": [
-        "lib/detect.js"
+        "lib/color.js",
+        "lib/i18n.js",
+        "lib/page.js",
+        "lib/grades.js",
+        "lib/fonts.js",
+        "lib/surfaces.js",
+        "defaults.js",
+        "content.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "all_frames": true
     },
     {
       "matches": [
@@ -193,7 +204,8 @@
       "resources": [
         "sharing/quick.html",
         "options.html",
-        "preview.html"
+        "preview.html",
+        "features/allow.html"
       ],
       "matches": [
         "https://*/*"

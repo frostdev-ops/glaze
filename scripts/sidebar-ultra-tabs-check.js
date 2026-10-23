@@ -5,7 +5,8 @@
 // NODE_PATH=<installed playwright> nice -n 15 node scripts/sidebar-ultra-tabs-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', uid = '_42_1';
 const G = require(path.join(ext, 'defaults.js'));
 const html = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-course.html'), 'utf8');

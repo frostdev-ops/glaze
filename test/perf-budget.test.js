@@ -1,6 +1,6 @@
 // Performance budget (W0). What every Ultra, Canvas and Moodle page pays for, checked statically, so a change can't
-// quietly grow it: the size of each site's first content script, the size of the detector every other https page runs, no fast
-// timers, and no new whole-page sweeps.
+// quietly grow it: the size of each site's first content script, the size of the detector every other https page runs on
+// Safari, no fast timers, and no new whole-page sweeps.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -162,15 +162,44 @@ const EN_PLURALS = 1187;
 // came), tries again once the page is back on screen, starts a scene whose WebGL context the browser took back again on a
 // new canvas, and starts without waiting for the site's part: 2363 bytes on every site. Measured against 74ac1e12.
 const SCENE_RECOVERY = 2363;
-// Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
-// Canvas's without its part.
-const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
-const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*.instructure.com/*'), moodle: entry('https://*.instructure.com/*').filter((f) => f !== 'content-canvas.js') };
+// One background under course tabs (owner-approved raise, 2026-10-19 policy; seam reported 2026-10-22): content.js signs what the
+// background is made of, the page puts it on <html>, and a course tab's frame wearing the same draws none and is marked
+// see-through, and the page withholds its signature until its background is on screen; the rest (the frame's check,
+// pointer relay) is lib/scene-host.js, on demand: 1762 bytes on every site. Measured against fc414dd3. A frame drawing its
+// own background takes the page's clock, and the aurora drifts on the wall clock: 456 more, measured against 6f177a52.
+const CTAB_ONE_BG = 2218;
+// Crossfaded palettes and Looks (WP-V2; owner-approved raise, 2026-10-23): content.js hands a settings change and the
+// system's light/dark switch to lib/motion.js's swap where a feature has loaded it, else applies them at once: 159 bytes on
+// every site. Measured against 27f83a1.
+const UI_SWAP = 159;
+// Ultra's page-link crossfade (content-ultra.js) handles the rejections of a transition the browser aborts (a resize),
+// which reached the page as errors (owner's go-ahead for the Mac session's requests, 2026-10-23): 118 bytes on Ultra.
+// Measured against bf11791.
+const ULTRA_VT_ABORT = { ultra: 118, canvas: 0, moodle: 0 };
+// The Frostdev Look (a named raise, as the owner approved for first scripts on 2026-10-19): its row in GZ_LOOKS (palette, fonts,
+// shape and the topography scene, 90% surfaces) and the two names it adds to GZ_SPEC (the scene, the pointer set) in defaults.js, which
+// every site reads for per-course Looks: 408 bytes on every site. Its scene, parts and pointers load only when worn.
+// Measured against b6bde988.
+const FROSTDEV_LOOK = 408;
+// The lit toolbar icon (narrow host access; a named raise, as the owner approved for first scripts on 2026-10-19): content.js
+// tells the worker each page Glaze starts in, from its top frame, so that tab shows Glaze's own icon over the lit one:
+// 204 bytes on every site. Measured against 5df16e13.
+const TOOLBAR_ICON = 204;
+// Local HTTP pages ask the worker for their held-grant policy; HTTPS pages only check their scheme.
+const LOCAL_DEV = 125; // measured against 11dfdd4a, excluding STREAM_FIX
+// Activity Stream's loading fix (0f5334d6, on main beside the narrow host access work; a named raise under the owner's
+// 2026-10-19 approval): content-ultra.js's Stream start (59 bytes) and content.js's hook for it (21, every site). Main fit it in
+// its 2% headroom, which the lit icon had already used here. Measured against 82ac5a42.
+const STREAM_FIX = { ultra: 80, canvas: 21, moodle: 21 };
+// Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
+// for other Moodle hosts: Canvas's without its part.
+const entry = (has) => m.content_scripts.find(has).js;
+const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content-ultra.js')), canvas: entry((c) => c.js.includes('content-canvas.js')), moodle: entry((c) => c.matches.includes('https://*.moodlecloud.com/*')) };
 
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY, budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site];
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -183,8 +212,16 @@ test('each site loads the shared core and its own part, and no other site\'s', (
   assert.deepEqual(FIRST_SCRIPT.canvas, [...core.slice(0, -1), 'content-canvas.js', 'content.js']);
 });
 
-test('the detector that runs on every other https page stays under 2 KB', () => {
-  assert.ok(m.content_scripts.some((c) => c.js.length === 1 && c.js[0] === 'lib/detect.js'));
+test('the detector that Safari runs on every other https page stays under 2 KB', () => {
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-perf-safari-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(m));
+    require('node:child_process').execFileSync('sh', [path.join(root, 'scripts/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
+    const safari = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    assert.ok(safari.content_scripts.some((c) => c.js.length === 1 && c.js[0] === 'lib/detect.js'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
   assert.ok(size('lib/detect.js') < 2048, `lib/detect.js is ${size('lib/detect.js')} bytes`);
 });
 
@@ -265,13 +302,14 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
+  ['lib/scene-host.js', 'getComputedStyle(c)', 1], // only direct siblings of the course/routed shell, when deciding whether it covers visible content
   ['features/coursemenu.js', 'getComputedStyle(g)', 1], // WP-N2: only the focused roving group, once per horizontal arrow key
   ['features/navbar.js', 'getComputedStyle(e)', 1], // WP-N2: only the old opener and same-id bar copies, on panel close/reposition
   ['features/docreview.js', 'getComputedStyle(el)', 1], // only the viewer's ancestors on entry and while focused; reject fixed-position traps
 
   ['features/mods.js', 'getComputedStyle(x.canvas)', 1], // one mounted mod canvas per slot while checking whether its Worker should pause
   ['features/navbar-canvas.js', 'getComputedStyle(el)', 1], // school logo background, one header mark per replacement
-  ['features/coursetabs.js', 'getComputedStyle(parent.document.documentElement)', 1], // a Canvas tab's frame: the bar's two room variables on the page around, when the bar or the window changes
+  ['features/coursetabs.js', 'getComputedStyle(parent.document.documentElement)', 1], // a tab's frame: the bar's room on the page around (Canvas: its two variables; Ultra: whether there is any), when the bar or the window changes
   ['features/sidebar.js', 'getComputedStyle(html())', 1], // the root's navigation offsets in a batched sidebar layout pass
   ['features/sidebar.js', 'getComputedStyle(x)', 1], // only the drawer's focusable controls, on Tab or a focus escape
   ['features/sidebar.js', 'getComputedStyle(node)', 1], // one exact overview or Rubric and at most 30 ancestors at projection start; Rubric overflow checks stop at 400 descendants
@@ -296,10 +334,20 @@ const STYLE_READS = [
   ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
   ['features/coursetabs.js', 'getComputedStyle(p)', 1], // the scroller above the course tabs, once a tab switch lands
   ['features/coursetabs.js', 'getComputedStyle(list)', 1], // the tab strip's direction, once per arrow key
+  // A course tab's sketch (lib/coursetabs.js sketch): off-screen subtrees stop at their outer box, without reading their
+  // styles; visible content is never lost to an element-count cap. Captures run at most each 0.6 s, each 15 s per page.
+  ['lib/coursetabs.js', 'getComputedStyle(el)', 1],
   ['features/insights.js', 'getComputedStyle(box)', 1], // Insights' dialog, once per saved picture, for its colors
   ['content.js', 'getComputedStyle(document.documentElement)', 1], // the palette's ink, once per highlighted element
   // One element, on its first hover or focus; one element under the pointer, to see if its text is cut short.
   ['content.js', 'getComputedStyle(el)', 2],
+  // WP-V2 (lib/motion.js): the root's motion knobs, once per flip/exit/enter/pop/swap call; the one element an exit fades
+  // (its opacity to start from); a ghost's container, once per element that left a flip; and the subtree of that ghost,
+  // a detached copy of one removed item, swept once to strip its ids and actions before it is shown.
+  ['lib/motion.js', 'getComputedStyle(document.documentElement)', 1],
+  ['lib/motion.js', 'getComputedStyle(el)', 1],
+  ['lib/motion.js', 'getComputedStyle(container)', 1],
+  ['lib/motion.js', "querySelectorAll('*')", 1],
 ];
 
 test('no new whole-page style reads or element sweeps beyond the reviewed ones', () => {
@@ -364,4 +412,8 @@ test('Ultra\'s :has() rules keep a small change from restyling the whole page', 
     const anchor = h.compound.replace(/:(is|where|not)\([^)]*\)/g, '');
     assert.ok(/[.#[]/.test(anchor) || !BROAD.has(anchor.trim().toLowerCase()), `${f}:${h.line} ${h.compound}:has(${h.arg}) before a combinator is tried on every ${anchor.trim() || 'element'}`);
   }
+});
+
+test('review: local development policy is loaded by the worker, outside every first content script', () => {
+  assert.doesNotMatch(read('defaults.js'), /GZ_LOCAL_DEV/, 'local developer policy belongs in the worker');
 });

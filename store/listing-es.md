@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.6 (Spanish)
+# Chrome Web Store listing — Glaze 3.3.8 (Spanish)
 
 ## Short summary (132 character maximum)
 
@@ -6,15 +6,25 @@ Dale otro estilo a Blackboard Ultra, Canvas y Moodle, con tu aspecto y navegaci�
 
 ## Detailed description
 
-Haz que Blackboard Ultra, Canvas y Moodle se sientan tuyos. Glaze da un nuevo estilo a tus cursos con paletas, fuentes, fondos y movimiento, y añade herramientas para planificar y estudiar justo donde haces tus trabajos del curso. Funciona en cualquier escuela que use Blackboard Ultra, Canvas o Moodle, incluso en el dominio propio de una escuela, donde pregunta antes de activar un sitio aún no aprobado. Sin cuenta ni analíticas. Tus cursos, calificaciones, notas y tareas se quedan en tu dispositivo; tus ajustes siguen la sincronización de tu navegador si está activada; compartir es opcional y va cifrado.
+Glaze da un nuevo estilo a tus cursos con paletas, fuentes, fondos y movimiento, y añade herramientas para planificar y estudiar justo donde haces tus trabajos del curso. Funciona en cualquier escuela que use Blackboard Ultra, Canvas o Moodle, incluso en el dominio propio de tu centro, cuando autorizas el acceso. Sin cuenta ni analíticas. Tus cursos, calificaciones, notas y tareas se quedan en tu dispositivo; tus ajustes siguen la sincronización de tu navegador si está activada; compartir es opcional y va cifrado.
 
-NOVEDADES DE 3.3.6
+NOVEDADES DE 3.3.8
+
+• Frostdev, un Look nuevo: una topografía viva con luz de hielo tallado que se inclina con tu puntero, con sus propios punteros y efectos de contorno.
+• Las partes de Glaze se mueven: las pestañas de cursos, los widgets, las tareas y las carpetas se deslizan a su nuevo lugar, y cambiar de paleta o de Look hace un fundido.
+• Blackboard: la barra de pestañas de cursos y los encabezados de cursos y elementos flotan como vidrio, y las páginas de herramientas como el Libro de calificaciones usan todo el ancho.
+• Blackboard: un fondo continuo detrás de las pestañas de cursos, sin costura, incluso con un elemento abierto.
+• Blackboard: cerrar un anuncio en una pestaña de curso vuelve al curso, y se puede cambiar de pestaña mientras una sigue cargando.
+• Blackboard: las notas hipotéticas cargan de forma fiable en las pestañas de cursos y muestran los nombres de las categorías.
+
+DE 3.3.6
 
 • Cada Look incluido tiene su propio puntero, una animación a su alrededor, un efecto al escribir y sus propios efectos para tareas terminadas, calificaciones y rachas.
 • Efectos al escribir: pequeñas partículas en el cursor de texto mientras escribes. Nunca leen lo que escribes ni aparecen en campos de contraseña o tarjeta, en exámenes ni con el movimiento desactivado.
 • Look › Puntero: conserva el puntero del Look, usa el del sistema, elige cualquiera de los punteros de Glaze o una imagen tuya, y activa o desactiva la animación del puntero.
 • Safari: la configuración dentro de una página del curso ya no se abre en blanco, y las animaciones y efectos de los Looks vuelven a cargarse en las páginas del curso.
 • El fondo animado de una pestaña de curso ya no se queda en su versión desenfocada provisional.
+• Blackboard: un anuncio abierto en una pestaña de curso se muestra ahí, en lugar de un error de página no encontrada.
 
 DE 3.3
 
@@ -86,9 +96,9 @@ EN MOODLE
 
 EN TODAS PARTES
 
-Pulsa Ctrl+K (⌘K en Mac) para saltar a cursos, páginas, ajustes de Glaze y trabajo por entregar. En un dominio propio de una escuela que aún no esté aprobado, Glaze pregunta «¿Usar Glaze en este sitio?» y no hace nada allí hasta que dices que sí; los ajustes enumeran esos sitios y pueden quitarlos. La ventana emergente mantiene a mano los controles rápidos. En Blackboard y Canvas, Lo que Glaze puede hacer enumera cada extra con su interruptor. Exporta e importa todos tus ajustes como archivo.
+Pulsa Ctrl+K (⌘K en Mac) para saltar a cursos, páginas, ajustes de Glaze y trabajo por entregar. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña que abre al instalarse o Ajustes › Sitios. La ventana emergente comprueba la página; las direcciones escritas se comprueban mediante las API del sitio después de que concedas acceso. Los ajustes enumeran esos sitios y pueden quitarlos. La ventana emergente mantiene a mano los controles rápidos. En Blackboard y Canvas, Lo que Glaze puede hacer enumera cada extra con su interruptor. Exporta e importa todos tus ajustes como archivo.
 
-Canvas en instructure.com y Ultra en blackboard.com son automáticos; las aprobaciones anteriores se conservan.
+Canvas en instructure.com, Ultra en blackboard.com y Moodle en moodlecloud.com son automáticos; las aprobaciones anteriores se conservan.
 
 SESIONES COMPARTIDAS OPCIONALES
 
@@ -98,7 +108,7 @@ Las ayudas de Glaze no cambian calificaciones, no entregan trabajos ni envían m
 
 PRIVACIDAD
 
-Sin analíticas, sin anuncios y sin cuenta. Los ajustes se quedan en tu navegador y siguen la sincronización de Chrome o de Firefox si la tienes activada (incluyen apodos de cursos, opciones de GPA y algunos identificadores de escuela, curso y cuenta; Safari los guarda en el dispositivo). Los datos de los cursos, los registros de calificaciones, las notas, las tareas, tu posición, la lista de entregas y las copias de lo que escribes se quedan en tu dispositivo. Glaze lee tu propio sitio de Blackboard, Canvas o Moodle con la sesión que ya tienes abierta y escribe en él solo cuando tú lo pides (una marca en el planificador, un apodo o un color de Canvas, cerrar sesión, el modo de edición de Moodle). Las fuentes web y las imágenes de fondo que elijas hacen solicitudes de red normales; los vídeos y animaciones enlazados los descarga el proceso de fondo de Glaze sin cookies, referente ni redirecciones (12 MiB de vídeo, 6 MiB de imagen, 1 MiB de Lottie; lados de vídeo/imagen de hasta 4096 píxeles). Los metadatos identificativos se eliminan del contenedor del archivo; los flujos codificados y los píxeles visibles permanecen. Los archivos guardados antes de 3.3.5 que no pueden limpiarse permanecen en este dispositivo y no se comparten. Las imágenes de las pestañas de cursos se quedan en la memoria y nunca se envían a ningún sitio. Las sesiones compartidas y los canales de mods, solo si los usas, envían contenido cifrado que el servidor de retransmisión no puede leer. Glaze no recopila ni vende tus trabajos, calificaciones, credenciales ni historial de navegación. Un mod con acceso a datos de cursos y a la red puede enviar esos datos a hosts autorizados. Política completa: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+Sin analíticas, sin anuncios y sin cuenta. Los ajustes se quedan en tu navegador y siguen la sincronización de Chrome o de Firefox si la tienes activada (incluyen apodos de cursos, opciones de GPA y algunos identificadores de escuela, curso y cuenta; Safari los guarda en el dispositivo). Los datos de los cursos, los registros de calificaciones, las notas, las tareas, tu posición, la lista de entregas y las copias de lo que escribes se quedan en tu dispositivo. Glaze lee tu propio sitio de Blackboard, Canvas o Moodle con la sesión que ya tienes abierta y escribe en él solo cuando tú lo pides (una marca en el planificador, un apodo o un color de Canvas, cerrar sesión, el modo de edición de Moodle). Las fuentes web y las imágenes de fondo que elijas hacen solicitudes de red normales; los vídeos y animaciones enlazados los descarga el proceso de fondo de Glaze sin cookies, referente ni redirecciones (12 MiB de vídeo, 6 MiB de imagen, 1 MiB de Lottie; lados de vídeo/imagen de hasta 4096 píxeles). Los metadatos identificativos se eliminan del contenedor del archivo; los flujos codificados y los píxeles visibles permanecen. Los archivos guardados antes de 3.3.5 que no pueden limpiarse permanecen en este dispositivo y no se comparten. Los bocetos de las pestañas de cursos se quedan en la memoria y nunca se envían a ningún sitio. Las sesiones compartidas y los canales de mods, solo si los usas, envían contenido cifrado que el servidor de retransmisión no puede leer. Glaze no recopila ni vende tus trabajos, calificaciones, credenciales ni historial de navegación. Un mod con acceso a datos de cursos y a la red puede enviar esos datos a hosts autorizados. Política completa: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
 Código abierto (MIT): https://github.com/frostdev-ops/glaze
 

@@ -30,6 +30,7 @@ const rig = async ({ worn = URL1, wornType = 'lottie', body = spin, lms = 'https
     fromEditor: (s) => s.id === 'glaze' && s.url?.split(/[?#]/)[0] === 'chrome-extension://glaze/options.html',
     fromLms: async (s) => (s.id === 'glaze' && s.tab && s.frameId === 0 && s.url?.startsWith(lms) ? lms : null),
     brokerArea: (name) => area(name === 'sync' ? sync : local2),
+    reachable: async () => true, // the address's host held (test/feature-hosts.test.js: one that isn't)
     setTimeout, clearTimeout,
     fetch: async (u, i) => { fetched.push([u, i]); return respond ? respond(u, i) : new Response(body, { status: 200 }); },
   });

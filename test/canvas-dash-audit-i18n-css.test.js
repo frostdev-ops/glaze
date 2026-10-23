@@ -59,7 +59,8 @@ const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim()
 test('first-paint strip reservation has its size sheet before the lazy feature starts', () => {
   const core = read('content.js'), sizes = read('features/coursetabs.css');
   assert.match(core, /const SHEETS = [^\n]*'features\/coursetabs\.css'/);
-  for (const [size, height] of [['small', 34], ['large', 48]]) assert.ok(sizes.includes(`html[data-gz-ctabs~="${size}"] { --gz-ctabs-h: ${height}px; }`));
+  for (const [size, height] of [['small', 34], ['large', 48]]) assert.ok(sizes.includes(`html[data-gz-ctabs~="${size}"] { --gz-ctabs-bar: ${height}px; }`));
+  assert.ok(sizes.includes('html[data-gz-ctabs] { --gz-ctabs-bar: 40px; --gz-ctabs-h: calc(var(--gz-ctabs-bar) + var(--gz-float-gap)); }'), 'the footprint holds the bar and its gap');
   assert.ok(rules.some(([sel, body]) => sel.includes(':not(:has(> #gz-ctabs))::before') && /flex:\s*0 0 100%/.test(body) && /height:\s*var\(--gz-ctabs-h, 40px\)/.test(body)));
 });
 

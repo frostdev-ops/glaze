@@ -311,6 +311,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
         onInstalled: { addListener: (f) => listeners.installed = f }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area('local', store.local), sync: area('sync', store.sync), onChanged: { addListener: (f) => heard.push(f) } },
       identity,
+      permissions: { contains: async () => true }, // the student granted every host (Chrome)
       tabs: { query: async () => [] },
       scripting: {
         getRegisteredContentScripts: async () => registered,
@@ -347,7 +348,7 @@ withMock('worker: only the editor connects; a page syncs only its own site\'s ac
   assert.ok(mock.calendars.has(cal));
   assert.equal(w.store.local.gcal.owner, 'student@example.edu');
   const reg = structuredClone(w.registered().find((s) => s.id === 'gz-gcal'));
-  assert.deepEqual([reg.js, reg.matches, reg.excludeMatches], [['features/gcal.js'], ['https://*.instructure.com/*', 'https://*/ultra', 'https://*/ultra/*'], ['https://canvadocs.instructure.com/*']]);
+  assert.deepEqual([reg.js, reg.matches, reg.excludeMatches], [['features/gcal.js'], ['https://*.instructure.com/*', 'https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*'], ['https://canvadocs.instructure.com/*']]);
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR), { ok: false, error: 'connected' }, 'one calendar per connection');
   assert.deepEqual(await sync({ src: 'https://other.instructure.com/3' }), { ok: false, error: 'sender' });
   assert.deepEqual(await sync({ src: SITE_SRC, from: 'soon' }), { ok: false, error: 'sender' });
@@ -415,10 +416,11 @@ test('switch off (the repo as it is): no settings section, no sync, no page scri
     w.install();
     await settle();
     assert.ok(!w.registered().some((s) => s.id === 'gz-gcal'), 'features/gcal.js never registered');
-    const on = worker(mock, { local: { gcal: { gen: 'g', cal: 'c_1@group.calendar.google.com', last: {} }, canvas: [] } });
+    const on = worker(mock, { local: { gcal: { gen: 'g', cal: 'c_1@group.calendar.google.com', last: {} }, canvas: [], ultra: ['https://bb.school.edu'] } });
     on.install();
     await settle();
     assert.ok(on.registered().some((s) => s.id === 'gz-gcal'), 'and with the switch on, the same install registers it');
+    assert.ok(['https://bb.school.edu/ultra', 'https://bb.school.edu/ultra/*'].every((p) => on.registered().find((s) => s.id === 'gz-gcal').matches.includes(p)), 'an approved Ultra site\'s pages too');
     assert.deepEqual([w.asked, mock.log], [[], []], 'no request at all');
   } finally { await mock.stop(); }
 });

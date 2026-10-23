@@ -44,7 +44,7 @@ function world({ at = '/courses/12/modules', showing = '12' } = {}) {
     save: () => calls.push(['save']), keepPage() {}, later() {}, showTurn: 0, waiting: '', wait: (cid) => calls.push(['wait', cid]), globalThis: {}, say: (s) => calls.push(['say', s]), t: (s) => s,
     show: (cid) => calls.push(['show', cid]), reveal: (cid) => calls.push(['reveal', cid]),
     openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
-    load: (cid, f, url) => { calls.push(['load', cid, url]); return true; }, guardFrame() {}, watch: () => calls.push(['watch']),
+    load: (cid, f, url) => { calls.push(['load', cid, url]); return true; }, guardFrame() {}, watch: () => calls.push(['watch']), hoist() {},
   });
   vm.runInContext(part('  let drawerFrom = ', '  const drawerOn = ') + part('  const canvasURL = ', '  // On the page itself') + part('  const KEEP = ', '  let showing = ') + part("  // ---- a frame's pages (Canvas)", '  // Canvas: a frame still loading')
     + part('  const dropNext = ', '  // Canvas loads a whole page'), c);

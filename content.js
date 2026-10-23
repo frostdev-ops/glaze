@@ -36,7 +36,7 @@
   });
   // The all-host Ultra entry can also encounter spoofed Canvas/Moodle markup. Gate the detected kind, not just Ultra.
   const yes = (list) => Array.isArray(list) && list.includes(site === 'ultra' ? location.origin : `${location.origin}/*`);
-  const known = location.protocol === 'https:' && !location.port && (site === 'ultra' ? /\.blackboard\.com$/.test(location.hostname) : site === 'canvas' && /(^|\.)instructure\.com$/.test(location.hostname));
+  const known = GZ_BUILT_IN(site, location) || location.protocol === 'http:' && await chrome.runtime.sendMessage({ type: 'glaze:local', kind: site }).catch(() => false);
   if (site && !isPreview && !known
     && !await new Promise((res) => { try { chrome.storage.local.get(site, (r) => res(yes(r?.[site]))); } catch { res(false); } })) {
     globalThis.GZ_SITE_ULTRA?.sheets?.splice(0).forEach((l) => l.remove());
@@ -47,6 +47,8 @@
   }
   if (site !== 'ultra') globalThis.GZ_SITE_ULTRA?.sheets?.forEach((l) => l.remove());
   if (!site) return;
+  // Glaze's toolbar icon for this tab (lib/background.js).
+  if (window.top === window && !isPreview) try { chrome.runtime.sendMessage({ type: 'glaze:here' }).catch(() => {}); } catch { /* reloaded */ }
   const ultra = site === 'ultra';
   const moodle = site === 'moodle';
 
@@ -941,7 +943,7 @@
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them: features/keys.js, loaded on the first key that
   // starts one while the switch is on, then handed every key. Top frame only.
-  const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+  const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, #gz-stream-settings, [contenteditable]:not([contenteditable="false"])'));
   // Whether a key is one for the shortcuts: switched on, no modifier, not typing or composing, not in a menu, list, grid or tree
   // (type-ahead: a dialog too on Canvas and Moodle, but Ultra's courses are dialogs), and on Canvas and Moodle not repeated, not
   // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too, and Moodle's pages).
@@ -1019,7 +1021,22 @@
   const sceneModule = () => (bgKind() === 'media' ? 'lib/scene-media.js' : 'lib/scene.js');
   const sceneSig = () => JSON.stringify([bgKind(), worn.bg.scene, partsOf()?.bg]);
   let modBg = null;
+  // A course tab's frame wearing the page's background shows the page's through it (lib/scene-host.js through).
+  let bgSig = '', thru = false;
+  const syncThrough = () => {
+    if (!tabFrame) {
+      setAttr('data-gz-bg-key', on(settings) && !!links.length && !modBg && !html.hasAttribute('data-gz-bg-failed') && (!sceneKind() || !!scene) && bgSig || false);
+      return false;
+    }
+    const bg = html.getAttribute('data-gz-bg'), H = globalThis.GZ_SCENE_HOST;
+    const want = !!bg && bg !== 'solid' && !modBg && on(settings) && !!links.length;
+    if (want && !H) need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).then(() => { if (globalThis.GZ_SCENE_HOST) syncScene(); }, () => {});
+    const now = !!H?.through(want && bgSig, ultra, hid(), syncScene);
+    if (now !== thru) { thru = now; html.toggleAttribute('data-gz-through', now); }
+    return now;
+  };
   const placeScene = () => {
+    if (tabFrame) { const was = thru; if (syncThrough() !== was) return syncScene(); }
     const c = modBg || sceneCanvas;
     if (c && globalThis.GZ_SCENE_HOST?.place(c, ultra)) scene?.draw();
   };
@@ -1030,9 +1047,11 @@
     sceneFailed = false;
     scene?.stop();
     scene = null;
+    globalThis.GZ_SCENE_HOST?.share(null);
     globalThis.GZ_SCENE_HOST?.clear(sceneCanvas);
     sceneCanvas?.remove();
     sceneCanvas = null;
+    if (!tabFrame) syncThrough();
   };
   // Load failures retry after 1 s, 5 s, then every 30 s while shown. Drawing failures get three tries per Look.
   const retryScene = (key, error, recover = true) => {
@@ -1077,12 +1096,14 @@
       colors: GZ_BG_COLORS(worn.bg.colors, palette),
       dim,
       amount,
-      speed: html.hasAttribute('data-gz-ctab-framed') ? 0 : pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
+      speed: pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
+      clock: tabFrame ? globalThis.GZ_SCENE_HOST?.clock() : undefined,
     };
   };
   const syncScene = () => {
     // An extension reload leaves the last frame in place.
     if (!chrome.runtime?.id) return;
+    if (syncThrough()) return stopScene();
     const key = sceneSig();
     if (sceneRetry && sceneRetry.key !== key) { clearTimeout(sceneRetry.timer); sceneRetry = null; sceneFailed = false; }
     if (scenePending && scenePending.key !== key) sceneUnwait();
@@ -1093,7 +1114,7 @@
     const file = sceneModule();
     if (scene && sceneFile !== file) stopScene();
     const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL;
-    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); } catch (error) { retryScene(key, error, false); } return; }
+    if (scene && !wait) { try { placeScene(); scene.update(sceneOpts()); GZ_SCENE_HOST.share(scene); if (!tabFrame) syncThrough(); } catch (error) { retryScene(key, error, false); } return; }
     if (!modBg && !sceneLoad[file]) { const p = sceneLoad[file] = import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { if (sceneLoad[file] === p) delete sceneLoad[file]; throw error; }); }
     const load = !modBg && sceneLoad[file];
     const pending = scenePending = { key, cancel: [] };
@@ -1102,6 +1123,7 @@
       if (!on(settings) || !chrome.runtime?.id || !links.length || document.hidden || hid() || key !== sceneSig()) { scenePending = null; return; }
       if (modBg) { scenePending = null; return placeScene(); }
       if (sceneBad === key || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
+      if (syncThrough()) return stopScene();
       pending.draw = true;
       if (!scene) {
         sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');
@@ -1117,7 +1139,9 @@
         });
       }
       scene.update(sceneOpts());
+      GZ_SCENE_HOST.share(scene);
       scenePending = null;
+      if (!tabFrame) syncThrough();
     }).catch((error) => { if (scenePending === pending) retryScene(key, error, !pending.draw); });
   };
   document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
@@ -1242,7 +1266,7 @@
     probed = url;
     setAttr('data-gz-bg-failed', false);
     const img = new Image();
-    img.onerror = () => { if (probed === url) setAttr('data-gz-bg-failed', true); };
+    img.onerror = () => { if (probed === url && bgKind() === 'image') { setAttr('data-gz-bg-failed', true); syncScene(); } };
     img.src = url;
   };
 
@@ -1339,6 +1363,11 @@
     else setAttr('data-gz-bg-failed', false);
     // Motion: the system's reduced-motion setting wins over the level unless told otherwise.
     setAttr('data-gz-motion', s.motion.followSystem && calmMQ.matches ? 'off' : s.motion.level);
+    if (kind === 'aurora') need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).then(() => globalThis.GZ_SCENE_HOST?.drift(html), () => {});
+    // What the background is made of: a course tab's frame wearing the same shows the page's (syncThrough).
+    let h = 2166136261;
+    for (const c of JSON.stringify([s.bg, colors, partsOf()?.bg, html.getAttribute('data-gz-motion'), bgKind() === 'aurora' && [s.look.surfaceCustom && s.look.surfaceColor, s.look.surfaceTint, s.look.surfaceTintSource === 'course' && surfaceCourse(), s.look.surfaceFrost]])) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    bgSig = (h >>> 0).toString(36);
     if (s.motion.level === 'expressive') need('features/light.js', () => globalThis.GZ_LIGHT).catch(() => {}); // the pointer light
     moveParts();
     setAttr('data-gz-no-trans', !s.motion.transitions);
@@ -1451,6 +1480,7 @@
     unmenu();
     for (const l of links) l.remove();
     links = [];
+    syncThrough();
     early();
     armFlip();
     X.syncTodo();
@@ -1471,6 +1501,8 @@
   };
 
   const reapply = () => { if (settings.enabled && links.length) applySettings(); };
+  // New palettes and Looks crossfade in (lib/motion.js, where loaded).
+  const swap = (f) => (globalThis.GZ_MOTION?.swap || ((g) => g()))(f);
 
   // ---- the site's own part -------------------------------------------------------------------------
   // content-ultra.js or content-canvas.js is given what it needs from here (I; live state through getters), and puts
@@ -1604,12 +1636,12 @@
       settings = s;
       if (on(s) && !was) enable();
       else if (!on(s) && was) disable();
-      else if (on(s)) applySettings();
+      else if (on(s)) swap(applySettings);
       if (changes.enabled) modsIn(true);
     });
   });
   // Moodle's course is on <body>: its tint and look before that is drawn.
   if (moodle && !document.body) new MutationObserver((_, o) => document.body && (o.disconnect(), reapply())).observe(html, { childList: true });
-  darkMQ.addEventListener('change', reapply);
+  darkMQ.addEventListener('change', () => swap(reapply));
   calmMQ.addEventListener('change', reapply);
 })();

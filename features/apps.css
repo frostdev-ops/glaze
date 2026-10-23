@@ -30,7 +30,8 @@
 .gz-w :is(button, input, select, textarea, a, [tabindex]):focus-visible, :is(#gz-hub, #gz-ccm, .gz-tour) :is(button, input, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 .gz-w-head { display: flex; align-items: center; gap: 0.35rem; min-width: 0; padding-inline-end: 4.5rem; }
 :is(#gz-dash, #gz-float, #gz-room) .gz-w-head h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gz-w-tools { position: absolute; top: 0.45rem; inset-inline-end: 0.5rem; display: flex; align-items: center; gap: 0.15rem; }
+/* Over the resize corner, which comes up beside them on a folded tile. */
+.gz-w-tools { position: absolute; z-index: 1; top: 0.45rem; inset-inline-end: 0.5rem; display: flex; align-items: center; gap: 0.15rem; }
 .gz-w-tools:empty { display: none; }
 /* Float, Remove and Fold stay in the heading row, so editing adds no height. */
 :is(#gz-room, #gz-dash[data-board])[data-editing] .gz-w:not([data-float]) .gz-w-head { padding-inline-end: 6rem; }
@@ -487,7 +488,7 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-inline-start: 3px solid var(--gz-accent); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
 }
 @media (prefers-reduced-motion: no-preference) { html:not([data-gz-motion="off"]) .gz-rm-toast { animation: gz-rm-in 0.22s ease-out; } }
-@keyframes gz-rm-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes gz-rm-in { from { opacity: 0; translate: 0 8px; } }
 .gz-rm-toast p { margin: 0; }
 .gz-rm-toast .gz-rm-what { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--gz-accent); }
 .gz-rm-toast .gz-rm-title { display: block; margin-top: 0.1rem; font-weight: 600; color: var(--gz-ink); }

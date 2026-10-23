@@ -59,7 +59,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     });
     const opts = await context.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
-    const store = (bg, lookX) => opts.evaluate(async ({ defaults, bg, lookX }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set({ ...defaults, bg, lookX }); }, { defaults: D.GZ_DEFAULTS, bg: { ...D.GZ_DEFAULTS.bg, ...bg }, lookX });
+    const store = (bg, lookX) => opts.evaluate(async ({ defaults, bg, lookX, origin }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set({ ...defaults, bg, lookX }); await chrome.storage.local.set({ ultra: [origin] }); }, { origin, defaults: D.GZ_DEFAULTS, bg: { ...D.GZ_DEFAULTS.bg, ...bg }, lookX });
     const look = async (x) => P.pack({ x });
     const open = async () => { const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message)); await page.goto(`${origin}/ultra/stream`); await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-font')); return page; };
     const scene = (page) => page.evaluate(() => { const c = document.getElementById('gz-scene'); return c && { w: c.width, h: c.height, bg: document.documentElement.getAttribute('data-gz-bg'), inside: c.parentNode.tagName }; });

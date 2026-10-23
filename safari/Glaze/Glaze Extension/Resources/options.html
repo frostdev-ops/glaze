@@ -97,6 +97,10 @@
   .courses .name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 0.78em; color: var(--gz-ink-faint); }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
   .sites li { grid-template-columns: minmax(0, 1fr) auto; }
+  .site-add { flex-wrap: nowrap; margin: .75rem 0 .25rem; }
+  .site-add .field { flex: 1; min-width: 0; }
+  .site-add button[aria-busy="true"] { opacity: .6; cursor: progress; }
+  #site-note .desc { margin: .25rem 0; color: var(--gz-err); }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
   button:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
   body.off [data-editor-section]:not(#data) { opacity: 0.5; }
@@ -474,6 +478,7 @@
             <label title="A striped sun over a gliding grid"><input type="radio" name="bg.scene" value="horizon">Horizon</label>
             <label title="Moonlit headstones, drifting ghosts and a skeleton who waves"><input type="radio" name="bg.scene" value="graveyard">Graveyard</label>
             <label title="Jack-o'-lanterns flickering under a dusk sky, and leaves falling"><input type="radio" name="bg.scene" value="pumpkins">Pumpkin patch</label>
+            <label title="Living terrain cut into paper terraces"><input type="radio" name="bg.scene" value="topography">Topography</label>
           </div></div>
 <label class="field" data-kinds="scene shader layers"><span>Intensity</span><input type="range" data-key="bg.intensity" min="0" max="100" step="5" aria-describedby="bg-intensity-note"><output data-for="bg.intensity" data-format="presence"></output></label>
 <p class="desc" id="bg-intensity-note" data-kinds="scene shader layers">How much it stands out: color, contrast and pace together. Drawn with WebGL (three.js) at low resolution, at most 30 frames a second; it pauses in background tabs and holds still when motion is off.</p>
@@ -856,7 +861,7 @@
 <p class="desc">Switching tabs shows a still copy of the course as you last saw it at once, then Blackboard's live page fades in. The copies stay in memory and are never written to disk; they go when the browser closes, when you turn the tabs or Glaze off, or when someone else signs in. Glaze never opens or loads a course in the background.</p>
 </section>
 </div>
-<div id="panel-blackboard" role="tabpanel" aria-labelledby="tab-blackboard" data-editor-panel="blackboard" hidden><nav class="section-links" aria-label="Sections"><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a><a href="#blackboard/dashboard" data-editor-alias>Dashboard</a><a href="#blackboard/folders" data-editor-alias>Hidden folders</a><a href="#blackboard/declutter" data-editor-alias>Declutter</a></nav>
+<div id="panel-blackboard" role="tabpanel" aria-labelledby="tab-blackboard" data-editor-panel="blackboard" hidden><nav class="section-links" aria-label="Sections"><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a><a href="#blackboard/dashboard" data-editor-alias>Dashboard</a><a href="#blackboard/stream" data-editor-alias>Activity Stream</a><a href="#blackboard/folders" data-editor-alias>Hidden folders</a><a href="#blackboard/declutter" data-editor-alias>Declutter</a></nav>
 <section id="bb-navigation" data-editor-section="blackboard/nav" data-sites="Blackboard Ultra" aria-labelledby="heading-blackboard-nav">
 <p class="section-path" data-editor-breadcrumb><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a></p><div class="section-heading"><h2 id="heading-blackboard-nav">Blackboard navigation</h2></div>
 <p class="desc section-note">Arrange the rail, its labels, branding, links and widgets.</p><p class="site-scope" translate="no">Blackboard Ultra</p>
@@ -909,6 +914,13 @@
 <label class="check"><input type="checkbox" data-key="widgets.land"><span>Open Blackboard on the dashboard</span>
             <span class="desc">Off by default. When Blackboard Ultra opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></label>
 <a href="#study/widgets" data-editor-alias>Notes and widgets</a>
+</section>
+<section id="bb-stream" data-editor-section="blackboard/stream" data-sites="Blackboard Ultra" aria-labelledby="heading-blackboard-stream">
+<div class="section-heading"><h2 id="heading-blackboard-stream">Activity Stream</h2><button type="button" class="section-reset" data-reset-section="blackboard/stream">Reset section</button></div>
+<label class="field"><span>Timeline dates</span><select data-key="stream.dates"><option value="smart">Due dates when available</option><option value="posted">Posted dates</option><option value="both">Due and posted dates</option></select></label>
+<label class="check"><input type="checkbox" data-key="stream.relative"><span>Relative due dates</span></label>
+<label class="check"><input type="checkbox" data-key="stream.compact"><span>Compact cards</span></label>
+<label class="check"><input type="checkbox" data-key="stream.encouragement"><span>Show encouragement</span></label>
 </section>
 <section id="bb-folders" data-editor-section="blackboard/folders" data-sites="Blackboard Ultra · Canvas" aria-labelledby="heading-blackboard-folders">
 <p class="section-path" data-editor-breadcrumb><a href="#blackboard/folders" data-editor-alias>Hidden folders</a></p><div class="section-heading"><h2 id="heading-blackboard-folders">Hidden folders</h2><button type="button" class="section-reset" data-reset-section="blackboard/folders">Reset section</button></div>
@@ -1366,7 +1378,12 @@
 </section>
 <section id="sites" data-editor-section="backup/sites" data-sites="Extension only" aria-labelledby="heading-backup-sites">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/sites" data-editor-alias>Sites</a></p><div class="section-heading"><h2 id="heading-backup-sites" tabindex="-1">Sites</h2></div>
-<p class="desc section-note">Glaze runs on Canvas at instructure.com and on Blackboard at blackboard.com. On a school's own address it asks first; these are the sites you said yes to.</p><p class="site-scope">On this device</p>
+<p class="site-scope">On this device</p>
+<form class="row site-add" id="site-add" novalidate autocomplete="off">
+  <label class="field wide"><span>School address</span><input id="site-address" type="text" inputmode="url" enterkeyhint="go" autocapitalize="off" spellcheck="false" translate="no" placeholder="canvas.school.edu" aria-describedby="site-error"></label>
+  <button type="submit" class="primary" id="site-allow">Allow</button>
+</form>
+<div id="site-note" role="alert" hidden><p class="desc" id="site-error"></p><div class="row" id="site-picks"></div></div>
 <ul class="courses sites" id="site-list"></ul>
 <p class="desc" id="site-empty">No other sites yet.</p>
 <p class="desc">Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.</p>
@@ -1395,7 +1412,7 @@
 <div id="preview-body">
 <div class="preview-controls">
 <label>Site <select id="preview-site" data-local><option value="ultra">Blackboard Ultra</option><option value="canvas">Canvas</option><option value="moodle">Moodle</option></select></label>
-<label>Page <select id="preview-page" data-local><option value="courses">Courses</option><option value="outline">Course outline</option><option value="dashboard">Dashboard</option><option value="tabs">Course tabs</option><option value="document">Document</option><option value="quiz">Quiz</option></select></label>
+<label>Page <select id="preview-page" data-local><option value="courses">Courses</option><option value="outline">Course outline</option><option value="dashboard">Dashboard</option><option value="tabs">Course tabs</option><option value="stream">Activity Stream</option><option value="document">Document</option><option value="quiz">Quiz</option></select></label>
 <label>Appearance <select id="nav-preview-scheme" data-local><option value="current">Current settings</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
 <label>Viewport <select id="preview-size" data-local><option value="desktop">Desktop</option><option value="phone">Phone</option></select></label>
 <label id="nav-preview-control">Navigation <select id="nav-preview-mode" data-local><option value="current">Current settings</option><option value="expanded">Expanded</option><option value="collapsed">Collapsed</option><option value="icons">Icons only</option></select></label>
@@ -1486,6 +1503,7 @@
   <script src="lib/pet.js"></script>
   <script src="lib/petplayer.js"></script>
   <script src="lib/petlibrary.js"></script>
+  <script src="lib/site.js"></script>
   <script src="options.js"></script>
   <script src="lib/notes.js"></script>
   <script src="lib/sessions-ui.js"></script>

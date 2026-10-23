@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { parseEnv } from 'node:util';
 import { spawn, execFileSync } from 'node:child_process';
-import { appleApp, appleBuild, amo, chromeStatus, submitChrome, submitFirefox, submitApple } from './store-api.mjs';
+import { StringDecoder } from 'node:string_decoder';
+import { appleApp, appleBuild, amo, chromeStatus, submitChrome, submitFirefox, submitApple, syncFirefoxListing, previewAppleListing } from './store-api.mjs';
+import { readListings, writeChromeKit, describeChanges } from './store-listings.mjs';
 import { publicPreflight, preparePublic, publishPublic, withIsolatedEnv, artifactPath } from './public-release.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -20,7 +22,7 @@ const defaults = {
   CWS_SERVICE_ACCOUNT: 'cws-publisher@frostdev-507119.iam.gserviceaccount.com',
   AMO_ADDON_ID: 'glaze@frostdev.io', ASC_BUNDLE_ID: 'io.frostdev.Glaze', SAFARI_TEAM_ID: '22AAZFMTV8',
 };
-const usage = `Usage: node scripts/store-release.mjs [release|doctor|plan|build|submit|publish] [options]
+const usage = `Usage: node scripts/store-release.mjs [release|doctor|plan|build|submit|publish|listings] [options]
 
   release              Build, submit stores, tag/push GitHub, deploy website/feed (default).
   doctor               Read-only store and public-release prerequisite checks.
@@ -28,6 +30,7 @@ const usage = `Usage: node scripts/store-release.mjs [release|doctor|plan|build|
   build                Test and build packages, with no uploads.
   submit               Resume store submissions only from verified packages.
   publish              Resume GitHub and website publication of saved public packages.
+  listings             Dry run: what each store's listing would change, per language. Writes nothing.
 
   --config FILE        Credentials file (default ~/.config/glaze/stores.env).
   --stores LIST        chrome,firefox,apple (default all three).
@@ -35,11 +38,10 @@ const usage = `Usage: node scripts/store-release.mjs [release|doctor|plan|build|
   --source-ref REF     Committed release source (default HEAD).
   --firefox-ref REF    Compatibility source (default dev/firefox).
   --out DIRECTORY     Release workspace (default release/<version>/stores/<source SHA>).
-  --notes FILE        Plain-text release notes (default current CHANGELOG.md entry).
+  --notes FILE        Plain-text GitHub release notes (default current CHANGELOG.md entry).
   --help               Show this help.
 
-Chrome is staged and Apple uses manual release after approval. Firefox listed submissions
-may publish as soon as AMO approves them. See RELEASING.md for credentials and recovery.`;
+Every store publishes as soon as its review approves the submission. See RELEASING.md for credentials and recovery.`;
 const expand = value => value.startsWith('~/') ? path.join(os.homedir(), value.slice(2)) : value;
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -62,12 +64,29 @@ export function options(args) {
     else if (arg === '--apple-platforms') result.applePlatforms = [...new Set(value.split(','))];
     else throw new Error(`Unknown option ${arg}`);
   }
-  if (!['release', 'doctor', 'plan', 'build', 'submit', 'publish'].includes(result.command)) throw new Error(`Unknown command ${result.command}`);
+  if (!['release', 'doctor', 'plan', 'build', 'submit', 'publish', 'listings'].includes(result.command)) throw new Error(`Unknown command ${result.command}`);
   if (result.stores.some(s => !['chrome', 'firefox', 'apple'].includes(s))) throw new Error('Stores must be chrome,firefox,apple.');
   if (result.applePlatforms.some(s => !['MAC_OS', 'IOS'].includes(s))) throw new Error('Apple platforms must be MAC_OS,IOS.');
   return result;
 }
-function environment(opt) {
+// Values never printed or logged: everything in the credentials file, and credentials however they were given.
+const secrets = new Set();
+const CREDENTIALS = /^(?:ASC_KEY_|ASC_ISSUER_|AMO_JWT_|WEB_EXT_API_|NOTARY_)|TOKEN|SECRET|PASSWORD/;
+const CREDENTIAL_FLAGS = new Set(['--api-key', '--api-issuer', '--apiKey', '--apiIssuer', '--key', '--key-id', '--issuer', '--keychain-profile', '--team-id', '--token', '--password', '--username', '-u', '-p']);
+export function redact(text) {
+  let result = String(text);
+  for (const value of [...secrets].sort((a, b) => b.length - a.length)) result = result.split(value).join('[redacted]');
+  return result;
+}
+// A command as logged: readable, with credential flag values and secret values replaced.
+export function commandLine(command, args) {
+  return redact([command, ...args.map((arg, i) => {
+    const [flag] = String(arg).split('=');
+    if (CREDENTIAL_FLAGS.has(args[i - 1])) return '[redacted]';
+    return flag !== arg && CREDENTIAL_FLAGS.has(flag) ? `${flag}=[redacted]` : arg;
+  })].join(' '));
+}
+export function environment(opt) {
   let configured = {};
   if (fs.existsSync(opt.config)) configured = parseEnv(fs.readFileSync(opt.config, 'utf8'));
   else if (opt.explicitConfig) throw new Error(`Missing config file ${opt.config}`);
@@ -78,6 +97,10 @@ function environment(opt) {
   for (const key of ['SPARKLE_BIN', 'FROSTDEV_SITE_DIR']) {
     if (env[key]) env[key] = path.resolve(path.dirname(opt.config), expand(env[key]));
   }
+  // Short values such as "1" would hide unrelated text without hiding anything identifying.
+  const hide = value => { if (typeof value === 'string' && value.length >= 4) secrets.add(value); };
+  for (const [key, value] of Object.entries(configured)) { hide(value); hide(expand(value)); hide(env[key]); }
+  for (const [key, value] of Object.entries(env)) if (CREDENTIALS.test(key)) hide(value);
   env.FROSTDEV_SITE_DIR ||= path.join(os.homedir(), 'Projects/frostdev.io');
   return env;
 }
@@ -102,16 +125,45 @@ async function doctor(opt, env, remote = true) {
         if (remote) await appleApp(env);
       }
       console.log(`${store}: ${remote ? 'credential/access check passed' : 'local prerequisites present'}`);
-    } catch (error) { failures++; console.log(`${store}: ${error.message}`); }
+    } catch (error) { failures++; console.log(`${store}: ${redact(error.message)}`); }
   }
   return failures === 0;
 }
-async function run(command, args, cwd, env, log) {
-  console.log(`Running ${command} ${args.join(' ')}`);
+export async function run(command, args, cwd, env, log) {
+  // Tools can echo credentials passed as flags even when they are absent from stores.env.
+  for (let i = 0; i < args.length; i++) {
+    const arg = String(args[i]), flag = arg.split('=')[0];
+    const value = CREDENTIAL_FLAGS.has(flag) ? (arg.includes('=') ? arg.slice(flag.length + 1) : args[i + 1]) : null;
+    if (value) secrets.add(String(value));
+  }
+  const line = commandLine(command, args);
+  console.log(`Running ${line}`);
   const fd = log ? fs.openSync(log, 'w', 0o600) : null;
   try {
+    if (fd !== null) fs.writeSync(fd, `$ ${line}\n`);
     await new Promise((resolve, reject) => {
-      const child = spawn(command, args, { cwd, env, stdio: fd === null ? ['ignore', 'inherit', 'inherit'] : ['ignore', fd, fd] });
+      const child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+      // Retain enough text to catch a credential split across chunks, and decode UTF-8 across chunk boundaries.
+      const keep = Math.max(1, ...[...secrets].map(value => value.length)) - 1;
+      for (const [stream, output] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
+        const decoder = new StringDecoder('utf8');
+        let pending = '';
+        const flush = (end = false) => {
+          let cut = end ? pending.length : Math.max(0, pending.length - keep), previous;
+          do {
+            previous = cut;
+            for (const value of secrets) {
+              const start = cut ? pending.lastIndexOf(value, cut - 1) : -1;
+              if (start >= 0 && start + value.length > cut) cut = start;
+            }
+          } while (cut !== previous);
+          const text = redact(pending.slice(0, cut));
+          pending = pending.slice(cut);
+          if (text) { if (fd === null) output.write(text); else fs.writeSync(fd, text); }
+        };
+        stream.on('data', chunk => { pending += decoder.write(chunk); flush(); });
+        stream.once('end', () => { pending += decoder.end(); flush(true); });
+      }
       const stop = signal => child.kill(signal);
       const interrupt = () => stop('SIGINT');
       const terminate = () => stop('SIGTERM');
@@ -141,7 +193,8 @@ async function build(opt, env, manifest, save, out) {
     await run('git', ['clone', '--quiet', '--shared', '--no-checkout', root, source], root, env);
     git(['-c', 'core.hooksPath=/dev/null', 'checkout', '--quiet', '--detach', manifest.sourceCommit], source);
     manifest.notes = opt.notes ? fs.readFileSync(opt.notes, 'utf8').trim() : notes(source);
-    if (!manifest.notes || (opt.stores.includes('apple') && manifest.notes.length > 4000)) throw new Error('Release notes must be nonempty and at most 4,000 characters for Apple. Use --notes FILE for shorter notes.');
+    // Stores take each language's notes from store/; these are the GitHub and website notes.
+    if (!manifest.notes) throw new Error('Release notes must be nonempty.');
     await run('nice', ['-n', '15', 'node', '--test'], source, env, path.join(out, 'logs/tests-main.log'));
     const dist = path.join(temp, 'dist'); fs.mkdirSync(dist);
     if (opt.stores.includes('chrome') || opt.stores.includes('apple')) await run('bash', ['package.sh'], source, { ...env, DIST: dist });
@@ -251,13 +304,17 @@ export async function main(args = process.argv.slice(2)) {
   const commit = git(['rev-parse', '--verify', `${opt.sourceRef}^{commit}`]);
   const version = JSON.parse(git(['show', `${commit}:manifest.json`])).version;
   const out = opt.out || path.join(root, 'release', version, 'stores', commit.slice(0, 12));
+  // The selected stores' listing text in every language, from the committed source: a gap stops here, before any build.
+  const show = file => { try { return git(['show', `${commit}:${file}`]); } catch { throw new Error(`${file} is missing from ${commit.slice(0, 12)}.`); } };
+  const listings = ['release', 'build', 'submit', 'plan', 'listings'].includes(opt.command) ? readListings(show, version, opt.stores) : null;
+  if (opt.command === 'listings') { await previewListings(opt, env, listings, version); return; }
   // Only a run that is about to build needs the current branch; one resuming saved packages keeps the base they were built on.
   const saved = path.join(out, 'release.json');
   const building = ['release', 'build'].includes(opt.command) && !(fs.existsSync(saved) && json(saved).ready);
   const firefoxBase = opt.stores.includes('firefox') ? resolveFirefoxBase(opt.firefoxRef, { fetch: building }) : null;
   console.log(`Glaze ${version}, committed source ${commit}\nStores: ${opt.stores.join(', ')}\nApple platforms: ${opt.applePlatforms.join(', ')}\nFirefox compatibility base: ${firefoxBase || '(not selected)'}\nOutput: ${out}`);
   if (opt.command === 'plan') {
-    console.log(`Full release: verify prerequisites; build/store checks; universal notarized DMG; signed feed; store submissions; push main and immutable v${version}; wait Package CI; publish verified GitHub assets; prepare/test/push frostdev.io; wait Website CI; deploy and verify live pages/feed.\nWebsite checkout: ${env.FROSTDEV_SITE_DIR}\nNo builds, network calls, uploads, or branch changes performed.`); return;
+    console.log(`Full release: verify prerequisites; build/store checks; universal notarized DMG; signed feed; store submissions; push main and immutable v${version}; wait Package CI; publish verified GitHub assets; prepare/test/push frostdev.io; wait Website CI; deploy and verify live pages/feed.\nWebsite checkout: ${redact(env.FROSTDEV_SITE_DIR)}\nNo builds, network calls, uploads, or branch changes performed.`); return;
   }
   if (['release', 'publish', 'doctor'].includes(opt.command)) publicPreflight(opt, env, root, { version, sourceCommit: commit });
   if (opt.command === 'doctor') { if (!await doctor(opt, env)) process.exitCode = 1; return; }
@@ -288,7 +345,11 @@ export async function main(args = process.argv.slice(2)) {
     if (opt.command === 'release') await preparePublic(publicContext);
     if (opt.command === 'publish') { await publishPublic(publicContext); return; }
     // Resolve paths only in the upload view; the persisted manifest remains relocatable.
-    const upload = { ...manifest, files: Object.fromEntries(Object.entries(manifest.files).map(([k, f]) => [k, { ...f, path: path.join(out, f.path) }])) };
+    const upload = { ...manifest, listings, files: Object.fromEntries(Object.entries(manifest.files).map(([k, f]) => [k, { ...f, path: path.join(out, f.path) }])) };
+    if (opt.stores.includes('chrome')) {
+      writeChromeKit(chromeKitDir(version), listings);
+      console.log(`Chrome listing: paste release/${version}/chrome-web-store/listing-<language>.txt into the dashboard, one per language.`);
+    }
     let failures = 0;
     for (const store of opt.stores) {
       const receipt = manifest.receipts[store] ||= {};
@@ -298,11 +359,11 @@ export async function main(args = process.argv.slice(2)) {
         else if (store === 'firefox') await submitFirefox(env, upload, receipt, save);
         else { await uploadApple(env, upload, receipt, save, out); await submitApple(env, upload, receipt, save); }
         delete receipt.error; save();
-      } catch (error) { failures++; receipt.error = error.message; save(); console.error(`${store}: ${error.message}`); }
+      } catch (error) { failures++; receipt.error = redact(error.message); save(); console.error(`${store}: ${receipt.error}`); }
     }
     if (opt.command === 'release') {
       try { await publishPublic(publicContext); }
-      catch (error) { failures++; manifest.public.error = error.message; save(); console.error(`Public release: ${error.message}`); }
+      catch (error) { failures++; manifest.public.error = redact(error.message); save(); console.error(`Public release: ${manifest.public.error}`); }
     }
     console.log(`Receipts: ${file}`);
     if (failures) throw new Error(`${failures} release stage(s) need attention. Rerun release with the same --source-ref/--out/options to resume all stages; submit resumes stores only, publish resumes public publication only.`);
@@ -310,6 +371,28 @@ export async function main(args = process.argv.slice(2)) {
   } finally { fs.closeSync(lockFd); fs.rmSync(lock, { force: true }); }
 }
 const chromeTarget = env => `${env.CWS_PUBLISHER_ID}/${env.CWS_EXTENSION_ID}`;
+const chromeKitDir = version => path.join(root, 'release', version, 'chrome-web-store');
+// The listings command: reads each store and reports per language what a release would change.
+async function previewListings(opt, env, listings, version) {
+  console.log(`Store listings for Glaze ${version}: what a release would change. Nothing is written.`);
+  let failures = 0;
+  for (const store of opt.stores) {
+    try {
+      const changes = [];
+      if (store === 'chrome') {
+        for (const { lang } of Object.values(listings)) changes.push({ store: 'Chrome', locale: lang, field: 'paste kit', action: 'write', detail: path.relative(root, path.join(chromeKitDir(version), `listing-${lang}.txt`)) });
+      } else if (store === 'firefox') {
+        requireValue(env.AMO_JWT_ISSUER, 'AMO_JWT_ISSUER'); requireValue(env.AMO_JWT_SECRET, 'AMO_JWT_SECRET');
+        changes.push(...await syncFirefoxListing(env, listings, { write: false, version }));
+      } else {
+        for (const key of ['ASC_KEY_PATH', 'ASC_KEY_ID', 'ASC_ISSUER_ID']) requireValue(env[key], key);
+        for (const platform of opt.applePlatforms) changes.push(...await previewAppleListing(env, platform, version, listings));
+      }
+      for (const line of describeChanges(changes)) console.log(line);
+    } catch (error) { failures++; console.error(`${store}: ${redact(error.message)}`); }
+  }
+  if (failures) process.exitCode = 1;
+}
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { console.error(`store-release: ${error.message}`); process.exitCode = 1; });
+  main().catch(error => { console.error(`store-release: ${redact(error.message)}`); process.exitCode = 1; });
 }

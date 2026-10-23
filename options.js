@@ -162,7 +162,7 @@ GZ_UI.load().then((s) => {
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
   const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
-  const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs'], canvas: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
+  const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs', 'stream'], canvas: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
   let previewSite = 'ultra', previewPage = 'outline', previewCourse = '', previewCollapsed = false, searchWasOn = false, beforeSearch = false;
   const sizePreview = () => {
     const phone = $('#preview-size').value === 'phone', width = phone ? 375 : 1280, height = phone ? 812 : 900;
@@ -202,7 +202,7 @@ GZ_UI.load().then((s) => {
   };
   followSection = (route) => {
     let site = previewSite, page = previewPage;
-    if (route.startsWith('blackboard/')) { site = 'ultra'; page = route.endsWith('/tabs') ? 'tabs' : route.endsWith('/dashboard') ? 'dashboard' : 'outline'; }
+    if (route.startsWith('blackboard/')) { site = 'ultra'; page = route.endsWith('/tabs') ? 'tabs' : route.endsWith('/dashboard') ? 'dashboard' : route.endsWith('/stream') ? 'stream' : 'outline'; }
     else if (route.startsWith('canvas/')) { site = 'canvas'; page = route.endsWith('/documents') ? 'document' : route.endsWith('/quizzes') ? 'quiz' : 'courses'; }
     else if (route.startsWith('moodle/')) { site = 'moodle'; page = 'courses'; }
     else if (route === 'look/courses') { site = 'ultra'; page = 'outline'; }
@@ -409,6 +409,7 @@ GZ_UI.load().then((s) => {
     outputs();
     for (const el of $$('#ultra-nav-editor input[type="range"][data-key]')) el.value = get(el.dataset.key);
     $('[data-key="auto.on"]').checked = s.auto.on;
+    $('[data-key="stream.relative"]').disabled = s.stream.dates === 'posted';
     $('[data-key="nav.detailed"]').checked = s.nav.detailed;
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
@@ -815,6 +816,9 @@ GZ_UI.load().then((s) => {
     const key = el.dataset.key;
     if (key === 'nav.size') el.addEventListener('change', () => { s.nav.detailed = false; pendingNav.add('detailed'); });
     if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
+    // Gradescope isn't a host Glaze holds from the start: switched on, it is asked for in this click; refused, the switch stays
+    // off. Switched off, the worker hands its grant back.
+    if (key === 'enhance.gradescope' && el.type === 'checkbox') { el.addEventListener('change', () => { const on = el.checked; el.checked = false; (on ? GZ_SITE.reach([GZ_GRADESCOPE.HOST]) : Promise.resolve(true)).then((held) => { if (!held) return; el.checked = on; set(key, on); refresh(); save([group(key)]); }); }); continue; }
     if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'look.surfaceCustom' && el.checked) seedSurface(); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { if (key.startsWith('nav.') && Object.hasOwn(N.dimensions(s.nav), key.slice(4))) { Object.assign(s.nav, N.dimensions(s.nav), { detailed: true }); for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k); } set(key, +el.value); refresh(); save([group(key)], true); });
@@ -1194,25 +1198,38 @@ GZ_UI.load().then((s) => {
   $('#share-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryCode(); });
   $('#share-cancel').addEventListener('click', () => { $('#share-code').value = ''; endOffer(); });
   // A code brings its own extras or none: the Look being left goes into History before the one below replaces it.
-  $('#share-apply').addEventListener('click', () => leaving());
   $('#share-apply').addEventListener('click', () => {
-    for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
-    s.card = offer.card;
-    s.nav = offer.nav;
-    // How Glaze's own navigation bar looks and sits (lib/share.js NAVBAR); whether it is on stays the student's.
-    s.navbar = { ...offer.navbar, on: s.navbar.on };
-    // The sidebar's appearance a Look brings (lib/share.js): its style, surface and corners only.
-    const sidebarLook = ['style', 'surface', 'radius'].some((k) => s.sidebar[k] !== offer.sidebar[k]);
-    if (sidebarLook) for (const k of ['style', 'surface', 'radius']) s.sidebar[k] = offer.sidebar[k];
-    pendingNav.clear();
-    // A theme's card styles take turns on the cards without their own (lib/cards.js).
-    const set = offer.cardSet;
-    if (set.length) cardsOp({ set });
-    $('#share-code').value = '';
-    endOffer(true); // its background file, if it brought one, is kept now
-    fill();
-    save([...GZ_HISTORY.KEYS, 'card', 'nav', 'navbar', ...sidebarLook ? ['sidebar'] : []]);
-    hint(t('Theme applied.'));
+    const chosen = offer, generation = offerGeneration;
+    if (!chosen) return;
+    const apply = () => {
+      if (offer !== chosen || generation !== offerGeneration) return;
+      leaving();
+      for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
+      s.card = offer.card;
+      s.nav = offer.nav;
+      // How Glaze's own navigation bar looks and sits (lib/share.js NAVBAR); whether it is on stays the student's.
+      s.navbar = { ...offer.navbar, on: s.navbar.on };
+      // The sidebar's appearance a Look brings (lib/share.js): its style, surface and corners only.
+      const sidebarLook = ['style', 'surface', 'radius'].some((k) => s.sidebar[k] !== offer.sidebar[k]);
+      if (sidebarLook) for (const k of ['style', 'surface', 'radius']) s.sidebar[k] = offer.sidebar[k];
+      pendingNav.clear();
+      // A theme's card styles take turns on the cards without their own (lib/cards.js).
+      const set = offer.cardSet;
+      if (set.length) cardsOp({ set });
+      $('#share-code').value = '';
+      endOffer(true); // its background file, if it brought one, is kept now
+      fill();
+      save([...GZ_HISTORY.KEYS, 'card', 'nav', 'navbar', ...sidebarLook ? ['sidebar'] : []]);
+      hint(t('Theme applied.'));
+    };
+    const src = chosen.parts?.x?.bg?.media?.src;
+    if (!src?.startsWith('https://')) return apply();
+    // A code can introduce remote media just as the link box can. Ask in Apply's click before changing this Look.
+    GZ_SITE.reach([src]).then((held) => {
+      if (offer !== chosen || generation !== offerGeneration) return;
+      if (!held) return hint(t('That link can’t be saved.'), true);
+      apply();
+    });
   });
 
   // ---- gallery, favorites and history: kept on this device (storage.local), lib/history.js ----
@@ -1474,7 +1491,7 @@ GZ_UI.load().then((s) => {
   });
 
   // ---- Sites: the sites the student said yes to (lib/background.js approved), each with Remove, which only the worker does.
-  // Canvas's and Blackboard's own hosts are Glaze's anyway, so they aren't listed.
+  // Each LMS's own hosts (GZ_BUILT_IN) are Glaze's anyway, so they aren't listed.
   const KINDS = { canvas: 'Canvas', moodle: 'Moodle', ultra: 'Blackboard Ultra' };
   const siteSaid = (text) => { $('#site-status').textContent = text; };
   const renderSites = (r) => {
@@ -1482,7 +1499,7 @@ GZ_UI.load().then((s) => {
     for (const kind of Object.keys(KINDS)) for (const x of Array.isArray(r?.[kind]) ? r[kind] : []) {
       let u;
       try { u = new URL(String(x).replace(/\/\*$/, '')); } catch { continue; }
-      const automatic = !u.port && (kind === 'canvas' ? /(^|\.)instructure\.com$/.test(u.hostname) : kind === 'ultra' && /\.blackboard\.com$/.test(u.hostname));
+      const automatic = GZ_BUILT_IN(kind, u);
       if (u.protocol !== 'https:' || automatic) continue;
       sites.set(u.origin, [...new Set([...sites.get(u.origin) || [], t(KINDS[kind])])]);
     }
@@ -1497,6 +1514,9 @@ GZ_UI.load().then((s) => {
         remove.disabled = true;
         const done = await chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'remove', origin }).catch(() => null);
         if (!done?.ok) { remove.disabled = false; siteSaid(t('Not saved. Try again in a moment.')); return; }
+        // And the browser's grant for it, where the student gave one for exactly this site (lib/site.js handBack).
+        const site = GZ_SITE.address(origin);
+        if (site?.origin === origin) await GZ_SITE.handBack(site);
         siteSaid(t('Removed {site}. Glaze no longer runs there.', { site: host }));
         $('#heading-backup-sites').focus({ preventScroll: true });
       });
@@ -1506,6 +1526,47 @@ GZ_UI.load().then((s) => {
     }));
     $('#site-empty').hidden = sites.size > 0;
   };
+  // Add a site, the first screen's way (lib/site.js allow): the browser's prompt from the submit itself, then the check;
+  // a course site is listed with its LMS, anything else has its grant handed back, with the course sites nearby to pick.
+  // Where Glaze holds every site (Safari), a school's own site is added from its pages' card instead.
+  const addForm = $('#site-add'), addInput = $('#site-address'), addGo = $('#site-allow');
+  addForm.hidden = !!chrome.runtime.getManifest().host_permissions?.includes('<all_urls>');
+  let adding = false;
+  const addSaid = (text = '', hosts = []) => {
+    $('#site-error').textContent = text;
+    $('#site-picks').replaceChildren(...hosts.map((h) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: h });
+      b.setAttribute('translate', 'no');
+      b.addEventListener('click', (e) => { if (!e.isTrusted || adding) return; addInput.value = h; addSite(GZ_SITE.address(h)); });
+      return b;
+    }));
+    $('#site-note').hidden = !text;
+  };
+  const addSite = (site) => {
+    adding = true;
+    addInput.readOnly = true;
+    addGo.setAttribute('aria-busy', 'true');
+    addSaid();
+    siteSaid('');
+    GZ_SITE.allow(site, { checking: () => siteSaid(t('Checking {host}', { host: site.host })) }).then((r) => {
+      adding = false;
+      addInput.readOnly = false;
+      addGo.removeAttribute('aria-busy');
+      siteSaid(r.state === 'done' ? t('Allowed {host}', { host: site.host }) : '');
+      if (r.state === 'done') { addInput.value = ''; addInput.focus(); return; }
+      if (r.state === 'refused') { addInput.focus(); return; }
+      addSaid(t(r.state === 'none' ? 'No course site at {host}' : "Can't reach {host}", { host: site.host }), r.hosts);
+      ($('#site-picks').children[0] || addInput).focus();
+    });
+  };
+  addForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!e.isTrusted || adding) return;
+    const site = GZ_SITE.address(addInput.value);
+    if (!site) { addSaid(t('Not a web address')); return; }
+    addSite(site);
+  });
+  addInput.addEventListener('input', () => addSaid());
   const readSites = () => chrome.storage.local.get(Object.keys(KINDS), renderSites);
   readSites();
   chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && Object.keys(KINDS).some((k) => k in c)) readSites(); });
