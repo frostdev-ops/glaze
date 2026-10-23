@@ -23,7 +23,8 @@ test('canvadocs gets its own small script in every frame, and not the first cont
   assert.equal(entry.run_at, 'document_start');
   const glaze = m.content_scripts.filter((x) => x.js.includes('content.js'));
   assert.deepEqual(glaze.find((c) => c.js.includes('content-canvas.js')).exclude_matches, DOCS);
-  assert.ok(glaze.find((c) => c.js.includes('content-ultra.js')).exclude_matches.includes('https://*.instructure.com/*'), 'nor does Ultra\'s: no instructure.com host');
+  assert.ok(glaze.find((c) => c.js.includes('content-ultra.js')).matches.every((p) => p.startsWith('https://*.blackboard.com/')), 'nor does Ultra\'s: Blackboard\'s hosts only');
+  assert.deepEqual(glaze.find((c) => c.matches.includes('https://*.moodlecloud.com/*')).matches, ['https://*.moodlecloud.com/*'], 'nor MoodleCloud\'s');
 });
 
 // Chrome's match pattern for one scheme://host/path: "*." in front of the host is any subdomain of it.

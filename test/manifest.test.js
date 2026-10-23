@@ -6,43 +6,91 @@ const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 const m = require('../manifest.json');
 
-// Glaze's first content script, one entry per site with its own part: Ultra's and Canvas's.
+// Glaze's first content script, one entry per LMS's own hosts: Ultra's and Canvas's, each with its own part, and MoodleCloud's.
 const glaze = m.content_scripts.filter((c) => c.js.at(-1) === 'content.js');
-const [ultra, canvas] = glaze;
-const detector = m.content_scripts.find((c) => c.js.includes('lib/detect.js'));
+const ultra = glaze.find((c) => c.js.includes('content-ultra.js'));
+const canvas = glaze.find((c) => c.js.includes('content-canvas.js'));
+const moodle = glaze.find((c) => c.matches.includes('https://*.moodlecloud.com/*'));
+const D = require('../defaults.js');
+// The Safari manifest scripts/safari-manifest.sh makes from `input`.
+const safari = (input) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-safari-manifest-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(input));
+    execFileSync('sh', [path.join(__dirname, '../scripts/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
+    return JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+};
+const V338 = require('./fixtures/manifest-v3.3.8.json');
 
-test('Ultra matches its bare entry and descendants without matching lookalike paths', () => {
-  assert.deepEqual(ultra.matches, ['https://*/ultra', 'https://*/ultra/*']);
+test('Ultra matches its bare entry and descendants on Blackboard\'s hosts, without matching lookalike paths', () => {
+  assert.deepEqual(ultra.matches, ['https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*']);
+  assert.equal(ultra.exclude_matches, undefined, 'no instructure.com host to leave out');
   assert.ok(ultra.js.includes('content-ultra.js') && !canvas.js.includes('content-ultra.js'));
 });
 
-// lib/background.js injects and registers the Canvas entry's list for Canvas hosts the detector finds, and that list
-// without content-canvas.js for Moodle hosts.
-test('the first content script is Glaze, and the detector covers the rest of https', () => {
-  assert.equal(glaze.length, 2);
+// lib/background.js registers the Canvas entry's list for Canvas hosts the student approved, and that list without
+// content-canvas.js (as MoodleCloud's entry has it) for Moodle hosts; Ultra sites get Ultra's entry on their /ultra pages.
+test('the first content script is Glaze on each LMS\'s own hosts, and nothing runs on other sites', () => {
+  assert.equal(glaze.length, 3);
   assert.deepEqual(canvas.matches, ['https://*.instructure.com/*']);
   assert.ok(canvas.js.includes('content-canvas.js') && !ultra.js.includes('content-canvas.js'));
   for (const g of glaze) assert.deepEqual([g.run_at, g.all_frames], ['document_start', true]);
-  // The two never both match a page: one list each, as the one entry was. Canvas's leaves canvadocs to its viewer script.
-  assert.deepEqual(ultra.exclude_matches, canvas.matches);
-  assert.deepEqual(canvas.exclude_matches, ['https://canvadocs.instructure.com/*']);
-  assert.deepEqual(detector.js, ['lib/detect.js']);
-  assert.deepEqual(detector.matches, ['https://*/*']);
-  assert.deepEqual(detector.exclude_matches, glaze.flatMap((g) => g.matches), 'what Glaze already matches is not detected twice');
-  assert.ok(!detector.all_frames, 'top frame only');
-  assert.equal(detector.run_at, 'document_start');
+  assert.deepEqual(canvas.exclude_matches, ['https://canvadocs.instructure.com/*'], 'Canvas\'s leaves canvadocs to its viewer script');
+  assert.deepEqual(moodle, { matches: ['https://*.moodlecloud.com/*'], js: canvas.js.filter((f) => f !== 'content-canvas.js'), run_at: canvas.run_at, all_frames: canvas.all_frames });
+  assert.ok(!m.content_scripts.some((c) => c.js.includes('lib/detect.js')), 'no detector: Chrome\'s own prompt adds a site');
+  assert.ok(m.content_scripts.every((c) => c.matches.every((p) => !p.startsWith('https://*/') && p !== '<all_urls>')), 'no entry on every host');
 });
 
-test('injecting and registering need scripting and host access; course tabs\' pictures need <all_urls>', () => {
+test('host access: each LMS\'s own hosts, Glaze\'s gallery and share relay; any other https site, local Canvas and Moodle only when granted', () => {
   assert.ok(m.permissions.includes('scripting'));
-  // chrome.tabs.captureVisibleTab takes <all_urls> or activeTab (owner, 2026-10-15); it covers every optional host too.
-  assert.deepEqual(m.host_permissions, ['<all_urls>']);
-  assert.equal(m.optional_host_permissions, undefined, 'Chrome flags and drops optional hosts the required ones cover');
+  assert.deepEqual(m.host_permissions, ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*']);
+  assert.deepEqual(m.optional_host_permissions, ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*']);
+  // Every content script's host is held from the start.
+  const held = (p) => m.host_permissions.some((h) => { const [, hh] = /^https:\/\/([^/]+)\//.exec(h), [, ph] = /^https:\/\/([^/]+)\//.exec(p); return hh === ph || (hh.startsWith('*.') && ph.endsWith(hh.slice(1))); });
+  for (const c of m.content_scripts) for (const p of c.matches) assert.ok(held(p), p);
 });
 
-test('Chrome retains exactly its existing permissions without native messaging', () => {
-  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage']); // notes are never cleared for space (owner, 2026-10-15)
+test('Chrome adds only activeTab and declarativeContent to its permissions, without native messaging', () => {
+  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent']); // notes are never cleared for space (owner, 2026-10-15)
   assert.ok(!m.permissions.includes('nativeMessaging'));
+});
+
+// content.js, content-ultra.js, options.js and lib/background.js all ask defaults.js GZ_BUILT_IN.
+test('the built-in hosts are the manifest\'s, in one place', () => {
+  const host = (c) => /^https:\/\/\*\.([^/]+)\//.exec(c.matches[0])[1];
+  for (const [kind, entry] of [['canvas', canvas], ['moodle', moodle], ['ultra', ultra]]) {
+    const h = host(entry);
+    assert.ok(m.host_permissions.includes(`https://*.${h}/*`), kind);
+    assert.equal(D.GZ_BUILT_IN(kind, new URL(`https://school.${h}/x`)), true, `${kind} on school.${h}`);
+    for (const u of [`https://school.${h}:8443/`, `http://school.${h}/`, `https://school.${h}.evil.test/`, `https://evil-${h}/`]) assert.equal(D.GZ_BUILT_IN(kind, new URL(u)), false, `${kind} ${u}`);
+    for (const other of ['canvas', 'moodle', 'ultra'].filter((k) => k !== kind)) assert.equal(D.GZ_BUILT_IN(other, new URL(`https://school.${h}/`)), false, `${other} on ${h}`);
+  }
+  assert.equal(D.GZ_BUILT_IN(null, new URL('https://school.instructure.com/')), false, 'no LMS found');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  for (const f of ['content.js', 'content-ultra.js', 'options.js', 'lib/background.js']) {
+    assert.match(read(f), /GZ_BUILT_IN\(/, f);
+    assert.doesNotMatch(read(f), /instructure\\\.com\$|blackboard\\\.com\$|endsWith\('\.(instructure|blackboard)\.com'\)/, `${f} keeps no host list of its own`);
+  }
+});
+
+test('Safari keeps 3.3.8\'s access: every host, Ultra on /ultra anywhere and the detector; MoodleCloud\'s entry may stay', () => {
+  const now = safari(m), then = safari(V338);
+  for (const k of ['permissions', 'optional_permissions', 'host_permissions', 'optional_host_permissions']) assert.deepEqual(now[k], then[k], k);
+  const detector = now.content_scripts.find((c) => c.js.includes('lib/detect.js'));
+  assert.ok(detector.exclude_matches.includes('https://*.moodlecloud.com/*'), 'MoodleCloud has its own entry, so the detector leaves it alone');
+  const as338 = now.content_scripts.filter((c) => !c.matches.includes('https://*.moodlecloud.com/*'))
+    .map((c) => (c === detector ? { ...c, exclude_matches: c.exclude_matches.filter((p) => p !== 'https://*.moodlecloud.com/*') } : c));
+  assert.deepEqual(as338, then.content_scripts);
+  assert.deepEqual(now.content_scripts.find((c) => c.matches.includes('https://*.moodlecloud.com/*')), moodle);
+});
+
+test('the 3.3.8 manifest fixture is the tagged release\'s', (t) => {
+  let tagged;
+  try { tagged = execFileSync('git', ['show', 'v3.3.8:manifest.json'], { cwd: path.join(__dirname, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return t.skip('no v3.3.8 tag in this clone'); }
+  assert.equal(fs.readFileSync(path.join(__dirname, 'fixtures/manifest-v3.3.8.json'), 'utf8'), tagged);
 });
 
 test('Safari manifest rewriting adds native messaging once and preserves unrelated fields', () => {
@@ -62,6 +110,11 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   delete expected.sandbox;
   delete expected.content_security_policy.sandbox;
   expected.web_accessible_resources = expected.web_accessible_resources.filter((e) => !e.resources.every((r) => r.startsWith('mods/')));
+  // Safari's access stays as it was (the test above).
+  expected.permissions = ['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging'];
+  expected.host_permissions = ['<all_urls>'];
+  delete expected.optional_host_permissions;
+  expected.content_scripts = safari(m).content_scripts;
   try {
     const rewrite = () => execFileSync('sh', [path.join(__dirname, '../scripts/safari-manifest.sh'), file]);
     rewrite();

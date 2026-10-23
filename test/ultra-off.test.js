@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const D = require('../defaults.js');
 const manifest = require('../manifest.json');
-const files = manifest.content_scripts.find((s) => s.matches.includes('https://*/ultra')).js;
+const files = manifest.content_scripts.find((s) => s.js.includes('content-ultra.js')).js;
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 // A Blackboard host, approved without asking (WP-C2): these tests are about Glaze's switch, not consent.

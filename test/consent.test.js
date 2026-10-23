@@ -14,14 +14,28 @@ const plain = (x) => JSON.parse(JSON.stringify(x));
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const ID = 'glaze';
-const CANVAS_FIRST = manifest.content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*')).js;
+const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
+const ULTRA_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-ultra.js')).js;
+// Safari's manifest, as scripts/safari-manifest.sh makes it.
+const SAFARI = (() => {
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-consent-safari-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
+    require('node:child_process').execFileSync('sh', [path.join(root, 'scripts/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
+    return JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+})();
 const ASK = ['lib/i18n.js', 'features/consent.js'];
 
 // ---- the worker -----------------------------------------------------------------------------------------------------
-const worker = ({ local = {}, sync = {} } = {}) => {
+// `granted`: the hosts Glaze holds (chrome.permissions), every one unless named; `m`: the manifest, Chrome's unless named.
+const worker = ({ local = {}, sync = {}, granted = () => true, m = manifest } = {}) => {
   const store = { local: structuredClone(local), sync: structuredClone(sync) };
-  const listeners = [], changed = [], installed = [], ran = [], opened = [];
-  const w = { store, ran, opened, installed, registered: [] };
+  const listeners = [], changed = [], installed = [], ran = [], opened = [], checked = [];
+  const w = { store, ran, opened, installed, checked, registered: [] };
+  w.local = { set: (v) => context.chrome.storage.local.set(v) };
   const pick = (s, k) => structuredClone(k == null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])));
   const tell = (name, before) => {
     const c = {};
@@ -39,10 +53,11 @@ const worker = ({ local = {}, sync = {} } = {}) => {
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), context, { filename: f }); },
     chrome: {
       runtime: {
-        id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => manifest,
+        id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => m,
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
         openOptionsPage: () => { opened.push('options'); return Promise.resolve(); },
       },
+      permissions: { contains: async ({ origins }) => { checked.push(...origins); return origins.every(granted); } },
       tabs: { query: async () => [], create: async (o) => { opened.push(o.url); }, onRemoved: { addListener() {} } },
       storage: { local: area('local'), sync: area('sync'), onChanged: { addListener: (f) => changed.push(f) } },
       scripting: {
@@ -65,6 +80,7 @@ const worker = ({ local = {}, sync = {} } = {}) => {
   });
   w.files = () => ran.filter((r) => r.files).map((r) => r.files);
   w.hosts = () => w.registered.filter((s) => /^https:/.test(s.id)).map((s) => s.id).sort();
+  w.ultra = () => w.registered.filter((s) => s.id.startsWith('ultra:')).map((s) => s.id).sort();
   return w;
 };
 // A content script in a tab's top frame (or `frameId`), on `url`, as Chrome names its sender.
@@ -263,6 +279,108 @@ test('Settings\' Remove unregisters a site, takes it off its list and forgets wh
   assert.deepEqual(w.hosts(), []);
 });
 
+// Chrome's manifest takes Ultra on Blackboard's hosts only: an Ultra site the student approved is registered as Canvas and
+// Moodle sites are, with Ultra's first content script on its /ultra pages.
+test('approved Ultra sites get Ultra\'s first content script on their /ultra pages; a site taken off loses it', async () => {
+  const B = 'https://bb.school.edu', P = 'https://bb.port.edu:8443', A = 'https://canvas.school.edu';
+  const w = worker({ local: { canvas: [`${A}/*`], ultra: [B, P, 'https://school.blackboard.com', B] } });
+  w.installed[0]({ reason: 'update' });
+  await settle();
+  assert.deepEqual(w.ultra(), [`ultra:${P}`, `ultra:${B}`], 'once each; Blackboard\'s own host has the manifest\'s entry');
+  assert.deepEqual(w.hosts(), [`${A}/*`], 'apart from Canvas\'s and Moodle\'s ids');
+  const reg = w.registered.find((s) => s.id === `ultra:${B}`);
+  assert.deepEqual(reg, { id: `ultra:${B}`, matches: [`${B}/ultra`, `${B}/ultra/*`], js: ULTRA_FIRST, runAt: 'document_start', allFrames: true, persistAcrossSessions: true });
+  assert.deepEqual(w.registered.find((s) => s.id === `ultra:${P}`).matches, ['https://bb.port.edu/ultra', 'https://bb.port.edu/ultra/*'], 'no port in a match pattern');
+  // A yes on another Ultra site registers it too; nothing is registered twice.
+  const C = 'https://bb.other.edu';
+  assert.deepEqual(await w.send(yes('ultra'), page(`${C}/ultra/course`)), { ok: true });
+  assert.deepEqual(w.ultra(), [`ultra:${C}`, `ultra:${P}`, `ultra:${B}`].sort());
+  assert.equal(w.registered.length, new Set(w.registered.map((s) => s.id)).size);
+  // Settings' Remove unregisters that site's /ultra pages and keeps the rest.
+  assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: B }, editor), { ok: true });
+  assert.deepEqual(w.ultra(), [`ultra:${C}`, `ultra:${P}`]);
+  assert.deepEqual(w.hosts(), [`${A}/*`]);
+  assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'reset' }, editor), { ok: true });
+  assert.deepEqual(w.registered.filter((s) => /^(https|ultra):/.test(s.id)), []);
+});
+
+test('approved Ultra sites stay registered while Glaze is off, as the manifest\'s Ultra entry does; Canvas and Moodle sites don\'t', async () => {
+  const B = 'https://bb.school.edu';
+  const w = worker({ local: { ultra: [B], canvas: ['https://canvas.school.edu/*'] }, sync: { enabled: false } });
+  w.installed[0]({ reason: 'update' });
+  await settle();
+  assert.deepEqual([w.ultra(), w.hosts()], [[`ultra:${B}`], []]);
+});
+
+test('a list changed in storage registers what it now holds', async () => {
+  const w = worker();
+  const area = w.store.local;
+  assert.deepEqual(await w.send(yes('ultra'), page('https://bb.school.edu/ultra/course')), { ok: true });
+  assert.deepEqual(w.ultra(), ['ultra:https://bb.school.edu']);
+  // Written to storage directly.
+  await w.local.set({ ultra: [...area.ultra, 'https://bb.two.edu'] });
+  await settle();
+  assert.deepEqual(w.ultra(), ['ultra:https://bb.school.edu', 'ultra:https://bb.two.edu']);
+  await w.local.set({ ultra: [] });
+  await settle();
+  assert.deepEqual(w.ultra(), []);
+});
+
+test('Safari (Ultra on /ultra anywhere) registers no Ultra site, and its yes needs no grant', async () => {
+  const B = 'https://bb.school.edu';
+  const w = worker({ m: SAFARI, local: { ultra: [B] }, granted: () => false });
+  w.installed[0]({ reason: 'update' });
+  await settle();
+  assert.deepEqual(w.ultra(), [], 'its manifest entry is in the page already: registering would run Glaze twice');
+  const shop = page('https://shop.test/');
+  await w.send('canvas', shop);
+  await settle();
+  assert.deepEqual(await w.send(yes('canvas'), shop), { ok: true });
+  assert.deepEqual(w.store.local.canvas, ['https://shop.test/*']);
+  assert.deepEqual(w.hosts(), ['https://shop.test/*']);
+  assert.deepEqual(w.checked, [], '<all_urls> holds every site');
+});
+
+test('on Chrome a yes approves nothing on a site whose host Glaze doesn\'t hold', async () => {
+  let held = [];
+  const w = worker({ granted: (o) => held.includes(o) });
+  const shop = page('https://shop.test/'), bb = page('https://bb.school.edu/ultra/course');
+  await w.send('canvas', shop);
+  await settle();
+  assert.deepEqual(await w.send(yes('canvas'), shop), { ok: false });
+  assert.deepEqual(await w.send(yes('ultra'), bb), { ok: false });
+  assert.deepEqual([w.store.local.canvas, w.store.local.ultra], [undefined, undefined]);
+  assert.deepEqual(w.registered, []);
+  assert.deepEqual([...new Set(w.checked)].sort(), ['https://bb.school.edu/*', 'https://shop.test/*'], 'asked by each site\'s origin');
+  held = ['https://shop.test/*', 'https://bb.school.edu/*'];
+  assert.deepEqual(await w.send(yes('canvas'), shop), { ok: true });
+  assert.deepEqual(await w.send(yes('ultra'), bb), { ok: true });
+  assert.deepEqual([w.hosts(), w.ultra()], [['https://shop.test/*'], ['ultra:https://bb.school.edu']]);
+});
+
+test('MoodleCloud is built in: trusted with no yes, and an approval from before is never registered over the manifest\'s entry', async () => {
+  const M = 'https://school.moodlecloud.com', O = 'https://moodle.school.edu';
+  const w = worker({ local: { moodle: [`${M}/*`, `${O}/*`] } });
+  w.registered.push({ id: `${M}/*`, matches: [`${M}/*`], js: CANVAS_FIRST.filter((f) => f !== 'content-canvas.js') }, { id: `ultra:https://gone.edu`, matches: ['https://gone.edu/ultra'], js: ULTRA_FIRST });
+  assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: 'https://other.edu' }, editor), { ok: true });
+  assert.deepEqual(w.hosts(), [`${O}/*`], 'the old registration goes: the manifest\'s entry runs there');
+  assert.deepEqual(w.ultra(), [], 'and an Ultra site no longer listed');
+  const fresh = worker();
+  assert.deepEqual(await fresh.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page('https://other.moodlecloud.com/my/')), { ok: true });
+  for (const url of ['https://other.moodlecloud.com:8443/my/', 'http://other.moodlecloud.com/my/', 'https://moodlecloud.com.evil.test/my/']) {
+    assert.deepEqual(await fresh.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page(url)), denied, url);
+  }
+});
+
+test('local Canvas (http://localhost) is Glaze\'s where the manifest lists it or its optional grant is held; Safari unchanged', async () => {
+  const local = page('http://localhost:3000/courses/1');
+  const load = (w) => w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, local);
+  assert.deepEqual(await load(worker({ granted: () => false })), denied, 'not granted');
+  assert.deepEqual(await load(worker({ granted: (o) => o === 'http://localhost/*' })), { ok: true }, 'granted');
+  assert.deepEqual(await load(worker({ m: { ...manifest, host_permissions: [...manifest.host_permissions, 'http://localhost/*'] }, granted: () => false })), { ok: true }, 'a dev build that lists it');
+  assert.deepEqual(await load(worker({ m: SAFARI })), denied, 'Safari\'s <all_urls> is no dev build');
+});
+
 test('CORE-8: a Look, a rotation turn, Settings and code on demand are refused to a tab where only lib/detect.js runs', async () => {
   const w = worker({ local: { moodle: ['https://moodle.school.edu/*'] } });
   const look = { type: 'glaze:look', parts: null, patch: { version: 2, colors: { '--gz-accent': '#123456' } } };
@@ -442,7 +560,7 @@ test('Settings lists the sites said yes to, with their LMS and a Remove only the
   const mk = (tag) => Object.assign(el(), { tagName: tag.toUpperCase(), attrs: {}, on: {}, setAttribute(k, v) { this.attrs[k] = v; }, addEventListener(t, f) { this.on[t] = f; }, focus() { this.focused = true; } });
   for (const id of ['#site-list', '#site-empty', '#site-status', '#heading-backup-sites']) nodes[id] = mk('x');
   const lists = { canvas: ['https://canvas.school.edu/*', 'https://school.instructure.com/*', 'https://both.school.edu/*'], moodle: ['https://moodle.school.edu/*', 'https://both.school.edu/*'], ultra: ['https://bb.school.edu', 'https://school.blackboard.com', 'nonsense'] };
-  const ctx = vm.createContext({ URL, Object, Array, Set, Map, document: { createElement: mk }, $: (s) => nodes[s], t: (k, v) => require('../lib/i18n.js').t(k, v, 'en'),
+  const ctx = vm.createContext({ URL, Object, Array, Set, Map, document: { createElement: mk }, $: (s) => nodes[s], t: (k, v) => require('../lib/i18n.js').t(k, v, 'en'), GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN,
     chrome: { storage: { local: { get: (k, cb) => cb(structuredClone(lists)) } }, runtime: { sendMessage: async (m) => { sent.push(plain(m)); return { ok: true }; } } } });
   vm.runInContext(`${block}; this.readSites = readSites;`, ctx);
   ctx.readSites();
@@ -572,7 +690,7 @@ test('review: unknown Ultra has no early render-blocking theme before storage an
   const src = read('content-ultra.js');
   const inserted = [];
   const context = vm.createContext({ document: { contentType: 'text/html', body: null, head: { appendChild: (l) => inserted.push(l) }, createElement: () => ({ setAttribute() {} }) },
-    location: new URL('https://evil.test/ultra/'), GZ_SITE_ULTRA: {}, chrome: { runtime: { getURL: (s) => s } }, setTimeout() {} });
+    location: new URL('https://evil.test/ultra/'), GZ_SITE_ULTRA: {}, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, chrome: { runtime: { getURL: (s) => s } }, setTimeout() {} });
   vm.runInContext(src.slice(src.indexOf('// Known Ultra entry:')), context);
   assert.deepEqual(inserted, []);
 });

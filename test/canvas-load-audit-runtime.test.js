@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const D = require('../defaults.js');
 const manifest = require('../manifest.json');
-const files = manifest.content_scripts.find((s) => s.matches.includes('https://*.instructure.com/*')).js;
+const files = manifest.content_scripts.find((s) => s.js.includes('content-canvas.js')).js;
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 const quiet = () => D.GZ_SANITIZE({

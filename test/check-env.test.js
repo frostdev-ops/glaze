@@ -70,6 +70,38 @@ test('the checks that launch Chromium resolve it through the shared helper', () 
   }
 });
 
+// Chrome's manifest holds each LMS's own hosts only; a school's own host is the student's grant, which headless can't give.
+test('a staged copy holds the hosts named, links every other file, leaves the source alone and goes at exit', () => {
+  const tmp = scratch();
+  try {
+    const src = path.join(tmp, 'src');
+    fs.mkdirSync(path.join(src, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(src, '.git'));
+    const manifest = { name: 'Glaze', host_permissions: ['https://*.instructure.com/*'] };
+    fs.writeFileSync(path.join(src, 'manifest.json'), JSON.stringify(manifest));
+    fs.writeFileSync(path.join(src, 'lib', 'a.js'), 'a');
+    const script = `const d = require(${JSON.stringify(path.join(scripts, 'check-env.js'))}).staged(${JSON.stringify(src)}, ['https://bb.school.test/*', 'https://*.instructure.com/*'], ${JSON.stringify(tmp)});
+      const fs = require('fs'), path = require('path');
+      console.log(JSON.stringify({ d, m: JSON.parse(fs.readFileSync(path.join(d, 'manifest.json'), 'utf8')), same: fs.statSync(path.join(d, 'lib/a.js')).ino === fs.statSync(${JSON.stringify(path.join(src, 'lib/a.js'))}).ino, git: fs.existsSync(path.join(d, '.git')) }));`;
+    const r = JSON.parse(require('node:child_process').execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' }));
+    assert.deepEqual(r.m.host_permissions, ['https://*.instructure.com/*', 'https://bb.school.test/*']);
+    assert.equal(r.d, fs.realpathSync(path.dirname(r.d)) + path.sep + path.basename(r.d), 'a real path: Chrome derives the id from it');
+    assert.deepEqual([r.same, r.git], [true, false]);
+    assert.ok(!fs.existsSync(r.d), 'removed when the check exits');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(src, 'manifest.json'), 'utf8')), manifest);
+    assert.equal(fs.readFileSync(path.join(src, 'lib', 'a.js'), 'utf8'), 'a');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('the checks that load Glaze on a school\'s own host give it a staged copy holding that host', () => {
+  const own = fs.readdirSync(scripts).filter((f) => /\.js$/.test(f)).filter((f) => {
+    const src = fs.readFileSync(path.join(scripts, f), 'utf8');
+    return /--load-extension=/.test(src) && /'https:\/\/[\w.-]+\.(?:school|moodle)\.test'?/.test(src) && !/writeFileSync\(path\.join\(ext, 'manifest\.json'\)/.test(src);
+  });
+  assert.ok(own.length >= 15, own.join(', '));
+  for (const f of own) assert.match(fs.readFileSync(path.join(scripts, f), 'utf8'), /require\('\.\/check-env\.js'\)\.staged\(/, f);
+});
+
 test('the Chromium search of the scene check also looks in Playwright\'s Linux cache', () => {
   assert.match(fs.readFileSync(path.join(scripts, 'scene-check.mjs'), 'utf8'), /\.cache\/ms-playwright/);
 });

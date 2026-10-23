@@ -62,6 +62,7 @@ const worker = ({ local = {}, state = null, production = false, manualTimers = f
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener: (f) => startup.push(f) }, onConnect: { addListener() {} },
       },
       tabs: { onRemoved: { addListener() {} } },
+      permissions: { contains: async () => true }, // the student granted every host (Chrome)
       storage: { session: area(store.session, 'session'), local: area(store.local, 'local'), sync: area(store.sync, 'sync'), onChanged: { addListener: (f) => changed.push(f) } },
       scripting: {
         getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {},

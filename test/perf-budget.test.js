@@ -1,6 +1,6 @@
 // Performance budget (W0). What every Ultra, Canvas and Moodle page pays for, checked statically, so a change can't
-// quietly grow it: the size of each site's first content script, the size of the detector every other https page runs, no fast
-// timers, and no new whole-page sweeps.
+// quietly grow it: the size of each site's first content script, the size of the detector every other https page runs on
+// Safari, no fast timers, and no new whole-page sweeps.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -181,10 +181,10 @@ const ULTRA_VT_ABORT = { ultra: 118, canvas: 0, moodle: 0 };
 // every site reads for per-course Looks: 408 bytes on every site. Its scene, parts and pointers load only when worn.
 // Measured against b6bde988.
 const FROSTDEV_LOOK = 408;
-// Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
-// Canvas's without its part.
-const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
-const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*.instructure.com/*'), moodle: entry('https://*.instructure.com/*').filter((f) => f !== 'content-canvas.js') };
+// Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
+// for other Moodle hosts: Canvas's without its part.
+const entry = (has) => m.content_scripts.find(has).js;
+const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content-ultra.js')), canvas: entry((c) => c.js.includes('content-canvas.js')), moodle: entry((c) => c.matches.includes('https://*.moodlecloud.com/*')) };
 
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
@@ -202,8 +202,16 @@ test('each site loads the shared core and its own part, and no other site\'s', (
   assert.deepEqual(FIRST_SCRIPT.canvas, [...core.slice(0, -1), 'content-canvas.js', 'content.js']);
 });
 
-test('the detector that runs on every other https page stays under 2 KB', () => {
-  assert.ok(m.content_scripts.some((c) => c.js.length === 1 && c.js[0] === 'lib/detect.js'));
+test('the detector that Safari runs on every other https page stays under 2 KB', () => {
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-perf-safari-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(m));
+    require('node:child_process').execFileSync('sh', [path.join(root, 'scripts/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
+    const safari = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    assert.ok(safari.content_scripts.some((c) => c.js.length === 1 && c.js[0] === 'lib/detect.js'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
   assert.ok(size('lib/detect.js') < 2048, `lib/detect.js is ${size('lib/detect.js')} bytes`);
 });
 

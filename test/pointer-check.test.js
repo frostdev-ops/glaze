@@ -19,7 +19,7 @@ const run = async (lock) => {
         locked = fs.existsSync(path.join(lock, 'owner'));
         throw new Error('synthetic launch failure');
       } } };
-      if (name === './check-env.js') return { lockPath: () => lock, chromeLaunch: () => ({}) };
+      if (name === './check-env.js') return { lockPath: () => lock, chromeLaunch: () => ({}), staged: (src) => src };
       if (name === './wait-for-browser.js') return async () => {};
       return require(name.startsWith('.') ? path.resolve(dir, name) : name);
     },

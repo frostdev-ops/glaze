@@ -350,7 +350,7 @@ test('only Glaze\'s content script in the top frame of an LMS page it runs on, w
     runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, getManifest: () => ({ host_permissions: ['<all_urls>'] }) },
     storage: Object.fromEntries(['local', 'sync'].map((a) => [a, { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in store[a]).map((x) => [x, store[a][x]])) }])),
   };
-  const ctx = vm.createContext({ chrome, URL, GZ_LX: require('../lib/lookx.js'), Promise });
+  const ctx = vm.createContext({ chrome, URL, GZ_LX: require('../lib/lookx.js'), GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, Promise });
   vm.runInContext(`${helpers}\n${mine}\nthis.fromLms = fromLms;`, ctx);
   const s = (url, over = {}) => ({ id: 'glaze', url, frameId: 0, tab: { id: 1, url }, ...over });
   const yes = { 'https://x.instructure.com/courses/1': 'https://x.instructure.com', 'https://canvas.school.edu/': 'https://canvas.school.edu', 'https://moodle.school.edu/my/': 'https://moodle.school.edu', 'https://bb.school.edu/ultra/course': 'https://bb.school.edu' };

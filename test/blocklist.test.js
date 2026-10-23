@@ -522,6 +522,6 @@ test('the setting defaults on, is a boolean, and has one owning control', () => 
 test('the manifest asks for no alarms and nothing new: the check rides on events that already happen', () => {
   const m = require('../manifest.json');
   assert.ok(!(m.permissions || []).includes('alarms'));
-  assert.ok(m.host_permissions.includes('<all_urls>'));
+  assert.ok(m.host_permissions.includes('https://frostdev.io/*'), 'the blocklist\'s host is held from the start');
   assert.ok(!/alarms|setInterval/.test(fs.readFileSync(require.resolve('../lib/blocklist.js'), 'utf8').replace(/\/\/.*$/gm, '')));
 });
