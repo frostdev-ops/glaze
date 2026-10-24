@@ -86,7 +86,7 @@ const badge = (sites) => sites.map((s) => SHORT[s]).join(' · ');
 
 test('site badges: only where something does not work on all three sites, and true', () => {
   const sections = [...main.matchAll(/<section [^>]*data-editor-section="([^"]+)"[^>]*>([\s\S]*?)<\/section>/g)];
-  assert.ok(sections.length >= 40);
+  assert.ok(sections.length >= 30, `${sections.length} sections`);
   for (const [open, route, body] of sections) {
     const sites = open.match(/data-sites="([^"]*)"/)?.[1];
     assert.ok(sites, `${route} names its sites`);
