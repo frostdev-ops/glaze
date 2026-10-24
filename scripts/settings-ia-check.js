@@ -113,6 +113,14 @@ const check = async (name, test) => {
       await open();
       assert.equal(await page.locator('#palette').evaluate((e) => getComputedStyle(e).backdropFilter), 'none', 'no invisible blur over solid colors');
     });
+    await check('popover-scroll', async () => {
+      await open('study/todo');
+      await page.locator('#todo button.info').first().click();
+      await page.locator('.info-pop:popover-open.placed').waitFor();
+      await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+      await pause(100);
+      assert.equal(await page.locator(':popover-open').count(), 0, 'a description dismisses when its button scrolls out of view');
+    });
   } finally {
     await context?.close();
     if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
