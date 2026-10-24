@@ -104,12 +104,16 @@ const MOODLE_DRAWER = `<div id="theme_boost-drawers-blocks" class="drawer drawer
     ok(back, 'Ultra: the pet and Return home come back once the panel closes');
     await open(DRAWER('right'));
     await verdict('Ultra top bar, a MUI drawer', 'ultra-top-drawer-right');
-    // Top/bottom drawers are content-sized sheets, not full-height side drawers.
-    for (const side of ['Top', 'Bottom']) {
-      await open(`<div class="MuiDrawer-modal" id="check-layer"><div class="MuiDrawer-paper MuiDrawer-paperAnchor${side}" style="position:fixed;left:0;right:0;top:auto;bottom:auto;${side.toLowerCase()}:0;height:200px;min-height:0;background:white"></div></div>`);
-      const size = await page.locator('#check-layer > div').boundingBox();
-      ok(size?.height === 200, `Ultra: a ${side.toLowerCase()} drawer keeps its 200px content height (got ${size?.height})`);
+    // MUI top/bottom sheets have automatic height, determined by their content. A fixed test height masks stretching.
+    for (const footer of [true, false]) {
+      await page.evaluate((on) => document.documentElement.toggleAttribute('data-gz-footer', on), footer);
+      for (const side of ['Top', 'Bottom']) {
+        await open(`<div class="MuiDrawer-modal" id="check-layer"><div class="MuiDrawer-paper MuiDrawer-paperAnchor${side}" style="position:fixed;left:0;right:0;top:auto;bottom:auto;${side.toLowerCase()}:0;height:auto;min-height:0;background:white"><div style="height:200px"></div></div></div>`);
+        const size = await page.locator('#check-layer > div').boundingBox();
+        ok(size?.height === 200, `Ultra: a ${side.toLowerCase()} drawer keeps its 200px content height with footer ${footer ? 'on' : 'off'} (got ${size?.height})`);
+      }
     }
+    await page.evaluate(() => document.documentElement.setAttribute('data-gz-footer', ''));
     await send({ place: 'rail', rail: 'open' });
     ok(await page.evaluate(() => document.documentElement.getAttribute('data-gz-ctabs')?.startsWith('above ')), 'Ultra: automatic tabs restore the strip immediately when top becomes rail');
     await open(PANEL('left'));
