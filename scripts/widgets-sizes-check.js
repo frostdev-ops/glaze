@@ -69,13 +69,36 @@ const api = (u) => {
 
 // The tiles: the built-in ones, the pet and a course card.
 const COURSE = `course:${O}/_101_1`;
-const IDS = [...W.TILES, COURSE];
-const tag = (id) => (id === COURSE ? 'course' : id);
+// Canvas's Dashboard, the way canvas-boards-check serves it: the saved Dashboard DOM under an invented school, synthetic API.
+const CANVAS = 'https://board.school.instructure.com', CUID = '3', CCOURSE = `course:${CANVAS}/25`;
+const CANVAS_FRAME = `<style>body { margin: 0; font: 14px/1.4 system-ui, sans-serif; }
+  #header, #mobile-header, #breadcrumbs, #footer, #right-side, .ic-Layout-watermark { display: none; } #wrapper { margin: 0; }
+  #main, #not_right_side, #content-wrapper, #content { min-width: 0; } #content { padding: 24px; } #dashboard_header_container { min-height: 64px; font-size: 24px; }
+  .screenreader-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .ic-DashboardCard__box__container { display: flex; flex-wrap: wrap; gap: 16px; } .ic-DashboardCard { width: 260px; } .ic-DashboardCard__header_image { height: 120px; }
+  @media (max-width: 600px) { #content { padding: 12px; } }</style>`;
+const CANVAS_DASH = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/canvas-dashboard-cards.html'), 'utf8')
+  .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '').replace('</head>', `${CANVAS_FRAME}</head>`);
+const canvasApi = (u) => {
+  if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return { id: CUID, time_zone: 'America/New_York' };
+  if (u.pathname === '/api/v1/users/self/colors') return { custom_colors: {} };
+  if (u.pathname === '/api/v1/courses') return [25, 26, 27, 28].map((id) => ({ id, name: `Course ${id}`, course_code: `C ${id}`, enrollments: [{ type: 'student', user_id: 3 }] }));
+  return [];
+};
+// A widget made of blocks (docs/mods-widgets.md), installed and granted as the editor leaves one: a tile on the boards and a
+// rail widget in Glaze's navigation, drawn by Glaze in a frame of its own.
+const MOD = 'gzsizecheckmodaa', MODTILE = `m${MOD.slice(0, 14)}0`;
+const MODREC = { id: MOD, enabled: true, grants: { todo: true }, manifest: { glaze: 1, name: 'Due soon', version: '1.0.0', author: { name: 'Kai', key: 'k' },
+  permissions: [{ id: 'todo', why: 'Shows what is due next.' }],
+  ui: { tiles: [{ id: 'main', name: 'Due soon', sizes: ['m'], blocks: [{ type: 'text', text: 'Next: {next.title}', size: 'l' }, { type: 'countdown', to: 'next.due', label: 'Due in' }, { type: 'list', items: 'todo.items', max: 3 }, { type: 'button', label: 'Open it', action: 'next' }] }],
+    rail: [{ id: 'next', name: 'Next up', blocks: [{ type: 'text', text: '{next.title}' }, { type: 'countdown', to: 'next.due', label: 'Due in' }] }] } } };
+const IDS = [...W.TILES, COURSE, MODTILE], CIDS = [...W.TILES, CCOURSE, MODTILE];
+const tag = (id) => (id === COURSE || id === CCOURSE ? 'course' : id === MODTILE ? 'mod' : id);
 // What each widget is for, which has to show without scrolling its tile.
 const PRIMARY = {
   notes: ['.gz-w-note-view'], agenda: ['.gz-w-row'], timer: ['.gz-w-clock', '.gz-w-main'], quotes: ['.gz-w-quote'], music: ['form.gz-w-music input'],
   breathe: ['.gz-w-breath', '.gz-w-main'], buddy: ['.gz-w-pet'], todo: ['#gz-todo .gz-todo-head'], settings: ['.gz-w-body > button'],
-  pet: ['.gz-game-habitat', '[data-control="pet"]', '[data-control="wander"]', '.gz-game-level'], course: ['.gz-course-card a'],
+  pet: ['.gz-game-habitat', '[data-control="pet"]', '[data-control="wander"]', '.gz-game-level'], course: ['.gz-w-body a'], mod: ['.gz-w-body > div'],
 };
 // Every action the habitat has, which has to be reachable at every size: in the tile, or through its More control.
 const PET_ACTIONS = ['pet', 'wander', 'wear', 'sprite', 'habitat', 'physics', 'learning', 'forget', 'supply:ball', 'supply:books', 'books'];
@@ -83,29 +106,41 @@ const PET_ACTIONS = ['pet', 'wander', 'wear', 'sprite', 'habitat', 'physics', 'l
 // Sizes: a tile's size name, or the size the student dragged it to by its corner (w: its width, h: its body's height).
 const SIZES = { s: { size: 's' }, m: { size: 'm' }, l: { size: 'l' }, ds: { size: 's', w: 200, h: 150 }, dl: { size: 'l', w: 680, h: 560 } };
 const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, ...extra,
-  navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: { ...G.GZ_DEFAULTS.enhance, notes: true, widgets: true, todo: true, pet: true, dashboard: true, sidebar: false, ...extra.enhance } });
+  navbar: { ...G.GZ_DEFAULTS.navbar, on: false, ...extra.navbar }, enhance: { ...G.GZ_DEFAULTS.enhance, notes: true, widgets: true, todo: true, pet: true, dashboard: true, sidebar: false, ...extra.enhance } });
 // A pet with its level-one furniture in its habitat (positions in percent of the habitat, as the student placed them).
 const PET = { decor: { books: 4, shelf: 4, ball: 4, yarn: 4 }, positions: { books: { x: 82, y: 92 }, shelf: { x: 24, y: 40 }, ball: { x: 60, y: 94 }, yarn: { x: 12, y: 94 } }, habitat: 'room' };
 const NOTE = { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm, room 114. https://example.edu/syllabus', at: Date.now() };
 // A Dashboard board with every tile on at one size, unplaced (the board puts each in free room); the rest of the layout fresh.
-const board = (sz, ids = IDS) => {
+const MORE = { pet: { size: 'm' }, [MODTILE]: { size: 'm' } };
+const board = (sz, ids = IDS, where = 'dash') => {
   const tiles = ids.map((id) => ({ id, on: true, size: sz.size, ...(sz.w && { w: sz.w }), ...(sz.h && { h: sz.h }) }));
-  return W.layout({ todo: true, canvasTodo: true, filled: ['cdash', 'dash', 'courses'], tiles: W.TILES.map((id) => ({ id, on: false })), boards: { dash: tiles, courses: [], cdash: [] } }, { pet: { size: 'm' } });
+  return W.layout({ todo: true, canvasTodo: true, filled: ['cdash', 'dash', 'courses'], tiles: W.TILES.map((id) => ({ id, on: false })), boards: { dash: [], courses: [], cdash: [], [where]: tiles } }, MORE);
 };
 // The same tiles floating over every page, each at its own spot.
 const floating = (sz, ids, spots) => {
   const tiles = ids.map((id, i) => ({ id, on: true, size: sz.size, x: spots[i][0], y: spots[i][1], ...(sz.w && { w: sz.w }), ...(sz.h && { h: sz.h }) }));
-  return W.layout({ todo: true, canvasTodo: true, filled: ['cdash', 'dash', 'courses'], tiles: W.TILES.map((id) => ({ id, on: false })), boards: { dash: [], courses: [], cdash: [], pages: tiles } }, { pet: { size: 'm' } });
+  return W.layout({ todo: true, canvasTodo: true, filled: ['cdash', 'dash', 'courses'], tiles: W.TILES.map((id) => ({ id, on: false })), boards: { dash: [], courses: [], cdash: [], pages: tiles } }, MORE);
 };
 
 // In the page: each tile's problems. A part out of the tile sideways (or out of its body, which scrolls only up and down), a
 // primary part not in view, a pet or furniture outside the habitat.
-const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
+const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
   const seen = (e) => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
+  // A CSS color as the screen shows it (a canvas reads any syntax), and the WCAG contrast of two.
+  const ink = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  const rgb = (c) => { ink.clearRect(0, 0, 1, 1); ink.fillStyle = '#000'; ink.fillStyle = c; ink.fillRect(0, 0, 1, 1); return [...ink.getImageData(0, 0, 1, 1).data].slice(0, 3); };
+  const lum = (c) => rgb(c).map((v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((n, v, i) => n + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
   const name = (e) => `${e.tagName.toLowerCase()}${e.id ? `#${e.id}` : ''}${e.className && typeof e.className === 'string' ? `.${e.className.trim().split(/\s+/).join('.')}` : ''}`;
   return [...document.querySelectorAll('section.gz-w')].filter((el) => seen(el) && !el.hidden).map((el) => {
-    const id = el.dataset.tile === COURSE ? 'course' : el.dataset.tile, r = el.getBoundingClientRect(), body = el.querySelector(':scope > .gz-w-body');
+    const id = COURSES.includes(el.dataset.tile) ? 'course' : el.dataset.tile === MODTILE ? 'mod' : el.dataset.tile, r = el.getBoundingClientRect(), body = el.querySelector(':scope > .gz-w-body');
     const problems = [];
+    // Its name on one line (cut short with an ellipsis if it must), not wrapped beside its tools.
+    const h3 = el.querySelector(':scope > .gz-w-head h3');
+    if (h3) { const range = document.createRange(); range.selectNodeContents(h3); const lines = new Set([...range.getClientRects()].map((x) => Math.round(x.top))).size; if (lines > 1) problems.push(`its name wraps onto ${lines} lines`); }
+    // A mod's frame: Glaze draws its blocks in a closed shadow root, whose overflow still shows on the frame.
+    const frame = id === 'mod' && body?.querySelector(':scope > div');
+    if (frame && frame.scrollWidth > frame.clientWidth + 1) problems.push(`the mod's frame overflows (${frame.scrollWidth} > ${frame.clientWidth})`);
     if (el.scrollWidth > el.clientWidth + 1) problems.push(`the tile scrolls sideways (${el.scrollWidth} > ${el.clientWidth})`);
     if (body && !body.hidden) {
       const v = body.getBoundingClientRect();
@@ -129,6 +164,12 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
         if (b.top < v.top - 1 || b.bottom > v.bottom + 1 || b.left < v.left - 1 || b.right > v.right + 1) problems.push(`${sel} is not in view without scrolling (${Math.round(b.top - v.top)}..${Math.round(b.bottom - v.top)} of ${Math.round(v.height)})`);
       }
     }
+    // Primary buttons: their text against their fill, at least 4.5:1 (WCAG AA), in whatever Look.
+    for (const b of el.querySelectorAll('.gz-w-main, .gz-game-primary')) {
+      if (!seen(b)) continue;
+      const cs = getComputedStyle(b), ratio = contrast(cs.color, cs.backgroundColor);
+      if (ratio < 4.5) problems.push(`"${b.textContent.trim()}" has ${ratio.toFixed(2)}:1 contrast (${cs.color} on ${cs.backgroundColor})`);
+    }
     let stage = null;
     if (id === 'pet') {
       const s = el.querySelector('.gz-game-habitat');
@@ -144,16 +185,21 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
           if (b.left < a.left - 1 || b.right > a.right + 1 || b.top < a.top - 1 || b.bottom > a.bottom + 1) problems.push(`${p.dataset.item || 'the pet'} is outside the habitat (${Math.round(b.left - a.left)},${Math.round(b.top - a.top)} ${Math.round(b.width)}×${Math.round(b.height)} in ${Math.round(a.width)}×${Math.round(a.height)})`);
         }
       }
-      // Reachable: shown, or in a section whose heading shows (it opens), or through a More that shows (the whole habitat).
+      // Reachable: shown, in a panel whose tab shows, in a section whose heading shows, or through ⋯ (the whole habitat).
       const more = [...el.querySelectorAll('[data-control="more"]')].some(seen);
       const outer = (e) => { let d = null; for (let n = e.closest('details'); n && el.contains(n); n = n.parentElement.closest('details')) d = n; return d; };
-      const reach = (c) => [...el.querySelectorAll('[data-control]')].filter((e) => e.dataset.control === c).some((e) => seen(e) || (outer(e) && seen(outer(e).querySelector(':scope > summary'))));
+      const tab = (e) => { const p = e.closest('[data-panel]'); return p && el.querySelector(`[data-control="tab:${p.dataset.panel}"]`); };
+      const reach = (c) => [...el.querySelectorAll('[data-control]')].filter((e) => e.dataset.control === c).some((e) => seen(e) || (tab(e) && seen(tab(e))) || (outer(e) && seen(outer(e).querySelector(':scope > summary')) && (!tab(e) || seen(tab(e)))));
       const missing = PET_ACTIONS.filter((c) => !reach(c));
+      if (!more) problems.push('no ⋯');
       if (missing.length && !more) problems.push(`actions not reachable: ${missing.join(', ')}`);
-      // The tier the habitat shows is the one its body's room calls for: More (and no sections) in a narrow or short single column.
-      const bw = body.clientWidth, fixed = !!body.style.height, compact = bw < 300 || (fixed && body.clientHeight < 520 && bw < 600);
-      if (compact !== more) problems.push(`${compact ? 'no More' : 'More'} in ${bw} × ${fixed ? body.clientHeight : 'auto'}`);
-      if (more && missing.length === 0 && el.querySelector('.gz-game-section') && [...el.querySelectorAll('.gz-game-controls > .gz-game-section')].every(seen)) problems.push('More shows beside every section');
+      // The tier its body's room calls for: the panels' tabs only with room (not narrow, not short in one column).
+      const bw = body.clientWidth, bh = body.clientHeight, fixed = !!body.style.height, tabs = [...el.querySelectorAll('.gz-game-tab')].some(seen);
+      const compact = bw < 300 || (fixed && bh < 520 && (bw < 600 || bw / bh < 1.5));
+      if (compact === tabs) problems.push(`${tabs ? 'tabs' : 'no tabs'} in ${bw} × ${fixed ? bh : 'auto'}`);
+      // Never mostly wall: the room is at most about two-thirds as tall as it is wide.
+      const a = el.querySelector('.gz-game-habitat')?.getBoundingClientRect();
+      if (a && a.height > a.width * .66 + 2) problems.push(`the room is ${Math.round(a.width)} × ${Math.round(a.height)}, mostly wall`);
     }
     return { id, w: Math.round(r.width), h: Math.round(r.height), problems, stage };
   });
@@ -174,6 +220,10 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
+      if (u.origin === CANVAS && route.request().method() === 'GET') {
+        if (u.pathname.startsWith('/api/v1/')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(canvasApi(u)) });
+        return u.pathname === '/' ? route.fulfill({ contentType: 'text/html', body: CANVAS_DASH }) : route.abort();
+      }
       if (u.origin !== O || route.request().method() !== 'GET') return route.abort();
       if (u.pathname.startsWith('/learn/api/')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(api(u)) });
       const page = { '/ultra/course': COURSES, '/ultra/institution-page': INSTITUTION }[u.pathname];
@@ -198,15 +248,20 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
         await page.waitForTimeout(100);
       }
     };
-    const local = (layout, sidebar) => ({ ultra: [O], widgetLayout: layout, [`notes:${O}/${UID}`]: NOTE, [`pet:${O}/${UID}`]: PET, ...(sidebar && { [`sidebar:ultra:${O}/${UID}`]: sidebar }) });
+    // What is due, as Glaze keeps it from the planner (the mod's blocks and What's next read it).
+    const HOUR = 36e5, due = (o, u) => ({ key: `todo:${o}/${u}`, at: Date.now(), items: [
+      { type: 'assignment', id: '9', cid: '_101_1', course: 'BIO 1100: Biology I', title: 'Lab report 4: enzyme kinetics', at: Date.now() + 3 * HOUR, url: '/ultra/stream' },
+      { type: 'assignment', id: '10', cid: '_102_1', course: 'ENG 1100: College Writing', title: 'Essay outline', at: Date.now() + 30 * HOUR, url: '/ultra/stream' }] });
+    const local = (layout, sidebar) => ({ ultra: [O], widgetLayout: layout, mods: [MOD], [`mod:${MOD}`]: MODREC, todoCache: due(O, UID),
+      ...Object.fromEntries([[O, UID], [CANVAS, CUID]].flatMap(([o, u]) => [[`notes:${o}/${u}`, NOTE], [`pet:${o}/${u}`, PET]])), ...(sidebar && { [`sidebar:ultra:${O}/${UID}`]: sidebar }) });
     const results = [];
     // One configuration: its settings and layout stored, the page opened, every tile measured and photographed.
-    const run = async ({ name, preset = 'Paper', width = 1600, height = 2600, where = '/ultra/institution-page', layout, sidebar, rtl = false, sel = '#gz-dash section.gz-w', expect, after }) => {
+    const run = async ({ name, preset = 'Paper', width = 1600, height = 2600, site = O, where = '/ultra/institution-page', layout, sidebar, rtl = false, sel = '#gz-dash section.gz-w', expect, after }) => {
       if (process.env.ONLY && !name.includes(process.env.ONLY)) return;
       dir = rtl ? 'rtl' : 'ltr';
       await store(settingsFor(preset, sidebar ? { enhance: { sidebar: true } } : {}), local(layout, sidebar));
       await page.setViewportSize({ width, height });
-      await page.goto(`${O}${where}`);
+      await page.goto(`${site}${where}`);
       // Now and then the first load after a storage reset draws no board; once more, said, before it counts as a failure.
       if (!await page.waitForSelector(sel, { timeout: 20000 }).catch(() => null)) { console.log(`note ${name}: no tiles on the first load; loading again`); await page.reload(); await page.waitForSelector(sel, { timeout: 20000 }).catch(() => {}); }
       await page.waitForSelector('section.gz-w[data-tile="pet"] .gz-game-actor', { timeout: 8000 }).catch(() => {});
@@ -215,10 +270,11 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
       // Ultra's page scrolls inside its main, where a photo of a tile below the fold comes out blank: a window as tall as the page.
       const tall = await page.evaluate(() => Math.ceil(Math.max(innerHeight, ...[...document.querySelectorAll('section.gz-w')].map((e) => { let y = e.getBoundingClientRect().bottom; for (let n = e.parentElement; n; n = n.parentElement) y += n.scrollTop || 0; return y; })) + 120));
       if (tall > height) { await page.setViewportSize({ width, height: Math.min(tall, 16000) }); await settle(); }
-      const tiles = await page.evaluate(MEASURE, { PRIMARY, PET_ACTIONS, COURSE });
+      if (process.env.PROBE) console.log(JSON.stringify(await require(process.env.PROBE)(page), null, 1));
+      const tiles = await page.evaluate(MEASURE, { PRIMARY, PET_ACTIONS, COURSES: [COURSE, CCOURSE], MODTILE });
       ok(tiles.length === expect, `${name}: ${tiles.length} of ${expect} widgets drawn`, tiles.map((x) => x.id).join(', '));
       await page.screenshot({ path: path.join(out, `${name}.png`), fullPage: true });
-      for (const id of IDS) {
+      for (const id of [...IDS, CCOURSE]) {
         const loc = page.locator(`section.gz-w[data-tile="${id}"]`).first();
         if (await loc.count() && await loc.isVisible()) await loc.screenshot({ path: path.join(out, `${name}-${tag(id)}.png`) }).catch(() => {});
       }
@@ -234,6 +290,12 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
       for (const [sz, def] of Object.entries(SIZES)) await run({ name: `board-${sz}-${look}`, preset, layout: board(def), expect: IDS.length });
       await run({ name: `phone-m-${look}`, preset, width: 390, height: 2400, layout: board(SIZES.m), expect: IDS.length });
     }
+    // Canvas's Dashboard: the same widgets on its board, with a Canvas course card.
+    for (const [sz, look, preset, width] of [['m', 'light', 'Paper', 1600], ['ds', 'light', 'Paper', 1600], ['dl', 'dark', 'Midnight', 1600], ['m', 'phone', 'Paper', 390]]) {
+      await run({ name: `canvas-${sz}-${look}`, preset, width, site: CANVAS, where: '/', layout: board(SIZES[sz], CIDS, 'cdash'), sel: '#gz-dash[data-board="cdash"] section.gz-w', expect: CIDS.length });
+    }
+    // The other Looks at one size: what changes with a Look is color, and every primary button must read in each.
+    for (const preset of G.GZ_PRESETS.map(([n]) => n).filter((n) => !['Paper', 'Midnight'].includes(n))) await run({ name: `look-${preset.toLowerCase()}-m`, preset, layout: board(SIZES.m), expect: IDS.length });
     for (const sz of ['m', 'ds']) await run({ name: `board-${sz}-rtl`, rtl: true, layout: board(SIZES[sz]), expect: IDS.length });
     // Floating: four at a time, one in each corner of the window.
     const corners = [[0, 0], [1, 0], [0, 1], [1, 1]];
@@ -311,6 +373,53 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
       await page.waitForTimeout(300);
       ok(await page.evaluate(() => !document.querySelector('dialog.gz-game-dialog') && document.activeElement?.dataset.control === 'more'), `More at ${w} px: Escape closes it and the focus is back on More`);
       ok(!errors.length, `More at ${w} px: no page errors`, errors.splice(0).join(' | '));
+    }
+    // Glaze's navigation widgets (features/navbar-widgets.js) and the mod's rail widget, in each place the bar shows them: the
+    // open rail, the icons rail, the top bar and its widgets dock, and a phone's More sheet and its dock. Each fits its place and
+    // the window, nothing in it scrolls or is cut sideways without an ellipsis.
+    const NAV = () => {
+      const r = document.getElementById('gz-navbar')?.shadowRoot;
+      if (!r) return null;
+      const seen = (e) => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none';
+      return [...r.querySelectorAll('.widget, .gz-mod-rail')].filter(seen).map((w) => {
+        const b = w.getBoundingClientRect(), place = w.closest('.dock, .sheet, .topbar, .rail'), a = place?.getBoundingClientRect(), problems = [];
+        if (b.left < -1 || b.right > innerWidth + 1 || b.top < -1 || b.bottom > innerHeight + 1) problems.push(`off the window (${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}×${Math.round(b.height)})`);
+        if (a && (b.left < a.left - 1 || b.right > a.right + 1)) problems.push(`out of its ${place.className.split(' ')[0]} sideways (${Math.round(b.left - a.left)}..${Math.round(b.right - a.left)} of ${Math.round(a.width)})`);
+        if (w.scrollWidth > w.clientWidth + 1) problems.push(`scrolls sideways (${w.scrollWidth} > ${w.clientWidth})`);
+        const inner = w.classList.contains('gz-mod-rail') && w.firstElementChild?.getBoundingClientRect();
+        if (inner && (inner.left - b.left < 4 || b.right - inner.right < 4)) problems.push(`its content touches its edge (${Math.round(inner.left - b.left)} px in)`);
+        for (const d of w.querySelectorAll('.w-detail')) if (seen(d) && d.scrollWidth > d.clientWidth + 1 && w.dataset.w === 'clock') problems.push('the date is cut short');
+        for (const d of w.querySelectorAll('*')) {
+          if (!seen(d)) continue;
+          const cs = getComputedStyle(d);
+          if (/hidden|clip/.test(cs.overflowX) && d.scrollWidth > d.clientWidth + 1 && cs.textOverflow !== 'ellipsis') problems.push(`${d.className || d.tagName} is cut (${d.scrollWidth} > ${d.clientWidth})`);
+        }
+        return { w: w.dataset.w || 'mod', place: place?.className.split(' ')[0] || '?', size: `${Math.round(b.width)}×${Math.round(b.height)}`, problems };
+      });
+    };
+    const bar = (fn, arg) => page.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gz-navbar')?.shadowRoot, a), [String(fn), arg]);
+    const navItems = { widgets: [{ id: 'clock', at: 'top' }, { id: 'next', at: 'bottom' }, { id: 'timer', at: 'bottom' }, { id: 'pet', at: 'bottom' }] };
+    for (const [name, width, height, navbar, open, want] of [
+      ['nav-rail', 1600, 1000, { on: true, place: 'rail', rail: 'open' }, null, 5],
+      ['nav-icons', 1600, 1000, { on: true, place: 'rail', rail: 'icons' }, null, 4],
+      ['nav-top', 1600, 1000, { on: true, place: 'top' }, (r) => r.querySelector('.tdock')?.click(), 5],
+      ['nav-phone-sheet', 390, 844, { on: true }, (r) => r.querySelector('.tab.more')?.click(), 4],
+      ['nav-phone-dock', 390, 844, { on: true }, (r) => { r.querySelector('.tab.more')?.click(); r.querySelector('.sheet [data-act="widgets"]')?.click(); }, 1],
+    ]) {
+      if (process.env.ONLY && !name.includes(process.env.ONLY)) continue;
+      dir = 'ltr';
+      await store({ ...settingsFor('Paper', { navbar }), navbarItems: navItems }, local(board(SIZES.m, ['notes'])));
+      await page.setViewportSize({ width, height });
+      await page.goto(`${O}/ultra/institution-page`);
+      const drawn = () => page.waitForFunction(() => document.getElementById('gz-navbar')?.shadowRoot?.querySelector('.widget'), null, { timeout: 20000 }).catch(() => null);
+      if (!await drawn()) { console.log(`note ${name}: no navigation on the first load; loading again`); await page.reload(); await drawn(); }
+      await page.waitForTimeout(1200); // the mod's rail widget and what is due arrive
+      if (open) { await bar(open); await page.waitForTimeout(600); }
+      const items = await page.evaluate(NAV);
+      await page.screenshot({ path: path.join(out, `${name}.png`) });
+      ok(items && items.length >= want, `${name}: ${items?.length ?? 0} widgets shown (want ${want} or more)`, JSON.stringify(items?.map((x) => `${x.w}@${x.place}`)));
+      for (const x of items || []) ok(!x.problems.length, `${name} ${x.w} in the ${x.place} (${x.size})`, x.problems.join(' | '));
+      ok(!errors.length, `${name}: no page errors`, errors.splice(0).join(' | '));
     }
     fs.writeFileSync(path.join(out, 'measures.json'), JSON.stringify(results, null, 1));
   } catch (e) {
