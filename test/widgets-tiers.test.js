@@ -45,3 +45,9 @@ test('every built-in widget reflows by its tile, not its size name', () => {
   }
   assert.ok(top.some(([s, b]) => s.includes('[data-tile^="course:"]') && s.includes('.course-banner') && sized(b)), 'a course card gives up its banner in a short tile');
 });
+
+// A query that asks a height looks past every container without one (an auto-height tile's body is inline-size), so a width
+// tier joined to a height one with "or" never applies to auto-height tiles.
+test('no tier joins a width and a height with "or"', () => {
+  for (const [q] of blocks) assert.ok(!(/\bor\b/.test(q) && /height/.test(q)), q);
+});

@@ -960,7 +960,8 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 /* The habitat: its stage fills the tile's width (and, at a dragged height, what the rest leaves); the pet, furniture and toys scale
    with it (features/petworld.js). Narrow or short, the stage carries the name and level and the main actions sit under it, More
    opening the whole habitat outside the tile; wider tiles add XP, care and the meters, then the sections; very wide ones put the
-   stage beside the rest. */
+   stage beside the rest. A query that asks a height only matches a container with one (a dragged height), so width and
+   height tiers are separate queries. */
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{grid-template-columns:minmax(0,1fr);grid-template-areas:"overview" "stage" "controls";align-content:start}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-overview{grid-area:overview}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-habitat{grid-area:stage}
@@ -977,7 +978,7 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
   .gz-game-more{display:inline-flex!important;align-items:center;justify-content:center}
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
 }
-@container gz-tile (width < 300px) or ((height < 300px) and (width < 600px)) {
+@container gz-tile (width < 300px) {
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{grid-template-areas:"stage" "controls"}
   .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] > .gz-game{grid-template-rows:minmax(64px,1fr) auto}
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-overview{grid-area:stage;z-index:6;align-self:start;gap:4px;padding:6px 8px;pointer-events:none}
@@ -991,7 +992,22 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-actions{grid-template-columns:minmax(0,1fr) auto}
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-primary{grid-column:1/-1}
 }
-@container gz-tile (width < 240px) or ((height < 380px) and (width < 600px)) { .gz-game-vitals{display:none!important} }
+@container gz-tile (height < 300px) and (width < 600px) {
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{grid-template-areas:"stage" "controls"}
+  .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] > .gz-game{grid-template-rows:minmax(64px,1fr) auto}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-overview{grid-area:stage;z-index:6;align-self:start;gap:4px;padding:6px 8px;pointer-events:none}
+  .gz-game-heading{align-items:center;gap:6px}
+  .gz-game-identity strong{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--gz-surface-fill,var(--gz-surface,#fff)) 82%,transparent);font-size:.9em}
+  .gz-game-identity .gz-game-hint,.gz-game-xp{display:none!important}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-overview progress{height:4px;opacity:.85}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-level{background:color-mix(in srgb,var(--gz-surface-fill,var(--gz-surface,#fff)) 82%,var(--gz-accent,#16837b))}
+  .gz-game-care,.gz-game-controls>.gz-game-section{display:none!important}
+  .gz-game-more{display:inline-flex!important;align-items:center;justify-content:center}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-actions{grid-template-columns:minmax(0,1fr) auto}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-primary{grid-column:1/-1}
+}
+@container gz-tile (width < 240px) { .gz-game-vitals{display:none!important} }
+@container gz-tile (height < 380px) and (width < 600px) { .gz-game-vitals{display:none!important} }
 @container gz-tile (height < 300px) and (width < 600px) { .gz-game-overview progress{display:none} }
 @container gz-tile (width >= 600px) {
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{grid-template-columns:minmax(0,1.55fr) minmax(220px,1fr);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"stage overview" "stage controls";column-gap:16px}
