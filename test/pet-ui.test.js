@@ -2,7 +2,7 @@ const test = require('node:test'), assert = require('node:assert/strict'), fs = 
 const P = require('../lib/pet.js'), T = require('../lib/todo.js'), { El } = require('./stand-in-dom.js');
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } }, world = false } = {}) => {
-  const doc = { activeElement: null }, storage = [], events = [], timers = new Map(), win = [], mounts = [], settings = { enabled: true, enhance: { pet: true } }; let next = 0, release;
+  const doc = { activeElement: null }, storage = [], events = [], timers = new Map(), win = [], mounts = [], sizes = [], settings = { enabled: true, enhance: { pet: true } }; let next = 0, release;
   const make = (tag) => new El(tag, doc);
   doc.root = make('html'); doc.head = make('head'); doc.body = make('body'); doc.root.append(doc.head, doc.body);
   Object.assign(doc, { visibilityState: 'visible', createElement: make, getElementById: (id) => doc.root.all().find((e) => e.id === id), querySelector: (sel) => doc.root.querySelector(sel),
@@ -12,6 +12,7 @@ const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } 
     GZ_PET: P, GZ_PET_BRAIN: require('../lib/petbrain.js'), GZ_TODO: T, GZ_CTX: { site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (m, n) => v && n in v ? v[n] : m), settings: () => settings, need: async () => {} },
     addEventListener: (type, f, opts) => win.push({ type, f, opts }), removeEventListener: (type, f) => { const i = win.findIndex((x) => x.type === type && x.f === f); if (i >= 0) win.splice(i, 1); },
     ...(world && { GZ_WIDGETS_UI: { who: async () => ({ uid: '3', tz: 'UTC' }), register() {} }, GZ_PET_WORLD: { mount: (stage, o) => { mounts.push({ stage, o }); return { stop() {}, play() {} }; }, refresh() {}, stop() {} } }),
+    ResizeObserver: class { constructor(f) { this.f = f; sizes.push(this); } observe(el) { this.el = el; } disconnect() { this.el = null; } },
     location: { origin: 'https://canvas.test' }, setTimeout: (f, ms) => { timers.set(++next, { f, ms }); return next; }, clearTimeout: (id) => timers.delete(id),
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => cb({ ok: true, data: P.view(record) }) },
       storage: { onChanged: { addListener: (f) => storage.push(f), removeListener: (f) => { const i = storage.indexOf(f); if (i >= 0) storage.splice(i, 1); } } } } };
@@ -20,6 +21,7 @@ const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } 
   const body = make('div'); doc.body.append(body);
   c.window = c;
   return { ui, body, doc, storage, events, timers, win, mounts, settings, fire: (type, e = {}) => { for (const l of win.filter((x) => x.type === type)) { if (l.opts?.once) win.splice(win.indexOf(l), 1); l.f({ type, ...e }); } },
+    resize: (width, height) => { body.box = { left: 0, top: 0, width, height }; body.style.height = `${height}px`; for (const s of sizes) if (s.el === body) s.f([{ target: body }]); }, sizes,
     write: (value) => { for (const f of [...storage]) f({ 'pet:https://canvas.test/3': { newValue: value } }, 'local'); }, chrome: c.chrome, release: () => release({ uid: '3', tz: 'UTC' }), api: { who: () => profile } };
 };
 test('pet mount stops storage/visibility listeners and its clock, without leaving a stylesheet link', async () => {
@@ -266,4 +268,19 @@ test('closing More after changing the habitat returns focus to the tile’s curr
   box.close();
   assert.ok(p.doc.activeElement === current, 'focus returns to the connected More control after a repaint');
   live.stop();
+});
+
+test('a tall resized habitat uses its panel space for Wellbeing until the student chooses a panel', async () => {
+  const p = page(), live = p.ui.mount(p.body, p.api); await settle();
+  const shown = () => p.body.querySelectorAll('.gz-game-panel').filter(e => !e.hidden).map(e => e.dataset.panel);
+  p.resize(650, 560);
+  assert.deepEqual(shown(), ['wellbeing'], 'a roomy tile opens the first panel instead of leaving a gap');
+  assert.equal(p.body.querySelector('[data-control="tab:wellbeing"]').getAttribute('aria-expanded'), 'true');
+  p.resize(250, 220); assert.deepEqual(shown(), [], 'a compact tile needs only its room and actions');
+  p.resize(650, 560); assert.deepEqual(shown(), ['wellbeing']);
+  const tab = p.body.querySelector('[data-control="tab:wellbeing"]');
+  for (const l of tab.listeners.filter(x => x.type === 'click')) l.f({ isTrusted: true });
+  p.resize(650, 600); live.update(); await settle();
+  assert.deepEqual(shown(), [], 'resizes and record refreshes respect an explicit close');
+  live.stop(); assert.ok(p.sizes.every(s => !s.el), 'the size observer is released');
 });

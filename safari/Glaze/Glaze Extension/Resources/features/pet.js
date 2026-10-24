@@ -16,7 +16,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const mount = (body, api, { inDialog = false } = {}) => {
     let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, pets = [], form = '', readout = '';
     // The one panel open under the actions (Wellbeing, Decorate, Progress; Settings in the dialog), or none. It survives repaints.
-    let panel = '', wandered = false;
+    let panel = '', panelChosen = false, wandered = false;
     const uid = `gz-game-${++mounts}`;
     const waiting = [];
     const tile = body.closest('.gz-w');
@@ -160,7 +160,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         for (const el of panels) el.hidden = el.dataset.panel !== panel;
       };
       for (const [id, name, content] of PANELS) {
-        const tab = button(t(name), () => { panel = panel === id ? '' : id; showPanel(); });
+        const tab = button(t(name), () => { panelChosen = true; panel = panel === id ? '' : id; showPanel(); });
         tab.className = 'gz-game-tab'; tab.dataset.control = `tab:${id}`; tab.setAttribute('aria-controls', `${uid}-${id}`);
         content.className = 'gz-game-panel'; content.id = `${uid}-${id}`; content.dataset.panel = id;
         content.setAttribute('role', 'region'); content.setAttribute('aria-label', t(name));
@@ -179,7 +179,15 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       form = nextForm; readout = nextReadout;
       world();
     };
-    const stop = () => { alive = false; mounted.delete(handle); player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
+    // Only a tile given a height has spare panel space. Auto-height tiles keep their compact default; an explicit choice wins
+    // over subsequent resizes. The observer changes content only inside a fixed-height body, so it cannot resize its own box.
+    const size = !inDialog && typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+      if (!alive || panelChosen || !body.clientWidth || !body.clientHeight) return;
+      const next = body.style.height && body.clientHeight >= 520 && body.clientWidth >= 300 ? 'wellbeing' : '';
+      if (next !== panel) { panel = next; form = ''; paint(); }
+    }) : null;
+    size?.observe(body);
+    const stop = () => { alive = false; size?.disconnect(); mounted.delete(handle); player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
     stage.addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('application/x-glaze-pet-item')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
     stage.addEventListener('drop', (e) => {
       const id = e.dataTransfer?.getData('application/x-glaze-pet-item');
