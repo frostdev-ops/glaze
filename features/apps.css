@@ -1031,6 +1031,7 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 .gz-w-breath { width: clamp(2.5rem, min(34cqi, 100cqb - 6.5rem), 11rem); height: clamp(2.5rem, min(34cqi, 100cqb - 6.5rem), 11rem); margin: 0.2rem auto; }
 .gz-w[data-tile="buddy"] .gz-w-pet :is(img,canvas) { width: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); height: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); }
 .gz-w[data-tile^="course:"] .gz-course-card .course-banner { height: clamp(0px, 100cqb - 7rem, var(--gz-card-h, 128px)); }
+.gz-w[data-tile^="course:"] .ic-DashboardCard__header_image { max-height: max(0px, 100cqb - 7rem); overflow: hidden; }
 /* Dragged to a height: what a widget shows sits in the middle of its tile, not at the top of an empty box. */
 .gz-w:is([data-tile="timer"], [data-tile="breathe"], [data-tile="buddy"]) > .gz-w-body[style*="height"] { align-content: safe center; }
 .gz-w:is([data-tile="quotes"], [data-tile="settings"]) > .gz-w-body[style*="height"] { display: flex; flex-direction: column; justify-content: safe center; gap: 0.4rem; }
