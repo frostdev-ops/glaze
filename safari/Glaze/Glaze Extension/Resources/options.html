@@ -96,7 +96,10 @@
   .group .stack { gap: .6rem; }
   .sub { margin-inline-start: 2.75rem; }
   /* A setting's longer description: a "?" after its name opens it (lib/editor-info.js). */
-  .has-info { display: flex; align-items: flex-start; }
+  .has-info, .has-badge { display: flex; align-items: flex-start; }
+  .site-badge { display: inline-block; justify-self: start; padding: 0 .45rem; border-radius: 999px; border: 1px solid var(--gz-border-line, var(--gz-line)); color: var(--gz-ink-muted); font-size: calc(11px * var(--gz-scale, 1)); font-weight: 400; line-height: 1.6; white-space: nowrap; }
+  .section-heading h2 + .site-badge { margin-inline-end: auto; }
+  :is(.has-info, .has-badge) > .site-badge { flex: none; margin: 1px .45rem 0; }
   .has-info > .check { flex: 0 1 auto; }
   button.info { display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; margin: 1px 0 0 .45rem; padding: 0; border-radius: 50%; vertical-align: -3px; font-size: calc(11px * var(--gz-scale, 1)); font-weight: 600; line-height: 1; color: var(--gz-ink-muted); background: none; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); }
   button.info::before { content: "?"; }
@@ -408,13 +411,11 @@
 <p class="section-path" data-editor-breadcrumb><a href="#look/palette" data-editor-alias>Looks and colors</a></p><div class="section-heading"><h2 id="heading-look-palette">Looks and colors</h2><button type="button" class="section-reset" data-reset-section="look/palette">Reset section</button></div>
 <div class="group">
           <h3>Looks</h3>
-          <p class="desc">A palette, fonts, shape and background that go together, in one click.</p>
           <div class="looks" id="looks"></div>
         </div>
 <div class="swatches" id="presets" data-setting-owner="preset"></div>
 <div class="group">
-          <label class="check"><input type="checkbox" data-key="auto.on"><span>Auto light and dark</span>
-            <span class="desc">Switches between two palettes: with your computer's mode, or at set times.</span></label>
+          <label class="check"><input type="checkbox" data-key="auto.on"><span>Auto light and dark</span></label>
 <div class="stack" data-show="auto">
           <div class="row">
             <select data-key="auto.mode" aria-label="Auto light and dark">
@@ -433,7 +434,7 @@
         </div>
 <div class="group">
           <h3>Gallery</h3>
-          <p class="desc" id="gallery-note">Free Looks shared by other students. Pick one there and Glaze opens it here to preview before anything changes. Opening the gallery is an ordinary visit to frostdev.io; Glaze sends nothing.</p>
+          <p class="desc" id="gallery-note">Opening the gallery is a plain visit to frostdev.io; Glaze sends nothing.</p>
           <div class="row"><a class="button" id="gallery-link" href="https://frostdev.io/glaze/looks/" target="_blank" rel="noopener" aria-describedby="gallery-note">Open the gallery</a></div>
         </div>
 <div class="offer" id="share-offer" hidden>
@@ -452,7 +453,7 @@
 <ul class="mine" id="mine" data-setting-owner="presets" aria-label="Your presets"></ul>
 <div class="row">
           <button type="button" id="share-copy" class="primary">Copy theme code</button>
-          <span class="desc">Your palette, fonts, look and background as one line of text, to send to someone with Glaze.</span>
+          <span class="desc">Your Look as one line of text, to send to someone with Glaze.</span>
         </div>
 <p class="desc" id="look-parts-storage" role="status" hidden></p>
 <div class="row">
@@ -461,12 +462,12 @@
         </div>
 <div class="group">
           <h3>Favorites</h3>
-          <p class="desc" id="favorites-note">Themes you saved from the gallery or a theme code, kept on this computer.</p>
+          <p class="desc" id="favorites-note">Themes you saved, kept on this computer.</p>
           <ul class="saved" id="favorites" aria-label="Favorites"></ul>
         </div>
 <div class="group">
           <h3>History</h3>
-          <p class="desc" id="history-note">The themes you wore lately, newest first, kept on this computer.</p>
+          <p class="desc" id="history-note">Themes you wore lately, kept on this computer.</p>
           <div class="row"><button type="button" id="history-back" aria-describedby="history-note">Previous Look</button><button type="button" id="history-clear" class="danger">Clear history</button></div>
           <ul class="saved" id="history" aria-label="History"></ul>
         </div>
@@ -489,7 +490,7 @@
                 <span class="desc" id="font-found" role="status"></span>
               </div>
               <div id="font-grid" data-setting-owner="look.font look.head look.mono"></div>
-              <p class="desc" id="font-note">Web fonts download when you choose them: from Google Fonts, or jsDelivr for OpenDyslexic and the Nerd Fonts (about 5 MB each). Opening this list loads small previews from Google Fonts.</p>
+              <p class="desc" id="font-note">A font you choose downloads from Google Fonts, or jsDelivr for OpenDyslexic and the Nerd Fonts; this list loads previews from Google Fonts.</p>
             </details>
           </div></div>
 <label class="field"><span>Text size</span><input type="range" data-key="look.scale" min="0.85" max="1.25" step="0.05"><output data-for="look.scale" data-format="pct"></output></label>
@@ -502,7 +503,7 @@
 <details class="more"><summary>More options</summary>
 <label class="field"><span>Line height</span><input type="range" data-key="look.leading" min="1.2" max="2" step="0.05"><output data-for="look.leading"></output></label>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="look.tooltips" aria-describedby="info-look-tooltips"><span id="info-look-tooltips-name">Themed tooltips</span></label><button type="button" class="info" popovertarget="info-look-tooltips" aria-labelledby="info-more info-look-tooltips-name" aria-describedby="info-look-tooltips"></button>
-<div class="info-pop" id="info-look-tooltips" popover><span class="desc">Blackboard's icon buttons use the browser's plain tooltip. This shows a themed one instead, a little sooner.</span></div></div>
+<div class="info-pop" id="info-look-tooltips" popover><span class="desc">A tooltip in your palette in place of the browser's plain one, a little sooner, on buttons and anything else with a tooltip.</span></div></div>
 <div class="has-info sub" data-show="tooltips"><label class="check"><input type="checkbox" data-key="look.hints" aria-describedby="info-look-hints"><span id="info-look-hints-name">Hover hints</span></label><button type="button" class="info" popovertarget="info-look-hints" aria-labelledby="info-more info-look-hints-name" aria-describedby="info-look-hints"></button>
 <div class="info-pop" id="info-look-hints" popover><span class="desc">Hover a date to see how far off it is ("Due in 2 days"), a grade to see its percentage, or cut-off text to read all of it.</span></div></div>
 </details>
@@ -515,7 +516,7 @@
 <details class="more"><summary>More options</summary>
 <div class="stack" data-show="surfaceOpacity">
 <div class="surface-control"><label class="field"><span>Surface opacity</span><input type="range" data-key="look.surfaceOpacity" min="-1" max="100" step="1"><output data-for="look.surfaceOpacity" data-format="surfacepct"></output></label><button type="button" class="control-reset" data-reset-setting="look.surfaceOpacity">Reset</button></div>
-<p class="desc">Automatic opacity keeps each Look’s existing fills. Custom opacity applies over pictures and animated backgrounds; solid pages and zero blur stay opaque. Small rows use a fill without extra blur. Surface corners follow Corner radius.</p>
+<p class="desc">Automatic keeps each Look’s own fills.</p>
 </div>
 <div class="surface-control"><label class="field"><span>Surface tint</span><input type="range" data-key="look.surfaceTint" min="0" max="100" step="1"><output data-for="look.surfaceTint" data-format="pct100"></output></label><button type="button" class="control-reset" data-reset-setting="look.surfaceTint">Reset</button></div>
 <div class="surface-control" data-show="tintSource"><label class="field"><span>Tint source</span><select data-key="look.surfaceTintSource"><option value="accent">Accent color</option><option value="course">Course color</option></select></label><button type="button" class="control-reset" data-reset-setting="look.surfaceTintSource">Reset</button></div>
@@ -554,14 +555,14 @@
             <label title="Living terrain cut into paper terraces"><input type="radio" name="bg.scene" value="topography">Topography</label>
           </div></div>
 <div class="field" data-kinds="scene shader layers"><span><label for="bg-intensity" id="bg-intensity-name">Intensity</label><button type="button" class="info" popovertarget="bg-intensity-note" aria-labelledby="info-more bg-intensity-name" aria-describedby="bg-intensity-note"></button></span><input id="bg-intensity" type="range" data-key="bg.intensity" min="0" max="100" step="5" aria-describedby="bg-intensity-note"><output data-for="bg.intensity" data-format="presence"></output></div>
-<p class="desc info-pop" id="bg-intensity-note" data-kinds="scene shader layers" popover>How much it stands out: color, contrast and pace together. Drawn with WebGL (three.js) at low resolution, at most 30 frames a second; it pauses in background tabs and holds still when motion is off.</p>
+<p class="desc info-pop" id="bg-intensity-note" data-kinds="scene shader layers" popover>How much it stands out: color, contrast and pace together. Drawn with WebGL at low resolution; it pauses in background tabs and holds still with motion off.</p>
 <div class="field wide" data-kinds="gradient aurora scene shader layers"><span>Colors</span>
           <div class="row">
             <div class="swatches" id="bg-sets" aria-label="Background colors"></div>
             <span class="row" id="bg-colors" data-setting-owner="bg.colors"></span>
           </div></div>
 <label class="field wide" data-kinds="image"><span>Image address</span><input type="url" id="bg-image" data-setting-owner="bg.image" translate="no" placeholder="https://…" aria-describedby="bg-image-note"></label>
-<p class="desc" id="bg-image-note" data-kinds="image">An https link to a picture. If it can't load, the gradient shows instead.</p>
+<p class="desc" id="bg-image-note" data-kinds="image">An https link to a picture; the gradient shows if it can't load.</p>
 <p class="desc" data-kinds="aurora">Aurora drifts slowly when motion is set to Expressive.</p>
 <p class="desc" data-kinds="solid">Just the palette's ground color.</p>
 <div id="x-shader" class="x-builder" data-kinds="shader"></div>
@@ -583,7 +584,7 @@
 <label class="field" data-kinds="gradient aurora image"><span>Dim</span><input type="range" data-key="bg.dim" min="0" max="90" step="5"><output data-for="bg.dim" data-format="pct100"></output></label>
 <label class="field" data-kinds="gradient aurora image"><span>Blur</span><input type="range" data-key="bg.blur" min="0" max="20" step="1"><output data-for="bg.blur" data-format="px"></output></label>
 <label class="check" data-kinds="gradient aurora image"><input type="checkbox" data-key="bg.grain"><span>Grain</span>
-          <span class="desc">A faint film grain that smooths out banding in soft gradients. Blur hides it.</span></label>
+          <span class="desc">A faint grain that smooths banding in soft gradients.</span></label>
 </details>
 </section>
 <section id="motion" data-editor-section="look/motion" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-motion">
@@ -594,7 +595,7 @@
             <label><input type="radio" name="motion.level" value="subtle">Subtle</label>
             <label><input type="radio" name="motion.level" value="expressive">Expressive</label>
           </div></div>
-<p class="desc info-pop" id="motion-note" popover>Subtle: pages and cards ease in, panels slide, hover lifts. Expressive adds springier motion, a drifting aurora, livelier animated backgrounds and a small burst when you complete an item. Off also holds animated backgrounds still.</p>
+<p class="desc info-pop" id="motion-note" popover>Subtle: pages and cards ease in, panels slide, hover lifts. Expressive adds springier motion, a drifting aurora, livelier backgrounds and a burst when you complete an item. Off holds backgrounds still.</p>
 <label class="check"><input type="checkbox" data-key="motion.followSystem"><span>Turn motion off when the system asks for reduced motion</span></label>
 <details class="more"><summary>More options</summary>
 <div class="group">
@@ -623,7 +624,7 @@
         </div>
 </details>
 </section>
-<section id="look-extras" data-editor-section="look/extras" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-look-extras">
+<section id="look-extras" data-editor-section="look/extras" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-extras">
 <p class="section-path" data-editor-breadcrumb><a href="#look/extras" data-editor-alias>Stickers and rotation</a></p><div class="section-heading"><h2 id="heading-look-extras">Stickers and rotation</h2><button type="button" class="section-reset" data-reset-section="look/extras">Reset section</button></div>
 <div class="group">
           <h3 id="rotate-head">Look rotation<button type="button" class="info" popovertarget="rotate-note" aria-labelledby="info-more rotate-head" aria-describedby="rotate-note"></button></h3>
@@ -661,7 +662,7 @@
 <section id="navbar" data-editor-section="navigation/bar" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-navigation-bar">
 <p class="section-path" data-editor-breadcrumb><a href="#navigation/bar" data-editor-alias>Navigation</a></p><div class="section-heading"><h2 id="heading-navigation-bar">Navigation</h2><button type="button" class="section-reset" data-reset-section="navigation/bar">Reset section</button></div>
 <div class="has-info nb-master"><label class="check"><input type="checkbox" data-key="navbar.on" aria-describedby="info-navbar-on"><span id="info-navbar-on-name">Use Glaze navigation</span></label><button type="button" class="info" popovertarget="info-navbar-on" aria-labelledby="info-more info-navbar-on-name" aria-describedby="info-navbar-on"></button>
-<div class="info-pop" id="info-navbar-on" popover><span class="desc">Glaze draws its own navigation in place of Blackboard's: a floating rail on wide windows and a bottom bar on phones. Turn it off to get Blackboard's back.</span></div></div>
+<div class="info-pop" id="info-navbar-on" popover><span class="desc">Glaze draws its own navigation in place of the site's: a rail or top bar on wide windows, a bottom bar on phones. Off brings the site's own back.</span></div></div>
 <div class="nb-body" data-show="navbar">
 <div class="nb-group"><h3 id="nbar-place-head">Placement</h3>
 <div class="seg nb-cards" role="radiogroup" aria-labelledby="nbar-place-head">
@@ -689,12 +690,12 @@
 <label><input type="radio" name="navbar.course" value="top">Top bar</label>
 <label><input type="radio" name="navbar.course" value="hide">Hidden</label>
 </div>
-<p class="desc">The navigation stays with you in a course, its tabs and anything opened over it. Give the course more room there with icons or a top bar, or hide it and use the course's own Home button.</p>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="navbar.cmenu" aria-describedby="info-navbar-cmenu"><span id="info-navbar-cmenu-name">The course's menu in the navigation</span></label><button type="button" class="info" popovertarget="info-navbar-cmenu" aria-labelledby="info-more info-navbar-cmenu-name" aria-describedby="info-navbar-cmenu"></button>
-<div class="info-pop" id="info-navbar-cmenu" popover><span class="desc">On Canvas and Moodle, a course's own pages (Home, Modules, Grades…) sit in the navigation, under the course's name, instead of a menu beside the page. With a top bar, they're a second row under it.</span></div></div></div>
+<p class="desc">Give a course more room with icons or a top bar.</p>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="navbar.cmenu" aria-describedby="info-navbar-cmenu"><span id="info-navbar-cmenu-name">The course's menu in the navigation</span></label><span class="site-badge" translate="no">Canvas · Moodle</span><button type="button" class="info" popovertarget="info-navbar-cmenu" aria-labelledby="info-more info-navbar-cmenu-name" aria-describedby="info-navbar-cmenu"></button>
+<div class="info-pop" id="info-navbar-cmenu" popover><span class="desc">A course's own pages (Home, Modules, Grades…) sit in the navigation under its name, in place of a menu beside the page; under a top bar, as a second row.</span></div></div></div>
 <div class="nb-group"><h3>Course tabs</h3>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="navbar.tabs" aria-describedby="info-navbar-tabs"><span id="info-navbar-tabs-name">Show course tabs in the navigation</span></label><button type="button" class="info" popovertarget="info-navbar-tabs" aria-labelledby="info-more info-navbar-tabs-name" aria-describedby="info-navbar-tabs"></button>
-<div class="info-pop" id="info-navbar-tabs" popover><span class="desc">The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it. To keep them only there, choose Only in the navigation in the course tab settings.</span></div></div>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="navbar.tabs" aria-describedby="info-navbar-tabs"><span id="info-navbar-tabs-name">Show course tabs in the navigation</span></label><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="info" popovertarget="info-navbar-tabs" aria-labelledby="info-more info-navbar-tabs-name" aria-describedby="info-navbar-tabs"></button>
+<div class="info-pop" id="info-navbar-tabs" popover><span class="desc">The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it.</span></div></div>
 <a href="#navigation/tabs" data-editor-alias>Course tab settings</a></div>
 <div class="nb-group"><h3 id="nbar-logo-head">Details</h3>
 <label class="check"><input type="checkbox" data-key="navbar.badges"><span>Show unread counts</span></label>
@@ -707,28 +708,28 @@
 </div></div></div>
 </details>
 </div>
-<div class="nav-own" id="sidebar" data-show="siteNav">
-<label class="field"><span>Sidebar background</span><select data-key="nav.k"><option value="default">Palette default</option><option value="solid">Solid</option><option value="gradient">Gradient</option><option value="image">Picture</option></select></label>
+<div class="nav-own" id="sidebar" data-show="siteNav"><span class="site-badge" translate="no">Canvas · Blackboard</span>
+<label class="field"><span>Site navigation background</span><select data-key="nav.k"><option value="default">Palette default</option><option value="solid">Solid</option><option value="gradient">Gradient</option><option value="image">Picture</option></select></label>
 <div class="row" data-nav-kinds="solid gradient image">
           <label><span>First color</span> <input type="color" data-key="nav.c"></label>
           <label data-nav-kinds="gradient"><span>Second color</span> <input type="color" data-key="nav.d"></label>
         </div>
 <label class="field" data-nav-kinds="gradient"><span>Angle</span><input type="range" data-key="nav.a" min="0" max="360" step="1"><output data-for="nav.a" data-format="deg"></output></label>
 <div class="group" data-nav-kinds="image">
-          <label class="field wide"><span>Sidebar picture link</span><input id="nav-url" data-setting-owner="nav.u" type="url" translate="no" placeholder="https://…" spellcheck="false" maxlength="2048"></label>
+          <label class="field wide"><span>Site navigation picture link</span><input id="nav-url" data-setting-owner="nav.u" type="url" translate="no" placeholder="https://…" spellcheck="false" maxlength="2048"></label>
           <div class="row"><button type="button" id="nav-pick">Choose a picture</button><input id="nav-file" data-setting-owner="nav.i" type="file" accept="image/*" hidden><span id="nav-picture-note" class="desc"></span></div>
-          <p class="desc">A file stays on this device. A linked picture loads from its host when the sidebar is shown.</p>
+          <p class="desc">A file stays on this device; a linked picture loads from its host.</p>
           <label class="field"><span>Image filter</span><select data-key="nav.f"><option value="none">None</option><option value="vivid">Vivid</option><option value="mono">Mono</option><option value="noir">Noir</option><option value="warm">Warm</option><option value="cool">Cool</option><option value="faded">Faded</option><option value="dreamy">Dreamy</option></select></label>
           <label class="field"><span>Overlay opacity</span><input type="range" data-key="nav.o" min="0" max="100" step="1"><output data-for="nav.o" data-format="pct100"></output></label>
         </div>
-<label class="field" data-nav-kinds="solid gradient image"><span>Sidebar text and icons</span><input type="color" data-key="nav.ink"></label>
+<label class="field" data-nav-kinds="solid gradient image"><span>Site navigation text and icons</span><input type="color" data-key="nav.ink"></label>
 <p id="nav-contrast" class="desc" role="status" aria-live="polite"></p>
 <label class="check"><input type="checkbox" data-key="nav.logo"><span>Show the institution logo</span></label>
-<label class="field"><span>Sidebar labels</span><select data-key="nav.labels"><option value="normal">Normal labels</option><option value="small">Small labels</option><option value="icons">Icons only</option></select></label>
-<label class="field"><span>Sidebar size</span><select data-key="nav.size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
-<label class="check"><input type="checkbox" data-key="nav.collapsed"><span>Collapse the sidebar</span><span class="desc">Every link stays in the rail. Point at it or focus it to read its label.</span></label>
+<label class="field"><span>Site navigation labels</span><select data-key="nav.labels"><option value="normal">Normal labels</option><option value="small">Small labels</option><option value="icons">Icons only</option></select></label>
+<label class="field"><span>Site navigation size</span><select data-key="nav.size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+<label class="check"><input type="checkbox" data-key="nav.collapsed"><span>Collapse the site navigation</span><span class="desc">Point at a link or focus it to read its label.</span></label>
 <details class="more" id="bb-navigation"><summary>More options</summary>
-<div class="group" id="ultra-nav-editor">
+<div class="group" id="ultra-nav-editor"><span class="site-badge" translate="no">Blackboard</span>
           <div class="nav-section-heading"><h3>Dimensions</h3><button type="button" data-nav-reset="dimensions" aria-label="Reset dimensions">Reset</button></div>
           <label class="check"><input type="checkbox" data-key="nav.detailed"><span>Use precise navigation dimensions</span></label>
           <label class="check"><input type="checkbox" data-key="nav.expandOnHover"><span>Expand on hover</span></label>
@@ -750,7 +751,7 @@
           <label class="field"><span>Logo alignment</span><select data-key="nav.logoAlign"><option value="start">Left</option><option value="center">Center</option><option value="end">Right</option></select></label>
           <label class="check"><input type="checkbox" data-key="nav.footer"><span>Show navigation footer</span></label>
           <div class="nav-section-heading"><h3>Custom links and item order</h3><button type="button" data-nav-reset="layout" aria-label="Reset item order and visibility">Reset</button></div>
-          <p class="desc">Custom navigation links sync with Chrome. Images stay on this device.</p>
+          <p class="desc">Custom links sync with Chrome; pictures stay on this device.</p>
           <p class="desc" id="nav-reorder-note">Drag a handle to reorder, or focus it and use the arrow keys.</p>
           <ol id="nav-items" data-setting-owner="navItems.order navItems.hidden" class="nav-editor-list" aria-describedby="nav-reorder-note"></ol>
           <div id="nav-link-editor" data-setting-owner="navItems.links" class="group">
@@ -761,7 +762,7 @@
             <div class="row"><button type="button" id="nav-link-save">Add link</button><button type="button" id="nav-link-cancel">Cancel</button></div>
           </div>
           <div class="nav-section-heading"><h3>Navigation widgets</h3><button type="button" data-nav-reset="widgets" aria-label="Reset navigation widgets">Reset</button></div>
-          <p class="desc">The rail uses the same focus timer and pet progress as your widgets. No extra activity is recorded.</p>
+          <p class="desc">The same focus timer and pet as your widgets; nothing more is recorded.</p>
           <ol id="nav-widgets" data-setting-owner="navItems.widgets" class="nav-editor-list" aria-describedby="nav-reorder-note"></ol>
           <button type="button" id="nav-reset">Reset navigation</button>
 </div>
@@ -769,16 +770,16 @@
 </div>
 <div class="stack" data-show="logo">
 <div class="row"><button type="button" id="nav-logo-pick">Choose a logo</button><input id="nav-logo-file" data-setting-owner="nav.li" type="file" accept="image/*" hidden><span id="nav-logo-note" class="desc"></span></div>
-<p class="desc">Your logo stays on this device. A Look shared from here carries the Glaze logo in its place.</p>
+<p class="desc">Your logo stays on this device; a Look you share carries the Glaze logo.</p>
 </div>
 </section>
 <section id="navbar-items" data-editor-section="navigation/items" data-sites="Canvas · Blackboard Ultra · Moodle" data-show="navbar" aria-labelledby="heading-navigation-items">
 <p class="section-path" data-editor-breadcrumb><a href="#navigation/items" data-editor-alias>Navigation items</a></p><div class="section-heading"><h2 id="heading-navigation-items">Navigation items</h2><button type="button" class="section-reset" id="nbar-reset">Reset items</button></div>
 <h3>Glaze's own</h3>
-<p class="desc">Off by default. Each one opens where you are.</p>
+<p class="desc">Each one opens where you are.</p>
 <div id="nbar-glaze" class="nb-glaze"></div>
 <h3>Widgets</h3>
-<p class="desc">The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.</p>
+<p class="desc">The same timer and pet as your other widgets; nothing more is recorded.</p>
 <ul id="nbar-widgets" class="nb-widgets"></ul>
 <details class="more"><summary>More options</summary>
 <div id="nbar-items" data-setting-owner="navbarItems"></div>
@@ -791,29 +792,29 @@
 <div class="row"><button type="submit" class="primary">Add link</button></div>
 </form>
 <h3>Arranged by mods</h3>
-<p class="desc">A mod may arrange the bar while it runs, never saved. Your own choices still win where you made them.</p>
+<p class="desc">A mod may arrange the bar while it runs; your own choices still win.</p>
 <ul id="nbar-mods" class="nb-widgets"></ul>
 </details>
 <p id="nbar-status" class="desc" role="status" aria-live="polite"></p>
 </section>
 <section id="tabs" data-editor-section="navigation/tabs" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-navigation-tabs">
-<p class="section-path" data-editor-breadcrumb><a href="#navigation/tabs" data-editor-alias>Course tabs</a></p><div class="section-heading"><h2 id="heading-navigation-tabs">Course tabs</h2><button type="button" class="section-reset" data-reset-section="navigation/tabs">Reset section</button></div>
-<p class="desc">On Canvas and Blackboard Ultra, each course you open gets a tab. Pick a tab to return to its live page, including an open test or assignment. Up to four extra course pages stay live; edited pages stay until you close them.</p>
+<p class="section-path" data-editor-breadcrumb><a href="#navigation/tabs" data-editor-alias>Course tabs</a></p><div class="section-heading"><h2 id="heading-navigation-tabs">Course tabs</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="navigation/tabs">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.tabs" aria-describedby="info-enhance-tabs"><span id="info-enhance-tabs-name">Course tabs</span></label><button type="button" class="info" popovertarget="info-enhance-tabs" aria-labelledby="info-more info-enhance-tabs-name" aria-describedby="info-enhance-tabs"></button>
-<div class="info-pop" id="info-enhance-tabs" popover><span class="desc">Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.</span></div></div>
+<div class="info-pop" id="info-enhance-tabs" popover><span class="desc">Each course you open gets a tab back to its live page, an open test included; up to four stay live. Pin, drag or close tabs; on the keyboard, arrows move, Delete closes, P pins.</span></div></div>
 <div class="field wide"><span>Where</span>
           <div class="seg wrap" role="radiogroup" aria-label="Where the tabs go">
+            <label><input type="radio" name="tabs.at" value="auto">Automatic</label>
             <label><input type="radio" name="tabs.at" value="above">Above the course's bar</label>
             <label><input type="radio" name="tabs.at" value="between">Between its rows</label>
             <label><input type="radio" name="tabs.at" value="below">Below it</label>
             <label><input type="radio" name="tabs.at" value="nav">Only in the navigation</label>
           </div></div>
-<p class="desc" data-tabs-nav-note>Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.</p>
+<p class="desc" data-tabs-nav-note>Only in the navigation needs Glaze navigation's course tabs on.</p>
 <details class="more"><summary>More options</summary>
 <div class="field"><span><label for="tabs-cap" id="tabs-cap-name">Most tabs</label><button type="button" class="info" popovertarget="tabs-cap-note" aria-labelledby="info-more tabs-cap-name" aria-describedby="tabs-cap-note"></button></span><input id="tabs-cap" type="range" data-key="tabs.cap" min="2" max="20" step="1" aria-describedby="tabs-cap-note"><output data-for="tabs.cap"></output></div>
 <p class="desc info-pop" id="tabs-cap-note" popover>With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.</p>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="tabs.place" aria-describedby="info-tabs-place"><span id="info-tabs-place-name">Go back to where you were</span></label><button type="button" class="info" popovertarget="info-tabs-place" aria-labelledby="info-more info-tabs-place-name" aria-describedby="info-tabs-place"></button>
-<div class="info-pop" id="info-tabs-place" popover><span class="desc">A tab opens its course at the page and scroll you left it at. Off: the Canvas course home or Blackboard course content. Canvas has one header row, so Between its rows places tabs below the breadcrumbs.</span></div></div>
+<div class="info-pop" id="info-tabs-place" popover><span class="desc">A tab opens its course at the page and scroll you left it at. Off: the Canvas course home or Blackboard course content.</span></div></div>
 <div class="group">
           <h3>Tab buttons</h3>
           <div class="field wide"><span>Shape</span>
@@ -843,22 +844,22 @@
               <label><input type="radio" name="tabs.color" value="tint">Tint</label>
               <label><input type="radio" name="tabs.color" value="theme">Strong</label>
             </div></div>
-          <p class="desc">Each course's colour and nickname are the ones under Courses and in a course card's menu.</p>
+          <p class="desc">Colors and nicknames come from Your courses.</p>
         </div>
 </details>
-<p class="desc">Switching tabs shows a still copy of the course as you last saw it at once, then Blackboard's live page fades in. The copies stay in memory and are never written to disk; they go when the browser closes, when you turn the tabs or Glaze off, or when someone else signs in. Glaze never opens or loads a course in the background.</p>
+<p class="desc" id="tabs-memory-note">Still copies of your courses stay in memory, never on disk; Glaze never loads a course in the background.</p>
 </section>
 <section id="side-panel" data-editor-section="navigation/sidebar" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-navigation-sidebar">
-<p class="section-path" data-editor-breadcrumb><a href="#navigation/sidebar" data-editor-alias>Sidebar</a></p><div class="section-heading"><h2 id="heading-navigation-sidebar">Sidebar</h2><button type="button" class="section-reset" data-reset-section="navigation/sidebar">Reset section</button></div>
+<p class="section-path" data-editor-breadcrumb><a href="#navigation/sidebar" data-editor-alias>Sidebar</a></p><div class="section-heading"><h2 id="heading-navigation-sidebar">Sidebar</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="navigation/sidebar">Reset section</button></div>
 <div class="has-info nb-master"><label class="check"><input type="checkbox" data-key="enhance.sidebar" aria-describedby="info-enhance-sidebar"><span id="info-enhance-sidebar-name">Use the sidebar</span></label><button type="button" class="info" popovertarget="info-enhance-sidebar" aria-labelledby="info-more info-enhance-sidebar-name" aria-describedby="info-enhance-sidebar"></button>
-<div class="info-pop" id="info-enhance-sidebar" popover><span class="desc">On Canvas and Blackboard Ultra: the page's own sidebar with your widgets docked under it, at the right edge on wide screens and a drawer on narrow ones. Where each widget goes is kept for each site and account, on this device. Turn it off to get each site's own sidebar and Glaze's boards back as they were; your dock is kept for when you turn it on again. To start over, choose Reset sidebar for this account in the sidebar's ⋯ menu.</span></div></div>
+<div class="info-pop" id="info-enhance-sidebar" popover><span class="desc">The page's own sidebar with your widgets docked under it: at the right on wide screens, a drawer on narrow ones. Off brings each site's sidebar back and keeps your dock; Reset sidebar in its ⋯ menu starts over.</span></div></div>
 <div class="nb-body" data-sidebar>
 <div class="nb-group"><h3>Where</h3>
 <label class="check"><input type="checkbox" data-key="sidebar.canvas"><span>On Canvas</span></label>
 <label class="check"><input type="checkbox" data-key="sidebar.ultra"><span>On Blackboard Ultra</span></label></div>
 <details class="more"><summary>More options</summary>
 <div class="nb-group">
-<p class="desc" id="sidebar-off-head">Show it on these pages. Elsewhere the site's own sidebar stays as it is, without your docked widgets.</p>
+<p class="desc" id="sidebar-off-head">Show it on these pages.</p>
 <div id="sidebar-off" class="seg wrap" role="group" aria-labelledby="sidebar-off-head"></div></div>
 <div class="nb-group"><h3 id="sbar-style-head">Style</h3>
 <div class="seg nb-cards" role="radiogroup" aria-labelledby="sbar-style-head">
@@ -880,7 +881,7 @@
           <span class="desc">A button in the header when the page's own content is long.</span></label></div>
 <div class="nb-group"><h3>Layout</h3>
 <div class="row"><label class="field"><span>Width (pixels)</span><input type="range" data-key="sidebar.width" min="288" max="480" step="8"><output data-for="sidebar.width"></output></label></div>
-<p class="desc">Until you drag its edge on a page. Dragging is kept for each site and account.</p>
+<p class="desc">Dragging its edge on a page wins, for that site and account.</p>
 <div class="field wide"><span id="sbar-order-label">First</span>
 <div class="seg" role="radiogroup" aria-labelledby="sbar-order-label">
 <label><input type="radio" name="sidebar.order" value="page">This page</label>
@@ -896,9 +897,9 @@
             <label class="field"><span>Room for the page (pixels)</span><input type="range" data-key="sidebar.min" min="480" max="1200" step="20"><output data-for="sidebar.min"></output></label>
             <label class="field"><span>Room for grades (pixels)</span><input type="range" data-key="sidebar.grades" min="600" max="1400" step="20"><output data-for="sidebar.grades"></output></label>
           </div>
-<p class="desc">When the window can't keep this much beside the sidebar, the sidebar becomes a drawer.</p>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="sidebar.absorb" aria-describedby="info-sidebar-absorb"><span id="info-sidebar-absorb-name">Absorb page panels into the sidebar</span></label><button type="button" class="info" popovertarget="info-sidebar-absorb" aria-labelledby="info-more info-sidebar-absorb-name" aria-describedby="info-sidebar-absorb"></button>
-<div class="info-pop" id="info-sidebar-absorb" popover><span class="desc">On Blackboard Ultra, an assignment's Grades and attempts or its Details and information show in This page instead of beside the assignment. They stay the assignment's own: turn this off to keep them where Blackboard puts them.</span></div></div></div>
+<p class="desc">With less room than this, the sidebar becomes a drawer.</p>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="sidebar.absorb" aria-describedby="info-sidebar-absorb"><span id="info-sidebar-absorb-name">Absorb page panels into the sidebar</span></label><span class="site-badge" translate="no">Blackboard</span><button type="button" class="info" popovertarget="info-sidebar-absorb" aria-labelledby="info-more info-sidebar-absorb-name" aria-describedby="info-sidebar-absorb"></button>
+<div class="info-pop" id="info-sidebar-absorb" popover><span class="desc">An assignment's Grades and attempts or its Details and information show in This page instead of beside the assignment.</span></div></div></div>
 <div class="nb-group"><h3>Appearance</h3>
 <div class="field wide"><span id="sbar-surface-label">Surface</span>
 <div class="seg" role="radiogroup" aria-labelledby="sbar-surface-label">
@@ -914,13 +915,13 @@
             <label>Corners <select data-key="sidebar.radius"><option value="auto">As the Look</option><option value="none">Square</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
             <label>Spacing <select data-key="sidebar.density"><option value="auto">As the Look</option><option value="compact">Compact</option><option value="cozy">Cozy</option><option value="comfortable">Comfortable</option></select></label>
           </div>
-<p class="desc">A Look you share carries the sidebar's style, surface and corners, never where your widgets are.</p></div>
+<p class="desc">A Look you share carries these, never where your widgets are.</p></div>
 <div class="nb-group"><h3 id="sbar-todo-head">To Do in the sidebar</h3>
 <div class="seg" role="radiogroup" aria-labelledby="sbar-todo-head">
 <label><input type="radio" name="sidebar.todo" value="follow">Follow page</label>
 <label><input type="radio" name="sidebar.todo" value="all">All courses</label>
 </div>
-<p class="desc">Follow page shows a course's work inside it and everything elsewhere. A choice made in the sidebar itself wins for that account.</p></div>
+<p class="desc">Follow page: a course's work inside it, everything elsewhere.</p></div>
 </details>
 </div>
 </section>
@@ -929,26 +930,24 @@
 <section id="courses" data-editor-section="courses/list" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-courses-list">
 <p class="section-path" data-editor-breadcrumb><a href="#courses/list" data-editor-alias>Your courses</a></p><div class="section-heading"><h2 id="heading-courses-list">Your courses</h2><button type="button" class="section-reset" data-reset-section="courses/list">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.coursemenu" aria-describedby="info-enhance-coursemenu"><span id="info-enhance-coursemenu-name">Course menu</span></label><button type="button" class="info" popovertarget="info-enhance-coursemenu" aria-labelledby="info-more info-enhance-coursemenu-name" aria-describedby="info-enhance-coursemenu"></button>
-<div class="info-pop" id="info-enhance-coursemenu" popover><span class="desc">A button on each course card on the Courses page to give the course a nickname, a color, a tint and a look without opening the editor. A nickname replaces the course's name on your cards and in Glaze, with Blackboard's name in a tooltip.</span>
+<div class="info-pop" id="info-enhance-coursemenu" popover><span class="desc">A button on each course card to give the course a nickname, a color, a tint and a look. Off also hides the nicknames you gave.</span>
           <span class="desc">On Canvas: tint and look; the nickname and color are in Canvas's own card menu.</span></div></div>
-<label class="check"><input type="checkbox" data-key="courses.harmonize"><span>Tone course colors to fit the palette</span>
-          <span class="desc">Course colors keep their hue but are toned to fit your palette.</span></label>
+<label class="check"><input type="checkbox" data-key="courses.harmonize"><span>Tone course colors to fit the palette</span></label>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="courses.tint" aria-describedby="info-courses-tint"><span id="info-courses-tint-name">Tint the theme inside a course</span></label><button type="button" class="info" popovertarget="info-courses-tint" aria-labelledby="info-more info-courses-tint-name" aria-describedby="info-courses-tint"></button>
-<div class="info-pop" id="info-courses-tint" popover><span class="desc">Inside each course ticked below, the accent takes the course's color and the background leans toward it, so you can tell at a glance which course you're in.</span></div></div>
+<div class="info-pop" id="info-courses-tint" popover><span class="desc">Inside each course ticked below, the accent takes the course's color and the background leans toward it, so you can tell which course you're in.</span></div></div>
 <label class="field" data-tint><span>Tint strength</span><input type="range" data-key="courses.strength" min="10" max="100" step="5"><output data-for="courses.strength" data-format="pct100"></output></label>
 <h3 id="course-head" hidden>Courses</h3>
 <ul class="courses" id="course-list" data-setting-owner="courses.colors courses.tinted courses.looks courses.names" data-control-group="course-pickers"></ul>
 <h3 id="org-head" hidden>Organizations</h3>
 <ul class="courses" id="org-list" data-setting-owner="courses.colors courses.tinted courses.looks courses.names" data-control-group="course-pickers"></ul>
-<p class="desc" id="course-empty">Open Blackboard or Canvas once and your courses show up here. Change Canvas colours in its own card menu.</p>
+<p class="desc" id="course-empty">Your courses show up here once you open your school's site.</p>
 </section>
 <section id="cards" data-editor-section="courses/cards" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-courses-cards">
-<p class="section-path" data-editor-breadcrumb><a href="#courses/cards" data-editor-alias>Course cards</a></p><div class="section-heading"><h2 id="heading-courses-cards">Course cards</h2><button type="button" class="section-reset" data-reset-section="courses/cards">Reset section</button></div>
-<p class="desc" id="cards-note">Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.</p>
+<p class="section-path" data-editor-breadcrumb><a href="#courses/cards" data-editor-alias>Course cards</a></p><div class="section-heading"><h2 id="heading-courses-cards">Course cards</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="courses/cards">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="card.condensed" aria-describedby="info-card-condensed"><span id="info-card-condensed-name">Condensed cards</span></label><button type="button" class="info" popovertarget="info-card-condensed" aria-labelledby="info-more info-card-condensed-name" aria-describedby="info-card-condensed"></button>
 <div class="info-pop" id="info-card-condensed" popover><span class="desc">The course name sits on the card's picture, so each card is shorter. A card's editor warns when the name would be hard to read there.</span></div></div>
 <label class="check"><input type="checkbox" data-key="card.overlay"><span>Course color over pictures</span>
-          <span class="desc">Canvas tints each card's picture in the course color. Off shows pictures as they are.</span></label>
+          <span class="desc">Off shows card pictures as they are.</span></label>
 <div class="field wide"><span><span id="card-hover-name">Hover</span><button type="button" class="info" popovertarget="card-motion-note" aria-labelledby="info-more card-hover-name" aria-describedby="card-motion-note"></button></span>
           <div class="seg wrap" role="radiogroup" aria-label="Card hover" aria-describedby="card-motion-note">
             <label><input type="radio" name="card.hover" value="none">None</label>
@@ -980,19 +979,18 @@
 <label class="field"><span>Picture height</span><input type="range" data-key="card.height" min="64" max="260" step="2"><output data-for="card.height" data-format="px"></output></label>
 <label class="check"><input type="checkbox" data-key="card.icons"><span>Bookmark icons on cards</span>
           <span class="desc">A card's bookmarks show as small icons on its picture.</span></label>
-<label class="check"><input type="checkbox" data-key="card.create"><span>Create button on cards</span>
-          <span class="desc">A + on each card to message the class, or start a discussion where the course allows it.</span></label>
+<div class="has-badge"><label class="check"><input type="checkbox" data-key="card.create"><span>Create button on cards</span>
+          <span class="desc">A + on each card to message the class or start a discussion.</span></label><span class="site-badge" translate="no">Canvas</span></div>
 <div class="row" id="card-set" hidden><span class="desc" id="card-set-note"></span><button type="button" id="card-set-clear" aria-describedby="card-set-note">Remove</button></div>
 </details>
 </section>
 </div>
 <div id="panel-study" role="tabpanel" aria-labelledby="tab-study" data-editor-panel="study" hidden>
 <section id="study-todo" data-editor-section="study/todo" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-study-todo">
-<p class="section-path" data-editor-breadcrumb><a href="#study/todo" data-editor-alias>To Do</a></p><div class="section-heading"><h2 id="heading-study-todo">To Do</h2><button type="button" class="section-reset" data-reset-section="study/todo">Reset section</button></div>
+<p class="section-path" data-editor-breadcrumb><a href="#study/todo" data-editor-alias>To Do</a></p><div class="section-heading"><h2 id="heading-study-todo">To Do</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="study/todo">Reset section</button></div>
 <div class="group" id="todo">
-          <h3>Better To Do</h3>
           <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.todo" aria-describedby="info-enhance-todo"><span id="info-enhance-todo-name">Better To Do</span></label><button type="button" class="info" popovertarget="info-enhance-todo" aria-labelledby="info-more info-enhance-todo-name" aria-describedby="info-enhance-todo"></button>
-<div class="info-pop" id="info-enhance-todo" popover><span class="desc">Glaze's own To Do list: on Canvas in place of Canvas's, on the Dashboard and on a course's home page (that course only); on Blackboard in place of the To Do on the Courses page, and beside a course's content (that course only). Grouped by day, with what's past due, what's done and, on Canvas, new announcements. Add your own tasks, steps, a day to do something on and timed focus sessions; they're kept on this device, and Export settings includes them.</span></div></div>
+<div class="info-pop" id="info-enhance-todo" popover><span class="desc">Glaze's own To Do list in place of the site's, on the Dashboard or Courses page and beside a course's content, grouped by day. Add your own tasks, steps, do-on days and focus sessions, kept on this device.</span></div></div>
           <div class="row">
             <label>Timeframe <select data-key="todo.span"><option value="week">This week</option><option value="custom">Custom</option></select></label>
             <label>Week starts <select data-key="todo.start"><option value="rolling">Today</option><option value="monday">Monday</option><option value="sunday">Sunday</option><option value="saturday">Saturday</option></select></label>
@@ -1006,9 +1004,9 @@
             <label>Done means <select data-key="todo.done"><option value="auto">Submitted, graded or ticked</option><option value="manual">Only what I tick</option></select></label>
           </div>
           <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.cardTasks" aria-describedby="info-enhance-cardTasks"><span id="info-enhance-cardTasks-name">Tasks on course cards</span></label><button type="button" class="info" popovertarget="info-enhance-cardTasks" aria-labelledby="info-more info-enhance-cardTasks-name" aria-describedby="info-enhance-cardTasks"></button>
-<div class="info-pop" id="info-enhance-cardTasks" popover><span class="desc">On Canvas's Dashboard and Blackboard's Courses page: each course card lists that course's next items, soonest first, each a link. They follow the timeframe, past-due work and "Done means" above, whether or not Better To Do is on.</span></div></div>
+<div class="info-pop" id="info-enhance-cardTasks" popover><span class="desc">Each course card lists that course's next items, soonest first. They follow the timeframe, past-due work and Done means above, with or without Better To Do.</span></div></div>
           <label class="check"><input type="checkbox" data-key="enhance.gradescope"><span>Gradescope in To Do</span>
-            <span class="desc">Assignments from your Gradescope courses join Better To Do, the course cards and reminders, marked Gradescope, with a link to each. On gradescope.com Glaze asks once which of your Canvas or Blackboard courses each Gradescope course belongs to, then reads your assignments whenever you visit, signed in as you. It only reads, and what it reads stays on this device.</span></label>
+            <span class="desc">Your Gradescope work joins To Do: on gradescope.com Glaze reads your assignments, signed in as you, and what it reads stays on this device.</span></label>
           <div id="gs-map" hidden>
             <p class="desc" id="gs-acct"></p>
             <p class="desc" id="gs-map-note">Your Gradescope courses and the course each goes with:</p>
@@ -1016,53 +1014,51 @@
             <div class="row">
               <button type="button" id="gs-ask">Ask on Gradescope again</button>
               <button type="button" id="gs-forget">Ask on Canvas and Blackboard again</button>
-              <span class="desc">Each Canvas or Blackboard account is asked once, before any Gradescope work shows for it: in Better To Do, above the course cards' tasks or in the reminders hub. One answer counts everywhere.</span>
+              <span class="desc">Each account is asked once, before its Gradescope work shows.</span>
             </div>
           </div>
 <details class="more"><summary>More options</summary>
           <label class="check"><input type="checkbox" data-key="todo.group"><span>Group by day</span></label>
           <label class="check"><input type="checkbox" data-key="todo.rel"><span>Relative dates</span>
-            <span class="desc">"in 2 days" instead of "Thu 11:59 PM". The other shows when you hover.</span></label>
-          <label class="check"><input type="checkbox" data-key="todo.urgent"><span>Highlight what's urgent</span>
+            <span class="desc">"in 2 days" instead of "Thu 11:59 PM", the other on hover.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.urgent"><span>Highlight urgent work in To Do</span>
             <span class="desc">Past due, or due within a day.</span></label>
-          <label class="check"><input type="checkbox" data-key="todo.teacher"><span>Grading, for teachers</span>
-            <span class="desc">If you teach or assist a course: work waiting for you to grade.</span></label>
-          <label class="check"><input type="checkbox" data-key="todo.progress"><span>Grading progress</span>
-            <span class="desc">How many handed-in submissions you've graded so far. Asks Canvas once per assignment.</span></label>
-          <div class="has-info"><label class="check"><input type="checkbox" data-key="todo.sync" aria-describedby="info-todo-sync"><span id="info-todo-sync-name">Tick off in Canvas too</span></label><button type="button" class="info" popovertarget="info-todo-sync" aria-labelledby="info-more info-todo-sync-name" aria-describedby="info-todo-sync"></button>
-<div class="info-pop" id="info-todo-sync" popover><span class="desc">Ticking an item marks it done in Canvas's own planner, as Canvas's List View does, so it shows done on your phone too. This is the only change Glaze makes in Canvas. Off: ticks stay on this device. On Blackboard, ticks always stay on this device.</span></div></div>
+          <div class="has-badge"><label class="check"><input type="checkbox" data-key="todo.teacher"><span>Grading, for teachers</span>
+            <span class="desc">If you teach or assist a course: work waiting for you to grade.</span></label><span class="site-badge" translate="no">Canvas</span></div>
+          <div class="has-badge"><label class="check"><input type="checkbox" data-key="todo.progress"><span>Grading progress</span>
+            <span class="desc">How many submissions you've graded; asks Canvas once per assignment.</span></label><span class="site-badge" translate="no">Canvas</span></div>
+          <div class="has-info"><label class="check"><input type="checkbox" data-key="todo.sync" aria-describedby="info-todo-sync"><span id="info-todo-sync-name">Tick off in Canvas too</span></label><span class="site-badge" translate="no">Canvas</span><button type="button" class="info" popovertarget="info-todo-sync" aria-labelledby="info-more info-todo-sync-name" aria-describedby="info-todo-sync"></button>
+<div class="info-pop" id="info-todo-sync" popover><span class="desc">Ticking an item also marks it done in Canvas's own planner, so it shows done on your phone too: the only change Glaze makes in Canvas. Off: ticks stay on this device.</span></div></div>
           <div class="row">
             <label class="field"><span>Tasks per card</span><input type="range" data-key="todo.cardN" min="1" max="10" step="1"><output data-for="todo.cardN"></output></label>
           </div>
           <label class="check"><input type="checkbox" data-key="todo.cardStatus"><span>Status on card tasks</span>
             <span class="desc">Submitted, graded, late, missing or excused, beside each item.</span></label>
           <label class="check"><input type="checkbox" data-key="todo.cardCross"><span>Cross out done tasks</span>
-            <span class="desc">Done items stay on the card, crossed out, until their due date passes. Off: they leave it.</span></label>
+            <span class="desc">Done items stay on the card, crossed out, until their due date passes.</span></label>
           <label class="check"><input type="checkbox" data-key="todo.gsDaily"><span>Also check Gradescope once a day from Canvas or Blackboard</span>
-            <span class="desc">New Gradescope work shows without a visit to Gradescope: once a day at most, a Canvas or Blackboard page has Glaze read each course's Gradescope page, with your Gradescope sign-in in this browser.</span></label>
+            <span class="desc">At most once a day, a Canvas or Blackboard page has Glaze read your Gradescope courses, with your Gradescope sign-in.</span></label>
 </details>
         </div>
 </section>
-<section id="study-grades" data-editor-section="study/grades" data-sites="Canvas · Blackboard Ultra (grade displays)" aria-labelledby="heading-study-grades">
-<p class="section-path" data-editor-breadcrumb><a href="#study/grades" data-editor-alias>Grades and GPA</a></p><div class="section-heading"><h2 id="heading-study-grades">Grades and GPA</h2><button type="button" class="section-reset" data-reset-section="study/grades">Reset section</button></div>
+<section id="study-grades" data-editor-section="study/grades" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-study-grades">
+<p class="section-path" data-editor-breadcrumb><a href="#study/grades" data-editor-alias>Grades and GPA</a></p><div class="section-heading"><h2 id="heading-study-grades">Grades and GPA</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="study/grades">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.inline" aria-describedby="info-enhance-inline"><span id="info-enhance-inline-name">Due-date status and percentages</span></label><button type="button" class="info" popovertarget="info-enhance-inline" aria-labelledby="info-more info-enhance-inline-name" aria-describedby="info-enhance-inline"></button>
-<div class="info-pop" id="info-enhance-inline" popover><span class="desc">Beside each due date in course content, where the work stands: "in 2 days · Unopened", "Submitted", "Graded · 18/20". Elsewhere, how long is left. And the percentage inside every grade.</span></div></div>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.overall" aria-describedby="info-enhance-overall"><span id="info-enhance-overall-name">Grades on course cards</span></label><button type="button" class="info" popovertarget="info-enhance-overall" aria-labelledby="info-more info-enhance-overall-name" aria-describedby="info-enhance-overall"></button>
-<div class="info-pop" id="info-enhance-overall" popover><span class="desc">Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.</span>
-          <span class="desc">On Canvas: on the Dashboard's cards. Click the grade to open the course's grades.</span></div></div>
+<div class="info-pop" id="info-enhance-inline" popover><span class="desc">Beside each due date in course content, where the work stands: "in 2 days · Unopened", "Submitted", "Graded · 18/20"; and the percentage in every grade.</span></div></div>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.overall" aria-describedby="info-enhance-overall"><span id="info-enhance-overall-name">Grades on course cards</span></label><span class="site-badge" translate="no">Canvas · Blackboard · Moodle</span><button type="button" class="info" popovertarget="info-enhance-overall" aria-labelledby="info-more info-enhance-overall-name" aria-describedby="info-enhance-overall"></button>
+<div class="info-pop" id="info-enhance-overall" popover><span class="desc">Each course card shows your overall grade, in its score band's color, when your instructor shares it.</span>
+          <span class="desc">On Canvas: click the grade to open the course's grades.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.newgrades" aria-describedby="info-enhance-newgrades"><span id="info-enhance-newgrades-name">New-grade badges</span></label><button type="button" class="info" popovertarget="info-enhance-newgrades" aria-labelledby="info-more info-enhance-newgrades-name" aria-describedby="info-enhance-newgrades"></button>
 <div class="info-pop" id="info-enhance-newgrades" popover><span class="desc">"New" beside grades that arrived since you last opened a course's gradebook, and a count on your course cards.</span>
           <span class="desc">On Canvas: the count follows Canvas's own unread grades.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.calc" aria-describedby="info-enhance-calc"><span id="info-enhance-calc-name">What-if calculator</span></label><button type="button" class="info" popovertarget="info-enhance-calc" aria-labelledby="info-more info-enhance-calc-name" aria-describedby="info-enhance-calc"></button>
-<div class="info-pop" id="info-enhance-calc" popover><span class="desc">On a course's gradebook: try scores for work not graded yet, or set a target and see what you'd need. Uses the course's own weights, and says so when it can't.</span>
-          <span class="desc">On Canvas: above a course's grades, by Canvas's own rules (weights, dropped scores, excused work, grading periods). Change real scores, leave work out, add pretend assignments. Kept on this device until the real grade arrives; Canvas never sees them.</span>
-          <span class="desc">On Blackboard: under a course's overall grade, with the same changes, by the course's own overall-grade recipe where Blackboard gives one. Where it doesn't, the figures are an estimate from your share of the points, and say so.</span></div></div>
+<div class="info-pop" id="info-enhance-calc" popover><span class="desc">On a course's gradebook: try scores for work not graded yet, or set a target and see what you'd need, by the course's own rules.</span>
+          <span class="desc">Kept on this device until the real grade arrives; where the rules aren't known, it says it estimates.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.gpa" aria-describedby="info-enhance-gpa"><span id="info-enhance-gpa-name">Grade point average</span></label><button type="button" class="info" popovertarget="info-enhance-gpa" aria-labelledby="info-more info-enhance-gpa-name" aria-describedby="info-enhance-gpa"></button>
-<div class="info-pop" id="info-enhance-gpa" popover><span class="desc">On Canvas's Dashboard: your GPA for each term and across your current courses, from your current grades. Set each course's credits, level and grading scale under it.</span>
-          <span class="desc">On Blackboard: on Grades, for this term's courses. Where Blackboard doesn't show a course's letter cut-offs, it uses a common scale until you give the course its own.</span></div></div>
+<div class="info-pop" id="info-enhance-gpa" popover><span class="desc">Your GPA from your current grades: on Canvas's Dashboard for each term, on Blackboard's Grades for this term. Set each course's credits, level and grading scale there.</span></div></div>
 <details class="more"><summary>More options</summary>
 <label class="check"><input type="checkbox" data-key="enhance.gradeHover"><span>Card grades only on hover</span>
-          <span class="desc">Grades on course cards, and the GPA, stay hidden until you point at them.</span></label>
+          <span class="desc">Card grades and the GPA stay hidden until you point at them.</span></label>
 <div class="group">
           <label class="check"><input type="checkbox" data-key="enhance.gpaPlus"><span>Plus/minus grade points</span>
             <span class="desc">A− counts 3.7, B+ 3.3 and so on, instead of 4 for any A.</span></label>
@@ -1073,10 +1069,9 @@
 </details>
 </section>
 <section id="study-reminders" data-editor-section="study/reminders" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-study-reminders">
-<p class="section-path" data-editor-breadcrumb><a href="#study/reminders" data-editor-alias>Reminders and streak</a></p><div class="section-heading"><h2 id="heading-study-reminders">Reminders and streak</h2><button type="button" class="section-reset" data-reset-section="study/reminders">Reset section</button></div>
+<p class="section-path" data-editor-breadcrumb><a href="#study/reminders" data-editor-alias>Reminders and streak</a></p><div class="section-heading"><h2 id="heading-study-reminders">Reminders and streak</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="study/reminders">Reset section</button></div>
 <div class="group" id="remind">
-          <h3>Reminders and streak</h3>
-          <p class="desc">Each is off until you turn it on. Reminders show only on Canvas and Blackboard pages, in the tab you're looking at: a small note in the corner, never a browser notification. They stay on this device and change nothing in Canvas or Blackboard. The bell in the To Do header and Ctrl+K "Reminders" list what's coming up.</p>
+          <p class="desc">A small note in the page you're on, never a browser notification.</p>
           <label class="check"><input type="checkbox" data-key="enhance.remind"><span>Due-date reminders</span>
             <span class="desc">A note before work is due, at each time you tick below.</span></label>
 <div class="stack" data-show="remind">
@@ -1090,7 +1085,7 @@
           </div>
 </div>
           <label class="check"><input type="checkbox" data-key="enhance.remindExam"><span>Exam reminders</span>
-            <span class="desc">Quizzes, and titles with exam, test, midterm or final in any of Glaze's six languages.</span></label>
+            <span class="desc">Quizzes, and titles with exam, test, midterm or final.</span></label>
           <div class="row" data-show="remindExam">
             <label>Before an exam <select data-key="remind.exam"><option value="1d">1 day</option><option value="2d">2 days</option><option value="3d">3 days</option><option value="1w">1 week</option></select></label>
           </div>
@@ -1100,28 +1095,28 @@
             <label>Before a focus session <select data-key="remind.plan"><option value="0">At the start</option><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
           </div>
           <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.remindClass" aria-describedby="info-enhance-remindClass"><span id="info-enhance-remindClass-name">Class reminders</span></label><button type="button" class="info" popovertarget="info-enhance-remindClass" aria-labelledby="info-more info-enhance-remindClass-name" aria-describedby="info-enhance-remindClass"></button>
-<div class="info-pop" id="info-enhance-remindClass" popover><span class="desc">Before each class in your class schedule (Ctrl+K, Class schedule, on a Canvas or Blackboard page).</span></div></div>
+<div class="info-pop" id="info-enhance-remindClass" popover><span class="desc">Before each class in your class schedule, which you set in Ctrl+K › Class schedule on a Canvas or Blackboard page.</span></div></div>
           <div class="row" data-show="remindClass">
             <label>Before a class <select data-key="remind.cls"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
           </div>
           <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.streak" aria-describedby="info-enhance-streak"><span id="info-enhance-streak-name">Streak</span></label><button type="button" class="info" popovertarget="info-enhance-streak" aria-labelledby="info-more info-enhance-streak-name" aria-describedby="info-enhance-streak"></button>
-<div class="info-pop" id="info-enhance-streak" popover><span class="desc">Days in a row with nothing missed, and your best, in the To Do header. Work handed in late or not at all ends a run; excused work never counts. Two restores a month put back a run, free.</span></div></div>
+<div class="info-pop" id="info-enhance-streak" popover><span class="desc">Days in a row with nothing missed, and your best, in the To Do header. Late or missing work ends a run; two restores a month put one back.</span></div></div>
         </div>
 </section>
 <section id="study-widgets" data-editor-section="study/widgets" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-study-widgets">
-<p class="section-path" data-editor-breadcrumb><a href="#study/widgets" data-editor-alias>Notes and widgets</a></p><div class="section-heading"><h2 id="heading-study-widgets">Notes and widgets</h2><button type="button" class="section-reset" data-reset-section="study/widgets">Reset section</button></div>
+<p class="section-path" data-editor-breadcrumb><a href="#study/widgets" data-editor-alias>Notes and widgets</a></p><div class="section-heading"><h2 id="heading-study-widgets">Notes and widgets</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="study/widgets">Reset section</button></div>
 <div class="group" id="widgets"><div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.notes" aria-describedby="info-enhance-notes"><span id="info-enhance-notes-name">Notes</span></label><button type="button" class="info" popovertarget="info-enhance-notes" aria-labelledby="info-more info-enhance-notes-name" aria-describedby="info-enhance-notes"></button>
-<div class="info-pop" id="info-enhance-notes" popover><span class="desc">On Canvas and Blackboard Ultra: a box for your own notes on Canvas's Dashboard or Ultra's Courses page (small, medium or large; web addresses in them become links) and a notes app with folders, formatting, checklists, pictures, attachments and links to your courses' content. Open the app from Ctrl+K, the notes box, a Canvas course card's + menu, or Course notes on a Canvas course's home or an Ultra course's outline. Kept on this device only, for each site and account, in Glaze's own storage, which the school's site can't read. Deleted notes stay in the trash for 30 days; export everything as a zip at any time.</span></div></div>
+<div class="info-pop" id="info-enhance-notes" popover><span class="desc">A notes box on the Dashboard or Courses page and a notes app (Ctrl+K) with folders, checklists, pictures and links to your courses. Kept on this device only, where the school's site can't read them.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.widgets" aria-describedby="info-enhance-widgets"><span id="info-enhance-widgets-name">Widgets</span></label><button type="button" class="info" popovertarget="info-enhance-widgets" aria-labelledby="info-more info-enhance-widgets-name" aria-describedby="info-enhance-widgets"></button>
-<div class="info-pop" id="info-enhance-widgets" popover><span class="desc">An agenda of your day, a focus timer, a quote, music, a breathing exercise and a study buddy. On Canvas's Dashboard, Edit layout lets you add, move and resize them, and any of them can float over every Canvas page. On Blackboard Ultra they float on the Courses page and on Glaze's Dashboard (the Institution page, with Better To Do), each with a layout of its own, and any of them can float over every Blackboard page: Edit layout lets you drag them anywhere or move them with the arrow keys; they snap to a grid, the edges and each other, and Alt places them freely.</span></div></div>
-<p class="desc">Dock widgets in the page's sidebar: <a href="#navigation/sidebar" data-editor-alias>Sidebar settings</a></p>
+<div class="info-pop" id="info-enhance-widgets" popover><span class="desc">An agenda, a focus timer, a quote, music, breathing and a study buddy on the Dashboard or Courses page, or floating over every page. Edit layout adds, moves and resizes them.</span></div></div>
+<p class="desc">Dock widgets in the sidebar: <a href="#navigation/sidebar" data-editor-alias>Sidebar settings</a></p>
 <details class="more"><summary>More options</summary>
 <div class="row">
             <label class="field"><span>Focus minutes</span><input type="range" data-key="widgets.work" min="1" max="120" step="1"><output data-for="widgets.work"></output></label>
             <label class="field"><span>Break minutes</span><input type="range" data-key="widgets.rest" min="1" max="60" step="1"><output data-for="widgets.rest"></output></label>
           </div>
 <label class="check"><input type="checkbox" data-key="widgets.sound"><span>Chime when the timer ends</span>
-            <span class="desc">A soft chime made by your browser, in the tab where you pressed Start.</span></label>
+            <span class="desc">A soft chime in the tab where you pressed Start.</span></label>
 <div class="row">
             <label>Quotes <select data-key="widgets.quotes"><option value="all">All</option><option value="focus">Focus</option><option value="calm">Calm</option><option value="courage">Courage</option></select></label>
             <label>New quote <select data-key="widgets.quoteMode"><option value="cycle">Every few seconds</option><option value="daily">Once a day</option></select></label>
@@ -1141,35 +1136,33 @@
 </div>
 </section>
 <section id="study-pet" data-editor-section="study/pet" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-study-pet">
-<p class="section-path" data-editor-breadcrumb><a href="#study/pet" data-editor-alias>Pet habitat</a></p><div class="section-heading"><h2 id="heading-study-pet">Pet habitat</h2><button type="button" class="section-reset" data-reset-section="study/pet">Reset section</button></div>
+<p class="section-path" data-editor-breadcrumb><a href="#study/pet" data-editor-alias>Pet habitat</a></p><div class="section-heading"><h2 id="heading-study-pet">Pet habitat</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="study/pet">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.pet" aria-describedby="info-enhance-pet"><span id="info-enhance-pet-name">Pet habitat</span></label><button type="button" class="info" popovertarget="info-enhance-pet" aria-labelledby="info-more info-enhance-pet-name" aria-describedby="info-enhance-pet"></button>
-<div class="info-pop" id="info-enhance-pet" popover><span class="desc">A local study buddy that earns XP from handed-in work, streak days and kept do-on plans already saved on this device. Decorate its habitat and unlock new looks. Off by default; no notifications, focus-session XP or missed-day penalties.</span></div></div>
+<div class="info-pop" id="info-enhance-pet" popover><span class="desc">A study buddy that earns XP from handed-in work, streak days and kept do-on plans, on this device. Decorate its habitat and unlock new looks; no notifications or penalties.</span></div></div>
 <p class="desc">Streak XP requires Streak to be on; earned XP stays when it is off.</p>
 <a href="#study/reminders" data-editor-alias>Reminders and streak</a>
 <details class="more"><summary>More options</summary>
-<h3>Animated pets</h3><p class="desc">Import a ChatGPT pet’s local pet.json and PNG or WebP sprite sheet, or a ZIP containing them. Both v1 and v2 layouts are supported. Files stay on this device. Importing a pet keeps your XP and decorations.</p><div id="pet-library"></div>
+<h3>Animated pets</h3><p class="desc">Import a ChatGPT pet’s pet.json and sprite sheet, or a ZIP; files stay on this device.</p><div id="pet-library"></div>
 </details>
 </section>
 <section id="study-imports" data-editor-section="study/imports" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-study-imports">
-<p class="section-path" data-editor-breadcrumb><a href="#study/imports" data-editor-alias>Syllabus and insights</a></p><div class="section-heading"><h2 id="heading-study-imports">Syllabus and insights</h2><button type="button" class="section-reset" data-reset-section="study/imports">Reset section</button></div>
+<p class="section-path" data-editor-breadcrumb><a href="#study/imports" data-editor-alias>Syllabus and insights</a></p><div class="section-heading"><h2 id="heading-study-imports">Syllabus and insights</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="study/imports">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.syllabus" aria-describedby="info-enhance-syllabus"><span id="info-enhance-syllabus-name">Syllabus import</span></label><button type="button" class="info" popovertarget="info-enhance-syllabus" aria-labelledby="info-more info-enhance-syllabus-name" aria-describedby="info-enhance-syllabus"></button>
-<div class="info-pop" id="info-enhance-syllabus" popover><span class="desc">On Canvas: read a course's syllabus (its Syllabus page, a Word, PowerPoint or web page file, or pasted text) on this device. You check every field before it's kept; then the professor, class times and dates show on the course home, the grading scale can go to your GPA and the dates to Better To Do.</span>
-          <span class="desc">On Blackboard, which has no syllabus page: on a course's outline, from a document in the course, a file or pasted text. The professor, class times and dates show there.</span></div></div>
+<div class="info-pop" id="info-enhance-syllabus" popover><span class="desc">Read a course's syllabus on this device, from its page, a file or pasted text. You check every field; then the professor, class times and dates show on the course, and can go to your GPA and To Do.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.insights" aria-describedby="info-enhance-insights"><span id="info-enhance-insights-name">Insights</span></label><button type="button" class="info" popovertarget="info-enhance-insights" aria-labelledby="info-more info-enhance-insights-name" aria-describedby="info-enhance-insights"></button>
-<div class="info-pop" id="info-enhance-insights" popover><span class="desc">On Canvas: an Insights button on the Dashboard (and in Ctrl+K) shows this term in numbers: how much you handed in on time, each course's grade over the term, the work due each week with the busiest weeks ahead, how often your Better To Do plans were kept, and a summary card you can save as a picture. Worked out on this device from your own Canvas; only a small summary for this term is kept, on this device, until you clear it.</span>
-          <span class="desc">On Blackboard: an Insights button on the Courses page (and in Ctrl+K), from your own Blackboard.</span></div></div>
+<div class="info-pop" id="info-enhance-insights" popover><span class="desc">An Insights button (and Ctrl+K) shows this term in numbers: work on time, grades over the term, the busiest weeks ahead and plans kept. Worked out on this device.</span></div></div>
 </section>
 <section id="study-schedule" data-editor-section="study/schedule" data-sites="Canvas · Blackboard Ultra" data-editor-power aria-labelledby="heading-study-schedule">
-<p class="section-path" data-editor-breadcrumb><a href="#study/schedule" data-editor-alias>Calendar export</a></p><div class="section-heading"><h2 id="heading-study-schedule">Calendar export</h2><button type="button" class="section-reset" data-reset-section="study/schedule">Reset section</button></div>
+<p class="section-path" data-editor-breadcrumb><a href="#study/schedule" data-editor-alias>Calendar export</a></p><div class="section-heading"><h2 id="heading-study-schedule">Calendar export</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="study/schedule">Reset section</button></div>
 <div class="group" id="ics">
           <h3>Export calendar (.ics)</h3>
-          <p class="desc"><span>On Canvas and Blackboard: Export in Better To Do, or Export calendar (.ics) in Ctrl+K.</span> <span>Made on this device. The file holds your course and assignment names: import it into Google Calendar, Outlook or Apple Calendar yourself. Importing a newer file updates the same events where your calendar supports it.</span></p>
+          <p class="desc" id="ics-note">Export in Better To Do or Ctrl+K; the file, made on this device, holds your course and assignment names.</p>
           <label class="check"><input type="checkbox" data-key="todo.icsDue"><span>Due dates from Canvas or Blackboard</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsTasks"><span>Your tasks with a due date</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsPlan"><span>Do-on days and focus sessions</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsClasses"><span>Your class schedule</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsGs"><span>Gradescope work</span>
-            <span class="desc">With Gradescope in To Do on, for an account that said yes to showing it.</span></label>
+            <span class="desc">Needs Gradescope in To Do.</span></label>
           <div class="row">
             <label>Range <select data-key="todo.icsRange"><option value="2w">Next 2 weeks</option><option value="4w">Next 4 weeks</option><option value="8w">Next 8 weeks</option><option value="16w">Next 16 weeks</option><option value="term">This term</option></select></label>
           </div>
@@ -1177,51 +1170,46 @@
 </section>
 </div>
 <div id="panel-pages" role="tabpanel" aria-labelledby="tab-pages" data-editor-panel="pages" hidden>
-<section id="extras" data-editor-section="pages/content" data-sites="Canvas · Blackboard Ultra · Moodle (supported tools)" aria-labelledby="heading-pages-content">
-<p class="section-path" data-editor-breadcrumb><a href="#pages/content" data-editor-alias>Course content</a></p><div class="section-heading"><h2 id="heading-pages-content">Course content</h2><button type="button" class="section-reset" data-reset-section="pages/content">Reset section</button></div>
+<section id="extras" data-editor-section="pages/content" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-pages-content">
+<p class="section-path" data-editor-breadcrumb><a href="#pages/content" data-editor-alias>Course content</a></p><div class="section-heading"><h2 id="heading-pages-content">Course content</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="pages/content">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.newcontent" aria-describedby="info-enhance-newcontent"><span id="info-enhance-newcontent-name">New-content badges</span></label><button type="button" class="info" popovertarget="info-enhance-newcontent" aria-labelledby="info-more info-enhance-newcontent-name" aria-describedby="info-enhance-newcontent"></button>
-<div class="info-pop" id="info-enhance-newcontent" popover><span class="desc">"New" beside course items added since you last looked at a course, a count on folders holding some, and on your course cards.</span>
-          <span class="desc">On Canvas: new items in Modules and a count on Dashboard cards.</span></div></div>
+<div class="info-pop" id="info-enhance-newcontent" popover><span class="desc">"New" beside course items added since you last looked at a course, with a count on folders holding some and on your course cards.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.progress" aria-describedby="info-enhance-progress"><span id="info-enhance-progress-name">Course progress</span></label><button type="button" class="info" popovertarget="info-enhance-progress" aria-labelledby="info-more info-enhance-progress-name" aria-describedby="info-enhance-progress"></button>
 <div class="info-pop" id="info-enhance-progress" popover><span class="desc">A bar at the top of course content adding up how much of the course you have completed.</span>
-          <span class="desc">On Canvas: from the course's module completion requirements; a course without any shows no bar.</span></div></div>
+          <span class="desc">On Canvas: from the modules' requirements; a course without any shows no bar.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.previews" aria-describedby="info-enhance-previews"><span id="info-enhance-previews-name">Folder previews</span></label><button type="button" class="info" popovertarget="info-enhance-previews" aria-labelledby="info-more info-enhance-previews-name" aria-describedby="info-enhance-previews"></button>
 <div class="info-pop" id="info-enhance-previews" popover><span class="desc">Hover a closed folder in course content to see what is inside, what is done and what is due.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.download" aria-describedby="info-enhance-download"><span id="info-enhance-download-name">Download all</span></label><button type="button" class="info" popovertarget="info-enhance-download" aria-labelledby="info-more info-enhance-download-name" aria-describedby="info-enhance-download"></button>
-<div class="info-pop" id="info-enhance-download" popover><span class="desc">A button on each folder and learning module in course content that saves its files as one zip. Items you haven't opened are left out, so downloading never marks them viewed.</span>
-          <span class="desc">On Canvas: each module with files.</span></div></div>
+<div class="info-pop" id="info-enhance-download" popover><span class="desc">A button on each folder, learning module or Canvas module that saves its files as one zip. Items you haven't opened are left out, so none is marked viewed.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.drafts" aria-describedby="info-enhance-drafts"><span id="info-enhance-drafts-name">Back up what you type</span></label><button type="button" class="info" popovertarget="info-enhance-drafts" aria-labelledby="info-more info-enhance-drafts-name" aria-describedby="info-enhance-drafts"></button>
-<div class="info-pop" id="info-enhance-drafts" popover><span class="desc">Keeps a copy of what you write in Blackboard's editors on this device until it's posted, and offers it back if the page reloads or your session times out. Copies are deleted after 14 days.</span>
-          <span class="desc">On Canvas: new Inbox messages; Canvas recovers its own editors.</span></div></div>
+<div class="info-pop" id="info-enhance-drafts" popover><span class="desc">Keeps a copy of what you write in Blackboard's editors, or a new Canvas Inbox message, on this device until it's posted, and offers it back after a reload. Deleted after 14 days.</span></div></div>
 <details class="more"><summary>More options</summary>
-<label class="check"><input type="checkbox" data-key="enhance.urgency"><span>Due-date urgency</span>
-          <span class="desc">Marks items overdue, due today or due within three days.</span></label>
+<label class="check"><input type="checkbox" data-key="enhance.urgency"><span>Mark due dates in course content</span>
+          <span class="desc">Overdue, due today, or due within three days.</span></label>
 <label class="check"><input type="checkbox" data-key="enhance.clamp"><span>Shorter descriptions</span>
-          <span class="desc">Long item descriptions in course content show three lines until you hover or focus them.</span></label>
+          <span class="desc">Long item descriptions show three lines until you hover or focus them.</span></label>
 <label class="check"><input type="checkbox" data-key="enhance.scores"><span>Score bars</span>
-          <span class="desc">A small bar under each gradebook score showing how much of the total it is.</span></label>
+          <span class="desc">A small bar under each gradebook score for its share of the total.</span></label>
 <label class="check"><input type="checkbox" data-key="enhance.reading"><span>Reading width</span>
           <span class="desc">Announcements, posts and documents keep lines to a comfortable length.</span></label>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.place" aria-describedby="info-enhance-place"><span id="info-enhance-place-name">Remember your place</span></label><button type="button" class="info" popovertarget="info-enhance-place" aria-labelledby="info-more info-enhance-place-name" aria-describedby="info-enhance-place"></button>
-<div class="info-pop" id="info-enhance-place" popover><span class="desc">Coming back to a course, its content opens the folders you left open and scrolls back to where you were. Kept on this device.</span>
-          <span class="desc">On Canvas: how far down Modules you were and the item you opened last; Canvas keeps modules open or closed itself.</span></div></div>
+<div class="info-pop" id="info-enhance-place" popover><span class="desc">Coming back to a course, its content opens the folders you left open and scrolls back to where you were, kept on this device.</span></div></div>
 </details>
 </section>
 <section id="canvas-documents" data-editor-section="pages/documents" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-pages-documents">
-<p class="section-path" data-editor-breadcrumb><a href="#pages/documents" data-editor-alias>Documents and quizzes</a></p><div class="section-heading"><h2 id="heading-pages-documents">Documents and quizzes</h2><button type="button" class="section-reset" data-reset-section="pages/documents">Reset section</button></div>
-<div class="row">
-          <label>Dark documents <select data-key="enhance.docPages"><option value="plain">Off</option><option value="dim">Dimmed</option><option value="dark">Inverted</option></select></label>
+<p class="section-path" data-editor-breadcrumb><a href="#pages/documents" data-editor-alias>Documents and quizzes</a></p><div class="section-heading"><h2 id="heading-pages-documents">Documents and quizzes</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="pages/documents">Reset section</button></div>
+<div class="row has-info">
+          <label><span id="docpages-name">Dark documents</span> <select data-key="enhance.docPages" aria-describedby="docpages-note"><option value="plain">Off</option><option value="dim">Dimmed</option><option value="dark">Inverted</option></select></label><button type="button" class="info" popovertarget="docpages-note" aria-labelledby="info-more docpages-name" aria-describedby="docpages-note"></button>
         </div>
-<p class="desc">How PDFs and file previews look with a dark palette. Dimmed keeps pictures true; inverted turns white paper dark, colors kept. The moon button beside a preview switches between dimmed and off.</p>
+<p class="desc info-pop" id="docpages-note" popover>How PDFs and file previews look with a dark palette. Dimmed keeps pictures true; Inverted turns white paper dark. The moon button beside a document cycles Off, Dimmed and Inverted.</p>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.toggles" aria-describedby="info-enhance-toggles"><span id="info-enhance-toggles-name">Document buttons</span></label><button type="button" class="info" popovertarget="info-enhance-toggles" aria-labelledby="info-more info-enhance-toggles-name" aria-describedby="info-enhance-toggles"></button>
-<div class="info-pop" id="info-enhance-toggles" popover><span class="desc">Round buttons at the bottom right of course documents: dark documents, and focus mode (the document alone, with a reading-progress line and reading time; Esc leaves it).</span>
-          <span class="desc">On Canvas: a bar above pages, assignments and file previews.</span></div></div>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.docTheme" aria-describedby="info-enhance-docTheme"><span id="info-enhance-docTheme-name">Document viewer in your palette</span></label><button type="button" class="info" popovertarget="info-enhance-docTheme" aria-labelledby="info-more info-enhance-docTheme-name" aria-describedby="info-enhance-docTheme"></button>
-<div class="info-pop" id="info-enhance-docTheme" popover><span class="desc">On Canvas: the document viewer's background, toolbar and thumbnails in your palette. The pages stay as they are, unless dimmed or inverted above.</span></div></div>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.docInk" aria-describedby="info-enhance-docInk"><span id="info-enhance-docInk-name">Pen and highlighter on documents</span></label><button type="button" class="info" popovertarget="info-enhance-docInk" aria-labelledby="info-more info-enhance-docInk-name" aria-describedby="info-enhance-docInk"></button>
-<div class="info-pop" id="info-enhance-docInk" popover><span class="desc">On Canvas: draw, highlight and erase on files in the document viewer, in any color and size, with undo. Your marks are kept on this device only, per file, and never sent anywhere; export them as a file to keep or move them, or save a page with them as a picture. Canvas's own annotations are left as they are.</span></div></div>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.quizLight" aria-describedby="info-enhance-quizLight"><span id="info-enhance-quizLight-name">Keep quizzes light</span></label><button type="button" class="info" popovertarget="info-enhance-quizLight" aria-labelledby="info-more info-enhance-quizLight-name" aria-describedby="info-enhance-quizLight"></button>
-<div class="info-pop" id="info-enhance-quizLight" popover><span class="desc">On Canvas, a quiz you are taking and external tools such as New Quizzes are shown without Glaze.</span></div></div>
+<div class="info-pop" id="info-enhance-toggles" popover><span class="desc">Buttons on course documents for dark documents and focus mode: the document alone, with reading progress and time; Esc leaves it.</span></div></div>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.docTheme" aria-describedby="info-enhance-docTheme"><span id="info-enhance-docTheme-name">Document viewer in your palette</span></label><span class="site-badge" translate="no">Canvas</span><button type="button" class="info" popovertarget="info-enhance-docTheme" aria-labelledby="info-more info-enhance-docTheme-name" aria-describedby="info-enhance-docTheme"></button>
+<div class="info-pop" id="info-enhance-docTheme" popover><span class="desc">The document viewer's background, toolbar and thumbnails in your palette. The pages stay as they are, unless Dark documents changes them.</span></div></div>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.docInk" aria-describedby="info-enhance-docInk"><span id="info-enhance-docInk-name">Pen and highlighter on documents</span></label><span class="site-badge" translate="no">Canvas</span><button type="button" class="info" popovertarget="info-enhance-docInk" aria-labelledby="info-more info-enhance-docInk-name" aria-describedby="info-enhance-docInk"></button>
+<div class="info-pop" id="info-enhance-docInk" popover><span class="desc">Draw, highlight and erase on files in the document viewer. Your marks are kept on this device only, per file, and never sent anywhere; export them to keep or move them.</span></div></div>
+<div class="has-badge"><label class="check"><input type="checkbox" data-key="enhance.quizLight"><span>Keep quizzes light</span>
+          <span class="desc">A quiz you are taking, and tools such as New Quizzes, show without Glaze.</span></label><span class="site-badge" translate="no">Canvas</span></div>
 <details class="more"><summary>More options</summary>
 <div class="group" id="document-review"><h3>Document review</h3>
 <label class="check"><input type="checkbox" data-key="docreview.compact"><span>Compact submission header</span></label>
@@ -1233,11 +1221,11 @@
 </details>
 </section>
 <section id="bb-dashboard" data-editor-section="pages/dashboard" data-sites="Blackboard Ultra" aria-labelledby="heading-pages-dashboard">
-<p class="section-path" data-editor-breadcrumb><a href="#pages/dashboard" data-editor-alias>Blackboard Dashboard</a></p><div class="section-heading"><h2 id="heading-pages-dashboard">Blackboard Dashboard</h2><button type="button" class="section-reset" data-reset-section="pages/dashboard">Reset section</button></div>
+<p class="section-path" data-editor-breadcrumb><a href="#pages/dashboard" data-editor-alias>Blackboard Dashboard</a></p><div class="section-heading"><h2 id="heading-pages-dashboard">Blackboard Dashboard</h2><span class="site-badge" translate="no">Blackboard</span><button type="button" class="section-reset" data-reset-section="pages/dashboard">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.dashboard" aria-describedby="info-enhance-dashboard"><span id="info-enhance-dashboard-name">Glaze Dashboard</span></label><button type="button" class="info" popovertarget="info-enhance-dashboard" aria-labelledby="info-more info-enhance-dashboard-name" aria-describedby="info-enhance-dashboard"></button>
-<div class="info-pop" id="info-enhance-dashboard" popover><span class="desc">On by default. Blackboard Ultra's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Ultra's own page, one click away.</span></div></div>
+<div class="info-pop" id="info-enhance-dashboard" popover><span class="desc">Blackboard's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Blackboard's own.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="widgets.land" aria-describedby="info-widgets-land"><span id="info-widgets-land-name">Open Blackboard on the dashboard</span></label><button type="button" class="info" popovertarget="info-widgets-land" aria-labelledby="info-more info-widgets-land-name" aria-describedby="info-widgets-land"></button>
-<div class="info-pop" id="info-widgets-land" popover><span class="desc">Off by default. When Blackboard Ultra opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></div></div>
+<div class="info-pop" id="info-widgets-land" popover><span class="desc">When Blackboard opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></div></div>
 <a href="#study/widgets" data-editor-alias>Notes and widgets</a>
 <details class="more"><summary>More options</summary>
 <div class="group" id="bb-stream"><h3>Activity Stream</h3>
@@ -1248,26 +1236,26 @@
 </div>
 </details>
 </section>
-<section id="bb-declutter" data-editor-section="pages/declutter" data-sites="Blackboard Ultra · Canvas (supported items)" aria-labelledby="heading-pages-declutter">
-<p class="section-path" data-editor-breadcrumb><a href="#pages/declutter" data-editor-alias>Declutter</a></p><div class="section-heading"><h2 id="heading-pages-declutter">Declutter</h2><button type="button" class="section-reset" data-reset-section="pages/declutter">Reset section</button></div>
+<section id="bb-declutter" data-editor-section="pages/declutter" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-pages-declutter">
+<p class="section-path" data-editor-breadcrumb><a href="#pages/declutter" data-editor-alias>Declutter</a></p><div class="section-heading"><h2 id="heading-pages-declutter">Declutter</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="pages/declutter">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.hideFolders" aria-describedby="info-enhance-hideFolders"><span id="info-enhance-hideFolders-name">Hide folders</span></label><button type="button" class="info" popovertarget="info-enhance-hideFolders" aria-labelledby="info-more info-enhance-hideFolders-name" aria-describedby="info-enhance-hideFolders"></button>
 <div class="info-pop" id="info-enhance-hideFolders" popover><span class="desc">Hide folders and learning modules in Blackboard course outlines, and modules on Canvas's Modules page, on this device.</span></div></div>
 <div class="group">
-          <h3>Declutter</h3>
           <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
-          <label class="check"><input type="checkbox" data-key="declutter.banner"><span>Hide course banner images</span></label>
-          <label class="check"><input type="checkbox" data-key="declutter.faculty"><span>Hide the Course Faculty box when it is empty</span></label>
+          <label class="check"><input type="checkbox" data-key="declutter.banner"><span>Hide course banner images</span>
+            <span class="desc">On Canvas: the pictures on Dashboard cards.</span></label>
+          <div class="has-badge"><label class="check"><input type="checkbox" data-key="declutter.faculty"><span>Hide the Course Faculty box when it is empty</span></label><span class="site-badge" translate="no">Blackboard</span></div>
           <p class="desc" id="declutter-tabs-note">Hide course tabs you never use:</p>
           <div class="row" id="declutter-tabs" data-setting-owner="declutter.tabs" role="group" aria-labelledby="declutter-tabs-note"></div>
         </div>
-<label class="check"><input type="checkbox" data-key="footer"><span>Show the Glaze footer bar</span></label>
+<div class="has-badge"><label class="check"><input type="checkbox" data-key="footer"><span>Show the Glaze footer bar</span></label><span class="site-badge" translate="no">Canvas · Blackboard · Moodle</span></div>
 </section>
 <section id="pages-shortcuts" data-editor-section="pages/shortcuts" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-pages-shortcuts">
 <p class="section-path" data-editor-breadcrumb><a href="#pages/shortcuts" data-editor-alias>Search and shortcuts</a></p><div class="section-heading"><h2 id="heading-pages-shortcuts">Search and shortcuts</h2><button type="button" class="section-reset" data-reset-section="pages/shortcuts">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.palette" aria-describedby="info-enhance-palette"><span id="info-enhance-palette-name">Command palette</span></label><button type="button" class="info" popovertarget="info-enhance-palette" aria-labelledby="info-more info-enhance-palette-name" aria-describedby="info-enhance-palette"></button>
 <div class="info-pop" id="info-enhance-palette" popover><span class="desc">Ctrl+K (⌘K on a Mac) to jump to a course, an item in this course, a page or a Glaze setting.</span></div></div>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.search" aria-describedby="info-enhance-search"><span id="info-enhance-search-name">Search in your courses</span></label><button type="button" class="info" popovertarget="info-enhance-search" aria-labelledby="info-more info-enhance-search-name" aria-describedby="info-enhance-search"></button>
-<div class="info-pop" id="info-enhance-search" popover><span class="desc">On Canvas and Blackboard Ultra: search your courses from the command palette. Ultra searches this course and open courses in this term. Canvas finds titles; Ultra also finds released document, announcement and discussion topic text. Answers are reused for five minutes.</span></div></div>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.search" aria-describedby="info-enhance-search"><span id="info-enhance-search-name">Search in your courses</span></label><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="info" popovertarget="info-enhance-search" aria-labelledby="info-more info-enhance-search-name" aria-describedby="info-enhance-search"></button>
+<div class="info-pop" id="info-enhance-search" popover><span class="desc">Search your courses from the command palette: titles on Canvas, and on Blackboard released document, announcement and discussion text too.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.keys" aria-describedby="info-enhance-keys"><span id="info-enhance-keys-name">Keyboard shortcuts</span></label><button type="button" class="info" popovertarget="info-enhance-keys" aria-labelledby="info-more info-enhance-keys-name" aria-describedby="info-enhance-keys"></button>
 <div class="info-pop" id="info-enhance-keys" popover><span class="desc">g then c, a, g, m or s for Courses, Calendar, Grades, Messages, Activity; / to search; ? for the list.</span>
           <span class="desc">On Canvas: g then d, c, a, g or m for Dashboard, Courses, Calendar, Grades, Inbox; g then ? for the list.</span></div></div>
@@ -1276,29 +1264,29 @@
 <div id="panel-sharing" role="tabpanel" aria-labelledby="tab-sharing" data-editor-panel="sharing" data-no-preview hidden>
 <section id="sharing-sessions" data-editor-section="sharing/sessions" data-sites="Extension only" aria-labelledby="heading-sharing-sessions">
 <p class="section-path" data-editor-breadcrumb><a href="#sharing/sessions" data-editor-alias>Share sessions</a></p><div class="section-heading"><h2 id="heading-sharing-sessions">Share sessions</h2></div>
-<p class="desc">Invite only, end-to-end encrypted through your selected relay. Your local copies keep working without the server. In Notes, Share on a note does the same in one step.</p>
+<p class="desc">Invite only, end-to-end encrypted through your selected relay.</p>
 <p class="desc ss-status" id="ss-status" role="status" aria-live="polite"></p>
 <div class="group"><h3>Connection</h3><p class="desc" id="ss-connection"></p><div class="row"><button type="button" id="ss-resume" hidden>Resume sessions</button><button type="button" id="ss-pause" hidden>Pause sharing</button><button type="button" id="ss-refresh" hidden>Sync now</button></div></div>
 <div class="group"><h3>Your sessions</h3><div id="ss-sessions"></div></div>
-<div class="group"><h3>Create a session</h3><p class="desc">Only the selected notes, Look or custom tasks and their plans are shared. Course account identifiers and LMS assignments are not carried.</p><p class="desc" id="ss-create-relay"></p>
+<div class="group"><h3>Create a session</h3><p class="desc">Only what you select is shared, never your course accounts or assignments.</p><p class="desc" id="ss-create-relay"></p>
 <label class="field wide"><span>Your name on this device</span><input id="ss-name" type="text" maxlength="60" autocomplete="off" data-local></label>
 <label class="field wide"><span>Session name</span><input id="ss-title" type="text" maxlength="80" autocomplete="off" data-local></label>
 <label class="field wide"><span>What to share</span><select id="ss-kind" data-local><option value="notes">Notes</option><option value="look">Current Look</option><option value="todo">Custom tasks and plans</option></select></label>
 <div id="ss-sources" class="ss-sources"></div>
 <label class="check"><input id="ss-expire" type="checkbox" data-local><span>Delete after a year unused</span></label>
 <div class="row"><button type="button" id="ss-create" class="primary" aria-describedby="ss-create-why" disabled>Create encrypted session</button><span class="desc" id="ss-create-why" role="status"></span></div></div>
-<div class="group"><h3>Join from an invite link</h3><p class="desc">Paste the full link here. Anyone holding an edit link can change the session; anyone holding a view link can read it. Keep links private.</p>
+<div class="group"><h3>Join from an invite link</h3><p class="desc">Anyone with an edit link can change the session, with a view link read it.</p>
 <label class="field wide"><span>Invite link</span><input id="ss-invite" type="password" maxlength="1024" autocomplete="off" spellcheck="false" data-local></label>
 <div class="row"><button type="button" id="ss-join">Join encrypted session</button></div>
-<p class="desc">Joining keeps a separate local copy. Copy it into Notes or To Do to add new local items without replacing existing work.</p></div>
+<p class="desc">Joining keeps a separate local copy.</p></div>
 </section>
 <section id="relay" data-editor-section="sharing/relay" data-sites="Extension only" data-editor-power aria-labelledby="heading-sharing-relay">
 <p class="section-path" data-editor-breadcrumb><a href="#sharing/relay" data-editor-alias>Relay</a></p><div class="section-heading"><h2 id="heading-sharing-relay">Relay</h2><button type="button" class="section-reset" data-reset-section="sharing/relay">Reset section</button></div>
-<p class="desc" id="relay-help">The relay applies to new sessions only. Existing sessions keep their own server. Saving never connects.</p>
+<p class="desc" id="relay-help">For new sessions only; saving never connects.</p>
 <label class="field wide"><span>Server for new sessions</span><select id="relay-kind" data-local><option value="default">frostdev.io (default)</option><option value="custom">Custom</option></select></label>
 <label class="field wide" id="relay-custom" hidden><span>Custom relay URL</span><input id="relay-url" type="url" maxlength="512" translate="no" placeholder="https://relay.example.edu" autocomplete="off" spellcheck="false" aria-describedby="relay-help relay-url-help" data-local></label>
-<p class="desc" id="relay-url-help">Use an HTTPS origin without a path, query, fragment or credentials. HTTP is allowed only on localhost or 127.0.0.1 for self-testing.</p>
-<p class="desc">With a custom relay, encrypted data goes to its operator. Glaze cannot vouch for that server.</p>
+<p class="desc" id="relay-url-help">An HTTPS origin with no path; HTTP only on localhost, for testing.</p>
+<p class="desc">A custom relay's operator receives your encrypted data.</p>
 <div class="row"><button id="relay-save" type="button">Save relay</button><button id="relay-test" type="button">Test connection</button><a href="https://github.com/frostdev-ops/glaze/blob/main/server/README.md" target="_blank" rel="noopener noreferrer">Run your own</a></div>
 <p class="desc" id="relay-status" role="status" aria-live="polite"></p>
 </section>
@@ -1306,11 +1294,11 @@
 <p class="section-path" data-editor-breadcrumb><a href="#sharing/calendar" data-editor-alias data-gcal-link hidden>Google Calendar sync</a></p><div class="section-heading"><h2 id="heading-sharing-calendar">Google Calendar sync</h2></div>
 <div class="group" id="gcal" hidden>
           <h3>Google Calendar sync</h3>
-          <p class="desc">Keeps a calendar named Glaze in your Google account up to date with Canvas or Blackboard: the events Export calendar (.ics) would save, with the choices above. Off until you connect. Chrome signs you in with Google; Glaze asks only to manage calendars it makes, and touches nothing else in your Google Calendar. There's no Glaze server: your calendar goes only between this browser and Google.</p>
-          <p class="desc" id="gcal-other" hidden>Google Calendar sync works in Google Chrome. In this browser, save your calendar with Export calendar (.ics) and import the file into your calendar.</p>
+          <p class="desc" id="gcal-note">Keeps a Glaze calendar in your Google account up to date, touching nothing else there; it goes only between this browser and Google.</p>
+          <p class="desc" id="gcal-other" hidden>Google Calendar sync needs Google Chrome; here, use Export calendar (.ics).</p>
           <div id="gcal-off" class="gcal" hidden>
             <div class="row"><button type="button" class="primary" id="gcal-connect">Connect Google Calendar</button></div>
-            <p class="desc" id="gcal-code-note">Syncing on another computer already? Paste its link code instead, so both keep the same Glaze calendar.</p>
+            <p class="desc" id="gcal-code-note">Paste a link code from your other computer to share one calendar.</p>
             <div class="row">
               <input type="text" id="gcal-code" spellcheck="false" autocomplete="off" aria-label="Link code" aria-describedby="gcal-code-note">
               <button type="button" id="gcal-link">Link calendar</button>
@@ -1326,7 +1314,7 @@
               <button type="button" id="gcal-disconnect">Disconnect</button>
             </div>
             <div id="gcal-pair" hidden>
-              <p class="desc" id="gcal-pair-note">On your other computer, open Glaze's settings and paste this code under Google Calendar sync. It's also the calendar's ID in Google Calendar's settings.</p>
+              <p class="desc" id="gcal-pair-note">Paste this code under Google Calendar sync on your other computer.</p>
               <div class="row">
                 <input type="text" id="gcal-id" readonly spellcheck="false" aria-label="Link code" aria-describedby="gcal-pair-note">
                 <button type="button" id="gcal-copy">Copy</button>
@@ -1338,9 +1326,8 @@
 <div id="panel-mods" role="tabpanel" aria-labelledby="tab-mods" data-editor-panel="mods" data-no-preview hidden>
 <section id="mods-installed" data-editor-section="mods/installed" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-mods-installed">
 <p class="section-path" data-editor-breadcrumb><a href="#mods/installed" data-editor-alias>Installed mods</a></p><div class="section-heading"><h2 id="heading-mods-installed" tabindex="-1">Installed mods</h2></div>
-<p class="desc section-note">Mods add tiles, widgets, backgrounds and more. Each can use only what it asked for and you allowed, and you can take any of that back here.</p>
-<p class="desc" id="mods-runtime" hidden>Code mods need Chrome. In this browser, mods made only of Look parts, widgets built from blocks and settings still work.</p>
-<p class="desc" id="mods-empty" hidden>No mods yet. Add one below.</p>
+<p class="desc" id="mods-runtime" hidden>Code mods need Chrome; Look parts, block widgets and settings work here.</p>
+<p class="desc" id="mods-empty" hidden>No mods yet.</p>
 <ul class="mods" id="mods-list"></ul>
 <p class="desc" id="mods-said" role="status" aria-live="polite"></p>
 <div class="group" id="mods-order-group" hidden>
@@ -1351,17 +1338,15 @@
 </section>
 <section id="mods-add" data-editor-section="mods/add" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-mods-add">
 <p class="section-path" data-editor-breadcrumb><a href="#mods/add" data-editor-alias>Add a mod</a></p><div class="section-heading"><h2 id="heading-mods-add">Add a mod</h2></div>
-<p class="desc section-note">From a .glazemod file, a mod code someone sent you, or the gallery's "Use in Glaze". Glaze shows what a mod asks for before anything is installed.</p>
 <div class="row"><button type="button" id="mod-file-btn">Open a .glazemod file…</button><input type="file" id="mod-file" accept=".glazemod,application/zip" hidden></div>
 <div class="mod-drop" id="mod-drop">Or drop a .glazemod file here</div>
 <label class="field wide"><span>Mod code</span><textarea id="mod-code" rows="3" spellcheck="false" translate="no" placeholder="glazemod1:…"></textarea></label>
-<p class="desc">A mod channel link works here too: installing from it follows the author's updates, checked when this page opens and at most daily while the mod runs.</p>
+<p class="desc">A mod channel link follows the author's updates, checked at most daily.</p>
 <div class="row"><button type="button" id="mod-code-read">Read code</button></div>
 <p class="desc" id="mod-add-said" role="status" aria-live="polite"></p>
 </section>
 <section id="mods-widget" data-editor-section="mods/widget" data-sites="Canvas · Blackboard Ultra · Moodle" data-editor-power aria-labelledby="heading-mods-widget">
 <p class="section-path" data-editor-breadcrumb><a href="#mods/widget" data-editor-alias>Widget builder</a></p><div class="section-heading"><h2 id="heading-mods-widget">Widget builder</h2></div>
-<p class="desc section-note">Build a widget from blocks, with no code. It can be a tile among your other widgets, or a widget in the navigation. Glaze draws it itself from your data on this device. Save it here, or share it as a signed .glazemod file.</p>
 <div class="wb">
 <div class="wb-edit">
 <label class="field wide"><span>Widget name</span><input type="text" id="wb-name" maxlength="40" autocomplete="off"></label>
@@ -1375,14 +1360,14 @@
 <div class="group">
 <h3>Blocks</h3>
 <ol class="mods" id="wb-blocks"></ol>
-<p class="desc" id="wb-empty" hidden>No blocks yet. Add one below.</p>
+<p class="desc" id="wb-empty" hidden>No blocks yet.</p>
 <div class="row"><label class="field wide"><span>Add a block</span><select id="wb-add-type"></select></label><button type="button" id="wb-add">Add block</button></div>
 </div>
 <div class="group" id="wb-reasons"></div>
 <div class="row"><button type="button" id="wb-save" class="primary">Save widget</button><button type="button" id="wb-export">Save and export file…</button><button type="button" id="wb-copy">Save and copy mod code</button><button type="button" id="wb-new">Start over</button></div>
 <p class="desc" id="wb-said" role="status" aria-live="polite"></p>
 <details class="group"><summary>Your author key</summary>
-<p class="desc">Your widgets are signed with it, and only it can update them for people you shared them with. Keep a backup: a lost key means no more updates.</p>
+<p class="desc">Only this key can update the widgets you share; keep a backup of it.</p>
 <label class="field wide"><span>Passphrase</span><input type="password" id="wb-pass" autocomplete="new-password"></label>
 <div class="row"><button type="button" id="wb-key-save">Back up key…</button></div>
 </details>
@@ -1392,22 +1377,21 @@
 </section>
 <section id="mods-dev" data-editor-section="mods/dev" data-sites="Extension only" data-editor-power aria-labelledby="heading-mods-dev">
 <p class="section-path" data-editor-breadcrumb><a href="#mods/dev" data-editor-alias>Mod development</a></p><div class="section-heading"><h2 id="heading-mods-dev">Mod development</h2></div>
-<p class="desc section-note">For people making mods: load a folder as an unsigned Dev copy, then export it signed with your author key.</p>
 <label class="check"><input type="checkbox" id="mod-dev"><span>Dev mode</span>
-          <span class="desc">Lets unsigned mods install and run, marked Dev. Turn it off when you aren't making a mod.</span></label>
+          <span class="desc">Lets unsigned mods install and run, marked Dev.</span></label>
 <div class="group" id="mod-dev-tools" hidden>
           <div class="row"><button type="button" id="mod-folder">Load mod folder…</button><button type="button" id="mod-reload" disabled>Reload</button><button type="button" id="mod-export-signed" disabled>Export signed</button></div>
           <p class="desc" id="mod-folder-chrome" hidden>Loading a folder needs Chrome.</p>
           <p class="desc" id="mod-folder-said" role="status" aria-live="polite"></p>
           <h3>Mod channel</h3>
-          <p class="desc">Publish the loaded mod, signed, to a channel on your share relay. People who installed it from the channel link get each newer version.</p>
+          <p class="desc">Publish the loaded mod, signed, to a channel on your share relay.</p>
           <div class="row"><button type="button" id="mod-publish" disabled>Publish to a channel</button><button type="button" id="mod-channel-copy">Copy channel link</button></div>
           <p class="desc" id="mod-publish-said" role="status" aria-live="polite"></p>
           <h3>Author key</h3>
           <p class="desc" id="mod-key-now"></p>
-          <p class="desc">Your mods are signed with it, and only it can update them. Keep a backup: a lost key means no more updates.</p>
+          <p class="desc">Only this key can update your mods; keep a backup of it.</p>
           <label class="field wide"><span>Passphrase</span><input type="password" id="mod-key-pass" autocomplete="new-password" aria-describedby="mod-key-pass-note"></label>
-          <p class="desc" id="mod-key-pass-note">Locks the backup file. Needed again to restore it.</p>
+          <p class="desc" id="mod-key-pass-note">Locks the backup file, and is needed to restore it.</p>
           <div class="row"><button type="button" id="mod-key-make">Make author key</button><button type="button" id="mod-key-save">Back up key…</button><button type="button" id="mod-key-restore-btn">Restore key…</button><input type="file" id="mod-key-file" accept="application/json,.json" hidden></div>
           <p class="desc" id="mod-key-said" role="status" aria-live="polite"></p>
         </div>
@@ -1420,12 +1404,11 @@
           <label class="row"><button type="button" id="import-btn">Import settings…</button><input type="file" id="import" accept="application/json,.json" hidden></label>
           <button type="button" id="reset-all" class="danger">Reset everything</button>
         </div>
-<p class="desc">Includes all share keys and creator delete tokens, even while sharing is paused. Anyone with this backup can open those sessions and may change or delete them. Keep it private.</p>
-<p class="desc">Exports are a JSON file with your palette, presets, options, any course nicknames you set, and your Better To Do tasks and plans. Course names from Blackboard or Canvas stay on this computer and are not exported.</p>
-<p class="desc">Card styles and bookmarks go in the export too. Pictures kept for cards stay on this computer.</p>
-<p class="desc">Resetting preferences keeps your presets, pictures, local notes, tasks, bookmarks and share keys.</p>
+<p class="desc" id="backup-keys-note">Includes all share keys and creator delete tokens: anyone with this backup can open, change or delete those sessions.</p>
+<p class="desc">Exports leave out your school's course names and card pictures.</p>
+<p class="desc">Reset keeps your presets, pictures, notes, tasks, bookmarks and share keys.</p>
 <label class="check"><input type="checkbox" data-key="mods.blocklist"><span>Check the mod blocklist</span>
-          <span class="desc">On Chrome, while you have code mods installed, Glaze asks frostdev.io about once a day for a list, signed by Glaze's owner, of mods that must stop. Nothing about you is sent. Turn this off and Glaze never asks; mods it already stopped stay stopped.</span></label>
+          <span class="desc">On Chrome, with code mods installed, Glaze asks frostdev.io once a day for a signed list of mods to stop. Nothing about you is sent.</span></label>
 <a href="https://frostdev.io/glaze/privacy" target="_blank" rel="noopener">Privacy</a>
 </section>
 <section id="sites" data-editor-section="backup/sites" data-sites="Extension only" aria-labelledby="heading-backup-sites">
@@ -1437,15 +1420,15 @@
 <div id="site-note" role="alert" hidden><p class="desc" id="site-error"></p><div class="row" id="site-picks"></div></div>
 <ul class="courses sites" id="site-list"></ul>
 <p class="desc" id="site-empty">No other sites yet.</p>
-<p class="desc">Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.</p>
+<p class="desc">Removing a site forgets what Glaze read there; your notes and tasks stay.</p>
 <p class="desc" id="site-status" role="status" aria-live="polite"></p>
 </section>
 <section id="notes-backup" data-editor-section="backup/notes" data-sites="Extension only" data-editor-power aria-labelledby="heading-backup-notes">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/notes" data-editor-alias>Notes backup</a></p><div class="section-heading"><h2 id="heading-backup-notes">Notes backup</h2></div>
 <label class="field wide"><span>Notes account</span><select id="nb-account" data-local></select></label>
 <div class="row"><button type="button" id="nb-export">Export notes and share keys</button><button type="button" id="nb-import">Import notes and share keys</button><input type="file" id="nb-file" accept=".zip,application/zip" hidden data-local></div>
-<p class="desc">Includes all share keys and creator delete tokens, even while sharing is paused. Anyone with this backup can open those sessions and may change or delete them. Keep it private.</p>
-<p class="desc">Import restores keys locally. It connects only after you create, join or resume a session.</p>
+<p class="desc" id="notes-keys-note">Includes all share keys and creator delete tokens: anyone with this backup can open, change or delete those sessions.</p>
+<p class="desc">Import connects only once you create, join or resume a session.</p>
 <p class="desc" id="nb-status" role="status" aria-live="polite"></p>
 </section>
 </div>
@@ -1460,7 +1443,7 @@
     </aside>
 <div class="group">
           <h3>Report a problem</h3>
-          <p class="desc" id="report-note">Opens a new issue on Glaze's GitHub page with your Glaze version, browser, system and language filled in, and nothing about your school. GitHub receives that text when the page opens; nothing is posted until you add what happened and submit it.</p>
+          <p class="desc" id="report-note">Opens a GitHub issue with your Glaze version, browser, system and language, which GitHub receives; nothing is posted until you submit it.</p>
           <div class="row"><a class="button" id="report-link" href="https://github.com/frostdev-ops/glaze/issues/new" target="_blank" rel="noopener" aria-describedby="report-note">Report a problem</a></div>
         </div>
 </section></div>
@@ -1478,7 +1461,7 @@
 </div>
 <p class="desc" id="preview-note" role="status" hidden></p>
 <div class="preview-stage"><iframe id="preview" src="preview.html" title="Live preview of a synthetic course page"></iframe></div>
-<details class="preview-swatch"><summary>Sidebar colors</summary><div id="nav-preview" aria-hidden="true"><span>Dashboard</span><span>Courses</span><span>Calendar</span></div></details>
+<details class="preview-swatch"><summary>Site navigation colors</summary><div id="nav-preview" aria-hidden="true"><span>Dashboard</span><span>Courses</span><span>Calendar</span></div></details>
 </div></aside>
   </div>
 
@@ -1486,7 +1469,7 @@
   <dialog id="gcal-bye" aria-labelledby="gcal-bye-title" aria-describedby="gcal-bye-note">
     <form method="dialog">
       <h3 id="gcal-bye-title">Disconnect Google Calendar?</h3>
-      <p class="desc" id="gcal-bye-note">Glaze stops syncing, forgets its Google sign-in on this device and asks Google to remove its access.</p>
+      <p class="desc" id="gcal-bye-note">Glaze stops syncing, forgets its Google sign-in here and asks Google to remove its access.</p>
       <label class="check"><input type="checkbox" id="gcal-drop"><span>Also delete the Glaze calendar and its events from Google Calendar</span></label>
       <div class="row"><button value="cancel" id="gcal-bye-cancel">Cancel</button><button value="ok" class="primary">Disconnect</button></div>
     </form>

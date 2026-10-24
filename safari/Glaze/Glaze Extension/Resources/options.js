@@ -118,7 +118,7 @@ const filter = () => {
   for (const sec of $$('[data-editor-section]')) {
     const h2 = sec.querySelector('h2'), boxes = [];
     const partsOf = (box) => [...box.children].flatMap((el) => {
-      if (el.matches('.section-heading, .section-path, .section-note, summary') || (box !== sec && el.tagName === 'H3')) return [];
+      if (el.matches('.section-heading, .section-path, summary') || (box !== sec && el.tagName === 'H3')) return [];
       if (el.matches(BOX)) { boxes.push(el); return partsOf(el); }
       return [el];
     });
@@ -778,7 +778,7 @@ GZ_UI.load().then((s) => {
       const ratio = GZ_CARDS.contrast(n, { avg, ink: n.ink });
       note.classList.toggle('err', ratio !== null && ratio < 4.5);
       let text = ratio === null ? t('Image contrast cannot be measured. Check that every label is readable.')
-        : t(ratio < 4.5 ? 'Low sidebar contrast: {ratio}:1. Choose different text or background colors.' : 'Sidebar contrast: {ratio}:1. Text should reach 4.5:1; icons 3:1.', { ratio: GZ_I18N.num(+ratio.toFixed(2), GZ_I18N.ui()) });
+        : t(ratio < 4.5 ? 'Low site navigation contrast: {ratio}:1. Choose different text or background colors.' : 'Site navigation contrast: {ratio}:1. Text should reach 4.5:1; icons 3:1.', { ratio: GZ_I18N.num(+ratio.toFixed(2), GZ_I18N.ui()) });
       if (n.k === 'image' && ratio !== null) text += ' ' + t('Image contrast uses an average; check the whole picture.');
       if (note.textContent !== text) note.textContent = text;
     };
