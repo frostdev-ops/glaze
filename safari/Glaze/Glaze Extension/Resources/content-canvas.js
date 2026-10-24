@@ -461,7 +461,8 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const paintTabs = () => {
     let at = null;
     try { at = sessionStorage.getItem('gz-ctabs'); } catch { /* blocked */ }
-    setAttr('data-gz-ctabs', !!I.links.length && I.solo && !!I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.() && (at ?? 'above medium'));
+    at ??= GZ_TABS_AUTO(I.settings, /^\/courses\/\d+(?:\/|$)/.test(location.pathname)) === 'nav' ? 'nav' : 'above medium';
+    setAttr('data-gz-ctabs', !!I.links.length && I.solo && !!I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.() && at);
   };
   const syncNav = () => {
     if (window.top !== window || /^\/(?:login|logout)(?:\/|$)/.test(location.pathname)) return;

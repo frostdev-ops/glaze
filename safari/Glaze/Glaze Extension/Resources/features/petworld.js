@@ -12,6 +12,18 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const world = make('div', 'gz-game-world');
     const actor = make('div', 'gz-game-actor'), avatar = make('div', 'gz-game-avatar'), cheer = make('span', 'gz-game-reaction');
     const home = make('button', 'gz-game-home'); home.type = 'button'; home.textContent = t('Return home');
+    // Out wandering, the pet and Return home float over everything: while the site has a panel or dialog open (and while
+    // Settings covers the page, data-gz-settings) they step aside (apps.css), not over its title, Close or Save.
+    const LAYERS = '.bb-offcanvas-panel:not(.screen, .full), .MuiDrawer-modal, .MuiDialog-root, [role="dialog"][aria-modal="true"]:not([class*="gz-"], [id^="gz-"]), .ui-dialog:not([style*="display: none"]), #nav-tray-portal [role="dialog"]';
+    // Looked for on a timer of its own while out, as a resting or still pet's loop may not run for a while.
+    let yieldTimer = 0;
+    const yieldTo = (on) => { if (document.documentElement.hasAttribute('data-gz-yield') !== on) document.documentElement.toggleAttribute('data-gz-yield', on); };
+    const watchLayers = () => {
+      clearTimeout(yieldTimer); yieldTimer = 0;
+      const out = alive && wandering && !!chrome.runtime?.id;
+      yieldTo(out && !!document.querySelector(LAYERS));
+      if (out) yieldTimer = setTimeout(watchLayers, 400);
+    };
     home.addEventListener('click', (e) => { if (e.isTrusted) changeMode(false); });
     actor.append(avatar, cheer); actor.tabIndex = 0; actor.setAttribute('role', 'group');
     actor.setAttribute('aria-label', t('Study buddy. Drag outside to wander, or press W. Press H to return home.'));
@@ -159,6 +171,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       clearActivity(); nextAction = 0; lastMotion = '';
       (wander ? worldHost() : stage)?.append(actor);
       if (wander) document.body.append(home); else home.remove();
+      watchLayers();
       const box = bounds(); groundY = wander ? Math.min(box.height, window.scrollY + window.innerHeight - 6) : box.height;
       b = { ...b, x: at?.x ?? Math.max(0, wander ? window.scrollX + (window.innerWidth - b.w) / 2 : (box.width - b.w) / 2), y: at?.y ?? Math.max(0, groundY - b.h), vx: 0, vy: 0, support: null, grounded: false };
       anchor = wander ? anchorAt(b.x + b.w / 2, b.y + b.h / 2) : null;
@@ -650,7 +663,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     };
     const destroy = () => {
       if (!alive) return;
-      alive = false; clearActivity(); clearTimeout(timer); clearTimeout(reaction); player?.stop();
+      alive = false; clearActivity(); clearTimeout(timer); clearTimeout(reaction); player?.stop(); clearTimeout(yieldTimer); yieldTo(false);
       for (const off of offs) off(); offs = [];
       for (const off of frameOffs) off(); frameOffs = [];
       for (const p of props) p.el.remove(); for (const p of floating.values()) p.el.remove(); floating.clear(); actor.remove(); home.remove(); world.remove();
