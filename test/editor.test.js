@@ -426,3 +426,42 @@ test('IA: the side list marks the top-most section still showing below the heade
   assert.match(css, /\.jump-mark \{[^}]*transition: transform [^}]*var\(--gz-ease\)/);
   assert.match(css, /html\[data-gz-motion="off"\] \.jump-mark \{ transition: none; \}/);
 });
+
+// A setting's description longer than a short line, or in several parts, sits behind a "?"; disclosures of what goes where
+// stay in view.
+const html = fs.readFileSync(path.join(root, 'options.html'), 'utf8');
+const words = (h) => h.replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+const PRIVACY = ['enhance.gradescope', 'todo.gsDaily', 'mods.blocklist'];
+const PRIVACY_NOTES = ['gallery-note', 'font-note', 'report-note', 'relay-help', 'relay-url-help', 'gcal-code-note', 'gcal-pair-note'];
+test('IA: long descriptions move behind a "?", short ones and privacy disclosures stay in view', () => {
+  const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+  for (const m of main.matchAll(/<label class="check[^"]*"[^>]*>(<input [^>]*>)[\s\S]*?<\/label>/g)) {
+    const descs = [...m[0].matchAll(/<span class="desc">([\s\S]*?)<\/span>/g)].map((d) => words(d[1]));
+    const key = m[1].match(/data-key="([^"]+)"/)?.[1];
+    if (!descs.length || !key) continue;
+    assert.ok(PRIVACY.includes(key) || (descs.length === 1 && descs[0].length <= 90), `${key}: ${descs.join(' ').length} characters still in view`);
+  }
+  for (const key of PRIVACY) assert.ok(new RegExp(`data-key="${key}"[^>]*>(?:(?!</label>)[\\s\\S])*<span class="desc">`).test(main), `${key} keeps its disclosure in view`);
+  // Notes a control is described by: long ones are popovers, except the disclosures.
+  const described = new Set([...main.matchAll(/aria-describedby="([^"]+)"/g)].flatMap((m) => m[1].split(' ')));
+  for (const m of main.matchAll(/<p class="desc([^"]*)" id="([^"]+)"([^>]*)>([\s\S]*?)<\/p>/g)) {
+    const [, cls, id, attrs, body] = m;
+    if (!described.has(id) || words(body).length <= 90) continue;
+    assert.ok(PRIVACY_NOTES.includes(id) !== /\binfo-pop\b/.test(cls), `#${id}`);
+    if (PRIVACY_NOTES.includes(id)) assert.ok(!/popover/.test(attrs), `#${id} stays in view`);
+  }
+  // Every popover has its "?": named "More about" + the setting's own name, described by the text it opens.
+  const pops = [...main.matchAll(/<(div|p) class="(?:desc )?info-pop" id="([^"]+)"[^>]*\spopover>([\s\S]*?)<\/\1>/g)];
+  assert.ok(pops.length >= 50, `${pops.length} popovers`);
+  for (const [, , id, body] of pops) {
+    const buttons = [...main.matchAll(new RegExp(`<button type="button" class="info" popovertarget="${id}" aria-labelledby="info-more ([\\w-]+)" aria-describedby="${id}"></button>`, 'g'))];
+    assert.equal(buttons.length, 1, `#${id}: one "?"`);
+    assert.ok(new RegExp(`id="${buttons[0][1]}"[^>]*>[^<]*\\p{L}`, 'u').test(main), `#${id}: named by its setting`);
+    assert.ok(words(body).length > 90 || (body.match(/class="desc"/g) || []).length > 1, `#${id} is long`);
+  }
+  assert.match(html, /<span id="info-more" hidden>More about<\/span>/);
+  // Search counts a popover's words for its setting: each one sits in its setting's row, or is a note the control names.
+  for (const [, , id] of pops) assert.ok(main.includes(`aria-describedby="${id}"`) || new RegExp(`aria-describedby="[^"]*\\b${id}\\b`).test(main), `#${id}`);
+  const filter = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  assert.match(filter, /querySelectorAll\('\.info-pop'\)[\s\S]*?GZ_FIND\.spans\(pop\.textContent, words\)[\s\S]*?classList\.add\('found'\)/);
+});

@@ -3040,4 +3040,5 @@
   "Search and shortcuts": "Búsqueda y atajos",
   "Backup and reset": "Copia de seguridad y restablecer",
   "More options": "Más opciones",
+  "More about": "Más sobre",
 };

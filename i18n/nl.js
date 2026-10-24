@@ -3040,4 +3040,5 @@
   "Search and shortcuts": "Zoeken en sneltoetsen",
   "Backup and reset": "Back-up en herstellen",
   "More options": "Meer opties",
+  "More about": "Meer over",
 };

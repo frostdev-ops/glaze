@@ -42,6 +42,7 @@ const hint = (msg, err = false, undo = null) => {
 const finder = $('#find');
 let followSection = () => {}, searchPreview = () => {};
 const editor = GZ_EDITOR.mount({ onRoute: (route, part) => followSection(route, part) });
+GZ_INFO.mount();
 
 // Opened as a page of the school's site (features/settingspage.js): the same Settings, with Close and a way to its own tab.
 // The page around can't read this frame, but it could cover it and borrow a click, so what holds keys and grants (sharing,
@@ -111,6 +112,7 @@ const filter = () => {
   const said = (el) => [el, ...el.querySelectorAll('[title], [aria-label], [placeholder]')]
     .map((e) => `${e.title} ${e.getAttribute('aria-label') || ''} ${e.getAttribute('placeholder') || ''}`).join(' ');
   let n = 0;
+  for (const b of $$('button.info.found')) b.classList.remove('found');
   for (const sec of $$('[data-editor-section]')) {
     const h2 = sec.querySelector('h2'), boxes = [];
     const partsOf = (box) => [...box.children].flatMap((el) => {
@@ -135,6 +137,10 @@ const filter = () => {
       any = true;
       n++;
       for (const x of [el, ...notes.get(el)]) { x.classList.remove('miss'); mark(x); }
+      // A match only in a "?"'s description rings the "?"; opening it shows the words marked.
+      for (const pop of [el, ...notes.get(el)].flatMap((x) => (x.matches('.info-pop') ? [x] : [...x.querySelectorAll('.info-pop')]))) {
+        if (GZ_FIND.spans(pop.textContent, words).length) document.querySelector(`[popovertarget="${pop.id}"]`)?.classList.add('found');
+      }
     }
     // Innermost first, so a box holding only empty boxes is empty too.
     for (const g of boxes.reverse()) {
