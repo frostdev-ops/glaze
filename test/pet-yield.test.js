@@ -10,7 +10,7 @@ test('out wandering, the pet yields to an open site panel within half a second, 
   const make = (tag) => new El(tag, doc);
   doc.root = make('html'); doc.head = make('head'); doc.body = make('body'); doc.root.append(doc.head, doc.body);
   const asked = [];
-  Object.assign(doc, { documentElement: doc.root, scrollingElement: doc.root, createElement: make, querySelectorAll: () => [],
+  Object.assign(doc, { documentElement: doc.root, scrollingElement: doc.root, createElement: make, querySelectorAll: (s) => { if (s.includes('.bb-offcanvas-panel')) { asked.push(s); return layer ? [layer] : []; } return []; },
     querySelector: (s) => { if (s.includes('.bb-offcanvas-panel')) { asked.push(s); return layer; } return null; },
     elementsFromPoint: () => [], addEventListener() {}, removeEventListener() {} });
   const stage = make('div'); stage.box = { left: 20, top: 20, width: 300, height: 200 }; doc.body.append(stage);
@@ -32,13 +32,13 @@ test('out wandering, the pet yields to an open site panel within half a second, 
   run(1000);
   assert.ok(doc.body.children.some((e) => e.className === 'gz-game-home'), 'out wandering, with Return home');
   assert.equal(yielded(), false);
-  layer = make('div');
+  layer = make('div'); layer.getClientRects = () => [{}];
   run(500);
   assert.equal(yielded(), true, 'a panel opened: it steps aside');
   layer = null;
   run(500);
   assert.equal(yielded(), false, 'closed: back');
-  layer = make('div'); run(500); assert.equal(yielded(), true);
+  layer = make('div'); layer.getClientRects = () => [{}]; run(500); assert.equal(yielded(), true);
   layer.hidden = true;
   layer.getClientRects = () => [];
   doc.querySelectorAll = () => [layer];

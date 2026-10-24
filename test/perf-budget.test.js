@@ -347,6 +347,7 @@ const STYLE_READS = [
   ['content-ultra.js', 'getComputedStyle(p)', 1], // a course slot's probe
   ['features/docs.js', 'getComputedStyle(p)', 1], // the scroller above the document in focus mode
   ['features/petworld.js', 'getComputedStyle(n)', 1], // at most 30 ancestors when a pet/toy acquires a content anchor; never in the scroll handler
+  ['features/petworld.js', 'getComputedStyle(e)', 1], // only matching panel roots with layout boxes, while the pet is wandering
   ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
   ['features/coursetabs.js', 'getComputedStyle(p)', 1], // the scroller above the course tabs, once a tab switch lands
   ['features/coursetabs.js', 'getComputedStyle(list)', 1], // the tab strip's direction, once per arrow key
