@@ -1721,13 +1721,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const onShow = (e) => { if (e.persisted && on && framed) { listen(false); listen(true); } };
   const onResize = () => {
     if (on) flag();
-    place();
+    if (ctx.site !== 'canvas') place();
     lay();
     navRoom();
     inView();
     if (ctx.site === 'canvas') {
       // A picture made at the old viewport no longer fits; keep the live frame through the resize.
       if (pic) { const f = frames.get(showing); if (f) f.el.style.visibility = ''; unpicture(true); }
+      place();
     }
   };
   let navWatch = null;
