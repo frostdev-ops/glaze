@@ -252,12 +252,12 @@ test('E1 switching an open phone preview to desktop removes modal semantics', ()
 });
 
 test('E1 routes, remembered tabs, legacy entry points and tab-only keyboard handling reveal the owning panel', async () => {
-  const events = {}, kept = [], wrappers = new Map(); let focused;
+  const events = {}, kept = [], wrappers = new Map(); let focused, scrolled;
   for (const n of nodes) wrappers.set(n, {
     id: n.attrs.id || '', dataset: Object.fromEntries(Object.entries(n.attrs).filter(([k]) => k.startsWith('data-')).map(([k, v]) => [k.slice(5).replace(/-([a-z])/g, (_, x) => x.toUpperCase()), v])),
     attrs: { ...n.attrs }, hidden: Object.hasOwn(n.attrs, 'hidden'), events: {},
     setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k] ?? null; }, hasAttribute(k) { return Object.hasOwn(this.attrs, k); },
-    toggleAttribute(k, on) { if (on) this.attrs[k] = ''; else delete this.attrs[k]; }, removeAttribute(k) { delete this.attrs[k]; }, addEventListener(k, f) { this.events[k] = f; }, focus() { focused = this; }, scrollIntoView() {},
+    toggleAttribute(k, on) { if (on) this.attrs[k] = ''; else delete this.attrs[k]; }, removeAttribute(k) { delete this.attrs[k]; }, addEventListener(k, f) { this.events[k] = f; }, focus() { focused = this; }, scrollIntoView() { scrolled = this; },
     closest() { return wrappers.get([n, ...n.parents.toReversed()].find((x) => x.attrs['data-editor-section'])); },
   });
   const all = [...wrappers.values()], doc = { querySelectorAll: (selector) => {
@@ -269,10 +269,11 @@ test('E1 routes, remembered tabs, legacy entry points and tab-only keyboard hand
     if (selector === 'details.more') return [];
     return all.filter((x) => x.id && x.closest());
   } };
-  const ctx = vm.createContext({ document: doc, structuredClone, location: { hash: '#tabs' }, scrollY: 50, scrollTo() {}, requestAnimationFrame: (f) => f(),
+  const ctx = vm.createContext({ document: doc, structuredClone, location: { hash: '#pages/declutter' }, scrollY: 50, scrollTo() {}, requestAnimationFrame: (f) => f(),
     addEventListener: (k, f) => { events[k] = f; }, chrome: { storage: { local: { get: async () => ({ editorTab: 'about' }), set: async (v) => { kept.push(v); } } } } });
   vm.runInContext(fs.readFileSync(path.join(root, 'lib/editor.js'), 'utf8'), ctx);
   const ui = ctx.GZ_EDITOR.mount();
+  assert.equal(scrolled?.dataset.editorSection, 'pages/declutter', 'an initial deep link scrolls its section into view');
   for (const [hash, route] of Object.entries({ '#bb-folders': 'pages/declutter', '#canvas-quizzes': 'pages/documents', '#canvas-shared': 'pages/content', '#moodle-courses': 'look/palette', '#tabs': 'navigation/tabs', '#blackboard/tabs': 'navigation/tabs', '#sidebar': 'navigation/bar', '#todo': 'study/todo', '#gcal': 'sharing/calendar', '#data': 'backup/privacy', '#background': 'look/background', '#blackboard/nav': 'navigation/bar', '#look/cards': 'courses/cards', '#canvas/shared': 'pages/content', '#study/tools': 'pages/content', '#blackboard': 'pages/dashboard', '#unknown/section': 'look/palette' })) {
     ctx.location.hash = hash; events.hashchange(); assert.equal(ui.route(), route, hash);
     assert.equal(all.find((x) => x.dataset.editorPanel === route.split('/')[0]).hidden, false);

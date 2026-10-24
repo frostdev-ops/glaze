@@ -161,7 +161,7 @@ var GZ_EDITOR = (() => {
       for (const s of sections) seen.observe(s);
     }
     addEventListener('hashchange', () => show(location.hash, { scroll: true, remember: true }));
-    show(location.hash);
+    show(location.hash, { scroll: !!location.hash });
     chrome.storage.local.get(['editorTab', 'editorAll']).then((r) => {
       if (r.editorAll === true) setAll(true, false);
       if (!location.hash) show(MOVED[r.editorTab] || first(r.editorTab) || first('look'));
