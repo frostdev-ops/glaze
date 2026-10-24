@@ -253,3 +253,17 @@ test('the habitat tile: allowance on the Pet button, one panel at a time, Settin
   assert.ok(d.body.querySelector('[data-panel="settings"] [data-control="wear"]'));
   box.stop();
 });
+
+test('closing More after changing the habitat returns focus to the tile’s current More button', async () => {
+  const p = page({ world: true }), live = p.ui.mount(p.body, p.api); await settle();
+  const more = p.body.querySelector('[data-control="more"]'); more.focus();
+  for (const l of more.listeners.filter(x => x.type === 'click')) l.f({ isTrusted: true });
+  await settle();
+  const box = p.doc.root.querySelector('dialog');
+  p.write({ ...level, habitat: 'garden' }); await settle();
+  const current = p.body.querySelector('[data-control="more"]');
+  assert.ok(current.isConnected, 'the tile keeps a reachable More button');
+  box.close();
+  assert.ok(p.doc.activeElement === current, 'focus returns to the connected More control after a repaint');
+  live.stop();
+});

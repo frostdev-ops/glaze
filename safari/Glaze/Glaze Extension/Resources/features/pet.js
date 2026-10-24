@@ -271,13 +271,15 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     if (!ctx.settings().enabled || !ctx.settings().enhance.pet) return;
     box?.close();
     const opener = document.activeElement, body = make('div');
+    // Changing the habitat in the dialog can repaint its tile and replace More before the dialog closes.
+    const openerControls = opener?.dataset.control === 'more' ? opener.closest('.gz-game-controls') : null;
     const close = button(t('Close'), () => box.close());
     box = make('dialog', { className: 'gz-game-dialog' }, make('header', {}, make('h2', { id: 'gz-game-title', textContent: t('Pet habitat') }), close), body);
     box.setAttribute('aria-labelledby', 'gz-game-title');
     const tile = mount(body, undefined, { inDialog: true }), current = box;
     const off = (ch, area) => { if (area === 'sync' && (ch.enabled?.newValue === false || (ch.enhance && !ch.enhance.newValue?.pet))) current.close(); };
     chrome.storage.onChanged.addListener(off);
-    box.addEventListener('close', () => { chrome.storage.onChanged.removeListener(off); tile.stop(); current.remove(); if (box === current) { box = null; opener?.focus({ preventScroll: true }); } });
+    box.addEventListener('close', () => { chrome.storage.onChanged.removeListener(off); tile.stop(); current.remove(); if (box === current) { box = null; (opener?.isConnected ? opener : openerControls?.querySelector('[data-control="more"]'))?.focus({ preventScroll: true }); } });
     box.addEventListener('click', (e) => { if (e.target === current) current.close(); });
     // Not modal (the pet can be dragged onto the page), so the browser does not close it on Escape. Something inside that used the
     // key already (the pet's own Escape, which sends it home) has prevented it.
