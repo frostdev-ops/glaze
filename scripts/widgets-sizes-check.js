@@ -235,8 +235,16 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
     await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
     const store = (s, local) => opts.evaluate(async ([s, local]) => {
       await chrome.storage.sync.clear(); await chrome.storage.sync.set(s);
-      await chrome.storage.local.clear(); await chrome.storage.local.set(local);
-    }, [s, local]).then(() => require('./check-env.js').ultraReady(opts));
+      // Keep approvals between fixtures: clearing Ultra queues unregistration, which can finish after ultraReady saw the
+      // previous registration and leave the next navigation with no content script at all.
+      const keys = Object.keys(await chrome.storage.local.get(null)).filter((k) => !['ultra', 'canvas', 'moodle'].includes(k));
+      await chrome.storage.local.remove(keys); await chrome.storage.local.set(local);
+    }, [s, local]).then(async () => {
+      // A fresh install also resets registration. Drain the worker's registration queue before testing the next page.
+      const worker = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
+      await worker.evaluate(() => queue);
+      await require('./check-env.js').ultraReady(opts);
+    });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(e.stack || String(e)));
     page.on('console', (msg) => { if (msg.type() === 'error' && !/ERR_NAME_NOT_RESOLVED|ERR_FAILED|404/.test(msg.text())) errors.push(msg.text()); });
@@ -264,8 +272,7 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
       await store(settingsFor(preset, sidebar ? { enhance: { sidebar: true } } : {}), local(layout, sidebar));
       await page.setViewportSize({ width, height });
       await page.goto(`${site}${where}`);
-      // Now and then the first load after a storage reset draws no board; once more, said, before it counts as a failure.
-      if (!await page.waitForSelector(sel, { timeout: 20000 }).catch(() => null)) { console.log(`note ${name}: no tiles on the first load; loading again`); await page.reload(); await page.waitForSelector(sel, { timeout: 20000 }).catch(() => {}); }
+      await page.waitForSelector(sel, { timeout: 20000 }).catch(() => null);
       await page.waitForSelector('section.gz-w[data-tile="pet"] .gz-game-actor', { timeout: 8000 }).catch(() => {});
       await page.waitForTimeout(900); // the agenda, the notes, To Do and the course card arrive
       await settle();
@@ -356,7 +363,7 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
       await page.setViewportSize({ width: w, height: h });
       await page.goto(`${O}/ultra/institution-page`);
       const ready = () => page.waitForSelector('section.gz-w[data-tile="pet"] [data-control="more"]', { state: 'visible', timeout: 20000 }).catch(() => null);
-      if (!await ready()) { console.log(`note More at ${w} px: no habitat on the first load; loading again`); await page.reload(); await ready(); }
+      await ready();
       await page.click('section.gz-w[data-tile="pet"] [data-control="more"]').catch(() => {});
       await page.waitForSelector('dialog.gz-game-dialog[open] .gz-game-habitat', { timeout: 10000 }).catch(() => {});
       await page.waitForTimeout(800);
@@ -415,7 +422,7 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
       await page.setViewportSize({ width, height });
       await page.goto(`${O}/ultra/institution-page`);
       const drawn = () => page.waitForFunction(() => document.getElementById('gz-navbar')?.shadowRoot?.querySelector('.widget'), null, { timeout: 20000 }).catch(() => null);
-      if (!await drawn()) { console.log(`note ${name}: no navigation on the first load; loading again`); await page.reload(); await drawn(); }
+      await drawn();
       await page.waitForTimeout(1200); // the mod's rail widget and what is due arrive
       if (open) { await bar(open); await page.waitForTimeout(600); }
       const items = await page.evaluate(NAV);

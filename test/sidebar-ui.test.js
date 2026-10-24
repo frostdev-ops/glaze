@@ -991,3 +991,16 @@ test('a late site registration or cleared test-copy storage retries an unfinishe
   await settle();
   assert.equal(p.store[KEY].mig, 1, 'the localhost clear/install sequence recreates the current account record');
 });
+
+test('dock reordering keeps focus on the moved tile’s current menu button or drag handle', async () => {
+  const p = page({ widgets: true, stored: { widgetLayout: lay0(), ...record({ dock: [{ id: 'timer' }, { id: 'notes' }], dest: { timer: 'dock', notes: 'dock' } }) } });
+  await p.pass();
+  const control = (id, sel) => p.$(`section[data-tile="${id}"]`).querySelector(sel);
+  menuItem(p, 'notes', 'Move up'); await settle();
+  assert.ok(p.doc.activeElement === control('notes', '.gz-w-dest'), 'menu reorder returns focus to its connected trigger');
+  const handle = control('notes', '.gz-w-handle'); handle.focus();
+  p.fire(handle, 'keydown', { key: 'ArrowDown' }); await settle();
+  assert.ok(p.doc.activeElement === control('notes', '.gz-w-handle'), 'arrow reorder keeps the connected handle focused');
+  assert.deepEqual(p.store[KEY].dock.map(x => x.id), ['timer', 'notes']);
+  p.side.sync(false); p.ui.sync(false);
+});
