@@ -158,6 +158,7 @@
   'Search settings /': 'Pesquisar configurações /',
   'Search settings': 'Pesquisar configurações',
   'Sections': 'Seções',
+  'Enable Glaze': 'Ativar Glaze',
   'Theme on / off': 'Tema ligado / desligado',
   'Contrast checks': 'Verificação de contraste',
   'Name this palette': 'Dê um nome a esta paleta',

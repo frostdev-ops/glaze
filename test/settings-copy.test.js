@@ -17,6 +17,11 @@ const PRIVACY_IDS = ['font-note', 'report-note', 'tabs-memory-note', 'ics-note',
 const PRIVACY_KEYS = ['enhance.gradescope', 'todo.gsDaily', 'mods.blocklist'];
 const CAP = 90, POP_CAP = 260;
 
+test('the master switch has a visible label', () => {
+  const label = html.match(/<label[^>]*>[^<]*<input[^>]*id="enabled"[^>]*>([\s\S]*?)<\/label>/)?.[1];
+  assert.ok(label && words(label), 'the master switch needs text beside its track');
+});
+
 test('no taglines or site lines on the settings page', () => {
   for (const f of ['options.html', 'options.js', 'lib/editor-xparts.js']) {
     assert.doesNotMatch(read(f), /section-note|site-scope/, f);

@@ -158,6 +158,7 @@
   'Search settings /': 'Instellingen zoeken  /',
   'Search settings': 'Instellingen zoeken',
   'Sections': 'Secties',
+  'Enable Glaze': 'Glaze inschakelen',
   'Theme on / off': 'Thema aan / uit',
   'Contrast checks': 'Contrastcontroles',
   'Name this palette': 'Geef dit palet een naam',
