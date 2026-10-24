@@ -1000,3 +1000,29 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
   .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-habitat{height:100%;align-self:stretch}
   .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-controls{min-height:0;overflow:auto;overscroll-behavior:contain;align-content:start}
 }
+
+/* The other widgets by their tile's room. Sizes come from the container (cqi: its width; cqb: its dragged height, else the
+   window's), so a widget grows into a large tile instead of leaving it empty, and gives way in a small one. */
+.gz-w[data-tile="timer"] > .gz-w-body { display: grid; justify-items: center; text-align: center; gap: 0.35rem; }
+.gz-w-clock { font-size: clamp(2rem, min(16cqi, 32cqb), 5.5rem); }
+.gz-w-quote { font-size: clamp(0.95rem, 4.6cqi, 1.6rem); }
+.gz-w-breath { width: clamp(2.5rem, min(34cqi, 100cqb - 6.5rem), 11rem); height: clamp(2.5rem, min(34cqi, 100cqb - 6.5rem), 11rem); margin: 0.2rem auto; }
+.gz-w[data-tile="buddy"] .gz-w-pet :is(img,canvas) { width: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); height: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); }
+.gz-w[data-tile^="course:"] .gz-course-card .course-banner { height: clamp(0px, 100cqb - 7rem, var(--gz-card-h, 128px)); }
+/* Dragged to a height: what a widget shows sits in the middle of its tile, not at the top of an empty box. */
+.gz-w:is([data-tile="timer"], [data-tile="breathe"], [data-tile="buddy"]) > .gz-w-body[style*="height"] { align-content: safe center; }
+.gz-w:is([data-tile="quotes"], [data-tile="settings"]) > .gz-w-body[style*="height"] { display: flex; flex-direction: column; justify-content: safe center; gap: 0.4rem; }
+.gz-w[data-tile="settings"] > .gz-w-body[style*="height"] { align-items: center; }
+.gz-w > .gz-w-body[style*="height"] .gz-w-stage iframe { height: max(5rem, 100cqb - 3.5rem); }
+@container gz-tile (width < 260px) {
+  .gz-w-agenda li { grid-template-columns: minmax(0, 1fr); }
+  .gz-w-agenda li > .gz-w-faint:not(:only-child) { grid-column: 1; }
+  .gz-w-music { flex-wrap: wrap; }
+  .gz-w-music input { flex-basis: 100%; }
+}
+
+/* To Do in a narrow tile: its count and tools on fewer rows, so the list starts sooner. */
+@container gz-tile (width < 260px) {
+  .gz-w[data-tile="todo"] #gz-todo .gz-todo-head { gap: 0.15rem 0.3rem; font-size: 0.8rem; }
+  .gz-w[data-tile="todo"] #gz-todo .gz-todo-head :is(button, a) { padding-inline: 0.4rem; }
+}
