@@ -179,7 +179,7 @@ test('Settings: the add form sits in Sites, above the list, in the Backup panel 
   const panel = html.slice(html.indexOf('data-editor-panel="backup"'), html.indexOf('data-editor-panel="about"'));
   assert.match(panel, /<section id="sites"[\s\S]*?<form class="row site-add" id="site-add" novalidate autocomplete="off">[\s\S]*?<input id="site-address"[^>]*translate="no"[\s\S]*?<button type="submit" class="primary" id="site-allow">Allow<\/button>[\s\S]*?<\/form>[\s\S]*?id="site-note" role="alert" hidden[\s\S]*?id="site-picks"[\s\S]*?id="site-list"/);
   assert.match(panel, /<span>School address<\/span>/, 'the field is labelled');
-  assert.ok(read('options.js').includes("['backup', 'Backup and privacy']"), 'embedded Settings gates the Backup panel to its own tab');
+  assert.ok(read('options.js').includes("['backup', 'Privacy and data']"), 'embedded Settings gates the Privacy and data panel to its own tab');
   assert.ok(html.indexOf('<script src="lib/site.js"></script>') > 0 && html.indexOf('<script src="lib/site.js"></script>') < html.indexOf('<script src="options.js"></script>'));
 });
 

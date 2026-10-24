@@ -126,7 +126,7 @@ const refreshed = (s, extra = {}) => {
   const source = between(options, '  const refresh = () => {', '  // Puts every control back in line');
   const context = vm.createContext({
     s, offer: null, GZ_UI: { paint() {}, looks: (box, v, cb) => { picks.look = cb; }, swatches: (box, v, cb) => { picks.swatch = cb; }, pickLook: UI.pickLook, pickPreset: UI.pickPreset },
-    $: element, $$: () => [], get: () => 0, finder: { value: '' }, preview() {}, renderContrast() {}, renderMine() {}, renderHistory() {}, renderExtras() {}, renderBg() {}, renderNav() {},
+    $: element, $$: () => [], get: () => 0, finder: { value: '' }, preview() {}, renderContrast() {}, renderMine() {}, renderHistory() {}, renderExtras() {}, renderBg() {}, renderNav() {}, showResets() {},
     navbarEditor: null, presetOptions() {}, outputs() {}, GZ_EDITOR_X: { render() {} }, GZ_XEDIT: { render() {} }, document: { body: { classList: { toggle() {} } } },
     save: (keys) => { saved.push(keys); log.push('save'); }, fill: () => log.push('fill'), hint: (...a) => { hints.push(a); log.push('hint'); }, t: say,
     leaving: () => { log.push('leaving'); return extra.undo ?? null; }, ...extra.context,
@@ -461,9 +461,9 @@ test('LOOK-10: a slider tick that changes nothing History shows does not redraw 
 const html = read('options.html');
 const sectionOf = (route) => html.match(new RegExp(`<section[^>]*data-editor-section="${route}"[^>]*>([\\s\\S]*?)</section>`))[1];
 
-test('LOOK-13: the Look tab’s section links reach "This Look’s navigation" and "Page tweaks", which have a path and a Reset like the rest', () => {
-  const nav = html.match(/<div id="panel-look"[^>]*><nav class="section-links"[^>]*>([\s\S]*?)<\/nav>/)[1];
-  const links = [...nav.matchAll(/<a href="#([^"]+)" data-editor-alias>([^<]+)<\/a>/g)].map((m) => [m[1], m[2]]);
+test('LOOK-13: the Look category’s section links reach "This Look’s navigation" and "Page tweaks", which have a path and a Reset like the rest', () => {
+  const nav = html.match(/<div data-editor-jumps="look"[^>]*>([\s\S]*?)<\/div>/)[1];
+  const links = [...nav.matchAll(/<a href="#([^"]+)" data-editor-jump>([^<]+)<\/a>/g)].map((m) => [m[1], m[2]]);
   assert.ok(links.some(([h, w]) => h === 'look/nav-layout' && w === "This Look's navigation"), JSON.stringify(links));
   assert.ok(links.some(([h, w]) => h === 'look/rules' && w === 'Page tweaks'));
   // In the order the sections are in.

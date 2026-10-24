@@ -114,6 +114,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     // The Ultra preview's course outline: the page whose own entrance (page.enter) shows there.
     await page.evaluate(() => { document.getElementById('preview-site').value = 'ultra'; document.getElementById('preview-page').value = 'outline'; document.getElementById('preview-page').dispatchEvent(new Event('change')); });
     await page.waitForFunction(() => document.getElementById('preview')?.contentDocument?.documentElement.dataset.previewReady === 'true');
+    await page.click('#motion details.more > summary'); // the Look's motion moments sit in Motion's More options
     await page.click('details[data-moment="page.enter"] summary');
     await page.selectOption('details[data-moment="page.enter"] select', 'rise');
     const rise = await until(async () => (await stored())?.anim?.['page.enter']);

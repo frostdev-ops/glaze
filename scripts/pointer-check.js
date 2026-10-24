@@ -81,8 +81,8 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     };
 
     // ---- the section and its cards -----------------------------------------------------------------------------------
-    const links = await page.evaluate(() => [...document.querySelectorAll('#panel-look > nav.section-links a')].map((a) => a.getAttribute('href')));
-    check('Pointer is in the Look tab\'s section links, after Motion', links.indexOf('#look/pointer') === links.indexOf('#look/motion') + 1, links.join(' '));
+    const links = await page.evaluate(() => [...document.querySelectorAll('[data-editor-jumps="look"] a')].map((a) => a.getAttribute('href')));
+    check('Pointer is in the Look category\'s section links, after Motion', links.indexOf('#look/pointer') === links.indexOf('#look/motion') + 1, links.join(' '));
     const cards = await page.evaluate(() => [...document.querySelectorAll('#pointer-tiles label')].map((l) => l.dataset.pointer));
     check('a card for every choice the setting takes', JSON.stringify(cards) === JSON.stringify(G.GZ_SPEC.extras.pointer[1]), cards.join(' '));
     check('  The Look\'s pointer is chosen to begin with', await chosen() === 'look');
@@ -110,7 +110,8 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('a click chooses Pumpkin; the preview wears it', await until(async () => (await sync()).pointer === 'pumpkin') && !!await wears('pumpkin'), await worn());
     check('  the Look keeps its own pointer: the choice is never written into it', await lookPointer() === 'quill', await lookPointer());
 
-    // ---- their own picture -------------------------------------------------------------------------------------------------
+    // ---- their own picture (in the section's More options) -------------------------------------------------------------------
+    await page.click('#look-pointer details.more > summary');
     check('no picture yet: its card can\'t be chosen and says so', await page.evaluate(() => document.querySelector('[data-pointer="own"] input').disabled && /No picture yet/.test(document.querySelector('[data-pointer="own"]').textContent)));
     const png = Buffer.from(await page.evaluate(() => {
       const c = Object.assign(document.createElement('canvas'), { width: 64, height: 64 }), g = c.getContext('2d');
