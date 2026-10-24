@@ -1,5 +1,5 @@
 /* Shared by the popup and the options page. Colors are the user's own palette: ui.js writes the
-   --gz-* tokens onto :root before first paint. */
+   --gz-* tokens onto :root before first paint, and on the options page the Look's text size (--gz-scale). */
 :root { --gz-ease: cubic-bezier(0.22, 1, 0.36, 1); --r: calc(var(--gz-radius, 12px) * 5 / 6); }
 * { box-sizing: border-box; }
 body {
@@ -8,9 +8,9 @@ body {
   color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2));
   transition: color 0.25s var(--gz-ease), background 0.25s var(--gz-ease);
 }
-h1 { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
+h1 { margin: 0; font-size: calc(14px * var(--gz-scale, 1)); font-weight: 700; letter-spacing: 0.01em; }
 h2 {
-  margin: 0 0 0.6rem; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+  margin: 0 0 0.6rem; font-size: calc(11px * var(--gz-scale, 1)); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--gz-ink-faint); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
 }
 label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
@@ -43,7 +43,7 @@ input[type="text"], input[type="url"], input[type="password"], select {
 :is(input, select, button, a.button):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 
 button, a.button {
-  font: inherit; font-size: 12px; padding: 0.3rem 0.75rem; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: calc(12px * var(--gz-scale, 1)); padding: 0.3rem 0.75rem; border-radius: 999px; cursor: pointer;
   color: var(--gz-ink-muted); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
   transition: color 0.2s var(--gz-ease), border-color 0.2s var(--gz-ease), background 0.2s var(--gz-ease);
 }
@@ -65,7 +65,7 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
 
 /* Segmented choice: radio inputs inside labels; the checked one is the value. */
 .seg { display: inline-flex; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; padding: 2px; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
-.seg label { padding: 0.25rem 0.7rem; border-radius: 999px; color: var(--gz-ink-muted); font-size: 12px; transition: background 0.2s var(--gz-ease), color 0.2s var(--gz-ease); }
+.seg label { padding: 0.25rem 0.7rem; border-radius: 999px; color: var(--gz-ink-muted); font-size: calc(12px * var(--gz-scale, 1)); transition: background 0.2s var(--gz-ease), color 0.2s var(--gz-ease); }
 .seg input { position: absolute; opacity: 0; width: 0; height: 0; }
 .seg label:has(input:checked) { background: var(--gz-accent-soft); color: var(--gz-accent); font-weight: 600; }
 .seg label:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
@@ -91,7 +91,7 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
 .look:hover { transform: translateY(-1px); }
 .look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface-2), 0 0 0 4px var(--gz-accent); }
 
-.hint { margin: 0; font-size: 11px; color: var(--gz-ink-faint); }
+.hint { margin: 0; font-size: calc(11px * var(--gz-scale, 1)); color: var(--gz-ink-faint); }
 .hint.err { color: var(--gz-err); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
 

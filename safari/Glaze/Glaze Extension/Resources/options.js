@@ -41,7 +41,8 @@ const hint = (msg, err = false, undo = null) => {
 // aria-labelledby, which show and hide with it. Nothing here lists the settings. ----
 const finder = $('#find');
 let followSection = () => {}, searchPreview = () => {};
-const editor = GZ_EDITOR.mount({ onRoute: (route) => followSection(route) });
+const editor = GZ_EDITOR.mount({ onRoute: (route, part) => followSection(route, part) });
+GZ_INFO.mount();
 
 // Opened as a page of the school's site (features/settingspage.js): the same Settings, with Close and a way to its own tab.
 // The page around can't read this frame, but it could cover it and borrow a click, so what holds keys and grants (sharing,
@@ -75,7 +76,7 @@ if (embedded) {
     e.preventDefault(); leave();
   });
   const make = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
-  for (const [panel, name] of [['sharing', 'Sharing and sync'], ['mods', 'Mods'], ['backup', 'Backup and privacy']]) {
+  for (const [panel, name] of [['sharing', 'Sharing'], ['mods', 'Mods'], ['backup', 'Privacy and data']]) {
     const box = document.querySelector(`[data-editor-panel="${panel}"]`);
     if (!box) continue;
     const go = make('button', { type: 'button', className: 'primary', textContent: t('Open in a new tab') });
@@ -85,6 +86,9 @@ if (embedded) {
       make('p', { textContent: t('This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.') }), go));
   }
 }
+// A section's parts are its children, and the children of the boxes in it (groups, More options, the navigation's bodies), each
+// box's own heading aside. A match inside a closed More options opens it; leaving the search closes it again (lib/editor.js).
+const BOX = '.group, .nb-body, .nb-group, details.more';
 const filter = () => {
   const words = GZ_FIND.parse(finder.value);
   const on = words.length > 0;
@@ -106,31 +110,45 @@ const filter = () => {
     .flatMap((e) => `${e.getAttribute('aria-describedby') || ''} ${e.getAttribute('aria-labelledby') || ''}`.split(' '))
     .map((id) => id && document.getElementById(id)).filter(Boolean);
   const said = (el) => [el, ...el.querySelectorAll('[title], [aria-label], [placeholder]')]
-    .map((e) => `${e.title} ${e.getAttribute('aria-label') || ''} ${e.placeholder || ''}`).join(' ');
+    .map((e) => `${e.title} ${e.getAttribute('aria-label') || ''} ${e.getAttribute('placeholder') || ''}`).join(' ');
   let n = 0;
+  for (const b of $$('button.info.found')) b.classList.remove('found');
   for (const sec of $$('[data-editor-section]')) {
-    const h2 = sec.querySelector('h2');
-    const parts = [...sec.querySelectorAll(':scope > :not(.section-heading, .section-path, .section-note, .site-scope, .group), :scope > .group > :not(h3)')];
+    const h2 = sec.querySelector('h2'), boxes = [];
+    const partsOf = (box) => [...box.children].flatMap((el) => {
+      if (el.matches('.section-heading, .section-path, .section-note, summary') || (box !== sec && el.tagName === 'H3')) return [];
+      if (el.matches(BOX)) { boxes.push(el); return partsOf(el); }
+      return [el];
+    });
+    const parts = partsOf(sec);
     const notes = new Map(parts.map((el) => [el, named(el)]));
     const isNote = new Set([...notes.values()].flat());
     for (const el of isNote) el.classList.toggle('miss', on);
     let any = false;
     for (const el of parts) {
       if (isNote.has(el)) continue;
-      const h3 = el.parentElement.querySelector(':scope > h3');
+      const heads = [];
+      for (let box = el.parentElement; box && box !== sec; box = box.parentElement) if (box.matches(BOX)) heads.push(box.querySelector(':scope > h3')?.textContent || '');
       const text = [el.textContent, said(el), ...notes.get(el).map((x) => x.textContent)].join(' ');
       const tab = $(`[data-editor-tab="${sec.dataset.editorSection.split('/')[0]}"]`).textContent;
-      const hit = !on || (!el.closest('[hidden]') && GZ_FIND.matches(`${tab} ${h2.textContent} ${h3?.textContent || ''}`, `${sec.dataset.sites} ${text}`, words));
+      const hit = !on || (!el.closest('[hidden]') && GZ_FIND.matches(`${tab} ${h2.textContent} ${heads.join(' ')}`, `${sec.dataset.sites} ${text}`, words));
       el.classList.toggle('miss', !hit);
       if (!hit || !on) continue;
       any = true;
       n++;
       for (const x of [el, ...notes.get(el)]) { x.classList.remove('miss'); mark(x); }
+      // A match only in a "?"'s description rings the "?"; opening it shows the words marked.
+      for (const pop of [el, ...notes.get(el)].flatMap((x) => (x.matches('.info-pop') ? [x] : [...x.querySelectorAll('.info-pop')]))) {
+        if (GZ_FIND.spans(pop.textContent, words).length) document.querySelector(`[popovertarget="${pop.id}"]`)?.classList.add('found');
+      }
     }
-    for (const g of sec.querySelectorAll(':scope > .group')) {
-      const empty = on && !g.querySelector(':scope > :not(h3, .miss)');
+    // Innermost first, so a box holding only empty boxes is empty too.
+    for (const g of boxes.reverse()) {
+      const empty = on && !g.querySelector(':scope > :not(h3, summary, .miss)');
       g.classList.toggle('miss', empty);
-      if (on && !empty) for (const h3 of g.querySelectorAll(':scope > h3')) mark(h3, true);
+      if (!on || empty) continue;
+      for (const h3 of g.querySelectorAll(':scope > h3')) mark(h3, true);
+      if (g.matches('details.more')) g.open = true;
     }
     sec.classList.toggle('miss', on && !any);
     if (on && any) mark(h2, true);
@@ -165,7 +183,7 @@ GZ_NEWS.check((notes) => {
 $('#news-close').addEventListener('click', () => { $('#news').hidden = true; finder.focus(); });
 
 GZ_UI.load().then((s) => {
-  const frame = $('#preview');
+  const frame = $('#preview'), backdrop = $('#backdrop');
   let navItems = GZ_NAV.clean(), navbarEditor = null;
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
@@ -177,8 +195,10 @@ GZ_UI.load().then((s) => {
     const phone = $('#preview-size').value === 'phone', width = phone ? 375 : 1280, height = phone ? 812 : 900;
     const stage = $('.preview-stage'), available = stage.clientWidth, scale = Math.min(1, available / width);
     Object.assign(frame.style, { width: `${width}px`, height: `${height}px`, transform: `scale(${scale})`, left: `${Math.max(0, (available - width * scale) / 2)}px` });
-    stage.style.height = `${Math.ceil(height * scale)}px`; $('#preview-size-label').textContent = `${width} × ${height} CSS px`;
+    stage.style.height = `${Math.ceil(height * scale)}px`;
   };
+  // The page's own background: the Look worn, or the one on offer while it is previewed.
+  const paintBackdrop = () => backdrop.contentWindow?.postMessage({ gzPreview: offer || s, gzPreviewParts: (offer || s).parts ?? null }, location.origin);
   const preview = () => {
     const belongs = (course) => course && (course.canvas ? 'canvas' : course.moodle ? 'moodle' : 'ultra') === previewSite;
     const base = offer || s, id = belongs(courses[previewCourse]) ? previewCourse : base.courses.tinted.find((id) => belongs(courses[id])), course = courses[id];
@@ -198,6 +218,7 @@ GZ_UI.load().then((s) => {
     const coursePointer = settings !== base && GZ_LOOK_PARTS({ name: base.courses.looks[id] })?.x?.pointer;
     frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) }, gzPreviewParts: settings === base ? base.parts ?? null : coursePointer ? { x: { pointer: coursePointer } } : null }, location.origin);
     renderNav(); renderContrast(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
+    paintBackdrop();
   };
   const contextPreview = (site, page) => {
     if (!supportedPages[site].includes(page)) page = 'courses';
@@ -209,18 +230,22 @@ GZ_UI.load().then((s) => {
     frame.title = t('Live preview: {site}, {page}', { site: $('#preview-site').selectedOptions[0].textContent, page: $('#preview-page').selectedOptions[0].textContent });
     preview();
   };
-  followSection = (route) => {
+  followSection = (route, part = '') => {
+    // part: the box in use inside the section (its id), where its preview differs from the section's.
     let site = previewSite, page = previewPage;
-    if (route.startsWith('blackboard/')) { site = 'ultra'; page = route.endsWith('/tabs') ? 'tabs' : route.endsWith('/dashboard') ? 'dashboard' : route.endsWith('/stream') ? 'stream' : 'outline'; }
-    else if (route.startsWith('canvas/')) { site = 'canvas'; page = route.endsWith('/documents') ? 'document' : route.endsWith('/quizzes') ? 'quiz' : 'courses'; }
-    else if (route.startsWith('moodle/')) { site = 'moodle'; page = 'courses'; }
-    else if (route === 'look/courses') { site = 'ultra'; page = 'outline'; }
+    if (part === 'bb-stream') { site = 'ultra'; page = 'stream'; }
+    else if (route === 'pages/dashboard') { site = 'ultra'; page = 'dashboard'; }
+    else if (route === 'pages/declutter') { site = 'ultra'; page = 'outline'; }
+    else if (route === 'pages/documents') { site = 'canvas'; page = 'document'; }
+    else if (route === 'navigation/tabs') { if (site === 'moodle') site = 'ultra'; page = 'tabs'; }
+    else if (route === 'courses/list') { site = 'ultra'; page = 'outline'; }
+    else if (route === 'pages/content') page = 'outline';
     else if (/\/(cards|palette|background)$/.test(route)) page = 'courses';
     else if (route === 'navigation/sidebar') { if (site === 'moodle') site = 'canvas'; page = 'courses'; }
     else if (route === 'study/widgets' || route === 'study/todo' || route === 'study/grades') { if (site === 'moodle') site = 'ultra'; page = 'dashboard'; }
     contextPreview(site, page);
   };
-  $('.editor').addEventListener('focusin', (e) => { const section = e.target.closest('[data-editor-section]'); if (section) followSection(section.dataset.editorSection); });
+  $('.editor').addEventListener('focusin', (e) => { const section = e.target.closest('[data-editor-section]'); if (section) followSection(section.dataset.editorSection, e.target.closest('#bb-stream')?.id); });
   for (const el of $$('#preview-site, #preview-page')) el.addEventListener('change', () => contextPreview($('#preview-site').value, $('#preview-page').value));
   for (const el of $$('#nav-preview-mode, #nav-preview-scheme, #preview-size')) el.addEventListener('change', preview);
   const showPreview = () => { $('#preview-body').hidden = previewCollapsed; $('#preview-toggle').setAttribute('aria-expanded', String(!previewCollapsed)); $('#preview-toggle').textContent = t(previewCollapsed ? 'Show preview' : 'Hide preview'); if (!previewCollapsed) sizePreview(); };
@@ -228,12 +253,19 @@ GZ_UI.load().then((s) => {
   searchPreview = (on) => { if (on !== searchWasOn) { if (on) { beforeSearch = previewCollapsed; previewCollapsed = true; } else previewCollapsed = beforeSearch; searchWasOn = on; showPreview(); } };
   frame.addEventListener('load', preview);
   addEventListener('message', (e) => {
+    if (e.origin === location.origin && e.source === backdrop.contentWindow && e.data?.gzPreviewReady) paintBackdrop();
     if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
     if (e.data?.gzPreviewReady) preview();
-    if (e.data?.gzPreviewFailed) $('#preview-note').textContent = t('Preview could not load. Try reloading settings.');
+    if (e.data?.gzPreviewFailed) Object.assign($('#preview-note'), { textContent: t('Preview could not load. Try reloading settings.'), hidden: false });
   });
-  const geometry = new ResizeObserver(() => { document.documentElement.style.setProperty('--editor-header', `${$('.top').getBoundingClientRect().height}px`); sizePreview(); });
-  geometry.observe($('.top')); geometry.observe($('.preview-stage'));
+  // Sticky things sit under the header; a section scrolled to sits under the header and, in one column, the categories' row too.
+  const geometry = new ResizeObserver(() => {
+    const top = $('.top').getBoundingClientRect().height, row = matchMedia('(max-width: 980px)').matches ? $('.editor-nav').getBoundingClientRect().height : 0;
+    document.documentElement.style.setProperty('--editor-top', `${top}px`);
+    document.documentElement.style.setProperty('--editor-header', `${top + row}px`);
+    sizePreview();
+  });
+  geometry.observe($('.top')); geometry.observe($('.editor-nav')); geometry.observe($('.preview-stage'));
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
   const pending = new Set(), pendingNav = new Set(), pendingNavbar = new Set();
@@ -265,7 +297,7 @@ GZ_UI.load().then((s) => {
 
   // Relay preference and explicit health action; sessions themselves are lib/sessions-ui.js's.
   const defaultRelay = 'https://share.frostdev.io';
-  let relayBusy = false;
+  let relayBusy = false, relayKept = defaultRelay;
   const relayStatus = (text, error = false) => { $('#relay-status').textContent = text; $('#relay-status').classList.toggle('error', error); };
   const relayValue = () => $('#relay-kind').value === 'default' ? defaultRelay : GZ_RELAY.normalize($('#relay-url').value);
   const relaySend = async (op, server) => {
@@ -280,6 +312,7 @@ GZ_UI.load().then((s) => {
     try {
       if (!test) {
         await relaySend('relaySave', server);
+        relayKept = server; showResets();
         if ($('#relay-kind').value === 'custom') $('#relay-url').value = server;
         relayStatus(t('Relay saved for new sessions. Existing sessions keep their own server.')); return;
       }
@@ -300,6 +333,7 @@ GZ_UI.load().then((s) => {
   $('#relay-test').addEventListener('click', (e) => { if (relayHuman(e)) relayAction(true); });
   chrome.storage.sync.get('shareRelay').then((r) => {
     const server = GZ_RELAY.normalize(r.shareRelay) || defaultRelay;
+    relayKept = server; showResets();
     $('#relay-kind').value = server === defaultRelay ? 'default' : 'custom'; $('#relay-url').value = server === defaultRelay ? '' : server; $('#relay-custom').hidden = server === defaultRelay;
   }).catch(() => {});
 
@@ -391,12 +425,14 @@ GZ_UI.load().then((s) => {
     };
   })();
 
+  // Reset buttons show only while what they reset differs from the defaults (set up with the resets, below).
+  let showResets = () => {};
   // ---- everything that follows the state, cheap enough to redo on every edit ----
   const outputs = () => {
     for (const o of $$('output[data-for]')) o.textContent = (FORMAT[o.dataset.format] || ((v) => GZ_I18N.num(v, GZ_I18N.ui())))(get(o.dataset.for));
   };
   const refresh = () => {
-    GZ_UI.paint(s);
+    GZ_UI.paint(s, { page: true });
     preview();
     // A whole Look brings its own extras: the Look being left is in History first, and Undo wears it again.
     GZ_UI.looks($('#looks'), s, (L) => {
@@ -422,6 +458,10 @@ GZ_UI.load().then((s) => {
     $('[data-key="nav.detailed"]').checked = s.nav.detailed;
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
+    // A control only where it has an effect (lib/editor.js SHOW); a More options with nothing left to show goes too.
+    for (const el of $$('[data-show]')) el.hidden = !GZ_EDITOR.SHOW[el.dataset.show](s);
+    for (const d of $$('details.more')) d.hidden = ![...d.children].some((el) => el.tagName !== 'SUMMARY' && !el.hidden);
+    showResets();
     document.body.classList.toggle('off', !s.enabled);
     // Redrawn lists and shown/hidden controls: match again.
     if (finder.value) filter();
@@ -641,6 +681,7 @@ GZ_UI.load().then((s) => {
       const row = node('li', {}, node('label', {}, input, t(widgetNames[w.id])), position, up, down); row.dataset.id = `widget-${w.id}`; reorderHandle(row, navItems.widgets.map((x) => x.id), at, t(widgetNames[w.id]), (ids) => writeNavItems({ ...navItems, widgets: ids.map((id) => navItems.widgets.find((x) => x.id === id)) }), 'widgets'); return row;
     }));
     if (focusId) { const row = document.querySelector(`.nav-editor-list [data-id="${focusId}"]`); const controls = row?.querySelectorAll('button, input, select'); (controls?.[focusAt]?.disabled ? row.querySelector('button:not([disabled]), input, select') : controls?.[focusAt])?.focus(); }
+    showResets();
   };
   const cancelLink = () => { editingLink = ''; $('#nav-link-name').value = ''; $('#nav-link-url').value = ''; $('#nav-link-icon').value = 'link'; showLinkIcon(); $('#nav-link-tab').checked = false; $('#nav-link-save').textContent = t('Add link'); };
   N.ICONS.forEach((id, at) => $('#nav-link-icon').append(new Option(t(iconNames[at]), id)));
@@ -655,8 +696,9 @@ GZ_UI.load().then((s) => {
   });
   $('#nav-link-cancel').addEventListener('click', () => { cancelLink(); $('#nav-link-name').focus(); });
   $('#nav-link-editor').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); cancelLink(); $('#nav-link-name').focus(); } });
-  // A logo picture, for the old sidebar and Glaze navigation alike: one picture on this device (nav.li), stored by the worker.
-  const pickLogo = async (e, after) => {
+  // A logo picture, for the site's own navigation and Glaze navigation alike: one picture on this device (nav.li), stored by the
+  // worker, picked where the navigation in use has Your logo chosen.
+  const pickLogo = async (e) => {
     const file = e.target.files[0], rev = ++navLogoPick; e.target.value = ''; if (!file) return;
     let logoImage;
     try { logoImage = await GZ_CARDS.picture(file); } catch { return hint(t("That file isn't a picture Glaze can read."), true); }
@@ -664,22 +706,21 @@ GZ_UI.load().then((s) => {
     const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:nav', nav: {}, logoImage }, (x) => res(chrome.runtime.lastError ? null : x)));
     if (rev !== navLogoPick) return;
     if (!r?.ok) return hint(t(r?.error === 'cap' ? "That picture is too big to keep. Try a smaller one, or remove another card's picture." : 'Not saved. Try again in a moment.'), true);
-    Object.assign(s.nav, r.nav); after?.(); fill(); hint(t('Saved'));
+    Object.assign(s.nav, r.nav); fill(); hint(t('Saved'));
   };
   $('#nav-logo-pick').addEventListener('click', () => $('#nav-logo-file').click());
   $('#nav-logo-file').addEventListener('change', (e) => pickLogo(e));
-  $('#nbar-logo-pick').addEventListener('click', () => $('#nbar-logo-file').click());
-  $('#nbar-logo-file').addEventListener('change', (e) => pickLogo(e, () => { if (s.navbar.brand !== 'custom') { set('navbar.brand', 'custom'); save(['navbar']); } }));
+  const NAV_RESETS = {
+    dimensions: ['size', 'width', 'icon', 'height', 'gap', 'padding', 'expandOnHover'],
+    labels: ['labels', 'text', 'labelOverflow'],
+    appearance: ['itemStyle', 'itemBackground', 'activeIndicator'],
+    branding: ['brand', 'logo', 'logoSize', 'logoAlign', 'footer'],
+  };
   for (const button of $$('[data-nav-reset]')) button.addEventListener('click', async () => {
     const section = button.dataset.navReset;
     if (section === 'layout') return writeNavItems({ ...navItems, order: [], hidden: [] });
     if (section === 'widgets') return writeNavItems({ ...navItems, widgets: N.clean().widgets });
-    const keys = {
-      dimensions: ['size', 'width', 'icon', 'height', 'gap', 'padding', 'expandOnHover'],
-      labels: ['labels', 'text', 'labelOverflow'],
-      appearance: ['itemStyle', 'itemBackground', 'activeIndicator'],
-      branding: ['brand', 'logo', 'logoSize', 'logoAlign', 'footer'],
-    }[section];
+    const keys = NAV_RESETS[section];
     if (!keys) return;
     if (section === 'dimensions' || section === 'labels') {
       Object.assign(s.nav, N.dimensions(s.nav), { detailed: true });
@@ -717,10 +758,8 @@ GZ_UI.load().then((s) => {
     };
     paint(n.u);
     for (const el of $$('#sidebar [data-nav-kinds]')) el.hidden = !el.dataset.navKinds.split(' ').includes(n.k);
-    // Glaze navigation (the Navigation tab): its controls while it is on, the rail's while it is a rail somewhere.
-    $('#navbar [data-navbar]').hidden = !s.navbar.on;
+    // Glaze navigation's rail controls while it is a rail somewhere.
     $('#navbar [data-navbar-rail]').hidden = s.navbar.place !== 'rail' && s.navbar.course !== 'icons';
-    $('#sidebar [data-navbar-note]').hidden = !s.navbar.on;
     // The sidebar's controls while it is on; blur and opacity only for glass.
     $('#side-panel [data-sidebar]').hidden = !s.enhance.sidebar;
     $('#side-panel [data-sidebar-glass]').hidden = s.sidebar.surface !== 'glass';
@@ -728,8 +767,7 @@ GZ_UI.load().then((s) => {
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
     $('#nav-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
-    $('#nbar-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
-    $('#nbar-logo-pick').textContent = t(n.li ? 'Change logo' : 'Choose a logo');
+    $('#nav-logo-pick').textContent = t(n.li ? 'Change logo' : 'Choose a logo');
     const note = $('#nav-contrast');
     note.classList.remove('err');
     if (n.k === 'default') { if (note.textContent) note.textContent = ''; return; }
@@ -1143,7 +1181,7 @@ GZ_UI.load().then((s) => {
     offerFile = '';
   };
   addEventListener('pagehide', () => { offerGeneration++; letGo(); });
-  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
+  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s, { page: true }); preview(); };
   const tryCode = async (gallery = null) => {
     const code = $('#share-code').value.trim();
     if (!code) return endOffer();
@@ -1199,7 +1237,7 @@ GZ_UI.load().then((s) => {
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;
-    GZ_UI.paint(offer);
+    GZ_UI.paint(offer, { page: true });
     preview();
   };
   $('#share-try').addEventListener('click', () => tryCode());
@@ -1485,7 +1523,7 @@ GZ_UI.load().then((s) => {
   // The defaults this device started with: a fresh install has Notes and the pet habitat on (GZ_SANITIZE's fresh), so a
   // reset gives those back rather than turning them off.
   let freshHere = false;
-  chrome.storage.local.get('freshDefaults', (r) => { freshHere = r?.freshDefaults?.fresh === true; });
+  chrome.storage.local.get('freshDefaults', (r) => { freshHere = r?.freshDefaults?.fresh === true; showResets(); });
   const defaultsHere = () => ({ ...GZ_SANITIZE(undefined, freshHere), card: GZ_CARDS.settings() });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
   let armed = 0;
@@ -1626,6 +1664,21 @@ GZ_UI.load().then((s) => {
     if (touched.includes('nav')) for (const key of paths.filter((p) => p.startsWith('nav.') && !['nav.i', 'nav.li'].includes(p))) pendingNav.add(key.slice(4));
     fill(); save(touched); hint(t('Section reset. Your local data is kept.'));
   });
+  const resetScope = new Map($$('[data-reset-section]').map((b) => [b, GZ_EDITOR.keys(b.closest('[data-editor-section]'))]));
+  const navDiffers = (keys) => keys.some((k) => JSON.stringify(s.nav[k]) !== JSON.stringify(GZ_DEFAULTS.nav[k]));
+  showResets = () => {
+    const defaults = defaultsHere();
+    for (const [b, paths] of resetScope) {
+      const route = b.dataset.resetSection, part = LOOK_PART[route];
+      b.hidden = part ? !s.parts?.x?.[part] : route === 'sharing/relay' ? relayKept === defaultRelay : !GZ_EDITOR.differs(s, paths, defaults);
+    }
+    for (const b of $$('[data-reset-setting]')) b.hidden = !GZ_EDITOR.differs(s, [b.dataset.resetSetting], defaults);
+    for (const b of $$('[data-nav-reset]')) {
+      const g = b.dataset.navReset;
+      b.hidden = g === 'layout' ? !navItems.order.length && !navItems.hidden.length : g === 'widgets' ? JSON.stringify(navItems.widgets) === JSON.stringify(N.clean().widgets) : !navDiffers(NAV_RESETS[g]);
+    }
+    $('#nav-reset').hidden = JSON.stringify(navItems) === JSON.stringify(N.clean()) && !navDiffers([...Object.keys(N.SPEC).filter((k) => k !== 'li'), 'labels', 'size', 'collapsed', 'logo']);
+  };
   // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key. The pointer
   // (lib/editor-pointer.js) is the student's, not the Look's: it saves extras.
   GZ_EDITOR_X.mount({ s, save, preview, t, frame, hint });
@@ -1636,7 +1689,7 @@ GZ_UI.load().then((s) => {
   navbarEditor = GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
-  followSection(editor.route());
+  followSection(editor.route(), editor.part());
 
   // Opening the editor wakes the mod blocklist check, which asks only if one is due (lib/blocklist.js).
   try { chrome.runtime.sendMessage({ type: 'glaze:blocklist' }, () => void chrome.runtime.lastError); } catch { /* no worker */ }
