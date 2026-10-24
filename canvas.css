@@ -414,7 +414,7 @@ html[data-gz-motion="expressive"]::view-transition-old(root), html[data-gz-motio
 @keyframes gz-vt-settle { from { opacity: 0; scale: var(--gz-reveal-scale, 1); } }
 /* A page revealed inside the transition is brought in by it (content.js marks it): its own fade-up and the
    cards' stagger would be a second movement. */
-:root[data-gz-vt-in] { --gz-enter-page: none; --gz-enter: none; --gz-stagger: 0s; }
+:root[data-gz-vt-in] { --gz-enter-page: none; --gz-enter: none; --gz-enter-card: none; --gz-stagger: 0s; }
 
 /* ---- the long tail: content.js tags anything still painted light / with dark text. (Only on a dark
    palette: on a light one Canvas's white is already the surface.) The footer tags (data-gz-fixed-bottom,

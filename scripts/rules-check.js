@@ -1,8 +1,9 @@
 // LMS rules (x.rules), headless: the real extension on the Ultra preview and on saved Canvas and Moodle pages under invented
 // school origins. The rules reach the pages the way a Look's parts do: Canvas and Moodle read them from storage (a Look saved
 // the way the editor saves it, sync `lookX`), the Ultra preview is sent them with its settings (it ignores storage); content.js
-// loads features/rules.js itself. All other requests abort; no LMS needed.
-//   NODE_PATH=/path/to/node_modules nice node scripts/rules-check.js
+// loads features/rules.js itself. The boards' course cards (Glaze's own, on Canvas's Dashboard and Ultra's Courses page) wear
+// a Look's card rules as the LMS's cards do. All other requests abort; no LMS needed.
+//   NODE_PATH=/path/to/node_modules nice node scripts/rules-check.js [out dir for screenshots]
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -10,12 +11,16 @@ const os = require('os');
 const crypto = require('crypto');
 const G = require('../defaults.js');
 // A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://moodle.school.test/*']);
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://moodle.school.test/*', 'https://bb.school.test/*']);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const CANVAS = 'https://rules.school.instructure.com', MOODLE = 'https://moodle.school.test';
+const W = require('../lib/widgets.js');
+const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-rules-shots-'));
+const CANVAS = 'https://rules.school.instructure.com', MOODLE = 'https://moodle.school.test', ULTRA = 'https://bb.school.test';
 const fixture = (name) => fs.readFileSync(path.join(ext, 'test/fixtures', name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
 const PAGES = { [`${CANVAS}/`]: 'canvas-dashboard-cards.html', [`${CANVAS}/courses/25`]: 'canvas-course-home.html', [`${CANVAS}/courses/25/quizzes/7/take`]: 'canvas-quiz-take.html', [`${MOODLE}/my/`]: 'moodle-dashboard.html' };
+// The boards' course cards (features/coursecards.js), where lib/parts.js finds them.
+const BOARD = { canvas: '.gz-w-body > .ic-DashboardCard[data-gz-tile-card]', ultra: '.gz-w-body > article.gz-course-card' };
 let checks = 0;
 const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); console.log(`ok   ${label}`); checks++; };
 
@@ -32,6 +37,8 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
       if (u.protocol === 'chrome-extension:') return route.continue();
       if (route.request().method() === 'GET' && PAGES[u.origin + u.pathname]) return route.fulfill({ contentType: 'text/html', body: fixture(PAGES[u.origin + u.pathname]) });
       if (u.origin === CANVAS && u.pathname.startsWith('/api/v1/')) return route.fulfill({ contentType: 'application/json', body: '[]' });
+      if (u.origin === ULTRA && u.pathname === '/ultra/course') return route.fulfill({ contentType: 'text/html', body: fs.readFileSync(path.join(ext, 'test/fixtures/ultra-courses.html'), 'utf8') });
+      if (u.origin === ULTRA && u.pathname.startsWith('/learn/api/')) return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
       return route.abort();
     });
     const until = async (page, fn, arg, label) => { const end = Date.now() + 10000; while (Date.now() < end) { if (await page.evaluate(fn, arg).catch(() => false)) return; await page.waitForTimeout(50); } throw new Error(`FAIL ${label}`); };
@@ -113,21 +120,46 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     };
 
     const dash = await open(`${CANVAS}/`, '.ic-DashboardCard');
-    // A fresh Dashboard's board takes the course cards (Glaze's own, never a part's): the rules are for Canvas's, its card view.
+    // A fresh Dashboard's board takes the course cards (Glaze's own, drawn as Canvas's): the Look's card rules reach them, and
+    // Canvas's own in its card view.
     const NATIVE = '.ic-DashboardCard:not([data-gz-tile-card])';
     await until(dash, () => document.querySelector('.gz-course-native'), null, "Canvas: the board offers Canvas's course cards");
-    await dash.click('.gz-course-native');
-    await until(dash, (sel) => [...document.querySelectorAll(sel)].every((e) => e.getClientRects().length), NATIVE, "Canvas: Canvas's course cards show");
+    await until(dash, (sel) => document.querySelectorAll(sel).length === 4, BOARD.canvas, "Canvas: the board holds the four course cards");
     const names = () => dash.evaluate((sel) => [...document.querySelectorAll(`${sel} .ic-DashboardCard__header-title`)].map((e) => e.textContent), NATIVE);
-    const real = await names();
+    const boardCards = () => dash.evaluate((sel) => [...document.querySelectorAll(sel)].map((c) => {
+      const tile = c.closest('.gz-w'), title = c.querySelector('.ic-DashboardCard__header-title'), s = getComputedStyle(c);
+      return { title: title.textContent.trim(), head: tile.querySelector('.gz-w-head').textContent.trim(), radius: s.borderRadius, bg: s.backgroundColor,
+        image: getComputedStyle(c.querySelector('.ic-DashboardCard__header_image')).display, tags: [...tile.querySelectorAll('[data-gz-r-st], [data-gz-r-hide]')].filter((e) => !c.contains(e) || /(^| )gz-/.test(e.className) || /^gz-/.test(e.id)).length };
+    }), BOARD.canvas);
+    const real = await names(), boardReal = await boardCards();
     await inject(`${CANVAS}/`, { rules: [
       { p: 'canvas.dashboard-card.title', do: 'label', t: 'Relabelled' },
       { p: 'canvas.dashboard-card', do: 'style', st: { r: 20, bg: 'accent-soft' } },
+      { p: 'canvas.dashboard-card.image', do: 'style', st: { o: 30 } },
+      { p: 'canvas.dashboard-card.menu', do: 'hide' },
       { p: 'canvas.sidebar.todo', do: 'hide' },
       { p: 'canvas.global-nav.help', do: 'hide' },
       { p: 'canvas.global-nav.inbox', do: 'move', to: 'canvas.global-nav.dashboard', at: 'before' },
     ] });
     await until(dash, () => !!document.getElementById('gz-rules-css')?.sheet, null, 'Canvas: rules.css loads');
+    await until(dash, (sel) => [...document.querySelectorAll(`${sel} .ic-DashboardCard__header-title`)].every((e) => e.textContent.trim() === 'Relabelled'), BOARD.canvas, "Canvas: the board's card titles take the label");
+    const onBoard = await boardCards();
+    ok(onBoard.length === 4 && onBoard.every((c) => c.title === 'Relabelled'), "Canvas: every board card's title is relabelled");
+    ok(onBoard.every((c, i) => c.head === boardReal[i].head), `Canvas: each tile's own header keeps the course's name (${onBoard.map((c) => c.head).join(', ')})`);
+    ok(onBoard.every((c) => c.radius === '20px') && onBoard.every((c, i) => c.bg !== boardReal[i].bg), `Canvas: board cards take the card's radius and background over Glaze's board (${onBoard[0].radius}, ${onBoard[0].bg})`);
+    ok(onBoard.every((c) => c.tags === 0), 'Canvas: nothing of the tile itself (its header, its tools) takes a rule');
+    ok(await dash.evaluate((sel) => [...document.querySelectorAll(`${sel} .ic-DashboardCard__header_image`)].every((e) => getComputedStyle(e).opacity === '0.3'), BOARD.canvas), "Canvas: the board card's picture takes its rule");
+    // The board writes its cards' text on each pass: a label it doesn't fight is a page that goes quiet.
+    const churn = await dash.evaluate(() => new Promise((res) => {
+      let n = 0;
+      const mo = new MutationObserver((rs) => { n += rs.length; });
+      mo.observe(document.getElementById('gz-dash'), { subtree: true, childList: true, characterData: true, attributes: true });
+      setTimeout(() => { mo.disconnect(); res(n); }, 1500);
+    }));
+    ok(churn === 0 && (await boardCards()).every((c) => c.title === 'Relabelled'), `Canvas: the labelled board settles (${churn} changes in 1.5 s) and keeps its labels`);
+    await dash.screenshot({ path: path.join(out, 'canvas-board-look.png'), fullPage: true });
+    await dash.click('.gz-course-native');
+    await until(dash, (sel) => [...document.querySelectorAll(sel)].every((e) => e.getClientRects().length), NATIVE, "Canvas: Canvas's course cards show");
     const c = await dash.evaluate((sel) => ({
       titles: [...document.querySelectorAll(`${sel} .ic-DashboardCard__header-title`)].map((e) => e.textContent.trim()),
       radius: getComputedStyle(document.querySelector(sel)).borderRadius,
@@ -135,13 +167,16 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
       help: getComputedStyle(document.querySelector('#global_nav_help_link').parentElement).display,
       order: [...document.querySelectorAll('#header .ic-app-header__menu-list > li > a[id]')].map((a) => a.id.replace(/^global_nav_|_link$/g, '')),
     }), NATIVE);
+    await until(dash, (sel) => [...document.querySelectorAll(`${sel} .ic-DashboardCard__header-title`)].every((e) => e.textContent.trim() === 'Relabelled'), NATIVE, "Canvas: its own card titles take the label");
     ok(c.titles.length === 4 && c.titles.every((t) => t === 'Relabelled'), 'Canvas: every card title is relabelled');
     ok(c.radius === '20px', `Canvas: cards take their radius over canvas.css (${c.radius})`);
     ok(c.todo === 'none' && c.help === 'none', 'Canvas: the sidebar To Do and the Help item are hidden');
     ok(c.order.indexOf('conversations') === c.order.indexOf('dashboard') - 1, `Canvas: Inbox moved before Dashboard (${c.order.join(' ')})`);
+    await dash.screenshot({ path: path.join(out, 'canvas-own-cards-look.png'), fullPage: true });
     await inject(`${CANVAS}/`, null);
     await until(dash, () => !document.getElementById('gz-rules-css'), null, 'Canvas: rules come off');
     ok(JSON.stringify(await names()) === JSON.stringify(real), 'Canvas: titles come back exactly');
+    ok(JSON.stringify((await boardCards()).map((c) => [c.title, c.radius, c.bg])) === JSON.stringify(boardReal.map((c) => [c.title, c.radius, c.bg])), "Canvas: the board's cards come back exactly");
     ok(await dash.evaluate(() => !document.querySelector('[data-gz-r-st], [data-gz-r-hide]') && [...document.querySelectorAll('#header .ic-app-header__menu-list > li > a[id]')].map((a) => a.id)[1] === 'global_nav_dashboard_link'
       && ![...document.querySelector('#header .ic-app-header__menu-list').childNodes].some((n) => n.nodeType === 8 && n.data === 'gz-rule')), 'Canvas: hidden parts show, Inbox is back in place, no marker left');
     await dash.close();
@@ -165,7 +200,9 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     await quiz.close();
 
     const moodle = await open(`${MOODLE}/my/`, '.block_calendar_month');
-    const moodleCards = () => moodle.evaluate(() => [...document.querySelectorAll('.course-card')].map((e) => e.outerHTML));
+    // The sweep may retag the menu button while the Look changes. Compare the title's full markup, including favourite
+    // status and both visible and screen-reader names; an unrelated menu's data-gz-light is not a label restore.
+    const moodleCards = () => moodle.evaluate(() => [...document.querySelectorAll('.course-card .coursename')].map((e) => e.outerHTML));
     const moodleBefore = await moodleCards();
     await inject(`${MOODLE}/my/`, { rules: [{ p: 'moodle.course-card.image', do: 'hide' }] });
     await seen(moodle, () => { const images = [...document.querySelectorAll('.course-card .card-img-top')]; return images.length && images.every((e) => e.hasAttribute('data-gz-r-hide')); }, null,
@@ -193,8 +230,60 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     await until(moodle, () => !document.getElementById('gz-rules-css') && !document.querySelector('.block_recentlyaccesseditems + .block_calendar_month'), null, 'Moodle: rules come off');
     ok(true, 'Moodle: rules come off and the block goes back');
 
+    // ---- Ultra: the Courses page's board, its course cards (Glaze's own) beside the Look's rules for Ultra's ----
+    await opts.evaluate(async ([o, layout, s]) => { await chrome.storage.local.set({ ultra: [o], widgetLayout: layout }); await chrome.storage.sync.set(s); }, [ULTRA, (() => {
+      const lay = W.layout({ todo: true });
+      for (const b of ['courses', 'dash', 'pages']) for (const x of lay.boards[b]) x.on = false;
+      lay.boards.courses.push(...['_100_1', '_101_1', '_102_1', '_103_1'].map((cid) => ({ id: `course:${ULTRA}/${cid}`, on: true, size: 's' })));
+      return W.layout(lay);
+    })(), G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false } })]);
+    const ub = await open(`${ULTRA}/ultra/course`, 'article.course-element-card');
+    await until(ub, (sel) => document.querySelectorAll(sel).length === 4, BOARD.ultra, "Ultra: the Courses page's board holds four course cards");
+    const ultraCards = () => ub.evaluate((sel) => [...document.querySelectorAll(sel)].map((c) => {
+      const s = getComputedStyle(c), title = c.querySelector('.course-title'), tile = c.closest('.gz-w');
+      return { title: title.textContent.trim(), radius: s.borderRadius, border: `${s.borderTopWidth} ${s.borderTopStyle}`, banner: getComputedStyle(c.querySelector('.course-banner')).backgroundColor,
+        code: getComputedStyle(c.querySelector('.course-id')).color, menu: !!c.querySelector('.gz-cm-btn') && getComputedStyle(c.querySelector('.gz-cm-btn')).display, shown: getComputedStyle(c).display,
+        head: tile.querySelector('.gz-w-head').textContent.trim(), tags: [...tile.querySelectorAll('[data-gz-r-st], [data-gz-r-hide]')].filter((e) => !c.contains(e) || /(^| )gz-/.test(e.className) && e !== c).length };
+    }), BOARD.ultra);
+    const ultraReal = await ultraCards();
+    await inject(`${ULTRA}/ultra/course`, { rules: [
+      { p: 'ultra.course-card.title', do: 'label', t: 'My favourite' },
+      { p: 'ultra.course-card', do: 'style', st: { r: 24, bw: 3, bc: 'accent' } },
+      { p: 'ultra.course-card', do: 'hide' },
+      { p: 'ultra.course-card.banner', do: 'style', st: { bg: '#331144' } },
+      { p: 'ultra.course-card.id', do: 'style', st: { fg: '#ff8800' } },
+      { p: 'ultra.course-card.id', do: 'move', to: 'ultra.course-card.title', at: 'before' },
+      { p: 'ultra.course-card.status', do: 'hide' },
+    ] });
+    await until(ub, (sel) => [...document.querySelectorAll(`${sel} .course-title`)].every((e) => e.textContent.trim() === 'My favourite'), BOARD.ultra, "Ultra: the board's card titles take the label");
+    await ub.waitForTimeout(300);
+    const ultraChurn = await ub.evaluate((sel) => new Promise((resolve) => {
+      let writes = 0;
+      const watch = new MutationObserver((records) => { writes += records.length; });
+      for (const c of document.querySelectorAll(sel)) {
+        watch.observe(c.querySelector('.course-title'), { childList: true, characterData: true, subtree: true });
+        watch.observe(c.closest('.gz-w').querySelector('.gz-w-head'), { childList: true, characterData: true, subtree: true });
+      }
+      setTimeout(() => { watch.disconnect(); resolve(writes); }, 1000);
+    }), BOARD.ultra);
+    ok(ultraChurn === 0, `Ultra: the labelled board settles (${ultraChurn} changes in 1 s)`);
+    const u = await ultraCards();
+    ok(u.every((c) => c.title === 'My favourite'), "Ultra: every board card's title is relabelled");
+    ok(u.every((c) => c.radius === '24px' && c.border === '3px solid'), `Ultra: board cards take the card's radius and border (${u[0].radius}, ${u[0].border})`);
+    ok(u.every((c) => c.banner === 'rgb(51, 17, 68)' && c.code === 'rgb(255, 136, 0)'), `Ultra: the board card's picture and code take theirs (${u[0].banner}, ${u[0].code})`);
+    ok(await ub.evaluate((sel) => [...document.querySelectorAll(sel)].every((c) => c.querySelector('.course-id').nextElementSibling === c.querySelector('.course-title')), BOARD.ultra), 'Ultra: a code moves before its own board title');
+    ok(u.every((c, i) => c.shown !== 'none' && c.menu === ultraReal[i].menu), `Ultra: a board card is never hidden, and its course menu stays as it was (${u[0].shown}, ${u[0].menu})`);
+    ok(u.every((c, i) => c.head === ultraReal[i].head && c.tags === 0), `Ultra: the tile's own header and pieces take nothing (${u.map((c) => c.head).join(', ')})`);
+    ok(await ub.evaluate(() => [...document.querySelectorAll('article.course-element-card .course-status')].every((e) => e.hasAttribute('data-gz-r-hide'))
+      && [...document.querySelectorAll('article.course-element-card .course-title')].every((e) => e.textContent.trim() === 'My favourite')), "Ultra: its own cards (behind the board) take the same rules");
+    await ub.screenshot({ path: path.join(out, 'ultra-board-look.png'), fullPage: true });
+    await inject(`${ULTRA}/ultra/course`, null);
+    await until(ub, () => !document.getElementById('gz-rules-css'), null, 'Ultra: rules come off the board');
+    ok(JSON.stringify(await ultraCards()) === JSON.stringify(ultraReal), "Ultra: the board's cards come back exactly");
+    await ub.close();
+
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log(`${checks} checks passed; no page errors.`);
+    console.log(`${checks} checks passed; no page errors; screenshots in ${out}`);
   } finally {
     await ctx?.close();
     fs.rmSync(tmp, { recursive: true, force: true });

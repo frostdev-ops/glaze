@@ -50,10 +50,11 @@ const MODES = {
     });
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
+    await opts.evaluate(() => chrome.storage.local.set({ ultra: ['https://bb.school.test'] }));
     const page = await ctx.newPage();
     const run = async (name, card, preset, width) => {
       await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); },
-        { ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === preset)[1], preset, card });
+        { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, colors: G.GZ_PRESETS.find(([n]) => n === preset)[1], preset, card });
       await page.setViewportSize({ width, height: 900 });
       await page.goto('https://bb.school.test/ultra/course');
       await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion'));
