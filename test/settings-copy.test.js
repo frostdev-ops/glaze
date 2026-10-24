@@ -132,6 +132,8 @@ test('course tabs offer every place lib/coursetabs.js knows, Automatic first', (
 
 test('labels say what the code does', () => {
   const text = words(main);
+  const help = main.match(/data-key="declutter.help"[^>]*><span>([^<]+)<\/span>/)?.[1];
+  assert.equal(help, 'Hide help buttons and links', 'Canvas hides its navigation Help link too');
   assert.doesNotMatch(text, /in place of Blackboard's|get Blackboard's back/, 'Glaze navigation is on all three sites');
   assert.doesNotMatch(text, /Off by default|On by default/, 'fresh installs turn some of these on');
   assert.doesNotMatch(text, /switches between dimmed and off/, 'the moon button cycles three states');

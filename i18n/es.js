@@ -144,7 +144,7 @@
   'Dark documents': 'Documentos oscuros',
   'Document buttons': 'Botones de documento',
   'Declutter': 'Despejar',
-  'Hide the floating help button': 'Ocultar el botón flotante de ayuda',
+  'Hide help buttons and links': 'Ocultar botones y enlaces de ayuda',
   'Hide course banner images': 'Ocultar las imágenes de banner de los cursos',
   'Hide the Course Faculty box when it is empty': 'Ocultar el cuadro de profesores del curso si está vacío',
   'Hide course tabs you never use:': 'Ocultar las pestañas del curso que nunca usas:',

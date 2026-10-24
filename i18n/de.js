@@ -144,7 +144,7 @@
   'Dark documents': 'Dunkle Dokumente',
   'Document buttons': 'Dokument-Schaltflächen',
   'Declutter': 'Aufräumen',
-  'Hide the floating help button': 'Schwebende Hilfe-Schaltfläche ausblenden',
+  'Hide help buttons and links': 'Hilfe-Schaltflächen und -Links ausblenden',
   'Hide course banner images': 'Kursbanner ausblenden',
   'Hide the Course Faculty box when it is empty': 'Feld „Lehrkräfte“ ausblenden, wenn es leer ist',
   'Hide course tabs you never use:': 'Kursregisterkarten ausblenden, die du nie nutzt:',

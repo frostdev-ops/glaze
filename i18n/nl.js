@@ -144,7 +144,7 @@
   'Dark documents': 'Donkere documenten',
   'Document buttons': 'Documentknoppen',
   'Declutter': 'Opruimen',
-  'Hide the floating help button': 'De zwevende helpknop verbergen',
+  'Hide help buttons and links': 'Helpknoppen en -links verbergen',
   'Hide course banner images': 'Bannerafbeeldingen van cursussen verbergen',
   'Hide the Course Faculty box when it is empty': 'Het vak Cursusdocenten verbergen als het leeg is',
   'Hide course tabs you never use:': 'Cursustabbladen verbergen die je nooit gebruikt:',
