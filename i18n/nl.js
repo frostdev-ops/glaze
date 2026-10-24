@@ -1781,7 +1781,6 @@
   "Auto short name": "Automatische korte naam",
   "Use precise navigation dimensions": "Precieze navigatieafmetingen gebruiken",
   "Expand on hover": "Uitklappen bij aanwijzen",
-  "Choose a name and items from one local account.": "Kies een naam en items uit één lokaal account.",
   "Edit access": "Bewerktoegang",
   "Invite copied. Keep it private.": "Uitnodiging gekopieerd. Houd deze privé.",
   "Notes and share keys exported. Keep the backup private.": "Notities en deelsleutels geëxporteerd. Houd de back-up privé.",
@@ -3041,4 +3040,9 @@
   "Backup and reset": "Back-up en herstellen",
   "More options": "Meer opties",
   "More about": "Meer over",
+  "Name the session.": "Geef de sessie een naam.",
+  "Pick at least one note.": "Kies minstens één notitie.",
+  "Pick at least one task.": "Kies minstens één taak.",
+  "Pick items from one account.": "Kies items uit één account.",
+  "Share your current Look instead": "In plaats daarvan je huidige Look delen",
 };
