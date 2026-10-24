@@ -23,9 +23,9 @@ const fresh = {
   nl: ['Chrome: Bij installatie', 'Firefox: Bij installatie', 'Moodle op moodlecloud.com', 'schets van de cursus'],
   'pt-BR': ['Chrome: Na instalação', 'Firefox: Na instalação', 'Moodle em moodlecloud.com', 'esboço do curso'],
 };
-for (const [lang, expected] of Object.entries(fresh)) test(`3.4.0 listing ${lang || 'en'} names both browsers' install access, MoodleCloud and the course sketch`, () => {
+for (const [lang, expected] of Object.entries(fresh)) test(`3.4.1 listing ${lang || 'en'} names both browsers' install access, MoodleCloud and the course sketch`, () => {
   const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
-  const block = text.slice(text.indexOf('3.4.0\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
+  const block = text.slice(text.indexOf('3.4.1\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
   for (const term of expected) assert.ok(block.includes(term), term);
 });
 
@@ -43,9 +43,9 @@ for (const [lang, expected] of Object.entries(terms)) test(`3.3.6 listing ${lang
   for (const term of expected) assert.ok(block.includes(term), term);
 });
 
-test('3.4.0 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '3.4.0');
-  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.4.0');
+test('3.4.1 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '3.4.1');
+  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.4.1');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('scripts/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
@@ -62,11 +62,11 @@ test('3.4.0 versions agree and the exact pure notes transform fits Apple', () =>
   assert.ok(!result.includes('## [3.3.8]'));
 });
 
-test('review: Step 4 copy discloses redirected Download all files in every language\'s 3.4.0 notes', () => {
+test('review: Step 4 copy discloses redirected Download all files in every language\'s 3.4.1 notes', () => {
   for (const file of ['PRIVACY.md', 'CHANGELOG.md', 'store/listing.md']) assert.match(read(file), /redirected files/i, file);
   for (const [lang, term] of Object.entries({ '': 'redirected files', de: 'Weitergeleitete Dateien', es: 'archivos redirigidos', fr: 'fichiers redirigés', nl: 'omgeleide bestanden', 'pt-BR': 'arquivos redirecionados' })) {
     const file = `store/listing${lang ? `-${lang}` : ''}.md`, text = read(file);
-    const block = text.slice(text.indexOf('3.4.0\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
+    const block = text.slice(text.indexOf('3.4.1\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
     assert.ok(block.toLowerCase().includes(term.toLowerCase()), `${file}: redirected file limit`);
   }
 });

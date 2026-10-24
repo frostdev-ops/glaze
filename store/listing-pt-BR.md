@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.0 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 3.4.1 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -8,7 +8,7 @@ Dê um novo visual ao Blackboard Ultra, Canvas e Moodle, com sua navegação, ma
 
 O Glaze dá um novo visual aos seus cursos com paletas, fontes, fundos e movimento, e traz ferramentas para planejar e estudar bem onde você faz seus trabalhos. Funciona em qualquer escola que use Blackboard Ultra, Canvas ou Moodle, inclusive no domínio próprio da sua escola, depois que você autoriza o acesso. Sem conta e sem análises de uso. Seus cursos, suas notas de avaliação, anotações e tarefas ficam no seu dispositivo; suas configurações acompanham a sincronização do navegador, se ela estiver ativada; compartilhar é opcional e criptografado.
 
-NOVO NA 3.4.0
+NOVO NA 3.4.1
 
 • Chrome: Na instalação, o Glaze pede acesso aos domínios das plataformas instructure.com, blackboard.com e moodlecloud.com, além da sua galeria e do seu servidor de compartilhamento. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba de instalação ou em Configurações › Sites. Baixar tudo, Gradescope, as mídias dos Looks e as conexões de rede dos mods pedem as permissões que faltam quando precisam delas. Os arquivos redirecionados são interrompidos com um erro que pede para baixá-los pelo Canvas.
 • Firefox: Na instalação, o Glaze pede acesso aos domínios das plataformas instructure.com, blackboard.com e moodlecloud.com, além da sua galeria e do seu servidor de compartilhamento. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba de instalação ou em Configurações › Sites. Baixar tudo, Gradescope, as mídias dos Looks e as conexões de rede dos mods pedem as permissões que faltam quando precisam delas. Os arquivos redirecionados são interrompidos com um erro que pede para baixá-los pelo Canvas.

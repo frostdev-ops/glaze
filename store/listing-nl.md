@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.0 (Dutch)
+# Chrome Web Store listing — Glaze 3.4.1 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -8,7 +8,7 @@ Geef Blackboard Ultra, Canvas en Moodle je eigen stijl en navigatie, plus een be
 
 Glaze geeft je cursussen een nieuwe stijl met paletten, lettertypen, achtergronden en beweging, en voegt hulpmiddelen voor plannen en studeren toe precies waar je je cursuswerk doet. Het werkt op elke school die Blackboard Ultra, Canvas of Moodle gebruikt, ook op het eigen domein van een school, zodra je het toestaat. Geen account, geen analytics. Je cursussen, cijfers, notities en taken blijven op je apparaat; je instellingen volgen de synchronisatie van je browser als die aanstaat; delen is optioneel en versleuteld.
 
-NIEUW IN 3.4.0
+NIEUW IN 3.4.1
 
 • Chrome: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten. Bij omgeleide bestanden verschijnt een foutmelding die je vraagt ze vanuit Canvas te downloaden.
 • Firefox: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten. Bij omgeleide bestanden verschijnt een foutmelding die je vraagt ze vanuit Canvas te downloaden.

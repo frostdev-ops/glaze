@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.0
+# Chrome Web Store listing — Glaze 3.4.1
 
 ## Name
 
@@ -16,7 +16,7 @@ Productivity
 
 Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain once you allow it. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
-NEW IN 3.4.0
+NEW IN 3.4.1
 
 • Chrome: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
 • Firefox: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
