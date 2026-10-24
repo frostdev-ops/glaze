@@ -355,7 +355,8 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
       await store(settingsFor('Paper'), local(board(SIZES.ds, ['pet'])));
       await page.setViewportSize({ width: w, height: h });
       await page.goto(`${O}/ultra/institution-page`);
-      await page.waitForSelector('section.gz-w[data-tile="pet"] [data-control="more"]', { state: 'visible', timeout: 20000 }).catch(() => {});
+      const ready = () => page.waitForSelector('section.gz-w[data-tile="pet"] [data-control="more"]', { state: 'visible', timeout: 20000 }).catch(() => null);
+      if (!await ready()) { console.log(`note More at ${w} px: no habitat on the first load; loading again`); await page.reload(); await ready(); }
       await page.click('section.gz-w[data-tile="pet"] [data-control="more"]').catch(() => {});
       await page.waitForSelector('dialog.gz-game-dialog[open] .gz-game-habitat', { timeout: 10000 }).catch(() => {});
       await page.waitForTimeout(800);
