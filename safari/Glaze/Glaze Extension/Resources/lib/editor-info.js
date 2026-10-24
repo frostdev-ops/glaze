@@ -2,12 +2,15 @@
 // keyboard, and on a mouse by resting on it. Placed beside the button and kept on screen when it opens. Settings page only.
 var GZ_INFO = (() => {
   const GAP = 6, EDGE = 8;
-  // Below the button, or above where there is no room; never past the window's edges.
+  // Below the button, or above where only that has room; where neither has, on the roomier side, scrolling within. Never
+  // over the button, never past the window's edges.
   const place = (button, pop) => {
+    pop.style.maxHeight = '';
     const b = button.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    const below = innerHeight - EDGE - b.bottom - GAP, above = b.top - GAP - EDGE, down = h <= below || (h > above && below >= above);
+    const room = down ? below : above, tall = Math.min(h, room);
     const left = Math.max(EDGE, Math.min(b.left - 12, innerWidth - w - EDGE));
-    const top = b.bottom + GAP + h <= innerHeight - EDGE ? b.bottom + GAP : Math.max(EDGE, b.top - GAP - h);
-    Object.assign(pop.style, { left: `${left}px`, top: `${top}px` });
+    Object.assign(pop.style, { left: `${left}px`, top: `${down ? b.bottom + GAP : b.top - GAP - tall}px`, maxHeight: h > room ? `${room}px` : '' });
   };
   const mount = (root = document) => {
     const buttons = [...root.querySelectorAll('button.info[popovertarget]')];
@@ -20,8 +23,17 @@ var GZ_INFO = (() => {
       let timer = 0, rested = false;
       const later = (f, ms) => { clearTimeout(timer); timer = setTimeout(f, ms); };
       // Measured once it is open, then shown where it belongs: no frame at the wrong place.
-      pop.addEventListener('beforetoggle', (e) => { if (e.newState === 'open') pop.classList.remove('placed'); else rested = false; });
-      pop.addEventListener('toggle', (e) => { if (e.newState === 'open') { place(button, pop); pop.classList.add('placed'); } });
+      // It stays by its button while the page scrolls or resizes under it.
+      const follow = () => place(button, pop);
+      pop.addEventListener('beforetoggle', (e) => {
+        if (e.newState === 'open') { pop.classList.remove('placed'); return; }
+        rested = false; removeEventListener('scroll', follow, true); removeEventListener('resize', follow);
+      });
+      pop.addEventListener('toggle', (e) => {
+        if (e.newState !== 'open') return;
+        place(button, pop); pop.classList.add('placed');
+        addEventListener('scroll', follow, { capture: true, passive: true }); addEventListener('resize', follow);
+      });
       const rest = (e) => { if (e.pointerType === 'mouse' && hover.matches && !pop.matches(':popover-open')) later(() => { rested = true; pop.showPopover(); }, 300); };
       const leave = (e) => {
         if (e.pointerType !== 'mouse') return;
