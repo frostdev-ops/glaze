@@ -587,7 +587,7 @@ test('each course card wears its own course\'s Look and tint, painted only on ch
   assert.equal(eng.style.vars['--gz-surface-grain'], 'none'); assert.equal(eng.style.vars['--gz-radius'], '6px');
   assert.equal(eng.dataset.gzDepth, '1');
   assert.equal(eng.dataset.gzCourseLook, 'light', 'Library is a light Look');
-  assert.deepEqual([plain(math.style.vars), math.dataset.gzCourseLook], [{ '--gz-course': '#fd79a8' }, undefined], 'no palette override: known course color remains available');
+  assert.deepEqual([plain(math.style.vars), math.dataset.gzCourseLook], [{ '--gz-course-raw': '#fd79a8' }, undefined], 'no palette override: known course color remains available');
   // Only on change: a card already painted isn't written again.
   bio.style.setProperty = () => assert.fail('painted again');
   p.api.paint();
@@ -597,7 +597,7 @@ test('each course card wears its own course\'s Look and tint, painted only on ch
   delete bio.style.setProperty;
   bio.style.setProperty = (x, v) => { bio.style.vars[x] = v; };
   p.api.paint();
-  assert.deepEqual([plain(bio.style.vars), bio.dataset.gzCourseLook, plain(eng.style.vars), eng.dataset.gzCourseLook], [{ '--gz-course': '#b2bec3' }, undefined, { '--gz-course': '#fdcb6e' }, undefined]);
+  assert.deepEqual([plain(bio.style.vars), bio.dataset.gzCourseLook, plain(eng.style.vars), eng.dataset.gzCourseLook], [{ '--gz-course-raw': '#b2bec3' }, undefined, { '--gz-course-raw': '#fdcb6e' }, undefined]);
 });
 
 // features/keys.js on Moodle, as content.js hands it keys.
@@ -647,13 +647,13 @@ test('Moodle card surface tint uses known colors without whole-palette tint and 
   const list = { [key]: { color: '#445566' } }, live = { on: true };
   const p = page({ cards: [['16'], ['99']], settings, list, live });
   p.api.paint();
-  assert.deepEqual(plain(p.cards[0].style.vars), { '--gz-course': '#445566' });
+  assert.deepEqual(plain(p.cards[0].style.vars), { '--gz-course-raw': '#445566' });
   assert.deepEqual(plain(p.cards[1].style.vars), {}, 'unknown course does not get an invented color');
   p.cards[0].style.setProperty = () => assert.fail('unchanged color written again');
   p.api.paint();
   p.cards[0].style.setProperty = (k, v) => { p.cards[0].style.vars[k] = v; };
   settings.courses.colors[key] = '#abcdef'; p.api.paint();
-  assert.equal(p.cards[0].style.vars['--gz-course'], '#abcdef');
+  assert.deepEqual(plain(p.cards[0].style.vars), { '--gz-course': '#abcdef' });
   settings.courses.colors[key] = 'invalid'; delete list[key].color; p.api.paint();
   assert.deepEqual(plain(p.cards[0].style.vars), {}, 'lost records clear the previous color');
   list[key].color = '#112233'; p.api.paint(); live.on = false; p.api.paint();

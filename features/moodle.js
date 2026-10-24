@@ -82,9 +82,10 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
     const on = s.enabled && GZ_CTX.on();
     for (const card of document.querySelectorAll('[data-region="course-content"][data-course-id]')) {
       const key = GZ_CTX.canvasCourseKey(card.dataset.courseId);
-      const course = on ? GZ_COURSE_COLOR(s, list, key) : '';
-      if (card.style.getPropertyValue('--gz-course') !== course) {
-        if (course) card.style.setProperty('--gz-course', course); else card.style.removeProperty('--gz-course');
+      // A picked color as is; Moodle's own for moodle.css to tone (courses.harmonize).
+      const course = on ? GZ_COURSE_COLOR(s, list, key) : '', picked = !!course && course === s.courses.colors?.[key];
+      for (const [v, c] of [['--gz-course', picked ? course : ''], ['--gz-course-raw', picked ? '' : course]]) {
+        if (card.style.getPropertyValue(v) !== c) { if (c) card.style.setProperty(v, c); else card.style.removeProperty(v); }
       }
       const color = on && s.courses.tint && s.courses.tinted.includes(key) && list[key]?.color;
       const look = on && s.courses.looks[key];
