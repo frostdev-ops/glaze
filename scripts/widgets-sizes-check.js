@@ -135,6 +135,9 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
       if (s) {
         const a = s.getBoundingClientRect();
         stage = { w: Math.round(a.width), h: Math.round(a.height), body: body && Math.round(body.getBoundingClientRect().height) };
+        // It fills the tile's width, or beside the controls in a very wide tile, more than half of it.
+        const room = body.clientWidth;
+        if (room < 600 ? a.width < room - 2 : a.width < room * .55) problems.push(`the habitat is ${Math.round(a.width)} px wide in ${room} px of room`);
         for (const p of s.querySelectorAll('.gz-game-item, .gz-game-actor')) {
           if (!seen(p)) continue;
           const b = p.getBoundingClientRect();
