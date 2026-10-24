@@ -130,3 +130,13 @@ test("an update moves a stored 'above' to 'auto' once; a later chosen 'above' st
   assert.equal(fresh.tabs, undefined, 'nothing written for a fresh install');
   assert.ok(freshLocal.migrated?.includes('tabs-auto'), 'and a later update leaves its choice');
 });
+
+test('a later update on another device preserves an above choice synced after migration', async () => {
+  const sync = { tabs: { at: 'above', size: 'large' } };
+  await worker(sync, {}).install('update');
+  assert.equal(sync.tabs.at, 'auto');
+  // A student's new choice, or an imported Look carrying this placement, reaches both devices.
+  sync.tabs = { at: 'above', size: 'small' };
+  await worker(sync, {}).install('update');
+  assert.deepEqual(sync.tabs, { at: 'above', size: 'small' }, 'another device must not migrate the newer choice again');
+});
