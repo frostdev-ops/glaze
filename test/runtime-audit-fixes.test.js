@@ -14,6 +14,8 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const between = (src, a, b) => { const i = src.indexOf(a); assert.ok(i >= 0, a); const j = src.indexOf(b, i); assert.ok(j > i, b); return src.slice(i, j); };
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const rules = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map((r) => r.split('{')).filter((r) => r.length === 2).map(([sel, body]) => ({ sel: sel.replace(/^[\s\S]*\{/, '').trim(), body: body.trim() }));
+// A rule's selectors, split at its own commas, not those inside :is() or :not().
+const selectors = (sel) => { const out = ['']; let depth = 0; for (const c of sel) { if (c === '(') depth++; if (c === ')') depth--; if (c === ',' && !depth) out.push(''); else out[out.length - 1] += c; } return out.map((x) => x.trim()); };
 
 // ---- 1. features/nav.js only where the site's own navigation shows ----
 const canvasSyncNav = ({ on, nav = {}, parts = null, ui = null }) => {
@@ -75,8 +77,8 @@ test('Ultra: neither features/nav.js nor a navItems read while Glaze navigation 
 test('canvas.css: nav.size\'s width reaches .tray-with-space-for-global-nav only while Canvas\'s own nav shows', () => {
   const found = rules(read('canvas.css')).filter((r) => r.sel.includes('.tray-with-space-for-global-nav') && /margin/.test(r.body));
   assert.ok(found.length);
-  for (const r of found) for (const s of r.sel.split(',').filter((s) => s.includes('.tray-with-space-for-global-nav'))) {
-    assert.match(s.trim(), /^html\[data-gz-nav-size\]:not\(\[data-gz-navbar\]\)/, s);
+  for (const r of found) for (const s of selectors(r.sel).filter((s) => s.includes('.tray-with-space-for-global-nav'))) {
+    assert.match(s, /^html\[data-gz-nav-size\]:not\(\[data-gz-navbar\]\)/, s);
   }
 });
 
@@ -100,7 +102,7 @@ test('moodle.css: compact and roomy space Moodle\'s rows, tables and cards; the 
   const found = rules(read('moodle.css')).filter((r) => r.body.includes('var(--gz-space'));
   const sels = found.map((r) => r.sel).join(',\n');
   for (const part of ['.activity-item', '.course-section-header', 'table.generaltable', '.table', '[data-region="card-deck"]']) assert.ok(sels.includes(part), part);
-  for (const r of found) for (const s of r.sel.split(',')) assert.match(s.trim(), /^html:is\(\[data-gz-density="compact"\], \[data-gz-density="roomy"\]\) /, s);
+  for (const r of found) for (const s of selectors(r.sel)) assert.match(s, /^html:is\(\[data-gz-density="compact"\], \[data-gz-density="roomy"\]\) /, s);
   assert.match(read('moodle.css'), /html\[data-gz-density="compact"\] \{ --gz-space: 0\.6; \}/);
 });
 
