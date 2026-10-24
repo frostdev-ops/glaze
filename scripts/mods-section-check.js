@@ -176,7 +176,10 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     await editor.fill('#mod-code', petsCode);
     await editor.click('#mod-code-read');
     await until(promptOpen);
-    check('a code prompts too, asking for nothing', /It asks for nothing/.test(await promptText()));
+    check('a code prompts too, disclosing code without data or network access', await editor.evaluate(() => {
+      const permissions = [...document.querySelectorAll('#mod-prompt-perms li')];
+      return permissions.length === 1 && /Runs its author’s code/.test(permissions[0].textContent);
+    }));
     await editor.click('#mod-prompt-install');
     check('installed from a code', (await until(() => rec(pets.id)))?.source === 'code');
     await editor.waitForSelector('#mods-order-group:not([hidden])');
@@ -239,6 +242,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
 
     // ---- dev mode ----
     check('dev tools are hidden until dev mode is on', await editor.evaluate(() => document.getElementById('mod-dev-tools').hidden));
+    await editor.evaluate(() => { location.hash = 'mods/dev'; });
     await editor.check('#mod-dev');
     await editor.waitForSelector('#mod-dev-tools:not([hidden])');
     check('dev mode is saved as modDev', (await local('modDev')).modDev === true);
