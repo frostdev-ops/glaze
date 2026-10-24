@@ -1284,7 +1284,7 @@
 <label class="field wide"><span>What to share</span><select id="ss-kind" data-local><option value="notes">Notes</option><option value="look">Current Look</option><option value="todo">Custom tasks and plans</option></select></label>
 <div id="ss-sources" class="ss-sources"></div>
 <label class="check"><input id="ss-expire" type="checkbox" data-local><span>Delete after a year unused</span></label>
-<div class="row"><button type="button" id="ss-create" class="primary">Create encrypted session</button></div></div>
+<div class="row"><button type="button" id="ss-create" class="primary" aria-describedby="ss-create-why" disabled>Create encrypted session</button><span class="desc" id="ss-create-why" role="status"></span></div></div>
 <div class="group"><h3>Join from an invite link</h3><p class="desc">Paste the full link here. Anyone holding an edit link can change the session; anyone holding a view link can read it. Keep links private.</p>
 <label class="field wide"><span>Invite link</span><input id="ss-invite" type="password" maxlength="1024" autocomplete="off" spellcheck="false" data-local></label>
 <div class="row"><button type="button" id="ss-join">Join encrypted session</button></div>

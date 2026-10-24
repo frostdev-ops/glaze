@@ -1781,7 +1781,6 @@
   "Auto short name": "Automatischer Kurzname",
   "Use precise navigation dimensions": "Genaue Navigationsmaße verwenden",
   "Expand on hover": "Beim Darüberfahren ausklappen",
-  "Choose a name and items from one local account.": "Wähle einen Namen und Elemente aus einem lokalen Konto.",
   "Edit access": "Bearbeitungszugriff",
   "Invite copied. Keep it private.": "Einladung kopiert. Halte sie geheim.",
   "Notes and share keys exported. Keep the backup private.": "Notizen und Freigabeschlüssel exportiert. Halte die Sicherung geheim.",
@@ -3041,4 +3040,9 @@
   "Backup and reset": "Sicherung und Zurücksetzen",
   "More options": "Weitere Optionen",
   "More about": "Mehr über",
+  "Name the session.": "Gib der Sitzung einen Namen.",
+  "Pick at least one note.": "Wähle mindestens eine Notiz.",
+  "Pick at least one task.": "Wähle mindestens eine Aufgabe.",
+  "Pick items from one account.": "Wähle Einträge aus einem Konto.",
+  "Share your current Look instead": "Stattdessen deinen aktuellen Look teilen",
 };
