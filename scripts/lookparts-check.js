@@ -68,7 +68,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     await until(() => editor.evaluate(() => !document.querySelector('#share-offer').hidden));
     const what = await editor.evaluate(() => document.querySelector('#share-what').textContent);
     check('the offer says what the code brings', /shader|cursor effect|animations|sidebar/i.test(what) && !/undefined/.test(what), what);
-    const frame = () => editor.frames().find((f) => f.url().includes('preview.html'));
+    const frame = () => editor.frames().find((f) => f.url().includes('preview.html') && !f.url().includes('backdrop'));
     const previewed = await until(() => frame()?.evaluate(() => globalThis.GZ_CTX?.parts() ?? null), (v) => !!v);
     check('the editor\'s preview frame has the parts before anything is saved', previewed?.cursor?.kind === 'sparkle' && previewed?.bg?.shader && !(await stored()).sync.lookX, JSON.stringify(previewed)?.slice(0, 200));
     await editor.click('#share-apply');

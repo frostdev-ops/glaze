@@ -53,7 +53,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
       await page.waitForFunction(() => document.querySelectorAll('#pointer-tiles input[type="radio"]').length > 0);
     };
     await open();
-    const preview = () => page.frames().find((f) => f.url().includes('preview.html'));
+    const preview = () => page.frames().find((f) => f.url().includes('preview.html') && !f.url().includes('backdrop'));
     const sync = () => page.evaluate(() => chrome.storage.sync.get('extras').then((r) => r.extras || {}));
     const localImg = () => page.evaluate(() => chrome.storage.local.get('cursorImg').then((r) => r.cursorImg || ''));
     const lookPointer = () => page.evaluate(async () => (await GZ_XPARTS.read(GZ_XPARTS.areas()))?.x?.pointer ?? null);
@@ -90,7 +90,8 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('  the system\'s card draws its own arrow and hand', await page.evaluate(() => document.querySelectorAll('[data-pointer="off"] .pt-stage svg').length === 2));
     check('  hovering a set\'s card wears its hand', await page.evaluate(() => /cursors\/lava\/pointer\.svg/.test(getComputedStyle(document.querySelector('[data-pointer="lava"]')).cursor)));
     const unnamed = await page.evaluate(() => [...document.querySelectorAll('#look-pointer input, #look-pointer button')]
-      .filter((c) => c.type !== 'file' && !(c.closest('label')?.textContent.trim() || c.textContent.trim() || c.getAttribute('aria-label'))).map((c) => c.outerHTML.slice(0, 80)));
+      .filter((c) => c.type !== 'file' && !(c.closest('label')?.textContent.trim() || c.textContent.trim() || c.getAttribute('aria-label')
+        || (c.getAttribute('aria-labelledby') || '').split(' ').map((id) => document.getElementById(id)?.textContent.trim()).filter(Boolean).length)).map((c) => c.outerHTML.slice(0, 80)));
     check('every control is labelled', !unnamed.length, unnamed.join(' '));
     check('the cards are one radio group, named by the section\'s heading', await page.evaluate(() => {
       const g = document.getElementById('pointer-tiles'), h = document.getElementById(g.getAttribute('aria-labelledby'));

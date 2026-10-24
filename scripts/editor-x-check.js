@@ -47,7 +47,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     await page.goto(`chrome-extension://${id}/options.html#look/background`);
     await page.waitForFunction(() => document.getElementById('preview')?.contentDocument?.documentElement.dataset.previewReady === 'true');
 
-    const preview = () => page.frames().find((f) => f.url().includes('preview.html'));
+    const preview = () => page.frames().find((f) => f.url().includes('preview.html') && !f.url().includes('backdrop'));
     const stored = () => page.evaluate(async () => (await GZ_XPARTS.read(GZ_XPARTS.areas()))?.x ?? null);
     const shot = async (name) => { if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, `${name}.png`), fullPage: false }); } };
     const kind = (k) => page.evaluate((k) => document.querySelector(`input[name="bg.kind"][value="${k}"]`).click(), k);

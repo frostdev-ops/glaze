@@ -183,7 +183,7 @@ GZ_NEWS.check((notes) => {
 $('#news-close').addEventListener('click', () => { $('#news').hidden = true; finder.focus(); });
 
 GZ_UI.load().then((s) => {
-  const frame = $('#preview');
+  const frame = $('#preview'), backdrop = $('#backdrop');
   let navItems = GZ_NAV.clean(), navbarEditor = null;
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
@@ -197,6 +197,8 @@ GZ_UI.load().then((s) => {
     Object.assign(frame.style, { width: `${width}px`, height: `${height}px`, transform: `scale(${scale})`, left: `${Math.max(0, (available - width * scale) / 2)}px` });
     stage.style.height = `${Math.ceil(height * scale)}px`;
   };
+  // The page's own background: the Look worn, or the one on offer while it is previewed.
+  const paintBackdrop = () => backdrop.contentWindow?.postMessage({ gzPreview: offer || s, gzPreviewParts: (offer || s).parts ?? null }, location.origin);
   const preview = () => {
     const belongs = (course) => course && (course.canvas ? 'canvas' : course.moodle ? 'moodle' : 'ultra') === previewSite;
     const base = offer || s, id = belongs(courses[previewCourse]) ? previewCourse : base.courses.tinted.find((id) => belongs(courses[id])), course = courses[id];
@@ -216,6 +218,7 @@ GZ_UI.load().then((s) => {
     const coursePointer = settings !== base && GZ_LOOK_PARTS({ name: base.courses.looks[id] })?.x?.pointer;
     frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) }, gzPreviewParts: settings === base ? base.parts ?? null : coursePointer ? { x: { pointer: coursePointer } } : null }, location.origin);
     renderNav(); renderContrast(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
+    paintBackdrop();
   };
   const contextPreview = (site, page) => {
     if (!supportedPages[site].includes(page)) page = 'courses';
@@ -250,6 +253,7 @@ GZ_UI.load().then((s) => {
   searchPreview = (on) => { if (on !== searchWasOn) { if (on) { beforeSearch = previewCollapsed; previewCollapsed = true; } else previewCollapsed = beforeSearch; searchWasOn = on; showPreview(); } };
   frame.addEventListener('load', preview);
   addEventListener('message', (e) => {
+    if (e.origin === location.origin && e.source === backdrop.contentWindow && e.data?.gzPreviewReady) paintBackdrop();
     if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
     if (e.data?.gzPreviewReady) preview();
     if (e.data?.gzPreviewFailed) Object.assign($('#preview-note'), { textContent: t('Preview could not load. Try reloading settings.'), hidden: false });
@@ -428,7 +432,7 @@ GZ_UI.load().then((s) => {
     for (const o of $$('output[data-for]')) o.textContent = (FORMAT[o.dataset.format] || ((v) => GZ_I18N.num(v, GZ_I18N.ui())))(get(o.dataset.for));
   };
   const refresh = () => {
-    GZ_UI.paint(s);
+    GZ_UI.paint(s, { page: true });
     preview();
     // A whole Look brings its own extras: the Look being left is in History first, and Undo wears it again.
     GZ_UI.looks($('#looks'), s, (L) => {
@@ -1177,7 +1181,7 @@ GZ_UI.load().then((s) => {
     offerFile = '';
   };
   addEventListener('pagehide', () => { offerGeneration++; letGo(); });
-  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
+  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s, { page: true }); preview(); };
   const tryCode = async (gallery = null) => {
     const code = $('#share-code').value.trim();
     if (!code) return endOffer();
@@ -1233,7 +1237,7 @@ GZ_UI.load().then((s) => {
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;
-    GZ_UI.paint(offer);
+    GZ_UI.paint(offer, { page: true });
     preview();
   };
   $('#share-try').addEventListener('click', () => tryCode());

@@ -541,3 +541,33 @@ test('review: a cancelled Look offer stays cancelled when its host permission an
   assert.equal(r.saved.length, 0);
   assert.equal(r.history(), 0);
 });
+
+test('the settings page keeps its surfaces readable over the Look\'s background: the Look\'s opacity, raised only as far as text needs', () => {
+  const look = (over) => D.GZ_SANITIZE({ ...over });
+  assert.equal(UI.readable(look({ bg: { kind: 'solid' } }), D.GZ_ACTIVE_COLORS(look({}), false)), 100, 'a solid page has opaque surfaces');
+  assert.equal(UI.readable(look({ look: { glass: 0 }, bg: { kind: 'gradient' } }), D.GZ_ACTIVE_COLORS(look({}), false)), 100, 'no blur, opaque');
+  // Frost's dark surfaces over a near-white gradient seen through little dim: 88% would leave muted text short of 4.5:1.
+  const bright = look({ bg: { kind: 'gradient', colors: ['#ffffff', '#fffde7', '#f0f9ff'], dim: 0 }, look: { surfaceOpacity: 40 } });
+  const colors = D.GZ_ACTIVE_COLORS(bright, false), o = UI.readable(bright, colors);
+  assert.ok(o > 40 && o <= 100, `raised to ${o}`);
+  const at = (op) => D.GZ_CONTRAST(colors).filter(({ fg, bg, min }) => ['--gz-surface', '--gz-surface-2'].includes(bg) && C.contrast(colors[fg], colors['--gz-surface']) >= min)
+    .every(({ fg, min }) => ['#ffffff', '#fffde7', '#f0f9ff'].every((u) => { const a = C.parse(u), p = C.parse(colors['--gz-surface']), t = op / 100; return C.contrast(colors[fg], C.hex({ r: a.r + (p.r - a.r) * t, g: a.g + (p.g - a.g) * t, b: a.b + (p.b - a.b) * t })) >= min; }));
+  assert.ok(at(o) && (o === 40 || !at(o - 2)), 'the least opacity that passes');
+  // A background the colour of the ground keeps the Look's own translucency.
+  const calm = look({ bg: { kind: 'gradient', colors: [colors['--gz-surface-2'], colors['--gz-surface-2'], colors['--gz-surface-2']] } });
+  assert.equal(UI.readable(calm, D.GZ_ACTIVE_COLORS(calm, false)), 88);
+});
+
+test('the settings page wears the Look: its background from the preview\'s own painter, the Look on offer while previewed', () => {
+  const page = read('options.html'), js = read('options.js'), runtime = read('lib/editor-preview.js');
+  assert.match(page, /<iframe id="backdrop" src="preview\.html\?site=canvas&amp;backdrop" aria-hidden="true" tabindex="-1" inert><\/iframe>/);
+  assert.match(page, /#backdrop \{ position: fixed; inset: 0;[^}]*z-index: -1; pointer-events: none; \}/);
+  assert.match(js, /const paintBackdrop = \(\) => backdrop\.contentWindow\?\.postMessage\(\{ gzPreview: offer \|\| s, gzPreviewParts: \(offer \|\| s\)\.parts \?\? null \}, location\.origin\);/);
+  assert.match(js.slice(js.indexOf('  const preview = () => {'), js.indexOf('\n  const contextPreview =')), /paintBackdrop\(\);/, 'every repaint of the preview repaints the page');
+  assert.ok((js.match(/GZ_UI\.paint\((?:s|offer), \{ page: true \}\)/g) || []).length === 3, 'the page paints the Look worn, an offer, and back');
+  // In the frame: the Canvas mock's own background painter and scene, none of the mock, its features or its sidebar.
+  assert.match(runtime, /const site = backdrop \? 'canvas'/);
+  assert.match(runtime, /if \(!backdrop\) for \(const file of \['lib\/lookx\.js'/);
+  assert.match(runtime, /if \(site === 'canvas' && !backdrop\) sidebar\(s\);/);
+  assert.match(runtime, /body > :not\(#gz-scene\) \{ visibility: hidden !important; \}/);
+});

@@ -32,7 +32,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     const ed = await context.newPage();
     ed.on('pageerror', (e) => errors.push(`editor: ${e}`));
     await ed.goto(`chrome-extension://${id}/options.html#look/nav-layout`);
-    const frame = () => ed.frames().find((f) => f.url().includes('preview.html'));
+    const frame = () => ed.frames().find((f) => f.url().includes('preview.html') && !f.url().includes('backdrop'));
     const inFrame = (f, arg) => until(() => frame().evaluate(f, arg));
     await until(() => ed.evaluate(() => !!document.querySelector('[data-f="nav:mine"]')));
     check('the section has a heading and says how it differs from the student’s own navigation', await ed.evaluate(() => document.querySelector('#heading-look-nav-layout').textContent === "This Look's navigation" && /stays yours on every Look/.test(document.querySelector('#xnav').textContent)));
