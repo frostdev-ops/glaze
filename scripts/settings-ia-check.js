@@ -66,6 +66,20 @@ const check = async (name, test) => {
         }
       } finally { await host.close(); }
     });
+    await check('search-site-navigation', async () => {
+      await open('navigation/bar');
+      const toggle = page.locator('[data-key="navbar.on"]');
+      if (await toggle.isChecked()) await toggle.uncheck();
+      assert.equal(await page.locator('#bb-navigation').evaluate((e) => e.open), false);
+      for (const [query, key] of [['Logo size', 'nav.logoSize'], ['Expand on hover', 'nav.expandOnHover']]) {
+        await page.fill('#find', query);
+        assert.equal(await page.locator(`[data-key="${key}"]`).isVisible(), true, `${query} reveals its control`);
+        assert.equal(await page.locator('[data-key="nav.width"]').isVisible(), false, 'unrelated controls are filtered');
+        assert.equal(await page.locator('#find-status').textContent(), '1 setting');
+      }
+      await page.fill('#find', '');
+      assert.equal(await page.locator('#bb-navigation').evaluate((e) => e.open), false, 'clearing search restores More options');
+    });
   } finally {
     await context?.close();
     if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
