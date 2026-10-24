@@ -413,3 +413,16 @@ test('IA: a Reset shows only while something in its scope differs from the defau
   assert.equal(E.differs(state, ['nav.li', 'presets'], defaults), false, 'what a reset keeps never shows a Reset');
   state.courses.colors = { _1_1: '#ff0000' }; assert.equal(E.differs(state, ['courses.colors'], defaults), true);
 });
+
+test('IA: the side list marks the top-most section still showing below the header, and the last at the page\'s end', () => {
+  const rects = [{ route: 'study/todo', top: -900, bottom: 40 }, { route: 'study/grades', top: 40, bottom: 700 }, { route: 'study/reminders', top: 700, bottom: 1300 }];
+  assert.equal(E.spy(rects, 100, false), 'study/grades', 'one scrolled under the header no longer counts');
+  assert.equal(E.spy(rects, 30, false), 'study/todo', 'a section still showing below the header wins');
+  assert.equal(E.spy(rects, 100, true), 'study/reminders', 'at the end the last wins');
+  assert.equal(E.spy([{ route: 'about/glaze', top: -50, bottom: -10 }], 100, false), 'about/glaze');
+  assert.equal(E.spy([], 100, false), '');
+  const js = fs.readFileSync(path.join(root, 'lib/editor.js'), 'utf8'), css = fs.readFileSync(path.join(root, 'options.html'), 'utf8');
+  assert.match(js, /className: 'jump-mark'/, 'one mark element');
+  assert.match(css, /\.jump-mark \{[^}]*transition: transform [^}]*var\(--gz-ease\)/);
+  assert.match(css, /html\[data-gz-motion="off"\] \.jump-mark \{ transition: none; \}/);
+});

@@ -46,9 +46,11 @@
   .editor-tabs [aria-selected="true"], .editor-tabs [aria-selected="true"]:hover { color: var(--gz-accent); background: var(--gz-accent-soft); font-weight: 600; }
   .jumps { position: absolute; inset-inline: 0; display: grid; padding: .15rem 0 .4rem .75rem; }
   .jumps > div { display: grid; gap: .05rem; border-inline-start: 1px solid var(--gz-border-line, var(--gz-line)); }
-  .jumps a { padding: .25rem .75rem; color: var(--gz-ink-muted); text-decoration: none; font-size: 12px; border-inline-start: 2px solid transparent; margin-inline-start: -1px; }
+  .jumps a { padding: .25rem .75rem; color: var(--gz-ink-muted); text-decoration: none; font-size: calc(12px * var(--gz-scale, 1)); }
   .jumps a:hover { color: var(--gz-accent); }
-  .jumps a[aria-current] { color: var(--gz-ink); border-inline-start-color: var(--gz-accent); }
+  .jumps a[aria-current] { color: var(--gz-ink); }
+  .jump-mark { position: absolute; top: 0; inset-inline-start: calc(.75rem - 1px); width: 2px; border-radius: 999px; background: var(--gz-accent); transition: transform .28s var(--gz-ease), height .28s var(--gz-ease); }
+  .jump-mark.instant, html[data-gz-motion="off"] .jump-mark { transition: none; }
   body.finding .jumps { visibility: hidden; }
   .editor { display: grid; gap: 1.25rem; min-width: 0; align-content: start; }
   .surface-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
