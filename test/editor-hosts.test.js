@@ -172,6 +172,6 @@ test('Settings: the Gradescope switch asks for www.gradescope.com in its click; 
   const at = src.indexOf("if (key === 'enhance.gradescope'");
   assert.ok(at > 0, 'the switch has its own path');
   const body = src.slice(at, src.indexOf('\n', at));
-  assert.match(body, /GZ_SITE\.reach\(\[GZ_GRADESCOPE\.HOST\]\)/, 'asks for Gradescope through reach');
+  assert.match(body, /GZ_SITE\.reach\(\[GZ_GRADESCOPE\.HOST\], el\)/, 'asks for Gradescope through reach');
   assert.ok(body.indexOf('GZ_SITE.reach') < body.indexOf('.then('), 'before anything is awaited');
 });

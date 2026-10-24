@@ -326,3 +326,23 @@ test('the contour pointer lets go a ring from 4 px to its size over its fade, an
   assert.equal(ps.filter((p) => p.shape === 'shard').length, 3, 'at most three flecks a key');
   assert.ok(ps.every((p) => p.life <= 320), 'gone by about 280 ms');
 });
+
+test("the card entrance plays on the boards' course cards too, staggered, under the same switches", () => {
+  const css = read('motion.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const TILE = '.gz-w[data-tile^="course:"]'; // features/widgets.js tileEl: section.gz-w, data-tile its id; a course card's is course:…
+  assert.match(read('features/widgets.js'), /make\('section', \{ className: 'gz-w' \}\);\s*el\.dataset\.id = id;\s*el\.dataset\.tile = id;/);
+  // A Look's card.enter, and nothing of Glaze's own without one: a board tile still plays tile.enter, which comes first.
+  assert.match(css, /--gz-enter-card: var\(--gz-x-enter, none\);/);
+  const rule = (sel) => css.match(new RegExp(`(?:^|\\})\\s*${sel.replace(/[.[\]^"()*+?]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] || '';
+  assert.match(rule(TILE), /animation: var\(--gz-enter-tile\), var\(--gz-enter-card\);/);
+  // Staggered as the LMS's cards are, counting course cards only (other tiles sit between them); tile.enter keeps no delay.
+  for (let i = 2; i <= 6; i++) {
+    const at = i < 6 ? `${i}` : 'n+6';
+    assert.match(rule(`${TILE}:nth-child(${at} of [data-tile^="course:"])`), new RegExp(`animation-delay: 0s, calc\\(var\\(--gz-stagger\\) \\* ${Math.min(i, 6) - 1}\\);`), `card ${at}`);
+  }
+  const group = (sel) => css.match(new RegExp(`html\\[data-gz-motion="off"\\], html\\[data-gz-${sel}\\] \\{([^}]*)\\}`))[1];
+  assert.match(group('no-enter'), /--gz-enter-card: none/, 'off and the entrances switch stop it');
+  assert.match(css.match(/@media \(prefers-reduced-motion: reduce\) \{\s*html:not\(\[data-gz-motion\]\) \{([^}]*)\}/)[1], /--gz-enter-card: none/, 'reduced motion before content.js runs');
+  // A Canvas page brought in by its view transition: no second movement, as its own cards.
+  assert.match(read('canvas.css'), /:root\[data-gz-vt-in\] \{[^}]*--gz-enter: none;[^}]*--gz-enter-card: none;/);
+});

@@ -12,3 +12,7 @@ button:hover { background: #a6efff; }
 button:focus-visible { outline: 2px solid #1590c4; outline-offset: -2px; }
 button[aria-disabled="true"] { opacity: 0.6; cursor: default; }
 [hidden] { display: none !important; }
+/* In a tab of its own (where the frame can't ask): the button alone, in the middle, on the first screen's ground. */
+html[data-tab] { height: 100%; background: #060d18; }
+html[data-tab] body { display: grid; place-items: center; height: 100%; }
+html[data-tab] button { height: 40px; padding: 0 20px; font-size: 15px; line-height: 40px; }

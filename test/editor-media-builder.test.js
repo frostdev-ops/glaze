@@ -33,7 +33,7 @@ class El {
 }
 
 // The builder with the real editor-x.js and lib/editor-xbg.js, a recording worker, and the parts the Look has.
-const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files: [] } : { ok: true }), answer = () => true } = {}) => {
+const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files: [] } : { ok: true }), answer = () => true, permissions = true } = {}) => {
   const doc = { body: null, elements: {} };
   doc.createElement = (tag) => new El(tag, doc);
   const roots = {};
@@ -47,7 +47,7 @@ const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files
     document: doc, console, Promise, JSON, Object, Array, String, Number, Math, Error, Set, Map, URL, btoa, Uint8Array, ArrayBuffer, clearTimeout, setTimeout, CSS: { escape: (s) => s }, structuredClone,
     Option: function Option(text, value, d, selected) { const o = new El('option', doc); Object.assign(o, { text, value: value ?? text, selected: !!selected }); o.textContent = text; return o; },
     chrome: { runtime: { lastError: null, getManifest: () => ({ host_permissions: ['https://frostdev.io/*'] }), sendMessage: (m, cb) => { sent.push(m); const r = Promise.resolve(reply(m)); if (cb) r.then(cb); return r; } },
-      permissions: { request: (o) => { asked.push([...o.origins]); return Promise.resolve(answer(o.origins)); } } },
+      ...(permissions && { permissions: { request: (o) => { asked.push([...o.origins]); return Promise.resolve(answer(o.origins)); } } }) },
     location: { origin: 'chrome-extension://glaze' }, addEventListener: (t, f) => { (listeners[t] ||= []).push(f); },
     GZ_XPARTS: XP, GZ_MEDIA: MEDIA, GZ_SPEC: D.GZ_SPEC, GZ_COLORS: D.GZ_COLORS, GZ_MX: require('../lib/motionx.js'),
   });
@@ -155,6 +155,22 @@ test('a link asks the browser for its host as it is taken; refused, the backgrou
   typeLink(bad, '');
   await bad.settle();
   assert.deepEqual(bad.asked, []);
+});
+
+// Embedded Settings on Firefox has no permissions API: the link's box goes to Settings' own tab (lib/site.js elsewhere), and
+// the builder neither keeps the link nor says it couldn't.
+test('without the permissions API, a link goes where the page sends it, with its box; nothing is asked, kept or said', async () => {
+  const r = rig({ parts: withFile, permissions: false });
+  const went = [];
+  r.ctx.GZ_SITE.elsewhere = (from) => went.push(from);
+  await r.settle();
+  typeLink(r, LINK);
+  await r.settle();
+  assert.deepEqual(went, [r.link()]);
+  assert.deepEqual(r.asked, []);
+  assert.deepEqual(r.media(), withFile.x.bg.media);
+  assert.deepEqual(r.writes, []);
+  assert.notEqual(r.note().textContent, 'That link can’t be saved.');
 });
 
 test('the preview reporting a file past the limits says so, in words that are not about the link', async () => {

@@ -3,8 +3,10 @@
 // button starts on the toolbar; the first-run tab opens on install; a site added there is granted, checked and taken by the
 // worker; a grant finished in the worker (permissions.onAdded) with the page that asked already gone, and one nobody asked
 // for; a built-in host taken back (Firefox obeys, as about:addons does) stops Glaze there without errors; Settings → Sites
-// adds and removes (and hands the grant back); Download all's Allow frame counts only its own answer; and an update from a
-// <all_urls> package (v3.3.8) keeps every site. The schools are the check's own pages over https, through a local proxy with
+// adds and removes (and hands the grant back); Download all's Allow frame counts only its own answer, and with no permissions
+// API in the frame its click opens Glaze's Allow tab, whose click grants (or refuses) and closes it; embedded Settings sends a
+// control that needs a grant to Settings' own tab; the gallery hands a Look to the editor; and an update from a <all_urls>
+// package (v3.3.8) keeps every site. The schools are the check's own pages over https, through a local proxy with
 // a throwaway certificate (Firefox can't route requests as Playwright does); every other request is refused. Any error in
 // Glaze's own files (Firefox's console service and console API) fails the check.
 //   FIREFOX=<Firefox.app> nice node scripts/firefox-check.mjs
@@ -22,8 +24,8 @@ const bin = app.endsWith('.app') ? path.join(app, 'Contents/MacOS/firefox') : ap
 const ID = 'glaze@frostdev.io', UUID = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b', EXT = `moz-extension://${UUID}/`;
 const WIDGET = 'glaze_frostdev_io-browser-action';
 const BB = 'https://bb.school.edu', CANVAS = 'https://canvas.school.edu', MOODLE = 'https://moodle.school.edu', LMS2 = 'https://lms.school.edu';
-const WWW = 'https://www.school.edu', INST = 'https://school.instructure.com', FILES = 'files.cdn-a.test';
-const HOSTS = [BB, CANVAS, MOODLE, LMS2, WWW, INST].map((o) => new URL(o).hostname).concat(FILES);
+const WWW = 'https://www.school.edu', INST = 'https://school.instructure.com', FILES = 'files.cdn-a.test', GALLERY = 'https://frostdev.io';
+const HOSTS = [BB, CANVAS, MOODLE, LMS2, WWW, INST, GALLERY].map((o) => new URL(o).hostname).concat(FILES);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-firefox-check-'));
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const failed = [];
@@ -68,6 +70,9 @@ const canvasApi = (u) => {
   if (u.pathname === '/api/v1/users/self' || u.pathname === '/api/v1/users/self/profile') return { id: '3', name: 'Sam' };
   return [];
 };
+// The gallery's Looks page: one Look's "Use this Look in Glaze" (lib/gallery.js), its code made as the editor makes one.
+let galleryCode = '';
+const galleryPage = () => `<!doctype html><title>Looks</title><a href="/glaze/" data-glaze-use data-code="${galleryCode}" data-name="Check Frost" data-author="glaze-check" style="display:inline-block;padding:12px">Use this Look in Glaze</a>`;
 const asked = [];
 const site = (q, r) => {
   const u = new URL(q.url, `https://${q.headers.host}`);
@@ -88,6 +93,7 @@ const site = (q, r) => {
   if (at === INST && p === '/courses/25/modules') return html(MODULES);
   if (at === INST && p.startsWith('/courses')) return html(fixture('canvas-course-home.html'));
   if (u.hostname === FILES && p === new URL(FILE.url).pathname) return send(200, 'application/pdf', FILE.body);
+  if (at === GALLERY && p === '/glaze/looks/') return html(galleryPage());
   return send(404, 'text/html', '<!doctype html><title>Not found</title>');
 };
 let schools, proxy;
@@ -183,9 +189,11 @@ const browser = (send, log) => {
     close: (context) => send('browsingContext.close', { context }),
     // A trusted click in the middle of the element, in the tab's top frame or in a frame of it (`within`: [the frame's
     // context, the frame element's selector in the top frame]).
-    click: async (context, selector, [within, frameAt] = []) => {
+    click: (context, selector, within) => b.clickOn(context, `document.querySelector(${JSON.stringify(selector)})`, within),
+    // The same for the element an expression finds (one in an open shadow root, say).
+    clickOn: async (context, element, [within, frameAt] = []) => {
       await send('browsingContext.activate', { context }).catch(() => {}); // not for Glaze's own pages
-      let box = await value(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`, within || context);
+      let box = await value(`(() => { const e = ${element}; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`, within || context);
       if (within) {
         const f = await value(`(() => { const r = document.querySelector(${JSON.stringify(frameAt)}).getBoundingClientRect(); return [r.x, r.y]; })()`, context);
         box = [box[0] + f[0], box[1] + f[1]];
@@ -202,6 +210,8 @@ const browser = (send, log) => {
     },
     type: (context, selector, text) => value(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.focus(); e.value = ${JSON.stringify(text)}; e.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`, context),
     placement: async () => value(`CustomizableUI.getPlacementOfWidget(${JSON.stringify(WIDGET)})?.area ?? null`, await chrome()),
+    // In the browser's own window (its prefs, its prompts).
+    inChrome: async (expression) => value(expression, await chrome()),
     install: (dir) => send('webExtension.install', { extensionData: { type: 'path', path: dir } }),
     // What Firefox printed since the last look (devtools.console.stdout.content): every console.error/warn from a page or an
     // extension page (Glaze's worker catches with console.warn), and script errors in Glaze's own files.
@@ -227,6 +237,7 @@ const noErrors = async (b, label) => { const e = await b.errors(); ok(e.length =
 
 const run = async () => {
   packages();
+  galleryCode = await require('../lib/share.js').encode(G.GZ_SANITIZE({ preset: 'Frost', colors: { ...G.GZ_PRESETS.find(([n]) => n === 'Frost')[1] } }), {}, null);
   await require('./wait-for-browser.js')();
   await serve();
   const manifest = JSON.parse(fs.readFileSync(path.join(fresh, 'manifest.json'), 'utf8'));
@@ -356,18 +367,113 @@ const run = async () => {
     await b.value(`(postMessage({ gzAllow: '${FILES}', ok: true }, '*'), document.querySelector('.gz-dl-allow').contentWindow.postMessage({ gzAllow: '${FILES}', ok: true }, '*'), 1)`, mods);
     await pause(1500);
     ok(!!await b.frame(mods, `${EXT}features/allow.html`) && !asked.some((u) => u.includes(FILES)), 'a message the page posts, saying yes, is ignored: the frame stays and nothing is fetched');
-    // Firefox gives an extension page framed in a web page only some APIs: whether the frame can ask at all.
+    // Firefox gives an extension page framed in a web page only some APIs, no permissions among them: its click has the worker
+    // open Glaze's Allow tab, whose click asks.
     const apis = await b.value(`Object.keys(chrome).sort().join(', ')`, frame);
+    ok(!apis.split(', ').includes('permissions'), `the framed Allow page has no permissions API (${apis})`);
+    const ALLOW_TAB = `${EXT}features/allow.html#${FILES}`;
     await b.click(mods, '#allow', [frame, '.gz-dl-allow']);
+    const own = await until(() => b.find(ALLOW_TAB), 'the Allow tab');
+    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && document.activeElement?.id === 'allow'`, own), 'its button');
+    ok(true, `the frame's click opens Glaze's Allow tab, its one button "Allow ${FILES}" focused`);
+    ok(!await holds(b, settings, `https://${FILES}/*`) && !asked.some((u) => u.includes(FILES)), 'nothing granted or fetched before its click');
+    await b.click(own, '#allow');
+    await until(async () => !await b.find(ALLOW_TAB), 'the Allow tab to close');
+    ok(true, 'its click answered, and the tab closed itself');
     const said = await until(async () => { const t = await b.value(`document.getElementById('gz-dl-73').textContent`, mods); return /^Saved 1 file|Download failed/.test(t) && t; }, 'the download to end');
-    ok(said.startsWith('Saved 1 file') && await holds(b, settings, `https://${FILES}/*`), `the frame's own click: Firefox granted ${FILES} and the download went on ("${said}"; the frame's APIs: ${apis})`);
-    if (!said.startsWith('Saved')) return noErrors(b, 'Download all');
+    ok(said.startsWith('Saved 1 file') && await holds(b, settings, `https://${FILES}/*`), `Firefox granted ${FILES} and the download went on ("${said}")`);
     ok(asked.includes(FILE.url), 'the worker fetched the file');
     const zip = await until(async () => fs.readdirSync(downloads).find((f) => f.endsWith('.zip')), 'the saved zip');
     const bytes = fs.readFileSync(path.join(downloads, zip));
     ok(bytes.includes(Buffer.from(FILE.name)) && bytes.includes(Buffer.from(FILE.body)), `and the zip saved with ${FILE.name} (${zip}, ${bytes.length} bytes)`);
     ok(!await b.frame(mods, `${EXT}features/allow.html`), 'the frame is gone');
     await noErrors(b, 'Download all');
+
+    // Refused: the grant taken back, Download all again; Firefox's own prompt this time, answered Cancel.
+    ok(await b.value(`browser.permissions.remove({ origins: ['https://${FILES}/*'] })`, settings) === true && !await holds(b, settings, `https://${FILES}/*`), `${FILES} taken back`);
+    for (const f of fs.readdirSync(downloads)) fs.rmSync(path.join(downloads, f), { force: true });
+    asked.length = 0;
+    await b.inChrome(`(Services.prefs.setBoolPref('extensions.webextOptionalPermissionPrompts', true), 1)`);
+    await b.hover(mods, '#context_module_73 .ig-header');
+    await b.click(mods, '#gz-dl-73');
+    const again = await until(() => b.frame(mods, `${EXT}features/allow.html`), 'the Allow frame again');
+    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}'`, again), 'its button');
+    await b.click(mods, '#allow', [again, '.gz-dl-allow']);
+    const own2 = await until(() => b.find(ALLOW_TAB), 'the Allow tab again');
+    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}'`, own2), 'its button');
+    await b.click(own2, '#allow');
+    const prompt = `PopupNotifications._currentNotifications.find((n) => n.id === 'addon-webext-permissions')`;
+    await until(() => b.inChrome(`!!${prompt}`), 'Firefox\'s prompt');
+    await b.inChrome(`(() => { const n = ${prompt}; n.secondaryActions[0].callback(); n.remove(); return 1; })()`);
+    await until(async () => !await b.find(ALLOW_TAB), 'the Allow tab to close');
+    ok(true, 'Cancel in Firefox\'s prompt: the Allow tab closed itself');
+    const no = await until(async () => { const t = await b.value(`document.getElementById('gz-dl-73').textContent`, mods); return /^Saved|Download failed/.test(t) && t; }, 'the download to end');
+    ok(no === 'Download failed' && !await holds(b, settings, `https://${FILES}/*`) && !asked.some((u) => u.includes(FILES)), `refused: the panel says "${no}", nothing granted or fetched`);
+    ok(!await b.frame(mods, `${EXT}features/allow.html`) && !fs.readdirSync(downloads).length, 'the frame is gone and nothing saved');
+    await b.inChrome(`(Services.prefs.setBoolPref('extensions.webextOptionalPermissionPrompts', false), 1)`);
+    await noErrors(b, 'Download all refused');
+
+    // Embedded Settings, opened from Glaze's navigation on a course page: a control that needs a grant goes to Settings' own
+    // tab (the frame has neither permissions nor tabs), and there it asks.
+    await b.value(`browser.storage.sync.get('navbar').then((r) => browser.storage.sync.set({ navbar: { ...r.navbar, on: true }, navbarItems: { glaze: ['settings'] } })).then(() => 1)`, settings);
+    const course = await b.open(`${INST}/courses/25`);
+    const navSettings = `document.getElementById('gz-navbar')?.shadowRoot?.querySelector('[data-id="glaze:settings"]')`;
+    const embed = async (hash) => {
+      await until(() => b.value(`!!${navSettings}?.getClientRects().length`, course), 'Glaze settings in the bar');
+      await b.clickOn(course, navSettings);
+      const f = await until(() => b.frame(course, `${EXT}options.html`), 'embedded Settings');
+      await until(() => b.value(`document.documentElement.hasAttribute('data-embed-ok')`, f), 'Settings to claim its frame');
+      await b.value(`(location.hash = ${JSON.stringify(hash)}, 1)`, f);
+      await pause(400);
+      return f;
+    };
+    const ownSettings = (hash) => until(() => b.find(`${EXT}options.html${hash}`), `Settings' own tab at ${hash}`);
+    const closed = () => until(() => b.value(`!document.getElementById('gz-settings-page')`, course), 'embedded Settings to close');
+    const gradescope = `document.querySelector('input[data-key="enhance.gradescope"]').closest('label')`;
+    const gsOn = () => b.value(`browser.storage.sync.get('enhance').then((r) => !!r.enhance?.gradescope)`, settings);
+    let f = await embed('#study/todo');
+    ok(!(await b.value(`Object.keys(chrome).sort().join(', ')`, f)).split(', ').some((k) => k === 'permissions' || k === 'tabs'), 'embedded Settings has no permissions or tabs API');
+    await b.clickOn(course, gradescope, [f, '#gz-settings-page']);
+    const gsTab = await ownSettings('#study/todo');
+    await closed();
+    ok(!await holds(b, settings, 'https://www.gradescope.com/*') && !await gsOn(), 'embedded: the Gradescope switch opens Settings\' own tab at To Do and closes; nothing granted or switched on');
+    await until(() => b.value(`!!document.querySelector('input[data-key="enhance.gradescope"]')?.getClientRects().length`, gsTab), 'the switch in its own tab');
+    await b.clickOn(gsTab, gradescope);
+    await until(async () => await holds(b, settings, 'https://www.gradescope.com/*') && await gsOn(), 'Gradescope on');
+    ok(true, 'in its own tab the same switch asks: Firefox granted www.gradescope.com and it is on');
+    await b.clickOn(gsTab, gradescope);
+    await until(async () => !await gsOn(), 'Gradescope off');
+    await b.close(gsTab);
+    await noErrors(b, 'embedded Settings: Gradescope');
+    const MEDIA = 'https://media.school.edu/loop.webm';
+    const look = () => b.value(`browser.storage.sync.get('lookX').then((r) => JSON.stringify(r.lookX ?? null))`, settings);
+    const lookBefore = await look();
+    f = await embed('#look/background');
+    await b.value(`(() => { const i = document.getElementById('x-media-link'); i.value = ${JSON.stringify(MEDIA)}; i.dispatchEvent(new Event('change')); return 1; })()`, f);
+    const bgTab = await ownSettings('#look/background');
+    await closed();
+    ok(!await holds(b, settings, 'https://media.school.edu/*') && await look() === lookBefore && !asked.some((u) => u.includes('media.school.edu')), 'embedded: a pasted Look link opens Settings\' own tab at Background and closes; nothing asked, kept or fetched');
+    await b.close(bgTab);
+    f = await embed('#mods/installed');
+    await b.clickOn(course, `document.querySelector('[data-editor-panel="mods"] .embed-gate button')`, [f, '#gz-settings-page']);
+    const modsTab = await ownSettings('#mods/installed');
+    await closed();
+    ok(true, 'embedded: Mods (a mod\'s network hosts) opens in Settings\' own tab');
+    await b.close(modsTab);
+    await b.close(course);
+    await noErrors(b, 'embedded Settings');
+
+    // The gallery: "Use this Look in Glaze" hands the Look to the editor (Firefox names the gallery's content script by its
+    // full address).
+    const looks = await b.open(`${GALLERY}/glaze/looks/`);
+    await b.click(looks, 'a[data-glaze-use]');
+    const editorTook = async () => {
+      for (const c of await b.tree()) if (c.url.startsWith(`${EXT}options.html`) && await b.value(`document.getElementById('share-code')?.value === ${JSON.stringify(galleryCode)}`, c.context)) return c.context;
+      return null;
+    };
+    await until(editorTook, 'the editor to take the Look');
+    ok(await b.value(`browser.storage.local.get('galleryOffer').then((r) => !r.galleryOffer)`, settings), 'the gallery hand-off: the editor took the Look to preview');
+    await noErrors(b, 'the gallery hand-off');
   });
 
   // 2. An update from a package that holds every site (v3.3.8): the student's sites and their grant stay.
