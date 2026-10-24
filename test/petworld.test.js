@@ -123,3 +123,19 @@ test('the habitat follows its stage: resized, it keeps the pet and furniture ins
   w.resize(640, 420); w.run(2000);
   assert.ok(boxOf(w.actor).w > small.w * 1.5, 'a larger habitat has a larger pet');
 });
+
+test('an exploring pet stays page-sized while its home furniture follows the resized habitat without writes', () => {
+  const w = world({ record: { wander: true, physics: false, learning: false, decor: { books: 4, shelf: 4 }, positions: { books: { x: 80, y: 92 }, shelf: { x: 25, y: 40 } } } });
+  const actor = w.doc.root.querySelector('.gz-game-actor');
+  const writes = w.saved.length;
+  for (const [width, height] of [[160, 120], [640, 420], [220, 180]]) {
+    w.resize(width, height);
+    const scale = Math.max(.5, Math.min(1.6, width / 340, height / 230));
+    const books = boxOf(w.stage.querySelector('[data-item="books"]')), shelf = boxOf(w.stage.querySelector('[data-item="shelf"]'));
+    assert.ok(Math.abs(books.w - 54 * scale) < .01, `home furniture scales while the pet explores: ${books.w} at ${width}×${height}`);
+    assert.ok(Math.abs(shelf.h - 38 * scale) < .01, 'shelf height follows the home scale too');
+    assert.equal(Number(actor.style['--gz-pet-u']), 1, 'the exploring pet keeps its page size');
+  }
+  assert.equal(w.saved.length, writes, 'resizing never writes furniture coordinates or pet data');
+  w.W.stop();
+});

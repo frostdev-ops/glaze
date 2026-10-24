@@ -34,10 +34,11 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     // The habitat fills its tile: a dock's narrow one or a large board slot. At home the pet, furniture and toys take their size from
     // the stage's (u: 1 for a 340 × 230 stage), so they keep their places relative to it; out on the page they are page-sized.
     let u = 1, fitted = { w: 0, h: 0 };
-    const scale = () => (wandering || !stage ? 1 : Math.max(.5, Math.min(1.6, (stage.clientWidth || 320) / 340, (stage.clientHeight || 240) / 230)));
+    const scale = () => (!stage ? 1 : Math.max(.5, Math.min(1.6, (stage.clientWidth || 320) / 340, (stage.clientHeight || 240) / 230)));
     const resize = () => {
-      u = scale(); b.w = 80 * u; b.h = 86 * u;
-      actor.style.setProperty('--gz-pet-u', String(Math.round(u * 1000) / 1000));
+      u = scale(); const actorScale = wandering ? 1 : u;
+      b.w = 80 * actorScale; b.h = 86 * actorScale;
+      actor.style.setProperty('--gz-pet-u', String(Math.round(actorScale * 1000) / 1000));
       stage?.style.setProperty('--gz-pet-u', String(Math.round(u * 1000) / 1000));
     };
     let props = [], offs = [], dirty = false, suppressClick = false, lastMotion = '', lastGaze = -1, path = location.pathname, awake = true, outing = null;
@@ -246,9 +247,10 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       if (!W || !H || (W === fitted.w && H === fitted.h)) return;
       if (drag || movingItem) { dirty = true; return; }
       const was = fitted; fitted = { w: W, h: H };
+      const across = was.w ? (b.x + b.w / 2) / was.w : .5, foot = was.h ? (b.y + b.h) / (was.h * .95) : 1;
+      resize();
       if (!wandering) {
-        const across = was.w ? (b.x + b.w / 2) / was.w : .5, foot = was.h ? (b.y + b.h) / (was.h * .95) : 1;
-        resize(); const box = bounds();
+        const box = bounds();
         b.x = Math.max(0, Math.min(box.width - b.w, across * box.width - b.w / 2)); b.y = Math.max(0, Math.min(box.height - b.h, foot * box.height - b.h)); b.vx = b.vy = 0;
         display();
       }
