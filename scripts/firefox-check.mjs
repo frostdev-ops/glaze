@@ -361,7 +361,7 @@ const run = async () => {
     await b.click(mods, '#gz-dl-73');
     const frame = await until(() => b.frame(mods, `${EXT}features/allow.html`), 'the Allow frame');
     ok(await b.value('location.hash', frame) === `#${FILES}`, `the module's header shows Glaze's Allow frame for ${FILES}`);
-    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}'`, frame), 'its button');
+    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, frame), 'its button');
     ok(!asked.some((u) => u.includes(FILES)), 'nothing fetched from the file server before the grant');
     // The page's own word, to the content script's window and to the frame: neither counts.
     await b.value(`(postMessage({ gzAllow: '${FILES}', ok: true }, '*'), document.querySelector('.gz-dl-allow').contentWindow.postMessage({ gzAllow: '${FILES}', ok: true }, '*'), 1)`, mods);
@@ -404,10 +404,10 @@ const run = async () => {
     await b.hover(mods, '#context_module_73 .ig-header');
     await b.click(mods, '#gz-dl-73');
     const again = await until(() => b.frame(mods, `${EXT}features/allow.html`), 'the Allow frame again');
-    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}'`, again), 'its button');
+    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, again), 'its button');
     await b.click(mods, '#allow', [again, '.gz-dl-allow']);
     const own2 = await until(() => b.find(ALLOW_TAB), 'the Allow tab again');
-    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}'`, own2), 'its button');
+    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, own2), 'its button');
     await b.click(own2, '#allow');
     const prompt = `PopupNotifications._currentNotifications.find((n) => n.id === 'addon-webext-permissions')`;
     await until(() => b.inChrome(`!!${prompt}`), 'Firefox\'s prompt');

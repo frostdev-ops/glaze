@@ -56,7 +56,7 @@ test('E1 UI confirms selected and previously approved custom hosts even with req
   p.node('#ss-invite').value = link(server); await p.click('#ss-join');
   assert.equal(p.calls[0], 'confirm');
   assert.equal(p.calls[1][0], 'request'); assert.equal(p.calls[2], 'join');
-  assert.deepEqual(p.calls[1][1], [server + '/*'], 'request in the input task; the browser silently accepts a held host');
+  assert.deepEqual([...p.calls[1][1]], [server + '/*'], 'request in the input task; the browser silently accepts a held host');
   const other = await page({ selected: server });
   other.node('#ss-invite').value = link(G.SERVER); await other.click('#ss-join');
   assert.deepEqual(other.calls, ['confirm']);
