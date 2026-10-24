@@ -195,3 +195,23 @@ test('WID-10: an open habitat paints its world again after a restore', async () 
   assert.ok(p.mounts.length > before);
   box.close();
 });
+
+// A tile too small for the habitat's sections (apps.css shows More then) still reaches every action: More opens the whole
+// habitat in its dialog, outside the tile. The dialog has them all at its size, so no More of its own.
+test('More opens the whole habitat in its dialog, which has every action of the tile and no More', async () => {
+  const p = page({ world: true }), live = p.ui.mount(p.body, p.api); await settle();
+  const more = p.body.querySelector('[data-control="more"]');
+  assert.ok(more, 'the tile has More');
+  assert.equal(more.getAttribute('aria-haspopup'), 'dialog');
+  assert.equal(more.getAttribute('aria-label'), 'Open Pet habitat');
+  const pat = p.body.querySelector('[data-control="pet"]');
+  assert.equal(pat.title, p.body.querySelector('.gz-game-care').textContent, 'the Pet button says how many bonding moments are left when the care line is hidden');
+  for (const l of more.listeners.filter((x) => x.type === 'click')) l.f({ isTrusted: true });
+  await settle();
+  const box = p.doc.body.children.find((e) => e.tagName === 'DIALOG');
+  assert.ok(box?.open, 'the habitat dialog is open');
+  const ids = (root) => new Set(root.querySelectorAll('[data-control]').map((e) => e.dataset.control));
+  assert.equal(ids(box).has('more'), false, 'the dialog has no More');
+  for (const c of ids(p.body)) if (c !== 'more') assert.ok(ids(box).has(c), `${c} is in the dialog`);
+  box.close(); live.stop();
+});

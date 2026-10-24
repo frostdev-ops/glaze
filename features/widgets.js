@@ -453,7 +453,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     music(body) {
       const form = make('form', { className: 'gz-w-music' });
       const input = make('input', { type: 'url', placeholder: 'https://open.spotify.com/…', value: lay.music, spellcheck: false, autocomplete: 'off' });
-      input.setAttribute('aria-label', t('A Spotify, YouTube, Apple Music or YouTube Music link'));
+      input.setAttribute('aria-label', t('A Spotify, YouTube, Apple Music or YouTube Music link')); input.title = input.getAttribute('aria-label');
       const err = make('p', { className: 'gz-w-status', role: 'status' });
       const stage = make('div', { className: 'gz-w-stage' });
       // Nothing is asked of the player's site until Load player: the link stays on this device and goes nowhere else.
@@ -468,7 +468,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
             f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
             stage.replaceChildren(f);
           }, { className: 'gz-w-btn gz-w-main' }),
-        ] : [make('p', { className: 'gz-w-faint', textContent: t('Paste a Spotify, YouTube, Apple Music or YouTube Music link to listen while you work.') })]));
+        ] : []));
       };
       form.addEventListener('submit', (e) => {
         e.preventDefault();
