@@ -98,7 +98,7 @@ test('Allow in its own tab: the same button, focused; its click asks the browser
 // ---- the worker ----------------------------------------------------------------------------------------------------------
 // `held`: the hosts the browser holds (a Set the test changes); `session`: storage.session as the worker left it.
 const worker = ({ held = new Set(), session = {} } = {}) => {
-  const listeners = [], removedListeners = [], created = [], removed = [], store = { local: {}, sync: {}, session: structuredClone(session) };
+  const listeners = [], connects = [], updated = [], replaced = [], removedListeners = [], created = [], removed = [], store = { local: {}, sync: {}, session: structuredClone(session) };
   let nextTab = 50;
   const area = (name) => ({
     get: async (k) => structuredClone(k == null ? store[name] : Object.fromEntries([].concat(k).filter((x) => x in store[name]).map((x) => [x, store[name][x]]))),
@@ -107,12 +107,12 @@ const worker = ({ held = new Set(), session = {} } = {}) => {
   });
   const manifest = require('../manifest.json');
   const context = vm.createContext({
-    URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto, atob, btoa, navigator: {},
+    URL, AbortController, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto, atob, btoa, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), context, { filename: f }); },
     chrome: {
       runtime: {
         id: ID, getURL: (p = '') => `${EXT}/${p}`, getManifest: () => manifest,
-        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
+        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (f) => connects.push(f) },
         openOptionsPage: () => Promise.resolve(),
       },
       permissions: { contains: async ({ origins }) => origins.every((o) => held.has(o)), onAdded: { addListener() {} }, onRemoved: { addListener() {} } },
@@ -121,6 +121,7 @@ const worker = ({ held = new Set(), session = {} } = {}) => {
         create: async (o) => { const tab = { id: nextTab++, ...plain(o) }; created.push(tab); return tab; },
         remove: async (id) => { removed.push(id); for (const f of removedListeners) f(id, {}); },
         onRemoved: { addListener: (f) => removedListeners.push(f) },
+        onUpdated: { addListener: (f) => updated.push(f) }, onReplaced: { addListener: (f) => replaced.push(f) },
       },
       storage: { local: area('local'), sync: area('sync'), session: area('session'), onChanged: { addListener() {} } },
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {}, executeScript: async () => [] },
@@ -140,7 +141,16 @@ const worker = ({ held = new Set(), session = {} } = {}) => {
     return p;
   };
   const closeTab = (id) => { for (const f of removedListeners) f(id, {}); };
-  return { send, created, removed, closeTab, store, held };
+  const download = async (tab = 7, host = CDN) => {
+    const incoming = [], gone = [], posted = [];
+    const p = { name: 'canvas-zip', sender: { id: ID, url: 'https://school.instructure.com/courses/1/modules', frameId: 0, tab: { id: tab } },
+      onMessage: { addListener: (f) => incoming.push(f) }, onDisconnect: { addListener: (f) => gone.push(f) }, postMessage: (m) => posted.push(plain(m)), disconnect() {} };
+    for (const f of connects) f(p);
+    for (const f of incoming) f({ type: 'file', url: `https://${host}/file.pdf` });
+    await settle();
+    return { ticket: posted.find((m) => m.type === 'ask')?.ticket, close: () => gone.forEach((f) => f()), posted };
+  };
+  return { send, created, removed, closeTab, store, held, download, updated, replaced };
 };
 // The Allow frame in tab 7's school page, and the tab the worker opens (id 50).
 const frameSender = (more = {}) => ({ id: ID, url: ALLOW, origin: EXT, frameId: 3, tab: { id: 7, index: 2, url: 'https://school.instructure.com/courses/1/modules' }, ...more });
@@ -331,4 +341,43 @@ test('Settings\' grant-needing controls hand reach the control, and a control se
   const xbg = read('lib/editor-xbg.js');
   assert.match(xbg, /GZ_SITE\.reach\(\[url\], input\)/);
   assert.match(xbg.slice(xbg.indexOf('GZ_SITE.reach([url], input)')), /^[^]*?if \(held === null\) return;/);
+});
+
+
+test('review: a public Allow tab cannot ask for a host planted in its hash', async () => {
+  const p = allowPage({ top: true, send: async () => ({ ok: false }) });
+  await settle(); p.click(); await settle();
+  assert.deepEqual(p.asked, [], 'unopened by the worker: no browser prompt');
+});
+
+test('review: an arbitrary Allow frame cannot ask on the strength of another tab or feature asking', async () => {
+  const w = worker({ session: askedByDownload() });
+  const r = w.send(ask, frameSender());
+  await settle();
+  assert.deepEqual(w.created, [], 'a global asked-host entry does not authorize a download frame');
+  assert.deepEqual(await r, { ok: false });
+});
+
+test('review: Allow authority belongs to one download, tab and frame; navigation and replacement end it', async () => {
+  for (const end of ['navigate', 'replace', 'source-close', 'download-close']) {
+    const w = worker(), a = await w.download(), b = await w.download(8, 'second.example.net');
+    assert.equal(typeof a.ticket, 'string', 'worker issues a private ticket for its own wait');
+    assert.notEqual(a.ticket, b.ticket);
+    const init = { type: 'glaze:allow-init', host: CDN, ticket: a.ticket };
+    assert.equal((await w.send(init, frameSender({ tab: { id: 8 } }))).ok, false);
+    assert.equal((await w.send(init, frameSender())).ok, true);
+    assert.equal((await w.send(init, frameSender({ frameId: 5 }))).ok, false, 'the ticket is consumed');
+    const pending = w.send({ ...ask, ticket: a.ticket }, frameSender());
+    await settle();
+    assert.equal(w.created.length, 1);
+    assert.equal((await w.send({ type: 'glaze:allow-init', host: CDN }, tabSender({ documentId: 'allow-doc' }))).ok, true);
+    if (end === 'navigate') w.updated.forEach((f) => f(50, { status: 'loading' }, {}));
+    if (end === 'replace') w.replaced.forEach((f) => f(51, 50));
+    if (end === 'source-close') w.closeTab(7);
+    if (end === 'download-close') a.close();
+    await settle();
+    assert.deepEqual(await pending, { ok: false }, end);
+    assert.equal((await w.send(answer, tabSender())).ok, false, 'a replacement document cannot answer');
+    assert.ok(w.removed.includes(50), 'no orphan Allow tab');
+  }
 });
