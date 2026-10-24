@@ -273,8 +273,8 @@ test('E1 routes, remembered tabs, legacy entry points and tab-only keyboard hand
     addEventListener: (k, f) => { events[k] = f; }, chrome: { storage: { local: { get: async () => ({ editorTab: 'about' }), set: async (v) => { kept.push(v); } } } } });
   vm.runInContext(fs.readFileSync(path.join(root, 'lib/editor.js'), 'utf8'), ctx);
   const ui = ctx.GZ_EDITOR.mount();
-  for (const [hash, route] of Object.entries({ '#tabs': 'navigation/tabs', '#blackboard/tabs': 'navigation/tabs', '#sidebar': 'navigation/bar', '#todo': 'study/todo', '#gcal': 'sharing/calendar', '#data': 'backup/privacy', '#background': 'look/background', '#blackboard/nav': 'navigation/bar', '#look/cards': 'courses/cards', '#canvas/shared': 'pages/content', '#study/tools': 'pages/content', '#blackboard': 'pages/dashboard', '#unknown/section': 'look/palette' })) {
-    ctx.location.hash = hash; events.hashchange(); assert.equal(ui.route(), route);
+  for (const [hash, route] of Object.entries({ '#bb-folders': 'pages/declutter', '#canvas-quizzes': 'pages/documents', '#canvas-shared': 'pages/content', '#moodle-courses': 'look/palette', '#tabs': 'navigation/tabs', '#blackboard/tabs': 'navigation/tabs', '#sidebar': 'navigation/bar', '#todo': 'study/todo', '#gcal': 'sharing/calendar', '#data': 'backup/privacy', '#background': 'look/background', '#blackboard/nav': 'navigation/bar', '#look/cards': 'courses/cards', '#canvas/shared': 'pages/content', '#study/tools': 'pages/content', '#blackboard': 'pages/dashboard', '#unknown/section': 'look/palette' })) {
+    ctx.location.hash = hash; events.hashchange(); assert.equal(ui.route(), route, hash);
     assert.equal(all.find((x) => x.dataset.editorPanel === route.split('/')[0]).hidden, false);
     assert.equal(all.filter((x) => x.dataset.editorTab && x.tabIndex === 0).length, 1);
   }
