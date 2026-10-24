@@ -90,7 +90,7 @@ if (embedded) {
 }
 // A section's parts are its children, and the children of the boxes in it (groups, More options, the navigation's bodies), each
 // box's own heading aside. A match inside a closed More options opens it; leaving the search closes it again (lib/editor.js).
-const BOX = '.group, .nb-body, .nb-group, details.more';
+const BOX = '.group, .nb-body, .nb-group, .nav-own, .stack, details.more';
 const filter = () => {
   const words = GZ_FIND.parse(finder.value);
   const on = words.length > 0;
