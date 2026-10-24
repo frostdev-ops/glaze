@@ -112,12 +112,12 @@ const glass = (b, what) => {
 test('beside Glaze\'s sidebar a course tool\'s header spans the window and only its content keeps the column\'s room', () => {
   // The owner's empty corner: the tool panel was narrowed (inset-inline-end), so the strip and course bar stopped short
   // of the window and nothing filled the column above the sidebar.
-  const [panel] = ruleWith(SIDEBAR, 'html[data-gz-sb-fixed]', '.course-content-container > .panel-wrap');
+  const [panel] = ruleWith(SIDEBAR, 'html[data-gz-sb-tool]', '.course-content-container > .panel-wrap');
   assert.ok(panel, 'the tool panel rule');
   assert.doesNotMatch(panel[1], /inset-inline-end:\s*var\(--gz-sb-room/, 'the panel itself is not narrowed');
   assert.match(panel[1], /inset-inline:\s*0/);
   assert.match(panel[1], /padding-inline-end:\s*var\(--gz-sb-room\)/, 'its content keeps the room');
-  const bar = ruleWith(SIDEBAR, 'html[data-gz-sb-fixed]', '.panel-wrap div.bb-course-navigation')[0];
+  const bar = ruleWith(SIDEBAR, 'html[data-gz-sb-tool]', '.panel-wrap div.bb-course-navigation')[0];
   assert.ok(bar && /margin-inline-end:\s*calc\(var\(--gz-sb-room\) \* -1\)/.test(bar[1]), 'the course bar reaches past that room to the window');
   // A routed page's header row too; never inside its content, and only the outermost header root.
   const routed = ruleWith(SIDEBAR, 'html[data-gz-sb-fixed]:not([data-gz-sb-tool])', '.routed-page.bb-offcanvas-container', 'content-page-header')[0];
