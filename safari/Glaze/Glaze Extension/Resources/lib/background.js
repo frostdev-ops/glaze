@@ -2234,7 +2234,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 
 // A Download all wait owns a private ticket, sent over its byte port and the frame's MessageChannel, never a URL.
 // A public Allow page's hash is display text, not authority. Only that wait's frame and the tab opened for it may ask.
-// Download all pings its byte port every 15 s; the worker's replies keep Firefox's event page active while these waits live.
+// Download all pings its byte port every 15 s; those onMessage events reset Firefox's idle timer while these waits live.
 const ALLOW_PAGE = 'features/allow.html';
 const allowWaits = new Map(); // ticket -> the byte port's wait (one per download)
 const allowTabs = new Map(); // the Allow tab's id -> its wait
