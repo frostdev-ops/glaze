@@ -4,7 +4,8 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const env = require('./check-env.js'), lock = env.lockPath();
+const env = require('./check-env.js'), lock = require('./check-env.js').lockPath();
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 let context, scratch, held = false, total = 0, failed = 0;
 const check = async (name, test) => {
@@ -20,10 +21,10 @@ const check = async (name, test) => {
       catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nsettings-ia-check\n`);
-    await require('./wait-for-browser.js')();
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-settings-ia-check-'));
+    await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 1000 },
+      ...chromeLaunch, headless: true, viewport: { width: 1440, height: 1000 },
       args: [`--disable-extensions-except=${root}`, `--load-extension=${root}`, '--disable-background-networking'],
     });
     env.noFirstRun(context);
