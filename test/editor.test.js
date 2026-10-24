@@ -257,7 +257,7 @@ test('E1 routes, remembered tabs, legacy entry points and tab-only keyboard hand
     id: n.attrs.id || '', dataset: Object.fromEntries(Object.entries(n.attrs).filter(([k]) => k.startsWith('data-')).map(([k, v]) => [k.slice(5).replace(/-([a-z])/g, (_, x) => x.toUpperCase()), v])),
     attrs: { ...n.attrs }, hidden: Object.hasOwn(n.attrs, 'hidden'), events: {},
     setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k] ?? null; }, hasAttribute(k) { return Object.hasOwn(this.attrs, k); },
-    toggleAttribute(k, on) { if (on) this.attrs[k] = ''; else delete this.attrs[k]; }, addEventListener(k, f) { this.events[k] = f; }, focus() { focused = this; }, scrollIntoView() {},
+    toggleAttribute(k, on) { if (on) this.attrs[k] = ''; else delete this.attrs[k]; }, removeAttribute(k) { delete this.attrs[k]; }, addEventListener(k, f) { this.events[k] = f; }, focus() { focused = this; }, scrollIntoView() {},
     closest() { return wrappers.get([n, ...n.parents.toReversed()].find((x) => x.attrs['data-editor-section'])); },
   });
   const all = [...wrappers.values()], doc = { querySelectorAll: (selector) => {
