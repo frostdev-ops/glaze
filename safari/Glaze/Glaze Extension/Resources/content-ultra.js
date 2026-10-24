@@ -501,7 +501,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       if (!holds) at = 'above medium';
     }
     // Uncached: 'auto', from this page's bar (a tab's frame: the page's around it).
-    if (at == null) { let top = GZ_TABS_AUTO(I.settings, /^\/ultra\/courses\//.test(location.pathname)) === 'nav'; if (tabFrame) try { top = /^(?=.*\btop\b).*\btabs\b/.test(parent.document.documentElement.getAttribute('data-gz-navbar') || ''); } catch { top = false; } at = top ? 'nav' : 'above medium'; }
+    if (at == null) { let top = GZ_TABS_AUTO(I.settings, /^\/ultra\/courses\//.test(location.pathname)) === 'nav'; if (tabFrame) try { top = parent.innerWidth >= 900 && /^(?=.*\btop\b).*\btabs\b/.test(parent.document.documentElement.getAttribute('data-gz-navbar') || ''); } catch { top = false; } at = top ? 'nav' : 'above medium'; }
     I.setAttr('data-gz-ctabs', tabsOn() && at);
     if (isPreview) return;
     const colors = courseColors();

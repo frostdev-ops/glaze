@@ -500,8 +500,8 @@ const GZ_COURSE_EDIT = {
   name: (c, id, nick) => { const n = cleanNick(nick); if (n) c.names[id] = n; else delete c.names[id]; },
 };
 // Surface tint uses only an existing picked or recorded color; an unknown course keeps the accent fallback.
-// tabs.at 'auto' at first paint: only in Glaze's bar where it is a top bar holding the tabs on this page, else above.
-const GZ_TABS_AUTO = (s, course) => { const b = s.navbar, c = course ? b.course : 'same'; return b.on && b.tabs && s.enhance.tabs && (c === 'same' ? b.place === 'top' : c === 'top') ? 'nav' : 'above'; };
+// tabs.at 'auto': in a desktop top bar holding tabs; elsewhere, above.
+const GZ_TABS_AUTO = (s, course, w = globalThis.innerWidth || 1440) => { const b = s.navbar; return w >= 900 && b.on && b.tabs && s.enhance.tabs && (course && b.course !== 'same' ? b.course : b.place) === 'top' ? 'nav' : 'above'; };
 const GZ_COURSE_COLOR = (s, list, key) => [s.courses?.colors?.[key], list[key]?.color].find((v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)) || '';
 // Whether the course is tinting its pages now: the master switch is on and it (or its slot) is ticked.
 const GZ_COURSE_TINTED = (c, id, list = {}) => !!c.tint && (c.tinted.includes(id) || (!!list[id]?.slot && c.tinted.includes(list[id].slot)));

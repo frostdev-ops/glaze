@@ -21,7 +21,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const watchLayers = () => {
       clearTimeout(yieldTimer); yieldTimer = 0;
       const out = alive && wandering && !!chrome.runtime?.id;
-      yieldTo(out && !!document.querySelector(LAYERS));
+      yieldTo(out && [...document.querySelectorAll(LAYERS)].some((e) => !e.hidden && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden'));
       if (out) yieldTimer = setTimeout(watchLayers, 400);
     };
     home.addEventListener('click', (e) => { if (e.isTrusted) changeMode(false); });

@@ -178,7 +178,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // 'auto' is 'nav' where that bar is a top bar holding them, as defaults.js GZ_TABS_AUTO words it for the first paint.
   const navHolds = () => words().includes('tabs');
   const words = () => { try { return ((framed ? parent.document : document).documentElement.getAttribute('data-gz-navbar') || '').split(' '); } catch { return []; } };
-  const at = () => (P().at === 'auto' ? (navHolds() && words().includes('top') ? 'nav' : 'above') : P().at !== 'nav' ? P().at : navHolds() ? 'nav' : 'above');
+  const topBar = () => { try { return (framed ? parent.innerWidth : innerWidth) >= 900 && words().includes('top'); } catch { return false; } };
+  const at = () => (P().at === 'auto' ? (navHolds() && topBar() ? 'nav' : 'above') : P().at !== 'nav' ? P().at : navHolds() ? 'nav' : 'above');
   const hosted = () => at() === 'nav';
   const place = () => {
     if (!on || !strip) return;
@@ -1719,13 +1720,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const onHide = () => { if (on) { saveNow(); keepPage(); } navWatch?.disconnect(); navWatch = null; };
   const onShow = (e) => { if (e.persisted && on && framed) { listen(false); listen(true); } };
   const onResize = () => {
+    if (on) flag();
+    place();
     lay();
     navRoom();
     inView();
     if (ctx.site === 'canvas') {
       // A picture made at the old viewport no longer fits; keep the live frame through the resize.
       if (pic) { const f = frames.get(showing); if (f) f.el.style.visibility = ''; unpicture(true); }
-      place();
     }
   };
   let navWatch = null;
