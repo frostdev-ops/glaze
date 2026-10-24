@@ -111,12 +111,21 @@ const MOODLE_DRAWER = `<div id="theme_boost-drawers-blocks" class="drawer drawer
       ok(size?.height === 200, `Ultra: a ${side.toLowerCase()} drawer keeps its 200px content height (got ${size?.height})`);
     }
     await send({ place: 'rail', rail: 'open' });
+    ok(await page.evaluate(() => document.documentElement.getAttribute('data-gz-ctabs')?.startsWith('above ')), 'Ultra: automatic tabs restore the strip immediately when top becomes rail');
     await open(PANEL('left'));
     await verdict('Ultra rail, a left side panel', 'ultra-rail-panel-left');
     await open(DRAWER('left'));
     await verdict('Ultra rail, a left MUI drawer', 'ultra-rail-drawer-left');
     await open(PANEL('right'));
     await verdict('Ultra rail, a right side panel', 'ultra-rail-panel-right');
+    await page.evaluate(() => { document.getElementById('check-layer')?.remove(); document.documentElement.dir = 'rtl'; });
+    await open(DRAWER('right'));
+    await verdict('Ultra RTL rail, a right MUI drawer', 'ultra-rtl-rail-drawer');
+    await page.evaluate(() => { document.getElementById('check-layer')?.remove(); document.documentElement.dir = 'ltr'; });
+    await page.setViewportSize({ width: 390, height: 860 });
+    await send({ place: 'top' });
+    ok(await page.evaluate(() => document.documentElement.getAttribute('data-gz-ctabs')?.startsWith('above ')), 'Ultra: automatic tabs keep the strip beside the phone bottom bar');
+    await page.setViewportSize({ width: 1280, height: 860 });
 
     // ---- Canvas: its tray portal sits over the bar (canvas.css) ----
     await page.goto(`chrome-extension://${extensionId(src)}/preview.html?site=canvas`);
