@@ -37,7 +37,7 @@ test("features/coursetabs.js resolves 'auto' from the bar on the page (the page 
   const src = read('features/coursetabs.js');
   const at = (stored, words, framed = false) => {
     const doc = (w) => ({ documentElement: { getAttribute: () => w } });
-    const ctx = vm.createContext({ P: () => ({ at: stored }), framed, document: doc(framed ? 'rail open float' : words), parent: { document: doc(words) }, GZ_TABS_AUTO: D.GZ_TABS_AUTO });
+    const ctx = vm.createContext({ P: () => ({ at: stored }), framed, innerWidth: 1280, document: doc(framed ? 'rail open float' : words), parent: { innerWidth: 1280, document: doc(words) }, GZ_TABS_AUTO: D.GZ_TABS_AUTO });
     return vm.runInContext(`${between(src, '  const navHolds = ', '  const hosted = ')}\nat()`, ctx);
   };
   assert.equal(at('auto', 'top float tabs'), 'nav');
@@ -82,7 +82,7 @@ test('the first paint without a cached strip keeps no room for one on a top-bar 
   assert.equal(canvas({ place: 'rail', course: 'top' }, '/'), 'above medium');
   const ultra = (navbar, pathname = '/ultra/courses/_5_1/outline', tabFrame = false, parentWords = '') => {
     const ctx = vm.createContext({ sessionStorage: { getItem: () => null }, location: { pathname }, tabFrame, isPreview: true, GZ_TABS_AUTO: D.GZ_TABS_AUTO,
-      parent: { document: { documentElement: { getAttribute: () => parentWords } } }, tabsOn: () => true,
+      parent: { innerWidth: 1280, document: { documentElement: { getAttribute: () => parentWords } } }, tabsOn: () => true,
       I: { settings: S(navbar), setAttr: (k, v) => { attrs[k] = v; } } });
     vm.runInContext(`${between(read('content-ultra.js'), '  const paintCourses = () => {', '    if (isPreview) return;')}}\npaintCourses();`, ctx);
     return attrs['data-gz-ctabs'];

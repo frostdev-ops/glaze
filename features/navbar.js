@@ -410,10 +410,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     X.setVar('--gz-navbar-left', `${lay.left}px`);
     X.setVar('--gz-navbar-top', `${lay.top}px`);
     if (lay.words === words) return;
-    const hadTabs = words.split(' ').includes('tabs');
     words = lay.words;
     html.setAttribute('data-gz-navbar', words);
-    if (hadTabs !== lay.tabs) tabsApi()?.place();
+    tabsApi()?.place(); // 'auto' follows top/rail changes too, even if both hold tabs
   };
   const geometry = () => JSON.stringify([innerWidth, innerHeight, host?.dir, host?.hasAttribute('data-footer'), X.settings().look]);
   const layout = () => {
