@@ -99,6 +99,20 @@ const check = async (name, test) => {
       await page.evaluate(() => { document.documentElement.dir = 'ltr'; });
       await page.setViewportSize({ width: 1440, height: 1000 });
     });
+    await check('glass-parity', async () => {
+      await open();
+      await page.evaluate(async () => {
+        const s = GZ_SANITIZE();
+        await chrome.storage.sync.set({ look: { ...s.look, glass: 18 }, bg: { ...s.bg, kind: 'gradient' } });
+      });
+      await open();
+      for (const selector of ['#palette', '.editor-nav', '.preview']) {
+        assert.match(await page.locator(selector).evaluate((e) => getComputedStyle(e).backdropFilter), /blur\(15px\)/, `${selector} keeps the Look's glass`);
+      }
+      await page.evaluate(async () => { const { bg } = await chrome.storage.sync.get('bg'); await chrome.storage.sync.set({ bg: { ...bg, kind: 'solid' } }); });
+      await open();
+      assert.equal(await page.locator('#palette').evaluate((e) => getComputedStyle(e).backdropFilter), 'none', 'no invisible blur over solid colors');
+    });
   } finally {
     await context?.close();
     if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
