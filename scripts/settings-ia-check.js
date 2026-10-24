@@ -80,6 +80,25 @@ const check = async (name, test) => {
       await page.fill('#find', '');
       assert.equal(await page.locator('#bb-navigation').evaluate((e) => e.open), false, 'clearing search restores More options');
     });
+    await check('side-list-accessibility', async () => {
+      await open('look/palette');
+      assert.equal(await page.locator('[data-editor-jump][href="#look/palette"]').getAttribute('aria-current'), 'location', 'the current section has a valid ARIA token');
+    });
+    await check('rtl-tabs', async () => {
+      await open('look/palette');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.evaluate(() => { document.documentElement.dir = 'rtl'; });
+      const nav = page.locator('[data-editor-tab="navigation"]');
+      await nav.click(); await nav.focus(); await page.keyboard.press('ArrowRight');
+      assert.equal(await page.evaluate(() => document.activeElement.dataset.editorTab), 'look', 'Right follows the RTL visual order');
+      await page.keyboard.press('ArrowLeft');
+      assert.equal(await page.evaluate(() => document.activeElement.dataset.editorTab), 'navigation');
+      await page.keyboard.press('End');
+      const rect = await page.locator('[data-editor-tab="about"]').boundingBox();
+      assert.ok(rect.x >= 0 && rect.x + rect.width <= 390, 'the selected RTL category scrolls into view');
+      await page.evaluate(() => { document.documentElement.dir = 'ltr'; });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    });
   } finally {
     await context?.close();
     if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
