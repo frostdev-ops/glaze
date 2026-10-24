@@ -904,7 +904,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   }
   if (m?.type !== 'glaze:settings-tab') return;
   settingsFramesLoaded.then(async () => {
-    const hash = typeof m.hash === 'string' && /^(#[a-z]+(\/[a-z-]+)?)?$/.test(m.hash) ? m.hash : null;
+    const hash = typeof m.hash === 'string' && /^(#[a-z][a-z-]*(\/[a-z-]+)?)?$/.test(m.hash) ? m.hash : null;
     const action = cleanSettingsAction(m.action);
     if (hash === null || action === null || !fromEditor(s) || !(s.frameId > 0) || !trustedFrame(s, 'settings')) return { ok: false };
     await openSettingsTab(s.tab, hash, action);

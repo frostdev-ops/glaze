@@ -96,7 +96,7 @@ const check = async (name, test) => {
         for (const [hash, route] of Object.entries({ 'bb-folders': 'pages/declutter', 'canvas-quizzes': 'pages/documents', 'canvas-shared': 'pages/content', 'moodle-courses': 'look/palette' })) {
           await open(hash);
           await page.waitForFunction((r) => document.querySelector(`[data-editor-jump][href="#${r}"]`)?.getAttribute('aria-current') === 'location', route);
-          await frame.evaluate((hash) => { location.hash = hash; }, hash);
+          await host.evaluate((hash) => document.querySelector('iframe').contentWindow.postMessage({ gzSettings: 'go', hash: `#${hash}` }, location.origin), hash);
           await frame.waitForFunction((r) => document.querySelector(`[data-editor-jump][href="#${r}"]`)?.getAttribute('aria-current') === 'location', route);
         }
       } finally { await host.close(); }

@@ -267,6 +267,15 @@ test('worker: claimed embedded Settings opens Settings\' own tab at a section, b
   assert.equal(w.created.length, 1);
 });
 
+test('worker: claimed Settings can carry legacy section hashes into its own tab', async () => {
+  const w = worker({ session: { 'settingsFrame:7': { frameId: 4, documentId: 'doc-s' } } });
+  await new Promise((r) => setTimeout(r, 20));
+  for (const hash of ['#bb-folders', '#canvas-quizzes', '#canvas-shared', '#moodle-courses']) {
+    assert.deepEqual(await w.send({ type: 'glaze:settings-tab', hash }, settingsFrame()), { ok: true }, hash);
+    assert.equal(w.created.at(-1).url, `${EXT}/options.html${hash}`);
+  }
+});
+
 // lib/site.js reach in a page that can't ask: the page's own way out (`elsewhere`), with the control that wanted the grant.
 const sitePage = ({ permissions, elsewhere } = {}) => {
   const asked = [], sent = [], went = [];
