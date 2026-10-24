@@ -34,13 +34,16 @@ for (const lang of LANGS) {
     assert.equal(chrome.description, section(text, 'Detailed description'));
   });
 
-  test(`${lang}: the release notes are this version's own "new in" block, for AMO and Apple alike`, async () => {
+  test(`${lang}: the release notes are this version's own "new in" block, with each browser's bullet in its own store's notes`, async () => {
     const { readListings } = await load();
     const { firefox, apple, chrome } = readListings(real, version)[lang];
     assert.ok(firefox.notes.startsWith('• '), firefox.notes.slice(0, 40));
     assert.ok(chrome.description.includes(firefox.notes), 'the block is taken from the listing as written');
     assert.ok(!/\n\n/.test(firefox.notes), 'it stops at the next heading');
-    assert.equal(apple.whatsNew, firefox.notes, 'this version has no bullet that belongs to one browser');
+    assert.match(firefox.notes, /^• Firefox\s*:/, 'Firefox\'s own bullet leads its notes');
+    assert.ok(!/^•\s*(?:Chrome|Safari)\s*:/m.test(firefox.notes), 'no other browser\'s bullet on AMO');
+    assert.ok(!/^•\s*(?:Chrome|Firefox)\s*:/m.test(apple.whatsNew), 'no other browser\'s bullet on the App Store');
+    assert.equal(apple.whatsNew, firefox.notes.split('\n').slice(1).join('\n'), 'the unlabelled bullets go to both');
     assert.ok(firefox.notes.length <= 3000 && apple.whatsNew.length <= 4000);
   });
 
@@ -97,7 +100,7 @@ test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listi
   assert.ok(chrome.description.includes('• Firefox: nur Firefox.') && chrome.description.includes('• Safari: nur Safari.'), 'the Chrome paste kit retains the other browser labels too');
   assert.ok(firefox.notes.includes('nur Firefox') && !firefox.notes.includes('nur Chrome') && !firefox.notes.includes('nur Safari'));
   assert.ok(apple.whatsNew.includes('nur Safari') && !apple.whatsNew.includes('nur Chrome') && !apple.whatsNew.includes('nur Firefox'));
-  assert.ok(firefox.notes.includes('Frostdev') && apple.whatsNew.includes('Frostdev'), 'unlabelled bullets go everywhere');
+  assert.ok(firefox.notes.includes('Skizze des Kurses') && apple.whatsNew.includes('Skizze des Kurses'), 'unlabelled bullets go everywhere');
   assert.ok(!listings.fr.firefox.notes.includes('seulement Safari') && listings.fr.apple.whatsNew.includes('seulement Safari'), 'French spacing before the colon');
 });
 

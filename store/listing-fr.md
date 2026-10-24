@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.8 (French)
+# Chrome Web Store listing — Glaze 3.4.0 (French)
 
 ## Short summary (132 character maximum)
 
@@ -8,14 +8,12 @@ Changez le style de Blackboard Ultra, Canvas et Moodle, avec votre look et votre
 
 Glaze change le style de vos cours avec des palettes, des polices, des arrière-plans et des animations, et ajoute des outils pour planifier et étudier directement là où vous faites vos travaux de cours. Il fonctionne dans tous les établissements qui utilisent Blackboard Ultra, Canvas ou Moodle, y compris sur le domaine propre d’un établissement, une fois que vous l’autorisez. Ni compte ni outil d’analyse. Vos cours, vos résultats, vos notes personnelles et vos tâches restent sur votre appareil ; vos réglages suivent la synchronisation de votre navigateur si elle est activée ; le partage est facultatif et chiffré.
 
-NOUVEAUTÉS DE LA VERSION 3.3.8
+NOUVEAUTÉS DE LA VERSION 3.4.0
 
-• Frostdev, un nouveau Look : une topographie vivante sous une lumière de glace taillée, qui s'incline avec votre pointeur, avec ses propres pointeurs et effets de contour.
-• Les éléments de Glaze bougent : les onglets de cours, les widgets, les tâches et les dossiers glissent vers leur nouvelle place, et changer de palette ou de Look se fait en fondu.
-• Blackboard : la barre des onglets de cours et les en-têtes des cours et des éléments flottent comme du verre, et les pages d'outils comme le carnet de notes utilisent toute la largeur.
-• Blackboard : un fond continu derrière les onglets de cours, sans raccord visible, même avec un élément ouvert.
-• Blackboard : fermer une annonce dans un onglet de cours ramène au cours, et on peut changer d'onglet pendant qu'un autre se charge encore.
-• Blackboard : les notes hypothétiques se chargent de façon fiable dans les onglets de cours et affichent le nom des catégories.
+• Chrome : À l’installation, Glaze demande l’accès aux domaines des plateformes instructure.com, blackboard.com et moodlecloud.com, ainsi qu’à sa galerie et à son relais de partage. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet d’installation ou Réglages › Sites. Tout télécharger, Gradescope, les médias des Looks et les connexions réseau des mods demandent les autorisations manquantes au besoin. Les fichiers redirigés sont arrêtés avec une erreur vous invitant à les télécharger depuis Canvas.
+• Firefox : À l’installation, Glaze demande l’accès aux domaines des plateformes instructure.com, blackboard.com et moodlecloud.com, ainsi qu’à sa galerie et à son relais de partage. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet d’installation ou Réglages › Sites. Tout télécharger, Gradescope, les médias des Looks et les connexions réseau des mods demandent les autorisations manquantes au besoin. Les fichiers redirigés sont arrêtés avec une erreur vous invitant à les télécharger depuis Canvas.
+• Moodle sur moodlecloud.com fonctionne dès l’installation.
+• Les onglets de cours affichent une esquisse du cours pendant le chargement, au lieu d’une image de la page.
 
 DE LA VERSION 3.3.6
 

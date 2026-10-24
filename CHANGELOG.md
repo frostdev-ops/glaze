@@ -4,7 +4,7 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.4.0] — Unreleased
+## [3.4.0] — 2026-10-23
 
 ### Added
 
@@ -12,6 +12,8 @@ All notable changes to Glaze are documented here. The format follows
 - Chrome, Edge and Firefox: Use Glaze on the site, in Glaze's toolbar popup on a school's own Blackboard, Canvas or Moodle page. On Chrome and Edge, Glaze's icon gets a dot on those pages.
 - Chrome, Edge and Firefox: Settings → Backup and privacy → Sites adds a site by its address, and a site granted in the browser's own extension menu is checked and taken the same way.
 - Moodle on moodlecloud.com works from install, like Canvas on instructure.com and Blackboard on blackboard.com.
+- Firefox: where a page shown inside a site can't ask for access (Download all's Allow, Settings shown in the page), a small Glaze tab asks instead.
+- Blackboard: Activity Stream settings, in Settings → Blackboard → Activity Stream and in Blackboard's Stream settings: due dates on deadline notifications, posted dates or both, relative due dates, compact cards, and encouragement on or off.
 
 ### Changed
 
@@ -19,6 +21,13 @@ All notable changes to Glaze are documented here. The format follows
 - Removing a site in Settings → Sites also returns any browser grant for that exact site. All sites access stays.
 - Course tabs show a blurred stand-in drawn from a sketch of the course page while it loads, instead of a picture of the page. Glaze takes no screenshots.
 - On Chrome, Edge and Firefox, Canvas's Download all asks for the school's file server the first time it's needed; redirected files show an error asking you to download them from Canvas. Glaze cannot discover the redirect's host. Safari keeps its existing access model. Gradescope in To Do asks for gradescope.com when you turn it on, and a Look's picture, video or animation from another site, or a site a mod may reach, asks for that site when you add it.
+- Firefox: new installs put Glaze's button on the toolbar.
+- A Look's course-card rules and entrance reach the course cards on the Dashboard's board.
+
+### Fixed
+
+- Firefox: Glaze runs on a school's own Blackboard, Canvas or Moodle domain; 3.3.8 didn't register those sites.
+- A folded tile's Unfold button sits above its resize corner.
 
 ## [3.3.8] — 2026-10-23
 

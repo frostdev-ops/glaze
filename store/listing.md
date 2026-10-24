@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.3.8
+# Chrome Web Store listing — Glaze 3.4.0
 
 ## Name
 
@@ -16,14 +16,12 @@ Productivity
 
 Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain once you allow it. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
-NEW IN 3.3.8
+NEW IN 3.4.0
 
-• Frostdev, a new Look: a living topography in cut-ice light that tilts with your pointer, with its own pointers and contour effects.
-• Glaze's own parts move: course tabs, widgets, to-dos and folders glide to their new places, and changing a palette or Look crossfades.
-• Blackboard: the course tab strip and the course and item headers float as glass, and tool pages like Gradebook use the full width.
-• Blackboard: one continuous background behind course tabs, with no seam, even with an item open.
-• Blackboard: closing an announcement in a course tab returns to the course, and tabs can be switched while one is still loading.
-• Blackboard: What-if grades load reliably in course tabs and show category names.
+• Chrome: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
+• Firefox: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
+• Moodle on moodlecloud.com works from install.
+• Course tabs show a sketch of the course while it loads, instead of a picture of the page.
 
 FROM 3.3.6
 
