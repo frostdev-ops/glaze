@@ -67,6 +67,8 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.evaluate(() => { document.querySelector('aside.outline-actions').remove(); GZ_SIDEBAR_UI.sync(true); });
     await page.waitForSelector('#gz-sidebar');
     check(await page.evaluate(() => Math.abs(document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left - document.querySelector('#main-end').getBoundingClientRect().right - 16) < 1), 'missing native host reserves the width once, without a second blank column');
+    await page.evaluate(() => document.documentElement.setAttribute('data-gz-sidebar', 'collapsed'));
+    check(await page.evaluate(() => Math.abs(document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left - document.querySelector('#main-end').getBoundingClientRect().right - 16) < 1), 'missing native host reserves its collapsed width once');
     await page.evaluate(() => {
       const inner = document.querySelector('#main-content-inner'); inner.removeAttribute('id');
       inner.className = 'routed-page bb-offcanvas-container';
@@ -369,7 +371,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.emulateMedia({ media: 'screen' });
     for (const style of ['float', 'embed']) for (const width of [1800, 1468, 1479, 1480, 1440, 1280]) for (const w of [352, 480]) {
       await live('gradebook', { style, width, w });
-      const g = await page.evaluate(() => { const h = document.querySelector('[data-gz-sidebar-host]'), r = h.getBoundingClientRect(), tb = document.getElementById('course-student-grades-sortable-table').getBoundingClientRect(); return { mode: document.documentElement.dataset.gzSidebar, family: document.documentElement.dataset.gzSbFamily, hostLeft: r.left, tableRight: tb.right, panel: (() => { const p = document.querySelector('.course-content-container > .panel-wrap').getBoundingClientRect(); return { right: p.right, width: p.width }; })() }; });
+      const g = await page.evaluate(() => { const h = document.querySelector('[data-gz-sidebar-host]'), r = h.getBoundingClientRect(), tb = document.getElementById('course-student-grades-sortable-table').getBoundingClientRect(); return { mode: document.documentElement.dataset.gzSidebar, family: document.documentElement.dataset.gzSbFamily, hostLeft: r.left, tableRight: tb.right, panel: (() => { const el = document.querySelector('.course-content-container > .panel-wrap'), p = el.getBoundingClientRect(), padding = parseFloat(getComputedStyle(el).paddingInlineEnd); return { right: p.right - padding, width: p.width - padding }; })() }; });
       check(g.family === 'grades', `gradebook ${style} ${width} @${w}: the grades family`);
       check(g.mode === 'drawer' || g.tableRight <= g.hostLeft - 16 + 1, `gradebook ${style} ${width} @${w}: ${g.mode}, the table ends at the sidebar's edge less the gap (${Math.round(g.tableRight)} / ${Math.round(g.hostLeft)})`);
       check(g.mode !== 'expanded' || Math.abs(g.hostLeft - g.panel.right - 16) <= 1 && g.panel.width >= 900, `gradebook ${style} ${width} @${w}: exactly one reserved column and at least 900px of usable panel (${Math.round(g.panel.width)}px)`);
@@ -387,7 +389,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         GZ_SIDEBAR_UI.sync(true);
       }, tool);
       await page.waitForTimeout(100);
-      check(await page.evaluate(() => Math.abs(document.querySelector('.course-content-container > .panel-wrap').getBoundingClientRect().right + 16 - document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left) <= 1), `${tool}: the course tool panel keeps the sidebar's gap`);
+      check(await page.evaluate(() => { const panel = document.querySelector('.course-content-container > .panel-wrap'); return Math.abs(panel.getBoundingClientRect().right - parseFloat(getComputedStyle(panel).paddingInlineEnd) + 16 - document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left) <= 1; }), `${tool}: the course tool content keeps the sidebar's gap`);
     }
     await require('./ultra-offcanvas-fixture.js')({ page, root, check, shot });
     console.log(JSON.stringify({ checks, fails }));

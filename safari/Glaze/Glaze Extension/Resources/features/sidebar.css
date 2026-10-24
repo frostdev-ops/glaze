@@ -82,14 +82,14 @@
   /* A course's tool pages (Gradebook, Calendar, Announcements, Discussions, Messages, Groups, Achievements) are an
      absolute panel the whole width of the course: beside Glaze's own column its content keeps the column's room. Its
      header (the course tabs and the course's bar) spans the window, as on Content, and the column starts under it. */
-  html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap {
+  html[data-gz-sb-tool]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap {
     box-sizing: border-box; width: auto !important; inset-inline: 0 !important; max-width: none !important; padding-inline-end: var(--gz-sb-room) !important;
   }
-  html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap div.bb-course-navigation { margin-inline-end: calc(var(--gz-sb-room) * -1) !important; }
+  html[data-gz-sb-tool]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap div.bb-course-navigation { margin-inline-end: calc(var(--gz-sb-room) * -1) !important; }
   html[data-gz-sb-tool]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(#main-content-inner, .routed-page.bb-offcanvas-container) { padding-inline-end: 0 !important; }
   /* An item over the course keeps its reading room, with its header and tabs over the column. */
-  html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap > .panel-header { margin-inline-end: calc(var(--gz-sb-room) * -1) !important; }
-  html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap > #gz-ctabs { width: calc(100% + var(--gz-sb-room)); }
+  html[data-gz-sb-tool]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap > .panel-header { margin-inline-end: calc(var(--gz-sb-room) * -1) !important; }
+  html[data-gz-sb-tool]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap > #gz-ctabs { width: calc(100% + var(--gz-sb-room)); }
   /* A routed page (a document, an assignment's overview) keeps the room too, and its header row spans the window. */
   html[data-gz-sb-fixed]:not([data-gz-sb-tool]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .routed-page.bb-offcanvas-container :is(content-page-header, [class*="headerRoot"]:not(content-page-header *, [class*="headerRoot"] *)):not(:is(main, [role="main"], article, .routed-page-body, .routed-scroll, .panel-body) *) {
     margin-inline-end: calc(var(--gz-sb-room) * -1) !important;
