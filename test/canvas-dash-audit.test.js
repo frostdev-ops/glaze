@@ -43,7 +43,7 @@ const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async 
     const value = structuredClone(Object.fromEntries([keys].flat().map((k) => [k, store[k]])));
     if (cb) cb(value); else return Promise.resolve(value);
   }, set: async (patch) => { writes.push(patch); Object.assign(store, structuredClone(patch)); return true; } };
-  const c = { document: doc, location: { origin, pathname: where }, URL, Intl, console, Promise, GZ_PAGE: P, GZ_FOLDERS: F, GZ_I18N: I18N,
+  const c = { document: doc, location: { origin, pathname: where }, URL, Intl, console, Promise, GZ_PAGE: P, GZ_FOLDERS: F, GZ_I18N: I18N, GZ_TABS_AUTO: D.GZ_TABS_AUTO,
     sessionStorage: { getItem: (k) => session.get(k) ?? null, setItem: (k, v) => session.set(k, String(v)) },
     fetch: async (url) => { const u = new URL(url), p = u.pathname.slice(7) + u.search; calls.push(p); const value = await api(p); return value instanceof Response ? value : new Response(JSON.stringify(value)); },
     Date: class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } },
