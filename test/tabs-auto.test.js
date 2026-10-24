@@ -50,6 +50,24 @@ test("features/coursetabs.js resolves 'auto' from the bar on the page (the page 
   assert.equal(at('below', 'top float tabs'), 'below');
 });
 
+test("auto keeps the strip on phones, where the navigation is a bottom bar", () => {
+  const src = read('features/coursetabs.js');
+  for (const innerWidth of [390, 899, 900, 1280]) {
+    const ctx = vm.createContext({ P: () => ({ at: 'auto' }), framed: false, innerWidth,
+      document: { documentElement: { getAttribute: () => 'top float tabs' } } });
+    assert.equal(vm.runInContext(`${between(src, '  const navHolds = ', '  const hosted = ')}\nat()`, ctx), innerWidth < 900 ? 'above' : 'nav', `width ${innerWidth}`);
+  }
+  assert.equal(D.GZ_TABS_AUTO(S({ place: 'top' }), false, 390), 'above', 'first paint agrees');
+});
+
+test('changing a top bar to a rail repositions automatic tabs even when both bars hold tabs', () => {
+  const placed = [];
+  const ctx = vm.createContext({ words: 'top float tabs', lay: { words: 'rail open float tabs', tabs: true, left: 272, top: 0 },
+    X: { setVar() {} }, html: { setAttribute() {} }, tabsApi: () => ({ place: () => placed.push(true) }) });
+  vm.runInContext(`${between(read('features/navbar.js'), '  const room = () => {', '  const geometry = ')}\nroom();`, ctx);
+  assert.equal(placed.length, 1, 'the old hidden strip must be restored immediately');
+});
+
 test('the first paint without a cached strip keeps no room for one on a top-bar page, on Canvas and on Ultra', () => {
   const attrs = {};
   const canvas = (navbar, pathname = '/courses/5') => {
