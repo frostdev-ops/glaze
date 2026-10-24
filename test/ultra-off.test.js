@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const D = require('../defaults.js');
 const manifest = require('../manifest.json');
-const files = manifest.content_scripts.find((s) => s.matches.includes('https://*/ultra')).js;
+const files = manifest.content_scripts.find((s) => s.js.includes('content-ultra.js')).js;
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 // A Blackboard host, approved without asking (WP-C2): these tests are about Glaze's switch, not consent.
@@ -110,11 +110,12 @@ const page = ({ cached = null, raw = {}, local = {}, pathname = '/ultra/course',
   };
 };
 // Work Glaze must not do while it is off: Ultra's API, the course list, the due list, registering the site, and loading
-// the features that do those (the sidebar's To Do, the widgets, the Dashboard's landing).
+// the features that do those (the sidebar's To Do, the widgets, the Dashboard's landing). Glaze's own toolbar icon for the
+// tab ('glaze:here') is none of those.
 const traces = (p) => ({
   requests: p.requests,
   loads: p.sent.filter((m) => m?.type === 'glaze:load').flatMap((m) => m.files),
-  messages: p.sent.filter((m) => m?.type !== 'glaze:load').map((m) => m.type),
+  messages: p.sent.filter((m) => m?.type !== 'glaze:load' && m?.type !== 'glaze:here').map((m) => m.type),
   local: p.writes.filter(([area]) => area === 'local').flatMap(([, keys]) => keys).filter((k) => /^(dueWeek|dueWeekAt|dueWeekFrom|seenCourses|seenCoursesAt|courseSlots|ultra)$/.test(k)),
   sweeping: p.sweeping(),
 });

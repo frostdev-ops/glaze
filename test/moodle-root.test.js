@@ -22,7 +22,7 @@ test('Canvas-only hooks on `/` stay off on a Moodle site', () => {
   }
   // Moodle's first script, as lib/background.js registers it: Canvas's without the Canvas part.
   const m = require('../manifest.json');
-  const moodleScript = m.content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*')).js.filter((f) => f !== 'content-canvas.js');
+  const moodleScript = m.content_scripts.find((c) => c.matches.includes('https://*.moodlecloud.com/*')).js;
   assert.ok(!moodleScript.includes('content-canvas.js') && moodleScript.at(-1) === 'content.js');
   // What stands in for Canvas's hooks on Moodle: nothing runs, and the planner check says no, so the page start asks for
   // Moodle's due list (startSweep: `if (window.top === window && !X.planner()) dueWeek()`).

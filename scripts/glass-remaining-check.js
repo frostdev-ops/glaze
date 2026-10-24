@@ -2,7 +2,8 @@
 // Canvas fixture. EXT=<checkout> NODE_PATH=<playwright> nice node scripts/glass-remaining-check.js <out dir> [scenario ...] [--looks a,b]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, ".."));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const G = require(path.join(ext, 'defaults.js'));
 const site = 'https://bb.school.test', uid = '_42_1';
 const out = path.resolve(process.argv[2]);
@@ -90,6 +91,7 @@ const OFFCANVAS = `<div class="bb-offcanvas-panel bb-offcanvas-right full active
         await chrome.storage.local.set({ ultra: [site], [`ctabs:${site}:${uid}`]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, at: i, top: 0 })) },
           [`sidebar:ultra:${site}/${uid}`]: { v: 1, rev: 1, mig: 1, open: !settings.glassCheckCollapsed, dock: [{ id: 'notes' }], dest: { notes: 'dock' } } });
       }, { settings, site, uid });
+      await require('./check-env.js').ultraReady(opts);
     };
     const go = async (p, ready = '#gz-ctabs [data-course-id="_102_1"]') => {
       await page.goto(site + p);

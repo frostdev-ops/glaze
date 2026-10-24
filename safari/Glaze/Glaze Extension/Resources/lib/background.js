@@ -1,4 +1,4 @@
-importScripts('download.js', 'color.js', 'fonts.js', 'surfaces.js', '../defaults.js', 'lookset.js', 'history.js', 'cards.js', 'nav.js', 'nav-items.js', 'navlayout.js', 'motionx.js', 'parts.js', 'nav-store.js', 'todo.js', 'petbrain.js', 'pet.js', 'petsprites.js', 'remind.js', 'widgets.js', 'sidebar.js', 'lookparts.js', 'share.js', 'lookx.js', 'gradescope.js', 'doctext.js', 'folders.js', 'notes.js', 'calexport.js', 'gcal.js', 'coursetabs.js');
+importScripts('download.js', 'color.js', 'fonts.js', 'surfaces.js', '../defaults.js', 'lookset.js', 'history.js', 'cards.js', 'nav.js', 'nav-items.js', 'navlayout.js', 'motionx.js', 'parts.js', 'nav-store.js', 'todo.js', 'petbrain.js', 'pet.js', 'petsprites.js', 'remind.js', 'widgets.js', 'sidebar.js', 'lookparts.js', 'share.js', 'lookx.js', 'gradescope.js', 'doctext.js', 'folders.js', 'notes.js', 'calexport.js', 'gcal.js', 'site.js', 'coursetabs.js');
 
 // Cache packaged broker scripts at install; parse them on first use rather than every worker wake.
 const BROKER_FILES = {
@@ -27,19 +27,39 @@ const fromEditor = (s) => s.id === chrome.runtime.id && typeof s.url === 'string
 // getURL keeps it uppercase. Chrome's and Firefox's ids are lowercase already.
 const OWN_ORIGIN = chrome.runtime.getURL('').replace(/\/$/, '').toLowerCase();
 const ownOrigin = (o) => typeof o === 'string' && o.toLowerCase() === OWN_ORIGIN;
-// The sites Glaze runs on: is `u` on an LMS (`kind`: canvas, moodle or ultra) the student approved? Canvas on *.instructure.com
-// (the manifest's match) and Ultra on *.blackboard.com are Glaze's from the start. Anywhere else, what a page looks like
-// proves nothing (its markup is its own, and any site can serve an /ultra/ address): only the student's yes (features/
-// consent.js, 'glaze:consent') puts a site on its LMS's list in storage.local, `canvas` and `moodle` by `https://host/*`,
-// `ultra` by origin. The lists are the approvals, so the sites on them before Glaze asked stay approved. Registration, the
-// broker's page checks (fromCanvas, fromUltra, fromMoodle), mods and code on demand all ask here; Settings lists and removes them.
-const KNOWN = { canvas: (u) => u.hostname === 'instructure.com' || u.hostname.endsWith('.instructure.com'), moodle: () => false, ultra: (u) => u.hostname.endsWith('.blackboard.com') };
+// The sites Glaze runs on: is `u` on an LMS (`kind`: canvas, moodle or ultra) the student approved? Each LMS's own hosts
+// (defaults.js GZ_BUILT_IN: *.instructure.com, *.moodlecloud.com, *.blackboard.com) are Glaze's from the start. Anywhere
+// else, what a page looks like proves nothing (its markup is its own, and any site can serve an /ultra/ address): only the
+// student's yes (features/consent.js, 'glaze:consent') puts a site on its LMS's list in storage.local, `canvas` and
+// `moodle` by `https://host/*`, `ultra` by origin. The lists are the approvals, so the sites on them before Glaze asked
+// stay approved. Registration, the broker's page checks (fromCanvas, fromUltra, fromMoodle), mods and code on demand all
+// ask here; Settings lists and removes them.
 const siteKey = (kind, u) => (kind === 'ultra' ? u.origin : `${u.origin}/*`);
+const granted = (pattern) => (async () => chrome.permissions.contains({ origins: [pattern] }))().catch(() => false);
+// Whether the worker may fetch `url`: the manifest holds every site (Safari), or the browser holds its host (a required host,
+// a grant for it, or the every-site grant). Anywhere else a fetch fails on CORS, so the features that go there ask the student
+// first (Download all, Gradescope, Look media, mods' network hosts, a channel's relay) and the worker checks here before each.
+const reachable = async (url) => {
+  let u;
+  try { u = new URL(url); } catch { return false; }
+  if (chrome.runtime.getManifest().host_permissions?.includes('<all_urls>')) return true;
+  return /^https?:$/.test(u.protocol) && await granted(`${u.protocol}//${u.hostname}/*`);
+};
+const GZ_LOCAL_DEV = (kind, u) => u.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(u.hostname) && /^(canvas|moodle)$/.test(kind);
+// A local Canvas or Moodle (GZ_LOCAL_DEV) on a host Glaze holds: a scratch build's manifest entry, with or without
+// its port, or the optional localhost / 127.0.0.1 grant. Never Safari's <all_urls>: no dev build.
+const localHeld = async (u) => {
+  const m = chrome.runtime.getManifest();
+  for (const p of [`http://${u.hostname}/*`, ...(u.port ? [`${u.origin}/*`] : [])]) {
+    if (m.host_permissions?.includes(p) || (m.optional_host_permissions?.includes(p) && await granted(p))) return true;
+  }
+  return false;
+};
 const approved = async (kind, u) => {
   if (!/^https?:$/.test(u.protocol)) return false;
-  if (kind === 'canvas' && u.hostname === 'localhost' && chrome.runtime.getManifest().host_permissions.includes('http://localhost/*')) return true;
+  if (GZ_LOCAL_DEV(kind, u)) return localHeld(u);
   if (u.protocol !== 'https:') return false;
-  if (!u.port && KNOWN[kind](u)) return true;
+  if (GZ_BUILT_IN(kind, u)) return true;
   const list = await chrome.storage.local.get(kind).then((r) => r[kind], () => null);
   return Array.isArray(list) && list.includes(siteKey(kind, u));
 };
@@ -55,7 +75,7 @@ const fromCanvas = async (s) => {
 // proof, as a school's own Canvas host isn't (fromCanvas).
 // A sender's address. A course tab's frame (features/coursetabs.js) reports about:blank, the address of its first, empty
 // document: its own origin, with its tab's page on that origin, stands in.
-const addressOf = (s) => (s.frameId > 0 && s.url === 'about:blank' && /^(?:https:\/\/[^/]+|http:\/\/localhost(?::\d+)?)$/.test(s.origin || '') && s.tab?.url?.startsWith(`${s.origin}/`) ? s.tab.url : s.url);
+const addressOf = (s) => (s.frameId > 0 && s.url === 'about:blank' && /^(?:https:\/\/[^/]+|http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?)$/.test(s.origin || '') && s.tab?.url?.startsWith(`${s.origin}/`) ? s.tab.url : s.url);
 const ultraAt = (s) => {
   if (s.id !== chrome.runtime.id || !s.tab) return null;
   try { const u = new URL(addressOf(s)); return u.protocol === 'https:' && /^\/ultra(\/|$)/.test(u.pathname) ? u.origin : null; } catch { return null; }
@@ -654,8 +674,12 @@ const mediaFetch = async (s, op, type) => {
   const env = { fetch: (u, i) => fetch(u, i), allow };
   // Kept Lottie returns before the loader's network allow check; apply the same worn-source boundary here too.
   if (op.op === 'lottie' && typeof op.src === 'string' && op.src.startsWith('file:') && !await allow(op.src)) return { ok: false, error: 'bad' };
+  // An address on a host the browser doesn't hold would fail on CORS: refused here instead. The editor asks for a link's host
+  // as it takes it (lib/editor-xbg.js), and a mod's install for its background's (lib/editor-mods.js).
+  if (op.op === 'lottie' && typeof op.src === 'string' && /^https:/.test(op.src) && await allow(op.src) && !await reachable(op.src)) return { ok: false, error: 'host' };
   if (op.op !== 'remote') return GZ_MEDIA.change(op, area, env);
   if (!['video', 'image'].includes(type) || GZ_XPARTS.MEDIA.url(op.src) !== op.src || !await allow(op.src)) return { ok: false, error: 'bad' };
+  if (!await reachable(op.src)) return { ok: false, error: 'host' };
   const key = `${type}\n${op.src}`;
   if (mediaDownloads.has(key)) return mediaDownloads.get(key);
   // Per-file caps still multiply by open tabs. Admit at most two distinct downloads, with no waiting queue retaining callers.
@@ -769,6 +793,11 @@ chrome.runtime.onConnect.addListener((p) => {
       return;
     }
     if (m?.online === true) { sessionsWorker?.changed(); return; }
+    if (m?.op === 'settings' && Number.isSafeInteger(m.id)) {
+      openSettingsTab(p.sender.tab, '#sharing/sessions', { kind: 'notes', key: scope.key, note: scope.note })
+        .then(() => reply({ ok: true }), () => reply({ ok: false }));
+      return;
+    }
     if (!m || !Number.isSafeInteger(m.id) || !QUICK_OPS.has(m.op) || JSON.stringify(m).length > (32 << 20)) { reply({ ok: false, error: 'sender' }); return; }
     const request = { ...m, scope }; // ignore every client-supplied scope
     BROKER.sessions.interrupt(request);
@@ -840,6 +869,50 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   })().then(reply, () => reply({ ok: false }));
   return true;
 });
+// A tab opened for a page in tab `tab`: next to it, and the browser goes back to it when it closes.
+const beside = (tab) => ({ openerTabId: tab.id, ...(Number.isInteger(tab.index) && { index: tab.index + 1 }) });
+// Pending controls travel through session storage to one worker-opened Settings tab, never through a page-controlled URL.
+const settingsActionKey = (id) => `settingsAction:${id}`;
+const cleanSettingsAction = (a) => {
+  if (a === undefined) return undefined;
+  if (a?.kind === 'code' && typeof a.code === 'string' && a.code.length <= 80000) return { kind: 'code', code: a.code };
+  if (a?.kind === 'media' && ['video', 'image', 'lottie'].includes(a.mediaKind) && typeof a.src === 'string' && a.src.length <= 2048
+    && GZ_SITE.address(a.src)?.origin.startsWith('https://')) return { kind: 'media', src: a.src, mediaKind: a.mediaKind };
+  return null;
+};
+const openSettingsTab = async (tab, hash, action) => {
+  const own = await chrome.tabs.create({ url: action ? 'about:blank' : chrome.runtime.getURL('options.html') + hash, ...beside(tab) });
+  if (action) try {
+    if (!chrome.storage.session) throw Error('storage');
+    await chrome.storage.session.set({ [settingsActionKey(own.id)]: { action, until: Date.now() + 60000 } });
+    await chrome.tabs.update(own.id, { url: chrome.runtime.getURL('options.html') + hash });
+  } catch (e) {
+    await chrome.storage.session?.remove(settingsActionKey(own.id)).catch(() => {});
+    await chrome.tabs.remove(own.id).catch(() => {}); throw e;
+  }
+};
+let settingsActionTurn = Promise.resolve();
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type === 'glaze:settings-action') {
+    if (!fromEditor(s) || !sessionFrame(s) || !Number.isInteger(s.tab?.id)) { reply({ ok: false }); return; }
+    settingsActionTurn = settingsActionTurn.catch(() => {}).then(async () => {
+      const key = settingsActionKey(s.tab.id), got = (await chrome.storage.session?.get(key))?.[key];
+      await chrome.storage.session?.remove(key);
+      return { ok: true, ...(got?.until > Date.now() && { action: got.action }) };
+    });
+    settingsActionTurn.then(reply, () => reply({ ok: false })); return true;
+  }
+  if (m?.type !== 'glaze:settings-tab') return;
+  settingsFramesLoaded.then(async () => {
+    const hash = typeof m.hash === 'string' && /^(#[a-z]+(\/[a-z-]+)?)?$/.test(m.hash) ? m.hash : null;
+    const action = cleanSettingsAction(m.action);
+    if (hash === null || action === null || !fromEditor(s) || !(s.frameId > 0) || !trustedFrame(s, 'settings')) return { ok: false };
+    await openSettingsTab(s.tab, hash, action);
+    return { ok: true };
+  }).then(reply, () => reply({ ok: false }));
+  return true;
+});
+chrome.tabs?.onRemoved?.addListener((id) => { chrome.storage.session?.remove(settingsActionKey(id)).catch(() => {}); });
 // Opening Settings (Sharing, a Notes account's backup, or the navigation bar's own section) conveys no keys. A source account is a selection hint for its Notes backup; Export still needs a
 // trusted click there after its key warning. Only known top-frame LMS callers and the editor may ask.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
@@ -907,10 +980,16 @@ const openEditor = () => {
 };
 chrome.runtime.onMessage.addListener((m, s) => { if (m === 'options') Promise.resolve(fromGlaze(s) || lmsPage(s)).then((ok) => { if (ok) openEditor(); }, () => {}); });
 
+// The manifest's content script entries, each file by its path in the package: Firefox's getManifest gives each one as its
+// full address. entryWith: the entry that runs `file`.
+const packaged = (f) => (f.startsWith(chrome.runtime.getURL('')) ? f.slice(chrome.runtime.getURL('').length) : f);
+const contentScripts = () => chrome.runtime.getManifest().content_scripts.map((c) => ({ ...c, js: (c.js || []).map(packaged) }));
+const entryWith = (file) => contentScripts().find((c) => c.js.includes(file));
+
 // "Use this Look in Glaze" on the gallery (lib/gallery.js): the code waits in storage.local for the editor,
 // which previews it and asks. Only from the gallery's own pages, where the manifest runs that script.
 // A pattern ending in /* takes that folder and below; any other is that one page.
-const GALLERY = chrome.runtime.getManifest().content_scripts.find((c) => c.js.includes('lib/gallery.js'))?.matches || [];
+const GALLERY = entryWith('lib/gallery.js')?.matches || [];
 const onGallery = (url) => {
   let here;
   try { const u = new URL(url); here = u.origin + u.pathname; } catch { return false; }
@@ -1025,31 +1104,58 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && (changes.lookHistory || changes.lookFavorites) && !before) sweepMedia();
 });
 
-// Canvas on a school's own domain (canvas.school.edu) can't be matched by address, nor can Moodle anywhere. Once the student
+// Canvas on a school's own domain (canvas.school.edu) can't be matched by address, nor can Moodle off MoodleCloud. Once the student
 // approved such a site (approved, above), Glaze goes onto its host for good, so its pages are themed from the first paint as
 // on *.instructure.com. Its LMS's list in storage.local is what registers it again: not every browser honors
 // persistAcrossSessions, and an update may clear registrations or change Glaze's file list.
-// Each LMS's own first content script: Canvas's is the manifest's for *.instructure.com, Moodle's the same without Canvas's
-// part (content-canvas.js). A host on both lists gets Canvas's, which holds all of Moodle's.
-const canvasEntry = () => chrome.runtime.getManifest().content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*'));
+// Each LMS's own first content script (entryWith, above): Canvas's is the manifest's for *.instructure.com, Moodle's the same
+// without Canvas's part (content-canvas.js). A host on both lists gets Canvas's, which holds all of Moodle's.
+const canvasEntry = () => entryWith('content-canvas.js');
 const glaze = (lms) => canvasEntry().js.filter((f) => lms === 'canvas' || f !== 'content-canvas.js');
 // Browser match patterns cannot name a port. The content startup and every worker trust check still use the exact origin.
-const script = (id, lms) => ({ id, matches: [`${new URL(id).protocol}//${new URL(id).hostname}/*`], js: glaze(lms), runAt: 'document_start', allFrames: true, persistAcrossSessions: true });
+const hostOf = (site) => `${new URL(site).protocol}//${new URL(site).hostname}`;
+const script = (id, lms) => ({ id, matches: [`${hostOf(id)}/*`], js: glaze(lms), runAt: 'document_start', allFrames: true, persistAcrossSessions: true });
+// Ultra on a school's own host: where the manifest's Ultra entry takes Blackboard's hosts only, each approved Ultra site gets
+// that entry's script on its /ultra pages. Safari's entry takes /ultra on every host, so there it would run twice.
+const ultraEntry = () => entryWith('content-ultra.js');
+const ultraEverywhere = () => ultraEntry().matches.some((p) => p.startsWith('https://*/'));
+const ultraScript = (origin) => ({ id: `ultra:${origin}`, matches: [`${hostOf(origin)}/ultra`, `${hostOf(origin)}/ultra/*`], js: ultraEntry().js, runAt: 'document_start', allFrames: true, persistAcrossSessions: true });
+// A listed site on its LMS's own host (an approval from before that host was built in) has the manifest's entry already;
+// an entry that is no address gets nothing.
+const builtInHost = (kind, site) => { try { return GZ_BUILT_IN(kind, new URL(`https://${new URL(site).hostname}`)); } catch { return true; } };
 // Storage and registration change one at a time: two tabs can report the same host together.
 let queue = Promise.resolve();
 const serial = (f) => (queue = queue.then(f).catch(console.warn));
+// Where Glaze holds every https site but its manifest has no detector (Chrome, Edge, Firefox with All sites, or an all-site
+// grant kept from before 3.4.0), it registers lib/detect.js itself, so the question (features/consent.js) asks on each
+// school's pages as Safari's does. The built-in hosts have Glaze already.
+const DETECTOR = 'gz-detect';
+const staticDetector = () => contentScripts().some((c) => c.js.length === 1 && c.js[0] === 'lib/detect.js');
+const builtInHosts = () => (chrome.runtime.getManifest().host_permissions || []).filter((p) => /^https:\/\/\*\.[^/]+\/\*$/.test(p) && LMS.some((k) => GZ_BUILT_IN(k, new URL(p.replace('*.', 'x.').slice(0, -1)))));
+const detector = () => ({ id: DETECTOR, matches: [ALL_SITES], excludeMatches: builtInHosts(), js: ['lib/detect.js'], runAt: 'document_start', persistAcrossSessions: true });
 const ensure = async () => {
-  const stored = await chrome.storage.local.get(['canvas', 'moodle']);
+  const stored = await chrome.storage.local.get(['canvas', 'moodle', 'ultra']);
   const on = await glazeOn();
-  const canvas = on && Array.isArray(stored.canvas) ? stored.canvas : [], moodle = on && Array.isArray(stored.moodle) ? stored.moodle : [];
+  // Only sites whose host Glaze holds: without <all_urls> each is a grant the student can take back (on Firefox a built-in
+  // host too). The lists stay, so a grant later brings everything back.
+  const everywhere = !!chrome.runtime.getManifest().host_permissions?.includes('<all_urls>');
+  const held = async (list) => (everywhere ? list : (await Promise.all(list.map(async (site) => {
+    try { return await granted(`${hostOf(site)}/*`) ? site : null; } catch { return null; }
+  }))).filter(Boolean));
+  const listed = (kind) => (Array.isArray(stored[kind]) ? stored[kind] : []);
+  const own = (kind) => listed(kind).filter((site) => !builtInHost(kind, site));
+  const canvas = on ? await held(listed('canvas')) : [], sites = on ? await held([...new Set([...own('canvas'), ...own('moodle')])]) : [];
+  // Ultra sites stay registered while Glaze is off, as the manifest's Ultra entry does: content.js keeps to the switch.
+  const ultra = ultraEverywhere() ? [] : [...new Set((await held(own('ultra'))).map(hostOf))].map(ultraScript);
+  const detect = !staticDetector() && await granted(ALL_SITES);
   const have = new Set((await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
-  const todo = [...new Set([...canvas, ...moodle])].filter((id) => !have.has(id));
-  if (todo.length) await chrome.scripting.registerContentScripts(todo.map((id) => script(id, canvas.includes(id) ? 'canvas' : 'moodle')));
-  // A site taken off its list (Settings' Sites, Reset everything) loses its registration here.
-  const gone = [...have].filter((id) => /^https?:\/\//.test(id) && !canvas.includes(id) && !moodle.includes(id));
+  const todo = [...sites.filter((id) => !have.has(id)).map((id) => script(id, canvas.includes(id) ? 'canvas' : 'moodle')), ...ultra.filter((s) => !have.has(s.id)), ...detect && !have.has(DETECTOR) ? [detector()] : []];
+  if (todo.length) await chrome.scripting.registerContentScripts(todo);
+  // A site taken off its list (Settings' Sites, Reset everything), or whose host was taken back, loses its registration here.
+  const gone = [...have].filter((id) => (/^https?:\/\//.test(id) && !sites.includes(id)) || (id.startsWith('ultra:') && !ultra.some((s) => s.id === id)) || (id === DETECTOR && !detect));
   if (gone.length) await chrome.scripting.unregisterContentScripts({ ids: gone });
   // Gradescope's own pages get Glaze only while Glaze and enhance.gradescope are on (lib/gradescope.js, features/gradescope.js).
-  const gs = await gradescopeOn();
+  const gs = await gradescopeOn() && await reachable(GZ_GRADESCOPE.HOST);
   if (gs && !have.has(GRADESCOPE.id)) await chrome.scripting.registerContentScripts([GRADESCOPE]);
   if (!gs && have.has(GRADESCOPE.id)) await chrome.scripting.unregisterContentScripts({ ids: [GRADESCOPE.id] });
   // The notes app's Course notes button (features/notes-home.js) on Canvas sites' course pages, only while Glaze and Notes
@@ -1066,9 +1172,8 @@ const ensure = async () => {
   if (have.has(GCAL_PAGE)) await chrome.scripting.unregisterContentScripts({ ids: [GCAL_PAGE] });
   if (GZ_GCAL.ON && (await chrome.storage.local.get('gcal')).gcal?.cal) {
     const first = canvasEntry();
-    const ultra = chrome.runtime.getManifest().content_scripts.find((c) => c.matches.includes('https://*/ultra')).matches;
     await chrome.scripting.registerContentScripts([{ id: GCAL_PAGE, js: ['features/gcal.js'], runAt: 'document_idle', persistAcrossSessions: true,
-      excludeMatches: first.exclude_matches || [], matches: [...new Set([...first.matches, ...canvas, ...ultra])] }]);
+      excludeMatches: first.exclude_matches || [], matches: [...new Set([...first.matches, ...canvas, ...ultraEntry().matches, ...ultra.flatMap((s) => s.matches)])] }]);
   }
 };
 const GCAL_PAGE = 'gz-gcal';
@@ -1087,7 +1192,14 @@ const notesHome = (canvas) => {
     matches: [...new Set([...first.matches, ...canvas.map((p) => `${new URL(p).protocol}//${new URL(p).hostname}/*`)].map((p) => p.replace(/\/\*$/, '/courses/*')))] };
 };
 const GRADESCOPE = { id: 'gz-gradescope', matches: ['https://www.gradescope.com/*'], js: ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js'], runAt: 'document_idle', persistAcrossSessions: true };
-chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && (changes.enhance || changes.enabled)) serial(ensure); });
+chrome.storage.onChanged.addListener((changes, area) => { if ((area === 'sync' && (changes.enhance || changes.enabled)) || (area === 'local' && (changes.canvas || changes.moodle || changes.ultra))) serial(ensure); });
+// Gradescope's switch turned off (Settings, Reset everything, another device): its grant goes back, as no other part of Glaze
+// reaches it and it isn't a required host. Glaze off as a whole keeps it, for when Glaze is on again.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync' || !changes.enhance) return;
+  const on = (v) => GZ_SANITIZE({ enhance: v }).enhance.gradescope;
+  if (on(changes.enhance.oldValue) && !on(changes.enhance.newValue)) GZ_SITE.handBack(GZ_SITE.address(GZ_GRADESCOPE.HOST)).catch(() => {});
+});
 // Defaults are an install transaction, independent of whether a page already wrote its layout or migrated its dock.
 // Its local intent survives worker restarts. Navigation uses a local fallback until a real sync preference is present.
 // Removals use separate sync keys: a device still starting up never uploads defaults over another device's choices.
@@ -1211,6 +1323,8 @@ chrome.runtime.onInstalled.addListener((d) => {
   if (d?.reason === 'update') sweepMedia(true);
   moveChannelKeys().catch(() => {});
   if (d?.reason === 'update') { serial(perSite); pointerToLook(); }
+  if (['install', 'update'].includes(d?.reason)) lightUp().catch(console.warn);
+  if (d?.reason === 'install') firstRun();
 });
 chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(false, true)).catch(() => {}); serial(ensure); moveChannelKeys().catch(() => {}); sweepMedia(); pointerToLook(); });
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -1285,10 +1399,11 @@ const perSite = async () => {
 };
 
 // ---- Asking first ---------------------------------------------------------------------------------------------------
-// A page that looks like an LMS, from a tab's top frame: lib/detect.js's 'canvas' or 'moodle', or content.js's 'ultra' from
-// an /ultra page off Blackboard's own hosts. On a site the student approved, Glaze goes into that page now (a registration an
-// update dropped) and stays registered. Anywhere else the page only makes its site a candidate: with Glaze on, and no Not now
-// there in the past week, Glaze asks on the page (features/consent.js). Nothing is registered, read or recorded before Yes.
+// A page that looks like an LMS, from a tab's top frame: lib/detect.js's 'canvas', 'moodle' or 'ultra', or content.js's 'ultra'
+// from an /ultra page off Blackboard's own hosts (Safari's any-host Ultra entry). On a site the student approved, Glaze goes
+// into that page now (a registration an update dropped) and stays registered. Anywhere else the page only makes its site a
+// candidate: with Glaze on, and no Not now there in the past week, Glaze asks on the page (features/consent.js). Nothing is
+// registered, read or recorded before Yes.
 const LMS = ['canvas', 'moodle', 'ultra'];
 const LATER = 7 * 864e5;
 const glazeOn = () => chrome.storage.sync.get('enabled').then((r) => r.enabled !== false, () => false);
@@ -1300,28 +1415,32 @@ const askedAt = (kind, s) => {
   try { u = new URL(s.url); } catch { return null; }
   return u.protocol === 'https:' && (kind !== 'ultra' || !!ultraAt(s)) ? u : null;
 };
-// The site on its LMS's list, with no Not now left for it, and registered.
+// The site on its LMS's list, with no Not now left for it, and registered. Without <all_urls> (Chrome), only once Glaze holds
+// the site's host: the browser's grant comes first.
+const reaches = (u) => chrome.runtime.getManifest().host_permissions?.includes('<all_urls>') || granted(`${u.origin}/*`);
 const approve = (kind, u) => serial(async () => {
   const { [kind]: list = [], askLater = {} } = await chrome.storage.local.get([kind, 'askLater']);
-  if (!await glazeOn()) return;
+  if (!await glazeOn() || !await reaches(u)) return;
   if (!list.includes(siteKey(kind, u))) await chrome.storage.local.set({ [kind]: [...list, siteKey(kind, u)] });
   if (Object.hasOwn(askLater, u.origin)) await chrome.storage.local.set({ askLater: Object.fromEntries(Object.entries(askLater).filter(([o]) => o !== u.origin)) });
   await ensure();
 });
 // Glaze's first content script, into the page that asked rather than whatever its tab has gone on to, then a Canvas site's
 // hook for the notes app (registration covers its next pages). `bar`: the question brought lib/i18n.js in, which can't run twice.
+// Ultra's goes onto its /ultra pages only, as its registration does.
 const glazeInto = async (kind, s, bar) => {
+  if (kind === 'ultra' && !/^\/ultra(\/|$)/.test(new URL(s.url).pathname)) return;
   // An all-host /ultra entry may already be waiting in content.js after detecting another LMS's markup.
   const live = await chrome.scripting.executeScript({ target: pageOf(s), func: () => !!window.__gzGlaze }).then((r) => r?.[0]?.result, () => true);
   if (live || !await glazeOn()) return;
-  const first = chrome.scripting.executeScript({ target: pageOf(s), files: glaze(kind).filter((f) => !bar || f !== 'lib/i18n.js'), injectImmediately: true }).catch(console.warn);
+  const first = chrome.scripting.executeScript({ target: pageOf(s), files: (kind === 'ultra' ? ultraEntry().js : glaze(kind)).filter((f) => !bar || f !== 'lib/i18n.js'), injectImmediately: true }).catch(console.warn);
   if (kind === 'canvas') serial(async () => { if (await switchOn('notes')) { await first; await notesHomeInto(notesHome([siteKey(kind, new URL(s.url))]), [s.tab]); } });
 };
 // The question, in the page's language and the student's palette. lib/detect.js's pages have none of Glaze's words yet;
-// Ultra's first content script has them (lib/i18n.js).
+// Ultra's first content script has them (lib/i18n.js), where the manifest puts it on /ultra everywhere (Safari).
 const ask = async (kind, s) => {
   const run = (o) => chrome.scripting.executeScript({ target: pageOf(s), injectImmediately: true, ...o }).then((r) => r?.[0]?.result);
-  const wordsIn = kind === 'ultra' || await run({ func: () => typeof GZ_I18N !== 'undefined' });
+  const wordsIn = (kind === 'ultra' && ultraEverywhere()) || await run({ func: () => typeof GZ_I18N !== 'undefined' });
   await run({ files: wordsIn ? ['features/consent.js'] : ['lib/i18n.js', 'features/consent.js'] });
   const words = await run({ func: () => globalThis.GZ_CONSENT?.words() });
   if (typeof words === 'string' && words.startsWith('i18n/') && LOADABLE.has(words)) await run({ files: [words] });
@@ -1335,7 +1454,7 @@ chrome.runtime.onMessage.addListener((m, s) => {
   (async () => {
     if (!await glazeOn()) return;
     if (await approved(m, u)) {
-      if (m !== 'ultra') { approve(m, u); glazeInto(m, s, false); }
+      if (m !== 'ultra' || !ultraEverywhere()) { approve(m, u); glazeInto(m, s, false); }
       return;
     }
     if (!await glazeOn() || (await chrome.storage.local.get('askLater')).askLater?.[u.origin] > Date.now()) return;
@@ -1343,8 +1462,8 @@ chrome.runtime.onMessage.addListener((m, s) => {
   })().catch(console.warn);
 });
 // The answer (features/consent.js, after a real click on its page): 'yes' approves the site, registers it and puts Glaze in
-// the page (on Ultra, content.js starts by itself once the site is on the list); 'join' puts Glaze in a page whose site was
-// approved in another tab; 'later' is Not now, kept for the 50 sites put off last.
+// the page (on Safari's Ultra, content.js waiting there starts by itself once the site is on the list); 'join' puts Glaze in
+// a page whose site was approved in another tab; 'later' is Not now, kept for the 50 sites put off last.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:consent') return;
   (async () => {
@@ -1360,7 +1479,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     }
     if (m.op === 'yes' && await glazeOn()) await approve(m.kind, u);
     if (!await approved(m.kind, u)) return { ok: false };
-    if (m.kind !== 'ultra') glazeInto(m.kind, s, true);
+    if (m.kind !== 'ultra' || !ultraEverywhere()) glazeInto(m.kind, s, true);
     return { ok: true };
   })().then((r) => reply(r || { ok: false }), () => reply({ ok: false }));
   return true;
@@ -1414,6 +1533,153 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   serial(() => (m.op === 'remove' ? forget(origin) : forgetAll()))
     .then((ok) => reply({ ok: ok === true }));
   return true;
+});
+
+// ---- Adding a site ---------------------------------------------------------------------------------------------------
+// Where Glaze holds only the LMSs' own hosts (Chrome, Edge, Firefox), a school's own site comes with the browser's grant.
+// Glaze's own pages ask for it, each in a page of its own (the popup, the first screen, Settings), and tell the worker first
+// ('glaze:allow'):
+// - 'ask', no kind (the first screen): once granted, the page checks the site itself (lib/site.js probe) and says what it
+//   found ('yes'), or hands the grant back. The grant waits for it.
+// - 'ask' with a kind and a tab (the popup, whose tab showed the kind): approved and into that tab once the host is held.
+// - 'cancel': the first screen's prompt was dismissed; a later browser grant checks the site itself.
+// - 'yes': checked again here (a page's word alone never says what a site is), then approved. The browser's prompt was the
+//   student's yes, so no card.
+// - 'all': every https site, and the detector with it (ensure).
+// What was asked waits in session storage for a few minutes: this worker may sleep while the browser's prompt is open.
+// A grant nobody asked for (Chrome's extensions menu, chrome://extensions) is checked here: a course site is approved and
+// Glaze goes into its open tabs; anything else stays as the student granted it. Taken back, a site's registration goes
+// (ensure); its approval and what Glaze keeps there stay, for a grant that brings it back. Glaze never removes a grant.
+const ALL_SITES = 'https://*/*';
+const ASKED_FOR = 5 * 60000;
+const askedKey = (pattern) => `allow ${pattern}`;
+const askedFor = async (pattern) => {
+  const v = (await Promise.resolve().then(() => chrome.storage.session?.get(askedKey(pattern))).catch(() => null))?.[askedKey(pattern)];
+  return v?.until > Date.now() ? v : null;
+};
+const asking = (pattern, v) => Promise.resolve().then(() => chrome.storage.session?.set({ [askedKey(pattern)]: { ...v, until: Date.now() + ASKED_FOR } }));
+const answered = (pattern) => Promise.resolve().then(() => chrome.storage.session?.remove(askedKey(pattern))).catch(() => {});
+// One site, as lib/site.js reads it, by its origin or by its grant (`https://host/*`); anything else is null.
+const siteAt = (origin) => { const s = typeof origin === 'string' ? GZ_SITE.address(origin) : null; return s?.origin === origin ? s : null; };
+const siteFor = (pattern) => { const s = typeof pattern === 'string' && /^https?:\/\/[^/*]+\/\*$/.test(pattern) ? GZ_SITE.address(pattern.slice(0, -1)) : null; return s?.pattern === pattern ? s : null; };
+const holdsSite = (site) => chrome.runtime.getManifest().host_permissions?.includes('<all_urls>') || granted(site.pattern);
+const listedAs = async (u) => { const got = await chrome.storage.local.get(LMS); return LMS.find((k) => Array.isArray(got[k]) && got[k].includes(siteKey(k, u))) || null; };
+// Only local pages need this startup policy; regular HTTPS first scripts carry none of it.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:local') return;
+  let u;
+  try { u = new URL(addressOf(s)); } catch { reply(false); return; }
+  if (s.id !== chrome.runtime.id || !GZ_LOCAL_DEV(m.kind, u)) { reply(false); return; }
+  approved(m.kind, u).then(reply, () => reply(false));
+  return true;
+});
+const ADDERS = ['popup.html', 'features/welcome.html', 'options.html'];
+const fromAdder = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ADDERS.some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p))
+  && extensionOrigin(s) && (!s.tab || s.frameId === 0);
+// Glaze into tabs already open on a site it now has (their top frames).
+const intoTabs = (kind, site, tabs) => {
+  for (const t of tabs) {
+    let u;
+    try { u = new URL(t.url); } catch { continue; }
+    if (`${u.protocol}//${u.hostname}/*` === site.pattern) glazeInto(kind, { tab: t, url: t.url }, false);
+  }
+};
+const allowing = async (m, site) => {
+  if (m.op === 'all') return serial(ensure);
+  if (m.op === 'cancel') {
+    const was = await askedFor(site.pattern);
+    if (was && !was.kind) await answered(site.pattern);
+    return;
+  }
+  const u = new URL(site.origin);
+  if (m.op === 'ask' && !m.kind) return asking(site.pattern, {});
+  if (m.op === 'ask') {
+    if (!await holdsSite(site)) return asking(site.pattern, { kind: m.kind, tabId: m.tabId });
+    await approve(m.kind, u);
+    return intoTabs(m.kind, site, [await chrome.tabs.get(m.tabId).catch(() => ({}))]);
+  }
+  if (!await holdsSite(site)) return false;
+  const at = GZ_SITE.address(typeof m.url === 'string' ? m.url : '');
+  const found = await GZ_SITE.probe({ ...site, path: at?.origin === site.origin ? at.path : '' });
+  if (found?.kind !== m.kind) return false;
+  await answered(site.pattern);
+  await approve(m.kind, u);
+  return approved(m.kind, u);
+};
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:allow') return;
+  // A feature may ask from embedded Settings too; adding a school still requires an editor tab.
+  const feature = m.op === 'feature';
+  const ownFeature = fromGlaze(s) && ADDERS.some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p));
+  if (!(feature ? ownFeature : fromAdder(s))) { reply({ ok: false, error: 'sender' }); return; }
+  const site = siteAt(m.origin);
+  if (feature) {
+    if (!site) { reply({ ok: false, error: 'site' }); return; }
+    asking(site.pattern, {}).then(() => reply({ ok: true }), () => reply({ ok: false }));
+    return true;
+  }
+  const ok = m.op === 'all' || (!!site && (m.op === 'ask' ? (m.kind === undefined && m.tabId === undefined) || (LMS.includes(m.kind) && Number.isInteger(m.tabId))
+    : m.op === 'cancel' || m.op === 'yes' && LMS.includes(m.kind)));
+  if (!ok) { reply({ ok: false, error: 'site' }); return; }
+  allowing(m, site).then((r) => reply({ ok: r !== false }), () => reply({ ok: false }));
+  return true;
+});
+// Where the manifest has the detector (Safari), its card is how a site is added, whatever the browser grants.
+const granting = async (pattern) => {
+  if (staticDetector()) return;
+  if (pattern === ALL_SITES) return serial(ensure);
+  const site = siteFor(pattern);
+  if (!site) return;
+  const was = await askedFor(pattern);
+  if (site.origin === GZ_GRADESCOPE.HOST || was && !was.kind) { await answered(pattern); return serial(ensure); }
+  const u = new URL(site.origin);
+  const tabs = was ? [await chrome.tabs.get(was.tabId).catch(() => ({}))] : await Promise.resolve().then(() => chrome.tabs.query({ url: pattern })).catch(() => []);
+  let kind = was?.kind || await listedAs(u);
+  if (!kind) { const found = await GZ_SITE.probe(site); kind = typeof found === 'object' ? found.kind : null; }
+  await answered(pattern);
+  if (kind) await approve(kind, u);
+  if (kind && await approved(kind, u)) intoTabs(kind, site, tabs);
+  serial(ensure);
+};
+chrome.permissions?.onAdded?.addListener((p) => { for (const o of p?.origins || []) granting(o).catch(console.warn); });
+chrome.permissions?.onRemoved?.addListener((p) => { for (const o of p?.origins || []) answered(o); serial(ensure); });
+// The first run (onInstalled, above): where a school's own site needs the student's grant (no detector in the manifest),
+// Glaze's first screen, once.
+const firstRun = () => { if (!staticDetector()) Promise.resolve().then(() => chrome.tabs.create({ url: chrome.runtime.getURL('features/welcome.html') })).catch(() => {}); };
+
+// ---- The toolbar button ---------------------------------------------------------------------------------------------
+// A new extension sits in Chrome's extensions menu. On a page that looks like an LMS its button lights there (a dot on its
+// icon), with no host access: declarativeContent matches displayed elements only, so each LMS by its body, never its head.
+// On a page Glaze runs in, Glaze's own icon for that tab beats the lit one; the browser clears it on every page load, and
+// content.js says each time it starts ('glaze:here'). Firefox has no declarativeContent: nothing lights, nothing to set.
+const LIT = [
+  { css: ['div#application.ic-app'] },
+  { css: ['body[id^="page-"][class*="pagelayout-"][class*="path-"]'] },
+  { pageUrl: { pathPrefix: '/ultra', schemes: ['https'] }, css: ['div#site-wrap.off-canvas-wrap'] },
+];
+// Glaze's icon with a bright dot in a dark ring at its top right, at 16 and 32 pixels, each on whole pixels.
+const litIcon = async () => {
+  const out = {};
+  for (const n of [16, 32]) {
+    const img = await createImageBitmap(await (await fetch(chrome.runtime.getURL(`icons/icon${n}.png`))).blob());
+    const g = new OffscreenCanvas(n, n).getContext('2d'), k = n / 16, x = n - 3.5 * k, y = 3.5 * k;
+    g.drawImage(img, 0, 0, n, n);
+    for (const [fill, r] of [['#03131e', 3.5], ['#a6efff', 2.5]]) { g.fillStyle = fill; g.beginPath(); g.arc(x, y, r * k, 0, 2 * Math.PI); g.fill(); }
+    out[n] = g.getImageData(0, 0, n, n);
+  }
+  return out;
+};
+const lightUp = async () => {
+  const dc = chrome.declarativeContent;
+  if (!dc) return;
+  const imageData = await litIcon();
+  await new Promise((done) => dc.onPageChanged.removeRules(undefined, done));
+  await new Promise((done) => dc.onPageChanged.addRules(LIT.map((c) => ({ conditions: [new dc.PageStateMatcher(c)], actions: [new dc.SetIcon({ imageData })] })), done));
+};
+const ownIcon = () => Object.fromEntries(Object.entries(chrome.runtime.getManifest().action.default_icon).map(([k, v]) => [k, `/${v}`]));
+chrome.runtime.onMessage.addListener((m, s) => {
+  if (m?.type !== 'glaze:here' || !chrome.declarativeContent || s.frameId !== 0 || !s.tab) return;
+  lmsPage(s).then((ok) => ok && chrome.action.setIcon({ tabId: s.tab.id, path: ownIcon() })).catch(() => {});
 });
 
 // Glaze's reader (reader.html, W23) reads a PDF or picture only with a one-use pass that an import's content script got
@@ -1482,7 +1748,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     try {
       // The editor's preview shows installed mods' parts and their background files as a page would (same checks, no code).
       const preview = m.type === 'glaze:modpage' && ['parts', 'media'].includes(m.op) && fromPreview(s);
-      const env = { site: preview ? 'editor' : await fromLms(s, m.type === 'glaze:modpage' && m.op === 'parts'), signal: control?.signal, local, sync: brokerArea('sync'), fetch: (u, i) => fetch(u, control ? { ...i, signal: control.signal } : i), queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
+      const env = { site: preview ? 'editor' : await fromLms(s, m.type === 'glaze:modpage' && m.op === 'parts'), signal: control?.signal, local, sync: brokerArea('sync'), fetch: (u, i) => fetch(u, control ? { ...i, signal: control.signal } : i), reach: reachable, queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
         keys: async () => (chrome.storage.local.getKeys ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))),
         record: (id) => modRead(`mod:${id}`), blocklist: () => modRead('modsBlocklist') };
       return await (m.type === 'glaze:mod' ? GZ_MODBROKER.handle(m, env) : GZ_MODBROKER.page(m, env));
@@ -1634,7 +1900,9 @@ const moveChannelKeys = async () => {
   }
   await chrome.storage.local.set({ [flag]: true });
 };
-const channelEnv = () => ({ local: channelLocal(), fetch: (u, i) => fetch(u, i), now: () => Date.now(), blocked, enqueue: queued,
+// A channel's relay is share.frostdev.io, a required host, or one of the student's own that the editor asked for (Read code);
+// one Glaze doesn't hold is refused before the request (lib/modchannel.js says 'network').
+const channelEnv = () => ({ local: channelLocal(), fetch: async (u, i) => { if (!await reachable(u)) throw new TypeError('host'); return fetch(u, i); }, now: () => Date.now(), blocked, enqueue: queued,
   install: (m) => GZ_MODBUNDLE.change(m, { local: brokerArea('local') }) });
 const channelCheck = (opts) => channels().check(channelEnv(), opts);
 chrome.runtime.onMessage.addListener((m, s, reply) => {
@@ -1663,11 +1931,12 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 
-// Course tabs' snapshots (features/coursetabs.js): pictures of course pages the student was on (the visible tab, taken
-// here at the page's ask, only while that tab is the one on screen), kept for a tab switch after a reload. In storage.session, which the browser holds in memory and never writes to disk, and which pages'
-// content scripts can't read (only this worker); where a browser has none, in this worker's memory. Gone when the browser
-// closes, when Glaze or the tabs are switched off (below), when another account turns up on the site, or on sign-out.
-// Only a Canvas or Ultra page's top frame asks, for its own origin (never one the message names). Sizes: lib/coursetabs.js.
+// Course tabs' sketches (features/coursetabs.js): of course pages the student was on, as the page drew them (lib/coursetabs.js
+// sketch: boxes and colours, no text but the course's name), kept for a tab switch after a reload. In storage.session, which the
+// browser holds in memory and never writes to disk, and which pages' content scripts can't read (only this worker); where a
+// browser has none, in this worker's memory. Gone when the browser closes, when Glaze or the tabs are switched off (below),
+// when another account turns up on the site, or on sign-out. Only a Canvas or Ultra page's top frame sends one, for its own
+// origin (never one the message names). Shapes and sizes: lib/coursetabs.js clip.
 const SNAP_MEM = new Map();
 let snapTurn;
 const snapQueue = (fn) => (snapTurn ||= GZ_CARDS.queue())(fn);
@@ -1676,7 +1945,7 @@ const snapArea = chrome.storage.session || {
   set: async (o) => { for (const [k, v] of Object.entries(o)) SNAP_MEM.set(k, v); },
   remove: async (ks) => { for (const k of [].concat(ks)) SNAP_MEM.delete(k); },
 };
-// The keys alone where the browser can (getKeys): reading everything would read every picture.
+// The keys alone where the browser can (getKeys): reading everything would read every sketch.
 const allKeys = async () => (snapArea.getKeys ? snapArea.getKeys() : Object.keys(await snapArea.get(null)));
 const snapKeys = async (site) => (await allKeys()).filter((k) => k.startsWith(site ? `snap:${site}|` : 'snap:'));
 // Only documents that identified themselves here receive cache/account invalidations.
@@ -1689,16 +1958,6 @@ const snapNotify = async (site, state) => {
   }));
 };
 const snapEpoch = (previous) => Math.max(Date.now(), (previous || 0) + 1);
-// The picture of tab `tabId` as it is on screen now, or null: the tab must be its window's active one before and after
-// (a switch of browser tab in between throws it away), still on `site`.
-const snapShot = async (tabId, site) => {
-  const before = await chrome.tabs.get(tabId).catch(() => null);
-  if (!before?.active || !before.url?.startsWith(`${site}/`)) return null;
-  // Shown blurred (features/coursetabs.js picture): a lower quality is not seen, and is a smaller picture to keep.
-  const shot = await chrome.tabs.captureVisibleTab(before.windowId, { format: 'jpeg', quality: 60 }).catch(() => null);
-  const after = await chrome.tabs.get(tabId).catch(() => null);
-  return shot && after?.active && after.windowId === before.windowId && after.url?.startsWith(`${site}/`) && /^data:image\/jpeg;base64,/.test(shot) ? shot : null;
-};
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:snap') return;
   snapQueue(async () => {
@@ -1742,17 +2001,16 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     const k = `snap:${site}|${m.uid}|${m.cid}`;
     if (m.op === 'forget') return snapArea.remove(k).then(() => true);
     if (m.op === 'get') return (await snapArea.get(k))[k] || null;
-    if (m.op !== 'shot') return null;
+    if (m.op !== 'sketch') return null;
     const path = String(m.path), q = path.indexOf('?'), p = q < 0 ? path : path.slice(0, q);
     if (GZ_CTABS_LIB.safe(p, q < 0 ? '' : path.slice(q + 1)) !== path || !GZ_CTABS_LIB.owns(p, m.cid)) return null;
-    const nums = (a, n) => Array.isArray(a) && a.length === n && a.every((v) => Number.isFinite(v) && Math.abs(v) <= 1e5) ? a.map(Math.round) : null;
-    const size = nums(m.size, 2), strip = m.strip === null ? null : nums(m.strip, 3);
-    if (!size || (m.strip !== null && !strip)) return null;
-    const shot = await snapShot(s.tab.id, site);
-    if (!shot || shot.length > GZ_CTABS_LIB.SNAP_ONE) return null;
-    const snap = { cid: m.cid, path, at: Date.now(), strip, size, shot, n: shot.length };
+    const sketch = GZ_CTABS_LIB.clip(m);
+    if (!sketch) return null;
+    const snap = { cid: m.cid, path, at: Date.now(), ...sketch };
+    snap.n = JSON.stringify(snap).length;
+    if (snap.n > GZ_CTABS_LIB.SNAP_ONE) return null;
     // The least recently kept go first, past the total (every site and account together). Sizes from this site's record
-    // (state.sizes, kept beside the pictures and checked against the keys there); the pictures are read only for keys it lacks.
+    // (state.sizes, kept beside the sketches and checked against the keys there); the sketches are read only for keys it lacks.
     const keys = (await snapKeys()).filter((x) => x !== k), sizes = state.sizes || {};
     const all = keys.some((x) => !sizes[x]) ? await snapArea.get(null) : {};
     const of = (x) => sizes[x] || [all[x]?.n || 0, all[x]?.at || 0];
@@ -1805,6 +2063,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     };
     const yes = typeof m.key === 'string' && !!site && m.key.startsWith(`${site}/`);
     if (!to || !yes || !await allowed()) return { ok: false, error: 'sender' };
+    // Gradescope isn't a required host: its switch asked for it. Taken back, nothing is asked of it, nor counted as tried.
+    if (!await reachable(GZ_GRADESCOPE.HOST)) return { ok: false, error: 'host' };
     const due = await (brokerTurn ||= GZ_CARDS.queue())(async () => {
       const now = Date.now();
       const { gradescope, gsTried = {} } = await chrome.storage.local.get([GZ_GRADESCOPE.KEY, 'gsTried']);
@@ -1972,6 +2232,65 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 
+// A Download all wait owns a private ticket, sent over its byte port and the frame's MessageChannel, never a URL.
+// A public Allow page's hash is display text, not authority. Only that wait's frame and the tab opened for it may ask.
+// Download all pings its byte port every 15 s; those onMessage events reset Firefox's idle timer while these waits live.
+const ALLOW_PAGE = 'features/allow.html';
+const allowWaits = new Map(); // ticket -> the byte port's wait (one per download)
+const allowTabs = new Map(); // the Allow tab's id -> its wait
+const allowPage = (s, host) => s.id === chrome.runtime.id && extensionOrigin(s) && s.url === `${chrome.runtime.getURL(ALLOW_PAGE)}#${host}`;
+const sameAllowFrame = (w, s) => w.tabId === s.tab?.id && w.frameId === s.frameId && w.documentId === s.documentId && allowPage(s, w.host);
+const endAllow = (w, ok = false) => {
+  if (allowWaits.get(w.ticket) !== w) return;
+  allowWaits.delete(w.ticket);
+  allowTabs.delete(w.ownTab);
+  w.reply?.({ ok });
+  if (Number.isInteger(w.ownTab)) Promise.resolve().then(() => chrome.tabs.remove(w.ownTab)).catch(() => {});
+};
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (!['glaze:allow-init', 'glaze:allow-tab', 'glaze:allow-answer'].includes(m?.type)) return;
+  const host = typeof m.host === 'string' ? m.host : '';
+  const w = s.frameId === 0 ? allowTabs.get(s.tab?.id) : allowWaits.get(m.ticket);
+  if (!w || w.host !== host || !allowPage(s, host)) { reply({ ok: false, ...(m.type === 'glaze:allow-answer' && { error: 'sender' }) }); return; }
+  if (m.type === 'glaze:allow-init') {
+    if (s.frameId === 0) {
+      if (w.ready) { reply({ ok: false }); return; }
+      w.ready = true; w.ownDocument = s.documentId;
+    } else {
+      if (!(s.frameId > 0) || w.tabId !== s.tab?.id || w.frameId !== undefined) { reply({ ok: false }); return; }
+      w.frameId = s.frameId; w.documentId = s.documentId;
+    }
+    reply({ ok: true }); return;
+  }
+  if (m.type === 'glaze:allow-answer') {
+    if (s.frameId !== 0 || !w.ready || w.ownDocument !== s.documentId) { reply({ ok: false, error: 'sender' }); return; }
+    granted(`https://${host}/*`).then((ok) => {
+      // A navigation or canceled download during contains still wins.
+      if (allowWaits.get(w.ticket) !== w) { reply({ ok: false }); return; }
+      endAllow(w, ok); reply({ ok: true });
+    });
+    return true;
+  }
+  if (!sameAllowFrame(w, s) || w.opening) { reply({ ok: false }); return; }
+  w.opening = true; w.reply = reply;
+  (async () => {
+    const tab = await chrome.tabs.create({ url: 'about:blank', ...beside(s.tab) });
+    if (allowWaits.get(w.ticket) !== w) { await chrome.tabs.remove(tab.id); return; }
+    w.ownTab = tab.id; allowTabs.set(tab.id, w);
+    await chrome.tabs.update(tab.id, { url: `${chrome.runtime.getURL(ALLOW_PAGE)}#${host}` });
+  })().catch(() => endAllow(w));
+  return true;
+});
+chrome.tabs?.onRemoved?.addListener((id) => {
+  for (const w of allowWaits.values()) if (w.tabId === id || w.ownTab === id) endAllow(w);
+});
+chrome.tabs?.onUpdated?.addListener((id, change) => {
+  for (const w of allowWaits.values()) if ((w.tabId === id || w.ownTab === id && w.ready) && (change.status === 'loading' || change.url)) endAllow(w);
+});
+chrome.tabs?.onReplaced?.addListener((added, removed) => {
+  for (const w of allowWaits.values()) if (w.tabId === removed || w.ownTab === removed) endAllow(w);
+});
+
 // Safari wakes its containing app for a silent update check; Chrome never enters this gate.
 if (new URL(chrome.runtime.getURL('')).protocol === 'safari-web-extension:') {
   (async () => {
@@ -1994,16 +2313,18 @@ chrome.runtime.onConnect.addListener((port) => {
     if (!trustedFrame(port.sender, 'download')) return port.disconnect();
     origin = new URL(port.sender.url);
   } catch { return port.disconnect(); }
-  // Production has HTTPS hosts only. The explicit localhost permission exists only in scratch builds.
-  const dev = origin.hostname === 'localhost' && chrome.runtime.getManifest().host_permissions.includes('http://localhost/*') ? origin.origin : '';
+  // Production has HTTPS hosts only; a local Canvas (GZ_LOCAL_DEV) only where Glaze holds its host, by the manifest of a
+  // scratch build or the optional localhost grant (approved).
+  const dev = GZ_LOCAL_DEV('canvas', origin) ? origin.origin : '';
   if (!GZ_DOWNLOAD.url(origin.href, dev)) return port.disconnect();
   const ready = approved('canvas', origin).catch(() => false);
   const ctl = new AbortController();
-  let used = 0, busy = false, ack = null, stall = 0;
+  if (dev) ready.then((ok) => { if (!ok) { ctl.abort(); port.disconnect(); } });
+  let used = 0, busy = false, ack = null, stall = 0, allowWait = null;
   // An idle connection is not a download: fail a stalled fetch/stream after 45 seconds.
   const fresh = () => { clearTimeout(stall); stall = setTimeout(() => { ctl.abort(); ack?.(); port.disconnect(); }, 45000); };
   const send = (m) => { if (!ctl.signal.aborted) port.postMessage(m); };
-  port.onDisconnect.addListener(() => { clearTimeout(stall); ctl.abort(); ack?.(); });
+  port.onDisconnect.addListener(() => { clearTimeout(stall); ctl.abort(); ack?.(); if (allowWait) endAllow(allowWait); });
   port.onMessage.addListener((m) => {
     if (m?.type === 'ping') { send({ type: 'ping' }); return; }
     if (m?.type === 'ack') { ack?.(); ack = null; return; }
@@ -2011,10 +2332,27 @@ chrome.runtime.onConnect.addListener((port) => {
     busy = true;
     (async () => {
       if (!await ready) throw new Error('sender');
-      fresh();
       const url = GZ_DOWNLOAD.url(m.url, dev);
       if (!url) throw new Error('url');
-      const r = await fetch(url, { credentials: 'omit', redirect: 'follow', cache: 'no-store', signal: ctl.signal });
+      // A file server Glaze doesn't hold (Canvas cloud keeps files on hosts of its own, never known ahead): the page shows
+      // Glaze's Allow frame for it (features/allow.html) and sends the file again once the student allowed it. Nothing is
+      // fetched until the browser holds the host, and nothing is kept but its grant. Noted as a feature's ask, so its grant
+      // isn't taken for a school's site (granting, below).
+      if (!await reachable(url)) {
+        const host = new URL(url).hostname;
+        await asking(`https://${host}/*`, {}).catch(() => {});
+        if (allowWait) endAllow(allowWait);
+        const ticket = crypto.randomUUID();
+        allowWait = { ticket, host, tabId: port.sender.tab.id };
+        allowWaits.set(ticket, allowWait);
+        send({ type: 'ask', host, ticket });
+        return;
+      }
+      fresh();
+      // A manual redirect hides Location (opaqueredirect). Refuse it explicitly: following could reach an unheld host.
+      const wide = chrome.runtime.getManifest().host_permissions?.includes('<all_urls>');
+      const r = await fetch(url, { credentials: 'omit', redirect: wide ? 'follow' : 'manual', cache: 'no-store', signal: ctl.signal });
+      if (r.type === 'opaqueredirect' || r.status >= 300 && r.status < 400) throw new Error('redirect');
       if (!r.ok || !GZ_DOWNLOAD.url(r.url, dev)) throw new Error('response');
       GZ_DOWNLOAD.bytes(used, Number(r.headers.get('content-length') || 0));
       const reader = r.body?.getReader();
@@ -2035,7 +2373,7 @@ chrome.runtime.onConnect.addListener((port) => {
       } finally { await reader.cancel().catch(() => {}); }
       send({ type: 'done' });
     })().catch((e) => {
-      send({ type: 'error', code: ['limit', 'url', 'sender', 'response'].includes(e.message) ? e.message : 'network' });
+      send({ type: 'error', code: ['limit', 'url', 'sender', 'response', 'redirect'].includes(e.message) ? e.message : 'network' });
     }).finally(() => { clearTimeout(stall); busy = false; });
   });
 });

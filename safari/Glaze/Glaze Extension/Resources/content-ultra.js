@@ -778,7 +778,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 });
 
 // Known Ultra entry: arm before asynchronous head detection lets the parser reach <body>.
-if (/html/.test(document.contentType) && !document.body && location.protocol === 'https:' && !location.port && /\.blackboard\.com$/.test(location.hostname) && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
+if (/html/.test(document.contentType) && !document.body && GZ_BUILT_IN('ultra', location) && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
   GZ_SITE_ULTRA.sheets = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => {
     const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = chrome.runtime.getURL(f);
     l.setAttribute('blocking', 'render');

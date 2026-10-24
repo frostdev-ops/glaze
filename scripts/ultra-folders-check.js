@@ -3,7 +3,8 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const D = require('../defaults.js');
-const ext = process.env.EXT || path.join(__dirname, '..');
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const out = process.argv[2] || path.join(ext, 'scratch/b9/shots');
 const fixture = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-folders.html'), 'utf8');
 const chromeLaunch = require('./check-env.js').chromeLaunch();

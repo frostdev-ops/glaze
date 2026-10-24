@@ -1,7 +1,8 @@
 // Dutch for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).nl = {
-  "Activity Stream": "Activiteitenstream",
+
+  "Redirected file: download it from Canvas": "Omgeleid bestand: download het vanuit Canvas",  "Activity Stream": "Activiteitenstream",
   "Timeline dates": "Tijdlijndatums",
   "Due dates when available": "Inleverdatums indien beschikbaar",
   "Posted dates": "Plaatsingsdatums",
@@ -1652,7 +1653,6 @@
   "Import notes and share keys": "Notities en deelsleutels importeren",
   "Import restores keys locally. It connects only after you create, join or resume a session.": "Importeren herstelt sleutels lokaal. Er wordt pas verbinding gemaakt nadat je een sessie maakt, eraan deelneemt of deze hervat.",
   "Sites": "Sites",
-  "Glaze runs on Canvas at instructure.com and on Blackboard at blackboard.com. On a school's own address it asks first; these are the sites you said yes to.": "Glaze werkt op Canvas via instructure.com en op Blackboard via blackboard.com. Op het eigen adres van een school vraagt het eerst; dit zijn de sites waarvoor je ja hebt gezegd.",
   "No other sites yet.": "Nog geen andere sites.",
   "Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.": "Een site verwijderen stopt Glaze daar en vergeet de cursussen en deadlines die het daar heeft gelezen; je notities en taken blijven. Alles resetten leegt deze lijst.",
   "Removed {site}. Glaze no longer runs there.": "{site} verwijderd. Glaze werkt daar niet meer.",
@@ -3071,5 +3071,17 @@
   "Form": "Formulier",
   "Survey": "Enquête",
   "Blog": "Blog",
-  "Wiki": "Wiki"
+  "Wiki": "Wiki",
+  "School address": "Adres van je school",
+  "Allow": "Toestaan",
+  "All sites": "Alle sites",
+  "Another school": "Andere school",
+  "Not a web address": "Geen webadres",
+  "Allowed {host}": "{host} toegestaan",
+  "All sites allowed": "Alle sites toegestaan",
+  "No course site at {host}": "Geen cursussite op {host}",
+  "Can't reach {host}": "{host} is niet bereikbaar",
+  "Checking {host}": "{host} controleren",
+  "Use Glaze on {host}": "Glaze gebruiken op {host}",
+  "Allow {host}": "{host} toestaan"
 };

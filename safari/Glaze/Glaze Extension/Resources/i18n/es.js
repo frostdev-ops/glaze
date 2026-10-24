@@ -1,7 +1,8 @@
 // Spanish for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).es = {
-  "Activity Stream": "Flujo de actividad",
+
+  "Redirected file: download it from Canvas": "Archivo redirigido: descárgalo desde Canvas",  "Activity Stream": "Flujo de actividad",
   "Timeline dates": "Fechas de la cronología",
   "Due dates when available": "Vencimiento cuando esté disponible",
   "Posted dates": "Fechas de publicación",
@@ -1652,7 +1653,6 @@
   "Import notes and share keys": "Importar notas y claves de uso compartido",
   "Import restores keys locally. It connects only after you create, join or resume a session.": "La importación restaura las claves localmente. Solo se conecta después de crear, unirte a una sesión o reanudarla.",
   "Sites": "Sitios",
-  "Glaze runs on Canvas at instructure.com and on Blackboard at blackboard.com. On a school's own address it asks first; these are the sites you said yes to.": "Glaze funciona en Canvas en instructure.com y en Blackboard en blackboard.com. En la dirección propia de una institución, pregunta primero; estos son los sitios a los que dijiste que sí.",
   "No other sites yet.": "Aún no hay otros sitios.",
   "Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.": "Al quitar un sitio, Glaze deja de funcionar allí y olvida los cursos y las fechas de entrega que leyó allí; tus notas y tareas se conservan. «Restablecer todo» vacía esta lista.",
   "Removed {site}. Glaze no longer runs there.": "Se quitó {site}. Glaze ya no funciona allí.",
@@ -3071,5 +3071,17 @@
   "Form": "Formulario",
   "Survey": "Encuesta",
   "Blog": "Blog",
-  "Wiki": "Wiki"
+  "Wiki": "Wiki",
+  "School address": "Dirección de tu centro",
+  "Allow": "Permitir",
+  "All sites": "Todos los sitios",
+  "Another school": "Otro centro",
+  "Not a web address": "No es una dirección web",
+  "Allowed {host}": "{host} permitido",
+  "All sites allowed": "Todos los sitios permitidos",
+  "No course site at {host}": "No hay un sitio de cursos en {host}",
+  "Can't reach {host}": "No se puede acceder a {host}",
+  "Checking {host}": "Comprobando {host}",
+  "Use Glaze on {host}": "Usar Glaze en {host}",
+  "Allow {host}": "Permitir {host}"
 };

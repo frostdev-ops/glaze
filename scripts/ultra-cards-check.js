@@ -15,7 +15,8 @@ const crypto = require('crypto');
 const os = require('os');
 const G = require('../defaults.js');
 
-const ext = process.env.EXT || path.join(__dirname, '..');
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-cards-'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-courses.html'), 'utf8');
@@ -52,7 +53,7 @@ const MODES = {
     await opts.evaluate(() => chrome.storage.local.set({ ultra: ['https://bb.school.test'] }));
     const page = await ctx.newPage();
     const run = async (name, card, preset, width) => {
-      await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); },
+      await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); },
         { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, colors: G.GZ_PRESETS.find(([n]) => n === preset)[1], preset, card });
       await page.setViewportSize({ width, height: 900 });
       await page.goto('https://bb.school.test/ultra/course');

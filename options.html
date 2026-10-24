@@ -97,6 +97,10 @@
   .courses .name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 0.78em; color: var(--gz-ink-faint); }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
   .sites li { grid-template-columns: minmax(0, 1fr) auto; }
+  .site-add { flex-wrap: nowrap; margin: .75rem 0 .25rem; }
+  .site-add .field { flex: 1; min-width: 0; }
+  .site-add button[aria-busy="true"] { opacity: .6; cursor: progress; }
+  #site-note .desc { margin: .25rem 0; color: var(--gz-err); }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
   button:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
   body.off [data-editor-section]:not(#data) { opacity: 0.5; }
@@ -1374,7 +1378,12 @@
 </section>
 <section id="sites" data-editor-section="backup/sites" data-sites="Extension only" aria-labelledby="heading-backup-sites">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/sites" data-editor-alias>Sites</a></p><div class="section-heading"><h2 id="heading-backup-sites" tabindex="-1">Sites</h2></div>
-<p class="desc section-note">Glaze runs on Canvas at instructure.com and on Blackboard at blackboard.com. On a school's own address it asks first; these are the sites you said yes to.</p><p class="site-scope">On this device</p>
+<p class="site-scope">On this device</p>
+<form class="row site-add" id="site-add" novalidate autocomplete="off">
+  <label class="field wide"><span>School address</span><input id="site-address" type="text" inputmode="url" enterkeyhint="go" autocapitalize="off" spellcheck="false" translate="no" placeholder="canvas.school.edu" aria-describedby="site-error"></label>
+  <button type="submit" class="primary" id="site-allow">Allow</button>
+</form>
+<div id="site-note" role="alert" hidden><p class="desc" id="site-error"></p><div class="row" id="site-picks"></div></div>
 <ul class="courses sites" id="site-list"></ul>
 <p class="desc" id="site-empty">No other sites yet.</p>
 <p class="desc">Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.</p>
@@ -1493,6 +1502,7 @@
   <script src="lib/pet.js"></script>
   <script src="lib/petplayer.js"></script>
   <script src="lib/petlibrary.js"></script>
+  <script src="lib/site.js"></script>
   <script src="options.js"></script>
   <script src="lib/notes.js"></script>
   <script src="lib/sessions-ui.js"></script>

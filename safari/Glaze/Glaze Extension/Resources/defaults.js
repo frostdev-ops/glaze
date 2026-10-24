@@ -31,6 +31,9 @@ const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], [
 // Canvas's Dashboard and Ultra's Courses page are both 'dashboard', a Canvas course home and an Ultra outline 'course'.
 const GZ_SIDEBAR_KINDS = [['dashboard', 'Dashboard'], ['course', 'Course home'], ['discussion', 'Discussions'], ['assignment', 'Assignments'], ['grades', 'Grades'], ['calendar', 'Calendar and syllabus'], ['quiz', 'Quizzes'], ['other', 'Other pages']];
 
+// Each LMS's own hosts, Glaze's from the start: the manifest's matches, on https with no port.
+const GZ_BUILT_IN = (kind, u) => u.protocol === 'https:' && !u.port && !!{ canvas: /(^|\.)instructure\.com$/, moodle: /(^|\.)moodlecloud\.com$/, ultra: /\.blackboard\.com$/ }[kind]?.test(u.hostname);
+
 // Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
 // 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
@@ -577,5 +580,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_SURFACE_VARS, GZ_COLORS, GZ_TABS, GZ_SIDEBAR_KINDS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_COLOR, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_SURFACE_VARS, GZ_COLORS, GZ_TABS, GZ_SIDEBAR_KINDS, GZ_BUILT_IN, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_COLOR, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }

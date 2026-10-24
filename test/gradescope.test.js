@@ -271,6 +271,7 @@ test('the worker: who may write, the script on Gradescope only while on, and the
   let registered = [];
   let answer = null;
   let hold = null; // a promise the next requests wait on, as a slow network would
+  let gsHeld = false; // the browser's grant for www.gradescope.com (not a required host: the switch asks for it)
   const pages = { '/courses/42': '<table id="assignments-student-table"></table>', '/account/edit': `<input name="user[email]" value="${EMAIL}">` };
   const context = vm.createContext({
     URL, console, TextEncoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
@@ -289,6 +290,11 @@ test('the worker: who may write, the script on Gradescope only while on, and the
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener: (f) => changed.push(f) } },
+      permissions: {
+        contains: async ({ origins }) => origins.every((o) => (gsHeld && o === 'https://www.gradescope.com/*') || m.host_permissions.includes(o)),
+        getAll: async () => ({ origins: [...m.host_permissions, ...(gsHeld ? ['https://www.gradescope.com/*'] : [])] }),
+        remove: async ({ origins }) => { if (origins.includes('https://www.gradescope.com/*')) gsHeld = false; return true; },
+      },
       scripting: {
         getRegisteredContentScripts: async () => registered.map((id) => ({ id })),
         registerContentScripts: async (l) => { registered.push(...l.map((s) => s.id)); },
@@ -303,7 +309,7 @@ test('the worker: who may write, the script on Gradescope only while on, and the
     if (!kept) res('ignored');
   });
   const settle = () => new Promise((r) => setTimeout(r, 5));
-  const toggle = async (on) => { store.sync.enhance = { gradescope: on }; for (const f of changed) f({ enhance: {} }, 'sync'); await settle(); };
+  const toggle = async (on) => { const was = store.sync.enhance; store.sync.enhance = { gradescope: on }; for (const f of changed) f({ enhance: { oldValue: was, newValue: store.sync.enhance } }, 'sync'); await settle(); };
   const gs = { id: 'glaze', tab: {}, frameId: 0, url: 'https://www.gradescope.com/courses/42' };
   const canvas = { id: 'glaze', tab: {}, url: 'https://school.instructure.com/' };
   const other = { ...canvas, url: 'https://other.instructure.com/' };
@@ -315,7 +321,11 @@ test('the worker: who may write, the script on Gradescope only while on, and the
   const nope = { ok: false, error: 'sender' };
   // Off: Gradescope's page may write nothing, and no script is registered there.
   assert.deepEqual(await send(acct, gs), nope);
-  // On: the script is registered, and Gradescope's own top frame may say who's signed in and place courses.
+  // On without the browser's grant for Gradescope (refused, or taken back): still nothing registered.
+  await toggle(true);
+  assert.deepEqual(registered, [], 'no script on a host Glaze does not hold');
+  // On, held: the script is registered, and Gradescope's own top frame may say who's signed in and place courses.
+  gsHeld = true;
   await toggle(true);
   assert.deepEqual(registered, ['gz-gradescope']);
   assert.equal((await send(acct, gs)).ok, true);
@@ -372,6 +382,14 @@ test('the worker: who may write, the script on Gradescope only while on, and the
     hold = null;
     redo();
   }
+  // The grant taken back: the read is refused before a request, and isn't counted as tried.
+  store.local.gsTried = {};
+  fetched.length = 0;
+  gsHeld = false;
+  assert.deepEqual(await send(page, canvas), { ok: false, error: 'host' });
+  assert.deepEqual(fetched, [], 'no request to a host Glaze does not hold');
+  assert.deepEqual(store.local.gsTried, {}, 'not tried');
+  gsHeld = true;
   // Turned off while the read is under way (here, as its try is noted): not one request more.
   store.local.gsTried = {};
   fetched.length = 0;
@@ -398,9 +416,10 @@ test('the worker: who may write, the script on Gradescope only while on, and the
   for (const f of changed) f({ enabled: {} }, 'sync');
   await settle();
   assert.deepEqual(registered, ['gz-gradescope'], 'back when Glaze is on again');
-  // Off again: the script goes.
+  // Off again: the script goes, and the grant goes back.
   await toggle(false);
   assert.deepEqual(registered, []);
+  assert.equal(gsHeld, false, 'the Gradescope grant is handed back');
 });
 
 test('on Gradescope: only with Glaze and its switch on; whose account first; redirects refused; stops when switched off mid-way', async () => {

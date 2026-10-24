@@ -14,7 +14,7 @@ Productivity
 
 ## Detailed description
 
-Make Blackboard Ultra, Canvas and Moodle feel like yours. Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain, where it asks before enabling a site it has not already approved. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
+Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain once you allow it. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
 NEW IN 3.3.8
 
@@ -103,9 +103,9 @@ ON MOODLE
 
 EVERYWHERE
 
-Press Ctrl+K (⌘K on a Mac) to jump to courses, pages, Glaze settings and due work. On a school's own domain not already approved, Glaze asks "Use Glaze on this site?" and does nothing there until you say yes; Settings lists those sites and can remove them. The popup keeps quick controls close. On Blackboard and Canvas, What Glaze can do lists every extra with its switch. Export and import all your settings as a file.
+Press Ctrl+K (⌘K on a Mac) to jump to courses, pages, Glaze settings and due work. Add your school's site from Glaze's toolbar button, the tab it opens at install, or Settings › Sites. The popup checks the page; typed addresses are checked through the site's APIs after you grant access. Settings lists those sites and can remove them. The popup keeps quick controls close. On Blackboard and Canvas, What Glaze can do lists every extra with its switch. Export and import all your settings as a file.
 
-Canvas on instructure.com and Ultra on blackboard.com are automatic; earlier approvals are kept.
+Canvas on instructure.com, Ultra on blackboard.com and Moodle on moodlecloud.com are automatic; earlier approvals are kept.
 
 OPTIONAL SHARE SESSIONS
 
@@ -115,7 +115,7 @@ Glaze's helpers do not change grades, submit coursework or send messages. What-i
 
 PRIVACY
 
-No analytics, no ads and no account. Settings stay in your browser and follow Chrome or Firefox sync if it is on (they include course nicknames, GPA choices and some school/course/account identifiers; Safari keeps them on the device). Course details, grade records, notes, tasks, your place, the due list and typing backups stay on your device. Glaze reads your own Blackboard, Canvas or Moodle site using your existing session, and writes to it only when you ask (a planner tick, a Canvas nickname or color, Sign out, Moodle's Edit mode). Chosen web fonts and background images make ordinary network requests; linked videos and animations are fetched by Glaze's worker without cookies, a referrer or redirects (12 MiB video, 6 MiB picture, 1 MiB Lottie; video/picture sides up to 4096 pixels). Identifying metadata is removed from the file’s container; encoded streams and visible pixels remain. Files saved before 3.3.5 that cannot be cleaned stay on this device and are not shared. Course tab pictures stay in memory and are never sent anywhere. Share sessions and mod channels, only if you use them, send encrypted content that the relay cannot read. Glaze does not collect or sell your coursework, grades, credentials or browsing history. A mod granted course data and network access can send that data to its granted hosts. Full policy: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+No analytics, no ads and no account. Settings stay in your browser and follow Chrome or Firefox sync if it is on (they include course nicknames, GPA choices and some school/course/account identifiers; Safari keeps them on the device). Course details, grade records, notes, tasks, your place, the due list and typing backups stay on your device. Glaze reads your own Blackboard, Canvas or Moodle site using your existing session, and writes to it only when you ask (a planner tick, a Canvas nickname or color, Sign out, Moodle's Edit mode). Chosen web fonts and background images make ordinary network requests; linked videos and animations are fetched by Glaze's worker without cookies, a referrer or redirects (12 MiB video, 6 MiB picture, 1 MiB Lottie; video/picture sides up to 4096 pixels). Identifying metadata is removed from the file’s container; encoded streams and visible pixels remain. Files saved before 3.3.5 that cannot be cleaned stay on this device and are not shared. Course tab sketches stay in memory and are never sent anywhere. Share sessions and mod channels, only if you use them, send encrypted content that the relay cannot read. Glaze does not collect or sell your coursework, grades, credentials or browsing history. A mod granted course data and network access can send that data to its granted hosts. Full policy: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
 Open source (MIT): https://github.com/frostdev-ops/glaze
 
@@ -135,19 +135,27 @@ Glaze customizes how Blackboard Ultra, Canvas and Moodle pages look and read, an
 
 ### storage
 
-Saves theme and extra settings in chrome.storage.sync, including user-set course nicknames, colors, tint and Looks; these follow Chrome sync when enabled. Local storage keeps course details, seen-grade and content records, the due list, Better To Do's own tasks and plans, the class schedule, reminder and streak state, widget layouts, hidden folders, supported draft backups, what-if scores and course positions, and the sites the user approved. Course tab pictures are kept only in chrome.storage.session (memory). Canvas badge records include site, account and course identifiers; some Ultra seen-grade/content records still use course ids without account scoping. Drafts expire after at most 14 days; switching backup off deletes them. Coursework records and draft text are not synced. See the privacy policy for each record's retention and removal behavior.
+Saves theme and extra settings in chrome.storage.sync, including user-set course nicknames, colors, tint and Looks; these follow Chrome sync when enabled. Local storage keeps course details, seen-grade and content records, the due list, Better To Do's own tasks and plans, the class schedule, reminder and streak state, widget layouts, hidden folders, supported draft backups, what-if scores and course positions, and the sites the user approved. Course tab sketches (boxes, colours and the course's name, with its page path) stay in page memory and chrome.storage.session (memory). Canvas badge records include site, account and course identifiers; some Ultra seen-grade/content records still use course ids without account scoping. Drafts expire after at most 14 days; switching backup off deletes them. Coursework records and draft text are not synced. See the privacy policy for each record's retention and removal behavior.
 
 ### unlimitedStorage
 
 Notes, their pictures and attachments, course-card pictures and files kept for Look backgrounds are kept in the extension's own storage. This permission stops the browser from deleting them to free space. Nothing more is collected or sent because of it.
 
-### Host access: <all_urls> (1,000 character maximum)
+### Host access (1,000 character maximum)
 
-Blackboard Ultra, Canvas and Moodle can run on a school's own domain, so Glaze needs site access to recognize and theme them. It is <all_urls> rather than https://*/* because chrome.tabs.captureVisibleTab requires it: course tabs on Ultra and Canvas show a picture of the course page, kept only in memory and never sent anywhere. Content scripts match HTTPS pages only; on other sites, lib/detect.js checks only the page head and stops. On a school's domain not already approved, Glaze asks the user first and does nothing there until they say yes. On approved sites it makes requests with the user's existing session: reads for the features they turn on, and writes only on their click (planner ticks, Canvas nicknames and colors, Sign out in Glaze's Canvas bar, Moodle's Edit mode). The same access covers Gradescope (only while its To Do option is on), the gallery and mods on frostdev.io, optional encrypted share sessions, media and fonts the user chooses, and HTTPS hosts the user grants a mod.
+Required hosts: *.instructure.com, *.blackboard.com, *.moodlecloud.com, frostdev.io and share.frostdev.io. https://*/* is optional: the popup checks the page before offering Use Glaze on the site; the first-run and Settings address fields check LMS APIs after the user grants access, returning only new grants if no LMS answers. Browser-menu grants are checked too; failed checks leave that access unused. All sites grants every HTTPS site; Glaze then asks the user first on each new school's pages. Redirected files stop with a Canvas fallback on Chrome/Edge/Firefox. Other hosts are requested as needed: Canvas Download all file servers, Gradescope, Look media, mod network hosts and custom share relays. Local testing uses optional http://localhost/* and http://127.0.0.1/*. On allowed school sites Glaze reads with the user's session and writes only on their click (planner ticks, Canvas nicknames and colors, Sign out, Moodle's Edit mode).
+
+### activeTab
+
+When the user opens Glaze's toolbar popup, Glaze reads that tab's address and checks its markup for Canvas, Blackboard Ultra or Moodle with a packaged function, so the popup can offer to turn Glaze on for that site. It reads nothing beyond that check and keeps nothing unless the user allows the site.
+
+### declarativeContent
+
+Puts a dot on Glaze's toolbar icon on pages that look like Canvas, Blackboard Ultra or Moodle, with page-URL and CSS rules that Chrome evaluates itself, so the user can see where Glaze can be turned on. Glaze is not told which pages match.
 
 ### scripting
 
-Injects and registers Glaze's packaged content scripts after recognizing Canvas or Moodle on a school's own domain and the user saying yes, so later visits to that host can be themed from the start. It does not inject Glaze's full theme into unrelated sites.
+Registers Glaze's packaged content scripts on the sites the user allowed, so later visits are themed from the start, and runs the popup's LMS check in the current tab. With All sites granted, it also registers a packaged check that reads only a page's head. All code is packaged; nothing is fetched and run. It does not inject Glaze's theme into unrelated sites.
 
 ### Web-accessible resources
 

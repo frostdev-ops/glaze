@@ -20,7 +20,7 @@ const worker = (execute = (o) => Promise.resolve([{ result: /typeof GZ_I18N|wind
   const none = { addListener() {} };
   const area = { get: (k) => Promise.resolve(Object.fromEntries([].concat(k ?? []).filter((x) => x in local).map((x) => [x, local[x]]))), set: () => Promise.resolve() };
   const context = vm.createContext({
-    URL, console, setTimeout, clearTimeout, GZ_GCAL: { ON: false },
+    URL, console, setTimeout, clearTimeout, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../defaults.js').GZ_LOCAL_DEV, GZ_GCAL: { ON: false },
     importScripts: (file) => vm.runInContext(read(path.join('lib', file)), context),
     chrome: {
       runtime: {
@@ -135,12 +135,11 @@ test('every loadable file ends on a value, which is how the worker knows it ran'
   }
 });
 
-// Each site's first content script: Ultra's and Canvas's from the manifest; Moodle's is Canvas's without its part, as
-// lib/background.js registers it. A site's part is loadable too, for a page whose list lacks it, and only there.
+// Each site's first content script, from the manifest: Ultra's, Canvas's and MoodleCloud's (Canvas's without its part, as
+// lib/background.js registers it for other Moodle hosts). A site's part is loadable too, for a page whose list lacks it, and only there.
 const firstScripts = () => {
-  const entry = (pattern) => manifest.content_scripts.find((c) => c.matches.includes(pattern)).js;
-  const canvas = entry('https://*.instructure.com/*');
-  return [entry('https://*/ultra'), canvas, canvas.filter((f) => f !== 'content-canvas.js')];
+  const entry = (has) => manifest.content_scripts.find(has).js;
+  return [entry((c) => c.js.includes('content-ultra.js')), entry((c) => c.js.includes('content-canvas.js')), entry((c) => c.matches.includes('https://*.moodlecloud.com/*'))];
 };
 const PARTS = ['content-ultra.js', 'content-canvas.js', 'lib/nav.js']; // Ultra's first-paint schema travels with its part on other registered hosts.
 test('every loadable file exists, is left out of the first content script, and is what content.js asks for', () => {

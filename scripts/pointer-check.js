@@ -11,7 +11,8 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const out = process.argv[2] && path.resolve(process.argv[2]);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const lock = require('./check-env.js').lockPath();

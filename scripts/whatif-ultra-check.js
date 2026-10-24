@@ -5,7 +5,8 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', user = '_900_1';
 const G = require(path.join(ext, 'defaults.js'));
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');

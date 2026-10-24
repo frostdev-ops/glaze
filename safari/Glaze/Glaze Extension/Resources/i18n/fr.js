@@ -1,7 +1,8 @@
 // French for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).fr = {
-  "Activity Stream": "Flux d’activité",
+
+  "Redirected file: download it from Canvas": "Fichier redirigé : téléchargez-le depuis Canvas",  "Activity Stream": "Flux d’activité",
   "Timeline dates": "Dates de la chronologie",
   "Due dates when available": "Échéances si disponibles",
   "Posted dates": "Dates de publication",
@@ -1652,7 +1653,6 @@
   "Import notes and share keys": "Importer les notes et les clés de partage",
   "Import restores keys locally. It connects only after you create, join or resume a session.": "L’importation restaure les clés localement. La connexion ne s’établit qu’après avoir créé, rejoint ou repris une session.",
   "Sites": "Sites",
-  "Glaze runs on Canvas at instructure.com and on Blackboard at blackboard.com. On a school's own address it asks first; these are the sites you said yes to.": "Glaze fonctionne sur Canvas à instructure.com et sur Blackboard à blackboard.com. Sur l’adresse propre d’un établissement, il demande d’abord ; voici les sites auxquels tu as dit oui.",
   "No other sites yet.": "Aucun autre site pour l’instant.",
   "Removing a site stops Glaze there and forgets the courses and due dates it read there; your notes and tasks stay. Reset everything clears this list.": "Retirer un site arrête Glaze sur ce site et lui fait oublier les cours et les échéances qu’il y a lus ; tes notes et tâches restent. « Tout réinitialiser » vide cette liste.",
   "Removed {site}. Glaze no longer runs there.": "{site} retiré. Glaze ne fonctionne plus sur ce site.",
@@ -3071,5 +3071,17 @@
   "Form": "Formulaire",
   "Survey": "Sondage",
   "Blog": "Blog",
-  "Wiki": "Wiki"
+  "Wiki": "Wiki",
+  "School address": "Adresse de ton établissement",
+  "Allow": "Autoriser",
+  "All sites": "Tous les sites",
+  "Another school": "Autre établissement",
+  "Not a web address": "Ce n’est pas une adresse web",
+  "Allowed {host}": "{host} autorisé",
+  "All sites allowed": "Tous les sites autorisés",
+  "No course site at {host}": "Aucun site de cours à {host}",
+  "Can't reach {host}": "{host} est injoignable",
+  "Checking {host}": "Vérification de {host}",
+  "Use Glaze on {host}": "Utiliser Glaze sur {host}",
+  "Allow {host}": "Autoriser {host}"
 };

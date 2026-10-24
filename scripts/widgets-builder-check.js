@@ -10,7 +10,8 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), https = require('node:https');
 const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
-const ext = fs.realpathSync(path.resolve(process.env.EXT || path.join(__dirname, '..')));
+// The local LMS (https://127.0.0.1) stands in the staged copy's host_permissions: the student's grant on the narrow manifest.
+const ext = require('./check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '..')), ['https://127.0.0.1/*']);
 const chrome = require('./check-env.js').chromePath() || chromium.executablePath();
 const M = require(path.join(ext, 'lib/modbundle.js'));
 const W = require(path.join(ext, 'lib/widgets.js'));

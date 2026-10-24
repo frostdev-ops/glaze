@@ -2,7 +2,8 @@
 // NODE_PATH=<playwright> nice -n 15 node scripts/background-pages-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.resolve(__dirname, '..'));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const root = require('./check-env.js').staged(process.env.EXT || path.resolve(__dirname, '..'), ['https://bb.school.test/*']);
 const G = require(path.join(root, 'defaults.js'));
 const id = [...crypto.createHash('sha256').update(root).digest('hex').slice(0,32)].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
 const origin = 'https://bb.school.test', uid = '_42_1', out = process.argv[2];
@@ -34,6 +35,7 @@ const check = (value,label) => { assert.ok(value,label); results.push(label); };
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ultra:[origin],[`sidebar:ultra:${origin}/${uid}`]:{v:1,rev:1,mig:1,dock:[{id:'notes'}],dest:{notes:'dock'}},[`ctabs:${origin}:${uid}`]:{tabs:[101,102].map((n,i)=>({cid:`_${n}_1`,name:`Course ${n}`,path:`/ultra/courses/_${n}_1/outline`,top:0,at:i,pin:true}))}});
     },{settings,origin,uid});
+    await require('./check-env.js').ultraReady(opts);
     const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
     page.on('console',m=>{if(m.text().startsWith('[Glaze] Background'))console.error(m.text());});
     const paths=['institution-page','course','stream','calendar','grades','messages',...['outline','calendar','announcements','engagement','grades','messages','groups/enrollments','achievements','document/_8110_1?view=content&state=view','assessment/_8120_1/overview','assessment/_8121_1/overview','outline/edit/document/_9001_1','outline/assessment/_9002_1/overview','outline/discussion/_9003_1'].map(p=>`courses/_101_1/${p}`)];

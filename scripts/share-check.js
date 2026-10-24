@@ -4,7 +4,8 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { relay, diskStore } = require('../server/relay.js');
 const G = require('../defaults.js');
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+// A copy holding the school's host and the local relay, as the student's grants do (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://bb.school.test/*', 'http://127.0.0.1/*']);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const site = 'https://bb.school.test';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -62,6 +63,7 @@ const click = async (page, locator, dwell = 750) => {
     const look = G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, G.GZ_LOOKS.find((l) => l.name === 'Aurora Night'));
     await settings.evaluate(async ({ patch, relayURL }) => {
       await chrome.storage.sync.set({ ...patch, enhance: { ...patch.enhance, notes: true }, shareRelay: relayURL });
+      await chrome.storage.local.set({ ultra: ['https://bb.school.test'] });
     }, { patch: { ...G.GZ_DEFAULTS, ...look }, relayURL });
     await settings.reload();
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));

@@ -1,6 +1,8 @@
 // The real lib/background.js in a vm, as test/sidebar-broker.test.js runs it, with in-memory storage and what the tests of
 // frame trust and starter flags also need: the worker's ports, tab events, session storage, and a count of the reads of
-// all of sync. Pass a previous run's `store` to restart the worker over the same storage.
+// all of sync. Pass a previous run's `store` to restart the worker over the same storage. chrome.permissions answers as
+// the browser would for the manifest's hosts plus `grants` (a Set the test may change); `revoked` takes required hosts
+// away, as Firefox lets a student do. `perms` records what was requested and removed; `registered`, the content scripts.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -8,8 +10,27 @@ const vm = require('node:vm');
 const root = path.join(__dirname, '..', '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 
-module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [] }, session: {} }, session = true, sessionArea, fetch } = {}) => {
+// Whether match pattern `p` covers `want` (a pattern or an origin's `scheme://host[:port]/*`).
+const covers = (p, want) => {
+  if (p === '<all_urls>') return true;
+  const a = /^(\*|https?):\/\/([^/:]+)(?::(\d+))?\//.exec(p), b = /^(https?):\/\/([^/:]+)(?::(\d+))?\//.exec(want);
+  if (!a || !b) return false;
+  const host = a[2] === '*' || a[2] === b[2] || (a[2].startsWith('*.') && (b[2] === a[2].slice(2) || b[2].endsWith(a[2].slice(1))));
+  return (a[1] === '*' ? /^https?$/.test(b[1]) : a[1] === b[1]) && host && (!a[3] || a[3] === b[3]);
+};
+module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [] }, session: {} }, session = true, sessionArea, fetch, grants = new Set(), revoked = [], manifest: edit } = {}) => {
   const manifest = JSON.parse(read('manifest.json'));
+  if (edit) edit(manifest);
+  const perms = { requested: [], removed: [], added: [], gone: [] };
+  const holding = () => [...(manifest.host_permissions || []).filter((p) => !revoked.includes(p)), ...grants];
+  const permissions = {
+    contains: async ({ origins = [] } = {}) => origins.every((o) => holding().some((p) => covers(p, o))),
+    getAll: async () => ({ origins: holding() }),
+    remove: async ({ origins = [] } = {}) => { perms.removed.push(...origins); for (const o of origins) grants.delete(o); return true; },
+    request: async ({ origins = [] } = {}) => { perms.requested.push(...origins); return false; },
+    onAdded: { addListener: (f) => perms.added.push(f) }, onRemoved: { addListener: (f) => perms.gone.push(f) },
+  };
+  const registered = new Map();
   const changed = [], startup = [], listeners = [], installed = [], connects = [], removed = [];
   const reads = { sync: 0, syncAll: 0, local: 0 };
   const area = (s, name) => ({
@@ -26,7 +47,7 @@ module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, 
     remove: async (k) => { for (const x of [].concat(k)) delete s[x]; },
   });
   const context = vm.createContext({
-    URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto, AbortController, btoa, atob, fetch, navigator: {},
+    URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto, AbortController, AbortSignal, DOMException, Response, btoa, atob, fetch, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => manifest,
@@ -34,7 +55,9 @@ module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, 
         onConnect: { addListener: (f) => connects.push(f) } },
       tabs: { onRemoved: { addListener: (f) => removed.push(f) }, query: async () => [] },
       storage: { ...(session && { session: sessionArea || area(store.session, 'session') }), local: area(store.local, 'local'), sync: area(store.sync, 'sync'), onChanged: { addListener: (f) => changed.push(f) } },
-      scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {}, executeScript: async () => [{ result: true }] },
+      permissions,
+      scripting: { getRegisteredContentScripts: async () => [...registered.values()], registerContentScripts: async (l) => { for (const x of l) registered.set(x.id, x); },
+        unregisterContentScripts: async ({ ids } = {}) => { for (const id of ids || [...registered.keys()]) registered.delete(id); }, executeScript: async () => [{ result: true }] },
     },
   });
   vm.runInContext(read('lib/background.js'), context);
@@ -52,5 +75,5 @@ module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, 
     for (const f of connects) f(port);
     return { port, say: (m) => { for (const f of on.message) f(m); } };
   };
-  return { store, send, installed, startup, changed, removed, reads, settle, connect, context };
+  return { store, send, installed, startup, changed, removed, reads, settle, connect, context, perms, grants, registered, manifest };
 };

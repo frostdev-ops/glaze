@@ -4,7 +4,7 @@
 // It opens courses, then checks: tabs open, switch, close (×, middle click, Delete), pin, move (keyboard, drag) and cap;
 // a first switch loads the saved course in a live frame; later switches keep that document, route, scroll and edits;
 // an assessment is never reopened or started by a warm switch; the strip above, between and below the bar's rows, on an item panel and above a page, never over
-// Ultra's own controls; the pictures and frames are dropped when the tabs are switched off and when another account signs in; and no
+// Ultra's own controls; a stand-in drawn from the course's sketch covers a frame while it first loads; the sketches and frames are dropped when the tabs are switched off and when another account signs in; and no
 // warm return reloads its document or resources. Screenshots: each placement, Frost (dark) and Paper (light), 1280 and 375 px wide.
 //   NODE_PATH=/path/to/node_modules node scripts/ultra-tabs-check.js [out dir for screenshots]   (needs playwright)
 const { chromium } = require('playwright');
@@ -13,9 +13,10 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const G = require('../defaults.js');
-require('../lib/coursetabs.js');
+const CTABS = require('../lib/coursetabs.js');
 
-const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-tabs-'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 let PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-course.html'), 'utf8');
@@ -82,11 +83,27 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     const pictured = (cid, route) => opts.evaluate(async ({ cid, route }) => {
       const until = performance.now() + 10000;
       while (performance.now() < until) {
-        if (Object.values(await chrome.storage.session.get(null)).some((v) => v?.cid === cid && v.path === route && v.shot)) return;
+        if (Object.values(await chrome.storage.session.get(null)).some((v) => v?.cid === cid && v.path === route && v.boxes?.length && !('shot' in v))) return;
         await new Promise((r) => setTimeout(r, 50));
       }
-      throw new Error(`no picture captured for ${cid} at ${route}`);
+      throw new Error(`no sketch kept for ${cid} at ${route}`);
     }, { cid, route });
+    // The stand-in on the page, read through its closed shadow root (DOM.getDocument pierces it): its drawn parts, and
+    // whether any picture is in it.
+    const standIn = async () => {
+      const s = await ctx.newCDPSession(page);
+      try {
+        const { root } = await s.send('DOM.getDocument', { depth: -1, pierce: true });
+        const attr = (n, k) => { const a = n.attributes || []; const i = a.indexOf(k); return i >= 0 && i % 2 === 0 ? a[i + 1] : ''; };
+        const kids = (n) => [...(n.children || []), ...(n.shadowRoots || [])];
+        const find = (n) => (/(^|\s)gz-ctabs-pic(\s|$)/.test(attr(n, 'class')) ? n : kids(n).map(find).find(Boolean) || null);
+        const pic = find(root);
+        if (!pic) return null;
+        const all = (n) => [n, ...kids(n).flatMap(all)];
+        const inside = (pic.shadowRoots || []).flatMap(all);
+        return { parts: inside.filter((n) => n.nodeName === 'DIV' && /left:\s*-?\d/.test(attr(n, 'style'))).length, pictures: inside.filter((n) => /^(IMG|PICTURE|CANVAS)$/.test(n.nodeName)).length };
+      } finally { await s.detach(); }
+    };
     let cdp, world;
     const worlds = [];
     const isolated = async (func) => {
@@ -355,13 +372,19 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await target.click('#gz-ctabs [data-course-id="_101_1"]');
     try {
       await page.waitForSelector('.gz-ctabs-pic');
-      ok(courseHeld, 'the first live course is still loading behind its picture');
+      ok(courseHeld, 'the first live course is still loading behind its stand-in');
       const axSession = await ctx.newCDPSession(page);
       const ax = await axSession.send('Accessibility.getFullAXTree');
       await axSession.detach();
-      ok(ax.nodes.some((n) => n.role?.value === 'progressbar' && n.name?.value === 'Loading…'), 'the loading picture exposes its accessible spinner');
+      ok(ax.nodes.some((n) => n.role?.value === 'progressbar' && n.name?.value === 'Loading…'), 'the stand-in exposes its accessible spinner');
       ok(await page.locator('#gz-ctabs [data-course-id="_101_1"]').getAttribute('aria-selected') === 'true', 'the selected tab updates while its live page loads');
-      ok(await page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('.gz-ctabs-pic')), 'the cached course picture covers the outgoing page until its frame is built');
+      ok(await page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('.gz-ctabs-pic')), 'the stand-in covers the outgoing page until its frame is built');
+      const drawnNow = await standIn(), sketch = Object.values(await session()).find((v) => v?.cid === '_101_1' && v.boxes);
+      fs.writeFileSync(path.join(out, 'stand-in-sketch.json'), JSON.stringify(sketch, null, 1));
+      ok(sketch && drawnNow?.parts === CTABS.drawn(sketch).length && drawnNow.pictures === 0, `the stand-in is drawn from the course's sketch, with no picture in it (${JSON.stringify(drawnNow)})`);
+      // The Gradebook's rows (text bars right of Ultra's menu, under the course's header) and its header's blocks.
+      const rows = sketch?.boxes.filter(([x, y, , , k]) => k === 't' && x > 230 && y > 170).length, header = sketch?.boxes.filter(([x, y, w, , k]) => 'bc'.includes(k) && x >= 220 && y < 170 && w > 500).length;
+      ok(rows >= 8 && header >= 2, `the sketch is of the course's page: its rows and its header (${rows} rows, ${header} header blocks)`);
       await page.screenshot({ path: path.join(out, 'switch-copy-frost-1280.png') });
     } finally { holdCourse = ''; releaseCourse?.(); }
     await showing('_101_1');
@@ -420,7 +443,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await showing('_101_1');
     ok(await order() === '_103_1 _101_1', `a middle click closes a tab (${await order()})`);
     await page.waitForTimeout(200);
-    ok(!Object.keys(await session()).some((k) => k.endsWith('|_104_1')), 'closing a tab also drops its worker picture');
+    ok(!Object.keys(await session()).some((k) => k.endsWith('|_104_1')), 'closing a tab also drops its worker sketch');
     // Dragging: the last unpinned tab to the first unpinned place.
     await open('_104_1');
     const box = async (cid) => target.locator(`#gz-ctabs [data-course-id="${cid}"]`).boundingBox();
@@ -543,7 +566,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await routedChecks();
     await open('_103_1');
 
-    // ---- pictures stay in session storage and are dropped on switch-off or another account ----
+    // ---- sketches stay in session storage and are dropped on switch-off or another account ----
     let kept = Object.keys(await session()).filter((k) => k.startsWith('snap:'));
     ok(kept.length >= 1 && kept.every((k) => k.startsWith(`snap:${SITE}|_`)), `copies are kept in storage.session, for this site (${kept.length})`);
     await settings({ enhance: { tabs: false } });
@@ -556,7 +579,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await target.waitForSelector('#gz-ctabs [role="tab"]');
     await switchTab('_104_1');
     await pictured('_104_1', '/ultra/courses/_104_1/outline');
-    ok(Object.keys(await session()).some((k) => k.startsWith('snap:')), 'on again, a switch keeps a picture again');
+    ok(Object.keys(await session()).some((k) => k.startsWith('snap:')), 'on again, a switch keeps a sketch again');
     user = '_43_1';
     phase = 'account-reload';
     await page.reload();

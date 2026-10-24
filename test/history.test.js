@@ -52,7 +52,7 @@ test('favorites are one per code, newest first, capped; bad stored lists are dro
 });
 
 // The background, run as the browser would: the gallery hand-off and the history it records.
-const worker = ({ fetch } = {}) => {
+const worker = ({ fetch, manifest = m } = {}) => {
   const on = { message: [], changed: [] };
   const local = {};
   const sync = {};
@@ -72,7 +72,7 @@ const worker = ({ fetch } = {}) => {
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
     chrome: {
       runtime: {
-        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
+        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => manifest,
         openOptionsPage: () => { opened.push('options'); return Promise.resolve(); },
         onMessage: { addListener: (f) => on.message.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
@@ -126,7 +126,8 @@ test('the gallery content script runs only on the gallery, and the background ta
   const entry = m.content_scripts.find((c) => c.js.includes('lib/gallery.js'));
   assert.deepEqual(entry.matches, ['https://frostdev.io/glaze/looks', 'https://frostdev.io/glaze/looks/*', 'https://frostdev.io/glaze/mods', 'https://frostdev.io/glaze/mods/*']);
   assert.ok(!entry.all_frames);
-  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage'], 'no permission for the gallery');
+  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent'], 'no permission for the gallery');
+  assert.ok(m.host_permissions.includes('https://frostdev.io/*'), 'its host is held from the start');
   const w = worker();
   const code = 'glaze1:abc';
   for (const [url, frameId] of [['https://evil.example/glaze/looks/', 0], ['https://frostdev.io/glaze', 0], ['https://frostdev.io/glaze/looksevil', 0], ['https://frostdev.io/glaze/looksevil/', 0], ['http://frostdev.io/glaze/looks/', 0], ['https://frostdev.io.evil.example/glaze/looks/', 0], ['https://frostdev.io/glaze/looks/', 3], ['https://frostdev.io/glaze/mods/', 0], ['https://frostdev.io/glaze/mods', 0], [undefined, 0]]) {
@@ -147,6 +148,20 @@ test('the gallery content script runs only on the gallery, and the background ta
     await w.tick();
     assert.equal(w.local.galleryOffer?.code, code, url);
   }
+});
+
+// Firefox's getManifest gives each content script file as its full address: the gallery's entry is still found by its file.
+test('Firefox: the gallery hand-off still takes codes from the gallery, whose content script getManifest names by its full address', async () => {
+  const firefox = { ...m, content_scripts: m.content_scripts.map((c) => ({ ...c, js: c.js.map((f) => `chrome-extension://x/${f}`) })) };
+  const w = worker({ manifest: firefox });
+  const code = 'glaze1:abc';
+  w.send({ gallery: { code, name: 'X' } }, { url: 'https://evil.example/glaze/looks/', frameId: 0 });
+  await w.tick();
+  assert.deepEqual(w.local, {});
+  w.send({ gallery: { code, name: 'Aurora Night', author: 'frostdev-ops' } }, { url: 'https://frostdev.io/glaze/looks/#aurora-night', frameId: 0 });
+  await w.tick();
+  assert.deepEqual(w.local.galleryOffer, { code, name: 'Aurora Night', author: 'frostdev-ops' });
+  assert.deepEqual(w.opened, ['options']);
 });
 
 test('the background records the theme left and the theme worn once a burst of changes rests', async () => {

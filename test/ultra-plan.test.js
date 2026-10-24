@@ -147,8 +147,9 @@ const worker = ({ sessionFail = null } = {}) => {
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
       tabs: { onRemoved: { addListener: (f) => removed.push(f) } },
+      permissions: { contains: async () => true }, // the student granted every host (Chrome)
       storage: { session: Object.fromEntries(Object.entries(area(store.session)).map(([k, f]) => [k, (...a) => { if (sessionFail === k) throw Error('storage unavailable'); return f(...a); }])), local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
-      scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
+      scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {}, executeScript: async () => [{ result: true }] }, // the page has Glaze already
     },
   });
   vm.runInContext(read('lib/background.js'), context);
@@ -252,7 +253,7 @@ test('landing worker validates top frame, recorded Ultra site, current master/da
   const both = await Promise.all([w.send(msg, page), w.send(msg, page)]);
   assert.deepEqual(both.map((x) => x.first).sort(), [false, true], 'only one simultaneous claim wins');
   assert.deepEqual(await w.send(msg, { ...page, tab: { id: 8 } }), { first: true }, 'another tab');
-  w.removed[0](7);
+  for (const listener of w.removed) listener(7);
   await new Promise(setImmediate);
   assert.equal(w.store.session['landed:7'], undefined, 'tab closure cleans its marker');
   for (const k of ['get', 'set']) {
