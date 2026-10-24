@@ -677,9 +677,11 @@ test("the open course's tab comes back into view when the window changes size, w
   // Five tabs of 104px, the open one last; the strip 351px wide on a phone after a rotation, still scrolled to its start.
   const tabs = [0, 1, 2, 3, 4].map((i) => ({ offsetLeft: i * 108, offsetWidth: 104 }));
   const list = { scrollLeft: 0, clientWidth: 351, querySelector: (s) => (s === '[aria-selected="true"]' ? tabs[4] : null) };
-  const c = vm.createContext({ list, ctx: { site: 'ultra' }, lay() {}, navRoom() {} });
+  const placed = [];
+  const c = vm.createContext({ list, on: true, flag() { placed.push('flag'); }, place() { placed.push('place'); }, ctx: { site: 'ultra' }, lay() {}, navRoom() {} });
   const onResize = vm.runInContext(`${part('  const inView = ', '  const draw = ')}${part('  const onResize = ', '  let navWatch = ')}\nonResize;`, c);
   onResize();
+  assert.deepEqual(placed, ['flag', 'place'], 'crossing the desktop breakpoint refreshes the automatic strip before scrolling it');
   assert.equal(list.scrollLeft, 4 * 108 - 8, 'scrolled to the open tab');
   // In view already: left as it is.
   list.scrollLeft = 200; list.clientWidth = 600;
@@ -688,4 +690,12 @@ test("the open course's tab comes back into view when the window changes size, w
   // No strip yet: nothing to do.
   c.list = null;
   assert.doesNotThrow(onResize);
+});
+
+test('Canvas resize drops the old sketch before deciding where its live strip belongs', () => {
+  const frame = { el: { style: { visibility: 'hidden' } } };
+  const c = vm.createContext({ on: true, flag() {}, ctx: { site: 'canvas' }, pic: {}, showing: '12', frames: new Map([['12', frame]]),
+    lay() {}, navRoom() {}, inView() {}, unpicture() { c.pic = null; }, place() { assert.equal(c.pic, null, 'the sketch no longer covers the live frame'); } });
+  vm.runInContext(`${part('  const onResize = ', '  let navWatch = ')}\nonResize();`, c);
+  assert.equal(frame.el.style.visibility, '', 'the live frame is visible');
 });

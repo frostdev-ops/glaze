@@ -350,14 +350,15 @@
   // What only some pages need isn't in the first content script: it runs in this frame the first time it's needed,
   // put there by lib/background.js ('glaze:load', its LOADABLE list). The options preview has it as <script> tags.
   // `ready` says whether what the file defines is here: before asking (the preview), and after the worker says it ran.
-  // One request per file at a time; a failed one may be asked again after a minute (flush asks often).
+  // One request per file at a time. A failed one is asked again by itself (1 s, 2 s, 4 s… 30 s apart, about four minutes)
+  // and the page syncs once it is in (recover); a refusal that won't change, by a sync after a minute.
   // docId names this document to the worker where the browser can't (no sender.documentId): it checks the frame still
   // holds this document before injecting.
   const docId = crypto.randomUUID();
   globalThis.__gzDoc = docId;
   const loading = new Map(); // file -> promise
-  const need = (file, ready, retry = true) => {
-    if (!loading.has(file)) {
+  const need = (file, ready, retry = true, n = 0) => {
+    if (n || !loading.has(file)) {
       const p = ready() ? Promise.resolve() : isPreview ? Promise.reject(new Error('not in the preview'))
         : Promise.resolve().then(() => {
           if (!chrome.runtime?.id) throw new Error('reloaded');
@@ -366,7 +367,10 @@
           if (!r?.ok) throw new Error(r?.error || 'not loaded');
           if (!ready()) throw new Error('ran, but not ready');
         });
-      if (retry) p.catch(() => { if (chrome.runtime?.id) setTimeout(() => { if (loading.get(file) === p) loading.delete(file); }, 60000); });
+      if (retry) p.then(() => { if (n) recover(); }, (e) => {
+        const again = n < 11 && !/^(not loadable|sender|not in the preview)$/.test(e.message);
+        if (chrome.runtime?.id) setTimeout(() => { if (loading.get(file) === p) { if (again) need(file, ready, true, n + 1).catch(() => {}); else loading.delete(file); } }, again ? Math.min(1000 << n, 30000) : 60000);
+      });
       loading.set(file, p);
     }
     return loading.get(file);
@@ -1501,6 +1505,9 @@
   };
 
   const reapply = () => { if (settings.enabled && links.length) applySettings(); };
+  // A file asked again came in: what wanted it syncs, the site's part too, and the sweep reads the page again.
+  let recovering = false;
+  const recover = () => { if (!recovering) { recovering = true; setTimeout(() => { recovering = false; takePart(); reapply(); if (observer) { full = true; if (!timer) timer = setTimeout(flush, 150); } }); } };
   // New palettes and Looks crossfade in (lib/motion.js, where loaded).
   const swap = (f) => (globalThis.GZ_MOTION?.swap || ((g) => g()))(f);
 
@@ -1514,7 +1521,8 @@
     get settings() { return settings; }, get ready() { return ready; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
     get courseList() { return courseList; }, get worn() { return worn; } };
   const part = { ultra: 'GZ_SITE_ULTRA', canvas: 'GZ_SITE_CANVAS' }[site];
-  const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
+  let took = false;
+  const takePart = () => { if (!took && part && globalThis[part]) { took = true; Object.assign(X, globalThis[part](I)); } };
   const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
   if (!partIn) takePart();
   // Moodle: first paint and lazy navigation.

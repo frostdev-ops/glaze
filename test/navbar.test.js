@@ -325,9 +325,9 @@ test("the editor lists every item where the bar puts it, hidden ones too, with t
 
 test('course tabs show in the bar when it holds them, and at "only in the navigation" their strip steps aside', () => {
   const src = read('features/coursetabs.js');
-  assert.deepEqual(require('../lib/coursetabs.js') && require('../defaults.js').GZ_SPEC.tabs.at, ['above', ['above', 'between', 'below', 'nav']]);
+  assert.deepEqual(require('../lib/coursetabs.js') && require('../defaults.js').GZ_SPEC.tabs.at, ['auto', ['auto', 'above', 'between', 'below', 'nav']]);
   assert.match(src, /\(framed \? parent\.document : document\)\.documentElement\.getAttribute\('data-gz-navbar'\)/, "a tab's frame asks the page around it");
-  assert.match(src, /const at = \(\) => \(P\(\)\.at !== 'nav' \? P\(\)\.at : navHolds\(\) \? 'nav' : 'above'\);/, "'nav' is the strip's 'above' where no bar holds the tabs");
+  assert.match(src, /P\(\)\.at !== 'nav' \? P\(\)\.at : navHolds\(\) \? 'nav' : 'above'\);/, "'nav' is the strip's 'above' where no bar holds the tabs");
   assert.match(src, /const hosted = \(\) => at\(\) === 'nav';/);
   assert.match(src, /if \(hosted\(\)\) \{ keepClear\(null\); strip\.remove\(\); return; \}/);
   assert.match(src, /v = a === 'nav' \? a : /, 'the first paint keeps no room for a strip');

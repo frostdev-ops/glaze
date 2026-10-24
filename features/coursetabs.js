@@ -174,9 +174,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (header && !hadClear) header.setAttribute('data-gz-keep-clear', '');
   };
   // Glaze's own navigation bar holds the tabs too (features/navbar.js, data-gz-navbar's word `tabs`). At 'nav' they are only
-  // there: no strip, in a tab's own frame either (the page around it has the bar). Where no bar holds them, 'nav' is 'above'.
-  const navHolds = () => { try { return ((framed ? parent.document : document).documentElement.getAttribute('data-gz-navbar') || '').split(' ').includes('tabs'); } catch { return false; } };
-  const at = () => (P().at !== 'nav' ? P().at : navHolds() ? 'nav' : 'above');
+  // there: no strip, in a tab's own frame either (the page around it has the bar). Where no bar holds them, 'nav' is 'above';
+  // 'auto' is 'nav' where that bar is a top bar holding them, as defaults.js GZ_TABS_AUTO words it for the first paint.
+  const navHolds = () => words().includes('tabs');
+  const words = () => { try { return ((framed ? parent.document : document).documentElement.getAttribute('data-gz-navbar') || '').split(' '); } catch { return []; } };
+  const topBar = () => { try { return (framed ? parent.innerWidth : innerWidth) >= 900 && words().includes('top'); } catch { return false; } };
+  const at = () => (P().at === 'auto' ? (navHolds() && topBar() ? 'nav' : 'above') : P().at !== 'nav' ? P().at : navHolds() ? 'nav' : 'above');
   const hosted = () => at() === 'nav';
   const place = () => {
     if (!on || !strip) return;
@@ -1717,6 +1720,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const onHide = () => { if (on) { saveNow(); keepPage(); } navWatch?.disconnect(); navWatch = null; };
   const onShow = (e) => { if (e.persisted && on && framed) { listen(false); listen(true); } };
   const onResize = () => {
+    if (on) flag();
+    if (ctx.site !== 'canvas') place();
     lay();
     navRoom();
     inView();

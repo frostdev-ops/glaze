@@ -193,6 +193,20 @@ const LOCAL_DEV = 125; // measured against 11dfdd4a, excluding STREAM_FIX
 // 2026-10-19 approval): content-ultra.js's Stream start (59 bytes) and content.js's hook for it (21, every site). Main fit it in
 // its 2% headroom, which the lit icon had already used here. Measured against 82ac5a42.
 const STREAM_FIX = { ultra: 80, canvas: 21, moodle: 21 };
+// The old rail's code stays out under Glaze navigation (the settings audit; a named raise under the owner's 2026-10-19
+// approval): content-ultra.js no longer loads features/nav.js, nor reads navItems for it, while Glaze navigation stands in
+// for Ultra's own: 128 bytes on Ultra. Canvas's same gate (113) fits its 2% headroom. Measured against 058c0bb2.
+const NAV_GATE = { ultra: 128, canvas: 0, moodle: 0 };
+// Code on demand that recovers by itself (a named raise under the owner's 2026-10-19 approval; seen in Safari after the
+// extension was registered again): content.js's need() asks a failed load again with backoff for about four minutes, and
+// the page syncs once it is in (the site's part taken once), so a quiet page doesn't stay without its extras until a
+// reload: 774 bytes on every site. Measured against 9dc20b7c.
+const LOAD_RECOVERY = 774;
+// Course tabs' automatic place (the owner's request; a named raise under the 2026-10-19 approval): defaults.js's GZ_TABS_AUTO
+// (337 bytes on every site, where both parts read it) and the first paints that use it with no cached strip, so a top-bar
+// page keeps no strip room and doesn't jump: content-ultra.js 371 (a tab's frame reads the page around it), content-canvas.js
+// 103. Measured against 5b77c49e.
+const TABS_AUTO = { ultra: 337 + 371, canvas: 337 + 103, moodle: 337 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -201,7 +215,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content-ultra.js')), c
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site];
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site];
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -334,6 +348,7 @@ const STYLE_READS = [
   ['content-ultra.js', 'getComputedStyle(p)', 1], // a course slot's probe
   ['features/docs.js', 'getComputedStyle(p)', 1], // the scroller above the document in focus mode
   ['features/petworld.js', 'getComputedStyle(n)', 1], // at most 30 ancestors when a pet/toy acquires a content anchor; never in the scroll handler
+  ['features/petworld.js', 'getComputedStyle(e)', 1], // only matching panel roots with layout boxes, while the pet is wandering
   ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
   ['features/coursetabs.js', 'getComputedStyle(p)', 1], // the scroller above the course tabs, once a tab switch lands
   ['features/coursetabs.js', 'getComputedStyle(list)', 1], // the tab strip's direction, once per arrow key

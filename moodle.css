@@ -416,6 +416,19 @@ html .activity-item .activitybadge.badge-none { background: transparent; border-
 html .course-content :is(li.section, .section.main) { border-color: var(--gz-border-line, var(--gz-line)); }
 html .course-content .divider hr, html .course-content .divider .divider-content { border-color: var(--gz-border-line, var(--gz-line)); }
 
+/* ---- Density and Line height (look.density, look.leading), as canvas.css and theme.css apply them. Compact and roomy
+   scale Boost 5.3's own spacing of activity rows, sections, tables and course cards (normal leaves it as Boost draws it);
+   the line height is that of formatted text, what a teacher or student wrote. ---- */
+html:is([data-gz-density="compact"], [data-gz-density="roomy"]) .activity-item { padding-block: calc(1.25rem * var(--gz-space)); }
+html:is([data-gz-density="compact"], [data-gz-density="roomy"]) body:not(.editing) .activity:not(:first-child),
+html:is([data-gz-density="compact"], [data-gz-density="roomy"]) body:not(.editing) .course-section { margin-top: calc(1rem * var(--gz-space)); }
+html:is([data-gz-density="compact"], [data-gz-density="roomy"]) .course-section .section-item .course-section-header { padding-block: calc(1rem * var(--gz-space)); }
+html:is([data-gz-density="compact"], [data-gz-density="roomy"]) table.generaltable :is(th, td) { padding-block: calc(0.75rem * var(--gz-space)); }
+html:is([data-gz-density="compact"], [data-gz-density="roomy"]) .table:not(.table-sm) { --bs-table-cell-padding-y: calc(0.5rem * var(--gz-space)); }
+html:is([data-gz-density="compact"], [data-gz-density="roomy"]) [data-region="card-deck"].card-grid { --bs-gutter-x: calc(0.5rem * var(--gz-space)); }
+html:is([data-gz-density="compact"], [data-gz-density="roomy"]) [data-region="card-deck"] > .col { margin-bottom: calc(0.5rem * var(--gz-space)) !important; }
+html :is(.no-overflow, .text_to_html), html :is(.no-overflow, .text_to_html) :where(p, li, td, th, div, span) { line-height: var(--gz-leading); }
+
 /* ---- an activity's own page: its header and description ---- */
 html .activity-header { color: var(--gz-ink-muted); border-color: var(--gz-border-line, var(--gz-line)); }
 html .path-mod .activity-details:not(:empty), html .activity-header .activity-information { background: transparent; }
@@ -840,6 +853,11 @@ html [data-region="course-content"][data-gz-course-look] {
   color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)) !important;
 }
 html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft: var(--gz-accent-hi); }
+/* A card's course color, toned as canvas.css and theme.css tone theirs: Moodle's own (--gz-course-raw, features/moodle.js) is
+   70% itself and 30% a grey as light as the muted ink, mixed in OKLab; data-gz-raw-courses (toning off) keeps Moodle's. A
+   color picked for the course is the card's --gz-course as is. */
+html [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+html[data-gz-raw-courses] [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
 
 /* Glaze navigation: keep Moodle's links alive, replace its 60px header room, and leave content drawers usable.
    First paint words come from content.js; the renderer then supplies the measured room inline. */
