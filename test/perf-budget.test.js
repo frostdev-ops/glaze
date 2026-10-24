@@ -233,11 +233,11 @@ test('the detector that Safari runs on every other https page stays under 2 KB',
 // tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
 const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server']);
 const VENDORED = new Set(['lib/three.min.js', 'lib/tesseract/tesseract-core-simd-lstm.js', 'lib/lottie/lottie_light_canvas.min.js']); // pdf.js is .mjs, not scanned
-const shipped = (top, dir = '') => fs.readdirSync(path.join(top, dir), { withFileTypes: true }).flatMap((e) => {
-  const rel = dir ? `${dir}/${e.name}` : e.name;
-  if (e.name.startsWith('.')) return [];
-  if (e.isDirectory()) return dir || !NOT_SHIPPED.has(e.name) ? shipped(top, rel) : [];
-  return e.name.endsWith('.js') && !VENDORED.has(rel) ? [rel] : [];
+// Only what git tracks: releases are packaged from a fresh checkout, so an untracked folder (another project's build) isn't Glaze.
+const shipped = (top) => execFileSync('git', ['ls-files', '-z', '--', '*.js'], { cwd: top, encoding: 'utf8' }).split('\0').filter((f) => {
+  const parts = f.split('/');
+  return f && !parts.some((p) => p.startsWith('.')) && !(parts.length > 1 && NOT_SHIPPED.has(parts[0])) && !VENDORED.has(f)
+    && fs.existsSync(path.join(top, f));
 });
 const CODE = shipped(root);
 
