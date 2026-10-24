@@ -168,7 +168,7 @@ a.widget[aria-disabled="true"] { cursor: default; }
 /* Mods' navigation widgets: the dock, under the open rail's items (it never moves: a frame moved loads again). */
 .dock { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; outline: none; }
 .dock:empty { display: none; }
-.dock > * { display: block; width: 100%; border-radius: 14px; overflow: hidden; background: var(--nb-hover); }
+.dock > * { display: block; box-sizing: border-box; width: 100%; padding: 8px 12px; border-radius: 14px; overflow: hidden; background: var(--nb-hover); }
 .rail:not([data-open]) .dock { visibility: hidden; }
 
 /* ---- the top bar: its items in a row (what doesn't fit under More), the course tabs, the account ---- */
@@ -375,6 +375,8 @@ a.widget[aria-disabled="true"] { cursor: default; }
   .swidgets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 8px 10px; }
   .swidgets .widget { min-height: 56px; }
   .swidgets .widget:is([data-w="next"], [data-w="timer"]) { grid-column: 1 / -1; }
+  /* A half-width cell: the date under the time, not cut off beside it. */
+  .swidgets .widget[data-w="clock"] { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; }
   :host([data-dock]) .dock { inset-inline: 8px; top: auto; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); width: auto; animation-name: gz-nb-panel-up; }
   :host([data-dock][data-footer]) .dock { bottom: calc(92px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)); }
 }

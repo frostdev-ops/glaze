@@ -610,3 +610,25 @@ test('a draft handoff committed after the next document resumed arrives through 
   await a.c.GZ_TODO_UI.resume(); a.p.form({ draft: { title: 'Keep on failure' } }); a.c.GZ_TODO_UI.suspend();
   await settle(); assert.equal(a.p.formNow()?.draft.title, 'Keep on failure', 'a rejected backup cannot lose the only copy');
 });
+
+// The head keeps what is used every day (the view switch in the dock, Add task); Share sessions and Export wait behind ⋯.
+test("the head: Add task and ⋯ only; ⋯ opens Share sessions and Export, and choosing one closes it", async () => {
+  const f = feature();
+  const target = new E();
+  f.c.GZ_TODO_UI.mount(target, { courseId: '25', scope: 'follow', setScope() {} });
+  await settle(); await settle();
+  const head = () => f.p.get().box.children[0];
+  const acts = () => head().children.filter((x) => x?.dataset?.act).map((x) => x.dataset.act);
+  const row = () => head().children.find((x) => x?.className === 'gz-todo-tools');
+  assert.deepEqual(acts(), ['add', 'tools']);
+  assert.equal(row(), undefined);
+  assert.ok(head().children.find((x) => x?.className === 'gz-todo-scope'), 'the view switch stays');
+  const more = head().children.find((x) => x.dataset?.act === 'tools');
+  assert.equal(more.attrs['aria-expanded'], 'false');
+  f.p.onClick({ target: { closest: () => more } });
+  assert.deepEqual(row().children.map((x) => x.dataset.act), ['sessions', 'ics']);
+  assert.equal(head().children.find((x) => x.dataset?.act === 'tools').attrs['aria-expanded'], 'true');
+  f.p.onClick({ target: { closest: () => row().children[0] } }); // a script's click: nothing opens, but the row closes
+  assert.equal(row(), undefined, 'choosing one closes it');
+  await settle();
+});

@@ -26,7 +26,11 @@ const cases = [
 ];
 for (const [name, kind, hosts] of cases) test(`${name} keeps its school-host ${kind} fixture approved after each reset`, async () => {
   const local = {};
-  const area = (store) => ({ clear: async () => { for (const key of Object.keys(store)) delete store[key]; }, set: async (patch) => Object.assign(store, patch) });
+  const area = (store) => ({
+    get: async (keys) => keys === null ? { ...store } : Object.fromEntries([keys].flat().filter((k) => k in store).map((k) => [k, store[k]])),
+    remove: async (keys) => { for (const key of [keys].flat()) delete store[key]; },
+    clear: async () => { for (const key of Object.keys(store)) delete store[key]; }, set: async (patch) => Object.assign(store, patch),
+  });
   const chrome = { storage: { local: area(local), sync: area({}) } };
   const run = seed(name, chrome);
   for (let rep = 0; rep < 2; rep++) {

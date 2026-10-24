@@ -453,7 +453,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     music(body) {
       const form = make('form', { className: 'gz-w-music' });
       const input = make('input', { type: 'url', placeholder: 'https://open.spotify.com/…', value: lay.music, spellcheck: false, autocomplete: 'off' });
-      input.setAttribute('aria-label', t('A Spotify, YouTube, Apple Music or YouTube Music link'));
+      input.setAttribute('aria-label', t('A Spotify, YouTube, Apple Music or YouTube Music link')); input.title = input.getAttribute('aria-label');
       const err = make('p', { className: 'gz-w-status', role: 'status' });
       const stage = make('div', { className: 'gz-w-stage' });
       // Nothing is asked of the player's site until Load player: the link stays on this device and goes nowhere else.
@@ -468,7 +468,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
             f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
             stage.replaceChildren(f);
           }, { className: 'gz-w-btn gz-w-main' }),
-        ] : [make('p', { className: 'gz-w-faint', textContent: t('Paste a Spotify, YouTube, Apple Music or YouTube Music link to listen while you work.') })]));
+        ] : []));
       };
       form.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -767,7 +767,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
   // With the sidebar, where a widget can go from where it is (the destination menu): the dock (not a course card), the
   // Dashboard's board, floating (not To Do), or nowhere. Moving keeps the other places' spots (lib/sidebar.js).
+  // In the dock, Move up and Move down are here too (the handle's arrow keys move it as well), so its heading has room for its name.
   const dests = (id, where, tile) => [
+    where === 'dock' && dockIds.indexOf(id) > 0 && { label: t('Move up'), run: () => dockMove(id, -1, '.gz-w-dest') },
+    where === 'dock' && dockIds.indexOf(id) >= 0 && dockIds.indexOf(id) < dockIds.length - 1 && { label: t('Move down'), run: () => dockMove(id, 1, '.gz-w-dest') },
     where !== 'dock' && dockable(id) && { label: t('Move to sidebar'), run: () => toDock(id) },
     where !== 'board' && atTop && dockable(id) && homeBoard() && { label: t('Move to Dashboard'), run: () => toBoard(id) },
     where !== 'float' && atTop && dockable(id) && id !== 'todo' && { label: t('Float'), run: () => toFloat(id) },
@@ -907,12 +910,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       fold.setAttribute('aria-expanded', String(!folded));
       x.body.hidden = folded;
       if (!tile.dock) { x.tools.replaceChildren(...(tile.float || editing ? [m] : []), fold); return; }
-      const i = dockIds.indexOf(tile.id);
       const handle = label(button('⠿', () => {}, { className: 'gz-w-icon gz-w-handle' }), t('Reorder {name}: drag, or use the arrow keys', { name }));
       dockDrag(tile.id, handle);
-      const up = label(button('↑', () => dockMove(tile.id, -1, '.gz-w-up'), { className: 'gz-w-icon gz-w-up', disabled: i <= 0 }), t('Move {name} up', { name }));
-      const down = label(button('↓', () => dockMove(tile.id, 1, '.gz-w-down'), { className: 'gz-w-icon gz-w-down', disabled: i < 0 || i >= dockIds.length - 1 }), t('Move {name} down', { name }));
-      x.tools.replaceChildren(handle, up, down, m, fold);
+      x.tools.replaceChildren(handle, m, fold);
       return;
     }
     const where = tile.float ? pages : board;
