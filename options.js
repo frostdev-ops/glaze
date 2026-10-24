@@ -72,6 +72,8 @@ if (embedded) {
   $('#embed-close').addEventListener('click', leave);
   $('#embed-tab').addEventListener('click', () => ownTab());
   addEventListener('keydown', (e) => {
+    // Let the browser dismiss its top-layer description before Escape can close the surrounding Settings frame.
+    if (e.key === 'Escape' && document.querySelector('.info-pop:popover-open')) return;
     if (e.key !== 'Escape' || e.defaultPrevented || e.target.closest?.('input, select, textarea, dialog, [role="dialog"], [role="menu"]')) return;
     e.preventDefault(); leave();
   });
