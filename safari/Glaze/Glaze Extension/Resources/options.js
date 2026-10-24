@@ -58,9 +58,18 @@ if (embedded) {
   addEventListener('message', (e) => { if (e.source === window.parent && e.data?.gzSettings === 'go' && /^#[a-z]+(\/[a-z-]+)?$/.test(e.data.hash || '')) location.hash = e.data.hash; });
   $('.embed-tools').hidden = false;
   const leave = () => window.parent.postMessage({ gzSettings: 'close' }, '*');
-  const ownTab = () => { chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + location.hash }).then(leave, () => {}); };
+  // Where the frame has no tabs API (Firefox gives an extension page framed in a web page none), the worker opens it.
+  const ownTab = (hash = location.hash, action) => {
+    const opened = !action && chrome.tabs?.create ? chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + hash })
+      : chrome.runtime.sendMessage({ type: 'glaze:settings-tab', hash, ...(action && { action }) }).then((r) => { if (!r?.ok) throw Error('refused'); });
+    opened.then(leave, () => {});
+  };
+  // Nor any permissions API: a control that needs a grant (lib/site.js reach) opens Settings' own tab at its section.
+  if (typeof chrome.permissions?.request !== 'function') {
+    GZ_SITE.elsewhere = (from, action) => { const at = from?.closest?.('[data-editor-section]')?.dataset.editorSection; ownTab(at ? `#${at}` : location.hash, action); };
+  }
   $('#embed-close').addEventListener('click', leave);
-  $('#embed-tab').addEventListener('click', ownTab);
+  $('#embed-tab').addEventListener('click', () => ownTab());
   addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || e.defaultPrevented || e.target.closest?.('input, select, textarea, dialog, [role="dialog"], [role="menu"]')) return;
     e.preventDefault(); leave();
@@ -70,7 +79,7 @@ if (embedded) {
     const box = document.querySelector(`[data-editor-panel="${panel}"]`);
     if (!box) continue;
     const go = make('button', { type: 'button', className: 'primary', textContent: t('Open in a new tab') });
-    go.addEventListener('click', ownTab);
+    go.addEventListener('click', () => ownTab());
     box.setAttribute('data-gated', '');
     box.prepend(make('div', { className: 'embed-gate' }, make('h2', { textContent: t(name) }),
       make('p', { textContent: t('This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.') }), go));
@@ -818,7 +827,7 @@ GZ_UI.load().then((s) => {
     if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
     // Gradescope isn't a host Glaze holds from the start: switched on, it is asked for in this click; refused, the switch stays
     // off. Switched off, the worker hands its grant back.
-    if (key === 'enhance.gradescope' && el.type === 'checkbox') { el.addEventListener('change', () => { const on = el.checked; el.checked = false; (on ? GZ_SITE.reach([GZ_GRADESCOPE.HOST]) : Promise.resolve(true)).then((held) => { if (!held) return; el.checked = on; set(key, on); refresh(); save([group(key)]); }); }); continue; }
+    if (key === 'enhance.gradescope' && el.type === 'checkbox') { el.addEventListener('change', () => { const on = el.checked; el.checked = false; (on ? GZ_SITE.reach([GZ_GRADESCOPE.HOST], el) : Promise.resolve(true)).then((held) => { if (!held) return; el.checked = on; set(key, on); refresh(); save([group(key)]); }); }); continue; }
     if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'look.surfaceCustom' && el.checked) seedSurface(); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { if (key.startsWith('nav.') && Object.hasOwn(N.dimensions(s.nav), key.slice(4))) { Object.assign(s.nav, N.dimensions(s.nav), { detailed: true }); for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k); } set(key, +el.value); refresh(); save([group(key)], true); });
@@ -1225,7 +1234,8 @@ GZ_UI.load().then((s) => {
     const src = chosen.parts?.x?.bg?.media?.src;
     if (!src?.startsWith('https://')) return apply();
     // A code can introduce remote media just as the link box can. Ask in Apply's click before changing this Look.
-    GZ_SITE.reach([src]).then((held) => {
+    GZ_SITE.reach([src], $('#share-apply'), { kind: 'code', code: chosen.code }).then((held) => {
+      if (held === null) return; // sent to Settings' own tab
       if (offer !== chosen || generation !== offerGeneration) return;
       if (!held) return hint(t('That link can’t be saved.'), true);
       apply();
@@ -1359,6 +1369,21 @@ GZ_UI.load().then((s) => {
     if (changes.galleryOffer?.newValue) takeOffer();
   });
   takeOffer();
+  if (!embedded) chrome.runtime.sendMessage({ type: 'glaze:settings-action' }).then(async (r) => {
+    const a = r?.action;
+    if (a?.kind === 'media') {
+      editor.show('look/background', { scroll: true });
+      GZ_EDITOR_XBG.offer(a);
+    } else if (a?.kind === 'notes') {
+      editor.show('sharing/sessions', { scroll: true });
+      globalThis.GZ_SESSION_OFFER?.(a);
+    } else if (a?.kind === 'code') {
+      $('#share-code').value = a.code;
+      await tryCode();
+      editor.show('look/palette', { scroll: true });
+      if (offer) $('#share-apply').focus({ preventScroll: true });
+    }
+  }).catch(() => {});
 
   // ---- Look rotation's list: kept on this computer (storage.local), lib/lookx.js. Your own pointer picture is
   // lib/editor-pointer.js's. ----

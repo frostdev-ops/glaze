@@ -154,7 +154,7 @@ const frame = ({ hash = `#${CDN}`, request = async () => true, manifest = { host
   const document = { getElementById: (id) => (id === 'allow' ? button : null), documentElement: new El('html'), body: { scrollWidth: 120, scrollHeight: 26 } };
   const g = { document, location: { hash }, console, Promise, URL, decodeURIComponent, navigator: { language: 'en' }, Intl, Object, Array, String, Number, JSON, Math, Error,
     parent: { postMessage: (m, o) => told.push([JSON.parse(JSON.stringify(m)), o]) }, addEventListener(t, f) { if (t === 'message') heard = f; }, requestAnimationFrame: (f) => f(),
-    chrome: { runtime: { getManifest: () => manifest }, permissions: { request: (o) => { asked.push([[...o.origins], active]); return request(o); } } } };
+    chrome: { runtime: { getManifest: () => manifest, sendMessage: async () => ({ ok: true }) }, permissions: { request: (o) => { asked.push([[...o.origins], active]); return request(o); } } } };
   g.globalThis = g;
   vm.createContext(g);
   for (const f of ['lib/i18n.js', 'features/allow.js']) vm.runInContext(read(f), g);
@@ -164,7 +164,7 @@ const frame = ({ hash = `#${CDN}`, request = async () => true, manifest = { host
 };
 
 test('the Allow frame: one button naming the host; its click asks for exactly https://host/* inside the click and tells the page', async () => {
-  const f = frame();
+  const f = frame(); await settle();
   assert.equal(f.button.textContent, `Allow ${CDN}`);
   f.click(false);
   assert.deepEqual(f.asked, [], 'a click the page made up asks nothing');
@@ -173,11 +173,11 @@ test('the Allow frame: one button naming the host; its click asks for exactly ht
   assert.deepEqual(f.asked, [[[`https://${CDN}/*`], true]]);
   assert.deepEqual(f.told.filter(([m]) => 'ok' in m), [[{ gzAllow: CDN, ok: true }, '*']]);
   const no = frame({ request: async () => false });
-  no.click();
+  await settle(); no.click();
   await settle();
   assert.deepEqual(no.told.filter(([m]) => 'ok' in m), [[{ gzAllow: CDN, ok: false }, '*']]);
   const threw = frame({ request: () => Promise.reject(new Error('This function must be called during a user gesture')) });
-  threw.click();
+  await settle(); threw.click();
   await settle();
   assert.deepEqual(threw.told.filter(([m]) => 'ok' in m), [[{ gzAllow: CDN, ok: false }, '*']]);
 });

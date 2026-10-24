@@ -39,7 +39,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
         // Asked again for a host just allowed: the grant didn't hold. The file fails rather than asking forever.
         if (p.asked.has(m.host)) { pending = null; p.resolve(null); return; }
         p.asked.add(m.host);
-        ask(m.host).then((yes) => {
+        ask(m.host, m.ticket).then((yes) => {
           if (pending !== p) return;
           if (yes) { post({ type: 'file', url: p.url }); return; }
           pending = null;
@@ -79,7 +79,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
   // Glaze's Allow frame (features/allow.html) beside a folder's button, for a host the worker can't reach yet: its one button
   // asks the browser for that host. → whether it was allowed; no when the download stops first or the button is gone.
   // Only the frame's own answer counts (a page can post anything); the worker checks the grant again either way.
-  const allowFrame = (fid, host, signal) => new Promise((resolve) => {
+  const allowFrame = (fid, host, signal, ticket) => new Promise((resolve) => {
     const b = document.getElementById(`gz-dl-${fid}`);
     if (!b || signal.aborted) return resolve(false);
     const f = document.createElement('iframe');
@@ -97,7 +97,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     // The reply port belongs only to this frame, including on Firefox where window messages hide source.
     channel.port1.onmessage = heard;
     f.addEventListener('load', () => {
-      f.contentWindow.postMessage({ gzAllow: host }, chrome.runtime.getURL('').replace(/\/$/, ''), [channel.port2]);
+      f.contentWindow.postMessage({ gzAllow: host, ticket }, chrome.runtime.getURL('').replace(/\/$/, ''), [channel.port2]);
     }, { once: true });
     signal.addEventListener('abort', stop, { once: true });
     b.after(f);
@@ -106,7 +106,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     const cid = ultra ? courseId() : canvasCourseId();
     const ctl = new AbortController();
     const job = { ctl, label: t('Finding files · Cancel'), pct: 0 };
-    const bridge = ultra ? null : canvasBytes(ctl.signal, (host) => allowFrame(fid, host, ctl.signal));
+    const bridge = ultra ? null : canvasBytes(ctl.signal, (host, ticket) => allowFrame(fid, host, ctl.signal, ticket));
     jobs.set(fid, job);
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);

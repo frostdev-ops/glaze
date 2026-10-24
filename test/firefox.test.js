@@ -42,3 +42,27 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     fs.rmSync(dist, { recursive: true, force: true });
   }
 });
+
+// Firefox has no declarativeContent and no addHostAccessRequest (AMO's linter flags both), and its button starts on the toolbar
+// for new installs (a Firefox-only key). The hosts are Chrome's: the built-in ones required, a school's own asked for.
+test('package-firefox.sh: no declarativeContent or addHostAccessRequest, the button on the toolbar, the hosts as Chrome asks', () => {
+  const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-firefox-'));
+  try {
+    execFileSync('sh', ['scripts/package-firefox.sh', '--development'], { cwd: path.join(__dirname, '..'), env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    const chrome = require('../manifest.json');
+    const zip = path.join(dist, `glaze-v${chrome.version}-firefox.zip`);
+    const m = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json'], { encoding: 'utf8' }));
+    assert.deepEqual(m.permissions, chrome.permissions.filter((p) => p !== 'declarativeContent'));
+    assert.ok(m.permissions.includes('activeTab'));
+    assert.equal(m.action.default_area, 'navbar');
+    assert.equal(chrome.action.default_area, undefined, "Chrome's manifest has no Firefox-only key");
+    assert.deepEqual(m.host_permissions, chrome.host_permissions);
+    assert.deepEqual(m.optional_host_permissions, chrome.optional_host_permissions);
+    assert.ok(m.optional_host_permissions.includes('https://*/*'));
+    const popup = execFileSync('unzip', ['-p', zip, 'popup.js'], { encoding: 'utf8' });
+    assert.ok(!popup.includes('addHostAccessRequest'), "the Firefox popup doesn't name Chrome's extensions-menu request");
+    assert.ok(popup.includes('chrome.permissions.request({ origins: [site.pattern] })'), 'the popup still asks for the site');
+  } finally {
+    fs.rmSync(dist, { recursive: true, force: true });
+  }
+});

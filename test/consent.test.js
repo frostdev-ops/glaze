@@ -316,6 +316,25 @@ test('approved Ultra sites get Ultra\'s first content script on their /ultra pag
   assert.deepEqual(w.registered.filter((s) => /^(https|ultra):/.test(s.id)), []);
 });
 
+test('Firefox gives each content script file as its full address in getManifest: approved sites still register with the package\'s files', async () => {
+  const at = (f) => `chrome-extension://${ID}/${f}`;
+  const firefox = { ...manifest, content_scripts: manifest.content_scripts.map((c) => ({ ...c, js: c.js.map(at) })) };
+  const B = 'https://bb.school.edu', A = 'https://canvas.school.edu', M = 'https://moodle.school.edu';
+  const w = worker({ m: firefox, local: { canvas: [`${A}/*`], moodle: [`${M}/*`], ultra: [B] } });
+  w.installed[0]({ reason: 'update' });
+  await settle();
+  assert.deepEqual(w.ultra(), [`ultra:${B}`]);
+  assert.deepEqual(w.hosts(), [`${A}/*`, `${M}/*`]);
+  assert.deepEqual(w.registered.find((s) => s.id === `ultra:${B}`).js, ULTRA_FIRST);
+  assert.deepEqual(w.registered.find((s) => s.id === `${A}/*`).js, CANVAS_FIRST);
+  assert.deepEqual(w.registered.find((s) => s.id === `${M}/*`).js, CANVAS_FIRST.filter((f) => f !== 'content-canvas.js'));
+  const S = 'https://bb.other.edu';
+  assert.deepEqual(await w.send(yes('ultra'), page(`${S}/ultra/course`)), { ok: true });
+  await settle();
+  assert.deepEqual(w.ultra(), [`ultra:${S}`, `ultra:${B}`].sort());
+  assert.deepEqual(w.files().at(-1), ULTRA_FIRST.filter((f) => f !== 'lib/i18n.js'), 'Glaze into the page with the package\'s files');
+});
+
 test('approved Ultra sites stay registered while Glaze is off, as the manifest\'s Ultra entry does; Canvas and Moodle sites don\'t', async () => {
   const B = 'https://bb.school.edu';
   const w = worker({ local: { ultra: [B], canvas: ['https://canvas.school.edu/*'] }, sync: { enabled: false } });

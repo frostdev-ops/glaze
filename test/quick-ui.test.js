@@ -51,7 +51,7 @@ const sharedNote = async (d) => {
   const { sid } = await d.send('create', { kind: 'notes', title: 'Biology', key: NK, ids: [id] });
   return { id, sid };
 };
-const page = async (d, { note = '', relay: selected, observer = 'v2', prefs = G.GZ_DEFAULTS } = {}) => {
+const page = async (d, { note = '', relay: selected, observer = 'v2', permissions = true, prefs = G.GZ_DEFAULTS } = {}) => {
   const doc = { activeElement: null }, ids = new Map(), events = new Map(), calls = [], messages = [], disconnects = [], copied = [], opened = [], changes = [];
   const sync = area(prefs);
   let clock = 1000, watcher;
@@ -93,7 +93,7 @@ const page = async (d, { note = '', relay: selected, observer = 'v2', prefs = G.
     GZ_I18N: { page() {}, ui() {}, t: (k, vars) => k.replace(/\{(\w+)\}/g, (_, key) => vars?.[key] ?? '') }, GZ_RELAY: R,
     ...G, GZ_COLOR: require('../lib/color.js'), GZ_FONTS: require('../lib/fonts.js'),
     matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener: (name, f) => events.set(name, f),
-    chrome: { storage: { sync, onChanged: { addListener(f) { changes.push(f); } } }, permissions: { contains: async () => true, request: async () => true }, tabs: { create: async (tab) => { opened.push(tab); } },
+    chrome: { storage: { sync, onChanged: { addListener(f) { changes.push(f); } } }, ...(permissions && { permissions: { contains: async () => true, request: async () => true } }), tabs: { create: async (tab) => { opened.push(tab); } },
       runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, connect: () => ({ onMessage: { addListener: (f) => messages.push(f) }, onDisconnect: { addListener: (f) => disconnects.push(f) }, disconnect() {},
         postMessage: (m) => { if (m.ticket) queueMicrotask(() => messages.forEach((f) => f({ id: m.id, ok: true })));
           else if (m.op) handle(m).then((r) => messages.forEach((f) => f({ id: m.id, ...r }))); } }), sendMessage: handle },
@@ -348,4 +348,14 @@ test('a scoped panel sees and acts on only its Notes account, and shares only it
   await assert.rejects(scoped('create', { kind: 'look', title: 'x' }), /bad/, 'not a Look');
   await assert.rejects(d.send('create', { kind: 'notes', title: 'x', key: NK, ids: [id], scope: { key: NK, note: '' } }), /bad/, 'the account view shares nothing');
   assert.ok((await scoped('link', { sid, edit: true })).link);
+});
+
+
+test('review: Notes without a permissions API offers its own tab even without visibility v2', async (t) => {
+  const server = await start(t), d = device(t, server), id = await seed(d);
+  const p = await page(d, { note: id, permissions: false, observer: 'absent' });
+  assert.equal(p.get('settings').textContent, 'Open in a new tab');
+  p.click('settings'); await settle();
+  assert.ok(p.calls.some((m) => m.op === 'settings'), 'the authenticated panel asks the worker to open Settings');
+  assert.equal(d.requests.length, 0, 'navigation makes no connection');
 });

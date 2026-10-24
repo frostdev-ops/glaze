@@ -52,7 +52,7 @@ test('favorites are one per code, newest first, capped; bad stored lists are dro
 });
 
 // The background, run as the browser would: the gallery hand-off and the history it records.
-const worker = ({ fetch } = {}) => {
+const worker = ({ fetch, manifest = m } = {}) => {
   const on = { message: [], changed: [] };
   const local = {};
   const sync = {};
@@ -72,7 +72,7 @@ const worker = ({ fetch } = {}) => {
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
     chrome: {
       runtime: {
-        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
+        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => manifest,
         openOptionsPage: () => { opened.push('options'); return Promise.resolve(); },
         onMessage: { addListener: (f) => on.message.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
@@ -148,6 +148,20 @@ test('the gallery content script runs only on the gallery, and the background ta
     await w.tick();
     assert.equal(w.local.galleryOffer?.code, code, url);
   }
+});
+
+// Firefox's getManifest gives each content script file as its full address: the gallery's entry is still found by its file.
+test('Firefox: the gallery hand-off still takes codes from the gallery, whose content script getManifest names by its full address', async () => {
+  const firefox = { ...m, content_scripts: m.content_scripts.map((c) => ({ ...c, js: c.js.map((f) => `chrome-extension://x/${f}`) })) };
+  const w = worker({ manifest: firefox });
+  const code = 'glaze1:abc';
+  w.send({ gallery: { code, name: 'X' } }, { url: 'https://evil.example/glaze/looks/', frameId: 0 });
+  await w.tick();
+  assert.deepEqual(w.local, {});
+  w.send({ gallery: { code, name: 'Aurora Night', author: 'frostdev-ops' } }, { url: 'https://frostdev.io/glaze/looks/#aurora-night', frameId: 0 });
+  await w.tick();
+  assert.deepEqual(w.local.galleryOffer, { code, name: 'Aurora Night', author: 'frostdev-ops' });
+  assert.deepEqual(w.opened, ['options']);
 });
 
 test('the background records the theme left and the theme worn once a burst of changes rests', async () => {

@@ -29,11 +29,12 @@ class El {
   fire(type) { for (const f of this.listeners[type] || []) f({ type, target: this, isTrusted: true }); }
   get all() { return this.children.filter((c) => c instanceof El).flatMap((c) => [c, ...c.all]); }
   get files() { return this._files || []; }
+  querySelector(s) { return this.all.find((e) => e.tagName === s) || null; }
   focus() {}
 }
 
 // The builder with the real editor-x.js and lib/editor-xbg.js, a recording worker, and the parts the Look has.
-const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files: [] } : { ok: true }), answer = () => true } = {}) => {
+const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files: [] } : { ok: true }), answer = () => true, permissions = true } = {}) => {
   const doc = { body: null, elements: {} };
   doc.createElement = (tag) => new El(tag, doc);
   const roots = {};
@@ -47,7 +48,7 @@ const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files
     document: doc, console, Promise, JSON, Object, Array, String, Number, Math, Error, Set, Map, URL, btoa, Uint8Array, ArrayBuffer, clearTimeout, setTimeout, CSS: { escape: (s) => s }, structuredClone,
     Option: function Option(text, value, d, selected) { const o = new El('option', doc); Object.assign(o, { text, value: value ?? text, selected: !!selected }); o.textContent = text; return o; },
     chrome: { runtime: { lastError: null, getManifest: () => ({ host_permissions: ['https://frostdev.io/*'] }), sendMessage: (m, cb) => { sent.push(m); const r = Promise.resolve(reply(m)); if (cb) r.then(cb); return r; } },
-      permissions: { request: (o) => { asked.push([...o.origins]); return Promise.resolve(answer(o.origins)); } } },
+      ...(permissions && { permissions: { request: (o) => { asked.push([...o.origins]); return Promise.resolve(answer(o.origins)); } } }) },
     location: { origin: 'chrome-extension://glaze' }, addEventListener: (t, f) => { (listeners[t] ||= []).push(f); },
     GZ_XPARTS: XP, GZ_MEDIA: MEDIA, GZ_SPEC: D.GZ_SPEC, GZ_COLORS: D.GZ_COLORS, GZ_MX: require('../lib/motionx.js'),
   });
@@ -157,6 +158,22 @@ test('a link asks the browser for its host as it is taken; refused, the backgrou
   assert.deepEqual(bad.asked, []);
 });
 
+// Embedded Settings on Firefox has no permissions API: the link's box goes to Settings' own tab (lib/site.js elsewhere), and
+// the builder neither keeps the link nor says it couldn't.
+test('without the permissions API, a link goes where the page sends it, with its box; nothing is asked, kept or said', async () => {
+  const r = rig({ parts: withFile, permissions: false });
+  const went = [];
+  r.ctx.GZ_SITE.elsewhere = (from) => went.push(from);
+  await r.settle();
+  typeLink(r, LINK);
+  await r.settle();
+  assert.deepEqual(went, [r.link()]);
+  assert.deepEqual(r.asked, []);
+  assert.deepEqual(r.media(), withFile.x.bg.media);
+  assert.deepEqual(r.writes, []);
+  assert.notEqual(r.note().textContent, 'That link can’t be saved.');
+});
+
 test('the preview reporting a file past the limits says so, in words that are not about the link', async () => {
   const r = rig({ parts: withLink });
   await r.settle();
@@ -206,4 +223,22 @@ test('review: an older permission answer cannot replace a newer media choice wit
   await r.settle();
   assert.equal(r.media().type, 'image', 'the older video choice stays superseded');
   assert.equal(r.writes.length, writes, 'the late answer writes nothing');
+});
+
+
+test('review: a carried media link is filled with its kind and waits for one Allow click', async () => {
+  const r = rig({ answer: () => true });
+  await r.settle();
+  assert.equal(typeof r.ctx.BG.offer, 'function');
+  r.ctx.BG.offer({ kind: 'media', src: LINK, mediaKind: 'lottie' });
+  assert.equal(r.link().value, LINK);
+  assert.equal(r.kind().value, 'lottie');
+  assert.deepEqual(r.writes, []);
+  assert.deepEqual(r.asked, []);
+  const allow = r.find((e) => e.tagName === 'button' && e.children.includes('Allow cdn.example.com'));
+  assert.ok(allow);
+  allow.fire('click'); await r.settle();
+  assert.deepEqual(r.asked, [['https://cdn.example.com/*']]);
+  assert.equal(r.media().src, LINK);
+  assert.equal(r.media().type, 'lottie');
 });
