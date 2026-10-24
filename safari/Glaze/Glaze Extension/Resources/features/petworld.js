@@ -31,6 +31,15 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
     let stage = null, data = null, alive = true, player = null, timer = 0, reaction = 0, drag = null, movingItem = null;
     let b = { x: 30, y: 30, w: 80, h: 86, vx: 0, vy: 0 }, surfaces = [], lastScan = 0, nextAction = 0, last = 0, wandering = false;
+    // The habitat fills its tile: a dock's narrow one or a large board slot. At home the pet, furniture and toys take their size from
+    // the stage's (u: 1 for a 340 × 230 stage), so they keep their places relative to it; out on the page they are page-sized.
+    let u = 1, fitted = { w: 0, h: 0 };
+    const scale = () => (wandering || !stage ? 1 : Math.max(.5, Math.min(1.6, (stage.clientWidth || 320) / 340, (stage.clientHeight || 240) / 230)));
+    const resize = () => {
+      u = scale(); b.w = 80 * u; b.h = 86 * u;
+      actor.style.setProperty('--gz-pet-u', String(Math.round(u * 1000) / 1000));
+      stage?.style.setProperty('--gz-pet-u', String(Math.round(u * 1000) / 1000));
+    };
     let props = [], offs = [], dirty = false, suppressClick = false, lastMotion = '', lastGaze = -1, path = location.pathname, awake = true, outing = null;
     const hosts = new Set(), floating = new Map();
     let decision = null, feedbackAt = -Infinity, feedbackEvent = '', carePending = false, focus = false, focusEnd = 0;
@@ -168,7 +177,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const relocate = (wander, at) => {
       if (wander === wandering && actor.parentElement === (wander ? world : stage)) return;
       wandering = wander; actor.dataset.wander = String(wander); home.hidden = !wander;
-      clearActivity(); nextAction = 0; lastMotion = '';
+      clearActivity(); nextAction = 0; lastMotion = ''; resize();
       (wander ? worldHost() : stage)?.append(actor);
       if (wander) document.body.append(home); else home.remove();
       watchLayers();
@@ -199,9 +208,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         const at = positionOf(id), el = make('button', 'gz-game-item'); el.type = 'button'; el.dataset.item = id; el.dataset.shelf = String(!!P.DECOR[id].shelf);
         el.setAttribute('aria-label', t(P.DECOR[id].toy ? '{name}. Drag outside to play; W takes it out, H returns it, Delete puts it away.' : '{name}. Drag to place; arrow keys move; Delete puts away.', { name: t(P.DECOR[id].name) }));
         el.title = t(P.DECOR[id].name); el.append(art(id)); stage.append(el);
-        const w = P.DECOR[id].shelf ? (stage.clientWidth || 320) * .34 : 54, h = P.DECOR[id].shelf ? 38 : 54;
-        const p = { id, el, x: at.x / 100 * (stage.clientWidth || 320) - w / 2, y: at.y / 100 * (stage.clientHeight || 240) - h, w, h, vx: 0, vy: 0 };
-        el.style.width = `${w}px`; el.style.height = `${h}px`; putProp(p);
+        const p = { id, el, vx: 0, vy: 0 }; placeProp(p);
         el.addEventListener('pointerdown', (e) => begin(e, p));
         el.addEventListener('keydown', (e) => {
           if (!e.isTrusted) return;
@@ -222,10 +229,35 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         return p;
       });
       if (focused) props.find((p) => p.id === focused)?.el.focus({ preventScroll: true });
-      scan(); wake();
+      fit(); scan(); wake();
     };
+    // A piece at home where the student put it: its size from the stage's, its middle and foot at its saved place in percent.
+    const placeProp = (p) => {
+      const at = positionOf(p.id), W = stage?.clientWidth || 320, H = stage?.clientHeight || 240, shelf = P.DECOR[p.id].shelf;
+      p.w = shelf ? W * .34 : 54 * u; p.h = shelf ? 38 * u : 54 * u;
+      p.x = Math.max(0, Math.min(W - p.w, at.x / 100 * W - p.w / 2)); p.y = Math.max(0, Math.min(H - p.h, at.y / 100 * H - p.h)); p.vx = p.vy = 0;
+      p.el.style.width = `${p.w}px`; p.el.style.height = `${p.h}px`; putProp(p);
+    };
+    // The stage was laid out at another size (its tile resized, the window, a dialog): the pet keeps its place across it and its
+    // footing, the pieces go back to their saved places at the new size, and physics settles them again.
+    const fit = () => {
+      if (!alive || !stage || !data) return;
+      const W = stage.clientWidth, H = stage.clientHeight;
+      if (!W || !H || (W === fitted.w && H === fitted.h)) return;
+      if (drag || movingItem) { dirty = true; return; }
+      const was = fitted; fitted = { w: W, h: H };
+      if (!wandering) {
+        const across = was.w ? (b.x + b.w / 2) / was.w : .5, foot = was.h ? (b.y + b.h) / (was.h * .95) : 1;
+        resize(); const box = bounds();
+        b.x = Math.max(0, Math.min(box.width - b.w, across * box.width - b.w / 2)); b.y = Math.max(0, Math.min(box.height - b.h, foot * box.height - b.h)); b.vx = b.vy = 0;
+        display();
+      }
+      for (const p of props) if (!floating.has(p.id)) placeProp(p);
+      wake();
+    };
+    const sizes = typeof ResizeObserver === 'function' ? new ResizeObserver(() => fit()) : null;
     const putProp = (p) => { p.el.style.left = '0'; p.el.style.top = '0'; p.el.style.transform = `translate3d(${p.x}px,${p.y}px,0)`; };
-    const shelves = () => props.filter((p) => !floating.has(p.id) && P.DECOR[p.id].shelf).map((p) => ({ x: p.x, y: p.y + 10, w: p.w }));
+    const shelves = () => props.filter((p) => !floating.has(p.id) && P.DECOR[p.id].shelf).map((p) => ({ x: p.x, y: p.y + 10 * u, w: p.w }));
     const scan = () => {
       surfaces = [];
       if (wandering || floating.size) {
@@ -336,6 +368,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       floating.set(p.id, p); p.el.dataset.outside = 'true'; worldHost().append(p.el);
       if (focused) p.el.focus({ preventScroll: true });
       if (drag?.target === p.el) p.el.setPointerCapture(drag.pointer);
+      p.w = p.h = 54; p.el.style.width = p.el.style.height = '54px';
       const box = pageSize(); p.x = Math.max(0, Math.min(box.width - p.w, x)); p.y = Math.max(0, Math.min(box.height - p.h, y)); p.ground = Math.max(p.y + p.h, window.scrollY + window.innerHeight - 6); p.anchor = anchorAt(p.x + p.w / 2, p.y + p.h / 2); putProp(p);
     };
     const startToyPlay = (p) => {
@@ -649,12 +682,13 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       const previousStage = stage;
       if (nextStage && !hosts.has(nextStage)) { hosts.add(nextStage); stage = nextStage; }
       else if (!stage?.isConnected && nextStage) stage = nextStage;
-      if (stage) stage.dataset.habitat = next.habitat;
+      if (stage) { stage.dataset.habitat = next.habitat; sizes?.observe(stage); }
+      if (stage !== previousStage) fitted = { w: stage?.clientWidth || 0, h: stage?.clientHeight || 0 };
       if (!player) player = GZ_WIDGETS_UI.avatar(avatar, { interactive: false, resting: 'idle', attention: false });
       setData(next, previousStage !== stage);
     };
     const detach = (oldStage) => {
-      hosts.delete(oldStage);
+      hosts.delete(oldStage); sizes?.unobserve(oldStage);
       if (oldStage !== stage) return;
       const previous = [...hosts].reverse().find((host) => host.isConnected);
       if (previous) { stage = null; attach(previous, data); return; }
@@ -667,14 +701,14 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       for (const off of offs) off(); offs = [];
       for (const off of frameOffs) off(); frameOffs = [];
       for (const p of props) p.el.remove(); for (const p of floating.values()) p.el.remove(); floating.clear(); actor.remove(); home.remove(); world.remove();
-      chrome.storage.onChanged.removeListener(changed); reduced?.removeEventListener('change', wake); motion?.disconnect();
+      chrome.storage.onChanged.removeListener(changed); reduced?.removeEventListener('change', wake); motion?.disconnect(); sizes?.disconnect();
       if (current?.key === key) current = null;
     };
     on(actor, 'pointerdown', (e) => begin(e)); on(document, 'pointermove', move, { passive: false });
     on(document, 'pointerup', end); on(document, 'pointercancel', end);
     on(actor, 'click', (e) => { if (!e.isTrusted || e.target.closest('.gz-game-home')) return; if (suppressClick) { suppressClick = false; return; } petTouch('pet'); });
     on(actor, 'keydown', (e) => { if (!e.isTrusted || e.target !== actor) return; const k = e.key.toLowerCase(); if (['w', 'h', 'escape'].includes(k)) { e.preventDefault(); changeMode(k === 'w'); } else if (k === ' ' || k === 'enter') { e.preventDefault(); if (!e.repeat) petTouch('play'); } });
-    on(document, 'visibilitychange', wake); on(window, 'resize', () => { if (stage && data) renderProps(); wake(); });
+    on(document, 'visibilitychange', wake); on(window, 'resize', () => { fit(); wake(); });
     const typed = (e) => { if (e.isTrusted && (e.target.matches?.('input,textarea,select,[contenteditable="true"],[role="textbox"]') || e.target.closest?.('[contenteditable="true"]'))) typedAt = performance.now(); };
     on(document, 'keydown', typed, { passive: true });
     const scrolled = (e) => {

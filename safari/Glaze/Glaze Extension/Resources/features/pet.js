@@ -11,7 +11,8 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const start = () => (ready ||= Promise.all([ctx.need('lib/petbrain.js', () => globalThis.GZ_PET_BRAIN), ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO), ctx.need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI), ctx.need('lib/petphysics.js', () => globalThis.GZ_PET_PHYSICS), ctx.need('features/petworld.js', () => globalThis.GZ_PET_WORLD)]).catch((e) => { ready = null; throw e; }));
   const send = (m) => new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: 'glaze:pet', ...m }, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const mounted = new Set();
-  const mount = (body, api) => {
+  // inDialog: the habitat dialog's own copy, which has every control at its size and so no way to open itself.
+  const mount = (body, api, { inDialog = false } = {}) => {
     let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, pets = [], form = '', readout = '';
     const waiting = [];
     const tile = body.closest('.gz-w');
@@ -58,12 +59,19 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       overview.replaceChildren(make('div', { className: 'gz-game-heading' }, identity, level), progress,
         make('div', { className: 'gz-game-xp' }, make('span', { textContent: t('{xp} total XP', { xp: d.xp }) }), make('span', { textContent: t('{xp} to next level', { xp: d.next - d.xp }) })));
       const pat = button(t('Pet your buddy'), (e) => { if (e.isTrusted && !busy) { pat.disabled = true; update({ op: 'interact', event: 'pet' }); } });
-      pat.className = 'gz-game-primary'; pat.dataset.control = 'pet'; pat.disabled = !allowance.remaining || cooling;
+      pat.className = 'gz-w-btn gz-w-main gz-game-primary'; pat.dataset.control = 'pet'; pat.disabled = !allowance.remaining || cooling;
       const wander = button(t(d.wander ? 'Return home' : 'Explore page'), (e) => { if (e.isTrusted) update({ op: 'wander', wander: !d.wander }); });
-      wander.dataset.control = 'wander'; wander.setAttribute('aria-pressed', String(d.wander));
+      wander.className = 'gz-w-btn'; wander.dataset.control = 'wander'; wander.setAttribute('aria-pressed', String(d.wander));
       const actions = make('div', { className: 'gz-game-actions' }, pat, wander);
+      // A tile too small for the rest (apps.css shows it then): the whole habitat, every control, in its dialog outside the tile.
+      if (!inDialog) {
+        const more = button('⋯', (e) => { if (e.isTrusted) open(); });
+        more.className = 'gz-w-icon gz-game-more'; more.dataset.control = 'more'; more.setAttribute('aria-haspopup', 'dialog');
+        more.title = t('Open {name}', { name: t('Pet habitat') }); more.setAttribute('aria-label', more.title);
+        actions.append(more);
+      }
       const care = make('p', { className: 'gz-game-care', textContent: !allowance.remaining ? t('All bonding moments enjoyed today. More tomorrow.') : cooling ? t('{n} of {max} bonding moments left today · Ready again in a minute', { n: allowance.remaining, max: P.CARE_LIMIT }) : t('{n} of {max} bonding moments left today', { n: allowance.remaining, max: P.CARE_LIMIT }) });
-      care.dataset.live = 'care';
+      care.dataset.live = 'care'; pat.title = care.textContent;
       const meterGroup = (ids, cls = '') => {
         const meters = make('div', { className: `gz-game-meters ${cls}` });
         for (const [id, name] of ids) {
@@ -110,15 +118,14 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
           placement.append(make('label', {}, make('span', { textContent: name }), select));
         }
       }
-      const decor = section('decor', 'Decorate habitat', field('Habitat style', habitat), make('p', { className: 'gz-game-hint', textContent: t('Click to add or put away. Drag items to arrange them; drag a toy onto the page to play.') }),
+      const decor = section('decor', 'Decorate habitat', field('Habitat style', habitat),
         make('h4', { textContent: t('Toys') }), toys, make('h4', { textContent: t('Furniture & decor') }), furniture, placement);
       if (locked.children.length) decor.append(section('unlocks', 'Upcoming unlocks', locked));
       const physics = make('input', { type: 'checkbox', checked: d.physics }); physics.dataset.control = 'physics';
       physics.addEventListener('change', (e) => { if (e.isTrusted) update({ op: 'physics', physics: physics.checked }); });
       const learning = make('input', { type: 'checkbox', checked: d.learning }); learning.dataset.control = 'learning';
       learning.addEventListener('change', (e) => { if (e.isTrusted) update({ op: 'learning', learning: learning.checked }); });
-      const settings = section('settings', 'Settings', field('Pet character', sprite), outfit, field('Gravity & water', physics), field('Learn from how I play', learning),
-        make('p', { className: 'gz-game-hint', textContent: t('Drag your buddy out to explore, and back in to come home. W: wander · H: home. Drag furniture, or use arrow keys; Delete puts it away.') }));
+      const settings = section('settings', 'Settings', field('Pet character', sprite), outfit, field('Gravity & water', physics), field('Learn from how I play', learning));
       const forget = button(t('Reset learned behavior'), (e) => { if (e.isTrusted) update({ op: 'forget' }); }); forget.dataset.control = 'forget';
       const stats = make('div', { className: 'gz-game-stats' }, make('p', { textContent: t('Learned interactions: {n}', { n: interactions }) }), make('p', { textContent: t('Familiarity: {n}/100', { n: profile.familiarity }) }));
       stats.dataset.live = 'learned';
@@ -134,7 +141,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         make('p', { textContent: t('Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.') }));
       const about = section('about', 'Progress & learning', rules, learned);
       if (nextForm === form) {
-        controls.querySelector('[data-control="pet"]').disabled = pat.disabled;
+        const petNow = controls.querySelector('[data-control="pet"]'); petNow.disabled = pat.disabled; petNow.title = pat.title;
         for (const fresh of [care, meters, traits, stats, breakdown]) controls.querySelector(`[data-live="${fresh.dataset.live}"]`)?.replaceWith(fresh);
       } else {
         controls.replaceChildren(actions, care, meters, wellbeing, decor, settings, about);
@@ -238,7 +245,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     const close = button(t('Close'), () => box.close());
     box = make('dialog', { className: 'gz-game-dialog' }, make('header', {}, make('h2', { id: 'gz-game-title', textContent: t('Pet habitat') }), close), body);
     box.setAttribute('aria-labelledby', 'gz-game-title');
-    const tile = mount(body), current = box;
+    const tile = mount(body, undefined, { inDialog: true }), current = box;
     const off = (ch, area) => { if (area === 'sync' && (ch.enabled?.newValue === false || (ch.enhance && !ch.enhance.newValue?.pet))) current.close(); };
     chrome.storage.onChanged.addListener(off);
     box.addEventListener('close', () => { chrome.storage.onChanged.removeListener(off); tile.stop(); current.remove(); if (box === current) { box = null; opener?.focus({ preventScroll: true }); } });

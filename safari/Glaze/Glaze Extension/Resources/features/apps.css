@@ -39,19 +39,19 @@
 .gz-w-faint { margin: 0; color: var(--gz-ink-muted); font-size: 0.8rem; }
 .gz-w-status { margin: 0; font-size: 0.8rem; color: var(--gz-ink-muted); }
 .gz-w-status:empty { display: none; }
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour) .gz-w-btn {
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-btn {
   display: inline-flex; align-items: center; padding: 0.25rem 0.85rem; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; cursor: pointer;
   color: var(--gz-ink); background: transparent; font-weight: 600; line-height: 1.5; text-decoration: none;
 }
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour) .gz-w-btn:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour) .gz-w-main { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour) .gz-w-main:hover { color: var(--gz-accent-ink); filter: brightness(1.08); }
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour) :is(.gz-w-small, .gz-w-icon) {
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-btn:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-main { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-main:hover { color: var(--gz-accent-ink); filter: brightness(1.08); }
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) :is(.gz-w-small, .gz-w-icon) {
   padding: 0.05rem 0.55rem; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer; color: var(--gz-ink-muted); line-height: 1.5;
 }
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour) .gz-w-icon { min-width: 1.7rem; padding: 0.05rem 0.3rem; font-size: 1rem; line-height: 1.3; }
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour) :is(.gz-w-small, .gz-w-icon):hover, :is(#gz-dash, #gz-toolbar) .gz-w-small[aria-pressed="true"] { color: var(--gz-accent); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
-:is(.gz-w, #gz-dash, #gz-ccm, .gz-tour) button:disabled { opacity: 0.45; cursor: default; }
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-icon { min-width: 1.7rem; padding: 0.05rem 0.3rem; font-size: 1rem; line-height: 1.3; }
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) :is(.gz-w-small, .gz-w-icon):hover, :is(#gz-dash, #gz-toolbar) .gz-w-small[aria-pressed="true"] { color: var(--gz-accent); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+:is(.gz-w, #gz-dash, #gz-ccm, .gz-tour, .gz-game-dialog) button:disabled { opacity: 0.45; cursor: default; }
 /* Notes: the text with its links, until clicked; then the box to type in. Height by the tile's size. */
 .gz-w-note-view, .gz-w-note {
   width: 100%; min-height: 5.5rem; max-height: 12rem; margin: 0; padding: 0.5rem 0.6rem; box-sizing: border-box; overflow: auto;
@@ -105,7 +105,7 @@ html:not([data-gz-motion="off"]) .gz-w-pet:hover :is(img,canvas) { transform: ro
 .gz-game-avatar .gz-w-pet :is(img,canvas) { width: 72px; height: 72px; }
 .gz-nav-pet .gz-w-pet :is(img,canvas) { width: 28px; height: 28px; }
 .gz-pet .gz-w-pet :is(img,canvas) { width: 64px; height: 64px; }
-.gz-w-body:has(.gz-w-pet) { position: relative; display: grid; justify-items: center; gap: 0.3rem; }
+.gz-w-body:has(> .gz-w-pet) { position: relative; display: grid; justify-items: center; gap: 0.3rem; }
 .gz-w-cheer { position: absolute; top: 40%; inset-inline: 0; pointer-events: none; text-align: center; font-weight: 700; font-size: 1rem; color: var(--gz-accent); }
 html:not([data-gz-motion="off"]) .gz-w-cheer { animation: gz-w-rise 1.6s ease-out forwards; }
 html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
@@ -343,7 +343,7 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game progress::-webkit-progress-value{background:var(--gz-accent,#16837b);border-radius:999px}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game progress::-moz-progress-bar{background:var(--gz-accent,#16837b);border-radius:999px}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game label{display:grid;grid-template-columns:1fr minmax(110px,1fr);align-items:center;gap:8px;margin:8px 0;font-size:.9em}
-:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game select,.gz-game-dialog button{font:inherit;color:inherit;background: var(--gz-surface-grain, none), var(--gz-surface-fill,var(--gz-surface,#fff));border:1px solid var(--gz-border-line,var(--gz-line,#bbc6cc));border-radius:var(--gz-radius-sm);padding:7px;min-width:0}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game select,.gz-game-dialog button:not(.gz-w-btn,.gz-w-icon){font:inherit;color:inherit;background: var(--gz-surface-grain, none), var(--gz-surface-fill,var(--gz-surface,#fff));border:1px solid var(--gz-border-line,var(--gz-line,#bbc6cc));border-radius:var(--gz-radius-sm);padding:7px;min-width:0}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game select:disabled{opacity:.65}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game details{border-top:1px solid var(--gz-line,#bbc6cc);padding-top:8px}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game summary{cursor:pointer;font-weight:600;padding:4px 0}
@@ -862,16 +862,16 @@ html[data-gz-card-condensed] .gz-course-card .course-banner { height: 56px; }
 .gz-course-card a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 
 /* A habitat is a small room; only the wandering companion leaves the widget. */
-:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-habitat{display:block;position:relative;height:248px;min-height:248px;overflow:hidden;background:linear-gradient(180deg,#e6e7f4 0 79%,#d4bca5 79% 82%,#ecdbca 82%);border:2px solid color-mix(in srgb,var(--gz-accent,#16837b) 28%,#dce8e4);box-shadow:inset 0 0 28px #64748b15}
-.gz-game-habitat[data-habitat="garden"]{background:radial-gradient(ellipse at 70% 20%,#f5f9d5,transparent 65%),linear-gradient(#d3e9dd 0 80%,#92bba1 80% 84%,#bfd6af 84%)!important}
-.gz-game-habitat[data-habitat="aquarium"]{background:linear-gradient(180deg,#e6f5fb 0 12%,#97dce5 12% 14%,#c1e9ed 14%,#8ac9d4 85%,#ebd9b3 85%)!important;border-color:#76a8b2!important;box-shadow:inset 8px 0 0 #ffffff60,inset -8px 0 0 #ffffff40!important}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-habitat{--gz-hab:var(--gz-surface-fill,var(--gz-surface,#fff));display:block;position:relative;box-sizing:border-box;width:100%;height:clamp(140px,60cqi,300px);min-height:0;overflow:hidden;border:1px solid var(--gz-border-line,var(--gz-line,#c3d1cc));border-radius:max(4px,calc(var(--gz-radius,12px) - 2px));background:linear-gradient(180deg,color-mix(in srgb,var(--gz-accent,#16837b) 9%,var(--gz-hab)) 0 79%,color-mix(in srgb,#a87c58 58%,var(--gz-hab)) 79% 82%,color-mix(in srgb,#d8b892 52%,var(--gz-hab)) 82%);box-shadow:inset 0 0 28px color-mix(in srgb,var(--gz-ink,#253449) 7%,transparent)}
+.gz-game-habitat[data-habitat="garden"]{background:radial-gradient(ellipse at 70% 20%,color-mix(in srgb,#f5f9d5 70%,var(--gz-hab)),transparent 65%),linear-gradient(color-mix(in srgb,#d3e9dd 72%,var(--gz-hab)) 0 80%,color-mix(in srgb,#92bba1 75%,var(--gz-hab)) 80% 84%,color-mix(in srgb,#bfd6af 70%,var(--gz-hab)) 84%)!important}
+.gz-game-habitat[data-habitat="aquarium"]{background:linear-gradient(180deg,color-mix(in srgb,#e6f5fb 70%,var(--gz-hab)) 0 12%,color-mix(in srgb,#97dce5 78%,var(--gz-hab)) 12% 14%,color-mix(in srgb,#c1e9ed 72%,var(--gz-hab)) 14%,color-mix(in srgb,#8ac9d4 75%,var(--gz-hab)) 85%,color-mix(in srgb,#ebd9b3 72%,var(--gz-hab)) 85%)!important;border-color:color-mix(in srgb,#76a8b2 70%,var(--gz-hab))!important;box-shadow:inset 8px 0 0 #ffffff40,inset -8px 0 0 #ffffff30!important}
 .gz-game-habitat[data-habitat="aquarium"]::after{content:"";position:absolute;inset:16% 9% 17%;background:radial-gradient(circle at 12% 30%,transparent 3px,#ffffff85 4px,transparent 5px),radial-gradient(circle at 86% 64%,transparent 5px,#ffffff85 6px,transparent 7px),radial-gradient(circle at 74% 19%,transparent 2px,#ffffff85 3px,transparent 4px);pointer-events:none}
-.gz-game-habitat[data-habitat="sky"]{background:radial-gradient(ellipse at 20% 85%,#fff 0 15%,transparent 16%),radial-gradient(ellipse at 80% 90%,#fff 0 20%,transparent 21%),linear-gradient(#c8ddf8,#ede5f8)!important}
-.gz-game-actor{position:absolute;z-index:5;width:80px;height:86px;touch-action:none;user-select:none;cursor:grab;color:var(--gz-ink,#253449);font:13px/1.3 system-ui,sans-serif;isolation:isolate}
+.gz-game-habitat[data-habitat="sky"]{background:radial-gradient(ellipse at 20% 85%,color-mix(in srgb,#fff 80%,var(--gz-hab)) 0 15%,transparent 16%),radial-gradient(ellipse at 80% 90%,color-mix(in srgb,#fff 80%,var(--gz-hab)) 0 20%,transparent 21%),linear-gradient(color-mix(in srgb,#c8ddf8 75%,var(--gz-hab)),color-mix(in srgb,#ede5f8 72%,var(--gz-hab)))!important}
+.gz-game-actor{position:absolute;z-index:5;width:calc(80px * var(--gz-pet-u, 1));height:calc(86px * var(--gz-pet-u, 1));touch-action:none;user-select:none;cursor:grab;color:var(--gz-ink,#253449);font:13px/1.3 system-ui,sans-serif;isolation:isolate}
 .gz-game-actor[hidden]{display:none!important}
 .gz-game-actor[data-wander="true"]{position:absolute;z-index:2147483000;filter:drop-shadow(0 5px 4px #17233325)}
-.gz-game-actor .gz-game-avatar,.gz-game-actor .gz-w-pet{display:block;position:static;margin:0;width:80px;height:86px;padding:0;border:0;background:none}
-.gz-game-actor .gz-w-pet :is(img,canvas){display:block;width:80px;height:86px;object-fit:contain;max-width:none;pointer-events:none}
+.gz-game-actor .gz-game-avatar,.gz-game-actor .gz-w-pet{display:block;position:static;margin:0;width:100%;height:100%;padding:0;border:0;background:none}
+.gz-game-actor .gz-w-pet :is(img,canvas){display:block;width:100%;height:100%;object-fit:contain;max-width:none;pointer-events:none}
 .gz-game-actor[data-dragging="true"],.gz-game-item[data-dragging="true"]{cursor:grabbing!important;z-index:2147483001!important;filter:drop-shadow(0 8px 7px #17233340)}
 .gz-game-home{position:fixed;z-index:2147483002;bottom:16px;right:20px;left:auto;transform:none;font:10px/1.2 system-ui,sans-serif!important;border:1px solid #77978e!important;border-radius:var(--gz-radius,12px)!important;padding:3px 7px!important;background:#f3faf8!important;color:#253449!important;white-space:nowrap;cursor:pointer}
 .gz-game-home[hidden]{display:none!important}
@@ -910,7 +910,7 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="climb"] .gz-game-
 .gz-game-meters small{font-size:10px;color:var(--gz-ink-muted,#526273)}
 .gz-game-item[data-shelf="true"] img{object-fit:cover}
 
-.gz-game-toy{position:absolute;left:0;top:0;width:11px;height:11px;border-radius:50%;background:#ecad64;box-shadow:inset -3px -2px 0 #c98244;pointer-events:none;z-index:4}
+.gz-game-toy{position:absolute;left:0;top:0;width:calc(11px * var(--gz-pet-u, 1));height:calc(11px * var(--gz-pet-u, 1));border-radius:50%;background:#ecad64;box-shadow:inset -3px -2px 0 #c98244;pointer-events:none;z-index:4}
 .gz-game-toy[data-wander="true"]{position:absolute;z-index:2147482999}
 html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="groom"] .gz-game-avatar{animation:gz-pet-groom 3.5s ease-in-out 2}
 html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-game-avatar{animation:gz-pet-stretch 4s ease-in-out 1;transform-origin:center bottom}
@@ -935,11 +935,6 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 .gz-game-identity strong{font-size:1.05em;line-height:1.3;overflow-wrap:anywhere}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-level{flex:none;font-size:.75em;line-height:1.5;padding:3px 9px;border-radius:999px;background:color-mix(in srgb,var(--gz-accent,#16837b) 12%,transparent);color:var(--gz-accent,#16837b)}
 .gz-game-xp{display:flex;flex-wrap:wrap;justify-content:space-between;gap:3px 8px;font-size:.72em;color:var(--gz-ink-muted,#526273);font-variant-numeric:tabular-nums}
-.gz-w[data-tile="pet"] .gz-game-habitat{height:210px;min-height:210px}
-.gz-game-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.gz-game-actions button{appearance:none;min-height:38px;padding:8px 10px;border:1px solid var(--gz-border-line,var(--gz-line,#bbc6cc));border-radius:var(--gz-radius-sm,8px);background:var(--gz-surface-fill,var(--gz-surface,#fff));color:var(--gz-ink,#253449);font:600 .82em/1.3 var(--gz-font,system-ui);cursor:pointer}
-.gz-game-actions .gz-game-primary{background:var(--gz-accent,#16837b);border-color:var(--gz-accent,#16837b);color:var(--gz-accent-ink,#fff)}
-.gz-game-actions button:disabled{opacity:.5;cursor:default}
 .gz-game-care{font-size:.75em;color:var(--gz-ink-muted,#526273);min-height:1.5em}
 .gz-game .gz-game-vitals{gap:8px;padding:4px 0 8px}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-vitals label{grid-template-columns:minmax(0,1fr) auto;min-width:0;gap:5px 4px;padding:8px;border-radius:var(--gz-radius-sm,8px);background:color-mix(in srgb,var(--gz-ink,#253449) 4%,transparent)}
@@ -954,3 +949,80 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 .gz-game-section .gz-game-section{margin-top:8px}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-section label{grid-template-columns:minmax(0,1fr) minmax(100px,1.05fr)}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-section .gz-game-meters label{grid-template-columns:1fr}
+
+/* ---- Tiles fit their room: each tile's body is a size container (gz-tile), so its content lays out by its real width, and by its
+   height once the student has dragged it to one (a body with a height of its own), whatever its size name: the same tile works in a
+   narrow dock, a phone's column and a large board slot. The habitat dialog's body is one too. */
+.gz-w > .gz-w-body { container: gz-tile / inline-size; min-width: 0; }
+.gz-w > .gz-w-body[style*="height"] { container-type: size; }
+.gz-game-dialog > div { container: gz-tile / inline-size; }
+
+/* The habitat: its stage fills the tile's width (and, at a dragged height, what the rest leaves); the pet, furniture and toys scale
+   with it (features/petworld.js). Narrow or short, the stage carries the name and level and the main actions sit under it, More
+   opening the whole habitat outside the tile; wider tiles add XP, care and the meters, then the sections; very wide ones put the
+   stage beside the rest. */
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{grid-template-columns:minmax(0,1fr);grid-template-areas:"overview" "stage" "controls";align-content:start}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-overview{grid-area:overview}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-habitat{grid-area:stage}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-controls{grid-area:controls}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{gap:8px}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr));gap:6px}
+:is(.gz-w,.gz-game-dialog) .gz-game-actions .gz-w-btn{justify-content:center;min-width:0;min-height:2rem;padding:.2rem .6rem;line-height:1.25;text-align:center;white-space:normal}
+.gz-game-more{display:none!important;align-self:stretch}
+.gz-w[data-tile="pet"] > .gz-w-body[style*="height"]{display:flex;flex-direction:column}
+.gz-w[data-tile="pet"] > .gz-w-body[style*="height"] > .gz-game{flex:1 1 auto;min-height:0;grid-template-rows:auto minmax(64px,1fr) auto}
+.gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-habitat{height:auto;min-height:64px}
+@container gz-tile (height < 520px) and (width < 600px) {
+  .gz-game-controls>.gz-game-section{display:none!important}
+  .gz-game-more{display:inline-flex!important;align-items:center;justify-content:center}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+}
+@container gz-tile (width < 300px) or ((height < 300px) and (width < 600px)) {
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{grid-template-areas:"stage" "controls"}
+  .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] > .gz-game{grid-template-rows:minmax(64px,1fr) auto}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-overview{grid-area:stage;z-index:6;align-self:start;gap:4px;padding:6px 8px;pointer-events:none}
+  .gz-game-heading{align-items:center;gap:6px}
+  .gz-game-identity strong{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--gz-surface-fill,var(--gz-surface,#fff)) 82%,transparent);font-size:.9em}
+  .gz-game-identity .gz-game-hint,.gz-game-xp{display:none!important}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-overview progress{height:4px;opacity:.85}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-level{background:color-mix(in srgb,var(--gz-surface-fill,var(--gz-surface,#fff)) 82%,var(--gz-accent,#16837b))}
+  .gz-game-care,.gz-game-controls>.gz-game-section{display:none!important}
+  .gz-game-more{display:inline-flex!important;align-items:center;justify-content:center}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-actions{grid-template-columns:minmax(0,1fr) auto}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-primary{grid-column:1/-1}
+}
+@container gz-tile (width < 240px) or ((height < 380px) and (width < 600px)) { .gz-game-vitals{display:none!important} }
+@container gz-tile (height < 300px) and (width < 600px) { .gz-game-overview progress{display:none} }
+@container gz-tile (width >= 600px) {
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{grid-template-columns:minmax(0,1.55fr) minmax(220px,1fr);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"stage overview" "stage controls";column-gap:16px}
+  :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-habitat{height:clamp(300px,42cqi,460px);align-self:start}
+  .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] > .gz-game{grid-template-rows:auto minmax(0,1fr)}
+  .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-habitat{height:100%;align-self:stretch}
+  .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-controls{min-height:0;overflow:auto;overscroll-behavior:contain;align-content:start}
+}
+
+/* The other widgets by their tile's room. Sizes come from the container (cqi: its width; cqb: its dragged height, else the
+   window's), so a widget grows into a large tile instead of leaving it empty, and gives way in a small one. */
+.gz-w[data-tile="timer"] > .gz-w-body { display: grid; justify-items: center; text-align: center; gap: 0.35rem; }
+.gz-w-clock { font-size: clamp(2rem, min(16cqi, 32cqb), 5.5rem); }
+.gz-w-quote { font-size: clamp(0.95rem, 4.6cqi, 1.6rem); }
+.gz-w-breath { width: clamp(2.5rem, min(34cqi, 100cqb - 6.5rem), 11rem); height: clamp(2.5rem, min(34cqi, 100cqb - 6.5rem), 11rem); margin: 0.2rem auto; }
+.gz-w[data-tile="buddy"] .gz-w-pet :is(img,canvas) { width: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); height: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); }
+.gz-w[data-tile^="course:"] .gz-course-card .course-banner { height: clamp(0px, 100cqb - 7rem, var(--gz-card-h, 128px)); }
+/* Dragged to a height: what a widget shows sits in the middle of its tile, not at the top of an empty box. */
+.gz-w:is([data-tile="timer"], [data-tile="breathe"], [data-tile="buddy"]) > .gz-w-body[style*="height"] { align-content: safe center; }
+.gz-w:is([data-tile="quotes"], [data-tile="settings"]) > .gz-w-body[style*="height"] { display: flex; flex-direction: column; justify-content: safe center; gap: 0.4rem; }
+.gz-w[data-tile="settings"] > .gz-w-body[style*="height"] { align-items: center; }
+.gz-w > .gz-w-body[style*="height"] .gz-w-stage iframe { height: max(5rem, 100cqb - 3.5rem); }
+@container gz-tile (width < 260px) {
+  .gz-w-agenda li { grid-template-columns: minmax(0, 1fr); }
+  .gz-w-agenda li > .gz-w-faint:not(:only-child) { grid-column: 1; }
+  .gz-w-music { flex-wrap: wrap; }
+  .gz-w-music input { flex-basis: 100%; }
+}
+
+/* To Do in a narrow tile: its count and tools on fewer rows, so the list starts sooner. */
+@container gz-tile (width < 260px) {
+  .gz-w[data-tile="todo"] #gz-todo .gz-todo-head { gap: 0.15rem 0.3rem; font-size: 0.8rem; }
+  .gz-w[data-tile="todo"] #gz-todo .gz-todo-head :is(button, a) { padding-inline: 0.4rem; }
+}
