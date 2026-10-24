@@ -384,7 +384,7 @@
     </div>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="all-switch"><input type="checkbox" id="editor-all" data-local><span>All settings</span></label>
-    <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
+    <label class="all-switch"><input type="checkbox" id="enabled"><span>Enable Glaze</span></label>
     <div class="embed-tools" hidden><button type="button" id="embed-tab">Open in a new tab</button><button type="button" id="embed-close" class="primary">Close</button></div>
   </header>
 
@@ -979,8 +979,8 @@
 <label class="field"><span>Picture height</span><input type="range" data-key="card.height" min="64" max="260" step="2"><output data-for="card.height" data-format="px"></output></label>
 <label class="check"><input type="checkbox" data-key="card.icons"><span>Bookmark icons on cards</span>
           <span class="desc">A card's bookmarks show as small icons on its picture.</span></label>
-<div class="has-badge"><label class="check"><input type="checkbox" data-key="card.create"><span>Create button on cards</span>
-          <span class="desc">A + on each card to message the class or start a discussion.</span></label><span class="site-badge" translate="no">Canvas</span></div>
+<div class="has-badge"><label class="check"><input type="checkbox" data-key="card.create"><span>Create button on cards <span class="site-badge" translate="no">Canvas</span></span>
+          <span class="desc">A + on each card to message the class or start a discussion.</span></label></div>
 <div class="row" id="card-set" hidden><span class="desc" id="card-set-note"></span><button type="button" id="card-set-clear" aria-describedby="card-set-note">Remove</button></div>
 </details>
 </section>
@@ -1023,10 +1023,10 @@
             <span class="desc">"in 2 days" instead of "Thu 11:59 PM", the other on hover.</span></label>
           <label class="check"><input type="checkbox" data-key="todo.urgent"><span>Highlight urgent work in To Do</span>
             <span class="desc">Past due, or due within a day.</span></label>
-          <div class="has-badge"><label class="check"><input type="checkbox" data-key="todo.teacher"><span>Grading, for teachers</span>
-            <span class="desc">If you teach or assist a course: work waiting for you to grade.</span></label><span class="site-badge" translate="no">Canvas</span></div>
-          <div class="has-badge"><label class="check"><input type="checkbox" data-key="todo.progress"><span>Grading progress</span>
-            <span class="desc">How many submissions you've graded; asks Canvas once per assignment.</span></label><span class="site-badge" translate="no">Canvas</span></div>
+          <div class="has-badge"><label class="check"><input type="checkbox" data-key="todo.teacher"><span>Grading, for teachers <span class="site-badge" translate="no">Canvas</span></span>
+            <span class="desc">If you teach or assist a course: work waiting for you to grade.</span></label></div>
+          <div class="has-badge"><label class="check"><input type="checkbox" data-key="todo.progress"><span>Grading progress <span class="site-badge" translate="no">Canvas</span></span>
+            <span class="desc">How many submissions you've graded; asks Canvas once per assignment.</span></label></div>
           <div class="has-info"><label class="check"><input type="checkbox" data-key="todo.sync" aria-describedby="info-todo-sync"><span id="info-todo-sync-name">Tick off in Canvas too</span></label><span class="site-badge" translate="no">Canvas</span><button type="button" class="info" popovertarget="info-todo-sync" aria-labelledby="info-more info-todo-sync-name" aria-describedby="info-todo-sync"></button>
 <div class="info-pop" id="info-todo-sync" popover><span class="desc">Ticking an item also marks it done in Canvas's own planner, so it shows done on your phone too: the only change Glaze makes in Canvas. Off: ticks stay on this device.</span></div></div>
           <div class="row">
@@ -1208,8 +1208,8 @@
 <div class="info-pop" id="info-enhance-docTheme" popover><span class="desc">The document viewer's background, toolbar and thumbnails in your palette. The pages stay as they are, unless Dark documents changes them.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.docInk" aria-describedby="info-enhance-docInk"><span id="info-enhance-docInk-name">Pen and highlighter on documents</span></label><span class="site-badge" translate="no">Canvas</span><button type="button" class="info" popovertarget="info-enhance-docInk" aria-labelledby="info-more info-enhance-docInk-name" aria-describedby="info-enhance-docInk"></button>
 <div class="info-pop" id="info-enhance-docInk" popover><span class="desc">Draw, highlight and erase on files in the document viewer. Your marks are kept on this device only, per file, and never sent anywhere; export them to keep or move them.</span></div></div>
-<div class="has-badge"><label class="check"><input type="checkbox" data-key="enhance.quizLight"><span>Keep quizzes light</span>
-          <span class="desc">A quiz you are taking, and tools such as New Quizzes, show without Glaze.</span></label><span class="site-badge" translate="no">Canvas</span></div>
+<div class="has-badge"><label class="check"><input type="checkbox" data-key="enhance.quizLight"><span>Keep quizzes light <span class="site-badge" translate="no">Canvas</span></span>
+          <span class="desc">A quiz you are taking, and tools such as New Quizzes, show without Glaze.</span></label></div>
 <details class="more"><summary>More options</summary>
 <div class="group" id="document-review"><h3>Document review</h3>
 <label class="check"><input type="checkbox" data-key="docreview.compact"><span>Compact submission header</span></label>
@@ -1241,7 +1241,7 @@
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.hideFolders" aria-describedby="info-enhance-hideFolders"><span id="info-enhance-hideFolders-name">Hide folders</span></label><button type="button" class="info" popovertarget="info-enhance-hideFolders" aria-labelledby="info-more info-enhance-hideFolders-name" aria-describedby="info-enhance-hideFolders"></button>
 <div class="info-pop" id="info-enhance-hideFolders" popover><span class="desc">Hide folders and learning modules in Blackboard course outlines, and modules on Canvas's Modules page, on this device.</span></div></div>
 <div class="group">
-          <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
+          <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide help buttons and links</span></label>
           <label class="check"><input type="checkbox" data-key="declutter.banner"><span>Hide course banner images</span>
             <span class="desc">On Canvas: the pictures on Dashboard cards.</span></label>
           <div class="has-badge"><label class="check"><input type="checkbox" data-key="declutter.faculty"><span>Hide the Course Faculty box when it is empty</span></label><span class="site-badge" translate="no">Blackboard</span></div>
