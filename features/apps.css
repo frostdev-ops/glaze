@@ -866,12 +866,12 @@ html[data-gz-card-condensed] .gz-course-card .course-banner { height: 56px; }
 .gz-game-habitat[data-habitat="garden"]{background:radial-gradient(ellipse at 70% 20%,#f5f9d5,transparent 65%),linear-gradient(#d3e9dd 0 80%,#92bba1 80% 84%,#bfd6af 84%)!important}
 .gz-game-habitat[data-habitat="aquarium"]{background:linear-gradient(180deg,#e6f5fb 0 12%,#97dce5 12% 14%,#c1e9ed 14%,#8ac9d4 85%,#ebd9b3 85%)!important;border-color:#76a8b2!important;box-shadow:inset 8px 0 0 #ffffff60,inset -8px 0 0 #ffffff40!important}
 .gz-game-habitat[data-habitat="aquarium"]::after{content:"";position:absolute;inset:16% 9% 17%;background:radial-gradient(circle at 12% 30%,transparent 3px,#ffffff85 4px,transparent 5px),radial-gradient(circle at 86% 64%,transparent 5px,#ffffff85 6px,transparent 7px),radial-gradient(circle at 74% 19%,transparent 2px,#ffffff85 3px,transparent 4px);pointer-events:none}
-.gz-game-habitat[data-habitat="sky"]{background:radial-gradient(ellipse at 20% 85%,#fff 0 15%,transparent 16%),radial-gradient(ellipse at 80% 90%,#fff 0 20%,transparent 21%),linear-gradient(#c8ddf8,#ede5f8)!important}
-.gz-game-actor{position:absolute;z-index:5;width:80px;height:86px;touch-action:none;user-select:none;cursor:grab;color:var(--gz-ink,#253449);font:13px/1.3 system-ui,sans-serif;isolation:isolate}
+.gz-game-habitat[data-habitat="sky"]{background:radial-gradient(ellipse at 20% 85%,color-mix(in srgb,#fff 80%,var(--gz-hab)) 0 15%,transparent 16%),radial-gradient(ellipse at 80% 90%,color-mix(in srgb,#fff 80%,var(--gz-hab)) 0 20%,transparent 21%),linear-gradient(color-mix(in srgb,#c8ddf8 75%,var(--gz-hab)),color-mix(in srgb,#ede5f8 72%,var(--gz-hab)))!important}
+.gz-game-actor{position:absolute;z-index:5;width:calc(80px * var(--gz-pet-u, 1));height:calc(86px * var(--gz-pet-u, 1));touch-action:none;user-select:none;cursor:grab;color:var(--gz-ink,#253449);font:13px/1.3 system-ui,sans-serif;isolation:isolate}
 .gz-game-actor[hidden]{display:none!important}
 .gz-game-actor[data-wander="true"]{position:absolute;z-index:2147483000;filter:drop-shadow(0 5px 4px #17233325)}
-.gz-game-actor .gz-game-avatar,.gz-game-actor .gz-w-pet{display:block;position:static;margin:0;width:80px;height:86px;padding:0;border:0;background:none}
-.gz-game-actor .gz-w-pet :is(img,canvas){display:block;width:80px;height:86px;object-fit:contain;max-width:none;pointer-events:none}
+.gz-game-actor .gz-game-avatar,.gz-game-actor .gz-w-pet{display:block;position:static;margin:0;width:100%;height:100%;padding:0;border:0;background:none}
+.gz-game-actor .gz-w-pet :is(img,canvas){display:block;width:100%;height:100%;object-fit:contain;max-width:none;pointer-events:none}
 .gz-game-actor[data-dragging="true"],.gz-game-item[data-dragging="true"]{cursor:grabbing!important;z-index:2147483001!important;filter:drop-shadow(0 8px 7px #17233340)}
 .gz-game-home{position:fixed;z-index:2147483002;bottom:16px;right:20px;left:auto;transform:none;font:10px/1.2 system-ui,sans-serif!important;border:1px solid #77978e!important;border-radius:var(--gz-radius,12px)!important;padding:3px 7px!important;background:#f3faf8!important;color:#253449!important;white-space:nowrap;cursor:pointer}
 .gz-game-home[hidden]{display:none!important}
@@ -910,7 +910,7 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="climb"] .gz-game-
 .gz-game-meters small{font-size:10px;color:var(--gz-ink-muted,#526273)}
 .gz-game-item[data-shelf="true"] img{object-fit:cover}
 
-.gz-game-toy{position:absolute;left:0;top:0;width:11px;height:11px;border-radius:50%;background:#ecad64;box-shadow:inset -3px -2px 0 #c98244;pointer-events:none;z-index:4}
+.gz-game-toy{position:absolute;left:0;top:0;width:calc(11px * var(--gz-pet-u, 1));height:calc(11px * var(--gz-pet-u, 1));border-radius:50%;background:#ecad64;box-shadow:inset -3px -2px 0 #c98244;pointer-events:none;z-index:4}
 .gz-game-toy[data-wander="true"]{position:absolute;z-index:2147482999}
 html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="groom"] .gz-game-avatar{animation:gz-pet-groom 3.5s ease-in-out 2}
 html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-game-avatar{animation:gz-pet-stretch 4s ease-in-out 1;transform-origin:center bottom}
