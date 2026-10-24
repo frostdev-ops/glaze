@@ -4,6 +4,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
+const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const m = require('../manifest.json');
 
@@ -231,13 +233,13 @@ test('the detector that Safari runs on every other https page stays under 2 KB',
 // tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
 const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server']);
 const VENDORED = new Set(['lib/three.min.js', 'lib/tesseract/tesseract-core-simd-lstm.js', 'lib/lottie/lottie_light_canvas.min.js']); // pdf.js is .mjs, not scanned
-const shipped = (dir = '') => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) => {
+const shipped = (top, dir = '') => fs.readdirSync(path.join(top, dir), { withFileTypes: true }).flatMap((e) => {
   const rel = dir ? `${dir}/${e.name}` : e.name;
   if (e.name.startsWith('.')) return [];
-  if (e.isDirectory()) return dir || !NOT_SHIPPED.has(e.name) ? shipped(rel) : [];
+  if (e.isDirectory()) return dir || !NOT_SHIPPED.has(e.name) ? shipped(top, rel) : [];
   return e.name.endsWith('.js') && !VENDORED.has(rel) ? [rel] : [];
 });
-const CODE = shipped();
+const CODE = shipped(root);
 
 // Source without its comments: /* … */ blocks, and // to the end of a line where // starts a comment (not https://).
 const executable = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[\s;{}()])\/\/[^\n]*/gm, '$1');
@@ -353,6 +355,22 @@ const STYLE_READS = [
 test('no new whole-page style reads or element sweeps beyond the reviewed ones', () => {
   const sweeps = found(['getComputedStyle', 'querySelectorAll', 'getElementsByTagName'], (c) => !/^(querySelectorAll|getElementsByTagName)/.test(c.call) || /^(['"`])\*\1$/.test(c.args));
   review(STYLE_READS, sweeps, 'reads computed styles or every element. Keep it to one element or its ancestors and add it to STYLE_READS with why it is bounded; dark-mode gaps it would fix belong in canvas.css.');
+});
+
+test('the scans read only the files git tracks: an untracked folder in the checkout is not Glaze', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-perf-'));
+  try {
+    const git = (...args) => execFileSync('git', args, { cwd: dir, stdio: 'ignore' });
+    for (const [f, src] of [['content.js', ''], ['features/a.js', ''], ['promo/build/621.bundle.js', 'setInterval(tick, 10)'], ['features/draft.js', '']]) {
+      fs.mkdirSync(path.join(dir, path.dirname(f)), { recursive: true });
+      fs.writeFileSync(path.join(dir, f), src);
+    }
+    git('init', '-q');
+    git('add', 'content.js', 'features/a.js');
+    assert.deepEqual(shipped(dir).sort(), ['content.js', 'features/a.js']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('the scans see the code they are meant to', () => {
