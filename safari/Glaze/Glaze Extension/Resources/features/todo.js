@@ -23,6 +23,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let shareSurface = null;
   let box = null; // section#gz-todo: its head and body are drawn anew; the status line stays, so it's announced
   let head = null, line = null, body = null;
+  let tools = false; // the header's ⋯ open: Share sessions and Export, the tools used now and then
   let started = null; // the start() promise while mounted
   let dead = false; // it failed for good on this page: Canvas's own list stays
   let gen = 0; // which start is current: off() and each start move it on, and a superseded start's results are dropped
@@ -391,6 +392,14 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     add.setAttribute('aria-expanded', String(!!form));
     const ics = small('ics', t('Export calendar (.ics)'), t('Export'));
     ics.dataset.focus = 'ics';
+    const sessions = small('sessions', t('Share sessions'));
+    sessions.dataset.focus = 'sessions';
+    const toolRow = (...kids) => { const g = make('div', { id: 'gz-todo-tools', className: 'gz-todo-tools' }, ...kids); g.setAttribute('role', 'group'); g.setAttribute('aria-label', t('More')); return g; };
+    const more = small('tools', t('More'), '⋯');
+    more.dataset.focus = 'tools';
+    more.setAttribute('aria-expanded', String(tools));
+    more.setAttribute('aria-controls', 'gz-todo-tools');
+    more.title = t('More');
     // In the dock: Follow page (this course inside one, all of them elsewhere) or All courses, kept for the account.
     const scope = mounted?.setScope && make('div', { className: 'gz-todo-scope', role: 'group' }, ...[['follow', 'Follow page'], ['all', 'All courses']].map(([v, l]) => {
       const b = small('scope', t(l));
@@ -402,7 +411,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (scope) scope.setAttribute('aria-label', t('Courses shown'));
     head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }), ...(scope ? [scope] : []),
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
-      ...(globalThis.GZ_REMIND_UI?.head() || []), small('sessions', t('Share sessions')), ics, add); // the streak and reminders (features/reminders.js), when on
+      ...(globalThis.GZ_REMIND_UI?.head() || []), add, more, // the streak and reminders (features/reminders.js), when on
+      ...(tools ? [toolRow(sessions, ics)] : []));
     const parts = [form && taskForm()];
     parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
     if (cache?.complete === false) parts.push(make('p', { className: 'gz-todo-hint', textContent: t('Blackboard sent only part of your calendar, so some work may be missing.') }));
@@ -475,6 +485,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!el || el.tagName === 'INPUT' || el.tagName === 'FORM') return;
     const act = el.dataset.act;
     if (act === 'scope') { if (mounted?.scope !== el.dataset.v) mounted?.setScope?.(el.dataset.v); return; }
+    if (act === 'tools') { tools = !tools; render(true); box.querySelector(`[data-focus="${tools ? 'sessions' : 'tools'}"]`)?.focus(); return; }
+    if (act === 'sessions' || act === 'ics') { tools = false; render(true); box.querySelector('[data-focus="tools"]')?.focus(); }
     if (act === 'sessions') { if (human(e)) chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => {}); return; }
     const k = el.closest('[data-key]')?.dataset.key;
     if (act === 'add') { form = form ? null : { cid: here() }; render(true); if (form) box.querySelector('[data-focus="form title"]')?.focus(); return; }
