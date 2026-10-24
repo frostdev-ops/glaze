@@ -113,6 +113,8 @@
   @keyframes info-in { from { opacity: 0; transform: translateY(-3px); } }
   [data-folded] { display: none !important; }
   section { background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-fill, var(--gz-surface))); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 7 / 6); padding: 1.1rem 1.25rem 1.25rem; display: grid; gap: 1rem; scroll-margin-top: 5rem; }
+  /* Large panels keep the Look's glass over artwork, like the course panels. A solid ground has nothing to blur. */
+  html[data-gz-bg]:not([data-gz-bg="solid"]) :is(section, .editor-nav, .preview) { backdrop-filter: blur(calc(var(--gz-glass, 12px) * 5 / 6)); }
   section > h2 { margin: 0; font-size: calc(12px * var(--gz-scale, 1)); }
   h3 { margin: 0; font-size: calc(13px * var(--gz-scale, 1)); font-weight: 600; color: var(--gz-ink); }
   .field { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) 3.5rem; align-items: center; gap: 0.75rem; }
