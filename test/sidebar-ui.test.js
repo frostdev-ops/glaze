@@ -406,6 +406,12 @@ test('the first visit migrates To Do into the dock before showing it; the native
 const dash = (x = {}) => page({ fixture: 'canvas-dashboard-cards.html', where: '/', widgets: true, width: 1600, left: 84, ...x });
 const lay0 = () => ({ tiles: W.TILES.map((id) => ({ id, on: id === 'notes', size: id === 'notes' ? 'l' : 's' })), canvasTodo: true, filled: ['cdash'],
   boards: { cdash: W.TILES.map((id) => ({ id, on: id === 'notes', size: 'l', ...(id === 'notes' && { x: 40, y: 80, w: 420, h: 220 }) })) } });
+// The labels in a docked tile's menu, as it opens now.
+const menuLabels = (p, id) => {
+  const open = () => p.fire(p.$(`section[data-tile="${id}"] .gz-w-dest`), 'click');
+  open(); const labels = p.$('#gz-sb-menu').children.map((b) => b.textContent); open(); // pressed again, it closes
+  return labels;
+};
 const menuItem = (p, id, label) => {
   p.fire(p.$(`section[data-tile="${id}"] .gz-w-dest`), 'click');
   const item = p.$('#gz-sb-menu').children.find((b) => b.textContent === label);
@@ -471,15 +477,18 @@ test('board → dock → float → board: one instance throughout, and the board
   assert.ok(q.$('#gz-dash').contains(q.$('section[data-tile="notes"]')));
 });
 
-test('in the dock: reorder by buttons and handle keys, fold, height and Auto height; remove then re-add restores them', async () => {
+test('in the dock: reorder by its menu and handle keys, fold, height and Auto height; remove then re-add restores them', async () => {
   const stored = { widgetLayout: lay0(), ...record({ dock: [{ id: 'timer' }, { id: 'quotes' }, { id: 'notes' }], dest: { timer: 'dock', quotes: 'dock', notes: 'dock' } }) };
   const p = page({ stored, widgets: true });
   await p.pass();
   const order = () => p.$('.gz-sb-dock').children.map((e) => e.dataset.tile);
   assert.deepEqual(order(), ['timer', 'quotes', 'notes']);
   const t = (id) => p.$(`section[data-tile="${id}"]`);
-  assert.equal(t('timer').querySelector('.gz-w-up').disabled, true);
-  p.fire(t('notes').querySelector('.gz-w-up'), 'click'); await settle();
+  // The heading keeps the handle, the menu and fold; Move up and Move down are in the menu, where they apply.
+  assert.deepEqual(t('timer').querySelector('.gz-w-tools').children.map((b) => b.className.split(' ').at(-1)), ['gz-w-handle', 'gz-w-dest', 'gz-w-fold']);
+  assert.equal(menuLabels(p, 'timer').includes('Move up'), false);
+  assert.equal(menuLabels(p, 'notes').includes('Move down'), false);
+  menuItem(p, 'notes', 'Move up'); await settle();
   assert.deepEqual(order(), ['timer', 'notes', 'quotes']);
   assert.match(p.$('#gz-sb-title').parentNode.querySelector('.gz-sr').textContent, /Notes moved to 2 of 3/);
   p.fire(t('timer').querySelector('.gz-w-handle'), 'keydown', { key: 'ArrowDown' }); await settle();
