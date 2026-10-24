@@ -104,6 +104,12 @@ const MOODLE_DRAWER = `<div id="theme_boost-drawers-blocks" class="drawer drawer
     ok(back, 'Ultra: the pet and Return home come back once the panel closes');
     await open(DRAWER('right'));
     await verdict('Ultra top bar, a MUI drawer', 'ultra-top-drawer-right');
+    // Top/bottom drawers are content-sized sheets, not full-height side drawers.
+    for (const side of ['Top', 'Bottom']) {
+      await open(`<div class="MuiDrawer-modal" id="check-layer"><div class="MuiDrawer-paper MuiDrawer-paperAnchor${side}" style="position:fixed;left:0;right:0;${side.toLowerCase()}:0;height:200px;background:white"></div></div>`);
+      const size = await page.locator('#check-layer > div').boundingBox();
+      ok(size?.height === 200, `Ultra: a ${side.toLowerCase()} drawer keeps its 200px content height (got ${size?.height})`);
+    }
     await send({ place: 'rail', rail: 'open' });
     await open(PANEL('left'));
     await verdict('Ultra rail, a left side panel', 'ultra-rail-panel-left');
