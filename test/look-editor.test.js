@@ -558,6 +558,24 @@ test('the settings page keeps its surfaces readable over the Look\'s background:
   assert.equal(UI.readable(calm, D.GZ_ACTIVE_COLORS(calm, false)), 88);
 });
 
+test('settings contrast covers bright scene pixels at the renderer\'s intensity and both surface fills', () => {
+  const mix = (a, b, weight) => Object.fromEntries(['r', 'g', 'b'].map((k) => [k, a[k] + (b[k] - a[k]) * weight]));
+  for (const preset of ['Frost', 'Paper']) for (const kind of ['scene', 'shader', 'layers', 'media']) for (const intensity of [0, 50, 100]) {
+    const s = D.GZ_SANITIZE({ colors: D.GZ_PRESET(preset), bg: { kind, intensity }, look: { surfaceOpacity: 20, surfaceTint: 5 } });
+    const colors = D.GZ_ACTIVE_COLORS(s, false), opacity = UI.readable(s, colors) / 100;
+    // Shaders and layer stacks can emit white or black regardless of the chosen background colors.
+    for (const row of D.GZ_CONTRAST(colors).filter((r) => ['--gz-surface', '--gz-surface-2'].includes(r.bg))) {
+      const base = C.parse(colors[row.bg]), paint = mix(base, C.parse(colors['--gz-accent']), .05);
+      if (C.contrast(colors[row.fg], C.hex(paint)) < row.min) continue;
+      for (const pixel of ['#ffffff', '#000000']) {
+        const under = mix(C.parse(pixel), C.parse(colors['--gz-surface-2']), D.GZ_SCENE_LOOK(intensity).dim);
+        const ratio = C.contrast(colors[row.fg], C.hex(mix(under, paint, opacity)));
+        assert.ok(ratio >= row.min, `${preset} ${kind} ${intensity} ${row.fg}/${row.bg} over ${pixel}: ${ratio} < ${row.min} at ${opacity}`);
+      }
+    }
+  }
+});
+
 test('the settings page wears the Look: its background from the preview\'s own painter, the Look on offer while previewed', () => {
   const page = read('options.html'), js = read('options.js'), runtime = read('lib/editor-preview.js');
   assert.match(page, /<iframe id="backdrop" src="preview\.html\?site=canvas&amp;backdrop" aria-hidden="true" tabindex="-1" inert><\/iframe>/);
