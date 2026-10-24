@@ -875,6 +875,8 @@ html[data-gz-card-condensed] .gz-course-card .course-banner { height: 56px; }
 .gz-game-actor[data-dragging="true"],.gz-game-item[data-dragging="true"]{cursor:grabbing!important;z-index:2147483001!important;filter:drop-shadow(0 8px 7px #17233340)}
 .gz-game-home{position:fixed;z-index:2147483002;bottom:16px;right:20px;left:auto;transform:none;font:10px/1.2 system-ui,sans-serif!important;border:1px solid #77978e!important;border-radius:var(--gz-radius,12px)!important;padding:3px 7px!important;background:#f3faf8!important;color:#253449!important;white-space:nowrap;cursor:pointer}
 .gz-game-home[hidden]{display:none!important}
+/* Stepping aside while the site's panel or dialog, or Glaze's Settings, is open (features/petworld.js). */
+html:is([data-gz-yield],[data-gz-settings]) :is(.gz-game-world,.gz-game-home){visibility:hidden!important}
 .gz-game-reaction{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);padding:5px 9px;border-radius:var(--gz-radius,12px);background:var(--gz-surface-fill,var(--gz-surface,#fff));color:var(--gz-ink,#253449);box-shadow:0 3px 14px #17233324;white-space:nowrap;pointer-events:none;font-weight:700}
 .gz-game-reaction:empty{display:none}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-item,.gz-game-item[data-outside="true"]{position:absolute;display:block;z-index:2;padding:0;border:0;background:none;box-shadow:none;cursor:grab;touch-action:none;user-select:none}
