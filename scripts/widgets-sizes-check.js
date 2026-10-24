@@ -282,6 +282,36 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
       }
       ok(!errors.length, 'resize: no page errors', errors.splice(0).join(' | '));
     }
+
+    // More, from a small tile: the whole habitat in its dialog, on screen and outside the tile, with every action; Escape closes
+    // it and gives the focus back. At a desktop window and a phone's.
+    for (const [w, h] of [[1600, 1000], [390, 844]]) {
+      if (process.env.ONLY && !'more'.includes(process.env.ONLY)) break;
+      dir = 'ltr';
+      await store(settingsFor('Paper'), local(board(SIZES.ds, ['pet'])));
+      await page.setViewportSize({ width: w, height: h });
+      await page.goto(`${O}/ultra/institution-page`);
+      await page.waitForSelector('section.gz-w[data-tile="pet"] [data-control="more"]', { state: 'visible', timeout: 20000 }).catch(() => {});
+      await page.click('section.gz-w[data-tile="pet"] [data-control="more"]').catch(() => {});
+      await page.waitForSelector('dialog.gz-game-dialog[open] .gz-game-habitat', { timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      const d = await page.evaluate((actions) => {
+        const box = document.querySelector('dialog.gz-game-dialog[open]');
+        if (!box) return null;
+        const r = box.getBoundingClientRect(), tile = document.querySelector('section.gz-w[data-tile="pet"]');
+        const ids = new Set([...box.querySelectorAll('[data-control]')].map((e) => e.dataset.control));
+        return { onScreen: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1, outside: !tile.contains(box),
+          missing: actions.filter((c) => !ids.has(c)), more: ids.has('more'), stage: box.querySelector('.gz-game-habitat').getBoundingClientRect().width, width: r.width };
+      }, PET_ACTIONS);
+      await page.screenshot({ path: path.join(out, `more-dialog-${w}.png`) });
+      ok(d?.onScreen && d.outside, `More at ${w} px: the habitat opens in its dialog, on screen, outside the tile`, JSON.stringify(d));
+      ok(d && !d.missing.length && !d.more, `More at ${w} px: the dialog has every action and no More`, JSON.stringify(d));
+      ok(d && d.stage >= d.width * .8, `More at ${w} px: the dialog's habitat fills it`, JSON.stringify(d));
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      ok(await page.evaluate(() => !document.querySelector('dialog.gz-game-dialog') && document.activeElement?.dataset.control === 'more'), `More at ${w} px: Escape closes it and the focus is back on More`);
+      ok(!errors.length, `More at ${w} px: no page errors`, errors.splice(0).join(' | '));
+    }
     fs.writeFileSync(path.join(out, 'measures.json'), JSON.stringify(results, null, 1));
   } catch (e) {
     ok(false, 'the check ran to its end', e.stack || e);
