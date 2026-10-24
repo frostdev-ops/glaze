@@ -10,7 +10,19 @@ const vm = require('node:vm');
 const M = require('../lib/modbundle.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const settle = async (n = 40) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
+// Web Crypto (a mod's signature and hashes) finishes off the main thread, after any fixed number of turns on a busy machine:
+// settling waits for it too.
+let inCrypto = 0;
+for (const k of ['digest', 'importKey', 'verify', 'sign', 'generateKey', 'exportKey']) {
+  const f = crypto.subtle[k].bind(crypto.subtle);
+  crypto.subtle[k] = (...a) => { inCrypto++; return f(...a).finally(() => { inCrypto--; }); };
+}
+const settle = async (n = 40) => {
+  for (let i = 0; i < n; i++) {
+    await new Promise(setImmediate);
+    while (inCrypto) await new Promise((r) => setTimeout(r, 1));
+  }
+};
 const t = (k, vars = {}) => k.replace(/\{(\w+)\}/g, (s, n) => (n in vars ? String(vars[n]) : s));
 const AUTHOR = { kty: 'OKP', crv: 'Ed25519', d: 'nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A', x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo' };
 const u8 = (s) => new TextEncoder().encode(s);
