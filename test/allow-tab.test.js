@@ -27,11 +27,11 @@ class El {
 // ---- the Allow page: framed in a school's page, or in its own tab --------------------------------------------------------
 // `permissions`: whether the page has the API (Chrome's frame, any top-level tab) or not (Firefox's frame); `send`: the
 // worker's answer to runtime.sendMessage.
-const allowPage = ({ hash = `#${CDN}`, top = false, permissions = true, request = async () => true, send = async () => ({ ok: true }) } = {}) => {
+const allowPage = ({ hash = `#${CDN}`, top = false, permissions = true, authorized = true, request = async () => true, send = async () => ({ ok: true }) } = {}) => {
   const button = new El('button'), html = new El('html'), asked = [], told = [], sent = [];
   let active = false, heard;
   const document = { getElementById: (id) => (id === 'allow' ? button : null), documentElement: html, body: { scrollWidth: 120, scrollHeight: 26 } };
-  const chrome = { runtime: { getManifest: () => ({ host_permissions: [] }), sendMessage: (m) => { sent.push([plain(m), active]); return send(m); } } };
+  const chrome = { runtime: { getManifest: () => ({ host_permissions: [] }), sendMessage: (m) => { if (m.type === 'glaze:allow-init') return Promise.resolve({ ok: authorized }); sent.push([plain(m), active]); return send(m); } } };
   if (permissions) chrome.permissions = { request: (o) => { asked.push([[...o.origins], active]); return request(o); } };
   const g = { document, location: { hash }, console, Promise, URL, decodeURIComponent, navigator: { language: 'en' }, Intl, Object, Array, String, Number, JSON, Math, Error,
     parent: { postMessage: (m) => told.push(plain(m)) }, addEventListener(t, f) { if (t === 'message') heard = f; }, requestAnimationFrame: (f) => f(), chrome };
@@ -39,7 +39,7 @@ const allowPage = ({ hash = `#${CDN}`, top = false, permissions = true, request 
   vm.createContext(g);
   for (const f of ['lib/i18n.js', 'features/allow.js']) vm.runInContext(read(f), g);
   // The school's page hands a framed one its reply port.
-  if (!top) heard?.({ data: { gzAllow: decodeURIComponent(hash.slice(1)) }, ports: [{ postMessage: (m) => told.push(plain(m)) }] });
+  if (!top) heard?.({ data: { gzAllow: decodeURIComponent(hash.slice(1)), ticket: 'page-ticket' }, ports: [{ postMessage: (m) => told.push(plain(m)) }] });
   const click = (isTrusted = true) => { active = true; for (const f of button.listeners.click || []) f({ isTrusted }); active = false; };
   const answers = () => told.filter((m) => 'ok' in m);
   return { button, html, asked, told, sent, click, answers };
@@ -47,24 +47,24 @@ const allowPage = ({ hash = `#${CDN}`, top = false, permissions = true, request 
 
 test('Allow frame without the permissions API: its click has the worker open the own tab, in the click, and says what came back', async () => {
   for (const [reply, ok] of [[{ ok: true }, true], [{ ok: false }, false], [undefined, false]]) {
-    const f = allowPage({ permissions: false, send: async () => reply });
+    const f = allowPage({ permissions: false, send: async () => reply }); await settle();
     assert.equal(f.button.textContent, `Allow ${CDN}`);
     f.click(false);
     assert.deepEqual(f.sent, [], 'a click the page made up sends nothing');
     f.click();
     f.click();
     await settle();
-    assert.deepEqual(f.sent, [[{ type: 'glaze:allow-tab', host: CDN }, true]], 'one word to the worker, in the click');
+    assert.deepEqual(f.sent, [[{ type: 'glaze:allow-tab', host: CDN, ticket: 'page-ticket' }, true]], 'one word to the worker, in the click');
     assert.deepEqual(f.answers(), [{ gzAllow: CDN, ok }], `the worker's ${JSON.stringify(reply)} goes to the page`);
   }
   const lost = allowPage({ permissions: false, send: () => Promise.reject(new Error('Could not establish connection')) });
-  lost.click();
+  await settle(); lost.click();
   await settle();
   assert.deepEqual(lost.answers(), [{ gzAllow: CDN, ok: false }], 'no worker: no');
 });
 
 test('Allow frame with the permissions API (Chrome): it asks the browser itself, never the worker for a tab', async () => {
-  const f = allowPage();
+  const f = allowPage(); await settle();
   f.click();
   await settle();
   assert.deepEqual(f.asked, [[[PATTERN], true]]);
@@ -74,7 +74,7 @@ test('Allow frame with the permissions API (Chrome): it asks the browser itself,
 
 test('Allow in its own tab: the same button, focused; its click asks the browser in the click, then tells the worker; nothing to a page', async () => {
   for (const yes of [true, false]) {
-    const t = allowPage({ top: true, request: async () => yes });
+    const t = allowPage({ top: true, request: async () => yes }); await settle();
     assert.equal(t.button.textContent, `Allow ${CDN}`);
     assert.equal(t.button.hidden, false);
     assert.equal(t.button.focused, true, 'Enter answers it');
@@ -88,7 +88,7 @@ test('Allow in its own tab: the same button, focused; its click asks the browser
     assert.deepEqual(t.told, []);
   }
   const threw = allowPage({ top: true, request: () => Promise.reject(new Error('no')) });
-  threw.click();
+  await settle(); threw.click();
   await settle();
   assert.deepEqual(threw.sent.map(([m]) => m), [{ type: 'glaze:allow-answer', host: CDN }], 'an ask that threw is an answer too');
   const bad = allowPage({ top: true, hash: '#https://x.example/' });
@@ -98,7 +98,7 @@ test('Allow in its own tab: the same button, focused; its click asks the browser
 // ---- the worker ----------------------------------------------------------------------------------------------------------
 // `held`: the hosts the browser holds (a Set the test changes); `session`: storage.session as the worker left it.
 const worker = ({ held = new Set(), session = {} } = {}) => {
-  const listeners = [], removedListeners = [], created = [], removed = [], store = { local: {}, sync: {}, session: structuredClone(session) };
+  const listeners = [], connects = [], updated = [], replaced = [], removedListeners = [], created = [], removed = [], store = { local: {}, sync: {}, session: structuredClone(session) };
   let nextTab = 50;
   const area = (name) => ({
     get: async (k) => structuredClone(k == null ? store[name] : Object.fromEntries([].concat(k).filter((x) => x in store[name]).map((x) => [x, store[name][x]]))),
@@ -107,20 +107,22 @@ const worker = ({ held = new Set(), session = {} } = {}) => {
   });
   const manifest = require('../manifest.json');
   const context = vm.createContext({
-    URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto, atob, btoa, navigator: {},
+    URL, AbortController, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto, atob, btoa, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), context, { filename: f }); },
     chrome: {
       runtime: {
         id: ID, getURL: (p = '') => `${EXT}/${p}`, getManifest: () => manifest,
-        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
+        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (f) => connects.push(f) },
         openOptionsPage: () => Promise.resolve(),
       },
       permissions: { contains: async ({ origins }) => origins.every((o) => held.has(o)), onAdded: { addListener() {} }, onRemoved: { addListener() {} } },
       tabs: {
         query: async () => [], get: async () => ({}),
         create: async (o) => { const tab = { id: nextTab++, ...plain(o) }; created.push(tab); return tab; },
+        update: async (id, o) => Object.assign(created.find((t) => t.id === id), plain(o)),
         remove: async (id) => { removed.push(id); for (const f of removedListeners) f(id, {}); },
         onRemoved: { addListener: (f) => removedListeners.push(f) },
+        onUpdated: { addListener: (f) => updated.push(f) }, onReplaced: { addListener: (f) => replaced.push(f) },
       },
       storage: { local: area('local'), sync: area('sync'), session: area('session'), onChanged: { addListener() {} } },
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {}, executeScript: async () => [] },
@@ -140,7 +142,16 @@ const worker = ({ held = new Set(), session = {} } = {}) => {
     return p;
   };
   const closeTab = (id) => { for (const f of removedListeners) f(id, {}); };
-  return { send, created, removed, closeTab, store, held };
+  const download = async (tab = 7, host = CDN) => {
+    const incoming = [], gone = [], posted = [];
+    const p = { name: 'canvas-zip', sender: { id: ID, url: 'https://school.instructure.com/courses/1/modules', frameId: 0, tab: { id: tab } },
+      onMessage: { addListener: (f) => incoming.push(f) }, onDisconnect: { addListener: (f) => gone.push(f) }, postMessage: (m) => posted.push(plain(m)), disconnect() {} };
+    for (const f of connects) f(p);
+    for (const f of incoming) f({ type: 'file', url: `https://${host}/file.pdf` });
+    await settle();
+    return { ticket: posted.find((m) => m.type === 'ask')?.ticket, close: () => gone.forEach((f) => f()), posted };
+  };
+  return { send, created, removed, closeTab, store, held, download, updated, replaced };
 };
 // The Allow frame in tab 7's school page, and the tab the worker opens (id 50).
 const frameSender = (more = {}) => ({ id: ID, url: ALLOW, origin: EXT, frameId: 3, tab: { id: 7, index: 2, url: 'https://school.instructure.com/courses/1/modules' }, ...more });
@@ -149,13 +160,20 @@ const tabSender = (more = {}) => ({ id: ID, url: ALLOW, origin: EXT, frameId: 0,
 const askedByDownload = () => ({ [`allow ${PATTERN}`]: { until: Date.now() + 60000 } });
 const ask = { type: 'glaze:allow-tab', host: CDN };
 const answer = { type: 'glaze:allow-answer', host: CDN };
+const startAsk = async (w, sender = frameSender()) => {
+  const d = await w.download();
+  assert.equal((await w.send({ type: 'glaze:allow-init', host: CDN, ticket: d.ticket }, sender)).ok, true);
+  return { ...ask, ticket: d.ticket };
+};
+const initTab = (w) => w.send({ type: 'glaze:allow-init', host: CDN }, tabSender());
 
 test('worker: the frame\'s ask opens features/allow.html for that host in a tab beside the school\'s; granted there, the frame hears yes and the tab closes', async () => {
   const w = worker({ session: askedByDownload() });
-  const r = w.send(ask, frameSender());
+  const r = w.send(await startAsk(w), frameSender());
   await settle();
   assert.equal(r.replied(), 'pending', 'the frame waits for the answer');
   assert.deepEqual(w.created.map(({ url, openerTabId, index }) => ({ url, openerTabId, index })), [{ url: ALLOW, openerTabId: 7, index: 3 }]);
+  await initTab(w);
   w.held.add(PATTERN);
   assert.deepEqual(await w.send(answer, tabSender()), { ok: true });
   assert.deepEqual(await r, { ok: true });
@@ -164,8 +182,9 @@ test('worker: the frame\'s ask opens features/allow.html for that host in a tab 
 
 test('worker: refused in the tab, the frame hears no, whatever the tab says; the tab closes', async () => {
   const w = worker({ session: askedByDownload() });
-  const r = w.send(ask, frameSender());
+  const r = w.send(await startAsk(w), frameSender());
   await settle();
+  await initTab(w);
   assert.deepEqual(await w.send({ ...answer, ok: true }, tabSender()), { ok: true });
   assert.deepEqual(await r, { ok: false }, 'the worker checks the grant itself');
   assert.deepEqual(w.removed, [50]);
@@ -173,13 +192,13 @@ test('worker: refused in the tab, the frame hears no, whatever the tab says; the
 
 test('worker: the tab closed without an answer is a no', async () => {
   const w = worker({ session: askedByDownload() });
-  const r = w.send(ask, frameSender());
+  const r = w.send(await startAsk(w), frameSender());
   await settle();
   w.closeTab(50);
   assert.deepEqual(await r, { ok: false });
   // The school's tab closing doesn't answer for the Allow tab.
   const v = worker({ session: askedByDownload() });
-  const s = v.send(ask, frameSender());
+  const s = v.send(await startAsk(v), frameSender());
   await settle();
   v.closeTab(8);
   await settle();
@@ -188,8 +207,9 @@ test('worker: the tab closed without an answer is a no', async () => {
 
 test('worker: an answer from any page but the tab it opened is refused, and the frame keeps waiting for the real one', async () => {
   const w = worker({ session: askedByDownload() });
-  const r = w.send(ask, frameSender());
+  const r = w.send(await startAsk(w), frameSender());
   await settle();
+  await initTab(w);
   w.held.add(PATTERN);
   for (const forged of [
     tabSender({ tab: { id: 51, url: ALLOW } }), // another tab showing the same page
@@ -222,9 +242,9 @@ test('worker: only Glaze\'s Allow frame, in a tab, for the host it shows and the
     [{ ...ask, host: 42 }, frameSender(), 'no host'],
   ]) assert.deepEqual(await w.send(m, s), { ok: false }, why);
   assert.deepEqual(w.created, []);
-  // Held already (granted meanwhile): yes, with no tab.
+  // A held host still cannot authorize an unrelated frame.
   w.held.add(PATTERN);
-  assert.deepEqual(await w.send(ask, frameSender()), { ok: true });
+  assert.deepEqual(await w.send(ask, frameSender()), { ok: false });
   assert.deepEqual(w.created, []);
 });
 
@@ -282,7 +302,7 @@ const embeddedSettings = ({ permissions, tabs }) => {
   const el = () => Object.assign(new El('div'), { hidden: true, prepend() {}, append() {}, closest: () => null });
   const els = {};
   const $ = (s) => (els[s] ||= el());
-  const chrome = { runtime: { getURL: (p = '') => `${EXT}/${p}`, sendMessage: (m) => { sent.push(plain(m)); return Promise.resolve({ ok: true }); } } };
+  const chrome = { runtime: { getURL: (p = '') => `${EXT}/${p}`, sendMessage: (m) => { if (m.type === 'glaze:allow-init') return Promise.resolve({ ok: authorized }); sent.push(plain(m)); return Promise.resolve({ ok: true }); } } };
   if (permissions) chrome.permissions = { request: async () => true };
   if (tabs) chrome.tabs = { create: (o) => { created.push(plain(o)); return Promise.resolve({ id: 1 }); } };
   const g = { $, t: (k) => k, chrome, console, Promise, URLSearchParams, location: { search: '?t=abc', pathname: '/options.html', hash: '#look/palette' },
@@ -326,9 +346,84 @@ test('Settings\' grant-needing controls hand reach the control, and a control se
   const line = (needle) => { const at = src.indexOf(needle); assert.ok(at > 0, needle); return src.slice(at, src.indexOf('\n', at)); };
   assert.match(line("if (key === 'enhance.gradescope'"), /GZ_SITE\.reach\(\[GZ_GRADESCOPE\.HOST\], el\)/);
   const apply = src.slice(src.indexOf("$('#share-apply').addEventListener"), src.indexOf('// ---- gallery, favorites and history'));
-  assert.match(apply, /GZ_SITE\.reach\(\[src\], \$\('#share-apply'\)\)/);
+  assert.match(apply, /GZ_SITE\.reach\(\[src\], \$\('#share-apply'\),/);
   assert.match(apply, /if \(held === null\) return;/);
   const xbg = read('lib/editor-xbg.js');
-  assert.match(xbg, /GZ_SITE\.reach\(\[url\], input\)/);
-  assert.match(xbg.slice(xbg.indexOf('GZ_SITE.reach([url], input)')), /^[^]*?if \(held === null\) return;/);
+  assert.match(xbg, /GZ_SITE\.reach\(\[url\], input,/);
+  assert.match(xbg.slice(xbg.indexOf('GZ_SITE.reach([url], input,')), /^[^]*?if \(held === null\) return;/);
+});
+
+
+test('review: a public Allow tab cannot ask for a host planted in its hash', async () => {
+  const p = allowPage({ top: true, authorized: false });
+  await settle(); p.click(); await settle();
+  assert.deepEqual(p.asked, [], 'unopened by the worker: no browser prompt');
+});
+
+test('review: an arbitrary Allow frame cannot ask on the strength of another tab or feature asking', async () => {
+  const w = worker({ session: askedByDownload() });
+  const r = w.send(ask, frameSender());
+  await settle();
+  assert.deepEqual(w.created, [], 'a global asked-host entry does not authorize a download frame');
+  assert.deepEqual(await r, { ok: false });
+});
+
+test('review: Allow authority belongs to one download, tab and frame; navigation and replacement end it', async () => {
+  for (const end of ['navigate', 'replace', 'source-close', 'download-close']) {
+    const w = worker(), a = await w.download(), b = await w.download(8, 'second.example.net');
+    assert.equal(typeof a.ticket, 'string', 'worker issues a private ticket for its own wait');
+    assert.notEqual(a.ticket, b.ticket);
+    const init = { type: 'glaze:allow-init', host: CDN, ticket: a.ticket };
+    assert.equal((await w.send(init, frameSender({ tab: { id: 8 } }))).ok, false);
+    assert.equal((await w.send(init, frameSender())).ok, true);
+    assert.equal((await w.send(init, frameSender({ frameId: 5 }))).ok, false, 'the ticket is consumed');
+    const pending = w.send({ ...ask, ticket: a.ticket }, frameSender());
+    await settle();
+    assert.equal(w.created.length, 1);
+    assert.equal((await w.send({ type: 'glaze:allow-init', host: CDN }, tabSender({ documentId: 'allow-doc' }))).ok, true);
+    if (end === 'navigate') w.updated.forEach((f) => f(50, { status: 'loading' }, {}));
+    if (end === 'replace') w.replaced.forEach((f) => f(51, 50));
+    if (end === 'source-close') w.closeTab(7);
+    if (end === 'download-close') a.close();
+    await settle();
+    assert.deepEqual(await pending, { ok: false }, end);
+    assert.equal((await w.send(answer, tabSender())).ok, false, 'a replacement document cannot answer');
+    assert.ok(w.removed.includes(50), 'no orphan Allow tab');
+  }
+});
+
+
+test('review: Settings carries an action privately to exactly the tab it opens, once', async () => {
+  const w = worker({ session: { 'settingsFrame:7': { frameId: 4, documentId: 'doc-s' } } });
+  const action = { kind: 'media', src: 'https://media.example.net/loop.webm', mediaKind: 'video' };
+  const msg = { type: 'glaze:settings-tab', hash: '#look/background', action };
+  assert.equal((await w.send(msg, settingsFrame({ documentId: 'forged' }))).ok, false);
+  assert.equal((await w.send(msg, settingsFrame())).ok, true);
+  const opened = { id: ID, origin: EXT, url: `${EXT}/options.html#look/background`, frameId: 0, tab: { id: 50 } };
+  assert.ok(!w.created[0].url.includes('media.example.net'), 'the payload never enters an address');
+  assert.equal((await w.send({ type: 'glaze:settings-action' }, { ...opened, tab: { id: 51 } })).action, undefined);
+  assert.deepEqual((await w.send({ type: 'glaze:settings-action' }, opened)).action, action);
+  assert.equal((await w.send({ type: 'glaze:settings-action' }, opened)).action, undefined, 'consumed');
+  const second = worker({ session: { 'settingsFrame:7': { frameId: 4, documentId: 'doc-s' } } });
+  const code = { kind: 'code', code: 'gz1:pending-look' };
+  assert.equal((await second.send({ ...msg, hash: '#look/palette', action: code }, settingsFrame())).ok, true);
+  assert.deepEqual((await second.send({ type: 'glaze:settings-action' }, opened)).action, code);
+});
+
+
+test('review: two Download alls answer only their own waits, including on the same host', async () => {
+  const w = worker(), a = await w.download(), b = await w.download(8);
+  await w.send({ type: 'glaze:allow-init', host: CDN, ticket: a.ticket }, frameSender());
+  const other = frameSender({ frameId: 5, tab: { id: 8 } });
+  await w.send({ type: 'glaze:allow-init', host: CDN, ticket: b.ticket }, other);
+  const first = w.send({ ...ask, ticket: a.ticket }, frameSender()), second = w.send({ ...ask, ticket: b.ticket }, other);
+  await settle();
+  await initTab(w);
+  await w.send({ type: 'glaze:allow-init', host: CDN }, tabSender({ tab: { id: 51 } }));
+  w.held.add(PATTERN);
+  await w.send(answer, tabSender({ tab: { id: 51 } }));
+  assert.deepEqual(await second, { ok: true });
+  assert.equal(first.replied(), 'pending');
+  w.closeTab(50);
+  assert.deepEqual(await first, { ok: false });
 });

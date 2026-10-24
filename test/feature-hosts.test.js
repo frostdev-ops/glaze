@@ -26,7 +26,8 @@ test('Download all: a file on a host Glaze lacks is asked for first, never fetch
   const file = { type: 'file', url: `https://${CDN}/files/9/doc.pdf?token=a` };
   say(file);
   await w.settle();
-  assert.deepEqual(posted(port), [{ type: 'ask', host: CDN }], 'the page is told which host to ask for');
+  assert.deepEqual(posted(port), [{ type: 'ask', host: CDN, ticket: port.posted[0].ticket }], 'the page is told which host to ask for');
+  assert.match(port.posted[0].ticket, /^[0-9a-f-]{36}$/);
   assert.deepEqual(fetched, [], 'nothing is fetched before the grant');
   assert.equal(port.hungUp, false, 'the port waits for the student');
   assert.deepEqual(w.store.session[`allow https://${CDN}/*`] && Object.keys(w.store.session[`allow https://${CDN}/*`]).sort(), ['until'],
@@ -77,7 +78,7 @@ test('Download all on Firefox, where a student can take a required host back: th
   await w.settle();
   say({ type: 'file', url: `${CANVAS}/files/9/download?verifier=a` });
   await w.settle();
-  assert.deepEqual(posted(port), [{ type: 'ask', host: 'school.instructure.com' }]);
+  assert.deepEqual(posted(port), [{ type: 'ask', host: 'school.instructure.com', ticket: port.posted[0].ticket }]);
   assert.deepEqual(fetched, []);
 });
 

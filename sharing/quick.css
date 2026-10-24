@@ -14,3 +14,5 @@ ul{margin:0;padding:0;list-style:none;display:grid;gap:.5rem}li{display:grid;gap
 /* Feedback must not move the controls and invalidate their visibility measurement on the next click. */
 #status{height:4.5em;overflow:auto}#status,#ask,#paused{padding:.45rem .6rem;border-radius:calc(var(--gz-radius,12px) / 2);background:var(--gz-surface-grain,none),var(--gz-surface-fill-2,var(--gz-surface-2))}
 #ask{display:grid;gap:.45rem}.error{color:var(--gz-err,light-dark(#9c1721,#ffa4ab))}[hidden]{display:none!important}
+
+html[data-own-tab] main > :not(:last-child) { display: none; }

@@ -8,7 +8,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const KEY = 'notesIdx:https://school.instructure.com/5';
 const tick = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 const worker = () => {
-  const listeners = [], connects = [], removed = [], handled = [];
+  const listeners = [], connects = [], removed = [], handled = [], opened = [];
   let clock = 1000, clients = 0;
   const area = { get: async () => ({}), set: async () => {}, remove: async () => {} };
   const ctx = vm.createContext({ URL, TextEncoder, TextDecoder, structuredClone, console, crypto, atob, btoa, setTimeout, clearTimeout,
@@ -18,7 +18,7 @@ const worker = () => {
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener: (f) => connects.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} } },
-      tabs: { onRemoved: { addListener: (f) => removed.push(f) } }, storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
+      tabs: { create: async (o) => { opened.push(structuredClone(o)); return { id: 50 }; }, update: async () => {}, onRemoved: { addListener: (f) => removed.push(f) } }, storage: { local: area, sync: area, session: { ...area, set: async (o) => { opened.push(structuredClone(o)); } }, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
   const send = (m, s) => new Promise((resolve) => { for (const f of listeners) if (f(m, s, (r) => resolve(structuredClone(r))) === true) return; resolve(null); });
   const lms = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', tab: { id: 9 } };
@@ -39,7 +39,7 @@ const worker = () => {
     vm.runInContext('(sessionTurn ||= GZ_CARDS.queue())(() => block)', ctx);
     return release;
   };
-  return { send, mint, port, panel, handled, removed, holdQueue, advance: (ms) => { clock += ms; }, clients: () => clients };
+  return { send, mint, port, panel, handled, removed, holdQueue, advance: (ms) => { clock += ms; }, clients: () => clients, opened };
 };
 
 test('a URL ticket cannot authorize repeatable frame-id-only session messages', async () => {
@@ -107,4 +107,15 @@ test('local revocation cancels queued panel operations without a local disconnec
   assert.equal(w.clients(), 0);
   a.remote(); // a later remote event must not release a connection twice
   assert.equal(w.clients(), 0);
+});
+
+
+test('review: Notes own-tab navigation uses its authenticated scope, never a page-supplied account', async () => {
+  const w = worker(), { ticket } = await w.mint(), a = w.port();
+  await a.post({ id: 0, ticket });
+  assert.equal((await a.post({ id: 1, op: 'settings', key: 'forged', note: 'forged' })).ok, true);
+  const saved = w.opened.find((o) => o['settingsAction:50'])?.['settingsAction:50'];
+  assert.deepEqual(saved?.action, { kind: 'notes', key: KEY, note: '' });
+  assert.ok(w.opened.some((o) => o.url === 'about:blank'));
+  assert.equal(w.handled.length, 0, 'navigation never starts a relay operation');
 });

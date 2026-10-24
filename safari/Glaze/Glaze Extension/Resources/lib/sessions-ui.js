@@ -26,13 +26,11 @@
     const b = make('button', t(key), { type: 'button' });
     b.addEventListener('click', (e) => { if (human(e)) act(f, options); }); return b;
   };
-  const permission = async (servers) => {
-    const origins = [];
-    for (const server of new Set(servers)) {
-      if (GZ_RELAY.normalize(server) !== server) return false;
-      if (!await chrome.permissions.contains({ origins: [server + '/*'] })) origins.push(server + '/*');
-    }
-    return !origins.length || chrome.permissions.request({ origins });
+  const permission = (servers) => {
+    const unique = [...new Set(servers)];
+    if (unique.some((server) => GZ_RELAY.normalize(server) !== server)) return Promise.resolve(false);
+    // Ask synchronously in the input handler. Already-held hosts return yes without a prompt.
+    return !unique.length ? Promise.resolve(true) : chrome.permissions.request({ origins: unique.map((server) => server + '/*') });
   };
   const confirmHost = (server) => (server === state.defaultRelay && server === state.relay) || confirm(server === state.defaultRelay
     ? t('This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?', { host: new URL(server).host, selected: new URL(state.relay).host })
@@ -113,7 +111,18 @@
     }));
     if (!state.sessions.length) $('#ss-sessions').append(make('p', t('No sessions on this device.'), { className: 'desc' }));
   };
-  const load = async () => { state = await send('list'); if (!dead) { render(); sources(); } };
+  let pendingNote = null;
+  const takeNote = () => {
+    if (!pendingNote || !state || dead) return;
+    const a = pendingNote; pendingNote = null;
+    $('#ss-kind').value = 'notes'; sources();
+    for (const input of $('#ss-sources').querySelectorAll('input')) input.checked = input.source.key === a.key && input.source.ids?.includes(a.note);
+    const picked = [...$('#ss-sources').querySelectorAll('input:checked')][0]?.source;
+    if (picked) $('#ss-title').value = picked.title;
+    $('#ss-create').focus();
+  };
+  globalThis.GZ_SESSION_OFFER = (a) => { if (a?.kind === 'notes') { pendingNote = a; takeNote(); } };
+  const load = async () => { state = await send('list'); if (!dead) { render(); sources(); takeNote(); } };
   const fail = () => say('Could not finish. Your local copies are kept. Try again.', true);
 
   $('#ss-kind').addEventListener('change', (e) => { if (human(e)) sources(); });

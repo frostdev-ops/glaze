@@ -6,6 +6,8 @@
   GZ_I18N.page();
   const t = (k, v) => GZ_I18N.t(k, v, GZ_I18N.ui());
   const $ = (s) => document.querySelector(s);
+  const ownTab = typeof chrome.permissions?.request !== 'function';
+  if (ownTab) { document.documentElement.setAttribute('data-own-tab', ''); $('#settings').textContent = t('Open in a new tab'); }
   // An embedded control needs verified IOv2 visibility, full intersection and a stable box for half a second.
   // Older observers silently ignore trackVisibility; geometric intersection alone cannot detect a hostile overlay.
   const shown = new WeakMap();
@@ -71,7 +73,7 @@
   const say = (k, vars, err = false) => { $('#status').textContent = k ? t(k, vars) : ''; $('#status').classList.toggle('error', err); };
   let port, serial = 0, started = false;
   const pending = new Map();
-  const lock = () => { for (const b of document.querySelectorAll('button')) b.disabled = dead || (b.id !== 'settings' && (busy || !started || !watcher)); };
+  const lock = () => { for (const b of document.querySelectorAll('button')) b.disabled = dead || (b.id !== 'settings' && (ownTab || busy || !started || !watcher)); };
   const expire = () => {
     if (dead) return;
     dead = true; state = null; key = ''; note = ''; lookRevision++; clearTimeout(lookTimer); clearTimeout(startTimer);
@@ -114,13 +116,11 @@
   });
   $('#ask-yes').addEventListener('click', (e) => { if (human(e)) answer?.(true); });
   $('#ask-no').addEventListener('click', (e) => { if (e.isTrusted) answer?.(false); });
-  const permission = async (servers) => {
-    const origins = [];
-    for (const server of new Set(servers)) {
-      if (GZ_RELAY.normalize(server) !== server) return false;
-      if (!await chrome.permissions.contains({ origins: [server + '/*'] })) origins.push(server + '/*');
-    }
-    return !origins.length || chrome.permissions.request({ origins });
+  const permission = (servers) => {
+    const unique = [...new Set(servers)];
+    if (unique.some((server) => GZ_RELAY.normalize(server) !== server)) return Promise.resolve(false);
+    // Ask synchronously in the input handler. Already-held hosts return yes without a prompt.
+    return !unique.length ? Promise.resolve(true) : chrome.permissions.request({ origins: unique.map((server) => server + '/*') });
   };
   const copy = async (sid, edit) => {
     const { link } = await send('link', { sid, edit });
@@ -204,7 +204,11 @@
     });
   });
   // Navigation grants no session authority. Keep recovery available even when this embedded surface cannot be trusted.
-  $('#settings').addEventListener('click', (e) => { if (!dead && e.isTrusted && navigator.userActivation?.isActive) chrome.tabs.create({ url: chrome.runtime.getURL('options.html#sharing/sessions') }).catch(() => {}); });
+  $('#settings').addEventListener('click', (e) => {
+    if (dead || !e.isTrusted || !navigator.userActivation?.isActive) return;
+    if (ownTab) { if (started) request({ op: 'settings' }).catch(() => {}); }
+    else chrome.tabs.create({ url: chrome.runtime.getURL('options.html#sharing/sessions') }).catch(() => {});
+  });
 
   const startTimer = setTimeout(expire, 10000);
   say('Open this from Notes.', undefined, true);
