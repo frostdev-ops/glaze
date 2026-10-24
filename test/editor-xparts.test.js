@@ -178,7 +178,8 @@ test('the options page loads the builders in their own sections and redraws them
   assert.match(js.slice(js.indexOf('  const refresh = () => {'), js.indexOf('  const fill = () => {')), /GZ_XEDIT\.render\(\);/);
   // Its strings are written by the module through t(), so the page holds no untranslated words of its own: only the path and
   // the Reset every section has, which the page's own translation (GZ_I18N.page) takes, and the headings are the module's.
-  const own = html.slice(html.indexOf('<section id="look-nav-layout"'), html.indexOf('<section id="motion"'));
+  const own = html.slice(html.indexOf('<section id="look-nav-layout"'), html.indexOf('<div id="panel-navigation"'));
+  assert.ok(own.includes('id="xnav"') && own.includes('id="xrules"'));
   const bare = own.replace(/<p class="site-scope" translate="no">[^<]*<\/p>/g, '').replace(/<p class="section-path"[^>]*><a [^>]*>[^<]*<\/a><\/p>/g, '').replace(/<button type="button" class="section-reset"[^>]*>Reset section<\/button>/g, '');
   assert.deepEqual([...bare.matchAll(/>([^<]*\p{L}[^<]*)</gu)], []);
 });

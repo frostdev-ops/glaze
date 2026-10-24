@@ -473,7 +473,7 @@ test('the editor has one control for each sidebar setting, offering exactly what
   const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'options.html'), 'utf8');
   const sec = html.slice(html.indexOf('<section id="side-panel" data-editor-section="navigation/sidebar"'), html.indexOf('</section>', html.indexOf('id="side-panel"')));
   assert.ok(sec.length > 100, 'the section');
-  assert.match(sec, /<label class="check nb-master"><input type="checkbox" data-key="enhance.sidebar">/, 'the switch, first and prominent');
+  assert.match(sec, /<\/div>\n<div class="has-info nb-master"><label class="check"><input type="checkbox" data-key="enhance.sidebar"/, 'the switch, first and prominent');
   assert.ok(sec.indexOf('data-key="enhance.sidebar"') < sec.indexOf('data-sidebar>'), 'before everything it hides');
   for (const [k, [d, rule]] of Object.entries(G.GZ_SPEC.sidebar)) {
     if (k === 'off') { assert.match(sec, /id="sidebar-off"/); continue; }
@@ -486,7 +486,7 @@ test('the editor has one control for each sidebar setting, offering exactly what
     } else if (Array.isArray(rule)) {
       const m = sec.match(new RegExp(`<input type="range" data-key="sidebar\\.${k}" min="(\\d+)" max="(\\d+)"`));
       assert.deepEqual(m && [+m[1], +m[2]], rule, `sidebar.${k}`);
-    } else if (rule === 'bool') assert.match(sec, new RegExp(`<input type="checkbox" data-key="sidebar\\.${k}">`), `sidebar.${k}`);
+    } else if (rule === 'bool') assert.match(sec, new RegExp(`<input type="checkbox" data-key="sidebar\\.${k}"[ >]`), `sidebar.${k}`);
     else if (rule === 'label') assert.match(sec, new RegExp(`<input type="text" data-key="sidebar\\.${k}" maxlength="40"`), `sidebar.${k}`);
   }
   // Each choice card has its picture.

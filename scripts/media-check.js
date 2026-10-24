@@ -425,6 +425,7 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     const pets = await context.newPage();
     pets.on('pageerror', (e) => errors.push(`editor: ${e.message}`));
     await pets.goto(`chrome-extension://${id}/options.html#study/pet`);
+    await pets.click('#study-pet details.more > summary'); // animated pets sit in the section's More options
     await pets.locator('#pet-library').scrollIntoViewIfNeeded(); // the library loads when it is on screen
     check('the pet library lists the pet a mod carries', await pets.waitForFunction(() => /Pets from your mods/.test(document.getElementById('pet-library')?.textContent || '') && /Mochi 2 · Garden/.test(document.getElementById('pet-library').textContent), null, { timeout: 15000 }).then(() => true, () => false), (await pets.locator('#pet-library').textContent()).slice(0, 200));
     await pets.evaluate(() => [...document.querySelectorAll('#pet-library button')].find((b) => /Add to my pets/.test(b.textContent)).click());
@@ -503,6 +504,7 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
       chrome.permissions.request = (o) => { __hostRequests.push([o.origins, navigator.userActivation.isActive]); return Promise.resolve(false); };
     });
     const codeWithMedia = await S.encode(D.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'video', src: `${ELSEWHERE}/media/clip.webm` } } } });
+    if (!await applyPage.evaluate(() => document.querySelector('#palette details.more').open)) await applyPage.click('#palette details.more > summary'); // theme codes sit in Looks and colors' More options
     await applyPage.locator('#share-code').fill(codeWithMedia);
     await applyPage.locator('#share-try').click();
     await applyPage.locator('#share-apply').waitFor({ state: 'visible' });

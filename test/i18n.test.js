@@ -260,5 +260,5 @@ test('widget labels distinguish the 4.0 GPA from an ordinary grade average', () 
     assert.match(cat['Grades — shows your grades and GPA, on this device only.'], /GPA/);
   }
   assert.equal(LANGS.nl['Today’s to-dos by time'], 'Taken van vandaag, gesorteerd op tijd');
-  assert.ok(LANGS.nl['Your widgets are signed with it, and only it can update them for people you shared them with. Keep a backup: a lost key means no more updates.'].includes('alleen daarmee'));
+  assert.match(LANGS.nl['Only this key can update the widgets you share; keep a backup of it.'], /alleen/);
 });

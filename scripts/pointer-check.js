@@ -53,7 +53,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
       await page.waitForFunction(() => document.querySelectorAll('#pointer-tiles input[type="radio"]').length > 0);
     };
     await open();
-    const preview = () => page.frames().find((f) => f.url().includes('preview.html'));
+    const preview = () => page.frames().find((f) => f.url().includes('preview.html') && !f.url().includes('backdrop'));
     const sync = () => page.evaluate(() => chrome.storage.sync.get('extras').then((r) => r.extras || {}));
     const localImg = () => page.evaluate(() => chrome.storage.local.get('cursorImg').then((r) => r.cursorImg || ''));
     const lookPointer = () => page.evaluate(async () => (await GZ_XPARTS.read(GZ_XPARTS.areas()))?.x?.pointer ?? null);
@@ -81,8 +81,8 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     };
 
     // ---- the section and its cards -----------------------------------------------------------------------------------
-    const links = await page.evaluate(() => [...document.querySelectorAll('#panel-look > nav.section-links a')].map((a) => a.getAttribute('href')));
-    check('Pointer is in the Look tab\'s section links, after Motion', links.indexOf('#look/pointer') === links.indexOf('#look/motion') + 1, links.join(' '));
+    const links = await page.evaluate(() => [...document.querySelectorAll('[data-editor-jumps="look"] a')].map((a) => a.getAttribute('href')));
+    check('Pointer is in the Look category\'s section links, after Motion', links.indexOf('#look/pointer') === links.indexOf('#look/motion') + 1, links.join(' '));
     const cards = await page.evaluate(() => [...document.querySelectorAll('#pointer-tiles label')].map((l) => l.dataset.pointer));
     check('a card for every choice the setting takes', JSON.stringify(cards) === JSON.stringify(G.GZ_SPEC.extras.pointer[1]), cards.join(' '));
     check('  The Look\'s pointer is chosen to begin with', await chosen() === 'look');
@@ -90,7 +90,8 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('  the system\'s card draws its own arrow and hand', await page.evaluate(() => document.querySelectorAll('[data-pointer="off"] .pt-stage svg').length === 2));
     check('  hovering a set\'s card wears its hand', await page.evaluate(() => /cursors\/lava\/pointer\.svg/.test(getComputedStyle(document.querySelector('[data-pointer="lava"]')).cursor)));
     const unnamed = await page.evaluate(() => [...document.querySelectorAll('#look-pointer input, #look-pointer button')]
-      .filter((c) => c.type !== 'file' && !(c.closest('label')?.textContent.trim() || c.textContent.trim() || c.getAttribute('aria-label'))).map((c) => c.outerHTML.slice(0, 80)));
+      .filter((c) => c.type !== 'file' && !(c.closest('label')?.textContent.trim() || c.textContent.trim() || c.getAttribute('aria-label')
+        || (c.getAttribute('aria-labelledby') || '').split(' ').map((id) => document.getElementById(id)?.textContent.trim()).filter(Boolean).length)).map((c) => c.outerHTML.slice(0, 80)));
     check('every control is labelled', !unnamed.length, unnamed.join(' '));
     check('the cards are one radio group, named by the section\'s heading', await page.evaluate(() => {
       const g = document.getElementById('pointer-tiles'), h = document.getElementById(g.getAttribute('aria-labelledby'));
@@ -110,7 +111,8 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('a click chooses Pumpkin; the preview wears it', await until(async () => (await sync()).pointer === 'pumpkin') && !!await wears('pumpkin'), await worn());
     check('  the Look keeps its own pointer: the choice is never written into it', await lookPointer() === 'quill', await lookPointer());
 
-    // ---- their own picture -------------------------------------------------------------------------------------------------
+    // ---- their own picture (in the section's More options) -------------------------------------------------------------------
+    await page.click('#look-pointer details.more > summary');
     check('no picture yet: its card can\'t be chosen and says so', await page.evaluate(() => document.querySelector('[data-pointer="own"] input').disabled && /No picture yet/.test(document.querySelector('[data-pointer="own"]').textContent)));
     const png = Buffer.from(await page.evaluate(() => {
       const c = Object.assign(document.createElement('canvas'), { width: 64, height: 64 }), g = c.getContext('2d');

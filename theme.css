@@ -1437,6 +1437,15 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) { inset-inline: 0 !important; width: auto !important; }
   html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
   html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
+  /* Side panels (Ultra's peek: Notification Settings, an item's details) and MUI's temporary drawers open at the window's top
+     and edge: the top bar covered their title and Close, and a rail one on its side. They start below the bar and beside the
+     rail; the page-sized layers above keep their own rules. */
+  html[data-gz-navbar] :is(.bb-offcanvas-panel:not(.screen, .full, .bb-offcanvas-panel *), .MuiDrawer-modal > .MuiDrawer-paper:is(.MuiDrawer-paperAnchorLeft, .MuiDrawer-paperAnchorRight)) { top: var(--gz-navbar-top) !important; bottom: 0 !important; height: auto !important; min-height: 0 !important; }
+  html[data-gz-navbar] .MuiDrawer-modal > .MuiDrawer-paperAnchorTop { top: var(--gz-navbar-top) !important; }
+  /* A top sheet keeps its content height; pinning both edges would stretch its automatic height. */
+  html[data-gz-navbar][data-gz-footer] .MuiDrawer-modal > .MuiDrawer-paper:is(.MuiDrawer-paperAnchorLeft, .MuiDrawer-paperAnchorRight, .MuiDrawer-paperAnchorBottom) { bottom: var(--gz-footer-h) !important; }
+  html[data-gz-navbar]:not([dir="rtl"]) :is(.bb-offcanvas-panel.bb-offcanvas-left:not(.screen, .full, .bb-offcanvas-panel *), .MuiDrawer-modal > .MuiDrawer-paperAnchorLeft) { left: var(--gz-navbar-left) !important; }
+  html[data-gz-navbar][dir="rtl"] :is(.bb-offcanvas-panel.bb-offcanvas-right:not(.screen, .full, .bb-offcanvas-panel *), .MuiDrawer-modal > .MuiDrawer-paperAnchorRight) { right: var(--gz-navbar-left) !important; }
   html[data-gz-navbar]:not([data-gz-footer]) :is(.route-view-container, .routed-page, [data-gz-vh]) { max-height: calc(100vh - var(--gz-navbar-top)) !important; }
   html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :is(section.course, .routed-page) { max-height: 100vh !important; }
 }

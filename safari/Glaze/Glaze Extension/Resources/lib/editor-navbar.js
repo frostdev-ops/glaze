@@ -181,6 +181,7 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
         const li = node('li', {}, node('label', {}, c, svg(WIDGETS[id][1]), name), at); li.dataset.w = id; return li;
       }));
       $('#nbar-links').replaceChildren(...prefs.links.map((l) => node('li', {}, svg(l.i), node('span', { className: 'nb-name', textContent: l.n }), node('span', { className: 'desc', textContent: new URL(l.u).hostname, translate: false }))));
+      $('#nbar-reset').hidden = JSON.stringify(prefs) === JSON.stringify(M().clean());
       if (widgetFocus) $('#nbar-widgets').querySelector(`[data-w="${widgetFocus[0]}"] ${widgetFocus[1]}`)?.focus();
       if (focus) box.querySelector(`li[data-id="${CSS.escape(focus[0])}"] [data-nb="${focus[1]}"]`)?.focus();
     };

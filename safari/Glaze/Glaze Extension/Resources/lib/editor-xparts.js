@@ -2,7 +2,7 @@
 // and its page tweaks (x.rules, named parts from lib/parts.js). Both edit s.parts ({ x, m } or null) and save it the way
 // the rest of a Look is saved (save(['parts'])), so a theme code carries them (glaze2:) and the worker cleans them again.
 // Every edit goes through the part's own cleaner before it is kept, so what is stored is already what a code decodes to.
-// The student's own Ultra items (navItems, Blackboard › Blackboard navigation) are a different thing: theirs on every
+// The student's own Ultra items (navItems, edited under Navigation while Glaze navigation is off) are a different thing: theirs on every
 // Look. A Look's layout replaces them only while that Look is worn, and the copy here says so.
 // Extension options page only (mount); the pure helpers are for node tests. English through t(); catalogues come later.
 var GZ_XEDIT = globalThis.GZ_XEDIT || (() => {
@@ -169,7 +169,7 @@ var GZ_XEDIT = globalThis.GZ_XEDIT || (() => {
     const navBox = document.getElementById('xnav'), navBody = h('div', { className: 'xparts-body' }), navSaid = status('xnav-status');
     heading('heading-look-nav-layout', "This Look's navigation");
     navBox.replaceChildren(
-      h('p', { className: 'desc section-note', textContent: t('Your own navigation (Blackboard › Blackboard navigation) stays yours on every Look. A layout here belongs to this Look: it travels in its theme code, and while you wear the Look it replaces your own items on Blackboard and arranges Canvas and Moodle’s navigation too.') }),
+      h('p', { className: 'desc', textContent: t('A layout here travels with this Look; your own stays under Navigation.') }),
       navBody, navSaid);
     let navSite = 'ultra', editing = '', navSig = '';
     const layout = () => s.parts?.x?.nav || null;
@@ -275,7 +275,7 @@ var GZ_XEDIT = globalThis.GZ_XEDIT || (() => {
     const ruleBox = document.getElementById('xrules'), ruleBody = h('div', { className: 'xparts-body' }), ruleSaid = status('xrules-status');
     heading('heading-look-rules', 'Page tweaks');
     ruleBox.replaceChildren(
-      h('p', { className: 'desc section-note', textContent: t('Hide, move, restyle or rename parts of your school’s pages while this Look is worn. Tweaks travel with the Look, and never apply on quizzes or tools inside a course.') }),
+      h('p', { className: 'desc', textContent: t('Tweaks travel with this Look and never apply on quizzes or course tools.') }),
       ruleBody, ruleSaid);
     const form = { site: 'ultra', part: '', act: '', at: 'after', to: '', st: {}, text: '' };
     let ruleSig = '', previewTick = 0;

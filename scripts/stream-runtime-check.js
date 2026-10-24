@@ -62,7 +62,7 @@ const findNode = (node, match) => match(node) ? node : [...(node.children || [])
     await options.goto(`chrome-extension://${id}/options.html#blackboard/stream`);
     await options.waitForFunction(() => document.getElementById('preview')?.contentDocument?.documentElement.dataset.previewReady === 'true');
     await options.locator('#enabled').check();
-    const preview = options.frames().find((f) => f.url().includes('/preview.html'));
+    const preview = options.frames().find((f) => f.url().includes('/preview.html') && !f.url().includes('backdrop'));
     await preview.waitForFunction(() => document.documentElement.dataset.previewPage === 'stream');
     check(await options.locator('#preview-page').inputValue() === 'stream' && await preview.locator('[data-preview-view=stream]').isVisible(), 'Glaze settings open the Activity Stream preview');
     await preview.waitForSelector('.gz-stream-date');

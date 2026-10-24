@@ -206,7 +206,7 @@ test('the page carries the builders in the sections their settings live in, with
   assert.match(section('look/background'), /<div id="x-layers" class="x-builder" data-kinds="layers"><\/div>/);
   assert.match(section('look/background'), /<div id="x-media" class="x-builder" data-kinds="media"><\/div>/);
   assert.match(section('look/background'), /data-kinds="gradient aurora scene shader layers"><span>Colors/);
-  assert.match(section('look/background'), /data-kinds="scene shader layers"><span>Intensity/);
+  assert.match(section('look/background'), /data-kinds="scene shader layers"><span><label for="bg-intensity" id="bg-intensity-name">Intensity<\/label>/);
   assert.match(section('look/motion'), /<div id="x-motion" class="group"><\/div>/);
   assert.match(section('look/pointer'), /<div class="seg pt-cards" role="radiogroup" aria-labelledby="heading-look-pointer" aria-describedby="pointer-note" id="pointer-tiles" data-setting-owner="extras\.pointer"><\/div>/);
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);

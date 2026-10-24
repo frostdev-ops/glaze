@@ -2,7 +2,7 @@ const test = require('node:test'), assert = require('node:assert/strict'), fs = 
 const P = require('../lib/pet.js'), T = require('../lib/todo.js'), { El } = require('./stand-in-dom.js');
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } }, world = false } = {}) => {
-  const doc = { activeElement: null }, storage = [], events = [], timers = new Map(), win = [], mounts = [], settings = { enabled: true, enhance: { pet: true } }; let next = 0, release;
+  const doc = { activeElement: null }, storage = [], events = [], timers = new Map(), win = [], mounts = [], sizes = [], settings = { enabled: true, enhance: { pet: true } }; let next = 0, release;
   const make = (tag) => new El(tag, doc);
   doc.root = make('html'); doc.head = make('head'); doc.body = make('body'); doc.root.append(doc.head, doc.body);
   Object.assign(doc, { visibilityState: 'visible', createElement: make, getElementById: (id) => doc.root.all().find((e) => e.id === id), querySelector: (sel) => doc.root.querySelector(sel),
@@ -12,6 +12,7 @@ const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } 
     GZ_PET: P, GZ_PET_BRAIN: require('../lib/petbrain.js'), GZ_TODO: T, GZ_CTX: { site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (m, n) => v && n in v ? v[n] : m), settings: () => settings, need: async () => {} },
     addEventListener: (type, f, opts) => win.push({ type, f, opts }), removeEventListener: (type, f) => { const i = win.findIndex((x) => x.type === type && x.f === f); if (i >= 0) win.splice(i, 1); },
     ...(world && { GZ_WIDGETS_UI: { who: async () => ({ uid: '3', tz: 'UTC' }), register() {} }, GZ_PET_WORLD: { mount: (stage, o) => { mounts.push({ stage, o }); return { stop() {}, play() {} }; }, refresh() {}, stop() {} } }),
+    ResizeObserver: class { constructor(f) { this.f = f; sizes.push(this); } observe(el) { this.el = el; } disconnect() { this.el = null; } },
     location: { origin: 'https://canvas.test' }, setTimeout: (f, ms) => { timers.set(++next, { f, ms }); return next; }, clearTimeout: (id) => timers.delete(id),
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => cb({ ok: true, data: P.view(record) }) },
       storage: { onChanged: { addListener: (f) => storage.push(f), removeListener: (f) => { const i = storage.indexOf(f); if (i >= 0) storage.splice(i, 1); } } } } };
@@ -20,6 +21,7 @@ const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } 
   const body = make('div'); doc.body.append(body);
   c.window = c;
   return { ui, body, doc, storage, events, timers, win, mounts, settings, fire: (type, e = {}) => { for (const l of win.filter((x) => x.type === type)) { if (l.opts?.once) win.splice(win.indexOf(l), 1); l.f({ type, ...e }); } },
+    resize: (width, height) => { body.box = { left: 0, top: 0, width, height }; body.style.height = `${height}px`; for (const s of sizes) if (s.el === body) s.f([{ target: body }]); }, sizes,
     write: (value) => { for (const f of [...storage]) f({ 'pet:https://canvas.test/3': { newValue: value } }, 'local'); }, chrome: c.chrome, release: () => release({ uid: '3', tz: 'UTC' }), api: { who: () => profile } };
 };
 test('pet mount stops storage/visibility listeners and its clock, without leaving a stylesheet link', async () => {
@@ -47,7 +49,7 @@ test('a reload stops the habitat before its next timer or late profile can repai
 
 test('animated characters hide Classic outfits without changing the saved outfit', async () => {
   const record = { sprite: 'rime', wear: 'bandana', earned: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`work:assignment:${i}`, 20])) };
-  const p = page({ record }), live = p.ui.mount(p.body, p.api); await settle();
+  const p = page({ record }), live = p.ui.mount(p.body, p.api, { inDialog: true }); await settle();
   let wear = p.body.querySelector('[data-control="wear"]');
   assert.equal(wear.parentElement.hidden, true); assert.equal(wear.value, 'bandana');
   record.sprite = ''; live.update(); await settle();
@@ -60,19 +62,22 @@ test('animated characters hide Classic outfits without changing the saved outfit
 const B = require('../lib/petbrain.js');
 const learned = (n) => B.learn(B.clean(), 'walk', B.vector({}), 1 + n * 0);
 const level = { earned: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`work:assignment:${i}`, 20])) };
-test('WID-4: a write that changes nothing shown keeps the same controls, open sections and focus', async () => {
+test('WID-4: a write that changes nothing shown keeps the same controls, open panel and focus', async () => {
   const p = page({ record: level }), live = p.ui.mount(p.body, p.api); await settle();
-  const habitat = p.body.querySelector('[data-control="habitat"]'), settings = p.body.querySelector('details[data-section="settings"]');
-  settings.open = true; habitat.focus();
+  const tab = p.body.querySelector('[data-control="tab:decor"]');
+  for (const l of tab.listeners.filter((x) => x.type === 'click')) l.f({ isTrusted: true });
+  const habitat = p.body.querySelector('[data-control="habitat"]'), settings = p.body.querySelector('[data-panel="decor"]');
+  assert.equal(settings.hidden, false); habitat.focus();
   p.write(JSON.parse(JSON.stringify(level))); p.write(structuredClone(level)); live.update(); await settle(); live.update(); await settle();
   // Identity checks use ok(): a failed equal on two elements tries to print their whole documents.
   assert.ok(p.body.querySelector('[data-control="habitat"]') === habitat, 'the select is the same element');
   assert.ok(p.doc.activeElement === habitat);
-  assert.ok(p.body.querySelector('details[data-section="settings"]') === settings); assert.equal(settings.open, true);
+  assert.ok(p.body.querySelector('[data-panel="decor"]') === settings); assert.equal(settings.hidden, false);
+  assert.equal(p.body.querySelector('[data-control="tab:decor"]').getAttribute('aria-expanded'), 'true');
   live.stop();
 });
 test('WID-4: a decision that only teaches the pet updates the numbers in place, not the controls', async () => {
-  const record = { ...level }, p = page({ record }), live = p.ui.mount(p.body, p.api); await settle();
+  const record = { ...level }, p = page({ record }), live = p.ui.mount(p.body, p.api, { inDialog: true }); await settle();
   const habitat = p.body.querySelector('[data-control="habitat"]'), wear = p.body.querySelector('[data-control="wear"]');
   assert.match(p.body.textContent, /Learned interactions: 0/);
   p.write({ ...level, brain: learned(0) }); await settle();
@@ -81,7 +86,7 @@ test('WID-4: a decision that only teaches the pet updates the numbers in place, 
   live.stop();
 });
 test('WID-4: a real change to what a control shows still rebuilds it', async () => {
-  const p = page({ record: level }), live = p.ui.mount(p.body, p.api); await settle();
+  const p = page({ record: level }), live = p.ui.mount(p.body, p.api, { inDialog: true }); await settle();
   p.write({ ...level, habitat: 'garden' }); await settle();
   assert.equal(p.body.querySelector('[data-control="habitat"]').value, 'garden');
   p.write({ ...level, habitat: 'garden', physics: false }); await settle();
@@ -194,4 +199,88 @@ test('WID-10: an open habitat paints its world again after a restore', async () 
   p.fire('pagehide', { persisted: true }); p.fire('pageshow', { persisted: true }); await settle();
   assert.ok(p.mounts.length > before);
   box.close();
+});
+
+// A tile too small for the habitat's sections (apps.css shows More then) still reaches every action: More opens the whole
+// habitat in its dialog, outside the tile. The dialog has them all at its size, so no More of its own.
+test('More opens the whole habitat in its dialog, which has every action of the tile and no More', async () => {
+  const p = page({ world: true }), live = p.ui.mount(p.body, p.api); await settle();
+  const more = p.body.querySelector('[data-control="more"]');
+  assert.ok(more, 'the tile has More');
+  assert.equal(more.getAttribute('aria-haspopup'), 'dialog');
+  assert.equal(more.getAttribute('aria-label'), 'Open Pet habitat');
+  const pat = p.body.querySelector('[data-control="pet"]');
+  assert.equal(pat.title, p.body.querySelector('.gz-game-care').textContent, 'the Pet button carries the bonding sentence as its tooltip');
+  for (const l of more.listeners.filter((x) => x.type === 'click')) l.f({ isTrusted: true });
+  await settle();
+  const box = p.doc.body.children.find((e) => e.tagName === 'DIALOG');
+  assert.ok(box?.open, 'the habitat dialog is open');
+  const ids = (root) => new Set(root.querySelectorAll('[data-control]').map((e) => e.dataset.control));
+  assert.equal(ids(box).has('more'), false, 'the dialog has no More');
+  for (const c of ids(p.body)) if (c !== 'more') assert.ok(ids(box).has(c), `${c} is in the dialog`);
+  box.close(); live.stop();
+});
+
+// The habitat in a tile: the room first with name and level on it; today's bonding moments on the Pet button (the sentence its
+// description); Wellbeing, Decorate and Progress as one-at-a-time panels; Settings only in the dialog; status only when out.
+test('the habitat tile: allowance on the Pet button, one panel at a time, Settings in the dialog, status only while exploring', async () => {
+  const p = page({ world: true }), live = p.ui.mount(p.body, p.api); await settle();
+  const game = p.body.querySelector('.gz-game');
+  assert.equal(game.children[0].className, 'gz-game-habitat', 'the room comes first');
+  const pat = p.body.querySelector('[data-control="pet"]'), care = p.body.querySelector('.gz-game-care');
+  assert.equal(pat.querySelector('.gz-game-left').textContent, '5/5');
+  assert.equal(pat.getAttribute('aria-describedby'), care.id);
+  assert.equal(care.textContent, '5 of 5 bonding moments left today');
+  assert.equal(p.body.querySelectorAll('p.gz-game-care').length, 0, 'no helper line');
+  const tabs = p.body.querySelectorAll('.gz-game-tab').map((b) => b.dataset.control);
+  assert.deepEqual(tabs, ['tab:wellbeing', 'tab:decor', 'tab:about']);
+  assert.equal(p.body.querySelector('[data-control="wear"]'), null, 'Settings is the dialog\'s');
+  const click = (el) => { for (const l of el.listeners.filter((x) => x.type === 'click')) l.f({ isTrusted: true }); };
+  const shown = () => p.body.querySelectorAll('.gz-game-panel').filter((e) => !e.hidden).map((e) => e.dataset.panel);
+  assert.deepEqual(shown(), []);
+  click(p.body.querySelector('[data-control="tab:decor"]')); assert.deepEqual(shown(), ['decor']);
+  click(p.body.querySelector('[data-control="tab:about"]')); assert.deepEqual(shown(), ['about']);
+  assert.equal(p.body.querySelector('[data-control="tab:decor"]').getAttribute('aria-expanded'), 'false');
+  assert.match(p.body.querySelector('[data-panel="about"]').textContent, /total XP/, 'the XP numbers are in Progress');
+  click(p.body.querySelector('[data-control="tab:about"]')); assert.deepEqual(shown(), [], 'pressed again, it closes');
+  const status = p.body.querySelector('.gz-game-overview .gz-game-hint');
+  assert.equal(status.hidden, true, 'no status at home');
+  live.stop();
+  const q = page({ world: true, record: { earned: { 'work:assignment:1': 20 }, wander: true } }), out = q.ui.mount(q.body, q.api); await settle();
+  const away = q.body.querySelector('.gz-game-overview .gz-game-hint');
+  assert.equal(away.hidden, false); assert.equal(away.textContent, 'Exploring the page');
+  out.stop();
+  const d = page({ world: true }), box = d.ui.mount(d.body, d.api, { inDialog: true }); await settle();
+  assert.deepEqual(d.body.querySelectorAll('.gz-game-tab').map((b) => b.dataset.control), ['tab:wellbeing', 'tab:decor', 'tab:about', 'tab:settings']);
+  assert.ok(d.body.querySelector('[data-panel="settings"] [data-control="wear"]'));
+  box.stop();
+});
+
+test('closing More after changing the habitat returns focus to the tile’s current More button', async () => {
+  const p = page({ world: true }), live = p.ui.mount(p.body, p.api); await settle();
+  const more = p.body.querySelector('[data-control="more"]'); more.focus();
+  for (const l of more.listeners.filter(x => x.type === 'click')) l.f({ isTrusted: true });
+  await settle();
+  const box = p.doc.root.querySelector('dialog');
+  p.write({ ...level, habitat: 'garden' }); await settle();
+  const current = p.body.querySelector('[data-control="more"]');
+  assert.ok(current.isConnected, 'the tile keeps a reachable More button');
+  box.close();
+  assert.ok(p.doc.activeElement === current, 'focus returns to the connected More control after a repaint');
+  live.stop();
+});
+
+test('a tall resized habitat uses its panel space for Wellbeing until the student chooses a panel', async () => {
+  const p = page(), live = p.ui.mount(p.body, p.api); await settle();
+  const shown = () => p.body.querySelectorAll('.gz-game-panel').filter(e => !e.hidden).map(e => e.dataset.panel);
+  p.resize(650, 560);
+  assert.deepEqual(shown(), ['wellbeing'], 'a roomy tile opens the first panel instead of leaving a gap');
+  assert.equal(p.body.querySelector('[data-control="tab:wellbeing"]').getAttribute('aria-expanded'), 'true');
+  p.resize(250, 220); assert.deepEqual(shown(), [], 'a compact tile needs only its room and actions');
+  p.resize(650, 560); assert.deepEqual(shown(), ['wellbeing']);
+  const tab = p.body.querySelector('[data-control="tab:wellbeing"]');
+  for (const l of tab.listeners.filter(x => x.type === 'click')) l.f({ isTrusted: true });
+  p.resize(650, 600); live.update(); await settle();
+  assert.deepEqual(shown(), [], 'resizes and record refreshes respect an explicit close');
+  live.stop(); assert.ok(p.sizes.every(s => !s.el), 'the size observer is released');
 });

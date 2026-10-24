@@ -6,7 +6,20 @@
 var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
   const html = document.documentElement;
   let host = null, frame = null, back = false, opener = null;
-  const stilled = new Set(); // the page's elements made inert under it
+  // The page under it, children of <body> and <html> alike and what comes while it's open: out of reach (Tab, a screen
+  // reader's reading, the pointer) and unseen. An overlay of the page's, Glaze's own too (the pet's world, the sidebar's
+  // buttons, floating tiles), drew over Settings from above its z-index and took its clicks. Glaze's bar stays in use.
+  const stilled = new Set(); // made inert here
+  const veiled = new Map(); // made unseen here: its own opacity, to put back
+  const still = (e) => {
+    if (!e?.tagName || e === host || e === document.body || e === document.head || e.id === 'gz-navbar') return;
+    if (!e.inert) { e.inert = true; stilled.add(e); }
+    if (e.style && !veiled.has(e)) {
+      veiled.set(e, [e.style.getPropertyValue('opacity'), e.style.getPropertyPriority?.('opacity') || '', e.hasAttribute('style')]);
+      e.style.setProperty('opacity', '0', 'important');
+    }
+  };
+  const watch = typeof MutationObserver === 'function' ? new MutationObserver((ms) => { if (host) for (const m of ms) for (const n of m.addedNodes) if (n.parentNode === m.target) still(n); }) : null;
   const wide = () => matchMedia('(min-width: 900px)').matches;
   // The page's room, as Glaze's navigation keeps it (theme.css and each site's sheet set the two variables).
   const fit = () => {
@@ -33,8 +46,14 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     // Focus in Settings (or nowhere) goes back to what opened it; a place picked in the bar keeps it.
     const from = [host, document.body, null].includes(document.activeElement) ? opener : null;
     host.remove(); host = frame = opener = null;
+    watch?.disconnect();
     for (const e of stilled) e.inert = false;
     stilled.clear();
+    for (const [e, [value, priority, had]] of veiled) {
+      if (value) e.style.setProperty('opacity', value, priority); else e.style.removeProperty('opacity');
+      if (!had && !e.style.length) e.removeAttribute('style');
+    }
+    veiled.clear();
     html.removeAttribute('data-gz-settings');
     removeEventListener('message', onMessage); removeEventListener('keydown', onKey, true); removeEventListener('resize', fit); removeEventListener('popstate', onPop);
     if (back && history.state?.gzSettings) { back = false; history.back(); }
@@ -65,8 +84,8 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     host.attachShadow({ mode: 'closed' }).append(frame);
     fit();
     (document.body || html).append(host);
-    // The page it covers is out of reach while it's open (Tab, a screen reader's reading); Glaze's bar stays in use.
-    for (const e of (document.body || html).children) if (e !== host && e.id !== 'gz-navbar' && !e.inert) { e.inert = true; stilled.add(e); }
+    for (const e of [...(document.body || html).children, ...html.children]) still(e);
+    for (const t of new Set([document.body || html, html])) watch?.observe(t, { childList: true });
     html.setAttribute('data-gz-settings', '');
     addEventListener('message', onMessage); addEventListener('keydown', onKey, true); addEventListener('resize', fit); addEventListener('popstate', onPop);
     try { history.pushState({ ...(history.state || {}), gzSettings: true }, ''); back = true; } catch { back = false; }

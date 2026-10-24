@@ -62,12 +62,13 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     const mine = G.GZ_SANITIZE({ bg: { kind: 'shader' }, look: { radius: 8 } });
     const code = await S.encode(mine, undefined, PARTS);
     check('the code is glaze2 and short enough for chat', code.startsWith('glaze2:') && code.length < 1500, `${code.length} characters`);
+    if (!await editor.evaluate(() => document.querySelector('#palette details.more').open)) await editor.click('#palette details.more > summary'); // theme codes sit in Looks and colors' More options
     await editor.fill('#share-code', code);
     await editor.click('#share-try');
     await until(() => editor.evaluate(() => !document.querySelector('#share-offer').hidden));
     const what = await editor.evaluate(() => document.querySelector('#share-what').textContent);
     check('the offer says what the code brings', /shader|cursor effect|animations|sidebar/i.test(what) && !/undefined/.test(what), what);
-    const frame = () => editor.frames().find((f) => f.url().includes('preview.html'));
+    const frame = () => editor.frames().find((f) => f.url().includes('preview.html') && !f.url().includes('backdrop'));
     const previewed = await until(() => frame()?.evaluate(() => globalThis.GZ_CTX?.parts() ?? null), (v) => !!v);
     check('the editor\'s preview frame has the parts before anything is saved', previewed?.cursor?.kind === 'sparkle' && previewed?.bg?.shader && !(await stored()).sync.lookX, JSON.stringify(previewed)?.slice(0, 200));
     await editor.click('#share-apply');
@@ -78,6 +79,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     check('the open page got the parts from storage: GZ_CTX.parts() and one glaze:parts event, without detail', s.loaded === 'object' && s.parts?.cursor?.kind === 'sparkle' && s.parts.bg.shader.src.length < SHADER.length && fired.n === 1 && !fired.detail, JSON.stringify({ s, fired }).slice(0, 300));
 
     // ---- a plain code and a built-in Look clear them ----------------------------------------------------------------------
+    if (!await editor.evaluate(() => document.querySelector('#palette details.more').open)) await editor.click('#palette details.more > summary'); // theme codes sit in Looks and colors' More options
     await editor.fill('#share-code', await S.encode(G.GZ_SANITIZE({ look: { radius: 10 }, bg: { kind: 'aurora' } })));
     await editor.click('#share-try');
     await until(() => editor.evaluate(() => !document.querySelector('#share-offer').hidden));
