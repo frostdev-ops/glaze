@@ -391,3 +391,21 @@ test('review: Allow authority belongs to one download, tab and frame; navigation
     assert.ok(w.removed.includes(50), 'no orphan Allow tab');
   }
 });
+
+
+test('review: Settings carries an action privately to exactly the tab it opens, once', async () => {
+  const w = worker({ session: { 'settingsFrame:7': { frameId: 4, documentId: 'doc-s' } } });
+  const action = { kind: 'media', src: 'https://media.example.net/loop.webm', mediaKind: 'video' };
+  const msg = { type: 'glaze:settings-tab', hash: '#look/background', action };
+  assert.equal((await w.send(msg, settingsFrame({ documentId: 'forged' }))).ok, false);
+  assert.equal((await w.send(msg, settingsFrame())).ok, true);
+  const opened = { id: ID, origin: EXT, url: `${EXT}/options.html#look/background`, frameId: 0, tab: { id: 50 } };
+  assert.ok(!w.created[0].url.includes('media.example.net'), 'the payload never enters an address');
+  assert.equal((await w.send({ type: 'glaze:settings-action' }, { ...opened, tab: { id: 51 } })).action, undefined);
+  assert.deepEqual((await w.send({ type: 'glaze:settings-action' }, opened)).action, action);
+  assert.equal((await w.send({ type: 'glaze:settings-action' }, opened)).action, undefined, 'consumed');
+  const second = worker({ session: { 'settingsFrame:7': { frameId: 4, documentId: 'doc-s' } } });
+  const code = { kind: 'code', code: 'gz1:pending-look' };
+  assert.equal((await second.send({ ...msg, hash: '#look/palette', action: code }, settingsFrame())).ok, true);
+  assert.deepEqual((await second.send({ type: 'glaze:settings-action' }, opened)).action, code);
+});

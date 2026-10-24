@@ -223,3 +223,21 @@ test('review: an older permission answer cannot replace a newer media choice wit
   assert.equal(r.media().type, 'image', 'the older video choice stays superseded');
   assert.equal(r.writes.length, writes, 'the late answer writes nothing');
 });
+
+
+test('review: a carried media link is filled with its kind and waits for one Allow click', async () => {
+  const r = rig({ answer: () => true });
+  await r.settle();
+  assert.equal(typeof r.ctx.BG.offer, 'function');
+  r.ctx.BG.offer({ kind: 'media', src: LINK, mediaKind: 'lottie' });
+  assert.equal(r.link().value, LINK);
+  assert.equal(r.kind().value, 'lottie');
+  assert.deepEqual(r.writes, []);
+  assert.deepEqual(r.asked, []);
+  const allow = r.find((e) => e.tagName === 'button' && e.textContent === 'Allow cdn.example.com');
+  assert.ok(allow);
+  allow.fire('click'); await r.settle();
+  assert.deepEqual(r.asked, [['https://cdn.example.com/*']]);
+  assert.equal(r.media().src, LINK);
+  assert.equal(r.media().type, 'lottie');
+});
