@@ -743,11 +743,13 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     syncDashboard();
     glazeItem(I.links.length && I.settings?.enabled);
     if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings?.navbar?.on)) need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI).then(() => GZ_NAVBAR_UI.sync(), () => {});
+    // Under Glaze navigation features/nav.js stays off, and navItems is read only for it.
+    const own = I.links.length && !I.settings?.navbar?.on;
     if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
-    else if (I.links.length && navItems) {
+    else if (own && navItems) {
       const n = I.worn.nav;
       if (n.i || n.li || n.labelOverflow === 'shrink' || n.collapsed || n.labels === 'icons' || globalThis.GZ_CTX?.parts()?.nav || ['links', 'order', 'hidden'].some((k) => Array.isArray(navItems[k]) && navItems[k].length) || (Array.isArray(navItems.widgets) && navItems.widgets.some((w) => w?.on === true))) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync()).catch(() => {});
-    } else if (I.links.length && !navRead) {
+    } else if (own && !navRead) {
       navRead = true;
       try { chrome.storage.sync.get('navItems', (r) => {
         navRead = false;
