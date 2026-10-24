@@ -8,7 +8,7 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://ultra.fixture.test/*']);
 const out = process.argv[2] && path.resolve(process.argv[2]);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -59,7 +59,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     });
     const opts = await context.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
-    const store = (bg, lookX) => opts.evaluate(async ({ defaults, bg, lookX, origin }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set({ ...defaults, bg, lookX }); await chrome.storage.local.set({ ultra: [origin] }); }, { origin, defaults: D.GZ_DEFAULTS, bg: { ...D.GZ_DEFAULTS.bg, ...bg }, lookX });
+    const store = (bg, lookX) => opts.evaluate(async ({ defaults, bg, lookX, origin }) => {
+      await chrome.storage.sync.clear();
+      const keys = Object.keys(await chrome.storage.local.get(null)).filter((k) => !['ultra', 'canvas', 'moodle'].includes(k));
+      await chrome.storage.local.remove(keys);
+      await chrome.storage.sync.set({ ...defaults, bg, lookX }); await chrome.storage.local.set({ ultra: [origin] });
+    }, { origin, defaults: D.GZ_DEFAULTS, bg: { ...D.GZ_DEFAULTS.bg, ...bg }, lookX }).then(async () => {
+      await worker.evaluate(() => queue);
+      await require('./check-env.js').ultraReady(opts);
+    });
     const look = async (x) => P.pack({ x });
     const open = async () => { const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message)); await page.goto(`${origin}/ultra/stream`); await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-font')); return page; };
     const scene = (page) => page.evaluate(() => { const c = document.getElementById('gz-scene'); return c && { w: c.width, h: c.height, bg: document.documentElement.getAttribute('data-gz-bg'), inside: c.parentNode.tagName }; });

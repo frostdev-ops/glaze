@@ -15,7 +15,7 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://api.weather.gov/*']);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const M = require(path.join(ext, 'lib/modbundle.js'));
 const enc = new TextEncoder();
@@ -97,7 +97,11 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('only Cancel and Install, Cancel focused', await editor.evaluate(() => [...document.querySelectorAll('#mod-prompt button')].map((b) => b.textContent).join(',') === 'Cancel,Install'
       && document.activeElement.id === 'mod-prompt-cancel'));
     for (let i = 0; i < 5; i++) await editor.keyboard.press('Tab');
-    check('focus stays in the prompt', await editor.evaluate(() => document.getElementById('mod-prompt').contains(document.activeElement)));
+    check('Tab never focuses the inert page behind the prompt', await editor.evaluate(() => {
+      const dialog = document.getElementById('mod-prompt');
+      // Native modal dialogs also let Tab reach the browser chrome, where the document reports body as active.
+      return dialog.matches(':modal') && (document.activeElement === document.body || dialog.contains(document.activeElement));
+    }));
     check('the page behind the prompt is inert', await editor.evaluate(() => { const b = document.getElementById('mod-file-btn'); b.focus(); return document.getElementById('mod-prompt').matches(':modal') && document.activeElement !== b; }));
     await editor.keyboard.press('Escape');
     check('Escape cancels without installing', !await promptOpen() && !(await local('mods')).mods);

@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), net = require('node:net');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['http://127.0.0.1/*']);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const check = (name, ok) => { assert.ok(ok, name); console.log(`ok  ${name}`); };
