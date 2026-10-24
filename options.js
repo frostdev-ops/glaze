@@ -1374,6 +1374,9 @@ GZ_UI.load().then((s) => {
     if (a?.kind === 'media') {
       editor.show('look/background', { scroll: true });
       GZ_EDITOR_XBG.offer(a);
+    } else if (a?.kind === 'notes') {
+      editor.show('sharing/sessions', { scroll: true });
+      globalThis.GZ_SESSION_OFFER?.(a);
     } else if (a?.kind === 'code') {
       $('#share-code').value = a.code;
       await tryCode();

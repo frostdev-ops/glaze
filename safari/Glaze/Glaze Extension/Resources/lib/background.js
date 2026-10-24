@@ -793,6 +793,11 @@ chrome.runtime.onConnect.addListener((p) => {
       return;
     }
     if (m?.online === true) { sessionsWorker?.changed(); return; }
+    if (m?.op === 'settings' && Number.isSafeInteger(m.id)) {
+      openSettingsTab(p.sender.tab, '#sharing/sessions', { kind: 'notes', key: scope.key, note: scope.note })
+        .then(() => reply({ ok: true }), () => reply({ ok: false }));
+      return;
+    }
     if (!m || !Number.isSafeInteger(m.id) || !QUICK_OPS.has(m.op) || JSON.stringify(m).length > (32 << 20)) { reply({ ok: false, error: 'sender' }); return; }
     const request = { ...m, scope }; // ignore every client-supplied scope
     BROKER.sessions.interrupt(request);

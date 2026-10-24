@@ -6,6 +6,8 @@
   GZ_I18N.page();
   const t = (k, v) => GZ_I18N.t(k, v, GZ_I18N.ui());
   const $ = (s) => document.querySelector(s);
+  const ownTab = typeof chrome.permissions?.request !== 'function';
+  if (ownTab) { document.documentElement.setAttribute('data-own-tab', ''); $('#settings').textContent = t('Open in a new tab'); }
   // An embedded control needs verified IOv2 visibility, full intersection and a stable box for half a second.
   // Older observers silently ignore trackVisibility; geometric intersection alone cannot detect a hostile overlay.
   const shown = new WeakMap();
@@ -71,7 +73,7 @@
   const say = (k, vars, err = false) => { $('#status').textContent = k ? t(k, vars) : ''; $('#status').classList.toggle('error', err); };
   let port, serial = 0, started = false;
   const pending = new Map();
-  const lock = () => { for (const b of document.querySelectorAll('button')) b.disabled = dead || (b.id !== 'settings' && (busy || !started || !watcher)); };
+  const lock = () => { for (const b of document.querySelectorAll('button')) b.disabled = dead || (b.id !== 'settings' && (ownTab || busy || !started || !watcher)); };
   const expire = () => {
     if (dead) return;
     dead = true; state = null; key = ''; note = ''; lookRevision++; clearTimeout(lookTimer); clearTimeout(startTimer);
@@ -204,7 +206,11 @@
     });
   });
   // Navigation grants no session authority. Keep recovery available even when this embedded surface cannot be trusted.
-  $('#settings').addEventListener('click', (e) => { if (!dead && e.isTrusted && navigator.userActivation?.isActive) chrome.tabs.create({ url: chrome.runtime.getURL('options.html#sharing/sessions') }).catch(() => {}); });
+  $('#settings').addEventListener('click', (e) => {
+    if (dead || !e.isTrusted || !navigator.userActivation?.isActive) return;
+    if (ownTab) { if (started) request({ op: 'settings' }).catch(() => {}); }
+    else chrome.tabs.create({ url: chrome.runtime.getURL('options.html#sharing/sessions') }).catch(() => {});
+  });
 
   const startTimer = setTimeout(expire, 10000);
   say('Open this from Notes.', undefined, true);
