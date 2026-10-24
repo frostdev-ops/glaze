@@ -20,7 +20,7 @@ grade calculators, loads on demand from `features/` the first time a page needs 
 ## Activity Stream
 
 Blackboard's Stream notification settings contain a Glaze section, also available at
-Settings → Blackboard → Activity Stream. Timeline dates default to due dates for deadline
+Settings → Course pages → Blackboard Dashboard → More options → Activity Stream. Timeline dates default to due dates for deadline
 notifications and posted dates for other updates. Choose posted dates or both, relative due
 dates, compact cards, and whether encouragement appears. The exact deadline and time zone
 remain available on the date's accessible label and hover title. Relative dates fall back to
