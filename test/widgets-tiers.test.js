@@ -21,14 +21,15 @@ test("the study buddy's centring is its own: the habitat (whose pet is a .gz-w-p
   assert.ok(top.some(([s]) => s.includes('.gz-w-body:has(> .gz-w-pet)')));
 });
 
-test('the habitat has no fixed height; narrow or short it shows More and hides its sections; very wide it goes two columns', () => {
+test('the habitat: no fixed height, ⋯ always in a tile, panels only with room, two columns only when wide and not tall', () => {
   for (const [s, b] of top) if (s.includes('.gz-game-habitat') && !s.includes('[data-habitat')) assert.doesNotMatch(b, /(?:^|;)\s*height:\s*\d+px/, s);
-  const compact = blocks.filter(([q]) => /width < 300px/.test(q));
-  assert.ok(compact.some(([, r]) => r.some(([s, b]) => s.includes('.gz-game-more') && /display:\s*inline-flex/.test(b))), 'More in narrow tiles');
-  assert.ok(compact.some(([, r]) => r.some(([s, b]) => s.includes('.gz-game-section') && /display:\s*none/.test(b))), 'sections go to the dialog');
-  assert.ok(blocks.some(([q, r]) => /height < 520px/.test(q) && r.some(([s, b]) => s.includes('.gz-game-more') && /inline-flex/.test(b))), 'and in short ones');
-  assert.ok(blocks.some(([q, r]) => /width >= 600px/.test(q) && r.some(([, b]) => /grid-template-areas:\s*"stage overview"/.test(b))), 'two columns');
-  assert.ok(top.some(([s, b]) => s === '.gz-game-more' && /display:\s*none/.test(b)), 'no More where the sections show');
+  assert.ok(top.some(([s, b]) => s === '.gz-game-more' && /display:\s*inline-flex/.test(b)), '⋯ in every tile (Settings is there)');
+  const hides = (q) => blocks.some(([k, r]) => q.test(k) && r.some(([s, b]) => s.includes('.gz-game-tabs') && s.includes('.gz-game-panel') && s.startsWith('.gz-w[data-tile="pet"]') && /display:\s*none/.test(b)));
+  assert.ok(hides(/^gz-tile \(width < 300px\)$/), 'narrow tiles leave the panels to the dialog');
+  assert.ok(hides(/height < 520px/), 'and short ones');
+  assert.ok(blocks.some(([q, r]) => q === 'gz-tile (width >= 600px)' && r.some(([, b]) => /grid-template-areas:\s*"stage controls"/.test(b))), 'two columns when wide');
+  assert.ok(blocks.some(([q, r]) => /aspect-ratio < 3\/2/.test(q) && r.some(([, b]) => /grid-template-areas:\s*"stage" "controls"/.test(b))), 'one column when wide but tall');
+  assert.ok(top.some(([s, b]) => s.includes('[style*="height"]') && s.includes('.gz-game-habitat') && /min\(58cqi/.test(b)), 'a dragged height never makes the room taller than its aspect');
 });
 
 // Each built-in widget takes its size from its tile: container units or a tier of its own.
