@@ -378,11 +378,12 @@ const run = async () => {
     ok(true, `the frame's click opens Glaze's Allow tab, its one button "Allow ${FILES}" focused`);
     ok(!await holds(b, settings, `https://${FILES}/*`) && !asked.some((u) => u.includes(FILES)), 'nothing granted or fetched before its click');
     // Read only browser-side lifecycle metadata: no debugger attached to the extension, no extension API calls while idle.
-    // The byte port's 15 s ping/reply is the only continuing worker traffic. Capture Firefox's actual idle reset reasons.
+    // The byte port's 15 s ping/reply is the only continuing worker traffic. Incoming onMessage events reset the idle timer.
     await b.inChrome(`(() => { const e = WebExtensionPolicy.getByID('${ID}').extension; window.__gzIdle = { resets: [], stopped: 0, child: e.backgroundContext?.childId }; e.on('background-script-reset-idle', (_, d) => window.__gzIdle.resets.push({ reason: d.reason, at: Date.now() })); e.on('shutdown-background-script', () => window.__gzIdle.stopped++); return 1; })()`);
     await pause(65000);
     const idle = await b.inChrome(`(() => { const e = WebExtensionPolicy.getByID('${ID}').extension; return { ...window.__gzIdle, state: e.backgroundState, childNow: e.backgroundContext?.childId, timeout: Services.prefs.getIntPref('extensions.background.idle.timeout', 30000) }; })()`);
-    ok(idle.state === 'running' && idle.stopped === 0 && idle.child === idle.childNow && idle.resets.filter((r) => r.reason === 'parentapicall').length >= 4,
+    const beats = idle.resets.filter((r) => r.reason === 'event').reduce((a, r) => { if (!a.length || r.at - a.at(-1) > 1000) a.push(r.at); return a; }, []);
+    ok(idle.state === 'running' && idle.stopped === 0 && idle.child === idle.childNow && beats.length >= 4 && beats.at(-1) - beats[0] >= 45000,
       `worker-unload: 65 s, idle timeout ${idle.timeout} ms, same context ${idle.child}, ${idle.stopped} unloads; resets ${JSON.stringify(idle.resets)}`);
     await b.click(own, '#allow');
     await until(async () => !await b.find(ALLOW_TAB), 'the Allow tab to close');
