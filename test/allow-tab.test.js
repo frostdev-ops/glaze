@@ -346,11 +346,11 @@ test('Settings\' grant-needing controls hand reach the control, and a control se
   const line = (needle) => { const at = src.indexOf(needle); assert.ok(at > 0, needle); return src.slice(at, src.indexOf('\n', at)); };
   assert.match(line("if (key === 'enhance.gradescope'"), /GZ_SITE\.reach\(\[GZ_GRADESCOPE\.HOST\], el\)/);
   const apply = src.slice(src.indexOf("$('#share-apply').addEventListener"), src.indexOf('// ---- gallery, favorites and history'));
-  assert.match(apply, /GZ_SITE\.reach\(\[src\], \$\('#share-apply'\)\)/);
+  assert.match(apply, /GZ_SITE\.reach\(\[src\], \$\('#share-apply'\),/);
   assert.match(apply, /if \(held === null\) return;/);
   const xbg = read('lib/editor-xbg.js');
-  assert.match(xbg, /GZ_SITE\.reach\(\[url\], input\)/);
-  assert.match(xbg.slice(xbg.indexOf('GZ_SITE.reach([url], input)')), /^[^]*?if \(held === null\) return;/);
+  assert.match(xbg, /GZ_SITE\.reach\(\[url\], input,/);
+  assert.match(xbg.slice(xbg.indexOf('GZ_SITE.reach([url], input,')), /^[^]*?if \(held === null\) return;/);
 });
 
 

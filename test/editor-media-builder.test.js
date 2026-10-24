@@ -29,6 +29,7 @@ class El {
   fire(type) { for (const f of this.listeners[type] || []) f({ type, target: this, isTrusted: true }); }
   get all() { return this.children.filter((c) => c instanceof El).flatMap((c) => [c, ...c.all]); }
   get files() { return this._files || []; }
+  querySelector(s) { return this.all.find((e) => e.tagName === s) || null; }
   focus() {}
 }
 
@@ -234,7 +235,7 @@ test('review: a carried media link is filled with its kind and waits for one All
   assert.equal(r.kind().value, 'lottie');
   assert.deepEqual(r.writes, []);
   assert.deepEqual(r.asked, []);
-  const allow = r.find((e) => e.tagName === 'button' && e.textContent === 'Allow cdn.example.com');
+  const allow = r.find((e) => e.tagName === 'button' && e.children.includes('Allow cdn.example.com'));
   assert.ok(allow);
   allow.fire('click'); await r.settle();
   assert.deepEqual(r.asked, [['https://cdn.example.com/*']]);

@@ -59,14 +59,14 @@ if (embedded) {
   $('.embed-tools').hidden = false;
   const leave = () => window.parent.postMessage({ gzSettings: 'close' }, '*');
   // Where the frame has no tabs API (Firefox gives an extension page framed in a web page none), the worker opens it.
-  const ownTab = (hash = location.hash) => {
-    const opened = chrome.tabs?.create ? chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + hash })
-      : chrome.runtime.sendMessage({ type: 'glaze:settings-tab', hash }).then((r) => { if (!r?.ok) throw Error('refused'); });
+  const ownTab = (hash = location.hash, action) => {
+    const opened = !action && chrome.tabs?.create ? chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + hash })
+      : chrome.runtime.sendMessage({ type: 'glaze:settings-tab', hash, ...(action && { action }) }).then((r) => { if (!r?.ok) throw Error('refused'); });
     opened.then(leave, () => {});
   };
   // Nor any permissions API: a control that needs a grant (lib/site.js reach) opens Settings' own tab at its section.
   if (typeof chrome.permissions?.request !== 'function') {
-    GZ_SITE.elsewhere = (from) => { const at = from?.closest?.('[data-editor-section]')?.dataset.editorSection; ownTab(at ? `#${at}` : location.hash); };
+    GZ_SITE.elsewhere = (from, action) => { const at = from?.closest?.('[data-editor-section]')?.dataset.editorSection; ownTab(at ? `#${at}` : location.hash, action); };
   }
   $('#embed-close').addEventListener('click', leave);
   $('#embed-tab').addEventListener('click', () => ownTab());
@@ -1234,7 +1234,7 @@ GZ_UI.load().then((s) => {
     const src = chosen.parts?.x?.bg?.media?.src;
     if (!src?.startsWith('https://')) return apply();
     // A code can introduce remote media just as the link box can. Ask in Apply's click before changing this Look.
-    GZ_SITE.reach([src], $('#share-apply')).then((held) => {
+    GZ_SITE.reach([src], $('#share-apply'), { kind: 'code', code: chosen.code }).then((held) => {
       if (held === null) return; // sent to Settings' own tab
       if (offer !== chosen || generation !== offerGeneration) return;
       if (!held) return hint(t('That link can’t be saved.'), true);
@@ -1369,6 +1369,18 @@ GZ_UI.load().then((s) => {
     if (changes.galleryOffer?.newValue) takeOffer();
   });
   takeOffer();
+  if (!embedded) chrome.runtime.sendMessage({ type: 'glaze:settings-action' }).then(async (r) => {
+    const a = r?.action;
+    if (a?.kind === 'media') {
+      editor.show('look/background', { scroll: true });
+      GZ_EDITOR_XBG.offer(a);
+    } else if (a?.kind === 'code') {
+      $('#share-code').value = a.code;
+      await tryCode();
+      editor.show('look/palette', { scroll: true });
+      if (offer) $('#share-apply').focus({ preventScroll: true });
+    }
+  }).catch(() => {});
 
   // ---- Look rotation's list: kept on this computer (storage.local), lib/lookx.js. Your own pointer picture is
   // lib/editor-pointer.js's. ----
