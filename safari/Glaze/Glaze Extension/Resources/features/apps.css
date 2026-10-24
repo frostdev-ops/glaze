@@ -44,9 +44,9 @@
   color: var(--gz-ink); background: transparent; font-weight: 600; line-height: 1.5; text-decoration: none;
 }
 :is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-btn:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
-/* The Look's text-on-accent (defaults.js keeps it at 4.5:1 or better). Ultra's theme colors every button in #site-wrap with
-   !important (theme.css), which the tiles on its boards are inside of: this one is more specific. */
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-main.gz-w-main { color: var(--gz-accent-ink) !important; background: var(--gz-accent); border-color: var(--gz-accent); }
+/* The Look's text-on-accent (defaults.js keeps it at 4.5:1 or better). Preserve the pair against Ultra's important ink rule
+   and the dark-page detector's hover/focus fill, which can tag a neutral custom accent as native light paper. */
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-main.gz-w-main { color: var(--gz-accent-ink) !important; background: var(--gz-accent) !important; border-color: var(--gz-accent); }
 :is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-main.gz-w-main:hover { color: var(--gz-accent-ink) !important; filter: brightness(1.08); }
 :is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) :is(.gz-w-small, .gz-w-icon) {
   padding: 0.05rem 0.55rem; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer; color: var(--gz-ink-muted); line-height: 1.5;

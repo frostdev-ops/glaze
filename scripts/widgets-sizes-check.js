@@ -168,7 +168,7 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
     }
     // Primary buttons: their text against their fill, at least 4.5:1 (WCAG AA), in whatever Look.
     for (const b of el.querySelectorAll('.gz-w-main, .gz-game-primary')) {
-      if (!seen(b)) continue;
+      if (!seen(b) || b.disabled) continue; // inactive controls are exempt from the text-contrast threshold
       const cs = getComputedStyle(b), ratio = contrast(cs.color, cs.backgroundColor);
       if (ratio < 4.5) problems.push(`"${b.textContent.trim()}" has ${ratio.toFixed(2)}:1 contrast (${cs.color} on ${cs.backgroundColor})`);
     }
@@ -266,10 +266,10 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
       ...Object.fromEntries([[O, UID], [CANVAS, CUID]].flatMap(([o, u]) => [[`notes:${o}/${u}`, NOTE], [`pet:${o}/${u}`, PET]])), ...(sidebar && { [`sidebar:ultra:${O}/${UID}`]: sidebar }) });
     const results = [];
     // One configuration: its settings and layout stored, the page opened, every tile measured and photographed.
-    const run = async ({ name, preset = 'Paper', width = 1600, height = 2600, site = O, where = '/ultra/institution-page', layout, sidebar, rtl = false, sel = '#gz-dash section.gz-w', expect, after }) => {
+    const run = async ({ name, preset = 'Paper', colors, width = 1600, height = 2600, site = O, where = '/ultra/institution-page', layout, sidebar, rtl = false, sel = '#gz-dash section.gz-w', expect, after }) => {
       if (process.env.ONLY && !name.includes(process.env.ONLY)) return;
       dir = rtl ? 'rtl' : 'ltr';
-      await store(settingsFor(preset, sidebar ? { enhance: { sidebar: true } } : {}), local(layout, sidebar));
+      await store(settingsFor(preset, { ...(sidebar && { enhance: { sidebar: true } }), ...(colors && { colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1], ...colors } }) }), local(layout, sidebar));
       await page.setViewportSize({ width, height });
       await page.goto(`${site}${where}`);
       await page.waitForSelector(sel, { timeout: 20000 }).catch(() => null);
@@ -305,6 +305,18 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
     }
     // The other Looks at one size: what changes with a Look is color, and every primary button must read in each.
     for (const preset of G.GZ_PRESETS.map(([n]) => n).filter((n) => !['Paper', 'Midnight'].includes(n))) await run({ name: `look-${preset.toLowerCase()}-m`, preset, layout: board(SIZES.m), expect: IDS.length });
+    // A neutral custom accent can look like a native light hover fill to the dark-page detector. Primary buttons must keep
+    // their text-on-accent pair after real keyboard focus and pointer hover, as well as before anyone touches them.
+    await run({ name: 'custom-dark-focus', preset: 'Midnight', colors: { '--gz-accent': '#777777', '--gz-accent-ink': '#000000' }, layout: board(SIZES.m), expect: IDS.length, after: async () => {
+      for (const id of ['timer', 'breathe', 'pet']) for (const mode of ['focus', 'hover']) {
+        const primary = page.locator(`section.gz-w[data-tile="${id}"] .gz-w-main`);
+        await primary[mode](); await page.waitForTimeout(250);
+        const measured = await page.evaluate(MEASURE, { PRIMARY, PET_ACTIONS, COURSES: [COURSE, CCOURSE], MODTILE });
+        ok(measured.every((x) => !x.problems.length), `custom dark ${id}: primary contrast after ${mode}`, measured.flatMap((x) => x.problems).join(' | '));
+      }
+      await page.screenshot({ path: path.join(out, 'custom-dark-focus-after.png'), fullPage: true });
+      ok(!errors.length, 'custom dark: no page errors after focus and hover', errors.splice(0).join(' | '));
+    } });
     for (const sz of ['m', 'ds']) await run({ name: `board-${sz}-rtl`, rtl: true, layout: board(SIZES[sz]), expect: IDS.length });
     // Floating: four at a time, one in each corner of the window.
     const corners = [[0, 0], [1, 0], [0, 1], [1, 1]];
