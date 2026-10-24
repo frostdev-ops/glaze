@@ -61,12 +61,16 @@ const GZ_UI = (() => {
   const readable = (s, colors) => {
     const C = GZ_COLOR, kind = s.bg.kind, own = s.look.surfaceOpacity;
     if (kind === 'solid' || !s.look.glass) return 100;
-    const ground = C.parse(colors['--gz-surface-2']), paint = C.parse(s.look.surfaceCustom ? s.look.surfaceColor : colors['--gz-surface']);
-    const scene = ['scene', 'shader', 'layers', 'media'].includes(kind), dim = scene ? 0.8 + GZ_SCENE_LOOK(s.bg.intensity).dim / 4 : s.bg.dim / 100;
+    const ground = C.parse(colors['--gz-surface-2']);
+    const scene = ['scene', 'shader', 'layers', 'media'].includes(kind), dim = scene ? GZ_SCENE_LOOK(s.bg.intensity).dim : s.bg.dim / 100;
     const over = (a, b, t) => ({ r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t });
-    const art = [...GZ_BG_COLORS(s.bg.colors, colors), ...(['image', 'media'].includes(kind) ? ['#000000', '#ffffff'] : [])].map((c) => over(C.parse(c), ground, dim));
-    const pairs = GZ_CONTRAST(colors).filter(({ fg, bg, min }) => ['--gz-surface', '--gz-surface-2'].includes(bg) && C.contrast(colors[fg], C.hex(paint)) >= min);
-    const passes = (o) => art.every((under) => pairs.every(({ fg, min }) => C.contrast(colors[fg], C.hex(over(under, paint, o / 100))) >= min));
+    // Scenes, custom shaders and layers can draw beyond their palette, just as pictures and films can.
+    const art = [...GZ_BG_COLORS(s.bg.colors, colors), ...(scene || kind === 'image' ? ['#000000', '#ffffff'] : [])].map((c) => over(C.parse(c), ground, dim));
+    const pairs = GZ_CONTRAST(colors).filter(({ bg }) => ['--gz-surface', '--gz-surface-2'].includes(bg)).map((row) => {
+      const base = C.parse(s.look.surfaceCustom ? s.look.surfaceColor : colors[row.bg]);
+      return { ...row, paint: over(base, C.parse(colors['--gz-accent']), s.look.surfaceTint / 100) };
+    }).filter(({ fg, min, paint }) => C.contrast(colors[fg], C.hex(paint)) >= min);
+    const passes = (o) => art.every((under) => pairs.every(({ fg, min, paint }) => C.contrast(colors[fg], C.hex(over(under, paint, o / 100))) >= min));
     let o = own >= 0 ? own : 88;
     while (o < 100 && !passes(o)) o = Math.min(100, o + 2);
     return o;
