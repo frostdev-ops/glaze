@@ -691,3 +691,11 @@ test("the open course's tab comes back into view when the window changes size, w
   c.list = null;
   assert.doesNotThrow(onResize);
 });
+
+test('Canvas resize drops the old sketch before deciding where its live strip belongs', () => {
+  const frame = { el: { style: { visibility: 'hidden' } } };
+  const c = vm.createContext({ on: true, flag() {}, ctx: { site: 'canvas' }, pic: {}, showing: '12', frames: new Map([['12', frame]]),
+    lay() {}, navRoom() {}, inView() {}, unpicture() { c.pic = null; }, place() { assert.equal(c.pic, null, 'the sketch no longer covers the live frame'); } });
+  vm.runInContext(`${part('  const onResize = ', '  let navWatch = ')}\nonResize();`, c);
+  assert.equal(frame.el.style.visibility, '', 'the live frame is visible');
+});
