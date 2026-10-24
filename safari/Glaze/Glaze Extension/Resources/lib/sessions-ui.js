@@ -26,13 +26,11 @@
     const b = make('button', t(key), { type: 'button' });
     b.addEventListener('click', (e) => { if (human(e)) act(f, options); }); return b;
   };
-  const permission = async (servers) => {
-    const origins = [];
-    for (const server of new Set(servers)) {
-      if (GZ_RELAY.normalize(server) !== server) return false;
-      if (!await chrome.permissions.contains({ origins: [server + '/*'] })) origins.push(server + '/*');
-    }
-    return !origins.length || chrome.permissions.request({ origins });
+  const permission = (servers) => {
+    const unique = [...new Set(servers)];
+    if (unique.some((server) => GZ_RELAY.normalize(server) !== server)) return Promise.resolve(false);
+    // Ask synchronously in the input handler. Already-held hosts return yes without a prompt.
+    return !unique.length ? Promise.resolve(true) : chrome.permissions.request({ origins: unique.map((server) => server + '/*') });
   };
   const confirmHost = (server) => (server === state.defaultRelay && server === state.relay) || confirm(server === state.defaultRelay
     ? t('This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?', { host: new URL(server).host, selected: new URL(state.relay).host })

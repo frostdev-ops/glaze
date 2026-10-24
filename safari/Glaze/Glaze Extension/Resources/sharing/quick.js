@@ -116,13 +116,11 @@
   });
   $('#ask-yes').addEventListener('click', (e) => { if (human(e)) answer?.(true); });
   $('#ask-no').addEventListener('click', (e) => { if (e.isTrusted) answer?.(false); });
-  const permission = async (servers) => {
-    const origins = [];
-    for (const server of new Set(servers)) {
-      if (GZ_RELAY.normalize(server) !== server) return false;
-      if (!await chrome.permissions.contains({ origins: [server + '/*'] })) origins.push(server + '/*');
-    }
-    return !origins.length || chrome.permissions.request({ origins });
+  const permission = (servers) => {
+    const unique = [...new Set(servers)];
+    if (unique.some((server) => GZ_RELAY.normalize(server) !== server)) return Promise.resolve(false);
+    // Ask synchronously in the input handler. Already-held hosts return yes without a prompt.
+    return !unique.length ? Promise.resolve(true) : chrome.permissions.request({ origins: unique.map((server) => server + '/*') });
   };
   const copy = async (sid, edit) => {
     const { link } = await send('link', { sid, edit });
