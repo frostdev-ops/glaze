@@ -10,10 +10,10 @@ All notable changes to Glaze are documented here. The format follows
 
 - Chrome, Edge and Firefox: a tab on install for your school's own address. Glaze checks it's Blackboard, Canvas or Moodle before keeping it. If no LMS answers, Glaze returns access granted by that attempt and offers up to two course sites nearby; access held beforehand stays. All sites gives Glaze every HTTPS site at once, and Glaze then asks on each new school's pages, as before.
 - Chrome, Edge and Firefox: Use Glaze on the site, in Glaze's toolbar popup on a school's own Blackboard, Canvas or Moodle page. On Chrome and Edge, Glaze's icon gets a dot on those pages.
-- Chrome, Edge and Firefox: Settings → Backup and privacy → Sites adds a site by its address, and a site granted in the browser's own extension menu is checked and taken the same way.
+- Chrome, Edge and Firefox: Settings → Privacy and data → Sites adds a site by its address, and a site granted in the browser's own extension menu is checked and taken the same way.
 - Moodle on moodlecloud.com works from install, like Canvas on instructure.com and Blackboard on blackboard.com.
 - Firefox: where a page shown inside a site can't ask for access (Download all's Allow, Settings shown in the page), a small Glaze tab asks instead.
-- Blackboard: Activity Stream settings, in Settings → Blackboard → Activity Stream and in Blackboard's Stream settings: due dates on deadline notifications, posted dates or both, relative due dates, compact cards, and encouragement on or off.
+- Blackboard: Activity Stream settings, in Settings → Course pages → Blackboard Dashboard → More options → Activity Stream and in Blackboard's Stream settings: due dates on deadline notifications, posted dates or both, relative due dates, compact cards, and encouragement on or off.
 
 ### Changed
 
@@ -79,7 +79,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- Glaze asks before running on a site that only looks like Canvas, Moodle or Blackboard Ultra, and records nothing there until the student says Yes. Canvas on instructure.com, Ultra on blackboard.com and sites already in use stay automatic. Settings → Backup and privacy → Sites lists approved custom sites, with Remove.
+- Glaze asks before running on a site that only looks like Canvas, Moodle or Blackboard Ultra, and records nothing there until the student says Yes. Canvas on instructure.com, Ultra on blackboard.com and sites already in use stay automatic. Settings → Privacy and data → Sites lists approved custom sites, with Remove.
 - A shared Look's offer names every navigation item it hides, where each link goes, the page parts it restyles and any text it writes. A Look from someone else that hides Sign out or the profile, adds a link that isn't https, or disguises a link is refused, with the reasons shown.
 - Share protocol v2 adds unambiguous signatures and safe share-creation retries. It stays off until a relay operator enables it; after a share uses v2, older members must update.
 

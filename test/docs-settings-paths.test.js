@@ -12,6 +12,7 @@ test('documented settings directions use the current category and section labels
     'docs/privacy.md': ['backup/sites'],
     'PRIVACY.md': ['backup/sites'],
     'server/README.md': ['sharing/relay'],
+    'CHANGELOG.md': ['backup/sites', 'pages/dashboard'],
     'docs/development.md': ['pages/dashboard'],
     'docs/mods-api.md': ['navigation/items'],
   };
