@@ -250,7 +250,8 @@ var GZ_EDITOR_XBG = globalThis.GZ_EDITOR_XBG || (() => {
     // The worker fetches the file (lib/media.js remote) and refuses a host the browser doesn't hold: asked for here, in the
     // change that takes the link (a paste and Enter, or leaving the box), before anything is awaited (lib/site.js reach).
     const kind = mediaKind;
-    GZ_SITE.reach([url]).then((held) => {
+    GZ_SITE.reach([url], input).then((held) => {
+      if (held === null) return; // sent to Settings' own tab
       if (pick !== mediaPick || input.value !== url) return; // a later choice owns the answer, even for the same URL
       if (!held) return say(note, tr('That link can’t be saved.'));
       if (!setMedia({ type: kind, src: url })) return say(note, tr('That link can’t be saved.'));

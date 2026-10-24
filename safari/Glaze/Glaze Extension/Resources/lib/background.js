@@ -864,6 +864,21 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   })().then(reply, () => reply({ ok: false }));
   return true;
 });
+// A tab opened for a page in tab `tab`: next to it, and the browser goes back to it when it closes.
+const beside = (tab) => ({ openerTabId: tab.id, ...(Number.isInteger(tab.index) && { index: tab.index + 1 }) });
+// Settings' own tab for Settings framed in an LMS tab (options.js ownTab), where the frame has no tabs API (Firefox gives an
+// extension page framed in a web page none): beside that tab, at the section it names. Only from the frame that claimed its
+// ticket.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:settings-tab') return;
+  settingsFramesLoaded.then(async () => {
+    const hash = typeof m.hash === 'string' && /^(#[a-z]+(\/[a-z-]+)?)?$/.test(m.hash) ? m.hash : null;
+    if (hash === null || !fromEditor(s) || !(s.frameId > 0) || !trustedFrame(s, 'settings')) return { ok: false };
+    await chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + hash, ...beside(s.tab) });
+    return { ok: true };
+  }).then(reply, () => reply({ ok: false }));
+  return true;
+});
 // Opening Settings (Sharing, a Notes account's backup, or the navigation bar's own section) conveys no keys. A source account is a selection hint for its Notes backup; Export still needs a
 // trusted click there after its key warning. Only known top-frame LMS callers and the editor may ask.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
@@ -931,10 +946,16 @@ const openEditor = () => {
 };
 chrome.runtime.onMessage.addListener((m, s) => { if (m === 'options') Promise.resolve(fromGlaze(s) || lmsPage(s)).then((ok) => { if (ok) openEditor(); }, () => {}); });
 
+// The manifest's content script entries, each file by its path in the package: Firefox's getManifest gives each one as its
+// full address. entryWith: the entry that runs `file`.
+const packaged = (f) => (f.startsWith(chrome.runtime.getURL('')) ? f.slice(chrome.runtime.getURL('').length) : f);
+const contentScripts = () => chrome.runtime.getManifest().content_scripts.map((c) => ({ ...c, js: (c.js || []).map(packaged) }));
+const entryWith = (file) => contentScripts().find((c) => c.js.includes(file));
+
 // "Use this Look in Glaze" on the gallery (lib/gallery.js): the code waits in storage.local for the editor,
 // which previews it and asks. Only from the gallery's own pages, where the manifest runs that script.
 // A pattern ending in /* takes that folder and below; any other is that one page.
-const GALLERY = chrome.runtime.getManifest().content_scripts.find((c) => c.js.includes('lib/gallery.js'))?.matches || [];
+const GALLERY = entryWith('lib/gallery.js')?.matches || [];
 const onGallery = (url) => {
   let here;
   try { const u = new URL(url); here = u.origin + u.pathname; } catch { return false; }
@@ -1053,13 +1074,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // approved such a site (approved, above), Glaze goes onto its host for good, so its pages are themed from the first paint as
 // on *.instructure.com. Its LMS's list in storage.local is what registers it again: not every browser honors
 // persistAcrossSessions, and an update may clear registrations or change Glaze's file list.
-// The manifest's content script entries, each file by its path in the package: Firefox's getManifest gives each one as its
-// full address.
-const packaged = (f) => (f.startsWith(chrome.runtime.getURL('')) ? f.slice(chrome.runtime.getURL('').length) : f);
-const contentScripts = () => chrome.runtime.getManifest().content_scripts.map((c) => ({ ...c, js: (c.js || []).map(packaged) }));
-// Each LMS's own first content script: Canvas's is the manifest's for *.instructure.com, Moodle's the same without Canvas's
-// part (content-canvas.js). A host on both lists gets Canvas's, which holds all of Moodle's.
-const entryWith = (file) => contentScripts().find((c) => c.js.includes(file));
+// Each LMS's own first content script (entryWith, above): Canvas's is the manifest's for *.instructure.com, Moodle's the same
+// without Canvas's part (content-canvas.js). A host on both lists gets Canvas's, which holds all of Moodle's.
 const canvasEntry = () => entryWith('content-canvas.js');
 const glaze = (lms) => canvasEntry().js.filter((f) => lms === 'canvas' || f !== 'content-canvas.js');
 // Browser match patterns cannot name a port. The content startup and every worker trust check still use the exact origin.
@@ -2180,6 +2196,44 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     return gcalTurn(() => gcalOps[m.op](m, epoch));
   })().then(reply, (e) => reply({ ok: false, error: e?.code || 'network' }));
   return true;
+});
+
+// Glaze's Allow frame without a permissions API (features/allow.js; Firefox gives an extension page framed in a web page none):
+// its click asks here, and the worker opens the same page in a tab of its own beside the school's, whose click asks the
+// browser. Only from the frame showing that host, in a tab, for a host this worker is waiting for (Download all's ask, below).
+// The tab's word that it was answered (glaze:allow-answer) counts only from the tab opened for it; the worker checks the grant
+// itself, tells that frame alone, and closes the tab. Closed without an answer: no.
+const ALLOW_PAGE = 'features/allow.html';
+const allowTabs = new Map(); // the Allow tab's id -> { host, reply }: the frame waiting on it
+const allowPage = (s, host) => s.id === chrome.runtime.id && extensionOrigin(s) && s.url === `${chrome.runtime.getURL(ALLOW_PAGE)}#${host}`;
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:allow-tab' && m?.type !== 'glaze:allow-answer') return;
+  const host = typeof m.host === 'string' ? m.host : '', pattern = `https://${host}/*`;
+  if (m.type === 'glaze:allow-answer') {
+    const id = s.tab?.id, waiting = allowTabs.get(id);
+    if (!waiting || waiting.host !== host || s.frameId !== 0 || !allowPage(s, host)) { reply({ ok: false, error: 'sender' }); return; }
+    allowTabs.delete(id);
+    granted(pattern).then((ok) => {
+      waiting.reply({ ok });
+      reply({ ok: true });
+      Promise.resolve().then(() => chrome.tabs.remove(id)).catch(() => {});
+    });
+    return true;
+  }
+  (async () => {
+    if (!host || !siteFor(pattern) || !(s.frameId > 0) || !Number.isInteger(s.tab?.id) || !allowPage(s, host)) return { ok: false };
+    if (await granted(pattern)) return { ok: true };
+    if (!await askedFor(pattern)) return { ok: false };
+    const tab = await chrome.tabs.create({ url: `${chrome.runtime.getURL(ALLOW_PAGE)}#${host}`, ...beside(s.tab) });
+    return new Promise((res) => allowTabs.set(tab.id, { host, reply: res }));
+  })().then(reply, () => reply({ ok: false }));
+  return true;
+});
+chrome.tabs?.onRemoved?.addListener((id) => {
+  const waiting = allowTabs.get(id);
+  if (!waiting) return;
+  allowTabs.delete(id);
+  waiting.reply({ ok: false });
 });
 
 // Safari wakes its containing app for a silent update check; Chrome never enters this gate.
