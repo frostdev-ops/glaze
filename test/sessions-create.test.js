@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const settle = async () => { for (let i = 0; i < 6; i++) await new Promise(setImmediate); };
 const A = 'notesIdx:https://canvas.school.edu/7', B = 'notesIdx:https://bb.school.edu/9';
-const page = async (sources) => {
+const page = async (sources, options = {}) => {
   const nodes = new Map(), messages = [];
   class Element {
     constructor(tag = '') {
@@ -26,14 +26,14 @@ const page = async (sources) => {
   const node = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
   node('#panel-backup').hidden = true;
   node('#ss-kind').value = 'notes';
-  const state = { ok: true, on: false, sessions: [], sources, accounts: [], relay: 'https://share.frostdev.io', defaultRelay: 'https://share.frostdev.io', hosts: [] };
+  const state = { ok: true, on: false, sessions: options.sessions || [], sources, accounts: [], relay: 'https://share.frostdev.io', defaultRelay: 'https://share.frostdev.io', hosts: [] };
   vm.runInNewContext(fs.readFileSync(require.resolve('../lib/sessions-ui.js'), 'utf8'), {
     URL, URLSearchParams, location: { search: '' }, navigator: { userActivation: { isActive: true } }, addEventListener() {},
     GZ_I18N: { t: (k) => k, ui: () => 'en' }, GZ_NOTES: { KEY: /^notesIdx:/ }, GZ_RELAY: { normalize: (s) => s },
     document: { querySelector: node, createElement: (tag) => new Element(tag) },
     MutationObserver: class { observe() {} },
     chrome: {
-      permissions: { request: async () => true },
+      permissions: { request: options.permission || (async () => true) },
       runtime: { sendMessage: async (m) => { messages.push(m); return m.op === 'list' ? structuredClone(state) : { ok: true }; },
         connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() {} }) },
     },
@@ -100,4 +100,24 @@ test('nothing of the kind on this device: the hint stays, and the Look is offere
   assert.equal(p.why.textContent, 'Name the session.');
   await p.title('Frostdev for the group');
   assert.equal(p.create.disabled, false);
+});
+
+test('Create stays off at the broker limits and while an action is in flight', async () => {
+  const limits = require('../lib/sessions.js').LIMIT;
+  assert.equal(limits.sessions, 20); assert.equal(limits.items, 200);
+  const full = await page([], { sessions: Array.from({ length: limits.sessions }, () => ({ items: [], members: [], kind: 'look' })) });
+  await full.kind('look'); await full.title('My Look');
+  assert.deepEqual([full.create.disabled, full.why.textContent], [true, 'Leave a session before creating another (20 maximum).']);
+  const many = await page(Array.from({ length: limits.items + 1 }, (_, i) => note(A, `n${i}`, `Note ${i}`)));
+  await many.title('A collection'); await many.tick(...Array.from({ length: limits.items + 1 }, (_, i) => i));
+  assert.deepEqual([many.create.disabled, many.why.textContent], [true, 'Pick at most 200 items.']);
+  const long = await page([note(A, 'n1', 'x'.repeat(81))]); await long.tick(0);
+  assert.deepEqual([long.create.disabled, long.why.textContent], [true, 'Use a session name of 80 characters or fewer.']);
+  await long.title('Short name'); assert.equal(long.create.disabled, false);
+  let grant;
+  const busy = await page([], { permission: () => new Promise((r) => { grant = r; }) });
+  await busy.kind('look'); await busy.title('My Look'); busy.create.events.click({ isTrusted: true }); await settle();
+  assert.deepEqual([busy.create.disabled, busy.why.textContent], [true, 'Working…']);
+  grant(false); await settle();
+  assert.deepEqual([busy.create.disabled, busy.why.textContent], [false, '']);
 });
