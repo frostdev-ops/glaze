@@ -37,6 +37,29 @@ const loadUi = (extra = {}) => {
 };
 const UI = loadUi();
 
+test('course-tab navigation warning follows placement changes without repainting navigation', () => {
+  require('../lib/coursetabs.js');
+  const s = D.GZ_SANITIZE({ navbar: { on: false, tabs: false } }), controls = new Map();
+  const $ = (key) => {
+    if (!controls.has(key)) controls.set(key, { hidden: false, dataset: {}, style: {}, textContent: '', classList: { remove() {} } });
+    return controls.get(key);
+  };
+  const context = vm.createContext({ s, offer: null, $, $$: () => [], activeColors: () => s.colors, GZ_CARDS: K, t: say });
+  const source = between(options, '  let navPick =', "  $('#nav-pick').addEventListener");
+  vm.runInContext(`${source}; globalThis.render = renderNav;`, context);
+  const note = $('#tabs [data-tabs-nav-note]');
+  context.render();
+  assert.equal(note.hidden, true);
+  s.tabs.at = 'nav'; context.render();
+  assert.equal(note.hidden, false, 'Only in the navigation warns even when the navigation paint is cached');
+  s.tabs.at = 'auto'; context.render();
+  assert.equal(note.hidden, true, 'Automatic clears the warning');
+  s.tabs.at = 'nav'; s.navbar.on = true; context.render();
+  assert.equal(note.hidden, false, 'disabled navbar tabs still warn');
+  s.navbar.tabs = true; context.render();
+  assert.equal(note.hidden, true, 'enabled navbar tabs need no warning');
+});
+
 // ---- LOOK-2: "Use this theme" ------------------------------------------------------------------------------------------
 // The code, previewed by tryCode and then applied by the "Use this theme" handler, both as options.js has them.
 const use = async (code, s = D.GZ_SANITIZE({}), answer = () => true) => {

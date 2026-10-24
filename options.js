@@ -746,6 +746,8 @@ GZ_UI.load().then((s) => {
   let navPick = 0, navReview = 0, navRendered = '', navImage = null;
   const navAverages = new Map();
   const renderNav = () => {
+    // Placement can change without changing the cached navigation paint.
+    $('#tabs [data-tabs-nav-note]').hidden = s.tabs.at !== 'nav' || (s.navbar.on && s.navbar.tabs);
     const n = { ...(offer || s).nav };
     const signature = JSON.stringify([n, n.k === 'default' ? activeColors(offer || s) : null, s.navbar]);
     if (signature === navRendered) return;
@@ -765,7 +767,6 @@ GZ_UI.load().then((s) => {
     // The sidebar's controls while it is on; blur and opacity only for glass.
     $('#side-panel [data-sidebar]').hidden = !s.enhance.sidebar;
     $('#side-panel [data-sidebar-glass]').hidden = s.sidebar.surface !== 'glass';
-    $('#tabs [data-tabs-nav-note]').hidden = s.tabs.at !== 'nav' || (s.navbar.on && s.navbar.tabs);
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
     $('#nav-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
