@@ -98,7 +98,7 @@ const tag = (id) => (id === COURSE || id === CCOURSE ? 'course' : id === MODTILE
 const PRIMARY = {
   notes: ['.gz-w-note-view'], agenda: ['.gz-w-row'], timer: ['.gz-w-clock', '.gz-w-main'], quotes: ['.gz-w-quote'], music: ['form.gz-w-music input'],
   breathe: ['.gz-w-breath', '.gz-w-main'], buddy: ['.gz-w-pet'], todo: ['#gz-todo .gz-todo-head'], settings: ['.gz-w-body > button'],
-  pet: ['.gz-game-habitat', '[data-control="pet"]', '[data-control="wander"]', '.gz-game-level'], course: ['.gz-w-body a'], mod: ['.gz-w-body > div'],
+  pet: ['.gz-game-habitat', '[data-control="pet"]', '[data-control="wander"]', '.gz-game-level'], course: [':is(.gz-course-card a, .ic-DashboardCard__header-title)'],
 };
 // Every action the habitat has, which has to be reachable at every size: in the tile, or through its More control.
 const PET_ACTIONS = ['pet', 'wander', 'wear', 'sprite', 'habitat', 'physics', 'learning', 'forget', 'supply:ball', 'supply:books', 'books'];
@@ -141,6 +141,8 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
     // A mod's frame: Glaze draws its blocks in a closed shadow root, whose overflow still shows on the frame.
     const frame = id === 'mod' && body?.querySelector(':scope > div');
     if (frame && frame.scrollWidth > frame.clientWidth + 1) problems.push(`the mod's frame overflows (${frame.scrollWidth} > ${frame.clientWidth})`);
+    // Its blocks are the mod's: a long list scrolls in a short tile, as any long content does, but it starts in view.
+    if (id === 'mod' && (!frame || frame.getBoundingClientRect().top > body.getBoundingClientRect().top + 1 || !frame.getBoundingClientRect().height)) problems.push("the mod's frame is missing or not at the top");
     if (el.scrollWidth > el.clientWidth + 1) problems.push(`the tile scrolls sideways (${el.scrollWidth} > ${el.clientWidth})`);
     if (body && !body.hidden) {
       const v = body.getBoundingClientRect();
