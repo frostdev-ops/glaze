@@ -233,18 +233,22 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
     });
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
-    const store = (s, local) => opts.evaluate(async ([s, local]) => {
-      await chrome.storage.sync.clear(); await chrome.storage.sync.set(s);
-      // Keep approvals between fixtures: clearing Ultra queues unregistration, which can finish after ultraReady saw the
-      // previous registration and leave the next navigation with no content script at all.
-      const keys = Object.keys(await chrome.storage.local.get(null)).filter((k) => !['ultra', 'canvas', 'moodle'].includes(k));
-      await chrome.storage.local.remove(keys); await chrome.storage.local.set(local);
-    }, [s, local]).then(async () => {
-      // A fresh install also resets registration. Drain the worker's registration queue before testing the next page.
+    const store = async (s, local) => {
+      // The old page can otherwise react to the new settings and write its default dock over the next fixture's record.
+      await page.goto('about:blank');
       const worker = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
+      await worker.evaluate(() => brokerTurn?.(() => {}));
+      await opts.evaluate(async ([s, local]) => {
+        await chrome.storage.sync.clear(); await chrome.storage.sync.set(s);
+        // Keep approvals between fixtures: clearing Ultra queues unregistration, which can finish after ultraReady saw the
+        // previous registration and leave the next navigation with no content script at all.
+        const keys = Object.keys(await chrome.storage.local.get(null)).filter((k) => !['ultra', 'canvas', 'moodle'].includes(k));
+        await chrome.storage.local.remove(keys); await chrome.storage.local.set(local);
+      }, [s, local]);
+      // A fresh install also resets registration. Drain the worker's registration queue before testing the next page.
       await worker.evaluate(() => queue);
       await require('./check-env.js').ultraReady(opts);
-    });
+    };
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(e.stack || String(e)));
     page.on('console', (msg) => { if (msg.type() === 'error' && !/ERR_NAME_NOT_RESOLVED|ERR_FAILED|404/.test(msg.text())) errors.push(msg.text()); });
