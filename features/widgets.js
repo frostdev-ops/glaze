@@ -44,12 +44,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak', 'pet']],
     ['Everywhere', ['palette', 'search', 'keys', 'drafts', 'quizLight']],
   ];
-  // Ultra's: what works there.
+  // Ultra's: what works there (all of Canvas's but Keep quizzes light). Gradescope stays in the editor, which asks for its site.
   const HUB_ULTRA = [
-    ['Courses page', ['dashboard', 'notes', 'widgets', 'newgrades', 'newcontent', 'coursemenu']],
-    ['Reminders and streak', ['streak', 'pet']],
-    ['Course pages', ['progress', 'place', 'download', 'calc', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'reading', 'clamp']],
-    ['Everywhere', ['palette', 'keys', 'drafts']],
+    ['Courses page', ['dashboard', 'notes', 'widgets', 'todo', 'cardTasks', 'overall', 'gradeHover', 'gpa', 'insights', 'newgrades', 'newcontent', 'coursemenu']],
+    ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak', 'pet']],
+    ['Course pages', ['progress', 'place', 'download', 'calc', 'syllabus', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp']],
+    ['Everywhere', ['palette', 'search', 'keys', 'drafts']],
   ];
   const EXTRA = {
     notes: 'Notes', widgets: 'Widgets', dashboard: 'Glaze Dashboard', todo: 'Better To Do', cardTasks: 'Tasks on course cards', overall: 'Grades on course cards',
