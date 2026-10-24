@@ -1,5 +1,6 @@
 // Settings over the page (features/settingspage.js), headless: the real extension on saved Ultra, Canvas and Moodle pages under
-// invented school origins, with Glaze navigation, the sidebar and the pet habitat on. Settings opens from the bar's Settings item;
+// invented school origins, with Glaze navigation, the sidebar (a drawer at this width, its button on the page) and the pet
+// habitat on. Settings opens from the bar's Settings item;
 // over its frame's whole area nothing else may draw or take the pointer: not Glaze's own overlays (the pet, the sidebar's
 // buttons, floating tiles), nor an overlay the page adds later, in <body> or beside it in <html>, however high its z-index.
 // Closing puts the page back as it was. All other requests abort; no LMS needed.
@@ -32,7 +33,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
   const errors = [];
   try {
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US',
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1000, height: 800 }, reducedMotion: 'reduce', locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-webgl', '--host-resolver-rules=MAP * ~NOTFOUND'] });
     require('./check-env.js').noFirstRun(ctx);
     await ctx.route('**/*', (route) => {
@@ -49,14 +50,15 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
       await chrome.storage.sync.set({ ...s, navbarItems: { glaze: ['settings'] } });
       await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'], ultra: ['https://bb.school.test'] }); // the student's yes to these sites
     }, settings);
-    const until = async (page, fn, arg, label) => { const end = Date.now() + 15000; while (Date.now() < end) { const v = await page.evaluate(fn, arg).catch(() => false); if (v) return v; await page.waitForTimeout(80); } throw new Error(label); };
+    await require('./check-env.js').ultraReady(opts);
+    const until = async (page, fn, arg, label) => { const end = Date.now() + 30000; while (Date.now() < end) { const v = await page.evaluate(fn, arg).catch(() => false); if (v) return v; await page.waitForTimeout(80); } throw new Error(label); };
 
     for (const [site, url] of SITES) {
       const page = await ctx.newPage();
       page.on('pageerror', (e) => errors.push(`${site}: ${e}`));
       try {
         await page.goto(url);
-        await until(page, () => document.documentElement.style.getPropertyValue('--gz-accent') && document.getElementById('gz-navbar')?.shadowRoot?.querySelector('[data-id="glaze:settings"]'), null, `${site}: themed, with the bar's Settings item`);
+        await until(page, () => !!document.documentElement.style.getPropertyValue('--gz-accent') && !!document.getElementById('gz-navbar')?.shadowRoot?.querySelector('[data-id="glaze:settings"]'), null, `${site}: themed, with the bar's Settings item`);
         // Let the sidebar and the pet arrive, then add the page's own overlays: one in <html> beside <body> before Settings opens.
         await page.waitForTimeout(1500);
         await page.evaluate(() => {
@@ -65,6 +67,8 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
           o.style.cssText = 'position:fixed;right:40px;bottom:40px;width:120px;height:80px;z-index:2147483647;background:#e0a';
           document.documentElement.append(o);
         });
+        const own = await page.evaluate(() => [...document.querySelectorAll('[id^="gz-"], [class*="gz-"]')].filter((e) => e.getClientRects().length && ['fixed', 'absolute'].includes(getComputedStyle(e).position) && !e.closest('#gz-navbar') && +getComputedStyle(e).zIndex >= 1000).map((e) => `${e.id || e.className.split(' ')[0]} z${getComputedStyle(e).zIndex}`));
+        console.log(`     ${site}: Glaze's overlays on the page: ${own.join(', ') || 'none'}`);
         await page.evaluate(() => [...document.getElementById('gz-navbar').shadowRoot.querySelectorAll('[data-id="glaze:settings"]')].find((b) => b.getClientRects().length).click());
         await until(page, () => document.getElementById('gz-settings-page')?.getBoundingClientRect().width > 0, null, `${site}: Settings opens over the page`);
         // An overlay that comes while it is open.
@@ -89,10 +93,14 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
             if (q.width && q.height && inside(x, y)) { points.push([x, y, name(el)]); if (el === e) seen.push(name(e)); }
           }
           const wrong = points.map(([x, y, what]) => [what, Math.round(x), Math.round(y), document.elementFromPoint(x, y)]).filter(([, , , at]) => at !== host).map(([what, x, y, at]) => `${what} @${x},${y} → ${name(at)}`);
-          return { points: points.length, wrong: [...new Set(wrong)].slice(0, 12), seen, late: getComputedStyle(document.getElementById('check-overlay-late')).opacity };
+          // Drawn over it: an overlay that still shows (no ancestor hides it) where it falls over Settings.
+          const shows = (e) => { for (let p = e; p && p.nodeType === 1; p = p.parentElement) { const c = getComputedStyle(p); if (c.opacity === '0' || c.visibility === 'hidden' || c.display === 'none') return false; } return true; };
+          const drawn = overlays.filter((e) => { const q = e.getBoundingClientRect(); return q.right > b.left && q.left < b.right && q.bottom > b.top && q.top < b.bottom && shows(e); }).map(name);
+          return { points: points.length, wrong: [...new Set(wrong)].slice(0, 12), seen, drawn };
         });
         console.log(`     ${site}: overlays over Settings: ${r.seen.join(', ') || 'none'}`);
         ok(r.wrong.length === 0, `${site}: Settings is the topmost thing at all ${r.points} points over its frame${r.wrong.length ? ` (${r.wrong.join('; ')})` : ''}`);
+        ok(r.drawn.length === 0, `${site}: nothing of the page shows over its frame${r.drawn.length ? ` (${r.drawn.join(', ')})` : ''}`);
         await page.screenshot({ path: path.join(out, `embedded-settings-${site}.png`) });
         await page.keyboard.press('Escape');
         await until(page, () => !document.getElementById('gz-settings-page'), null, `${site}: Settings closes`);
