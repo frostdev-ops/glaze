@@ -150,6 +150,9 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSE }) => {
       const reach = (c) => [...el.querySelectorAll('[data-control]')].filter((e) => e.dataset.control === c).some((e) => seen(e) || (outer(e) && seen(outer(e).querySelector(':scope > summary'))));
       const missing = PET_ACTIONS.filter((c) => !reach(c));
       if (missing.length && !more) problems.push(`actions not reachable: ${missing.join(', ')}`);
+      // The tier the habitat shows is the one its body's room calls for: More (and no sections) in a narrow or short single column.
+      const bw = body.clientWidth, fixed = !!body.style.height, compact = bw < 300 || (fixed && body.clientHeight < 520 && bw < 600);
+      if (compact !== more) problems.push(`${compact ? 'no More' : 'More'} in ${bw} × ${fixed ? body.clientHeight : 'auto'}`);
       if (more && missing.length === 0 && el.querySelector('.gz-game-section') && [...el.querySelectorAll('.gz-game-controls > .gz-game-section')].every(seen)) problems.push('More shows beside every section');
     }
     return { id, w: Math.round(r.width), h: Math.round(r.height), problems, stage };
