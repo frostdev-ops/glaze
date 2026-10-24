@@ -377,6 +377,13 @@ const run = async () => {
     await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && document.activeElement?.id === 'allow'`, own), 'its button');
     ok(true, `the frame's click opens Glaze's Allow tab, its one button "Allow ${FILES}" focused`);
     ok(!await holds(b, settings, `https://${FILES}/*`) && !asked.some((u) => u.includes(FILES)), 'nothing granted or fetched before its click');
+    // Read only browser-side lifecycle metadata: no debugger attached to the extension, no extension API calls while idle.
+    // The byte port's 15 s ping/reply is the only continuing worker traffic. Capture Firefox's actual idle reset reasons.
+    await b.inChrome(`(() => { const e = WebExtensionPolicy.getByID('${ID}').extension; window.__gzIdle = { resets: [], stopped: 0, child: e.backgroundContext?.childId }; e.on('background-script-reset-idle', (_, d) => window.__gzIdle.resets.push({ reason: d.reason, at: Date.now() })); e.on('shutdown-background-script', () => window.__gzIdle.stopped++); return 1; })()`);
+    await pause(65000);
+    const idle = await b.inChrome(`(() => { const e = WebExtensionPolicy.getByID('${ID}').extension; return { ...window.__gzIdle, state: e.backgroundState, childNow: e.backgroundContext?.childId, timeout: Services.prefs.getIntPref('extensions.background.idle.timeout', 30000) }; })()`);
+    ok(idle.state === 'running' && idle.stopped === 0 && idle.child === idle.childNow && idle.resets.filter((r) => r.reason === 'parentapicall').length >= 4,
+      `worker-unload: 65 s, idle timeout ${idle.timeout} ms, same context ${idle.child}, ${idle.stopped} unloads; resets ${JSON.stringify(idle.resets)}`);
     await b.click(own, '#allow');
     await until(async () => !await b.find(ALLOW_TAB), 'the Allow tab to close');
     ok(true, 'its click answered, and the tab closed itself');
@@ -453,6 +460,8 @@ const run = async () => {
     const bgTab = await ownSettings('#look/background');
     await closed();
     ok(!await holds(b, settings, 'https://media.school.edu/*') && await look() === lookBefore && !asked.some((u) => u.includes('media.school.edu')), 'embedded: a pasted Look link opens Settings\' own tab at Background and closes; nothing asked, kept or fetched');
+    await until(() => b.value(`document.getElementById('x-media-link').value === ${JSON.stringify(MEDIA)} && !!document.getElementById('x-media-allow')?.getClientRects().length`, bgTab), 'the carried link and Allow button');
+    ok(true, 'the pasted media link carries into its own tab with one Allow button, without granting or saving');
     await b.close(bgTab);
     f = await embed('#mods/installed');
     await b.clickOn(course, `document.querySelector('[data-editor-panel="mods"] .embed-gate button')`, [f, '#gz-settings-page']);
@@ -462,6 +471,12 @@ const run = async () => {
     await b.close(modsTab);
     await b.close(course);
     await noErrors(b, 'embedded Settings');
+
+    // A web-accessible Allow page opened directly cannot request a host planted in its hash.
+    const planted = await b.open(`${EXT}features/allow.html#planted.example.net`);
+    await pause(400);
+    ok(await b.value(`document.getElementById('allow').hidden`, planted) && !await holds(b, settings, 'https://planted.example.net/*'), 'a public Allow URL has no prompt authority');
+    await b.close(planted);
 
     // The gallery: "Use this Look in Glaze" hands the Look to the editor (Firefox names the gallery's content script by its
     // full address).

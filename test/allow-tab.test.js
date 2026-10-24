@@ -409,3 +409,21 @@ test('review: Settings carries an action privately to exactly the tab it opens, 
   assert.equal((await second.send({ ...msg, hash: '#look/palette', action: code }, settingsFrame())).ok, true);
   assert.deepEqual((await second.send({ type: 'glaze:settings-action' }, opened)).action, code);
 });
+
+
+test('review: two Download alls answer only their own waits, including on the same host', async () => {
+  const w = worker(), a = await w.download(), b = await w.download(8);
+  await w.send({ type: 'glaze:allow-init', host: CDN, ticket: a.ticket }, frameSender());
+  const other = frameSender({ frameId: 5, tab: { id: 8 } });
+  await w.send({ type: 'glaze:allow-init', host: CDN, ticket: b.ticket }, other);
+  const first = w.send({ ...ask, ticket: a.ticket }, frameSender()), second = w.send({ ...ask, ticket: b.ticket }, other);
+  await settle();
+  await initTab(w);
+  await w.send({ type: 'glaze:allow-init', host: CDN }, tabSender({ tab: { id: 51 } }));
+  w.held.add(PATTERN);
+  await w.send(answer, tabSender({ tab: { id: 51 } }));
+  assert.deepEqual(await second, { ok: true });
+  assert.equal(first.replied(), 'pending');
+  w.closeTab(50);
+  assert.deepEqual(await first, { ok: false });
+});

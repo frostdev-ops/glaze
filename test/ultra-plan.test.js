@@ -253,7 +253,7 @@ test('landing worker validates top frame, recorded Ultra site, current master/da
   const both = await Promise.all([w.send(msg, page), w.send(msg, page)]);
   assert.deepEqual(both.map((x) => x.first).sort(), [false, true], 'only one simultaneous claim wins');
   assert.deepEqual(await w.send(msg, { ...page, tab: { id: 8 } }), { first: true }, 'another tab');
-  w.removed[0](7);
+  for (const listener of w.removed) listener(7);
   await new Promise(setImmediate);
   assert.equal(w.store.session['landed:7'], undefined, 'tab closure cleans its marker');
   for (const k of ['get', 'set']) {
