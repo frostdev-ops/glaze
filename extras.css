@@ -87,6 +87,9 @@ html[data-gz-motion="expressive"][data-gz-bg="aurora"] :is(.panel-wrap, .bb-offc
    open course or item panel), above that shell's ::before and below its content. Until it draws,
    or without WebGL, the ::before shows the gradient. The canvas is drawn small and stretched. */
 [data-gz-scene-host] { isolation: isolate; }
+/* Keep the base page's card controls, course tabs and board tiles below an open course, even when the course's scene
+   makes its shell a stacking context. Menus and tooltips live on body; floating widgets keep their own layer. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) #main-content { isolation: isolate; }
 html[data-gz-bg]:not([data-gz-bg="solid"]) .course-content-container > .panel-wrap[data-gz-scene-host] { clip-path: none; }
 /* A narrower/shorter scroller must not paint a second fallback over the shell's scene. Its
    content still clips normally; partial-width sheets retain their own opaque backgrounds. */
