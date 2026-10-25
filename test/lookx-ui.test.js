@@ -582,6 +582,28 @@ test('palette: a Pointer: entry for every choice the setting takes, the current 
   assert.equal(p.synced.at(-1).extras.pointerAnim, true);
 });
 
+test('palette: one switch for the custom pointer comes first; its styles and animation are listed only while it is on', async () => {
+  const G = require('../defaults.js');
+  const p = page({});
+  p.settings.extras = { ...G.GZ_DEFAULTS.extras, pointer: 'lava' };
+  await p.lx.ready();
+  const toggles = () => p.lx.cmds().filter((c) => /^Turn (off|on) \{name\|lower\}$/.test(c.label));
+  const first = p.lx.cmds()[0];
+  assert.equal(first.label, 'Turn off {name|lower}');
+  first.run();
+  assert.deepEqual(JSON.parse(JSON.stringify(p.synced.at(-1))), { version: 2, extras: { ...G.GZ_DEFAULTS.extras, pointer: 'lava', pointerOn: false } }, 'only the switch, the style kept');
+  assert.equal(toggles().length, 2, 'the switch and the animation switch');
+  // Off: the switch says so, and nothing that would change a pointer nobody sees is offered.
+  p.settings.extras = { ...p.settings.extras, pointerOn: false };
+  const off = p.lx.cmds();
+  assert.equal(off[0].label, 'Turn on {name|lower}');
+  assert.equal(off.filter((c) => c.label === 'Pointer: {name}').length, 0);
+  assert.equal(toggles().length, 1, 'no animation switch while off');
+  off[0].run();
+  assert.equal(p.synced.at(-1).extras.pointerOn, true);
+  assert.equal(p.synced.at(-1).extras.pointer, 'lava');
+});
+
 test('palette: a pointer command preserves settings changed since the palette opened', () => {
   const G = require('../defaults.js'), p = page({});
   p.settings.extras = { ...G.GZ_DEFAULTS.extras };
