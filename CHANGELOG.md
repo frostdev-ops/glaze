@@ -6,6 +6,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Settings → Look → Pointer has a switch that turns the custom pointer off on every page, giving you the system's pointer and no pointer animation, and back on with your choice as you left it; Ctrl+K has the same switch. System pointer is no longer one of the pointers: if you had chosen it, the switch is off. Your own picture is a card among the pointers, and the animation switch stays in view.
+- The Look's own pointer and cursor effect moved from Motion to Pointer, under This Look's pointer.
+
 ### Fixed
 
 - Blackboard: on the Courses page, course tabs no longer cover the sidebar's header when Blackboard's To Do column holds the sidebar.

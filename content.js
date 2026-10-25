@@ -264,8 +264,8 @@
   // brings features/motionx.js in, and a pointer, the Look's or the student's own choice of one, features/lookx.js.
   const moveParts = () => {
     const p = GZ_CTX.parts(), x = settings.extras;
-    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerAnim || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
-    if (globalThis.GZ_LOOKX || (x.pointer === 'look' ? p?.pointer || lookHere() : x.pointer !== 'off' && partsOn(true))) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
+    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerOn && x.pointerAnim || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
+    if (globalThis.GZ_LOOKX || x.pointerOn && (x.pointer === 'look' ? p?.pointer || lookHere() : partsOn(true))) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
   };
   document.addEventListener('glaze:parts', moveParts);
   // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed. The dots are

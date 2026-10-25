@@ -208,6 +208,25 @@ test('the student\'s pointer animation switch: off, the Look\'s pointer animatio
   assert.deepEqual(look.cursor, { kind: 'trail', fade: 300 });
 });
 
+test('the custom pointer switch off: no pointer animation, whatever the animation switch says; on, it plays again', async () => {
+  const look = { cursor: { kind: 'trail', fade: 300 }, type: { kind: 'sparks' } };
+  const x = feature({ parts: look, extras: { pointer: 'aqua', pointerOn: false, pointerAnim: true } });
+  await x.api.sync();
+  await settle();
+  assert.equal(x.handlers.pointermove, undefined, 'no pointer listener with the custom pointer off');
+  assert.equal(typeof x.listeners.input, 'function', 'typing still listens');
+  x.settings.extras = { ...x.settings.extras, pointerOn: true };
+  await x.api.sync();
+  assert.equal(typeof x.handlers.pointermove, 'function');
+  x.handlers.pointermove({ pointerType: 'mouse', clientX: 50, clientY: 60 });
+  x.tick();
+  assert.ok(x.canvases.at(-1)?.isConnected, 'drawn around the pointer');
+  x.settings.extras = { ...x.settings.extras, pointerOn: false };
+  await x.api.sync();
+  assert.equal(x.handlers.pointermove, undefined);
+  assert.equal(x.canvases.at(-1).isConnected, false);
+});
+
 test('changing or removing a Look cancels its running particles without adding pointer listeners', async () => {
   const x = feature({ parts: { cursor: { kind: 'glow' }, fx: { complete: {} } } });
   await x.api.sync();

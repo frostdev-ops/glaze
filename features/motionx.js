@@ -432,8 +432,10 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
     const p = quiet() ? null : ctx.parts() || null;
     css(GZ_MX.compile(p?.anim));
     fxs = GZ_MX.fxs(p?.fx);
-    // The pointer's animation is the Look's, unless the student turned it off (extras.pointerAnim).
-    cur = ctx.settings?.().extras?.pointerAnim === false ? null : GZ_MX.cursor(p?.cursor);
+    // The pointer's animation is the Look's, unless the student turned it, or the custom pointer, off (extras.pointerAnim,
+    // extras.pointerOn).
+    const mine = ctx.settings?.().extras;
+    cur = mine?.pointerOn === false || mine?.pointerAnim === false ? null : GZ_MX.cursor(p?.cursor);
     typ = GZ_MX.typing(p?.type);
     const next = JSON.stringify([fxs, cur, typ]);
     if (next !== config) { clearKeys(); engine.end(); config = next; }

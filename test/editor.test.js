@@ -24,8 +24,8 @@ const ENHANCE = {
 const OVERRIDE = {
   enabled: 'header', footer: 'pages/declutter', preset: 'look/palette', presets: 'look/palette',
   'widgets.land': 'pages/dashboard',
-  // The student's pointer and its animation have a section of their own; the rest of extras is stickers and rotation.
-  'extras.pointer': 'look/pointer', 'extras.pointerAnim': 'look/pointer',
+  // The student's pointer, its switch and its animation have a section of their own; the rest of extras is stickers and rotation.
+  'extras.pointer': 'look/pointer', 'extras.pointerOn': 'look/pointer', 'extras.pointerAnim': 'look/pointer',
   ...Object.fromEntries(['radius', 'glass', 'depth', ...Object.keys(D.GZ_SPEC.look).filter((k) => /^(surface|shadow)/.test(k))].map((k) => [`look.${k}`, 'look/surfaces'])),
   ...Object.fromEntries(Object.entries(ENHANCE).flatMap(([section, keys]) => keys.map((key) => [`enhance.${key}`, section]))),
   ...Object.fromEntries(['icsDue', 'icsTasks', 'icsPlan', 'icsGs', 'icsClasses', 'icsRange'].map((key) => [`todo.${key}`, 'study/schedule'])),
@@ -43,7 +43,7 @@ const SPECIAL = {
 const ACTIONS = {
   'look/palette': ['looks', 'save-preset', 'reset-colors', 'share-copy', 'share-code', 'share-try', 'share-offer', 'share-apply', 'share-fav', 'share-cancel', 'gallery-link', 'favorites', 'history', 'history-back', 'history-clear'],
   'look/type': ['font-custom', 'font-use'], 'look/background': ['bg-sets', 'x-shader', 'x-layers'], 'look/motion': ['x-motion'],
-  'look/pointer': ['pointer-tiles', 'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look'], 'look/extras': ['rotate-looks'],
+  'look/pointer': ['pointer-tiles', 'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look', 'x-pointer'], 'look/extras': ['rotate-looks'],
   'navigation/bar': ['nav-pick', 'nav-file', 'nav-url', 'nav-items', 'nav-widgets', 'nav-logo-pick', 'nav-logo-file', 'nav-link-name', 'nav-link-url', 'nav-link-icon', 'nav-link-tab', 'nav-link-save', 'nav-link-cancel', 'nav-reset'],
   'navigation/items': ['nbar-items', 'nbar-glaze', 'nbar-widgets', 'nbar-links', 'nbar-link-form', 'nbar-mods', 'nbar-reset'],
   'courses/cards': ['card-set', 'card-set-clear'], 'courses/list': ['course-list', 'org-list'], 'study/pet': ['pet-library'],
@@ -60,7 +60,7 @@ const MORE = {
     'look.leading', 'look.tooltips', 'look.hints',
     ...['surfaceOpacity', 'surfaceTint', 'surfaceTintSource', 'shadowStrength', 'surfaceFrost', 'surfaceBorder', 'surfaceCustom', 'surfaceColor', 'shadowCustom', 'shadowColor'].map((k) => `look.${k}`),
     ...['style', 'angle', 'blend', 'spread', 'dim', 'blur', 'grain'].map((k) => `bg.${k}`),
-    'motion.enter', 'motion.hover', 'motion.transitions', 'extras.pointerAnim',
+    'motion.enter', 'motion.hover', 'motion.transitions',
     ...['rail', 'peek', 'course', 'cmenu', 'tabs', 'badges', 'brand'].map((k) => `navbar.${k}`), ...NAV_MORE.map((k) => `nav.${k}`),
     ...['cap', 'place', 'shape', 'size', 'width', 'label', 'mark', 'color'].map((k) => `tabs.${k}`),
     ...Object.keys(D.GZ_SPEC.sidebar).filter((k) => !['canvas', 'ultra'].includes(k)).map((k) => `sidebar.${k}`),
@@ -71,7 +71,7 @@ const MORE = {
     ...Object.keys(D.GZ_SPEC.docreview).map((k) => `docreview.${k}`), ...Object.keys(D.GZ_SPEC.stream).map((k) => `stream.${k}`),
   ],
   ids: ['save-preset', 'reset-colors', 'share-copy', 'share-code', 'share-try', 'favorites', 'history', 'history-back', 'history-clear', 'x-motion',
-    'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look', 'nav-items', 'nav-widgets', 'nav-link-name', 'nav-link-url', 'nav-link-icon',
+    'x-pointer', 'nav-items', 'nav-widgets', 'nav-link-name', 'nav-link-url', 'nav-link-icon',
     'nav-link-tab', 'nav-link-save', 'nav-link-cancel', 'nav-reset', 'nbar-items', 'nbar-links', 'nbar-link-form', 'nbar-mods', 'card-set', 'card-set-clear', 'pet-library'],
 };
 // Sections only for power users: shown with All settings, while searching, or when an address leads to them.
@@ -465,4 +465,42 @@ test('IA: long descriptions move behind a "?", short ones and privacy disclosure
   for (const [, , id] of pops) assert.ok(main.includes(`aria-describedby="${id}"`) || new RegExp(`aria-describedby="[^"]*\\b${id}\\b`).test(main), `#${id}`);
   const filter = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
   assert.match(filter, /querySelectorAll\('\.info-pop'\)[\s\S]*?GZ_FIND\.spans\(pop\.textContent, words\)[\s\S]*?classList\.add\('found'\)/);
+});
+
+
+for (const [route, keys] of [['look/pointer', ['pointer', 'cursor']], ['look/motion', ['anim', 'fx', 'type']]]) test(`${route} Reset shows for every Look part it clears, even with default settings`, () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const block = source.slice(source.indexOf('  const LOOK_PART'), source.indexOf('  // Look parts builders'));
+  const s = D.GZ_SANITIZE({}), defaults = D.GZ_SANITIZE({});
+  const button = { dataset: { resetSection: route }, closest: () => ({}), addEventListener() {} };
+  const paths = route === 'look/pointer' ? ['extras.pointer', 'extras.pointerOn', 'extras.pointerAnim'] : ['motion'];
+  const ctx = vm.createContext({ s, GZ_EDITOR: { ...E, keys: () => paths }, defaultsHere: () => defaults,
+    $$: (sel) => sel === '[data-reset-section]' ? [button] : [], $: () => ({}),
+    N: { clean: () => ({}), SPEC: {} }, navItems: {}, GZ_DEFAULTS: defaults,
+  });
+  vm.runInContext(block, ctx);
+  ctx.showResets();
+  assert.equal(button.hidden, true, route + ': nothing to reset');
+  for (const key of keys) {
+    s.parts = { x: { [key]: key === 'pointer' ? 'lava' : { kind: 'glow' } } };
+    ctx.showResets();
+    assert.equal(button.hidden, false, route + ': Reset clears ' + key);
+  }
+  s.parts = { x: { nav: { place: 'top' } } };
+  ctx.showResets();
+  assert.equal(button.hidden, true, route + ': unrelated parts do not show Reset');
+});
+
+test('builder saves update Reset visibility before storage answers, without refreshing focused controls', () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const mount = source.slice(source.indexOf('  GZ_EDITOR_X.mount('), source.indexOf("  $('#editor-version')"));
+  let api, resets = 0;
+  const saved = [];
+  vm.runInNewContext(mount, { s: {}, preview() {}, t() {}, frame: {}, hint() {}, showResets: () => resets++,
+    save: (...args) => saved.push(args), GZ_EDITOR_X: { mount: (a) => { api = a; } },
+  });
+  api.save(['extras']);
+  api.save(['parts'], true, ['cursor']);
+  assert.equal(resets, 2, 'cards and Look builders reveal Reset on the edit itself');
+  assert.deepEqual(saved, [[['extras']], [['parts'], true, ['cursor']]]);
 });

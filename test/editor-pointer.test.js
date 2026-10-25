@@ -1,6 +1,7 @@
-// The student's pointer in the editor (lib/editor-pointer.js, Look › Pointer): one card per choice the setting takes, what
-// each shows, and that choosing, uploading and removing write only the student's settings (extras) and their picture on
-// this device, never the Look's parts. In a VM with a small stand-in DOM and storage; how it looks is the headless check's.
+// The student's pointer in the editor (lib/editor-pointer.js, Look › Pointer): the switch, one card per choice the setting
+// takes, what each shows, and that choosing, uploading and removing write only the student's settings (extras) and their
+// picture on this device, never the Look's parts; the Look's own pointer and cursor effect, which write only the Look's.
+// In a VM with a small stand-in DOM and storage; how it looks is the headless check's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -17,7 +18,8 @@ class El {
   constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, style: {}, dataset: {}, on: {}, hidden: false, disabled: false, checked: false }); }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return this.attrs[k] ?? null; }
-  append(...kids) { this.children.push(...kids.map((k) => (typeof k === 'string' ? { text: k } : k))); }
+  append(...kids) { for (const k of kids) { const c = typeof k === 'string' ? { text: k } : k; c.parentElement = this; this.children.push(c); } }
+  replaceWith(next) { const p = this.parentElement; p.children[p.children.indexOf(this)] = next; next.parentElement = p; this.parentElement = null; }
   replaceChildren(...kids) { this.children = []; this.append(...kids); }
   addEventListener(t, f) { (this.on[t] ||= []).push(f); }
   fire(t, e = {}) { for (const f of this.on[t] || []) f({ type: t, isTrusted: true, ...e }); }
@@ -26,21 +28,29 @@ class El {
   get textContent() { return this._text ?? this.children.map((c) => c.text ?? c.textContent).join(''); }
   set textContent(v) { this._text = String(v); this.children = []; }
   all(test) { return [this, ...this.children.filter((c) => c instanceof El).flatMap((c) => c.all(test))].filter(test); }
+  querySelector(sel) {
+    const focus = sel.match(/^\[data-focus="(.+)"\]$/)?.[1];
+    return this.all((n) => n !== this && (focus ? n.dataset.focus === focus || n.attrs['data-focus'] === focus : n.tagName === sel.toUpperCase()))[0] || null;
+  }
 }
+class Option extends El { constructor(text, value, d, selected) { super('option'); Object.assign(this, { text, value, selected }); } }
 
 // The editor page with the section's static parts, the settings `s` and storage.local holding `local`.
 const editor = (s, local = {}) => {
-  const ids = Object.fromEntries(['pointer-tiles', 'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look'].map((id) => [id, new El(id === 'pointer-tiles' ? 'div' : 'p')]));
+  const ids = Object.fromEntries(['pointer-tiles', 'pointer-body', 'pointer-own', 'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look', 'x-pointer'].map((id) => [id, new El(['pointer-tiles', 'pointer-body', 'pointer-own', 'x-pointer'].includes(id) ? 'div' : 'p')]));
+  const reset = new El('button');
   const saved = [], previews = [], hints = [], changed = [], reads = [];
   let picked = null;
   const context = vm.createContext({
-    console, JSON, Object, Array, String, Promise, setTimeout,
+    console, JSON, Object, Array, String, Promise, setTimeout, Option, CSS: { escape: (x) => x },
+    ...Object.fromEntries(['GZ_COLORS', 'GZ_SPEC', 'GZ_SYNC_BYTES', 'GZ_SYNC_ITEM_MAX'].map((k) => [k, G[k]])),
     // What the libraries load in node when the page's globals are not there (defaults.js, lib/lookparts.js).
     require: (f) => require(path.resolve(__dirname, '../lib', f)),
     document: {
       createElement: (tag) => (tag === 'canvas' ? Object.assign(new El('canvas'), { getContext: () => ({ drawImage() {} }), toDataURL: () => 'data:image/png;base64,cGljdHVyZQ==' }) : new El(tag)),
       createElementNS: (ns, tag) => Object.assign(new El(tag), { namespaceURI: ns }),
       getElementById: (id) => ids[id] || null,
+      querySelector: (sel) => (sel === '[data-reset-section="look/pointer"]' ? reset : null),
     },
     createImageBitmap: async (f) => { if (f.bad) throw new Error('no'); return { width: 64, height: 48, close() {} }; },
     chrome: {
@@ -68,17 +78,21 @@ const editor = (s, local = {}) => {
     save: (keys, soon, parts) => saved.push(JSON.parse(JSON.stringify([keys, parts ?? null]))), preview: () => previews.push(JSON.stringify(s.extras)), hint: (...a) => hints.push(JSON.parse(JSON.stringify(a))) });
   const cards = () => ids['pointer-tiles'].children;
   const card = (v) => cards().find((c) => c.attrs['data-pointer'] === v);
-  const radio = (v) => card(v).children[0];
-  const shows = (v) => card(v).children[1].children.map((c) => c.src || (c.tagName === 'SVG' ? 'system' : c.className === 'pt-none' ? 'none' : '?'));
-  const said = (v) => (card(v).children[3].hidden ? '' : card(v).children[3].textContent);
+  const part = (v, f) => card(v).children.find(f);
+  const radio = (v) => part(v, (c) => c.tagName === 'INPUT');
+  const shows = (v) => part(v, (c) => c.className === 'pt-stage').children.map((c) => c.src || (c.tagName === 'SVG' ? 'system' : c.className === 'pt-none' ? 'none' : '?'));
+  const said = (v) => { const d = part(v, (c) => c.className === 'desc'); return d.hidden ? '' : d.textContent; };
   const choose = (v) => { const r = radio(v); r.checked = true; r.fire('change'); };
-  return { ids, cards, card, radio, shows, said, choose, saved, previews, hints, changed, reads, local, context, picked: () => picked, render: () => context.GZ_EDITOR_X.render() };
+  // The Look's own controls under This Look's pointer: a select by its label.
+  const lookSelect = (label) => ids['x-pointer'].all((n) => n.tagName === 'LABEL' && n.children[0]?.textContent === label)[0]?.children[1];
+  return { ids, reset, cards, card, radio, shows, said, choose, lookSelect, saved, previews, hints, changed, reads, local, context, picked: () => picked, render: () => context.GZ_EDITOR_X.render() };
 };
 const settings = (extras = {}, parts = { x: { pointer: 'pumpkin', cursor: { kind: 'flicker' } } }) => ({ ...G.GZ_SANITIZE({ extras }), parts: structuredClone(parts) });
 
-test('a card for every choice the setting takes, in its order, each a radio in one group named for the setting', () => {
+test('a card for every choice the setting takes, in its order, each a radio in one group named for the setting', async () => {
   assert.deepEqual(P.TILES(), G.GZ_SPEC.extras.pointer[1]);
-  const e = editor(settings());
+  const e = editor(settings({}), { cursorImg: 'data:image/png;base64,b25l' });
+  await tick();
   assert.deepEqual(e.cards().map((c) => c.attrs['data-pointer']), G.GZ_SPEC.extras.pointer[1]);
   for (const c of e.cards()) {
     const [input, stage, name] = c.children;
@@ -89,7 +103,8 @@ test('a card for every choice the setting takes, in its order, each a radio in o
     assert.ok(name.textContent.length > 1);
   }
   // Names: the two that are not sets, the sets' own names, the picture.
-  assert.deepEqual(['look', 'off', 'lava', 'neon', 'own'].map((v) => e.card(v).children[2].textContent), ["The Look's pointer", 'System pointer', 'Lava', 'Neon', 'Your own picture']);
+  assert.deepEqual(['look', 'lava', 'neon', 'own'].map((v) => e.card(v).children[2].textContent), ["The Look's pointer", 'Lava', 'Neon', 'Your own picture']);
+  assert.equal(e.card('off'), undefined, 'the system\'s is the switch, not a card');
 });
 
 test('each card shows its pointer: a set\'s arrow and hand, the system\'s drawn, the Look\'s what the Look wears', async () => {
@@ -101,14 +116,13 @@ test('each card shows its pointer: a set\'s arrow and hand, the system\'s drawn,
     for (const f of e.shows(set)) assert.ok(fs.existsSync(path.join(__dirname, '..', f)), f);
     assert.match(e.card(set).style.cursor, new RegExp(`^url\\("assets/art/cursors/${set}/pointer\\.${ext}"\\) \\d+ \\d+.*, pointer$`), `${set}: hovering wears its hand`);
   }
-  assert.deepEqual(e.shows('off'), ['system', 'system']);
   assert.deepEqual(e.shows('look'), e.shows('pumpkin'), 'the Look\'s card: the Look\'s set');
   assert.equal(e.said('look'), 'Pumpkin');
   assert.deepEqual(e.shows('own'), ['none']);
-  assert.equal(e.said('own'), 'No picture yet');
-  assert.equal(e.radio('own').disabled, true, 'nothing to wear yet: the arrow keys pass it by');
-  assert.equal(e.ids['pointer-remove'].hidden, true);
-  assert.equal(e.ids['pointer-pick'].textContent, 'Choose a picture…');
+  assert.equal(e.said('own'), 'Choose a picture…');
+  assert.equal(e.card('own').tagName, 'BUTTON', 'nothing to wear yet: a button that asks for one, which the arrow keys pass by');
+  assert.equal(e.radio('own'), undefined);
+  assert.equal(e.ids['pointer-own'].hidden, true, 'Replace and Remove only once there is a picture');
   assert.equal(e.ids['pointer-anim-look'].textContent, "This Look's: Flicker");
   // A Look without a pointer, or any parts: the Look's card shows the system's.
   const bare = editor(settings({}, null));
@@ -128,13 +142,13 @@ test('choosing a card saves the student\'s setting alone and shows it in the pre
   assert.deepEqual(e.previews, [JSON.stringify(s.extras)], 'the preview has it before the save');
   assert.deepEqual(s.parts, look);
   assert.deepEqual(e.cards().filter((c) => c.children[0].checked).map((c) => c.attrs['data-pointer']), ['lava']);
-  e.choose('off');
-  assert.equal(s.extras.pointer, 'off');
+  e.choose('rose');
+  assert.equal(s.extras.pointer, 'rose');
   // Another Look is worn: the choice stays, and the Look's card follows the new Look.
   s.parts = { x: { pointer: 'ghost' } };
   e.render();
-  assert.equal(s.extras.pointer, 'off');
-  assert.equal(e.radio('off').checked, true);
+  assert.equal(s.extras.pointer, 'rose');
+  assert.equal(e.radio('rose').checked, true);
   assert.deepEqual(e.shows('look'), e.shows('ghost'));
   assert.equal(e.said('look'), 'Ghost');
   // A reset or another tab changes the setting: the cards follow it.
@@ -148,8 +162,9 @@ test('their own picture: chosen, it is kept on this computer and becomes the poi
   const s = settings(), look = structuredClone(s.parts);
   const e = editor(s);
   await tick();
-  e.ids['pointer-pick'].click();
-  assert.equal(e.picked(), 'asked', 'Choose a picture… opens the file chooser');
+  e.card('own').click();
+  assert.equal(e.picked(), 'asked', 'its card opens the file chooser');
+  assert.equal(s.extras.pointer, 'look', 'and chooses nothing yet');
   const file = e.ids['pointer-file'];
   file.files = [{ type: 'image/png', size: 100 }];
   file.fire('change');
@@ -159,26 +174,28 @@ test('their own picture: chosen, it is kept on this computer and becomes the poi
   assert.deepEqual(e.saved, [[['extras'], null]]);
   assert.deepEqual(s.parts, look, 'never a Look part');
   assert.deepEqual(e.shows('own'), [e.local.cursorImg, e.local.cursorImg]);
-  assert.equal(e.radio('own').disabled, false);
+  assert.equal(e.card('own').tagName, 'LABEL');
   assert.equal(e.radio('own').checked, true);
   assert.equal(e.said('own'), '');
   assert.equal(e.card('own').style.cursor, `url("${e.local.cursorImg}") 0 0, pointer`);
-  assert.equal(e.ids['pointer-pick'].textContent, 'Replace picture…');
-  assert.equal(e.ids['pointer-remove'].hidden, false);
+  assert.equal(e.ids['pointer-own'].hidden, false);
+  e.ids['pointer-pick'].click();
+  assert.equal(e.picked(), 'asked', 'Replace picture… opens the file chooser');
   // A file that isn't a picture: said, and nothing changes.
   file.files = [{ type: 'image/png', size: 100, bad: true }];
   file.fire('change');
   for (let i = 0; i < 5; i++) await tick();
   assert.deepEqual(e.hints, [["That file isn't a picture Glaze can read.", true]]);
   assert.equal(s.extras.pointer, 'own');
-  // Removed: gone from storage; the pointer is the Look's again, and focus goes back to Choose.
+  // Removed: gone from storage; the pointer is the Look's again, and focus goes to the card that asks for one.
   e.ids['pointer-remove'].click();
   for (let i = 0; i < 3; i++) await tick();
   assert.ok(!('cursorImg' in e.local));
   assert.equal(s.extras.pointer, 'look');
   assert.equal(e.radio('look').checked, true);
-  assert.equal(e.radio('own').disabled, true);
-  assert.equal(e.ids['pointer-pick'].focused, true);
+  assert.equal(e.card('own').tagName, 'BUTTON');
+  assert.equal(e.card('own').focused, true);
+  assert.equal(e.ids['pointer-own'].hidden, true);
   assert.deepEqual(s.parts, look);
 });
 
@@ -255,21 +272,94 @@ test('an initial picture read cannot overwrite a newer storage change in the edi
     e.context.storageChanged({ cursorImg: { newValue: next } }, 'local');
     e.reads[0]();
     assert.deepEqual(e.shows('own'), next ? [next, next] : ['none']);
-    assert.equal(e.ids['pointer-remove'].hidden, !next);
+    assert.equal(e.ids['pointer-own'].hidden, !next);
   }
 });
 
-test('the section: in the Look tab\'s links, a carrier for the cards, the picture\'s controls and the animation switch', () => {
+test('the section: the switch in its heading, a body with the cards, the picture\'s controls and the animation switch, and the Look\'s pointer', () => {
   const html = read('options.html');
   const section = html.split('data-editor-section="look/pointer"')[1].split('</section>')[0];
-  assert.match(section, /id="pointer-tiles" data-setting-owner="extras\.pointer"/);
-  assert.match(section, /<input type="checkbox" data-key="extras\.pointerAnim"/);
-  assert.match(section, /<button type="button" id="pointer-pick" aria-describedby="pointer-own-note">Choose a picture…<\/button>/);
-  assert.match(section, /<input type="file" id="pointer-file" accept="image\/png,image\/jpeg" hidden>/);
+  const cut = section.indexOf('</div>\n'), heading = section.slice(0, cut), rest = section.slice(cut);
+  assert.match(heading, /<input type="checkbox" role="switch" data-key="extras\.pointerOn" aria-label="Custom pointer">/);
+  const [body, more] = rest.split('<details class="more">');
+  assert.match(body, /<div id="pointer-body" class="stack">/);
+  assert.match(body, /id="pointer-tiles" data-setting-owner="extras\.pointer"/);
+  assert.match(body, /<input type="checkbox" data-key="extras\.pointerAnim"/);
+  assert.match(body, /<button type="button" id="pointer-pick" aria-describedby="pointer-own-note">Replace picture…<\/button>/);
+  assert.match(body, /<input type="file" id="pointer-file" accept="image\/png,image\/jpeg" hidden>/);
+  assert.match(more, /^<summary>This Look's pointer<\/summary>\n<div id="x-pointer" class="group"><\/div>\n<\/details>/);
   // The picture is asked for here only: the old routes to it are gone.
   assert.doesNotMatch(html, /id="cursor-(pick|file|img|own|note)"/);
   assert.doesNotMatch(read('options.js'), /cursorImg/);
   assert.doesNotMatch(read('lib/editor-xmotion.js'), /Pointers, stickers and rotation/);
-  // The Look builder offers its own picture only to a Look that wears it already.
-  assert.match(read('lib/editor-xmotion.js'), /MX\(\)\.POINTERS\.filter\(\(k\) => k !== 'own' \|\| v === 'own'\)/);
+  // The Look's pointer offers the student's own picture only to a Look that wears it already.
+  assert.match(read('lib/editor-pointer.js'), /MX\(\)\.POINTERS\.filter\(\(k\) => k !== 'own' \|\| v === 'own'\)/);
+});
+
+test('the switch: off hides the cards and the animation switch and keeps the choice; on shows them again', async () => {
+  const s = settings({ pointer: 'lava' });
+  const e = editor(s);
+  await tick();
+  assert.equal(e.ids['pointer-body'].hidden, false);
+  // options.js saves the switch (data-key) and asks the builders to follow.
+  s.extras.pointerOn = false;
+  e.render();
+  assert.equal(e.ids['pointer-body'].hidden, true);
+  assert.equal(s.extras.pointer, 'lava');
+  assert.equal(e.ids['x-pointer'].hidden, false, 'the Look\'s pointer stays reachable');
+  s.extras.pointerOn = true;
+  e.render();
+  assert.equal(e.ids['pointer-body'].hidden, false);
+  assert.equal(e.radio('lava').checked, true);
+  assert.deepEqual(e.saved, [], 'following the state saves nothing');
+});
+
+test('This Look\'s pointer: the Look\'s set and cursor effect, written to the Look\'s parts alone', async () => {
+  const s = settings({ pointer: 'aqua' }), extras = structuredClone(s.extras);
+  const e = editor(s);
+  await tick();
+  const set = e.lookSelect('Pointer');
+  assert.equal(set.value ?? set.children.find((o) => o.selected)?.value, 'pumpkin');
+  assert.ok(!set.children.some((o) => o.value === 'own'), 'the student\'s picture is offered only to a Look that wears it');
+  set.value = 'lava';
+  set.fire('change');
+  assert.equal(s.parts.x.pointer, 'lava');
+  assert.deepEqual(e.saved.at(-1), [['parts'], ['pointer']]);
+  const effect = e.lookSelect('Cursor effect');
+  assert.equal(effect.children.find((o) => o.selected)?.value, 'flicker');
+  effect.value = '';
+  effect.fire('change');
+  assert.equal(s.parts.x.cursor, undefined);
+  assert.deepEqual(e.saved.at(-1), [['parts'], ['cursor']]);
+  assert.deepEqual(s.extras, extras, 'the student\'s settings stay as they were');
+  // The Look's card follows the Look's set.
+  assert.deepEqual(e.shows('look'), e.shows('lava'));
+});
+
+test('Reset section takes the Look\'s pointer and cursor effect out too, after the section\'s own save', async () => {
+  const s = settings({ pointer: 'aqua' }, { x: { pointer: 'pumpkin', cursor: { kind: 'flicker' }, type: { kind: 'ink' } } });
+  const e = editor(s);
+  await tick();
+  e.reset.fire('click', { isTrusted: false });
+  assert.deepEqual(e.saved, [], 'only a person\'s click');
+  e.reset.fire('click');
+  assert.deepEqual(JSON.parse(JSON.stringify(s.parts)), { x: { type: { kind: 'ink' } } }, 'the Look\'s typing effect is Motion\'s, and stays');
+  assert.deepEqual(e.saved, [[['parts'], ['pointer']], [['parts'], ['cursor']], [['parts'], ['pointer', 'cursor']]]);
+  assert.equal(e.lookSelect('Pointer').children.find((o) => o.selected)?.value, '');
+});
+
+test('a synced own-picture choice without this device’s picture still offers the file chooser', async () => {
+  const s = settings({ pointer: 'own' }), e = editor(s);
+  await tick();
+  assert.equal(e.card('own').tagName, 'BUTTON', 'no local picture: the card must let the student supply one');
+  assert.equal(e.radio('own'), undefined);
+  e.card('own').click();
+  assert.equal(e.picked(), 'asked');
+  assert.equal(s.extras.pointer, 'own', 'the synced choice is kept while the picture is missing');
+  e.ids['pointer-file'].files = [{ type: 'image/jpeg', size: 100 }];
+  e.ids['pointer-file'].fire('change');
+  for (let i = 0; i < 5; i++) await tick();
+  assert.equal(e.radio('own').checked, true);
+  e.context.storageChanged({ cursorImg: { newValue: undefined } }, 'local');
+  assert.equal(e.card('own').tagName, 'BUTTON', 'removing the selected picture in another tab leaves a way to replace it');
 });

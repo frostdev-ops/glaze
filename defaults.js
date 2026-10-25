@@ -109,9 +109,9 @@ const GZ_SPEC = {
   },
   docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
   stream: { dates: ['smart', ['smart', 'posted', 'both']], relative: [false, 'bool'], compact: [false, 'bool'], encouragement: [true, 'bool'] },
-  // features/lookx.js. pointer: the student's over every Look's (x.pointer): 'look' wears the Look's, 'off' the system's,
-  // 'own' their picture (on this device). pointerAnim: the Look's pointer animation (x.cursor). Never in a Look or its code.
-  extras: { pointer: ['look', ['look', 'off', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own']], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
+  // features/lookx.js. pointer: the student's over every Look's (x.pointer): 'look' the Look's, 'own' their picture (on
+  // this device); pointerOn off: the system's. pointerAnim: the Look's pointer animation (x.cursor). Never in a Look's code.
+  extras: { pointer: ['look', ['look', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own']], pointerOn: [true, 'bool'], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
   // lib/blocklist.js
   mods: { blocklist: [true, 'bool'] },
@@ -351,6 +351,8 @@ const GZ_SANITIZE = (raw, fresh = false) => {
   if (fresh === true) for (const id of ['notes', 'pet']) if (typeof raw.enhance?.[id] !== 'boolean') out.enhance[id] = true;
   // 2.2's darkDocs inverted.
   if (isObj(raw.enhance) && raw.enhance.docPages === undefined && raw.enhance.darkDocs === true) out.enhance.docPages = 'dark';
+  // 3.4's System pointer, also from an older device.
+  if (raw.extras?.pointer === 'off') out.extras.pointerOn = false;
   // 1.0 had only the three motion switches: all off meant "no motion".
   if (!raw.version && isObj(raw.motion) && raw.motion.level === undefined) {
     out.motion.level = out.motion.enter || out.motion.hover || out.motion.transitions ? 'subtle' : 'off';

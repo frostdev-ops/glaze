@@ -35,11 +35,12 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
 
   // ---- the pointer: a set as a CSS cursor on the page (features/lookx.css), the system's I-beam kept on text. The system
   // draws it, so it never lags; its animation is features/motionx.js's, on the canvas around it. Which one is the student's
-  // choice (extras.pointer) over the Look's, including a course's assigned Look. Off on quiz/tool pages and with Glaze off.
+  // choice (extras.pointer) over the Look's, including a course's assigned Look. Off on quiz/tool pages, with Glaze off and
+  // with the custom pointer off (extras.pointerOn).
   let pointer = '', pointing = 0; // the own pointer's blob: address and the latest read
   let live = true; // false from pagehide until the page is shown again: no blob: address is made meanwhile
   const worn = () => (ctx.on() && ctx.partsOn(true) && !quiz() ? GZ_LX.pointerOf(X().pointer,
-    ctx.courseLook?.() ? globalThis.GZ_LOOK_PARTS?.({ name: ctx.courseLook() })?.x?.pointer : ctx.parts()?.pointer) : 'off');
+    ctx.courseLook?.() ? globalThis.GZ_LOOK_PARTS?.({ name: ctx.courseLook() })?.x?.pointer : ctx.parts()?.pointer, X().pointerOn !== false) : 'off');
   // Whether this browser takes image-set() in a cursor (for the 2x picture); one that doesn't gets the 1x PNG after the SVG.
   let sets;
   const imageSet = () => (sets ??= !!globalThis.CSS?.supports?.('cursor', 'image-set(url("a.png") 1x, url("b.png") 2x) 0 0, auto'));
@@ -470,10 +471,10 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     stickers();
   };
 
-  // The command palette's switches (features/palette.js). The student's pointer by name, as the editor's Look › Pointer
-  // lists them (settings extras.pointer, defaults.js); their own picture only once there is one (ready(), asked as the
-  // palette opens).
-  const POINTERS = { look: "The Look's pointer", off: 'System pointer', aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal',
+  // The command palette's switches (features/palette.js). The custom pointer's switch first (extras.pointerOn); while it is
+  // on, the student's pointer by name, as the editor's Look › Pointer lists them (settings extras.pointer, defaults.js), with
+  // their own picture only once there is one (ready(), asked as the palette opens), and its animation's switch.
+  const POINTERS = { look: "The Look's pointer", aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal',
     lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', frostdev: 'Frostdev', own: 'Your own picture' };
   let ownPic = false;
   const ready = async () => { ownPic = !!(await get('cursorImg')).cursorImg; };
@@ -481,12 +482,14 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     const x = X();
     const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, extras: { ...X(), ...patch } }); } catch { /* extension reloaded */ } };
     const hint = (now) => (now ? t('Current') : 'Glaze');
+    const on = x.pointerOn !== false;
     return [
+      { label: t(on ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t('Custom pointer') }), hint: 'Glaze', group: 'Glaze', run: store({ pointerOn: !on }) },
       ...(top && !quiz() ? [{ label: t('Place stickers on this page'), hint: 'Glaze', group: 'Glaze', run: edit }] : []),
       { label: t(x.stickers ? 'Hide stickers' : 'Show stickers'), hint: 'Glaze', group: 'Glaze', run: store({ stickers: !x.stickers }) },
-      ...Object.entries(POINTERS).filter(([v]) => v !== 'own' || ownPic || x.pointer === 'own')
+      ...(on ? [...Object.entries(POINTERS).filter(([v]) => v !== 'own' || ownPic || x.pointer === 'own')
         .map(([v, n]) => ({ label: t('Pointer: {name}', { name: t(n) }), hint: hint(x.pointer === v), group: 'Glaze', run: store({ pointer: v }) })),
-      { label: t(x.pointerAnim ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t('Pointer animation') }), hint: 'Glaze', group: 'Glaze', run: store({ pointerAnim: !x.pointerAnim }) },
+      { label: t(x.pointerAnim ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t('Pointer animation') }), hint: 'Glaze', group: 'Glaze', run: store({ pointerAnim: !x.pointerAnim }) }] : []),
       ...[['off', 'Off'], ['6h', 'Every 6 hours'], ['12h', 'Every 12 hours'], ['24h', 'Every 24 hours'], ['week', 'Every week'], ['daily', 'Every day at a set time']]
         .map(([v, n]) => ({ label: t('Look rotation: {every}', { every: t(n) }), hint: hint(x.rotate === v), group: 'Glaze', run: store({ rotate: v }) })),
       ...(x.rotate !== 'off' ? [{ label: t('Next Look now'), hint: t('Look rotation'), group: 'Glaze', run: () => send({ type: 'glaze:rotate', now: true }) }] : []),
