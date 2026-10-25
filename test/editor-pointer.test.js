@@ -18,7 +18,8 @@ class El {
   constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, style: {}, dataset: {}, on: {}, hidden: false, disabled: false, checked: false }); }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return this.attrs[k] ?? null; }
-  append(...kids) { this.children.push(...kids.map((k) => (typeof k === 'string' ? { text: k } : k))); }
+  append(...kids) { for (const k of kids) { const c = typeof k === 'string' ? { text: k } : k; c.parentElement = this; this.children.push(c); } }
+  replaceWith(next) { const p = this.parentElement; p.children[p.children.indexOf(this)] = next; next.parentElement = p; this.parentElement = null; }
   replaceChildren(...kids) { this.children = []; this.append(...kids); }
   addEventListener(t, f) { (this.on[t] ||= []).push(f); }
   fire(t, e = {}) { for (const f of this.on[t] || []) f({ type: t, isTrusted: true, ...e }); }
