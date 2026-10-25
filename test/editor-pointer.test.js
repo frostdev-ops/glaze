@@ -346,3 +346,19 @@ test('Reset section takes the Look\'s pointer and cursor effect out too, after t
   assert.deepEqual(e.saved, [[['parts'], ['pointer']], [['parts'], ['cursor']], [['parts'], ['pointer', 'cursor']]]);
   assert.equal(e.lookSelect('Pointer').children.find((o) => o.selected)?.value, '');
 });
+
+test('a synced own-picture choice without this device’s picture still offers the file chooser', async () => {
+  const s = settings({ pointer: 'own' }), e = editor(s);
+  await tick();
+  assert.equal(e.card('own').tagName, 'BUTTON', 'no local picture: the card must let the student supply one');
+  assert.equal(e.radio('own'), undefined);
+  e.card('own').click();
+  assert.equal(e.picked(), 'asked');
+  assert.equal(s.extras.pointer, 'own', 'the synced choice is kept while the picture is missing');
+  e.ids['pointer-file'].files = [{ type: 'image/jpeg', size: 100 }];
+  e.ids['pointer-file'].fire('change');
+  for (let i = 0; i < 5; i++) await tick();
+  assert.equal(e.radio('own').checked, true);
+  e.context.storageChanged({ cursorImg: { newValue: undefined } }, 'local');
+  assert.equal(e.card('own').tagName, 'BUTTON', 'removing the selected picture in another tab leaves a way to replace it');
+});
