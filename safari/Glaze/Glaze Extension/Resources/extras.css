@@ -377,6 +377,9 @@ html[data-gz-focus] #site-wrap div:has(> .js-content-navigator-previous, > .js-c
    always on a screen that can't hover. theme.css has every button in #site-wrap take the ink color, and every input
    the surface fill, with !important: the rules here say so too, and are more specific. */
 :where(article:has(> .gz-cm-btn)) { position: relative; }
+/* Its z-index, and that of Glaze's other parts on a card, stay in the card: a course opened over the Courses page with a
+   scene behind it (lib/scene-host.js, [data-gz-scene-host] below) is a stacking context at the page's level. */
+:where(article[id^="course-list-course-"]) { isolation: isolate; }
 html .gz-cm-btn {
   position: absolute; top: var(--gz-cm-top, 8px); right: var(--gz-cm-right, 8px); z-index: 2;
   display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; cursor: pointer; opacity: 0;
