@@ -466,3 +466,41 @@ test('IA: long descriptions move behind a "?", short ones and privacy disclosure
   const filter = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
   assert.match(filter, /querySelectorAll\('\.info-pop'\)[\s\S]*?GZ_FIND\.spans\(pop\.textContent, words\)[\s\S]*?classList\.add\('found'\)/);
 });
+
+
+for (const [route, keys] of [['look/pointer', ['pointer', 'cursor']], ['look/motion', ['anim', 'fx', 'type']]]) test(`${route} Reset shows for every Look part it clears, even with default settings`, () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const block = source.slice(source.indexOf('  const LOOK_PART'), source.indexOf('  // Look parts builders'));
+  const s = D.GZ_SANITIZE({}), defaults = D.GZ_SANITIZE({});
+  const button = { dataset: { resetSection: route }, closest: () => ({}), addEventListener() {} };
+  const paths = route === 'look/pointer' ? ['extras.pointer', 'extras.pointerOn', 'extras.pointerAnim'] : ['motion'];
+  const ctx = vm.createContext({ s, GZ_EDITOR: { ...E, keys: () => paths }, defaultsHere: () => defaults,
+    $$: (sel) => sel === '[data-reset-section]' ? [button] : [], $: () => ({}),
+    N: { clean: () => ({}), SPEC: {} }, navItems: {}, GZ_DEFAULTS: defaults,
+  });
+  vm.runInContext(block, ctx);
+  ctx.showResets();
+  assert.equal(button.hidden, true, route + ': nothing to reset');
+  for (const key of keys) {
+    s.parts = { x: { [key]: key === 'pointer' ? 'lava' : { kind: 'glow' } } };
+    ctx.showResets();
+    assert.equal(button.hidden, false, route + ': Reset clears ' + key);
+  }
+  s.parts = { x: { nav: { place: 'top' } } };
+  ctx.showResets();
+  assert.equal(button.hidden, true, route + ': unrelated parts do not show Reset');
+});
+
+test('builder saves update Reset visibility before storage answers, without refreshing focused controls', () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const mount = source.slice(source.indexOf('  GZ_EDITOR_X.mount('), source.indexOf("  $('#editor-version')"));
+  let api, resets = 0;
+  const saved = [];
+  vm.runInNewContext(mount, { s: {}, preview() {}, t() {}, frame: {}, hint() {}, showResets: () => resets++,
+    save: (...args) => saved.push(args), GZ_EDITOR_X: { mount: (a) => { api = a; } },
+  });
+  api.save(['extras']);
+  api.save(['parts'], true, ['cursor']);
+  assert.equal(resets, 2, 'cards and Look builders reveal Reset on the edit itself');
+  assert.deepEqual(saved, [[['extras']], [['parts'], true, ['cursor']]]);
+});

@@ -106,9 +106,16 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
       return g.getAttribute('role') === 'radiogroup' && h?.textContent === 'Pointer' && new Set([...g.querySelectorAll('input')].map((i) => i.name)).size === 1;
     }));
 
+    const resetShown = (route) => page.evaluate((route) => !document.querySelector(`[data-reset-section="${route}"]`).hidden, route);
+    await page.click('[data-pointer="lava"]');
+    check('choosing a card reveals Reset section without a refresh', await until(async () => (await sync()).pointer === 'lava') && await resetShown('look/pointer'));
+    await page.click('[data-pointer="look"]');
+    await until(async () => (await sync()).pointer === 'look');
+
     // ---- a Look's pointer, then the student's over it ----------------------------------------------------------------------
     await wearLook('Library');
     check('wearing Library: the Look\'s card shows its quill, and so does the preview', await until(() => page.evaluate(() => /cursors\/quill\/default/.test(document.querySelector('[data-pointer="look"] img')?.src || ''))) && await wears('quill'), await worn());
+    check('a Look alone reveals Pointer and Motion Reset', await resetShown('look/pointer') && await resetShown('look/motion'));
     await page.focus('#pointer-tiles input[value="look"]');
     await page.keyboard.press('ArrowRight');
     check('the arrow keys choose: Aqua, saved as the student\'s setting', await until(async () => (await sync()).pointer === 'aqua') && await chosen() === 'aqua');
