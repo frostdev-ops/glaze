@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.1 (Spanish)
+# Chrome Web Store listing — Glaze 3.4.2 (Spanish)
 
 ## Short summary (132 character maximum)
 
@@ -8,10 +8,20 @@ Dale otro estilo a Blackboard Ultra, Canvas y Moodle, con tu aspecto y navegaci�
 
 Glaze da un nuevo estilo a tus cursos con paletas, fuentes, fondos y movimiento, y añade herramientas para planificar y estudiar justo donde haces tus trabajos del curso. Funciona en cualquier escuela que use Blackboard Ultra, Canvas o Moodle, incluso en el dominio propio de tu centro, cuando autorizas el acceso. Sin cuenta ni analíticas. Tus cursos, calificaciones, notas y tareas se quedan en tu dispositivo; tus ajustes siguen la sincronización de tu navegador si está activada; compartir es opcional y va cifrado.
 
-NOVEDADES DE 3.4.1
+NOVEDADES DE 3.4.2
 
-• Chrome: Al instalarse, Glaze pide acceso a los dominios de las plataformas instructure.com, blackboard.com y moodlecloud.com, además de su galería y servidor de retransmisión. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña de instalación o Ajustes › Sitios. Descargar todo, Gradescope, los archivos multimedia de los Looks y las conexiones de red de los mods piden los permisos que falten cuando los necesitan. Los archivos redirigidos se detienen con un error que te pide descargarlos desde Canvas.
-• Firefox: Al instalarse, Glaze pide acceso a los dominios de las plataformas instructure.com, blackboard.com y moodlecloud.com, además de su galería y servidor de retransmisión. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña de instalación o Ajustes › Sitios. Descargar todo, Gradescope, los archivos multimedia de los Looks y las conexiones de red de los mods piden los permisos que falten cuando los necesitan. Los archivos redirigidos se detienen con un error que te pide descargarlos desde Canvas.
+• Los ajustes se agrupan según lo que cambian: lo de cada día a la vista, el resto en «Más opciones» y todos los ajustes en la búsqueda. «Todos los ajustes» muestra las secciones avanzadas.
+• Un «?» junto a un ajuste lo explica, y la página de ajustes lleva tu Look.
+• Los widgets se adaptan a su recuadro en cualquier tamaño: en el Dashboard, en la barra lateral, en la navegación y en el móvil.
+• El hábitat de la mascota es una habitación que llena su recuadro, con los colores de tu Look.
+• Las pestañas de cursos usan «Automático» por defecto: en la navegación de Glaze cuando es una barra superior y, si no, encima del curso.
+• Blackboard: los paneles laterales, como los ajustes del flujo de actividad, se abren debajo de la barra superior de Glaze.
+• Moodle: la densidad, el interlineado y el tono de los colores de los cursos funcionan, como en Canvas y Blackboard.
+
+DE 3.4
+
+• Chrome: Al instalarse, Glaze pide acceso a los dominios de las plataformas instructure.com, blackboard.com y moodlecloud.com, además de su galería y servidor de retransmisión. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña de instalación o Ajustes › Privacidad y datos › Sitios. Descargar todo, Gradescope, los archivos multimedia de los Looks y las conexiones de red de los mods piden los permisos que falten cuando los necesitan. Los archivos redirigidos se detienen con un error que te pide descargarlos desde Canvas.
+• Firefox: Al instalarse, Glaze pide acceso a los dominios de las plataformas instructure.com, blackboard.com y moodlecloud.com, además de su galería y servidor de retransmisión. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña de instalación o Ajustes › Privacidad y datos › Sitios. Descargar todo, Gradescope, los archivos multimedia de los Looks y las conexiones de red de los mods piden los permisos que falten cuando los necesitan. Los archivos redirigidos se detienen con un error que te pide descargarlos desde Canvas.
 • Moodle en moodlecloud.com funciona desde la instalación.
 • Las pestañas de cursos muestran un boceto del curso mientras carga, en lugar de una imagen de la página.
 
@@ -38,15 +48,6 @@ DE 3.0.4
 • Mods: añade fondos, animaciones, widgets, diseños de navegación y ajustes de página creados por otras personas, desde un código, un enlace, un archivo o la galería. Cada mod muestra lo que lee y por qué antes de que lo añadas, y se ejecuta en un entorno aislado.
 • Crea tu propio widget para el tablero o la barra, sin código.
 • Los estilos pueden tener como fondo un vídeo en bucle, una imagen animada o una animación Lottie.
-
-DE 3.0
-
-• Blackboard Ultra tiene un Tablero de Glaze y widgets que puedes colocar donde quieras: Better To Do, notas, una agenda, un temporizador de concentración y tus tarjetas de curso como widgets que puedes mover, cambiar de tamaño y contraer.
-• Pestañas de cursos en Blackboard: cada curso que abres tiene su pestaña, como en un navegador. Hasta cuatro se mantienen activas, así que una pestaña vuelve exactamente como la dejaste: la página abierta, lo que escribiste y hasta dónde te desplazaste.
-• Busca dentro de tus cursos con Ctrl+K (⌘K en Mac) y oculta las carpetas que no usas.
-• Cambia el aspecto de la navegación de Blackboard: logotipo, tamaños y espaciado, elementos reordenados u ocultos y tus propios enlaces.
-• Moodle: los mismos estilos, además de tu nota total del curso en cada tarjeta de curso, lo que vence esta semana y atajos de teclado.
-• Un editor de ajustes en diez pestañas, con búsqueda y vista previa en vivo con ancho de escritorio o de teléfono.
 
 TU ASPECTO
 
@@ -94,7 +95,7 @@ EN MOODLE
 
 EN TODAS PARTES
 
-Pulsa Ctrl+K (⌘K en Mac) para saltar a cursos, páginas, ajustes de Glaze y trabajo por entregar. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña que abre al instalarse o Ajustes › Sitios. La ventana emergente comprueba la página; las direcciones escritas se comprueban mediante las API del sitio después de que concedas acceso. Los ajustes enumeran esos sitios y pueden quitarlos. La ventana emergente mantiene a mano los controles rápidos. En Blackboard y Canvas, Lo que Glaze puede hacer enumera cada extra con su interruptor. Exporta e importa todos tus ajustes como archivo.
+Pulsa Ctrl+K (⌘K en Mac) para saltar a cursos, páginas, ajustes de Glaze y trabajo por entregar. Añade el sitio de tu centro desde el botón de Glaze en la barra de herramientas, la pestaña que abre al instalarse o Ajustes › Privacidad y datos › Sitios. La ventana emergente comprueba la página; las direcciones escritas se comprueban mediante las API del sitio después de que concedas acceso. Los ajustes enumeran esos sitios y pueden quitarlos. La ventana emergente mantiene a mano los controles rápidos. En Blackboard y Canvas, Lo que Glaze puede hacer enumera cada extra con su interruptor. Exporta e importa todos tus ajustes como archivo.
 
 Canvas en instructure.com, Ultra en blackboard.com y Moodle en moodlecloud.com son automáticos; las aprobaciones anteriores se conservan.
 

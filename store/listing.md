@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.1
+# Chrome Web Store listing — Glaze 3.4.2
 
 ## Name
 
@@ -16,10 +16,20 @@ Productivity
 
 Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain once you allow it. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
-NEW IN 3.4.1
+NEW IN 3.4.2
 
-• Chrome: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
-• Firefox: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
+• Settings are grouped by what they change, with everyday controls in view, the rest under More options and every setting in search. All settings shows the power-user sections.
+• A "?" beside a setting explains it, and the settings page wears your Look.
+• Widgets fit their tile at any size, on the Dashboard, in the sidebar, in the navigation and on phones.
+• The pet habitat is a room that fills its tile, in your Look's colors.
+• Course tabs default to Automatic: in Glaze's navigation when it is a top bar, above the course otherwise.
+• Blackboard: side panels such as Activity Stream's settings open below Glaze's top bar.
+• Moodle: Density, Line height and course color tone work, as on Canvas and Blackboard.
+
+FROM 3.4
+
+• Chrome: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Privacy and data › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
+• Firefox: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Privacy and data › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
 • Moodle on moodlecloud.com works from install.
 • Course tabs show a sketch of the course while it loads, instead of a picture of the page.
 
@@ -46,14 +56,6 @@ FROM 3.0.4
 • Mods: add backgrounds, animations, widgets, nav layouts and page tweaks others have made, from a code, a link, a file or the gallery. Each mod shows what it reads and why before you add it, and runs sandboxed.
 • Build your own dashboard or rail widget with no code.
 • Looks can have a looping video, animated picture or Lottie animation as their background.
-
-FROM 3.0
-
-• Blackboard Ultra gets a Glaze Dashboard and widgets you place anywhere: Better To Do, notes, an agenda, a focus timer, and your course cards as widgets you can move, resize and fold.
-• Course tabs on Blackboard: every course you open gets a tab, as in a browser. Up to four stay live, so a tab comes back exactly as you left it: the open page, what you typed and where you scrolled.
-• Search inside your courses with Ctrl+K (⌘K on a Mac), and hide folders you don't use.
-• Moodle: the same Looks, plus your course total on each course card, what's due this week and keyboard shortcuts.
-• A settings editor in ten tabs, with search and a live preview at desktop or phone widths.
 
 YOUR LOOK
 
@@ -101,7 +103,7 @@ ON MOODLE
 
 EVERYWHERE
 
-Press Ctrl+K (⌘K on a Mac) to jump to courses, pages, Glaze settings and due work. Add your school's site from Glaze's toolbar button, the tab it opens at install, or Settings › Sites. The popup checks the page; typed addresses are checked through the site's APIs after you grant access. Settings lists those sites and can remove them. The popup keeps quick controls close. On Blackboard and Canvas, What Glaze can do lists every extra with its switch. Export and import all your settings as a file.
+Press Ctrl+K (⌘K on a Mac) to jump to courses, pages, Glaze settings and due work. Add your school's site from Glaze's toolbar button, the tab it opens at install, or Settings › Privacy and data › Sites. The popup checks the page; typed addresses are checked through the site's APIs after you grant access. Settings lists those sites and can remove them. The popup keeps quick controls close. On Blackboard and Canvas, What Glaze can do lists every extra with its switch. Export and import all your settings as a file.
 
 Canvas on instructure.com, Ultra on blackboard.com and Moodle on moodlecloud.com are automatic; earlier approvals are kept.
 

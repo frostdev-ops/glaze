@@ -4,6 +4,33 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.2] — 2026-10-24
+
+### Added
+
+- Settings are grouped by what they change: Look, Navigation, Courses, Study, Course pages, Sharing, Mods, Privacy and data, and About. Each section shows its everyday controls and keeps the rest under More options; All settings adds the power-user sections, and search finds every setting. The side list marks the section in view as you scroll.
+- A "?" beside a setting opens its longer description, by click, tap, keyboard or resting the mouse on it.
+- The settings page wears your Look: its background, surfaces, fonts and text size.
+- Course tabs have an Automatic place, now the default: in Glaze's navigation when it is a top bar holding them on a wide window, above the course otherwise. Installs on the old default move to it once.
+
+### Changed
+
+- Every widget fits its tile's size, on the Dashboard, in the sidebar, floating, in the navigation and on phones.
+- The pet habitat is a room that fills its tile, in your Look's colors, with the pet's name, level and XP on it. The Pet button shows today's bonding moments left; Wellbeing, Decorate and Progress are one switcher, and the habitat's settings are in its ⋯ menu.
+- A docked widget's Move up and Move down are in its ⋯ menu, and To Do keeps Share sessions and Export behind ⋯.
+- Share sessions: Create stays off until it can succeed, saying what is missing, and offers your current Look when there is nothing else to share.
+- Moodle: Density, Line height and course color tone work, as on Canvas and Blackboard.
+
+### Fixed
+
+- Blackboard: side panels and drawers, like Activity Stream's notification settings, open below Glaze's top bar with Close in reach, and the pet and Return home step aside while a panel, a dialog or Settings is open.
+- Nothing on the page draws over Settings opened inside a course page.
+- A page opened while Glaze wasn't answering fills in by itself, without a reload.
+- Widget buttons keep readable text in every Look, on hover and focus too.
+- Blackboard: Card grades only on hover blurs GPA figures too, as on Canvas, and outlines without Blackboard's actions column no longer leave a second blank column beside the sidebar.
+- Canvas: navigation trays keep their room while Glaze navigation is on.
+- Links to old settings addresses open the right section, and a link to a section scrolls to it.
+
 ## [3.4.1] — 2026-10-23
 
 ### Added

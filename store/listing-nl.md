@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.1 (Dutch)
+# Chrome Web Store listing — Glaze 3.4.2 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -8,10 +8,20 @@ Geef Blackboard Ultra, Canvas en Moodle je eigen stijl en navigatie, plus een be
 
 Glaze geeft je cursussen een nieuwe stijl met paletten, lettertypen, achtergronden en beweging, en voegt hulpmiddelen voor plannen en studeren toe precies waar je je cursuswerk doet. Het werkt op elke school die Blackboard Ultra, Canvas of Moodle gebruikt, ook op het eigen domein van een school, zodra je het toestaat. Geen account, geen analytics. Je cursussen, cijfers, notities en taken blijven op je apparaat; je instellingen volgen de synchronisatie van je browser als die aanstaat; delen is optioneel en versleuteld.
 
-NIEUW IN 3.4.1
+NIEUW IN 3.4.2
 
-• Chrome: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten. Bij omgeleide bestanden verschijnt een foutmelding die je vraagt ze vanuit Canvas te downloaden.
-• Firefox: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten. Bij omgeleide bestanden verschijnt een foutmelding die je vraagt ze vanuit Canvas te downloaden.
+• Instellingen zijn gegroepeerd naar wat ze veranderen: het dagelijkse in beeld, de rest onder “Meer opties” en elke instelling in de zoekfunctie. “Alle instellingen” toont de geavanceerde onderdelen.
+• Een “?” naast een instelling legt die uit, en de instellingenpagina draagt je Look.
+• Widgets passen in hun tegel op elk formaat: op het Dashboard, in de zijbalk, in de navigatie en op je telefoon.
+• Het huisdierverblijf is een kamer die zijn tegel vult, in de kleuren van je Look.
+• Cursustabbladen staan standaard op “Automatisch”: in de navigatie van Glaze als die een bovenbalk is, anders boven de cursus.
+• Blackboard: zijpanelen, zoals de instellingen van de activiteitenstream, openen onder de bovenbalk van Glaze.
+• Moodle: dichtheid, regelhoogte en de tint van cursuskleuren werken, net als op Canvas en Blackboard.
+
+UIT 3.4
+
+• Chrome: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Privacy en gegevens › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten. Bij omgeleide bestanden verschijnt een foutmelding die je vraagt ze vanuit Canvas te downloaden.
+• Firefox: Bij installatie vraagt Glaze toegang tot de LMS-domeinen instructure.com, blackboard.com en moodlecloud.com, en tot de eigen galerij en deelserver. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het installatietabblad of Instellingen › Privacy en gegevens › Sites. Alles downloaden, Gradescope, Look-media en netwerkverbindingen van mods vragen waar nodig om ontbrekende toegangsrechten. Bij omgeleide bestanden verschijnt een foutmelding die je vraagt ze vanuit Canvas te downloaden.
 • Moodle op moodlecloud.com werkt vanaf de installatie.
 • Cursustabbladen tonen tijdens het laden een schets van de cursus in plaats van een afbeelding van de pagina.
 
@@ -38,15 +48,6 @@ UIT 3.0.4
 • Mods: voeg achtergronden, animaties, widgets, navigatie-indelingen en pagina-aanpassingen toe die anderen hebben gemaakt, via een code, een link, een bestand of de galerie. Elke mod laat zien wat hij leest en waarom voordat je hem toevoegt, en draait in een sandbox.
 • Bouw zonder code je eigen dashboard- of balkwidget.
 • Looks kunnen een video, geanimeerde afbeelding of Lottie-animatie in een lus als achtergrond hebben.
-
-UIT 3.0
-
-• Blackboard Ultra krijgt een Glaze-dashboard en widgets die je overal plaatst: Better To Do, notities, een agenda, een focustimer en je cursuskaarten als widgets die je kunt verplaatsen, vergroten of verkleinen en inklappen.
-• Cursustabbladen op Blackboard: elke cursus die je opent krijgt een tabblad, zoals in een browser. Maximaal vier blijven actief, zodat een tabblad precies terugkomt zoals je het achterliet: de geopende pagina, wat je typte en waar je had gescrold.
-• Zoek in je cursussen met Ctrl+K (⌘K op een Mac) en verberg mappen die je niet gebruikt.
-• Geef de navigatie van Blackboard een nieuwe stijl: logo, groottes en tussenruimte, items in een andere volgorde of verborgen, en je eigen links.
-• Moodle: dezelfde Looks, plus je cijfer per cursus op elke cursuskaart, wat je deze week moet inleveren en sneltoetsen.
-• Een instellingeneditor in tien tabbladen, met zoeken en een live voorbeeld op desktop- of telefoonbreedte.
 
 JOUW LOOK
 
@@ -94,7 +95,7 @@ OP MOODLE
 
 OVERAL
 
-Druk op Ctrl+K (⌘K op een Mac) om naar cursussen, pagina's, Glaze-instellingen en werk met een deadline te springen. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het tabblad bij installatie of Instellingen › Sites. De pop-up controleert de pagina; ingetypte adressen worden via de API's van de site gecontroleerd nadat je toegang hebt gegeven. De instellingen tonen die sites en kunnen ze verwijderen. De pop-up houdt snelle bediening binnen handbereik. Op Blackboard en Canvas toont Wat Glaze kan elke extra met de bijbehorende schakelaar. Exporteer en importeer al je instellingen als bestand.
+Druk op Ctrl+K (⌘K op een Mac) om naar cursussen, pagina's, Glaze-instellingen en werk met een deadline te springen. Voeg de site van je school toe via de knop van Glaze in de werkbalk, het tabblad bij installatie of Instellingen › Privacy en gegevens › Sites. De pop-up controleert de pagina; ingetypte adressen worden via de API's van de site gecontroleerd nadat je toegang hebt gegeven. De instellingen tonen die sites en kunnen ze verwijderen. De pop-up houdt snelle bediening binnen handbereik. Op Blackboard en Canvas toont Wat Glaze kan elke extra met de bijbehorende schakelaar. Exporteer en importeer al je instellingen als bestand.
 
 Canvas op instructure.com, Ultra op blackboard.com en Moodle op moodlecloud.com werken automatisch; eerdere goedkeuringen blijven behouden.
 
