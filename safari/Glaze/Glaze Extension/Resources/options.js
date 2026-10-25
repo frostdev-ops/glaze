@@ -1682,8 +1682,8 @@ GZ_UI.load().then((s) => {
     }
     $('#nav-reset').hidden = JSON.stringify(navItems) === JSON.stringify(N.clean()) && !navDiffers([...Object.keys(N.SPEC).filter((k) => k !== 'li'), 'labels', 'size', 'collapsed', 'logo']);
   };
-  // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key. The pointer
-  // (lib/editor-pointer.js) is the student's, not the Look's: it saves extras.
+  // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key. The pointer's cards
+  // (lib/editor-pointer.js) are the student's, not the Look's: they save extras; its This Look's pointer edits s.parts.
   GZ_EDITOR_X.mount({ s, save, preview, t, frame, hint });
   $('#editor-version').textContent = `Glaze ${chrome.runtime.getManifest().version}`;
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
