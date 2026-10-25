@@ -151,9 +151,19 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     await page.click('[data-key="extras.pointerOn"]');
     check('the switch off: saved, the cards and the animation switch hidden, the picture kept, and the preview wears the system\'s',
       await until(async () => (await sync()).pointerOn === false) && (await sync()).pointer === 'own' && await page.evaluate(() => document.getElementById('pointer-body').hidden) && !!await wears('system'), await worn());
+    await page.fill('#find', 'Pointer animation');
+    check('search excludes Pointer animation while the custom pointer is off', await page.evaluate(() => {
+      const row = document.querySelector('[data-key="extras.pointerAnim"]').closest('.has-info');
+      return row.classList.contains('miss') && document.getElementById('pointer-body').classList.contains('miss');
+    }));
+    await page.fill('#find', '');
     await shot('pointer-setting-light-off');
     await page.click('[data-key="extras.pointerOn"]');
     check('  on again: the picture is worn again', await until(async () => (await sync()).pointerOn === true) && !!await wears('own') && await page.evaluate(() => !document.getElementById('pointer-body').hidden), await worn());
+
+    await page.fill('#find', 'Pointer animation');
+    check('search finds Pointer animation once the custom pointer is back on', await page.evaluate(() => !document.querySelector('[data-key="extras.pointerAnim"]').closest('.miss')));
+    await page.fill('#find', '');
 
     // ---- another Look: the choice stays -------------------------------------------------------------------------------------
     await wearLook('Graveyard');
@@ -162,6 +172,13 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     await page.click('#pointer-remove');
     check('Remove picture: gone from this computer, and the Look\'s pointer is back', await until(async () => !(await localImg()) && (await sync()).pointer === 'look') && !!await wears('ghost'), await worn());
     check('  focus goes to the card that asks for another', await page.evaluate(() => document.activeElement?.tagName === 'BUTTON' && document.activeElement.dataset.pointer === 'own'));
+
+    await page.focus('#pointer-tiles input[value="look"]');
+    await page.evaluate(() => chrome.storage.local.set({ cursorImg: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' }));
+    await until(() => page.evaluate(() => !!document.querySelector('[data-pointer="own"] input')));
+    check('a picture arriving in another tab keeps keyboard focus on the chosen card', await page.evaluate(() => document.activeElement === document.querySelector('#pointer-tiles input[value="look"]')));
+    await page.evaluate(() => chrome.storage.local.remove('cursorImg'));
+    await until(() => page.evaluate(() => document.querySelector('[data-pointer="own"]').tagName === 'BUTTON'));
 
     // ---- the animation switch ---------------------------------------------------------------------------------------------
     // Moves the pointer once what was drawn before has faded (its canvas goes with it), and says whether anything is drawn.
