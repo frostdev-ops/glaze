@@ -9,7 +9,7 @@ All notable changes to Glaze are documented here. The format follows
 ### Fixed
 
 - Blackboard: on the Courses page, course tabs no longer cover the sidebar's header when Blackboard's To Do column holds the sidebar.
-- Blackboard: a course opened over the Courses page with an animated background no longer shows the course cards' Glaze buttons through it, or lets them catch clicks meant for the course.
+- Blackboard: a course opened over the Courses page with an animated background keeps course-card controls, course tabs and board tiles beneath it.
 
 ## [3.4.2] — 2026-10-24
 
