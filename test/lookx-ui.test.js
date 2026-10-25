@@ -387,6 +387,7 @@ const shown = (p) => {
   return /^url\("blob:/.test(c) ? 'own' : c.match(/cursors\/(\w+)\/default\./)?.[1] || c;
 };
 const choose = async (p, pointer) => { p.settings.extras = { ...p.settings.extras, pointer }; await p.lx.sync(); await settle(); };
+const turn = async (p, pointerOn) => { p.settings.extras = { ...p.settings.extras, pointerOn }; await p.lx.sync(); await settle(); };
 
 test('page: the student\'s pointer wins over the Look\'s; The Look\'s pointer gives the Look\'s back', async () => {
   const data = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
@@ -399,10 +400,17 @@ test('page: the student\'s pointer wins over the Look\'s; The Look\'s pointer gi
   await choose(p, 'aqua');
   assert.equal(shown(p), 'aqua', 'a set over the Look\'s');
   assert.match(p.html.style['--gz-cursor-pointer'], /cursors\/aqua\/pointer\.png"\) 14 2, pointer$/, 'its hand where the page is clickable');
-  await choose(p, 'off');
-  assert.equal(shown(p), 'system', 'System pointer: none of Glaze\'s, whatever the Look has');
+  await turn(p, false);
+  assert.equal(shown(p), 'system', 'the custom pointer off: none of Glaze\'s, whatever the Look has');
   assert.equal(p.html.style['--gz-cursor-pointer'], undefined);
+  assert.ok(!('data-gz-cursor' in p.html.attrs));
+  await turn(p, true);
+  assert.equal(shown(p), 'aqua', 'on again: the set chosen before');
   await choose(p, 'own');
+  await turn(p, false);
+  assert.equal(shown(p), 'system', 'their picture too');
+  assert.equal(p.blobs.size, 0, 'its address revoked while off');
+  await turn(p, true);
   assert.equal(shown(p), 'own', 'their picture, as a blob: address');
   assert.equal(p.blobs.size, 1);
   await choose(p, 'look');
@@ -451,8 +459,9 @@ test('page: the personal pointer wins on course Looks, and following the Look us
   await p.lx.sync();
   await settle();
   assert.equal(shown(p), 'ghost', 'changing courses follows their respective Looks');
-  await choose(p, 'off');
-  assert.equal(shown(p), 'system');
+  await turn(p, false);
+  assert.equal(shown(p), 'system', 'the custom pointer off: no course Look\'s either');
+  await turn(p, true);
   await choose(p, 'neon');
   p.setCourseLook(null);
   await p.lx.sync();

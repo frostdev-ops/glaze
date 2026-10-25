@@ -186,20 +186,36 @@ test('a rotated favorite is worn like "Use this theme": its palette, look and ba
 });
 
 test('extras settings: off by default, sanitized', () => {
-  assert.deepEqual(G.GZ_DEFAULTS.extras, { pointer: 'look', pointerAnim: true, stickers: true, rotate: 'off', at: '08:00' });
-  assert.deepEqual(G.GZ_SANITIZE({ extras: { cursor: 'evil', pointer: 'evil', pointerAnim: 'no', rotate: '1m', at: '25:99', stickers: 'yes' } }).extras, G.GZ_DEFAULTS.extras);
+  assert.deepEqual(G.GZ_DEFAULTS.extras, { pointer: 'look', pointerOn: true, pointerAnim: true, stickers: true, rotate: 'off', at: '08:00' });
+  assert.deepEqual(G.GZ_SANITIZE({ extras: { cursor: 'evil', pointer: 'evil', pointerOn: 'no', pointerAnim: 'no', rotate: '1m', at: '25:99', stickers: 'yes' } }).extras, G.GZ_DEFAULTS.extras);
 });
 
-test('the pointer setting: the Look\'s, the system\'s, any bundled set or the student\'s own picture, kept as chosen', () => {
-  // Every set a Look may name (and 'own'), after the two that are not a set.
-  assert.deepEqual(G.GZ_SPEC.extras.pointer, ['look', ['look', 'off', ...MX.POINTERS]]);
-  assert.equal(G.GZ_SPEC.extras.pointer[1].length, 17, 'the eleven Look sets, aqua, lilac, pearl and own, after look and off');
+test('the pointer setting: the Look\'s, any bundled set or the student\'s own picture, kept as chosen', () => {
+  // Every set a Look may name (and 'own'), after the Look's. The system's is the switch (pointerOn), not a choice.
+  assert.deepEqual(G.GZ_SPEC.extras.pointer, ['look', ['look', ...MX.POINTERS]]);
+  assert.equal(G.GZ_SPEC.extras.pointer[1].length, 16, 'the eleven Look sets, aqua, lilac, pearl and own, after look');
+  assert.deepEqual(G.GZ_SPEC.extras.pointerOn, [true, 'bool']);
   for (const v of G.GZ_SPEC.extras.pointer[1]) assert.equal(G.GZ_SANITIZE({ extras: { pointer: v } }).extras.pointer, v);
   for (const v of ['', 'Pumpkin', 'none', 'standard', 'cursor', 0, null, ['lava'], { set: 'lava' }]) assert.equal(G.GZ_SANITIZE({ extras: { pointer: v } }).extras.pointer, 'look', JSON.stringify(v));
   assert.equal(G.GZ_SANITIZE({ extras: { pointerAnim: false } }).extras.pointerAnim, false);
   // Settings saved before there was one (sync extras without the keys) wear the Look's pointer and its animation, as before.
   const before = G.GZ_SANITIZE({ extras: { stickers: false, rotate: '6h', at: '09:00' } }).extras;
-  assert.deepEqual([before.pointer, before.pointerAnim, before.stickers, before.rotate], ['look', true, false, '6h']);
+  assert.deepEqual([before.pointer, before.pointerOn, before.pointerAnim, before.stickers, before.rotate], ['look', true, true, false, '6h']);
+});
+
+test('the pointer switch: System pointer from before it is the switch off, and a chosen set stays through off and on', () => {
+  const S = (extras) => G.GZ_SANITIZE({ extras }).extras;
+  // 'off' was System pointer: it becomes the switch off and the Look's pointer, once, and stays so.
+  const was = S({ pointer: 'off', pointerAnim: false });
+  assert.deepEqual([was.pointer, was.pointerOn, was.pointerAnim], ['look', false, false]);
+  assert.deepEqual(G.GZ_SANITIZE(G.GZ_SANITIZE({ extras: { pointer: 'off' } })).extras, S({ pointer: 'off' }), 'idempotent');
+  // A device that still has System pointer writes 'off' over the switch on: off wins, as that student chose.
+  assert.equal(S({ pointer: 'off', pointerOn: true }).pointerOn, false);
+  // Off keeps the style; on gives it back.
+  const off = S({ pointer: 'aqua', pointerOn: false });
+  assert.deepEqual([off.pointer, off.pointerOn], ['aqua', false]);
+  assert.deepEqual([S({ ...off, pointerOn: true }).pointer, S({ ...off, pointerOn: true }).pointerOn], ['aqua', true]);
+  assert.equal(S({ pointer: 'own', pointerOn: false }).pointer, 'own');
 });
 
 test('which pointer is worn: the student\'s choice over the Look\'s; the Look\'s only while the choice is the Look\'s', () => {
@@ -218,6 +234,10 @@ test('which pointer is worn: the student\'s choice over the Look\'s; the Look\'s
   assert.equal(P('aqua', undefined), 'aqua');
   assert.equal(P('own', 'pumpkin'), 'own');
   assert.equal(P('pumpkin', 'pumpkin'), 'pumpkin');
+  // The switch off: the system's, whatever the choice and the Look; on (or not given), as above.
+  for (const [choice, look] of [['look', 'pumpkin'], ['aqua', 'pumpkin'], ['own', undefined], ['look', 'own']]) assert.equal(P(choice, look, false), 'off', `${choice} ${look}`);
+  assert.equal(P('aqua', 'pumpkin', true), 'aqua');
+  assert.equal(P('look', 'pumpkin', true), 'pumpkin');
 });
 
 test('Ultra LTI launch frames and direct attempts exclude Look effects', () => {
