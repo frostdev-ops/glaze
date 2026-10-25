@@ -89,7 +89,8 @@ test('a card for every choice the setting takes, in its order, each a radio in o
     assert.ok(name.textContent.length > 1);
   }
   // Names: the two that are not sets, the sets' own names, the picture.
-  assert.deepEqual(['look', 'off', 'lava', 'neon', 'own'].map((v) => e.card(v).children[2].textContent), ["The Look's pointer", 'System pointer', 'Lava', 'Neon', 'Your own picture']);
+  assert.deepEqual(['look', 'lava', 'neon', 'own'].map((v) => e.card(v).children[2].textContent), ["The Look's pointer", 'Lava', 'Neon', 'Your own picture']);
+  assert.equal(e.card('off'), undefined, 'the system\'s is the switch, not a card');
 });
 
 test('each card shows its pointer: a set\'s arrow and hand, the system\'s drawn, the Look\'s what the Look wears', async () => {
@@ -101,7 +102,6 @@ test('each card shows its pointer: a set\'s arrow and hand, the system\'s drawn,
     for (const f of e.shows(set)) assert.ok(fs.existsSync(path.join(__dirname, '..', f)), f);
     assert.match(e.card(set).style.cursor, new RegExp(`^url\\("assets/art/cursors/${set}/pointer\\.${ext}"\\) \\d+ \\d+.*, pointer$`), `${set}: hovering wears its hand`);
   }
-  assert.deepEqual(e.shows('off'), ['system', 'system']);
   assert.deepEqual(e.shows('look'), e.shows('pumpkin'), 'the Look\'s card: the Look\'s set');
   assert.equal(e.said('look'), 'Pumpkin');
   assert.deepEqual(e.shows('own'), ['none']);
@@ -128,13 +128,13 @@ test('choosing a card saves the student\'s setting alone and shows it in the pre
   assert.deepEqual(e.previews, [JSON.stringify(s.extras)], 'the preview has it before the save');
   assert.deepEqual(s.parts, look);
   assert.deepEqual(e.cards().filter((c) => c.children[0].checked).map((c) => c.attrs['data-pointer']), ['lava']);
-  e.choose('off');
-  assert.equal(s.extras.pointer, 'off');
+  e.choose('rose');
+  assert.equal(s.extras.pointer, 'rose');
   // Another Look is worn: the choice stays, and the Look's card follows the new Look.
   s.parts = { x: { pointer: 'ghost' } };
   e.render();
-  assert.equal(s.extras.pointer, 'off');
-  assert.equal(e.radio('off').checked, true);
+  assert.equal(s.extras.pointer, 'rose');
+  assert.equal(e.radio('rose').checked, true);
   assert.deepEqual(e.shows('look'), e.shows('ghost'));
   assert.equal(e.said('look'), 'Ghost');
   // A reset or another tab changes the setting: the cards follow it.

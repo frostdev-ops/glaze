@@ -585,7 +585,7 @@ test('palette: a Pointer: entry for every choice the setting takes, the current 
 test('palette: a pointer command preserves settings changed since the palette opened', () => {
   const G = require('../defaults.js'), p = page({});
   p.settings.extras = { ...G.GZ_DEFAULTS.extras };
-  const command = p.lx.cmds().filter((c) => c.label === 'Pointer: {name}')[2]; // Aqua
+  const command = p.lx.cmds().filter((c) => c.label === 'Pointer: {name}')[1]; // Aqua
   p.settings.extras = { ...p.settings.extras, pointerAnim: false, stickers: false, rotate: 'daily', at: '10:30' };
   command.run();
   assert.deepEqual(p.synced.at(-1).extras, { ...p.settings.extras, pointer: 'aqua' });

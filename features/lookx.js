@@ -35,11 +35,12 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
 
   // ---- the pointer: a set as a CSS cursor on the page (features/lookx.css), the system's I-beam kept on text. The system
   // draws it, so it never lags; its animation is features/motionx.js's, on the canvas around it. Which one is the student's
-  // choice (extras.pointer) over the Look's, including a course's assigned Look. Off on quiz/tool pages and with Glaze off.
+  // choice (extras.pointer) over the Look's, including a course's assigned Look. Off on quiz/tool pages, with Glaze off and
+  // with the custom pointer off (extras.pointerOn).
   let pointer = '', pointing = 0; // the own pointer's blob: address and the latest read
   let live = true; // false from pagehide until the page is shown again: no blob: address is made meanwhile
   const worn = () => (ctx.on() && ctx.partsOn(true) && !quiz() ? GZ_LX.pointerOf(X().pointer,
-    ctx.courseLook?.() ? globalThis.GZ_LOOK_PARTS?.({ name: ctx.courseLook() })?.x?.pointer : ctx.parts()?.pointer) : 'off');
+    ctx.courseLook?.() ? globalThis.GZ_LOOK_PARTS?.({ name: ctx.courseLook() })?.x?.pointer : ctx.parts()?.pointer, X().pointerOn !== false) : 'off');
   // Whether this browser takes image-set() in a cursor (for the 2x picture); one that doesn't gets the 1x PNG after the SVG.
   let sets;
   const imageSet = () => (sets ??= !!globalThis.CSS?.supports?.('cursor', 'image-set(url("a.png") 1x, url("b.png") 2x) 0 0, auto'));
@@ -473,7 +474,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   // The command palette's switches (features/palette.js). The student's pointer by name, as the editor's Look › Pointer
   // lists them (settings extras.pointer, defaults.js); their own picture only once there is one (ready(), asked as the
   // palette opens).
-  const POINTERS = { look: "The Look's pointer", off: 'System pointer', aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal',
+  const POINTERS = { look: "The Look's pointer", aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal',
     lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', frostdev: 'Frostdev', own: 'Your own picture' };
   let ownPic = false;
   const ready = async () => { ownPic = !!(await get('cursorImg')).cursorImg; };
