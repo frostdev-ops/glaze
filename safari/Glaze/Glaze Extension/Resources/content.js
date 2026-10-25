@@ -878,7 +878,7 @@
     if (window.top !== window || !settings.enabled) return;
     const sweep = (s, all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
-      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (settings.enabled && old.length) s.remove(old); }, () => {});
+      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { if (settings.enabled) GZ_DRAFTS.tidy(s, all, settings.enhance.drafts); }, () => {});
     };
     local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => {
       if (!settings.enabled) return;

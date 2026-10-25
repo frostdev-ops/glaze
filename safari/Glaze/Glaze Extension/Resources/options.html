@@ -66,13 +66,14 @@
   .preview { display: flex; flex-direction: column; }
   .preview iframe { position: absolute; width: 1280px; height: 900px; border: 0; display: block; transform-origin: top left; }
   .preview-stage { position: relative; overflow: hidden; width: 100%; height: 300px; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
-  .preview-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .6rem; }
+  .preview-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding: .6rem; }
   .preview-heading h2 { margin: 0; font-size: calc(14px * var(--gz-scale, 1)); }
   .preview #preview-note { margin: .5rem .65rem; color: var(--gz-err); }
   .preview-swatch { padding: .6rem; }
   #preview-body { min-width: 0; overflow: auto; }
   .preview-controls { display: flex; gap: .5rem; flex-wrap: wrap; padding: .6rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
-  .preview-controls label { display: flex; align-items: center; gap: .35rem; font-size: calc(12px * var(--gz-scale, 1)); }
+  .preview-controls label { display: flex; flex-wrap: wrap; min-width: 0; align-items: center; gap: .35rem; font-size: calc(12px * var(--gz-scale, 1)); }
+  .preview-controls select { max-width: 100%; }
   @media (max-width: 1240px) {
     .layout { grid-template-columns: 10.5rem minmax(0, 1fr) minmax(300px, 36%); gap: 1rem; }
     .layout:has(> .editor > [data-no-preview]:not([hidden])) { grid-template-columns: 10.5rem minmax(0, 1fr); }
@@ -87,20 +88,21 @@
     .jumps { display: none; }
   }
   /* More options: each section's further controls, closed until asked for (or All settings). */
-  details.more { display: grid; gap: 1rem; }
+  details.more { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
   details.more > summary { justify-self: start; cursor: pointer; color: var(--gz-accent); font-size: calc(12px * var(--gz-scale, 1)); list-style-position: inside; }
   details.more[open] > summary { margin-bottom: .1rem; }
   details.more:not([open]) > summary { margin-top: -.25rem; }
-  .stack, .nav-own { display: grid; gap: 1rem; }
+  .stack, .nav-own { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
   .nav-own { margin-top: .25rem; }
   .group .stack { gap: .6rem; }
   .sub { margin-inline-start: 2.75rem; }
   /* A setting's longer description: a "?" after its name opens it (lib/editor-info.js). */
-  .has-info, .has-badge { display: flex; align-items: flex-start; }
+  .has-info, .has-badge { display: flex; flex-wrap: wrap; align-items: flex-start; }
   .site-badge { display: inline-block; justify-self: start; padding: 0 .45rem; border-radius: 999px; border: 1px solid var(--gz-border-line, var(--gz-line)); color: var(--gz-ink-muted); font-size: calc(11px * var(--gz-scale, 1)); font-weight: 400; line-height: 1.6; white-space: nowrap; }
   .section-heading h2 + .site-badge { margin-inline-end: auto; }
   :is(.has-info, .has-badge) > .site-badge { flex: none; margin: 1px .45rem 0; }
-  .has-info > .check { flex: 0 1 auto; }
+  /* Grows to its own width, so the badge and "?" move to the next line only when even its longest word would not fit. */
+  :is(.has-info, .has-badge) > .check { flex: 1 1 0; max-width: max-content; }
   button.info { display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; margin: 1px 0 0 .45rem; padding: 0; border-radius: 50%; vertical-align: -3px; font-size: calc(11px * var(--gz-scale, 1)); font-weight: 600; line-height: 1; color: var(--gz-ink-muted); background: none; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); }
   button.info::before { content: "?"; }
   button.info:hover, button.info:focus-visible { color: var(--gz-accent); border-color: var(--gz-accent); }
@@ -115,7 +117,7 @@
   @media (prefers-reduced-motion: reduce) { .info-pop.placed { animation: none; } }
   @keyframes info-in { from { opacity: 0; transform: translateY(-3px); } }
   [data-folded] { display: none !important; }
-  section { background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-fill, var(--gz-surface))); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 7 / 6); padding: 1.1rem 1.25rem 1.25rem; display: grid; gap: 1rem; scroll-margin-top: 5rem; }
+  section { background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-fill, var(--gz-surface))); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 7 / 6); padding: 1.1rem 1.25rem 1.25rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; scroll-margin-top: 5rem; }
   /* Large panels keep the Look's glass over artwork, like the course panels. A solid ground has nothing to blur. */
   html[data-gz-bg]:not([data-gz-bg="solid"]) :is(section, .editor-nav, .preview) { backdrop-filter: blur(calc(var(--gz-glass, 12px) * 5 / 6)); }
   section > h2 { margin: 0; font-size: calc(12px * var(--gz-scale, 1)); }
@@ -125,6 +127,9 @@
   .field output { font-variant-numeric: tabular-nums; color: var(--gz-ink-muted); text-align: right; font-size: calc(12px * var(--gz-scale, 1)); }
   .field.wide { grid-template-columns: 9.5rem minmax(0, 1fr); }
   .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  .row > label { min-width: 0; }
+  .row > label:has(> select) { flex-wrap: wrap; }
+  .row > label > select { max-width: 100%; }
   /* Google Calendar sync: the link code, and the Disconnect question. */
   .gcal { display: grid; gap: 0.6rem; }
   .gcal input[type="text"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: calc(12px * var(--gz-scale, 1)); }
@@ -133,8 +138,14 @@
   #gcal-bye { color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 7 / 6); padding: 1.1rem 1.25rem; max-width: 30rem; }
   #gcal-bye::backdrop { background: rgb(0 0 0 / 0.45); }
   #gcal-bye form { display: grid; gap: 0.9rem; }
-  .row input[type="text"], .row input[type="url"] { flex: 1; min-width: 12rem; }
-  .group { display: grid; gap: 0.6rem; padding-top: 1rem; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
+  #restore-pick { color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 7 / 6); padding: 1.1rem 1.25rem; width: min(34rem, calc(100vw - 2rem)); box-sizing: border-box; }
+  #restore-pick::backdrop { background: rgb(0 0 0 / 0.45); }
+  #restore-pick form { display: grid; gap: 0.9rem; }
+  #restore-pick h3 { margin: 0; overflow-wrap: anywhere; }
+  #restore-cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.6rem 1.25rem; }
+  #restore-pick .row { justify-content: flex-end; }
+  .row input[type="text"], .row input[type="url"] { flex: 1; min-width: min(12rem, 100%); }
+  .group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; padding-top: 1rem; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
   .desc { margin: 0; color: var(--gz-ink-faint); font-size: calc(12px * var(--gz-scale, 1)); }
   .check { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.6rem; align-items: start; cursor: pointer; }
   .check input { margin-top: 2px; }
@@ -142,7 +153,7 @@
 
   .tokens { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.45rem 1rem; }
   .tokens label { color: var(--gz-ink-muted); font-size: calc(13px * var(--gz-scale, 1)); }
-  .contrast { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.35rem 1rem; }
+  .contrast { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr)); gap: 0.35rem 1rem; }
   .contrast li { display: flex; justify-content: space-between; gap: 0.5rem; font-size: calc(12px * var(--gz-scale, 1)); color: var(--gz-ink-muted); }
   .contrast b { font-variant-numeric: tabular-nums; font-weight: 600; padding: 0 0.45rem; border-radius: 999px; }
   .contrast .pass b { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
@@ -230,7 +241,7 @@
   .nb-glaze { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem; }
   .nb-glaze input { flex: none; }
   .nb-widgets { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
-  .nb-widgets li { display: flex; align-items: center; gap: .75rem; padding: .45rem .7rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
+  .nb-widgets li { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .45rem .7rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
   .nb-widgets li:has(input:checked) { border-color: var(--gz-accent); background: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent); }
   .nb-widgets label { flex: 1; display: flex; align-items: center; gap: .55rem; font-size: calc(13px * var(--gz-scale, 1)); cursor: pointer; }
   .nb-widgets svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -264,7 +275,7 @@
   .offer { display: grid; gap: 0.6rem; padding: 0.75rem 0.9rem; border: 1px solid var(--gz-accent); border-radius: calc(var(--gz-radius, 12px) * 5 / 6); background: var(--gz-accent-soft); }
   .offer p { margin: 0; color: var(--gz-ink); }
   .offer .desc { display: block; margin-top: 0.25rem; }
-  .saved { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+  .saved { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }
   .saved li { display: flex; align-items: center; gap: 0.6rem; }
   .saved .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .saved .name small { margin-left: 0.4rem; color: var(--gz-ink-faint); }
@@ -305,7 +316,7 @@
     .courses .name { flex: 1 1 calc(100% - 4rem); white-space: normal; overflow-wrap: anywhere; }
   }
 
-  [data-editor-panel] { display: grid; align-content: start; gap: 1.2rem; min-width: 0; }
+  [data-editor-panel] { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 1.2rem; min-width: 0; }
   [data-editor-section] { scroll-margin-top: calc(var(--editor-header, 100px) + 1rem); }
   .section-heading { display: flex; justify-content: space-between; gap: .7rem; align-items: baseline; flex-wrap: wrap; }
   .section-heading h2 { margin: 0; font-size: calc(16px * var(--gz-scale, 1)); }
@@ -316,8 +327,8 @@
   #relay-status { min-height: 1.5em; overflow-wrap: anywhere; }
   #relay-status.error { color: var(--gz-err); }
   #share-contrast { margin: 0; color: var(--gz-err); }
-  #ss-status.error, #nb-status.error { color: var(--gz-err); }
-  #ss-status:empty, #nb-status:empty { display: none; }
+  #ss-status.error { color: var(--gz-err); }
+  #ss-status:empty { display: none; }
   .ss-status { position: sticky; top: 0; z-index: 1; padding: 0.4rem 0; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); font-size: calc(13px * var(--gz-scale, 1)); color: var(--gz-ink); }
   .ss-sources { display: grid; gap: 0.35rem; max-height: 16rem; overflow: auto; padding: 0.2rem; }
   .ss-session { display: grid; gap: 0.5rem; margin-top: 0.6rem; padding: 0.75rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); overflow-wrap: anywhere; }
@@ -405,7 +416,7 @@
 <div data-editor-jumps="pages" hidden><a href="#pages/content" data-editor-jump>Course content</a><a href="#pages/documents" data-editor-jump>Documents and quizzes</a><a href="#pages/dashboard" data-editor-jump>Blackboard Dashboard</a><a href="#pages/declutter" data-editor-jump>Declutter</a><a href="#pages/shortcuts" data-editor-jump>Search and shortcuts</a></div>
 <div data-editor-jumps="sharing" hidden><a href="#sharing/sessions" data-editor-jump>Share sessions</a><a href="#sharing/relay" data-editor-jump>Relay</a><a href="#sharing/calendar" data-editor-jump data-gcal-link hidden>Google Calendar sync</a></div>
 <div data-editor-jumps="mods" hidden><a href="#mods/installed" data-editor-jump>Installed mods</a><a href="#mods/add" data-editor-jump>Add a mod</a><a href="#mods/widget" data-editor-jump>Widget builder</a><a href="#mods/dev" data-editor-jump>Mod development</a></div>
-<div data-editor-jumps="backup" hidden><a href="#backup/privacy" data-editor-jump>Backup and reset</a><a href="#backup/sites" data-editor-jump>Sites</a><a href="#backup/notes" data-editor-jump>Notes backup</a></div>
+<div data-editor-jumps="backup" hidden><a href="#backup/privacy" data-editor-jump>Backup and reset</a><a href="#backup/sites" data-editor-jump>Sites</a></div>
 <div data-editor-jumps="about" hidden><a href="#about/glaze" data-editor-jump>About Glaze</a></div>
     </nav>
     </div>
@@ -1403,12 +1414,11 @@
 <section id="data" data-editor-section="backup/privacy" data-sites="Extension only" aria-labelledby="heading-backup-privacy">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/privacy" data-editor-alias>Backup and reset</a></p><div class="section-heading"><h2 id="heading-backup-privacy">Backup and reset</h2></div>
 <div class="row">
-          <button type="button" id="export">Export settings</button>
-          <label class="row"><button type="button" id="import-btn">Import settings…</button><input type="file" id="import" accept="application/json,.json" hidden></label>
+          <button type="button" id="export">Back up…</button>
+          <label class="row"><button type="button" id="import-btn">Restore…</button><input type="file" id="import" accept=".zip,application/zip,.json,application/json" hidden></label>
           <button type="button" id="reset-all" class="danger">Reset everything</button>
         </div>
 <p class="desc" id="backup-keys-note">Includes all share keys and creator delete tokens: anyone with this backup can open, change or delete those sessions.</p>
-<p class="desc">Exports leave out your school's course names and card pictures.</p>
 <p class="desc">Reset keeps your presets, pictures, notes, tasks, bookmarks and share keys.</p>
 <label class="check"><input type="checkbox" data-key="mods.blocklist"><span>Check the mod blocklist</span>
           <span class="desc">On Chrome, with code mods installed, Glaze asks frostdev.io once a day for a signed list of mods to stop. Nothing about you is sent.</span></label>
@@ -1425,14 +1435,6 @@
 <p class="desc" id="site-empty">No other sites yet.</p>
 <p class="desc">Removing a site forgets what Glaze read there; your notes and tasks stay.</p>
 <p class="desc" id="site-status" role="status" aria-live="polite"></p>
-</section>
-<section id="notes-backup" data-editor-section="backup/notes" data-sites="Extension only" data-editor-power aria-labelledby="heading-backup-notes">
-<p class="section-path" data-editor-breadcrumb><a href="#backup/notes" data-editor-alias>Notes backup</a></p><div class="section-heading"><h2 id="heading-backup-notes">Notes backup</h2></div>
-<label class="field wide"><span>Notes account</span><select id="nb-account" data-local></select></label>
-<div class="row"><button type="button" id="nb-export">Export notes and share keys</button><button type="button" id="nb-import">Import notes and share keys</button><input type="file" id="nb-file" accept=".zip,application/zip" hidden data-local></div>
-<p class="desc" id="notes-keys-note">Includes all share keys and creator delete tokens: anyone with this backup can open, change or delete those sessions.</p>
-<p class="desc">Import connects only once you create, join or resume a session.</p>
-<p class="desc" id="nb-status" role="status" aria-live="polite"></p>
 </section>
 </div>
 <div id="panel-about" role="tabpanel" aria-labelledby="tab-about" data-editor-panel="about" data-no-preview hidden>
@@ -1477,6 +1479,15 @@
       <div class="row"><button value="cancel" id="gcal-bye-cancel">Cancel</button><button value="ok" class="primary">Disconnect</button></div>
     </form>
   </dialog>
+  <!-- Restore…'s list (options.js): what the picked file holds, all ticked; Cancel changes nothing. -->
+  <dialog id="restore-pick" aria-labelledby="restore-title">
+    <form method="dialog">
+      <h3 id="restore-title"></h3>
+      <div id="restore-cats" role="group" aria-labelledby="restore-title"></div>
+      <label class="field wide" id="restore-account-field" hidden><span>Notes account</span><select id="restore-account"></select></label>
+      <div class="row"><button value="cancel" id="restore-cancel">Cancel</button><button value="ok" class="primary" id="restore-ok">Restore</button></div>
+    </form>
+  </dialog>
   <!-- A mod's install prompt (lib/editor-mods.js): only Install installs. -->
   <dialog id="mod-prompt" aria-labelledby="mod-prompt-title" aria-describedby="mod-prompt-meta mod-prompt-source">
     <form method="dialog">
@@ -1505,6 +1516,7 @@
   <script src="lib/lookparts.js"></script>
   <script src="lib/share.js"></script>
   <script src="lib/relay.js"></script>
+  <script src="lib/sharing.js"></script>
   <script src="lib/editor.js"></script>
   <script src="lib/editor-info.js"></script>
   <script src="lib/glsl.js"></script>
@@ -1525,9 +1537,12 @@
   <script src="lib/gcal.js"></script>
   <script src="lib/coursetabs.js"></script>
   <script src="lib/zip.js"></script>
+  <script src="lib/backup.js"></script>
   <script src="lib/modbundle.js"></script>
   <script src="lib/modapi.js"></script>
   <script src="lib/gradecalc.js"></script>
+  <script src="lib/gpa.js"></script>
+  <script src="lib/classes.js"></script>
   <script src="lib/modwidget.js"></script>
   <script src="lib/modbroker.js"></script>
   <script src="features/modui.js"></script>

@@ -94,7 +94,7 @@ const ASK = ['lib/i18n.js', 'features/consent.js'];
 const asked = (first) => first.filter((f) => f !== 'lib/i18n.js'); // the question brought Glaze's words in already
 test('a Moodle host is asked about, then injected now and registered from then on, apart from Canvas hosts', async () => {
   const store = { canvas: ['https://canvas.school.edu/*'] };
-  const injected = [], registered = [], lists = {};
+  const injected = [], registered = [], lists = {}, kept = {};
   let message;
   const none = { addListener() {} };
   const context = vm.createContext({ solo: false, tabFrame: '',
@@ -106,8 +106,8 @@ test('a Moodle host is asked about, then injected now and registered from then o
       permissions: { contains: async () => true }, // the student granted every host (Chrome)
       scripting: {
         executeScript: async (o) => { injected.push(o); return [{ result: /typeof GZ_I18N|window\.__gzGlaze/.test(String(o.func)) ? false : {} }]; },
-        getRegisteredContentScripts: async () => registered.map((id) => ({ id })),
-        registerContentScripts: async (list) => { for (const s of list) { assert.ok(!registered.includes(s.id), `registered twice: ${s.id}`); registered.push(s.id); lists[s.id] = s.js; } },
+        getRegisteredContentScripts: async () => registered.map((id) => plain(kept[id])),
+        registerContentScripts: async (list) => { for (const s of list) { assert.ok(!registered.includes(s.id), `registered twice: ${s.id}`); registered.push(s.id); lists[s.id] = s.js; kept[s.id] = s; } },
       },
     },
   });

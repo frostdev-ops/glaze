@@ -317,7 +317,7 @@ const DB = () => ({
 const env = ({ site = SITE, record = widgetRec(), local = {}, list = null } = {}) => {
   const l = area({ [`mod:${ID}`]: record, mods: [ID], ...DB(), ...local });
   let turn = Promise.resolve();
-  return { site, local: l, sync: area({}), queue: (f) => (turn = turn.then(f, f)), keys: async () => Object.keys(l.data), record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`], blocklist: async () => list };
+  return { site, local: l, sync: area({}), queue: (f) => (turn = turn.then(f, f)), keys: async () => Object.keys(l.data), record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`], blocklist: async () => list, account: async () => '5' };
 };
 const ask = (e, over = {}) => B.page({ op: 'widget', mod: ID, slot: 'tile:main', lang: 'en', ...over }, e);
 const dataKeys = (e) => e.local.reads.filter((k) => /^(todoCache|seenCourses|insights:)/.test(k));

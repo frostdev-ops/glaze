@@ -10,7 +10,14 @@ on:
 permissions: {}
 
 jobs:
+  # A release zip is built only from a tag whose browser checks pass.
+  browser:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/browser.yml
+
   package:
+    needs: browser
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

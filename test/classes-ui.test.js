@@ -53,13 +53,35 @@ const page = () => {
   document.body = new E('body');
   const box = {};
   const area = { local: { get: async (ks) => Object.fromEntries(ks.filter((k) => k in box).map((k) => [k, structuredClone(box[k])])), set: async (p) => { Object.assign(box, structuredClone(p)); return true; } } };
-  const sent = [], held = [], replies = [], imports = [];
-  let hold = false, holdReplies = false, feed = new TextEncoder().encode(ICS);
+  const sent = [], held = [], replies = [], imports = [], fetches = [], streams = [];
+  let hold = false, holdBody = false, holdReplies = false, feed = new TextEncoder().encode(ICS);
+  const wait = async () => { if (hold) await new Promise((res) => held.push(res)); };
   const c = {
     console, URL, Intl, AbortController, TextDecoder, document, location: { origin: ORIGIN, host: 'canvas.test' },
-    fetch: async (u) => {
-      if (hold) await new Promise((res) => held.push(res));
-      return { ok: String(u).startsWith(ORIGIN), text: async () => new TextDecoder().decode(feed), arrayBuffer: async () => feed.slice().buffer };
+    // As a browser's: a request called off before its headers fails with an AbortError. Its body, held, answers on release,
+    // and arrives in 64 KiB chunks; each stream counts the bytes handed out and whether it was cancelled.
+    fetch: async (u, o = {}) => {
+      fetches.push(o);
+      await Promise.race([wait(), new Promise((res, rej) => o.signal?.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'AbortError' }))))]);
+      const data = feed, s = { read: 0, cancelled: false };
+      let body = holdBody;
+      const arrive = async () => { if (body) { body = false; await new Promise((res) => held.push(res)); } };
+      streams.push(s);
+      return {
+        ok: String(u).startsWith(ORIGIN), text: async () => new TextDecoder().decode(data),
+        arrayBuffer: async () => { await arrive(); s.read = data.length; return data.slice().buffer; },
+        body: { getReader: () => ({
+          read: async () => {
+            await arrive();
+            if (s.cancelled || s.read >= data.length) return { done: true, value: undefined };
+            const value = data.slice(s.read, s.read + (1 << 16));
+            s.read += value.length;
+            return { done: false, value };
+          },
+          cancel: async () => { s.cancelled = true; },
+          releaseLock() {},
+        }) },
+      };
     },
     GZ_I18N: { locale: () => 'en' }, GZ_TODO: T, GZ_CLASSES: C, GZ_ICS: I,
     // features/import.js, held: a read is recorded and never answers.
@@ -79,7 +101,8 @@ const page = () => {
   const ui = vm.runInContext(read('features/classes.js'), c);
   const dialog = () => document.body.children.find((x) => x.tagName === 'DIALOG' && x.open) || null;
   const find = (text, tag = 'BUTTON') => dialog()?.all.find((n) => n.tagName === tag && n.textContent === text);
-  return { ui, box, sent, imports, document, dialog, find, serve: (b) => { feed = b; }, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); },
+  return { ui, c, box, sent, imports, fetches, streams, document, dialog, find, serve: (b) => { feed = b; }, hold: () => { hold = true; }, holdBody: () => { holdBody = true; },
+    release: () => { hold = holdBody = false; held.splice(0).forEach((r) => r()); },
     holdReplies: () => { holdReplies = true; }, stopHolding: () => { holdReplies = false; }, releaseReplies: () => { holdReplies = false; replies.splice(0).forEach((r) => r()); } };
 };
 
@@ -262,4 +285,367 @@ test('a file in the import step is read only on the student\'s own click of Read
   p.find('Read schedule').fire('click');
   await settle();
   assert.equal(p.imports.length, 1, 'the student\'s click reads it');
+});
+
+// ---- Stop reading: whatever the read was waiting on, it ends stopped and the review never comes ----------------------
+const linkRead = async (p) => {
+  await p.ui.open();
+  p.find('Import a schedule').fire('click');
+  p.dialog().all.find((n) => n.type === 'url').value = `${ORIGIN}/feeds/calendars/user_x.ics`;
+  p.find('Read schedule').fire('click');
+  await settle();
+};
+const stopped = (p) => {
+  assert.equal(p.dialog().querySelectorAll('.gz-cl-entry').length, 0, 'no review');
+  assert.match(p.dialog().querySelector('h2').textContent, /Import a schedule/);
+  assert.equal(p.dialog().querySelector('.gz-cl-say').textContent, 'Stopped.');
+  assert.equal(p.find('Read schedule').disabled, false);
+};
+
+test('Stop reading calls off a calendar link still waiting for its answer', async () => {
+  const p = page();
+  p.hold();
+  await linkRead(p);
+  assert.ok(p.fetches[0].signal, 'the request can be called off');
+  p.find('Stop reading').fire('click');
+  await settle();
+  assert.equal(p.fetches[0].signal.aborted, true);
+  stopped(p);
+  p.release();
+  await settle();
+  stopped(p);
+});
+
+test('Stop reading while a calendar link\'s body is still arriving: stopped once it arrives', async () => {
+  const p = page();
+  p.holdBody();
+  await linkRead(p);
+  p.find('Stop reading').fire('click');
+  await settle();
+  p.release();
+  await settle();
+  stopped(p);
+});
+
+test('Stop reading while a file is read on this device: a calendar file, or a document the reader answers late', async () => {
+  const p = page();
+  await p.ui.open();
+  p.find('Import a schedule').fire('click');
+  let give;
+  const bytes = new TextEncoder().encode(ICS);
+  p.dialog().querySelector('input').files = [{ name: 'schedule.ics', type: 'text/calendar', size: bytes.length, arrayBuffer: () => new Promise((res) => { give = () => res(bytes.slice().buffer); }) }];
+  p.find('Read schedule').fire('click');
+  await settle();
+  p.find('Stop reading').fire('click');
+  give();
+  await settle();
+  stopped(p);
+  // features/import.js answering after it was called off (its text came in as Stop was pressed).
+  const q = page();
+  let answer;
+  q.c.GZ_IMPORT.read = () => new Promise((res) => { answer = () => res({ text: 'BIO 1100 Biology TR 1:30-2:45pm Life Sciences 120' }); });
+  await q.ui.open();
+  q.find('Import a schedule').fire('click');
+  q.dialog().querySelector('input').files = [{ name: 'schedule.pdf', type: 'application/pdf', size: 9 }];
+  q.find('Read schedule').fire('click');
+  await settle();
+  q.find('Stop reading').fire('click');
+  answer();
+  await settle();
+  stopped(q);
+});
+
+test('closing the dialog while a calendar link is read calls the request off, and nothing is read from it', async () => {
+  const p = page();
+  let parsed = 0;
+  p.c.GZ_CLASSES = { ...C, fromIcs: (...a) => { parsed++; return C.fromIcs(...a); } };
+  p.hold();
+  await linkRead(p);
+  p.dialog().close();
+  assert.equal(p.fetches[0].signal?.aborted, true);
+  p.release();
+  await settle();
+  assert.equal(parsed, 0);
+  assert.equal(p.dialog(), null);
+  await p.ui.open();
+  assert.match(p.dialog().querySelector('h2').textContent, /Class schedule/);
+});
+
+// ---- limits: 20 times a class, 60 classes -------------------------------------------------------------------------------
+const say = (p) => p.dialog().querySelector('.gz-cl-say');
+
+test('a class takes at most 20 times in the review, and an import with more says so instead of saving', async () => {
+  const p = page();
+  await p.ui.open();
+  p.find('Add a class').fire('click');
+  for (let i = 0; i < 25; i++) p.find('Add a time').fire('click');
+  assert.equal(p.dialog().querySelectorAll('.gz-cl-period').length, 20);
+  assert.equal(say(p).textContent, 'A class can have at most 20 times.');
+  // A calendar with 21 weekly times for one class.
+  const ev = (i) => ['BEGIN:VEVENT', `UID:t${i}@x`, 'SUMMARY:BIO 1100 Biology', `DTSTART;TZID=America/New_York:20260825T${C.hhmm(420 + i * 30).replace(':', '')}00`,
+    `DTEND;TZID=America/New_York:20260825T${C.hhmm(440 + i * 30).replace(':', '')}00`, 'RRULE:FREQ=WEEKLY;BYDAY=TU;UNTIL=20991211T235959Z', 'END:VEVENT'];
+  const q = page();
+  q.serve(new TextEncoder().encode(['BEGIN:VCALENDAR', 'VERSION:2.0', ...Array.from({ length: 21 }, (_, i) => ev(i)).flat(), 'END:VCALENDAR', ''].join('\r\n')));
+  await linkRead(q);
+  assert.equal(q.dialog().querySelectorAll('.gz-cl-period').length, 21);
+  q.find('Save').fire('click');
+  await settle();
+  assert.equal(q.sent.length, 0, 'nothing sent');
+  assert.equal(say(q).textContent, 'A class can have at most 20 times.');
+  assert.equal(say(q).getAttribute('role'), 'alert');
+  q.find('Remove this time').fire('click');
+  q.find('Save').fire('click');
+  await settle();
+  assert.equal(q.box[KEY].courses[0].periods.length, 20);
+  assert.equal(say(q).textContent, 'Saved.');
+});
+
+test('a 61st class is refused with a message, never "Saved."', async () => {
+  const p = page();
+  p.box[KEY] = { courses: Array.from({ length: 60 }, (_, i) => ({ id: `o-c${i}`, name: `Class ${i}`, at: 1, periods: [{ days: [1], start: 600, end: 650 }] })) };
+  await p.ui.open();
+  p.find('Add a class').fire('click');
+  p.dialog().all.find((n) => n.type === 'text' && n.maxLength === 200).value = 'Choir';
+  p.dialog().all.find((n) => n.type === 'checkbox' && String(n.dataset.day) === '3').checked = true;
+  p.find('Save').fire('click');
+  await settle();
+  assert.equal(p.sent.length, 1);
+  assert.equal(say(p).textContent, 'A schedule can have at most 60 classes.');
+  assert.equal(say(p).getAttribute('role'), 'alert');
+  assert.equal(p.box[KEY].courses.length, 60);
+  assert.ok(!p.box[KEY].courses.some((c) => c.name === 'Choir'));
+});
+
+// ---- zones: an edit keeps the zone its class was saved in ---------------------------------------------------------------
+test('editing a class from a page in another zone keeps the zone its times were saved in', async () => {
+  const at = (store) => C.icsEvents(store, { from: '2026-11-02', to: '2026-11-02', tz: 'America/New_York' }).map((e) => new Date(e.start).toISOString());
+  for (const [stored, want] of [
+    [{ courses: [{ id: '25', name: 'Biology', at: 1, periods: [{ days: [1], start: 540, end: 600, tz: 'America/New_York' }] }] }, '2026-11-02T14:00:00.000Z'],
+    [{ tz: 'America/Phoenix', courses: [{ id: '25', name: 'Biology', at: 1, periods: [{ days: [1], start: 540, end: 600 }] }] }, '2026-11-02T16:00:00.000Z'],
+  ]) {
+    const p = page();
+    p.c.GZ_CTX.profile = async () => ({ id: 3, time_zone: 'America/Los_Angeles' });
+    p.box[KEY] = stored;
+    assert.deepEqual(at(p.box[KEY]), [want]);
+    await p.ui.open();
+    p.find('Edit').fire('click');
+    p.find('Save changes').fire('click');
+    await settle();
+    assert.equal(p.sent[0].tz, 'America/Los_Angeles');
+    assert.deepEqual(at(p.box[KEY]), [want]);
+  }
+});
+
+test('an abandoned document reader cannot report progress into a reopened dialog', async () => {
+  const p = page();
+  await p.ui.open();
+  p.find('Import a schedule').fire('click');
+  p.dialog().querySelector('input').files = [{ name: 'schedule.pdf', type: 'application/pdf', size: 9 }];
+  p.find('Read schedule').fire('click');
+  await settle();
+  const { progress } = p.imports[0].opts;
+  p.dialog().close();
+  await p.ui.open();
+  progress('Reading page 9');
+  assert.equal(say(p).textContent || '', '');
+});
+
+test('class times identify their zone in the list and the edit controls', async () => {
+  const p = page();
+  p.box[KEY] = { tz: 'America/Phoenix', courses: [{ id: '25', name: 'Biology', periods: [{ days: [1], start: 540, end: 600, tz: 'America/Los_Angeles' }, { days: [2], start: 600, end: 650 }] }] };
+  await p.ui.open();
+  assert.match(p.dialog().querySelector('.gz-cl-list').text, /America\/Los_Angeles/);
+  assert.match(p.dialog().querySelector('.gz-cl-list').text, /America\/Phoenix/);
+  p.find('Edit').fire('click');
+  assert.match(p.dialog().querySelectorAll('.gz-cl-period')[0].text, /Starts.*America\/Los_Angeles/);
+  assert.match(p.dialog().querySelectorAll('.gz-cl-period')[1].text, /Starts.*America\/Phoenix/);
+});
+
+test('a class time in the zone the page is in shows no zone', async () => {
+  const p = page();
+  p.box[KEY] = { courses: [{ id: '25', name: 'Biology', periods: [{ days: [1], start: 540, end: 600, tz: 'America/New_York' }] }] };
+  await p.ui.open();
+  assert.doesNotMatch(p.dialog().querySelector('.gz-cl-list').text, /America\//);
+  p.find('Edit').fire('click');
+  assert.doesNotMatch(p.dialog().querySelector('.gz-cl-period').text, /America\//);
+});
+
+test('schedule views use their controls without introductory helper paragraphs', async () => {
+  const p = page();
+  await p.ui.open();
+  assert.equal(p.dialog().querySelectorAll('p').some((x) => /Your classes, shown/.test(x.text)), false);
+  p.find('Import a schedule').fire('click');
+  assert.equal(p.dialog().querySelectorAll('p').some((x) => /Glaze reads it on this device/.test(x.text)), false);
+  p.dialog().querySelector('textarea').value = 'BIO 1100 Biology M 9:00-10:00am';
+  p.find('Read schedule').fire('click');
+  await settle();
+  assert.equal(p.dialog().querySelectorAll('p').some((x) => /Nothing is saved until/.test(x.text)), false);
+});
+
+test('pasted schedules over the period limit stay in the importer with an error', async () => {
+  const p = page();
+  await p.ui.open();
+  p.find('Import a schedule').fire('click');
+  p.dialog().querySelector('textarea').value = Array.from({ length: 21 }, (_, i) => `BIO 1100 Biology M ${C.hhmm(420 + i * 20)}-${C.hhmm(430 + i * 20)} Room ${i}`).join('\n');
+  p.find('Read schedule').fire('click');
+  await settle();
+  assert.equal(p.dialog().querySelectorAll('.gz-cl-entry').length, 0);
+  assert.equal(say(p).textContent, 'A class can have at most 20 times.');
+});
+
+test('editing days off preserves import provenance through a later reimport', async () => {
+  const p = page();
+  const period = { days: [1], start: 540, end: 600, skip: ['2026-11-02'], importedSkip: ['2026-11-02'] };
+  p.box[KEY] = { courses: [{ id: '25', name: 'Biology', periods: [period] }] };
+  await p.ui.open();
+  p.find('Edit').fire('click');
+  const dates = p.dialog().all.filter((n) => n.type === 'date');
+  dates.at(-1).value = '2026-11-09';
+  p.find('Add').fire('click');
+  p.find('Save changes').fire('click');
+  await settle();
+  assert.deepEqual(Array.from(p.sent[0].courses[0].periods[0].importedSkip || []), ['2026-11-02']);
+});
+
+test('the day-off editor stops at 200 and imported excess cannot be saved', async () => {
+  const dates = Array.from({ length: 201 }, (_, i) => C.keyOf(C.dayNum('2026-01-01') + i));
+  const p = page();
+  p.box[KEY] = { courses: [{ id: '25', name: 'Biology', periods: [{ days: [1], start: 540, end: 600, skip: dates.slice(0, 200) }] }] };
+  await p.ui.open();
+  p.find('Edit').fire('click');
+  p.dialog().all.filter((n) => n.type === 'date').at(-1).value = dates[200];
+  p.find('Add').fire('click');
+  assert.equal(p.dialog().querySelector('.gz-cl-chips').children.length, 200);
+  assert.equal(say(p).textContent, 'A class time can have at most 200 days off.');
+  const q = page();
+  q.c.GZ_CLASSES = { ...C, fromText: () => ({ entries: [{ id: '', name: 'Biology', periods: [{ days: [1], start: 540, end: 600, skip: dates, unsure: [] }] }] }) };
+  await q.ui.open();
+  q.find('Import a schedule').fire('click');
+  q.dialog().querySelector('textarea').value = 'schedule';
+  q.find('Read schedule').fire('click');
+  await settle();
+  q.find('Save').fire('click');
+  await settle();
+  assert.equal(q.sent.length, 0);
+  assert.equal(say(q).textContent, 'A class time can have at most 200 days off.');
+});
+
+test('the importer labels inputs without an instructional placeholder or format list', async () => {
+  const p = page();
+  await p.ui.open();
+  p.find('Import a schedule').fire('click');
+  assert.equal(!!p.dialog().querySelector('textarea').placeholder, false);
+  assert.equal(p.dialog().querySelector('input').parent.text, 'A file');
+});
+
+test('a calendar link past the size limit stops being read once it passes it, and says it is not one Glaze can read', async () => {
+  const p = page();
+  const big = new Uint8Array(8 << 20).fill(10);
+  big.set(new TextEncoder().encode(ICS));
+  p.serve(big);
+  await linkRead(p);
+  const [s] = p.streams;
+  assert.ok(s.read <= (5 << 20) + (1 << 16), `read ${s.read} bytes`);
+  assert.equal(s.cancelled, true, 'the rest of the body is called off');
+  assert.equal(p.dialog().querySelectorAll('.gz-cl-entry').length, 0, 'no review');
+  assert.equal(say(p).textContent, "That link isn't a calendar Glaze can read.");
+  assert.equal(say(p).getAttribute('role'), 'alert');
+  // At the limit exactly, it still reads.
+  const q = page();
+  const full = new Uint8Array(5 << 20).fill(10);
+  full.set(new TextEncoder().encode(ICS));
+  q.serve(full);
+  await linkRead(q);
+  assert.equal(q.streams[0].cancelled, false);
+  assert.equal(q.dialog().querySelectorAll('.gz-cl-entry').length, 1);
+});
+
+test('a calendar the reader refuses says so in the page\'s language, and anything unexpected still reads as a failure', async () => {
+  require('../i18n/fr.js');
+  const FR = globalThis.GZ_LANGS.fr;
+  const fr = (k, v) => (FR[k] ?? k).replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? '');
+  const paste = async (p, ics) => {
+    p.c.GZ_CTX.t = fr;
+    await p.ui.open();
+    p.find(FR['Import a schedule']).fire('click');
+    p.dialog().querySelector('textarea').value = ics;
+    p.find(FR['Read schedule']).fire('click');
+    await settle();
+  };
+  // A time zone with more changes than the reader keeps.
+  const zone = ['BEGIN:VTIMEZONE', 'TZID:Far', ...Array.from({ length: 1001 }, () => ['BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:+0000', 'TZOFFSETTO:+0000', 'END:STANDARD']).flat(), 'END:VTIMEZONE'];
+  const p = page();
+  await paste(p, ICS.replace('VERSION:2.0', ['VERSION:2.0', ...zone].join('\r\n')));
+  assert.equal(say(p).textContent, FR['This calendar is too big to read.']);
+  assert.equal(say(p).getAttribute('role'), 'alert');
+  for (const [thrown, shown] of [
+    [new RangeError('calendar file too large'), 'This calendar is too big to read.'],
+    [new RangeError('calendar too complex'), 'This calendar is too big to read.'],
+    [new RangeError('calendar time zone too large'), 'This calendar is too big to read.'],
+    [new TypeError("Cannot read properties of undefined (reading 'x')"), "Couldn't read that."],
+  ]) {
+    const q = page();
+    q.c.GZ_CLASSES = { ...C, fromIcs: () => { throw thrown; } };
+    await paste(q, ICS);
+    assert.ok(FR[shown], shown);
+    assert.equal(say(q).textContent, FR[shown], thrown.message);
+    assert.equal(q.find(FR['Read schedule']).disabled, false);
+  }
+});
+
+for (const how of ['done', 'large', 'abort', 'error']) test(`a calendar body releases its reader after ${how}`, async () => {
+  const p = page();
+  let body, cancel = 0;
+  p.c.fetch = async (_, { signal }) => {
+    body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(ICS));
+        if (how === 'done') controller.close();
+        if (how === 'large') controller.enqueue(new Uint8Array(5 << 20));
+        signal.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')), { once: true });
+      },
+      pull(controller) { if (how === 'error') controller.error(new TypeError('network interrupted')); },
+      cancel() { cancel++; },
+    });
+    return new Response(body);
+  };
+  await linkRead(p);
+  if (how === 'abort') { p.find('Stop reading').fire('click'); await settle(); stopped(p); }
+  if (how === 'done') assert.equal(p.dialog().querySelectorAll('.gz-cl-entry').length, 1);
+  if (how === 'large') assert.equal(cancel, 1);
+  assert.equal(body.locked, false, 'the response body must not retain its reader');
+});
+
+test('a calendar response without a body is refused without buffering a fallback', async () => {
+  const p = page();
+  p.c.fetch = async () => ({ ok: true, body: null, arrayBuffer() { assert.fail('must not buffer'); } });
+  await linkRead(p);
+  assert.equal(say(p).textContent, "That link isn't a calendar Glaze can read.");
+});
+
+for (const how of ['fetch', 'body', 'file', 'dependency', 'text', 'document', 'known']) test(`schedule ${how} errors use translated student-facing words`, async () => {
+  require('../i18n/fr.js');
+  const FR = globalThis.GZ_LANGS.fr, p = page();
+  p.c.GZ_CTX.t = (k, v) => (FR[k] ?? k).replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? '');
+  const fail = () => { throw new TypeError('untranslated browser or parser error'); };
+  if (how === 'text') p.c.GZ_CLASSES = { ...C, fromText: fail };
+  await p.ui.open();
+  p.find(FR['Import a schedule']).fire('click');
+  if (how === 'fetch' || how === 'body') {
+    p.dialog().all.find((n) => n.type === 'url').value = `${ORIGIN}/calendar.ics`;
+    p.c.fetch = how === 'fetch' ? fail : async () => new Response(new ReadableStream({ start(c) { c.error(new TypeError('network interrupted')); } }));
+  } else if (how === 'file') {
+    p.dialog().querySelector('input').files = [{ name: 'schedule.ics', size: 1, arrayBuffer: fail }];
+  } else if (how === 'document' || how === 'known') {
+    p.dialog().querySelector('input').files = [{ name: 'schedule.pdf', size: 1 }];
+    p.c.GZ_IMPORT.read = how === 'document' ? fail : () => { throw Object.assign(new Error(FR['That file is too large.']), { mine: true }); };
+  } else {
+    p.dialog().querySelector('textarea').value = how === 'text' ? 'BIO 1100 Mon 9:00-10:00' : ICS;
+    if (how === 'dependency') p.c.GZ_CTX.need = fail;
+  }
+  p.find(FR['Read schedule']).fire('click');
+  await settle();
+  assert.equal(say(p).textContent, FR[how === 'known' ? 'That file is too large.' : "Couldn't read that."]);
+  assert.equal(say(p).getAttribute('role'), 'alert');
+  assert.equal(p.find(FR['Read schedule']).disabled, false);
 });

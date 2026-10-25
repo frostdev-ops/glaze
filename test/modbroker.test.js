@@ -32,7 +32,7 @@ const env = ({ site = SITE, record = rec(), local = {}, sync = {}, list = null, 
     queue: (f) => (turn = turn.then(f, f)),
     keys: async () => Object.keys(l.data),
     record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`],
-    blocklist: async () => list,
+    blocklist: async () => list, account: async () => '5', // the account signed in on the page (lib/background.js modAccount)
   };
 };
 const call = (e, callName, args = [], extra = {}) => B.handle({ mod: ID, call: callName, args, via: 'worker', ...extra }, e);
@@ -125,7 +125,7 @@ test('courses, plans and grades come from Glaze\'s own caches, this site\'s only
   assert.equal(todo[1].url, '', 'never another site\'s address');
   assert.ok(!JSON.stringify(todo).includes('private words'), 'planner notes stay out');
   assert.deepEqual((await call(env({ local: { todoCache: { key: 'todo:https://other.instructure.com/5', at: 1, items: [{ id: '1' }] } } }), 'todo')).value, [], 'another site\'s plans');
-  assert.deepEqual((await call(e, 'grades')).value, [{ courseId: '42', name: 'Chem', percent: 91.5, at: 2 }], 'the newest account\'s, latest point');
+  assert.deepEqual((await call(e, 'grades')).value, [{ courseId: '42', name: 'Chem', percent: 91.5, at: 2 }], 'the page\'s account\'s, latest point');
   assert.deepEqual((await call(e, 'grades', ['43'])).value, []);
   assert.deepEqual(await call(e, 'grades', [{}]), { ok: false, error: 'args' });
 });

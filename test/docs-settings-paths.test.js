@@ -8,7 +8,7 @@ const sections = new Map([...html.matchAll(/href="#([^"]+)" data-editor-jump[^>]
 
 test('documented settings directions use the current category and section labels', () => {
   const paths = {
-    'docs/features.md': ['look/surfaces', 'study/pet', 'sharing/sessions', 'sharing/relay', 'backup/notes', 'backup/sites'],
+    'docs/features.md': ['look/surfaces', 'study/pet', 'sharing/sessions', 'sharing/relay', 'backup/privacy', 'backup/sites'],
     'docs/privacy.md': ['backup/sites'],
     'PRIVACY.md': ['backup/sites'],
     'server/README.md': ['sharing/relay'],
@@ -25,4 +25,11 @@ test('documented settings directions use the current category and section labels
     }
   }
   assert.ok(plain(read('docs/features.md')).includes([...tabs.values()].slice(0, -1).join(', ') + ', and ' + [...tabs.values()].at(-1)), 'the category inventory follows the editor');
+});
+
+test('installation and privacy instructions name the one-file backup action', () => {
+  for (const file of ['docs/install.md', 'docs/features.md', 'docs/privacy.md', 'PRIVACY.md']) {
+    const body = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', file), 'utf8');
+    require('node:assert/strict').doesNotMatch(body, /Export all|Export settings/);
+  }
 });

@@ -7,6 +7,31 @@ const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
 const env = require('./check-env.js'), lock = require('./check-env.js').lockPath();
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const layoutState = ({ remember, route, focused = false } = {}) => {
+  const face = (el) => el.matches('.seg input, .switch input') ? el.closest('label') : el;
+  const visible = (el) => el.checkVisibility({ visibilityProperty: true }) && face(el).checkVisibility({ visibilityProperty: true, opacityProperty: true });
+  const controls = focused ? [] : [...document.querySelectorAll(':is(.top, .layout) :is(input, select, textarea, button, a[href], summary)')]
+    .filter((el) => !el.closest('.editor-nav') && visible(el));
+  if (remember) (window.layoutWant ??= new Map()).set(remember, controls);
+  const active = document.activeElement;
+  const wanted = focused ? (active && active !== document.body ? [active] : []) : [...new Set([...controls, ...window.layoutWant?.get(route) || []])];
+  const off = [];
+  for (const el of wanted) {
+    const name = el.dataset.key || el.id || el.name || el.textContent.trim().slice(0, 30) || el.tagName;
+    const box = face(el), r = box.getBoundingClientRect();
+    if (!visible(el)) { off.push(`${name} is hidden`); continue; }
+    if (!r.width || !r.height) { off.push(`${name} has zero size`); continue; }
+    if (r.left < -1 || r.right > innerWidth + 1) off.push(`${name} ${Math.round(r.left)}..${Math.round(r.right)} is outside the viewport`);
+    for (let parent = box.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+      if (getComputedStyle(parent).overflowX === 'visible') continue;
+      const b = parent.getBoundingClientRect(), left = b.left + parent.clientLeft;
+      if (r.left < left - 1 || r.right > left + parent.clientWidth + 1) {
+        off.push(`${name} is clipped by ${parent.id || parent.className || parent.tagName}`); break;
+      }
+    }
+  }
+  return { scroll: document.documentElement.scrollWidth, off, active: window.tabWant?.get(active), body: !active || active === document.body };
+};
 let context, scratch, held = false, total = 0, failed = 0;
 const check = async (name, test) => {
   if (process.env.IA_CASE && process.env.IA_CASE !== name) return;
@@ -227,6 +252,138 @@ const check = async (name, test) => {
       assert.ok(rect.x >= 0 && rect.x + rect.width <= 390, 'the selected RTL category scrolls into view');
       await page.evaluate(() => { document.documentElement.dir = 'ltr'; });
       await page.setViewportSize({ width: 1440, height: 1000 });
+    });
+    await check('layout-guards', async () => {
+      await open('study/todo');
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.evaluate(layoutState, { remember: 'study/todo' });
+      await page.setViewportSize({ width: 320, height: 900 });
+      const missed = [];
+      for (const [name, css] of [
+        ['hidden control', '[data-key="todo.done"]{display:none!important}'],
+        ['invisible control', '[data-key="todo.done"]{visibility:hidden!important}'],
+        ['zero-size control', '[data-key="todo.done"]{width:0!important;height:0!important;padding:0!important;border:0!important}'],
+        ['ancestor clipping', '#todo .row:has([data-key="todo.done"]){width:220px;overflow:hidden} [data-key="todo.done"]{min-width:250px}'],
+        ['preview clipping', '.preview-controls{width:210px;overflow:hidden} #preview-site{min-width:250px}'],
+      ]) {
+        const style = await page.addStyleTag({ content: css });
+        try {
+          const m = await page.evaluate(layoutState, { route: 'study/todo' });
+          const target = name === 'preview clipping' ? 'preview-site ' : 'todo.done ';
+          if (!m.off.some((issue) => issue.startsWith(target))) missed.push(name);
+        } finally { await style.evaluate((el) => el.remove()); }
+      }
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      assert.deepEqual(missed, [], 'layout checks reject hidden, zero-size and clipped controls');
+    });
+    // All routes at 320px, including translated, RTL and larger text. Wide controls must remain visible and usable.
+    await check('narrow-320', async () => {
+      const problems = [];
+      for (const variant of [{ name: 'en' }, { name: 'de', lang: 'de' }, { name: 'rtl', dir: 'rtl' }, { name: 'larger', scale: 1.25, root: '20px' }]) {
+        for (const all of [false, true]) {
+          const host = await context.newPage();
+          try {
+            await host.setViewportSize({ width: 320, height: 900 });
+            if (variant.lang) await host.addInitScript((language) => { chrome.i18n.getUILanguage = () => language; }, variant.lang);
+            await host.goto(`${base}/options.html#look/palette`);
+            await host.waitForFunction(() => document.querySelector('#looks button'));
+            await host.evaluate(async () => chrome.storage.sync.set(GZ_SANITIZE()));
+            await host.reload();
+            await host.waitForFunction(() => document.querySelector('#looks button'));
+            if (variant.scale) {
+              await host.evaluate(async (scale) => { const s = GZ_SANITIZE(); await chrome.storage.sync.set({ look: { ...s.look, scale } }); }, variant.scale);
+              await host.waitForFunction((scale) => document.documentElement.style.getPropertyValue('--gz-scale') === String(scale), variant.scale);
+            }
+            await host.locator('#editor-all').setChecked(all);
+            await host.evaluate(({ dir, root }) => {
+              if (dir) document.documentElement.dir = dir;
+              if (root) document.documentElement.style.fontSize = root;
+            }, variant);
+            assert.equal(await host.locator('[data-key="navbar.on"]').isChecked(), true, 'narrow layout includes the default navigation controls after earlier checks');
+            const routes = await host.evaluate(() => [...document.querySelectorAll('[data-editor-section]')].map((s) => s.dataset.editorSection));
+            assert.equal(routes.length, 37, 'every settings route is swept');
+            const panels = new Set();
+            for (const route of routes) {
+              await host.evaluate((hash) => { location.hash = hash; }, route);
+              await host.waitForFunction((r) => editor.route() === r, route);
+              const tag = `${variant.name} ${all ? 'all' : 'default'} ${route}`;
+              await host.setViewportSize({ width: 1440, height: 1000 });
+              await host.evaluate(layoutState, { remember: route });
+              await host.setViewportSize({ width: 320, height: 900 });
+              const m = await host.evaluate(layoutState, { route });
+              if (m.scroll > 320) problems.push(`${tag}: page is ${m.scroll}px wide`);
+              for (const off of m.off) problems.push(`${tag}: ${off}`);
+              const panel = await host.evaluate(() => document.querySelector('[data-editor-panel]:not([hidden])').dataset.editorPanel);
+              if (panels.has(panel)) continue;
+              panels.add(panel);
+              // Include the header and preview as well as the panel; a radio group is one stop.
+              await host.evaluate(() => {
+                window.tabWant = new Map();
+                for (const el of document.querySelectorAll(':is(.top, .layout) :is(input, select, textarea, button, a[href], summary)')) {
+                  if (el.disabled || el.tabIndex < 0 || el.closest('[inert], .editor-nav') || !el.checkVisibility({ visibilityProperty: true })) continue;
+                  const group = el.type === 'radio' && [...tabWant.entries()].find(([o]) => o.type === 'radio' && o.name === el.name);
+                  tabWant.set(el, group ? group[1] : `${tabWant.size} ${el.dataset.key || el.name || el.id || el.textContent.trim().slice(0, 30) || el.outerHTML.slice(0, 60)}`);
+                }
+                document.body.tabIndex = -1; document.body.focus(); document.body.removeAttribute('tabindex'); scrollTo(0, 0);
+              });
+              const reached = new Set();
+              let first;
+              for (let i = 0; i < 2000; i++) {
+                await host.keyboard.press('Tab');
+                const at = await host.evaluate(layoutState, { focused: true });
+                if (at.body) break;
+                for (const off of at.off) problems.push(`${tag}: focused ${off}`);
+                if (at.active === undefined) continue;
+                if (at.active === first) break;
+                first ??= at.active;
+                reached.add(at.active);
+              }
+              const want = await host.evaluate(() => [...new Set(tabWant.values())]);
+              for (const key of want) if (!reached.has(key)) problems.push(`${tag}: ${key} cannot be reached with Tab`);
+            }
+          } finally {
+            if (variant.scale) await host.evaluate(async () => { const s = GZ_SANITIZE(), { look } = await chrome.storage.sync.get('look'); await chrome.storage.sync.set({ look: { ...look, scale: s.look.scale } }); }).catch(() => {});
+            await host.close();
+          }
+        }
+      }
+      assert.deepEqual([...new Set(problems)], [], 'settings fit a 320px viewport');
+    });
+    await check('translated-large-layout', async () => {
+      const problems = [];
+      for (const lang of ['en', 'de', 'fr', 'es', 'nl', 'pt-BR']) {
+        const host = await context.newPage();
+        try {
+          await host.addInitScript((language) => { chrome.i18n.getUILanguage = () => language; }, lang);
+          await host.goto(`${base}/options.html#look/palette`);
+          await host.waitForFunction(() => document.querySelector('#looks button'));
+          await host.evaluate(async () => {
+            const s = GZ_SANITIZE();
+            await chrome.storage.sync.set({ ...s, colors: GZ_PRESET('Paper'), preset: 'Paper', look: { ...s.look, scale: 1.25 } });
+            await chrome.storage.local.set({ lookHistory: [{ theme: GZ_HISTORY.theme(s), at: 1 }] });
+            document.documentElement.style.fontSize = '20px';
+          });
+          await host.waitForFunction(() => document.documentElement.style.getPropertyValue('--gz-scale') === '1.25' && document.querySelector('#history li'));
+          assert.equal(await host.locator('html').getAttribute('lang'), lang);
+          for (const all of [false, true]) {
+            await host.locator('#editor-all').setChecked(all);
+            for (const dir of ['ltr', 'rtl']) {
+              await host.evaluate((direction) => { document.documentElement.dir = direction; }, dir);
+              for (const route of ['look/palette', 'look/extras', 'navigation/bar', 'study/todo', 'pages/documents']) {
+                await host.evaluate((r) => editor.show(r), route);
+                for (const width of [1440, 390, 320]) {
+                  await host.setViewportSize({ width, height: 1000 });
+                  const m = await host.evaluate(layoutState, width === 1440 ? { remember: route } : { route });
+                  const tag = `${lang} ${all ? 'all' : 'default'} ${dir} ${width} ${route}`;
+                  if (m.scroll > width) problems.push(`${tag}: page is ${m.scroll}px wide`);
+                  for (const off of m.off) problems.push(`${tag}: ${off}`);
+                }
+              }
+            }
+          }
+        } finally { await host.close(); }
+      }
+      assert.deepEqual([...new Set(problems)], [], 'translated larger text and saved Looks fit without clipping');
     });
     await check('glass-parity', async () => {
       await open();

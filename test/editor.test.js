@@ -49,7 +49,7 @@ const ACTIONS = {
   'courses/cards': ['card-set', 'card-set-clear'], 'courses/list': ['course-list', 'org-list'], 'study/pet': ['pet-library'],
   'sharing/sessions': ['ss-status', 'ss-resume', 'ss-pause', 'ss-refresh', 'ss-sessions', 'ss-name', 'ss-title', 'ss-kind', 'ss-sources', 'ss-expire', 'ss-create', 'ss-invite', 'ss-join'],
   'sharing/calendar': ['gcal', 'gcal-connect', 'gcal-code', 'gcal-link', 'gcal-reconnect', 'gcal-share', 'gcal-disconnect', 'gcal-pair', 'gcal-id', 'gcal-copy'],
-  'backup/privacy': ['export', 'import-btn', 'import', 'reset-all'], 'backup/notes': ['nb-account', 'nb-export', 'nb-import', 'nb-file', 'nb-status'], 'about/glaze': ['report-link', 'news', 'news-close'],
+  'backup/privacy': ['export', 'import-btn', 'import', 'reset-all'], 'about/glaze': ['report-link', 'news', 'news-close'],
 };
 // Each section's everyday controls stay in view; the rest sit in its "More options" (details.more). Keys and action IDs listed
 // here are inside it; every other key and action of the inventory is outside it.
@@ -75,7 +75,7 @@ const MORE = {
     'nav-link-tab', 'nav-link-save', 'nav-link-cancel', 'nav-reset', 'nbar-items', 'nbar-links', 'nbar-link-form', 'nbar-mods', 'card-set', 'card-set-clear', 'pet-library'],
 };
 // Sections only for power users: shown with All settings, while searching, or when an address leads to them.
-const POWER = ['look/nav-layout', 'look/rules', 'study/schedule', 'sharing/relay', 'mods/widget', 'mods/dev', 'backup/notes'];
+const POWER = ['look/nav-layout', 'look/rules', 'study/schedule', 'sharing/relay', 'mods/widget', 'mods/dev'];
 // Every address the settings had before the regrouping, and the categories' old names a stored editorTab may hold.
 const OLD_ROUTES = ['look/palette', 'look/type', 'look/surfaces', 'look/background', 'look/cards', 'look/courses', 'look/navigation', 'look/nav-layout', 'look/rules', 'look/motion', 'look/pointer', 'look/extras',
   'navigation/bar', 'navigation/items', 'navigation/sidebar', 'navigation/tabs', 'blackboard/nav', 'blackboard/dashboard', 'blackboard/stream', 'blackboard/folders', 'blackboard/declutter', 'blackboard/tabs',

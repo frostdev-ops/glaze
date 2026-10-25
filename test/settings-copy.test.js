@@ -13,7 +13,7 @@ const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
 const words = (h) => h.replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
 
 // Disclosures of what goes where: in view whatever their length. By element id, or by the setting whose label holds one.
-const PRIVACY_IDS = ['font-note', 'report-note', 'tabs-memory-note', 'ics-note', 'backup-keys-note', 'notes-keys-note', 'gcal-note'];
+const PRIVACY_IDS = ['font-note', 'report-note', 'tabs-memory-note', 'ics-note', 'backup-keys-note', 'gcal-note'];
 const PRIVACY_KEYS = ['enhance.gradescope', 'todo.gsDaily', 'mods.blocklist'];
 const CAP = 90, POP_CAP = 260;
 

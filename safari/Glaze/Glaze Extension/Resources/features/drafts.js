@@ -2,11 +2,13 @@
 // up is on the page or written in, hands it what was written meanwhile, then every keydown, input and paste (write) and
 // its passes (watch). Ultra's editors (Quill), and Canvas's plain-text Inbox compose.
 // What you write is copied to storage.local a second after you stop, keyed by the site, who you are and the editor (on
-// Ultra, the page too). The copy goes once what you wrote shows on the page outside an editor (the post went through),
-// when you clear the editor, or after 14 days. When that editor turns up empty again (a reload, a crash, a timed-out
-// session) a bar above it offers the copy back. Restoring types it in through the browser's own editing, so Quill and Ultra
-// take it as your edit. A copy an earlier page kept is never written over by what you type now: it stays beside it
-// (lib/drafts.js pack) until you restore it, dismiss it, or it posts, and is offered again when the editor is empty.
+// Ultra, the page too). The copy goes once you send it (a button named Post, Reply, Submit or Send, or Ctrl+Enter) and, still
+// on that page, the editor closes or empties with all of what you wrote showing on the page more often than as you sent it
+// (the post went through), when you clear the editor,
+// or after 14 days. When that editor turns up empty again (a reload, a crash, a timed-out session) a bar above it offers
+// the copy back. Restoring types it in through the browser's own editing, so Quill and Ultra take it as your edit. Each page's copy is its own (lib/drafts.js change, in the worker's queue): what you type
+// replaces only this page's, so one an earlier page or another tab kept stays beside it until you restore it, dismiss it,
+// or it posts, and is offered again when the editor is empty.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -35,53 +37,99 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   // own id; null until the account is known. A snapshot's own values only, never its elements (Ultra may reuse them for another post).
   const keyOf = (s) => (ultra ? GZ_DRAFTS.ultraKey({ origin: location.origin, user: account?.user, path: s.path, near: s.near, id: s.id }) : GZ_DRAFTS.canvasKey(identityOf(s)));
   const draftKey = (ed) => keyOf(ctx.draftAt(ed));
-  const typed = new Map(); // key -> { ed, text, gone }: written here, watched until it posts
+  const typed = new Map(); // key -> { ed, text, id, gone }: written here, watched until it posts
+  const sending = new Map(); // key -> { text, n, at, away }: sent from here, with how often the page showed the text then
+  const own = new Map(); // key -> the id of this page's copy there, until it is cleared, posts or is let go
+  const ownId = (key) => own.get(key) || own.set(key, (Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 20)).get(key);
+  const versions = new Map(); // monotonic within a page, even when two edits share a millisecond
   const saveTimers = new Map(); // editor -> timer
   const ultraPending = new Map(); // editor -> input snapshot, before Ultra can reuse it
   let offered = new WeakMap(); // editor -> the destination offered
   const bars = new Map(); // bar -> editor
-  // What is stored for an editor besides what this page wrote there: copies an earlier page kept (a crash, a timed-out
-  // session), or this page's own once it stopped watching the editor. Read the first time the key is needed, and written back
-  // beside every copy this page writes (store), so typing never replaces them: each stays until it is restored, dismissed or posted.
+  // What is stored for an editor besides this page's own copy: copies an earlier page kept (a crash, a timed-out session),
+  // another tab's, or this page's own once it stopped watching the editor. Read afresh when one may be offered, and told by
+  // the worker after each change; each stays until it is restored, dismissed or posted.
   const held = new Map(); // key -> [copy], newest first
   const reading = new Map(); // key -> [callback]: the read under way
-  let epoch = 0; // clearing backup invalidates reads that may still arrive
+  let epoch = 0; // clearing backup invalidates reads and answers that may still arrive
   const deferred = new Set(); // editors with a held copy that wasn't offered because there was text: offered when they are empty
+  const done = new Set(); // copies restored, dismissed or posted here: not offered again
+  const dropping = new Map(); // key -> copies restored here, which go with this page's next copy there
+  const tag = (c) => `${c.id || c.text}:${c.at}`;
+  // A Canvas copy is for the one destination its key names.
+  const known = (key, copies) => held.set(key, copies.filter((c) => !(c.id && c.id === own.get(key)) && !done.has(tag(c)) && (ultra || GZ_DRAFTS.canvasKey(c.canvas) === key)));
+  const area = (s) => ({
+    get: (key) => new Promise((yes, no) => { try { s.get(key, (r) => chrome.runtime.lastError ? no(Error('read')) : yes(r)); } catch (e) { no(e); } }),
+    ...(s.getKeys && { keys: () => s.getKeys() }),
+  });
+  // If an update invalidates *all* extension APIs, a same-tab session journal survives reload. Clear it as soon as the
+  // extension's durable local storage accepts it. It is scoped to this origin, account and destination, never sync storage.
+  const session = (fn) => { try { return fn(sessionStorage); } catch { return undefined; } };
+  const journal = (m, generation, ed, name = GZ_DRAFTS.pendingKey(m)) => {
+    session((s) => {
+      s.setItem(name, JSON.stringify(m));
+      const all = {};
+      for (let i = 0; i < s.length; i++) { const k = s.key(i); if (k?.startsWith(GZ_DRAFTS.pendingPrefix(m.key))) { try { all[k] = JSON.parse(s.getItem(k)); } catch {} } }
+      for (const k of GZ_DRAFTS.superseded(m, all)) s.removeItem(k);
+    });
+    local((s) => s.set({ [name]: m }, () => {
+      if (chrome.runtime.lastError) return;
+      session((s) => s.removeItem(name));
+      GZ_DRAFTS.load(m.key, area(s)).then((all) => { const old = GZ_DRAFTS.superseded(m, all); if (old.length) s.remove(old, () => void chrome.runtime.lastError); }, () => {});
+      if (generation !== epoch || !ctx.settings().enhance.drafts) { s.remove(name); return; }
+      tell(m, generation, ed);
+    }));
+  };
+  const tell = (m, generation, ed) => {
+    try { chrome.runtime.sendMessage({ type: 'glaze:drafts', ...m }, (r) => {
+      if (chrome.runtime.lastError || generation !== epoch || !r?.ok) return;
+      known(m.key, r.copies);
+      if (ed && held.get(m.key).length) deferred.add(ed);
+    }); } catch { /* the durable journal is enough to recover */ }
+  };
   const read = (key, fn) => {
-    if (held.has(key)) { fn(); return; }
     if (reading.has(key)) { reading.get(key).push(fn); return; }
     reading.set(key, [fn]);
-    const generation = epoch;
-    // A Canvas copy is for the one destination its key names.
-    local((s) => { try { s.get(key, (r) => {
+    const generation = epoch, pending = {};
+    session((s) => {
+      for (let i = 0; i < s.length; i++) {
+        const k = s.key(i);
+        if (!k?.startsWith('draft:pending:')) continue;
+        let m; try { m = JSON.parse(s.getItem(k)); } catch { continue; }
+        if (m?.key === key) pending[k] = m;
+      }
+    });
+    local((s) => GZ_DRAFTS.load(key, area(s)).then((all) => {
       if (generation !== epoch) return;
-      if (chrome.runtime?.lastError) { reading.delete(key); return; }
-      held.set(key, GZ_DRAFTS.unpack(r?.[key]).filter((d) => ultra || GZ_DRAFTS.canvasKey(d.canvas) === key));
+      known(key, GZ_DRAFTS.unpack(GZ_DRAFTS.fold(key, { ...all, ...pending })));
+      for (const [k, m] of Object.entries(pending)) journal(m, generation, null, k);
+      // Entries the worker never had (it slept, or the page closed first) are handed to it now, to fold into the record.
+      if (!Object.keys(pending).length && Object.keys(all).some((k) => k !== key)) tell({ key, at: Date.now() }, generation);
       const waiting = reading.get(key);
       reading.delete(key);
-      for (const f of waiting) f();
-    }); } catch { reading.delete(key); } });
+      for (const f of waiting || []) f();
+    }, () => { reading.delete(key); }));
   };
-  // Writes what is kept for an editor: this page's own copy (typed) and the held ones beside it, or takes the key away when
-  // there is nothing. Only once what is stored there has been read. ed: the editor, which offers the held ones when it is empty.
-  const store = (key, ed) => read(key, () => {
+  const store = (key, ed) => {
     if (!ctx.settings().enhance.drafts || !ctx.on()) return;
-    if (ed && held.get(key).length) deferred.add(ed);
-    const rec = GZ_DRAFTS.pack(typed.get(key), held.get(key));
-    local((s) => (rec ? s.set({ [key]: rec }) : s.remove(key)));
-  });
-  // A held copy that is done with: restored (it is the editor's text now), dismissed or posted. write: store what is left now.
-  const resolve = (key, d, write = true) => read(key, () => {
-    held.set(key, held.get(key).filter((c) => c.at !== d.at || c.text !== d.text));
-    if (write) store(key);
-  });
-  // This page stops watching an editor it wrote in (it closed, or its post never showed): its copy stays, now like one an
-  // earlier page kept.
-  const release = (key) => {
-    const d = typed.get(key);
-    typed.delete(key);
-    if (d) held.set(key, GZ_DRAFTS.unpack(GZ_DRAFTS.pack(d, held.get(key))));
+    const d = typed.get(key), drop = dropping.get(key) || [];
+    dropping.delete(key);
+    if (!d && own.has(key)) { drop.push({ id: own.get(key), at: versions.get(key) }); own.delete(key); }
+    if (d) { d.at = Math.max(d.at, (versions.get(key) || 0) + 1); versions.set(key, d.at); }
+    const m = { key, at: Date.now(), ...(d && { put: { html: d.html, text: d.text, at: d.at, id: d.id, ...(d.canvas && { canvas: d.canvas }) } }), drop };
+    journal(m, epoch, ed);
   };
+  // A held copy that is done with: restored (it is the editor's text now), dismissed or posted. write: it goes now; else
+  // with this page's next copy there, so it is kept until that is.
+  const resolve = (key, d, write = true) => {
+    done.add(tag(d));
+    held.set(key, (held.get(key) || []).filter((c) => tag(c) !== tag(d)));
+    dropping.set(key, [...(dropping.get(key) || []), GZ_DRAFTS.mark(d)]);
+    if (write) store(key);
+  };
+  // This page stops watching an editor it wrote in (it closed, or its post never showed): its copy stays, now like one an
+  // earlier page kept, and what is typed there next is a new copy beside it.
+  const release = (key) => { typed.delete(key); own.delete(key); sending.delete(key); };
   // The modal can unmount before the debounce runs; retain the input's validated destination and body.
   const captureInboxDraft = (ed) => {
     const canvas = inboxIdentity(ed);
@@ -100,8 +148,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       const { key, d } = pending;
       if (ed.isConnected && draftKey(ed) !== key) return;
       if (typed.get(key)?.at > d.at) return;
-      // Stored now, as write() has read what is there already: an async read's callback can disappear during navigation.
-      if (GZ_DRAFTS.worth(d.text)) typed.set(key, { ed, ...d, gone: 0 }); else typed.delete(key);
+      // Sent now: during navigation a later callback may never run.
+      if (GZ_DRAFTS.worth(d.text)) typed.set(key, { ed, ...d, id: ownId(key), gone: 0 }); else typed.delete(key);
       store(key, ed);
       return;
     }
@@ -116,7 +164,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     // Too short, or cleared: drop the copy, but only one written here. A copy still on offer stays, with
     // or without new text beside it.
     if (!GZ_DRAFTS.worth(text)) { if (typed.delete(key)) store(key, ed); return; }
-    typed.set(key, { ed, html: ultra ? ed.innerHTML : text, text, at: Date.now(), ...(!ultra && { canvas: inboxIdentity(ed) }), gone: 0 });
+    typed.set(key, { ed, html: ultra ? ed.innerHTML : text, text, at: Date.now(), ...(!ultra && { canvas: inboxIdentity(ed) }), id: ownId(key), gone: 0 });
     store(key, ed);
   };
   // Who you are (and on Canvas your courses), asked once an editor is on the page or written in; again a minute after a
@@ -142,8 +190,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     if (!account) { accountWaiting.set(ultra ? s : s.ed, s); loadAccount(); return; }
     if (ultra) {
       const key = keyOf(s);
-      if (!key || !GZ_DRAFTS.worth(s.text)) return;
-      typed.set(key, { ed: s.ed, html: s.html, text: s.text, at: s.at, gone: 0 });
+      if (!key || !GZ_DRAFTS.worth(s.text) || (typed.get(key)?.at || 0) > s.at) return;
+      typed.set(key, { ed: s.ed, html: s.html, text: s.text, at: s.at, id: ownId(key), gone: 0 });
       store(key, s.ed);
       return;
     }
@@ -169,6 +217,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     }
     // A copy's key needs the account (who you are, and on Canvas your courses): what is written before it is in waits for it.
     if (!account) { accountWaiting.set(ed, ctx.draftAt(ed)); loadAccount(); return; }
+    if (ultra && e.type === 'keydown' && e.isTrusted && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { send(ed); return; }
     if (ultra) {
       const pending = ultraPending.get(ed);
       if (pending && keyOf(pending) !== draftKey(ed)) keep(pending);
@@ -178,7 +227,6 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       const key = draftKey(ed);
       inboxWrites.set(ed, key);
       captureInboxDraft(ed);
-      if (key) read(key, () => {}); // so the copies kept there are known by the time this is saved
     }
     // A copy on offer steps aside while there is text, and is back when the editor is empty again.
     for (const [bar, editor] of bars) if (editor === ed) bar.hidden = !!draftText(ed).trim();
@@ -186,14 +234,45 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     saveTimers.set(ed, setTimeout(() => saveDraft(ed), 1000));
   };
   addEventListener('pagehide', () => { for (const [ed, t] of saveTimers) { clearTimeout(t); saveDraft(ed); } });
-  // The page's text outside the editors being written in: where a post shows up once it's sent.
-  // ponytail: walks the whole page, only while a draft's editor has just emptied or gone (a minute at most).
+  // The page's text outside the editors being written in: where a post shows up once it's sent. Not the editors this page
+  // wrote in either, even turned read-only while Ultra sends: what they show is what was typed, sent or not.
+  // ponytail: walks the whole page once as a draft is sent, then each pass while its editor is closed or emptied (a minute at most).
   const pageText = () => {
-    const skip = `${EDITOR}, .ql-clipboard, .gz-draft`;
-    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeType === 3 ? 1 : n.matches(skip) ? 2 : 3) });
+    const skip = `${EDITOR}, .ql-clipboard, .gz-draft`, mine = new Set([...typed.values()].map((d) => d.ed));
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeType === 3 ? 1 : n.matches(skip) || mine.has(n) ? 2 : 3) });
     let out = '';
     for (let n = walk.nextNode(); n; n = walk.nextNode()) out += n.data;
     return out;
+  };
+  // Where a send was made: the page, and the course or discussion ids Ultra keeps in its query or hash.
+  const where = () => `${location.pathname}${`${location.search || ''}${location.hash || ''}`.match(/_\d+_\d+/g)?.join() || ''}`;
+  // The student sends what an Ultra editor holds: it is kept as it is now, with how often the page shows it, once a send.
+  const send = (ed) => {
+    if (saveTimers.has(ed)) { clearTimeout(saveTimers.get(ed)); saveDraft(ed); }
+    const key = draftKey(ed), d = key && typed.get(key);
+    if (d) sending.set(key, { text: d.text, n: GZ_DRAFTS.count(d.text, pageText()), at: Date.now(), where: where() });
+  };
+  // Blackboard's labels for sending (en, de, es, fr, nl, pt-BR), and words that never send.
+  const SEND = new Set('post reply submit send respond veröffentlichen posten antworten senden absenden abgeben einreichen publicar responder enviar publier répondre envoyer soumettre plaatsen beantwoorden reageren verzenden versturen indienen postar'.split(' '));
+  const NOT = new Set('cancel discard close delete remove edit draft abbrechen verwerfen schließen löschen entfernen bearbeiten entwurf cancelar descartar cerrar eliminar borrar editar borrador annuler ignorer fermer supprimer modifier brouillon annuleren negeren sluiten verwijderen bewerken concept fechar excluir remover rascunho'.split(' '));
+  // A control's name: aria-label, else its text, else its title.
+  const words = (b) => ([b.getAttribute('aria-label'), b.textContent, b.matches('input') && b.value, b.getAttribute('title')].map((s) => (s || '').trim()).find(Boolean) || '').toLowerCase().split(/[^\p{L}\p{N}]+/u);
+  // An editor's Post (Reply, Submit, Send) button: one that names sending, outside the editor and its toolbar, a few levels
+  // from it; or a submit button in the editor's own form that names no other action.
+  const sentFrom = (target) => {
+    const b = target.closest?.('button, [role="button"], input[type="submit"]');
+    if (!b || b.closest(`${EDITOR}, .ql-toolbar, [role="toolbar"], .gz-draft`)) return [];
+    const w = words(b);
+    if (w.some((x) => NOT.has(x))) return [];
+    const eds = [...typed.values()].map((d) => d.ed).filter((ed) => ed.isConnected && ed.textContent.trim());
+    const form = b.matches('[type="submit"]') && b.closest('form'), mine = form ? eds.filter((ed) => ed.closest('form') === form) : [];
+    if (mine.length) return mine;
+    if (!w.some((x) => SEND.has(x))) return [];
+    for (let p = b.parentElement, i = 0; p && i < 8; p = p.parentElement, i++) {
+      const near = eds.filter((ed) => p.contains(ed));
+      if (near.length) return near;
+    }
+    return [];
   };
   const restoreBar = (ed, key, d) => {
     const bar = document.createElement('div');
@@ -217,16 +296,14 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       if (!ultra) {
         if (draftKey(ed) !== key || draftText(ed).trim() || !ctx.settings().enhance.drafts || !ctx.on()) return;
         // React's controlled textarea reads the native setter + input, rather than a visible-only DOM edit.
-        local((s) => s.get(key, (r) => {
-          if (chrome.runtime?.lastError) return;
-          // Still kept (it may have been dismissed in another tab since).
-          if (!GZ_DRAFTS.unpack(r?.[key]).some((c) => c.at === d.at && c.text === d.text)) { resolve(key, d, false); inboxWrites.delete(ed); return; }
+        read(key, () => {
+          if (!(held.get(key) || []).some((c) => tag(c) === tag(d))) { resolve(key, d, false); inboxWrites.delete(ed); return; }
           if (!ed.isConnected || draftKey(ed) !== key || draftText(ed).trim() || !ctx.settings().enhance.drafts || !ctx.on()) return;
-          resolve(key, d, false); // it is the editor's text now, and kept as this page's own once typed in
+          resolve(key, d, false);
           Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ed, d.text);
           ed.dispatchEvent(new Event('input', { bubbles: true }));
           ed.focus();
-        }));
+        });
         return;
       }
       resolve(key, d, false);
@@ -235,7 +312,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       r.selectNodeContents(ed);
       getSelection().removeAllRanges();
       getSelection().addRange(r);
-      document.execCommand('insertHTML', false, d.html);
+      document.execCommand('insertHTML', false, GZ_DRAFTS.restoreHTML(d, document));
     }), button(t('Dismiss'), () => { resolve(key, d); offerDraft(ed); }));
     (ed.closest('react-editor-wrapper') || ed.closest('.bb-editor-root') || ed.closest('[data-cid="TextArea"]') || ed).before(bar);
     bars.set(bar, ed);
@@ -252,9 +329,10 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     }
     if (all) {
       epoch++;
+      session((s) => { for (let i = s.length - 1; i >= 0; i--) { const k = s.key(i); if (k?.startsWith('draft:pending:')) s.removeItem(k); } });
       for (const timer of saveTimers.values()) clearTimeout(timer);
       saveTimers.clear(); ultraPending.clear(); accountWaiting.clear(); reading.clear();
-      typed.clear(); held.clear(); deferred.clear(); offered = new WeakMap();
+      typed.clear(); sending.clear(); own.clear(); held.clear(); deferred.clear(); done.clear(); dropping.clear(); offered = new WeakMap();
     }
   };
   const inboxPosted = async (d) => {
@@ -266,7 +344,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     } catch { return false; } // Offline or no exact match: keep the copy.
   };
   // The newest copy kept for this editor that isn't its own text: offered when the editor is empty, and if you were already
-  // typing, when it next is. Posted ones are dropped and the next is looked at; one is shown at a time.
+  // typing, when it next is. Canvas copies sent are dropped and the next is looked at; on Ultra the page's text alone never
+  // says whose a post is, so the copy is offered and you can dismiss it. One is shown at a time.
   const offerDraft = (ed) => {
     const key = draftKey(ed);
     if (!key) return;
@@ -275,9 +354,10 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       const d = held.get(key)?.[0];
       if (!d || !here()) return;
       if (draftText(ed).trim()) { deferred.add(ed); return; }
-      const posted = ultra ? GZ_DRAFTS.posted(d.text, pageText()) : await inboxPosted(d);
+      const posted = !ultra && await inboxPosted(d);
       if (posted) { resolve(key, d); offerDraft(ed); return; }
-      if (here() && !draftText(ed).trim() && held.get(key)?.[0] === d && ![...bars.values()].includes(ed)) restoreBar(ed, key, d);
+      const top = held.get(key)?.[0];
+      if (here() && !draftText(ed).trim() && top && tag(top) === tag(d) && ![...bars.values()].includes(ed)) restoreBar(ed, key, d);
     });
   };
   // Editors with a copy waiting that were typed in when it would have been offered: offered once they are empty.
@@ -293,12 +373,20 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     if (!ctx.settings().enhance.drafts) return;
     const now = Date.now();
     let page = null;
+    const here = where();
     for (const [key, d] of typed) {
-      // Still being written in. An editor turned read-only shows the sent post, so it counts as gone.
-      if (d.ed.isConnected && d.ed.matches(EDITOR) && d.ed.textContent.trim()) { d.gone = 0; continue; }
+      let s = sending.get(key);
+      // Ultra moved to another page, course or discussion since the send: what shows here says nothing of it.
+      if (s && s.where !== here) { sending.delete(key); s = null; }
+      // Still being written in; back with its text after a send, that send failed and proves nothing.
+      if (d.ed.isConnected && d.ed.matches(EDITOR) && d.ed.textContent.trim()) { if (s?.away) sending.delete(key); d.gone = 0; continue; }
+      if (s) s.away = true;
       d.gone ||= now;
-      page ??= pageText();
-      if (GZ_DRAFTS.posted(d.text, page)) { typed.delete(key); store(key, d.ed); }
+      // Posted: sent from here in the last minute, as it still reads, and the editor closed or emptied (one turned
+      // read-only is still sending) with the text showing more often than as it was sent. The new post's discussion and
+      // author would settle it, but no capture of Ultra's post markup says where to read them, so they aren't checked.
+      if (s && now - s.at < 60000 && GZ_DRAFTS.squash(s.text) === GZ_DRAFTS.squash(d.text) && (!d.ed.isConnected || d.ed.matches(EDITOR))
+        && GZ_DRAFTS.posted(d.text, page ??= pageText(), s.n)) { typed.delete(key); sending.delete(key); store(key, d.ed); }
       else if (now - d.gone > 60000) release(key); // never posted: the copy stays
     }
     // A bar steps aside while its editor has text (Ultra's own saved draft, or you're writing), and goes with it.
@@ -339,6 +427,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     redeem();
   };
   document.addEventListener('click', (e) => {
+    if (ultra && e.isTrusted && ctx.settings().enhance.drafts && ctx.on()) for (const ed of sentFrom(e.target)) send(ed);
     if (ultra || !ctx.settings().enhance.drafts || !ctx.on() || !e.target.closest?.('#send-message-button')) return;
     const ed = document.querySelector(EDITOR);
     const key = ed && draftKey(ed);

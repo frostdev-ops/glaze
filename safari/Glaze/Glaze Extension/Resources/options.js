@@ -1450,11 +1450,58 @@ GZ_UI.load().then((s) => {
     if (changes.rotateLooks || changes.lookFavorites) renderRotate();
   });
 
+  // ---- the restore list (#restore-pick): what a read file holds (lib/backup.js read), every category ticked; an old Notes
+  // zip goes into an account on this device. → { ticked: Set, account } once Restore is pressed, or null.
+  const askRestore = (() => {
+    const dialog = $('#restore-pick'), cats = $('#restore-cats'), go = $('#restore-ok'), field = $('#restore-account-field'), select = $('#restore-account');
+    let answer = null;
+    const boxes = () => [...cats.querySelectorAll('input')];
+    const enabled = () => { go.disabled = !boxes().some((b) => b.checked && !b.disabled) || (!field.hidden && boxes().some((b) => b.value === 'notes' && b.checked) && !select.value); };
+    cats.addEventListener('change', enabled);
+    select.addEventListener('change', enabled);
+    dialog.addEventListener('close', () => {
+      const ticked = new Set(boxes().filter((b) => b.checked && !b.disabled).map((b) => b.value));
+      answer?.(dialog.returnValue === 'ok' && ticked.size ? { ticked, account: select.value } : null);
+      answer = null;
+    });
+    // A Notes account as a person reads it: its school's host and user id.
+    const account = (key) => { const u = new URL(key.slice(9)); return `${u.host} · ${u.pathname.slice(1)}`; };
+    return (file, plan, accounts) => new Promise((resolve) => {
+      const names = backupNames(), count = plan.cats.notes?.length || 0;
+      $('#restore-title').textContent = t('Restore from {file}', { file: file.name });
+      cats.replaceChildren(...GZ_BACKUP.CATS.filter((k) => plan.cats[k] !== undefined).map((k) => {
+        const none = k === 'notes' && plan.kind === 'notes' && !accounts.length;
+        const box = Object.assign(document.createElement('input'), { type: 'checkbox', value: k, checked: !none, disabled: none });
+        const label = Object.assign(document.createElement('label'), { className: 'check' });
+        label.append(box, Object.assign(document.createElement('span'), { textContent: k === 'notes' && count > 1 ? t('Notes ({n} accounts)', { n: count }) : names[k] }));
+        if (none) label.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: t('No notes on this device yet. Write one in Notes on Canvas or Blackboard first.') }));
+        return label;
+      }));
+      field.hidden = plan.kind !== 'notes' || !accounts.length;
+      select.replaceChildren(Object.assign(document.createElement('option'), { value: '', textContent: '', selected: true }), ...accounts.map((k) => Object.assign(document.createElement('option'), { value: k, textContent: account(k) })));
+      enabled();
+      answer = resolve;
+      dialog.returnValue = '';
+      dialog.showModal();
+      (boxes().find((b) => !b.disabled) || $('#restore-cancel')).focus(); // focused here, not by autofocus: Settings can be a frame
+    });
+  })();
+
   // ---- backup ----
-  // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
-  // card styles and bookmarks go too; a picture kept on this computer stays here.
+  // One file (lib/backup.js): the settings, with Better To Do's own tasks and plans (storage.local, per Canvas site and user)
+  // and the pet beside them, card styles and bookmarks (a picture kept on this computer stays here), Look favorites, every
+  // Notes account, and this device's own records. Restore… lists what a file holds; each ticked category joins what is here.
+  const backupNames = () => ({ settings: t('Settings and Looks'), notes: t('Notes'), tasks: t('Tasks and pet'), dashNotes: t('Dashboard notes'),
+    classes: t('Class schedules'), gpa: t('GPA past terms'), widgets: t('Widgets'), shareKeys: t('Share keys') });
+  const sessionsOp = async (op, rest = {}) => {
+    const r = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op, ...rest });
+    if (!r?.ok) throw new Error(r?.error || 'storage');
+    return r;
+  };
+  let backupBusy = false;
   $('#export').addEventListener('click', async (e) => {
-    if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true)) return;
+    if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true) || backupBusy) return;
+    backupBusy = true;
     try {
       const keys = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'exportKeys' });
       if (!keys?.ok || !Array.isArray(keys.keys)) throw new Error('keys');
@@ -1468,25 +1515,23 @@ GZ_UI.load().then((s) => {
       const folders = GZ_FOLDERS.backup(all);
       const nav = { ...s.nav, i: '', li: '', ...(s.nav.li && { brand: 'glaze' }), ...(s.nav.i && { k: 'default', u: '' }) };
       const navbar = { ...s.navbar, ...(s.navbar.brand === 'custom' && { brand: 'glaze' }) };
-      const blob = new Blob([JSON.stringify({ ...s, nav, navbar, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
-      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
+      const settings = { ...s, nav, navbar, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), favorites: GZ_HISTORY.favorites(all.lookFavorites) };
+      const notes = [];
+      for (const account of Object.keys(all).filter((k) => GZ_BACKUP.ACCOUNT.test(k))) {
+        hint(t('Backing up…'));
+        notes.push({ account, entries: await GZ_BACKUP.notesOut(account, sessionsOp) });
+      }
+      const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, notes, keys: keys.keys, version: chrome.runtime.getManifest().version });
+      const blob = new Blob(GZ_ZIP.zip(entries), { type: 'application/zip' });
+      if (blob.size > GZ_BACKUP.LIMIT.zip || entries.length > GZ_BACKUP.LIMIT.entries) throw Object.assign(new Error('big'), { ui: t('Too big for one backup file (up to {size}).', { size: `${GZ_BACKUP.LIMIT.zip >> 20} MB` }) });
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: GZ_BACKUP.fileName() });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); }
+      hint('');
+    } catch (err) { hint(err.ui || t('Could not finish. Your local copies are kept. Try again.'), true); }
+    finally { backupBusy = false; }
   });
-  $('#import-btn').addEventListener('click', (e) => { if (e.isTrusted) $('#import').click(); });
-  $('#import').addEventListener('change', async (e) => {
-    if (!e.isTrusted) return;
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-    let raw;
-    try { raw = JSON.parse(await file.text()); } catch { return hint(t("{file} isn't a JSON file.", { file: file.name }), true); }
-    if (!raw || typeof raw !== 'object' || !['colors', 'look', 'bg', 'motion', 'presets'].some((k) => k in raw)) {
-      return hint(t('No Glaze settings found in {file}.', { file: file.name }), true);
-    }
-    // All of it is cleaned before any of it is applied, then stored whole by the background worker's write queue
-    // (GZ_TODO.restore, 'glaze:todo'): a file that can't be taken whole changes nothing, imports and every tab's
-    // To Do edits take turns, and success is said only once both stores have it.
+  // Clean Settings for the worker's staged restore; the UI reloads them only after the whole backup commits.
+  const putSettings = async (raw) => {
     const next = { ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw.card) };
     next.nav.i = ''; next.nav.li = ''; if (next.nav.brand === 'custom') next.nav.brand = 'glaze'; // A backup never names a picture on another device.
     if (next.navbar.brand === 'custom') next.navbar.brand = 'glaze';
@@ -1499,29 +1544,68 @@ GZ_UI.load().then((s) => {
     if (mediaMissing) next.bg.kind = 'gradient';
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
-    flush(); // an edit still waiting goes out first, so it can't land on top of the import
-    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, pets: raw.pets, folders: GZ_FOLDERS.backup(raw.folders), parts: raw.parts ?? null, settings: { version: 2, ...next, navItems: N.clean(raw.navItems), ...(raw.navbarItems !== undefined && { navbarItems: GZ_NAVBAR.clean(raw.navbarItems) }) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
-    if (!r.ok) {
-      // The settings didn't take, and putting the tasks back didn't either: say so, and show the settings as stored.
-      if (r.undone === false) {
-        GZ_UI.load().then((now) => { Object.assign(s, now); fill(); });
-        return hint(t("Couldn't import {file}, and undoing it failed too: your Better To Do tasks may be the imported ones. Your settings are as they were.", { file: file.name }), true);
+    const restore = { tasks, pets: raw.pets, folders: GZ_FOLDERS.backup(raw.folders), parts: raw.parts ?? null,
+      settings: { version: 2, ...next, navItems: N.clean(raw.navItems), ...(raw.navbarItems !== undefined && { navbarItems: GZ_NAVBAR.clean(raw.navbarItems) }) } };
+    const cards = [
+      ...(raw.ucards || raw.ulinks ? [{ ultra: true, replace: { cards: raw.ucards, links: raw.ulinks } }] : []),
+      { nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) },
+    ];
+    return { restore, cards, media: mediaMissing };
+  };
+  $('#import-btn').addEventListener('click', (e) => { if (e.isTrusted) $('#import').click(); });
+  $('#import').addEventListener('change', async (e) => {
+    if (!e.isTrusted) return;
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file || backupBusy) return;
+    backupBusy = true;
+    let plan;
+    try {
+      hint(t('Reading {name}…', { name: file.name }));
+      try { plan = await GZ_BACKUP.read(file); hint(''); } catch (err) {
+        const zip = /\.zip$/i.test(file.name);
+        return hint({
+          big: () => t('That file is too big to import (up to {size}).', { size: `${(zip ? GZ_BACKUP.LIMIT.zip : GZ_BACKUP.LIMIT.json) >> 20} MB` }),
+          json: () => t("{file} isn't a JSON file.", { file: file.name }),
+          none: () => t('No Glaze settings found in {file}.', { file: file.name }),
+          newer: () => t('{file} was made by a newer Glaze. Update Glaze to restore it.', { file: file.name }),
+        }[err.why]?.() || t("{file} isn't a Glaze backup, or it's damaged.", { file: file.name }), true);
       }
-      return hint(t("Couldn't import {file}, so nothing changed.", { file: file.name }), true);
+      const accounts = plan.kind !== 'notes' ? [] : (chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))).filter((k) => GZ_BACKUP.ACCOUNT.test(k));
+      const pick = await askRestore(file, plan, accounts);
+      if (!pick) return;
+      let token;
+      const backupOp = async (op, rest = {}) => {
+        const r = await chrome.runtime.sendMessage({ type: 'glaze:backup', restore: { op, token, ...rest } });
+        if (!r?.ok) throw new Error(r?.error || 'write');
+        return r;
+      };
+      const abandon = () => { if (token) chrome.runtime.sendMessage({ type: 'glaze:backup', restore: { op: 'abort', token } }).catch(() => {}); };
+      addEventListener('pagehide', abandon, { once: true });
+      flush();
+      hint(t('Restoring…'));
+      const out = await GZ_BACKUP.restore(plan, pick.ticked, {
+        begin: async () => { token = (await backupOp('begin')).token; },
+        own: (value) => backupOp('stage', { action: 'own', value }),
+        settings: async (raw) => { const value = await putSettings(raw); await backupOp('stage', { action: 'settings', value }); return { ok: true, media: value.media }; },
+        send: (op, rest) => backupOp('stage', { action: 'send', value: { op, ...rest } }),
+        finish: () => chrome.runtime.sendMessage({ type: 'glaze:backup', restore: { op: 'commit', token } }),
+        abort: async () => { if (token) await backupOp('abort'); },
+      }, pick.account);
+      removeEventListener('pagehide', abandon);
+      const names = backupNames();
+      if (!out.failed.length) {
+        Object.assign(s, await GZ_UI.load());
+        navItems = N.clean((await chrome.storage.sync.get('navItems')).navItems); renderNavItems(); showNavPreview(); fill();
+        hint([t('Restored {file}.', { file: file.name }), out.media && t('The background file was not included in this backup; showing the gradient.'),
+          pick.ticked.has('shareKeys') && t('Resume sharing to reconnect.'), out.skipped && t('Skipped (already up to date or too large): {n}', { n: out.skipped })].filter(Boolean).join(' '));
+      } else if (out.undone === false) hint(t("Couldn't restore {names}. Try again.", { names: new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(out.failed.map((k) => names[k])) }), true);
+      else if (!out.changed) hint(t("Couldn't restore {file}, so nothing changed.", { file: file.name }), true);
+      else hint(t("Couldn't restore {names}. Try again.", { names: new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(out.failed.map((k) => names[k])) }), true);
+    } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); } finally {
+      backupBusy = false;
+      $('#import-btn').focus();
     }
-    Object.assign(s, next);
-    // The backup's Look brings its parts (the export holds them); one without any leaves none worn.
-    s.parts = GZ_XPARTS.bundle(raw.parts);
-    navItems = N.clean(raw.navItems); renderNavItems(); showNavPreview();
-    const ultraStyled = !(raw.ucards || raw.ulinks) || await cardsOp({ ultra: true, replace: { cards: raw.ucards, links: raw.ulinks } });
-    const styled = await cardsOp({ nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) });
-    fill();
-    if (!styled || !ultraStyled) return hint(t('Some settings could not be imported. Try again in a moment.'), true);
-    if (raw.shareKeys !== undefined) {
-      const shared = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'importKeys', keys: raw.shareKeys }).catch(() => null);
-      if (!shared?.ok) return hint(t('Settings imported, but share keys could not be restored. Try importing again.'), true);
-    }
-    hint(t(mediaMissing ? 'Imported {file}. The background file was not included in this backup; showing the gradient.' : 'Imported {file}.', { file: file.name }));
   });
   // The defaults this device started with: a fresh install has Notes and the pet habitat on (GZ_SANITIZE's fresh), so a
   // reset gives those back rather than turning them off.

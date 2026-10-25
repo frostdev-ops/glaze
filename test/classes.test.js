@@ -466,6 +466,108 @@ test('the worker\'s writes: an older save after Delete all, a deletion or a newe
   assert.deepEqual(a.box[KEY].courses.map((c) => c.id), ['o-choir']);
 });
 
+test('a calendar read again brings its days off: added, removed, the same twice, other periods left alone', async () => {
+  const a = area();
+  const NY = 'America/New_York';
+  const term = { loc: 'Room 1', from: '2026-10-01', to: '2026-12-01' };
+  const mon = (skip) => P([1], 540, 600, { ...term, skip });
+  const wed = P([3], 540, 600, { ...term, skip: ['2026-11-25'] });
+  const choir = { id: 'o-choir', name: 'Choir', periods: [P([4], 1080, 1170, { skip: ['2026-11-26'] })] };
+  const add = (at, periods) => C.change({ key: KEY, op: 'add', at, tz: NY, courses: [{ id: '25', name: 'Biology', periods }] }, a);
+  await C.change({ key: KEY, op: 'add', at: 100, tz: NY, courses: [{ id: '25', name: 'Biology', periods: [mon([]), wed] }, choir] }, a);
+  const meets = (k) => C.onDay(a.box[KEY], C.dayNum(k)).filter((x) => x.id === '25').length;
+  assert.equal(meets('2026-10-26'), 1);
+  // A holiday the new reading has: no class that day, and still one Monday period.
+  let r = await add(200, [mon(['2026-10-26'])]);
+  assert.equal(r.ok, true);
+  assert.equal(meets('2026-10-26'), 0, 'the new day off holds');
+  assert.equal(meets('2026-11-02'), 1);
+  const bio = () => a.box[KEY].courses.find((c) => c.id === '25');
+  assert.deepEqual(bio().periods.map((p) => [p.days, p.skip]), [[[1], ['2026-10-26']], [[3], ['2026-11-25']]]);
+  // The same reading again changes nothing.
+  r = await add(300, [mon(['2026-10-26'])]);
+  assert.deepEqual(bio().periods.map((p) => [p.days, p.skip]), [[[1], ['2026-10-26']], [[3], ['2026-11-25']]]);
+  // A holiday the calendar dropped and another it added.
+  await add(400, [mon(['2026-11-09'])]);
+  assert.deepEqual(bio().periods.map((p) => [p.days, p.skip]), [[[1], ['2026-11-09']], [[3], ['2026-11-25']]]);
+  assert.equal(meets('2026-10-26'), 1);
+  assert.equal(meets('2026-11-09'), 0);
+  assert.deepEqual(a.box[KEY].courses.find((c) => c.id === 'o-choir').periods[0].skip, ['2026-11-26'], 'another course keeps its days off');
+});
+
+test('a save from a page in another zone moves no class already kept', async () => {
+  const a = area();
+  const NY = 'America/New_York', LA = 'America/Los_Angeles';
+  const iso = (store, k, name, tz = NY) => C.icsEvents(store, { from: k, to: k, tz }).filter((e) => e.summary === name).map((e) => new Date(e.start).toISOString());
+  const bio = { id: '25', name: 'Biology', periods: [P([1], 540, 600)] };
+  await C.change({ key: KEY, op: 'add', at: 100, tz: NY, courses: [bio] }, a);
+  assert.deepEqual(iso(a.box[KEY], '2026-10-26', 'Biology'), ['2026-10-26T13:00:00.000Z']);
+  await C.change({ key: KEY, op: 'add', at: 200, tz: LA, courses: [{ id: '26', name: 'Chemistry', periods: [P([1], 700, 750)] }] }, a);
+  // Across the clock change (1 Nov 2026), each class at its own zone's 9:00 and 11:40, whoever's zone asks.
+  for (const tz of [NY, LA]) {
+    assert.deepEqual(iso(a.box[KEY], '2026-10-26', 'Biology', tz), ['2026-10-26T13:00:00.000Z']);
+    assert.deepEqual(iso(a.box[KEY], '2026-11-02', 'Biology', tz), ['2026-11-02T14:00:00.000Z']);
+    assert.deepEqual(iso(a.box[KEY], '2026-10-26', 'Chemistry', tz), ['2026-10-26T18:40:00.000Z']);
+    assert.deepEqual(iso(a.box[KEY], '2026-11-02', 'Chemistry', tz), ['2026-11-02T19:40:00.000Z']);
+  }
+  // Biology's same time read again in Los Angeles is another meeting, not Biology's New York one.
+  await C.change({ key: KEY, op: 'add', at: 300, tz: LA, courses: [bio] }, a);
+  assert.deepEqual(iso(a.box[KEY], '2026-10-26', 'Biology'), ['2026-10-26T13:00:00.000Z', '2026-10-26T16:00:00.000Z']);
+  // An edit from the Los Angeles page that keeps the period's zone leaves it where it was.
+  await C.change({ key: KEY, op: 'put', at: 400, tz: LA, courses: [{ ...bio, name: 'Biology', periods: [P([1], 540, 600, { tz: NY })] }] }, a);
+  assert.deepEqual(iso(a.box[KEY], '2026-11-02', 'Biology'), ['2026-11-02T14:00:00.000Z']);
+});
+
+test('a schedule saved before zones were kept keeps its meaning when a class is added from another zone', async () => {
+  const NY = 'America/New_York', LA = 'America/Los_Angeles', PHX = 'America/Phoenix';
+  const at = (store, tz) => C.icsEvents(store, { from: '2026-10-26', to: '2026-10-26', tz }).filter((e) => e.summary === 'Biology').map((e) => new Date(e.start).toISOString());
+  const chem = { id: '26', name: 'Chemistry', periods: [P([1], 700, 750)] };
+  // No zone kept at all: the times are the student's own zone's, whichever it is.
+  const none = area({ [KEY]: { courses: [{ id: '25', name: 'Biology', at: 1, periods: [P([1], 540, 600)] }] } });
+  await C.change({ key: KEY, op: 'add', at: 100, tz: LA, courses: [chem] }, none);
+  assert.deepEqual(at(none.box[KEY], NY), ['2026-10-26T13:00:00.000Z']);
+  assert.deepEqual(at(none.box[KEY], LA), ['2026-10-26T16:00:00.000Z']);
+  // One zone kept for the whole schedule: still that one.
+  const one = area({ [KEY]: { tz: PHX, courses: [{ id: '25', name: 'Biology', at: 1, periods: [P([1], 540, 600)] }] } });
+  await C.change({ key: KEY, op: 'add', at: 100, tz: LA, courses: [chem] }, one);
+  for (const tz of [NY, LA]) assert.deepEqual(at(one.box[KEY], tz), ['2026-10-26T16:00:00.000Z']);
+});
+
+test('a save over the limits (20 times a class, 60 classes) is refused whole, and up to them is kept whole', async () => {
+  const times = (n) => Array.from({ length: n }, (_, i) => P([1], 480 + i * 10, 490 + i * 10, { loc: `Room ${i}` }));
+  const a = area();
+  let r = await C.change({ key: KEY, op: 'add', at: 100, courses: [{ id: '25', name: 'Biology', periods: times(21) }] }, a);
+  assert.deepEqual(r, { ok: false, error: 'periods' });
+  assert.equal(a.box[KEY], undefined, 'nothing written');
+  r = await C.change({ key: KEY, op: 'add', at: 200, courses: [{ id: '25', name: 'Biology', periods: times(20) }] }, a);
+  assert.equal(r.ok, true);
+  assert.equal(a.box[KEY].courses[0].periods.length, 20);
+  // Joined to what is kept, or as an edit, the same.
+  const kept = structuredClone(a.box[KEY]);
+  r = await C.change({ key: KEY, op: 'add', at: 300, courses: [{ id: '25', name: 'Biology', periods: [P([2], 480, 490)] }] }, a);
+  assert.deepEqual(r, { ok: false, error: 'periods' });
+  r = await C.change({ key: KEY, op: 'put', at: 300, courses: [{ id: '25', name: 'Biology', periods: times(21) }] }, a);
+  assert.deepEqual(r, { ok: false, error: 'periods' });
+  assert.deepEqual(a.box[KEY], kept);
+  // 60 classes; a 61st refused, with the rest of its save.
+  const classes = (n, from = 0) => Array.from({ length: n }, (_, i) => ({ id: `o-c${from + i}`, name: `Class ${from + i}`, periods: [P([1], 600, 650)] }));
+  const b = area();
+  r = await C.change({ key: KEY, op: 'add', at: 100, courses: classes(61) }, b);
+  assert.deepEqual(r, { ok: false, error: 'courses' });
+  assert.equal(b.box[KEY], undefined);
+  r = await C.change({ key: KEY, op: 'add', at: 200, courses: classes(60) }, b);
+  assert.equal(r.ok, true);
+  assert.equal(b.box[KEY].courses.length, 60);
+  const sixty = structuredClone(b.box[KEY]);
+  r = await C.change({ key: KEY, op: 'add', at: 300, courses: [...classes(1, 60), { id: 'o-c0', name: 'Class 0', periods: [P([2], 600, 650)] }] }, b);
+  assert.deepEqual(r, { ok: false, error: 'courses' });
+  assert.deepEqual(b.box[KEY], sixty);
+  // A full schedule still takes a new time for a class it has.
+  r = await C.change({ key: KEY, op: 'add', at: 400, courses: [{ id: 'o-c0', name: 'Class 0', periods: [P([2], 600, 650)] }] }, b);
+  assert.equal(r.ok, true);
+  assert.equal(b.box[KEY].courses.find((c) => c.id === 'o-c0').periods.length, 2);
+});
+
 test('the worker allows a page its own site\'s schedules only', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/background.js'), 'utf8');
   assert.match(src, /classes: \{\s*allow: async \(m, s\) => typeof m\.key === 'string' && GZ_CLASSES\.STORE_KEY\.test\(m\.key\) && m\.key\.startsWith\(`classes:\$\{\(await fromCanvas\(s\)\) \|\| \(await fromUltra\(s\)\)\}\/`\)/);
@@ -521,12 +623,13 @@ test('the export hook: one event per meeting, at its instant in the schedule\'s 
   for (const tz of ['America/New_York', 'Europe/Berlin', undefined]) {
     assert.match(I.write({ name: 'x', events: C.icsEvents(phx, { from: '2026-10-15', to: '2026-10-15', tz }) }, { now: NOW }), /DTSTART:20261015T160000Z\r\nDTEND:20261015T165000Z/);
   }
-  // Saving keeps the zone the page read the times in.
+  // Saving keeps the zone the page read the times in, with each time.
   const a = area();
   await C.change({ key: KEY, op: 'add', at: 1, tz: 'America/Phoenix', courses: phx.courses }, a);
-  assert.equal(a.box[KEY].tz, 'America/Phoenix');
+  assert.deepEqual(a.box[KEY].courses[0].periods.map((p) => p.tz), ['America/Phoenix']);
   await C.change({ key: KEY, op: 'add', at: 2, tz: 'Not/AZone', courses: phx.courses }, a);
-  assert.equal(a.box[KEY].tz, 'America/Phoenix');
+  assert.deepEqual(a.box[KEY].courses[0].periods.map((p) => p.tz), ['America/Phoenix']);
+  assert.match(I.write({ name: 'x', events: C.icsEvents(a.box[KEY], { from: '2026-10-15', to: '2026-10-15', tz: 'America/New_York' }) }, { now: NOW }), /DTSTART:20261015T160000Z/);
 });
 
 // Codex W14 review: a day of the student's Canvas zone isn't a day of the schedule's zone. A Thursday 23:00 class kept in

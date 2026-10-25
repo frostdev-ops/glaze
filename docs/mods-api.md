@@ -254,9 +254,9 @@ Where a row says Worker, a frame UI can't use it (personal data goes to Workers 
 | `glaze.theme()` | `{ tokens: { accent: '#17c8f4', ... }, dark, motion: 'off' \| 'subtle' \| 'expressive' }`. The `tokens` are the palette Glaze wears. | |
 | `glaze.settings()` | `{ [setting id]: value }`, with defaults. | |
 | `glaze.courses()` | `[{ id, name, code, color }]`, the courses Glaze has seen on this site. Worker. | `courses` |
-| `glaze.todo()` | `[{ id, type, courseId, course, title, due, url, done, submitted, graded, late, missing }]`, the cached plan on this site; `due` is ms since 1970 or null; planner notes' text isn't included. Worker. | `todo` |
+| `glaze.todo()` | `[{ id, type, courseId, course, title, due, url, done, submitted, graded, late, missing }]`, the cached plan of the account signed in on this page; `due` is ms since 1970 or null; planner notes' text isn't included. Worker. | `todo` |
 | `glaze.schedule(from, to)` | Cached due items in `[from, to]`, including both ends, with the same fields and cleaning as `todo`. Both arguments are non-negative safe integer ms since 1970, `from <= to`, at most 60 days apart; at most 500 results in cache order. Undated items are omitted. Uses only the plan Glaze has already read: no fetch for missing days, no class timetable. Worker. | `todo` |
-| `glaze.grades(courseId?)` | `[{ courseId, name, percent, at }]`, each course's latest grade from Insights, `[]` until Insights has run. Worker. | `grades` |
+| `glaze.grades(courseId?)` | `[{ courseId, name, percent, at }]`, each course's latest grade from Insights for the account signed in on this page, `[]` until Insights has run or while that account is unknown. Worker. | `grades` |
 | `glaze.fetch(url, init?)` | `{ status, ok, headers, text }`. `https` on port 443, `GET` or `POST` (`init.body` a string), request headers `accept` `accept-language` `content-language` `content-type` `authorization`. No cookies, no referrer, redirects refused, 15 s, 2 MiB back as text; of the response headers only `content-type` `content-length` `etag` `last-modified` `date` `cache-control`. | `network:<host>` |
 | `glaze.ui.render(slot, tree)` | Draws a component tree in a slot of the manifest that has no `file`; `null` clears it. | |
 | `glaze.ui.canvas(slot)` | The slot's `canvas` component as an `OffscreenCanvas`. Worker. | |

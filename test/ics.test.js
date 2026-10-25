@@ -308,3 +308,140 @@ test('review: generated UIDs keep different items apart; supplied UIDs are TEXT-
   assert.match(out, /^UID:a\\,b\\;c\\\\d$/m);
   assert.equal(I.parse(out).events[0].uid, 'a,b;c\\d');
 });
+
+// A VTIMEZONE: STANDARD/DAYLIGHT blocks, each [DTSTART, from, to, RRULE?].
+const vtz = (id, obs) => ['BEGIN:VTIMEZONE', `TZID:${id}`, ...obs.flatMap(([kind, start, from, to, rrule]) =>
+  [`BEGIN:${kind}`, `DTSTART:${start}`, `TZOFFSETFROM:${from}`, `TZOFFSETTO:${to}`, ...(rrule ? [`RRULE:${rrule}`] : []), `END:${kind}`]), 'END:VTIMEZONE'].join('\r\n');
+const US = [['STANDARD', '20071104T020000', '-0400', '-0500', 'FREQ=YEARLY;BYMONTH=11;BYDAY=1SU'], ['DAYLIGHT', '20070311T020000', '-0500', '-0400', 'FREQ=YEARLY;BYMONTH=3;BYDAY=2SU']];
+// Counts Date.UTC calls, which reading a VTIMEZONE's yearly rules makes for each observance it looks at.
+const utcCalls = (f) => {
+  const real = Date.UTC;
+  let n = 0;
+  Date.UTC = (...a) => (n++, real(...a));
+  try { return [f(), n]; } finally { Date.UTC = real; }
+};
+
+test('a time zone with thousands of observances is refused', () => {
+  const obs = Array.from({ length: 2000 }, () => ['STANDARD', '19700101T000000', '+0000', '+0000']);
+  const events = Array.from({ length: 2000 }, (_, i) => ev(`UID:${i}`, 'DTSTAMP:20260101T000000Z', 'DTSTART;TZID=Evil:20260101T090000'));
+  assert.throws(() => I.parse(cal1('VERSION:2.0', 'PRODID:-//x//EN', vtz('Evil', obs), ...events)), RangeError);
+  const cap = (n) => I.parse(cal1(vtz('Z', Array.from({ length: n }, () => US[0])), ev('UID:a', 'DTSTART;TZID=Z:20261201T090000')), { limits: { observances: 3 } });
+  assert.equal(iso(cap(3).events[0].start), '2026-12-01T14:00:00Z');
+  assert.throws(() => cap(4), RangeError);
+});
+
+test('a zone\'s observances are read once per year, not once per time converted', () => {
+  // 400 copies of the US rules: the same offsets as New York, read with work that doesn't grow with the events.
+  const zone = vtz('Many', Array.from({ length: 200 }, () => US).flat());
+  const days = Array.from({ length: 2000 }, (_, i) => new Date(Date.UTC(2026, 0, 1) + (i % 365) * 864e5).toISOString().slice(0, 10).replace(/-/g, ''));
+  const [cal, calls] = utcCalls(() => I.parse(cal1(zone, ...days.map((d, i) => ev(`UID:${i}`, `DTSTART;TZID=Many:${d}T013000`, 'DURATION:PT1H')))));
+  assert.ok(calls < 20000, `${calls} Date.UTC calls`);
+  const ny = I.parse(cal1(...days.map((d, i) => ev(`UID:${i}`, NY(`${d}T013000`), 'DURATION:PT1H'))));
+  assert.deepEqual(cal.events.map((e) => [e.start, e.end]), ny.events.map((e) => [e.start, e.end]));
+});
+
+test('one work budget covers zone lookups and RDATEs in parse, and RDATEs in expand', () => {
+  const zone = vtz('Many', Array.from({ length: 25 }, () => US).flat());
+  const years = Array.from({ length: 30 }, (_, i) => ev(`UID:${i}`, `DTSTART;TZID=Many:${2000 + i}0601T090000`)).join('\r\n');
+  assert.equal(I.parse(cal1(zone, years)).events.length, 30);
+  assert.throws(() => I.parse(cal1(zone, years), { limits: { steps: 1000 } }), RangeError);
+  const rdates = Array.from({ length: 3000 }, (_, i) => iso(at('2026-01-01T09:00:00Z') + i * 864e5).replace(/[-:]/g, '')).join(',');
+  const many = cal1(ev('UID:r', 'DTSTART:20260101T090000Z', `RDATE:${rdates}`));
+  assert.throws(() => I.parse(many, { limits: { steps: 1000 } }), RangeError);
+  const cal = I.parse(many);
+  assert.equal(cal.events[0].rdates.length, 3000);
+  assert.equal(I.expand(cal, at('2026-01-01'), at('2027-01-01'), { limits: { steps: 100 } }).truncated, true);
+  assert.equal(I.expand(cal, at('2026-01-01'), at('2027-01-01')).length, 365);
+});
+
+test('zone work on the last RDATE stops expansion and reports truncation', () => {
+  const zone = vtz('Many', Array.from({ length: 25 }, () => US).flat());
+  const cal = I.parse(cal1(zone, ev('UID:r', 'DTSTART;TZID=Many:20260601T090000', 'RDATE:20300601T090000Z')));
+  const [out, calls] = utcCalls(() => I.expand(cal, at('2026-01-01'), at('2031-01-01'), { limits: { steps: 1 } }));
+  assert.equal(out.truncated, true);
+  assert.deepEqual(out.map((o) => iso(o.start)), ['2026-06-01T13:00:00Z']);
+  assert.ok(calls < 10, `${calls} Date.UTC calls after the budget ran out`);
+  assert.equal(I.expand(cal, at('2026-01-01'), at('2031-01-01')).length, 2, 'a later call gets its own budget');
+});
+
+test('parsing charges unused observances and every zone RDATE, including invalid dates', () => {
+  const parse = (zone, steps) => I.parse(cal1(zone, ev('UID:a', 'DTSTART:20260601T090000Z')), { limits: { steps } });
+  assert.throws(() => parse(vtz('Unused', Array.from({ length: 11 }, () => US[0])), 10), /calendar too complex/);
+  for (const value of ['20260101T000000', 'invalid']) {
+    const zone = vtz('Unused', [US[0]]).replace('END:STANDARD', `RDATE:${Array(11).fill(value).join(',')}\r\nEND:STANDARD`);
+    assert.throws(() => parse(zone, 10), /calendar too complex/, value);
+    assert.equal(parse(zone, 100).events.length, 1);
+  }
+});
+
+test('expanding distant years bounds retained zone years across calls', () => {
+  // Observe retained transition lists without exposing parser internals in its public API.
+  let peak = 0;
+  class TrackedMap extends Map {
+    set(k, v) {
+      super.set(k, v);
+      if (Array.isArray(v) && v.some((x) => typeof x.t === 'number')) peak = Math.max(peak, this.size);
+      return this;
+    }
+  }
+  const context = { module: { exports: {} }, TextEncoder, TextDecoder, Map: TrackedMap };
+  require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../lib/ics.js'), 'utf8'), context);
+  const parser = context.module.exports;
+  const cal = parser.parse(cal1(vtz('Custom', US), ev('UID:y', 'DTSTART;TZID=Custom:20260601T090000', 'RRULE:FREQ=YEARLY')));
+  for (const end of [2100, 2200]) {
+    const out = parser.expand(cal, at('2026-01-01'), at(`${end}-01-01`));
+    assert.equal(out.length, end - 2026);
+    assert.equal(out.truncated, undefined);
+    assert.equal(iso(out.at(-1).start), `${end - 1}-06-01T13:00:00Z`);
+  }
+  assert.ok(peak <= 16, `${peak} years retained by one zone`);
+});
+
+test('custom Southern DST preserves the skipped and repeated hours', () => {
+  const zone = vtz('South', [
+    ['STANDARD', '20000402T030000', '+1100', '+1000', 'FREQ=YEARLY;BYMONTH=4;BYDAY=1SU'],
+    ['DAYLIGHT', '20001001T020000', '+1000', '+1100', 'FREQ=YEARLY;BYMONTH=10;BYDAY=1SU'],
+  ]);
+  for (const [wall, expected] of [
+    ['20260101T090000', '2025-12-31T22:00:00Z'],
+    ['20260405T023000', '2026-04-04T15:30:00Z'],
+    ['20260405T033000', '2026-04-04T17:30:00Z'],
+    ['20261004T023000', '2026-10-03T16:30:00Z'],
+    ['20261004T033000', '2026-10-03T16:30:00Z'],
+  ]) assert.equal(iso(I.parse(cal1(zone, ev('UID:s', `DTSTART;TZID=South:${wall}`))).events[0].start), expected);
+  const cal = I.parse(cal1(zone, ev('UID:s', 'DTSTART;TZID=South:20260927T023000', 'RRULE:FREQ=WEEKLY;COUNT=3')));
+  assert.deepEqual(I.expand(cal, at('2026-09-01'), at('2026-11-01')).map((o) => iso(o.start)),
+    ['2026-09-26T16:30:00Z', '2026-10-10T15:30:00Z', '2026-10-17T15:30:00Z']);
+});
+
+test('custom zone rules change by era and preserve pre-1970 onsets', () => {
+  const zone = vtz('History', [
+    ['STANDARD', '19601030T020000', '-0400', '-0500', 'FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU;UNTIL=20061029T060000Z'],
+    ['DAYLIGHT', '19600403T020000', '-0500', '-0400', 'FREQ=YEARLY;BYMONTH=4;BYDAY=1SU;UNTIL=20060402T020000'],
+    ...US,
+  ]);
+  for (const [wall, expected] of [
+    ['19600403T023000', '1960-04-03T07:30:00Z'],
+    ['19601030T013000', '1960-10-30T05:30:00Z'],
+    ['19690601T090000', '1969-06-01T13:00:00Z'],
+    ['20060320T090000', '2006-03-20T14:00:00Z'],
+    ['20060402T023000', '2006-04-02T07:30:00Z'],
+    ['20070311T023000', '2007-03-11T07:30:00Z'],
+    ['20071104T013000', '2007-11-04T05:30:00Z'],
+  ]) assert.equal(iso(I.parse(cal1(zone, ev('UID:h', `DTSTART;TZID=History:${wall}`))).events[0].start), expected);
+});
+
+test('zone UNTIL includes the same last onset in local time and UTC; ties keep source order', () => {
+  const fixed = ['STANDARD', '20250102T000000', '+0100', '+0300'];
+  for (const until of ['20260101T000000', '20251231T230000Z', '20251231T235959', '20251231T225959Z']) {
+    const zone = vtz('Cutoff', [['STANDARD', '20200101T000000', '+0100', '+0200', `FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=1;UNTIL=${until}`], fixed]);
+    const e = I.parse(cal1(zone, ev('UID:u', 'DTSTART;TZID=Cutoff:20260601T090000'))).events[0];
+    assert.equal(iso(e.start), until.endsWith('59') || until.endsWith('59Z') ? '2026-06-01T06:00:00Z' : '2026-06-01T07:00:00Z');
+  }
+  const annual = ['STANDARD', '20200101T000000', '+0000', '+0100', 'FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=1'];
+  const once = ['STANDARD', '20260101T000000', '+0000', '+0200'];
+  for (const [rules, expected] of [[[annual, once], '2026-06-01T08:00:00Z'], [[once, annual], '2026-06-01T07:00:00Z']]) {
+    const e = I.parse(cal1(vtz('Tie', rules), ev('UID:t', 'DTSTART;TZID=Tie:20260601T090000'))).events[0];
+    assert.equal(iso(e.start), expected);
+  }
+});

@@ -6,13 +6,26 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Back up… and Restore… in Settings → Privacy and data save and bring back everything in one file: settings and Looks, tasks and pet, every Notes account, dashboard notes, class schedules, GPA past terms, widgets and share keys. Restore lists what the file holds, each ticked, and checks all of it before changing anything. Older settings files and Notes backups still restore.
+
 ### Changed
 
 - Settings → Look → Pointer has a switch that turns the custom pointer off on every page, giving you the system's pointer and no pointer animation, and back on with your choice as you left it; Ctrl+K has the same switch. System pointer is no longer one of the pointers: if you had chosen it, the switch is off. Your own picture is a card among the pointers, and the animation switch stays in view.
 - The Look's own pointer and cursor effect moved from Motion to Pointer, under This Look's pointer.
+- Mods and widgets read only the grades, to-dos and schedule of the account signed in on the page, and nothing while that account is unknown.
+- Class schedule: a time saved in another time zone names that zone.
+- CI runs the settings, popup, site-permission and pointer checks in a pinned, integrity-checked Chromium on every push and pull request, and a release zip is built only once they pass.
 
 ### Fixed
 
+- Draft backup keeps each tab's own copy when the same reply or message is open in more than one tab, and on Blackboard lets a reply's copy go only after Post, Reply, Submit or Send (or Ctrl+Enter) on the same page and the reply then shows up there; Cancel, Save draft, a quotation, someone else's matching post or moving to another discussion keep it. A restored draft is cleaned of scripts and event handlers.
+- Notes: restoring a newer backup brings back renames, folder moves and course changes, and a folder's newer name, course and order (folders only on this device follow the backup's), field by field, and keeps any newer ones made on this device.
+- Class schedule: a calendar imported again updates its days off and keeps the ones you added; adding a class from a page in another time zone no longer moves the classes already saved; a class with more than 20 times or a schedule of more than 60 classes says so instead of "Saved"; Stop reading stops a calendar link.
+- Class schedule: a calendar link is read only up to the size limit, a calendar with a huge time zone can no longer freeze the page, and a calendar too big to read says so in your language.
+- Settings fit a 320-pixel window, with larger text, translations and right-to-left: no sideways scrolling, and every control stays on screen.
+- Pages on a school's own Canvas, Blackboard or Moodle address no longer load without Glaze while Glaze installs or updates.
 - Blackboard: on the Courses page, course tabs no longer cover the sidebar's header when Blackboard's To Do column holds the sidebar.
 - Blackboard: a course opened over the Courses page with an animated background keeps course-card controls, course tabs and board tiles beneath it.
 

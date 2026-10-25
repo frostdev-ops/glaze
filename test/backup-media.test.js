@@ -6,6 +6,7 @@ const G = require('../defaults.js');
 const P = require('../lib/lookparts.js');
 const C = require('../lib/cards.js');
 const B = require('../lib/navbar.js');
+const BK = require('../lib/backup.js');
 
 const source = fs.readFileSync(require.resolve('../options.js'), 'utf8');
 const backup = source.slice(source.indexOf('  // ---- backup ----'), source.indexOf('  // Two clicks, so a stray'));
@@ -13,17 +14,23 @@ const backup = source.slice(source.indexOf('  // ---- backup ----'), source.inde
 const restore = async (src, kind = 'media', extra = {}, roundTrip = false, stored = {}, kept = []) => {
   let raw = { ...structuredClone(G.GZ_DEFAULTS), bg: { ...G.GZ_DEFAULTS.bg, kind }, parts: { x: { bg: { media: { type: 'video', src } }, cursor: { kind: 'glow' } } }, ...extra };
   const elements = {}, sent = [], hints = [], s = {};
-  let exported;
+  let exported, staged;
+  const file = (raw) => { const text = JSON.stringify(raw); return { name: 'backup.json', size: text.length, text: async () => text }; };
   const context = {
-    s, navigator: {}, document: { createElement: () => ({ click() {} }) }, URL: { createObjectURL: (blob) => { exported = blob; return 'blob:test'; }, revokeObjectURL() {} }, Blob, setTimeout: () => 0, structuredClone, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: C, GZ_XPARTS: P,
+    s, GZ_UI: { load: async () => ({ ...staged.restore.settings, parts: staged.restore.parts }) }, navItems: {}, navigator: {}, document: { createElement: () => ({ click() {} }) }, URL: { createObjectURL: (blob) => { exported = blob; return 'blob:test'; }, revokeObjectURL() {} }, Blob, setTimeout: () => 0, structuredClone, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: C, GZ_XPARTS: P,
     GZ_TODO: { STORE_KEY: /^todo:/ }, GZ_PET: { KEY: /^pet:/, backup: () => ({}) }, GZ_NAVBAR: B, GZ_FOLDERS: { backup: () => ({}) }, N: { clean: () => ({}) },
-    $: (id) => (elements[id] ||= { addEventListener: (type, fn) => { elements[id][type] = fn; } }),
-    flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true,
+    GZ_BACKUP: BK, GZ_HISTORY: require('../lib/history.js'), GZ_ZIP: require('../lib/zip.js'), askRestore: async (f, plan) => ({ ticked: new Set(Object.keys(plan.cats)), account: '' }),
+    $: (id) => (elements[id] ||= { focus() {}, addEventListener: (type, fn) => { elements[id][type] = fn; } }),
+    addEventListener() {}, removeEventListener() {}, flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true,
     hint: (...v) => hints.push(v), t: (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars[k]),
-    chrome: { storage: { local: { get: async (k) => (k in stored ? { [k]: stored[k] } : {}) }, sync: { get: async () => ({}) } }, runtime: { sendMessage: (m, cb) => {
+    chrome: { storage: { local: { get: async (k) => (k in stored ? { [k]: stored[k] } : {}) }, sync: { get: async () => ({}) } }, runtime: { getManifest: () => ({ version: '1' }), sendMessage: (m, cb) => {
       if (m.type === 'glaze:sessions') return Promise.resolve({ ok: true, keys: [] });
       if (m.type === 'glaze:media') { const r = m.op === 'list' ? { ok: true, files: kept.map((h) => ({ h, t: 'video/webm', size: 3 })) } : { ok: false }; cb?.(r); return Promise.resolve(r); }
-      sent.push(m); cb?.({ ok: true });
+      if (m.type === 'glaze:backup') {
+        if (m.restore.op === 'stage' && m.restore.action === 'settings') { staged = m.restore.value; sent.push({ restore: staged.restore }); }
+        return Promise.resolve({ ok: true, token: 'test' });
+      }
+      sent.push(m); cb?.({ ok: true }); return Promise.resolve({ ok: true });
     } } },
   };
   vm.runInNewContext(backup, context);
@@ -31,9 +38,11 @@ const restore = async (src, kind = 'media', extra = {}, roundTrip = false, store
     Object.assign(s, G.GZ_SANITIZE(raw), { parts: P.bundle(raw.parts) }); // the editor keeps the Look's parts beside its settings
     await elements['#export'].click({ isTrusted: true });
     assert.ok(exported, hints.map((x) => x[0]).join(', '));
-    raw = JSON.parse(await exported.text());
+    const bytes = new Uint8Array(await exported.arrayBuffer());
+    await elements['#import'].change({ isTrusted: true, target: { files: [{ name: 'backup.json', size: bytes.length, type: 'application/zip', arrayBuffer: async () => bytes.buffer }] } });
+    return { s, sent: JSON.parse(JSON.stringify(sent)), hints };
   }
-  await elements['#import'].change({ isTrusted: true, target: { files: [{ name: 'backup.json', text: async () => JSON.stringify(raw) }] } });
+  await elements['#import'].change({ isTrusted: true, target: { files: [file(raw)] } });
   return { s, sent: JSON.parse(JSON.stringify(sent)), hints };
 };
 
@@ -50,7 +59,7 @@ test('a backup put back on the computer that still keeps its background file kee
   const r = await restore(`file:${h}`, 'media', {}, false, {}, [h]);
   assert.equal(r.sent[0].restore.settings.bg.kind, 'media');
   assert.equal(r.s.parts.x.bg.media.src, `file:${h}`);
-  assert.equal(r.hints.at(-1)[0], 'Imported backup.json.');
+  assert.equal(r.hints.at(-1)[0], 'Restored backup.json.');
 });
 
 test('a backup round trip on this computer keeps its kept background file, wherever the worker keeps it', async () => {
@@ -59,7 +68,7 @@ test('a backup round trip on this computer keeps its kept background file, where
   assert.equal(r.sent[0].restore.settings.bg.kind, 'media');
   assert.equal(r.sent[0].restore.parts.x.bg.media.src, `file:${h}`);
   assert.equal(r.s.bg.kind, 'media');
-  assert.equal(r.hints.at(-1)[0], 'Imported backup.json.');
+  assert.equal(r.hints.at(-1)[0], 'Restored backup.json.');
   // Another file kept here is not this one.
   const other = await restore(`file:${h}`, 'media', {}, true, {}, ['B'.repeat(43)]);
   assert.equal(other.s.bg.kind, 'gradient');
@@ -70,7 +79,7 @@ test('backup restore preserves URL backgrounds and inactive media drafts', async
     const r = await restore(src, kind);
     assert.equal(r.s.bg.kind, kind);
     assert.equal(r.s.parts.x.bg.media.src, src);
-    assert.equal(r.hints.at(-1)[0], 'Imported backup.json.');
+    assert.equal(r.hints.at(-1)[0], 'Restored backup.json.');
   }
 });
 

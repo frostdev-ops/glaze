@@ -383,6 +383,18 @@ test('calls go to the worker as glaze:mod with the host\'s tags, and come back t
   port.close();
 });
 
+test('a call names this document (content.js __gzDoc) for the worker\'s account check, and carries nothing else the mod adds', async () => {
+  const p = page();
+  p.ctx.__gzDoc = 'doc-1';
+  p.G.start([W('a')]);
+  const { port } = await p.load();
+  port.postMessage({ ready: true });
+  port.postMessage({ mod: 'a', via: 'worker', id: 4, call: 'grades', args: [], account: '5', uid: '5', doc: 'forged', type: 'glaze:modpage' });
+  await settle();
+  eq(p.sent.filter((m) => m.call), [{ type: 'glaze:mod', mod: 'a', via: 'worker', call: 'grades', args: [], doc: 'doc-1' }]);
+  port.close();
+});
+
 test('a Worker that stops answering is ended alone; the host and the others go on', async () => {
   const p = page();
   p.G.start([W('a'), W('b')]);

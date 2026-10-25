@@ -7,7 +7,7 @@ _Last updated: 2026-10-22_
 Chrome can run JavaScript from mod bundles you choose to install, including author-signed channel updates.
 Glaze does not fetch mod code to run automatically from us. Code runs in an isolated sandbox without extension APIs;
 Firefox and Safari use declarative parts only. Courses, to-dos, grades and the navigation model require declared and granted permissions,
-are scoped to the requesting school's origin, and reach only a DOM-less Worker. Brokered network requests require
+are scoped to the requesting school's origin and signed-in account, and reach only a DOM-less Worker. Brokered network requests require
 a declared and granted exact HTTPS host, omit cookies and referrers, and refuse redirects. A mod granted both data
 and network access can send that data to its granted hosts. A mod without data access may have a frame UI that can
 contact other sites; linked Look media also contacts its chosen host. Those sites receive ordinary connection
@@ -68,7 +68,7 @@ at most daily while a page runs it; **Stop following** or removing the mod ends 
 channel** uploads the signed mod to their selected relay. Both are encrypted share-session requests without cookies,
 referrer or student identifiers; the relay sees what it sees for any session (described below). The check state stays
 in device-local storage. The edit key of a channel you publish (`modChannelOwn:<id>`) is kept in the `vault` store of
-the worker-only `glaze-sharing` database, not in `storage.local`, where a page's script could read it; Export all does
+the worker-only `glaze-sharing` database, not in `storage.local`, where a page's script could read it; a backup does
 not carry it. The install prompt and followed mod name the relay host. After publishing a newer version,
 Glaze requests deletion of the previous bundle file, best effort; older relays without file deletion retain it until
 session deletion or expiry. Recipients and operator backups may keep copies.
@@ -81,7 +81,7 @@ The Relay preference (`shareRelay`) is stored in browser sync, without credentia
 
 With a custom relay, encrypted data and necessary metadata go to that server and its infrastructure, instead of the default operator. Glaze cannot vouch for that operator, its availability, proxy, logs, backups or retention. Content remains end-to-end encrypted either way; a relay can withhold/delete ciphertext and creator actions reveal the delete token as described below. See [the self-host guide](server/README.md) for the public interface and operator responsibilities.
 
-The worker keeps session keys, creator delete tokens, merge state, unsent changes, decrypted local copies and retained file bytes in Glaze's own IndexedDB (`glaze-sharing`). Only Glaze extension pages may request keys. LMS-side buttons open that page with a validated, nonsecret account selection hint. Notes ZIP import and Export all move together to that page: a key-bearing file input or blob URL must never belong to a school page. Both notes ZIPs and settings exports always include every session's share keys and creator delete tokens, even while sharing is paused, with an explicit private-backup warning. A failed key read fails the export; it never silently omits keys. Single-note exports do not include session keys.
+The worker keeps session keys, creator delete tokens, merge state, unsent changes, decrypted local copies and retained file bytes in Glaze's own IndexedDB (`glaze-sharing`). Only Glaze extension pages may request keys. LMS-side buttons open that page with a validated, nonsecret account selection hint. **Back up…** and **Restore…** live on that page: a key-bearing file input or blob URL must never belong to a school page. Backups include every session's share keys and creator delete tokens, even while sharing is paused, with an explicit private-backup warning. A failed key read fails the export; it never silently omits keys. Single-note exports do not include session keys.
 
 Selected notes/folders, their pictures and attachments, a Look, or selected custom tasks and their steps/plans are encrypted on this device before going to `https://share.frostdev.io`. Account/site identifiers and LMS assignments are not carrier fields. Decrypted remote content is still untrusted: Notes HTML is sanitized, Look codes decoded/validated and custom tasks/plans cleaned before use. Joining first keeps a separate local session; an explicit copy into a chosen existing local account creates fresh IDs, preserving existing work. Viewer copies are detached; editable copies follow changes. Use this Look opens the existing editor preview (including its external font/image notices); only Apply changes your theme. All local app copies survive pause, leave, session deletion and expiry.
 
@@ -172,7 +172,7 @@ not those unknown legacy copies or unrelated stickers.
   committed-picture cap). Replacement can temporarily retain the previous logo until the new setting commits;
   failed saves retain the old picture. Replacement/reset/import then remove unused custom logos. A displayed local
   picture is readable by the school page, like other displayed images.
-  Export all carries navigation settings/links but removes local picture ids and restores the bundled logo on import;
+  A backup carries navigation settings/links but removes local picture ids and restores the bundled logo on restore;
   Look/share codes exclude personal navigation links, layout and logos. Rail widgets are off by default. The timer
   shares the existing device `widgetTimer`; its editor preview is an isolated demonstration. When Next due is enabled
   and visible, it uses the agenda/Better To Do planner reader and account-matched cache: a covered To Do copy under
@@ -273,7 +273,7 @@ not those unknown legacy copies or unrelated stickers.
   them. Canvas's own editor recovery and its own what-if scores stay with Canvas.
 - **Better To Do** (Canvas and Blackboard, on by default), in `chrome.storage.local`, on this device only, per Canvas
   or Blackboard site and signed-in user id: the tasks you add (title, course, due date, notes), the steps, "do on" days
-  and focus sessions you plan, and what you tick off while "Tick off in Canvas too" is off (on Blackboard, always). Export settings includes them, so you can
+  and focus sessions you plan, and what you tick off while "Tick off in Canvas too" is off (on Blackboard, always). A backup includes them, so you can
   move them; nothing else sends them anywhere. It also keeps one copy of your planner items (title, course, dates,
   submission status, your planner marks; on Blackboard, your due items with whether each was handed in, late, missing or
   excused, and whether Blackboard sent its calendar whole) and, for teachers, the work waiting to be graded with its counts. Two
@@ -352,7 +352,7 @@ not those unknown legacy copies or unrelated stickers.
   shortened note: a note too long to keep whole (over 2 MB of text, or more than 100,000 elements) is refused with a
   visible warning when you save, import, duplicate, export, paste or sync it, never cut. Glaze asks the browser for
   `unlimitedStorage` (see Permissions), so this storage isn't cleared to free space; where a browser withholds that, it
-  may clear it if the device runs very short, so **Export all** saves a copy
+  may clear it if the device runs very short, so **Back up…** saves a copy
   (a zip of Markdown files, the pictures and attachments, and the notes as HTML for importing back) through your
   browser's own download, and **Import** reads such a zip on your device.
 - **Reminders and streak** (Canvas and Blackboard, off by default), in `chrome.storage.local`, on this device only, per
@@ -361,7 +361,7 @@ not those unknown legacy copies or unrelated stickers.
   snoozed and the items you muted, each with a time (dropped after a month; mutes after three months), and, with the
   streak on, the day your run started, the day it was last calculated, your best, what a restore forgave and how many restores you used this month.
   It's kept apart from Canvas's and Blackboard's own read and done state, which Glaze never changes. Nothing sends it anywhere, and
-  Export settings leaves it out; your reminder choices (which kinds, how long before) are settings and sync with them.
+  a backup leaves it out; your reminder choices (which kinds, how long before) are settings and sync with them.
 - **Your class schedule** (Canvas and Blackboard), in `chrome.storage.local`, on this device only, per Canvas or
   Blackboard site and signed-in user id: for each course you saved, its course id there (or a name of your own), code and
   name, and each meeting's days, start and end time, place, first and last day and days off; the time zone those times
@@ -369,7 +369,7 @@ not those unknown legacy copies or unrelated stickers.
   so a save from another tab made before a deletion can't bring a course back. Only what you choose to save on the
   review screen is kept; the file, page or text you import is read on your device and not kept. Delete removes a
   course, Delete all the lot. Nothing sends it anywhere other than into a calendar file you export yourself (Export
-  calendar (.ics), "Your class schedule"), and Export settings leaves it out; whether class reminders are on, and how
+  calendar (.ics), "Your class schedule") or a backup you save yourself (**Back up…**); whether class reminders are on, and how
   long before, are settings and sync with them.
 - **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
@@ -935,7 +935,7 @@ admin@frostdev.io
 
 ### Hidden Ultra folders
 
-Hidden folder/module IDs and the Show hidden folders switch are stored in `storage.local`, separately for each HTTPS site, known Ultra account and course. No titles or content are stored. Limits are 500 IDs per course, 200 account/course records and 256 KiB across them. Unknown identity or failed storage leaves the outline untouched. The feature makes no requests, including no profile request; it reuses only the existing page identity cache. Export all includes validated records; imports retain their account/site/course keys and ignore malformed records without replacing existing choices. Only your own clicks or keyboard activation save a choice. The brief status and Undo are held only in memory, cleared on navigation, account changes or disabling, and store no additional data. Undo changes only the folder just hidden. Search, Download all, progress and new-item counts are unaffected.
+Hidden folder/module IDs and the Show hidden folders switch are stored in `storage.local`, separately for each HTTPS site, known Ultra account and course. No titles or content are stored. Limits are 500 IDs per course, 200 account/course records and 256 KiB across them. Unknown identity or failed storage leaves the outline untouched. The feature makes no requests, including no profile request; it reuses only the existing page identity cache. Back up… includes validated records; imports retain their account/site/course keys and ignore malformed records without replacing existing choices. Only your own clicks or keyboard activation save a choice. The brief status and Undo are held only in memory, cleared on navigation, account changes or disabling, and store no additional data. Undo changes only the folder just hidden. Search, Download all, progress and new-item counts are unaffected.
 
 The settings editor remembers its last tab in device-local `editorTab`. Its previews are authored synthetic pages inside the extension, with no school account or LMS request. They reuse Glaze’s styles and local feature helpers. Existing notices still apply when you deliberately select a web font or linked image. Preference resets keep local notes/tasks, stickers, bookmarks and share keys, but Reset everything removes current and discoverable files kept for Look backgrounds, subject to the older-browser limit described above.
 Blackboard nicknames edited here use the same synced course-name fields as the course-card menu. Selecting a preview course does not store any additional course data.

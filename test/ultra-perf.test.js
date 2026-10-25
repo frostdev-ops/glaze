@@ -151,7 +151,7 @@ test('draft cleanup reads only listed drafts; without a key listing it reads eve
     window.top = window;
     const tidy = vm.runInNewContext(`${core.slice(start, end)} tidyDrafts`, {
       window, local: (fn) => fn(area), Promise: { resolve: promise }, Date,
-      need: async () => {}, GZ_DRAFTS: { stale: () => ['draft:old'] }, settings: { enabled: true, enhance: { drafts: false } },
+      need: async () => {}, GZ_DRAFTS: require('../lib/drafts.js'), settings: { enabled: true, enhance: { drafts: false } },
     });
     tidy();
     await new Promise(setImmediate);

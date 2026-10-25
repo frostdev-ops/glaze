@@ -113,7 +113,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     if (size > 2 * MIB) return reply({ error: 'size' }); // the worker's own limit is lower; this only spares the message
     if (!alive()) return stop();
     r.waiting.set(d.mod, n + 1);
-    chrome.runtime.sendMessage({ type: 'glaze:mod', mod: d.mod, via: d.via, call: d.call, args: d.args })
+    chrome.runtime.sendMessage({ type: 'glaze:mod', mod: d.mod, via: d.via, call: d.call, args: d.args, doc: globalThis.__gzDoc })
       .then((x) => { const own = x?.ok === true && current() && !gone.has(d.mod) ? apply(d.mod, d.via, d.call, x.value) : null; reply(own || x); }, () => reply({ error: 'failed' }))
       .finally(() => r.waiting.set(d.mod, r.waiting.get(d.mod) - 1));
   };

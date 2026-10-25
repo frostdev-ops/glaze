@@ -19,7 +19,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   // Each drawing of the dialog (a view, or the dialog opened again) is a new generation: an answer that comes back after
   // it moved on (a file or link still being read, a write the worker hadn't answered) changes nothing on screen.
   let gen = 0;
-  let reading = null; // the AbortController of a PDF or picture being read: a new view or closing the dialog calls it off
+  let reading = null; // the AbortController of a schedule being read: Stop reading, a new view or closing the dialog calls it off
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false && k !== '')); return e; };
   // A click a person made (not a page script's): every button here saves, deletes or moves on.
@@ -46,7 +46,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     const r = await send({ ...m, at: Date.now(), ...(tz && { tz }) });
     if (g !== gen) return;
     if (r?.ok) store = C.clean(r.data);
-    if (!r?.ok) return say(t("Couldn't save. Try again in a moment."), true);
+    if (!r?.ok) return say(limit(r?.error) || t("Couldn't save. Try again in a moment."), true);
     list('.gz-cl-import');
     say(r.stale ? t('Some of this changed in another tab first. This is what is kept now.') : said);
   };
@@ -57,10 +57,16 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   const dateText = (k) => new Date(`${k}T00:00Z`).toLocaleDateString(lang(), { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
   const minutes = (v) => (/^\d{2}:\d{2}$/.test(v) ? +v.slice(0, 2) * 60 + +v.slice(3) : -1);
   const labelOf = (c) => [c.friendly_name || c.name, c.course_code !== (c.friendly_name || c.name) && c.course_code, location.host].filter(Boolean).join(' · ');
+  const tooMany = () => t('A class can have at most {n} times.', { n: C.MAX.periods });
+  const limit = (error) => error === 'periods' ? tooMany() : error === 'courses' ? t('A schedule can have at most {n} classes.', { n: C.MAX.courses })
+    : error === 'skip' ? t('A class time can have at most {n} days off.', { n: C.MAX.skip }) : '';
+  const zoneOf = (p) => p.tz || store.tz || tz;
+  // A time's zone, named only when it isn't the one this page is in.
+  const zoneTag = (p) => (zoneOf(p) && zoneOf(p) !== tz ? ` (${zoneOf(p)})` : '');
   const say = (text, alert) => { const p = box?.querySelector('.gz-cl-say'); if (p) { p.textContent = text; p.setAttribute('role', alert ? 'alert' : 'status'); } };
 
   // ---- the saved schedule --------------------------------------------------------------------------------------
-  const describe = (p) => [ORDER.filter((d) => p.days.includes(d)).map((d) => dayName(d)).join(', '), hours(p.start, p.end), p.loc,
+  const describe = (p) => [ORDER.filter((d) => p.days.includes(d)).map((d) => dayName(d)).join(', '), `${hours(p.start, p.end)}${zoneTag(p)}`, p.loc,
     (p.from || p.to) && `${p.from ? dateText(p.from) : '…'} – ${p.to ? dateText(p.to) : '…'}`, p.skip.length && t('Days off: {n}', { n: p.skip.length })].filter(Boolean).join(' · ');
   const list = (focus) => {
     view = 'list';
@@ -74,12 +80,12 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       return make('li', {}, make('div', { className: 'gz-cl-main' }, make('strong', {}, name, c.code && !c.name.includes(c.code) && make('span', { className: 'gz-cl-faint', textContent: ` · ${c.code}` })),
         ...c.periods.map((p) => make('span', { className: 'gz-cl-faint', textContent: describe(p) }))),
       make('div', { className: 'gz-cl-row' },
-        button(t('Edit'), () => review([{ id: c.id, code: c.code, name: c.name, periods: c.periods.map((p) => ({ ...p, unsure: [] })) }], { edit: true }), { 'aria-label': t('Edit {name}', { name: c.name }) }),
+        // Each time stays in the zone it was saved in, whatever this page's is now.
+        button(t('Edit'), () => review([{ id: c.id, code: c.code, name: c.name, periods: c.periods.map((p) => ({ ...p, tz: p.tz || store.tz || tz, unsure: [] })) }], { edit: true }), { 'aria-label': t('Edit {name}', { name: c.name }) }),
         button(t('Delete'), () => write({ op: 'drop', id: c.id }, t('Deleted {name}.', { name: c.name })), { 'aria-label': t('Delete {name}', { name: c.name }) })));
     });
     draw(t('Class schedule'),
-      make('p', { className: 'gz-cl-faint', textContent: t('Your classes, shown in the agenda and, if you turn them on, as class reminders. Read and kept on this device; nothing is sent anywhere.') }),
-      items.length ? make('ul', { className: 'gz-cl-list' }, ...items) : make('p', { textContent: t('No classes yet. Import your schedule, or add a class yourself.') }),
+      items.length ? make('ul', { className: 'gz-cl-list' }, ...items) : make('p', { textContent: t('No classes yet.') }),
       make('div', { className: 'gz-cl-row' }, button(t('Import a schedule'), importer, { className: 'gz-cl-main-btn gz-cl-import' }),
         button(t('Add a class'), () => review([{ code: '', name: '', label: '', periods: [{ days: [], start: 540, end: 590, loc: '', from: '', to: '', skip: [], unsure: [] }] }], { manual: true })),
         items.length > 0 && all),
@@ -88,37 +94,71 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   };
 
   // ---- reading a schedule --------------------------------------------------------------------------------------
+  const cancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
+  const oops = (msg) => Object.assign(new Error(msg), { mine: true }); // translated, like features/import.js
+  const TOO_BIG = new Set(['calendar file too large', 'calendar too complex', 'calendar time zone too large']); // lib/ics.js parse
+  // signal: Stop reading, another view or the dialog closed. Whatever a wait here ends with, it is checked after.
   const read = async (file, text, link, signal) => {
+    const live = () => { if (signal.aborted) throw cancelled(); };
     // A calendar goes to lib/ics.js as bytes: it unfolds lines before decoding them, as a fold can split a character.
-    const ics = (s) => C.fromIcs(s, { tz });
+    // What the reader refuses (in English, for the code) is said in the page's language.
+    const ics = async (s) => {
+      await ctx.need('lib/ics.js', () => globalThis.GZ_ICS);
+      live();
+      try { return C.fromIcs(s, { tz }); } catch (e) { throw oops(TOO_BIG.has(e?.message) ? t('This calendar is too big to read.') : t("Couldn't read that.")); }
+    };
+    // A link's decoded body, stopping at the first chunk that passes MAX.
+    const upTo = async (r) => {
+      const rd = r.body.getReader(), parts = [];
+      let n = 0, end = false;
+      try {
+        for (;;) {
+          const c = await rd.read();
+          if ((end = c.done)) break;
+          live();
+          if ((n += c.value.length) > MAX) return null;
+          parts.push(c.value);
+        }
+      } finally {
+        if (!end) rd.cancel().catch(() => {});
+        rd.releaseLock();
+      }
+      const b = new Uint8Array(n);
+      parts.reduce((at, x) => (b.set(x, at), at + x.length), 0);
+      return b;
+    };
     if (file) {
       if (/\.(ics|ical|ifb)$/i.test(file.name) || file.type === 'text/calendar') {
-        if (file.size > MAX) throw new Error(t('That file is too big for a schedule.'));
-        await ctx.need('lib/ics.js', () => globalThis.GZ_ICS);
-        return ics(new Uint8Array(await file.arrayBuffer()));
+        if (file.size > MAX) throw oops(t('That file is too big for a schedule.'));
+        const b = new Uint8Array(await file.arrayBuffer());
+        live();
+        return ics(b);
       }
       await ctx.need('features/import.js', () => globalThis.GZ_IMPORT);
-      const r = await GZ_IMPORT.read(file, { signal, progress: (s) => say(s) });
+      live();
+      const r = await GZ_IMPORT.read(file, { signal, progress: (s) => { if (!signal.aborted) say(s); } });
+      live();
       return { ...C.fromText(r.text, { lang: lang() }), ocr: r.ocr };
     }
     if (link) {
       // Only this site's own addresses (its calendar feed): Glaze asks nothing of anywhere else.
       let u;
       try { u = new URL(link.replace(/^webcals?:\/\//i, 'https://'), location.origin); } catch { u = null; }
-      if (!u || u.origin !== location.origin) throw new Error(t('Glaze only reads calendar links on {site}. Download the .ics file instead and choose it above.', { site: location.host }));
-      const r = await fetch(u.href, { credentials: 'same-origin', redirect: 'error' });
-      const b = r.ok ? new Uint8Array(await r.arrayBuffer()) : new Uint8Array();
-      if (!/BEGIN:VCALENDAR/.test(new TextDecoder().decode(b.subarray(0, 2000))) || b.length > MAX) throw new Error(t("That link isn't a calendar Glaze can read."));
-      await ctx.need('lib/ics.js', () => globalThis.GZ_ICS);
+      if (!u || u.origin !== location.origin) throw oops(t('Glaze only reads calendar links on {site}. Download the .ics file instead and choose it above.', { site: location.host }));
+      const r = await fetch(u.href, { credentials: 'same-origin', redirect: 'error', signal });
+      live();
+      const b = r.ok && r.body ? await upTo(r) : new Uint8Array();
+      live();
+      if (!b || !/BEGIN:VCALENDAR/.test(new TextDecoder().decode(b.subarray(0, 2000)))) throw oops(t("That link isn't a calendar Glaze can read."));
       return ics(b);
     }
-    if (/^\s*BEGIN:VCALENDAR/.test(text)) { await ctx.need('lib/ics.js', () => globalThis.GZ_ICS); return ics(text); }
+    if (/^\s*BEGIN:VCALENDAR/.test(text)) return ics(text);
     return C.fromText(text, { lang: lang() });
   };
   const importer = () => {
     view = 'import';
     const file = make('input', { type: 'file', accept: '.ics,.ical,.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.html,.htm,.docx,.txt,text/calendar,application/pdf,image/*,text/html,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-    const text = make('textarea', { rows: 7, placeholder: t(`Copy your schedule from your school's registration page and paste it here, or type it: one class per line, like "BIO 110 TR 1:30-2:45pm Life Sciences 120".`) });
+    const text = make('textarea', { rows: 7 });
     const link = make('input', { type: 'url', placeholder: `${location.origin}${ultra ? '/' : '/feeds/calendars/'}….ics` });
     const stop = button(t('Stop reading'), () => reading?.abort(), { hidden: true });
     // pasted: a screenshot pasted into the text box, read instead of what's typed there.
@@ -137,12 +177,18 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       try {
         const r = await read(f, text.value, link.value.trim(), ctl.signal);
         if (g !== gen) return;
+        if (ctl.signal.aborted) throw cancelled();
+        if (limit(r.error)) throw oops(limit(r.error));
         if (!r.entries.length) { go.disabled = false; return say(t("Glaze didn't find any classes there. Check that days and times are in it, or add your classes yourself."), true); }
         // A class read from a line the OCR engine wasn't sure of: its days, times and place are guesses too.
         const doubt = (e) => !!r.ocr && GZ_IMPORT.doubt(r.ocr, e.label);
-        const found = r.entries.map((e) => ({ ...e, id: C.match(e, courses), periods: doubt(e) ? e.periods.map((p) => ({ ...p, unsure: [...new Set([...p.unsure, 'days', 'time', 'loc'])] })) : e.periods }));
+        const found = r.entries.map((e) => ({ ...e, id: C.match(e, courses), periods: e.periods.map((p) => ({ ...p, importedSkip: p.skip, ...(doubt(e) && { unsure: [...new Set([...p.unsure, 'days', 'time', 'loc'])] }) })) }));
         review(found, { ignored: r.ignored, ocr: r.ocr });
-      } catch (e) { if (g === gen) { go.disabled = false; say(e?.cancelled ? t('Stopped.') : e?.message || t("Couldn't read that."), !e?.cancelled); } }
+      } catch (e) {
+        // A request called off fails with the browser's AbortError.
+        const off = !!e?.cancelled || e?.name === 'AbortError' || ctl.signal.aborted;
+        if (g === gen) { go.disabled = false; say(off ? t('Stopped.') : e?.mine && e.message || t("Couldn't read that."), !off); }
+      }
       finally {
         if (reading === ctl) reading = null;
         const back = document.activeElement === stop;
@@ -156,8 +202,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       if (img && !go.disabled) { e.preventDefault(); run(img); }
     });
     draw(t('Import a schedule'),
-      make('p', { className: 'gz-cl-faint', textContent: t('Glaze reads it on this device and shows you what it found before anything is saved.') }),
-      field(t('A file: .ics calendar, PDF, picture or screenshot, saved web page (.html), Word (.docx) or text'), file),
+      field(t('A file'), file),
       field(t('Or paste it, or paste a screenshot'), text),
       field(t('Or a calendar link on {site}', { site: location.host }), link),
       make('div', { className: 'gz-cl-row' }, go, stop, button(t('Back'), () => list('.gz-cl-import'))));
@@ -185,7 +230,6 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       save.disabled = false;
     }, { className: 'gz-cl-main-btn' });
     draw(opts.edit ? t('Edit class') : opts.manual ? t('Add a class') : t('Check what Glaze found'),
-      !opts.edit && !opts.manual && make('p', { className: 'gz-cl-faint', textContent: t('Nothing is saved until you choose Save. Fields marked "Check this" were a guess.') }),
       opts.ocr && make('p', { className: 'gz-cl-ocr', textContent: GZ_IMPORT.note(opts.ocr) }),
       opts.ignored > 0 && make('p', { className: 'gz-cl-faint', textContent: t('Left out as one-off events or office hours: {n}', { n: opts.ignored }) }),
       ...rows.map((r) => r.el),
@@ -216,7 +260,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     const el = make('fieldset', { className: 'gz-cl-entry' }, title,
       !opts.edit && !opts.manual && make('label', { className: 'gz-cl-keep' }, keep, make('span', { textContent: t('Keep this class') })),
       field(ultra ? t('Blackboard course') : t('Canvas course'), sel), named, periods,
-      button(t('Add a time'), () => addPeriod({ days: [], start: 540, end: 590, loc: '', from: '', to: '', skip: [], unsure: [] }).el.querySelector('input').focus()));
+      button(t('Add a time'), () => (parts.length >= C.MAX.periods ? say(tooMany(), true) : addPeriod({ days: [], start: 540, end: 590, loc: '', from: '', to: '', skip: [], unsure: [] }).el.querySelector('input').focus())));
     keep.addEventListener('change', () => el.toggleAttribute('data-off', !keep.checked));
     let bad = null;
     return {
@@ -235,6 +279,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
           ps.push(p);
         }
         if (!ps.length) { bad = el.querySelector('button'); return t('Add at least one time for {name}.', { name: nm }); }
+        if (ps.length > C.MAX.periods) { bad = parts[0].el.querySelector('input'); return tooMany(); }
         const id = opts.edit ? e.id : c ? String(c.id) : C.otherId(nm);
         return { id, code: c ? c.course_code || '' : e.code || '', name: nm, periods: ps };
       },
@@ -255,19 +300,21 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     const from = make('input', { type: 'date', value: p.from || '' }), to = make('input', { type: 'date', value: p.to || '' });
     // Days the class doesn't meet (holidays, breaks): each removable; another added by date.
     const skip = new Set(p.skip || []);
+    const importedSkip = p.importedSkip || [];
     const chips = make('ul', { className: 'gz-cl-chips' });
     const drawSkip = () => chips.replaceChildren(...[...skip].sort().map((k) => make('li', {}, make('span', { textContent: dateText(k) }),
       button('×', () => { skip.delete(k); drawSkip(); add.focus(); }, { 'aria-label': t('Remove {date}', { date: dateText(k) }) }))));
     const more = make('input', { type: 'date' });
     // Only a whole date ("2026-11-26"); an empty or half-typed field adds nothing and says so.
     const add = button(t('Add'), () => {
+      if (C.date(more.value) && !skip.has(more.value) && skip.size >= C.MAX.skip) return say(limit('skip'), true);
       if (C.date(more.value)) { skip.add(more.value); more.value = ''; drawSkip(); say(''); }
       else say(t('Choose a date first.'), true);
       more.focus();
     });
     drawSkip();
     const el = make('div', { className: 'gz-cl-period' }, dayBox,
-      make('div', { className: 'gz-cl-row' }, field(t('Starts'), start, u.has('time')), field(t('Ends'), end, u.has('time') || u.has('end')), field(t('Place'), loc, u.has('loc'))),
+      make('div', { className: 'gz-cl-row' }, field(`${t('Starts')}${zoneTag(p)}`, start, u.has('time')), field(`${t('Ends')}${zoneTag(p)}`, end, u.has('time') || u.has('end')), field(t('Place'), loc, u.has('loc'))),
       make('div', { className: 'gz-cl-row' }, field(t('First day'), from), field(t('Last day'), to, u.has('to'))),
       make('div', { className: 'gz-cl-skip' }, make('span', { textContent: t('No class on') }), chips, field(t('Date'), more), add),
       button(t('Remove this time'), remove, { className: 'gz-cl-quiet' }));
@@ -280,8 +327,9 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
         const s = minutes(start.value), e = minutes(end.value);
         if (!ds.length) { bad = days[0].firstChild; return t('Choose the days this class meets.'); }
         if (s < 0 || e <= s) { bad = s < 0 ? start : end; return t('A class ends after it starts.'); }
+        if (skip.size > C.MAX.skip) { bad = more; return limit('skip'); }
         if (from.value && to.value && to.value < from.value) { bad = to; return t('The last day comes after the first.'); }
-        return { days: ds, start: s, end: e, loc: loc.value.trim(), from: from.value, to: to.value, skip: [...skip] };
+        return { days: ds, start: s, end: e, loc: loc.value.trim(), from: from.value, to: to.value, skip: [...skip], importedSkip: [...importedSkip], ...(p.tz && { tz: p.tz }) };
       },
     };
   };
@@ -305,7 +353,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     C = globalThis.GZ_CLASSES;
     const [p, list0] = await Promise.all([ctx.profile(), ctx.canvasCourses()]);
     if (!GZ_TODO.ID.test(String(p?.id))) throw new Error('no profile');
-    tz = GZ_TODO.zone(p.time_zone);
+    tz = GZ_TODO.zone(p.time_zone) || new Intl.DateTimeFormat().resolvedOptions().timeZone;
     key = C.storeKey(location.origin, String(p.id));
     courses = list0.filter((c) => GZ_TODO.ID.test(String(c.id)) && c.name);
     store = await new Promise((res) => { try { chrome.storage.local.get(key, (r) => res(C.clean(r?.[key]))); } catch { res(C.clean(null)); } });
@@ -314,6 +362,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     box = make('dialog', { id: 'gz-cl' }, make('div', { className: 'gz-cl-in' }), make('style', { textContent: CSS }));
     box.setAttribute('aria-labelledby', 'gz-cl-title');
     box.addEventListener('close', () => {
+      gen++;
       reading?.abort();
       box?.remove();
       box = null;

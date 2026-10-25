@@ -502,6 +502,352 @@ test('importing the same export twice adds nothing; a newer copy wins, an older 
   assert.equal((await w.run({ op: 'load', id: id(2) })).html, '<p>two</p>');
 });
 
+// A backup as the options page makes one and the worker reads it: the library's notes with their text, the zip's
+// notes.json, read in the page, then again in the worker. old: as Glaze 3.4.2 and earlier wrote it, without field times.
+const backup = async (w, { old = false } = {}) => {
+  const site = 'https://school.instructure.com', idx = w.idx();
+  const notes = [];
+  for (const [nid, n] of N.list(idx)) notes.push({ id: nid, ...n, html: (await w.run({ op: 'load', id: nid }, n.at)).html });
+  const m = JSON.parse(new TextDecoder().decode(N.exportZip({ site, folders: N.folderList(idx).map(([fid, f]) => ({ id: fid, ...f })), notes, files: [] })[0].data));
+  if (old) for (const x of [...m.notes, ...m.folders]) delete x.ft;
+  const page = N.parseExport(m, { site });
+  const data = N.parseExport(JSON.stringify({ ...m, folders: page.folders, notes: page.notes }), { site });
+  return { folders: data.folders, notes: data.notes };
+};
+const moved = async () => {
+  const src = world(), dst = world(), t = src.now;
+  await src.run({ op: 'folder', id: id(10), name: 'Labs' }, t);
+  await src.run({ op: 'folder', id: id(11), name: 'Lectures', course: '43' }, t);
+  await src.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>Unchanged body</p>', title: 'Old title', folder: id(10), course: '42', copy: id(90) }, t + 1000);
+  assert.deepEqual(await dst.run({ op: 'import', ...await backup(src) }, t + 2000), { ok: true, done: 1, skipped: 0 });
+  return { src, dst, t };
+};
+
+test('a newer backup restores a rename made without touching the note text', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'meta', id: id(1), title: 'Renamed title', at: t + 3000 }, t + 3000);
+  assert.deepEqual(await dst.run({ op: 'import', ...await backup(src) }, t + 4000), { ok: true, done: 1, skipped: 0 });
+  const n = dst.idx().notes[id(1)];
+  assert.equal(n.title, 'Renamed title');
+  assert.equal(n.rev, 1, 'the text is not written again');
+  assert.deepEqual(dst.bodies(id(1)), [`https://school.instructure.com/5/${id(1)}/1`]);
+});
+
+test('a newer backup restores a move to another folder, and the course that came with it', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'meta', id: id(1), folder: id(11), at: t + 3000 }, t + 3000);
+  await dst.run({ op: 'import', ...await backup(src) }, t + 4000);
+  assert.deepEqual([dst.idx().notes[id(1)].folder, dst.idx().notes[id(1)].course, dst.idx().notes[id(1)].title], [id(11), '43', 'Old title']);
+});
+
+test('a newer backup restores a course reassignment', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'meta', id: id(1), course: '77', cn: 'Chemistry', at: t + 3000 }, t + 3000);
+  await dst.run({ op: 'import', ...await backup(src) }, t + 4000);
+  assert.deepEqual([dst.idx().notes[id(1)].course, dst.idx().notes[id(1)].cn, dst.idx().notes[id(1)].folder], ['77', 'Chemistry', id(10)]);
+});
+
+test('a backup restores an explicitly cleared course inside a course folder', async () => {
+  for (const newerBody of [false, true]) {
+    const { src, dst, t } = await moved();
+    await src.run({ op: 'meta', id: id(1), folder: id(11), at: t + 3000 }, t + 3000);
+    await dst.run({ op: 'import', ...await backup(src) }, t + 4000);
+    await src.run({ op: 'meta', id: id(1), course: '', at: t + 5000 }, t + 5000);
+    if (newerBody) await src.run({ op: 'save', id: id(1), base: 1, sid: 'b', html: '<p>New body</p>' }, t + 5500);
+    const b = await backup(src);
+    assert.deepEqual(await dst.run({ op: 'import', ...b }, t + 6000), { ok: true, done: 1, skipped: 0 });
+    const n = dst.idx().notes[id(1)];
+    assert.deepEqual([n.course, n.cn, n.folder], ['', '', id(11)], 'the folder must not replace an explicit course choice');
+    assert.equal(n.rev, newerBody ? 2 : 1);
+    assert.deepEqual(await dst.run({ op: 'import', ...b }, t + 7000), { ok: true, done: 0, skipped: 1 });
+    const fresh = world();
+    await fresh.run({ op: 'import', ...b }, t + 6000);
+    assert.equal(fresh.idx().notes[id(1)].course, '', 'a first import keeps the same choice');
+  }
+});
+
+test('importing the same newer backup twice changes the note once', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'meta', id: id(1), title: 'Renamed title', at: t + 3000 }, t + 3000);
+  const b = await backup(src);
+  assert.deepEqual(await dst.run({ op: 'import', ...b }, t + 4000), { ok: true, done: 1, skipped: 0 });
+  const after = dst.idx().notes[id(1)];
+  assert.deepEqual(await dst.run({ op: 'import', ...b }, t + 5000), { ok: true, done: 0, skipped: 1 });
+  assert.deepEqual(dst.idx().notes[id(1)], after);
+});
+
+test('a backup keeps the destination\'s newer rename, field by field, even when its text is newer', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'meta', id: id(1), title: 'Renamed at the source', at: t + 3000 }, t + 3000);
+  await src.run({ op: 'save', id: id(1), base: 1, sid: 'b', html: '<p>Newer body</p>', copy: id(91) }, t + 3500);
+  await dst.run({ op: 'meta', id: id(1), title: 'Renamed here', at: t + 4000 }, t + 4000);
+  assert.deepEqual(await dst.run({ op: 'import', ...await backup(src) }, t + 5000), { ok: true, done: 1, skipped: 0 });
+  assert.equal(dst.idx().notes[id(1)].title, 'Renamed here');
+  assert.equal((await dst.run({ op: 'load', id: id(1) }, t + 5000)).html, '<p>Newer body</p>');
+  // Only the title is newer here: the import is skipped as a whole.
+  await dst.run({ op: 'meta', id: id(1), title: 'Renamed here again', at: t + 6000 }, t + 6000);
+  assert.deepEqual(await dst.run({ op: 'import', ...await backup(src) }, t + 7000), { ok: true, done: 0, skipped: 1 });
+  assert.equal(dst.idx().notes[id(1)].title, 'Renamed here again');
+});
+
+test('a backup from before field times still imports, its title and place travelling with its text', async () => {
+  const src = world(), dst = world(), t = src.now;
+  await src.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>One</p>', title: 'Old title', course: '42', copy: id(90) }, t + 1000);
+  const first = await backup(src, { old: true });
+  assert.equal(first.notes[0].ft, undefined);
+  assert.deepEqual(await dst.run({ op: 'import', ...first }, t + 2000), { ok: true, done: 1, skipped: 0 });
+  assert.deepEqual([dst.idx().notes[id(1)].title, dst.idx().notes[id(1)].course], ['Old title', '42']);
+  assert.deepEqual(await dst.run({ op: 'import', ...first }, t + 3000), { ok: true, done: 0, skipped: 1 });
+  await src.run({ op: 'save', id: id(1), base: 1, sid: 'b', html: '<p>Two</p>', copy: id(91) }, t + 4000);
+  await src.run({ op: 'meta', id: id(1), title: 'New title', at: t + 4000 }, t + 4000);
+  assert.deepEqual(await dst.run({ op: 'import', ...await backup(src, { old: true }) }, t + 5000), { ok: true, done: 1, skipped: 0 });
+  assert.equal(dst.idx().notes[id(1)].title, 'New title');
+  assert.equal((await dst.run({ op: 'load', id: id(1) }, t + 5000)).html, '<p>Two</p>');
+});
+
+test('restoring a legacy backup does not date its fields at the restore time', async () => {
+  for (const newerBody of [false, true]) {
+    const src = world(), dst = world(), t = src.now;
+    await src.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>One</p>', title: 'Old title' }, t + 1000);
+    const old = await backup(src, { old: true });
+    await src.run({ op: 'meta', id: id(1), title: 'Later title', at: t + 3000 }, t + 3000);
+    if (newerBody) await src.run({ op: 'save', id: id(1), base: 1, sid: 'b', html: '<p>Two</p>' }, t + 4000);
+    const latest = await backup(src);
+    // Both backups predate the restore, and the older one is restored first.
+    await dst.run({ op: 'import', ...old }, t + 5000);
+    assert.deepEqual(await dst.run({ op: 'import', ...latest }, t + 6000), { ok: true, done: 1, skipped: 0 });
+    assert.equal(dst.idx().notes[id(1)].title, 'Later title');
+    assert.equal(dst.idx().notes[id(1)].ft.title, t + 3000);
+    assert.deepEqual(await dst.run({ op: 'import', ...latest }, t + 6500), { ok: true, done: 0, skipped: 1 });
+    await dst.run({ op: 'meta', id: id(1), title: 'Local title', at: t + 7000 }, t + 7000);
+    await dst.run({ op: 'import', ...latest }, t + 8000);
+    assert.equal(dst.idx().notes[id(1)].title, 'Local title');
+  }
+});
+
+test('backup field times keep only numeric known fields through both readings', async () => {
+  const site = 'https://school.instructure.com', w = world(), t = w.now;
+  await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', title: 'Keep', html: '<p>Keep</p>' }, t);
+  const before = structuredClone(w.store);
+  const hostile = JSON.parse('{"title":1e400,"folder":"9000000000000","course":-1,"__proto__":{"polluted":true},"constructor":{"prototype":{"polluted":true}},"del":1}');
+  for (const ft of [hostile, { title: null, folder: true, course: {} }, [], 'bad', null]) {
+    const raw = { format: 'glaze-notes', version: 1, site, folders: [], files: [], notes: [{ id: id(1), title: 'Replace', html: '<p>Replace</p>', at: t, ft }] };
+    const page = N.parseExport(raw, { site });
+    const worker = N.parseExport(JSON.stringify({ ...raw, ...page }), { site });
+    if (ft && typeof ft === 'object') assert.deepEqual(worker.notes[0].ft, { title: 0, folder: 0, course: 0 });
+    else assert.equal(worker.notes[0].ft, undefined);
+    assert.deepEqual(await w.run({ op: 'import', ...worker }, t + 1000), { ok: true, done: 0, skipped: 1 });
+    assert.deepEqual(w.store, before);
+  }
+  assert.equal({}.polluted, undefined);
+});
+
+test('metadata imports preserve trash and revisions, while a newer body restores and conflicts safely', async () => {
+  const { src, dst, t } = await moved();
+  await dst.run({ op: 'folderDel', id: id(10), notes: 'trash' }, t + 2500);
+  await src.run({ op: 'meta', id: id(1), title: 'Renamed', at: t + 3000 }, t + 3000);
+  assert.deepEqual(await dst.run({ op: 'import', ...await backup(src) }, t + 4000), { ok: true, done: 1, skipped: 0 });
+  const n = dst.idx().notes[id(1)];
+  assert.deepEqual([n.title, n.rev, n.del, n.with], ['Renamed', 1, t + 2500, id(10)]);
+  assert.deepEqual(dst.bodies(id(1)), [`https://school.instructure.com/5/${id(1)}/1`]);
+  await src.run({ op: 'save', id: id(1), base: 1, sid: 'b', html: '<p>New body</p>' }, t + 5000);
+  assert.deepEqual(await dst.run({ op: 'import', ...await backup(src) }, t + 6000), { ok: true, done: 1, skipped: 0 });
+  const restored = dst.idx().notes[id(1)];
+  assert.deepEqual([restored.rev, restored.del, restored.with, restored.folder], [2, undefined, undefined, '']);
+  assert.deepEqual(dst.bodies(id(1)), [`https://school.instructure.com/5/${id(1)}/2`]);
+  assert.deepEqual(await dst.run({ op: 'save', id: id(1), base: 1, sid: 'stale', copy: id(92), html: '<p>Unsaved tab</p>' }, t + 7000), { ok: true, id: id(92), rev: 1, conflict: true });
+  assert.equal((await dst.run({ op: 'load', id: id(1) }, t + 7000)).html, '<p>New body</p>');
+  assert.equal((await dst.run({ op: 'load', id: id(92) }, t + 7000)).html, '<p>Unsaved tab</p>');
+});
+
+test('future backup field times cannot overrule local edits', async () => {
+  for (const future of [Date.UTC(2100, 0, 1), Number.MAX_VALUE]) {
+    const { src, dst, t } = await moved();
+    const b = await backup(src);
+    b.notes[0].title = 'Future title';
+    b.notes[0].ft.title = future;
+    await dst.run({ op: 'meta', id: id(1), title: 'Local title', at: t + 3000 }, t + 3000);
+    assert.deepEqual(await dst.run({ op: 'import', ...b }, t + 4000), { ok: true, done: 0, skipped: 1 });
+    assert.equal(dst.idx().notes[id(1)].title, 'Local title');
+  }
+});
+
+test('future backup field times do not count repeat imports as changes', async () => {
+  for (const future of [Date.UTC(2100, 0, 1), Number.MAX_VALUE]) {
+    const { src, t } = await moved(), fresh = world(), b = await backup(src);
+    b.notes[0].ft.title = future;
+    assert.deepEqual(await fresh.run({ op: 'import', ...b }, t + 4000), { ok: true, done: 1, skipped: 0 });
+    assert.deepEqual(await fresh.run({ op: 'import', ...b }, t + 5000), { ok: true, done: 0, skipped: 1 });
+    assert.equal(fresh.idx().notes[id(1)].ft.title, t + 1000, 'a future field falls back to the backup edit time');
+  }
+});
+
+test('a failed metadata import keeps the committed note and its body for a retry', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'meta', id: id(1), title: 'Renamed', at: t + 3000 }, t + 3000);
+  const b = await backup(src), before = structuredClone(dst.store), bodies = structuredClone(dst.db.bodies);
+  const set = dst.local.set;
+  dst.local.set = async () => false;
+  assert.deepEqual(await dst.run({ op: 'import', ...b }, t + 4000), { ok: false, error: 'write' });
+  assert.deepEqual(dst.store, before);
+  assert.deepEqual(dst.db.bodies, bodies);
+  dst.local.set = set;
+  assert.deepEqual(await dst.run({ op: 'import', ...b }, t + 5000), { ok: true, done: 1, skipped: 0 });
+  assert.equal(dst.idx().notes[id(1)].title, 'Renamed');
+});
+
+test('a newer backup renames a folder here, once', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'folder', id: id(10), name: 'Lab reports', at: t + 3000 }, t + 3000);
+  const b = await backup(src);
+  assert.deepEqual(await dst.run({ op: 'import', ...b }, t + 4000), { ok: true, done: 0, skipped: 1 });
+  assert.equal(dst.idx().folders[id(10)].name, 'Lab reports');
+  const after = structuredClone(dst.store);
+  assert.deepEqual(await dst.run({ op: 'import', ...b }, t + 5000), { ok: true, done: 0, skipped: 1 });
+  assert.deepEqual(dst.store, after);
+});
+
+test('a folder\'s newer rename here stays, while the backup\'s newer course still lands', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'folder', id: id(10), name: 'Renamed at the source', at: t + 3000 }, t + 3000);
+  await dst.run({ op: 'folder', id: id(10), name: 'Renamed here', at: t + 4000 }, t + 4000);
+  await src.run({ op: 'folder', id: id(10), course: '77', cn: 'Chemistry', at: t + 5000 }, t + 5000);
+  await dst.run({ op: 'import', ...await backup(src) }, t + 6000);
+  const f = dst.idx().folders[id(10)];
+  assert.deepEqual([f.name, f.course, f.cn], ['Renamed here', '77', 'Chemistry']);
+});
+
+test('a newer backup restores the folders\' order, and a newer order here stays', async () => {
+  const { src, dst, t } = await moved();
+  assert.deepEqual(N.folderList(dst.idx()).map(([k]) => k), [id(10), id(11)]);
+  await src.run({ op: 'order', ids: [id(11), id(10)], at: t + 3000 }, t + 3000);
+  const b = await backup(src);
+  await dst.run({ op: 'import', ...b }, t + 4000);
+  assert.deepEqual(N.folderList(dst.idx()).map(([k]) => k), [id(11), id(10)]);
+  await dst.run({ op: 'order', ids: [id(10), id(11)], at: t + 5000 }, t + 5000);
+  await dst.run({ op: 'import', ...b }, t + 6000);
+  assert.deepEqual(N.folderList(dst.idx()).map(([k]) => k), [id(10), id(11)]);
+});
+
+const places = (w) => N.folderList(w.idx()).map(([k]) => k);
+const orders = (w) => Object.values(w.idx().folders).map((f) => f.order).sort((a, b) => a - b);
+
+test('a folder new to this device lands where the newer backup put it, before folders here', async () => {
+  const src = world(), dst = world(), t = src.now;
+  await src.run({ op: 'folder', id: id(10), name: 'First' }, t);
+  await dst.run({ op: 'import', ...await backup(src) }, t + 1000);
+  await src.run({ op: 'folder', id: id(11), name: 'New' }, t + 2000);
+  await src.run({ op: 'order', ids: [id(11), id(10)], at: t + 3000 }, t + 3000);
+  const b = await backup(src);
+  await dst.run({ op: 'import', ...b }, t + 4000);
+  assert.deepEqual(places(dst), places(src));
+  assert.deepEqual(orders(dst), [0, 1]);
+  assert.deepEqual([id(10), id(11)].map((k) => dst.idx().folders[k].ft.order), [t + 3000, t + 3000]);
+  const after = structuredClone(dst.store);
+  await dst.run({ op: 'import', ...b }, t + 5000);
+  assert.deepEqual(dst.store, after);
+});
+
+test('folders only here follow the backup\'s folders, in their own order, their times untouched', async () => {
+  const { src, dst, t } = await moved();
+  await dst.run({ op: 'folder', id: id(12), name: 'Mine' }, t + 2500);
+  await dst.run({ op: 'folder', id: id(14), name: 'Also mine' }, t + 2500);
+  await dst.run({ op: 'order', ids: [id(14), id(10), id(12), id(11)], at: t + 2600 }, t + 2600);
+  await src.run({ op: 'folder', id: id(13), name: 'New' }, t + 3000);
+  await src.run({ op: 'order', ids: [id(13), id(11), id(10)], at: t + 3500 }, t + 3500);
+  await dst.run({ op: 'import', ...await backup(src) }, t + 4000);
+  assert.deepEqual(places(dst), [id(13), id(11), id(10), id(14), id(12)]);
+  assert.deepEqual(orders(dst), [0, 1, 2, 3, 4]);
+  assert.deepEqual([id(12), id(14)].map((k) => dst.idx().folders[k].ft.order), [t + 2600, t + 2600]);
+});
+
+test('a newer order here stays against an older backup, and a folder new here keeps the backup\'s neighbour', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'folder', id: id(13), name: 'New' }, t + 3000);
+  await src.run({ op: 'order', ids: [id(10), id(13), id(11)], at: t + 3000 }, t + 3000);
+  await dst.run({ op: 'order', ids: [id(11), id(10)], at: t + 5000 }, t + 5000);
+  await dst.run({ op: 'import', ...await backup(src) }, t + 6000);
+  assert.deepEqual(places(dst), [id(11), id(10), id(13)]);
+  assert.deepEqual(orders(dst), [0, 1, 2]);
+  assert.deepEqual([id(10), id(11), id(13)].map((k) => dst.idx().folders[k].ft.order), [t + 5000, t + 5000, t + 3000]);
+});
+
+test('a backup from before folder times adds its new folders after these, and leaves this order as it is', async () => {
+  const { src, dst, t } = await moved();
+  await src.run({ op: 'folder', id: id(13), name: 'New' }, t + 3000);
+  await src.run({ op: 'order', ids: [id(13), id(11), id(10)], at: t + 3500 }, t + 3500);
+  await dst.run({ op: 'import', ...await backup(src, { old: true }) }, t + 4000);
+  assert.deepEqual(places(dst), [id(10), id(11), id(13)]);
+  assert.deepEqual(dst.idx().folders[id(13)].ft, { name: 0, course: 0, order: 0 });
+});
+
+test('a backup from before folder times leaves a folder here as it is, and a later one still renames it', async () => {
+  const src = world(), dst = world(), t = src.now;
+  await src.run({ op: 'folder', id: id(10), name: 'Labs' }, t);
+  await dst.run({ op: 'import', ...await backup(src, { old: true }) }, t + 1000);
+  assert.equal(dst.idx().folders[id(10)].name, 'Labs');
+  await src.run({ op: 'folder', id: id(10), name: 'Lab reports', at: t + 2000 }, t + 2000);
+  await dst.run({ op: 'import', ...await backup(src, { old: true }) }, t + 3000);
+  assert.equal(dst.idx().folders[id(10)].name, 'Labs');
+  await dst.run({ op: 'import', ...await backup(src) }, t + 4000);
+  assert.equal(dst.idx().folders[id(10)].name, 'Lab reports');
+});
+
+test('a folder deleted for good here comes back from a backup, as a note does', async () => {
+  const { src, dst, t } = await moved();
+  await dst.run({ op: 'folderDel', id: id(10), notes: 'keep' }, t + 2500);
+  await dst.run({ op: 'purge', ids: [id(10)] }, t + 2600);
+  assert.ok(dst.idx().gone[id(10)]);
+  await src.run({ op: 'folder', id: id(10), name: 'Lab reports', at: t + 3000 }, t + 3000);
+  await dst.run({ op: 'import', ...await backup(src) }, t + 4000);
+  assert.equal(dst.idx().folders[id(10)].name, 'Lab reports');
+  assert.equal(dst.idx().gone[id(10)], undefined);
+});
+
+test('folder times in a backup keep only numeric known fields, and a future one never overrules', async () => {
+  const site = 'https://school.instructure.com', { dst, t } = await moved();
+  const before = structuredClone(dst.store);
+  const hostile = JSON.parse('{"name":1e400,"course":"9","order":-1,"__proto__":{"polluted":true},"del":1}');
+  for (const ft of [hostile, { name: Date.UTC(2100, 0, 1), course: Number.MAX_VALUE, order: Date.UTC(2100, 0, 1) }, [], 'bad', null]) {
+    const raw = { format: 'glaze-notes', version: 1, site, notes: [], files: [], folders: [{ id: id(10), name: 'Replace', course: '1', order: 9, ft }] };
+    const worker = N.parseExport(JSON.stringify({ ...raw, ...N.parseExport(raw, { site }) }), { site });
+    if (!ft || typeof ft !== 'object') assert.equal(worker.folders[0].ft, undefined);
+    else assert.deepEqual(Object.keys(worker.folders[0].ft), ['name', 'course', 'order']);
+    await dst.run({ op: 'import', ...worker }, t + 4000);
+    assert.deepEqual(dst.store, before);
+  }
+  assert.equal({}.polluted, undefined);
+});
+
+test('the backup worker retains field times and counts metadata imports across batches', async () => {
+  const S = require('../lib/sessions.js'), src = world(), dst = world(), t = src.now;
+  let turns = 0;
+  const worker = (w) => S.make({ local: w.local, sync: w.local, notes: w.idb, db: { all: async () => [] }, enqueue: async (f) => { turns++; return f(); } });
+  const source = worker(src), target = worker(dst);
+  try {
+    await dst.local.set({ [KEY]: N.clean({}) });
+    for (let i = 1; i <= 21; i++) await src.run({ op: 'save', id: id(i), base: 0, sid: `a${i}`, html: '<p>Body</p>', title: 'Old' }, t + 1000);
+    const exported = async () => {
+      const data = await source.backupNotes(KEY);
+      for (const n of data.notes) {
+        assert.deepEqual(n.ft, src.idx().notes[n.id].ft);
+        const body = await source.handle({ op: 'notesRead', key: KEY, id: n.id });
+        assert.equal(body.rev, n.rev);
+        n.html = body.html;
+      }
+      const raw = JSON.parse(new TextDecoder().decode(N.exportZip(data)[0].data));
+      return JSON.stringify({ ...raw, ...N.parseExport(raw, { site: data.site }) });
+    };
+    assert.deepEqual(await target.handle({ op: 'notesImport', key: KEY, json: await exported() }), { ok: true, done: 21, skipped: 0 });
+    for (let i = 1; i <= 21; i++) await src.run({ op: 'meta', id: id(i), title: 'New', at: t + 3000 }, t + 3000);
+    const json = await exported();
+    assert.deepEqual(await target.handle({ op: 'notesImport', key: KEY, json }), { ok: true, done: 21, skipped: 0 });
+    assert.deepEqual(await target.handle({ op: 'notesImport', key: KEY, json }), { ok: true, done: 0, skipped: 21 });
+    for (const n of Object.values(dst.idx().notes)) assert.deepEqual([n.title, n.ft.title, n.rev], ['New', t + 3000, 1]);
+    assert.equal(turns, 45, 'each read and each import takes one broker turn');
+  } finally { source.stop(); target.stop(); }
+});
+
 test('Canvas links: only this site, link and title only', () => {
   const o = 'https://school.instructure.com';
   assert.deepEqual(N.canvasLinks('file', [{ id: 9, display_name: 'Slides.pdf', url: 'https://cdn.example/x?sig=1' }], o, '7'), [{ title: 'Slides.pdf', href: `${o}/courses/7/files/9`, kind: 'file' }]);
@@ -543,4 +889,66 @@ test('Ultra: notes kept per Ultra site and _N_N account, courses by Ultra id, an
   ]);
   assert.deepEqual(N.ultraLinks(null, o), []);
   assert.match(N.sanitize('<a href="https://school.blackboard.test/ultra/x" data-gz-kind="item">Lab</a>'), /data-gz-kind="item"/, 'an Ultra link keeps its kind in a note');
+});
+
+test('ids that name an object\'s own properties are refused, and nothing reaches the prototype', async () => {
+  const w = world();
+  await w.run({ op: 'folder', id: id(10), name: 'Labs' });
+  await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>1</p>', title: 'L1', folder: id(10), copy: id(90) });
+  try {
+    for (const [i, bad] of ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'].entries()) {
+      for (const notes of ['keep', 'trash']) assert.deepEqual(await w.run({ op: 'folderDel', id: bad, notes }), { ok: false, error: 'bad' }, bad);
+      assert.deepEqual(await w.run({ op: 'load', id: bad }), { ok: false, error: 'bad' }, bad);
+      assert.deepEqual(await w.run({ op: 'meta', id: bad, title: 'x', course: '42' }), { ok: false, error: 'bad' }, bad);
+      await w.run({ op: 'meta', id: id(1), folder: bad });
+      assert.equal(w.idx().notes[id(1)].folder, '', bad);
+      await w.run({ op: 'save', id: id(20 + i), base: 0, sid: bad, html: '<p>2</p>', folder: bad, copy: id(60 + i) });
+      assert.equal(w.idx().notes[id(20 + i)].folder, '', bad);
+      w.store[KEY].notes[id(1)].folder = bad;
+      w.store[KEY].notes[id(1)].with = bad;
+      assert.equal(N.clean(w.store[KEY]).notes[id(1)].folder, '', bad);
+      assert.equal(N.clean(w.store[KEY]).notes[id(1)].with, undefined, bad);
+    }
+    for (const k of ['del', 'title', 'folder', 'with', 'ft']) assert.ok(!Object.hasOwn(Object.prototype, k) && !Object.hasOwn(Object, k), k);
+  } finally {
+    for (const k of ['del', 'title', 'folder', 'with', 'ft']) { delete Object.prototype[k]; delete Object[k]; }
+  }
+});
+
+test('note operations refuse non-string ids instead of coercing them into stored keys', async () => {
+  const w = world();
+  await w.run({ op: 'folder', id: id(10), name: 'Labs' });
+  await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>1</p>', folder: id(10) });
+  await w.run({ op: 'file', id: id(2), note: id(1), kind: 'file', data: 'YQ==' });
+  const before = structuredClone(w.store);
+  for (const wrap of [(v) => [v], (v) => [[v]], () => ({ toString: 'not callable' })]) {
+    for (const m of [
+      { op: 'folderDel', id: id(10), notes: 'trash' }, { op: 'folder', id: id(10), name: 'Changed' },
+      { op: 'load', id: id(1) }, { op: 'meta', id: id(1), title: 'Changed' },
+      { op: 'save', id: id(1), base: 1, sid: 'b', html: '<p>2</p>' },
+      { op: 'file', id: id(2), note: id(1), kind: 'file', data: 'Yg==' },
+    ]) assert.deepEqual(await w.run({ ...m, id: wrap(m.id) }), { ok: false, error: 'bad' }, m.op);
+    assert.equal((await w.run({ op: 'getFile', id: wrap(id(2)) })).ok, false);
+    assert.deepEqual(await w.run({ op: 'save', id: id(1), base: 0, sid: 'b', html: '<p>2</p>', copy: wrap(id(3)) }), { ok: false, error: 'bad' });
+    assert.deepEqual(await w.run({ op: 'file', id: id(2), note: wrap(id(1)), kind: 'file', data: 'Yg==' }), { ok: false, error: 'bad' });
+  }
+  assert.deepEqual(w.store, before, 'invalid ids change neither the folder nor its notes');
+});
+
+test('stored folder references and imported ids must be strings', async () => {
+  const w = world();
+  await w.run({ op: 'folder', id: id(10), name: 'Labs' });
+  await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>1</p>', folder: id(10) });
+  for (const bad of [[id(10)], { toString: 'not callable' }]) {
+    const raw = structuredClone(w.store[KEY]);
+    Object.assign(raw.notes[id(1)], { folder: bad, with: bad, del: w.now });
+    const n = N.clean(raw).notes[id(1)];
+    assert.equal(n.folder, '');
+    assert.equal(n.with, undefined);
+  }
+  const folders = [{ id: [id(20)], name: 'Invalid' }], notes = [{ id: [id(21)], html: '<p>Invalid</p>' }];
+  assert.deepEqual(await w.run({ op: 'import', folders, notes }), { ok: true, done: 0, skipped: 0 });
+  const parsed = N.parseExport(JSON.stringify({ format: 'glaze-notes', version: 1, folders, notes,
+    files: [{ id: [id(22)], kind: 'file', path: 'files/a.txt', size: 1 }] }), { site: 'https://school.instructure.com' });
+  assert.deepEqual(parsed, { folders: [], notes: [], files: [] });
 });

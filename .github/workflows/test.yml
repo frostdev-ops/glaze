@@ -1,6 +1,7 @@
 name: test
 on:
   push:
+    tags-ignore: ['v*']
   pull_request:
 permissions:
   contents: read
@@ -21,3 +22,7 @@ jobs:
           # Node 22's deflate-raw stream accepts trailing junk; 26 follows the browser contract.
           node-version: 26
       - run: node --test
+  browser:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/browser.yml

@@ -22,8 +22,8 @@ The listing shows the currently approved version for desktop Firefox 140 or newe
 3. Open your Blackboard Ultra, Canvas or Moodle site and reload. Check Glaze's site access if it does not appear.
 
 The store installation stays installed after Firefox restarts and receives updates through Firefox.
-Before replacing a temporary development copy, save **Export settings** and Notes **Export all**,
-then import both backups into the store copy. Keep backups private: they include share keys.
+Before replacing a temporary development copy, choose **Settings → Privacy and data → Backup and reset → Back up…**,
+then use **Restore…** in the store copy. Keep backups private: they include share keys.
 Google Calendar sign-in sync is not included in Firefox; calendar-file (.ics) export is available.
 Firefox supports declarative mod parts and does not run code mods.
 

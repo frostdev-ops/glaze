@@ -14,6 +14,7 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
 
   let list = []; // [{ id, name, slots: [{ key, name, size }] }], from the worker, in the student's order
   let wired = false, asking = 0, revision = 0, drawing = 0;
+  let accountWait = null, accountTimer = 0;
   const mounts = new Map(); // `${mod}|${slot}` → { root, timer, n, acts, links }
   const railBoxes = new Map(); // `${mod}|${slot}` → the rail's element
   const assets = new Map(); // `${mod}|${path}` → Promise<ImageBitmap>
@@ -51,16 +52,32 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
   };
 
   // ---- one widget ------------------------------------------------------------------------------------------------------------
+  // A worker read may time out before the page's identity arrives. Wait once for all affected widgets; failed identity
+  // reads retry after the native reader's minute-long backoff, only while a visible mount still needs an account.
+  const needsAccount = () => [...mounts.values()].some((m) => m.accountPending);
+  const waitAccount = () => {
+    if (accountWait || accountTimer || !alive() || document.hidden || !needsAccount()) return;
+    const c = ctx(), doc = globalThis.__gzDoc;
+    accountWait = Promise.resolve().then(() => c.account()).then((uid) => {
+      if (ctx() !== c || globalThis.__gzDoc !== doc || !alive() || !/^(\d{1,20}|_\d{1,20}_\d{1,20})$/.test(typeof uid === 'string' ? uid : '')) return;
+      if (needsAccount()) { for (const m of mounts.values()) m.accountPending = false; redraw(); }
+    }, () => {}).finally(() => {
+      accountWait = null;
+      if (alive() && needsAccount()) accountTimer = setTimeout(() => { accountTimer = 0; waitAccount(); }, 60000);
+    });
+  };
   // Draw it, and again at the time its answer next changes by itself. A hidden page draws when it is shown again.
   const draw = async (k) => {
     const m = mounts.get(k);
     if (!m || document.hidden) return;
     clearTimeout(m.timer);
     const n = ++m.n, [mod, slot] = k.split('|');
-    const [U, a] = await Promise.all([ui(), ask({ op: 'widget', mod, slot, lang: document.documentElement.lang || navigator.language })]).catch(() => []);
+    const [U, a] = await Promise.all([ui(), ask({ op: 'widget', mod, slot, lang: document.documentElement.lang || navigator.language, doc: globalThis.__gzDoc })]).catch(() => []);
     if (!U || mounts.get(k) !== m || n !== m.n) return; // the renderer did not load, or this answer is old
     m.acts = a?.ok && a.acts ? a.acts : {};
     m.links = a?.ok && a.links ? a.links : {};
+    m.accountPending = a?.ok && a.accountPending === true;
+    if (m.accountPending) waitAccount();
     const note = (text) => ({ type: 'text', text, size: 's', muted: true });
     // A mod that went (turned off, removed, blocked) shows nothing; the storage change that did it updates the list.
     const tree = a?.ok && a.tree ? a.tree : a?.ok ? note(a.why === 'denied' ? t('This widget’s data is turned off. Turn it on in the Mods tab of Glaze’s editor.') : t('Nothing to show yet.')) : null;
@@ -81,6 +98,7 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
     if (!m || (only && m !== only)) return;
     mounts.delete(k);
     clearTimeout(m.timer);
+    if (!needsAccount()) { clearTimeout(accountTimer); accountTimer = 0; }
     m.root.replaceChildren();
   };
   const redraw = () => { clearTimeout(drawing); drawing = setTimeout(() => { for (const k of mounts.keys()) draw(k); }, 300); };

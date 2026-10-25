@@ -366,7 +366,8 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   const ui = read('lib/sessions-ui.js');
   assert.match(ui, /const human = \(e\) => e\.isTrusted/);
   assert.match(ui, /if \(!human\(e\) \|\| busy \|\| !state\) return;/);
-  assert.match(ui, /if \(!e\.isTrusted\) return;/);
+  const options = read('options.js');
+  for (const id of ['export', 'import']) assert.match(options, new RegExp(`\\$\\('#${id}'\\)\\.addEventListener\\('(?:click|change)', async \\(e\\) => \\{\\n    if \\(!e\\.isTrusted`), id);
   const quick = read('sharing/quick.js');
   assert.match(quick, /!e\.isTrusted/);
   assert.doesNotMatch(quick, /\bconfirm\(|parent\.|top\./, 'a framed panel asks inline and posts nothing to the page');

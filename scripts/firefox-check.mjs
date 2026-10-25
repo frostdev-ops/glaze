@@ -291,9 +291,14 @@ const run = async () => {
     ok(true, 'the popup closed under its request');
     await until(async () => (await lists(b, welcome)).canvas?.includes(`${CANVAS}/*`), 'the worker to approve the Canvas site');
     ok(await holds(b, welcome, `${CANVAS}/*`), 'Firefox granted it; the worker approved it from onAdded');
-    ok((await registered(b, welcome)).includes(`${CANVAS}/*`), 'registered it');
+    // The worker stores the approval before it registers the site: wait for the registration itself.
+    await until(async () => (await registered(b, welcome)).includes(`${CANVAS}/*`), 'the worker to register the Canvas site');
+    ok(true, 'registered it');
     await until(async () => (await b.sheets(canvas)).includes('canvas.css'), 'Glaze in the open Canvas tab');
     ok(true, 'and put Glaze into the tab that asked, without a reload');
+    await b.reload(canvas);
+    await until(async () => (await b.sheets(canvas)).includes('canvas.css'), 'Glaze in the Canvas tab after a reload');
+    ok((await registered(b, welcome)).includes(`${CANVAS}/*`), 'it stays registered, and a fresh page gets Glaze');
 
     // A grant nobody asked for (as about:addons gives): the worker checks the site itself, approves it and goes into its tab.
     const moodle = await b.open(`${MOODLE}/course/view.php?id=2`);

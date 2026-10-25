@@ -127,6 +127,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       return result.result.value;
     };
     await settings();
+    await require('./check-env.js').ultraReady(opts);
     page = await ctx.newPage();
     page.setDefaultTimeout(10000);
     let target = page;
@@ -153,9 +154,9 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     };
     const showing = async (cid) => {
       const own = await page.evaluate((cid) => location.pathname.startsWith(`/ultra/courses/${cid}/`), cid);
-      if (!own) await page.locator(`iframe[name="gz-ctab:${cid}"]`).waitFor({ state: 'attached' });
-      target = own ? page : page.frames().find((f) => f.name() === `gz-ctab:${cid}`);
-      if (!target) throw new Error(`no live frame for ${cid}`);
+      // Playwright learns a frame's name when its first document commits, after its <iframe> is in the page.
+      const named = (f) => f.name() === `gz-ctab:${cid}`;
+      target = own ? page : page.frames().find(named) || await page.waitForEvent('framenavigated', { predicate: named });
       if (!own) await page.locator(`iframe[name="gz-ctab:${cid}"]`).waitFor({ state: 'visible' });
       await settled(cid);
       await page.waitForFunction((name) => {
@@ -596,26 +597,28 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     phase = 'redraw-probes';
     await isolated(() => {
       globalThis.__b8 = { syncs: 0, helds: 0, adds: 0, removes: 0, storeAdds: 0, storeRemoves: 0, runtimeAdds: 0, runtimeRemoves: 0, timeouts: new Set() };
+      // Called from this file itself: a call it makes into another module (Glaze's navigation bar's own cleanup) is that module's.
+      const own = () => String(new Error().stack).split('\n')[3]?.includes('features/coursetabs.js');
       const sync = GZ_CTABS.sync, held = GZ_CTABS.held;
       GZ_CTABS.sync = (...a) => { __b8.syncs++; return sync(...a); };
       GZ_CTABS.held = (...a) => { __b8.helds++; return held(...a); };
       for (const name of ['addEventListener', 'removeEventListener']) {
         const native = EventTarget.prototype[name];
-        EventTarget.prototype[name] = function(...args) { if (String(new Error().stack).includes('features/coursetabs.js')) __b8[name === 'addEventListener' ? 'adds' : 'removes']++; return native.apply(this, args); };
+        EventTarget.prototype[name] = function(...args) { if (own()) __b8[name === 'addEventListener' ? 'adds' : 'removes']++; return native.apply(this, args); };
       }
       for (const name of ['addListener', 'removeListener']) {
         const native = chrome.storage.onChanged[name];
-        chrome.storage.onChanged[name] = (...args) => { if (String(new Error().stack).includes('features/coursetabs.js')) __b8[name === 'addListener' ? 'storeAdds' : 'storeRemoves']++; return native.apply(chrome.storage.onChanged, args); };
+        chrome.storage.onChanged[name] = (...args) => { if (own()) __b8[name === 'addListener' ? 'storeAdds' : 'storeRemoves']++; return native.apply(chrome.storage.onChanged, args); };
       }
       for (const name of ['addListener', 'removeListener']) {
         const native = chrome.runtime.onMessage[name];
-        chrome.runtime.onMessage[name] = (...args) => { if (String(new Error().stack).includes('features/coursetabs.js')) __b8[name === 'addListener' ? 'runtimeAdds' : 'runtimeRemoves']++; return native.apply(chrome.runtime.onMessage, args); };
+        chrome.runtime.onMessage[name] = (...args) => { if (own()) __b8[name === 'addListener' ? 'runtimeAdds' : 'runtimeRemoves']++; return native.apply(chrome.runtime.onMessage, args); };
       }
       const schedule = setTimeout, cancel = clearTimeout;
       globalThis.setTimeout = (f, ms, ...a) => {
-        const own = String(new Error().stack).includes('features/coursetabs.js');
+        const mine = own();
         let id; id = schedule(() => { __b8.timeouts.delete(id); f(...a); }, ms);
-        if (own) __b8.timeouts.add(id); return id;
+        if (mine) __b8.timeouts.add(id); return id;
       };
       globalThis.clearTimeout = (id) => { __b8.timeouts.delete(id); return cancel(id); };
       return true;
@@ -630,9 +633,9 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.waitForTimeout(2000);
     const quietBefore = await isolated(() => ({ syncs: __b8.syncs, helds: __b8.helds }));
     await page.waitForTimeout(1200);
-    const quietAfter = await isolated(() => ({ syncs: __b8.syncs, helds: __b8.helds, netListeners: __b8.adds - __b8.removes, netStoreListeners: __b8.storeAdds - __b8.storeRemoves, netRuntimeListeners: __b8.runtimeAdds - __b8.runtimeRemoves, timers: __b8.timeouts.size }));
+    const quietAfter = await isolated(() => ({ syncs: __b8.syncs, helds: __b8.helds, adds: __b8.adds, netListeners: __b8.adds - __b8.removes, netStoreListeners: __b8.storeAdds - __b8.storeRemoves, netRuntimeListeners: __b8.runtimeAdds - __b8.runtimeRemoves, timers: __b8.timeouts.size }));
     ok(quietAfter.syncs - quietBefore.syncs <= 2, `quiet after redraws: ${quietAfter.syncs - quietBefore.syncs} sync calls in 1.2s`);
-    ok(quietAfter.netListeners === 0, `toggle cycles retain no extra listeners (${quietAfter.netListeners})`);
+    ok(quietAfter.adds > 0 && quietAfter.netListeners === 0, `toggle cycles retain no extra listeners (${quietAfter.netListeners} of ${quietAfter.adds} added)`);
     ok(quietAfter.netStoreListeners === 0, `toggle cycles retain no extra storage listeners (${quietAfter.netStoreListeners})`);
     ok(quietAfter.netRuntimeListeners === 0, `routes/toggles retain no extra runtime listeners (${quietAfter.netRuntimeListeners})`);
     ok(await target.locator('#gz-ctabs').count() === 1, 'redraws, Back and Forward keep exactly one strip');

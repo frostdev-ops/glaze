@@ -1,0 +1,46 @@
+name: browser
+# The real-browser gate: test.yml runs it on non-release pushes and pull requests, package.yml before it builds a release zip.
+on:
+  workflow_call:
+permissions: {}
+jobs:
+  chromium:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT: 1.63.0
+    steps:
+      # Actions are pinned by commit SHA, with the tag each was resolved from in its comment.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
+      # Install scripts off; every package checked against ci/playwright.pins, and Chromium/FFmpeg against ci/*.pins,
+      # before either runs.
+      - name: Install the pinned Playwright
+        run: |
+          echo "NODE_PATH=$RUNNER_TEMP/playwright/node_modules" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/ms-playwright" >> "$GITHUB_ENV"
+          npm install --prefix "$RUNNER_TEMP/playwright" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund --registry https://registry.npmjs.org/ "playwright@$PLAYWRIGHT"
+          node scripts/npm-integrity.js "$RUNNER_TEMP/playwright/node_modules/.package-lock.json" ci/playwright.pins playwright playwright-core
+      - name: Install its Chromium
+        run: |
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps --no-shell chromium
+          node scripts/ci-chromium.js
+
+      - name: Settings, popup, sites and pointer checks
+        run: nice -n 10 node scripts/ci-browser-checks.js "$RUNNER_TEMP/browser-evidence"
+
+      - name: Keep the logs and screenshots
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-evidence
+          path: ${{ runner.temp }}/browser-evidence
+          if-no-files-found: ignore
+          retention-days: 14
