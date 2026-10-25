@@ -156,6 +156,26 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       check(c.mode !== 'expanded' || [c.tools, c.pager, c.list].every((x) => x <= c.left - 16 + 1), `courses ${width} @${w}: ${c.mode}; header tools, list and pager clear of the column (${Math.round(c.tools)}, ${Math.round(c.pager)}, ${Math.round(c.list)} / ${Math.round(c.left)})`);
       if (width === 1800 && w === 480) await shot('p6-ultra-courses-header');
     }
+    // Course tabs above the Courses page (features/coursetabs.js: first in #main-content-inner) keep the page's room, so
+    // they never cover the column's header.
+    for (const dir of ['ltr', 'rtl']) for (const mode of ['expanded', 'collapsed']) {
+      await page.setViewportSize({ width: 1600, height: 900 });
+      await setup('courses');
+      await page.addStyleTag({ path: path.join(root, 'features/coursetabs.css') });
+      const g = await page.evaluate(({ dir, mode }) => {
+        const h = document.documentElement;
+        h.dir = dir; h.setAttribute('data-gz-ctabs', 'page');
+        if (mode === 'collapsed') h.setAttribute('data-gz-sidebar', 'collapsed');
+        const strip = document.createElement('div'); strip.id = 'gz-ctabs'; strip.dataset.at = 'page';
+        strip.innerHTML = '<div class="gz-ctabs-list" role="tablist"><div class="gz-ctab" role="tab" aria-selected="true">Course</div></div>';
+        document.getElementById('main-content-inner').prepend(strip);
+        const host = document.querySelector('[data-gz-sidebar-host]'), c = host.getBoundingClientRect(), s = strip.getBoundingClientRect();
+        return { mode: h.dataset.gzSidebar, strip: [Math.round(s.left), Math.round(s.right)], column: [Math.round(c.left), Math.round(c.right)],
+          clear: dir === 'rtl' ? s.left >= c.right + 16 - 1 : s.right <= c.left - 16 + 1, head: host.contains(document.elementFromPoint((c.left + c.right) / 2, c.top + 4)) };
+      }, { dir, mode });
+      check(g.mode === mode && g.clear && g.head, `courses ${dir} ${mode}: course tabs above the page keep clear of the column and its header (${JSON.stringify(g)})`);
+      if (dir === 'ltr' && mode === 'expanded') await shot('courses-ctabs-column');
+    }
     await page.setViewportSize({ width: 1600, height: 900 });
     const LOOK = { dark: '--gz-surface:#0d1b2e;--gz-surface-2:#060d18;--gz-ink:#e8f2fa;--gz-ink-muted:#8fa8c0;--gz-line:#16283f;--gz-line-strong:#24405f;--gz-accent:#17c8f4;--gz-accent-ink:#04121f;--gz-accent-soft:#082f49',
       light: '--gz-surface:#ffffff;--gz-surface-2:#f4f5f7;--gz-ink:#14181f;--gz-ink-muted:#5b6472;--gz-line:#e3e6ea;--gz-line-strong:#c8cdd4;--gz-accent:#2563eb;--gz-accent-ink:#ffffff;--gz-accent-soft:#dbeafe' };

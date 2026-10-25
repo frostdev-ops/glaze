@@ -117,6 +117,26 @@ const fixture = `<!doctype html><html><head><style>
       check(geometry.content.top >= Math.max(geometry.header.bottom, geometry.strip.bottom), `${label}: announcement content must follow both header and tabs`);
       if (out && width === 1280 && dir === 'ltr' && at === 'above' && size === 'large') await page.screenshot({ path: path.join(out, 'announcement-course-tabs.png') });
     }
+    // A course open over the Courses page, a scene's host its container (lib/scene-host.js): Glaze's controls on the
+    // cards underneath (course menu, bookmarks, a condensed title) stay under the course, seen and clicked.
+    for (const width of [1280, 375]) for (const kind of ['gradient', 'scene', 'solid']) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.setContent(`<!doctype html><html data-gz-bg="${kind}" data-gz-enhance-coursemenu data-gz-card-condensed><head><style>
+        body { margin: 0; } #site-wrap { position: relative; height: 100vh; overflow: hidden; } #main-content { height: 100%; overflow-y: auto; }
+        article { width: 262px; height: 284px; margin: 16px; } .course-banner { height: 128px; }
+        .panel-wrap { position: absolute; inset: 0; z-index: 10; overflow-y: auto; }
+      </style></head><body><div id="site-wrap"><main id="main-content"><div id="main-content-inner"><section class="base-courses-container"><div class="course-list multi-column-view">
+        <article id="course-list-course-_101_1" class="element-card course-element-card" data-course-id="_101_1"><div class="course-banner"></div><div class="gz-bm"><a href="#">Syllabus</a></div>
+        <div class="element-details"><h4 class="course-title">Biology</h4></div><button type="button" class="gz-cm-btn" aria-label="Colour and look"></button></article>
+      </div></section></div></main><div class="course-content-container"${kind === 'scene' ? ' data-gz-scene-host' : ''}><div class="panel-wrap"><section class="course"><p>Course content</p></section></div>${kind === 'scene' ? '<canvas id="gz-scene"></canvas>' : ''}</div></div></body></html>`);
+      for (const sheet of ['theme.css', 'motion.css', 'extras.css']) await page.addStyleTag({ path: path.join(root, sheet) });
+      const hits = await page.evaluate(() => [...document.querySelectorAll('.gz-cm-btn, .gz-bm, .course-title')].map((e) => {
+        const r = e.getBoundingClientRect();
+        return [e.className, !!document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('.course-content-container')];
+      }));
+      check(hits.every(([, under]) => under), `${width} ${kind}: the cards' Glaze controls stay under an open course (${JSON.stringify(hits)})`);
+      if (out && width === 375 && kind === 'scene') { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, 'course-over-cards.png') }); }
+    }
     // Peek/Fabric side sheets and their descendants never acquire full-page backgrounds or clipping.
     for (const selector of ['bb-offcanvas-panel peek', 'peek-panel__content-wrapper', 'ms-Panel-main']) {
       await page.setContent(`<!doctype html><html data-gz-bg="gradient"><body><div class="${selector}"><div class="bb-offcanvas-panel"><div class="panel-wrap"></div></div></div></body></html>`);
