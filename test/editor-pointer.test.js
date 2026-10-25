@@ -88,9 +88,10 @@ const editor = (s, local = {}) => {
 };
 const settings = (extras = {}, parts = { x: { pointer: 'pumpkin', cursor: { kind: 'flicker' } } }) => ({ ...G.GZ_SANITIZE({ extras }), parts: structuredClone(parts) });
 
-test('a card for every choice the setting takes, in its order, each a radio in one group named for the setting', () => {
+test('a card for every choice the setting takes, in its order, each a radio in one group named for the setting', async () => {
   assert.deepEqual(P.TILES(), G.GZ_SPEC.extras.pointer[1]);
   const e = editor(settings({}), { cursorImg: 'data:image/png;base64,b25l' });
+  await tick();
   assert.deepEqual(e.cards().map((c) => c.attrs['data-pointer']), G.GZ_SPEC.extras.pointer[1]);
   for (const c of e.cards()) {
     const [input, stage, name] = c.children;
@@ -277,7 +278,7 @@ test('an initial picture read cannot overwrite a newer storage change in the edi
 test('the section: the switch in its heading, a body with the cards, the picture\'s controls and the animation switch, and the Look\'s pointer', () => {
   const html = read('options.html');
   const section = html.split('data-editor-section="look/pointer"')[1].split('</section>')[0];
-  const [heading, rest] = section.split('</div>\n');
+  const cut = section.indexOf('</div>\n'), heading = section.slice(0, cut), rest = section.slice(cut);
   assert.match(heading, /<input type="checkbox" role="switch" data-key="extras\.pointerOn" aria-label="Custom pointer">/);
   const [body, more] = rest.split('<details class="more">');
   assert.match(body, /<div id="pointer-body" class="stack">/);
@@ -341,7 +342,7 @@ test('Reset section takes the Look\'s pointer and cursor effect out too, after t
   e.reset.fire('click', { isTrusted: false });
   assert.deepEqual(e.saved, [], 'only a person\'s click');
   e.reset.fire('click');
-  assert.deepEqual(s.parts, { x: { type: { kind: 'ink' } } }, 'the Look\'s typing effect is Motion\'s, and stays');
+  assert.deepEqual(JSON.parse(JSON.stringify(s.parts)), { x: { type: { kind: 'ink' } } }, 'the Look\'s typing effect is Motion\'s, and stays');
   assert.deepEqual(e.saved, [[['parts'], ['pointer']], [['parts'], ['cursor']], [['parts'], null]]);
   assert.equal(e.lookSelect('Pointer').children.find((o) => o.selected)?.value, '');
 });

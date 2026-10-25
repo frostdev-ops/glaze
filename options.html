@@ -193,13 +193,18 @@
   /* The pointer (lib/editor-pointer.js): a card per pointer, its arrow and hand on a stage half light and half dark, as pages
      are. Hovering a card wears its hand. */
   .seg.pt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: .6rem; padding: 0; border: 0; border-radius: 0; background: none; }
-  .seg.pt-cards label { position: relative; display: grid; gap: .3rem; align-content: start; justify-items: center; text-align: center; padding: .5rem .5rem .6rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6); border: 1px solid var(--gz-border-line, var(--gz-line)); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); font-size: calc(13px * var(--gz-scale, 1)); cursor: pointer; transition: border-color .2s var(--gz-ease), box-shadow .2s var(--gz-ease), transform .2s var(--gz-ease); }
-  .seg.pt-cards label:hover { border-color: var(--gz-border-strong, var(--gz-line-strong)); transform: translateY(-1px); }
+  .seg.pt-cards :is(label, button) { position: relative; display: grid; gap: .3rem; align-content: start; justify-items: center; text-align: center; padding: .5rem .5rem .6rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6); border: 1px solid var(--gz-border-line, var(--gz-line)); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); font-size: calc(13px * var(--gz-scale, 1)); cursor: pointer; transition: border-color .2s var(--gz-ease), box-shadow .2s var(--gz-ease), transform .2s var(--gz-ease); }
+  .seg.pt-cards :is(label, button):hover { border-color: var(--gz-border-strong, var(--gz-line-strong)); transform: translateY(-1px); }
   .seg.pt-cards label:has(input:checked) { border-color: var(--gz-accent); box-shadow: 0 0 0 1px var(--gz-accent), 0 8px 24px color-mix(in srgb, var(--gz-accent) 18%, transparent); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-soft) 45%, var(--gz-surface-fill, var(--gz-surface))); color: var(--gz-ink); font-weight: 400; }
-  .seg.pt-cards label:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+  .seg.pt-cards label:has(input:focus-visible), .seg.pt-cards button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
   .seg.pt-cards label:has(input:disabled) { cursor: default; transform: none; }
   .seg.pt-cards b { font-weight: 600; }
   .seg.pt-cards .desc { margin: -.15rem 0 0; font-size: calc(11px * var(--gz-scale, 1)); }
+  .seg.pt-cards button { font-family: inherit; }
+  /* A section's own switch sits at the heading's end, where Reset section showing up beside it doesn't move it. */
+  .section-heading > [role="switch"] { align-self: center; margin-inline-start: auto; }
+  .section-heading > .section-reset:not([hidden]):has(+ [role="switch"]) { margin-inline-start: auto; }
+  .section-heading > .section-reset:not([hidden]) + [role="switch"] { margin-inline-start: 0; }
   .pt-stage { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; place-items: center; width: 100%; height: 56px; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); background: linear-gradient(90deg, #f4f5f7 50%, #1b1e25 50%); border: 1px solid var(--gz-border-line, var(--gz-line)); box-sizing: border-box; }
   .pt-stage :is(img, svg) { display: block; width: 32px; height: 32px; }
   .pt-none { display: grid; place-items: center; width: 34px; height: 34px; border: 2px dashed #8a8f99; border-radius: calc(var(--gz-radius, 12px) / 2); color: #8a8f99; font-size: calc(22px * var(--gz-scale, 1)); font-weight: 300; line-height: 1; grid-column: 1 / -1; background: #f4f5f7; }
@@ -608,20 +613,18 @@
 </details>
 </section>
 <section id="look-pointer" data-editor-section="look/pointer" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-pointer">
-<p class="section-path" data-editor-breadcrumb><a href="#look/pointer" data-editor-alias>Pointer</a></p><div class="section-heading"><h2 id="heading-look-pointer">Pointer</h2><button type="button" class="info" popovertarget="pointer-note" aria-labelledby="info-more heading-look-pointer" aria-describedby="pointer-note"></button><button type="button" class="section-reset" data-reset-section="look/pointer">Reset section</button></div>
-<div class="seg pt-cards" role="radiogroup" aria-labelledby="heading-look-pointer" aria-describedby="pointer-note" id="pointer-tiles" data-setting-owner="extras.pointer"></div>
+<p class="section-path" data-editor-breadcrumb><a href="#look/pointer" data-editor-alias>Pointer</a></p><div class="section-heading"><h2 id="heading-look-pointer">Pointer</h2><button type="button" class="info" popovertarget="pointer-note" aria-labelledby="info-more heading-look-pointer" aria-describedby="pointer-note"></button><button type="button" class="section-reset" data-reset-section="look/pointer">Reset section</button><input type="checkbox" role="switch" data-key="extras.pointerOn" aria-label="Custom pointer"></div>
 <p class="desc info-pop" id="pointer-note" popover>Yours with whichever Look you wear, and never put in a Look or a theme code. Text fields keep the usual text cursor; touch screens have no pointer.</p>
-<details class="more"><summary>More options</summary>
-<div class="group">
-          <h3 id="pointer-own-head">Your own picture<button type="button" class="info" popovertarget="pointer-own-note" aria-labelledby="info-more pointer-own-head" aria-describedby="pointer-own-note"></button></h3>
-          <div class="row"><button type="button" id="pointer-pick" aria-describedby="pointer-own-note">Choose a picture…</button><button type="button" id="pointer-remove" class="danger" hidden>Remove picture</button><input type="file" id="pointer-file" accept="image/png,image/jpeg" hidden></div>
-          <p class="desc info-pop" id="pointer-own-note" popover>A PNG or JPEG up to 5 MiB, scaled to 32 pixels and kept on this computer; choosing one makes it your pointer. Its top-left corner is the tip.</p>
-        </div>
-<div class="group">
-          <div class="has-info"><label class="check"><input type="checkbox" data-key="extras.pointerAnim" aria-describedby="pointer-anim-look info-extras-pointerAnim"><span id="info-extras-pointerAnim-name">Pointer animation</span></label><button type="button" class="info" popovertarget="info-extras-pointerAnim" aria-labelledby="info-more info-extras-pointerAnim-name" aria-describedby="info-extras-pointerAnim"></button>
+<div id="pointer-body" class="stack">
+<div class="seg pt-cards" role="radiogroup" aria-labelledby="heading-look-pointer" aria-describedby="pointer-note" id="pointer-tiles" data-setting-owner="extras.pointer"></div>
+<div class="row" id="pointer-own" hidden><button type="button" id="pointer-pick" aria-describedby="pointer-own-note">Replace picture…</button><button type="button" id="pointer-remove" class="danger">Remove picture</button><span id="pointer-own-name" hidden>Your own picture</span><button type="button" class="info" popovertarget="pointer-own-note" aria-labelledby="info-more pointer-own-name" aria-describedby="pointer-own-note"></button><input type="file" id="pointer-file" accept="image/png,image/jpeg" hidden></div>
+<p class="desc info-pop" id="pointer-own-note" popover>A PNG or JPEG up to 5 MiB, scaled to 32 pixels and kept on this computer; choosing one makes it your pointer. Its top-left corner is the tip.</p>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="extras.pointerAnim" aria-describedby="pointer-anim-look info-extras-pointerAnim"><span id="info-extras-pointerAnim-name">Pointer animation</span></label><button type="button" class="info" popovertarget="info-extras-pointerAnim" aria-labelledby="info-more info-extras-pointerAnim-name" aria-describedby="info-extras-pointerAnim"></button>
 <div class="info-pop" id="info-extras-pointerAnim" popover><span class="desc">The Look's animation around your pointer, such as sparkles or a glow. Off keeps your pointer still; typing and event effects stay as the Look has them.</span></div></div>
-          <p class="desc" id="pointer-anim-look"></p>
-        </div>
+<p class="desc" id="pointer-anim-look"></p>
+</div>
+<details class="more"><summary>This Look's pointer</summary>
+<div id="x-pointer" class="group"></div>
 </details>
 </section>
 <section id="look-extras" data-editor-section="look/extras" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-extras">
