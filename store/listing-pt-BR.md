@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.2 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 3.4.3 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -8,18 +8,22 @@ Dê um novo visual ao Blackboard Ultra, Canvas e Moodle, com sua navegação, ma
 
 O Glaze dá um novo visual aos seus cursos com paletas, fontes, fundos e movimento, e traz ferramentas para planejar e estudar bem onde você faz seus trabalhos. Funciona em qualquer escola que use Blackboard Ultra, Canvas ou Moodle, inclusive no domínio próprio da sua escola, depois que você autoriza o acesso. Sem conta e sem análises de uso. Seus cursos, suas notas de avaliação, anotações e tarefas ficam no seu dispositivo; suas configurações acompanham a sincronização do navegador, se ela estiver ativada; compartilhar é opcional e criptografado.
 
-NOVO NA 3.4.2
+NOVO NA 3.4.3
 
-• As configurações estão agrupadas pelo que mudam: o dia a dia à vista, o resto em “Mais opções” e todas as configurações na pesquisa. “Todas as configurações” mostra as seções avançadas.
-• Um “?” ao lado de uma configuração explica o que ela faz, e a página de configurações usa o seu Look.
-• Os widgets cabem no bloco em qualquer tamanho: no Dashboard, na barra lateral, na navegação e no celular.
-• O habitat do mascote é um cômodo que preenche o bloco, nas cores do seu Look.
-• As abas de cursos usam “Automática” por padrão: na navegação do Glaze quando ela é uma barra superior e, se não, acima do curso.
-• Blackboard: painéis laterais, como as configurações do fluxo de atividades, abrem abaixo da barra superior do Glaze.
-• Moodle: densidade, altura da linha e o tom das cores dos cursos funcionam, como no Canvas e no Blackboard.
+• Look › Ponteiro tem o interruptor “Ponteiro personalizado”: desligado, você usa o ponteiro do sistema em todas as páginas; ligado, sua escolha volta.
+• “Fazer backup…” e “Restaurar…”, em Configurações › Privacidade e dados, salvam e trazem de volta tudo em um só arquivo: configurações, Looks, tarefas, notas, grades de aulas e mais.
+• O backup de rascunhos guarda uma cópia própria em cada aba e, no Blackboard, mantém uma resposta até ela ser publicada.
+• Restaurar as Notas traz de volta nomes alterados, itens movidos e a ordem das pastas.
+• Grade de aulas: um calendário importado de novo atualiza os dias de folga, as aulas não mudam mais de horário entre fusos, uma grade grande demais avisa em vez de mostrar “Salvo”, e “Parar a leitura” interrompe um link de calendário.
+• As configurações cabem em janelas estreitas.
+• Páginas no endereço próprio da sua escola não carregam mais sem o Glaze enquanto ele é atualizado.
+• Mods e widgets leem só as notas de avaliação, as tarefas e a grade de aulas da conta conectada na página.
 
 DA 3.4
 
+• As configurações estão agrupadas pelo que mudam, com o resto em “Mais opções” e “Todas as configurações”.
+• Os widgets e o habitat do mascote cabem no bloco em qualquer tamanho, e as abas de cursos usam “Automática” por padrão.
+• Moodle: densidade, altura da linha e o tom das cores dos cursos funcionam, como no Canvas e no Blackboard.
 • Chrome: Na instalação, o Glaze pede acesso aos domínios das plataformas instructure.com, blackboard.com e moodlecloud.com, além da sua galeria e do seu servidor de compartilhamento. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba de instalação ou em Configurações › Privacidade e dados › Sites. Baixar tudo, Gradescope, as mídias dos Looks e as conexões de rede dos mods pedem as permissões que faltam quando precisam delas. Os arquivos redirecionados são interrompidos com um erro que pede para baixá-los pelo Canvas.
 • Firefox: Na instalação, o Glaze pede acesso aos domínios das plataformas instructure.com, blackboard.com e moodlecloud.com, além da sua galeria e do seu servidor de compartilhamento. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba de instalação ou em Configurações › Privacidade e dados › Sites. Baixar tudo, Gradescope, as mídias dos Looks e as conexões de rede dos mods pedem as permissões que faltam quando precisam delas. Os arquivos redirecionados são interrompidos com um erro que pede para baixá-los pelo Canvas.
 • Moodle em moodlecloud.com funciona desde a instalação.
@@ -95,7 +99,7 @@ NO MOODLE
 
 EM QUALQUER LUGAR
 
-Pressione Ctrl+K (⌘K no Mac) para ir direto a cursos, páginas, configurações do Glaze e trabalhos com prazo. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba que ele abre ao ser instalado ou em Configurações › Privacidade e dados › Sites. O pop-up verifica a página; os endereços digitados são verificados pelas APIs do site depois que você autoriza o acesso. As configurações listam esses sites e podem removê-los. O pop-up mantém os controles rápidos à mão. No Blackboard e no Canvas, O que o Glaze faz lista cada extra com o respectivo interruptor. Exporte e importe todas as suas configurações como um arquivo.
+Pressione Ctrl+K (⌘K no Mac) para ir direto a cursos, páginas, configurações do Glaze e trabalhos com prazo. Adicione o site da sua escola pelo botão do Glaze na barra de ferramentas, pela aba que ele abre ao ser instalado ou em Configurações › Privacidade e dados › Sites. O pop-up verifica a página; os endereços digitados são verificados pelas APIs do site depois que você autoriza o acesso. As configurações listam esses sites e podem removê-los. O pop-up mantém os controles rápidos à mão. No Blackboard e no Canvas, O que o Glaze faz lista cada extra com o respectivo interruptor. “Fazer backup…” e “Restaurar…” salvam e trazem de volta tudo em um só arquivo.
 
 Canvas em instructure.com, Ultra em blackboard.com e Moodle em moodlecloud.com são automáticos; as aprovações anteriores são mantidas.
 

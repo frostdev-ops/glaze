@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.2 (French)
+# Chrome Web Store listing — Glaze 3.4.3 (French)
 
 ## Short summary (132 character maximum)
 
@@ -8,18 +8,22 @@ Changez le style de Blackboard Ultra, Canvas et Moodle, avec votre look et votre
 
 Glaze change le style de vos cours avec des palettes, des polices, des arrière-plans et des animations, et ajoute des outils pour planifier et étudier directement là où vous faites vos travaux de cours. Il fonctionne dans tous les établissements qui utilisent Blackboard Ultra, Canvas ou Moodle, y compris sur le domaine propre d’un établissement, une fois que vous l’autorisez. Ni compte ni outil d’analyse. Vos cours, vos résultats, vos notes personnelles et vos tâches restent sur votre appareil ; vos réglages suivent la synchronisation de votre navigateur si elle est activée ; le partage est facultatif et chiffré.
 
-NOUVEAUTÉS DE LA VERSION 3.4.2
+NOUVEAUTÉS DE LA VERSION 3.4.3
 
-• Les réglages sont regroupés selon ce qu’ils changent : l’essentiel est visible, le reste dans « Plus d’options », et la recherche trouve chaque réglage. « Tous les réglages » affiche les sections avancées.
-• Un « ? » à côté d’un réglage l’explique, et la page des réglages porte votre Look.
-• Les widgets s’adaptent à leur tuile, quelle que soit sa taille : sur le Dashboard, dans la barre latérale, dans la navigation et sur téléphone.
-• L’habitat du compagnon est une pièce qui remplit sa tuile, aux couleurs de votre Look.
-• Les onglets de cours sont sur « Automatique » par défaut : dans la navigation de Glaze quand c’est une barre supérieure, sinon au-dessus du cours.
-• Blackboard : les panneaux latéraux, comme les réglages du flux d’activité, s’ouvrent sous la barre supérieure de Glaze.
-• Moodle : la densité, l’interligne et le ton des couleurs de cours fonctionnent, comme sur Canvas et Blackboard.
+• Look › Pointeur : l’interrupteur « Pointeur personnalisé » passe au pointeur du système sur chaque page, puis revient à votre choix.
+• « Sauvegarder… » et « Restaurer… », dans Réglages › Confidentialité et données, gardent tout dans un seul fichier : réglages, Looks, tâches, notes et emplois du temps.
+• La sauvegarde de brouillon garde une copie par onglet et, sur Blackboard, une réponse jusqu’à sa publication.
+• Restaurer les Notes ramène renommages, déplacements et ordre des dossiers.
+• Emploi du temps : un calendrier réimporté met à jour ses jours de congé, les cours ne se décalent plus entre fuseaux horaires, les limites sont signalées au lieu d’« Enregistré », et « Arrêter la lecture » arrête un lien de calendrier.
+• Les réglages tiennent dans les fenêtres étroites.
+• Glaze reste présent sur le site de votre établissement pendant ses mises à jour.
+• Les mods et widgets ne lisent que le compte connecté sur la page.
 
 DE LA VERSION 3.4
 
+• Les réglages sont regroupés selon ce qu’ils changent, le reste dans « Plus d’options » et « Tous les réglages ».
+• Les widgets et l’habitat du compagnon s’adaptent à toute taille de tuile, et les onglets de cours sont sur « Automatique » par défaut.
+• Moodle : la densité, l’interligne et le ton des couleurs de cours fonctionnent, comme sur Canvas et Blackboard.
 • Chrome : À l’installation, Glaze demande l’accès aux domaines des plateformes instructure.com, blackboard.com et moodlecloud.com, ainsi qu’à sa galerie et à son relais de partage. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet d’installation ou Réglages › Confidentialité et données › Sites. Tout télécharger, Gradescope, les médias des Looks et les connexions réseau des mods demandent les autorisations manquantes au besoin. Les fichiers redirigés sont arrêtés avec une erreur vous invitant à les télécharger depuis Canvas.
 • Firefox : À l’installation, Glaze demande l’accès aux domaines des plateformes instructure.com, blackboard.com et moodlecloud.com, ainsi qu’à sa galerie et à son relais de partage. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet d’installation ou Réglages › Confidentialité et données › Sites. Tout télécharger, Gradescope, les médias des Looks et les connexions réseau des mods demandent les autorisations manquantes au besoin. Les fichiers redirigés sont arrêtés avec une erreur vous invitant à les télécharger depuis Canvas.
 • Moodle sur moodlecloud.com fonctionne dès l’installation.
@@ -95,7 +99,7 @@ SUR MOODLE
 
 PARTOUT
 
-Appuyez sur Ctrl+K (⌘K sur Mac) pour aller à des cours, des pages, des réglages de Glaze et des travaux à rendre. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet ouvert à l’installation ou Réglages › Confidentialité et données › Sites. La fenêtre contextuelle vérifie la page ; les adresses saisies sont vérifiées via les API du site après votre autorisation. Les réglages listent ces sites et peuvent les retirer. La fenêtre contextuelle garde les commandes rapides à portée de main. Sur Blackboard et Canvas, Ce que Glaze sait faire liste chaque extra avec son interrupteur. Exportez et importez tous vos réglages sous forme de fichier.
+Appuyez sur Ctrl+K (⌘K sur Mac) pour aller à des cours, des pages, des réglages de Glaze et des travaux à rendre. Ajoutez le site de votre établissement depuis le bouton de Glaze dans la barre d’outils, l’onglet ouvert à l’installation ou Réglages › Confidentialité et données › Sites. La fenêtre contextuelle vérifie la page ; les adresses saisies sont vérifiées via les API du site après votre autorisation. Les réglages listent ces sites et peuvent les retirer. La fenêtre contextuelle garde les commandes rapides à portée de main. Sur Blackboard et Canvas, Ce que Glaze sait faire liste chaque extra avec son interrupteur. « Sauvegarder… » et « Restaurer… » gardent tout dans un seul fichier.
 
 Canvas sur instructure.com, Ultra sur blackboard.com et Moodle sur moodlecloud.com sont automatiques ; les autorisations antérieures sont conservées.
 

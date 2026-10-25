@@ -4,7 +4,7 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.4.3] — 2026-10-25
 
 ### Added
 
@@ -16,7 +16,7 @@ All notable changes to Glaze are documented here. The format follows
 - The Look's own pointer and cursor effect moved from Motion to Pointer, under This Look's pointer.
 - Mods and widgets read only the grades, to-dos and schedule of the account signed in on the page, and nothing while that account is unknown.
 - Class schedule: a time saved in another time zone names that zone.
-- CI runs the settings, popup, site-permission and pointer checks in a pinned, integrity-checked Chromium on every push and pull request, and a release zip is built only once they pass.
+- CI runs Glaze's browser checks in a pinned, integrity-checked Chromium on every push, and a release zip waits for them.
 
 ### Fixed
 

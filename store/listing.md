@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.2
+# Chrome Web Store listing — Glaze 3.4.3
 
 ## Name
 
@@ -16,18 +16,22 @@ Productivity
 
 Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain once you allow it. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
 
-NEW IN 3.4.2
+NEW IN 3.4.3
 
-• Settings are grouped by what they change, with everyday controls in view, the rest under More options and every setting in search. All settings shows the power-user sections.
-• A "?" beside a setting explains it, and the settings page wears your Look.
-• Widgets fit their tile at any size, on the Dashboard, in the sidebar, in the navigation and on phones.
-• The pet habitat is a room that fills its tile, in your Look's colors.
-• Course tabs default to Automatic: in Glaze's navigation when it is a top bar, above the course otherwise.
-• Blackboard: side panels such as Activity Stream's settings open below Glaze's top bar.
-• Moodle: Density, Line height and course color tone work, as on Canvas and Blackboard.
+• Look › Pointer has a Custom pointer switch: off gives you the system pointer on every page, on brings your choice back.
+• Back up… and Restore… in Settings › Privacy and data save and bring back everything in one file: settings, Looks, tasks, notes, schedules and more.
+• Draft backup keeps each tab's own copy, and on Blackboard keeps a reply until it is posted.
+• Restoring Notes brings back renames, moves and folder order.
+• Class schedule: a reimported calendar updates its days off, classes no longer shift across time zones, a schedule over its limits says so instead of "Saved", and Stop reading stops a calendar link.
+• Settings fit narrow windows.
+• Pages on your school's own address no longer load without Glaze while it updates.
+• Mods and widgets read only the signed-in account's grades, to-dos and schedule.
 
 FROM 3.4
 
+• Settings are grouped by what they change, with the rest under More options and All settings.
+• Widgets and the pet habitat fit their tile at any size, and course tabs default to Automatic.
+• Moodle: Density, Line height and course color tone work, as on Canvas and Blackboard.
 • Chrome: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Privacy and data › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
 • Firefox: Glaze asks at install for the hosted LMS domains instructure.com, blackboard.com and moodlecloud.com, plus its gallery and share relay. Add your school's site from Glaze's toolbar button, the install tab or Settings › Privacy and data › Sites. Download all, Gradescope, Look media and mod network hosts request missing access when needed. Redirected files stop with an error asking you to download them from Canvas.
 • Moodle on moodlecloud.com works from install.
@@ -103,7 +107,7 @@ ON MOODLE
 
 EVERYWHERE
 
-Press Ctrl+K (⌘K on a Mac) to jump to courses, pages, Glaze settings and due work. Add your school's site from Glaze's toolbar button, the tab it opens at install, or Settings › Privacy and data › Sites. The popup checks the page; typed addresses are checked through the site's APIs after you grant access. Settings lists those sites and can remove them. The popup keeps quick controls close. On Blackboard and Canvas, What Glaze can do lists every extra with its switch. Export and import all your settings as a file.
+Press Ctrl+K (⌘K on a Mac) to jump to courses, pages, Glaze settings and due work. Add your school's site from Glaze's toolbar button, the tab it opens at install, or Settings › Privacy and data › Sites. The popup checks the page; typed addresses are checked through the site's APIs after you grant access. Settings lists those sites and can remove them. The popup keeps quick controls close. On Blackboard and Canvas, What Glaze can do lists every extra with its switch. Back up… and Restore… save and bring back everything in one file.
 
 Canvas on instructure.com, Ultra on blackboard.com and Moodle on moodlecloud.com are automatic; earlier approvals are kept.
 

@@ -99,7 +99,7 @@ test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listi
   assert.ok(chrome.description.includes('• Firefox: nur Firefox.') && chrome.description.includes('• Safari: nur Safari.'), 'the Chrome paste kit retains the other browser labels too');
   assert.ok(firefox.notes.includes('nur Firefox') && !firefox.notes.includes('nur Chrome') && !firefox.notes.includes('nur Safari'));
   assert.ok(apple.whatsNew.includes('nur Safari') && !apple.whatsNew.includes('nur Chrome') && !apple.whatsNew.includes('nur Firefox'));
-  assert.ok(firefox.notes.includes('Haustier-Zuhause') && apple.whatsNew.includes('Haustier-Zuhause'), 'unlabelled bullets go everywhere');
+  assert.ok(firefox.notes.includes('Entwurfssicherung') && apple.whatsNew.includes('Entwurfssicherung'), 'unlabelled bullets go everywhere');
   assert.ok(!listings.fr.firefox.notes.includes('seulement Safari') && listings.fr.apple.whatsNew.includes('seulement Safari'), 'French spacing before the colon');
 });
 
