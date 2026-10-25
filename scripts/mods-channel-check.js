@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), net = require('node:net');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['http://127.0.0.1/*']);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const check = (name, ok) => { assert.ok(ok, name); console.log(`ok  ${name}`); };
@@ -94,14 +94,21 @@ const until = async (name, fn) => {
     const publish = async (version) => {
       await editor.click('#mod-publish');
       return until('publication saved', async () => {
-        const all = await local(null), own = Object.entries(all).find(([k, v]) => k.startsWith('modChannelOwn:') && v.version === version);
-        return own && { id: own[0].slice('modChannelOwn:'.length), ...own[1] };
+        // Author sessions belong to the worker's vault, not storage.local where any page script could read their keys.
+        return sw.evaluate(async (version) => {
+          const author = (await chrome.storage.local.get('modAuthor')).modAuthor;
+          const bytes = Uint8Array.from(atob(author.x.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+          const id = await GZ_MODBUNDLE.modId(bytes, 'Channel Timer'), key = `modChannelOwn:${id}`;
+          const own = (await channelLocal().get(key))[key];
+          return own?.version === version ? { id, ...own } : null;
+        }, version);
       });
     };
     await load('1.0.0');
     const first = await publish('1.0.0'), id = first.id;
     check('publishing from the Mods tab returns a read link on the local relay', first.link.startsWith(`${server}/j#1.r.`));
     check('publishing alone does not install a mod', !await record(id));
+    check('the author session stays out of page-readable storage', !Object.keys(await local(null)).some((k) => k.startsWith('modChannelOwn:')));
     await route('add');
     await editor.fill('#mod-code', first.link);
     await editor.click('#mod-code-read');

@@ -15,7 +15,7 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://api.weather.gov/*']);
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const M = require(path.join(ext, 'lib/modbundle.js'));
 const enc = new TextEncoder();
@@ -97,7 +97,11 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('only Cancel and Install, Cancel focused', await editor.evaluate(() => [...document.querySelectorAll('#mod-prompt button')].map((b) => b.textContent).join(',') === 'Cancel,Install'
       && document.activeElement.id === 'mod-prompt-cancel'));
     for (let i = 0; i < 5; i++) await editor.keyboard.press('Tab');
-    check('focus stays in the prompt', await editor.evaluate(() => document.getElementById('mod-prompt').contains(document.activeElement)));
+    check('Tab never focuses the inert page behind the prompt', await editor.evaluate(() => {
+      const dialog = document.getElementById('mod-prompt');
+      // Native modal dialogs also let Tab reach the browser chrome, where the document reports body as active.
+      return dialog.matches(':modal') && (document.activeElement === document.body || dialog.contains(document.activeElement));
+    }));
     check('the page behind the prompt is inert', await editor.evaluate(() => { const b = document.getElementById('mod-file-btn'); b.focus(); return document.getElementById('mod-prompt').matches(':modal') && document.activeElement !== b; }));
     await editor.keyboard.press('Escape');
     check('Escape cancels without installing', !await promptOpen() && !(await local('mods')).mods);
@@ -172,7 +176,10 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     await editor.fill('#mod-code', petsCode);
     await editor.click('#mod-code-read');
     await until(promptOpen);
-    check('a code prompts too, asking for nothing', /It asks for nothing/.test(await promptText()));
+    check('a code prompts too, disclosing code without data or network access', await editor.evaluate(() => {
+      const permissions = [...document.querySelectorAll('#mod-prompt-perms li')];
+      return permissions.length === 1 && /Runs its author’s code/.test(permissions[0].textContent);
+    }));
     await editor.click('#mod-prompt-install');
     check('installed from a code', (await until(() => rec(pets.id)))?.source === 'code');
     await editor.waitForSelector('#mods-order-group:not([hidden])');
@@ -235,6 +242,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
 
     // ---- dev mode ----
     check('dev tools are hidden until dev mode is on', await editor.evaluate(() => document.getElementById('mod-dev-tools').hidden));
+    await editor.evaluate(() => { location.hash = 'mods/dev'; });
     await editor.check('#mod-dev');
     await editor.waitForSelector('#mod-dev-tools:not([hidden])');
     check('dev mode is saved as modDev', (await local('modDev')).modDev === true);

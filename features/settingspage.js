@@ -64,7 +64,7 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
   const ticket = () => new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:settings-ticket' }, (r) => res(chrome.runtime.lastError || !r?.ok ? '' : r.ticket)); } catch { res(''); } });
   const open = async (section = '') => {
     if (!chrome.runtime?.id) return false;
-    const hash = /^[a-z]+(\/[a-z-]+)?$/.test(section) ? `#${section}` : '';
+    const hash = /^[a-z][a-z-]*(\/[a-z-]+)?$/.test(section) ? `#${section}` : '';
     if (host) { if (hash) frame.contentWindow?.postMessage({ gzSettings: 'go', hash }, '*'); frame.focus(); return true; }
     const from = focused();
     const t = await ticket();

@@ -81,6 +81,30 @@ const check = async (name, test) => {
       await page.fill('#find', '');
       assert.equal(await page.locator('#bb-navigation').evaluate((e) => e.open), false, 'clearing search restores More options');
     });
+    await check('legacy-section-hashes', async () => {
+      const host = await context.newPage();
+      try {
+        await host.goto(`${base}/popup.html`);
+        await host.evaluate(() => {
+          document.body.replaceChildren();
+          const frame = document.createElement('iframe');
+          frame.src = 'options.html'; frame.style = 'width:100%;height:800px'; document.body.append(frame);
+        });
+        await host.waitForFunction(() => document.querySelector('iframe')?.contentDocument?.querySelector('#looks button'));
+        const frame = host.frames().find((f) => f.url().includes('options.html'));
+        await frame.evaluate(() => document.documentElement.setAttribute('data-embed-ok', ''));
+        for (const [hash, route] of Object.entries({ 'bb-folders': 'pages/declutter', 'canvas-quizzes': 'pages/documents', 'canvas-shared': 'pages/content', 'moodle-courses': 'look/palette' })) {
+          await open(hash);
+          const inView = (r) => {
+            const section = document.querySelector(`[data-editor-section="${r}"]`), rect = section.getBoundingClientRect();
+            return editor.route() === r && rect.top < innerHeight && rect.bottom > 0;
+          };
+          await page.waitForFunction(inView, route);
+          await host.evaluate((hash) => document.querySelector('iframe').contentWindow.postMessage({ gzSettings: 'go', hash: `#${hash}` }, location.origin), hash);
+          await frame.waitForFunction(inView, route);
+        }
+      } finally { await host.close(); }
+    });
     await check('side-list-accessibility', async () => {
       await open('look/palette');
       assert.equal(await page.locator('[data-editor-jump][href="#look/palette"]').getAttribute('aria-current'), 'location', 'the current section has a valid ARIA token');

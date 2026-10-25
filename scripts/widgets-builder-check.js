@@ -267,7 +267,7 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
         ok(true, `${label}: the tile shows the next to-do from the student's own data (${lines.join(' | ')})`);
         ok(lines.includes('3 left') && lines.includes('To-dos left'), `${label}: the number block counts the open to-dos`, lines.join('|'));
         ok(lines.includes('3.35') && lines.includes('GPA'), `${label}: and the GPA is worked out in the worker from Insights' grades (A- and B, equally weighted)`, lines.join('|'));
-        const rail = await until(async () => { const x = await tree(page); const r = x.all.find((n) => n.nodeName === 'DIV' && /gz-mod-rail/.test(x.attr(n, 'class') || '')); return r && x; }, 'the rail widget', 6000).catch(() => null);
+        const rail = await until(async () => { const x = await tree(page); const r = x.all.find((n) => n.nodeName === 'DIV' && /gz-mod-rail/.test(x.attr(n, 'class') || '')); return r && x.strings().filter((s) => s === 'Next: Lab report (Biology)').length === 2 && x; }, 'the rail widget data', 6000).catch(() => null);
         ok(!!rail && rail.strings().filter((s) => s === 'Next: Lab report (Biology)').length === 2, `${label}: the navigation widget shows the same blocks, drawn in a closed root`, rail ? rail.strings().join('|') : 'no rail widget');
         ok(lines.some((s) => s.startsWith('Old quiz · Biology')) && lines.some((s) => s.startsWith('Lab report · Biology')) && !lines.some((s) => s.startsWith('Essay outline')), `${label}: the list shows two rows, soonest first`);
         ok(t.all.some((n) => n.nodeName === 'SPAN' && t.attr(n, 'role') === 'timer' && /\d/.test(t.text(n))), `${label}: the countdown counts to the next to-do`);
