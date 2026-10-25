@@ -343,6 +343,6 @@ test('Reset section takes the Look\'s pointer and cursor effect out too, after t
   assert.deepEqual(e.saved, [], 'only a person\'s click');
   e.reset.fire('click');
   assert.deepEqual(JSON.parse(JSON.stringify(s.parts)), { x: { type: { kind: 'ink' } } }, 'the Look\'s typing effect is Motion\'s, and stays');
-  assert.deepEqual(e.saved, [[['parts'], ['pointer']], [['parts'], ['cursor']], [['parts'], null]]);
+  assert.deepEqual(e.saved, [[['parts'], ['pointer']], [['parts'], ['cursor']], [['parts'], ['pointer', 'cursor']]]);
   assert.equal(e.lookSelect('Pointer').children.find((o) => o.selected)?.value, '');
 });

@@ -258,7 +258,7 @@ test('the event builder offers the canvas marks and shows the Look\'s selected m
 });
 
 test('Motion has the Look\'s animations, event effects and typing effect; its pointer and cursor effect are under Look › Pointer', () => {
-  const MX = require('../lib/motionx.js'), labels = [], writes = [];
+  const MX = require('../lib/motionx.js'), labels = [], writes = [], saves = [];
   let builder, resetClick;
   const node = () => ({ dataset: {}, querySelector: node, append() {}, closest: () => null, childElementCount: 0, replaceChildren() {} });
   const section = { querySelector: () => ({ addEventListener: (t, f) => { resetClick = f; } }) };
@@ -270,9 +270,10 @@ test('Motion has the Look\'s animations, event effects and typing effect; its po
       select: (o) => { labels.push(o.label); return node(); }, slider: node, colors: node, button: node, status: node, motionNote: () => '',
     } });
   vm.runInContext(read('lib/editor-xmotion.js'), context);
-  builder.mount({ s: { parts: { x: { pointer: 'aqua', cursor: { kind: 'glow' }, type: { kind: 'ink' } } }, extras: {} }, write: (k) => writes.push(k), save() {} });
+  builder.mount({ s: { parts: { x: { pointer: 'aqua', cursor: { kind: 'glow' }, type: { kind: 'ink' } } }, extras: {} }, write: (k) => writes.push(k), save: (keys, soon, parts) => saves.push([keys, soon, parts]) });
   assert.ok(labels.includes('Typing effect') && labels.includes('Event effects'), labels.join(', '));
   for (const gone of ['Pointer', 'Cursor effect']) assert.ok(!labels.includes(gone), gone);
   resetClick({ isTrusted: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(saves)), [[['parts'], false, ['anim', 'fx', 'type']]], 'Reset must merge only its parts into the latest Look');
   assert.deepEqual(writes, ['anim', 'fx', 'type'], 'Motion\'s Reset leaves the pointer to Pointer\'s');
 });
