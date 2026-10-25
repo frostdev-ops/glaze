@@ -1649,6 +1649,7 @@ GZ_UI.load().then((s) => {
   // A Look's own navigation layout and page tweaks are parts of the Look (lib/editor-xparts.js), not settings: the section's
   // Reset takes that part out of the Look, as its own button does, and can be undone.
   const LOOK_PART = { 'look/nav-layout': 'nav', 'look/rules': 'rules' };
+  const LOOK_PARTS = { 'look/pointer': ['pointer', 'cursor'], 'look/motion': ['anim', 'fx', 'type'] };
   for (const button of $$('[data-reset-section]')) button.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
     if (button.dataset.resetSection === 'sharing/relay') return resetRelay();
@@ -1673,7 +1674,7 @@ GZ_UI.load().then((s) => {
     const defaults = defaultsHere();
     for (const [b, paths] of resetScope) {
       const route = b.dataset.resetSection, part = LOOK_PART[route];
-      b.hidden = part ? !s.parts?.x?.[part] : route === 'sharing/relay' ? relayKept === defaultRelay : !GZ_EDITOR.differs(s, paths, defaults);
+      b.hidden = part ? !s.parts?.x?.[part] : route === 'sharing/relay' ? relayKept === defaultRelay : !GZ_EDITOR.differs(s, paths, defaults) && !LOOK_PARTS[route]?.some((key) => s.parts?.x?.[key]);
     }
     for (const b of $$('[data-reset-setting]')) b.hidden = !GZ_EDITOR.differs(s, [b.dataset.resetSetting], defaults);
     for (const b of $$('[data-nav-reset]')) {
@@ -1684,7 +1685,7 @@ GZ_UI.load().then((s) => {
   };
   // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key. The pointer's cards
   // (lib/editor-pointer.js) are the student's, not the Look's: they save extras; its This Look's pointer edits s.parts.
-  GZ_EDITOR_X.mount({ s, save, preview, t, frame, hint });
+  GZ_EDITOR_X.mount({ s, save: (...args) => { showResets(); save(...args); }, preview, t, frame, hint });
   $('#editor-version').textContent = `Glaze ${chrome.runtime.getManifest().version}`;
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
   // Mods (lib/editor-mods.js): installed mods, adding one, its install prompt and dev mode.
