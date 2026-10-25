@@ -214,7 +214,7 @@ test('the page carries the builders in the sections their settings live in, with
     assert.ok(at(a) > 0 && at(a) < at(b), `${a} loads before ${b}`);
   }
   const js = read('options.js');
-  assert.match(js, /GZ_EDITOR_X\.mount\(\{ s, save, preview, t, frame, hint \}\)/);
+  assert.match(js, /GZ_EDITOR_X\.mount\(\{ s, save[^\n]*preview, t, frame, hint \}\)/);
   assert.match(js.split('const refresh = () => {')[1].split('};')[0], /GZ_EDITOR_X\.render\(\);/);
   // Builders never save on their own: only through the editor's save() and the Look's parts key.
   for (const f of ['lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js']) assert.doesNotMatch(read(f), /chrome\.storage|GZ_UI\.save|innerHTML|insertAdjacentHTML/, f);

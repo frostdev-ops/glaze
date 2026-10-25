@@ -199,7 +199,7 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
     host.closest('section')?.querySelector('[data-reset-section]')?.addEventListener('click', (e) => {
       if (!e.isTrusted) return;
       for (const k of ['anim', 'fx', 'type']) write(k, null, true);
-      A.save(['parts']);
+      A.save(['parts'], false, ['anim', 'fx', 'type']);
       draw();
     });
     // Where the preview can play them changes with its site.
