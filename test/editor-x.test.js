@@ -256,3 +256,23 @@ test('the event builder offers the canvas marks and shows the Look\'s selected m
   for (const shape of MX.DRAWN) assert.ok(checks.some((c) => c['data-focus'] === `fx-complete-${shape}`), shape);
   assert.equal(checks.find((c) => c['data-focus'] === 'fx-complete-ghost').checked, true);
 });
+
+test('Motion has the Look\'s animations, event effects and typing effect; its pointer and cursor effect are under Look › Pointer', () => {
+  const MX = require('../lib/motionx.js'), labels = [], writes = [];
+  let builder, resetClick;
+  const node = () => ({ dataset: {}, querySelector: node, append() {}, closest: () => null, childElementCount: 0, replaceChildren() {} });
+  const section = { querySelector: () => ({ addEventListener: (t, f) => { resetClick = f; } }) };
+  const host = { ...node(), closest: () => section };
+  const context = vm.createContext({ document: { getElementById: (id) => id === 'x-motion' ? host : null },
+    GZ_MX: MX, GZ_EDITOR_X: {
+      add: (b) => { builder = b; }, tr: (s) => s, tokenName: (s) => s, prune: (o) => o,
+      el: (tag, props, ...kids) => { if (tag === 'h3') labels.push(kids.flat()[0]); return node(); },
+      select: (o) => { labels.push(o.label); return node(); }, slider: node, colors: node, button: node, status: node, motionNote: () => '',
+    } });
+  vm.runInContext(read('lib/editor-xmotion.js'), context);
+  builder.mount({ s: { parts: { x: { pointer: 'aqua', cursor: { kind: 'glow' }, type: { kind: 'ink' } } }, extras: {} }, write: (k) => writes.push(k), save() {} });
+  assert.ok(labels.includes('Typing effect') && labels.includes('Event effects'), labels.join(', '));
+  for (const gone of ['Pointer', 'Cursor effect']) assert.ok(!labels.includes(gone), gone);
+  resetClick({ isTrusted: true });
+  assert.deepEqual(writes, ['anim', 'fx', 'type'], 'Motion\'s Reset leaves the pointer to Pointer\'s');
+});

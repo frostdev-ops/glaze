@@ -24,8 +24,8 @@ const ENHANCE = {
 const OVERRIDE = {
   enabled: 'header', footer: 'pages/declutter', preset: 'look/palette', presets: 'look/palette',
   'widgets.land': 'pages/dashboard',
-  // The student's pointer and its animation have a section of their own; the rest of extras is stickers and rotation.
-  'extras.pointer': 'look/pointer', 'extras.pointerAnim': 'look/pointer',
+  // The student's pointer, its switch and its animation have a section of their own; the rest of extras is stickers and rotation.
+  'extras.pointer': 'look/pointer', 'extras.pointerOn': 'look/pointer', 'extras.pointerAnim': 'look/pointer',
   ...Object.fromEntries(['radius', 'glass', 'depth', ...Object.keys(D.GZ_SPEC.look).filter((k) => /^(surface|shadow)/.test(k))].map((k) => [`look.${k}`, 'look/surfaces'])),
   ...Object.fromEntries(Object.entries(ENHANCE).flatMap(([section, keys]) => keys.map((key) => [`enhance.${key}`, section]))),
   ...Object.fromEntries(['icsDue', 'icsTasks', 'icsPlan', 'icsGs', 'icsClasses', 'icsRange'].map((key) => [`todo.${key}`, 'study/schedule'])),
@@ -43,7 +43,7 @@ const SPECIAL = {
 const ACTIONS = {
   'look/palette': ['looks', 'save-preset', 'reset-colors', 'share-copy', 'share-code', 'share-try', 'share-offer', 'share-apply', 'share-fav', 'share-cancel', 'gallery-link', 'favorites', 'history', 'history-back', 'history-clear'],
   'look/type': ['font-custom', 'font-use'], 'look/background': ['bg-sets', 'x-shader', 'x-layers'], 'look/motion': ['x-motion'],
-  'look/pointer': ['pointer-tiles', 'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look'], 'look/extras': ['rotate-looks'],
+  'look/pointer': ['pointer-tiles', 'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look', 'x-pointer'], 'look/extras': ['rotate-looks'],
   'navigation/bar': ['nav-pick', 'nav-file', 'nav-url', 'nav-items', 'nav-widgets', 'nav-logo-pick', 'nav-logo-file', 'nav-link-name', 'nav-link-url', 'nav-link-icon', 'nav-link-tab', 'nav-link-save', 'nav-link-cancel', 'nav-reset'],
   'navigation/items': ['nbar-items', 'nbar-glaze', 'nbar-widgets', 'nbar-links', 'nbar-link-form', 'nbar-mods', 'nbar-reset'],
   'courses/cards': ['card-set', 'card-set-clear'], 'courses/list': ['course-list', 'org-list'], 'study/pet': ['pet-library'],
@@ -60,7 +60,7 @@ const MORE = {
     'look.leading', 'look.tooltips', 'look.hints',
     ...['surfaceOpacity', 'surfaceTint', 'surfaceTintSource', 'shadowStrength', 'surfaceFrost', 'surfaceBorder', 'surfaceCustom', 'surfaceColor', 'shadowCustom', 'shadowColor'].map((k) => `look.${k}`),
     ...['style', 'angle', 'blend', 'spread', 'dim', 'blur', 'grain'].map((k) => `bg.${k}`),
-    'motion.enter', 'motion.hover', 'motion.transitions', 'extras.pointerAnim',
+    'motion.enter', 'motion.hover', 'motion.transitions',
     ...['rail', 'peek', 'course', 'cmenu', 'tabs', 'badges', 'brand'].map((k) => `navbar.${k}`), ...NAV_MORE.map((k) => `nav.${k}`),
     ...['cap', 'place', 'shape', 'size', 'width', 'label', 'mark', 'color'].map((k) => `tabs.${k}`),
     ...Object.keys(D.GZ_SPEC.sidebar).filter((k) => !['canvas', 'ultra'].includes(k)).map((k) => `sidebar.${k}`),
@@ -71,7 +71,7 @@ const MORE = {
     ...Object.keys(D.GZ_SPEC.docreview).map((k) => `docreview.${k}`), ...Object.keys(D.GZ_SPEC.stream).map((k) => `stream.${k}`),
   ],
   ids: ['save-preset', 'reset-colors', 'share-copy', 'share-code', 'share-try', 'favorites', 'history', 'history-back', 'history-clear', 'x-motion',
-    'pointer-pick', 'pointer-remove', 'pointer-file', 'pointer-anim-look', 'nav-items', 'nav-widgets', 'nav-link-name', 'nav-link-url', 'nav-link-icon',
+    'x-pointer', 'nav-items', 'nav-widgets', 'nav-link-name', 'nav-link-url', 'nav-link-icon',
     'nav-link-tab', 'nav-link-save', 'nav-link-cancel', 'nav-reset', 'nbar-items', 'nbar-links', 'nbar-link-form', 'nbar-mods', 'card-set', 'card-set-clear', 'pet-library'],
 };
 // Sections only for power users: shown with All settings, while searching, or when an address leads to them.
