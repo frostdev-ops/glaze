@@ -1,12 +1,15 @@
 // The student's pointer (Look › Pointer, lib/editor-pointer.js), headless, in the real unpacked extension's options page:
-// a card for every choice, chosen with the arrow keys and the pointer and saved as the student's setting (sync extras),
-// never into the Look; the preview wearing what is chosen; a picture of their own uploaded, worn and removed; the choice
-// staying through a change of Look; the animation switch stopping the Look's pointer animation in the preview; the
-// section's Reset; labelled controls. Then a synthetic Ultra page with the real content script: the student's pointer worn
-// over the Look's or with no Look parts at all, the system's, none with Glaze off, text fields keeping the I-beam, and the
-// animation switch. No network: every request outside the extension (and the synthetic page) is aborted.
+// the custom pointer switch in the heading; a card for every choice, chosen with the arrow keys and the pointer and saved as
+// the student's setting (sync extras), never into the Look; the preview wearing what is chosen; a picture of their own asked
+// for from its card, worn and removed; the choice staying through a change of Look; the animation switch stopping the Look's
+// pointer animation in the preview; the switch off giving the system's pointer and no animation, and on again the choice
+// back; This Look's pointer editing the Look's parts; the section's Reset taking out both; labelled controls. Then a
+// synthetic Ultra page with the real content script: the student's pointer worn over the Look's or with no Look parts at
+// all, the system's with the switch off, none with Glaze off, text fields keeping the I-beam, the animation switch, and the
+// command palette's switch. No network: every request outside the extension (and the synthetic page) is aborted.
 //   NODE_PATH=/path/to/node_modules nice -n 10 node scripts/pointer-check.js [out-dir for screenshots]
-// With an out dir it also saves the section in a light and a dark editor (pointer-setting-light.png, -dark.png, -phone.png).
+// With an out dir it also saves the section in a light and a dark editor and at phone width, each with the switch on and off
+// (pointer-setting-light.png, -dark.png, -phone.png, and -off after each name).
 // Holds GLAZE_LOCK (check-env.js) and waits while another browser runs. The profile is temporary and removed.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
@@ -83,13 +86,18 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     // ---- the section and its cards -----------------------------------------------------------------------------------
     const links = await page.evaluate(() => [...document.querySelectorAll('[data-editor-jumps="look"] a')].map((a) => a.getAttribute('href')));
     check('Pointer is in the Look category\'s section links, after Motion', links.indexOf('#look/pointer') === links.indexOf('#look/motion') + 1, links.join(' '));
-    const cards = await page.evaluate(() => [...document.querySelectorAll('#pointer-tiles label')].map((l) => l.dataset.pointer));
+    const cards = await page.evaluate(() => [...document.querySelectorAll('#pointer-tiles [data-pointer]')].map((l) => l.dataset.pointer));
     check('a card for every choice the setting takes', JSON.stringify(cards) === JSON.stringify(G.GZ_SPEC.extras.pointer[1]), cards.join(' '));
     check('  The Look\'s pointer is chosen to begin with', await chosen() === 'look');
+    check('the heading has the custom pointer switch, on, named', await page.evaluate(() => {
+      const s = document.querySelector('#look-pointer .section-heading [role="switch"][data-key="extras.pointerOn"]');
+      return s?.checked && s.getAttribute('aria-label') === 'Custom pointer';
+    }));
+    check('Motion no longer has the Look\'s pointer or cursor effect', await page.evaluate(() => !document.querySelector('#x-motion [data-focus="pointer"], #x-motion [data-focus="cursor"]')));
     check('  every picture on the cards loads', await until(() => page.evaluate(() => [...document.querySelectorAll('#pointer-tiles img')].every((i) => i.complete && i.naturalWidth > 0))));
-    check('  the system\'s card draws its own arrow and hand', await page.evaluate(() => document.querySelectorAll('[data-pointer="off"] .pt-stage svg').length === 2));
+    check('  no System pointer card: the switch is the way to it', await page.evaluate(() => !document.querySelector('[data-pointer="off"]')));
     check('  hovering a set\'s card wears its hand', await page.evaluate(() => /cursors\/lava\/pointer\.svg/.test(getComputedStyle(document.querySelector('[data-pointer="lava"]')).cursor)));
-    const unnamed = await page.evaluate(() => [...document.querySelectorAll('#look-pointer input, #look-pointer button')]
+    const unnamed = await page.evaluate(() => [...document.querySelectorAll('#look-pointer input, #look-pointer button, #look-pointer select')]
       .filter((c) => c.type !== 'file' && !(c.closest('label')?.textContent.trim() || c.textContent.trim() || c.getAttribute('aria-label')
         || (c.getAttribute('aria-labelledby') || '').split(' ').map((id) => document.getElementById(id)?.textContent.trim()).filter(Boolean).length)).map((c) => c.outerHTML.slice(0, 80)));
     check('every control is labelled', !unnamed.length, unnamed.join(' '));
@@ -103,17 +111,20 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('wearing Library: the Look\'s card shows its quill, and so does the preview', await until(() => page.evaluate(() => /cursors\/quill\/default/.test(document.querySelector('[data-pointer="look"] img')?.src || ''))) && await wears('quill'), await worn());
     await page.focus('#pointer-tiles input[value="look"]');
     await page.keyboard.press('ArrowRight');
-    check('the arrow keys choose: System pointer, saved as the student\'s setting', await until(async () => (await sync()).pointer === 'off') && await chosen() === 'off');
-    check('  and the preview wears the system\'s', await wears('system'), await worn());
-    await page.keyboard.press('ArrowRight');
-    check('  the next card is Aqua', await until(async () => (await sync()).pointer === 'aqua') && !!await wears('aqua'), await worn());
+    check('the arrow keys choose: Aqua, saved as the student\'s setting', await until(async () => (await sync()).pointer === 'aqua') && await chosen() === 'aqua');
+    check('  and the preview wears it', await wears('aqua'), await worn());
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    check('  arrowing back past the first card wraps to the last set, never to the picture\'s card', await until(async () => (await sync()).pointer === 'frostdev') && await chosen() === 'frostdev');
     await page.click('[data-pointer="pumpkin"]');
     check('a click chooses Pumpkin; the preview wears it', await until(async () => (await sync()).pointer === 'pumpkin') && !!await wears('pumpkin'), await worn());
     check('  the Look keeps its own pointer: the choice is never written into it', await lookPointer() === 'quill', await lookPointer());
 
-    // ---- their own picture (in the section's More options) -------------------------------------------------------------------
-    await page.click('#look-pointer details.more > summary');
-    check('no picture yet: its card can\'t be chosen and says so', await page.evaluate(() => document.querySelector('[data-pointer="own"] input').disabled && /No picture yet/.test(document.querySelector('[data-pointer="own"]').textContent)));
+    // ---- their own picture: its card asks for one -----------------------------------------------------------------------------
+    check('no picture yet: its card is a button that asks for one, and Replace and Remove aren\'t shown', await page.evaluate(() => {
+      const c = document.querySelector('[data-pointer="own"]');
+      return c.tagName === 'BUTTON' && !c.querySelector('input') && /Choose a picture…/.test(c.textContent) && document.getElementById('pointer-own').hidden;
+    }));
     const png = Buffer.from(await page.evaluate(() => {
       const c = Object.assign(document.createElement('canvas'), { width: 64, height: 64 }), g = c.getContext('2d');
       g.fillStyle = '#f59e0b'; g.beginPath();
@@ -121,13 +132,21 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
       g.closePath(); g.fill(); g.lineWidth = 4; g.strokeStyle = '#7c2d12'; g.stroke();
       return c.toDataURL('image/png').split(',')[1];
     }), 'base64');
-    await page.setInputFiles('#pointer-file', { name: 'star.png', mimeType: 'image/png', buffer: png });
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('[data-pointer="own"]')]);
+    check('  clicking it opens the file chooser', !!chooser);
+    await chooser.setFiles({ name: 'star.png', mimeType: 'image/png', buffer: png });
     check('a picture chosen is kept on this computer, scaled to 32 pixels, and becomes the pointer', await until(async () => (await localImg()) && (await sync()).pointer === 'own')
       && await page.evaluate(() => new Promise((r) => { const i = new Image(); i.onload = () => r(i.width === 32 && i.height === 32); i.src = document.querySelector('[data-pointer="own"] img').src; })));
     check('  the preview wears it (as a blob: address)', await wears('own'), await worn());
-    check('  its card is chosen, Replace and Remove are offered', await page.evaluate(() => document.querySelector('[data-pointer="own"] input').checked && document.getElementById('pointer-pick').textContent === 'Replace picture…' && !document.getElementById('pointer-remove').hidden));
+    check('  its card is chosen, Replace and Remove are offered under the cards', await page.evaluate(() => document.querySelector('[data-pointer="own"] input').checked && document.getElementById('pointer-pick').textContent === 'Replace picture…' && !document.getElementById('pointer-own').hidden));
     check('  and the Look still has its own pointer', await lookPointer() === 'quill');
     await shot('pointer-setting-light');
+    await page.click('[data-key="extras.pointerOn"]');
+    check('the switch off: saved, the cards and the animation switch hidden, the picture kept, and the preview wears the system\'s',
+      await until(async () => (await sync()).pointerOn === false) && (await sync()).pointer === 'own' && await page.evaluate(() => document.getElementById('pointer-body').hidden) && !!await wears('system'), await worn());
+    await shot('pointer-setting-light-off');
+    await page.click('[data-key="extras.pointerOn"]');
+    check('  on again: the picture is worn again', await until(async () => (await sync()).pointerOn === true) && !!await wears('own') && await page.evaluate(() => !document.getElementById('pointer-body').hidden), await worn());
 
     // ---- another Look: the choice stays -------------------------------------------------------------------------------------
     await wearLook('Graveyard');
@@ -135,7 +154,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
       && (await sync()).pointer === 'own' && !!await wears('own'), await worn());
     await page.click('#pointer-remove');
     check('Remove picture: gone from this computer, and the Look\'s pointer is back', await until(async () => !(await localImg()) && (await sync()).pointer === 'look') && !!await wears('ghost'), await worn());
-    check('  focus goes back to Choose a picture', await page.evaluate(() => document.activeElement?.id === 'pointer-pick'));
+    check('  focus goes to the card that asks for another', await page.evaluate(() => document.activeElement?.tagName === 'BUTTON' && document.activeElement.dataset.pointer === 'own'));
 
     // ---- the animation switch ---------------------------------------------------------------------------------------------
     // Moves the pointer once what was drawn before has faded (its canvas goes with it), and says whether anything is drawn.
@@ -150,17 +169,38 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('  this Look\'s animation is named beside the switch', await page.evaluate(() => /^This Look's: \S/.test(document.getElementById('pointer-anim-look').textContent)));
     await page.click('[data-pointer="pumpkin"]');
     await until(async () => (await sync()).pointer === 'pumpkin');
+    await page.click('[data-key="extras.pointerAnim"]');
+    check('Pointer animation on again: it plays around Pumpkin', await until(async () => (await sync()).pointerAnim === true) && !!await wears('pumpkin') && !!await until(trail, 4000));
     await shot('pointer-setting-dark');
     await page.setViewportSize({ width: 390, height: 900 });
     await shot('pointer-setting-phone');
     check('at phone width the cards fit, with no sideways scrolling', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.getElementById('pointer-tiles').scrollWidth <= document.getElementById('pointer-tiles').clientWidth));
+    await page.click('[data-key="extras.pointerOn"]');
+    await until(async () => (await sync()).pointerOn === false);
+    await shot('pointer-setting-phone-off');
+    check('at phone width, off: the heading keeps its switch in view', await page.evaluate(() => { const r = document.querySelector('[data-key="extras.pointerOn"]').getBoundingClientRect(); return r.width > 0 && r.right <= innerWidth; }));
     await page.setViewportSize({ width: 1400, height: 1000 });
+    await shot('pointer-setting-dark-off');
+    check('the switch off: the system\'s pointer and nothing drawn around it in the preview', await wears('system') && !(await sleep(300), await trail()), await worn());
+    await page.click('[data-key="extras.pointerOn"]');
+    check('  on again: Pumpkin and its animation are back', await until(async () => (await sync()).pointerOn === true) && !!await wears('pumpkin') && !!await until(trail, 4000), await worn());
+
+    // ---- This Look's pointer: the Look's parts ---------------------------------------------------------------------------------
+    const lookCursor = () => page.evaluate(async () => (await GZ_XPARTS.read(GZ_XPARTS.areas()))?.x?.cursor?.kind ?? null);
+    check('This Look\'s pointer is closed to begin with', await page.evaluate(() => !document.getElementById('x-pointer').closest('details').open));
+    await page.click('#look-pointer details.more > summary');
+    await page.selectOption('#x-pointer select[data-focus="pointer"]', 'lava');
+    check('  the Look\'s set is saved into the Look, and its card follows; the student\'s choice stays', await until(async () => (await lookPointer()) === 'lava')
+      && !!await until(() => page.evaluate(() => /cursors\/lava\/default/.test(document.querySelector('[data-pointer="look"] img')?.src || ''))) && (await sync()).pointer === 'pumpkin');
+    await page.selectOption('#x-pointer select[data-focus="cursor"]', 'sparkle');
+    check('  a cursor effect is saved into the Look', await until(async () => (await lookCursor()) === 'sparkle'));
 
     // ---- Reset section --------------------------------------------------------------------------------------------------------
     await page.click('[data-reset-section="look/pointer"]');
-    check('Reset section gives back the Look\'s pointer and its animation', await until(async () => { const x = await sync(); return x.pointer === 'look' && x.pointerAnim === true; }) && await chosen() === 'look' && !!await wears('ghost'));
+    check('Reset section gives back your pointer settings and takes the Look\'s pointer and cursor effect out', await until(async () => { const x = await sync(); return x.pointer === 'look' && x.pointerOn === true && x.pointerAnim === true; })
+      && await chosen() === 'look' && !!await until(async () => (await lookPointer()) === null && (await lookCursor()) === null) && !!await wears('system'), `${await lookPointer()} ${await lookCursor()} ${await worn()}`);
     await open();
-    check('after a reload the cards show what is saved', await chosen() === 'look' && await page.evaluate(() => document.querySelector('[data-key="extras.pointerAnim"]').checked));
+    check('after a reload the cards show what is saved', await chosen() === 'look' && await page.evaluate(() => document.querySelector('[data-key="extras.pointerAnim"]').checked && document.querySelector('[data-key="extras.pointerOn"]').checked));
 
     // ---- part 2: a course page ------------------------------------------------------------------------------------------------
     console.log('\n-- an Ultra page --');
@@ -185,10 +225,12 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('a Look with its own pointer: the student\'s still wins', (await look({ x: { pointer: 'ghost', cursor: { kind: 'glow' } } }))?.ok && await sleep(500) === undefined && await shows('lava'), await onPage());
     await extras({ pointer: 'look' });
     check('The Look\'s pointer: the page wears the Look\'s ghost', await shows('ghost'), await onPage());
-    await extras({ pointer: 'off' });
-    check('System pointer: none of Glaze\'s on the page', await shows('system') && await lms.evaluate(() => !document.documentElement.hasAttribute('data-gz-cursor')), await onPage());
     await extras({ pointer: 'neon' });
     await shows('neon');
+    await extras({ pointerOn: false });
+    check('the custom pointer off: none of Glaze\'s on the page', await shows('system') && await lms.evaluate(() => !document.documentElement.hasAttribute('data-gz-cursor')), await onPage());
+    await extras({ pointerOn: true });
+    check('  on again: the set chosen before', await shows('neon'), await onPage());
     await page.evaluate(() => chrome.storage.sync.set({ enabled: false }));
     check('Glaze off: the page is left with the system\'s', await shows('system') && await lms.evaluate(() => !document.documentElement.style.getPropertyValue('--gz-cursor')), await onPage());
     await page.evaluate(() => chrome.storage.sync.set({ enabled: true }));
@@ -203,6 +245,10 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('  Pointer animation off: nothing drawn around it', !(await sleep(600), await glow()));
     await extras({ pointerAnim: true });
     check('  on again: it plays', await until(glow, 4000));
+    await extras({ pointerOn: false });
+    check('the custom pointer off: nothing drawn around the pointer either', await shows('system') && !(await sleep(600), await glow()));
+    await extras({ pointerOn: true });
+    check('  on again: it plays', await until(glow, 4000));
     // The command palette (Ctrl+K): a Pointer: entry per choice; their own picture only once there is one.
     await lms.keyboard.press('Control+k');
     await lms.waitForSelector('#gz-cmd input');
@@ -212,11 +258,26 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
       await sleep(250);
       return lms.evaluate(() => [...document.querySelectorAll('#gz-cmd-list li')].map((li) => li.textContent).filter((x) => /^Pointer: /.test(x)));
     };
-    const names = ["The Look's pointer", 'System pointer', 'Terminal', 'Pumpkin'];
+    const names = ["The Look's pointer", 'Terminal', 'Pumpkin'];
     const found = [];
     for (const n of names) if ((await listed(`Pointer: ${n}`)).some((x) => x.startsWith(`Pointer: ${n}`))) found.push(n);
-    check('the palette has Pointer: entries, the Look\'s and the system\'s among them', found.length === names.length, found.join(', '));
-    check('  but none for a picture there isn\'t', !(await listed('Pointer: Your own picture')).some((x) => /Your own picture/.test(x)));
+    check('the palette has Pointer: entries, the Look\'s among them', found.length === names.length, found.join(', '));
+    check('  but none for a picture there isn\'t, nor System pointer', !(await listed('Pointer: Your own picture')).some((x) => /Your own picture/.test(x)) && !(await listed('Pointer: System pointer')).some((x) => /System pointer/.test(x)));
+    // Its switch: off from the palette, and the styles go from it until it is on again.
+    const run = async (q, re) => {
+      if (!await lms.$('#gz-cmd input')) { await lms.keyboard.press('Control+k'); await lms.waitForSelector('#gz-cmd input'); }
+      await lms.fill('#gz-cmd input', q);
+      const li = await until(() => lms.evaluate((re) => [...document.querySelectorAll('#gz-cmd-list li')].find((li) => new RegExp(re).test(li.textContent))?.id, re.source));
+      if (li) await lms.click(`#${li}`);
+      return !!li;
+    };
+    check('Turn off custom pointer: saved, and the page wears the system\'s', await run('custom pointer', /^Turn off custom pointer/) && await until(async () => (await sync()).pointerOn === false) && !!await shows('system'), await onPage());
+    await lms.keyboard.press('Control+k');
+    await lms.waitForSelector('#gz-cmd input');
+    check('  while off, the palette lists no Pointer: entries', !(await listed('Pointer:')).length);
+    check('  Turn on custom pointer: the set chosen before is back', await run('custom pointer', /^Turn on custom pointer/) && await until(async () => (await sync()).pointerOn === true) && !!await shows('neon'), await onPage());
+    await lms.keyboard.press('Control+k');
+    await lms.waitForSelector('#gz-cmd input');
     await lms.fill('#gz-cmd input', 'Pointer:');
     await lms.keyboard.type(' Rose');
     const rose = await until(() => lms.evaluate(() => [...document.querySelectorAll('#gz-cmd-list li')].find((li) => /^Pointer: Rose/.test(li.textContent))?.id));

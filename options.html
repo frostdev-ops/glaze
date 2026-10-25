@@ -202,9 +202,9 @@
   .seg.pt-cards .desc { margin: -.15rem 0 0; font-size: calc(11px * var(--gz-scale, 1)); }
   .seg.pt-cards button { font-family: inherit; }
   /* A section's own switch sits at the heading's end, where Reset section showing up beside it doesn't move it. */
-  .section-heading > [role="switch"] { align-self: center; margin-inline-start: auto; }
+  .section-heading > input[type="checkbox"][role="switch"] { align-self: center; margin-inline-start: auto; }
   .section-heading > .section-reset:not([hidden]):has(+ [role="switch"]) { margin-inline-start: auto; }
-  .section-heading > .section-reset:not([hidden]) + [role="switch"] { margin-inline-start: 0; }
+  .section-heading > .section-reset:not([hidden]) + input[type="checkbox"][role="switch"] { margin-inline-start: 0; }
   .pt-stage { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; place-items: center; width: 100%; height: 56px; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); background: linear-gradient(90deg, #f4f5f7 50%, #1b1e25 50%); border: 1px solid var(--gz-border-line, var(--gz-line)); box-sizing: border-box; }
   .pt-stage :is(img, svg) { display: block; width: 32px; height: 32px; }
   .pt-none { display: grid; place-items: center; width: 34px; height: 34px; border: 2px dashed #8a8f99; border-radius: calc(var(--gz-radius, 12px) / 2); color: #8a8f99; font-size: calc(22px * var(--gz-scale, 1)); font-weight: 300; line-height: 1; grid-column: 1 / -1; background: #f4f5f7; }
