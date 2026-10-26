@@ -1358,3 +1358,10 @@ test('review: excepted week ranges cannot become recurrence bounds', () => {
   const text = 'Quizzes are due every Friday, except September 11 and weeks 3–5.\nCourse ends: October 9';
   assert.deepEqual(S.extract(text, reviewOpts).dates, []);
 });
+
+test('a staff table\'s header naming office hours does not make the cell under it a note', () => {
+  for (const [text, hint] of [['Role\tName\tE-mail\tRoom\tOffice hours\nCoordinator and\nlecturer', 'en'], ['Rol\tNaam\tE-mail\tKamer\tSpreekuur\nCoördinator en\ndocent', 'nl']]) {
+    assert.equal(S.extract(text, { start: FALL, md: true, hint }).prof.note.value, '', text);
+  }
+  assert.equal(S.extract('Office: Law Building 4.22. Office hours:\nTuesdays after class', { start: FALL, md: true }).prof.note.value, 'Tuesdays after class');
+});
