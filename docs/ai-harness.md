@@ -16,7 +16,7 @@ until the student has turned AI on, chosen a connection and allowed that feature
 | `lib/ai/providers.js` | The provider registry and `run`, the one way to call a model. |
 | `lib/ai/providers/openai.js` | Any Chat Completions server. `mock.js` is for tests and evals only; the worker never loads it. |
 | `lib/ai/providers/device.js` | Chrome's Prompt API (Gemini Nano, Chrome 138+), in the worker itself. Unavailable elsewhere. |
-| `lib/ai/providers/apple.js` | Safari only: Apple's Foundation Models (on this device, or Private Cloud Compute) through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
+| `lib/ai/providers/apple.js` | Safari only: Apple's Foundation Models on this device, through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
 | `lib/ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
 | `lib/ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
 | `lib/ai/task.js` | Task definitions and `run`. Tasks live in `lib/ai/tasks/<id>.js`. |
@@ -122,16 +122,9 @@ Feature status reports `ready: false` with `why: 'download' | 'downloading' | 'u
 
 ## Safari's Apple provider
 
-An `apple` connection chooses `model: 'on-device'` or `'private-cloud'`. It is registered and offered by Settings only
-on Safari. Both paths currently require macOS 27 or iOS 27; older systems return `unavailable` with reason `os`.
-The on-device model keeps text on this device. **Private Cloud Compute sends text encrypted to Apple's Private Cloud
-Compute.** Its catalog label states this before selection; a cloud connection is an explicit choice, never a fallback.
-
-PCC's system availability and context size do not establish that the extension has the required entitlement. Status
-therefore reports `unavailable`, reason `unverified`, with `unverified: true` (or the system's device/quota reason).
-Settings' Test and feature status send no inference probe and never claim PCC is ready. An explicitly requested run still
-attempts the selected model; native failures return only fixed categories. Verifying readiness in a signed extension is a
-separate release check. The catalog lists model names only and does not certify runtime availability.
+An `apple` connection uses `model: 'on-device'`, Apple Intelligence on this device; text stays on the device. It is
+registered and offered by Settings only on Safari, and needs macOS 27 or iOS 27; older systems return `unavailable` with
+reason `os`.
 
 `ai.run` is one native request and reply. Refusals stay `refusal`; a reply reaching `maximumResponseTokens` is marked
 `length`, and structured output is refused even if guided generation closed the JSON. Rate and quota limits carry 429.

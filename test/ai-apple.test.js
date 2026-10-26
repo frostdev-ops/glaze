@@ -47,8 +47,8 @@ test('status: the native answer in the harness\'s words; no handler or a strange
   assert.deepEqual(await A.status(cfg), { state: 'downloading', reason: 'not-ready' });
   native = async () => ({ ok: true, state: 'unavailable', reason: 'off' });
   assert.deepEqual(await A.status(cfg), { state: 'unavailable', reason: 'off' });
-  native = async () => ({ ok: true, state: 'unavailable', reason: 'quota', quota: 'reached' });
-  assert.deepEqual(await A.status(A.config({ model: 'private-cloud' })), { state: 'unavailable', reason: 'quota' });
+  native = async () => ({ ok: true, state: 'unavailable', reason: 'quota', unverified: true });
+  assert.deepEqual(await A.status(cfg), { state: 'unavailable', reason: 'native' }, 'a reason only the cloud model had is unknown now');
   native = async () => { throw new Error('Native messaging host not found'); };
   assert.deepEqual(await A.status(cfg), { state: 'unavailable', reason: 'native' });
   for (const odd of [null, 'ready', { ok: true, state: 'great' }, { ok: false }]) {

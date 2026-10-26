@@ -3,10 +3,9 @@
 //  Glaze Extension
 //
 //  The `apple` AI provider's native side (lib/ai/providers/apple.js, docs/ai-harness.md): Apple's Foundation Models, on
-//  this device or on Private Cloud Compute, answering browser.runtime.sendNativeMessage. One message, one reply; nothing
-//  streams. Messages:
-//    { type: 'ai.status', model: 'on-device' | 'private-cloud' }
-//      → { ok: true, state: 'ready' | 'downloading' | 'unavailable', reason?, unverified?, context?, images?, quota? }
+//  this device, answering browser.runtime.sendNativeMessage. One message, one reply; nothing streams. Messages:
+//    { type: 'ai.status', model: 'on-device' }
+//      → { ok: true, state: 'ready' | 'downloading' | 'unavailable', reason?, context?, images? }
 //    { type: 'ai.run', id, model, messages, schema?, temperature?, maxTokens? }
 //      → { ok: true, text, model, finish: 'stop' | 'length', usage? } | { ok: false, error, reason? }
 //    { type: 'ai.cancel', id } → { ok: true, cancelled }
@@ -78,24 +77,6 @@ private enum Native {
             case .unavailable(.deviceNotEligible): return ["ok": true, "state": "unavailable", "reason": "device"]
             case .unavailable: return ["ok": true, "state": "unavailable", "reason": "unknown"]
             }
-        case "private-cloud":
-            let model = PrivateCloudComputeLanguageModel()
-            switch model.availability {
-            case .available:
-                let quota: String
-                switch model.quotaUsage.status {
-                case .limitReached: quota = "reached"
-                case .belowLimit(let below): quota = below.isApproachingLimit ? "near" : "ok"
-                @unknown default: quota = "unknown"
-                }
-                // Availability (and even contextSize) can succeed without the PCC entitlement; inference then fails
-                // with ModelManagerError 1046. Status sends no probe or user text, so it cannot promise readiness.
-                return ["ok": true, "state": "unavailable", "reason": quota == "reached" ? "quota" : "unverified",
-                        "unverified": true, "quota": quota, "images": model.capabilities.contains(.vision)]
-            case .unavailable(.deviceNotEligible): return ["ok": true, "state": "unavailable", "reason": "device"]
-            case .unavailable(.systemNotReady): return ["ok": true, "state": "unavailable", "reason": "not-ready"]
-            case .unavailable: return ["ok": true, "state": "unavailable", "reason": "unknown"]
-            }
         default:
             return ["ok": false, "error": "request-rejected", "reason": "model"]
         }
@@ -145,11 +126,6 @@ private enum Native {
                 guard model.isAvailable else { return ["ok": false, "error": "provider-unavailable", "reason": "unavailable"] }
                 session = LanguageModelSession(model: model, transcript: Transcript(entries: entries))
                 name = model.variant.displayName
-            case "private-cloud":
-                let model = PrivateCloudComputeLanguageModel()
-                guard model.isAvailable else { return ["ok": false, "error": "provider-unavailable", "reason": "unavailable"] }
-                session = LanguageModelSession(model: model, transcript: Transcript(entries: entries))
-                name = "Private Cloud Compute"
             default:
                 return ["ok": false, "error": "request-rejected", "reason": "model"]
             }
@@ -189,14 +165,6 @@ private enum Native {
             case .unsupportedCapability, .unsupportedTranscriptContent, .unsupportedGenerationGuide: return ["ok": false, "error": "request-rejected", "reason": "unsupported"]
             case .unsupportedLanguageOrLocale: return ["ok": false, "error": "request-rejected", "reason": "language"]
             case .timeout: return ["ok": false, "error": "timeout"]
-            @unknown default: break
-            }
-        }
-        if let e = error as? PrivateCloudComputeLanguageModel.Error {
-            switch e {
-            case .networkFailure: return ["ok": false, "error": "connection-lost", "reason": "network"]
-            case .quotaLimitReached: return ["ok": false, "error": "request-rejected", "reason": "quota", "status": 429]
-            case .serviceUnavailable: return ["ok": false, "error": "provider-unavailable", "reason": "service"]
             @unknown default: break
             }
         }

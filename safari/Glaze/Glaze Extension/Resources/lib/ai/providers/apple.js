@@ -1,6 +1,6 @@
 // The AI harness's `apple` provider (docs/ai-harness.md): Apple's Foundation Models, through Safari's native handler
-// (safari/Glaze/Glaze Extension/GlazeAI.swift). cfg: { model: 'on-device' (Apple Intelligence on this device) |
-// 'private-cloud' (Apple's Private Cloud Compute: the request leaves the device, encrypted to Apple's servers) }.
+// (safari/Glaze/Glaze Extension/GlazeAI.swift). cfg: { model: 'on-device' } (Apple Intelligence on this device; text stays
+// on the device).
 // browser.runtime.sendNativeMessage is one message and one reply, so nothing streams and a cancel is a second message
 // (ai.cancel) the native side honours when the run is still in its process. Tools aren't offered: Foundation Models runs a
 // tool inside the native call, where Glaze's loop and approvals can't reach it. Added only on Safari; elsewhere the file
@@ -10,8 +10,7 @@ var GZ_AI_APPLE = globalThis.GZ_AI_APPLE || (() => {
   const R = typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('../request.js');
   const F = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('../failure.js');
   // Context sizes as Foundation Models reports them on macOS 27 (contextSize).
-  const MODELS = { 'on-device': { context: 8192, name: 'Apple Intelligence (on this device)' },
-    'private-cloud': { context: 32768, name: 'Private Cloud Compute (sends text encrypted to Apple)' } };
+  const MODELS = { 'on-device': { context: 8192, name: 'Apple Intelligence (on this device)' } };
   const APP = 'io.frostdev.Glaze'; // Safari ignores it and asks the containing app's extension.
   const STATES = ['ready', 'download', 'downloading', 'unavailable'];
   const safari = () => { try { return new URL((typeof globalThis.browser?.runtime?.getURL === 'function' ? globalThis.browser.runtime : globalThis.chrome?.runtime).getURL('')).protocol === 'safari-web-extension:'; } catch { return false; } };
@@ -26,14 +25,13 @@ var GZ_AI_APPLE = globalThis.GZ_AI_APPLE || (() => {
   const config = (raw) => (R.isObj(raw) && Object.hasOwn(MODELS, raw.model) ? { model: raw.model } : null);
   const caps = (cfg) => ({ text: true, images: true, json: true, tools: false, stream: false, context: MODELS[cfg.model].context });
   // Never forward arbitrary native diagnostics, even to Settings. Checking status sends no prompt.
-  const REASONS = ['os', 'off', 'device', 'not-ready', 'unknown', 'quota', 'unverified'];
+  const REASONS = ['os', 'off', 'device', 'not-ready', 'unknown'];
   const status = async (cfg, { signal } = {}) => {
     const timer = F.deadline(20000), both = F.anySignal([signal, timer.signal]);
     try {
       const r = await F.wait(() => send({ type: 'ai.status', model: cfg.model }), both.signal);
       if (r.ok !== true || !STATES.includes(r.state)) return { state: 'unavailable', reason: 'native' };
-      return { state: r.state, ...(r.state !== 'ready' && { reason: REASONS.includes(r.reason) ? r.reason : 'native' }),
-        ...(r.unverified === true && { unverified: true }) };
+      return { state: r.state, ...(r.state !== 'ready' && { reason: REASONS.includes(r.reason) ? r.reason : 'native' }) };
     } catch { return { state: 'unavailable', reason: 'native' }; }
     finally { timer.done(); both.done(); }
   };
