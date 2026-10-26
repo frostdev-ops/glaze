@@ -1972,7 +1972,7 @@ let aiVault = null, aiRevision = 0;
 chrome.storage.onChanged.addListener((changes, area) => {
   if ((area === 'local' && changes.ai) || (area === 'sync' && changes.enabled)) aiRevision++;
 });
-chrome.permissions.onRemoved?.addListener(() => { aiRevision++; });
+chrome.permissions?.onRemoved?.addListener(() => { aiRevision++; });
 const aiEnv = () => ({
   settings: async () => (await chrome.storage.local.get(GZ_AI_SETTINGS.KEY))[GZ_AI_SETTINGS.KEY],
   enabled: async () => (await chrome.storage.sync.get('enabled')).enabled !== false,
