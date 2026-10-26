@@ -989,3 +989,33 @@ Final exam: Sat 10/24`;
   assert.deepEqual(rule('Weekly quizzes are due Mondays.', { week1: FALL }), [], 'no last day to stop at');
   assert.deepEqual(rule('Abgabe jeweils freitags.\nTermin\tAbgabe\nDi, 13.10.\tFr, 23.10.\nDi, 20.10.\tFr, 30.10.', { start: Date.UTC(2026, 9, 12), hint: 'de' }), [], 'the schedule dates them itself');
 });
+
+const slots = (list) => list.map((m) => `${m.label ? `${m.label} | ` : ''}${m.days.join(' ')} ${m.start}-${m.end}${m.location ? ` | ${m.location}` : ''}`);
+
+test('dated rows, room numbers and a course week\'s times are no class meetings', () => {
+  const de = S.extract('Übung: Do 14:15–15:45, SR 1.07\nTermin\tThema\tÜbungsblatt\tAbgabe\nDi, 13.10.\tEinführung\tBlatt 1\tFr, 23.10., 12:00', { start: FALL, hint: 'de' });
+  assert.deepEqual(slots(de.meetings), ['Übung | TH 14:15-15:45 | SR 1.07']);
+  const r = S.extract(`Lecture: MWF 9:00–9:50, Hall 1
+2\t1/18/2027\tClass moves to Tue 1/19/2027, 0800–1150
+Tue 9/29 - Prelim 1, 7:30–9:00 PM, Ruiz Hall
+A course week runs from Monday 12:00 a.m. through Sunday 11:59 p.m.; day 7 of a week is its
+Sunday. Plan on 15–18 hours of work per week.
+Inleveren verslag: week 6,
+vrijdag 17.00 uur`, { start: FALL });
+  assert.deepEqual(slots(r.meetings), ['Lecture | MO WE FR 09:00-09:50 | Hall 1']);
+});
+
+test('office hours: a 24-hour clock, cum tempore, a staff table\'s column, a TA\'s with the role, and more labels', () => {
+  const r = S.extract(`Office Hours: Tuesday 1230–1430 and Thursday 0900–1000, or by appointment
+Clinical: Wednesdays 0645–1515 at assigned facility`, { hint: 'en' });
+  assert.deepEqual(slots(r.hours), ['Office Hours | TU 12:30-14:30', 'Office Hours | TH 09:00-10:00']);
+  assert.deepEqual(slots(r.meetings), ['Clinical | WE 06:45-15:15 | assigned facility']);
+  assert.deepEqual(slots(S.extract('Vorlesung: Di 10–12 Uhr (c.t.), HS 3', { hint: 'de' }).meetings), ['Vorlesung | TU 10:15-11:45 | HS 3']);
+  assert.equal(r.prof.note.value, '', 'times read are no note');
+  const staff = S.extract('Role\tName\tEmail\tOffice Hours\nInstructor\tProf. Ana Ruiz\taruiz@x.edu\tMon 2–3:30 PM, Hall 412\nTA\tSam Lee\tslee@x.edu\tFri 1–3 PM, Lab 2');
+  assert.deepEqual([slots(staff.hours), staff.meetings], [['MO 14:00-15:30 | Hall 412', 'TA | FR 13:00-15:00 | Lab 2'], []]);
+  assert.deepEqual(slots(S.extract('Teaching Assistant: Sam Lee · slee@x.edu · Office hours: Mon 3–4 pm, Room 5').hours), ['Teaching Assistant | MO 15:00-16:00 | Room 5']);
+  assert.deepEqual(slots(S.extract('Übungsleitung: Jonas Weber (jw@x.de), Sprechzeit\nMo 9–10 Uhr, Raum 3.09', { hint: 'de' }).hours), ['Übungsleitung | MO 09:00-10:00 | Raum 3.09']);
+  assert.deepEqual(slots(S.extract('Disponibilités : mardi 13 h à 15 h, local A-1', { hint: 'fr' }).hours), ['Disponibilités | TU 13:00-15:00 | local A-1']);
+  assert.deepEqual(slots(S.extract('Atendimento: quartas-feiras, 14h às 16h, sala 3', { hint: 'pt' }).hours), ['Atendimento | WE 14:00-16:00 | sala 3']);
+});
