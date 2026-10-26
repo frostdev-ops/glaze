@@ -1148,3 +1148,63 @@ test('review: wrapped holiday records and unknown due cells do not invent deadli
   assert.deepEqual(S.extract('Week 2\nMon\tNo quiz\nWed\tProject due', reviewOpts).dates.map((d) => d.day), ['2026-09-09']);
   assert.deepEqual(S.extract('Quiz 1 due October 5; Paper 2 due October 19', reviewOpts).dates.map((d) => d.day), ['2026-10-05', '2026-10-19']);
 });
+
+// Recall on syllabi the heuristics were not written against (2026-10-26): layouts and words real schedules use.
+const rows = (text, opts) => S.extract(text, opts).dates.map((d) => `${d.day} ${d.kind}`);
+test('a dated row\'s cells are no sentences: a question as a topic leaves the row its date', () => {
+  assert.deepEqual(rows('1\t1–7 Feb\tWhy stories?\tQuiz 1', { start: Date.UTC(2027, 0, 19) }), ['2027-02-07 exam']);
+});
+
+test('a day, a dash and a month ("26-Jan", "4-Feb-2027") is a date', () => {
+  const r = S.extract('Session\tDay\tDate\tCase / Topic\tDeliverable\n3\tTue\t26-Jan\tCase: Harrow\tCase write-up due 9:00 a.m.\n6\tThu\t4-Feb-2027\tCase: Kestrel\tCase write-up due 9:00 a.m.', { start: Date.UTC(2027, 0, 19), md: true });
+  assert.deepEqual(r.dates.map((d) => `${d.day} ${d.kind}`), ['2027-01-26 due', '2027-02-04 due']);
+});
+
+test('"the last day of week 3" is that week\'s seventh day, in each language', () => {
+  for (const [hint, line] of [['en', 'Quiz 1 — by 23:59 on the last day of Week 3'], ['de', 'Test 1 — am letzten Tag der Woche 3'], ['es', 'Prueba 1: el último día de la semana 3'],
+    ['fr', 'Quiz 1 : le dernier jour de la semaine 3'], ['nl', 'Toets 1: laatste dag van week 3'], ['pt', 'Prova 1: último dia da semana 3']]) {
+    assert.deepEqual(S.extract(line, { week1: SPRING, hint }).dates.map((d) => `${d.day} ${d.week}`), ['2027-01-31 3'], line);
+  }
+});
+
+test('auditions, a Chilean solemne, a German compound test, work collected and a French "date limite" are deadlines', () => {
+  assert.deepEqual(rows('Seating auditions: Monday, August 31, 6:00–9:00 p.m.', { start: FALL, md: true }), ['2026-08-31 exam']);
+  assert.deepEqual(rows('Solemne 1: 09/10/2026\nCertamen 2: 13/11/2026', { start: FALL, hint: 'es' }), ['2026-10-09 exam', '2026-11-13 exam']);
+  assert.deepEqual(rows('Zwischentest (Kapitel 1–4): Donnerstag, 19.11.2026\nAbschlussklausur: 25.02.2027', { start: Date.UTC(2026, 9, 12), hint: 'de' }), ['2026-11-19 exam', '2027-02-25 exam']);
+  assert.deepEqual(rows('Process books are collected for a check on Friday, September 25.', { start: FALL, md: true }), ['2026-09-25 due']);
+  assert.deepEqual(rows('Travail 1 – Analyse de cas : date limite le 21 février 2027\nRapport d\'étape : 12 février 2027', { start: SPRING, hint: 'fr' }), ['2027-02-21 due', '2027-02-12 due']);
+  assert.deepEqual(rows('Practice logs are due Sunday, August 30.', { start: FALL, md: true }), ['2026-08-30 due'], 'a practice log is work, not a practice test');
+  assert.deepEqual(rows('Practice quiz (ungraded): Friday, August 28.\nThe contest closes on Sept 4.', { start: FALL, md: true }), [], 'a practice test, and a word that only ends in "test"');
+});
+
+test('work released on one day and due on another is one row on the day it is due', () => {
+  const r = S.extract('Final exam • Take-home: released Friday, December 11, 9:00 a.m.; due Monday, December 14, 5:00 p.m.', { start: FALL, md: true });
+  assert.deepEqual(r.dates.map((d) => `${d.day} ${d.kind}`), ['2026-12-14 exam']);
+  assert.match(r.dates[0].title, /released Friday, December 11/);
+  assert.deepEqual(rows('Exam 2 posted Oct 5, due Oct 7.\nPaper 1 opens Oct 5; Quiz 3 due Oct 7.', { start: FALL, md: true }), ['2026-10-07 exam', '2026-10-05 due', '2026-10-07 exam']);
+});
+
+test('a deliverables column names its own work, before its date', () => {
+  const r = S.extract('Wk\tDates\tStudio\tDeliverables\n3\tSep 7–Sep 11\tP1: precedent analysis\tPin-up: P1 concept boards — Friday, Sep. 11th\n5\tSep 21–Sep 25\tP1 development\tP1 Final Review, 1:30–5:20, Gallery — Wednesday, Sep. 23rd\n11\tNov 2–Nov 6\tP2 detailing\tP2 Midterm Review (guest critics) — Wednesday, Nov. 4th\n12\tNov 9–Nov 13\tP3: urban block',
+    { start: FALL, md: true });
+  assert.deepEqual(r.dates.map((d) => `${d.day} ${d.kind} ${d.title}`), ['2026-09-11 due Pin-up: P1 concept boards', '2026-09-23 due P1 Final Review, Gallery', '2026-11-04 due P2 Midterm Review (guest critics)']);
+  assert.deepEqual(rows('Session\tDate\tTopic\tDeliverable\n25\t4/20\tGroup presentations (slot A)\tGroup presentation (assigned slot)\n24\t4/15\tGroup project workshop', { start: SPRING, md: true }), ['2027-04-20 due']);
+});
+
+test('a table with a weight column lists graded work: each dated row is a deadline', () => {
+  const fr = S.extract('Titre\tDate\tPondération\nRapport d\'étape (équipe)\t12 février 2027\tPondération 10 %\nExamen intra\t15 mars 2027 de 12 h 30 à 15 h 20\tPondération 25 %\nQuiz en ligne\tChaque vendredi\tPondération 10 %', { start: SPRING, hint: 'fr' });
+  assert.deepEqual(fr.dates.map((d) => `${d.day} ${d.kind} ${d.title}`), ['2027-02-12 due Rapport d\'étape (équipe)', '2027-03-15 exam Examen intra']);
+  assert.deepEqual(rows('Evaluación\tFecha\tPonderación\nInforme 1\t10/09/2026\t10%\nSolemne 1\t09/10/2026\t25%', { start: Date.UTC(2026, 7, 3), hint: 'es' }), ['2026-09-10 due', '2026-10-09 exam']);
+  assert.deepEqual(rows('Week\tDate\tTopic\nWeek 2\tSept 4\tElasticity', { start: FALL, md: true }), [], 'no weight column: a topic stays a topic');
+});
+
+test('a heading names the date on the line under it', () => {
+  assert.deepEqual(rows('Seating auditions\nMonday, August 31, 6:00–9:00 p.m. Sign up for a 10-minute slot.', { start: FALL, md: true }), ['2026-08-31 exam']);
+  assert.deepEqual(rows('Assignments\nOct 3: Lab 1 due', { start: FALL, md: true }), ['2026-10-03 due'], 'a line with its own work keeps it, once');
+  assert.deepEqual(rows('Course schedule\nMonday, August 31: introductions', { start: FALL, md: true }), [], 'a heading that names no work');
+});
+
+test('a day a sentence excepts is no deadline', () => {
+  assert.deepEqual(S.extract('Hausübungen: Abgabe jeweils montags bis 10 Uhr (außer in der vorlesungsfreien Zeit 21.12.–03.01.).', { start: Date.UTC(2026, 9, 12), hint: 'de' }).dates.filter((d) => !d.rule), []);
+  assert.deepEqual(rows('Problem sets are due on Fridays, except Nov. 27.', { start: FALL, md: true }), []);
+});
