@@ -1115,7 +1115,7 @@ test('review: weekly expansion rejects negation, examples, optional work and unr
   for (const line of [
     'No quizzes are due every Friday.', 'Quizzes are not due every Friday.',
     'Optional quizzes are due every Friday.', 'For example, quizzes are due every Friday.',
-    'Quizzes are due every Friday except the first week.', 'Quizzes are due every Friday of weeks 3–5.',
+    'Quizzes are due every Friday except the first week.', 'Quizzes are due every Friday, except during spring break.',
     'Keine Abgabe jeweils freitags.', 'Las tareas no se entregan todos los viernes.',
     'Les devoirs ne sont pas à remettre chaque vendredi.', 'Geen opdrachten inleveren elke vrijdag.',
     'Os trabalhos não devem ser entregues toda sexta-feira.',
@@ -1207,4 +1207,42 @@ test('a heading names the date on the line under it', () => {
 test('a day a sentence excepts is no deadline', () => {
   assert.deepEqual(S.extract('Hausübungen: Abgabe jeweils montags bis 10 Uhr (außer in der vorlesungsfreien Zeit 21.12.–03.01.).', { start: Date.UTC(2026, 9, 12), hint: 'de' }).dates.filter((d) => !d.rule), []);
   assert.deepEqual(rows('Problem sets are due on Fridays, except Nov. 27.', { start: FALL, md: true }), []);
+});
+
+// Owner, 2026-10-26: recurring rules are expanded; the weeks, start, end and days off a rule's own sentence gives bound it.
+const ruleDays = (text, opts) => S.extract(text, opts).dates.filter((d) => d.rule === 'weekly').map((d) => `${d.day.slice(5)} ${d.kind}`);
+test('a weekly rule\'s own weeks bound it, and the breaks it excepts are left out', () => {
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday of weeks 3–5.\nCourse ends: September 25').map((d) => d.day), ['2026-09-18', '2026-09-25']);
+  assert.deepEqual(ruleDays('Pre-lab quizzes close every Monday at 8:00 a.m., weeks 2–13. They cover that week\'s lab handout.\nMLK Day (Mon 1/18): no lecture. Spring Break (March 15–19): no lecture or lab.\nFinal Exam: Monday, May 3', { week1: SPRING, md: true }),
+    ['01-25', '02-01', '02-08', '02-15', '02-22', '03-01', '03-08', '03-22', '03-29', '04-05'].map((d) => `${d} exam`));
+  const fr = 'Quiz en ligne chaque vendredi (semaines 2 à 12, sauf la semaine de lecture), à faire sur monPortail avant 23 h 59.\nSemaine de lecture : du 1er mars 2027 au 5 mars 2027. Congés universitaires : Vendredi saint (vendredi 26 mars 2027).';
+  const want = ['01-22', '01-29', '02-05', '02-12', '02-19', '02-26', '03-12', '03-19', '04-02'].map((d) => `${d} exam`);
+  assert.deepEqual(ruleDays(fr, { week1: SPRING, hint: 'fr' }), want);
+  assert.deepEqual(ruleDays(`Titre\tDate\tPondération\nQuiz en ligne (10, les 8 meilleurs comptent)\tChaque vendredi\tPondération 10 %\n${fr}`, { week1: SPRING, hint: 'fr' }), want, 'the table\'s row and the sentence are one rule');
+  assert.deepEqual(ruleDays('Quizzes are due every Friday, except during spring break.\nFinal exam: Friday, December 11', { start: FALL, md: true }), [], 'a break the text never dates can\'t be left out');
+});
+
+test('a weekly rule starts at the course week it names and skips the dates it excepts', () => {
+  assert.deepEqual(ruleDays('Vorlesungsbeginn: 12.10.2026 · Vorlesungsende: 05.02.2027\nHausübungen: Abgabe jeweils montags bis 10 Uhr (ab der 3. Vorlesungswoche, außer in der vorlesungsfreien Zeit 21.12.–03.01.) im Briefkasten.', { start: Date.UTC(2026, 9, 12), hint: 'de' }),
+    ['10-26', '11-02', '11-09', '11-16', '11-23', '11-30', '12-07', '12-14', '01-04', '01-11', '01-18', '01-25', '02-01'].map((d) => `${d} due`));
+  assert.deepEqual(ruleDays('Quizzes are due every Friday starting in week 3.\nCourse ends: September 25', reviewOpts), ['09-18 exam', '09-25 exam']);
+});
+
+test('a weekly rule\'s own first and last day bound it; days off, and days of the exams it skips, are left out', () => {
+  const es = `Controles semanales: los viernes, en línea, desde el viernes 14 de agosto hasta el viernes 20 de noviembre; no hay control en las semanas de feriado, de receso ni de solemne.
+El viernes 18 y el sábado 19 de septiembre son feriados legales. La Semana de receso va del lunes 21 al viernes 25 de septiembre.
+Solemne 1: 09/10/2026
+Solemne 2: 13/11/2026`;
+  assert.deepEqual(ruleDays(es, { start: Date.UTC(2026, 7, 3), hint: 'es' }), ['08-14', '08-21', '08-28', '09-04', '09-11', '10-02', '10-16', '10-23', '10-30', '11-06', '11-20'].map((d) => `${d} exam`));
+});
+
+test('"classes run" a span of days: its first day starts week 1 and its last ends the weekly rules', () => {
+  const text = 'Classes run August 24 – December 4. Fall break (Oct 10–13): no rehearsal. Thanksgiving recess Nov 25–29.\nPractice logs are due every Sunday by 11:59 p.m. on Canvas (minimum 4 hours a week).';
+  assert.deepEqual(ruleDays(text, { start: Date.UTC(2026, 7, 17), md: true }), ['08-30', '09-06', '09-13', '09-20', '09-27', '10-04', '10-18', '10-25', '11-01', '11-08', '11-15', '11-22'].map((d) => `${d} due`));
+});
+
+test('two days with "and" share the second\'s month, and a range may name its weekdays', () => {
+  const r = S.extract('El viernes 18 y el sábado 19 de septiembre son feriados.\nTarea 1: entrega el viernes 18 y el lunes 21 de septiembre', { start: Date.UTC(2026, 7, 3), hint: 'es' });
+  assert.deepEqual(r.dates.map((d) => d.day), ['2026-09-18', '2026-09-21']);
+  assert.deepEqual(rows('Examen parcial: del lunes 21 al viernes 25 de septiembre', { start: Date.UTC(2026, 7, 3), hint: 'es' }), ['2026-09-25 exam']);
 });
