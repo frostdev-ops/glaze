@@ -28,6 +28,12 @@ const association = { id: '_500_1', entityId: '_300_1', rubricId: '_600_1', perc
 // Ultra's own shapes for a graded attempt: the evaluation unpublished and without a userId, the row's status GRADED.
 const evaluation = { id: '_700_1', attemptId: '_400_1', rubricAssociationId: '_500_1', userId: null, submitted: true, published: false, completed: true, editable: false, maxScore: 20, totalScore: 15,
   cells: [{ id: '_710_1', rubricRowId: '_620_1', rubricCellId: '_630_1', selectedPercent: 100, feedback: { rawText: '<p>Strong evidence.</p>' } }] };
+// NUMERIC: rows carry rowPoints, levels numericPoints, and an evaluation cell's selectedPercent is the level's points.
+const numeric = { ...definition, rubricType: 'NUMERIC', columnHeaders: ['Excellent', 'Good', 'Fair', 'Weak', 'Missing'].map((header, i) => ({ id: `_${610+i}_1`, header, position: i })),
+  rows: ['Evidence', 'Reasoning'].map((header, r) => ({ id: `_${620+r}_1`, header, percentage: 50, rowPoints: 10, position: r,
+    cells: [10, 8, 6, 4, 0].map((n, c) => ({ id: `_${630+r*5+c}_1`, rubricRowId: `_${620+r}_1`, rubricColumnId: `_${610+c}_1`, position: c, numericPoints: n, normalizedPoints: n, percentage: n * 10,
+      weightedPercent: n / 20, startPointRange: 0, endPointRange: 0, percentageMin: 0, percentageMax: 0, description: `<p>${header} ${n} points.</p>` })) })) };
+const numericEvaluation = { ...evaluation, totalScore: 18, cells: [{ id: '_710_1', rubricRowId: '_620_1', rubricCellId: '_631_1', selectedPercent: 8, feedback: { rawText: '<p>Strong evidence.</p>' } }, { id: '_711_1', rubricRowId: '_621_1', rubricCellId: '_635_1', selectedPercent: 10, feedback: { rawText: '' } }] };
 const grade = { id: '_510_1', courseId: '_101_1', userId: '_42_1', columnId: '_300_1', lastAttemptId: '_400_1', column: { id: '_300_1', contentId: '_8120_1', possible: 20 }, lastAttempt: { id: '_400_1', status: 'COMPLETED' }, submissionStatus: { status: 'GRADED' } };
 const assignment = { id: '22', course_id: '11', name: 'Evidence and reasoning', restrict_quantitative_data: false, use_rubric_for_grading: true,
   rubric_settings: { id: '33', title: 'Evidence and reasoning', points_possible: 20, hide_points: false, hide_score_total: false },
@@ -90,8 +96,8 @@ const tableInfo = function () {
       else if (u.pathname.includes('/gradebook/columns/_300_1')) {
         if (scenario === 'forbidden') return r.fulfill({status:403,contentType:'application/json',body:'{}'});
         if (scenario === 'slow') { slowSeen = true; await new Promise(done => { releaseSlow = done; }); }
-        data = { id:'_300_1',courseId:'_101_1',contentId:'_8120_1',possible:20,rubricAssociations:[association] };
-      } else if (u.pathname.includes('/gradebook/attempts/')) data = { id:'_400_1',courseId:'_101_1',columnId:'_300_1',userId:'_42_1',status:scenario==='submitted'?'NEEDS_GRADING':'COMPLETED',rubricEvaluation:{...evaluation,...(scenario==='submitted'?{published:true,userId:'_42_1'}:scenario==='foreign-user'?{userId:'_43_1'}:{})} };
+        data = { id:'_300_1',courseId:'_101_1',contentId:'_8120_1',possible:20,rubricAssociations:[scenario==='numeric'?{...association,rubricDefinition:numeric}:association] };
+      } else if (u.pathname.includes('/gradebook/attempts/')) data = { id:'_400_1',courseId:'_101_1',columnId:'_300_1',userId:'_42_1',status:scenario==='submitted'?'NEEDS_GRADING':'COMPLETED',rubricEvaluation:{...(scenario==='numeric'?numericEvaluation:evaluation),...(scenario==='submitted'?{published:true,userId:'_42_1'}:scenario==='foreign-user'?{userId:'_43_1'}:{})} };
       else if (u.origin === canvas && /\/assignments\/22\/submissions\/self$/.test(u.pathname)) data = { assignment_id:'22',user_id:'42',rubric_assessment:{c0:{rating_id:'r00',points:10,comments:'Strong evidence.'}} };
       else if (u.origin === canvas && /\/assignments\/22$/.test(u.pathname)) data = assignment;
       return r.fulfill({contentType:'application/json',body:JSON.stringify(data)});
@@ -149,6 +155,11 @@ const tableInfo = function () {
     if(run('foreign-user')) {
       const {page,cdp}=await open({kind:'foreign-user'}), x=await until(()=>info(cdp),'graded rubric with a foreign evaluation');
       check(x.selected===0&&!x.text.includes('Strong evidence.'),'an evaluation naming another user shows the graded rubric without its selections');await page.close();
+    }
+    if(run('numeric')) {
+      const {page,cdp}=await open({kind:'numeric'}), x=await until(()=>info(cdp),'graded NUMERIC rubric');
+      check(x.cols===6&&x.selected===2&&/Total: 18 \/ 20/.test(x.surfaceText),'a graded NUMERIC rubric shows its selected levels\' points and the total');
+      await screenshot(page,'numeric-inline'); await page.close();
     }
     if(run('description')) {
       const {page,cdp}=await open(), x=await until(()=>info(cdp),'rubric description');
