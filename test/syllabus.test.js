@@ -1070,3 +1070,14 @@ test('a scale table of two columns read across, and a failing letter written aft
   assert.equal(pick(S.extract('Letter grades: 90–100% A, 80–89% B, 70–79% C, 60–69% D, below 60% F.')).scale, 'A 90, B 80, C 70, D 60, F 0');
   assert.equal(pick(S.extract('Letter grades: 90–100% A, 80–89% B, 70–79% C, 60–69% D; below 40% the course is failed.')).scale, 'A 90, B 80, C 70, D 60', 'no letter given');
 });
+
+test('an office named only by a room\'s word and number, or only where the professor holds office hours', () => {
+  assert.equal(S.extract('Profesora: Mtra. Clara Soto\nCubículo: 14, Edificio D', { hint: 'es' }).prof.office.value, 'Cubículo 14, Edificio D');
+  const staff = S.extract('Role\tName\tEmail\tOffice Hours\nInstructor\tProf. Ana Ruiz\taruiz@x.edu\tMon 2–3:30 PM, Hall 412\nTA\tSam Lee\tslee@x.edu\tFri 1–3 PM, Lab 2');
+  assert.deepEqual([staff.prof.office.value, staff.prof.office.conf], ['Hall 412', 'check']);
+  assert.equal(S.extract('Instructor: Dr. Lee Park\nOffice hours: Tuesdays 7–8 p.m. via Zoom').prof.office.value, '', 'a call is no office');
+});
+
+test('a scale table written range first ends with its capitalised "Below"', () => {
+  assert.equal(pick(S.extract('Your Average\tCourse Grade\n90 – 100\tA\n80 – 89\tB\n70 – 79\tC\n60 – 69\tD\nBelow 60\tF')).scale, 'A 90, B 80, C 70, D 60, F 0');
+});
