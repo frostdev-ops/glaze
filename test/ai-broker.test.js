@@ -285,3 +285,11 @@ test('the vault is an IndexedDB store of the worker\'s own, read back as written
   assert.equal(await v.remove('connections'), true);
   assert.equal(await v.get('connections'), undefined);
 });
+
+test('Settings\' Test of a failing endpoint gives its category, HTTP status and a reference, never the server\'s words', async () => {
+  const e = env({ reach: async () => true, fetch: async () => json({ error: { message: `bad key ${KEY}` } }, 401) });
+  const r = await B.config({ op: 'test', id: 'main' }, e);
+  assert.deepEqual({ ...r, reference: typeof r.reference }, { ok: true, state: 'unavailable', reason: 'request-rejected', status: 401, reference: 'string' });
+  assert.match(r.reference, /^[0-9a-f-]{36}$/);
+  assert.ok(!JSON.stringify(r).includes('bad key'));
+});

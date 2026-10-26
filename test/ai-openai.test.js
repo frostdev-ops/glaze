@@ -193,6 +193,9 @@ test('status asks the catalog: ready when it lists the model, why not otherwise'
   assert.equal(s.calls[0].url, `https://api${n}.example.com/v1/models`);
   assert.equal(s.calls[0].init.headers.authorization, `Bearer ${KEY}`);
   assert.deepEqual(await O.status(O.config(cfg({ base: 'https://other.example.com/v1' })), { fetch: server(list(['other'])).fetch }), { state: 'unavailable', reason: 'model', source: 'live' });
-  assert.deepEqual(await O.status(O.config(cfg({ base: 'https://auth.example.com/v1' })), { fetch: server(json({}, 401)).fetch }), { state: 'unavailable', reason: 'request-rejected' });
-  assert.deepEqual(await O.status(O.config(cfg({ base: 'https://down.example.com/v1' })), { fetch: async () => { throw new TypeError('down'); } }), { state: 'unavailable', reason: 'connection-lost' });
+  // A failure: its category, HTTP status and a reference the student can quote.
+  const refused = await O.status(O.config(cfg({ base: 'https://auth.example.com/v1' })), { fetch: server(json({}, 401)).fetch });
+  assert.deepEqual({ ...refused, reference: typeof refused.reference }, { state: 'unavailable', reason: 'request-rejected', status: 401, reference: 'string' });
+  const down = await O.status(O.config(cfg({ base: 'https://down.example.com/v1' })), { fetch: async () => { throw new TypeError('down'); } });
+  assert.deepEqual({ ...down, reference: typeof down.reference }, { state: 'unavailable', reason: 'connection-lost', reference: 'string' });
 });
