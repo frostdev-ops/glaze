@@ -71,6 +71,35 @@ test('week context ends at a section break and ambiguous weekdays stay empty', (
   assert.deepEqual(dated.dates.map((d) => [d.day, d.title]), [['2026-09-11', 'Quiz due']]);
 });
 
+test('calendar weeks respect ISO year boundaries and explicitly written years', () => {
+  const dates = (text, start) => S.extract(text, { start: start && Date.parse(`${start}T00:00:00Z`), hint: 'de' }).dates;
+  assert.deepEqual(dates('Hausarbeit: Freitag, KW 53', '2027-01-04').map((d) => d.day), ['2027-01-01']);
+  assert.deepEqual(dates('Hausarbeit: Montag, KW 1', '2026-12-28').map((d) => d.day), ['2027-01-04']);
+  assert.deepEqual(dates('Hausarbeit: Freitag, KW 53', '2027-08-30'), [], '2027 has only 52 ISO weeks');
+  assert.deepEqual(dates('Hausarbeit: Freitag, KW 45/2027', '2026-10-12').map((d) => [d.day, d.title]), [['2027-11-12', 'Hausarbeit']]);
+  assert.deepEqual(dates('Hausarbeit: KW 45/2027 Freitag').map((d) => d.day), ['2027-11-12']);
+  assert.deepEqual(dates('Hausarbeit: Freitag, KW 53/2027', '2026-10-12'), []);
+  assert.deepEqual(dates('Hausarbeit: Freitag, KW 45/27', '2026-10-12'), [], 'an unsupported year must not be discarded');
+});
+
+test('week arithmetic stays in UTC across both daylight saving changes', () => {
+  const { spawnSync } = require('node:child_process');
+  for (const TZ of ['UTC', 'America/New_York', 'Europe/Berlin', 'Pacific/Auckland']) {
+    const r = spawnSync(process.execPath, ['-e', `
+      const S = require(${JSON.stringify(require.resolve('../lib/syllabus.js'))});
+      console.log(JSON.stringify([
+        S.weekDay('2027-03-08', 2, 6), S.weekDay('2026-10-26', 2, 6),
+        S.extract('Quiz due Monday of week 2', {week1: Date.UTC(2027, 2, 10)}).dates[0].day,
+        S.extract('Klausur am 4.2.', {start: Date.UTC(2027, 0, 11), md: true}).dates[0].day,
+        S.extract('Exam 4/2', {start: Date.UTC(2027, 0, 11), md: true}).dates[0].day,
+        S.extract('Examen 4/2', {start: Date.UTC(2027, 0, 11), md: false}).dates[0].day,
+      ]));
+    `], { env: { ...process.env, TZ }, encoding: 'utf8', timeout: 3000 });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), ['2027-03-21', '2026-11-08', '2027-03-22', '2027-02-04', '2027-04-02', '2027-02-04'], TZ);
+  }
+});
+
 const FALL = Date.UTC(2026, 7, 24); // Fall 2026 starts August 24
 const SPRING = Date.UTC(2027, 0, 11);
 const pick = (r) => ({
