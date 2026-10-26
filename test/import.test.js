@@ -204,6 +204,16 @@ test('ocrText: keeps small conjunctions and plus signs outside bulleted table li
   }
 });
 
+test('ocrText: confidence describes the words retained in a joined row', () => {
+  const r = D.ocrText(engineJson([
+    [['Course', 20, 90, 14, 34], ['e', 180, 188, 10, 20, 0], ['First', 200, 250, 0, 20]],
+    [['e', 180, 188, 35, 45, 0], ['Second', 200, 270, 25, 45]],
+  ]));
+  assert.equal(r.text, 'Course\tFirst · Second');
+  assert.deepEqual(r.unsure, []);
+  assert.equal(r.conf, 95, 'discarded bullet guesses are not recognized words');
+});
+
 test('ocrText: a table row whose cells are several lines, or centred in it, is one line; level rows and a paragraph stay lines', () => {
   // A course calendar laid out as the engine reads it in one block: the week's dates centred in their cell, so the
   // engine puts them on a line with the second line of the cells beside them, or on a line of their own; bullets read
