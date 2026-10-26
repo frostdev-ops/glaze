@@ -63,8 +63,8 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     [new RegExp(`(?<![\\d.])(\\d{1,2})(?:\\.|º|°|er|st|nd|rd|th)?\\s*(?:de\\s+)?${MON}(?![\\p{L}])(?:\\s+(?:de\\s+)?(\\d{4}))?`, 'giu'), (m) => ({ mo: monthOf(m[2]), d: +m[1], y: m[3], named: true })],
     // "2026-10-12"
     [/(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/g, (m) => ({ y: m[1], mo: +m[2] - 1, d: +m[3], named: true })],
-    // "12.10." or "12.10.2026" (day first), not a section's number that goes on ("3.3.1.")
-    [/(?<![\d.])(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2}(?!\d))?(?!\d)/g, (m) => ({ d: +m[1], mo: +m[2] - 1, y: m[3] })],
+    // "12.10." or "12.10.2026" (day first), not a section's number that goes on ("3.3.1.", "4.1.10.")
+    [/(?<![\d.])(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2}(?![\d.]))?(?!\d)/g, (m) => ({ d: +m[1], mo: +m[2] - 1, y: m[3] })],
     // "10/12" or "10/12/26": month first where the page's language writes it so (US English), else day first
     [/(?<![\d/])(\d{1,2})\/(\d{1,2})(?:\/(\d{4}|\d{2}))?(?![\d/%])(?!\s*(?:of|der|des|de|van|do|da)\b)/g, (m, o) => ({ ...(o.md ? { mo: +m[1] - 1, d: +m[2] } : { d: +m[1], mo: +m[2] - 1 }), y: m[3], amb: +m[1] <= 12 && +m[2] <= 12 && m[1] !== m[2] })],
   ];
@@ -127,8 +127,12 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   };
   // skip: the lines weekRows placed. Each row keeps its line (i), for extract to put both kinds in the text's order.
   const dateRows = (lines, o, skip) => {
-    const out = [], heads = new Set(), subs = new Set();
-    for (const l of lines) { const m = SECTION.exec(l); if (m) (m[2] ? subs : heads).add(m[2] ? `${+m[1]}.${+m[2]}` : +m[1]); }
+    const out = [], heads = new Set(), subs = new Set(), deep = new Set();
+    for (const l of lines) {
+      const m = SECTION.exec(l);
+      if (m) (m[2] ? subs : heads).add(m[2] ? `${+m[1]}.${+m[2]}` : +m[1]);
+      if (m?.[2] && /^\s*\d{1,2}\.\d{1,2}\.\d/.test(l)) deep.add(`${+m[1]}.${+m[2]}`); // "4.1.10." makes "4.1." a section
+    }
     let dateTable = false;
     lines.forEach((raw, i) => {
       if (!raw.includes('\t')) dateTable = false;
@@ -136,7 +140,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       const kind = EXAM_RE.test(raw) ? 'exam' : DUE_RE.test(raw) ? 'due' : '';
       if (!kind || TOC.test(raw) || skip.has(i)) return; // a schedule's every lecture topic is noise
       const sec = SECTION.exec(raw);
-      const numbered = !dateTable && sec?.[2] && heads.has(+sec[1]) && (subs.has(`${+sec[1]}.${+sec[2] - 1}`) || subs.has(`${+sec[1]}.${+sec[2] + 1}`));
+      const numbered = !dateTable && sec?.[2] && (deep.has(`${+sec[1]}.${+sec[2]}`) || (heads.has(+sec[1]) && (subs.has(`${+sec[1]}.${+sec[2] - 1}`) || subs.has(`${+sec[1]}.${+sec[2] + 1}`))));
       const found = datesIn(raw, o).filter((f) => !(numbered && f.at === raw.search(/\d/)));
       if (!found.length) return;
       // The title: the line without its dates and the weekday right before each.
@@ -505,7 +509,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     return out.map(({ name, weight }) => ({ name, weight }));
   };
   const weights = (s, lines, starts) => {
-    const t = s.replace(/\(\s*(\d{1,3}(?:[.,]\d+)?)\s*%\s*\)/g, ' $1%').replace(/\([^)\n]*%[^)\n]*\)/g, (x) => ' '.repeat(x.length));
+    const t = s.replace(/\(\s*(\d{1,3}(?:[.,]\d+)?)\s*%\s*\)/g, ' $1%').replace(/\([^()\n%]{0,120}%[^()\n]{0,120}\)/g, (x) => ' '.repeat(x.length));
     const tidy = (x) => clean(x.replace(/\s*\([^)]*\)?/g, ' ')).replace(/^(?:and|und|y|e|et|en|the|die|der|das|le|la|les|el|los|las|o|os|a|as|de|het)\s+/i, '')
       .replace(/\s*(?:(?:is|are)\s+)?(?:worth|counts?(?:\s+for)?|accounts?\s+for|weighted\s+at|zählt|vale|cuenta|compte pour|telt voor|representa|=)\s*$/i, '')
       .replace(/\s*,\s*/g, ' / ').trim().slice(0, 60); // a row of several ("Homework, Tests 75%") as one name the review screen can save
