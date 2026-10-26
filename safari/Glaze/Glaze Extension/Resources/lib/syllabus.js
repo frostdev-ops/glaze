@@ -178,7 +178,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     // "Friday of week 2", "Freitag der Woche 2", "viernes de la semana 2", "vrijdag van week 2", "sexta-feira da semana 2"
     [new RegExp(`${NB}${FD}\\s*,?\\s*(?:(?:of(?: the)?|in(?: der)?|der|de(?: la)?|van|da|do|na)\\s+)?${WK}`, 'iu'), (m) => ({ week: +m[2], day: dayIdx(m[1]) })],
   ];
-  const KW_RE = new RegExp(`${NB}(?:${FD}\\s*,?\\s*(?:(?:der|in der)\\s+)?)?(?:KW|Kalenderwoche)\\s*(\\d{1,2})(?!\\d)(?:\\s*[,:-]?\\s*${FD})?`, 'iu');
+  const KW_RE = new RegExp(`${NB}(?:${FD}\\s*,?\\s*(?:(?:der|in der)\\s+)?)?(?:KW|Kalenderwoche)\\s*(\\d{1,2})(?!\\d)(?:\\s*[/,]?\\s*(\\d{4})(?!\\d))?(?:\\s*[,:-]?\\s*${FD})?`, 'iu');
   // A line a week starts: "Week 3", "Woche 3", "Semana 3 (14-18 sept.)", after a bullet or an icon.
   const HEADER = new RegExp(`^[\\s\\p{So}\\p{Co}•*·-]*${WK}`, 'iu');
   // A start the text states: a word for it, right after it (a weekday at most between) the date. A plain "starts" or
@@ -218,11 +218,19 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     let ctx = null, weekly = '';
     // → { day } from a week's own dates or a calendar week, { day, week, wd } from the anchor, or null.
     const place = (ref) => {
-      if (ref.kw) {
-        if (!anchor || ref.kw > 53) return null;
-        const y = +anchor.day.slice(0, 4), a = Date.parse(anchor.day);
-        const kw = (year) => { const j4 = Date.UTC(year, 0, 4); return j4 - monday(j4) * DAY + ((ref.kw - 1) * 7 + ref.day) * DAY; };
-        return { day: iso(kw(y) < a - 45 * DAY ? kw(y + 1) : kw(y)) };
+      if (ref.kw != null) {
+        if ((!anchor && !ref.year) || ref.kw < 1 || ref.kw > 53) return null;
+        const first = (year) => { const j4 = Date.UTC(year, 0, 4); return j4 - monday(j4) * DAY; };
+        const kw = (year) => first(year) + ((ref.kw - 1) * 7 + ref.day) * DAY;
+        let y = ref.year || +anchor.day.slice(0, 4);
+        if (!ref.year) {
+          const earliest = Date.parse(anchor.day) - 45 * DAY;
+          // Early January can still belong to the preceding ISO year; late December can belong to the next one.
+          if (kw(y - 1) >= earliest) y--;
+          else if (kw(y) < earliest) y++;
+        }
+        const ms = kw(y);
+        return ms < first(y + 1) ? { day: iso(ms) } : null; // week 53 exists in only some ISO years
       }
       if (ref.start) {
         const s0 = Date.parse(ref.start), day = iso(s0 + (ref.wd ?? (ref.day - monday(s0) + 7) % 7) * DAY);
@@ -248,7 +256,10 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       let ref = null, span = null;
       for (const [re, read] of WEEK_REFS) { const m = re.exec(raw); if (m) { ref = read(m); span = [m.index, m.index + m[0].length]; break; } }
       const kw = !ref && KW_RE.exec(raw);
-      if (kw && (kw[1] || kw[3])) { ref = { kw: +kw[2], day: dayIdx(kw[1] || kw[3]) }; span = [kw.index, kw.index + kw[0].length]; }
+      if (kw) {
+        if (/^\s*[/,(]?\s*\d/.test(raw.slice(kw.index + kw[0].length))) return;
+        if (kw[1] || kw[4]) { ref = { kw: +kw[2], year: +kw[3] || null, day: dayIdx(kw[1] || kw[4]) }; span = [kw.index, kw.index + kw[0].length]; }
+      }
       if (!ref && ctx) {
         const from = hm ? (hf ? hf.at + hf.len : hm[0].length) : 0, m = FD_RE.exec(raw.slice(from));
         if (m) { ref = { week: ctx.week, day: dayIdx(m[1]) }; span = [from + m.index, from + m.index + m[0].length]; }
