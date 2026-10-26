@@ -632,3 +632,51 @@ test('a table of contents and numbered section headings are not dates; a day-fir
   const de = S.extract('Klausur am 4.2.\n11.11.\tAbgabe des Exposés\n1. Sitzung: Einführung', { start: Date.UTC(2026, 9, 12) });
   assert.deepEqual(pick(de).dates, ['2027-02-04 exam Klausur', '2026-11-11 due Abgabe des Exposés']);
 });
+
+test('weights from a table read cell by cell, a table with its total, and a chart\'s labels each above its percent', () => {
+  const units = [[12, 10], [10, 10], [10, 10], [8, 10], [10, 10]].map(([p, q], i) => `UNIT ${i + 1}\nProblem set ${i + 1}\nQuiz ${i + 1}\n${p}%\n${q}%\n5th day of week ${i + 1}`).join('\n');
+  const cells = S.extract(`Quizzes:
+Each of the five units ends with a quiz. All assessments are out of 100 points with the following weights assigned to each.
+Grading Methods for assessing student performance – Percentage & Schedule:
+Name\tWeight\tDate/Schedule
+${units}
+
+An approximate guideline for grade distribution is as follows:`).weights;
+  assert.deepEqual([S.weightsText(cells.value), cells.conf], ['Problem set 50%, Quiz 50%', 'sure'], 'a numbered series of one kind is one category');
+  const pie = `Homework
+40%
+Unit tests
+20%
+Audio
+recordings
+10%
+Video
+Projects
+20%
+Discussions
+10%
+FINAL GRADE CALCULATION`;
+  const both = S.extract(`4.1. Grade Distribution And Scale
+•\tThe grading scale is as follows:
+Grades Breakdown
+Percentage
+Online Platform Categories: Homework, Audio Recordings, Unit Tests\t70%
+Discussion Forums\t20%
+Video Projects\t10%
+Total\t100%
+Extra Credit\tAdditional opportunity
+•\tLate work will have a 10% penalty. If there are circumstances preventing you from
+submitting an assignment on time, please write to your professor.
+Points\tGrade
+93 and above\tA
+90 – 92\tA-
+80 – 89\tB
+70 – 79\tC
+60 – 69\tD
+59 and below\tF
+${pie}`).weights;
+  assert.equal(S.weightsText(both.value), 'Homework / Audio Recordings / Unit Tests 70%, Discussion Forums 20%, Video Projects 10%', 'a total is no category');
+  assert.ok(S.parseWeights(S.weightsText(both.value)), 'what the review screen shows can be saved as it is');
+  assert.equal(pick(S.extract(`Points\tGrade\n59 and below\tF\n${pie}`)).weights, 'Homework 40%, Unit tests 20%, Audio recordings 10%, Video Projects 20%, Discussions 10%', 'the chart\'s title is no category');
+  assert.equal(pick(S.extract('Breakdown\n10%\nParticipation\n40%\nEssays\n50%\nFinal portfolio')).weights, '', 'a label at each end, and neither a heading: either reading could be right');
+});
