@@ -198,6 +198,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       const row = (next) => next.trim() && !BARE_DAY.test(next) && !HEADER.test(next) && !TOC.test(next) && !SECTION.test(next) && !timed(next) && !/^\s*\d{1,3}\s*\t/.test(next);
       for (let rec = false; n < 6 && i + n < lines.length && t.length < 1500; n++) {
         const next = lines[i + n];
+        if (BREAK_RE.test(t) || END_RE.test(next)) break;
         rec ||= !TOC.test(t) && !HEADER.test(t) && bare(t);
         if (!wrapped(next) && !(rec && row(next))) break;
         t = `${t.replace(/\s+$/, '')} ${next.trim()}`;
@@ -294,6 +295,8 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   const WEEKLY_DE = ['mon', 'die', 'mit', 'don', 'fre', 'sam', 'son'];
   const END_RE = any('classes end|last day of classes|course ends|term ends|semester ends|vorlesungsende|vorlesungsschluss|fin del periodo lectivo|fin de (?:las )?clases|fin des cours|einde van de colleges|término das aulas|fim das aulas|course dates');
   const BREAK_RE = any('holidays?|break|recess|no class(?:es)?|no school|no lectures?|labou?r day|thanksgiving|memorial day|reading week|feiertage?|ferien|vorlesungsfrei|keine vorlesung|festivos?|vacaciones|sin clases|no hay clases|congés?|férié|relâche|semaine de lecture|vakantie|geen college|feriados?|recesso|não haverá aula|sem aulas?');
+  const UNKNOWN_DUE = any('TBD|TBA|to be (?:announced|determined)|noch offen|wird bekannt gegeben|por confirmar|por determinar|à déterminer|à confirmer|nader te bepalen|a definir|a confirmar');
+  const RULE_UNCLEAR = any('no|not|never|kein(?:e[nmrs]?)?|nicht|pas|geen|niet|não|sem|except|unless|excluding|ausgenommen|außer|salvo|excepto|sauf|behalve|exceto|semanas|semaines|weeks|wochen');
   const EXAMPLE = /(?<![\p{L}])(?:for example|for instance|e\.\s?g\.|example:|z\.\s?B\.|zum Beispiel|beispielsweise|por ejemplo|p\.\s?ej\.|par exemple|p\.\s?ex\.|bijvoorbeeld|bv\.|por exemplo)/iu;
   const OPEN = /(?<![\p{L}])(?:opens?|available|from|between|starting|ab|vom|desde|del|à partir du|du|vanaf|van|a partir de|disponible|beschikbaar|disponível)\s*(?:on\s+)?$/iu;
   const CLOSE = /(?<![\p{L}])(?:until|till|by|through|thru|to|closes?|due|bis|hasta|jusqu'au|au|tot|até)(?![\p{L}])/iu;
@@ -524,7 +527,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       if (tail.length) for (const p of parts(raw, pos, zone[1], tail)) items.push({ ...p, r: tailRef === def ? null : tailRef });
       const due = items.map((it) => {
         const r = it.r || (!(def?.type === 'date' && loose(it.at) && it.ms.every((m) => m.strong < 2)) && def);
-        const w = r && !UNGRADED.test(raw.slice(it.at, it.end + 40)) && when(r, def, ctx);
+        const w = r && !UNKNOWN_DUE.test(raw.slice(it.at, it.end)) && !UNGRADED.test(raw.slice(it.at, it.end + 40)) && when(r, def, ctx);
         if (w && r === def) delete w.label; // a week row's dates are no window
         return w && { it, r, w };
       }).filter(Boolean);
@@ -561,18 +564,22 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     // Days the text names as a break or a holiday are left out, and so is a rule the schedule already dates (two such rows
     // of its kind on that weekday). Each is to check and keeps rule: 'weekly', for the review to show them as one.
     const dated = rows.filter((r) => !r.week);
+    // A semicolon starts another record: an exam after the course end, or a due date after a holiday, is not its bound.
+    const clauses = lines.flatMap(({ t }) => t.split(/[;!?]|\.(?=\s+\p{Lu})/u));
     const end = (() => {
-      for (const { t } of lines) {
-        if (!END_RE.test(t) || TOC.test(t)) continue;
-        const f = datesIn(t, o).at(-1);
+      for (const t of clauses) {
+        const m = END_RE.exec(t);
+        if (!m || TOC.test(t)) continue;
+        const f = datesIn(t, o).find((d) => d.at >= m.index + m[0].length);
         if (f) return iso(Date.parse(f.end || f.day) + DAY);
       }
       return dated.length ? dated.reduce((a, r) => (r.day > a ? r.day : a), '') : '';
     })();
     const off = [];
-    for (const { t } of lines) if (BREAK_RE.test(t)) for (const f of datesIn(t, o)) off.push([f.day, f.end || f.day]);
+    for (const t of clauses) if (BREAK_RE.test(t)) for (const f of datesIn(t, o)) off.push([f.day, f.end || f.day]);
+    const rules = new Set();
     lines.forEach(({ t: raw, i: line }) => {
-      const m = !anchor || !end || datesIn(raw, o).length || /every other|bi-?weekly|alternate/i.test(raw) ? null : WEEKLY.exec(raw);
+      const m = !anchor || !end || datesIn(raw, o).length || EXAMPLE.test(raw) || UNGRADED.test(raw) || RULE_UNCLEAR.test(raw) || /every other|bi-?weekly|alternate/i.test(raw) ? null : WEEKLY.exec(raw);
       if (!m) return;
       const ms = marksIn(raw.slice(0, m.index + m[0].length));
       const wd = m[1] ? dayIdx(m[1]) : m[2] ? dayIdx(m[2].slice(0, -1)) : WEEKLY_DE.indexOf(m[3].toLowerCase().slice(0, 3));
@@ -583,6 +590,9 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       const upto = m.index + m[0].search(/(?:every|each|jeden|jede|cada|todos|chaque|tous|elke|iedere|toda|jeweils|\p{L}+(?:days|tags|wochs))\s*\p{L}*$/iu);
       const name = raw.slice(0, upto).replace(/\s*(?:(?:are|is|sind|werden|son|se|sont|zijn|são)\s+)?(?:due|close[sd]?|entregan?|cierran|ferment|sluiten|fecham)?\s*(?:on|am|el|le|op|às|aux|les|los)?\s*$/iu, '');
       const title = titled(name.trim() ? name : raw.slice(0, upto), raw);
+      const key = `${wd}|${kind}|${title.toLowerCase()}`;
+      if (rules.has(key)) return;
+      rules.add(key);
       const a0 = Date.parse(anchor.day);
       let k = 0;
       for (let d = a0 + ((wd - monday(a0) + 7) % 7 || 7) * DAY; iso(d) < end && k < 20; d += 7 * DAY) {
@@ -667,7 +677,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   // Someone else on the course staff, whose contact details follow their own name.
   const OTHER_ROLE = any("TAs?|teaching assistants?|teaching fellows?|tutors?|graders?|course assistants?|lab instructors?|co-instructors?|tutor(?:in|en)?|hilfskr(?:a|ä)fte?|wissenschaftliche[rn]? mitarbeiter(?:in)?|ayudantes?|asistentes?|monitor(?:a|es)?|chargée? de td|assistante?s?|student-assistent(?:en)?|werkcollegedocent|assistente|übungsleit(?:ung|er|erin)|auxiliaires? d’enseignement|auxiliaires? d'enseignement");
   const field = (value, conf, src) => ({ value: value || '', conf: value ? conf : '', src: value ? src : '' });
-  const professor = (lines, lang, hours = []) => {
+  const professor = (lines, lang) => {
     let name = field(), at0 = -1;
     for (let i = 0; i < lines.length && !name.value; i++) {
       const rest = !HOURS_RE.test(lines[i]) && PROF_LINE.exec(lines[i])?.[1];
@@ -704,10 +714,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       const v = m && clean(m[2].split(EMAIL)[0]);
       if (m && !HOURS_RE.test(lines[i])) office = field(`${m[1] && /^\d/.test(v) ? `${m[1]} ` : ''}${v}`.slice(0, 120), 'sure', at(lines, i));
     }
-    // With no office named, the professor's own office hours' place, when it is a room ("Mon 2–3:30 PM, Gates Hall 412"),
-    // not a call ("via Zoom"): to check.
-    const own = !office.value && hours.find((h) => !h.label.match(OTHER_ROLE) && /\p{L}{2}.*\d|\d.*\p{L}{2}/u.test(h.location) && !/zoom|teams|online|virtual|meet|webex|skype|discord|appointment|link/i.test(h.location));
-    if (own) office = field(own.location.slice(0, 120), 'check', own.src);
+    // An office-hours venue can be a library or shared classroom; only an explicit office label identifies the office.
     // Office hours with no time to read ("By appointment"): kept as words, from a line their label starts, after a bullet
     // or an icon and a word or two ("▪ Virtual office hours:"), never from a heading that lists them ("Name, office hours,
     // and e-mail address:") or a sentence that mentions them ("attend office hours regularly and…").
@@ -796,7 +803,10 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const failing = !/^[EF]/.test(lastF.letter) && new RegExp(`^[^\\n]*?(?:(?:${UNDER})\\s*${NUM}\\s*%?\\s*[:=]?\\s*\\(?([EF])(?![\\p{L}\\d+])|(?<![\\p{L}])([EF])\\s*[:=]?\\s*\\(?(?:${UNDER})\\s*${NUM})`, 'iu').exec(tail);
     if (failing && Math.abs(n(failing[1] || failing[4]) - lastF.min) < 0.51) best = [...best, { letter: (failing[2] || failing[3]).toUpperCase(), min: 0, max: n(failing[1] || failing[4]) - 0.01, at: lastF.at + failing.index }];
     // Letters on a 0–10 or a 0–20 scale (conceitos "A: 9,0 a 10,0") are read as percents.
-    const top = Math.max(...best.map((e) => e.max ?? e.min)), k = top >= 9 && top <= 10 ? 10 : top >= 16 && top <= 20 ? 5 : 1;
+    const top = Math.max(...best.map((e) => e.max ?? e.min));
+    const percent = best.some((e) => lines[lineAt(starts, e.at)].includes('%'));
+    if (!percent && top <= 20 && !best.some((e) => e.max === top && (top === 10 || top === 20))) return field();
+    const k = !percent && top === 10 ? 10 : !percent && top === 20 ? 5 : 1;
     if (k > 1) best = best.map((e) => ({ ...e, min: e.min * k, max: e.max == null ? null : e.max * k }));
     // What makes the scale a guess: ranges that overlap, leave a gap (more than a point), or letters out of order.
     const issues = order ? [{ kind: 'order' }] : [];
@@ -814,12 +824,23 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   };
   // A scale in points ("A\t900–1000"), where the grading gives its total, as percents of that total.
   const pointScale = (s, lines, starts, pts) => {
-    const f = scale(s, lines, starts);
-    if (f.value || !(pts > 100)) return f;
-    const pct = (l) => l.replace(/(?<![\d.,])\d{3,5}(?:[.,]\d+)?(?![\d%])/g, (x) => (n(x) <= pts ? String(Math.round((n(x) / pts) * 10000) / 100) : x));
-    const ls = lines.map(pct), st = [];
-    for (let i = 0, k = 0; k < ls.length; k++) { st.push(i); i += ls[k].length + 1; }
-    return scale(ls.join('\n'), ls, st, lines);
+    // Convert only a labelled letter/points table. Its full top bound must match the grading total, and every row must
+    // survive conversion as one consistent scale. A document-wide rewrite can turn room numbers into grades or mix units.
+    const grade = any('grades?|letters?|noten|calificaciones|notas|conceitos|barème|cijfers');
+    const row = new RegExp(`^\\s*${LETTER}\\s*[:=]?\\s*${RANGE.replaceAll('\\d{1,3}', '\\d{1,5}')}\\s*$`, 'iu');
+    for (let i = 0; i < lines.length; i++) {
+      if (!POINTS.test(lines[i]) || !(grade.test(lines[i]) || SCALE_LABEL.test(lines[i]))) continue;
+      const block = [];
+      for (let j = i + 1; j < lines.length && block.length < 20 && row.test(lines[j]); j++) block.push(lines[j]);
+      if (!block.length) continue;
+      const nums = block.flatMap((l) => [...l.matchAll(/\d{1,5}(?:[.,]\d+)?/g)].map((m) => n(m[0])));
+      if (!(pts > 100) || block.length < 3 || block.some((l) => l.includes('%')) || Math.max(...nums) !== pts) return field();
+      const ls = block.map((l) => l.replace(/\d{1,5}(?:[.,]\d+)?/g, (x) => `${Math.round((n(x) / pts) * 10000) / 100}%`)), st = [];
+      for (let p = 0, k = 0; k < ls.length; k++) { st.push(p); p += ls[k].length + 1; }
+      const f = scale(ls.join('\n'), ls, st, block);
+      return f.value?.length === block.length && !f.issues.length ? f : field();
+    }
+    return scale(s, lines, starts);
   };
   const lineAt = (starts, i) => { let lo = 0, hi = starts.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (starts[mid] <= i) lo = mid; else hi = mid - 1; } return lo; };
 
@@ -1018,7 +1039,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const all = scan(lines, lang);
     const wk = deadlines(lines, { ...o, lang }, opts.week1), w = weights(s, lines, starts);
     return {
-      prof: professor(lines, lang, once(all.filter((m) => m.hours))),
+      prof: professor(lines, lang),
       hours: once(all.filter((m) => m.hours).map(({ hours, ...m }) => m)),
       meetings: all.filter((m) => !m.hours).map(({ hours, ...m }) => m),
       dates: wk.rows.map(({ i, ...d }) => d).slice(0, 100),
