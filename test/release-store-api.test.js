@@ -632,6 +632,22 @@ test('a language Apple adds to the version itself, when its app info gets that l
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a version language without a support URL gets the primary language\'s, which review requires', async () => {
+  const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    stubFetch(route({
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
+      'GET /appInfos/info-1/appInfoLocalizations?limit=200': { data: [enInfo(), { id: 'ail-de', attributes: { locale: 'de-DE', name: listings.de.apple.name, subtitle: listings.de.apple.subtitle } }] },
+      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale({ whatsNew: listings.en.apple.whatsNew }), { id: 'loc-de', attributes: { locale: 'de-DE', supportUrl: null } }] },
+      'PATCH /appStoreVersionLocalizations/*': {},
+    }));
+    await syncAppleListing(e, 'app-1', 'MAC_OS', { id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION' } }, { en: listings.en, de: listings.de });
+    const fields = Object.assign({}, ...calls.filter((c) => c.method === 'PATCH' && c.url.endsWith('/loc-de')).map((c) => bodyOf(c).data.attributes));
+    assert.equal(fields.supportUrl, 'https://example.test/support');
+    assert.equal(fields.marketingUrl, 'https://example.test/glaze');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('a version in review is never edited', async () => {
   const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
   try {
