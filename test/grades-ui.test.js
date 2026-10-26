@@ -1203,10 +1203,11 @@ const served = (got, size, type) => (url, o) => {
   return { ok: true, status: 200, headers: { get: (h) => (h.toLowerCase() === 'content-length' ? String(size) : null) }, blob: async () => ({ size, type }) };
 };
 // The outline with PAGES, the import dialog open; GZ_IMPORT stands in for features/import.js.
-const docsPage = async (GZ_IMPORT, files = {}) => {
+const docsPage = async (GZ_IMPORT, files = {}, setup = () => {}) => {
   const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': PAGES, ...files } });
   p.ctx.GZ_IMPORT = GZ_IMPORT;
   p.ctx.File = class File { constructor(parts, name, o) { Object.assign(this, { parts, name, type: o?.type }); } };
+  setup(p);
   vm.runInContext(read('features/syllabus.js'), p.ctx);
   p.ctx.GZ_SYL_UI.sync(true);
   await settle(12);
@@ -1298,6 +1299,89 @@ test("Ultra syllabus import: a document with nothing readable says so; a file's 
   held[1].resolve({ text: SYL_TEXT, ocr: null });
   await settle(12);
   assert.doesNotMatch(p.dlg.textContent, /Check what Glaze found/);
+});
+
+// Hold a code load across a close, another click, or a course change.
+const holdSylNeed = (p, wanted) => {
+  const need = p.ctx.GZ_CTX.need, held = [];
+  p.ctx.GZ_CTX.need = (file, ready) => file === wanted ? new Promise((resolve) => held.push(() => resolve(need(file, ready)))) : need(file, ready);
+  return held;
+};
+
+test('Ultra syllabus import: closing while the importer loads never starts the file reader', async () => {
+  const reads = [], got = [];
+  let held;
+  const p = await docsPage({ read: async (file) => { reads.push(file.name); return { text: SYL_TEXT }; } },
+    { '/bbcswebdav/pid-9504-': served(got, 2048, 'application/pdf') }, (p) => { held = holdSylNeed(p, 'features/import.js'); });
+  await p.pick('Math Syllabus');
+  assert.equal(held.length, 1);
+  p.dlg.close();
+  held.shift()();
+  await settle(12);
+  assert.equal(got[0].signal.aborted, true);
+  assert.deepEqual(reads, [], 'a closed dialog must not start a reader after its code arrives');
+});
+
+test('Ultra syllabus import: leaving the course aborts its read and prevents the next download', async () => {
+  const got = [], reads = [];
+  const p = await docsPage({ read: (file, opts) => new Promise((resolve) => reads.push({ opts, resolve })) }, {
+    '/bbcswebdav/': served(got, 2048, 'application/pdf'),
+  });
+  await p.pick('Course Syllabus');
+  assert.equal(reads.length, 1);
+  p.loc.pathname = '/ultra/courses/_102_1/outline';
+  p.ctx.GZ_SYL_UI.sync(true);
+  await settle(12);
+  const aborted = reads[0].opts.signal.aborted;
+  reads[0].resolve({ text: SYL_TEXT });
+  await settle(12);
+  assert.equal(aborted, true, 'navigation must abort the active course read');
+  assert.equal(got.length, 1, 'no more files from the course that was left');
+  assert.doesNotMatch(p.dlg.textContent, /Check what Glaze found/);
+});
+
+test('Ultra syllabus import: an old course picker cannot start a read after navigation', async () => {
+  const got = [];
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }) }, { '/bbcswebdav/': served(got, 2048, 'application/pdf') });
+  p.loc.pathname = '/ultra/courses/_102_1/outline';
+  p.ctx.GZ_SYL_UI.sync(true);
+  await settle(12);
+  await p.pick('Math Syllabus');
+  assert.equal(got.length, 0, 'the old course needs a new dialog before reading');
+});
+
+test('Ultra syllabus import: a replaced read cannot report progress or fetch another file', async () => {
+  const got = [], reads = [];
+  const p = await docsPage({ read: (file, opts) => new Promise((resolve) => reads.push({ opts, resolve })), note: () => '', doubt: () => false }, {
+    '/bbcswebdav/': served(got, 2048, 'application/pdf'),
+  });
+  await p.pick('Course Syllabus');
+  await p.pick('Math Syllabus');
+  assert.equal(reads[0].opts.signal.aborted, true);
+  reads[1].opts.progress('Current progress');
+  reads[0].opts.progress('Old progress');
+  const status = p.status();
+  reads[0].resolve({ text: 'Old text' });
+  await settle(12);
+  const downloads = got.length;
+  reads[1].resolve({ text: SYL_TEXT });
+  await settle(12);
+  assert.equal(status, 'Current progress', 'only the current read can update progress');
+  assert.equal(downloads, 2, 'a replaced read cannot fetch its remaining files');
+  assert.equal(p.readText(), SYL_TEXT);
+});
+
+test('Ultra syllabus import: the document is chosen at the click, before the text reader loads', async () => {
+  const got = [];
+  let held;
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }), note: () => '', doubt: () => false },
+    { '/bbcswebdav/': served(got, 2048, 'application/pdf') }, (p) => { held = holdSylNeed(p, 'lib/doctext.js'); });
+  await p.pick('Math Syllabus');
+  p.doc.getElementById('gz-syl-doc').value = '2'; // Welcome, with no new read click.
+  held.shift()();
+  await settle(12);
+  assert.equal(got.length, 1, 'the clicked document is read even if the selection changes while loading');
+  assert.equal(p.readText(), SYL_TEXT);
 });
 
 // Codex B4 #3: Ultra moves from course to course in one document; what's saved belongs to the course on the page.
