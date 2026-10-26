@@ -54,16 +54,46 @@ const GZ_UI = (() => {
 
   };
 
-  // The extension's own pages wear the palette being edited.
-  const paint = (s) => {
-    const colors = GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
-    for (const [v] of GZ_COLORS) document.documentElement.style.setProperty(v, colors[v]);
-    document.documentElement.style.setProperty('--gz-radius', `${s.look.radius}px`);
-    document.documentElement.style.setProperty('--gz-glass', `${s.look.glass}px`);
-    document.documentElement.setAttribute('data-gz-depth', String(s.look.depth));
-    document.documentElement.setAttribute('data-gz-motion', s.motion.level);
-    for (const [key, value] of Object.entries(GZ_SURFACE_VARS({ ...s, bg: { kind: 'solid' } }))) document.documentElement.style.setProperty(key, value);
-    document.documentElement.style.colorScheme = GZ_COLOR.brightness(GZ_COLOR.parse(colors['--gz-surface'])) < 0.5 ? 'dark' : 'light';
+  // How opaque a page's surfaces must be over the Look's background for their text to pass the page's own contrast checks
+  // (GZ_CONTRAST on surface and ground) that the palette passes at full opacity: the Look's own opacity (a translucent
+  // panel's 88% when it leaves it automatic), raised as far as needed. Under a surface: the background's colors (black and
+  // white for a picture or film), seen through its dim layer of the ground.
+  const readable = (s, colors) => {
+    const C = GZ_COLOR, kind = s.bg.kind, own = s.look.surfaceOpacity;
+    if (kind === 'solid' || !s.look.glass) return 100;
+    const ground = C.parse(colors['--gz-surface-2']);
+    const scene = ['scene', 'shader', 'layers', 'media'].includes(kind), dim = scene ? GZ_SCENE_LOOK(s.bg.intensity).dim : s.bg.dim / 100;
+    const over = (a, b, t) => ({ r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t });
+    // Scenes, custom shaders and layers can draw beyond their palette, just as pictures and films can.
+    const art = [...GZ_BG_COLORS(s.bg.colors, colors), ...(scene || kind === 'image' ? ['#000000', '#ffffff'] : [])].map((c) => over(C.parse(c), ground, dim));
+    const pairs = GZ_CONTRAST(colors).filter(({ bg }) => ['--gz-surface', '--gz-surface-2'].includes(bg)).map((row) => {
+      const base = C.parse(s.look.surfaceCustom ? s.look.surfaceColor : colors[row.bg]);
+      return { ...row, paint: over(base, C.parse(colors['--gz-accent']), s.look.surfaceTint / 100) };
+    }).filter(({ fg, min, paint }) => C.contrast(colors[fg], C.hex(paint)) >= min);
+    const passes = (o) => art.every((under) => pairs.every(({ fg, min, paint }) => C.contrast(colors[fg], C.hex(over(under, paint, o / 100))) >= min));
+    let o = own >= 0 ? own : 88;
+    while (o < 100 && !passes(o)) o = Math.min(100, o + 2);
+    return o;
+  };
+  // The extension's own pages wear the palette being edited. The settings page (page: true) wears the whole Look: its
+  // surfaces over the Look's background (options.html #backdrop), opaque enough to read, and its fonts and text size.
+  const paint = (s, { page = false } = {}) => {
+    const root = document.documentElement, colors = GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
+    for (const [v] of GZ_COLORS) root.style.setProperty(v, colors[v]);
+    root.style.setProperty('--gz-radius', `${s.look.radius}px`);
+    root.style.setProperty('--gz-glass', `${s.look.glass}px`);
+    root.setAttribute('data-gz-depth', String(s.look.depth));
+    root.setAttribute('data-gz-motion', s.motion.level);
+    for (const [key, value] of Object.entries(GZ_SURFACE_VARS(page ? s : { ...s, bg: { kind: 'solid' } }))) root.style.setProperty(key, value);
+    root.style.colorScheme = GZ_COLOR.brightness(GZ_COLOR.parse(colors['--gz-surface'])) < 0.5 ? 'dark' : 'light';
+    if (!page) return;
+    root.setAttribute('data-gz-bg', s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind);
+    const opacity = readable(s, colors);
+    if (opacity < 100 || s.bg.kind !== 'solid') root.style.setProperty('--gz-surface-opacity', `${opacity}%`);
+    root.style.setProperty('--gz-font', GZ_FONTS.stack(s.look.font));
+    root.style.setProperty('--gz-font-head', s.look.head === 'auto' ? 'var(--gz-font)' : GZ_FONTS.stack(s.look.head));
+    root.style.setProperty('--gz-scale', String(s.look.scale));
+    for (const font of [s.look.font, s.look.head]) GZ_FONTS.load(font);
   };
 
   // One round button per preset: surface disc, accent dot, pressed when it is the active palette.
@@ -169,5 +199,5 @@ const GZ_UI = (() => {
     return rows;
   };
 
-  return { load, save, paint, swatches, pickPreset, looks, pickLook, themeName, contrast };
+  return { load, save, paint, readable, swatches, pickPreset, looks, pickLook, themeName, contrast };
 })();

@@ -610,3 +610,58 @@ test('a draft handoff committed after the next document resumed arrives through 
   await a.c.GZ_TODO_UI.resume(); a.p.form({ draft: { title: 'Keep on failure' } }); a.c.GZ_TODO_UI.suspend();
   await settle(); assert.equal(a.p.formNow()?.draft.title, 'Keep on failure', 'a rejected backup cannot lose the only copy');
 });
+
+// The head keeps what is used every day (the view switch in the dock, Add task); Share sessions and Export wait behind ⋯.
+test("the head: Add task and ⋯ only; ⋯ opens Share sessions and Export, and choosing one closes it", async () => {
+  const f = feature();
+  const target = new E();
+  f.c.GZ_TODO_UI.mount(target, { courseId: '25', scope: 'follow', setScope() {} });
+  await settle(); await settle();
+  const head = () => f.p.get().box.children[0];
+  const acts = () => head().children.filter((x) => x?.dataset?.act).map((x) => x.dataset.act);
+  const row = () => head().children.find((x) => x?.className === 'gz-todo-tools');
+  assert.deepEqual(acts(), ['add', 'tools']);
+  assert.equal(row(), undefined);
+  assert.ok(head().children.find((x) => x?.className === 'gz-todo-scope'), 'the view switch stays');
+  const more = head().children.find((x) => x.dataset?.act === 'tools');
+  assert.equal(more.attrs['aria-expanded'], 'false');
+  f.p.onClick({ target: { closest: () => more } });
+  assert.deepEqual(row().children.map((x) => x.dataset.act), ['sessions', 'ics']);
+  assert.equal(head().children.find((x) => x.dataset?.act === 'tools').attrs['aria-expanded'], 'true');
+  f.p.onClick({ target: { closest: () => row().children[0] } }); // a script's click: nothing opens, but the row closes
+  assert.equal(row(), undefined, 'choosing one closes it');
+  await settle();
+});
+
+// An announcement in the list opens in Glaze's pop-up (features/announce.js, stood in for here) as its settings say, and
+// keeps the browser's own for a modifier or middle click; once Canvas has it as read, the list says so too.
+test('an announcement opens through GZ_ANNOUNCE for a plain click; Ctrl, Cmd, Shift, Alt keep the browser\'s', async () => {
+  const f = feature();
+  const gone = [];
+  f.c.GZ_ANNOUNCE = { ready: Promise.resolve(), go: (r) => gone.push(r) };
+  const loaded = [];
+  f.c.GZ_CTX.need = async (file) => { loaded.push(file); };
+  const ann = { type: 'announcement', id: '7', cid: '25', course: 'BIO', title: 'Lab moved', at: Date.now() - 864e5, url: '/courses/25/discussion_topics/7', read: false };
+  f.p.seed({ prefs: O, cache: { key: 'todo:https://canvas.test/3', at: Date.now(), items: [ann], grading: [], sums: {} } });
+  f.p.render(true);
+  const a = { dataset: { ann: 'announcement:7' }, href: 'https://canvas.test/courses/25/discussion_topics/7' };
+  const click = (o = {}) => ({ target: { closest: (s) => (s === 'a[data-ann]' ? a : null) }, button: 0, isTrusted: true, prevented: false, preventDefault() { this.prevented = true; }, ...o });
+  for (const mod of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }, { isTrusted: false }]) {
+    const e = click(mod);
+    f.p.onClick(e);
+    assert.equal(e.prevented, false, JSON.stringify(mod));
+  }
+  await settle();
+  assert.deepEqual(gone, []);
+  const e = click();
+  f.p.onClick(e);
+  assert.equal(e.prevented, true);
+  await settle();
+  assert.deepEqual(loaded, ['features/announce.js']);
+  const r = gone[0];
+  assert.deepEqual({ site: r.site, entry: r.entry, courseId: r.courseId, id: r.id, url: r.url, title: r.title, course: r.course },
+    { site: 'canvas', entry: 'glaze', courseId: '25', id: '7', url: 'https://canvas.test/courses/25/discussion_topics/7', title: 'Lab moved', course: 'BIO' });
+  assert.equal(typeof r.from, 'function', 'focus goes back to the link as drawn after the list redraws');
+  r.onRead();
+  assert.equal(f.p.get().cache.items[0].read, true, 'read once Canvas has it');
+});

@@ -387,6 +387,7 @@ const shown = (p) => {
   return /^url\("blob:/.test(c) ? 'own' : c.match(/cursors\/(\w+)\/default\./)?.[1] || c;
 };
 const choose = async (p, pointer) => { p.settings.extras = { ...p.settings.extras, pointer }; await p.lx.sync(); await settle(); };
+const turn = async (p, pointerOn) => { p.settings.extras = { ...p.settings.extras, pointerOn }; await p.lx.sync(); await settle(); };
 
 test('page: the student\'s pointer wins over the Look\'s; The Look\'s pointer gives the Look\'s back', async () => {
   const data = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
@@ -399,10 +400,17 @@ test('page: the student\'s pointer wins over the Look\'s; The Look\'s pointer gi
   await choose(p, 'aqua');
   assert.equal(shown(p), 'aqua', 'a set over the Look\'s');
   assert.match(p.html.style['--gz-cursor-pointer'], /cursors\/aqua\/pointer\.png"\) 14 2, pointer$/, 'its hand where the page is clickable');
-  await choose(p, 'off');
-  assert.equal(shown(p), 'system', 'System pointer: none of Glaze\'s, whatever the Look has');
+  await turn(p, false);
+  assert.equal(shown(p), 'system', 'the custom pointer off: none of Glaze\'s, whatever the Look has');
   assert.equal(p.html.style['--gz-cursor-pointer'], undefined);
+  assert.ok(!('data-gz-cursor' in p.html.attrs));
+  await turn(p, true);
+  assert.equal(shown(p), 'aqua', 'on again: the set chosen before');
   await choose(p, 'own');
+  await turn(p, false);
+  assert.equal(shown(p), 'system', 'their picture too');
+  assert.equal(p.blobs.size, 0, 'its address revoked while off');
+  await turn(p, true);
   assert.equal(shown(p), 'own', 'their picture, as a blob: address');
   assert.equal(p.blobs.size, 1);
   await choose(p, 'look');
@@ -451,8 +459,9 @@ test('page: the personal pointer wins on course Looks, and following the Look us
   await p.lx.sync();
   await settle();
   assert.equal(shown(p), 'ghost', 'changing courses follows their respective Looks');
-  await choose(p, 'off');
-  assert.equal(shown(p), 'system');
+  await turn(p, false);
+  assert.equal(shown(p), 'system', 'the custom pointer off: no course Look\'s either');
+  await turn(p, true);
   await choose(p, 'neon');
   p.setCourseLook(null);
   await p.lx.sync();
@@ -573,10 +582,32 @@ test('palette: a Pointer: entry for every choice the setting takes, the current 
   assert.equal(p.synced.at(-1).extras.pointerAnim, true);
 });
 
+test('palette: one switch for the custom pointer comes first; its styles and animation are listed only while it is on', async () => {
+  const G = require('../defaults.js');
+  const p = page({});
+  p.settings.extras = { ...G.GZ_DEFAULTS.extras, pointer: 'lava' };
+  await p.lx.ready();
+  const toggles = () => p.lx.cmds().filter((c) => /^Turn (off|on) \{name\|lower\}$/.test(c.label));
+  const first = p.lx.cmds()[0];
+  assert.equal(first.label, 'Turn off {name|lower}');
+  first.run();
+  assert.deepEqual(JSON.parse(JSON.stringify(p.synced.at(-1))), { version: 2, extras: { ...G.GZ_DEFAULTS.extras, pointer: 'lava', pointerOn: false } }, 'only the switch, the style kept');
+  assert.equal(toggles().length, 2, 'the switch and the animation switch');
+  // Off: the switch says so, and nothing that would change a pointer nobody sees is offered.
+  p.settings.extras = { ...p.settings.extras, pointerOn: false };
+  const off = p.lx.cmds();
+  assert.equal(off[0].label, 'Turn on {name|lower}');
+  assert.equal(off.filter((c) => c.label === 'Pointer: {name}').length, 0);
+  assert.equal(toggles().length, 1, 'no animation switch while off');
+  off[0].run();
+  assert.equal(p.synced.at(-1).extras.pointerOn, true);
+  assert.equal(p.synced.at(-1).extras.pointer, 'lava');
+});
+
 test('palette: a pointer command preserves settings changed since the palette opened', () => {
   const G = require('../defaults.js'), p = page({});
   p.settings.extras = { ...G.GZ_DEFAULTS.extras };
-  const command = p.lx.cmds().filter((c) => c.label === 'Pointer: {name}')[2]; // Aqua
+  const command = p.lx.cmds().filter((c) => c.label === 'Pointer: {name}')[1]; // Aqua
   p.settings.extras = { ...p.settings.extras, pointerAnim: false, stickers: false, rotate: 'daily', at: '10:30' };
   command.run();
   assert.deepEqual(p.synced.at(-1).extras, { ...p.settings.extras, pointer: 'aqua' });

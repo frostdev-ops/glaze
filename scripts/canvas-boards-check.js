@@ -77,7 +77,12 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
     });
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
-    const store = (s, l) => opts.evaluate(async ([s, l]) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); if (l) { await chrome.storage.local.clear(); await chrome.storage.local.set(l); } }, [s, l]);
+    const store = async (s, l) => {
+      await page.goto('about:blank');
+      const worker = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
+      await worker.evaluate(() => brokerTurn?.(() => {}));
+      await opts.evaluate(async ([s, l]) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); if (l) { await chrome.storage.local.clear(); await chrome.storage.local.set(l); } }, [s, l]);
+    };
     const layout = () => opts.evaluate(() => chrome.storage.local.get('widgetLayout').then((r) => r.widgetLayout));
     const page = await ctx.newPage(), errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));

@@ -168,7 +168,8 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
     const baseStore = () => { const { nav, ...patch } = BASE; return opts.evaluate((p) => chrome.storage.sync.set(p), patch); };
     await baseStore();
     await opts.reload();
-    await opts.waitForSelector('#share-code');
+    await opts.waitForSelector('#share-code', { state: 'attached' });
+    if (!await opts.evaluate(() => document.querySelector('#palette details.more').open)) await opts.click('#palette details.more > summary'); // theme codes sit in Looks and colors' More options
     await opts.fill('#share-code', code);
     await opts.click('#share-try');
     await opts.waitForSelector('#share-offer:not([hidden])');

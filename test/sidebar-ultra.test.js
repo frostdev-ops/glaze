@@ -718,7 +718,8 @@ test('an assignment overview gets the assignment family and Glaze\'s own column;
   // The course's absolute tool panel keeps the column's room and the gap for its content; its header spans the window
   // (features/sidebar.css).
   const css = read('features/sidebar.css');
-  assert.match(css, /html\[data-gz-sb-fixed\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*padding-inline-end: var\(--gz-sb-room\) !important/);
+  assert.match(css, /html\[data-gz-sb-tool\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*padding-inline-end: var\(--gz-sb-room\) !important/);
+  assert.doesNotMatch(css, /html\[data-gz-sb-fixed\][^{]*\.panel-wrap[^}]*padding-inline-end/, 'relative outline panels reserve room in their parent only');
   assert.match(css, /html\[data-gz-sidebar="expanded"\] \{ --gz-sb-room: calc\(var\(--gz-sidebar-w\) \+ 16px \+ var\(--gz-sb-inset, 0px\) \+ var\(--gz-sb-safe, 0px\)\); \}/);
 });
 

@@ -11,7 +11,8 @@
 // zone. One answer serves the site's pages (and, on Canvas, the popup's due list), kept in storage.local and asked again
 // after two minutes, only when the page is shown or focused: no polling. The one write is a mark, and only on Canvas with
 // todo.sync on: Canvas's planner override, exactly as Canvas's own List View checkbox sends it. Ultra has nothing like it,
-// so there a tick stays on this device (owner decision).
+// so there a tick stays on this device (owner decision). An announcement opened in Glaze's pop-up is marked read, as the
+// site's own page marks it (features/announce.js).
 // Loaded on demand: a second injection into the same frame keeps the first.
 var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -23,6 +24,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let shareSurface = null;
   let box = null; // section#gz-todo: its head and body are drawn anew; the status line stays, so it's announced
   let head = null, line = null, body = null;
+  let tools = false; // the header's ⋯ open: Share sessions and Export, the tools used now and then
   let started = null; // the start() promise while mounted
   let dead = false; // it failed for good on this page: Canvas's own list stays
   let gen = 0; // which start is current: off() and each start move it on, and a superseded start's results are dropped
@@ -334,12 +336,40 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   const LABEL = { past: 'Past due', today: 'Today', tomorrow: 'Tomorrow', week: 'This week', later: 'Later', none: 'No date', all: 'Upcoming' };
   const news = (r) => {
-    const li = make('li', { className: 'gz-todo-item gz-todo-news' }, make('div', { className: 'gz-todo-main' },
-      make('a', { href: r.url, className: 'gz-todo-title', textContent: r.title }),
+    const a = make('a', { href: r.url, className: 'gz-todo-title', textContent: r.title });
+    if (r.url) { a.dataset.ann = r.key; a.dataset.focus = `news ${r.key}`; }
+    const li = make('li', { className: 'gz-todo-item gz-todo-news' }, make('div', { className: 'gz-todo-main' }, a,
       make('div', { className: 'gz-todo-meta' }, r.course && make('span', { textContent: r.course }), make('span', { textContent: when(r, Date.now())[o().rel ? 'rel' : 'abs'] }),
         !r.read && chip(t('Unread')))));
     if (!r.read) li.dataset.unread = '';
     return li;
+  };
+  // An announcement opens in Glaze's pop-up (features/announce.js) where the student's settings say so, and shows a
+  // preview on hover or focus; Ctrl, Cmd, Shift, Alt or a middle click keep the browser's own. Opening it there marks it read
+  // on Canvas, as Canvas's page does: the list's Unread goes with it.
+  let newsShown = new Map(); // key -> announcement row, as drawn
+  const annRef = (r) => ({ site: ultra ? 'ultra' : 'canvas', entry: 'glaze', courseId: r.cid, id: r.id, url: new URL(r.url, location.origin).href, title: r.title, course: r.course,
+    from: () => box?.querySelector(`[data-focus="${CSS.escape(`news ${r.key}`)}"]`), onRead: () => readNews(r.key) });
+  const announceIn = () => ctx.need('features/announce.js', () => globalThis.GZ_ANNOUNCE).then(() => GZ_ANNOUNCE.ready);
+  const openNews = (e, a) => {
+    const r = newsShown.get(a.dataset.ann);
+    if (e.defaultPrevented || e.button > 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || !human(e)) return;
+    e.preventDefault();
+    announceIn().then(() => GZ_ANNOUNCE.go(annRef(r)), () => location.assign(a.href));
+  };
+  const peekNews = (e) => {
+    const a = e.target.closest?.('a[data-ann]');
+    const r = a && newsShown.get(a.dataset.ann);
+    if (!r || 'peek' in a.dataset) return;
+    a.dataset.peek = '';
+    announceIn().then(() => GZ_ANNOUNCE.preview(a, annRef(r)), () => {});
+  };
+  const readNews = (k) => {
+    const it = cache?.items.find((i) => i.type === 'announcement' && `announcement:${i.id}` === k);
+    if (!it || it.read) return;
+    it.read = true;
+    keep(cache);
+    render(true);
   };
   const grade = (r) => make('li', { className: 'gz-todo-item gz-todo-grade' }, make('div', { className: 'gz-todo-main' },
     make('a', { href: r.url || `/courses/${r.cid}/gradebook`, className: 'gz-todo-title', textContent: r.title }),
@@ -382,6 +412,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const out = L.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], grading: o().teacher ? cache?.grading || [] : [], data, o: o(), now, tz: who.tz, cids: courses.cids, course, names: courses.names, sync: toSite() });
     firstIds = new Map();
     shown = new Map([...out.groups.flatMap(([, l]) => l), ...out.done, ...out.graded].map((r) => [r.key, r]));
+    newsShown = new Map([...out.unread, ...out.read].map((r) => [r.key, r]));
     // The focused control, found again in the new tree by what it was for; if that went out of sight (a ticked item
     // into the closed Done section), the one after it.
     const was = box.contains(document.activeElement) ? document.activeElement.dataset.focus : null;
@@ -391,6 +422,14 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     add.setAttribute('aria-expanded', String(!!form));
     const ics = small('ics', t('Export calendar (.ics)'), t('Export'));
     ics.dataset.focus = 'ics';
+    const sessions = small('sessions', t('Share sessions'));
+    sessions.dataset.focus = 'sessions';
+    const toolRow = (...kids) => { const g = make('div', { id: 'gz-todo-tools', className: 'gz-todo-tools' }, ...kids); g.setAttribute('role', 'group'); g.setAttribute('aria-label', t('More')); return g; };
+    const more = small('tools', t('More'), '⋯');
+    more.dataset.focus = 'tools';
+    more.setAttribute('aria-expanded', String(tools));
+    more.setAttribute('aria-controls', 'gz-todo-tools');
+    more.title = t('More');
     // In the dock: Follow page (this course inside one, all of them elsewhere) or All courses, kept for the account.
     const scope = mounted?.setScope && make('div', { className: 'gz-todo-scope', role: 'group' }, ...[['follow', 'Follow page'], ['all', 'All courses']].map(([v, l]) => {
       const b = small('scope', t(l));
@@ -402,7 +441,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (scope) scope.setAttribute('aria-label', t('Courses shown'));
     head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }), ...(scope ? [scope] : []),
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
-      ...(globalThis.GZ_REMIND_UI?.head() || []), small('sessions', t('Share sessions')), ics, add); // the streak and reminders (features/reminders.js), when on
+      ...(globalThis.GZ_REMIND_UI?.head() || []), add, more, // the streak and reminders (features/reminders.js), when on
+      ...(tools ? [toolRow(sessions, ics)] : []));
     const parts = [form && taskForm()];
     parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
     if (cache?.complete === false) parts.push(make('p', { className: 'gz-todo-hint', textContent: t('Blackboard sent only part of your calendar, so some work may be missing.') }));
@@ -471,10 +511,14 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     render(true);
   };
   const onClick = (e) => {
+    const ann = e.target.closest('a[data-ann]');
+    if (newsShown.has(ann?.dataset.ann)) return openNews(e, ann);
     const el = e.target.closest('[data-act]');
     if (!el || el.tagName === 'INPUT' || el.tagName === 'FORM') return;
     const act = el.dataset.act;
     if (act === 'scope') { if (mounted?.scope !== el.dataset.v) mounted?.setScope?.(el.dataset.v); return; }
+    if (act === 'tools') { tools = !tools; render(true); box.querySelector(`[data-focus="${tools ? 'sessions' : 'tools'}"]`)?.focus(); return; }
+    if (act === 'sessions' || act === 'ics') { tools = false; render(true); box.querySelector('[data-focus="tools"]')?.focus(); }
     if (act === 'sessions') { if (human(e)) chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => {}); return; }
     const k = el.closest('[data-key]')?.dataset.key;
     if (act === 'add') { form = form ? null : { cid: here() }; render(true); if (form) box.querySelector('[data-focus="form title"]')?.focus(); return; }
@@ -624,6 +668,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       box.addEventListener('submit', onSubmit);
       box.addEventListener('keydown', onKey);
       box.addEventListener('toggle', onToggle, true);
+      box.addEventListener('pointerover', peekNews);
+      box.addEventListener('focusin', peekNews);
       document.addEventListener('visibilitychange', onShow);
       addEventListener('focus', onShow);
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }

@@ -1,6 +1,10 @@
 {
+  "name": {
+    "message": "Glaze : thèmes pour Canvas, Blackboard et Moodle",
+    "description": "Name in the browser and the store. Keep the name Glaze and \"for\" before the sites; 75 characters at most."
+  },
   "description": {
-    "message": "Changez le style de Blackboard Ultra, Canvas et Moodle : palettes, polices, fonds, un meilleur To Do, des widgets et des extras.",
+    "message": "Canvas, Blackboard et Moodle : thèmes et mode sombre. Agenda, GPA et notes sur Canvas et Blackboard.",
     "description": "Short description in the browser and the store. Keep the name Glaze; 132 characters at most."
   }
 }

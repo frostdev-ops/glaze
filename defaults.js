@@ -109,12 +109,16 @@ const GZ_SPEC = {
   },
   docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
   stream: { dates: ['smart', ['smart', 'posted', 'both']], relative: [false, 'bool'], compact: [false, 'bool'], encouragement: [true, 'bool'] },
-  // features/lookx.js. pointer: the student's over every Look's (x.pointer): 'look' wears the Look's, 'off' the system's,
-  // 'own' their picture (on this device). pointerAnim: the Look's pointer animation (x.cursor). Never in a Look or its code.
-  extras: { pointer: ['look', ['look', 'off', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own']], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
+  // features/lookx.js. pointer: the student's over every Look's (x.pointer): 'look' the Look's, 'own' their picture (on
+  // this device); pointerOn off: the system's. pointerAnim: the Look's pointer animation (x.cursor). Never in a Look's code.
+  extras: { pointer: ['look', ['look', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own']], pointerOn: [true, 'bool'], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
   // lib/blocklist.js
   mods: { blocklist: [true, 'bool'] },
+  // Announcements and pop-ups (features/announce.js).
+  announce: { open: ['popup', ['popup', 'site']], ...Object.fromEntries(['glaze', 'ultra', 'canvas', 'moodle'].flatMap((k) => [[k, ['default', ['default', 'popup', 'site']]], [k + 'Preview', [true, 'bool']]])), preview: [true, 'bool'], delay: [600, [200, 2000]], lines: [3, [1, 8]] },
+  popup: { anim: ['genie', ['genie', 'fade', 'none']] },
+  rubric: { show: ['auto', ['auto', 'popup', 'site']], inline: [true, 'bool'] },
 };
 
 const GZ_DEFAULTS = {
@@ -351,6 +355,8 @@ const GZ_SANITIZE = (raw, fresh = false) => {
   if (fresh === true) for (const id of ['notes', 'pet']) if (typeof raw.enhance?.[id] !== 'boolean') out.enhance[id] = true;
   // 2.2's darkDocs inverted.
   if (isObj(raw.enhance) && raw.enhance.docPages === undefined && raw.enhance.darkDocs === true) out.enhance.docPages = 'dark';
+  // 3.4's System pointer, also from an older device.
+  if (raw.extras?.pointer === 'off') out.extras.pointerOn = false;
   // 1.0 had only the three motion switches: all off meant "no motion".
   if (!raw.version && isObj(raw.motion) && raw.motion.level === undefined) {
     out.motion.level = out.motion.enter || out.motion.hover || out.motion.transitions ? 'subtle' : 'off';
@@ -500,6 +506,8 @@ const GZ_COURSE_EDIT = {
   name: (c, id, nick) => { const n = cleanNick(nick); if (n) c.names[id] = n; else delete c.names[id]; },
 };
 // Surface tint uses only an existing picked or recorded color; an unknown course keeps the accent fallback.
+// tabs.at 'auto': in a desktop top bar holding tabs; elsewhere, above.
+const GZ_TABS_AUTO = (s, course, w = globalThis.innerWidth || 1440) => { const b = s.navbar; return w >= 900 && b.on && b.tabs && s.enhance.tabs && (course && b.course !== 'same' ? b.course : b.place) === 'top' ? 'nav' : 'above'; };
 const GZ_COURSE_COLOR = (s, list, key) => [s.courses?.colors?.[key], list[key]?.color].find((v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)) || '';
 // Whether the course is tinting its pages now: the master switch is on and it (or its slot) is ticked.
 const GZ_COURSE_TINTED = (c, id, list = {}) => !!c.tint && (c.tinted.includes(id) || (!!list[id]?.slot && c.tinted.includes(list[id].slot)));
@@ -580,5 +588,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_SURFACE_VARS, GZ_COLORS, GZ_TABS, GZ_SIDEBAR_KINDS, GZ_BUILT_IN, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_COLOR, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_SURFACE_VARS, GZ_COLORS, GZ_TABS, GZ_SIDEBAR_KINDS, GZ_BUILT_IN, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_COLOR, GZ_TABS_AUTO, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }

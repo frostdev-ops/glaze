@@ -72,6 +72,7 @@ class El {
   get layoutBox() { return this.box || this.doc.boxOf?.(this) || null; }
   getBoundingClientRect() { const b = this.layoutBox; return b ? { ...b, right: b.left + b.width, bottom: b.top + b.height } : { left: 0, right: 100, top: 0, bottom: 20 }; }
   get clientWidth() { return this.layoutBox?.width ?? 0; }
+  get clientHeight() { return this.layoutBox?.height ?? 0; }
   get offsetWidth() { return this.layoutBox?.width ?? 0; }
   get offsetHeight() { return this.layoutBox?.height ?? 0; }
   get scrollHeight() { return this.layoutBox?.height ?? 0; }

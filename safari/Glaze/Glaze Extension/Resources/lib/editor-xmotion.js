@@ -1,6 +1,6 @@
 // The editor's motion builders: per moment, a ready animation or one
-// built from 2–8 stops (x.anim); per event, an effect (x.fx); the pointer (x.pointer), its animation (x.cursor); and a
-// typing effect (x.type). Names, limits and what an
+// built from 2–8 stops (x.anim); per event, an effect (x.fx); and a typing effect (x.type). The Look's pointer (x.pointer)
+// and its animation (x.cursor) are under Look › Pointer (lib/editor-pointer.js). Names, limits and what an
 // absent value means are lib/motionx.js's (GZ_MX), which draws them. Shared controls and the save path are in
 // lib/editor-x.js; the preview plays them (lib/editor-preview.js) unless motion is off. Extension settings page only; the
 // tables have module.exports for node.
@@ -54,7 +54,7 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
   let A = null, shown = '', box, note;
   const { el, tr } = X;
   const xOf = () => A.s.parts?.x || {};
-  const sig = () => JSON.stringify([xOf().anim, xOf().fx, xOf().cursor, xOf().pointer, xOf().type, A.s.extras?.pointer]);
+  const sig = () => JSON.stringify([xOf().anim, xOf().fx, xOf().type]);
   const write = (key, value, soon = false) => { A.write(key, X.prune(value || {}), soon); shown = sig(); };
   const unit = (u) => (v) => `${v}${u}`;
   const fmtKey = (k) => (KEYS[k][2] === '' ? (v) => `${Math.round(v * 100)}%` : unit(KEYS[k][2]));
@@ -128,7 +128,7 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
     return el('details', { open: opened(moment, !!a), 'data-moment': moment }, summary, el('div', { class: 'x-body' }, body));
   };
 
-  // ---- event effects and the cursor -------------------------------------------------------------------------------------
+  // ---- event effects ------------------------------------------------------------------------------------------------------
   const effectUI = (ev) => {
     const f = xOf().fx?.[ev], d = f && MX().fx(f); // d: what draws, the defaults filled in
     // The stored effect when it runs (see setAnim), with what is left empty taken out.
@@ -158,35 +158,6 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
     }
     return el('details', { open: opened(ev, !!f), 'data-event': ev }, el('summary', {}, `${tr(EVENTS[ev])} · ${f ? tr(X.tokenName(f.kind)) : tr('None')}`), el('div', { class: 'x-body' }, body));
   };
-  const cursorUI = () => {
-    const c = xOf().cursor, d = c && MX().cursor(c), few = ['orbit', 'contour'].includes(c?.kind), cap = c?.kind === 'contour' ? 3 : 6; // marks that are counted, not a length
-    const set = (k) => (v, soon) => write('cursor', { ...xOf().cursor, [k]: v }, soon);
-    const kind = X.select({ label: tr('Cursor effect'), value: c?.kind || '', options: [['', tr('None')], ...MX().CURSORS.map((k) => [k, tr(X.tokenName(k))])], on: (v) => { write('cursor', v ? { ...xOf().cursor, kind: v } : null); redraw('cursor'); } });
-    kind.querySelector('select').dataset.focus = 'cursor';
-    return [kind, ...(c ? [
-      X.colors({ label: tr('Colours'), list: c.c || [], max: 3, none: tr('The accent colour'), on: (v, soon) => { set('c')(v, soon); if (!soon) redraw('cursor'); } }),
-      X.slider({ label: tr('Size'), min: 2, max: 48, value: d.size, fmt: unit('px'), on: set('size') }),
-      ['orbit', 'drift', 'sparkle'].includes(c.kind) && X.select({ label: tr('Shape'), value: d.shape || '', options: [...(c.kind === 'sparkle' ? [['', tr('Sparks and stars')]] : []), ...MX().SHAPES.concat(MX().MARKS).map((k) => [k, tr(X.tokenName(k))])],
-        on: (v) => { write('cursor', { ...xOf().cursor, shape: v || null }); redraw('cursor'); } }),
-      !['glow', 'flicker', 'scan'].includes(c.kind) && X.slider({ label: tr(few ? 'How many' : 'Length'), min: c.kind === 'orbit' ? 1 : 2, max: few ? cap : 24, value: few ? Math.min(cap, d.len) : d.len, on: set('len') }),
-      X.slider({ label: tr('Fade'), min: 100, max: 2000, step: 50, value: d.fade, fmt: unit(' ms'), on: set('fade') }),
-      el('p', { class: 'desc' }, tr('Move the pointer over the preview to see it. Off on touch screens.')),
-    ] : [])];
-  };
-
-  // The Look's pointer: one of the sets, or the system's. The student's own picture is offered only to a Look that wears it
-  // already: a picture is the student's choice, under Look › Pointer (lib/editor-pointer.js), which also says whether they
-  // see the Look's pointer at all.
-  const pointerUI = () => {
-    const v = xOf().pointer || '', mine = A.s.extras?.pointer || 'look';
-    const pick = X.select({ label: tr('Pointer'), value: v, options: [['', tr('Standard')], ...MX().POINTERS.filter((k) => k !== 'own' || v === 'own').map((k) => [k, tr(POINTERS[k] || X.tokenName(k))])],
-      on: (next) => { A.write('pointer', next || null); shown = sig(); redraw('pointer'); } });
-    pick.querySelector('select').dataset.focus = 'pointer';
-    return [pick, el('p', { class: 'desc' }, tr(v === 'own' ? 'Your own picture, kept on this computer: a theme code of this Look goes without it.'
-      : 'Worn with this Look, and in a theme code of it. Drawn by your system so it never lags; text fields keep the usual text cursor.')),
-    el('p', { class: 'desc' }, mine === 'look' ? tr('Which pointer you see is yours to choose:') : tr('You see {name} instead, your own choice:', { name: tr(POINTERS[mine] || (mine === 'off' ? 'System pointer' : mine)) }),
-      ' ', el('a', { href: '#look/pointer', 'data-editor-alias': true }, tr('Pointer settings')))];
-  };
   const typeUI = () => {
     const c = xOf().type, d = c && MX().typing(c);
     const set = (k) => (v, soon) => write('type', { ...xOf().type, [k]: v }, soon);
@@ -213,10 +184,6 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
       el('h3', {}, tr('Event effects')),
       el('p', { class: 'desc' }, tr('What plays when something happens. Silent, and never on a quiz.')),
       MX().EVENTS.map(effectUI),
-      el('h3', {}, tr('Pointer')),
-      pointerUI(),
-      el('h3', {}, tr('Cursor effect')),
-      cursorUI(),
       el('h3', {}, tr('Typing effect')),
       typeUI()].flat().filter(Boolean));
   };
@@ -231,8 +198,8 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
     // Reset section takes the Look's own motion out too (one save after the section's own).
     host.closest('section')?.querySelector('[data-reset-section]')?.addEventListener('click', (e) => {
       if (!e.isTrusted) return;
-      for (const k of ['anim', 'fx', 'cursor', 'pointer', 'type']) write(k, null, true);
-      A.save(['parts']);
+      for (const k of ['anim', 'fx', 'type']) write(k, null, true);
+      A.save(['parts'], false, ['anim', 'fx', 'type']);
       draw();
     });
     // Where the preview can play them changes with its site.

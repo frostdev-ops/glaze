@@ -129,7 +129,7 @@ test('late words start the sidebar once; ordinary mutation passes do not repeat 
   const chunk = source.slice(source.indexOf('  const flush = () => {'), source.indexOf('  // Throttle, not debounce:'));
   let ready = false, calls = 0;
   const ctx = { timer: 1, dirty: new Set(), full: false, wordsLate: true, ultra: true, hid: () => false, document: { body: {} }, tip: null, tinted: null, looked: null, words: () => ready, outermost: () => [], tintKey: () => null, lookHere: () => null, surfaceCourse: () => '', html: { style: { getPropertyValue: () => '' } }, X: { gate() {}, syncNav: () => calls++ } };
-  for (const name of ['sweepAll','sweepRoots','tagExtras','themeEditors','applySettings','placeScene','keepPlace','watchDrafts','syncDownloads','syncDocTools','syncCourseMenu','syncRules']) ctx[name] = () => {};
+  for (const name of ['sweepAll','sweepRoots','tagExtras','themeEditors','applySettings','placeScene','keepPlace','watchDrafts','syncDownloads','syncDocTools','syncCourseMenu','syncRules','routes']) ctx[name] = () => {};
   for (const name of ['paintCourses','renderProgress','renderNew','renderCalc','syncTodo','syncCardTasks','syncRemind','syncWidgets','syncSyl','syncInsights']) ctx.X[name] = () => {};
   const c = vm.createContext(ctx);
   vm.runInContext(chunk + '\nglobalThis.flushNow = flush;', c);

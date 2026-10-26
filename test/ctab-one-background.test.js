@@ -291,7 +291,7 @@ test('sharing race: disabling a frame clears the sharing marker held by its page
   Object.assign(r.ctx, {
     links: [{ remove() {} }], moodle: false,
     X: new Proxy({}, { get: () => () => {} }),
-    ...Object.fromEntries(['hideTip', 'unmenu', 'early', 'armFlip', 'syncPageFade', 'stopSweep', 'syncRules', 'clearSettings', 'syncDocTools', 'syncFooter'].map((k) => [k, () => {}])),
+    ...Object.fromEntries(['hideTip', 'unmenu', 'early', 'armFlip', 'syncPageFade', 'stopSweep', 'syncRules', 'routes', 'clearSettings', 'syncDocTools', 'syncFooter'].map((k) => [k, () => {}])),
   });
   r.ctx.document.querySelectorAll = () => [];
   vm.runInContext(source.slice(source.indexOf('  const disable = () => {'), source.indexOf('  const reapply =')) + '; disable();', r.ctx);

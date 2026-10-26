@@ -86,6 +86,14 @@ test('start asks the worker for the declarative widgets and declares their tiles
   assert.equal(p.declared.length, 1);
 });
 
+test('a widget\'s ask names this document (content.js __gzDoc) for the worker\'s account check', async () => {
+  const p = page();
+  p.ctx.__gzDoc = 'doc-1';
+  await p.start();
+  await p.fill();
+  eq(p.widgets(), [{ type: 'glaze:modpage', op: 'widget', mod: ID, slot: 'tile:main', lang: 'de', doc: 'doc-1' }]);
+});
+
 test('a tile draws what the worker made of its blocks, in a closed root, asking for this slot in this page\'s language', async () => {
   const p = page();
   await p.start();
@@ -164,6 +172,42 @@ test('a widget draws again when its data changes, once, and not while the page i
   p.ctx.document.onvisibilitychange();
   await p.tick(10);
   assert.equal(p.widgets().length, 3, 'shown again: drawn');
+});
+
+test('widgets redraw together when a slow account resolves without a storage change or reload', async () => {
+  let resolve, known = false, reads = 0;
+  const pending = new Promise((r) => { resolve = r; });
+  const p = page({ widget: () => ({ ok: true, tree: { type: 'text', text: known ? 'B course' : 'Waiting' }, until: 864e5, accountPending: !known }) });
+  p.ctx.GZ_CTX.account = () => { reads++; return pending; };
+  await p.start();
+  const { got } = await p.fill();
+  p.G.rail();
+  await settle();
+  assert.equal(p.widgets().length, 2);
+  known = true;
+  resolve('6');
+  await settle();
+  await p.tick(400);
+  assert.equal(p.widgets().length, 4, 'both mounts redraw once');
+  assert.equal(reads, 1, 'one identity wait for the whole page');
+  eq(p.renders.slice(-2).map((r) => r.tree.text), ['B course', 'B course']);
+  got.stop();
+});
+
+test('an unresolved widget retries identity after a failure and stops retrying when unmounted', async () => {
+  let known = false, reads = 0;
+  const p = page({ widget: () => ({ ok: true, tree: { type: 'text', text: known ? 'B course' : 'Waiting' }, until: 864e5, accountPending: !known }) });
+  p.ctx.GZ_CTX.account = async () => { reads++; if (!known) throw new Error('HTTP 503'); return '6'; };
+  await p.start();
+  const { got } = await p.fill();
+  known = true;
+  await p.tick(61000);
+  assert.equal(reads, 2);
+  assert.equal(p.widgets().length, 2);
+  eq(p.renders.at(-1).tree, { type: 'text', text: 'B course' });
+  got.stop();
+  await p.tick(120000);
+  assert.equal(reads, 2);
 });
 
 test('a widget asks again at the time its answer changes by itself, and the latest answer wins', async () => {

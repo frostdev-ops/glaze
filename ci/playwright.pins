@@ -1,0 +1,4 @@
+# The Playwright the browser gate installs (.github/workflows/browser.yml), checked by scripts/npm-integrity.js. To upgrade,
+# change PLAYWRIGHT there, copy each package's `npm view <name>@<version> dist.integrity` here, and repin ci/chromium.pins and ci/ffmpeg.pins.
+playwright@1.63.0 sha512-+7ziBLidS4NaNCdt57SUDT+wYmmd5fmiQejUic/kb+YsYSCPyOOE9sebzMjNmQrsnNpDJqd4WHvV/8lfKfUDUg==
+playwright-core@1.63.0 sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==

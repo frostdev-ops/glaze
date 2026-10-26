@@ -196,11 +196,12 @@ Each release brings the listings in English, German, Spanish, French, Dutch and 
 | Store | Source | What the release sets |
 | --- | --- | --- |
 | Chrome | `store/listing*.md` | Nothing: the API has no listing method. It writes `release/<v>/chrome-web-store/listing-<lang>.txt` to paste in the dashboard. |
-| Firefox | `store/listing*.md`, with privacy from `store/firefox*.md` | Release notes in every language; summary and description where they differ. The description leaves out the older "FROM …" blocks (AMO shows each version's notes). Firefox privacy describes Firefox sync and excludes executable mod permissions. |
+| Firefox | `store/listing*.md`, with privacy from `store/firefox*.md` | Release notes in every language; summary and description where they differ. Firefox privacy describes Firefox sync and excludes executable mod permissions. |
 | Apple | `store/app-store*.md` | Name and subtitle, description, keywords, promotional text and What's New, per platform version submitted. Missing languages are created with English's privacy policy, support and marketing URLs. |
 
-Release notes in every store and language are that language's "NEW IN <version>" block; a language without one stops
-the release before anything is built. A bullet labelled with a browser ("Safari: …") goes only to that browser's store.
+Release notes in every store and language are the "NEW IN <version>" block under that language's `## Release notes`; a
+language without one, or a description with release notes in it, stops the release before anything is built. The
+description has no version history. A bullet labelled with a browser ("Safari: …") goes only to that browser's store.
 `CHANGELOG.md`, or `--notes FILE`, is for GitHub and the website. Apple's text is edited only while its version and app
 info are being prepared, never in review; a new language shows the English screenshots until it has its own, and
 Apple has no What's New field for a platform's first release.

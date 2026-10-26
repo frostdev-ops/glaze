@@ -34,25 +34,27 @@ for (const lang of LANGS) {
     assert.equal(chrome.description, section(text, 'Detailed description'));
   });
 
-  test(`${lang}: the release notes are this version's own "new in" block, for AMO and Apple alike`, async () => {
+  test(`${lang}: the release notes are this version's own "new in" block in ## Release notes, with each browser's bullet in its own store's notes`, async () => {
     const { readListings } = await load();
     const { firefox, apple, chrome } = readListings(real, version)[lang];
     assert.ok(firefox.notes.startsWith('• '), firefox.notes.slice(0, 40));
-    assert.ok(chrome.description.includes(firefox.notes), 'the block is taken from the listing as written');
+    assert.ok(section(real(listingFile(lang)), 'Release notes').includes(firefox.notes), 'the block is taken from the listing as written');
+    assert.ok(!chrome.description.includes(firefox.notes), 'and is not in the description');
     assert.ok(!/\n\n/.test(firefox.notes), 'it stops at the next heading');
+    assert.ok(!/^•\s*(?:Chrome|Safari)\s*:/m.test(firefox.notes), 'no other browser\'s bullet on AMO');
+    assert.ok(!/^•\s*(?:Chrome|Firefox)\s*:/m.test(apple.whatsNew), 'no other browser\'s bullet on the App Store');
     assert.equal(apple.whatsNew, firefox.notes, 'this version has no bullet that belongs to one browser');
     assert.ok(firefox.notes.length <= 3000 && apple.whatsNew.length <= 4000);
   });
 
-  test(`${lang}: AMO keeps the summary, and a description without the older release blocks that fits its 15,000`, async () => {
+  test(`${lang}: AMO keeps the summary, and the description with Firefox's privacy, within its 15,000`, async () => {
     const { readListings } = await load();
     const { firefox, chrome } = readListings(real, version)[lang];
     assert.equal(firefox.summary, chrome.summary);
     assert.ok(firefox.description.length <= 15000, `${firefox.description.length} characters`);
-    assert.ok(firefox.description.includes(firefox.notes), 'the current block stays');
-    const headings = chrome.description.split('\n').filter((line) => /\s\d+\.\d+(?:\.\d+)?$/.test(line));
-    assert.ok(headings.length > 1);
-    for (const heading of headings.slice(1)) assert.ok(!firefox.description.includes(`\n${heading}\n`), heading);
+    const privacy = section(real(`store/firefox${lang === 'en' ? '' : `-${lang}`}.md`), 'Privacy');
+    const [before, after] = chrome.description.split(/\n\n(?:PRIVACY|DATENSCHUTZ|PRIVACIDAD|CONFIDENTIALITÉ|PRIVACIDADE)\n\n[^\n]+/);
+    assert.ok(firefox.description.startsWith(before) && firefox.description.endsWith(after) && firefox.description.includes(privacy));
     assert.ok(!/^•\s*Safari\s*:/m.test(firefox.description), 'a Safari-only bullet is not Firefox copy');
     assert.ok(!/[*_`]|^\s*(?:#|>|[-+] |\d+\. )/m.test(firefox.description), 'no Markdown that AMO would render differently');
   });
@@ -74,30 +76,105 @@ for (const lang of LANGS) {
   });
 }
 
-test('English App Store text is the copy live on the store, not a new one', async () => {
+// The stores list each version's notes on their own; a description is what Glaze does now.
+for (const lang of LANGS) test(`${lang}: the description has no release notes or version history`, async () => {
+  const { readListings } = await load();
+  const { chrome, firefox } = readListings(real, version)[lang];
+  const history = /^(?:NEW IN|FROM|NEU IN|AUS|NOVEDADES DE|DE|NOUVEAUTÉS DE LA VERSION|DE LA VERSION|NIEUW IN|UIT|NOVO NA|DA)\s+\d+\.\d+(?:\.\d+)?$/m;
+  for (const text of [chrome.description, firefox.description]) {
+    assert.doesNotMatch(text, history);
+    assert.doesNotMatch(text, /^[^\n•]*\b\d+\.\d+(?:\.\d+)?\s*$/m, 'no heading ends in a version');
+  }
+  assert.doesNotMatch(real(listingFile(lang)), /^## What's new in/m);
+});
+
+test('a description with a release block stops the release, naming where notes go', async () => {
+  const { readListings } = await load();
+  for (const heading of ['NOVEDADES DE 3.4.2', 'NOVEDADES DE 3.4.2 ', 'Novedades de 3.4.2', '### De 3.4.2']) {
+    const es = real('store/listing-es.md').replace('\nTU ASPECTO\n', `\n${heading}\n\n• Algo.\n\nTU ASPECTO\n`);
+    assert.throws(() => readListings(readWith({ 'store/listing-es.md': es }), version), /store\/listing-es\.md: the detailed description has release notes .*; they go in ## Release notes/, heading);
+  }
+});
+
+// Lead with the theme/platform terms. Put study tools in their supported-platform sentence,
+// and retain the other useful search terms in the feature descriptions rather than stuffing the opening.
+const SEARCH = {
+  en: { summary: ['theme', 'dark mode'], detail: ['student', 'planner', 'to-do', 'GPA', 'colors', 'fonts', 'grades', 'notes', 'course tabs', 'LMS'] },
+  de: { summary: ['Designs', 'Dunkelmodus'], detail: ['Studierende', 'Planer', 'To-do', 'Notendurchschnitt', 'Farben', 'Schriften', 'GPA', 'Noten', 'Notizen', 'Kurs-Tabs', 'LMS'] },
+  es: { summary: ['tema', 'modo oscuro'], detail: ['estudiantes', 'agenda', 'tareas', 'promedio', 'colores', 'fuentes', 'GPA', 'calificaciones', 'notas', 'pestañas de cursos', 'LMS'] },
+  fr: { summary: ['thème', 'mode sombre'], detail: ['étudiant', 'agenda', 'tâches', 'moyenne', 'couleurs', 'polices', 'GPA', 'notes', 'onglets de cours', 'LMS'] },
+  nl: { summary: ['thema', 'donkere modus'], detail: ['studenten', 'planner', 'takenlijst', 'kleuren', 'lettertypen', 'GPA', 'cijfers', 'notities', 'cursustabbladen', 'LMS'] },
+  'pt-BR': { summary: ['tema', 'modo escuro'], detail: ['estudantes', 'planner', 'tarefas', 'média', 'cores', 'fontes', 'GPA', 'notas', 'anotações', 'abas de cursos', 'LMS'] },
+};
+for (const lang of LANGS) test(`${lang}: search copy leads with themes and scopes study tools to Canvas and Blackboard`, async () => {
+  const { readListings } = await load();
+  const { chrome } = readListings(real, version)[lang];
+  const opening = chrome.description.split('\n\n')[0];
+  const has = (text, term) => text.toLowerCase().includes(term.toLowerCase());
+  for (const text of [chrome.summary, opening]) {
+    const [themes, study] = text.split('. ');
+    for (const term of ['Canvas', 'Blackboard', 'Moodle', ...SEARCH[lang].summary]) assert.ok(has(themes, term), `themes: ${term}`);
+    for (const term of ['Canvas', 'Blackboard', 'GPA']) assert.ok(has(study || '', term), `study: ${term}`);
+    assert.doesNotMatch(study, /Moodle/, 'Moodle has no planner, GPA or Notes');
+  }
+  for (const term of SEARCH[lang].detail) assert.ok(has(chrome.description, term), `description: ${term}`);
+  assert.ok(chrome.summary.indexOf('Canvas') < 20, 'the supported platforms appear early');
+  const locale = JSON.parse(real(`_locales/${lang.replace('-', '_')}/messages.json`));
+  assert.equal(locale.description.message, chrome.summary, 'the browser shows the store summary');
+});
+
+test('the App Store name and subtitle name no other company\'s product, in any language', async () => {
+  for (const lang of LANGS) {
+    const text = real(appStoreFile(lang));
+    for (const field of ['Name', 'Subtitle']) assert.doesNotMatch(section(text, field), /Canvas|Blackboard|Moodle|Instructure|Anthology/i, `${lang} ${field}`);
+  }
+});
+
+test('App Store keywords hold the platforms and repeat no word of the name or subtitle', async () => {
+  const { readListings } = await load();
+  const listings = readListings(real, version, ['apple']);
+  for (const lang of LANGS) {
+    const { name, subtitle, keywords } = listings[lang].apple;
+    assert.doesNotMatch(keywords, /, /, `${lang}: no space after a comma`);
+    const list = keywords.split(',');
+    for (const site of ['canvas', 'blackboard', 'moodle']) assert.ok(list.includes(site), `${lang}: ${site}`);
+    const normalize = (text) => text.normalize('NFC').toLowerCase().replace(/[-’']/g, '');
+    const words = new Set(normalize(`${name} ${subtitle}`).split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+    assert.equal(new Set(list.map(normalize)).size, list.length, `${lang}: keywords are unique`);
+    for (const keyword of list) {
+      assert.ok(keyword.trim() === keyword && keyword.length > 2, `${lang}: nonempty comma-separated terms`);
+      for (const word of normalize(keyword).split(' ')) assert.ok(!words.has(word), `${lang}: "${word}" is already in the name or subtitle`);
+    }
+  }
+});
+
+test('English App Store copy keeps the generic name and subtitle, useful keywords and privacy disclosures', async () => {
   const { readListings } = await load();
   const { apple } = readListings(real, version).en;
-  assert.equal(apple.name, 'Glaze for Safari');
-  assert.equal(apple.subtitle, 'Your courses, your colors');
-  assert.equal(apple.description.length, 3310);
+  assert.equal(apple.name, 'Glaze: Course Themes & Planner');
+  assert.equal(apple.subtitle, 'Dark mode, GPA, notes & to-do');
+  assert.equal(apple.description, section(real('store/app-store.md'), 'Description'));
+  assert.match(apple.description, /Glaze does not collect or sell your data\./);
   assert.match(apple.description, /^Make Blackboard Ultra, Canvas and Moodle feel like your own study space\. Glaze is a Safari extension/);
-  assert.equal(apple.keywords, 'blackboard,canvas,moodle,dark mode,themes,student,grades,notes,planner,study,safari,extension');
+  assert.equal(apple.keywords, 'canvas,blackboard,moodle,student,grades,deadlines,study,school,college,homework,calendar,ultra,focus');
 });
 
 test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listing', async () => {
   const { readListings } = await load();
   const de = real('store/listing-de.md'), fr = real('store/listing-fr.md');
   const block = (text, heading, bullets) => text.replace(`${heading}\n\n`, `${heading}\n\n${bullets}\n`);
+  const labelled = '• Chrome: nur Chrome.\n• Firefox: nur Firefox.\n• Safari: nur Safari.';
   const listings = readListings(readWith({
-    'store/listing-de.md': block(de, `NEU IN ${version}`, '• Chrome: nur Chrome.\n• Firefox: nur Firefox.\n• Safari: nur Safari.'),
+    'store/listing-de.md': block(block(de, `NEU IN ${version}`, labelled), 'CANVAS', labelled.replace(/nur/g, 'Beschreibung nur')),
     'store/listing-fr.md': block(fr, `NOUVEAUTÉS DE LA VERSION ${version}`, '• Safari : seulement Safari.'),
   }), version);
   const { firefox, apple, chrome } = listings.de;
-  assert.ok(chrome.description.includes('• Chrome: nur Chrome.'), 'Chrome text is the listing exactly');
-  assert.ok(chrome.description.includes('• Firefox: nur Firefox.') && chrome.description.includes('• Safari: nur Safari.'), 'the Chrome paste kit retains the other browser labels too');
+  assert.ok(chrome.description.includes('• Chrome: Beschreibung nur Chrome.'), 'Chrome text is the listing exactly');
+  assert.ok(chrome.description.includes('• Firefox: Beschreibung nur Firefox.') && chrome.description.includes('• Safari: Beschreibung nur Safari.'), 'the Chrome paste kit retains the other browser labels too');
+  assert.ok(firefox.description.includes('Beschreibung nur Firefox') && !firefox.description.includes('Beschreibung nur Chrome') && !firefox.description.includes('Beschreibung nur Safari'), 'AMO filters the description too');
   assert.ok(firefox.notes.includes('nur Firefox') && !firefox.notes.includes('nur Chrome') && !firefox.notes.includes('nur Safari'));
   assert.ok(apple.whatsNew.includes('nur Safari') && !apple.whatsNew.includes('nur Chrome') && !apple.whatsNew.includes('nur Firefox'));
-  assert.ok(firefox.notes.includes('Frostdev') && apple.whatsNew.includes('Frostdev'), 'unlabelled bullets go everywhere');
+  assert.ok(firefox.notes.includes('Entwurfssicherung') && apple.whatsNew.includes('Entwurfssicherung'), 'unlabelled bullets go everywhere');
   assert.ok(!listings.fr.firefox.notes.includes('seulement Safari') && listings.fr.apple.whatsNew.includes('seulement Safari'), 'French spacing before the colon');
 });
 
@@ -105,7 +182,7 @@ test('a language without this version\'s block stops the release before anything
   const { readListings } = await load();
   const nl = real('store/listing-nl.md').replace(`NIEUW IN ${version}`, 'NIEUW IN 3.3.7');
   assert.throws(() => readListings(readWith({ 'store/listing-nl.md': nl }), version), (error) => {
-    assert.match(error.message, new RegExp(`store/listing-nl\\.md: no "NIEUW IN ${version.replace(/\./g, '\\.')}" block`));
+    assert.match(error.message, new RegExp(`store/listing-nl\\.md: no "NIEUW IN ${version.replace(/\./g, '\\.')}" block in ## Release notes`));
     return true;
   });
   assert.throws(() => readListings(real, '9.9.9'), /no "NEW IN 9\.9\.9" block/);
@@ -113,14 +190,23 @@ test('a language without this version\'s block stops the release before anything
 
 test('every problem is named at once, with the store limit it breaks', async () => {
   const { readListings } = await load();
-  const en = real('store/app-store.md').replace('Your courses, your colors', 'Your courses, your colors, your Chrome');
+  const en = real('store/app-store.md').replace('Dark mode, GPA, notes & to-do', 'Dark mode, GPA, notes & to-do, your Chrome');
   const es = real('store/listing-es.md').replace(/(## Short summary[^\n]*\n\n)[^\n]+/, `$1${'x'.repeat(140)}`);
   assert.throws(() => readListings(readWith({ 'store/app-store.md': en, 'store/listing-es.md': es }), version), (error) => {
-    assert.match(error.message, /store\/app-store\.md: subtitle is 38 characters; the App Store allows 30/);
+    assert.match(error.message, /store\/app-store\.md: subtitle is 42 characters; the App Store allows 30/);
     assert.match(error.message, /store\/app-store\.md: subtitle names another browser \(Chrome\)/);
     assert.match(error.message, /store\/listing-es\.md: short summary is 140 characters; the Chrome Web Store allows 132/);
     return true;
   });
+  const missing = real('store/listing.md').replace(/## Detailed description\n[\s\S]*?(?=## Release notes)/, '');
+  for (const stores of [['chrome', 'firefox', 'apple'], ['firefox']]) {
+    assert.throws(() => readListings(readWith({ 'store/listing.md': missing, 'store/listing-es.md': es }), version, stores), (error) => {
+      assert.match(error.message, /store\/listing\.md: description is missing/);
+      assert.match(error.message, /store\/listing\.md: no PRIVACY paragraph/);
+      assert.ok(!(error instanceof TypeError));
+      return true;
+    });
+  }
 });
 
 test('only the selected stores\' sources are required', async () => {
@@ -203,7 +289,7 @@ test('the listings command is a dry run: it reads the stores, prints what would 
     [/\/v1\/apps\/app-1\/appStoreVersions\?filter\[platform\]=MAC_OS&filter\[versionString\]=/, { data: [] }],
     [/\/v1\/apps\/app-1\/appStoreVersions\?filter\[platform\]=MAC_OS&limit=20$/, { data: [{ id: 'ver-live', attributes: { appVersionState: 'READY_FOR_DISTRIBUTION' } }] }],
     [/\/v1\/apps\/app-1\/appInfos$/, { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] }],
-    [/\/v1\/appInfos\/info-live\/appInfoLocalizations/, { data: [{ id: 'ail-en', attributes: { locale: 'en-US', name: 'Glaze for Safari', subtitle: 'Your courses, your colors' } }] }],
+    [/\/v1\/appInfos\/info-live\/appInfoLocalizations/, { data: [{ id: 'ail-en', attributes: { locale: 'en-US', name: listings.en.apple.name, subtitle: listings.en.apple.subtitle } }] }],
     [/\/v1\/appStoreVersions\/ver-live\/appStoreVersionLocalizations/, { data: [{ id: 'loc-en', attributes: { locale: 'en-US', ...listings.en.apple, whatsNew: 'Older notes' } }] }],
   ];
   const calls = [], lines = [], original = { fetch: globalThis.fetch, log: console.log, error: console.error, exitCode: process.exitCode };

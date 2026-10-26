@@ -16,6 +16,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   const KEY = /^notesIdx:https?:\/\/[a-z\d.-]+(?::\d+)?\/(\d{1,20}|_\d{1,20}_\d{1,20})$/i; // a Canvas user id, or Ultra's _N_N
   const storeKey = (origin, uid) => `notesIdx:${origin}/${uid}`;
   const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const isId = (v) => typeof v === 'string' && ID.test(v);
   const COURSE = /^(\d{1,20}|_\d{1,20}_\d{1,20})$/; // Canvas's, or Ultra's _N_N
   const set = (s) => new Set(s.split(' '));
 
@@ -27,7 +28,8 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   // italic, underline, strikethrough, lists and checklists, links, quotes, code, tables. Links: http(s) and mailto only,
   // made absolute (against `base`, the page a paste came from), opened with rel="noopener noreferrer". Pictures: only
   // Glaze's own stored ones (data-gz-file; the page shows them through revocable blob: addresses); any other picture
-  // becomes a link to it, so opening a note never loads anything from anywhere.
+  // becomes a link to it, so opening a note never loads anything from anywhere. `pictures(href)` (an announcement, from
+  // the school's own site) keeps the pictures it says yes to as <img src>.
   const RAW = set('script style template noscript textarea title xmp iframe noembed noframes plaintext');
   const DROP = set('script style template noscript textarea title xmp iframe noembed noframes plaintext head svg math object embed applet select option optgroup datalist button input canvas video audio source track picture link meta base frameset frame map area param keygen dialog portal');
   const VOID = set('area base br col embed hr img input link meta param source track wbr keygen');
@@ -66,7 +68,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
     : /text-decoration[^;]*underline/i.test(style) ? 'u' : /text-decoration[^;]*line-through/i.test(style) ? 's' : null);
   const clip = (s, n) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, n);
   // What an open tag becomes: an element { tag, attrs, kids }, or null to keep only what's inside it.
-  const element = (name, a, base) => {
+  const element = (name, a, base, pictures) => {
     let tag = MAP[name] || null;
     if (name === 'span' || name === 'font' || (name === 'b' && /font-weight\s*:\s*(normal|[1-4]00)/i.test(a.get('style') || ''))) tag = styled(a.get('style') || '');
     if (!tag) return null;
@@ -86,6 +88,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         // Another site's picture: a link to it instead, named by its alt text or its file name.
         const href = safeUrl((a.get('src') || '').trim(), base);
         if (!href || href.startsWith('mailto:')) return { drop: true };
+        if (pictures?.(href)) return { tag: 'img', attrs: { src: href, ...(a.get('alt') && { alt: clip(a.get('alt'), LIMIT.title) }) }, kids: [] };
         const last = new URL(href).pathname.split('/').pop() || '';
         let label = clip(a.get('alt') || '', LIMIT.title).trim();
         try { label ||= decodeURIComponent(last); } catch { label ||= last; }
@@ -103,7 +106,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   const WALL = set('li td th blockquote div table ul ol');
   // The tree of what's kept: { kids } of { tag, attrs, kids } and strings; `steps` counts the stack frames looked at; `cut`
   // is true when input was left unread because a budget (nodes, tags, or twice the body limit of text) ran out.
-  const parse = (html, { base } = {}) => {
+  const parse = (html, { base, pictures } = {}) => {
     const src = String(html || '');
     const root = { kids: [], steps: 0, cut: src.length > LIMIT.body * 2 };
     const stack = []; // { name, node }, node null for an element kept only for what's inside it
@@ -141,7 +144,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         continue;
       }
       if (DROP.has(name)) { if (!VOID.has(name) && !tk.empty) drop = { name, depth: 1 }; continue; }
-      const el = element(name, attrsOf(tk.attrs), base);
+      const el = element(name, attrsOf(tk.attrs), base, pictures);
       if (el?.drop) continue;
       const tag = el?.tag;
       if (tag && ENDS_P.has(tag)) { const i = find((e, out) => out === 'p', WALL); if (i >= 0) popTo(i); }
@@ -249,26 +252,29 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   // ---- the library: what's kept in storage.local ------------------------------------------------------------------
   // { notes: { id: { title, folder, course, created, at (last edit), rev, ft {title, folder, course: when each was last
   //   set}, ex (the start of its text), sid (the last save applied), del? (when trashed), with? (the folder it went to
-  //   the trash with) } }, folders: { id: { name, course, order, created, del? } }, gone: { id: when it was deleted for
-  //   good } }. A course is a Canvas course id on the same site; folder '' is No folder.
+  //   the trash with) } }, folders: { id: { name, course, order, created, ft {name, course, order}, del? } }, gone: { id:
+  //   when it was deleted for good } }. A course is a Canvas course id on the same site; folder '' is No folder.
   const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
   const str = (v, max) => (typeof v === 'string' ? clip(v, max) : '');
   const time = (v) => (Number.isFinite(v) && v > 0 ? v : 0);
   const cid = (v) => (typeof v === 'string' && COURSE.test(v) ? v : '');
+  const FIELDS = ['title', 'folder', 'course']; // a note's fields set on their own, each with its time in ft
+  const FOLDER_FIELDS = ['name', 'course', 'order']; // and a folder's
+  const times = (ft, fields) => Object.fromEntries(fields.map((f) => [f, time(obj(ft)[f])]));
   const clean = (raw) => {
     const r = obj(raw);
     const folders = {}, notes = {}, gone = {};
     for (const [id, f] of Object.entries(obj(r.folders))) {
       if (!ID.test(id) || !f || typeof f !== 'object') continue;
-      folders[id] = { name: str(f.name, LIMIT.name).trim() || '…', course: cid(f.course), cn: str(f.cn, 120), order: Number.isFinite(f.order) ? f.order : 0, created: time(f.created), ...(time(f.del) && { del: f.del }) };
+      folders[id] = { name: str(f.name, LIMIT.name).trim() || '…', course: cid(f.course), cn: str(f.cn, 120), order: Number.isFinite(f.order) ? f.order : 0, created: time(f.created), ft: times(f.ft, FOLDER_FIELDS), ...(time(f.del) && { del: f.del }) };
     }
     for (const [id, n] of Object.entries(obj(r.notes))) {
       if (!ID.test(id) || !n || typeof n !== 'object') continue;
       const ft = obj(n.ft);
       notes[id] = {
-        title: str(n.title, LIMIT.title), folder: folders[n.folder] ? n.folder : '', course: cid(n.course), cn: str(n.cn, 120), created: time(n.created), at: time(n.at),
+        title: str(n.title, LIMIT.title), folder: isId(n.folder) && Object.hasOwn(folders, n.folder) ? n.folder : '', course: cid(n.course), cn: str(n.cn, 120), created: time(n.created), at: time(n.at),
         rev: Number.isInteger(n.rev) && n.rev >= 0 ? n.rev : 0, ft: { title: time(ft.title), folder: time(ft.folder), course: time(ft.course) }, ex: str(n.ex, 160), sid: str(n.sid, 40),
-        ...(time(n.del) && { del: n.del }), ...(time(n.del) && folders[n.with] && { with: n.with }),
+        ...(time(n.del) && { del: n.del }), ...(time(n.del) && isId(n.with) && Object.hasOwn(folders, n.with) && { with: n.with }),
       };
     }
     for (const [id, at] of Object.entries(obj(r.gone))) if (ID.test(id) && time(at)) gone[id] = at;
@@ -287,8 +293,8 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       && (folder === '*' || n.folder === folder)
       && (!want.length || want.every((w) => fold(n.title).includes(w)) || !!found?.has(id))).sort(by);
   };
-  const folderList = (idx, { trash = false } = {}) => Object.entries(idx.folders).filter(([, f]) => !!f.del === trash)
-    .sort((a, b) => a[1].order - b[1].order || a[1].created - b[1].created);
+  const byOrder = (a, b) => a[1].order - b[1].order || a[1].created - b[1].created;
+  const folderList = (idx, { trash = false } = {}) => Object.entries(idx.folders).filter(([, f]) => !!f.del === trash).sort(byOrder);
   // Gone for good: from the index (with a tombstone, so a change still on its way can't bring it back) → the notes whose
   // bodies go. A folder's notes still in the library stay, in No folder.
   const purge = (idx, ids, now) => {
@@ -310,7 +316,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   // A course and its name as Canvas showed it (so a past term's course still reads as a name), from a change or, failing
   // that, from the folder a note goes into.
   const courseOf = (m, f) => (cid(m?.course) ? { course: cid(m.course), cn: str(m.cn, 120) } : { course: f?.course || '', cn: f?.cn || '' });
-  const liveFolder = (idx, id) => (idx.folders[id] && !idx.folders[id].del ? id : '');
+  const liveFolder = (idx, id) => (isId(id) && idx.folders[id] && !idx.folders[id].del ? id : '');
 
   // ---- files ---------------------------------------------------------------------------------------------------------
   const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); };
@@ -390,6 +396,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
     };
     switch (m.op) {
       case 'load': {
+        if (!isId(m.id)) return { ok: false, error: 'bad' };
         const n = idx.notes[m.id];
         if (!n) return finish({ ok: false, error: 'gone' });
         const b = await db.get('bodies', bk(m.id, n.rev));
@@ -402,14 +409,14 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       case 'save': {
         // m: { id, base (the revision the page started from; 0 for a new note), sid (this save, so a retry is
         // recognised), html, copy (an id for a conflict copy), copyTitle, and for a new note title, folder, course }.
-        if (!ID.test(m.id) || typeof m.sid !== 'string' || !m.sid || m.sid.length > 40 || !Number.isInteger(m.base) || typeof m.html !== 'string') return { ok: false, error: 'bad' };
+        if (!isId(m.id) || typeof m.sid !== 'string' || !m.sid || m.sid.length > 40 || !Number.isInteger(m.base) || typeof m.html !== 'string') return { ok: false, error: 'bad' };
         // A note the sanitizer had to cut is refused, not stored short with an ok: the page tells the student.
         const { html, cut } = sanitized(m.html);
         if (cut || html.length > LIMIT.body) return { ok: false, error: 'big' };
         const n = idx.notes[m.id];
         // A retry of a save that landed (its answer was lost): again, so the page sends anything typed since afresh.
         if (n?.sid === m.sid) return finish({ ok: true, id: m.id, rev: n.rev, again: true });
-        if (ID.test(m.copy || '') && idx.notes[m.copy]?.sid === m.sid) return finish({ ok: true, id: m.copy, rev: idx.notes[m.copy].rev, conflict: true, again: true });
+        if (isId(m.copy) && idx.notes[m.copy]?.sid === m.sid) return finish({ ok: true, id: m.copy, rev: idx.notes[m.copy].rev, conflict: true, again: true });
         if (n ? !n.del && n.rev === m.base : m.base === 0 && !idx.gone[m.id]) {
           if (!n && count() >= LIMIT.notes) return finish({ ok: false, error: 'many' });
           const folder = liveFolder(idx, m.folder);
@@ -420,7 +427,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         }
         // Both changed (another tab saved since this page read it), or it went to the trash or for good meanwhile: what
         // this page has becomes a copy beside it, and the stored note stays as it is. Nothing is lost.
-        if (!ID.test(m.copy || '') || idx.notes[m.copy] || idx.gone[m.copy]) return finish({ ok: false, error: 'bad' });
+        if (!isId(m.copy) || idx.notes[m.copy] || idx.gone[m.copy]) return finish({ ok: false, error: 'bad' });
         if (count() >= LIMIT.notes) return finish({ ok: false, error: 'many' });
         const folder = liveFolder(idx, n?.folder);
         const title = str(m.copyTitle, LIMIT.title).trim() || n?.title || str(m.title, LIMIT.title);
@@ -429,6 +436,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       }
       case 'meta': {
         // Rename, move, or change the course: each field is set only by a change made after its last one.
+        if (!isId(m.id)) return { ok: false, error: 'bad' };
         const n = idx.notes[m.id];
         if (!n) return finish({ ok: false, error: 'gone' });
         if (typeof m.title === 'string' && at >= past(n.ft.title)) { n.title = str(m.title, LIMIT.title).trim(); n.ft.title = at; }
@@ -466,24 +474,25 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         return finish({ ok: true });
       }
       case 'folder': {
-        if (!ID.test(m.id)) return { ok: false, error: 'bad' };
+        if (!isId(m.id)) return { ok: false, error: 'bad' };
         if (idx.gone[m.id]) return finish({ ok: false, error: 'gone' });
         let f = idx.folders[m.id];
         if (!f) {
           if (Object.keys(idx.folders).length >= LIMIT.folders) return finish({ ok: false, error: 'many' });
-          f = idx.folders[m.id] = { name: '…', course: '', order: Math.max(0, ...Object.values(idx.folders).map((x) => x.order + 1)), created: now };
+          f = idx.folders[m.id] = { name: '…', course: '', order: Math.max(0, ...Object.values(idx.folders).map((x) => x.order + 1)), created: now, ft: { name: at, course: at, order: at } };
         }
-        if (typeof m.name === 'string' && m.name.trim()) f.name = str(m.name, LIMIT.name).trim();
-        if (typeof m.course === 'string') Object.assign(f, courseOf(m));
+        if (typeof m.name === 'string' && m.name.trim() && at >= past(f.ft.name)) { f.name = str(m.name, LIMIT.name).trim(); f.ft.name = at; }
+        if (typeof m.course === 'string' && at >= past(f.ft.course)) { Object.assign(f, courseOf(m)); f.ft.course = at; }
         return finish({ ok: true });
       }
       case 'order': {
-        ids(m.ids).forEach((id, i) => { if (idx.folders[id]) idx.folders[id].order = i; });
+        ids(m.ids).forEach((id, i) => { const f = idx.folders[id]; if (f && at >= past(f.ft.order)) { f.order = i; f.ft.order = at; } });
         return finish({ ok: true });
       }
       case 'folderDel': {
         // A folder to the trash, and its notes as the student chose: out to No folder ('keep'), or to the trash with it
         // ('trash', back with it when it's restored).
+        if (!isId(m.id)) return { ok: false, error: 'bad' };
         const f = idx.folders[m.id];
         if (!f || !['keep', 'trash'].includes(m.notes)) return finish({ ok: false, error: f ? 'bad' : 'gone' });
         f.del = now;
@@ -496,7 +505,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       case 'file': {
         // m: { id, kind ('image' or 'file'), name, data (base64), note }. A picture must be one (by its bytes); an
         // attachment is kept as bytes only, and only ever offered as a download.
-        if (!ID.test(m.id) || !['image', 'file'].includes(m.kind) || typeof m.data !== 'string' || !ID.test(m.note || '')) return { ok: false, error: 'bad' };
+        if (!isId(m.id) || !['image', 'file'].includes(m.kind) || typeof m.data !== 'string' || !isId(m.note)) return { ok: false, error: 'bad' };
         const cap = LIMIT[m.kind];
         if (m.data.length > Math.ceil(cap / 3) * 4 + 4) return { ok: false, error: 'big' };
         let bytes;
@@ -522,7 +531,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         return finish({ ok: true, id: m.id });
       }
       case 'getFile': {
-        const f = ID.test(m.id || '') && await db.get('files', fk(m.id));
+        const f = isId(m.id) && await db.get('files', fk(m.id));
         const bytes = f && await db.get('blobs', fk(m.id));
         return finish(bytes ? { ok: true, kind: f.kind, name: f.name, type: f.type, size: f.size, data: b64(bytes) } : { ok: false, error: 'gone' });
       }
@@ -546,29 +555,66 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       }
       case 'tidy': return finish({ ok: true });
       case 'import': {
-        // A batch read from an export (parseExport), by the notes' and folders' own ids: a note already here is replaced
-        // only by a newer one (and comes back from the trash with it), so importing the same export twice adds nothing;
-        // one deleted for good here comes back. done: notes written; skipped: notes here already, as new or newer.
-        const fs = Array.isArray(m.folders) ? m.folders.slice(0, LIMIT.folders) : [];
+        // A batch read from an export (parseExport), by the notes' and folders' own ids: a note's text already here is
+        // replaced only by a newer one (and comes back from the trash with it), and its title, folder and course each only
+        // by one set later than here (ft; an export without field times carries them with its text), so importing the same
+        // export twice adds nothing; one deleted for good here comes back. A folder here likewise takes its name, course and
+        // order only where the export set them later (one without folder times leaves it as it is, and puts its new folders
+        // last). done: notes changed; skipped: notes here already, as new or newer.
+        const seen = new Set();
+        const fs = (Array.isArray(m.folders) ? m.folders.slice(0, LIMIT.folders) : []).filter((f) => isId(f?.id) && !seen.has(f.id) && !!seen.add(f.id))
+          .map((f) => ({ ...f, order: Number.isFinite(f.order) ? f.order : 0 })).sort((a, b) => a.order - b.order);
         const ns = Array.isArray(m.notes) ? m.notes.slice(0, 50) : [];
+        const placed = new Set(); // the folders whose place comes from the export: newer there, or new here
+        let many = false;
         for (const f of fs) {
-          if (!ID.test(f?.id || '') || idx.folders[f.id]) continue;
-          if (Object.keys(idx.folders).length >= LIMIT.folders) return finish({ ok: false, error: 'many' });
+          const had = idx.folders[f.id], ft = f.ft && typeof f.ft === 'object' ? Object.fromEntries(FOLDER_FIELDS.map((k) => [k, past(time(f.ft[k]))])) : null;
+          const name = str(f.name, LIMIT.name).trim() || '…';
+          if (had) {
+            for (const k of ft ? FOLDER_FIELDS : []) {
+              if (!(ft[k] > past(had.ft[k]))) continue;
+              if (k === 'course') Object.assign(had, courseOf(f)); else if (k === 'name') had.name = name; else placed.add(f.id);
+              had.ft[k] = ft[k];
+            }
+            continue;
+          }
+          if (Object.keys(idx.folders).length >= LIMIT.folders) { many = true; break; }
           delete idx.gone[f.id];
-          idx.folders[f.id] = { name: str(f.name, LIMIT.name).trim() || '…', ...courseOf(f), order: Math.max(0, ...Object.values(idx.folders).map((x) => x.order + 1)), created: now };
+          idx.folders[f.id] = { name, ...courseOf(f), order: Math.max(0, ...Object.values(idx.folders).map((x) => x.order + 1)), created: now, ft: ft || times(null, FOLDER_FIELDS) };
+          if (ft) placed.add(f.id);
         }
+        if (placed.size) {
+          // The placed folders in the export's order, each right after the folder before it there that keeps its place here
+          // (first if none); the rest in their order here. Then numbered afresh.
+          const after = new Map([['', []]]);
+          let prev = '';
+          for (const f of fs) if (idx.folders[f.id]) { if (placed.has(f.id)) after.get(prev).push(f.id); else after.set(prev = f.id, []); }
+          const rest = Object.entries(idx.folders).filter(([k]) => !placed.has(k)).sort(byOrder).map(([k]) => k);
+          [...after.get(''), ...rest.flatMap((k) => [k, ...(after.get(k) || [])])].forEach((k, i) => { idx.folders[k].order = i; });
+        }
+        if (many) return finish({ ok: false, error: 'many' });
         let done = 0, skipped = 0;
         for (const x of ns) {
-          if (!ID.test(x?.id || '') || typeof x.html !== 'string') continue;
+          if (!isId(x?.id) || typeof x.html !== 'string') continue;
           const had = idx.notes[x.id], when = Math.min(time(x.at) || now, now);
-          if (had && had.at >= when) { skipped++; continue; }
+          const ft = x.ft && Object.fromEntries(FIELDS.map((f) => [f, past(time(x.ft[f])) || when]));
+          const body = !had || had.at < when;
+          const fields = FIELDS.filter((f) => !had || (ft ? ft[f] > past(had.ft[f]) : body));
+          if (!body && !fields.length) { skipped++; continue; }
           if (!had && count() >= LIMIT.notes) return finish({ ok: false, error: 'many', done, skipped });
+          const folder = liveFolder(idx, x.folder);
+          const meta = { title: str(x.title, LIMIT.title).trim(), folder, ...courseOf(x, ft ? null : idx.folders[folder]) };
+          const note = { ...had, ft: { ...had?.ft } };
+          for (const f of fields) {
+            if (f === 'course') { note.course = meta.course; note.cn = meta.cn; } else note[f] = meta[f];
+            note.ft[f] = ft ? ft[f] : when;
+          }
+          if (!body) { idx.notes[x.id] = note; done++; continue; }
           const { html, cut } = sanitized(x.html);
           if (cut || x.big === true || html.length > LIMIT.body) { skipped++; continue; }
-          const folder = liveFolder(idx, x.folder);
           delete idx.gone[x.id];
-          await write(x.id, html, { title: str(x.title, LIMIT.title).trim(), folder, ...courseOf(x, idx.folders[folder]), created: Math.min(time(x.created) || when, when), at: when,
-            rev: (had?.rev || 0) + 1, ft: { title: at, folder: at, course: at }, ex: '', sid: '' }, had?.rev);
+          await write(x.id, html, { title: note.title, folder: liveFolder(idx, note.folder), course: note.course, cn: note.cn, created: Math.min(time(x.created) || when, when), at: when,
+            rev: (had?.rev || 0) + 1, ft: note.ft, ex: '', sid: '' }, had?.rev);
           done++;
         }
         return finish({ ok: true, done, skipped });
@@ -580,7 +626,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   // ---- export and import -----------------------------------------------------------------------------------------
   // Everything as one zip: notes.json (folders, notes with their HTML, the files' list: what an import reads, so it
   // round-trips), each note as Markdown under notes/<folder>/, and its pictures and attachments under files/.
-  // data: { site, folders [{ id, name, course, order }], notes [{ id, title, folder, course, created, at, html }],
+  // data: { site, folders [{ id, name, course, order, ft }], notes [{ id, title, folder, course, created, at, ft, html }],
   // files [{ id, kind, name, type, bytes }] } → the zip's entries for GZ_ZIP.zip.
   const FORMAT = 'glaze-notes';
   const exportZip = ({ site, folders, notes, files }, date = new Date()) => {
@@ -600,9 +646,9 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       const up = '../'.repeat(path.split('/').length - 1);
       const md = `# ${(n.title || '').replace(/\s+/g, ' ')}\n\n${markdown(n.html, { path: (id) => (where.has(id) ? up + where.get(id) : null) })}\n`;
       out.push({ name: path, data: enc.encode(md), date });
-      return { id: n.id, title: n.title, folder: n.folder, course: n.course, cn: n.cn || '', created: n.created, at: n.at, html: n.html, path };
+      return { id: n.id, title: n.title, folder: n.folder, course: n.course, cn: n.cn || '', created: n.created, at: n.at, ...(n.ft && { ft: n.ft }), html: n.html, path };
     });
-    const manifest = { format: FORMAT, version: 1, site, exported: date.toISOString(), folders: folders.map(({ id, name, course, cn, order }) => ({ id, name, course, cn: cn || '', order })), notes: list,
+    const manifest = { format: FORMAT, version: 1, site, exported: date.toISOString(), folders: folders.map(({ id, name, course, cn, order, ft }) => ({ id, name, course, cn: cn || '', order, ...(ft && { ft }) })), notes: list,
       files: files.map((f) => ({ id: f.id, kind: f.kind, name: f.name, type: f.type, size: f.bytes.length, path: where.get(f.id) })) };
     for (const f of files) out.push({ name: where.get(f.id), data: f.bytes, date });
     return [{ name: 'notes.json', data: enc.encode(JSON.stringify(manifest, null, 1)), date }, ...out];
@@ -615,19 +661,21 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
     const r = obj(typeof json === 'string' ? JSON.parse(json) : json);
     if (r.format !== FORMAT || r.version !== 1) throw new Error('not a Glaze notes export');
     const same = r.site === site;
-    const once = () => { const seen = new Set(); return (x) => ID.test(x?.id || '') && !seen.has(x.id) && !!seen.add(x.id); };
+    const once = () => { const seen = new Set(); return (x) => isId(x?.id) && !seen.has(x.id) && !!seen.add(x.id); };
     const files = (Array.isArray(r.files) ? r.files : []).slice(0, 5000).filter(once()).filter((f) => ['image', 'file'].includes(f.kind)
       && typeof f.path === 'string' && /^files\//.test(f.path) && !f.path.split('/').includes('..') && Number.isInteger(f.size) && f.size >= 0 && f.size <= LIMIT[f.kind])
       .map((f) => ({ id: f.id, kind: f.kind, name: fileName(f.name), path: f.path, size: f.size }));
     const declared = new Set(files.map((f) => f.id));
     const folders = (Array.isArray(r.folders) ? r.folders : []).slice(0, LIMIT.folders).filter(once())
-      .map((f) => ({ id: f.id, name: str(f.name, LIMIT.name).trim() || '…', course: same ? cid(f.course) : '', cn: same ? str(f.cn, 120) : '', order: Number.isFinite(f.order) ? f.order : 0 }));
+      .map((f) => ({ id: f.id, name: str(f.name, LIMIT.name).trim() || '…', course: same ? cid(f.course) : '', cn: same ? str(f.cn, 120) : '', order: Number.isFinite(f.order) ? f.order : 0,
+        ...(f.ft && typeof f.ft === 'object' && { ft: times(f.ft, FOLDER_FIELDS) }) }));
     const kept = new Set(folders.map((f) => f.id));
     // big: a note the sanitizer had to cut here, or flagged so by an earlier reading (the page reads an export, then hands the
     // notes to the worker, which reads them again from what was kept): run 'import' skips it instead of storing it short.
     const html = (h) => { const a = sanitized(h), b = sanitized(a.html.replace(/ data-gz-file="([0-9a-f-]{36})"/g, (m, x) => (declared.has(x) ? m : ''))); return { html: b.html, big: a.cut || b.cut }; };
     const notes = (Array.isArray(r.notes) ? r.notes : []).slice(0, LIMIT.notes).filter(once()).filter((n) => typeof n.html === 'string')
-      .map((n) => { const h = html(n.html); return { id: n.id, title: str(n.title, LIMIT.title).trim(), folder: kept.has(n.folder) ? n.folder : '', course: same ? cid(n.course) : '', cn: same ? str(n.cn, 120) : '', created: time(n.created), at: time(n.at), html: h.html, ...((h.big || n.big === true) && { big: true }) }; });
+      .map((n) => { const h = html(n.html); return { id: n.id, title: str(n.title, LIMIT.title).trim(), folder: kept.has(n.folder) ? n.folder : '', course: same ? cid(n.course) : '', cn: same ? str(n.cn, 120) : '', created: time(n.created), at: time(n.at),
+        ...(n.ft && typeof n.ft === 'object' && { ft: Object.fromEntries(FIELDS.map((f) => [f, time(n.ft[f])])) }), html: h.html, ...((h.big || n.big === true) && { big: true }) }; });
     return { folders, notes, files };
   };
 

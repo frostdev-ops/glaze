@@ -38,8 +38,9 @@ var GZ_LX = globalThis.GZ_LX || (() => {
     return [`url("${url(`${base}.svg`)}") ${at}`, imageSet && `image-set(url("${url(`${base}.png`)}") 1x, url("${url(`${base}@2x.png`)}") 2x) ${at}`, `url("${url(`${base}.png`)}") ${at}`].filter(Boolean).join(', ');
   };
   // The pointer worn: the student's choice (settings extras.pointer) over the Look's (x.pointer). 'look' (or none) wears
-  // the Look's, which may be none ('off', the system's); any other choice is worn whatever the Look says.
-  const pointerOf = (choice, look) => (!choice || choice === 'look' ? look || 'off' : choice);
+  // the Look's, which may be none ('off', the system's); any other choice is worn whatever the Look says. With the custom
+  // pointer off (extras.pointerOn), the system's.
+  const pointerOf = (choice, look, on = true) => (!on ? 'off' : !choice || choice === 'look' ? look || 'off' : choice);
 
   // ---- placements -------------------------------------------------------------------------------
   // A placement is { id, s: 'pack/name' | 'own:<id>', x: % of the page's width (its centre), y: px from the top, w: px, r: degrees }.

@@ -4,14 +4,70 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.4.0] — Unreleased
+## [3.4.3] — 2026-10-25
+
+### Added
+
+- Announcements open in a Glaze pop-up from Better To Do, widgets, Ctrl+K and site lists; Better To Do and lists preview on hover. Opening marks unread Canvas announcements read; Moodle follows automatic forum tracking. Blackboard and previews mark nothing read. Settings → Course pages → Announcements; All settings → Pop-ups.
+- Assignment rubrics, with your published scores and feedback, replace the rubric entry in Ultra's Assessment Details when there's room, otherwise open in a pop-up, as Canvas's folded rubric does. Settings → Course pages → Documents and quizzes → Rubrics.
+- Back up… and Restore… in Settings → Privacy and data save and bring back everything in one file: settings, Looks, tasks, pet, Notes, dashboard notes, schedules, GPA past terms, widgets and share keys. Restore lists what the file holds and checks it all before changing anything. Older settings files and Notes backups still restore.
+
+### Changed
+
+- Settings → Look → Pointer has a switch for the custom pointer: off gives the system's pointer, without animation, on every page; on brings your choice back. Ctrl+K has it too. System pointer is no longer a choice; if you had it, the switch is off. Your own picture is a card among the pointers.
+- The Look's own pointer and cursor effect moved from Motion to Pointer, under This Look's pointer.
+- Mods and widgets read only the grades, to-dos and schedule of the account signed in on the page, and nothing while that account is unknown.
+- Class schedule: a time saved in another time zone names that zone.
+- CI runs Glaze's browser checks in a pinned, integrity-checked Chromium on every push, and a release zip waits for them.
+
+### Fixed
+
+- Draft backup keeps each tab's own copy of the same reply or message, and on Blackboard drops a reply's copy only once it is sent from that page and shows up there. A restored draft is cleaned of scripts and event handlers.
+- Notes: restoring a newer backup brings back renames, moves, course changes and folder order, field by field, keeping newer changes made here.
+- Class schedule: a reimported calendar updates its days off and keeps yours; adding a class from another time zone no longer moves saved ones; too many class times or classes are reported instead of "Saved"; oversized calendars are reported; large time zone data no longer freezes the page; Stop reading stops a calendar link.
+- Settings fit a 320-pixel window with larger text, translations and right-to-left, without sideways scrolling.
+- Pages on a school's own Canvas, Blackboard or Moodle address no longer load without Glaze while it installs or updates.
+- Blackboard: on the Courses page, course tabs no longer cover the sidebar's header when the To Do column holds the sidebar.
+- Blackboard: a course opened over the Courses page with an animated background keeps course-card controls, course tabs and board tiles beneath it.
+- Blackboard: a graded attempt's rubric column has its panel again, so an animated background no longer shows through it.
+
+## [3.4.2] — 2026-10-24
+
+### Added
+
+- Settings are grouped by what they change: Look, Navigation, Courses, Study, Course pages, Sharing, Mods, Privacy and data, and About. Each section shows its everyday controls and keeps the rest under More options; All settings adds the power-user sections, and search finds every setting. The side list marks the section in view as you scroll.
+- A "?" beside a setting opens its longer description, by click, tap, keyboard or resting the mouse on it.
+- The settings page wears your Look: its background, surfaces, fonts and text size.
+- Course tabs have an Automatic place, now the default: in Glaze's navigation when it is a top bar holding them on a wide window, above the course otherwise. Installs on the old default move to it once.
+
+### Changed
+
+- Every widget fits its tile's size, on the Dashboard, in the sidebar, floating, in the navigation and on phones.
+- The pet habitat is a room that fills its tile, in your Look's colors, with the pet's name, level and XP on it. The Pet button shows today's bonding moments left; Wellbeing, Decorate and Progress are one switcher, and the habitat's settings are in its ⋯ menu.
+- A docked widget's Move up and Move down are in its ⋯ menu, and To Do keeps Share sessions and Export behind ⋯.
+- Share sessions: Create stays off until it can succeed, saying what is missing, and offers your current Look when there is nothing else to share.
+- Moodle: Density, Line height and course color tone work, as on Canvas and Blackboard.
+
+### Fixed
+
+- Blackboard: side panels and drawers, like Activity Stream's notification settings, open below Glaze's top bar with Close in reach, and the pet and Return home step aside while a panel, a dialog or Settings is open.
+- Nothing on the page draws over Settings opened inside a course page.
+- A page opened while Glaze wasn't answering fills in by itself, without a reload.
+- Widget buttons keep readable text in every Look, on hover and focus too.
+- Blackboard: Card grades only on hover blurs GPA figures too, as on Canvas, and outlines without Blackboard's actions column no longer leave a second blank column beside the sidebar.
+- Canvas: navigation trays keep their room while Glaze navigation is on.
+- Links to old settings addresses open the right section, and a link to a section scrolls to it.
+
+## [3.4.1] — 2026-10-23
 
 ### Added
 
 - Chrome, Edge and Firefox: a tab on install for your school's own address. Glaze checks it's Blackboard, Canvas or Moodle before keeping it. If no LMS answers, Glaze returns access granted by that attempt and offers up to two course sites nearby; access held beforehand stays. All sites gives Glaze every HTTPS site at once, and Glaze then asks on each new school's pages, as before.
 - Chrome, Edge and Firefox: Use Glaze on the site, in Glaze's toolbar popup on a school's own Blackboard, Canvas or Moodle page. On Chrome and Edge, Glaze's icon gets a dot on those pages.
-- Chrome, Edge and Firefox: Settings → Backup and privacy → Sites adds a site by its address, and a site granted in the browser's own extension menu is checked and taken the same way.
+- Chrome, Edge and Firefox: Settings → Privacy and data → Sites adds a site by its address, and a site granted in the browser's own extension menu is checked and taken the same way.
 - Moodle on moodlecloud.com works from install, like Canvas on instructure.com and Blackboard on blackboard.com.
+- Firefox: where a page shown inside a site can't ask for access (Download all's Allow, Settings shown in the page), a small Glaze tab asks instead.
+- Blackboard: Activity Stream settings, in Settings → Course pages → Blackboard Dashboard → More options → Activity Stream and in Blackboard's Stream settings: due dates on deadline notifications, posted dates or both, relative due dates, compact cards, and encouragement on or off.
 
 ### Changed
 
@@ -19,6 +75,13 @@ All notable changes to Glaze are documented here. The format follows
 - Removing a site in Settings → Sites also returns any browser grant for that exact site. All sites access stays.
 - Course tabs show a blurred stand-in drawn from a sketch of the course page while it loads, instead of a picture of the page. Glaze takes no screenshots.
 - On Chrome, Edge and Firefox, Canvas's Download all asks for the school's file server the first time it's needed; redirected files show an error asking you to download them from Canvas. Glaze cannot discover the redirect's host. Safari keeps its existing access model. Gradescope in To Do asks for gradescope.com when you turn it on, and a Look's picture, video or animation from another site, or a site a mod may reach, asks for that site when you add it.
+- Firefox: new installs put Glaze's button on the toolbar.
+- A Look's course-card rules and entrance reach the course cards on the Dashboard's board.
+
+### Fixed
+
+- Firefox: Glaze runs on a school's own Blackboard, Canvas or Moodle domain; 3.3.8 didn't register those sites.
+- A folded tile's Unfold button sits above its resize corner.
 
 ## [3.3.8] — 2026-10-23
 
@@ -70,7 +133,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- Glaze asks before running on a site that only looks like Canvas, Moodle or Blackboard Ultra, and records nothing there until the student says Yes. Canvas on instructure.com, Ultra on blackboard.com and sites already in use stay automatic. Settings → Backup and privacy → Sites lists approved custom sites, with Remove.
+- Glaze asks before running on a site that only looks like Canvas, Moodle or Blackboard Ultra, and records nothing there until the student says Yes. Canvas on instructure.com, Ultra on blackboard.com and sites already in use stay automatic. Settings → Privacy and data → Sites lists approved custom sites, with Remove.
 - A shared Look's offer names every navigation item it hides, where each link goes, the page parts it restyles and any text it writes. A Look from someone else that hides Sign out or the profile, adds a link that isn't https, or disguises a link is refused, with the reasons shown.
 - Share protocol v2 adds unambiguous signatures and safe share-creation retries. It stays off until a relay operator enables it; after a share uses v2, older members must update.
 

@@ -264,8 +264,8 @@
   // brings features/motionx.js in, and a pointer, the Look's or the student's own choice of one, features/lookx.js.
   const moveParts = () => {
     const p = GZ_CTX.parts(), x = settings.extras;
-    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerAnim || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
-    if (globalThis.GZ_LOOKX || (x.pointer === 'look' ? p?.pointer || lookHere() : x.pointer !== 'off' && partsOn(true))) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
+    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerOn && x.pointerAnim || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
+    if (globalThis.GZ_LOOKX || x.pointerOn && (x.pointer === 'look' ? p?.pointer || lookHere() : partsOn(true))) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
   };
   document.addEventListener('glaze:parts', moveParts);
   // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed. The dots are
@@ -350,14 +350,15 @@
   // What only some pages need isn't in the first content script: it runs in this frame the first time it's needed,
   // put there by lib/background.js ('glaze:load', its LOADABLE list). The options preview has it as <script> tags.
   // `ready` says whether what the file defines is here: before asking (the preview), and after the worker says it ran.
-  // One request per file at a time; a failed one may be asked again after a minute (flush asks often).
+  // One request per file at a time. A failed one is asked again by itself (1 s, 2 s, 4 s… 30 s apart, about four minutes)
+  // and the page syncs once it is in (recover); a refusal that won't change, by a sync after a minute.
   // docId names this document to the worker where the browser can't (no sender.documentId): it checks the frame still
   // holds this document before injecting.
   const docId = crypto.randomUUID();
   globalThis.__gzDoc = docId;
   const loading = new Map(); // file -> promise
-  const need = (file, ready, retry = true) => {
-    if (!loading.has(file)) {
+  const need = (file, ready, retry = true, n = 0) => {
+    if (n || !loading.has(file)) {
       const p = ready() ? Promise.resolve() : isPreview ? Promise.reject(new Error('not in the preview'))
         : Promise.resolve().then(() => {
           if (!chrome.runtime?.id) throw new Error('reloaded');
@@ -366,7 +367,10 @@
           if (!r?.ok) throw new Error(r?.error || 'not loaded');
           if (!ready()) throw new Error('ran, but not ready');
         });
-      if (retry) p.catch(() => { if (chrome.runtime?.id) setTimeout(() => { if (loading.get(file) === p) loading.delete(file); }, 60000); });
+      if (retry) p.then(() => { if (n) recover(); }, (e) => {
+        const again = n < 11 && !/^(not loadable|sender|not in the preview)$/.test(e.message);
+        if (chrome.runtime?.id) setTimeout(() => { if (loading.get(file) === p) { if (again) need(file, ready, true, n + 1).catch(() => {}); else loading.delete(file); } }, again ? Math.min(1000 << n, 30000) : 60000);
+      });
       loading.set(file, p);
     }
     return loading.get(file);
@@ -441,6 +445,8 @@
   // The Look's LMS rules (features/rules.js), once it has any: each pass puts them back on what the page redrew.
   const syncRules = () => { if (globalThis.GZ_RULES) GZ_RULES.sync(); else if (GZ_CTX.parts()?.rules?.length) need('features/rules.js', () => globalThis.GZ_RULES).then(() => GZ_RULES.sync(), () => {}); };
   document.addEventListener('glaze:parts', syncRules);
+  // Features of some pages only (features/routes.js).
+  const routes = () => need('features/routes.js', () => globalThis.GZ_ROUTES).then(() => GZ_ROUTES.sync(), no);
   const flush = () => {
     timer = 0;
     if (hid()) { dirty.clear(); full = true; return; }
@@ -457,6 +463,7 @@
     globalThis.GZ_XPARTS_PAGE?.pass();
     placeScene();
     syncRules();
+    routes();
     if (!said) return;
     if (all) X.syncNav();
     X.renderProgress();
@@ -516,6 +523,7 @@
     recordCourses();
     if (!ultra) X.paintCourses();
     syncRules();
+    routes();
     if (!words()) { wordsLate = true; return; }
     tagExtras([document.body]);
     watchDrafts();
@@ -874,7 +882,7 @@
     if (window.top !== window || !settings.enabled) return;
     const sweep = (s, all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
-      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (settings.enabled && old.length) s.remove(old); }, () => {});
+      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { if (settings.enabled) GZ_DRAFTS.tidy(s, all, settings.enhance.drafts); }, () => {});
     };
     local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => {
       if (!settings.enabled) return;
@@ -1501,6 +1509,9 @@
   };
 
   const reapply = () => { if (settings.enabled && links.length) applySettings(); };
+  // A file asked again came in: what wanted it syncs, the site's part too, and the sweep reads the page again.
+  let recovering = false;
+  const recover = () => { if (!recovering) { recovering = true; setTimeout(() => { recovering = false; takePart(); reapply(); if (observer) { full = true; if (!timer) timer = setTimeout(flush, 150); } }); } };
   // New palettes and Looks crossfade in (lib/motion.js, where loaded).
   const swap = (f) => (globalThis.GZ_MOTION?.swap || ((g) => g()))(f);
 
@@ -1514,7 +1525,8 @@
     get settings() { return settings; }, get ready() { return ready; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
     get courseList() { return courseList; }, get worn() { return worn; } };
   const part = { ultra: 'GZ_SITE_ULTRA', canvas: 'GZ_SITE_CANVAS' }[site];
-  const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
+  let took = false;
+  const takePart = () => { if (!took && part && globalThis[part]) { took = true; Object.assign(X, globalThis[part](I)); } };
   const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
   if (!partIn) takePart();
   // Moodle: first paint and lazy navigation.

@@ -1,9 +1,9 @@
-// Store listing text: store/listing*.md for shared copy and notes, store/firefox*.md for Firefox privacy, and
-// store/app-store*.md for Apple. Everything is checked before a release builds or sends anything.
+// Store listing text: store/listing*.md for the shared summary, description and release notes, store/firefox*.md for
+// Firefox privacy, and store/app-store*.md for Apple. Everything is checked before a release builds or sends anything.
 import fs from 'node:fs';
 import path from 'node:path';
 
-// "NEW IN <version>" in each language heads the release notes for that version.
+// "NEW IN <version>" in each language heads that version's notes in a listing's "## Release notes".
 export const LANGUAGES = {
   en: { amoLocale: 'en-US', appleLocale: 'en-US', newIn: 'NEW IN', privacyHeading: 'PRIVACY' },
   de: { amoLocale: 'de', appleLocale: 'de-DE', newIn: 'NEU IN', privacyHeading: 'DATENSCHUTZ' },
@@ -33,30 +33,25 @@ function sections(text) {
   }
   return result;
 }
-// A heading inside a description is a line in capitals, like "NEW IN 3.3.8" or "YOUR LOOK".
+// A heading inside a description or the notes is a line in capitals, like "YOUR LOOK" or "NEW IN 3.3.8".
 const isHeading = line => line.trim() && !line.startsWith('•') && line === line.toUpperCase() && /\p{L}/u.test(line);
-const isRelease = line => isHeading(line) && /\s\d+\.\d+(?:\.\d+)?$/.test(line);
+const releaseLabel = new RegExp(`^(?:#{1,6}\\s+)?(?:${Object.values(LANGUAGES).map(({ newIn }) => newIn).join('|')}|FROM|AUS|DE LA VERSION|DE|UIT|DA)\\s+\\d+\\.\\d+(?:\\.\\d+)?$`, 'i');
+const isRelease = line => {
+  const heading = line.trim();
+  return releaseLabel.test(heading) || (isHeading(heading) && /\s\d+\.\d+(?:\.\d+)?$/.test(heading));
+};
 // "• Safari: …" is about one browser and belongs only in that browser's store; other bullets go everywhere.
 const forBrowser = (text, browser) => text.split('\n').filter(line => {
   const label = /^•\s*(Chrome|Firefox|Safari)\s*:/.exec(line);
   return !label || label[1] === browser;
 }).join('\n');
-function block(description, heading) {
-  const lines = description.split('\n'), start = lines.indexOf(heading);
+function block(text, heading) {
+  const lines = text.split('\n'), start = lines.indexOf(heading);
   if (start < 0) return null;
   const end = lines.findIndex((line, i) => i > start && isHeading(line));
   return lines.slice(start + 1, end < 0 ? undefined : end).join('\n').trim();
 }
-// AMO lists every version's notes beside the listing, so its description keeps only the newest block.
-function amoDescription(description, heading) {
-  const kept = [];
-  let skipping = false;
-  for (const line of description.split('\n')) {
-    if (isHeading(line)) skipping = isRelease(line) && line !== heading;
-    if (!skipping) kept.push(line);
-  }
-  return forBrowser(kept.join('\n'), 'Firefox').replace(/\n{3,}/g, '\n\n').trim();
-}
+const amoDescription = description => forBrowser(description, 'Firefox').replace(/\n{3,}/g, '\n\n').trim();
 
 // read(file) returns a repository file's text (a committed one, for a release). Throws once, naming every problem.
 export function readListings(read, version, stores = ['chrome', 'firefox', 'apple']) {
@@ -80,16 +75,19 @@ export function readListings(read, version, stores = ['chrome', 'firefox', 'appl
     const file = `store/listing${suffix(lang)}.md`, heading = `${codes.newIn} ${version}`;
     const text = sections(read(file));
     const chrome = { summary: text['short summary'], description: text['detailed description'] };
-    const notes = chrome.description && block(chrome.description, heading);
-    if (!notes) problems.push(`${file}: no "${heading}" block in the detailed description`);
+    // The stores show each version's notes on their own, so the description has none.
+    const release = (chrome.description || '').split('\n').find(isRelease);
+    if (release) problems.push(`${file}: the detailed description has release notes ("${release}"); they go in ## Release notes`);
+    const notes = text['release notes'] && block(text['release notes'], heading);
+    if (!notes) problems.push(`${file}: no "${heading}" block in ## Release notes`);
     if (stores.includes('chrome')) { entry.chrome = chrome; check(file, 'chrome', chrome); }
     if (stores.includes('firefox') && notes) {
       const firefoxFile = `store/firefox${suffix(lang)}.md`, privacy = sections(read(firefoxFile)).privacy;
-      const paragraphs = chrome.description.split('\n\n'), index = paragraphs.indexOf(codes.privacyHeading);
+      const paragraphs = (chrome.description || '').split('\n\n'), index = paragraphs.indexOf(codes.privacyHeading);
       if (index < 0 || !paragraphs[index + 1]) problems.push(`${file}: no ${codes.privacyHeading} paragraph`);
       if (!privacy) problems.push(`${firefoxFile}: privacy is missing`);
       if (index >= 0 && privacy) paragraphs[index + 1] = privacy;
-      entry.firefox = { summary: chrome.summary, description: amoDescription(paragraphs.join('\n\n'), heading), notes: forBrowser(notes, 'Firefox') };
+      entry.firefox = { summary: chrome.summary, description: amoDescription(paragraphs.join('\n\n')), notes: forBrowser(notes, 'Firefox') };
       check(file, 'firefox', entry.firefox);
     }
     if (stores.includes('apple')) {

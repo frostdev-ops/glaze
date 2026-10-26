@@ -20,7 +20,7 @@ grade calculators, loads on demand from `features/` the first time a page needs 
 ## Activity Stream
 
 Blackboard's Stream notification settings contain a Glaze section, also available at
-Settings → Blackboard → Activity Stream. Timeline dates default to due dates for deadline
+Settings → Course pages → Blackboard Dashboard → More options → Activity Stream. Timeline dates default to due dates for deadline
 notifications and posted dates for other updates. Choose posted dates or both, relative due
 dates, compact cards, and whether encouragement appears. The exact deadline and time zone
 remain available on the date's accessible label and hover title. Relative dates fall back to
@@ -53,6 +53,8 @@ node --test
 Runs the tests for the colour, settings and page-text logic. Use Node 26, matching CI and the browser's strict compression-stream behavior. No dependencies to install.
 
 The browser checks in `scripts/*-check.js` need Playwright (`NODE_PATH=/path/to/node_modules`, and `npx playwright install chromium` once). They launch Playwright's own Chromium; set `CHROME` to use another executable. `mods-api-check.js`, `mods-sandbox-check.js` and `widgets-builder-check.js` also use macOS's `sandbox-exec` and run only there. The three heaviest checks (`background-shell-check.js`, `background-pages-check.js` and `docreview-check.js`) take a lock directory so only one runs at a time: `glaze-heavy.lock` in the OS temp directory, or `GLAZE_LOCK` if set (`scripts/check-env.js` resolves both).
+
+CI's browser gate (`.github/workflows/browser.yml`) runs on every push and pull request and before a release zip is built: `scripts/ci-browser-checks.js` runs the settings, popup, sites and pointer checks in the Playwright, Chromium and FFmpeg pinned in `ci/`, and keeps their logs and screenshots as the `browser-evidence` artifact when one fails. Release tags run it through packaging only. The runner verifies binaries again before any check, rejects `CHROME`, `EXT` and `IA_CASE` overrides, allows six minutes for settings and two for each other check within an eleven-minute total budget, and awaits detached browser cleanup before releasing the lock. Firefox and Safari are checked separately before a release. Firefox: `FIREFOX=<Firefox.app> nice node scripts/firefox-check.mjs` runs the package in native Firefox. Safari: `bash scripts/sync-safari-resources.sh --check` proves packaged-resource parity only, that both targets bundle the package's files; native runtime needs the built app run in Safari on Mac and iOS.
 
 For motion, run `NODE_PATH=/path/to/node_modules node scripts/motion-check.js [receipt.json]`. It traces every animation on the Ultra, Canvas and Moodle previews at Expressive and fails if an entrance, a card's hover lift or a loading pulse runs on the main thread instead of the compositor (a finished entrance that animates `transform` does that to the hover for the life of the page: entrances use `translate` and `scale`). It also checks that a Glaze dialog stays up while it fades out on closing. Paint-only effects are listed in the receipt but allowed.
 The check explicitly exercises positioned panel/tooltip and Look entrances and Moodle's loading pulse, requires their trace records, and retains failures even if a later sample recovers. It also checks final placement and instant dialogs with motion Off or transitions disabled. This Chromium check does not establish native Firefox or Safari behavior.

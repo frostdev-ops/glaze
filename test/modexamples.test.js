@@ -131,7 +131,7 @@ const run = async (name, { local = {}, grants = {}, events = [] } = {}) => {
   });
   let turn = Promise.resolve();
   const env = { site: SITE, local: l, sync: area({}), fetch: async () => { throw new Error('no network'); }, queue: (f) => (turn = turn.then(f, f)), keys: async () => Object.keys(l.data),
-    record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`], blocklist: async () => null };
+    record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`], blocklist: async () => null, account: async () => '5' };
   const heard = [], listeners = [];
   const port = {
     addEventListener: (t, f) => listeners.push(f), start() {},

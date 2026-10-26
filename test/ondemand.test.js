@@ -210,7 +210,9 @@ for (const gone of Object.keys(AFTER)) {
       document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => null, querySelectorAll: () => [],
         body: {}, createTreeWalker: () => ({ nextNode: () => null }) }, // the page's text, where a sent post would show: none here
       NodeFilter: { SHOW_ELEMENT: 1, SHOW_TEXT: 4 },
-      chrome: { storage: { local: { set: (v) => saved.push(v), get: (k, cb) => cb({}), remove() {} } } },
+      // What is kept: written here, or (as it is now) sent to the worker's queue for it to write.
+      chrome: { storage: { local: { set: (v, cb) => { cb?.(); }, get: (k, cb) => cb({}), remove() {} } },
+        runtime: { sendMessage: (m, cb) => { if (m.put) saved.push({ [m.key]: m.put }); Promise.resolve().then(() => cb?.({ ok: true, copies: [] })); } } },
       need: (file) => (loads.find((l) => l.file === file) || loads[loads.push({ file, p: later() }) - 1]).p, // one request a file, as need() does
       setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, window: {}, globalThis: null,
     });
@@ -464,7 +466,9 @@ for (const gone of ['never', 'before the files arrive', 'while the account is as
     const ctx = vm.createContext({ solo: false, tabFrame: '',
       ultra: false, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/conversations', origin: 'https://school.test' },
       document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: (s) => (s === SEL ? editor : null), querySelectorAll: () => [] },
-      chrome: { storage: { local: { set: (v) => saved.push(v), get: (k, cb) => cb({}), remove() {} } } },
+      // What is kept: written here, or (as it is now) sent to the worker's queue for it to write.
+      chrome: { storage: { local: { set: (v, cb) => { cb?.(); }, get: (k, cb) => cb({}), remove() {} } },
+        runtime: { sendMessage: (m, cb) => { if (m.put) saved.push({ [m.key]: m.put }); Promise.resolve().then(() => cb?.({ ok: true, copies: [] })); } } },
       need: (file) => { const p = later(); loads.push({ file, p }); return p; },
       setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, Promise, window: {}, globalThis: null,
     });

@@ -49,7 +49,7 @@ const fs = require('fs');
 const path = require('path');
 const [file, background, popup, development, branch, commit, dirty] = process.argv.slice(2);
 const m = JSON.parse(fs.readFileSync(file, 'utf8'));
-if (development === 'true') m.name = `${m.name} (Firefox development)`;
+if (development === 'true') m.name = `${m.short_name} (Firefox development)`;
 fs.writeFileSync(path.join(path.dirname(file), 'glaze-build.json'), JSON.stringify({ target: 'firefox', development: development === 'true', branch, commit, dirty: dirty === 'true' }, null, 2) + '\n');
 // Every importScripts call in the worker, in order, as paths from the package root.
 const imports = [...fs.readFileSync(background, 'utf8').matchAll(/importScripts\(([^)]*)\)/g)]

@@ -233,15 +233,26 @@ test('numbers and percentages in the language', () => {
   assert.equal(I.num(18.5, 'fr'), '18,5');
 });
 
-test('the manifest description is localized and fits the stores', () => {
+// The stores take the name and summary from the manifest. The name says what Glaze is for ("for Canvas, Blackboard & Moodle"),
+// never that it belongs to them; toolbars and menus show the short name.
+test('the manifest name and description are localized and fit the stores', () => {
   const m = require('../manifest.json');
+  assert.equal(m.name, '__MSG_name__');
+  assert.equal(m.default_locale, 'en');
+  assert.equal(m.short_name, 'Glaze');
+  assert.equal(m.action.default_title, 'Glaze');
   assert.equal(m.description, '__MSG_description__');
-  assert.equal(m.name, 'Glaze');
   const dirs = fs.readdirSync(path.join(root, '_locales')).sort();
   assert.deepEqual(dirs, ['de', 'en', 'es', 'fr', 'nl', 'pt_BR']);
+  const FOR = { de: 'für', es: 'para', fr: 'pour', nl: 'voor', pt_BR: 'para' };
   for (const d of dirs) {
     const msgs = JSON.parse(read(`_locales/${d}/messages.json`));
-    assert.deepEqual(Object.keys(msgs), ['description'], d);
+    assert.deepEqual(Object.keys(msgs), ['name', 'description'], d);
+    const name = msgs.name.message;
+    assert.ok(name.length <= 75, `${d}: Chrome Web Store allows 75 characters in a name (${name.length})`);
+    assert.match(name, /^Glaze ?: /, d);
+    for (const site of ['Canvas', 'Blackboard', 'Moodle']) assert.ok(name.includes(site), `${d}: ${site}`);
+    assert.ok(name.split(' ').includes(FOR[d] || 'for'), `${d}: "${FOR[d] || 'for'}" keeps the sites as what Glaze works with`);
     assert.ok(msgs.description.message.length <= 132, `${d}: Chrome Web Store allows 132 characters`);
   }
 });
@@ -260,5 +271,5 @@ test('widget labels distinguish the 4.0 GPA from an ordinary grade average', () 
     assert.match(cat['Grades — shows your grades and GPA, on this device only.'], /GPA/);
   }
   assert.equal(LANGS.nl['Today’s to-dos by time'], 'Taken van vandaag, gesorteerd op tijd');
-  assert.ok(LANGS.nl['Your widgets are signed with it, and only it can update them for people you shared them with. Keep a backup: a lost key means no more updates.'].includes('alleen daarmee'));
+  assert.match(LANGS.nl['Only this key can update the widgets you share; keep a backup of it.'], /alleen/);
 });

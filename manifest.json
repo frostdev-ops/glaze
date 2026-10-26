@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Glaze",
-  "version": "3.3.8",
+  "name": "__MSG_name__",
+  "short_name": "Glaze",
+  "version": "3.4.3",
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [

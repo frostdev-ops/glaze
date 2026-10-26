@@ -352,8 +352,9 @@ html[data-gz-nav-size="large"] { --gz-nav-wide: 100px; --gz-nav-narrow: 64px; --
   html[data-gz-nav-size] body:not(.primary-nav-expanded) { --gz-nav-width: var(--gz-nav-narrow); }
   html[data-gz-nav-collapsed] body { --gz-nav-width: var(--gz-nav-narrow) !important; }
   html[data-gz-nav-size] body:not(.hide-global-nav) #header { width: var(--gz-nav-width); }
-  html[data-gz-nav-size] body:not(.hide-global-nav) #wrapper,
-  html[data-gz-nav-size] body:not(.hide-global-nav) .tray-with-space-for-global-nav { margin-inline-start: var(--gz-nav-width); }
+  html[data-gz-nav-size] body:not(.hide-global-nav) #wrapper { margin-inline-start: var(--gz-nav-width); }
+  /* Under Glaze navigation Canvas's trays keep Canvas's own room: the rail they'd make room for is hidden. */
+  html[data-gz-nav-size]:not([data-gz-navbar]) body:not(.hide-global-nav) .tray-with-space-for-global-nav { margin-inline-start: var(--gz-nav-width); }
   html[data-gz-nav-size] #header .menu-item-icon-container :is(svg, .ic-avatar) { width: var(--gz-nav-icon); height: var(--gz-nav-icon); }
   html[data-gz-nav-labels="small"] #header .menu-item__text { display: block; font-size: 10px; line-height: 1.2; }
   html:is([data-gz-nav-collapsed], [data-gz-nav-labels="icons"]) #header .menu-item__text {

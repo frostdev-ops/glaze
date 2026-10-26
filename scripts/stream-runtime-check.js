@@ -32,6 +32,9 @@ const findNode = (node, match) => match(node) ? node : [...(node.children || [])
     const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['keys', 'palette'].includes(k)])) });
     await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
     const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`chrome-extension://${id}/popup.html`);
+    await worker.evaluate(() => queue);
+    await require('./check-env.js').ultraReady(page);
     await page.goto(`${site}/ultra/stream`);
     await page.waitForSelector('#gz-stream-settings');
     await page.waitForFunction(() => document.querySelector('#deadline .gz-stream-date .date')?.textContent === 'Due Oct 25');
@@ -62,7 +65,7 @@ const findNode = (node, match) => match(node) ? node : [...(node.children || [])
     await options.goto(`chrome-extension://${id}/options.html#blackboard/stream`);
     await options.waitForFunction(() => document.getElementById('preview')?.contentDocument?.documentElement.dataset.previewReady === 'true');
     await options.locator('#enabled').check();
-    const preview = options.frames().find((f) => f.url().includes('/preview.html'));
+    const preview = options.frames().find((f) => f.url().includes('/preview.html') && !f.url().includes('backdrop'));
     await preview.waitForFunction(() => document.documentElement.dataset.previewPage === 'stream');
     check(await options.locator('#preview-page').inputValue() === 'stream' && await preview.locator('[data-preview-view=stream]').isVisible(), 'Glaze settings open the Activity Stream preview');
     await preview.waitForSelector('.gz-stream-date');

@@ -67,6 +67,8 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.evaluate(() => { document.querySelector('aside.outline-actions').remove(); GZ_SIDEBAR_UI.sync(true); });
     await page.waitForSelector('#gz-sidebar');
     check(await page.evaluate(() => Math.abs(document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left - document.querySelector('#main-end').getBoundingClientRect().right - 16) < 1), 'missing native host reserves the width once, without a second blank column');
+    await page.evaluate(() => document.documentElement.setAttribute('data-gz-sidebar', 'collapsed'));
+    check(await page.evaluate(() => Math.abs(document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left - document.querySelector('#main-end').getBoundingClientRect().right - 16) < 1), 'missing native host reserves its collapsed width once');
     await page.evaluate(() => {
       const inner = document.querySelector('#main-content-inner'); inner.removeAttribute('id');
       inner.className = 'routed-page bb-offcanvas-container';
@@ -153,6 +155,26 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         return { mode: document.documentElement.dataset.gzSidebar, left: h.left, tools: r('tools-end'), pager: r('pager-end'), list: r('main-end') }; });
       check(c.mode !== 'expanded' || [c.tools, c.pager, c.list].every((x) => x <= c.left - 16 + 1), `courses ${width} @${w}: ${c.mode}; header tools, list and pager clear of the column (${Math.round(c.tools)}, ${Math.round(c.pager)}, ${Math.round(c.list)} / ${Math.round(c.left)})`);
       if (width === 1800 && w === 480) await shot('p6-ultra-courses-header');
+    }
+    // Course tabs above the Courses page (features/coursetabs.js: first in #main-content-inner) keep the page's room, so
+    // they never cover the column's header.
+    for (const dir of ['ltr', 'rtl']) for (const mode of ['expanded', 'collapsed']) {
+      await page.setViewportSize({ width: 1600, height: 900 });
+      await setup('courses');
+      await page.addStyleTag({ path: path.join(root, 'features/coursetabs.css') });
+      const g = await page.evaluate(({ dir, mode }) => {
+        const h = document.documentElement;
+        h.dir = dir; h.setAttribute('data-gz-ctabs', 'page');
+        if (mode === 'collapsed') h.setAttribute('data-gz-sidebar', 'collapsed');
+        const strip = document.createElement('div'); strip.id = 'gz-ctabs'; strip.dataset.at = 'page';
+        strip.innerHTML = '<div class="gz-ctabs-list" role="tablist"><div class="gz-ctab" role="tab" aria-selected="true">Course</div></div>';
+        document.getElementById('main-content-inner').prepend(strip);
+        const host = document.querySelector('[data-gz-sidebar-host]'), c = host.getBoundingClientRect(), s = strip.getBoundingClientRect();
+        return { mode: h.dataset.gzSidebar, strip: [Math.round(s.left), Math.round(s.right)], column: [Math.round(c.left), Math.round(c.right)],
+          clear: dir === 'rtl' ? s.left >= c.right + 16 - 1 : s.right <= c.left - 16 + 1, head: host.contains(document.elementFromPoint((c.left + c.right) / 2, c.top + 4)) };
+      }, { dir, mode });
+      check(g.mode === mode && g.clear && g.head, `courses ${dir} ${mode}: course tabs above the page keep clear of the column and its header (${JSON.stringify(g)})`);
+      if (dir === 'ltr' && mode === 'expanded') await shot('courses-ctabs-column');
     }
     await page.setViewportSize({ width: 1600, height: 900 });
     const LOOK = { dark: '--gz-surface:#0d1b2e;--gz-surface-2:#060d18;--gz-ink:#e8f2fa;--gz-ink-muted:#8fa8c0;--gz-line:#16283f;--gz-line-strong:#24405f;--gz-accent:#17c8f4;--gz-accent-ink:#04121f;--gz-accent-soft:#082f49',
@@ -369,7 +391,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.emulateMedia({ media: 'screen' });
     for (const style of ['float', 'embed']) for (const width of [1800, 1468, 1479, 1480, 1440, 1280]) for (const w of [352, 480]) {
       await live('gradebook', { style, width, w });
-      const g = await page.evaluate(() => { const h = document.querySelector('[data-gz-sidebar-host]'), r = h.getBoundingClientRect(), tb = document.getElementById('course-student-grades-sortable-table').getBoundingClientRect(); return { mode: document.documentElement.dataset.gzSidebar, family: document.documentElement.dataset.gzSbFamily, hostLeft: r.left, tableRight: tb.right, panel: (() => { const p = document.querySelector('.course-content-container > .panel-wrap').getBoundingClientRect(); return { right: p.right, width: p.width }; })() }; });
+      const g = await page.evaluate(() => { const h = document.querySelector('[data-gz-sidebar-host]'), r = h.getBoundingClientRect(), tb = document.getElementById('course-student-grades-sortable-table').getBoundingClientRect(); return { mode: document.documentElement.dataset.gzSidebar, family: document.documentElement.dataset.gzSbFamily, hostLeft: r.left, tableRight: tb.right, panel: (() => { const el = document.querySelector('.course-content-container > .panel-wrap'), p = el.getBoundingClientRect(), padding = parseFloat(getComputedStyle(el).paddingInlineEnd); return { right: p.right - padding, width: p.width - padding }; })() }; });
       check(g.family === 'grades', `gradebook ${style} ${width} @${w}: the grades family`);
       check(g.mode === 'drawer' || g.tableRight <= g.hostLeft - 16 + 1, `gradebook ${style} ${width} @${w}: ${g.mode}, the table ends at the sidebar's edge less the gap (${Math.round(g.tableRight)} / ${Math.round(g.hostLeft)})`);
       check(g.mode !== 'expanded' || Math.abs(g.hostLeft - g.panel.right - 16) <= 1 && g.panel.width >= 900, `gradebook ${style} ${width} @${w}: exactly one reserved column and at least 900px of usable panel (${Math.round(g.panel.width)}px)`);
@@ -387,7 +409,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         GZ_SIDEBAR_UI.sync(true);
       }, tool);
       await page.waitForTimeout(100);
-      check(await page.evaluate(() => Math.abs(document.querySelector('.course-content-container > .panel-wrap').getBoundingClientRect().right + 16 - document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left) <= 1), `${tool}: the course tool panel keeps the sidebar's gap`);
+      check(await page.evaluate(() => { const panel = document.querySelector('.course-content-container > .panel-wrap'); return Math.abs(panel.getBoundingClientRect().right - parseFloat(getComputedStyle(panel).paddingInlineEnd) + 16 - document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left) <= 1; }), `${tool}: the course tool content keeps the sidebar's gap`);
     }
     await require('./ultra-offcanvas-fixture.js')({ page, root, check, shot });
     console.log(JSON.stringify({ checks, fails }));

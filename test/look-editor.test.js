@@ -37,6 +37,29 @@ const loadUi = (extra = {}) => {
 };
 const UI = loadUi();
 
+test('course-tab navigation warning follows placement changes without repainting navigation', () => {
+  require('../lib/coursetabs.js');
+  const s = D.GZ_SANITIZE({ navbar: { on: false, tabs: false } }), controls = new Map();
+  const $ = (key) => {
+    if (!controls.has(key)) controls.set(key, { hidden: false, dataset: {}, style: {}, textContent: '', classList: { remove() {} } });
+    return controls.get(key);
+  };
+  const context = vm.createContext({ s, offer: null, $, $$: () => [], activeColors: () => s.colors, GZ_CARDS: K, t: say });
+  const source = between(options, '  let navPick =', "  $('#nav-pick').addEventListener");
+  vm.runInContext(`${source}; globalThis.render = renderNav;`, context);
+  const note = $('#tabs [data-tabs-nav-note]');
+  context.render();
+  assert.equal(note.hidden, true);
+  s.tabs.at = 'nav'; context.render();
+  assert.equal(note.hidden, false, 'Only in the navigation warns even when the navigation paint is cached');
+  s.tabs.at = 'auto'; context.render();
+  assert.equal(note.hidden, true, 'Automatic clears the warning');
+  s.tabs.at = 'nav'; s.navbar.on = true; context.render();
+  assert.equal(note.hidden, false, 'disabled navbar tabs still warn');
+  s.navbar.tabs = true; context.render();
+  assert.equal(note.hidden, true, 'enabled navbar tabs need no warning');
+});
+
 // ---- LOOK-2: "Use this theme" ------------------------------------------------------------------------------------------
 // The code, previewed by tryCode and then applied by the "Use this theme" handler, both as options.js has them.
 const use = async (code, s = D.GZ_SANITIZE({}), answer = () => true) => {
@@ -126,7 +149,7 @@ const refreshed = (s, extra = {}) => {
   const source = between(options, '  const refresh = () => {', '  // Puts every control back in line');
   const context = vm.createContext({
     s, offer: null, GZ_UI: { paint() {}, looks: (box, v, cb) => { picks.look = cb; }, swatches: (box, v, cb) => { picks.swatch = cb; }, pickLook: UI.pickLook, pickPreset: UI.pickPreset },
-    $: element, $$: () => [], get: () => 0, finder: { value: '' }, preview() {}, renderContrast() {}, renderMine() {}, renderHistory() {}, renderExtras() {}, renderBg() {}, renderNav() {},
+    $: element, $$: () => [], get: () => 0, finder: { value: '' }, preview() {}, renderContrast() {}, renderMine() {}, renderHistory() {}, renderExtras() {}, renderBg() {}, renderNav() {}, showResets() {},
     navbarEditor: null, presetOptions() {}, outputs() {}, GZ_EDITOR_X: { render() {} }, GZ_XEDIT: { render() {} }, document: { body: { classList: { toggle() {} } } },
     save: (keys) => { saved.push(keys); log.push('save'); }, fill: () => log.push('fill'), hint: (...a) => { hints.push(a); log.push('hint'); }, t: say,
     leaving: () => { log.push('leaving'); return extra.undo ?? null; }, ...extra.context,
@@ -461,9 +484,9 @@ test('LOOK-10: a slider tick that changes nothing History shows does not redraw 
 const html = read('options.html');
 const sectionOf = (route) => html.match(new RegExp(`<section[^>]*data-editor-section="${route}"[^>]*>([\\s\\S]*?)</section>`))[1];
 
-test('LOOK-13: the Look tab’s section links reach "This Look’s navigation" and "Page tweaks", which have a path and a Reset like the rest', () => {
-  const nav = html.match(/<div id="panel-look"[^>]*><nav class="section-links"[^>]*>([\s\S]*?)<\/nav>/)[1];
-  const links = [...nav.matchAll(/<a href="#([^"]+)" data-editor-alias>([^<]+)<\/a>/g)].map((m) => [m[1], m[2]]);
+test('LOOK-13: the Look category’s section links reach "This Look’s navigation" and "Page tweaks", which have a path and a Reset like the rest', () => {
+  const nav = html.match(/<div data-editor-jumps="look"[^>]*>([\s\S]*?)<\/div>/)[1];
+  const links = [...nav.matchAll(/<a href="#([^"]+)" data-editor-jump>([^<]+)<\/a>/g)].map((m) => [m[1], m[2]]);
   assert.ok(links.some(([h, w]) => h === 'look/nav-layout' && w === "This Look's navigation"), JSON.stringify(links));
   assert.ok(links.some(([h, w]) => h === 'look/rules' && w === 'Page tweaks'));
   // In the order the sections are in.
@@ -540,4 +563,52 @@ test('review: a cancelled Look offer stays cancelled when its host permission an
   assert.equal(r.s.bg.kind, 'solid');
   assert.equal(r.saved.length, 0);
   assert.equal(r.history(), 0);
+});
+
+test('the settings page keeps its surfaces readable over the Look\'s background: the Look\'s opacity, raised only as far as text needs', () => {
+  const look = (over) => D.GZ_SANITIZE({ ...over });
+  assert.equal(UI.readable(look({ bg: { kind: 'solid' } }), D.GZ_ACTIVE_COLORS(look({}), false)), 100, 'a solid page has opaque surfaces');
+  assert.equal(UI.readable(look({ look: { glass: 0 }, bg: { kind: 'gradient' } }), D.GZ_ACTIVE_COLORS(look({}), false)), 100, 'no blur, opaque');
+  // Frost's dark surfaces over a near-white gradient seen through little dim: 88% would leave muted text short of 4.5:1.
+  const bright = look({ bg: { kind: 'gradient', colors: ['#ffffff', '#fffde7', '#f0f9ff'], dim: 0 }, look: { surfaceOpacity: 40 } });
+  const colors = D.GZ_ACTIVE_COLORS(bright, false), o = UI.readable(bright, colors);
+  assert.ok(o > 40 && o <= 100, `raised to ${o}`);
+  const at = (op) => D.GZ_CONTRAST(colors).filter(({ fg, bg, min }) => ['--gz-surface', '--gz-surface-2'].includes(bg) && C.contrast(colors[fg], colors['--gz-surface']) >= min)
+    .every(({ fg, min }) => ['#ffffff', '#fffde7', '#f0f9ff'].every((u) => { const a = C.parse(u), p = C.parse(colors['--gz-surface']), t = op / 100; return C.contrast(colors[fg], C.hex({ r: a.r + (p.r - a.r) * t, g: a.g + (p.g - a.g) * t, b: a.b + (p.b - a.b) * t })) >= min; }));
+  assert.ok(at(o) && (o === 40 || !at(o - 2)), 'the least opacity that passes');
+  // A background the colour of the ground keeps the Look's own translucency.
+  const calm = look({ bg: { kind: 'gradient', colors: [colors['--gz-surface-2'], colors['--gz-surface-2'], colors['--gz-surface-2']] } });
+  assert.equal(UI.readable(calm, D.GZ_ACTIVE_COLORS(calm, false)), 88);
+});
+
+test('settings contrast covers bright scene pixels at the renderer\'s intensity and both surface fills', () => {
+  const mix = (a, b, weight) => Object.fromEntries(['r', 'g', 'b'].map((k) => [k, a[k] + (b[k] - a[k]) * weight]));
+  for (const preset of ['Frost', 'Paper']) for (const kind of ['scene', 'shader', 'layers', 'media']) for (const intensity of [0, 50, 100]) {
+    const s = D.GZ_SANITIZE({ colors: D.GZ_PRESET(preset), bg: { kind, intensity }, look: { surfaceOpacity: 20, surfaceTint: 5 } });
+    const colors = D.GZ_ACTIVE_COLORS(s, false), opacity = UI.readable(s, colors) / 100;
+    // Shaders and layer stacks can emit white or black regardless of the chosen background colors.
+    for (const row of D.GZ_CONTRAST(colors).filter((r) => ['--gz-surface', '--gz-surface-2'].includes(r.bg))) {
+      const base = C.parse(colors[row.bg]), paint = mix(base, C.parse(colors['--gz-accent']), .05);
+      if (C.contrast(colors[row.fg], C.hex(paint)) < row.min) continue;
+      for (const pixel of ['#ffffff', '#000000']) {
+        const under = mix(C.parse(pixel), C.parse(colors['--gz-surface-2']), D.GZ_SCENE_LOOK(intensity).dim);
+        const ratio = C.contrast(colors[row.fg], C.hex(mix(under, paint, opacity)));
+        assert.ok(ratio >= row.min, `${preset} ${kind} ${intensity} ${row.fg}/${row.bg} over ${pixel}: ${ratio} < ${row.min} at ${opacity}`);
+      }
+    }
+  }
+});
+
+test('the settings page wears the Look: its background from the preview\'s own painter, the Look on offer while previewed', () => {
+  const page = read('options.html'), js = read('options.js'), runtime = read('lib/editor-preview.js');
+  assert.match(page, /<iframe id="backdrop" src="preview\.html\?site=canvas&amp;backdrop" aria-hidden="true" tabindex="-1" inert><\/iframe>/);
+  assert.match(page, /#backdrop \{ position: fixed; inset: 0;[^}]*z-index: -1; pointer-events: none; \}/);
+  assert.match(js, /const paintBackdrop = \(\) => backdrop\.contentWindow\?\.postMessage\(\{ gzPreview: offer \|\| s, gzPreviewParts: \(offer \|\| s\)\.parts \?\? null \}, location\.origin\);/);
+  assert.match(js.slice(js.indexOf('  const preview = () => {'), js.indexOf('\n  const contextPreview =')), /paintBackdrop\(\);/, 'every repaint of the preview repaints the page');
+  assert.ok((js.match(/GZ_UI\.paint\((?:s|offer), \{ page: true \}\)/g) || []).length === 3, 'the page paints the Look worn, an offer, and back');
+  // In the frame: the Canvas mock's own background painter and scene, none of the mock, its features or its sidebar.
+  assert.match(runtime, /const site = backdrop \? 'canvas'/);
+  assert.match(runtime, /if \(!backdrop\) for \(const file of \['lib\/lookx\.js'/);
+  assert.match(runtime, /if \(site === 'canvas' && !backdrop\) sidebar\(s\);/);
+  assert.match(runtime, /body > :not\(#gz-scene\) \{ visibility: hidden !important; \}/);
 });

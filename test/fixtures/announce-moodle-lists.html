@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+  A synthetic Moodle page with the two lists of a course's Announcements forum (its news forum) that Glaze's pop-up
+  takes over, built from Moodle's own templates (~/Projects/moodle-dev/moodle, 5.x): the Latest announcements block
+  (blocks/news_items/block_news_items.php in core/block's section[data-block]) and the forum's discussion list
+  (mod/forum/templates/discussion_list.mustache, which news_discussion_list extends; view.php adds body.forumtype-news).
+  Everything in it is invented. A harness serves it as /course/view.php?id=16 and /mod/forum/view.php?id=40.
+-->
+<html dir="ltr" lang="en"><head>
+<meta charset="utf-8">
+<title>BIO 1100: Announcements</title>
+<meta name="keywords" content="moodle, BIO 1100: Announcements">
+<style>
+  body { margin: 0; font: 14px/1.4 sans-serif; }
+  #page { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; padding: 24px; max-width: 1200px; }
+  table { border-collapse: collapse; width: 100%; } th, td { padding: 8px; border-bottom: 1px solid #ccc; text-align: start; }
+  .unlist { list-style: none; padding: 0; } .post { margin-bottom: 12px; } .card { border: 1px solid #ccc; border-radius: 6px; }
+</style>
+</head><body id="page-mod-forum-view" class="path-mod path-mod-forum forumtype-news course-16 context-160 pagelayout-incourse">
+<div id="page">
+<div id="region-main">
+<h2>Announcements</h2>
+<div id="discussion-list-0" data-region="discussion-list-container" data-contextid="160" data-cmid="40" data-name="Announcements" data-content="discussion-list">
+<table class="table discussion-list"><caption class="visually-hidden">List of discussions.</caption>
+<tbody>
+<tr class="discussion hasunread" data-region="discussion-list-item" data-discussionid="12" data-forumid="5"><td class="p-0 text-center align-middle icon-no-margin" style="width: 1px;"></td><th scope="row" class="topic p-0 align-middle"><div class="p-3 ps-0"><div class="d-flex"><a class="w-100 h-100 d-block" href="/mod/forum/discuss.php?d=12" title="Lab moved to room 2" aria-label="Lab moved to room 2">Lab moved to room 2</a></div></div></th><td class="author align-middle fit-content limit-width px-3"><div class="d-flex"><div class="author-info align-middle"><div class="mb-1 line-height-3 text-truncate">Ana Rivera</div><div class="line-height-3"><time id="time-created-12" class="" datetime="2026-10-21T13:55:00+00:00" data-timestamp="1792504500" data-datetimeformat="%Y-%m-%dT%H:%M%z">21 Oct</time></div></div></div></td><td class="text-start align-middle fit-content limit-width px-3"><div class="d-flex"><div class="author-info align-middle"><div class="mb-1 line-height-3 text-truncate">Ana Rivera</div><div class="line-height-3"><a href="/mod/forum/discuss.php?d=12&amp;parent=31" title="Tuesday, 21 October 2026, 1:55 PM">21 Oct</a></div></div></div></td></tr>
+<tr class="discussion" data-region="discussion-list-item" data-discussionid="13" data-forumid="5"><td class="p-0 text-center align-middle icon-no-margin" style="width: 1px;"></td><th scope="row" class="topic p-0 align-middle"><div class="p-3 ps-0"><div class="d-flex"><a class="w-100 h-100 d-block" href="/mod/forum/discuss.php?d=13" title="Exam seating plan" aria-label="Exam seating plan">Exam seating plan</a></div></div></th><td class="author align-middle fit-content limit-width px-3"><div class="d-flex"><div class="author-info align-middle"><div class="mb-1 line-height-3 text-truncate">Ana Rivera</div><div class="line-height-3"><time id="time-created-13" class="" datetime="2026-10-14T09:00:00+00:00" data-timestamp="1791968400" data-datetimeformat="%Y-%m-%dT%H:%M%z">14 Oct</time></div></div></div></td><td></td></tr>
+</tbody></table>
+</div>
+</div>
+<aside id="block-region-side-pre" class="block-region" data-blockregion="side-pre">
+<section id="inst9" class=" block_news_items block  card mb-3" role="region" data-block="news_items" data-instance-id="9" aria-labelledby="instance-9-header"><div class="card-body p-3"><div class="block-header d-flex"><h3 id="instance-9-header" class="h5 card-title">Latest announcements</h3></div><div class="card-text content mt-3">
+<ul class='unlist'>
+<li class="post"><div class="head clearfix"><div class="date">21 Oct, 13:55</div><div class="name">Ana Rivera</div></div><div class="info"><a href="/mod/forum/discuss.php?d=12">Lab moved to room 2</a></div></li>
+<li class="post"><div class="head clearfix"><div class="date">14 Oct, 09:00</div><div class="name">Ana Rivera</div></div><div class="info"><a href="/mod/forum/discuss.php?d=13">Exam seating plan</a></div></li>
+</ul>
+<div class="footer"><div class="newlink"><a href="/mod/forum/post.php?forum=5">Add a new topic...</a></div><div class="oldlink"><a href="/mod/forum/view.php?f=5&amp;showall=1">Older topics...</a></div></div>
+</div></div></section>
+</aside>
+</div>
+<div class="logininfo">You are logged in as <a href="/user/profile.php?id=3">Sam Taylor</a> (<a href="/login/logout.php?sesskey=fixturekey">Log out</a>)</div>
+</body></html>

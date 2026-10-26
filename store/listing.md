@@ -1,12 +1,12 @@
-# Chrome Web Store listing — Glaze 3.3.8
+# Chrome Web Store listing — Glaze 3.4.3
 
 ## Name
 
-Glaze
+Glaze: Themes for Canvas, Blackboard & Moodle
 
 ## Short summary (132 character maximum)
 
-Restyle Blackboard Ultra, Canvas and Moodle with your own look and navigation, plus a better To Do, widgets and study tools.
+Canvas, Blackboard & Moodle themes and dark mode. Planner, GPA and notes on Canvas & Blackboard.
 
 ## Category
 
@@ -14,118 +14,70 @@ Productivity
 
 ## Detailed description
 
-Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain once you allow it. No account, no analytics. Your courses, grades, notes and tasks stay on your device; your settings follow your browser's sync if it is on; sharing is optional and encrypted.
-
-NEW IN 3.3.8
-
-• Frostdev, a new Look: a living topography in cut-ice light that tilts with your pointer, with its own pointers and contour effects.
-• Glaze's own parts move: course tabs, widgets, to-dos and folders glide to their new places, and changing a palette or Look crossfades.
-• Blackboard: the course tab strip and the course and item headers float as glass, and tool pages like Gradebook use the full width.
-• Blackboard: one continuous background behind course tabs, with no seam, even with an item open.
-• Blackboard: closing an announcement in a course tab returns to the course, and tabs can be switched while one is still loading.
-• Blackboard: What-if grades load reliably in course tabs and show category names.
-
-FROM 3.3.6
-
-• Every built-in Look has its own pointer, an animation around it, a typing effect and its own effects for finishing work, grades and streaks.
-• Typing effects: small particles at the caret as you type. They never read what you type and never appear in password or card fields, on quizzes or with motion off.
-• Look › Pointer: keep the Look's pointer, use the system pointer, pick any of Glaze's pointers or a picture of your own, and turn the pointer animation on or off.
-• Safari: Settings inside a course page no longer opens blank, and Look animations and effects load on course pages again.
-• A course tab's animated background no longer gets stuck on its blurred stand-in.
-• Blackboard: an announcement opened in a course tab shows there, instead of a "We can't find that page" error.
-
-FROM 3.3
-
-• Glaze navigation on Blackboard Ultra, Canvas and Moodle, on by default: a side rail or a top bar in place of the site's own, floating or embedded, and a bottom bar on phones. Rename, reorder, hide or add items (up to eight links of your own), choose your four phone tabs, and keep course tabs in it. Turn it off and the site's own comes back.
-• A sidebar on Canvas and Blackboard Ultra: the page's own sidebar and the widgets you dock under it, in one column on wide windows and a drawer on narrow ones.
-• Course tabs on Canvas too, each course a live page of its own, and hide modules you don't use, as you can hide folders on Blackboard.
-• Document review on submitted-work pages: compact headers, expandable feedback, full screen and document focus. Pages you can edit stay as the site made them.
-• New installs start with a Dashboard of a pet habitat, focus timer, notes, quotes and your course cards, and Glaze settings in the bar. Saved layouts and removals stay as you chose. Canvas course cards can be widgets too.
-• Settings open as a page of your school's site, with a live preview.
-
-FROM 3.0.4
-
-• Mods: add backgrounds, animations, widgets, nav layouts and page tweaks others have made, from a code, a link, a file or the gallery. Each mod shows what it reads and why before you add it, and runs sandboxed.
-• Build your own dashboard or rail widget with no code.
-• Looks can have a looping video, animated picture or Lottie animation as their background.
-
-FROM 3.0
-
-• Blackboard Ultra gets a Glaze Dashboard and widgets you place anywhere: Better To Do, notes, an agenda, a focus timer, and your course cards as widgets you can move, resize and fold.
-• Course tabs on Blackboard: every course you open gets a tab, as in a browser. Up to four stay live, so a tab comes back exactly as you left it: the open page, what you typed and where you scrolled.
-• Search inside your courses with Ctrl+K (⌘K on a Mac), and hide folders you don't use.
-• Moodle: the same Looks, plus your course total on each course card, what's due this week and keyboard shortcuts.
-• A settings editor in ten tabs, with search and a live preview at desktop or phone widths.
+Give Canvas, Blackboard Ultra and Moodle your own theme and dark mode. On Canvas and Blackboard Ultra, Glaze adds a student planner, to-do list, GPA calculator and notes. Free, with no Glaze account, ads or analytics.
 
 YOUR LOOK
 
-• Pick a palette, edit all fourteen colors, save your own palettes, or pair light and dark palettes with your system's appearance or a schedule.
-• Choose fonts for text, headings and code, including Lexend and OpenDyslexic, about forty more, or any Google Font by name. Adjust text size, line height, spacing, rounded corners, depth and frosted glass.
-• Use a solid background, a linear, radial, conic or mesh gradient, an aurora, your own image link, or one of eleven animated scenes. One Intensity slider sets how much a scene stands out.
-• Apply one of eleven Looks: a matching palette, fonts, shape and background in one click, including the Halloween Looks Graveyard and Pumpkin Patch. Share a Look as a one-line theme code that previews before it applies, or browse free Looks at frostdev.io/glaze/looks.
-• Give a course its own color, tint or Look. Style course cards with a color, gradient or picture, and add bookmarks to them.
-• Place stickers on course pages, pick a pointer set, or let Glaze rotate through your favorite Looks.
-• Choose Off, Subtle or Expressive motion. Glaze follows your reduced-motion setting by default, and animated scenes pause in background tabs.
+• Apply one of eleven Looks, or get free ones at frostdev.io/glaze/looks.
+• Dark mode: pair a light and a dark palette with your system's appearance or a schedule.
+• Custom colors and fonts: edit all fourteen colors, give each course its own color, and pick Lexend, OpenDyslexic or any Google Font.
+• Backgrounds: a gradient, your own picture or one of eleven animated scenes.
+• Pointers in Look › Pointer, and typing effects that never read what you type and stay out of password fields and quizzes.
+• Glaze navigation, and Ctrl+K (⌘K on a Mac) to jump to any course, page or setting.
 
-PLAN AND STUDY ON BLACKBOARD ULTRA AND CANVAS
+PLAN AND STUDY ON CANVAS AND BLACKBOARD ULTRA
 
-• Better To Do (on by default): your work by day (past due, today, tomorrow, this week, later), with your own tasks, steps, "do on" days and focus sessions.
-• Tasks on course cards, due-date reminders inside the page (never browser notifications) and an optional streak, each off until you turn it on.
-• Export your deadlines and plans as a calendar file (.ics) for Google Calendar, Outlook or Apple Calendar.
-• Import your class schedule or a course syllabus from a PDF, photo, Word file, web page or pasted text. Glaze reads it on your device and shows everything for you to check before it keeps anything.
-• Notes with folders, rich text, pictures and attachments. Widgets: an agenda, a focus timer, quotes, music, a breathing exercise and a study buddy. Insights on your term (off until you turn it on), and a pet habitat. New installs start with notes, the pet and a few widgets on; existing choices stay.
-• Gradescope assignments in Better To Do, if you turn it on.
+• Better To Do: coursework grouped by due date, with your own tasks and focus sessions.
+• Announcements open in a Glaze pop-up from Better To Do or Ctrl+K on Canvas and Blackboard Ultra, and from the sites' own lists, including Moodle. Hover to preview in Better To Do and those lists.
+• Due-date reminders in the page, never browser notifications, off until you turn them on.
+• Import your class schedule or a syllabus from a PDF or photo, read on your device, and export deadlines as a calendar file (.ics).
+• Notes with folders and attachments, a focus timer and a pet habitat.
+• Course tabs keep up to 4 course pages live alongside the main page.
 
-EXTRAS ON BLACKBOARD ULTRA
+CANVAS
 
-• Course Content: due-date status such as “in 2 days · Unopened”, “Submitted”, “Submitted late” and “Graded · 18/20”; closed-folder previews; course progress; new-content badges; and returning to the folders and scroll position you left.
-• Grades: score bars, percentages and new-grade badges, a what-if calculator that keeps your trial scores on your device until real grades arrive, and an optional GPA with past terms and a goal.
-• Courses page: grades on course cards when your instructor shares them, course nicknames and colors, and counts of new grades and content.
-• Folders and learning modules: Download all makes a zip of accessible files from items you've already opened. Unopened items are left out, so downloading does not mark them viewed.
-• Blackboard editors: a local typing backup can offer back your writing after a reload or session timeout, before it is posted.
-• Course documents: focus mode, a reading-progress line, a reading-time estimate and an optional dark view.
+• A GPA calculator, plus what-if grades that follow Canvas's grading rules.
+• Folded assignment rubrics open in a Glaze pop-up with your published scores and feedback.
+• Download all for a module's files. Items you haven't opened are left out, and redirected files stop with an error asking you to download them from Canvas.
+• Glaze themes Canvas's own what-if scores, editor recovery, nicknames, colors, Files-folder zips and unread counts; it does not replace them.
 
-EXTRAS ON CANVAS
+BLACKBOARD ULTRA
 
-• Modules: course progress from completion requirements, previews of closed modules, new-item badges, your place, and Download all for a module's files (items you haven't opened are left out).
-• Grades and Assignments: score bars and percentages, due-date status and urgency, a what-if calculator that follows Canvas's own grading rules, and an optional GPA.
-• Dashboard: card grades, course tint and Looks, card colors, gradients and pictures, bookmarks, and new-item counts. Style Canvas's sidebar too.
-• Canvas's document viewer in your palette, with an optional pen and highlighter whose marks stay on your device.
-• Draft backup for new Inbox messages to individual users, keyboard shortcuts, and hiding parts of the page you don't use.
+• Grades: score bars, what-if grades and a GPA calculator with past terms and a goal.
+• Assignment rubrics, with your published scores and feedback, show in the page when there's room, otherwise in the pop-up.
+• Course Content: due-date status, course progress and new-content badges.
+• Download all zips files from items you've already opened, so unopened items aren't marked viewed.
 
-Canvas's own what-if scores, editor recovery, nicknames, colors, Files-folder zips and unread counts belong to Canvas. Glaze themes them; it does not replace them.
+MOODLE
 
-ON MOODLE
+• Glaze styles Moodle's Boost theme (Moodle 5, and 4.x where the markup matches), with course totals on cards, what's due this week and Glaze navigation.
 
-• The theme on Moodle's Boost theme (Moodle 5, and 4.x where its markup is the same): Dashboard, My courses, course and activity pages, grades, calendar, messages and the login page.
-• Your course total on each course card, what's due this week from your Timeline, a tint and Look per course, and keyboard shortcuts.
-• Glaze navigation, with Moodle's Edit mode switch and your school's own menu links in the bar.
+AT YOUR SCHOOL
 
-EVERYWHERE
-
-Press Ctrl+K (⌘K on a Mac) to jump to courses, pages, Glaze settings and due work. Add your school's site from Glaze's toolbar button, the tab it opens at install, or Settings › Sites. The popup checks the page; typed addresses are checked through the site's APIs after you grant access. Settings lists those sites and can remove them. The popup keeps quick controls close. On Blackboard and Canvas, What Glaze can do lists every extra with its switch. Export and import all your settings as a file.
-
-Canvas on instructure.com, Ultra on blackboard.com and Moodle on moodlecloud.com are automatic; earlier approvals are kept.
-
-OPTIONAL SHARE SESSIONS
-
-Share selected notes, files, a Look or your own tasks with classmates. Everything is encrypted on your device before it leaves, through frostdev.io's relay or one you host yourself. Sharing stays off until you create or join a session, and Glaze works fully without it. On frostdev.io's relay, a share nobody has used for two years is deleted.
-
-Glaze's helpers do not change grades, submit coursework or send messages. What-if scores are hypothetical and stay on your device.
+Works from install on instructure.com, blackboard.com and moodlecloud.com. Install access also covers frostdev.io and share.frostdev.io; other hosts are requested when needed. Add your school's own address in Settings › Privacy and data › Sites; Back up… and Restore… there save everything in one file. Glaze never changes grades, submits coursework or sends messages, and what-if scores stay on your device.
 
 PRIVACY
 
-No analytics, no ads and no account. Settings stay in your browser and follow Chrome or Firefox sync if it is on (they include course nicknames, GPA choices and some school/course/account identifiers; Safari keeps them on the device). Course details, grade records, notes, tasks, your place, the due list and typing backups stay on your device. Glaze reads your own Blackboard, Canvas or Moodle site using your existing session, and writes to it only when you ask (a planner tick, a Canvas nickname or color, Sign out, Moodle's Edit mode). Chosen web fonts and background images make ordinary network requests; linked videos and animations are fetched by Glaze's worker without cookies, a referrer or redirects (12 MiB video, 6 MiB picture, 1 MiB Lottie; video/picture sides up to 4096 pixels). Identifying metadata is removed from the file’s container; encoded streams and visible pixels remain. Files saved before 3.3.5 that cannot be cleaned stay on this device and are not shared. Course tab sketches stay in memory and are never sent anywhere. Share sessions and mod channels, only if you use them, send encrypted content that the relay cannot read. Glaze does not collect or sell your coursework, grades, credentials or browsing history. A mod granted course data and network access can send that data to its granted hosts. Full policy: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+Settings follow Chrome or Firefox sync if it is on, including course nicknames, GPA choices and some school, course and account identifiers. Coursework records, notes, tasks and typing backups stay on your device. Glaze reads your LMS with your session and writes only when you ask (a planner tick, a Canvas nickname or color, Sign out, Moodle's Edit mode, marking announcements read when opened in Canvas or in Moodle forums with automatic read tracking); previews and Blackboard send no read mark. Rubrics are read-only. Chosen web fonts and background images make ordinary network requests. Linked videos and animations are fetched without cookies, referrers or redirects; identifying container metadata is removed, but encoded streams and visible pixels remain. Older files that cannot be cleaned stay local and are not shared; course tab sketches stay in memory and are never sent anywhere. Sharing starts only when you create, join or resume a session. Optional share sessions and mod channels are encrypted so the relay cannot read them; a mod granted course data and network access can send that data to its granted hosts. These services receive connection data such as your IP address. Glaze does not collect or sell your data. Full policy: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
 Open source (MIT): https://github.com/frostdev-ops/glaze
 
 Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Anthology Inc. Moodle is a registered trademark of Moodle Pty Ltd. Glaze is an independent project and is not affiliated with or endorsed by any of these companies or any school.
 
-## What's new in 3.3.5
+## Release notes
 
-Prepared release copy; the Chrome Web Store has no separate What's New field.
+NEW IN 3.4.3
 
-Glaze 3.3.5 asks before running on an unapproved school domain and lists approved custom sites in Settings, shows what a shared Look changes and refuses ones that could mislead, paces selected bulk reads per document and site, and fetches Look media with size caps and container metadata cleanup. Uncleanable older files stay local and are not shared. It also fixes grade and GPA reading, course tabs, notes, pets, documents and accessibility, and keeps Moodle's Edit mode in Glaze's bar. Glaze 3.3 added its own navigation on all three sites, a sidebar, live course tabs on Canvas, document review on submitted work and a starter Dashboard; 3.0.4 added mods and video and animated backgrounds.
+• Look › Pointer has a Custom pointer switch: off gives you the system pointer on every page, on brings your choice back.
+• Back up… and Restore… in Settings › Privacy and data save and bring back everything in one file: settings, Looks, tasks, notes, schedules and more.
+• Draft backup keeps each tab's own copy, and on Blackboard keeps a reply until it is posted.
+• Restoring Notes brings back renames, moves and folder order.
+• Class schedule: a reimported calendar updates its days off, classes no longer shift across time zones, a schedule over its limits says so instead of "Saved", and Stop reading stops a calendar link.
+• Settings fit narrow windows.
+• Pages on your school's own address no longer load without Glaze while it updates.
+• Mods and widgets read only the signed-in account's grades, to-dos and schedule.
+• Announcements open in a Glaze pop-up, with a preview on hover.
+• Collapsed Canvas rubrics open in a pop-up; on Blackboard Ultra, rubrics show in the page when there's room, otherwise in the pop-up.
 
 ## Single-purpose statement
 
@@ -143,7 +95,7 @@ Notes, their pictures and attachments, course-card pictures and files kept for L
 
 ### Host access (1,000 character maximum)
 
-Required hosts: *.instructure.com, *.blackboard.com, *.moodlecloud.com, frostdev.io and share.frostdev.io. https://*/* is optional: the popup checks the page before offering Use Glaze on the site; the first-run and Settings address fields check LMS APIs after the user grants access, returning only new grants if no LMS answers. Browser-menu grants are checked too; failed checks leave that access unused. All sites grants every HTTPS site; Glaze then asks the user first on each new school's pages. Redirected files stop with a Canvas fallback on Chrome/Edge/Firefox. Other hosts are requested as needed: Canvas Download all file servers, Gradescope, Look media, mod network hosts and custom share relays. Local testing uses optional http://localhost/* and http://127.0.0.1/*. On allowed school sites Glaze reads with the user's session and writes only on their click (planner ticks, Canvas nicknames and colors, Sign out, Moodle's Edit mode).
+Required hosts: *.instructure.com, *.blackboard.com, *.moodlecloud.com, frostdev.io and share.frostdev.io. https://*/* is optional: the popup checks the page before offering Use Glaze on the site; the first-run and Settings address fields check LMS APIs after the user grants access, returning only new grants if no LMS answers. Browser-menu grants are checked too; failed checks leave that access unused. All sites grants every HTTPS site; Glaze then asks the user first on each new school's pages. Redirected files stop with a Canvas fallback on Chrome/Edge/Firefox. Other hosts are requested as needed: Canvas Download all file servers, Gradescope, Look media, mod network hosts and custom share relays. Local testing uses optional http://localhost/* and http://127.0.0.1/*. On allowed school sites Glaze reads with the user's session and writes only on their click (planner ticks, Canvas nicknames and colors, announcement read marks, Sign out, Moodle's Edit mode).
 
 ### activeTab
 

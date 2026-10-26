@@ -1,4 +1,4 @@
-// Settings → Sharing and sync → Share sessions, and Backup and privacy → Notes backup (options.html). Extension-only
+// Settings → Sharing and sync → Share sessions (options.html). Extension-only
 // UI: links are never rendered, put in a URL, or handed to an LMS content script. The sessions port (and with it any
 // relay traffic) is open only while the Sharing tab is showing.
 (() => {
@@ -18,9 +18,10 @@
   const act = async (f, { reload = true, interrupt = false } = {}) => {
     if (busy && !interrupt) return;
     busy = true;
+    ready();
     try { await f(); if (reload && !dead) await load(); }
     catch (e) { if (!dead) { say('Could not finish. Your local copies are kept. Try again.', true); if (e.ui) $('#ss-status').textContent += ' ' + e.ui; } }
-    finally { busy = false; }
+    finally { busy = false; if (!dead) ready(); }
   };
   const button = (key, f, options) => {
     const b = make('button', t(key), { type: 'button' });
@@ -41,12 +42,34 @@
     catch { say('Could not copy the invite. Try again.', true); }
   };
   const sourceId = (s) => JSON.stringify([s.key, s.folder || '', s.ids || []]);
+  const picked = () => [...$('#ss-sources').querySelectorAll('input:checked')].map((x) => x.source);
+  const titleOf = (chosen) => $('#ss-title').value.trim() || (chosen.length === 1 ? chosen[0].title : '');
+  // What stands between the form and a session it can create, said beside Create, which stays off until nothing does.
+  const problem = () => {
+    if (busy) return 'Working…';
+    if (state.sessions.length >= 20) return 'Leave a session before creating another (20 maximum).';
+    const kind = $('#ss-kind').value, chosen = picked();
+    if (kind !== 'look') {
+      if (!chosen.length) return kind === 'notes' ? 'Pick at least one note.' : 'Pick at least one task.';
+      if (chosen.some((x) => x.folder) && chosen.length > 1) return 'Share a folder on its own, or choose notes instead.';
+      if (!chosen.every((x) => x.key === chosen[0].key)) return 'Pick items from one account.';
+      if (chosen.flatMap((x) => x.ids || []).length > 200) return 'Pick at most 200 items.';
+    }
+    const title = titleOf(chosen);
+    if (title.length > 80) return 'Use a session name of 80 characters or fewer.';
+    return title ? '' : 'Name the session.';
+  };
+  const ready = () => {
+    const why = state ? problem() : '';
+    $('#ss-create').disabled = !state || !!why;
+    $('#ss-create-why').textContent = why ? t(why) : '';
+  };
   let sourceStamp = '';
   const sources = () => {
     const kind = $('#ss-kind').value;
     const rows = state.sources.filter((s) => s.kind === kind);
     const stamp = JSON.stringify([kind, rows, !!state.partial]);
-    if (stamp === sourceStamp) return; // live updates must not replace the checkbox under a user's pointer
+    if (stamp === sourceStamp) return ready(); // live updates must not replace the checkbox under a user's pointer
     const selected = new Set([...$('#ss-sources').querySelectorAll('input:checked')].map((x) => sourceId(x.source)));
     sourceStamp = stamp;
     $('#ss-sources').replaceChildren(...rows.map((s) => {
@@ -56,9 +79,15 @@
       label.append(input, make('span', s.ids ? s.title : t('Folder: {name}', { name: s.title })), make('span', account(s.key), { className: 'desc' }));
       return label;
     }));
-    if (!rows.length && kind !== 'look') $('#ss-sources').append(make('p', t(kind === 'notes' ? 'No notes on this device yet. Write one in Notes on Canvas or Blackboard first.' : 'No custom tasks on this device yet.'), { className: 'desc' }));
+    if (!rows.length && kind !== 'look') {
+      // Nothing of this kind to share: the way out is the Look, which needs no items.
+      const look = make('button', t('Share your current Look instead'), { type: 'button' });
+      look.addEventListener('click', () => { $('#ss-kind').value = 'look'; sources(); });
+      $('#ss-sources').append(make('p', t(kind === 'notes' ? 'No notes on this device yet. Write one in Notes on Canvas or Blackboard first.' : 'No custom tasks on this device yet.'), { className: 'desc' }), look);
+    }
     if (state.partial) $('#ss-sources').append(make('p', t('Only the first {n} items are listed.', { n: 3000 }), { className: 'desc' }));
     $('#ss-sources').hidden = kind === 'look';
+    ready();
   };
   const render = () => {
     $('#ss-connection').textContent = t(state.on ? 'Sharing is on while a shared surface is open.' : 'Sharing is paused. Create, join or resume to connect.');
@@ -117,15 +146,17 @@
     const a = pendingNote; pendingNote = null;
     $('#ss-kind').value = 'notes'; sources();
     for (const input of $('#ss-sources').querySelectorAll('input')) input.checked = input.source.key === a.key && input.source.ids?.includes(a.note);
-    const picked = [...$('#ss-sources').querySelectorAll('input:checked')][0]?.source;
-    if (picked) $('#ss-title').value = picked.title;
-    $('#ss-create').focus();
+    const first = picked()[0];
+    if (first) $('#ss-title').value = first.title;
+    ready(); $('#ss-create').focus();
   };
   globalThis.GZ_SESSION_OFFER = (a) => { if (a?.kind === 'notes') { pendingNote = a; takeNote(); } };
   const load = async () => { state = await send('list'); if (!dead) { render(); sources(); takeNote(); } };
   const fail = () => say('Could not finish. Your local copies are kept. Try again.', true);
 
   $('#ss-kind').addEventListener('change', (e) => { if (human(e)) sources(); });
+  $('#ss-title').addEventListener('input', ready);
+  $('#ss-sources').addEventListener('change', ready);
   $('#ss-pause').addEventListener('click', (e) => { if (human(e)) act(() => send('pause'), { interrupt: true }); });
   $('#ss-resume').addEventListener('click', (e) => {
     if (!human(e) || busy || !state) return;
@@ -140,17 +171,14 @@
   $('#ss-refresh').addEventListener('click', (e) => { if (human(e)) act(async () => { for (const s of state.sessions) await send('sync', { sid: s.sid }); }); });
   $('#ss-create').addEventListener('click', (e) => {
     if (!human(e) || busy || !state) return;
-    const chosen = [...$('#ss-sources').querySelectorAll('input:checked')].map((x) => x.source);
-    const kind = $('#ss-kind').value, title = $('#ss-title').value.trim() || (chosen.length === 1 ? chosen[0].title : '');
-    const folder = chosen.find((x) => x.folder);
-    if (!title || (kind !== 'look' && (!chosen.length || !chosen.every((x) => x.key === chosen[0].key) || (folder && chosen.length > 1)))) {
-      return say(folder ? 'Share a folder on its own, or choose notes instead.' : 'Choose a name and items from one local account.', true);
-    }
+    if (problem()) return ready();
+    const chosen = picked(), kind = $('#ss-kind').value, title = titleOf(chosen), folder = chosen.find((x) => x.folder);
     const server = state.relay, p = permission([server]);
     act(async () => {
       if (!await p) return say('Host permission was not granted. No connection was made.', true);
       await send('create', { kind, title, server, key: chosen[0]?.key, folder: folder?.folder, ids: chosen.flatMap((x) => x.ids || []), name: $('#ss-name').value, expire: $('#ss-expire').checked });
       $('#ss-title').value = ''; for (const x of $('#ss-sources').querySelectorAll('input:checked')) x.checked = false;
+      ready();
       say('Session created. Copy an invite below to share it.');
     });
   });
@@ -185,79 +213,4 @@
   visible();
   addEventListener('pagehide', () => { dead = true; $('#ss-invite').value = ''; port?.disconnect(); port = null; });
   addEventListener('online', () => { if (!dead && port) { port.postMessage({ online: true }); load().catch(() => {}); } });
-
-  // ---- Notes backup: one Notes account's notes, files and every share key, as a zip ----------------------------------
-  const nb = (text, err = false) => { $('#nb-status').textContent = text; $('#nb-status').classList.toggle('error', err); };
-  const nbFail = (e) => { if (!dead) nb([t('Could not finish. Your local copies are kept. Try again.'), e?.ui].filter(Boolean).join(' '), true); };
-  let nbBusy = false;
-  const nbAct = async (f) => { if (nbBusy) return; nbBusy = true; try { await f(); } catch (e) { nbFail(e); } finally { nbBusy = false; } };
-  const wanted = new URLSearchParams(location.search).get('notes');
-  const accounts = async () => {
-    const keys = (await send('list')).accounts.filter((k) => GZ_NOTES.KEY.test(k));
-    const select = $('#nb-account'), was = select.value || (GZ_NOTES.KEY.test(wanted || '') ? wanted : '');
-    select.replaceChildren(...keys.map((k) => make('option', account(k), { value: k, selected: k === was })));
-    $('#nb-export').disabled = $('#nb-import').disabled = !keys.length;
-    if (!keys.length) nb(t('No notes on this device yet. Write one in Notes on Canvas or Blackboard first.'));
-  };
-  const backupPanel = $('#panel-backup');
-  const backupShown = () => { if (!backupPanel.hidden && !dead) accounts().catch(nbFail); };
-  new MutationObserver(backupShown).observe(backupPanel, { attributes: true, attributeFilter: ['hidden'] });
-  backupShown();
-  $('#nb-import').addEventListener('click', (e) => { if (human(e)) $('#nb-file').click(); });
-  $('#nb-file').addEventListener('change', (e) => {
-    if (!e.isTrusted) return;
-    const file = e.target.files[0], key = $('#nb-account').value; e.target.value = '';
-    if (!file || !GZ_NOTES.KEY.test(key)) return;
-    nbAct(async () => {
-      const cap = GZ_NOTES.LIMIT.total + (64 << 20);
-      if (file.size > cap) throw Object.assign(new Error('big'), { ui: t('That file is too big to import (up to {size}).', { size: Math.round(cap / 1048576) + ' MB' }) });
-      nb(t('Reading {name}…', { name: file.name }));
-      let zip, json, data;
-      try {
-        zip = GZ_DOCTEXT.unzip(new Uint8Array(await file.arrayBuffer()), { limits: { input: cap, entry: 64 << 20, total: cap, entries: 20000 } });
-        json = await zip.text('notes.json');
-        data = GZ_NOTES.parseExport(json, { site: new URL(key.slice(9)).origin });
-      } catch { throw Object.assign(new Error('bad'), { ui: t("That isn't a notes export from Glaze, or it's damaged.") }); }
-      const shareKeys = await zip.text('share-keys.json');
-      if (shareKeys !== null && shareKeys !== undefined) await send('importKeys', { keys: JSON.parse(shareKeys) });
-      for (const [i, f] of data.files.entries()) {
-        nb(t('Importing… {n} of {all}', { n: i + 1, all: data.files.length + data.notes.length }));
-        const bytes = await zip.bytes(f.path);
-        if (!bytes || bytes.length !== f.size) throw Object.assign(new Error('missing'), { ui: t('Left out: {names}', { names: f.name }) });
-        const owner = data.notes.find((n) => GZ_NOTES.refs(n.html).has(f.id));
-        if (owner) await send('notesFile', { key, file: { id: f.id, note: owner.id, kind: f.kind, name: f.name, data: GZ_NOTES.b64(bytes) } });
-      }
-      const raw = JSON.parse(json);
-      let done = 0, skipped = 0;
-      for (let i = 0; i < data.notes.length || i === 0; i += 5) {
-        const r = await send('notesImport', { key, json: JSON.stringify({ format: raw.format, version: raw.version, site: raw.site, folders: data.folders, files: data.files, notes: data.notes.slice(i, i + 5) }) });
-        done += r.done; skipped += r.skipped;
-      }
-      nb([t('Notes and share keys imported locally. Resume to reconnect.'), t('Notes imported: {n}', { n: done }), skipped && t('Skipped (already up to date or too large): {n}', { n: skipped })].filter(Boolean).join(' · '));
-    });
-  });
-  $('#nb-export').addEventListener('click', (e) => {
-    if (!human(e)) return;
-    const key = $('#nb-account').value;
-    if (!GZ_NOTES.KEY.test(key)) return;
-    nbAct(async () => {
-      const r = await send('backupNotes', { key }).catch(() => { throw Object.assign(new Error('read'), { ui: t("Couldn't read your notes. Nothing was saved.") }); });
-      const data = r.data, seen = new Set();
-      for (const [i, n] of data.notes.entries()) {
-        nb(t('Exporting… {n} of {all}', { n: i + 1, all: data.notes.length }));
-        const body = await send('notesRead', { key, id: n.id }).catch(() => { throw Object.assign(new Error('read'), { ui: t("Couldn't export “{title}”. Nothing was saved.", { title: n.title }) }); });
-        if (body.rev !== n.rev) throw new Error('changed'); // A mixed-revision archive is not a backup.
-        n.html = body.html;
-        for (const id of GZ_NOTES.refs(n.html)) if (!seen.has(id)) {
-          seen.add(id); const f = await send('notesGetFile', { key, id });
-          data.files.push({ id, ...f, bytes: GZ_NOTES.unb64(f.data) });
-        }
-      }
-      const entries = GZ_NOTES.exportZip(data);
-      entries.push({ name: 'share-keys.json', data: new TextEncoder().encode(JSON.stringify(data.keys, null, 2)), date: new Date() });
-      const url = URL.createObjectURL(new Blob(GZ_ZIP.zip(entries), { type: 'application/zip' }));
-      const a = make('a', undefined, { href: url, download: 'glaze-notes.zip' }); a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      nb([t('Notes and share keys exported. Keep the backup private.'), t('Notes exported: {n}', { n: data.notes.length })].join(' · '));
-    });
-  });
 })();

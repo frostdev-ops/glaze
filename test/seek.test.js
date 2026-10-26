@@ -491,3 +491,33 @@ test('palette: its own list arriving late keeps every row on screen in place whi
   r.late([...pages(), cmdOf('Biology', 'Courses', 'BIO 1100'), cmdOf('Turn on course progress', 'Glaze', 'Glaze extra')]);
   assert.deepEqual(r.text().slice(0, done.length), done);
 });
+
+// An announcement found in Ctrl+K opens in Glaze's pop-up (features/announce.js, stood in for here) for the student's own
+// Enter or click; with a modifier, or a script's event, its page opens as before.
+test('palette: an announcement result opens through GZ_ANNOUNCE; a modifier or untrusted event opens its page', async () => {
+  const assigned = [];
+  const p = palette();
+  p.ctx.location.assign = (u) => assigned.push(u);
+  const gone = [];
+  p.ctx.GZ_ANNOUNCE = { ready: Promise.resolve(), go: (r) => gone.push(r) };
+  await p.attach();
+  p.type('lab');
+  p.tick();
+  await settle();
+  p.answer((u) => u.includes('only_announcements=true') && u.includes('/courses/2/'), [{ id: '55', title: 'Lab moved' }]);
+  await pump(p);
+  const row = p.cmd.found.find((c) => c.group === 'Announcement');
+  assert.ok(row, 'the announcement is a result');
+  assert.deepEqual(S.read(S.KINDS.find((k) => k.kind === 'Announcement'), [{ id: '55', title: 'Lab moved' }], { id: '2', name: 'BIO' })[0],
+    { key: '2/topic:55', title: 'Lab moved', url: '/courses/2/discussion_topics/55', kind: 'Announcement', course: 'BIO', cid: '2', aid: '55' });
+  row.run({ isTrusted: true, ctrlKey: true });
+  row.run({ isTrusted: false });
+  assert.deepEqual(assigned, ['/courses/2/discussion_topics/55', '/courses/2/discussion_topics/55']);
+  row.run({ isTrusted: true, button: 0 });
+  await settle(); await settle();
+  assert.equal(gone.length, 1);
+  assert.deepEqual({ ...gone[0] }, { site: 'canvas', entry: 'glaze', courseId: '2', id: '55', url: 'https://canvas.test/courses/2/discussion_topics/55', title: 'Lab moved', course: 'BIO' });
+  // Other kinds open their page, as before.
+  const other = p.cmd.found.find((c) => c.group !== 'Announcement');
+  if (other) { other.run({ isTrusted: true }); assert.equal(assigned.length, 3); }
+});

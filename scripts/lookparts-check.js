@@ -10,12 +10,12 @@
 // One browser at a time (wait while another agent's run is up); it deletes its own profile when it is done.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
-const ext = process.env.EXT || path.resolve(__dirname, '..');
+const ext = require('./check-env.js').staged(process.env.EXT || path.resolve(__dirname, '..'), ['https://school.example.test/*']);
 const G = require(path.join(ext, 'defaults.js')), S = require(path.join(ext, 'lib/share.js')), X = require(path.join(ext, 'lib/lookparts.js'));
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const LMS = 'https://school.example.test';
 const PAGE = `${LMS}/ultra/courses/_1_1/outline`, QUIZ = `${LMS}/ultra/courses/_1_1/assessment/_9_1`;
-const html = '<!doctype html><html><head><base href="https://school.example.test/ultra/"><title>Course</title></head><body><main id="app"><h1>A course</h1></main></body></html>';
+const html = '<!doctype html><html><head><base href="https://school.example.test/ultra/"><title>Course</title></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page">Institution Page</a><a href="/ultra/course">Courses</a></nav><main id="app"><h1>A course</h1></main></div></body></html>';
 const SHADER = '// a ring\nfloat ring(vec2 p) {\n    return smoothstep(0.3, 0.29, length(p - 0.5));\n}\nvec4 scene(vec2 uv) {\n    return vec4(uC1, ring(uv));\n}';
 const PARTS = { x: { bg: { shader: { src: SHADER } }, cursor: { kind: 'sparkle', c: ['accent'], size: 14 }, anim: { 'card.enter': { s: [{ at: 0, y: 12, o: 0 }, { at: 1, y: 0, o: 1 }], ms: 300 } }, nav: { place: 'top', hidden: ['grades'] } } };
 const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() + ms; let v; while (Date.now() < end) { v = await fn(); if (ok(v)) return v; await new Promise((r) => setTimeout(r, 40)); } return v; };
@@ -38,6 +38,11 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     const sw = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const id = new URL(sw.url()).host;
     await sw.evaluate((origin) => chrome.storage.local.set({ ultra: [origin] }), LMS);
+    const seed = await context.newPage();
+    await seed.goto(`chrome-extension://${id}/popup.html`);
+    await sw.evaluate(() => queue);
+    await require('./check-env.js').ultraReady(seed);
+    await seed.close();
     const state = (url = PAGE) => sw.evaluate(async (u) => {
       const [tab] = await chrome.tabs.query({ url: u });
       const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ loaded: typeof GZ_XPARTS_PAGE, parts: globalThis.GZ_CTX ? globalThis.GZ_CTX.parts() : 'no GZ_CTX' }) });
@@ -62,12 +67,13 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     const mine = G.GZ_SANITIZE({ bg: { kind: 'shader' }, look: { radius: 8 } });
     const code = await S.encode(mine, undefined, PARTS);
     check('the code is glaze2 and short enough for chat', code.startsWith('glaze2:') && code.length < 1500, `${code.length} characters`);
+    if (!await editor.evaluate(() => document.querySelector('#palette details.more').open)) await editor.click('#palette details.more > summary'); // theme codes sit in Looks and colors' More options
     await editor.fill('#share-code', code);
     await editor.click('#share-try');
     await until(() => editor.evaluate(() => !document.querySelector('#share-offer').hidden));
     const what = await editor.evaluate(() => document.querySelector('#share-what').textContent);
     check('the offer says what the code brings', /shader|cursor effect|animations|sidebar/i.test(what) && !/undefined/.test(what), what);
-    const frame = () => editor.frames().find((f) => f.url().includes('preview.html'));
+    const frame = () => editor.frames().find((f) => f.url().includes('preview.html') && !f.url().includes('backdrop'));
     const previewed = await until(() => frame()?.evaluate(() => globalThis.GZ_CTX?.parts() ?? null), (v) => !!v);
     check('the editor\'s preview frame has the parts before anything is saved', previewed?.cursor?.kind === 'sparkle' && previewed?.bg?.shader && !(await stored()).sync.lookX, JSON.stringify(previewed)?.slice(0, 200));
     await editor.click('#share-apply');
@@ -78,6 +84,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     check('the open page got the parts from storage: GZ_CTX.parts() and one glaze:parts event, without detail', s.loaded === 'object' && s.parts?.cursor?.kind === 'sparkle' && s.parts.bg.shader.src.length < SHADER.length && fired.n === 1 && !fired.detail, JSON.stringify({ s, fired }).slice(0, 300));
 
     // ---- a plain code and a built-in Look clear them ----------------------------------------------------------------------
+    if (!await editor.evaluate(() => document.querySelector('#palette details.more').open)) await editor.click('#palette details.more > summary'); // theme codes sit in Looks and colors' More options
     await editor.fill('#share-code', await S.encode(G.GZ_SANITIZE({ look: { radius: 10 }, bg: { kind: 'aurora' } })));
     await editor.click('#share-try');
     await until(() => editor.evaluate(() => !document.querySelector('#share-offer').hidden));

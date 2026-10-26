@@ -27,15 +27,17 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     await context.route('**/*', (route) => { const url = route.request().url(); if (url.startsWith('chrome-extension:') || url.startsWith('data:')) return route.continue(); external.push(url); return route.abort(); });
     const sw = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const id = new URL(sw.url()).host;
+    // This builder edits the site's own navigation. Glaze navigation has a separate layout and is on by default.
+    await sw.evaluate(() => chrome.storage.sync.set({ navbar: { on: false } }));
     // The Look's parts as stored: the packed sync item, unpacked here.
     const parts = async () => { const { lookX } = await sw.evaluate(() => chrome.storage.sync.get('lookX')); return typeof lookX === 'string' && lookX ? X.unpack(lookX) : null; };
     const ed = await context.newPage();
     ed.on('pageerror', (e) => errors.push(`editor: ${e}`));
     await ed.goto(`chrome-extension://${id}/options.html#look/nav-layout`);
-    const frame = () => ed.frames().find((f) => f.url().includes('preview.html'));
+    const frame = () => ed.frames().find((f) => f.url().includes('preview.html') && !f.url().includes('backdrop'));
     const inFrame = (f, arg) => until(() => frame().evaluate(f, arg));
     await until(() => ed.evaluate(() => !!document.querySelector('[data-f="nav:mine"]')));
-    check('the section has a heading and says how it differs from the student’s own navigation', await ed.evaluate(() => document.querySelector('#heading-look-nav-layout').textContent === "This Look's navigation" && /stays yours on every Look/.test(document.querySelector('#xnav').textContent)));
+    check('the section has a heading and says how it differs from the student’s own navigation', await ed.evaluate(() => document.querySelector('#heading-look-nav-layout').textContent === "This Look's navigation" && /your own stays under Navigation/.test(document.querySelector('#xnav').textContent)));
 
     // ---- nav layout ------------------------------------------------------------------------------------------------
     await ed.click('[data-f="nav:mine"]');

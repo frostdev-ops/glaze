@@ -16,7 +16,7 @@ or if the file is missing, its background becomes a gradient. Keep the original 
 storage key listing cannot reset unknown legacy media until it is discovered; current and discoverable media are removed,
 while stickers and other local data stay.
 
-Private backups of settings and notes ZIPs include share keys and creator delete tokens for all sessions, even paused ones. Keep these backups private: the keys grant access to shared content. Single-note exports do not contain session keys. See [sharing and backups](../PRIVACY.md#optional-encrypted-share-sessions).
+Backups (**Back up…**, and older settings files and notes ZIPs) include share keys and creator delete tokens for all sessions, even paused ones. Keep these backups private: the keys grant access to shared content. Single-note exports do not contain session keys. See [sharing and backups](../PRIVACY.md#optional-encrypted-share-sessions).
 
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
 you set in a course's menu. These follow Chrome sync (or Firefox Sync) when it's on; Safari keeps them on this device only.
@@ -26,7 +26,7 @@ site needs your yes first: on Chrome, Edge and Firefox the popup checks the page
 tab or Settings is checked through the site's APIs after access is granted. Browser-menu grants are checked too; a failed
 check leaves that access unused. With All sites, in Safari and on installs from before 3.4.0, Glaze asks on unapproved
 course sites (**Use Glaze on example.edu?**) before theming them, reading their APIs or keeping course data. **Settings →
-Backup and privacy → Sites** lists your sites, with Remove, which also forgets the courses and due dates Glaze read there.
+Privacy and data → Sites** lists your sites, with Remove, which also forgets the courses and due dates Glaze read there.
 See [Adding a school's own site](../PRIVACY.md#adding-a-schools-own-site).
 
 The sidebar's title, style, page choices and other general settings sync too. Its width, open/fold state, To Do scope,

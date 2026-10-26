@@ -112,3 +112,84 @@ test('the release job attaches the zip built by the tested job and creates a dra
   assert.match(upload, /^\s+name:\s*(\S+)\s*$/m);
   assert.equal(upload.match(/^\s+name:\s*(\S+)\s*$/m)[1], block.match(/^\s+name:\s*(\S+)\s*$/m)[1], 'uploaded and downloaded under one name');
 });
+
+// ---- the browser gate (browser.yml), called by test.yml on non-release pushes and pull requests and by package.yml before the zip ----
+const browser = () => jobsOf(read('browser.yml'));
+const runsOf = (job) => job.lines.join('\n').replace(/^\s*#.*$/gm, '');
+const callers = (f) => jobsOf(read(f)).filter((j) => /^    uses:\s*\.\/\.github\/workflows\/browser\.yml\s*$/m.test(j.lines.join('\n')));
+
+test('the browser gate runs only when called, on non-release pushes and pull requests', () => {
+  const yaml = read('browser.yml'), on = yaml.split(/^jobs:/m)[0];
+  assert.match(on, /^on:\s*\n  workflow_call:\s*$/m);
+  assert.doesNotMatch(on, /^  (push|pull_request|schedule|workflow_dispatch):/m);
+  const test = read('test.yml').split(/^jobs:/m)[0];
+  assert.match(test, /^  push:/m);
+  assert.match(test, /^  pull_request:/m);
+  assert.equal(callers('test.yml').length, 1, 'test.yml calls the gate');
+});
+
+test('a release zip is built only after the browser gate passes', () => {
+  const [gate] = callers('package.yml');
+  assert.ok(gate, 'package.yml calls the gate');
+  const job = jobsOf(read('package.yml')).find((j) => /package\.sh/.test(j.lines.join('\n')));
+  const needs = (job.lines.join('\n').match(/^    needs:\s*(.+)$/m)?.[1] || '').replace(/[[\]'"\s]/g, '').split(',');
+  assert.ok(needs.includes(gate.name), `the packaging job needs ${gate.name}`);
+});
+
+test('the browser job has a pinned runner image and a time limit of 15 minutes or less', () => {
+  const [job] = browser(), block = job.lines.join('\n');
+  assert.match(block, /^    runs-on:\s*ubuntu-\d+\.\d+\s*$/m, 'a named image, not ubuntu-latest, so its system libraries stay put');
+  assert.ok(Number(block.match(/^    timeout-minutes:\s*(\d+)\s*$/m)?.[1]) <= 15);
+});
+
+test('the gate installs the pinned Playwright, checks it and its Chromium, and only then runs the checks', () => {
+  const [job] = browser(), runs = runsOf(job);
+  const version = job.lines.join('\n').match(/^      PLAYWRIGHT:\s*(\d+\.\d+\.\d+)\s*$/m)?.[1];
+  assert.ok(version, 'PLAYWRIGHT names an exact version');
+  const pins = require('../scripts/npm-integrity.js').parsePins(fs.readFileSync(path.join(__dirname, '../ci/playwright.pins'), 'utf8'));
+  assert.ok(pins.has(`playwright@${version}`) && pins.has(`playwright-core@${version}`), 'ci/playwright.pins pins this version');
+  const install = runs.match(/npm install[^\n]*/)?.[0] ?? '';
+  for (const flag of ['--ignore-scripts', '--no-package-lock', '--registry https://registry.npmjs.org/', '"playwright@$PLAYWRIGHT"']) assert.ok(install.includes(flag), flag);
+  assert.doesNotMatch(runs, /\bnpx\b|@latest/);
+  const at = (s) => { const i = runs.indexOf(s); assert.ok(i >= 0, s); return i; };
+  const order = [at('npm install'), at('scripts/npm-integrity.js "$RUNNER_TEMP/playwright/node_modules/.package-lock.json" ci/playwright.pins playwright playwright-core'),
+    at('.bin/playwright" install --with-deps --no-shell chromium'), at('node scripts/ci-chromium.js'), at('node scripts/ci-browser-checks.js')];
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'install, verify, install Chromium, verify, run');
+});
+
+test('the gate keeps its logs and screenshots when it fails', () => {
+  const [job] = browser(), steps = stepsOf(job).map((s) => s.join('\n'));
+  const out = runsOf(job).match(/ci-browser-checks\.js "\$RUNNER_TEMP\/([\w-]+)"/)?.[1];
+  assert.ok(out, 'the checks write to a directory under the runner temp');
+  const upload = steps.find((s) => /upload-artifact@/.test(s));
+  assert.ok(upload, 'an upload step');
+  assert.match(upload, /^\s+if:\s*failure\(\)\s*$/m);
+  assert.match(upload, new RegExp(`^\\s+path:\\s*\\$\\{\\{ runner\\.temp \\}\\}/${out}\\s*$`, 'm'));
+});
+
+test('the gate runs only checks that need no school, local LMS or network', () => {
+  const { CHECKS } = require('../scripts/ci-browser-checks.js');
+  assert.deepEqual(CHECKS.map((c) => c.script), ['settings-ia-check.js', 'backup-check.js', 'popup-check.js', 'sites-check.js', 'pointer-check.js', 'register-update-check.js']);
+  for (const { script } of CHECKS) {
+    const code = fs.readFileSync(path.join(__dirname, '../scripts', script), 'utf8');
+    assert.doesNotMatch(code, /localhost:(8081|3000)|127\.0\.0\.1:(8081|3000)/, `${script} reaches a local LMS`);
+    assert.match(code, /route\(/, `${script} answers or blocks the page's requests itself`);
+  }
+});
+
+
+test('release tags run the browser gate once while other pushes keep their test workflow', () => {
+  const trigger = read('test.yml').split(/^jobs:/m)[0];
+  assert.match(trigger, /^    tags-ignore: \['v\*'\]$/m);
+  assert.doesNotMatch(trigger, /^    (branches|branches-ignore|tags):/m);
+  assert.match(read('package.yml'), /^    tags: \['v\*'\]$/m);
+});
+
+test('fork checks receive no secrets and release artifacts stay within the gated run', () => {
+  for (const f of files) assert.doesNotMatch(read(f), /pull_request_target|workflow_run|secrets:|secrets\./, f);
+  const release = jobsOf(read('package.yml')).find((j) => j.name === 'release').lines.join('\n');
+  assert.doesNotMatch(release, /run-id:|repository:|github-token:|pattern:|merge-multiple:/);
+  assert.match(release, /^          name: chrome-zip$/m);
+  for (const job of jobsOf(read('package.yml'))) assert.doesNotMatch(job.lines.join('\n'), /^    if:/m, 'gate dependencies must not be overridden');
+  assert.doesNotMatch(read('package.yml').split(/^jobs:/m)[0], /workflow_dispatch|pull_request/);
+});

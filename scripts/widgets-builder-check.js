@@ -35,6 +35,8 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
 (async () => {
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-widgets-builder-')));
   let context, lms, deadline;
+  let holdIdentity = false;
+  const identityResponses = new Set();
   const launch = async (extPath, profile) => {
     const wrapper = path.join(tmp, 'chrome'), q = (v) => `'${v.replaceAll("'", "'\\''")}'`;
     fs.writeFileSync(path.join(tmp, 'net.sb'), '(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip "localhost:*"))');
@@ -58,7 +60,15 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
     const hits = [];
     lms = https.createServer(tls, (req, res) => {
       hits.push(req.url);
-      if (req.url.includes('/api/')) { res.setHeader('content-type', 'application/json'); res.end('{"results":[]}'); return; }
+      // Who is signed in: widgets read only this account's plans and grades.
+      if (req.url.includes('/api/')) {
+        res.setHeader('content-type', 'application/json');
+        if (req.url.endsWith('/learn/api/v1/users/me')) {
+          if (holdIdentity) { identityResponses.add(res); res.on('close', () => identityResponses.delete(res)); }
+          else res.end('{"id":"_5_1"}');
+        } else res.end('{"results":[]}');
+        return;
+      }
       if (req.url.includes('strict')) res.setHeader('content-security-policy', "default-src 'self'; script-src 'none'; frame-src 'none'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'");
       res.setHeader('content-type', 'text/html');
       res.end(SHELL);
@@ -72,14 +82,15 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
     const HOUR = 36e5, now = Date.now();
     const seed = async (sw, over = {}) => sw.evaluate(async ({ origin, now, over }) => {
       await chrome.storage.local.clear();
-      await chrome.storage.sync.set({ enabled: true, enhance: {}, motion: { level: 'subtle' } });
+      // Glaze's own To Do stays off: on this stand-in LMS it would replace the planner below with an empty one.
+      await chrome.storage.sync.set({ enabled: true, enhance: { todo: false }, motion: { level: 'subtle' } });
       await chrome.storage.local.set({ ultra: [origin],
-        todoCache: { key: `todo:${origin}/5`, at: now, items: [
+        todoCache: { key: `todo:${origin}/_5_1`, at: now, items: [
           { type: 'assignment', id: '9', cid: '_1_1', course: 'Biology', title: 'Lab report', at: now + 3 * 36e5, url: '/ultra/stream/assignment/9' },
           { type: 'assignment', id: '10', cid: '_2_1', course: 'History', title: 'Essay outline', at: now + 30 * 36e5, url: '/ultra/stream/assignment/10' },
           { type: 'assignment', id: '11', cid: '_1_1', course: 'Biology', title: 'Old quiz', at: now - 5 * 36e5, url: '/ultra/stream/assignment/11' },
         ] },
-        [`insights:${origin}/5`]: { at: now, courses: [{ id: '_1_1', name: 'Biology', trend: [[now - 1e6, 91.5]] }, { id: '_2_1', name: 'History', trend: [[now - 1e6, 84]] }] },
+        [`insights:${origin}/_5_1`]: { at: now, courses: [{ id: '_1_1', name: 'Biology', trend: [[now - 1e6, 91.5]] }, { id: '_2_1', name: 'History', trend: [[now - 1e6, 84]] }] },
         seenCourses: { _1_1: { name: 'Biology', site: origin, code: 'BIO' }, _2_1: { name: 'History', site: origin, code: 'HIS' } }, ...over });
     }, { origin, now, over });
     const tree = async (page) => {
@@ -258,16 +269,27 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
     await editor.close();
 
     const pageChecks = async (label, sw, logs, modes) => {
+      // The retained account is newer: neither a mod nor page-main-world globals may select it.
+      await sw.evaluate((origin) => chrome.storage.local.set({ [`insights:${origin}/_6_1`]: { at: Date.now() + 60000, courses: [{ id: '_9_1', name: 'Other account secret', trend: [[Date.now(), 100]] }] } }), origin);
       for (const mode of modes) {
         console.log(`-- ${label}, ${mode} page policy`);
         const page = await context.newPage();
+        holdIdentity = mode === 'permissive';
         await page.goto(`${origin}/ultra/course?${mode}`);
+        if (holdIdentity) {
+          await until(async () => identityResponses.size && (await tree(page)).strings().some((s) => s.startsWith('Next:')), 'empty widget while identity waits');
+          ok(!(await tree(page)).strings().some((s) => s.includes('Lab report') || s.includes('Other account secret')), `${label}: a slow identity read reveals neither account's cached data`);
+          holdIdentity = false;
+          for (const res of identityResponses) res.end('{"id":"_5_1"}');
+          identityResponses.clear();
+        }
         const t = await until(async () => { const x = await tree(page); return x.strings().includes('Next: Lab report (Biology)') && x; }, 'the tile drawn');
+        if (mode === 'permissive') ok(true, `${label}: identity resolving redraws existing widgets without navigation or a storage change`);
         const lines = t.strings();
         ok(true, `${label}: the tile shows the next to-do from the student's own data (${lines.join(' | ')})`);
         ok(lines.includes('3 left') && lines.includes('To-dos left'), `${label}: the number block counts the open to-dos`, lines.join('|'));
         ok(lines.includes('3.35') && lines.includes('GPA'), `${label}: and the GPA is worked out in the worker from Insights' grades (A- and B, equally weighted)`, lines.join('|'));
-        const rail = await until(async () => { const x = await tree(page); const r = x.all.find((n) => n.nodeName === 'DIV' && /gz-mod-rail/.test(x.attr(n, 'class') || '')); return r && x; }, 'the rail widget', 6000).catch(() => null);
+        const rail = await until(async () => { const x = await tree(page); const r = x.all.find((n) => n.nodeName === 'DIV' && /gz-mod-rail/.test(x.attr(n, 'class') || '')); return r && x.strings().filter((s) => s === 'Next: Lab report (Biology)').length === 2 && x; }, 'the rail widget data', 6000).catch(() => null);
         ok(!!rail && rail.strings().filter((s) => s === 'Next: Lab report (Biology)').length === 2, `${label}: the navigation widget shows the same blocks, drawn in a closed root`, rail ? rail.strings().join('|') : 'no rail widget');
         ok(lines.some((s) => s.startsWith('Old quiz · Biology')) && lines.some((s) => s.startsWith('Lab report · Biology')) && !lines.some((s) => s.startsWith('Essay outline')), `${label}: the list shows two rows, soonest first`);
         ok(t.all.some((n) => n.nodeName === 'SPAN' && t.attr(n, 'role') === 'timer' && /\d/.test(t.text(n))), `${label}: the countdown counts to the next to-do`);
@@ -278,6 +300,12 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
         ok(!!button && button.shadow === 'closed' && !t.attr(button, 'disabled'), `${label}: the button is there, in a closed root`);
         ok(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && frames.length === 0), `${label}: the page has no frame of Glaze's for it`);
         ok(await inPage(sw, page, () => typeof GZ_MODS === 'undefined' && GZ_MODWIDGETS.stats().list.length === 1 && GZ_MODWIDGETS.stats().mounts.length === 2), `${label}: only the widget side runs (GZ_MODS is not even loaded)`);
+        await page.evaluate(() => { globalThis.__gzDoc = 'forged'; globalThis.GZ_CTX = { on: () => true, account: async () => '_6_1' }; });
+        const isolated = await inPage(sw, page, async () => {
+          const mod = GZ_MODWIDGETS.stats().list[0];
+          return { ownDoc: globalThis.__gzDoc !== 'forged', result: await chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'widget', mod: mod.id, slot: mod.slots[0].key, doc: globalThis.__gzDoc }) };
+        });
+        ok(isolated.ownDoc && JSON.stringify(isolated.result).includes('3.35') && !JSON.stringify(isolated.result).includes('Other account secret'), `${label}: page-main-world globals cannot replace the isolated document or account`);
         const at = await t.box(button);
         await page.mouse.click(at.x, at.y);
         await page.waitForURL(`${origin}/ultra/stream/assignment/9`, { timeout: 8000 });
@@ -336,6 +364,8 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
   } finally {
     clearTimeout(deadline);
     await context?.close().catch(() => {});
+    for (const res of identityResponses) res.destroy();
+    lms?.closeAllConnections();
     lms?.close();
     fs.rmSync(tmp, { recursive: true, force: true });
     console.log(`Cleanup: owned browser, listener and profiles removed. ${fails ? `${fails} FAILED` : 'all passed'}`);

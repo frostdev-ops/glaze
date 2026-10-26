@@ -60,6 +60,11 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       // The seventh first: closed at once, its next tab is the page's own course.
       await chrome.storage.local.set({ [key]: { tabs: [7, 1, 2, 3, 4, 5, 6].map((n, i) => ({ cid: `_${100 + n}_1`, name: `Synthetic course ${n}`, path: `/ultra/courses/_${100 + n}_1/outline`, top: 0, at: i, pin: false })) } });
     }, { settings, key, site });
+    await require('./check-env.js').ultraReady(opts);
+    check(await opts.evaluate(async (site) => {
+      const scripts = [...chrome.runtime.getManifest().content_scripts, ...await chrome.scripting.getRegisteredContentScripts()];
+      return scripts.some((s) => s.js?.includes('content-ultra.js') && s.matches.some((p) => p === `${site}/ultra/*` || p === 'https://*/ultra/*'));
+    }, site), 'the approved school has its content script before navigation');
     const saved = () => opts.evaluate(async (key) => (await chrome.storage.local.get(key))[key]?.tabs, key);
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     const tab = (f, cid) => f.locator(`#gz-ctabs [data-course-id="${cid}"]`);

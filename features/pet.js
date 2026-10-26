@@ -11,15 +11,21 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const start = () => (ready ||= Promise.all([ctx.need('lib/petbrain.js', () => globalThis.GZ_PET_BRAIN), ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO), ctx.need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI), ctx.need('lib/petphysics.js', () => globalThis.GZ_PET_PHYSICS), ctx.need('features/petworld.js', () => globalThis.GZ_PET_WORLD)]).catch((e) => { ready = null; throw e; }));
   const send = (m) => new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: 'glaze:pet', ...m }, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const mounted = new Set();
-  const mount = (body, api) => {
+  let mounts = 0; // each mount's ids (its panels, its care line) stay its own when a tile and the dialog show at once
+  // inDialog: the habitat dialog's own copy, which has every control at its size and so no way to open itself.
+  const mount = (body, api, { inDialog = false } = {}) => {
     let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, pets = [], form = '', readout = '';
+    // The one panel open under the actions (Wellbeing, Decorate, Progress; Settings in the dialog), or none. It survives repaints.
+    let panel = '', panelChosen = false, wandered = false;
+    const uid = `gz-game-${++mounts}`;
     const waiting = [];
     const tile = body.closest('.gz-w');
     if (tile) tile.hidden = true;
     const pet = make('div', { className: 'gz-game' });
     const stage = make('div', { className: 'gz-game-habitat' });
+    // Name, level and XP ride on the room (apps.css), so the room comes first in the tile; the status only while out exploring.
     const level = make('span', { className: 'gz-game-level' }), overview = make('div', { className: 'gz-game-overview' }), controls = make('div', { className: 'gz-game-controls' });
-    pet.append(overview, stage, controls);
+    pet.append(stage, overview, controls);
     stage.setAttribute('aria-label', t('Your buddy’s habitat'));
     const status = make('p', { className: 'gz-game-status', role: 'status' });
     const activity = make('p', { className: 'gz-game-hint' });
@@ -53,17 +59,30 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       progress.setAttribute('aria-label', t('Pet experience'));
       level.textContent = t('Level {level}', { level: d.level });
       level.setAttribute('aria-label', t('Level {level} · {xp} XP', { level: d.level, xp: d.xp }));
-      const identity = make('div', { className: 'gz-game-identity' }, make('strong', { textContent: pets.find((p) => p.id === d.sprite)?.name || t('Study buddy') }), activity);
-      if (!activity.textContent) activity.textContent = t(d.wander ? 'Exploring the page' : 'At home');
-      overview.replaceChildren(make('div', { className: 'gz-game-heading' }, identity, level), progress,
-        make('div', { className: 'gz-game-xp' }, make('span', { textContent: t('{xp} total XP', { xp: d.xp }) }), make('span', { textContent: t('{xp} to next level', { xp: d.next - d.xp }) })));
+      level.title = level.getAttribute('aria-label');
+      progress.title = t('{xp} to next level', { xp: d.next - d.xp });
+      if (d.wander && !wandered) activity.textContent = t('Exploring the page');
+      wandered = d.wander; activity.hidden = !d.wander;
+      overview.replaceChildren(make('div', { className: 'gz-game-heading' }, make('strong', { className: 'gz-game-name', textContent: pets.find((p) => p.id === d.sprite)?.name || t('Study buddy') }), level), progress, activity);
+      const xpLine = make('p', { className: 'gz-game-xp' }, make('span', { textContent: t('{xp} total XP', { xp: d.xp }) }), make('span', { textContent: t('{xp} to next level', { xp: d.next - d.xp }) }));
+      xpLine.dataset.live = 'xp';
       const pat = button(t('Pet your buddy'), (e) => { if (e.isTrusted && !busy) { pat.disabled = true; update({ op: 'interact', event: 'pet' }); } });
-      pat.className = 'gz-game-primary'; pat.dataset.control = 'pet'; pat.disabled = !allowance.remaining || cooling;
+      pat.className = 'gz-w-btn gz-w-main gz-game-primary'; pat.dataset.control = 'pet'; pat.disabled = !allowance.remaining || cooling;
       const wander = button(t(d.wander ? 'Return home' : 'Explore page'), (e) => { if (e.isTrusted) update({ op: 'wander', wander: !d.wander }); });
-      wander.dataset.control = 'wander'; wander.setAttribute('aria-pressed', String(d.wander));
+      wander.className = 'gz-w-btn'; wander.dataset.control = 'wander'; wander.setAttribute('aria-pressed', String(d.wander));
       const actions = make('div', { className: 'gz-game-actions' }, pat, wander);
-      const care = make('p', { className: 'gz-game-care', textContent: !allowance.remaining ? t('All bonding moments enjoyed today. More tomorrow.') : cooling ? t('{n} of {max} bonding moments left today · Ready again in a minute', { n: allowance.remaining, max: P.CARE_LIMIT }) : t('{n} of {max} bonding moments left today', { n: allowance.remaining, max: P.CARE_LIMIT }) });
-      care.dataset.live = 'care';
+      // A tile too small for the rest (apps.css shows it then): the whole habitat, every control, in its dialog outside the tile.
+      if (!inDialog) {
+        const more = button('⋯', (e) => { if (e.isTrusted) open(); });
+        more.className = 'gz-w-icon gz-game-more'; more.dataset.control = 'more'; more.setAttribute('aria-haspopup', 'dialog');
+        more.title = t('Open {name}', { name: t('Pet habitat') }); more.setAttribute('aria-label', more.title);
+        actions.append(more);
+      }
+      // Today's bonding moments on the button itself; the sentence is its description and tooltip.
+      const careText = !allowance.remaining ? t('All bonding moments enjoyed today. More tomorrow.') : cooling ? t('{n} of {max} bonding moments left today · Ready again in a minute', { n: allowance.remaining, max: P.CARE_LIMIT }) : t('{n} of {max} bonding moments left today', { n: allowance.remaining, max: P.CARE_LIMIT });
+      const left = make('span', { className: 'gz-game-left', textContent: `${allowance.remaining}/${P.CARE_LIMIT}` }); left.setAttribute('aria-hidden', 'true');
+      const care = make('span', { className: 'gz-sr gz-game-care', id: `${uid}-care`, textContent: careText });
+      pat.append(left); pat.title = careText; pat.setAttribute('aria-describedby', care.id); care.dataset.live = 'care';
       const meterGroup = (ids, cls = '') => {
         const meters = make('div', { className: `gz-game-meters ${cls}` });
         for (const [id, name] of ids) {
@@ -76,7 +95,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       const meters = meterGroup([['mood', 'Mood'], ['energy', 'Energy'], ['bond', 'Bond']], 'gz-game-vitals');
       const traits = meterGroup([['playful', 'Playfulness'], ['curiosity', 'Curiosity'], ['comfort', 'Comfort']]);
       meters.dataset.live = 'vitals'; traits.dataset.live = 'traits';
-      const wellbeing = section('wellbeing', 'Wellbeing', traits,
+      const wellbeing = make('div', {}, traits,
         make('p', { textContent: t('Petting and play share {n} bonding moments each day, one per minute. Extra clicks do not add rewards or reactions. Your buddy is always happy to keep you company.', { n: P.CARE_LIMIT }) }));
       const wear = make('select'); wear.dataset.control = 'wear'; wear.setAttribute('aria-label', t('Buddy’s look'));
       for (const [id, item] of Object.entries(P.WEAR)) wear.append(make('option', { value: id, selected: d.wear === id, disabled: d.level < item.level, textContent: `${t(NAMES[id])} · ${t('Level {level}', { level: item.level })}` }));
@@ -110,15 +129,14 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
           placement.append(make('label', {}, make('span', { textContent: name }), select));
         }
       }
-      const decor = section('decor', 'Decorate habitat', field('Habitat style', habitat), make('p', { className: 'gz-game-hint', textContent: t('Click to add or put away. Drag items to arrange them; drag a toy onto the page to play.') }),
+      const decor = make('div', {}, field('Habitat style', habitat),
         make('h4', { textContent: t('Toys') }), toys, make('h4', { textContent: t('Furniture & decor') }), furniture, placement);
       if (locked.children.length) decor.append(section('unlocks', 'Upcoming unlocks', locked));
       const physics = make('input', { type: 'checkbox', checked: d.physics }); physics.dataset.control = 'physics';
       physics.addEventListener('change', (e) => { if (e.isTrusted) update({ op: 'physics', physics: physics.checked }); });
       const learning = make('input', { type: 'checkbox', checked: d.learning }); learning.dataset.control = 'learning';
       learning.addEventListener('change', (e) => { if (e.isTrusted) update({ op: 'learning', learning: learning.checked }); });
-      const settings = section('settings', 'Settings', field('Pet character', sprite), outfit, field('Gravity & water', physics), field('Learn from how I play', learning),
-        make('p', { className: 'gz-game-hint', textContent: t('Drag your buddy out to explore, and back in to come home. W: wander · H: home. Drag furniture, or use arrow keys; Delete puts it away.') }));
+      const settings = make('div', {}, field('Pet character', sprite), outfit, field('Gravity & water', physics), field('Learn from how I play', learning));
       const forget = button(t('Reset learned behavior'), (e) => { if (e.isTrusted) update({ op: 'forget' }); }); forget.dataset.control = 'forget';
       const stats = make('div', { className: 'gz-game-stats' }, make('p', { textContent: t('Learned interactions: {n}', { n: interactions }) }), make('p', { textContent: t('Familiarity: {n}/100', { n: profile.familiarity }) }));
       stats.dataset.live = 'learned';
@@ -132,18 +150,44 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         make('p', { textContent: t('Handed in: 20 XP on time, 10 XP late, 15 XP when timing is unknown. A kept do-on plan: 8 XP. Each verified streak day: 5 XP. Focus sessions give no XP.') }),
         make('p', { textContent: t('Your buddy keeps growing across semesters, with no final level. Progress stays with this school account on this device. Missing days never take progress away; unticking work removes its XP.') }),
         make('p', { textContent: t('Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.') }));
-      const about = section('about', 'Progress & learning', rules, learned);
+      const about = make('div', {}, xpLine, rules, learned);
+      // One panel at a time under the actions; a tab pressed again closes it. Settings is the dialog's (reached by ⋯ from a tile).
+      const PANELS = [['wellbeing', 'Wellbeing', wellbeing], ['decor', 'Decorate', decor], ['about', 'Progress', about], ...(inDialog ? [['settings', 'Settings', settings]] : [])];
+      const tabs = make('div', { className: 'gz-game-tabs' }), panels = [];
+      tabs.setAttribute('role', 'group'); tabs.setAttribute('aria-label', t('Pet habitat'));
+      const showPanel = () => {
+        for (const b of tabs.children) b.setAttribute('aria-expanded', String(b.dataset.control === `tab:${panel}`));
+        for (const el of panels) el.hidden = el.dataset.panel !== panel;
+      };
+      for (const [id, name, content] of PANELS) {
+        const tab = button(t(name), () => { panelChosen = true; panel = panel === id ? '' : id; showPanel(); });
+        tab.className = 'gz-game-tab'; tab.dataset.control = `tab:${id}`; tab.setAttribute('aria-controls', `${uid}-${id}`);
+        content.className = 'gz-game-panel'; content.id = `${uid}-${id}`; content.dataset.panel = id;
+        content.setAttribute('role', 'region'); content.setAttribute('aria-label', t(name));
+        tabs.append(tab); panels.push(content);
+      }
+      if (!PANELS.some(([id]) => id === panel)) panel = '';
+      showPanel();
       if (nextForm === form) {
-        controls.querySelector('[data-control="pet"]').disabled = pat.disabled;
-        for (const fresh of [care, meters, traits, stats, breakdown]) controls.querySelector(`[data-live="${fresh.dataset.live}"]`)?.replaceWith(fresh);
+        const petNow = controls.querySelector('[data-control="pet"]');
+        petNow.disabled = pat.disabled; petNow.title = pat.title; petNow.querySelector('.gz-game-left')?.replaceWith(left);
+        for (const fresh of [care, meters, traits, stats, breakdown, xpLine]) controls.querySelector(`[data-live="${fresh.dataset.live}"]`)?.replaceWith(fresh);
       } else {
-        controls.replaceChildren(actions, care, meters, wellbeing, decor, settings, about);
+        controls.replaceChildren(actions, care, meters, tabs, ...panels);
         if (active) [...pet.querySelectorAll('[data-control]')].find((e) => e.dataset.control === active)?.focus({ preventScroll: true });
       }
       form = nextForm; readout = nextReadout;
       world();
     };
-    const stop = () => { alive = false; mounted.delete(handle); player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
+    // Only a tile given a height has spare panel space. Auto-height tiles keep their compact default; an explicit choice wins
+    // over subsequent resizes. The observer changes content only inside a fixed-height body, so it cannot resize its own box.
+    const size = !inDialog && typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+      if (!alive || panelChosen || !body.clientWidth || !body.clientHeight) return;
+      const next = body.style.height && body.clientHeight >= 520 && body.clientWidth >= 300 ? 'wellbeing' : '';
+      if (next !== panel) { panel = next; form = ''; paint(); }
+    }) : null;
+    size?.observe(body);
+    const stop = () => { alive = false; size?.disconnect(); mounted.delete(handle); player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
     stage.addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('application/x-glaze-pet-item')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
     stage.addEventListener('drop', (e) => {
       const id = e.dataTransfer?.getData('application/x-glaze-pet-item');
@@ -235,13 +279,15 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     if (!ctx.settings().enabled || !ctx.settings().enhance.pet) return;
     box?.close();
     const opener = document.activeElement, body = make('div');
+    // Changing the habitat in the dialog can repaint its tile and replace More before the dialog closes.
+    const openerControls = opener?.dataset.control === 'more' ? opener.closest('.gz-game-controls') : null;
     const close = button(t('Close'), () => box.close());
     box = make('dialog', { className: 'gz-game-dialog' }, make('header', {}, make('h2', { id: 'gz-game-title', textContent: t('Pet habitat') }), close), body);
     box.setAttribute('aria-labelledby', 'gz-game-title');
-    const tile = mount(body), current = box;
+    const tile = mount(body, undefined, { inDialog: true }), current = box;
     const off = (ch, area) => { if (area === 'sync' && (ch.enabled?.newValue === false || (ch.enhance && !ch.enhance.newValue?.pet))) current.close(); };
     chrome.storage.onChanged.addListener(off);
-    box.addEventListener('close', () => { chrome.storage.onChanged.removeListener(off); tile.stop(); current.remove(); if (box === current) { box = null; opener?.focus({ preventScroll: true }); } });
+    box.addEventListener('close', () => { chrome.storage.onChanged.removeListener(off); tile.stop(); current.remove(); if (box === current) { box = null; (opener?.isConnected ? opener : openerControls?.querySelector('[data-control="more"]'))?.focus({ preventScroll: true }); } });
     box.addEventListener('click', (e) => { if (e.target === current) current.close(); });
     // Not modal (the pet can be dragged onto the page), so the browser does not close it on Escape. Something inside that used the
     // key already (the pet's own Escape, which sends it home) has prevented it.

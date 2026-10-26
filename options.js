@@ -17,6 +17,7 @@ const FORMAT = {
   deg: (v) => `${v}°`,
   presence: (v) => t(['Faint', 'Soft', 'Clear', 'Bold'][Math.min(3, Math.floor(v / 25))]),
   themepx: (v) => (v < 0 ? t('Theme') : `${v}px`),
+  sec: (v) => `${GZ_I18N.num(v / 1000, GZ_I18N.ui())} s`,
 };
 
 let hintTimer = 0, undoHeld = false;
@@ -41,7 +42,8 @@ const hint = (msg, err = false, undo = null) => {
 // aria-labelledby, which show and hide with it. Nothing here lists the settings. ----
 const finder = $('#find');
 let followSection = () => {}, searchPreview = () => {};
-const editor = GZ_EDITOR.mount({ onRoute: (route) => followSection(route) });
+const editor = GZ_EDITOR.mount({ onRoute: (route, part) => followSection(route, part) });
+GZ_INFO.mount();
 
 // Opened as a page of the school's site (features/settingspage.js): the same Settings, with Close and a way to its own tab.
 // The page around can't read this frame, but it could cover it and borrow a click, so what holds keys and grants (sharing,
@@ -55,7 +57,7 @@ if (embedded) {
   const ticket = new URLSearchParams(location.search).get('t') || '';
   history.replaceState(null, '', location.pathname + location.hash);
   chrome.runtime.sendMessage({ type: 'glaze:settings-claim', ticket }).then((r) => { if (r?.ok) document.documentElement.setAttribute('data-embed-ok', ''); }, () => {});
-  addEventListener('message', (e) => { if (e.source === window.parent && e.data?.gzSettings === 'go' && /^#[a-z]+(\/[a-z-]+)?$/.test(e.data.hash || '')) location.hash = e.data.hash; });
+  addEventListener('message', (e) => { if (e.source === window.parent && e.data?.gzSettings === 'go' && /^#[a-z][a-z-]*(\/[a-z-]+)?$/.test(e.data.hash || '')) location.hash = e.data.hash; });
   $('.embed-tools').hidden = false;
   const leave = () => window.parent.postMessage({ gzSettings: 'close' }, '*');
   // Where the frame has no tabs API (Firefox gives an extension page framed in a web page none), the worker opens it.
@@ -71,11 +73,13 @@ if (embedded) {
   $('#embed-close').addEventListener('click', leave);
   $('#embed-tab').addEventListener('click', () => ownTab());
   addEventListener('keydown', (e) => {
+    // Let the browser dismiss its top-layer description before Escape can close the surrounding Settings frame.
+    if (e.key === 'Escape' && document.querySelector('.info-pop:popover-open')) return;
     if (e.key !== 'Escape' || e.defaultPrevented || e.target.closest?.('input, select, textarea, dialog, [role="dialog"], [role="menu"]')) return;
     e.preventDefault(); leave();
   });
   const make = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
-  for (const [panel, name] of [['sharing', 'Sharing and sync'], ['mods', 'Mods'], ['backup', 'Backup and privacy']]) {
+  for (const [panel, name] of [['sharing', 'Sharing'], ['mods', 'Mods'], ['backup', 'Privacy and data']]) {
     const box = document.querySelector(`[data-editor-panel="${panel}"]`);
     if (!box) continue;
     const go = make('button', { type: 'button', className: 'primary', textContent: t('Open in a new tab') });
@@ -85,6 +89,9 @@ if (embedded) {
       make('p', { textContent: t('This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.') }), go));
   }
 }
+// A section's parts are its children, and the children of the boxes in it (groups, More options, the navigation's bodies), each
+// box's own heading aside. A match inside a closed More options opens it; leaving the search closes it again (lib/editor.js).
+const BOX = '.group, .nb-body, .nb-group, .nav-own, .stack, details.more';
 const filter = () => {
   const words = GZ_FIND.parse(finder.value);
   const on = words.length > 0;
@@ -106,31 +113,45 @@ const filter = () => {
     .flatMap((e) => `${e.getAttribute('aria-describedby') || ''} ${e.getAttribute('aria-labelledby') || ''}`.split(' '))
     .map((id) => id && document.getElementById(id)).filter(Boolean);
   const said = (el) => [el, ...el.querySelectorAll('[title], [aria-label], [placeholder]')]
-    .map((e) => `${e.title} ${e.getAttribute('aria-label') || ''} ${e.placeholder || ''}`).join(' ');
+    .map((e) => `${e.title} ${e.getAttribute('aria-label') || ''} ${e.getAttribute('placeholder') || ''}`).join(' ');
   let n = 0;
+  for (const b of $$('button.info.found')) b.classList.remove('found');
   for (const sec of $$('[data-editor-section]')) {
-    const h2 = sec.querySelector('h2');
-    const parts = [...sec.querySelectorAll(':scope > :not(.section-heading, .section-path, .section-note, .site-scope, .group), :scope > .group > :not(h3)')];
+    const h2 = sec.querySelector('h2'), boxes = [];
+    const partsOf = (box) => [...box.children].flatMap((el) => {
+      if (el.matches('.section-heading, .section-path, summary') || (box !== sec && el.tagName === 'H3')) return [];
+      if (el.matches(BOX)) { boxes.push(el); return partsOf(el); }
+      return [el];
+    });
+    const parts = partsOf(sec);
     const notes = new Map(parts.map((el) => [el, named(el)]));
     const isNote = new Set([...notes.values()].flat());
     for (const el of isNote) el.classList.toggle('miss', on);
     let any = false;
     for (const el of parts) {
       if (isNote.has(el)) continue;
-      const h3 = el.parentElement.querySelector(':scope > h3');
+      const heads = [];
+      for (let box = el.parentElement; box && box !== sec; box = box.parentElement) if (box.matches(BOX)) heads.push(box.querySelector(':scope > h3')?.textContent || '');
       const text = [el.textContent, said(el), ...notes.get(el).map((x) => x.textContent)].join(' ');
       const tab = $(`[data-editor-tab="${sec.dataset.editorSection.split('/')[0]}"]`).textContent;
-      const hit = !on || (!el.closest('[hidden]') && GZ_FIND.matches(`${tab} ${h2.textContent} ${h3?.textContent || ''}`, `${sec.dataset.sites} ${text}`, words));
+      const hit = !on || (!el.closest('[hidden]') && GZ_FIND.matches(`${tab} ${h2.textContent} ${heads.join(' ')}`, `${sec.dataset.sites} ${text}`, words));
       el.classList.toggle('miss', !hit);
       if (!hit || !on) continue;
       any = true;
       n++;
       for (const x of [el, ...notes.get(el)]) { x.classList.remove('miss'); mark(x); }
+      // A match only in a "?"'s description rings the "?"; opening it shows the words marked.
+      for (const pop of [el, ...notes.get(el)].flatMap((x) => (x.matches('.info-pop') ? [x] : [...x.querySelectorAll('.info-pop')]))) {
+        if (GZ_FIND.spans(pop.textContent, words).length) document.querySelector(`[popovertarget="${pop.id}"]`)?.classList.add('found');
+      }
     }
-    for (const g of sec.querySelectorAll(':scope > .group')) {
-      const empty = on && !g.querySelector(':scope > :not(h3, .miss)');
+    // Innermost first, so a box holding only empty boxes is empty too.
+    for (const g of boxes.reverse()) {
+      const empty = on && !g.querySelector(':scope > :not(h3, summary, .miss)');
       g.classList.toggle('miss', empty);
-      if (on && !empty) for (const h3 of g.querySelectorAll(':scope > h3')) mark(h3, true);
+      if (!on || empty) continue;
+      for (const h3 of g.querySelectorAll(':scope > h3')) mark(h3, true);
+      if (g.matches('details.more')) g.open = true;
     }
     sec.classList.toggle('miss', on && !any);
     if (on && any) mark(h2, true);
@@ -165,7 +186,7 @@ GZ_NEWS.check((notes) => {
 $('#news-close').addEventListener('click', () => { $('#news').hidden = true; finder.focus(); });
 
 GZ_UI.load().then((s) => {
-  const frame = $('#preview');
+  const frame = $('#preview'), backdrop = $('#backdrop');
   let navItems = GZ_NAV.clean(), navbarEditor = null;
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
@@ -177,8 +198,10 @@ GZ_UI.load().then((s) => {
     const phone = $('#preview-size').value === 'phone', width = phone ? 375 : 1280, height = phone ? 812 : 900;
     const stage = $('.preview-stage'), available = stage.clientWidth, scale = Math.min(1, available / width);
     Object.assign(frame.style, { width: `${width}px`, height: `${height}px`, transform: `scale(${scale})`, left: `${Math.max(0, (available - width * scale) / 2)}px` });
-    stage.style.height = `${Math.ceil(height * scale)}px`; $('#preview-size-label').textContent = `${width} × ${height} CSS px`;
+    stage.style.height = `${Math.ceil(height * scale)}px`;
   };
+  // The page's own background: the Look worn, or the one on offer while it is previewed.
+  const paintBackdrop = () => backdrop.contentWindow?.postMessage({ gzPreview: offer || s, gzPreviewParts: (offer || s).parts ?? null }, location.origin);
   const preview = () => {
     const belongs = (course) => course && (course.canvas ? 'canvas' : course.moodle ? 'moodle' : 'ultra') === previewSite;
     const base = offer || s, id = belongs(courses[previewCourse]) ? previewCourse : base.courses.tinted.find((id) => belongs(courses[id])), course = courses[id];
@@ -198,6 +221,7 @@ GZ_UI.load().then((s) => {
     const coursePointer = settings !== base && GZ_LOOK_PARTS({ name: base.courses.looks[id] })?.x?.pointer;
     frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) }, gzPreviewParts: settings === base ? base.parts ?? null : coursePointer ? { x: { pointer: coursePointer } } : null }, location.origin);
     renderNav(); renderContrast(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
+    paintBackdrop();
   };
   const contextPreview = (site, page) => {
     if (!supportedPages[site].includes(page)) page = 'courses';
@@ -209,18 +233,22 @@ GZ_UI.load().then((s) => {
     frame.title = t('Live preview: {site}, {page}', { site: $('#preview-site').selectedOptions[0].textContent, page: $('#preview-page').selectedOptions[0].textContent });
     preview();
   };
-  followSection = (route) => {
+  followSection = (route, part = '') => {
+    // part: the box in use inside the section (its id), where its preview differs from the section's.
     let site = previewSite, page = previewPage;
-    if (route.startsWith('blackboard/')) { site = 'ultra'; page = route.endsWith('/tabs') ? 'tabs' : route.endsWith('/dashboard') ? 'dashboard' : route.endsWith('/stream') ? 'stream' : 'outline'; }
-    else if (route.startsWith('canvas/')) { site = 'canvas'; page = route.endsWith('/documents') ? 'document' : route.endsWith('/quizzes') ? 'quiz' : 'courses'; }
-    else if (route.startsWith('moodle/')) { site = 'moodle'; page = 'courses'; }
-    else if (route === 'look/courses') { site = 'ultra'; page = 'outline'; }
+    if (part === 'bb-stream') { site = 'ultra'; page = 'stream'; }
+    else if (route === 'pages/dashboard') { site = 'ultra'; page = 'dashboard'; }
+    else if (route === 'pages/declutter') { site = 'ultra'; page = 'outline'; }
+    else if (route === 'pages/documents') { site = 'canvas'; page = 'document'; }
+    else if (route === 'navigation/tabs') { if (site === 'moodle') site = 'ultra'; page = 'tabs'; }
+    else if (route === 'courses/list') { site = 'ultra'; page = 'outline'; }
+    else if (route === 'pages/content') page = 'outline';
     else if (/\/(cards|palette|background)$/.test(route)) page = 'courses';
     else if (route === 'navigation/sidebar') { if (site === 'moodle') site = 'canvas'; page = 'courses'; }
     else if (route === 'study/widgets' || route === 'study/todo' || route === 'study/grades') { if (site === 'moodle') site = 'ultra'; page = 'dashboard'; }
     contextPreview(site, page);
   };
-  $('.editor').addEventListener('focusin', (e) => { const section = e.target.closest('[data-editor-section]'); if (section) followSection(section.dataset.editorSection); });
+  $('.editor').addEventListener('focusin', (e) => { const section = e.target.closest('[data-editor-section]'); if (section) followSection(section.dataset.editorSection, e.target.closest('#bb-stream')?.id); });
   for (const el of $$('#preview-site, #preview-page')) el.addEventListener('change', () => contextPreview($('#preview-site').value, $('#preview-page').value));
   for (const el of $$('#nav-preview-mode, #nav-preview-scheme, #preview-size')) el.addEventListener('change', preview);
   const showPreview = () => { $('#preview-body').hidden = previewCollapsed; $('#preview-toggle').setAttribute('aria-expanded', String(!previewCollapsed)); $('#preview-toggle').textContent = t(previewCollapsed ? 'Show preview' : 'Hide preview'); if (!previewCollapsed) sizePreview(); };
@@ -228,12 +256,19 @@ GZ_UI.load().then((s) => {
   searchPreview = (on) => { if (on !== searchWasOn) { if (on) { beforeSearch = previewCollapsed; previewCollapsed = true; } else previewCollapsed = beforeSearch; searchWasOn = on; showPreview(); } };
   frame.addEventListener('load', preview);
   addEventListener('message', (e) => {
+    if (e.origin === location.origin && e.source === backdrop.contentWindow && e.data?.gzPreviewReady) paintBackdrop();
     if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
     if (e.data?.gzPreviewReady) preview();
-    if (e.data?.gzPreviewFailed) $('#preview-note').textContent = t('Preview could not load. Try reloading settings.');
+    if (e.data?.gzPreviewFailed) Object.assign($('#preview-note'), { textContent: t('Preview could not load. Try reloading settings.'), hidden: false });
   });
-  const geometry = new ResizeObserver(() => { document.documentElement.style.setProperty('--editor-header', `${$('.top').getBoundingClientRect().height}px`); sizePreview(); });
-  geometry.observe($('.top')); geometry.observe($('.preview-stage'));
+  // Sticky things sit under the header; a section scrolled to sits under the header and, in one column, the categories' row too.
+  const geometry = new ResizeObserver(() => {
+    const top = $('.top').getBoundingClientRect().height, row = matchMedia('(max-width: 980px)').matches ? $('.editor-nav').getBoundingClientRect().height : 0;
+    document.documentElement.style.setProperty('--editor-top', `${top}px`);
+    document.documentElement.style.setProperty('--editor-header', `${top + row}px`);
+    sizePreview();
+  });
+  geometry.observe($('.top')); geometry.observe($('.editor-nav')); geometry.observe($('.preview-stage'));
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
   const pending = new Set(), pendingNav = new Set(), pendingNavbar = new Set();
@@ -265,7 +300,7 @@ GZ_UI.load().then((s) => {
 
   // Relay preference and explicit health action; sessions themselves are lib/sessions-ui.js's.
   const defaultRelay = 'https://share.frostdev.io';
-  let relayBusy = false;
+  let relayBusy = false, relayKept = defaultRelay;
   const relayStatus = (text, error = false) => { $('#relay-status').textContent = text; $('#relay-status').classList.toggle('error', error); };
   const relayValue = () => $('#relay-kind').value === 'default' ? defaultRelay : GZ_RELAY.normalize($('#relay-url').value);
   const relaySend = async (op, server) => {
@@ -280,6 +315,7 @@ GZ_UI.load().then((s) => {
     try {
       if (!test) {
         await relaySend('relaySave', server);
+        relayKept = server; showResets();
         if ($('#relay-kind').value === 'custom') $('#relay-url').value = server;
         relayStatus(t('Relay saved for new sessions. Existing sessions keep their own server.')); return;
       }
@@ -300,6 +336,7 @@ GZ_UI.load().then((s) => {
   $('#relay-test').addEventListener('click', (e) => { if (relayHuman(e)) relayAction(true); });
   chrome.storage.sync.get('shareRelay').then((r) => {
     const server = GZ_RELAY.normalize(r.shareRelay) || defaultRelay;
+    relayKept = server; showResets();
     $('#relay-kind').value = server === defaultRelay ? 'default' : 'custom'; $('#relay-url').value = server === defaultRelay ? '' : server; $('#relay-custom').hidden = server === defaultRelay;
   }).catch(() => {});
 
@@ -391,12 +428,14 @@ GZ_UI.load().then((s) => {
     };
   })();
 
+  // Reset buttons show only while what they reset differs from the defaults (set up with the resets, below).
+  let showResets = () => {};
   // ---- everything that follows the state, cheap enough to redo on every edit ----
   const outputs = () => {
     for (const o of $$('output[data-for]')) o.textContent = (FORMAT[o.dataset.format] || ((v) => GZ_I18N.num(v, GZ_I18N.ui())))(get(o.dataset.for));
   };
   const refresh = () => {
-    GZ_UI.paint(s);
+    GZ_UI.paint(s, { page: true });
     preview();
     // A whole Look brings its own extras: the Look being left is in History first, and Undo wears it again.
     GZ_UI.looks($('#looks'), s, (L) => {
@@ -422,6 +461,10 @@ GZ_UI.load().then((s) => {
     $('[data-key="nav.detailed"]').checked = s.nav.detailed;
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
+    // A control only where it has an effect (lib/editor.js SHOW); a More options with nothing left to show goes too.
+    for (const el of $$('[data-show]')) el.hidden = !GZ_EDITOR.SHOW[el.dataset.show](s);
+    for (const d of $$('details.more')) d.hidden = ![...d.children].some((el) => el.tagName !== 'SUMMARY' && !el.hidden);
+    showResets();
     document.body.classList.toggle('off', !s.enabled);
     // Redrawn lists and shown/hidden controls: match again.
     if (finder.value) filter();
@@ -641,6 +684,7 @@ GZ_UI.load().then((s) => {
       const row = node('li', {}, node('label', {}, input, t(widgetNames[w.id])), position, up, down); row.dataset.id = `widget-${w.id}`; reorderHandle(row, navItems.widgets.map((x) => x.id), at, t(widgetNames[w.id]), (ids) => writeNavItems({ ...navItems, widgets: ids.map((id) => navItems.widgets.find((x) => x.id === id)) }), 'widgets'); return row;
     }));
     if (focusId) { const row = document.querySelector(`.nav-editor-list [data-id="${focusId}"]`); const controls = row?.querySelectorAll('button, input, select'); (controls?.[focusAt]?.disabled ? row.querySelector('button:not([disabled]), input, select') : controls?.[focusAt])?.focus(); }
+    showResets();
   };
   const cancelLink = () => { editingLink = ''; $('#nav-link-name').value = ''; $('#nav-link-url').value = ''; $('#nav-link-icon').value = 'link'; showLinkIcon(); $('#nav-link-tab').checked = false; $('#nav-link-save').textContent = t('Add link'); };
   N.ICONS.forEach((id, at) => $('#nav-link-icon').append(new Option(t(iconNames[at]), id)));
@@ -655,8 +699,9 @@ GZ_UI.load().then((s) => {
   });
   $('#nav-link-cancel').addEventListener('click', () => { cancelLink(); $('#nav-link-name').focus(); });
   $('#nav-link-editor').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); cancelLink(); $('#nav-link-name').focus(); } });
-  // A logo picture, for the old sidebar and Glaze navigation alike: one picture on this device (nav.li), stored by the worker.
-  const pickLogo = async (e, after) => {
+  // A logo picture, for the site's own navigation and Glaze navigation alike: one picture on this device (nav.li), stored by the
+  // worker, picked where the navigation in use has Your logo chosen.
+  const pickLogo = async (e) => {
     const file = e.target.files[0], rev = ++navLogoPick; e.target.value = ''; if (!file) return;
     let logoImage;
     try { logoImage = await GZ_CARDS.picture(file); } catch { return hint(t("That file isn't a picture Glaze can read."), true); }
@@ -664,22 +709,21 @@ GZ_UI.load().then((s) => {
     const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:nav', nav: {}, logoImage }, (x) => res(chrome.runtime.lastError ? null : x)));
     if (rev !== navLogoPick) return;
     if (!r?.ok) return hint(t(r?.error === 'cap' ? "That picture is too big to keep. Try a smaller one, or remove another card's picture." : 'Not saved. Try again in a moment.'), true);
-    Object.assign(s.nav, r.nav); after?.(); fill(); hint(t('Saved'));
+    Object.assign(s.nav, r.nav); fill(); hint(t('Saved'));
   };
   $('#nav-logo-pick').addEventListener('click', () => $('#nav-logo-file').click());
   $('#nav-logo-file').addEventListener('change', (e) => pickLogo(e));
-  $('#nbar-logo-pick').addEventListener('click', () => $('#nbar-logo-file').click());
-  $('#nbar-logo-file').addEventListener('change', (e) => pickLogo(e, () => { if (s.navbar.brand !== 'custom') { set('navbar.brand', 'custom'); save(['navbar']); } }));
+  const NAV_RESETS = {
+    dimensions: ['size', 'width', 'icon', 'height', 'gap', 'padding', 'expandOnHover'],
+    labels: ['labels', 'text', 'labelOverflow'],
+    appearance: ['itemStyle', 'itemBackground', 'activeIndicator'],
+    branding: ['brand', 'logo', 'logoSize', 'logoAlign', 'footer'],
+  };
   for (const button of $$('[data-nav-reset]')) button.addEventListener('click', async () => {
     const section = button.dataset.navReset;
     if (section === 'layout') return writeNavItems({ ...navItems, order: [], hidden: [] });
     if (section === 'widgets') return writeNavItems({ ...navItems, widgets: N.clean().widgets });
-    const keys = {
-      dimensions: ['size', 'width', 'icon', 'height', 'gap', 'padding', 'expandOnHover'],
-      labels: ['labels', 'text', 'labelOverflow'],
-      appearance: ['itemStyle', 'itemBackground', 'activeIndicator'],
-      branding: ['brand', 'logo', 'logoSize', 'logoAlign', 'footer'],
-    }[section];
+    const keys = NAV_RESETS[section];
     if (!keys) return;
     if (section === 'dimensions' || section === 'labels') {
       Object.assign(s.nav, N.dimensions(s.nav), { detailed: true });
@@ -703,6 +747,8 @@ GZ_UI.load().then((s) => {
   let navPick = 0, navReview = 0, navRendered = '', navImage = null;
   const navAverages = new Map();
   const renderNav = () => {
+    // Placement can change without changing the cached navigation paint.
+    $('#tabs [data-tabs-nav-note]').hidden = s.tabs.at !== 'nav' || (s.navbar.on && s.navbar.tabs);
     const n = { ...(offer || s).nav };
     const signature = JSON.stringify([n, n.k === 'default' ? activeColors(offer || s) : null, s.navbar]);
     if (signature === navRendered) return;
@@ -717,19 +763,15 @@ GZ_UI.load().then((s) => {
     };
     paint(n.u);
     for (const el of $$('#sidebar [data-nav-kinds]')) el.hidden = !el.dataset.navKinds.split(' ').includes(n.k);
-    // Glaze navigation (the Navigation tab): its controls while it is on, the rail's while it is a rail somewhere.
-    $('#navbar [data-navbar]').hidden = !s.navbar.on;
+    // Glaze navigation's rail controls while it is a rail somewhere.
     $('#navbar [data-navbar-rail]').hidden = s.navbar.place !== 'rail' && s.navbar.course !== 'icons';
-    $('#sidebar [data-navbar-note]').hidden = !s.navbar.on;
     // The sidebar's controls while it is on; blur and opacity only for glass.
     $('#side-panel [data-sidebar]').hidden = !s.enhance.sidebar;
     $('#side-panel [data-sidebar-glass]').hidden = s.sidebar.surface !== 'glass';
-    $('#tabs [data-tabs-nav-note]').hidden = s.tabs.at !== 'nav' || (s.navbar.on && s.navbar.tabs);
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
     $('#nav-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
-    $('#nbar-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
-    $('#nbar-logo-pick').textContent = t(n.li ? 'Change logo' : 'Choose a logo');
+    $('#nav-logo-pick').textContent = t(n.li ? 'Change logo' : 'Choose a logo');
     const note = $('#nav-contrast');
     note.classList.remove('err');
     if (n.k === 'default') { if (note.textContent) note.textContent = ''; return; }
@@ -738,7 +780,7 @@ GZ_UI.load().then((s) => {
       const ratio = GZ_CARDS.contrast(n, { avg, ink: n.ink });
       note.classList.toggle('err', ratio !== null && ratio < 4.5);
       let text = ratio === null ? t('Image contrast cannot be measured. Check that every label is readable.')
-        : t(ratio < 4.5 ? 'Low sidebar contrast: {ratio}:1. Choose different text or background colors.' : 'Sidebar contrast: {ratio}:1. Text should reach 4.5:1; icons 3:1.', { ratio: GZ_I18N.num(+ratio.toFixed(2), GZ_I18N.ui()) });
+        : t(ratio < 4.5 ? 'Low site navigation contrast: {ratio}:1. Choose different text or background colors.' : 'Site navigation contrast: {ratio}:1. Text should reach 4.5:1; icons 3:1.', { ratio: GZ_I18N.num(+ratio.toFixed(2), GZ_I18N.ui()) });
       if (n.k === 'image' && ratio !== null) text += ' ' + t('Image contrast uses an average; check the whole picture.');
       if (note.textContent !== text) note.textContent = text;
     };
@@ -1143,7 +1185,7 @@ GZ_UI.load().then((s) => {
     offerFile = '';
   };
   addEventListener('pagehide', () => { offerGeneration++; letGo(); });
-  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
+  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s, { page: true }); preview(); };
   const tryCode = async (gallery = null) => {
     const code = $('#share-code').value.trim();
     if (!code) return endOffer();
@@ -1199,7 +1241,7 @@ GZ_UI.load().then((s) => {
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;
-    GZ_UI.paint(offer);
+    GZ_UI.paint(offer, { page: true });
     preview();
   };
   $('#share-try').addEventListener('click', () => tryCode());
@@ -1409,11 +1451,58 @@ GZ_UI.load().then((s) => {
     if (changes.rotateLooks || changes.lookFavorites) renderRotate();
   });
 
+  // ---- the restore list (#restore-pick): what a read file holds (lib/backup.js read), every category ticked; an old Notes
+  // zip goes into an account on this device. → { ticked: Set, account } once Restore is pressed, or null.
+  const askRestore = (() => {
+    const dialog = $('#restore-pick'), cats = $('#restore-cats'), go = $('#restore-ok'), field = $('#restore-account-field'), select = $('#restore-account');
+    let answer = null;
+    const boxes = () => [...cats.querySelectorAll('input')];
+    const enabled = () => { go.disabled = !boxes().some((b) => b.checked && !b.disabled) || (!field.hidden && boxes().some((b) => b.value === 'notes' && b.checked) && !select.value); };
+    cats.addEventListener('change', enabled);
+    select.addEventListener('change', enabled);
+    dialog.addEventListener('close', () => {
+      const ticked = new Set(boxes().filter((b) => b.checked && !b.disabled).map((b) => b.value));
+      answer?.(dialog.returnValue === 'ok' && ticked.size ? { ticked, account: select.value } : null);
+      answer = null;
+    });
+    // A Notes account as a person reads it: its school's host and user id.
+    const account = (key) => { const u = new URL(key.slice(9)); return `${u.host} · ${u.pathname.slice(1)}`; };
+    return (file, plan, accounts) => new Promise((resolve) => {
+      const names = backupNames(), count = plan.cats.notes?.length || 0;
+      $('#restore-title').textContent = t('Restore from {file}', { file: file.name });
+      cats.replaceChildren(...GZ_BACKUP.CATS.filter((k) => plan.cats[k] !== undefined).map((k) => {
+        const none = k === 'notes' && plan.kind === 'notes' && !accounts.length;
+        const box = Object.assign(document.createElement('input'), { type: 'checkbox', value: k, checked: !none, disabled: none });
+        const label = Object.assign(document.createElement('label'), { className: 'check' });
+        label.append(box, Object.assign(document.createElement('span'), { textContent: k === 'notes' && count > 1 ? t('Notes ({n} accounts)', { n: count }) : names[k] }));
+        if (none) label.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: t('No notes on this device yet. Write one in Notes on Canvas or Blackboard first.') }));
+        return label;
+      }));
+      field.hidden = plan.kind !== 'notes' || !accounts.length;
+      select.replaceChildren(Object.assign(document.createElement('option'), { value: '', textContent: '', selected: true }), ...accounts.map((k) => Object.assign(document.createElement('option'), { value: k, textContent: account(k) })));
+      enabled();
+      answer = resolve;
+      dialog.returnValue = '';
+      dialog.showModal();
+      (boxes().find((b) => !b.disabled) || $('#restore-cancel')).focus(); // focused here, not by autofocus: Settings can be a frame
+    });
+  })();
+
   // ---- backup ----
-  // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
-  // card styles and bookmarks go too; a picture kept on this computer stays here.
+  // One file (lib/backup.js): the settings, with Better To Do's own tasks and plans (storage.local, per Canvas site and user)
+  // and the pet beside them, card styles and bookmarks (a picture kept on this computer stays here), Look favorites, every
+  // Notes account, and this device's own records. Restore… lists what a file holds; each ticked category joins what is here.
+  const backupNames = () => ({ settings: t('Settings and Looks'), notes: t('Notes'), tasks: t('Tasks and pet'), dashNotes: t('Dashboard notes'),
+    classes: t('Class schedules'), gpa: t('GPA past terms'), widgets: t('Widgets'), shareKeys: t('Share keys') });
+  const sessionsOp = async (op, rest = {}) => {
+    const r = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op, ...rest });
+    if (!r?.ok) throw new Error(r?.error || 'storage');
+    return r;
+  };
+  let backupBusy = false;
   $('#export').addEventListener('click', async (e) => {
-    if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true)) return;
+    if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true) || backupBusy) return;
+    backupBusy = true;
     try {
       const keys = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'exportKeys' });
       if (!keys?.ok || !Array.isArray(keys.keys)) throw new Error('keys');
@@ -1427,25 +1516,23 @@ GZ_UI.load().then((s) => {
       const folders = GZ_FOLDERS.backup(all);
       const nav = { ...s.nav, i: '', li: '', ...(s.nav.li && { brand: 'glaze' }), ...(s.nav.i && { k: 'default', u: '' }) };
       const navbar = { ...s.navbar, ...(s.navbar.brand === 'custom' && { brand: 'glaze' }) };
-      const blob = new Blob([JSON.stringify({ ...s, nav, navbar, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
-      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
+      const settings = { ...s, nav, navbar, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), favorites: GZ_HISTORY.favorites(all.lookFavorites) };
+      const notes = [];
+      for (const account of Object.keys(all).filter((k) => GZ_BACKUP.ACCOUNT.test(k))) {
+        hint(t('Backing up…'));
+        notes.push({ account, entries: await GZ_BACKUP.notesOut(account, sessionsOp) });
+      }
+      const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, notes, keys: keys.keys, version: chrome.runtime.getManifest().version });
+      const blob = new Blob(GZ_ZIP.zip(entries), { type: 'application/zip' });
+      if (blob.size > GZ_BACKUP.LIMIT.zip || entries.length > GZ_BACKUP.LIMIT.entries) throw Object.assign(new Error('big'), { ui: t('Too big for one backup file (up to {size}).', { size: `${GZ_BACKUP.LIMIT.zip >> 20} MB` }) });
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: GZ_BACKUP.fileName() });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); }
+      hint('');
+    } catch (err) { hint(err.ui || t('Could not finish. Your local copies are kept. Try again.'), true); }
+    finally { backupBusy = false; }
   });
-  $('#import-btn').addEventListener('click', (e) => { if (e.isTrusted) $('#import').click(); });
-  $('#import').addEventListener('change', async (e) => {
-    if (!e.isTrusted) return;
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-    let raw;
-    try { raw = JSON.parse(await file.text()); } catch { return hint(t("{file} isn't a JSON file.", { file: file.name }), true); }
-    if (!raw || typeof raw !== 'object' || !['colors', 'look', 'bg', 'motion', 'presets'].some((k) => k in raw)) {
-      return hint(t('No Glaze settings found in {file}.', { file: file.name }), true);
-    }
-    // All of it is cleaned before any of it is applied, then stored whole by the background worker's write queue
-    // (GZ_TODO.restore, 'glaze:todo'): a file that can't be taken whole changes nothing, imports and every tab's
-    // To Do edits take turns, and success is said only once both stores have it.
+  // Clean Settings for the worker's staged restore; the UI reloads them only after the whole backup commits.
+  const putSettings = async (raw) => {
     const next = { ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw.card) };
     next.nav.i = ''; next.nav.li = ''; if (next.nav.brand === 'custom') next.nav.brand = 'glaze'; // A backup never names a picture on another device.
     if (next.navbar.brand === 'custom') next.navbar.brand = 'glaze';
@@ -1458,34 +1545,73 @@ GZ_UI.load().then((s) => {
     if (mediaMissing) next.bg.kind = 'gradient';
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
-    flush(); // an edit still waiting goes out first, so it can't land on top of the import
-    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, pets: raw.pets, folders: GZ_FOLDERS.backup(raw.folders), parts: raw.parts ?? null, settings: { version: 2, ...next, navItems: N.clean(raw.navItems), ...(raw.navbarItems !== undefined && { navbarItems: GZ_NAVBAR.clean(raw.navbarItems) }) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
-    if (!r.ok) {
-      // The settings didn't take, and putting the tasks back didn't either: say so, and show the settings as stored.
-      if (r.undone === false) {
-        GZ_UI.load().then((now) => { Object.assign(s, now); fill(); });
-        return hint(t("Couldn't import {file}, and undoing it failed too: your Better To Do tasks may be the imported ones. Your settings are as they were.", { file: file.name }), true);
+    const restore = { tasks, pets: raw.pets, folders: GZ_FOLDERS.backup(raw.folders), parts: raw.parts ?? null,
+      settings: { version: 2, ...next, navItems: N.clean(raw.navItems), ...(raw.navbarItems !== undefined && { navbarItems: GZ_NAVBAR.clean(raw.navbarItems) }) } };
+    const cards = [
+      ...(raw.ucards || raw.ulinks ? [{ ultra: true, replace: { cards: raw.ucards, links: raw.ulinks } }] : []),
+      { nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) },
+    ];
+    return { restore, cards, media: mediaMissing };
+  };
+  $('#import-btn').addEventListener('click', (e) => { if (e.isTrusted) $('#import').click(); });
+  $('#import').addEventListener('change', async (e) => {
+    if (!e.isTrusted) return;
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file || backupBusy) return;
+    backupBusy = true;
+    let plan;
+    try {
+      hint(t('Reading {name}…', { name: file.name }));
+      try { plan = await GZ_BACKUP.read(file); hint(''); } catch (err) {
+        const zip = /\.zip$/i.test(file.name);
+        return hint({
+          big: () => t('That file is too big to import (up to {size}).', { size: `${(zip ? GZ_BACKUP.LIMIT.zip : GZ_BACKUP.LIMIT.json) >> 20} MB` }),
+          json: () => t("{file} isn't a JSON file.", { file: file.name }),
+          none: () => t('No Glaze settings found in {file}.', { file: file.name }),
+          newer: () => t('{file} was made by a newer Glaze. Update Glaze to restore it.', { file: file.name }),
+        }[err.why]?.() || t("{file} isn't a Glaze backup, or it's damaged.", { file: file.name }), true);
       }
-      return hint(t("Couldn't import {file}, so nothing changed.", { file: file.name }), true);
+      const accounts = plan.kind !== 'notes' ? [] : (chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))).filter((k) => GZ_BACKUP.ACCOUNT.test(k));
+      const pick = await askRestore(file, plan, accounts);
+      if (!pick) return;
+      let token;
+      const backupOp = async (op, rest = {}) => {
+        const r = await chrome.runtime.sendMessage({ type: 'glaze:backup', restore: { op, token, ...rest } });
+        if (!r?.ok) throw new Error(r?.error || 'write');
+        return r;
+      };
+      const abandon = () => { if (token) chrome.runtime.sendMessage({ type: 'glaze:backup', restore: { op: 'abort', token } }).catch(() => {}); };
+      addEventListener('pagehide', abandon, { once: true });
+      flush();
+      hint(t('Restoring…'));
+      const out = await GZ_BACKUP.restore(plan, pick.ticked, {
+        begin: async () => { token = (await backupOp('begin')).token; },
+        own: (value) => backupOp('stage', { action: 'own', value }),
+        settings: async (raw) => { const value = await putSettings(raw); await backupOp('stage', { action: 'settings', value }); return { ok: true, media: value.media }; },
+        send: (op, rest) => backupOp('stage', { action: 'send', value: { op, ...rest } }),
+        finish: () => chrome.runtime.sendMessage({ type: 'glaze:backup', restore: { op: 'commit', token } }),
+        abort: async () => { if (token) await backupOp('abort'); },
+      }, pick.account);
+      removeEventListener('pagehide', abandon);
+      const names = backupNames();
+      if (!out.failed.length) {
+        Object.assign(s, await GZ_UI.load());
+        navItems = N.clean((await chrome.storage.sync.get('navItems')).navItems); renderNavItems(); showNavPreview(); fill();
+        hint([t('Restored {file}.', { file: file.name }), out.media && t('The background file was not included in this backup; showing the gradient.'),
+          pick.ticked.has('shareKeys') && t('Resume sharing to reconnect.'), out.skipped && t('Skipped (already up to date or too large): {n}', { n: out.skipped })].filter(Boolean).join(' '));
+      } else if (out.undone === false) hint(t("Couldn't restore {names}. Try again.", { names: new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(out.failed.map((k) => names[k])) }), true);
+      else if (!out.changed) hint(t("Couldn't restore {file}, so nothing changed.", { file: file.name }), true);
+      else hint(t("Couldn't restore {names}. Try again.", { names: new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(out.failed.map((k) => names[k])) }), true);
+    } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); } finally {
+      backupBusy = false;
+      $('#import-btn').focus();
     }
-    Object.assign(s, next);
-    // The backup's Look brings its parts (the export holds them); one without any leaves none worn.
-    s.parts = GZ_XPARTS.bundle(raw.parts);
-    navItems = N.clean(raw.navItems); renderNavItems(); showNavPreview();
-    const ultraStyled = !(raw.ucards || raw.ulinks) || await cardsOp({ ultra: true, replace: { cards: raw.ucards, links: raw.ulinks } });
-    const styled = await cardsOp({ nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) });
-    fill();
-    if (!styled || !ultraStyled) return hint(t('Some settings could not be imported. Try again in a moment.'), true);
-    if (raw.shareKeys !== undefined) {
-      const shared = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'importKeys', keys: raw.shareKeys }).catch(() => null);
-      if (!shared?.ok) return hint(t('Settings imported, but share keys could not be restored. Try importing again.'), true);
-    }
-    hint(t(mediaMissing ? 'Imported {file}. The background file was not included in this backup; showing the gradient.' : 'Imported {file}.', { file: file.name }));
   });
   // The defaults this device started with: a fresh install has Notes and the pet habitat on (GZ_SANITIZE's fresh), so a
   // reset gives those back rather than turning them off.
   let freshHere = false;
-  chrome.storage.local.get('freshDefaults', (r) => { freshHere = r?.freshDefaults?.fresh === true; });
+  chrome.storage.local.get('freshDefaults', (r) => { freshHere = r?.freshDefaults?.fresh === true; showResets(); });
   const defaultsHere = () => ({ ...GZ_SANITIZE(undefined, freshHere), card: GZ_CARDS.settings() });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
   let armed = 0;
@@ -1608,6 +1734,7 @@ GZ_UI.load().then((s) => {
   // A Look's own navigation layout and page tweaks are parts of the Look (lib/editor-xparts.js), not settings: the section's
   // Reset takes that part out of the Look, as its own button does, and can be undone.
   const LOOK_PART = { 'look/nav-layout': 'nav', 'look/rules': 'rules' };
+  const LOOK_PARTS = { 'look/pointer': ['pointer', 'cursor'], 'look/motion': ['anim', 'fx', 'type'] };
   for (const button of $$('[data-reset-section]')) button.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
     if (button.dataset.resetSection === 'sharing/relay') return resetRelay();
@@ -1626,9 +1753,24 @@ GZ_UI.load().then((s) => {
     if (touched.includes('nav')) for (const key of paths.filter((p) => p.startsWith('nav.') && !['nav.i', 'nav.li'].includes(p))) pendingNav.add(key.slice(4));
     fill(); save(touched); hint(t('Section reset. Your local data is kept.'));
   });
-  // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key. The pointer
-  // (lib/editor-pointer.js) is the student's, not the Look's: it saves extras.
-  GZ_EDITOR_X.mount({ s, save, preview, t, frame, hint });
+  const resetScope = new Map($$('[data-reset-section]').map((b) => [b, GZ_EDITOR.keys(b.closest('[data-editor-section]'))]));
+  const navDiffers = (keys) => keys.some((k) => JSON.stringify(s.nav[k]) !== JSON.stringify(GZ_DEFAULTS.nav[k]));
+  showResets = () => {
+    const defaults = defaultsHere();
+    for (const [b, paths] of resetScope) {
+      const route = b.dataset.resetSection, part = LOOK_PART[route];
+      b.hidden = part ? !s.parts?.x?.[part] : route === 'sharing/relay' ? relayKept === defaultRelay : !GZ_EDITOR.differs(s, paths, defaults) && !LOOK_PARTS[route]?.some((key) => s.parts?.x?.[key]);
+    }
+    for (const b of $$('[data-reset-setting]')) b.hidden = !GZ_EDITOR.differs(s, [b.dataset.resetSetting], defaults);
+    for (const b of $$('[data-nav-reset]')) {
+      const g = b.dataset.navReset;
+      b.hidden = g === 'layout' ? !navItems.order.length && !navItems.hidden.length : g === 'widgets' ? JSON.stringify(navItems.widgets) === JSON.stringify(N.clean().widgets) : !navDiffers(NAV_RESETS[g]);
+    }
+    $('#nav-reset').hidden = JSON.stringify(navItems) === JSON.stringify(N.clean()) && !navDiffers([...Object.keys(N.SPEC).filter((k) => k !== 'li'), 'labels', 'size', 'collapsed', 'logo']);
+  };
+  // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key. The pointer's cards
+  // (lib/editor-pointer.js) are the student's, not the Look's: they save extras; its This Look's pointer edits s.parts.
+  GZ_EDITOR_X.mount({ s, save: (...args) => { showResets(); save(...args); }, preview, t, frame, hint });
   $('#editor-version').textContent = `Glaze ${chrome.runtime.getManifest().version}`;
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
   // Mods (lib/editor-mods.js): installed mods, adding one, its install prompt and dev mode.
@@ -1636,7 +1778,7 @@ GZ_UI.load().then((s) => {
   navbarEditor = GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
-  followSection(editor.route());
+  followSection(editor.route(), editor.part());
 
   // Opening the editor wakes the mod blocklist check, which asks only if one is due (lib/blocklist.js).
   try { chrome.runtime.sendMessage({ type: 'glaze:blocklist' }, () => void chrome.runtime.lastError); } catch { /* no worker */ }

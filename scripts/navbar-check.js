@@ -102,7 +102,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     await page.keyboard.press('ArrowDown');
     ok(await bar((r) => r.activeElement?.dataset.id) === 'organization', 'Down moves to the next item');
     await page.keyboard.press('Escape');
-    ok(await bar((r) => !r.querySelector('.rail').hasAttribute('data-open') && r.activeElement?.classList.contains('toggle')), 'Escape closes the peek and keeps focus on the bar');
+    ok(await bar((r) => !r.querySelector('.rail').hasAttribute('data-open') && r.activeElement?.dataset.id === 'organization'), 'Escape closes the peek and keeps focus on its item');
 
     // Pinning (the editor's preview doesn't save it).
     await bar((r) => r.querySelector('.toggle').click());

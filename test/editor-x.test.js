@@ -206,7 +206,7 @@ test('the page carries the builders in the sections their settings live in, with
   assert.match(section('look/background'), /<div id="x-layers" class="x-builder" data-kinds="layers"><\/div>/);
   assert.match(section('look/background'), /<div id="x-media" class="x-builder" data-kinds="media"><\/div>/);
   assert.match(section('look/background'), /data-kinds="gradient aurora scene shader layers"><span>Colors/);
-  assert.match(section('look/background'), /data-kinds="scene shader layers"><span>Intensity/);
+  assert.match(section('look/background'), /data-kinds="scene shader layers"><span><label for="bg-intensity" id="bg-intensity-name">Intensity<\/label>/);
   assert.match(section('look/motion'), /<div id="x-motion" class="group"><\/div>/);
   assert.match(section('look/pointer'), /<div class="seg pt-cards" role="radiogroup" aria-labelledby="heading-look-pointer" aria-describedby="pointer-note" id="pointer-tiles" data-setting-owner="extras\.pointer"><\/div>/);
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);
@@ -214,7 +214,7 @@ test('the page carries the builders in the sections their settings live in, with
     assert.ok(at(a) > 0 && at(a) < at(b), `${a} loads before ${b}`);
   }
   const js = read('options.js');
-  assert.match(js, /GZ_EDITOR_X\.mount\(\{ s, save, preview, t, frame, hint \}\)/);
+  assert.match(js, /GZ_EDITOR_X\.mount\(\{ s, save[^\n]*preview, t, frame, hint \}\)/);
   assert.match(js.split('const refresh = () => {')[1].split('};')[0], /GZ_EDITOR_X\.render\(\);/);
   // Builders never save on their own: only through the editor's save() and the Look's parts key.
   for (const f of ['lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js']) assert.doesNotMatch(read(f), /chrome\.storage|GZ_UI\.save|innerHTML|insertAdjacentHTML/, f);
@@ -255,4 +255,25 @@ test('the event builder offers the canvas marks and shows the Look\'s selected m
   builder.mount({ s: { parts: { x: { fx: { complete: { kind: 'sprite', shapes: ['ghost'] } } } } } });
   for (const shape of MX.DRAWN) assert.ok(checks.some((c) => c['data-focus'] === `fx-complete-${shape}`), shape);
   assert.equal(checks.find((c) => c['data-focus'] === 'fx-complete-ghost').checked, true);
+});
+
+test('Motion has the Look\'s animations, event effects and typing effect; its pointer and cursor effect are under Look › Pointer', () => {
+  const MX = require('../lib/motionx.js'), labels = [], writes = [], saves = [];
+  let builder, resetClick;
+  const node = () => ({ dataset: {}, querySelector: node, append() {}, closest: () => null, childElementCount: 0, replaceChildren() {} });
+  const section = { querySelector: () => ({ addEventListener: (t, f) => { resetClick = f; } }) };
+  const host = { ...node(), closest: () => section };
+  const context = vm.createContext({ document: { getElementById: (id) => id === 'x-motion' ? host : null },
+    GZ_MX: MX, GZ_EDITOR_X: {
+      add: (b) => { builder = b; }, tr: (s) => s, tokenName: (s) => s, prune: (o) => o,
+      el: (tag, props, ...kids) => { if (tag === 'h3') labels.push(kids.flat()[0]); return node(); },
+      select: (o) => { labels.push(o.label); return node(); }, slider: node, colors: node, button: node, status: node, motionNote: () => '',
+    } });
+  vm.runInContext(read('lib/editor-xmotion.js'), context);
+  builder.mount({ s: { parts: { x: { pointer: 'aqua', cursor: { kind: 'glow' }, type: { kind: 'ink' } } }, extras: {} }, write: (k) => writes.push(k), save: (keys, soon, parts) => saves.push([keys, soon, parts]) });
+  assert.ok(labels.includes('Typing effect') && labels.includes('Event effects'), labels.join(', '));
+  for (const gone of ['Pointer', 'Cursor effect']) assert.ok(!labels.includes(gone), gone);
+  resetClick({ isTrusted: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(saves)), [[['parts'], false, ['anim', 'fx', 'type']]], 'Reset must merge only its parts into the latest Look');
+  assert.deepEqual(writes, ['anim', 'fx', 'type'], 'Motion\'s Reset leaves the pointer to Pointer\'s');
 });

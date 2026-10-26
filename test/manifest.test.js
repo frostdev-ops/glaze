@@ -120,6 +120,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   delete expected.oauth2; // Safari has no identity API: Google Calendar sync is Chrome's
   delete expected.optional_permissions;
   expected.description = 'Restyle Blackboard Ultra, Canvas and Moodle: palettes, fonts, backgrounds and motion, plus handy extras.';
+  expected.name = 'Glaze'; // Apple may reject other companies' trademarks in a name; Chrome's and Firefox's name them
   for (const entry of expected.web_accessible_resources) delete entry.use_dynamic_url;
   // Safari has no manifest sandbox (MDN: not supported on macOS or iOS), so no code mods: their page, CSP and files go.
   delete expected.sandbox;

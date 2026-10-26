@@ -97,14 +97,16 @@ test('existing Look codes with a custom brand import as Glaze', async () => {
 
 const backupFixture = () => {
   const elements = {}, writes = [], downloads = [];
+  let staged;
   const s = G.GZ_SANITIZE({ navbar: { brand: 'custom' }, nav: { brand: 'custom', li: 'aaaaaaaaaaaa' } });
-  const c = { s, navigator: {}, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: require('../lib/cards.js'), GZ_XPARTS: require('../lib/lookparts.js'),
+  const c = { s, navItems: {}, GZ_UI: { load: async () => ({ ...staged.restore.settings, parts: staged.restore.parts }) }, navigator: {}, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: require('../lib/cards.js'), GZ_XPARTS: require('../lib/lookparts.js'),
     GZ_NAVBAR: require('../lib/navbar.js'), GZ_TODO: { STORE_KEY: /^todo:/ }, GZ_PET: { KEY: /^pet:/, backup: () => ({}) }, GZ_FOLDERS: { backup: () => ({}) },
     N: { clean: () => ({}) }, Blob, URL: { createObjectURL: (blob) => { downloads.push(blob); return 'blob:backup'; }, revokeObjectURL() {} }, setTimeout() {},
+    GZ_BACKUP: require('../lib/backup.js'), GZ_HISTORY: require('../lib/history.js'), GZ_ZIP: require('../lib/zip.js'), askRestore: async (file, plan) => ({ ticked: new Set(Object.keys(plan.cats)), account: '' }),
     document: { createElement: () => ({ click() {} }) },
-    $: (id) => (elements[id] ||= { addEventListener: (type, fn) => { elements[id][type] = fn; } }),
-    flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true, hint() {}, t: (s) => s,
-    chrome: { storage: { sync: { get: async () => ({}) }, local: { get: async () => ({}) } }, runtime: { sendMessage: (m, cb) => { writes.push(m); const r = { ok: true, keys: [] }; cb?.(r); return Promise.resolve(r); } } },
+    $: (id) => (elements[id] ||= { focus() {}, addEventListener: (type, fn) => { elements[id][type] = fn; } }),
+    addEventListener() {}, removeEventListener() {}, flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true, hint() {}, t: (s) => s,
+    chrome: { storage: { sync: { get: async () => ({}) }, local: { get: async () => ({}) } }, runtime: { getManifest: () => ({ version: '1' }), sendMessage: (m, cb) => { if (m.restore?.op === 'stage' && m.restore.action === 'settings') { staged = m.restore.value; writes.push(staged); } const r = { ok: true, keys: [], token: 'test' }; cb?.(r); return Promise.resolve(r); } } },
   };
   const src = read('options.js'); vm.runInNewContext(part(src, '  // ---- backup ----', '  // Two clicks, so a stray'), c);
   return { s, elements, writes, downloads };
@@ -112,13 +114,15 @@ const backupFixture = () => {
 
 test('a settings backup exports Glaze in place of the device-only navigation logo', async () => {
   const f = backupFixture(); await f.elements['#export'].click({ isTrusted: true });
-  const saved = JSON.parse(await f.downloads[0].text());
+  const zip = require('../lib/doctext.js').unzip(new Uint8Array(await f.downloads[0].arrayBuffer()));
+  const saved = JSON.parse(await zip.text('glaze-backup.json')).settings;
   assert.equal(saved.navbar.brand, 'glaze'); assert.equal(saved.nav.li, '');
 });
 
 test('restoring a backup with a custom navigation brand selects Glaze without a picture reference', async () => {
   const f = backupFixture();
-  await f.elements['#import'].change({ isTrusted: true, target: { files: [{ name: 'settings.json', text: async () => JSON.stringify(f.s) }] } });
+  const text = JSON.stringify(f.s);
+  await f.elements['#import'].change({ isTrusted: true, target: { files: [{ name: 'settings.json', size: text.length, text: async () => text }] } });
   assert.equal(f.writes[0].restore.settings.navbar.brand, 'glaze');
   assert.equal(f.s.navbar.brand, 'glaze'); assert.equal(f.s.nav.li, '');
 });
