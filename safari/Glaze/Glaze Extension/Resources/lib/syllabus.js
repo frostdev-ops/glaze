@@ -129,11 +129,14 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   const dateRows = (lines, o, skip) => {
     const out = [], heads = new Set(), subs = new Set();
     for (const l of lines) { const m = SECTION.exec(l); if (m) (m[2] ? subs : heads).add(m[2] ? `${+m[1]}.${+m[2]}` : +m[1]); }
+    let dateTable = false;
     lines.forEach((raw, i) => {
+      if (!raw.includes('\t')) dateTable = false;
+      else if (/^\s*(?:date|datum|fecha|data)[ \t]*\t/iu.test(raw)) dateTable = true;
       const kind = EXAM_RE.test(raw) ? 'exam' : DUE_RE.test(raw) ? 'due' : '';
       if (!kind || TOC.test(raw) || skip.has(i)) return; // a schedule's every lecture topic is noise
       const sec = SECTION.exec(raw);
-      const numbered = sec?.[2] && heads.has(+sec[1]) && (subs.has(`${+sec[1]}.${+sec[2] - 1}`) || subs.has(`${+sec[1]}.${+sec[2] + 1}`));
+      const numbered = !dateTable && sec?.[2] && heads.has(+sec[1]) && (subs.has(`${+sec[1]}.${+sec[2] - 1}`) || subs.has(`${+sec[1]}.${+sec[2] + 1}`));
       const found = datesIn(raw, o).filter((f) => !(numbered && f.at === raw.search(/\d/)));
       if (!found.length) return;
       // The title: the line without its dates and the weekday right before each.
