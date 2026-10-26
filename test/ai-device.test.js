@@ -70,6 +70,7 @@ const stub = ({ avail = 'available', imageAvail, window = 1000, used = 10, cost 
   return { LM, log };
 };
 const install = (s) => { globalThis.LanguageModel = s.LM; return s; };
+const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 test.beforeEach(() => { delete globalThis.LanguageModel; D._reset(); B._reset(); });
 test.after(() => { delete globalThis.LanguageModel; });
 
@@ -319,11 +320,187 @@ test('in the real worker: Settings\' top frame asks for the device and starts it
   const EXT = 'chrome-extension://x';
   const editor = { id: 'glaze', frameId: 0, url: `${EXT}/options.html`, origin: EXT, tab: { id: 9, url: `${EXT}/options.html` } };
   const page = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com', tab: { id: 4, url: 'https://school.instructure.com/courses/1' } };
-  assert.deepEqual(await w.send({ type: 'glaze:ai-config', op: 'test', provider: 'device' }, page), { ok: false, error: 'sender' });
-  assert.deepEqual(await w.send({ type: 'glaze:ai-config', op: 'prepare', provider: 'device' }, page), { ok: false, error: 'sender' });
+  for (const sender of [page, { ...editor, frameId: 1 }, { ...editor, id: 'other' }, { ...editor, url: `${EXT}/popup.html` }, { ...editor, origin: 'https://evil.example' }]) {
+    for (const op of ['test', 'prepare', 'run']) assert.deepEqual(await w.send({ type: 'glaze:ai-config', op, provider: 'device' }, sender), { ok: false, error: 'sender' });
+  }
   assert.equal(s.log.create.length, 0);
+  const events = [];
+  w.context.chrome.runtime.sendMessage = async (m) => { events.push(JSON.parse(JSON.stringify(m))); };
   assert.deepEqual(JSON.parse(JSON.stringify(await w.send({ type: 'glaze:ai-config', op: 'test', provider: 'device' }, editor))), { ok: true, state: 'download' });
   assert.deepEqual(JSON.parse(JSON.stringify(await w.send({ type: 'glaze:ai-config', op: 'prepare', provider: 'device' }, editor))), { ok: true, state: 'ready' });
   assert.equal(s.log.create.length, 1);
+  assert.deepEqual(events, [0, 0.5, 1].map((loaded) => ({ type: 'glaze:ai-config', event: 'progress', provider: 'device', loaded })));
   assert.ok(w.context.GZ_AI_DEVICE, 'the worker imported the provider with the harness');
+});
+
+test('broker readiness follows the device model state without creating a session or downloading', async () => {
+  const e = env();
+  for (const [avail, why] of [['downloadable', 'download'], ['downloading', 'downloading'], ['unavailable', 'unavailable'], ['available', undefined]]) {
+    const s = install(stub({ avail }));
+    const out = await B.status({ feature: 'syllabus' }, e);
+    assert.equal(out.ready, avail === 'available', avail);
+    assert.equal(out.why, why, avail);
+    assert.equal(s.log.create.length, 0, 'status never downloads');
+  }
+  delete globalThis.LanguageModel;
+  assert.equal((await B.status({ feature: 'syllabus' }, e)).ready, false, 'Firefox and Safari');
+});
+
+test('a stalled shared download times out, detaches progress, and permits a retry without leaking its late session', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const s = install(stub({ avail: 'downloadable' }));
+  const create = s.LM.create;
+  const monitor = new EventTarget();
+  let finish, signal, calls = 0, destroyed = 0;
+  s.LM.create = (o) => {
+    calls++;
+    signal = o.signal;
+    o.monitor(monitor);
+    return new Promise((resolve) => { finish = () => resolve({ contextWindow: 1000, destroy() { destroyed++; } }); });
+  };
+  const seen = [], results = [];
+  const jobs = [D.prepare({}, { onProgress: (n) => seen.push(n) }).then((r) => { results[0] = r; }), D.prepare({}, { onProgress: (n) => seen.push(n) }).then((r) => { results[1] = r; })];
+  try {
+    await settle();
+    assert.equal(calls, 1);
+    monitor.dispatchEvent(Object.assign(new Event('downloadprogress'), { loaded: 0.25 }));
+    assert.deepEqual(seen, [0.25, 0.25]);
+    t.mock.timers.tick(240001);
+    await settle();
+    assert.deepEqual(results, [{ state: 'unavailable', reason: 'timeout' }, { state: 'unavailable', reason: 'timeout' }]);
+    assert.equal(signal.aborted, true);
+    monitor.dispatchEvent(Object.assign(new Event('downloadprogress'), { loaded: 0.75 }));
+    assert.deepEqual(seen, [0.25, 0.25], 'no progress after timeout');
+    s.LM.create = create;
+    s.LM.availability = async () => 'available';
+    assert.deepEqual(await D.prepare({}), { state: 'ready' }, 'a new attempt does not join the expired job');
+  } finally {
+    finish?.();
+    await Promise.all(jobs);
+    await settle();
+  }
+  assert.equal(destroyed, 1, 'a session arriving after timeout is destroyed');
+});
+
+test('prepare also bounds a stalled availability check and never creates a session when it returns late', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const s = install(stub());
+  let release, result;
+  s.LM.availability = () => new Promise((resolve) => { release = resolve; });
+  const job = D.prepare({}).then((r) => { result = r; });
+  try {
+    await settle();
+    t.mock.timers.tick(240001);
+    await settle();
+    assert.deepEqual(result, { state: 'unavailable', reason: 'timeout' });
+  } finally {
+    release('downloadable');
+    await job;
+    await settle();
+  }
+  assert.equal(s.log.create.length, 0, 'late availability must not start a download');
+});
+
+test('a stalled device status check returns unavailable so neither Settings nor feature readiness hangs', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const s = install(stub());
+  const releases = [], results = [];
+  s.LM.availability = () => new Promise((resolve) => releases.push(resolve));
+  const jobs = [B.config({ op: 'test', provider: 'device' }, env()).then((r) => { results[0] = r; }), B.status({ feature: 'syllabus' }, env()).then((r) => { results[1] = r; })];
+  try {
+    await settle();
+    t.mock.timers.tick(20001);
+    await settle();
+    assert.deepEqual(results[0], { ok: true, state: 'unavailable', reason: 'timeout' });
+    assert.equal(results[1]?.ready, false);
+    assert.equal(results[1]?.why, 'unavailable');
+  } finally {
+    for (const release of releases) release('available');
+    await Promise.all(jobs);
+  }
+  assert.equal(s.log.create.length, 0);
+});
+
+for (const legacy of [false, true]) test(`cancel during ${legacy ? 'measureInputUsage' : 'measureContextUsage'} destroys the session before measurement returns`, async () => {
+  let release;
+  const s = install(stub({ legacy, cost: () => new Promise((resolve) => { release = resolve; }) }));
+  const c = new AbortController();
+  const job = P.run('device', req(), {}, { signal: c.signal }).catch((e) => e);
+  try {
+    await settle();
+    assert.equal(typeof release, 'function');
+    c.abort(new DOMException('Cancelled', 'AbortError'));
+    assert.equal((await job).code, 'cancelled');
+    await settle();
+    assert.equal(s.log.destroyed, 1, 'cleanup cannot wait for a stalled measurement');
+  } finally {
+    release?.(20);
+    await job;
+    await settle();
+  }
+  assert.equal(s.log.prompts.length, 0, 'no inference after cancellation');
+});
+
+test('a throwing stream consumer cancels and unlocks the stream and destroys the session', async () => {
+  const s = install(stub());
+  const create = s.LM.create;
+  let stream;
+  s.LM.create = async (o) => {
+    const session = await create(o), streaming = session.promptStreaming;
+    session.promptStreaming = (...args) => (stream = streaming(...args));
+    return session;
+  };
+  await assert.rejects(P.run('device', req(), {}, { onDelta: () => { throw new Error('consumer failed'); } }), { code: 'connection-lost' });
+  assert.equal(s.log.destroyed, 1);
+  assert.equal(stream.locked, false);
+});
+
+test('cancelling a pending stream read unlocks it and destroys the session without waiting for more output', async () => {
+  const s = install(stub());
+  const create = s.LM.create;
+  let stream, controller, cancelled = false;
+  s.LM.create = async (o) => {
+    const session = await create(o);
+    session.promptStreaming = () => (stream = new ReadableStream({ start(c) { controller = c; }, cancel() { cancelled = true; } }));
+    return session;
+  };
+  const c = new AbortController();
+  const job = P.run('device', req(), {}, { signal: c.signal, onDelta: () => {} }).catch((e) => e);
+  try {
+    await settle();
+    c.abort(new DOMException('Cancelled', 'AbortError'));
+    assert.equal((await job).code, 'cancelled');
+    await settle();
+    assert.equal(cancelled, true);
+    assert.equal(stream.locked, false);
+    assert.equal(s.log.destroyed, 1);
+  } finally {
+    // Release the stub's pending read even against the unfixed provider.
+    if (!cancelled) controller?.close();
+    await settle();
+  }
+});
+
+test('responseConstraint never replaces validation of the returned JSON', async () => {
+  for (const answer of ['not JSON', '{"text":42}', '{"other":"value"}']) {
+    const s = install(stub({ chunks: [answer] }));
+    await assert.rejects(P.run('device', req(), {}), { code: 'invalid-response' });
+    assert.equal(s.log.destroyed, 1);
+  }
+});
+
+test('a restarted worker reads current download state and never replays a session', async () => {
+  const worker = require('./helpers/worker-env.cjs');
+  const { fakeIDB } = require('./helpers/fake-idb.cjs');
+  const s = stub({ avail: 'downloading' });
+  const globals = { ...fakeIDB(), LanguageModel: s.LM, EventTarget, Event };
+  const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html', origin: 'chrome-extension://x' };
+  const w = worker({ globals });
+  assert.deepEqual(await w.send({ type: 'glaze:ai-config', op: 'test', provider: 'device' }, editor), { ok: true, state: 'downloading' });
+  const restarted = worker({ globals, store: w.store });
+  s.LM.availability = async () => 'downloadable';
+  assert.deepEqual(await restarted.send({ type: 'glaze:ai-config', op: 'test', provider: 'device' }, editor), { ok: true, state: 'download' });
+  s.LM.availability = async () => 'available';
+  assert.deepEqual(await restarted.send({ type: 'glaze:ai-config', op: 'test', provider: 'device' }, editor), { ok: true, state: 'ready' });
+  assert.equal(s.log.create.length, 0);
 });
