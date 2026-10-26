@@ -16,6 +16,8 @@ All notable changes to Glaze are documented here. The format follows
 - Blackboard: Read this document in Syllabus import reads a document's attached files (PDFs, Word, PowerPoint, pictures) and lists each document under its own title.
 - Syllabus import: tables of contents and section numbers are no longer read as dates, weights from tables and charts pair with the right labels, office hours given twice show once, and fields Glaze isn't sure of stay empty.
 - Imported pictures keep a table's rows and a chart's labels with their values.
+- Syllabus import reads schedule rows whose exam or due word sits in another column, "released … due …" windows, weekly rules limited to weeks or dates (skipping the days they except), and a TA's or coordinator's hours as office hours.
+- Syllabus import with AI fills an office from a line that labels it or gives the professor's e-mail.
 
 - Blackboard: a discussion's rubric link, and the one on the page View instructions opens, show Glaze's rubric pop-up instead of Blackboard's own rubric panel.
 - Settings: Blackboard's preview repaints its course cards as you change them.
