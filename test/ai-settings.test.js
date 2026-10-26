@@ -23,8 +23,8 @@ const listing = (ids) => json({ data: ids.map((id) => ({ id })) });
 
 // page({ ai, calls, granted, device, features, server }): Settings with the AI tab mounted.
 //   device(m): the device provider's worker side (undefined: Glaze doesn't ship it here); server(url, init): the endpoint.
-const page = ({ ai, calls, granted = true, device, providers, features, server = async () => listing(['gpt-x', 'gpt-y']) } = {}) => {
-  const ids = new Map(), sent = [], asked = [], onChanged = [], onMessage = [], held = new Set(), vault = new Map(), fetched = [];
+const page = ({ ai, calls, granted = true, device, providers, features, embedded = false, save = true, server = async () => listing(['gpt-x', 'gpt-y']) } = {}) => {
+  const ids = new Map(), sent = [], asked = [], reads = [], onChanged = [], onMessage = [], held = new Set(), vault = new Map(), fetched = [];
   const data = { ...(ai && { ai: structuredClone(ai) }), ...(calls && { aiCalls: structuredClone(calls) }) };
   let gesture = false;
   const doc = { activeElement: null };
@@ -40,12 +40,12 @@ const page = ({ ai, calls, granted = true, device, providers, features, server =
   Object.assign(doc, { createElement: el, getElementById: (id) => { if (!ids.has(id)) ids.set(id, el()); return ids.get(id); } });
   const changed = (patch) => { for (const f of onChanged) f(patch, 'local'); };
   const local = {
-    get: async (keys) => structuredClone(Object.fromEntries([].concat(keys).filter((k) => Object.hasOwn(data, k)).map((k) => [k, data[k]]))),
+    get: async (keys) => { reads.push(keys); return structuredClone(Object.fromEntries([].concat(keys).filter((k) => Object.hasOwn(data, k)).map((k) => [k, data[k]]))); },
     set: async (patch) => { Object.assign(data, structuredClone(patch)); changed(Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, { newValue: structuredClone(v) }]))); },
     remove: async (keys) => { for (const k of [].concat(keys)) delete data[k]; changed(Object.fromEntries([].concat(keys).map((k) => [k, {}]))); },
   };
   const env = {
-    vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
+    vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { if (!save) return false; vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
     reach: async (url) => { const u = new URL(url); return held.has(`${u.protocol}//${u.hostname}/*`); },
     fetch: async (url, init) => { fetched.push(url); return server(url, init); },
     say: (m) => { for (const f of onMessage) f(m, { id: 'glaze' }); },
@@ -67,7 +67,8 @@ const page = ({ ai, calls, granted = true, device, providers, features, server =
     permissions: { request: ({ origins }) => { asked.push([[...origins], gesture]); if (granted) origins.forEach((o) => held.add(o)); return Promise.resolve(granted); } },
   };
   const settings = { ...AS, ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
-  const ctx = vm.createContext({ chrome, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
+  const window = {}; window.top = embedded ? {} : window;
+  const ctx = vm.createContext({ chrome, window, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
     GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../lib/ai/endpoint.js') });
   vm.runInContext(read('lib/site.js'), ctx);
   vm.runInContext(read('lib/editor-ai.js'), ctx);
@@ -77,7 +78,7 @@ const page = ({ ai, calls, granted = true, device, providers, features, server =
   // Every word and value on the page, to look for what must never be there.
   const all = (e = null) => (e ? [e.textContent, e.value, ...e.children.flatMap((k) => all(k))] : [...ids.values()].flatMap((x) => all(x)));
   return {
-    $, data, sent, asked, held, vault, fetched, doc, all,
+    $, data, sent, asked, reads, held, vault, fetched, doc, all,
     ops: () => sent.filter((m) => m.type === 'glaze:ai-config').map((m) => m.op),
     click: async (id) => { fire(id, 'click'); await settle(); },
     change: async (id, checked) => { $(id).checked = checked; fire(id, 'change'); await settle(); },
@@ -106,6 +107,23 @@ test('off by default: the switch is off, only it shows, and the worker is asked 
   assert.deepEqual(p.data, {}, 'opening Settings writes nothing');
   assert.match(read('options.html'), /<input type="checkbox" id="ai-on" data-local>/, 'the switch is not checked in the page');
   assert.deepEqual(AS.clean(undefined), { on: false, use: null, features: { syllabus: false } });
+});
+
+test('embedded Settings does not initialize AI controls or read its connections and activity', async () => {
+  const p = await open({ embedded: true, ai: { on: true, use: 'device' }, calls: [{ startedAt: 1, feature: 'syllabus', provider: 'device', state: 'completed' }] });
+  assert.deepEqual(p.ops(), []);
+  assert.deepEqual(p.reads, []);
+  assert.deepEqual(p.$('ai-feature-list').children, []);
+  await p.change('ai-on', false);
+  assert.equal(p.data.ai.on, true, 'the gated frame has no AI change handlers');
+});
+
+test('enabling AI refreshes a saved device connection without starting a download', async () => {
+  const p = await open({ ai: { on: false, use: 'device' } });
+  assert.deepEqual(p.ops(), ['get']);
+  await p.change('ai-on', true);
+  assert.equal(p.$('ai-device-state').textContent, 'Not available in this browser');
+  assert.equal(p.ops().includes('prepare'), false);
 });
 
 test('the switch and the connection are kept in storage.local ai, cleaned; the features stay off until each is turned on', async () => {
@@ -182,6 +200,16 @@ test('a key left masked is kept, an emptied one is removed, a new one replaces i
   assert.equal(p.vault.get('connections').endpoint.key, 'sk-other-1234567890');
   assert.equal(p.$('ai-key').value, 'sk-o••••7890');
   assert.ok(!p.all().some((x) => String(x).includes('sk-other-1234567890')));
+});
+
+test('a rejected save removes the submitted credential from the page', async () => {
+  const p = await open({ save: false });
+  await p.endpoint();
+  await p.click('ai-save');
+  assert.equal(p.$('ai-said').textContent, 'Could not save. Try again.');
+  assert.ok(!p.all().some((x) => String(x).includes(KEY)), 'the submitted key is no longer readable from an input');
+  assert.equal(p.$('ai-key').type, 'password');
+  assert.equal(p.vault.size, 0);
 });
 
 test('a refused host is said; an address that is no endpoint is refused before any prompt', async () => {
