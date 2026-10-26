@@ -214,6 +214,20 @@ test('ocrText: confidence describes the words retained in a joined row', () => {
   assert.equal(r.conf, 95, 'discarded bullet guesses are not recognized words');
 });
 
+test('ocrText: a dense 4000 pixel page has bounded layout cost', (t) => {
+  // Small type in a dense numerical table: 40,000 words in a 4000 × 4000 image.
+  // A percent in every cell used to search the whole page for a chart neighbor.
+  const json = engineJson(Array.from({ length: 400 }, (_, y) => Array.from({ length: 100 }, (_, x) =>
+    ['10%', x * 40, x * 40 + 20, y * 10, y * 10 + 8])));
+  const cpu = process.cpuUsage(), start = performance.now();
+  const r = D.ocrText(json);
+  const elapsed = performance.now() - start, used = process.cpuUsage(cpu);
+  t.diagnostic(`4000x4000, 40000 words: ${elapsed.toFixed(1)} ms wall, ${((used.user + used.system) / 1000).toFixed(1)} ms CPU`);
+  assert.equal(r.text.split('\n').length, 400);
+  assert.equal(r.text.split(/\s+/).length, 40000);
+  assert.ok(used.user + used.system < 2_000_000, 'layout alone must use less than two seconds of CPU');
+});
+
 test('ocrText: a table row whose cells are several lines, or centred in it, is one line; level rows and a paragraph stay lines', () => {
   // A course calendar laid out as the engine reads it in one block: the week's dates centred in their cell, so the
   // engine puts them on a line with the second line of the cells beside them, or on a line of their own; bullets read
