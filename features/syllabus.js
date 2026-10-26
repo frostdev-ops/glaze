@@ -254,19 +254,25 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       const docs = avail.filter((c) => pages.has(c.id) && !pages.has(c.parentId) && html(c).trim()).sort((a, b) => SYL.test(b.title) - SYL.test(a.title));
       if (!docs.length || !box.isConnected) return;
       const sel = make('select', { id: 'gz-syl-doc' }, ...docs.slice(0, 200).map((d, i) => make('option', { value: String(i), textContent: String(d.title || '').slice(0, 200) })));
+      const live = () => dlg === mine && mine.open && box.isConnected && allowed(cid);
       const read = async () => {
+        const chosen = docs[+sel.value];
+        if (!live() || !chosen) return;
         // One read at a time, as go()'s: a newer one, Stop, another step or closing the dialog calls this one off.
         reading?.abort();
         say.textContent = t('Reading…');
         const ctl = reading = new AbortController(), signal = ctl.signal;
+        const check = () => { if (!live() || reading !== ctl) ctl.abort(); signal.throwIfAborted(); };
         stop.hidden = false;
         try {
           await docIn();
+          check();
           const D = globalThis.GZ_DOCTEXT;
           const texts = [], ocrs = [];
           let why = null;
           // The HTML split at its anchors: an anchor files() takes is a file, the rest is text.
-          for (const [i, s] of html(docs[+sel.value]).split(/(<a\s[^>]*>)/i).entries()) {
+          for (const [i, s] of html(chosen).split(/(<a\s[^>]*>)/i).entries()) {
+            check();
             const f = i % 2 ? GZ_PAGE.files({ body: s }, location.origin)[0] : null;
             if (!f) { texts.push(s); continue; }
             try {
@@ -274,16 +280,20 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
               // by the size Ultra's store says before it's fetched; features/import.js checks each kind's own after.
               if (!D.kind(f.name)) continue;
               const r = await fetch(f.url, { credentials: 'same-origin', signal });
+              check();
               if (!r.ok || +r.headers.get('content-length') > D.READ.pdf) continue;
               const b = await r.blob();
+              check();
               if (b.size > D.READ.pdf) continue;
               await need('features/import.js', () => globalThis.GZ_IMPORT);
-              const got = await GZ_IMPORT.read(new File([b], f.name, { type: b.type }), { signal, progress: (w) => { say.textContent = w; } });
+              check();
+              const got = await GZ_IMPORT.read(new File([b], f.name, { type: b.type }), { signal, progress: (w) => { if (live() && reading === ctl && !signal.aborted) say.textContent = w; } });
+              check();
               texts.push({ text: got.text || '' });
               if (got.ocr) ocrs.push(got.ocr);
             } catch (e) { if (signal.aborted) throw e; why = e; }
           }
-          signal.throwIfAborted();
+          check();
           // Runs of HTML become text together, so a split never cuts a line in two.
           const parts = [];
           for (const x of texts) if (typeof x === 'string' && typeof parts.at(-1) === 'string') parts[parts.length - 1] += x; else parts.push(x);
@@ -472,6 +482,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // ---- switches ---------------------------------------------------------------------------------------------------
   const sync = (want) => {
     on = !!want;
+    if (opened && !allowed(opened.cid)) reading?.abort();
     // Off this page's part, the dialog stays (Ctrl+K opens it on any course page); with Glaze or the switch off, it goes.
     if (!on) { draw(); if (!X.on() || X.settings().enabled === false || !X.settings().enhance.syllabus) dlg?.close(); return; }
     ready().then(() => draw(), () => {});
