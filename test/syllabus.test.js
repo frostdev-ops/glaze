@@ -1071,13 +1071,80 @@ test('a scale table of two columns read across, and a failing letter written aft
   assert.equal(pick(S.extract('Letter grades: 90–100% A, 80–89% B, 70–79% C, 60–69% D; below 40% the course is failed.')).scale, 'A 90, B 80, C 70, D 60', 'no letter given');
 });
 
-test('an office named only by a room\'s word and number, or only where the professor holds office hours', () => {
+test('an office named by a room\'s word and number is distinct from an office-hours venue', () => {
   assert.equal(S.extract('Profesora: Mtra. Clara Soto\nCubículo: 14, Edificio D', { hint: 'es' }).prof.office.value, 'Cubículo 14, Edificio D');
   const staff = S.extract('Role\tName\tEmail\tOffice Hours\nInstructor\tProf. Ana Ruiz\taruiz@x.edu\tMon 2–3:30 PM, Hall 412\nTA\tSam Lee\tslee@x.edu\tFri 1–3 PM, Lab 2');
-  assert.deepEqual([staff.prof.office.value, staff.prof.office.conf], ['Hall 412', 'check']);
+  assert.deepEqual([staff.prof.office.value, staff.prof.office.conf], ['', '']);
   assert.equal(S.extract('Instructor: Dr. Lee Park\nOffice hours: Tuesdays 7–8 p.m. via Zoom').prof.office.value, '', 'a call is no office');
 });
 
 test('a scale table written range first ends with its capitalised "Below"', () => {
   assert.equal(pick(S.extract('Your Average\tCourse Grade\n90 – 100\tA\n80 – 89\tB\n70 – 79\tC\n60 – 69\tD\nBelow 60\tF')).scale, 'A 90, B 80, C 70, D 60, F 0');
+});
+
+// Round-two review: synthetic counterexamples, independent of the mock holdout corpus.
+test('review: office-hours venues alone never identify the professor office', () => {
+  for (const [hint, label] of [['en', 'Office hours'], ['de', 'Sprechstunden'], ['es', 'Horas de oficina'], ['fr', 'Heures de bureau'], ['nl', 'Spreekuur'], ['pt', 'Atendimento']]) {
+    const text = `Instructor: Dr. Lee Park\n${label}: Monday 2–3 PM, Library 205`;
+    assert.equal(S.extract(text, { hint }).prof.office.value, '', text);
+    assert.equal(S.extract(`Office: Hall 410\n${text}`, { hint }).prof.office.value, 'Hall 410');
+  }
+});
+
+const reviewPoints = 'Assignment\tPoints\nEssays\t400\nExams\t600\nTotal\t1000\n';
+test('review: a points total cannot turn unrelated numbers or inconsistent scales into letter grades', () => {
+  for (const tail of [
+    'Room assignments\nA 900\nB 800\nC 700',
+    'Grade\tPoints\nA 180–200\nB 160–179\nC 140–159',
+    'Grade\tPoints\nA 900–1000\nB 80–89\nC 70–79',
+    'Grade\tPoints\nA 900–1000\nB 800–950\nC 700–799',
+  ]) assert.equal(S.extract(reviewPoints + tail).scale.value, '', tail);
+  assert.deepEqual(S.extract(reviewPoints + 'Grade\tPoints\nA 900–1000\nB 800–899\nC 0–799').scale.value, [['A', 90], ['B', 80], ['C', 0]]);
+});
+
+test('review: short letter scales need an explicit maximum of ten or twenty', () => {
+  for (const text of ['Conceitos\nA 9–9.5\nB 7–8.9\nC 0–6.9', 'Barème\nA 16–18\nB 14–15\nC 0–13']) {
+    assert.equal(S.extract(text).scale.value, '', text);
+  }
+  assert.deepEqual(S.extract('Grading scale\nA 9–10%\nB 7–8.99%\nC 0–6.99%').scale.value, [['A', 9], ['B', 7], ['C', 0]]);
+});
+
+const reviewOpts = { start: Date.UTC(2026, 7, 31), week1: Date.UTC(2026, 7, 31), md: true };
+const reviewWeekly = (text, opts = reviewOpts) => S.extract(text, opts).dates.filter((d) => d.rule === 'weekly');
+test('review: weekly expansion rejects negation, examples, optional work and unresolved exceptions', () => {
+  for (const line of [
+    'No quizzes are due every Friday.', 'Quizzes are not due every Friday.',
+    'Optional quizzes are due every Friday.', 'For example, quizzes are due every Friday.',
+    'Quizzes are due every Friday except the first week.', 'Quizzes are due every Friday of weeks 3–5.',
+    'Keine Abgabe jeweils freitags.', 'Las tareas no se entregan todos los viernes.',
+    'Les devoirs ne sont pas à remettre chaque vendredi.', 'Geen opdrachten inleveren elke vrijdag.',
+    'Os trabalhos não devem ser entregues toda sexta-feira.',
+  ]) assert.deepEqual(reviewWeekly(`${line}\nCourse ends: September 25`), [], line);
+});
+
+test('review: recurring end dates and holidays belong to their own clauses', () => {
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday.\nClasses end: September 25; final exam: October 9').map((d) => d.day),
+    ['2026-09-04', '2026-09-11', '2026-09-18', '2026-09-25']);
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday.\nFall break (no classes) September 11; paper due September 18\nCourse ends: September 25').map((d) => d.day),
+    ['2026-09-04', '2026-09-18', '2026-09-25']);
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday.\nFall break: September 11–September 18\nCourse ends: September 25').map((d) => d.day), ['2026-09-04', '2026-09-25']);
+});
+
+test('review: repeated weekly rules produce one occurrence per day and respect dated rows and the cap', () => {
+  const line = 'Quizzes are due every Friday.\n';
+  const rows = reviewWeekly(line.repeat(2) + 'Course ends: September 25');
+  assert.deepEqual(rows.map((d) => d.day), ['2026-09-04', '2026-09-11', '2026-09-18', '2026-09-25']);
+  assert.equal(reviewWeekly(line.repeat(2) + 'Course ends: December 31, 2027').length, 20);
+  assert.deepEqual(reviewWeekly(line + 'Quiz 1: September 11\nCourse ends: September 25').map((d) => d.day), ['2026-09-04', '2026-09-18', '2026-09-25']);
+  assert.deepEqual(reviewWeekly(line + 'Quiz 1: September 11\nQuiz 2: September 18\nCourse ends: September 25'), []);
+});
+
+test('review: wrapped holiday records and unknown due cells do not invent deadlines', () => {
+  for (const text of [
+    'No class September 7\nquiz due later',
+    'Date\tAssignment Due\nSeptember 7\tHomework TBD',
+    'Date\tAssignment Due\nSeptember 7\tProject deadline to be announced',
+  ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
+  assert.deepEqual(S.extract('Week 2\nMon\tNo quiz\nWed\tProject due', reviewOpts).dates.map((d) => d.day), ['2026-09-09']);
+  assert.deepEqual(S.extract('Quiz 1 due October 5; Paper 2 due October 19', reviewOpts).dates.map((d) => d.day), ['2026-10-05', '2026-10-19']);
 });
