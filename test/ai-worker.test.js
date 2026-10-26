@@ -16,7 +16,7 @@ const make = (fetch) => worker({ globals: fakeIDB(), fetch, grants: new Set(['ht
   store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, use: 'main', features: { syllabus: true } } }, session: {} } });
 const live = (w, sender) => {
   w.context.chrome.tabs.get = async () => sender.tab;
-  w.context.chrome.scripting.executeScript = async () => [{ result: { href: sender.url, origin: sender.origin } }];
+  w.context.chrome.scripting.executeScript = async () => [{ result: { href: sender.url, origin: sender.origin, ancestors: sender.frameId > 0 ? [sender.tab.url] : [] } }];
 };
 const status = async (w, sender) => {
   live(w, sender);
@@ -152,7 +152,7 @@ test('an existing AI port loses authority after SPA navigation to an assessment'
   const w = make();
   let href = `${CANVAS}/courses/1`;
   w.context.chrome.tabs.get = async () => ({ id: 4, url: href });
-  w.context.chrome.scripting.executeScript = async () => [{ result: { href, origin: CANVAS } }];
+  w.context.chrome.scripting.executeScript = async () => [{ result: { href, origin: CANVAS, ancestors: [] } }];
   const { port, say } = w.connect('glaze:ai', lms());
   say({ id: 1, op: 'status', feature: 'syllabus' });
   await w.settle();

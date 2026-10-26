@@ -158,14 +158,14 @@ test('each failure is a category with a reference, and nothing a page or the err
   // A key with no recognisable shape is taken out by its exact text.
   const plainKey = 'localserver-SECRET-9876';
   const odd = await P.run('openai', ask(), cfg({ key: plainKey, base: 'https://odd.example.com/v1' }), { fetch: server(json({ error: { message: `bad key ${plainKey}` } }, 401)).fetch }).catch((x) => x);
-  assert.ok(odd.cause?.message.includes('[key]') && !odd.cause.message.includes(plainKey), odd.cause?.message);
+  assert.equal(odd.cause?.message, 'Model request failed.');
   const net = await P.run('openai', ask(), cfg(), { fetch: async () => { throw new TypeError(`fetch failed for ${KEY}`); } }).catch((x) => x);
   assert.equal(net.code, 'connection-lost');
   assert.ok(!JSON.stringify(net).includes(KEY) && !net.message.includes(KEY));
   // A text-only model asked about a picture: the one failure the student fixes by picking a model.
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64');
   await assert.rejects(P.run('openai', { messages: [{ role: 'user', content: [{ type: 'image', mime: 'image/png', data: png }] }] }, cfg(), { fetch: server(json({ error: { message: 'This model does not support image input' } }, 400)).fetch }),
-    (e) => e.code === 'caps' && /vision model/.test(e.detail));
+    (e) => e.code === 'caps' && e.detail === 'Model request failed.');
 });
 
 test('a cancel and a timeout end the request with their categories; a known lack refuses before anything is sent', async () => {
@@ -257,4 +257,15 @@ test('encoded credential echoes do not survive in provider diagnostics', async (
     assert.ok(error instanceof Error);
     for (let e = error; e; e = e.cause) assert.ok(!String(e.message).includes(escaped), fixture);
   }
+});
+
+test('a schema tool-call round cannot emit a Unicode-escaped credential in its text', async () => {
+  const escaped = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
+  const deltas = [];
+  const events = [chunk({ content: `Provider text: ${escaped}` }), chunk({ tool_calls: [{ index: 0, id: 'c1', type: 'function',
+    function: { name: 'look_up', arguments: '{}' } }] }, 'tool_calls')];
+  await assert.rejects(P.run('openai', ask({ schema: SCHEMA }), cfg(), {
+    fetch: server(sse(events)).fetch, onDelta: (d) => deltas.push(d),
+  }), { code: 'invalid-response' });
+  assert.equal(deltas.length, 0);
 });

@@ -25,7 +25,7 @@ test('a compat server\'s list: ids only, the key sent to it, cached an hour, and
   const down = async () => { throw new TypeError('down'); };
   assert.deepEqual(await M.list(cfg, { fetch: down, cache, now: () => 9e9 }), { ...live, source: 'cache' });
   M._reset();
-  await assert.rejects(M.list({ ...cfg, generation: 'g2' }, { fetch: down, cache: store() }), /down/, 'a new generation has no last good list of the old one');
+  await assert.rejects(M.list({ ...cfg, generation: 'g2' }, { fetch: down, cache: store() }), { name: 'TypeError', message: 'Model request failed.' }, 'a new generation has no last good list of the old one');
   await assert.rejects(M.list(cfg, { fetch: async () => json({}, 401), cache: store() }), (e) => e.status === 401);
 });
 
