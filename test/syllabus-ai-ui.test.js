@@ -14,6 +14,7 @@ const settle = async (n = 12) => { for (let i = 0; i < n; i++) await new Promise
 const ORIGIN = 'https://school.instructure.com';
 const TEXT = 'Instructor: Dr. Amara Okafor\nMidterm exam: October 14, 2026\nHW 3 · Fri 9/25/2026';
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+const shadows = new WeakMap(); // Visible to the student, inaccessible through the page DOM.
 
 class El {
   constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, dataset: {}, style: {}, open: false, parentNode: null, on: {}, files: [], text: '' }); }
@@ -28,6 +29,7 @@ class El {
   get all() { return [this, ...this.children.flatMap((c) => c.all)]; }
   focus() {}
   showModal() { this.open = true; }
+  attachShadow({ mode }) { assert.equal(mode, 'closed'); const root = new El('div'); shadows.set(this, root); return root; }
   close() { this.open = false; this.fire('close'); }
   contains() { return false; }
   querySelector() { return null; }
@@ -43,10 +45,11 @@ const page = ({ ai, broker = () => {}, file = { name: 'syllabus.pdf' }, syllabus
   const bars = [];
   const syl = syllabus && Object.assign(new El('div'), { innerHTML: syllabus, text: syllabus, before: (b) => bars.push(b) });
   const ports = [];
+  const messages = [];
   const chrome = {
     runtime: {
       lastError: undefined,
-      sendMessage: (m, cb) => cb?.(null),
+      sendMessage: (m, cb) => { messages.push(m); cb?.(null); },
       connect: ({ name }) => {
         const port = { name, sent: [], on: [], off: [], disconnected: false,
           onMessage: { addListener: (f) => port.on.push(f) }, onDisconnect: { addListener: (f) => port.off.push(f) },
@@ -60,6 +63,7 @@ const page = ({ ai, broker = () => {}, file = { name: 'syllabus.pdf' }, syllabus
   };
   const ctx = vm.createContext({
     Intl, Date, JSON, Promise, Math, Number, String, Object, Array, Error, File, AbortController, Uint8Array, Set, Map, btoa, setTimeout, setImmediate,
+    requestAnimationFrame: (f) => setImmediate(f),
     document: { body, activeElement: null, createElement: (t) => new El(t), getElementById: (id) => (id === 'course_syllabus' && syl) || null, querySelector: () => null },
     location: { origin: ORIGIN, pathname: '/courses/25/modules' },
     chrome,
@@ -75,7 +79,7 @@ const page = ({ ai, broker = () => {}, file = { name: 'syllabus.pdf' }, syllabus
   const open = async () => { await ctx.GZ_SYL_UI.open(); await settle(); const dlg = body.children[0]; dlg.all.find((e) => e.id === 'gz-syl-file').files = [file]; return dlg; };
   const button = (dlg, text) => dlg.all.find((e) => e.tagName === 'BUTTON' && e.text === text);
   const statusLine = (dlg) => dlg.all.filter((e) => /gz-syl-status/.test(e.className || '')).at(-1)?.text;
-  return { ctx, body, ports, bars, open, button, statusLine, title: (dlg) => dlg.all.find((e) => e.id === 'gz-syl-title')?.text };
+  return { ctx, body, ports, bars, messages, open, button, statusLine, title: (dlg) => dlg.all.find((e) => e.id === 'gz-syl-title')?.text };
 };
 const ON = { on: true, use: 'mine', features: { syllabus: true } };
 // The stub broker: a status, then a run held until the test answers it.
@@ -175,7 +179,7 @@ test('AI failing, or a syllabus too long for it, leaves Glaze\'s own reading, an
 
 test('the privacy line: this computer keeps the local words, an endpoint says its host', async () => {
   const local = 'Glaze reads it on this device. Nothing is sent anywhere, and nothing is kept until you check it and save.';
-  const desc = (dlg) => dlg.all.find((e) => /gz-syl-desc/.test(e.className || '')).text;
+  const desc = (dlg) => { const e = dlg.all.find((e) => /gz-syl-desc/.test(e.className || '')); return shadows.get(e)?.text || e.text; };
   for (const [ai, status, want] of [
     [undefined, undefined, local],
     [ON, { on: true, allowed: true, ready: true, provider: 'device', caps: {} }, local],
@@ -185,6 +189,118 @@ test('the privacy line: this computer keeps the local words, an endpoint says it
     const dlg = await p.open();
     assert.equal(desc(dlg), want);
   }
+});
+
+test('page scripts cannot start either Canvas read or save the AI review', async () => {
+  const runs = [];
+  const p = page({ ai: ON, syllabus: '<p>Exam October 14, 2026</p>', broker: broker({ runs }) });
+  p.ctx.GZ_SYL_UI.sync(true);
+  await settle();
+  p.button(p.bars[0], 'Read this syllabus').fire('click', false);
+  await settle();
+  assert.equal(runs.length, 0, 'the page cannot start the automatic Canvas AI read');
+  assert.equal(p.ports.length, 0, 'an untrusted opener cannot request the endpoint');
+  const dlg = await p.open();
+  p.button(dlg, "Read this course's Syllabus page").fire('click', false);
+  await settle();
+  assert.equal(runs.length, 0, 'the page cannot start the dialog Canvas read');
+  p.button(dlg, 'Read it').fire('click');
+  await settle();
+  runs[0].end(OUTPUT);
+  await settle();
+  p.button(dlg, 'Save').fire('click', false);
+  await settle();
+  assert.equal(p.messages.some((m) => m.type === 'glaze:syllabus'), false, 'only a student can save a review');
+});
+
+test('the endpoint disclosure is visible in a closed root and never in page-readable text or attributes', async () => {
+  const runs = [];
+  const host = 'private-model.example.test:8443';
+  const p = page({ ai: ON, broker: broker({ runs, status: { allowed: true, ready: true, caps: {}, to: host } }) });
+  const dlg = await p.open();
+  const desc = dlg.all.find((e) => /gz-syl-desc/.test(e.className || ''));
+  assert.ok(!JSON.stringify(dlg.all.map((e) => [e.text, e.attrs, e.dataset])).includes(host));
+  assert.ok(shadows.get(desc)?.text.includes(host), 'the student sees the actual destination');
+  p.button(dlg, 'Read it').fire('click');
+  await settle();
+  assert.equal(runs[0]?.m.to, host, 'the run carries the destination that was disclosed');
+  dlg.close();
+});
+
+test('a disclosure arriving during file reading cannot authorize that click', async () => {
+  const runs = [], statuses = [];
+  const p = page({ ai: ON, broker: (m, post) => {
+    if (m.op === 'status') statuses.push(() => post({ id: m.id, type: 'status', allowed: true, ready: true, caps: {}, to: 'late.example.test' }));
+    if (m.op === 'run') runs.push(m);
+  } });
+  const dlg = await p.open();
+  let release;
+  p.ctx.GZ_IMPORT.read = () => new Promise((r) => { release = () => r({ text: TEXT }); });
+  p.button(dlg, 'Read it').fire('click');
+  await settle();
+  statuses.shift()();
+  await settle();
+  release();
+  await settle();
+  for (const answer of statuses) answer();
+  await settle();
+  assert.equal(runs.length, 0, 'the endpoint was not disclosed when the student clicked');
+  dlg.close();
+});
+
+test('Stop disconnects the AI port, including while its status is pending', async () => {
+  for (const pending of [false, true]) {
+    const runs = [];
+    let statuses = 0;
+    const respond = broker({ runs });
+    const p = page({ ai: ON, broker: (m, post) => { if (m.op === 'status' && ++statuses > 1 && pending) return; respond(m, post); } });
+    const dlg = await p.open();
+    p.button(dlg, 'Read it').fire('click');
+    await settle();
+    p.button(dlg, 'Stop reading').fire('click');
+    await settle();
+    assert.ok(p.ports.every((port) => port.disconnected), `pending status: ${pending}`);
+    dlg.close();
+  }
+});
+
+test('closing before AI settings arrive cannot open a late port', async () => {
+  const p = page({ ai: ON, broker: broker() });
+  let release;
+  const get = p.ctx.chrome.storage.local.get;
+  p.ctx.chrome.storage.local.get = (k, cb) => { if (k === 'ai') release = () => cb({ ai: ON }); else get(k, cb); };
+  const dlg = await p.open();
+  dlg.close();
+  release();
+  await settle();
+  assert.equal(p.ports.length, 0);
+});
+
+test('reopening while the old dialog close event is queued cancels its run', async () => {
+  const runs = [];
+  const p = page({ ai: ON, broker: broker({ runs }) });
+  const first = await p.open();
+  p.button(first, 'Read it').fire('click');
+  await settle();
+  first.close = () => { first.open = false; setImmediate(() => first.fire('close')); };
+  await p.open();
+  assert.equal(p.ports[0].disconnected, true, 'the old run is cancelled before the new dialog owns the close handler');
+  runs[0].end(OUTPUT);
+  await settle();
+  assert.equal(p.title(p.body.children.at(-1)), 'Import a syllabus');
+  p.body.children.at(-1).close();
+});
+
+test('an oversized syllabus is refused without sending a truncated prefix to AI', async () => {
+  const runs = [];
+  const p = page({ ai: ON, broker: broker({ runs }) });
+  const dlg = await p.open();
+  p.ctx.GZ_IMPORT.read = async () => ({ text: `${TEXT}\n${'x'.repeat(200001)}` });
+  p.button(dlg, 'Read it').fire('click');
+  await settle();
+  assert.equal(runs.length, 0);
+  assert.equal(p.statusLine(dlg), 'That syllabus is too long for AI. This is what Glaze read.');
+  dlg.close();
 });
 
 test('pictures go with the text only to a model that takes them', async () => {
