@@ -162,3 +162,68 @@ test('the broker keeps an apple connection, tests it and runs a task on it, with
   assert.deepEqual(end.output, { text: 'hello' });
   assert.equal(end.meta.provider, 'apple');
 });
+
+test('Settings offers Apple only on Safari, including when only the browser namespace exists', () => {
+  for (const [scheme, namespace, want] of [['chrome-extension:', 'chrome', false], ['moz-extension:', 'browser', false], ['safari-web-extension:', 'chrome', true], ['safari-web-extension:', 'browser', true]]) {
+    const out = execFileSync(process.execPath, ['-e', `
+      globalThis.${namespace} = { runtime: { getURL: () => '${scheme}//abc/' } };
+      const P = require('./lib/ai/providers.js'); require('./lib/ai/providers/apple.js');
+      const A = require('./lib/ai/settings.js');
+      process.stdout.write(JSON.stringify([!!P.get('apple'), A.PROVIDERS.includes('apple')]));`], { cwd: path.join(__dirname, '..') }).toString();
+    assert.deepEqual(JSON.parse(out), [want, want], `${namespace} ${scheme}`);
+  }
+});
+
+test('native diagnostics never leave the Apple adapter, including status and nested causes', async () => {
+  const secret = 'PRIVATE SYLLABUS TEXT';
+  native = async () => ({ ok: true, state: 'unavailable', reason: secret });
+  assert.deepEqual(await A.status({ model: 'on-device' }), { state: 'unavailable', reason: 'native' });
+  native = async () => ({ ok: false, error: 'provider-unavailable', reason: secret });
+  const direct = await A.run(ask(), { model: 'on-device' }).catch((e) => e);
+  assert.ok(!require('node:util').inspect(direct, { depth: 10 }).includes(secret));
+  native = async () => { throw new Error(secret); };
+  const thrown = await A.run(ask(), { model: 'on-device' }).catch((e) => e);
+  assert.ok(!require('node:util').inspect(thrown, { depth: 10 }).includes(secret));
+});
+
+test('a native cancellation stays cancelled without a worker abort', async () => {
+  native = async () => ({ ok: false, error: 'cancelled' });
+  await assert.rejects(P.run('apple', ask(), { model: 'on-device' }), { category: 'cancelled' });
+});
+
+test('an already cancelled adapter call sends no text and timeout cancels a pending native run', async () => {
+  const stopped = new AbortController(); stopped.abort(new DOMException('Cancelled', 'AbortError'));
+  native = async () => ok('late');
+  await assert.rejects(A.run(ask(), { model: 'on-device' }, { signal: stopped.signal }));
+  assert.equal(sent.length, 0);
+  native = async (m) => m.type === 'ai.cancel' ? { ok: true, cancelled: false } : new Promise(() => {});
+  await assert.rejects(P.run('apple', ask({ timeoutMs: 10 }), { model: 'on-device' }), { category: 'timeout' });
+  assert.deepEqual(sent.map((s) => s.m.type), ['ai.run', 'ai.cancel']);
+  assert.equal(sent[0].m.id, sent[1].m.id);
+});
+
+test('PCC is unverified without an entitlement check and its model label discloses encrypted transmission', async () => {
+  native = async () => ({ ok: true, state: 'unavailable', reason: 'unverified', unverified: true });
+  assert.deepEqual(await A.status({ model: 'private-cloud' }), { state: 'unavailable', reason: 'unverified', unverified: true });
+  const list = await A.catalog();
+  assert.match(list.models.find((m) => m.id === 'private-cloud').name, /sends text encrypted to Apple/);
+  assert.match(list.models.find((m) => m.id === 'on-device').name, /on this device/i);
+});
+
+test('feature status checks Apple readiness even though it has no model download operation', async () => {
+  const env = { enabled: async () => true, settings: async () => ({ on: true, use: 'mac', features: { syllabus: true } }),
+    vault: { get: async () => ({ mac: { provider: 'apple', model: 'private-cloud' } }) } };
+  native = async () => ({ ok: true, state: 'unavailable', reason: 'unverified', unverified: true });
+  assert.equal((await B.status({ feature: 'syllabus' }, env)).ready, false);
+  assert.equal(sent.length, 1);
+});
+
+test('Apple status stops waiting when its caller cancels', async () => {
+  native = async () => new Promise(() => {});
+  const c = new AbortController();
+  const result = A.status({ model: 'on-device' }, { signal: c.signal });
+  c.abort();
+  const out = await Promise.race([result, new Promise((resolve) => setTimeout(() => resolve('hung'), 50))]);
+  assert.notEqual(out, 'hung');
+  assert.equal(out.state, 'unavailable');
+});
