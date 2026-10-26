@@ -73,6 +73,15 @@ test('a run is one message with the cleaned request and the schema; the JSON ans
     messages: [{ role: 'system', content: [{ type: 'text', text: 'Answer.' }] }, { role: 'user', content: [{ type: 'text', text: 'Q' }] }] });
 });
 
+test('an answer the native side cut at maxTokens is a refusal, never read, even when its JSON closes', async () => {
+  // Guided generation closes the JSON when it reaches maximumResponseTokens (measured: 40 tokens of 30 asked-for rows came
+  // back as valid JSON with 3), so the native side says finish: 'length'.
+  native = async () => ok('{"answer":"4"}', { finish: 'length', usage: { input: 9, output: 300 } });
+  await assert.rejects(P.run('apple', ask({ schema: SCHEMA, maxTokens: 300 }), { model: 'on-device' }), { code: 'refusal' });
+  native = async () => ok('Four', { finish: 'length' });
+  assert.equal((await P.run('apple', ask({ maxTokens: 300 }), { model: 'on-device' })).finish, 'length', 'plain text keeps what came, marked');
+});
+
 test('pictures go as base64 parts; a request with tools is refused before anything is sent', async () => {
   native = async () => ok('It says hi.');
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64');
