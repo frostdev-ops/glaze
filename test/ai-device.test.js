@@ -36,6 +36,7 @@ const stub = ({ avail = 'available', imageAvail, window = 1000, used = 10, cost 
       if (monitor) {
         const m = new EventTarget();
         monitor(m);
+        await new Promise(setImmediate); // Chrome reports progress after create() returns its promise
         for (const loaded of avail === 'available' ? [] : progress) m.dispatchEvent(Object.assign(new Event('downloadprogress'), { loaded, total: 1 }));
       }
       log.sessions++;
@@ -262,7 +263,7 @@ test('the catalog reads the window from a session when it isn\'t known yet, and 
   assert.equal(s.log.sessions, 1, 'kept');
   install(stub({ avail: 'downloadable' }));
   D._reset();
-  assert.deepEqual((await D.catalog({})).models, [{ id: 'gemini-nano', name: 'Gemini Nano', json: true }], 'no session before the model is there');
+  assert.deepEqual((await D.catalog({})).models, [{ id: 'gemini-nano', name: 'Gemini Nano', json: true, vision: true }], 'no window, and no session, before the model is there');
 });
 
 // ---- the broker -----------------------------------------------------------------------------------------------------------
@@ -308,4 +309,21 @@ test('a run on the device connection goes through the broker to the model in the
   assert.deepEqual(end.output, { text: 'hello' });
   assert.equal(end.meta.unverified, undefined, 'the device names its own model');
   assert.equal(e.local.data.aiCalls[0].provider, 'device');
+});
+
+test('in the real worker: Settings\' top frame asks for the device and starts its download; nothing else may', async () => {
+  const worker = require('./helpers/worker-env.cjs');
+  const { fakeIDB } = require('./helpers/fake-idb.cjs');
+  const s = stub({ avail: 'downloadable' });
+  const w = worker({ globals: { ...fakeIDB(), LanguageModel: s.LM, EventTarget, Event } });
+  const EXT = 'chrome-extension://x';
+  const editor = { id: 'glaze', frameId: 0, url: `${EXT}/options.html`, origin: EXT, tab: { id: 9, url: `${EXT}/options.html` } };
+  const page = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com', tab: { id: 4, url: 'https://school.instructure.com/courses/1' } };
+  assert.deepEqual(await w.send({ type: 'glaze:ai-config', op: 'test', provider: 'device' }, page), { ok: false, error: 'sender' });
+  assert.deepEqual(await w.send({ type: 'glaze:ai-config', op: 'prepare', provider: 'device' }, page), { ok: false, error: 'sender' });
+  assert.equal(s.log.create.length, 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(await w.send({ type: 'glaze:ai-config', op: 'test', provider: 'device' }, editor))), { ok: true, state: 'download' });
+  assert.deepEqual(JSON.parse(JSON.stringify(await w.send({ type: 'glaze:ai-config', op: 'prepare', provider: 'device' }, editor))), { ok: true, state: 'ready' });
+  assert.equal(s.log.create.length, 1);
+  assert.ok(w.context.GZ_AI_DEVICE, 'the worker imported the provider with the harness');
 });

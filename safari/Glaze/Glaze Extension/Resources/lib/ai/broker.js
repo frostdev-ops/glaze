@@ -202,9 +202,22 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   //   { op: 'remove', id } → { ok }
   //   { op: 'test', id } → { ok, state, reason?, source? }: the provider's status, once its host is held.
   //   { op: 'models', id } → { ok, models, source, at } | { ok: false, error }: its catalog, for a model picker.
+  //   { op: 'test', provider: 'device' } → { ok, state, reason? }: a provider with a model on this computer, before any
+  //     connection uses it. { op: 'prepare', provider: 'device' } (from a click) → { ok, state, reason? } once its model is
+  //     downloaded and loaded; meanwhile env.say({ type: 'glaze:ai-config', event: 'progress', provider, loaded: 0..1 }).
+  //     Not queued: a download takes minutes. Settings asks 'test' again if the worker stopped before it answered.
+  const local = (m, env) => {
+    const p = typeof m.provider === 'string' && A().PROVIDERS.includes(m.provider) ? P().get(m.provider) : null;
+    const cfg = p && typeof p.prepare === 'function' && p.config({});
+    if (!cfg) return Promise.resolve({ ok: false, error: 'setup' });
+    const done = (st) => ({ ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }) });
+    const failed = () => ({ ok: true, state: 'unavailable', reason: 'failed' });
+    if (m.op === 'test') return p.status(cfg, {}).then(done, failed);
+    return p.prepare(cfg, { onProgress: (loaded) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: p.id, loaded }); } catch { /* no page listening */ } } }).then(done, failed);
+  };
   let turn = Promise.resolve();
   const queued = (f) => { const next = turn.then(f, f); turn = next.catch(() => {}); return next; };
-  const config = (m, env) => queued(async () => {
+  const config = (m, env) => ((m?.op === 'prepare' || m?.op === 'test') && m.id === undefined ? local(m, env) : queued(async () => {
     const all = await connections(env);
     if (m?.op === 'get') {
       const out = {};
@@ -244,7 +257,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       try { const c = await use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env) }); return { ok: true, models: c.models, source: c.source, at: c.at }; } catch (e) { return { ok: false, error: F().modelFailure(e).category }; }
     }
     return { ok: false, error: 'op' };
-  });
+  }));
 
   return { LIMIT, CONNECTIONS, CALLS, vault, connect, status, config, _reset: () => { inflight.clear(); starts.clear(); } };
 })();

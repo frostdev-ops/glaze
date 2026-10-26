@@ -15,6 +15,7 @@ until the student has turned AI on, chosen a connection and allowed that feature
 | `lib/ai/models.js` | Catalogs (a server's `/models`, OpenRouter's public list) with provenance, and `select`. |
 | `lib/ai/providers.js` | The provider registry and `run`, the one way to call a model. |
 | `lib/ai/providers/openai.js` | Any Chat Completions server. `mock.js` is for tests and evals only; the worker never loads it. |
+| `lib/ai/providers/device.js` | Chrome's Prompt API (Gemini Nano, Chrome 138+), in the worker itself. Unavailable elsewhere. |
 | `lib/ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
 | `lib/ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
 | `lib/ai/task.js` | Task definitions and `run`. Tasks live in `lib/ai/tasks/<id>.js`. |
@@ -29,7 +30,8 @@ One file, `lib/ai/providers/<id>.js`, that calls `GZ_AI_PROVIDERS.add({ … })`:
 { id, config(raw) → cfg | null, caps(cfg) → { text, images, json, tools, stream, context },
   status(cfg, { fetch, signal, cache }) → { state: 'ready' | 'download' | 'downloading' | 'unavailable', reason? },
   run(request, cfg, { signal, onDelta, onThinking, fetch }) → { text, toolCalls?, usage?, model, finish },
-  origin?(cfg) → 'https://host/*', catalog?(cfg, env) → models.list() }
+  origin?(cfg) → 'https://host/*', catalog?(cfg, env) → models.list(),
+  prepare?(cfg, { onProgress }) → status, for a model that downloads to this computer }
 ```
 
 A capability that isn't known is left out, never `false`. Name the file in the worker's `importScripts` call
@@ -85,6 +87,9 @@ Error codes: the model request's category (`cancelled`, `timeout`, `provider-una
 Settings' top frame (`options.html`) manages connections with `chrome.runtime.sendMessage({ type: 'glaze:ai-config', op })`:
 `get`, `set { id, cfg: { provider, base, model, key?, images?, context? } }`, `remove { id }`, `test { id }`,
 `models { id }`. Request the host from a click first with `chrome.permissions.request({ origins: [origin] })`.
+The model on this computer: `test { provider: 'device' }` → `{ ok, state, reason? }`, and from a click `prepare { provider:
+'device' }`, which answers once the model is ready and meanwhile sends `{ type: 'glaze:ai-config', event: 'progress',
+provider, loaded }` (0 to 1) to Glaze's pages.
 
 ## Limits
 
