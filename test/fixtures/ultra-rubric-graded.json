@@ -1,0 +1,47 @@
+{
+  "grade": {
+    "id": "_510_1", "courseId": "_101_1", "userId": "_42_1", "columnId": "_300_1", "lastAttemptId": "_400_1",
+    "column": { "id": "_300_1", "contentId": "_8120_1", "possible": 100 },
+    "lastAttempt": { "id": "_400_1", "status": "COMPLETED" },
+    "submissionStatus": { "status": "GRADED" }
+  },
+  "column": {
+    "id": "_300_1", "courseId": "_101_1", "contentId": "_8120_1", "possible": 100,
+    "rubricAssociations": [{
+      "id": "_500_1", "entityId": "_300_1", "rubricId": "_600_1", "percentOfGrade": 100,
+      "displayBefore": true, "displayAfter": false, "displayGraded": true, "isWithEvaluations": true,
+      "rubricDefinition": {
+        "id": "_600_1", "title": "Synthetic rubric", "description": "<p>Synthetic guidance.</p>", "rubricType": "PERCENTAGE",
+        "courseId": "_101_1", "readOnly": true, "associated": true, "permissions": { "edit": false, "delete": false },
+        "columnHeaders": [
+          { "id": "_610_1", "header": "Level A", "localizedHeader": { "rawValue": "Level A" }, "position": 0 },
+          { "id": "_611_1", "header": "Level B", "localizedHeader": { "rawValue": "Level B" }, "position": 1 },
+          { "id": "_612_1", "header": "Level C", "localizedHeader": { "rawValue": "Level C" }, "position": 2 }
+        ],
+        "rows": [
+          { "id": "_620_1", "header": "Criterion one", "localizedHeader": { "rawValue": "Criterion one" }, "percentage": 50, "position": 0, "cells": [
+            { "id": "_630_1", "rubricRowId": "_620_1", "rubricColumnId": "_610_1", "description": "<p>One A</p>", "position": 0, "percentage": 100, "percentageMin": 85, "percentageMax": 100, "numericPoints": 0, "startPointRange": 0, "endPointRange": 0, "normalizedPoints": 0, "weightedPercent": 50 },
+            { "id": "_631_1", "rubricRowId": "_620_1", "rubricColumnId": "_611_1", "description": "<p>One B</p>", "position": 1, "percentage": 70, "percentageMin": 60, "percentageMax": 84, "numericPoints": 0, "startPointRange": 0, "endPointRange": 0, "normalizedPoints": 0, "weightedPercent": 35 },
+            { "id": "_632_1", "rubricRowId": "_620_1", "rubricColumnId": "_612_1", "description": "<p>One C</p>", "position": 2, "percentage": 40, "percentageMin": 0, "percentageMax": 59, "numericPoints": 0, "startPointRange": 0, "endPointRange": 0, "normalizedPoints": 0, "weightedPercent": 20 }
+          ] },
+          { "id": "_621_1", "header": "Criterion two", "localizedHeader": { "rawValue": "Criterion two" }, "percentage": 50, "position": 1, "cells": [
+            { "id": "_633_1", "rubricRowId": "_621_1", "rubricColumnId": "_610_1", "description": "<p>Two A</p>", "position": 0, "percentage": 100, "percentageMin": 85, "percentageMax": 100, "numericPoints": 0, "startPointRange": 0, "endPointRange": 0, "normalizedPoints": 0, "weightedPercent": 50 },
+            { "id": "_634_1", "rubricRowId": "_621_1", "rubricColumnId": "_611_1", "description": "<p>Two B</p>", "position": 1, "percentage": 70, "percentageMin": 60, "percentageMax": 84, "numericPoints": 0, "startPointRange": 0, "endPointRange": 0, "normalizedPoints": 0, "weightedPercent": 35 },
+            { "id": "_635_1", "rubricRowId": "_621_1", "rubricColumnId": "_612_1", "description": "<p>Two C</p>", "position": 2, "percentage": 40, "percentageMin": 0, "percentageMax": 59, "numericPoints": 0, "startPointRange": 0, "endPointRange": 0, "normalizedPoints": 0, "weightedPercent": 20 }
+          ] }
+        ]
+      }
+    }]
+  },
+  "attempt": {
+    "id": "_400_1", "courseId": "_101_1", "columnId": "_300_1", "userId": "_42_1", "status": "COMPLETED",
+    "rubricEvaluation": {
+      "id": "_700_1", "attemptId": "_400_1", "rubricAssociationId": "_500_1", "userId": null,
+      "submitted": true, "published": false, "completed": true, "editable": false, "maxScore": 100, "totalScore": 85,
+      "cells": [
+        { "id": "_710_1", "rubricRowId": "_620_1", "rubricCellId": "_630_1", "selectedPercent": 100, "feedback": { "rawText": "<p>Synthetic note.</p>", "displayText": "<p>Synthetic note.</p>", "webLocation": null, "fileLocation": null } },
+        { "id": "_711_1", "rubricRowId": "_621_1", "rubricCellId": "_634_1", "selectedPercent": 70, "feedback": { "rawText": "", "displayText": "", "webLocation": null, "fileLocation": null } }
+      ]
+    }
+  }
+}

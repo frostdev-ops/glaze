@@ -248,9 +248,14 @@ test('Ultra each own-attempt state requires exactly its visibility flag', () => 
   assert.equal(lib().parse.ultra(ultra(), association(), evaluation(), { ...uc, state: 'COMPLETED' }), null);
 });
 
-test('Ultra evaluation requires publication and current own IDs, never completed alone', () => {
+test('Ultra evaluation requires the current association, attempt and user, and ignores its published flag', () => {
+  for (const mutate of [(e) => { e.published = false; }, (e) => { delete e.published; }, (e) => { e.userId = null; }, (e) => { delete e.userId; }]) {
+    const e = evaluation(); mutate(e); assert.ok(lib().parse.ultra(ultra(), association(), e, uc).result, 'the graded state, not the flag, gates selections');
+  }
+  const real = require('./fixtures/ultra-rubric-graded.json'), a = real.column.rubricAssociations[0];
+  const m = lib().parse.ultra(a.rubricDefinition, a, real.attempt.rubricEvaluation, { ...uc, columnId: '_300_1', contentId: '_8120_1', userId: '_42_1', attemptId: '_400_1', pointsPossible: 100 });
+  assert.deepEqual(Object.values(m.result.criteria).map((c) => [c.cell, c.score]), [['_630_1', 100], ['_634_1', 70]]);
   for (const mutate of [
-    (e) => { e.published = false; e.completed = true; }, (e) => { delete e.published; },
     (e) => { e.rubricAssociationId = '_99_1'; }, (e) => { e.attemptId = '_99_1'; }, (e) => { e.userId = '_99_1'; },
     (e) => { e.cells[0].rubricRowId = '_99_1'; }, (e) => { e.cells[0].rubricCellId = '_99_1'; },
     (e) => { e.cells.push(copy(e.cells[0])); }
