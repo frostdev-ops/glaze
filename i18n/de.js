@@ -1178,6 +1178,7 @@
   "Kind": "Art",
   "Add to To Do": "Zu Better To Do hinzufügen",
   "Important dates": "Wichtige Termine",
+  "Week 1 starts": "Woche 1 beginnt",
   "Homework 20%, Exams 50%, …": "Hausaufgaben 20 %, Prüfungen 50 %, …",
   "Write weights as names and percents: Homework 20%, Exams 50%.": "Schreibe Gewichtungen als Namen und Prozent: Hausaufgaben 20 %, Prüfungen 50 %.",
   "That e-mail address looks wrong.": "Diese E-Mail-Adresse scheint falsch zu sein.",

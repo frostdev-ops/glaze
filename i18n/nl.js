@@ -1178,6 +1178,7 @@
   "Kind": "Soort",
   "Add to To Do": "Toevoegen aan Better To Do",
   "Important dates": "Belangrijke data",
+  "Week 1 starts": "Week 1 begint",
   "Homework 20%, Exams 50%, …": "Huiswerk 20%, Tentamens 50%, …",
   "Write weights as names and percents: Homework 20%, Exams 50%.": "Schrijf wegingen als namen en percentages: Huiswerk 20%, Tentamens 50%.",
   "That e-mail address looks wrong.": "Dat e-mailadres lijkt niet te kloppen.",
