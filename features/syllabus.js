@@ -6,7 +6,10 @@
 // kept only when the student saves: in storage.local per Canvas site, user and course, through the worker
 // ('glaze:syllabus'). On save the scale can become the course's in the GPA (sync gpaCourses), the dates can become the
 // student's own To Do tasks ('glaze:todo'); the professor, class times and dates show on the course home, the weights
-// beside the what-if calculator (features/grades.js). Nothing is sent anywhere.
+// beside the what-if calculator (features/grades.js). Nothing is sent anywhere, unless the student has turned on AI for
+// syllabus import (Settings → AI): then, after Glaze's own reading, the text (and a picture read, to a model that takes
+// pictures) goes to their connection ('glaze:ai' port, lib/ai/tasks/syllabus-read.js), and what it reads is put beside
+// Glaze's (lib/syllabus-ai.js), each value of it to check. The dialog says where an endpoint's text goes.
 // On Blackboard Ultra (content-ultra.js syncSyl), which has no syllabus tool: on a course's outline, in its right-hand
 // column, with a document of the course's own (its text from the public content API, lib/ultra.js) in place of Canvas's
 // Syllabus page; kept per Ultra site, user and course, the scale for the course's GPA (ultra:<origin>/<id>).
@@ -22,6 +25,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   let dlg = null, opener = null;
   let opened = null; // the course (who) the open dialog is for
   let reading = null; // the AbortController of a PDF or picture being read: another step or closing the dialog calls it off
+  let asking = null; // the AbortController of AI's reading after it: Stop ends it alone, and the review shows Glaze's own
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false && k !== '')); return e; };
   const attr = (el, a) => { for (const [k, v] of Object.entries(a)) el.setAttribute(k, v); return el; };
@@ -161,7 +165,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // ocr: what came from a picture (features/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
   // week1: the course's own first day, for dates by course week.
   const extract = (text, ocr, week1 = dayOf(opened.own.start)) => {
-    const r = L.extract(text, options(week1));
+    const o = options(week1);
+    const r = { ...L.extract(text, o), opts: o };
     if (!ocr) return r;
     const d = (f) => (GZ_IMPORT.doubt(ocr, f.src) ? { ...f, conf: 'check' } : f);
     return { ...r, ocr, prof: Object.fromEntries(Object.entries(r.prof).map(([k, f]) => [k, d(f)])), hours: r.hours.map(d), meetings: r.meetings.map(d), dates: r.dates.map(d), scale: d(r.scale), weights: d(r.weights), week1: r.week1.src ? d(r.week1) : r.week1 };
@@ -190,6 +195,105 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     return Number.isFinite(start) ? extract(text, ocr, start) : r;
   };
 
+
+  // ---- AI (docs/ai-harness.md) ------------------------------------------------------------------------------------
+  // Asked only when storage.local ai says AI is on, a connection is chosen and syllabus import may use it; otherwise no
+  // port is opened and the dialog is as without AI. One port a dialog, closed with it (which cancels a run).
+  let port = null, asked = 0;
+  const waits = new Map(); // message id → its answer's handler
+  const aiOn = async () => { const s = await get('local', 'ai'); return !!s && s.on === true && typeof s.use === 'string' && !!s.use && s.features?.syllabus === true; };
+  const hangUp = () => {
+    const p = port;
+    port = null;
+    for (const w of waits.values()) w({ type: 'error', error: 'connection-lost' });
+    waits.clear();
+    try { p?.disconnect(); } catch { /* gone */ }
+  };
+  // → the answer that ends message m (its id: .id): a status, an end or an error. Events before it go to each(event).
+  const ask = (m, each) => {
+    const id = ++asked;
+    return Object.assign(new Promise((resolve) => {
+      waits.set(id, (a) => { if (['status', 'end', 'error'].includes(a?.type)) { waits.delete(id); resolve(a); } else each?.(a); });
+      try {
+        if (!port) {
+          const p = port = chrome.runtime.connect({ name: 'glaze:ai' });
+          p.onMessage.addListener((a) => waits.get(a?.id)?.(a));
+          p.onDisconnect.addListener(() => { if (port === p) hangUp(); });
+        }
+        port.postMessage({ id, ...m });
+      } catch { waits.delete(id); resolve({ type: 'error', error: 'failed' }); }
+    }), { id });
+  };
+  // Where the text would go now: null (AI won't read), '' (this computer), or the endpoint's host.
+  const aiWhere = async () => {
+    if (!await aiOn()) return null;
+    const st = await ask({ op: 'status', feature: 'syllabus' });
+    return st.allowed && st.ready ? { to: typeof st.to === 'string' ? st.to : '', caps: st.caps || {} } : null;
+  };
+  // The dialog's line on where the text goes, kept to what it says (shown: '' for this computer).
+  const privacy = (desc) => {
+    desc.dataset.to = '';
+    aiWhere().then((w) => { if (w?.to && desc.isConnected !== false) { desc.dataset.to = w.to; desc.textContent = t('Glaze reads it and sends the text to {host}. Nothing is kept until you check it and save.', { host: w.to }); } }, () => {});
+  };
+  // Pictures for a model that takes them: PNG, JPEG, WebP or GIF files, each at most 6 MB, 12 MB in all, eight at most.
+  const MIME = [['image/png', [0x89, 0x50, 0x4e, 0x47]], ['image/jpeg', [0xff, 0xd8, 0xff]], ['image/gif', [0x47, 0x49, 0x46, 0x38]], ['image/webp', [0x52, 0x49, 0x46, 0x46]]];
+  const pictures = async (files) => {
+    const out = [];
+    let size = 0;
+    for (const f of files.slice(0, 8)) {
+      let b;
+      try {
+        if (!(f.size <= 6 << 20)) continue;
+        const h = new Uint8Array(await f.slice(0, 12).arrayBuffer());
+        const mime = MIME.find(([, m]) => m.every((x, i) => h[i] === x))?.[0];
+        if (!mime || (mime === 'image/webp' && String.fromCharCode(...h.subarray(8, 12)) !== 'WEBP')) continue;
+        b = { mime, bytes: new Uint8Array(await f.arrayBuffer()) };
+      } catch { continue; }
+      const { mime, bytes } = b;
+      let s = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      const data = btoa(s);
+      if ((size += data.length) > 12 << 20) break;
+      out.push({ type: 'image', mime, data });
+    }
+    return out;
+  };
+  // Glaze's reading r, with AI's beside it when AI may read and still sends where the dialog said (shown). read: the read's
+  // controller (a newer read or closing the dialog ends AI too); files: pictures read. → the result to review; when AI
+  // didn't finish, Glaze's own with aiSaid, a few words on why.
+  const withAI = async (r, text, { read, say, stop, shown = '', files = [] }) => {
+    const w = await aiWhere().catch(() => null);
+    if (!w || w.to !== shown || read.signal.aborted) return r;
+    const ctl = asking = new AbortController();
+    const off = () => ctl.abort();
+    read.signal.addEventListener('abort', off, { once: true });
+    say.textContent = t('Reading with AI…');
+    if (stop) stop.hidden = false;
+    let id = 0;
+    // Stop: the broker is told, and the answer that may still come is no longer waited for.
+    const cancelled = new Promise((resolve) => ctl.signal.addEventListener('abort', () => {
+      if (id) { waits.delete(id); try { port?.postMessage({ id, op: 'cancel' }); } catch { /* gone */ } }
+      resolve({ type: 'error', error: 'cancelled' });
+    }, { once: true }));
+    try {
+      const names = [opened.course?.name, opened.course?.course_code].filter((n) => typeof n === 'string' && n.trim()).map((n) => n.trim().slice(0, 200));
+      const input = { text: text.slice(0, L.MAX), images: w.caps.images === true ? await pictures(files) : [], names: [...new Set(names)] };
+      if (ctl.signal.aborted) throw new Error('stopped');
+      const run = ask({ op: 'run', feature: 'syllabus', task: 'syllabus.read', input });
+      id = run.id;
+      const end = await Promise.race([run, cancelled]);
+      if (end.type !== 'end' || !end.output) throw Object.assign(new Error('ai'), { code: end.error });
+      await need('lib/syllabus-ai.js', () => globalThis.GZ_SYLLABUS_AI);
+      if (ctl.signal.aborted) throw new Error('stopped');
+      return GZ_SYLLABUS_AI.merge(r, GZ_SYLLABUS_AI.interpret(end.output, r.opts, r, text));
+    } catch (e) {
+      return { ...r, aiSaid: ctl.signal.aborted ? t('Stopped.') : e?.code === 'size' ? t('That syllabus is too long for AI. This is what Glaze read.') : t("AI couldn't read it. This is what Glaze read.") };
+    } finally {
+      read.signal.removeEventListener('abort', off);
+      if (asking === ctl) asking = null;
+    }
+  };
+
   // ---- the dialog -------------------------------------------------------------------------------------------------
   // Opens on the source step, on the review of what's kept (saved), or straight on a review of Canvas's own page.
   // Still wanted when the code it waited for arrives: Glaze on, the switch on, still in that course.
@@ -199,18 +303,20 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     if (!allowed(cid)) return;
     try { await ready(); } catch { return; }
     if (usePage) await docIn().catch(() => {});
+    // Canvas's own page straight to its review, unless AI reads it too: then the first step shows it being read, with Stop.
+    const aiPage = usePage && await aiOn().catch(() => false);
     if (!allowed(cid)) return;
     opener = document.activeElement;
     opened = who;
     dlg?.close();
     const box = (dlg = attr(make('dialog', { id: 'gz-syl-dlg' }), { 'aria-labelledby': 'gz-syl-title' }));
     // Its own close only: one closed as the next opens (close fires later) leaves the new one, its read and focus alone.
-    box.addEventListener('close', () => { box.remove(); if (dlg !== box) return; reading?.abort(); dlg = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
+    box.addEventListener('close', () => { box.remove(); if (dlg !== box) return; reading?.abort(); asking?.abort(); hangUp(); dlg = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
     dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
     document.body.append(dlg);
     if (saved) review(fromSaved(saved), '');
-    else if (usePage && globalThis.GZ_DOCTEXT) { const text = pageText(); review(extract(text), text); }
-    else source();
+    else if (usePage && globalThis.GZ_DOCTEXT && !aiPage) { const text = pageText(); review(extract(text), text); }
+    else source(aiPage && globalThis.GZ_DOCTEXT);
     dlg.showModal();
   };
   const frame = (title, ...kids) => {
@@ -221,11 +327,15 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   };
   const status = () => attr(make('p', { className: 'gz-syl-status' }), { role: 'status' });
 
-  const source = () => {
+  // pageNow: read Canvas's Syllabus page at once (the course page's own button, with AI on).
+  const source = (pageNow) => {
     const say = status();
     const file = make('input', { type: 'file', id: 'gz-syl-file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.docx,.pptx,.html,.htm,.txt,.md,application/pdf,image/*' });
     const paste = make('textarea', { id: 'gz-syl-paste', rows: 8 });
-    const stop = button(t('Stop reading'), 'stop', () => reading?.abort());
+    // Stop ends AI's reading alone while it reads (Glaze's own reading is then reviewed), else the file's.
+    const stop = button(t('Stop reading'), 'stop', () => (asking ? asking.abort() : reading?.abort()));
+    const desc = make('p', { className: 'gz-syl-desc', textContent: t('Glaze reads it on this device. Nothing is sent anywhere, and nothing is kept until you check it and save.') });
+    privacy(desc);
     stop.hidden = true;
     // pasted: a screenshot pasted into the text box, read instead of what's typed there.
     const go = async (pasted) => {
@@ -243,7 +353,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
         }
         if (ctl.signal.aborted) return;
         if (!text.trim()) { say.textContent = t('Choose a file or paste the text first.'); return; }
-        const r = await reviewed(text, ocr, ctl.signal);
+        const r = await withAI(await reviewed(text, ocr, ctl.signal), text, { read: ctl, say, stop, shown: desc.dataset.to, files: f ? [f] : [] });
         if (ctl.signal.aborted) return;
         review(r, text);
       } catch (e) { if (reading === ctl) say.textContent = e?.cancelled ? t('Stopped.') : e?.mine ? e.message : t("Glaze couldn't read that file."); }
@@ -253,10 +363,21 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       const img = e.isTrusted && [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));
       if (img && !reading) { e.preventDefault(); go(img); }
     });
-    frame(t('Import a syllabus'),
-      make('p', { className: 'gz-syl-desc', textContent: t('Glaze reads it on this device. Nothing is sent anywhere, and nothing is kept until you check it and save.') }),
-      page()?.textContent.trim() && button(t("Read this course's Syllabus page"), 'page', async () => { await docIn().catch(() => {}); if (globalThis.GZ_DOCTEXT) { const text = pageText(); review(extract(text), text); } }),
-      ultra && docPicker(say, stop),
+    // Canvas's Syllabus page, as it's shown; with AI, read after Glaze's own reading like a file.
+    const fromHere = async () => {
+      await docIn().catch(() => {});
+      if (!globalThis.GZ_DOCTEXT) return;
+      const text = pageText();
+      reading?.abort();
+      const ctl = reading = new AbortController();
+      try {
+        const r = await withAI(extract(text), text, { read: ctl, say, stop, shown: desc.dataset.to });
+        if (!ctl.signal.aborted) review(r, text);
+      } finally { if (reading === ctl) { reading = null; stop.hidden = true; } }
+    };
+    frame(t('Import a syllabus'), desc,
+      page()?.textContent.trim() && button(t("Read this course's Syllabus page"), 'page', fromHere),
+      ultra && docPicker(say, stop, desc),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-file', textContent: t('A file') }), file,
         make('small', { textContent: t('A PDF, a picture or screenshot, Word, PowerPoint, a web page or text.') })),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-paste', textContent: t('Or paste the text, or a screenshot') }), paste),
@@ -264,6 +385,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       make('div', { className: 'gz-syl-actions' }, button(t('Read it'), 'go', (e) => { if (e.isTrusted) go(); }, 'gz-syl-main'), stop, button(t('Cancel'), 'cancel', () => dlg.close())),
       say);
     first(file);
+    if (pageNow) fromHere();
   };
   // Ultra: a document of the course's, read from the public content API (a list of metadata and text, which [I] marks
   // nothing as opened: not measured), listed once the dialog asks, syllabus-like titles first. Shown only when the course
@@ -276,7 +398,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // out; with nothing read at all, the reason (the last file's own, or that it couldn't be read). Only the student's own
   // click reads, as Read it.
   const SYL = /syllab|course (outline|info)|programa|lehrplan|plan de cours|studiewijzer/i;
-  const docPicker = (say, stop) => {
+  const docPicker = (say, stop, desc) => {
     const box = make('div', { className: 'gz-syl-f', hidden: true });
     const cid = opened.cid, mine = dlg;
     // Never contentDetail or the whole contentHandler: an LTI link keeps its tool's secret there (lib/ultra.js).
@@ -303,7 +425,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
           await docIn();
           check();
           const D = globalThis.GZ_DOCTEXT;
-          const texts = [], ocrs = [];
+          const texts = [], ocrs = [], files = [];
           const tooLarge = () => Object.assign(new Error(t('That file is too large.')), { mine: true });
           let why = null;
           // Tokenize real tags, not anchor-like text inside attributes, comments or scripts.
@@ -348,6 +470,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
               check();
               texts.push({ text: got.text || '' });
               if (got.ocr) ocrs.push(got.ocr);
+              files.push(file);
             } catch (e) { if (signal.aborted) throw e; why = e; }
           }
           check();
@@ -361,7 +484,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
           // confidence by page.
           const n = ocrs.reduce((k, o) => k + o.pages, 0);
           const ocr = ocrs.length ? { pages: n, conf: Math.round(ocrs.reduce((k, o) => k + o.conf * o.pages, 0) / n), unsure: ocrs.flatMap((o) => o.unsure), blank: ocrs.reduce((k, o) => k + (o.blank || 0), 0) } : null;
-          const r = await reviewed(text, ocr, signal);
+          const r = await withAI(await reviewed(text, ocr, signal), text, { read: ctl, say, stop, shown: desc.dataset.to, files });
           check();
           review(r, text);
         } catch (e) { if (reading === ctl) say.textContent = signal.aborted ? t('Stopped.') : t("Glaze couldn't read that file."); }
@@ -384,9 +507,10 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const id = () => `gz-syl-${++uid}`;
   // A field: its label, the value to correct, a "Check this" / "Not found" mark and the line it came from.
   const mark = (conf, empty, saved) => (saved ? '' : conf === 'check' ? t('Check this') : empty ? t('Not found') : '');
-  const note = (input, conf, src, saved) => {
+  // ai: the value is AI's (lib/syllabus-ai.js), marked as one.
+  const note = (input, conf, src, saved, ai) => {
     const m = mark(conf, !src, saved);
-    const tag = m && make('span', { id: id(), className: `gz-syl-conf${conf === 'check' ? ' gz-syl-check' : ''}`, textContent: m });
+    const tag = m && make('span', { id: id(), className: `gz-syl-conf${conf === 'check' ? ' gz-syl-check' : ''}${ai && !saved ? ' gz-syl-ai' : ''}`, textContent: m });
     const from = src && make('small', { id: id(), className: 'gz-syl-src', textContent: t('From: “{text}”', { text: src }) });
     const by = [tag?.id, from?.id].filter(Boolean).join(' ');
     if (by) input.setAttribute('aria-describedby', by);
@@ -394,7 +518,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   };
   const field = (label, input, f, saved) => {
     input.id = id();
-    const [tag, from] = note(input, f.conf, f.src, saved);
+    const [tag, from] = note(input, f.conf, f.src, saved, f.ai);
     return make('div', { className: 'gz-syl-f' }, make('div', { className: 'gz-syl-lab' }, make('label', { htmlFor: input.id, textContent: label }), tag), input, from);
   };
   const text = (value, more = {}) => make('input', { type: 'text', value: value || '', ...more });
@@ -410,7 +534,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const to = attr(make('input', { type: 'time', value: m.end || '', className: 'gz-syl-end' }), { 'aria-label': t('Ends') });
     const loc = attr(text(m.location, { maxLength: 80, className: 'gz-syl-loc', placeholder: t('Where') }), { 'aria-label': t('Where') });
     const row = attr(make('div', { className: 'gz-syl-row' }), { role: 'group', 'aria-label': name });
-    const [tag, src] = note(label, m.conf, m.src, saved || !m.src);
+    const [tag, src] = note(label, m.conf, m.src, saved || !m.src, m.ai);
     row.append(label, days, from, '–', to, loc, x(name, () => { row.remove(); list.querySelector('input')?.focus(); }), tag, src);
     return row;
   };
@@ -429,7 +553,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       Object.assign(row.dataset, { week: String(d.week), wd: String(d.wd) });
       for (const type of ['input', 'change']) day.addEventListener(type, () => { row.dataset.own = '1'; });
     }
-    const [tag, src] = note(title, d.conf, d.src, saved || !d.src);
+    const [tag, src] = note(title, d.conf, d.src, saved || !d.src, d.ai);
     row.append(title, day, kind, add || '', x(name, () => { row.remove(); list.querySelector('input')?.focus(); }), tag, src);
     return row;
   };
@@ -461,7 +585,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     // the term's ("Check this"). Changing it moves each of those rows whose day the student hasn't set.
     const wk = r.week1?.value ? make('input', { type: 'date', value: r.week1.value }) : null;
     const wkSrc = r.week1?.from === 'text' ? r.week1.src : '';
-    const week1 = wk && field(t('Week 1 starts'), wk, { conf: r.week1.conf, src: wkSrc }, saved || (r.week1.conf !== 'check' && !wkSrc));
+    const week1 = wk && field(t('Week 1 starts'), wk, { conf: r.week1.conf, src: wkSrc, ai: r.week1.ai }, saved || (r.week1.conf !== 'check' && !wkSrc));
     const dates = rows(t('Important dates'), L.ids(r.dates, kept?.dates), (l, d, n) => dateRow(l, d, n, saved, todo, kept), { title: '', day: '', kind: 'exam' }, week1);
     const move = () => {
       for (const row of dates.querySelectorAll('.gz-syl-date')) {
@@ -536,6 +660,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       read && make('details', { className: 'gz-syl-read' }, make('summary', { textContent: t('The text Glaze read') }), make('pre', { textContent: read.slice(0, 20000) })),
       make('div', { className: 'gz-syl-actions' }, button(t('Save'), 'save', save, 'gz-syl-main'), back, button(t('Cancel'), 'cancel', () => dlg.close())),
       say);
+    if (r.aiSaid) say.textContent = r.aiSaid;
     first(name);
   };
 

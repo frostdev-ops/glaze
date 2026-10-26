@@ -19,6 +19,7 @@ until the student has turned AI on, chosen a connection and allowed that feature
 | `lib/ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
 | `lib/ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
 | `lib/ai/task.js` | Task definitions and `run`. Tasks live in `lib/ai/tasks/<id>.js`. |
+| `lib/ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `lib/syllabus-ai.js` reads them with `lib/syllabus.js` and merges them into the import dialog's review. |
 | `lib/ai/settings.js` | storage.local `ai`: `{ on, use, features }`. |
 | `lib/ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
 
@@ -93,6 +94,7 @@ provider, loaded }` (0 to 1) to Glaze's pages.
 Concurrent prepare calls share one attempt, limited to four minutes; a timeout answers `unavailable` with reason `timeout`.
 If the worker stops or the attempt times out, ask `test` again and let the student retry; inference is never replayed.
 Feature status reports `ready: false` with `why: 'download' | 'downloading' | 'unavailable'` until Chrome reports ready.
+For a connection that goes over the network it reports `to`, the host the text goes to, so the feature can say so.
 
 ## Limits
 
