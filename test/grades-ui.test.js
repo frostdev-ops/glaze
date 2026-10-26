@@ -1742,6 +1742,10 @@ test("Ultra syllabus import: week-based dates count from the term, marked Check 
   w.input.value = '2026-11-02';
   w.input.fire('input');
   assert.deepEqual(p.days(), { 'Essay 1 due': '2026-11-13', 'Quiz 2 due': '2026-09-25', 'Midterm exam': '2026-10-14' }, 'week rows move, a row set by hand and a dated row stay');
+  // A course starting on a Wednesday: "Week 2 – Friday" is still a Friday.
+  w.input.value = '2026-11-04';
+  w.input.fire('input');
+  assert.equal(p.days()['Essay 1 due'], '2026-11-13', 'a named weekday stays that weekday');
   w.input.value = '';
   w.input.fire('input');
   assert.equal(p.days()['Essay 1 due'], '2026-11-13', 'an emptied Week 1 moves nothing');
