@@ -100,6 +100,13 @@ test('week arithmetic stays in UTC across both daylight saving changes', () => {
   }
 });
 
+test('dated table cells remain dates when a section number matches their day', () => {
+  for (const [header, exam] of [['Date', 'Exam'], ['Datum', 'Klausur'], ['Fecha', 'Examen'], ['Date', 'Partiel'], ['Datum', 'Tentamen'], ['Data', 'Prova']]) {
+    const text = `4. Assessment\n${header}\tAssessment\n4.1.\t${exam} 1\n4.2.\t${exam} 2`;
+    assert.deepEqual(S.extract(text, { start: Date.UTC(2026, 9, 12) }).dates.map((d) => d.day), ['2027-01-04', '2027-02-04']);
+  }
+});
+
 const FALL = Date.UTC(2026, 7, 24); // Fall 2026 starts August 24
 const SPRING = Date.UTC(2027, 0, 11);
 const pick = (r) => ({
