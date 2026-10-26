@@ -426,7 +426,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const add = todo && make('label', { className: 'gz-syl-todo' }, make('input', { type: 'checkbox', className: 'gz-syl-task' }), ` ${t('Add to To Do')}`);
     // A date by course week moves with Week 1 starts until the student sets its day.
     if (Number.isInteger(d.week) && Number.isInteger(d.wd)) {
-      Object.assign(row.dataset, { week: String(d.week), wd: String(d.wd) });
+      Object.assign(row.dataset, { week: String(d.week), wd: String(d.wd), ...(d.dow && { dow: d.dow }) });
       for (const type of ['input', 'change']) day.addEventListener(type, () => { row.dataset.own = '1'; });
     }
     const [tag, src] = note(title, d.conf, d.src, saved || !d.src);
@@ -465,7 +465,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const dates = rows(t('Important dates'), L.ids(r.dates, kept?.dates), (l, d, n) => dateRow(l, d, n, saved, todo, kept), { title: '', day: '', kind: 'exam' }, week1);
     const move = () => {
       for (const row of dates.querySelectorAll('.gz-syl-date')) {
-        const day = !row.dataset.own && row.dataset.week && L.weekDay(wk.value, +row.dataset.week, +row.dataset.wd);
+        const day = !row.dataset.own && row.dataset.week && L.weekDay(wk.value, +row.dataset.week, +row.dataset.wd, row.dataset.dow);
         if (day) row.querySelector('input[type="date"]').value = day;
       }
     };
