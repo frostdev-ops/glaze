@@ -326,6 +326,8 @@ export async function syncAppleListing(env, app, platform, version, listings, { 
         note(locale, label, same ? 'same' : 'change');
         if (!same) changed[key] = fields[key];
       }
+      // A language Apple added on its own has no support URL, which review requires: the primary language's goes in.
+      for (const [key, value] of Object.entries(pick(primary, ['supportUrl', 'marketingUrl']))) if (!target.attributes?.[key]) changed[key] = value;
       if (write && Object.keys(changed).length) await apple(env, `/appStoreVersionLocalizations/${target.id}`, 'PATCH', document('appStoreVersionLocalizations', changed, {}, target.id));
     } else {
       for (const [key, label] of VERSION_FIELDS) if (key in fields) note(locale, label, 'create');
