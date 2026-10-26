@@ -46,7 +46,7 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         }
         #endif
 
-        // The AI harness's apple provider (GlazeAI.swift). Answered before the log below, which would record its text.
+        // The AI harness's apple provider (GlazeAI.swift). Never log native message bodies.
         if let command = message as? [String: Any], (command["type"] as? String)?.hasPrefix("ai.") == true {
             Task {
                 let response = NSExtensionItem()
@@ -56,7 +56,7 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             return
         }
 
-        os_log(.default, "Received message from browser.runtime.sendNativeMessage: %@ (profile: %@)", String(describing: message), profile?.uuidString ?? "none")
+        os_log(.default, "Received native message (profile: %@)", profile?.uuidString ?? "none")
 
         let response = NSExtensionItem()
         if #available(iOS 15.0, macOS 11.0, *) {

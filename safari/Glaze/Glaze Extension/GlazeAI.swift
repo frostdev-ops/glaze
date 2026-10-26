@@ -6,7 +6,7 @@
 //  this device or on Private Cloud Compute, answering browser.runtime.sendNativeMessage. One message, one reply; nothing
 //  streams. Messages:
 //    { type: 'ai.status', model: 'on-device' | 'private-cloud' }
-//      → { ok: true, state: 'ready' | 'downloading' | 'unavailable', reason?, context?, images?, quota? }
+//      → { ok: true, state: 'ready' | 'downloading' | 'unavailable', reason?, unverified?, context?, images?, quota? }
 //    { type: 'ai.run', id, model, messages, schema?, temperature?, maxTokens? }
 //      → { ok: true, text, model, finish: 'stop' | 'length', usage? } | { ok: false, error, reason? }
 //    { type: 'ai.cancel', id } → { ok: true, cancelled }
@@ -48,14 +48,22 @@ private enum Native {
     static let maxMessages = 64, maxChars = 2_000_000, maxImages = 8, maxImageBytes = 6 << 20, maxSchemaDepth = 12
 
     // Runs in flight, by the worker's id, so ai.cancel can stop one. Only reaches a run in this same process.
-    nonisolated(unsafe) private static var running: [String: Task<[String: Any], Never>] = [:]
+    // JSON bytes cross task boundaries; dictionaries containing Any stay inside the task that decodes them.
+    nonisolated(unsafe) private static var running: [String: Task<Data, Never>] = [:]
+    // Safari may deliver the separate cancel message before the run registers. Keep a bounded, short-lived tombstone.
+    nonisolated(unsafe) private static var cancelled: [String: Date] = [:]
     private static let lock = NSLock()
 
     static func cancel(_ m: [String: Any]) -> [String: Any] {
-        guard let id = m["id"] as? String else { return ["ok": false, "error": "request-rejected", "reason": "id"] }
-        let task = lock.withLock { running[id] }
-        task?.cancel()
-        return ["ok": true, "cancelled": task != nil]
+        guard let id = m["id"] as? String, !id.isEmpty, id.count <= 128 else { return ["ok": false, "error": "request-rejected", "reason": "id"] }
+        let found = lock.withLock {
+            if let task = running[id] { task.cancel(); return true }
+            cancelled = cancelled.filter { $0.value > Date() }
+            if cancelled.count >= 256, let oldest = cancelled.min(by: { $0.value < $1.value })?.key { cancelled[oldest] = nil }
+            cancelled[id] = Date().addingTimeInterval(300)
+            return false
+        }
+        return ["ok": true, "cancelled": found]
     }
 
     static func status(_ m: [String: Any]) async -> [String: Any] {
@@ -80,10 +88,10 @@ private enum Native {
                 case .belowLimit(let below): quota = below.isApproachingLimit ? "near" : "ok"
                 @unknown default: quota = "unknown"
                 }
-                var out: [String: Any] = ["ok": true, "state": quota == "reached" ? "unavailable" : "ready", "quota": quota, "images": model.capabilities.contains(.vision)]
-                if quota == "reached" { out["reason"] = "quota" }
-                if let size = try? await model.contextSize { out["context"] = size }
-                return out
+                // Availability (and even contextSize) can succeed without the PCC entitlement; inference then fails
+                // with ModelManagerError 1046. Status sends no probe or user text, so it cannot promise readiness.
+                return ["ok": true, "state": "unavailable", "reason": quota == "reached" ? "quota" : "unverified",
+                        "unverified": true, "quota": quota, "images": model.capabilities.contains(.vision)]
             case .unavailable(.deviceNotEligible): return ["ok": true, "state": "unavailable", "reason": "device"]
             case .unavailable(.systemNotReady): return ["ok": true, "state": "unavailable", "reason": "not-ready"]
             case .unavailable: return ["ok": true, "state": "unavailable", "reason": "unknown"]
@@ -95,17 +103,32 @@ private enum Native {
 
     static func run(_ m: [String: Any]) async -> [String: Any] {
         guard let id = m["id"] as? String, !id.isEmpty, id.count <= 128 else { return ["ok": false, "error": "request-rejected", "reason": "id"] }
-        let task = Task { await respond(m) }
-        lock.withLock { running[id] = task }
-        let out = await task.value
+        guard let data = try? JSONSerialization.data(withJSONObject: m) else { return ["ok": false, "error": "request-rejected", "reason": "message"] }
+        let admission: (task: Task<Data, Never>?, cancelled: Bool) = lock.withLock {
+            cancelled = cancelled.filter { $0.value > Date() }
+            if cancelled.removeValue(forKey: id) != nil { return (nil, true) }
+            guard running[id] == nil else { return (nil, false) }
+            let task = Task {
+                let message = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+                let reply = await respond(message)
+                return (try? JSONSerialization.data(withJSONObject: reply)) ?? Data(#"{"ok":false,"error":"invalid-response"}"#.utf8)
+            }
+            running[id] = task
+            return (task, false)
+        }
+        guard let task = admission.task else {
+            return admission.cancelled ? ["ok": false, "error": "cancelled"] : ["ok": false, "error": "request-rejected", "reason": "duplicate"]
+        }
+        let dataOut = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
         lock.withLock { running[id] = nil }
-        return out
+        return (try? JSONSerialization.jsonObject(with: dataOut)) as? [String: Any] ?? ["ok": false, "error": "invalid-response"]
     }
 
     private struct Refused: Error { let reason: String }
 
     private static func respond(_ m: [String: Any]) async -> [String: Any] {
         do {
+            try Task.checkCancellation()
             let (instructions, history, prompt) = try conversation(m["messages"])
             var options = GenerationOptions()
             if let t = m["temperature"] as? Double, t >= 0, t <= 2 { options.temperature = t }
@@ -132,6 +155,7 @@ private enum Native {
             }
             let text: String
             let usage: LanguageModelSession.Usage
+            try Task.checkCancellation()
             if let schema {
                 let r = try await session.respond(to: prompt, schema: schema, options: options)
                 text = r.content.jsonString
@@ -147,7 +171,7 @@ private enum Native {
             return ["ok": true, "text": text, "model": name, "finish": cut ? "length" : "stop",
                     "usage": ["input": usage.input.totalTokenCount, "cached": usage.input.cachedTokenCount, "output": usage.output.totalTokenCount]]
         } catch let e as Refused {
-            return ["ok": false, "error": "request-rejected", "reason": e.reason]
+            return Task.isCancelled ? ["ok": false, "error": "cancelled"] : ["ok": false, "error": "request-rejected", "reason": e.reason]
         } catch {
             return failure(error)
         }
@@ -155,7 +179,7 @@ private enum Native {
 
     /// An error as one of lib/ai/failure.js's categories (or 'refusal'), with a reason word for a developer.
     static func failure(_ error: Error) -> [String: Any] {
-        if error is CancellationError { return ["ok": false, "error": "cancelled"] }
+        if Task.isCancelled || error is CancellationError { return ["ok": false, "error": "cancelled"] }
         if let e = error as? LanguageModelError {
             switch e {
             case .contextSizeExceeded(let c): return ["ok": false, "error": "request-rejected", "reason": "context", "context": c.contextSize, "tokens": c.tokenCount]
@@ -178,10 +202,8 @@ private enum Native {
         }
         if error is SystemLanguageModel.Error { return ["ok": false, "error": "provider-unavailable", "reason": "assets"] }
         if error is GeneratedContent.ParsingError { return ["ok": false, "error": "invalid-response", "reason": "decoding"] }
-        // Anything else: the innermost NSError's domain and code, for a developer (the worker never shows it on a page).
-        var inner = error as NSError
-        while let next = (inner.userInfo[NSMultipleUnderlyingErrorsKey] as? [NSError])?.first ?? inner.userInfo[NSUnderlyingErrorKey] as? NSError { inner = next }
-        return ["ok": false, "error": "provider-unavailable", "reason": "\(inner.domain) \(inner.code)"]
+        // Native error domains, descriptions and underlying errors can contain user text. Never send them back.
+        return ["ok": false, "error": "provider-unavailable", "reason": "unknown"]
     }
 
     // ---- the conversation ----------------------------------------------------------------------------------------------
@@ -244,6 +266,7 @@ private enum Native {
             var types = (s["type"] as? [String]) ?? [(s["type"] as? String) ?? ""]
             let nullable = types.contains("null")
             types.removeAll { $0 == "null" }
+            if nullable && types.isEmpty { return .null }
             guard types.count == 1 else { throw Refused(reason: "schema type") }
             let inner: DynamicGenerationSchema
             switch types[0] {

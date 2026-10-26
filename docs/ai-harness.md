@@ -119,3 +119,26 @@ Feature status reports `ready: false` with `why: 'download' | 'downloading' | 'u
   inference that may have run is never replayed.
 - The call record (`storage.local aiCalls`) keeps ids, task, feature, provider, state, category, status, timing and usage:
   no prompts, answers, addresses or keys.
+
+## Safari's Apple provider
+
+An `apple` connection chooses `model: 'on-device'` or `'private-cloud'`. It is registered and offered by Settings only
+on Safari. Both paths currently require macOS 27 or iOS 27; older systems return `unavailable` with reason `os`.
+The on-device model keeps text on this device. **Private Cloud Compute sends text encrypted to Apple's Private Cloud
+Compute.** Its catalog label states this before selection; a cloud connection is an explicit choice, never a fallback.
+
+PCC's system availability and context size do not establish that the extension has the required entitlement. Status
+therefore reports `unavailable`, reason `unverified`, with `unverified: true` (or the system's device/quota reason).
+Settings' Test and feature status send no inference probe and never claim PCC is ready. An explicitly requested run still
+attempts the selected model; native failures return only fixed categories. Verifying readiness in a signed extension is a
+separate release check. The catalog lists model names only and does not certify runtime availability.
+
+`ai.run` is one native request and reply. Refusals stay `refusal`; a reply reaching `maximumResponseTokens` is marked
+`length`, and structured output is refused even if guided generation closed the JSON. Rate and quota limits carry 429.
+Schemas are converted to `DynamicGenerationSchema`; the worker validates every answer against the full original schema.
+Native messages and errors never log or forward prompt text through diagnostics.
+
+Cancel and timeout end the worker's wait immediately and send `ai.cancel` for that request id. Native cancellation is
+cooperative and confined to the same extension process; `cancelled: true` means a registered task received cancellation,
+not that computation has already stopped. An early cancel is remembered for five minutes (up to 256 ids), duplicate runs
+cannot replace an active task, and late output is discarded. A different native process cannot cancel the original task.
