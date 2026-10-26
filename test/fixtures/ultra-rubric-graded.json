@@ -1,4 +1,5 @@
 {
+  "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shapes for a graded assignment with a rubric, synthetic values.",
   "grade": {
     "id": "_510_1", "courseId": "_101_1", "userId": "_42_1", "columnId": "_300_1", "lastAttemptId": "_400_1",
     "column": { "id": "_300_1", "contentId": "_8120_1", "possible": 100 },
