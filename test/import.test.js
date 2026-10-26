@@ -172,6 +172,38 @@ test('ocrText: preserves engine lines on skewed and quarter turned pages', () =>
   assert.equal(D.ocrText(turned).text, 'First line\nSecond line');
 });
 
+test('ocrText: keeps large single letters and numbers as text instead of icons', () => {
+  for (const heading of ['A', 'I', 'C', '10', '1a', 'An']) {
+    const r = D.ocrText(engineJson([
+      [[heading, 20, 100, 20, 100, 60]],
+      [['Read', 20, 60, 130, 150], ['the', 65, 95, 130, 150], ['instructions.', 100, 200, 130, 150]],
+    ]));
+    assert.equal(r.text, `${heading}\nRead the instructions.`, heading);
+    assert.deepEqual(r.unsure, [heading]);
+    assert.equal(r.conf, 86);
+  }
+});
+
+test('ocrText: keeps uncertain grades and short words in joined rows', () => {
+  for (const value of ['A', 'I', 'C', '10', '1a', 'an', 'to']) {
+    const r = D.ocrText(engineJson([
+      [['Course', 20, 90, 14, 34], ['First', 200, 250, 0, 20]],
+      [['Second', 200, 270, 25, 45], [value, 400, 420, 14, 34, 40]],
+    ]));
+    assert.equal(r.text, `Course\tFirst Second\t${value}`, value);
+    assert.deepEqual(r.unsure, [r.text]);
+    assert.equal(r.conf, 81);
+  }
+});
+
+test('ocrText: keeps small conjunctions and plus signs outside bulleted table lists', () => {
+  for (const word of ['e', 'o', '+']) {
+    const r = D.ocrText(engineJson([[[word, 20, 30, 30, 40, 60], ['Material', 46, 140, 20, 40]] ]));
+    assert.equal(r.text, `${word} Material`);
+    assert.deepEqual(r.unsure, [r.text]);
+  }
+});
+
 test('ocrText: a table row whose cells are several lines, or centred in it, is one line; level rows and a paragraph stay lines', () => {
   // A course calendar laid out as the engine reads it in one block: the week's dates centred in their cell, so the
   // engine puts them on a line with the second line of the cells beside them, or on a line of their own; bullets read
