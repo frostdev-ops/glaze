@@ -1014,8 +1014,59 @@ Clinical: Wednesdays 0645–1515 at assigned facility`, { hint: 'en' });
   assert.equal(r.prof.note.value, '', 'times read are no note');
   const staff = S.extract('Role\tName\tEmail\tOffice Hours\nInstructor\tProf. Ana Ruiz\taruiz@x.edu\tMon 2–3:30 PM, Hall 412\nTA\tSam Lee\tslee@x.edu\tFri 1–3 PM, Lab 2');
   assert.deepEqual([slots(staff.hours), staff.meetings], [['MO 14:00-15:30 | Hall 412', 'TA | FR 13:00-15:00 | Lab 2'], []]);
+  assert.deepEqual(slots(S.extract('▦\tVirtual Office Hours\nThursdays, 10:00–11:30 a.m.').hours), ['TH 10:00-11:30'], 'an icon\'s cell is no table');
   assert.deepEqual(slots(S.extract('Teaching Assistant: Sam Lee · slee@x.edu · Office hours: Mon 3–4 pm, Room 5').hours), ['Teaching Assistant | MO 15:00-16:00 | Room 5']);
   assert.deepEqual(slots(S.extract('Übungsleitung: Jonas Weber (jw@x.de), Sprechzeit\nMo 9–10 Uhr, Raum 3.09', { hint: 'de' }).hours), ['Übungsleitung | MO 09:00-10:00 | Raum 3.09']);
   assert.deepEqual(slots(S.extract('Disponibilités : mardi 13 h à 15 h, local A-1', { hint: 'fr' }).hours), ['Disponibilités | TU 13:00-15:00 | local A-1']);
   assert.deepEqual(slots(S.extract('Atendimento: quartas-feiras, 14h às 16h, sala 3', { hint: 'pt' }).hours), ['Atendimento | WE 14:00-16:00 | sala 3']);
+});
+
+// Owner, 2026-10-26: grading in points only becomes percents of the total; letters on 0–10 or 0–20 become percents.
+test('grading in points becomes percents of its total, and a scale in points or on 0–10 or 0–20 becomes percents', () => {
+  const pts = S.extract(`Grade Breakdown
+Assignment\tPoints
+Lab notebooks (4 × 50 points)\t200
+Problem sets\t150
+Midterm\t250
+Final project\t400
+Total\t1000
+Grading Scale
+Grade\tPoints
+A\t900–1000
+B\t800–899
+C\t700–799
+D\t600–699
+F\t599 and below`);
+  assert.deepEqual([S.weightsText(pts.weights.value), pts.weights.conf], ['Lab notebooks 20%, Problem sets 15%, Midterm 25%, Final project 40%', 'check']);
+  assert.deepEqual([pick(pts).scale, pts.scale.conf], ['A 90, B 80, C 70, D 60, F 0', 'check']);
+  assert.match(pts.scale.src, /900-1000/, 'the source line as written');
+  assert.equal(S.weightsText(S.extract('Grading\nHomework – 150 points\nQuizzes – 100 points\nExams – 750 points\nTotal – 1000 points').weights.value), 'Homework 15%, Quizzes 10%, Exams 75%');
+  assert.equal(S.weightsText(S.extract('Course grade:\nHomework (150 pts)\nQuizzes (50 pts)').weights.value), 'Homework 75%, Quizzes 25%');
+  assert.equal(S.extract('Assignment\tPoints\nEssays\t400\nQuizzes\t100\nTotal\t900').weights.value, '', 'a total that is not the sum');
+  assert.equal(pick(S.extract('Grading Scale\nA: 900 points and above\nB: 800 points\nC: 700 points')).weights, '', 'a scale is no weights');
+  assert.equal(pick(S.extract('Conceitos: A: 9,0 a 10,0; B: 7,5 a 8,9; C: 6,0 a 7,4; D: 0 a 5,9.', { hint: 'pt' })).scale, 'A 90, B 75, C 60, D 0');
+  assert.equal(pick(S.extract('Barème : A : 16 à 20 ; B : 14 à 15,9 ; C : 12 à 13,9 ; D : 10 à 11,9 ; E : 0 à 9,9', { hint: 'fr' })).scale, 'A 80, B 70, C 60, D 50, E 0');
+});
+
+test('a sentence\'s percent beside a breakdown is no category, nor does an item\'s own label start a new block', () => {
+  assert.equal(pick(S.extract('Completion\nThis course is Pass / No Pass. To pass you need 70% overall:\nJournals – 40%\nGrant draft – 30%\nPitch – 30%')).weights, 'Journals 40%, Grant draft 30%, Pitch 30%');
+  assert.equal(pick(S.extract('Évaluation\tPondération\tDate\nExercices (6)\t10 %\tVoir le calendrier\nExamen intra\t30 %\tlundi 26 octobre\nProjet\t60 %\tlundi 30 novembre\nTout travail remis en retard sera pénalisé de 10 % par jour.', { hint: 'fr' })).weights,
+    'Exercices 10%, Examen intra 30%, Projet 60%');
+  assert.equal(pick(S.extract('Grading\nProgramming assignments (6): 36%\nPrelim 1: 15%\nPrelim 2: 15%\nFinal exam: 25%\nQuizzes and participation: 9%')).weights,
+    'Programming assignments 36%, Prelim 1 15%, Prelim 2 15%, Final exam 25%, Quizzes and participation 9%');
+  assert.equal(pick(S.extract('Toetsing\nTentamen\t70%\nGroepsopdracht (verslag + presentatie)\t30%', { hint: 'nl' })).weights, 'Tentamen 70%, Groepsopdracht 30%');
+});
+
+test('a professor\'s name ends at its table cell, a facilitator teaches, and an office can follow an e-mail on its line', () => {
+  assert.equal(S.extract('Profesora:\tMtra. Clara Ibáñez Soto\tGrupo:\t4CP2', { hint: 'es' }).prof.name.value, 'Mtra. Clara Ibáñez Soto');
+  assert.equal(S.extract('Facilitator: Marisol Okoye-Lind, MPA\nEmail: m.okoye@x.edu').prof.name.value, 'Marisol Okoye-Lind');
+  assert.equal(S.extract('Lecturer: Dr. Ama Boateng\n✉ aboateng@x.edu · Office: LSB 3340').prof.office.value, 'LSB 3340');
+});
+
+test('a scale table of two columns read across, and a failing letter written after its bound', () => {
+  const two = S.extract('Grading Scale\nGrade\tPercentage\tGrade\tPercentage\nA\t94–100\tC+\t77–79.99\nA-\t90–93.99\tC\t70–76.99\nB+\t87–89.99\tD\t60–69.99\nB\t84–86.99\tF\tbelow 60\nB-\t80–83.99');
+  assert.equal(pick(two).scale, 'A 94, A- 90, B+ 87, B 84, B- 80, C+ 77, C 70, D 60, F 0');
+  assert.match(two.scale.src, /B- · 80-83\.99/);
+  assert.equal(pick(S.extract('Letter grades: 90–100% A, 80–89% B, 70–79% C, 60–69% D, below 60% F.')).scale, 'A 90, B 80, C 70, D 60, F 0');
+  assert.equal(pick(S.extract('Letter grades: 90–100% A, 80–89% B, 70–79% C, 60–69% D; below 40% the course is failed.')).scale, 'A 90, B 80, C 70, D 60', 'no letter given');
 });
