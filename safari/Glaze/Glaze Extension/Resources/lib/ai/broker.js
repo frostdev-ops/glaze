@@ -169,7 +169,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         const cfg = { ...use.cfg, ...(chosen.caps.context && !use.cfg.context && { context: chosen.caps.context }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }) };
         if (often(key, now())) throw R().error('often');
         if (control.signal.aborted) throw Object.assign(R().error('cancelled'), { category: 'cancelled' });
-        const remember = (id) => { const parked = confirms.get(id); if (parked) Object.assign(parked, { runId: m.id, feature: m.feature, task: m.task, use }); };
+        const remember = (id) => { const parked = confirms.get(id); if (parked) Object.assign(parked, { runId: m.id, feature: m.feature, task: m.task, to: m.to, use }); };
         const out = await T().run(task, m.input, { provider: use.p, cfg, signal: control.signal, fetch: pinned(env, use), tools: env.tools, confirms,
           emit: (ev) => { if (control.signal.aborted || closed) return; if (ev.pending) remember(ev.pending.confirmId); post({ ...ev, id: m.id, ...(ev.id !== undefined && { event: ev.id }) }); } });
         await unchanged(env, use, control.signal);
