@@ -380,3 +380,21 @@ test('feature revocation while a confirmation waits for its live sender check pr
   assert.equal(ran, 0);
   assert.equal(p.posted.at(-1).error, 'feature');
 });
+
+test('an authority revision changed during the final connection read refuses confirmation', async () => {
+  let ran = 0, revision = 0, release, reads = 0;
+  const tools = TL.registry(); tools.add(TL.define({ ...remind, run: async () => { ran++; return { ok: true }; } }));
+  const fetch = async (url) => (url.endsWith('/models') ? models() : json({ choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'reminder_add', arguments: '{"at":"2026-11-02","reason":"Soon."}' } }] }, finish_reason: 'tool_calls' }] }));
+  const e = env({ fetch, tools, revision: () => revision }), p = open(e);
+  p.say(run(undefined, { task: 'example.plan' }));
+  await flush();
+  const id = p.posted.at(-1).pending.confirmId, get = e.vault.get;
+  e.vault.get = (k) => k === 'connections' && ++reads === 2 ? new Promise((r) => { release = () => r(get(k)); }) : get(k);
+  p.say({ id: 2, op: 'confirm', confirmId: id, approve: true });
+  await flush();
+  revision++;
+  release?.();
+  await flush();
+  assert.equal(ran, 0);
+  assert.equal(p.posted.at(-1).type, 'error');
+});
