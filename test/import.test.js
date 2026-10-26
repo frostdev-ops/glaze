@@ -487,11 +487,11 @@ const ACCURACY = [
   ['timetable-photo.jpg', 'OCR, phone photo', 0.4],
   ['syllabus.png', 'OCR, screenshot', 20 / 21],
   ['transcript-photo.jpg', 'OCR, phone photo, sharp', 1],
-  // The class schedule's own list on Canvas: a course on one line, its times on the next, buttons beside it. The times
-  // come through; BIO 1100L's and ENG 1100's headings carry OCR specks that make lib/classes.js file their times under
-  // the course above, and places without a word like "Hall" aren't recognised as places.
-  ['canvas-schedule-light.png', 'OCR, Canvas screenshot, light', 0.5],
-  ['canvas-schedule-dark.png', 'OCR, Canvas screenshot, dark', 0.3],
+  // The class schedule's own list on Canvas: a course on one line, its times on the next, buttons centred beside both,
+  // which make the three one row. ENG 1100's heading carries OCR specks that keep its times apart from it, and places
+  // without a word like "Hall" aren't recognised as places.
+  ['canvas-schedule-light.png', 'OCR, Canvas screenshot, light', 0.7],
+  ['canvas-schedule-dark.png', 'OCR, Canvas screenshot, dark', 0.6],
 ];
 
 test('the OCR worker starts on the bundled models only, and refuses a language it doesn\'t have', async () => {
