@@ -94,11 +94,17 @@ test('a graded attempt shows its rubric inline with the selections, whatever the
   assert.match(p.shadow.textContent, /Synthetic note\./, 'with the criterion feedback');
 });
 
-test('a posted grade on a completed attempt is graded too: displayGrade or the column\'s released grades', async () => {
-  for (const post of [(d) => { d.grade.displayGrade = { scaleType: 'PERCENT', score: 85 }; }, (d) => { d.column.gradesReleased = true; }]) {
+test('a completed ungraded attempt cannot use column release settings or displayGrade to reveal grading', async () => {
+  for (const post of [(d) => { d.column.gradesReleased = true; }, (d) => { d.grade.displayGrade = {}; }, (d) => { d.grade.displayGrade = { scaleType: 'PERCENT', score: 85 }; }]) {
     const d = real(); d.grade.submissionStatus = { status: 'SUBMITTED' }; post(d);
     const p = await show(d);
-    assert.equal(p.selected.length, 2);
+    assert.equal(!!p.node, false, 'SUBMITTED follows displayAfter, even on a released column or with a display grade');
+    assert.equal(p.nativeHidden, false);
+    d.column.rubricAssociations[0].displayAfter = true;
+    const after = await show(d);
+    assert.ok(after.node, 'displayAfter permits the definition');
+    assert.deepEqual(after.selected, [], 'an ungraded attempt has no selections');
+    assert.doesNotMatch(after.shadow.textContent, /Synthetic note\./);
   }
 });
 
