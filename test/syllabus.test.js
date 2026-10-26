@@ -1330,3 +1330,9 @@ test('review: topic cells cannot override an empty deliverables column', () => {
   ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
   assert.deepEqual(S.extract('Date\tTopic\tDeliverables\nSeptember 7\tAuditions\tProject due', reviewOpts).dates.map((d) => `${d.day} ${d.kind}`), ['2026-09-07 due']);
 });
+
+test('review: parenthetical comments do not end an exception list', () => {
+  const text = 'Quizzes are due every Friday, except September 11 (orientation) and September 18.\nCourse ends: September 25';
+  assert.deepEqual(S.extract(text, reviewOpts).dates, []);
+  assert.deepEqual(S.extract('Quizzes are due every Friday, weeks 1–4 (except September 11 and September 18).', reviewOpts).dates.map((d) => d.day), ['2026-09-04', '2026-09-25']);
+});
