@@ -1297,4 +1297,6 @@ test('review: every part of an exception list must be resolved before weekly exp
   }
   assert.deepEqual(reviewWeekly('Quizzes are due every Friday, weeks 1–4, except September 11 and September 18.').map((d) => d.day), ['2026-09-04', '2026-09-25']);
   assert.deepEqual(reviewWeekly('Quizzes are due every Friday from December 18 until January 15, except December 25 and January 1.').map((d) => d.day), ['2026-12-18', '2027-01-08', '2027-01-15']);
+  assert.deepEqual(S.extract('Quizzes are due every Friday, weeks 1–4, except Sep. 11 and Sep. 18.', reviewOpts).dates.map((d) => d.day), ['2026-09-04', '2026-09-25']);
+  assert.deepEqual(S.extract('Quizzes are due every Friday, weeks 1–6, except September 11, September 18, September 25, October 2 and October 9.', reviewOpts).dates.map((d) => d.day), ['2026-09-04']);
 });
