@@ -91,13 +91,13 @@ const tableInfo = function () {
       if (u.pathname.endsWith('/rubric.css')) return r.fulfill({contentType:'text/css',body:''});
       let data = { results:[] };
       if (u.pathname.endsWith('/users/me') || u.pathname.endsWith('/users/self/profile')) data = { id:u.origin === canvas ? '42' : '_42_1',name:'Synthetic student' };
-      else if (u.pathname.includes('/gradebook/grades')) { const row={...grade}; if(scenario==='unopened')for(const k of ['lastAttemptId','lastAttempt','status','submissionStatus'])delete row[k]; if(scenario==='submitted')Object.assign(row,{lastAttempt:{id:'_400_1',status:'NEEDS_GRADING'},submissionStatus:{status:'SUBMITTED'}}); data={results:[row]}; }
+      else if (u.pathname.includes('/gradebook/grades')) { const row={...grade}; if(scenario==='unopened')for(const k of ['lastAttemptId','lastAttempt','status','submissionStatus'])delete row[k]; if(['submitted','released-ungraded'].includes(scenario))Object.assign(row,{lastAttempt:{id:'_400_1',status:scenario==='submitted'?'NEEDS_GRADING':'COMPLETED'},submissionStatus:{status:'SUBMITTED'}}); data={results:[row]}; }
       else if (u.pathname.includes('/contents/')) data = { id:'_8120_1', contentDetail:{'resource/x-bb-asmt-test-link':{test:{gradingColumn:{id:'_300_1'},assessment:{gradableItemId:'_300_1'}}}} };
       else if (u.pathname.includes('/gradebook/columns/_300_1')) {
         if (scenario === 'forbidden') return r.fulfill({status:403,contentType:'application/json',body:'{}'});
         if (scenario === 'slow') { slowSeen = true; await new Promise(done => { releaseSlow = done; }); }
-        data = { id:'_300_1',courseId:'_101_1',contentId:'_8120_1',possible:20,rubricAssociations:[scenario==='numeric'?{...association,rubricDefinition:numeric}:association] };
-      } else if (u.pathname.includes('/gradebook/attempts/')) data = { id:'_400_1',courseId:'_101_1',columnId:'_300_1',userId:'_42_1',status:scenario==='submitted'?'NEEDS_GRADING':'COMPLETED',rubricEvaluation:{...(scenario==='numeric'?numericEvaluation:evaluation),...(scenario==='submitted'?{published:true,userId:'_42_1'}:scenario==='foreign-user'?{userId:'_43_1'}:{})} };
+        data = { id:'_300_1',courseId:'_101_1',contentId:'_8120_1',possible:20,gradesReleased:scenario==='released-ungraded',rubricAssociations:[scenario==='numeric'?{...association,rubricDefinition:numeric}:scenario==='graded-hidden'?{...association,displayGraded:false}:association] };
+      } else if (u.pathname.includes('/gradebook/attempts/')) data = { id:'_400_1',courseId:'_101_1',columnId:'_300_1',userId:'_42_1',status:scenario==='submitted'?'NEEDS_GRADING':'COMPLETED',rubricEvaluation:{...(scenario==='numeric'?numericEvaluation:evaluation),...(scenario==='submitted'?{published:true,userId:'_42_1'}:scenario==='foreign-user'?{userId:'_43_1'}:scenario==='foreign-attempt'?{attemptId:'_401_1'}:scenario==='foreign-association'?{rubricAssociationId:'_501_1'}:{})} };
       else if (u.origin === canvas && /\/assignments\/22\/submissions\/self$/.test(u.pathname)) data = { assignment_id:'22',user_id:'42',rubric_assessment:{c0:{rating_id:'r00',points:10,comments:'Strong evidence.'}} };
       else if (u.origin === canvas && /\/assignments\/22$/.test(u.pathname)) data = assignment;
       return r.fulfill({contentType:'application/json',body:JSON.stringify(data)});
@@ -147,14 +147,32 @@ const tableInfo = function () {
       const x=await until(()=>info(cdp),'unopened own assessment rubric');
       check(x.selected===0&&!x.text.includes('Strong evidence.')&&!requests.slice(start).some(r=>r.path.includes('/gradebook/attempts/')),'an unopened own assessment without status fields displays its permitted definition without evaluation');await page.close();
     }
-    if(run('submitted')) {
-      const {page}=await open({kind:'submitted'});
-      check(!await page.locator('#gz-rubric,#gz-popup').count(),'a published evaluation of an ungraded submission cannot promote after-submission rubric visibility');
+    for (const kind of ['submitted','released-ungraded','graded-hidden']) if(run(kind)) {
+      const {page}=await open({kind});
+      check(!await page.locator('#gz-rubric,#gz-popup').count(),`${kind}: an evaluation cannot bypass the attempt state's visibility flag`);
       await page.locator('#native-rubric').click();await page.waitForSelector('#native-rubric-panel');check(true,'an unavailable after-submission rubric retains its native control');await page.close();
     }
-    if(run('foreign-user')) {
-      const {page,cdp}=await open({kind:'foreign-user'}), x=await until(()=>info(cdp),'graded rubric with a foreign evaluation');
-      check(x.selected===0&&!x.text.includes('Strong evidence.'),'an evaluation naming another user shows the graded rubric without its selections');await page.close();
+    for (const kind of ['foreign-user','foreign-attempt','foreign-association']) if(run(kind)) {
+      const {page,cdp}=await open({kind}), x=await until(()=>info(cdp),'graded rubric with a foreign evaluation');
+      check(x.selected===0&&!x.text.includes('Strong evidence.'),`${kind}: an unrelated evaluation shows the graded rubric without its selections`);await page.close();
+    }
+    if(run('results')) {
+      const {page,cdp}=await open(); await until(()=>info(cdp),'rubric before results styles');
+      await page.evaluate(()=>{
+        const section=document.createElement('div');section.className='overview-section assessment-results-section main-section-container';
+        section.innerHTML='<div class="assessment-results-header"><h2 class="section-label">Assessment Results</h2></div><div class="section-content">Results</div>';
+        document.querySelector('.assessment-overview-grid').append(section);
+        const other=document.createElement('div');other.id='other-section';other.innerHTML='<div class="section-content">Other content</div>';document.querySelector('#site-wrap').append(other);
+      });
+      const styles=()=>page.evaluate(()=>{
+        const css=s=>getComputedStyle(document.querySelector(s)), body=css('.assessment-results-section > .section-content'), label=css('.assessment-results-header > .section-label'), other=css('#other-section > .section-content');
+        return {radius:body.borderTopLeftRadius,padding:body.paddingInlineStart,border:body.borderTopWidth,fill:body.backgroundColor,blur:body.backdropFilter,labelRadius:label.borderTopLeftRadius,labelDisplay:label.display,otherBorder:other.borderTopWidth};
+      });
+      const glass=await styles();
+      check(parseFloat(glass.radius)>0&&parseFloat(glass.padding)>0&&glass.border==='1px'&&glass.fill!=='rgba(0, 0, 0, 0)','Assessment Results content has a rounded padded surface');
+      check(glass.labelRadius==='999px'&&glass.labelDisplay==='inline-flex'&&glass.otherBorder==='0px','the nested Results heading is a pill and unrelated section content has no panel border');
+      await page.evaluate(()=>document.documentElement.setAttribute('data-gz-bg','solid'));
+      check((await styles()).blur==='none','Assessment Results disables backdrop blur with a solid background');await page.close();
     }
     if(run('numeric')) {
       const {page,cdp}=await open({kind:'numeric'}), x=await until(()=>info(cdp),'graded NUMERIC rubric');

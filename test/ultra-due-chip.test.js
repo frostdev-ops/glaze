@@ -13,14 +13,22 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ORIGIN = 'https://bb.test', NOW = Date.parse('2026-10-01T12:00:00Z');
 
-const page = (row) => {
+const page = (row, { locale = 'en', labelText = 'Assessment due date:', dateText = '10/4/26, 11:59 PM', view = 'assessment' } = {}) => {
   const doc = { activeElement: null, fire() {} };
   const make = (tag, cls = '', ...kids) => { const e = new El(tag, doc); e.className = cls; e.append(...kids); return e; };
   doc.root = make('html');
-  const label = make('h3', 'grid-item-label', 'Assessment due date:');
-  const date = make('bb-datetime', '', '10/4/26, 11:59 PM');
+  const label = make('h3', 'grid-item-label', labelText);
+  const date = make('bb-datetime', '', dateText);
   const body = make('body', '', make('div', 'assessment-overview-grid', make('div', 'overview-section overview-due-date-section main-section-container',
     make('h2', 'section-label', 'Details'), make('div', 'due-date-container', label, make('div', 'grid-item-value', date)))));
+  if (view !== 'assessment') {
+    const container = date.closest('.due-date-container');
+    if (view === 'outline') {
+      container.className = 'content-list-item';
+      container.setAttribute('data-content-id', '_7_1');
+      const detail = make('div', 'makeStylesgradeDetail-test'); detail.append(date); container.append(detail);
+    } else container.className = 'due-date-list';
+  }
   doc.root.append(body);
   // Text nodes in document order, each with its parent, through acceptNode as the browser's walker does.
   const createTreeWalker = (from, _, { acceptNode }) => {
@@ -32,7 +40,7 @@ const page = (row) => {
   };
   const answer = (u) => (/users\/me$/.test(u.pathname) ? { id: '_9_1' } : /gradebook\/grades$/.test(u.pathname) ? { results: [row] } : { results: [] });
   const fetch = async (url) => new Response(JSON.stringify(answer(new URL(url))), { status: 200 });
-  const location = { origin: ORIGIN, protocol: 'https:', hostname: 'bb.test', port: '', pathname: '/ultra/courses/_1_1/assessment/_7_1/overview', search: '' };
+  const location = { origin: ORIGIN, protocol: 'https:', hostname: 'bb.test', port: '', pathname: view === 'assessment' ? '/ultra/courses/_1_1/assessment/_7_1/overview' : `/ultra/courses/_1_1/${view}`, search: '' };
   const D = class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } };
   const ctx = vm.createContext({
     document: Object.assign(doc, { documentElement: doc.root, body, createTreeWalker, querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), getElementById: () => null, addEventListener() {}, createElement: (t) => new El(t, doc) }),
@@ -51,7 +59,7 @@ const page = (row) => {
   vm.runInContext(read('content-ultra.js'), ctx);
   const need = (file, ready) => { if (!ready()) vm.runInContext(read(file), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
   const api = (p) => fetch(`${ORIGIN}/learn/api/v1${p}`).then((r) => r.json());
-  const I = { C: {}, html: doc.root, isPreview: false, solo: true, tabFrame: '', need, t: (x) => x, locale: () => 'en', api,
+  const I = { C: {}, html: doc.root, isPreview: false, solo: true, tabFrame: '', need, t: (x) => x, locale: () => locale, api,
     courseId: () => location.pathname.match(/\/ultra\/courses\/(_\d+_\d+)\//)?.[1], markDue, drawProgress() {}, cardBadge() {},
     cardsInView: { observe() {}, unobserve() {} }, inView: new Set(), tagCards() {}, tagExtras() {}, courseSlots: {}, courseColors: () => ({}), varText: () => '', CARD: 'article', dueLabelled,
     links: [1], settings: { enabled: true, enhance: { inline: true, urgency: true, scores: false, progress: false, newgrades: false, newcontent: false }, nav: { brand: 'x' }, courses: { names: {}, tint: false, tinted: [] }, sidebar: {} },
@@ -76,4 +84,33 @@ test('an open assessment\'s due-date row draws its countdown and urgency once, o
   assert.deepEqual(p.chipped(), ['bb-datetime']);
   assert.ok(p.date.getAttribute('data-gz-countdown'));
   assert.equal(p.date.getAttribute('data-gz-due'), 'soon');
+});
+
+
+test('assessment date chips use the gradebook date in other locales without tagging their labels', async () => {
+  for (const [locale, labelText, dateText] of [
+    ['en-GB', 'Assessment due date:', '04/10/2026, 23:59'],
+    ['es', 'Fecha de entrega:', '4/10/26, 23:59'],
+    ['fr', 'Date limite :', '04/10/2026 23:59'],
+    ['de', 'Fälligkeitsdatum:', '04.10.26, 23:59'],
+    ['pt-BR', 'Data de entrega:', '04/10/2026 23:59'],
+    ['nl', 'Inleverdatum:', '04-10-2026 23:59'],
+  ]) {
+    const p = page({ columnId: '_300_1', submissionStatus: { status: 'NOT_SUBMITTED' }, column }, { locale, labelText, dateText });
+    await p.tag();
+    assert.deepEqual(p.chipped(), ['bb-datetime'], locale);
+    assert.equal(p.date.getAttribute('data-gz-due'), 'soon', locale);
+    assert.equal(p.date.getAttribute('data-gz-countdown'), require('../lib/page.js').status(new Date(column.dueDate), null, { column }, new Date(NOW), false, locale).label, locale);
+  }
+});
+
+test('course outline dates retain grade status and unrelated date lists retain their countdown', async () => {
+  const row = { columnId: '_300_1', status: 'GRADED', displayGrade: { score: 5 }, pointsPossible: 5, submissionStatus: { status: 'GRADED' }, column };
+  const outline = page(row, { view: 'outline' }); await outline.tag();
+  assert.match(outline.date.getAttribute('data-gz-countdown'), /^Graded · 5\/5$/);
+  assert.equal(outline.date.hasAttribute('data-gz-due'), false);
+  const list = page(row, { view: 'calendar', dateText: 'Due: 10/4/26, 11:59 PM' }); await list.tag();
+  assert.ok(list.date.getAttribute('data-gz-countdown'));
+  assert.doesNotMatch(list.date.getAttribute('data-gz-countdown'), /Graded/);
+  assert.equal(list.date.getAttribute('data-gz-due'), 'soon');
 });
