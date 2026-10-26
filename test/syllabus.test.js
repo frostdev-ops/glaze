@@ -1322,3 +1322,11 @@ test('review: a staff line can name its class section after the time', () => {
   }
   assert.equal(S.extract('Teaching Assistant: Sam Lee · Office hours: Mondays 9–10 am, Room 5', reviewOpts).hours.length, 1);
 });
+
+test('review: topic cells cannot override an empty deliverables column', () => {
+  for (const text of [
+    'Date\tTopic\tDeliverables\nSeptember 7\tAuditions\tNone',
+    'Date\tTopic\tAssignments\nSeptember 7\tQuiz design\tNone',
+  ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
+  assert.deepEqual(S.extract('Date\tTopic\tDeliverables\nSeptember 7\tAuditions\tProject due', reviewOpts).dates.map((d) => `${d.day} ${d.kind}`), ['2026-09-07 due']);
+});
