@@ -655,3 +655,11 @@ test('the export hook keeps its UIDs between exports', () => {
   assert.equal(new Set(evs.map((e) => e.uid)).size, 3);
   assert.deepEqual(C.icsEvents(STORE, { site: 'x', from: '2026-10-12', to: '2026-10-18' }).map((e) => e.uid), C.icsEvents(STORE, { site: 'x', from: '2026-10-12', to: '2026-10-18' }).map((e) => e.uid), 'stable');
 });
+
+test('review: Dutch uur marks a 24-hour clock even below twelve', () => {
+  assert.deepEqual(m('ma 6–8 uur', { lang: 'nl' }), [['1', '06:00', '08:00']]);
+  assert.deepEqual(m('ma 1–3 uur', { lang: 'nl' }), [['1', '01:00', '03:00']]);
+  assert.deepEqual(m('wo 0645–1845', { lang: 'nl' }), [['3', '06:45', '18:45']]);
+  assert.deepEqual(m('Do 14:15–15:45, SR 1.07', { lang: 'de' }), [['4', '14:15', '15:45']]);
+  assert.deepEqual(m('quartas-feiras 14h às 16h', { lang: 'pt' }), [['3', '14:00', '16:00']]);
+});

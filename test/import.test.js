@@ -85,8 +85,9 @@ test('pdfText: runs in drawing order; a new line, a tab across a cell gap, a spa
 });
 
 test('ocrText: lines, cells by their gaps, slips mended, and how sure it was', () => {
-  const word = (text, x0, x1, confidence = 95) => ({ text, confidence, bbox: { x0, y0: 10, x1, y1: 24 } });
-  const line = (...words) => ({ bbox: { x0: 0, y0: 6, x1: 500, y1: 40 }, words });
+  let y = 10;
+  const word = (text, x0, x1, confidence = 95) => ({ text, confidence, bbox: { x0, y0: y, x1, y1: y + 14 } });
+  const line = (...words) => { y += 24; return { bbox: { x0: 0, y0: words[0].bbox.y0, x1: 500, y1: words[0].bbox.y1 }, words }; };
   const r = D.ocrText({ blocks: [{ paragraphs: [{ lines: [
     line(word('MATH', 0, 40), word('1350', 46, 80), word('Calculus', 120, 180), word('|', 186, 190, 60), word('©', 200, 204, 20)),
     line(word('‘Principles', 0, 80, 40), word('MTWR_', 100, 150)),
@@ -112,6 +113,209 @@ test('ocrText: a line it mends is reported unsure as mended, so the review still
   require('../scripts/import-truth.js');
   const src = require('../lib/syllabus.js').extract(r.text).hours[0].src;
   assert.ok(importer().I.doubt(r, src), `"${src}" is one of the unsure lines`);
+});
+
+// The engine's JSON as it gives it (blocks → paragraphs → lines → words { text, confidence, bbox }), one engine line
+// per [[text, x0, x1, y0, y1, confidence?], …]; coordinates as on the picture it read, twice the size of the original.
+const engineJson = (...blocks) => {
+  const box = (bs) => ({ x0: Math.min(...bs.map((b) => b.x0)), y0: Math.min(...bs.map((b) => b.y0)), x1: Math.max(...bs.map((b) => b.x1)), y1: Math.max(...bs.map((b) => b.y1)) });
+  const conf = (xs) => Math.round(xs.reduce((a, x) => a + x.confidence, 0) / xs.length);
+  return { page_id: 'page_1', blocks: blocks.map((lines) => {
+    const ls = lines.map((ws) => {
+      const words = ws.map(([text, x0, x1, y0, y1, confidence = 95]) => ({ text, confidence, bbox: { x0, y0, x1, y1 }, choices: [{ text, confidence }], font_name: '' }));
+      return { text: `${words.map((w) => w.text).join(' ')}\n`, confidence: conf(words), bbox: box(words.map((w) => w.bbox)), words };
+    });
+    const p = { text: ls.map((l) => l.text).join(''), confidence: conf(ls), bbox: box(ls.map((l) => l.bbox)), is_ltr: true, lines: ls };
+    return { text: p.text, confidence: p.confidence, bbox: p.bbox, blocktype: 1, paragraphs: [p] };
+  }) };
+};
+
+test('ocrText: preserves the engine reading order of separate prose columns', () => {
+  const columns = [
+    [[['Read', 20, 60, 20, 40], ['this', 65, 100, 20, 40]], [['column', 20, 90, 50, 70], ['first.', 95, 150, 50, 70]]],
+    [[['Then', 300, 350, 20, 40], ['read', 355, 400, 20, 40]], [['this', 300, 340, 50, 70], ['column.', 345, 420, 50, 70]]],
+  ];
+  const blocks = engineJson(...columns);
+  const expected = 'Read this\ncolumn first.\nThen read\nthis column.';
+  assert.equal(D.ocrText(blocks).text, expected);
+  // The same columns can be paragraphs of one engine block.
+  assert.equal(D.ocrText({ blocks: [{ paragraphs: blocks.blocks.flatMap((b) => b.paragraphs) }] }).text, expected);
+});
+
+test('ocrText: preserves RTL and mixed direction word order', () => {
+  for (const words of [
+    [['مرحبا', 240, 300, 20, 40], ['بكم', 180, 230, 20, 40]],
+    [['ציון', 260, 300, 20, 40], ['C', 230, 240, 20, 40, 40], ['10', 180, 200, 20, 40]],
+  ]) {
+    const json = engineJson([words]);
+    json.blocks[0].paragraphs[0].is_ltr = false;
+    const r = D.ocrText(json);
+    assert.equal(r.text, words.map((w) => w[0]).join(' '));
+    assert.deepEqual(r.unsure, words.some((w) => w[5] < 65) ? [r.text] : []);
+  }
+});
+
+test('ocrText: preserves engine lines on skewed and quarter turned pages', () => {
+  for (const slope of [-0.2, 0.2]) {
+    const json = engineJson(Array.from({ length: 3 }, (_, i) => Array.from({ length: 4 }, (_, k) =>
+      [`row${i}word${k}`, k * 100, k * 100 + 90, 100 + i * 35 + slope * k * 100, 120 + i * 35 + slope * k * 100])));
+    for (const [i, line] of json.blocks[0].paragraphs[0].lines.entries()) {
+      line.baseline = { x0: 0, y0: 120 + i * 35, x1: 390, y1: 120 + i * 35 + slope * 390 };
+    }
+    assert.equal(D.ocrText(json).text, Array.from({ length: 3 }, (_, i) => Array.from({ length: 4 }, (_, k) => `row${i}word${k}`).join(' ')).join('\n'));
+  }
+  const turned = engineJson([
+    [['First', 100, 120, 100, 160], ['line', 100, 120, 170, 220]],
+    [['Second', 70, 90, 100, 170], ['line', 70, 90, 180, 230]],
+  ]);
+  for (const line of turned.blocks[0].paragraphs[0].lines) line.baseline = { x0: line.bbox.x0, x1: line.bbox.x0, y0: 100, y1: 230 };
+  assert.equal(D.ocrText(turned).text, 'First line\nSecond line');
+});
+
+test('ocrText: a distant tiny mark does not turn a horizontal schedule into skewed text', () => {
+  // Like the light Canvas fixture: a button speck extends the heading's estimated
+  // baseline, although its actual words are level. The heading and times still join.
+  const json = engineJson([
+    [['CHEM', 20, 80, 20, 40], ['1200', 85, 140, 20, 40], ['i', 920, 924, 37, 41, 90]],
+    [['Edit', 890, 940, 33, 68], ['Delete', 980, 1060, 37, 58]],
+    [['Tue', 20, 60, 59, 79], ['2:00', 70, 120, 59, 79], ['-', 130, 140, 69, 72],
+      ['4:50', 150, 200, 59, 79], ['PM', 210, 240, 59, 79]],
+  ]);
+  json.blocks[0].paragraphs[0].lines[0].baseline = { x0: 20, y0: 39, x1: 924, y1: 50 };
+  const r = D.ocrText(json);
+  assert.equal(r.text, 'CHEM 1200 Tue 2:00 - 4:50 PM\tEdit i\tDelete');
+  assert.deepEqual(r.unsure, []);
+});
+
+test('ocrText: counts visual lines rather than word fragments in a multiline table cell', () => {
+  // Gaps split each line into three cells, while the staggered spans still form
+  // one column beside its centred action. Six fragments are only two lines.
+  const r = D.ocrText(engineJson([
+    [['Alpha', 20, 120, 20, 40], ['Beta', 150, 250, 20, 40], ['Gamma', 280, 380, 20, 40]],
+    [['Edit', 500, 550, 30, 65]],
+    [['Delta', 70, 170, 55, 75], ['Epsilon', 200, 300, 55, 75], ['Zeta', 330, 430, 55, 75]],
+  ]));
+  assert.equal(r.text, 'Alpha Beta Gamma Delta Epsilon Zeta\tEdit');
+});
+
+test('ocrText: keeps large single letters and numbers as text instead of icons', () => {
+  for (const heading of ['A', 'I', 'C', '10', '1a', 'An']) {
+    const r = D.ocrText(engineJson([
+      [[heading, 20, 100, 20, 100, 60]],
+      [['Read', 20, 60, 130, 150], ['the', 65, 95, 130, 150], ['instructions.', 100, 200, 130, 150]],
+    ]));
+    assert.equal(r.text, `${heading}\nRead the instructions.`, heading);
+    assert.deepEqual(r.unsure, [heading]);
+    assert.equal(r.conf, 86);
+  }
+});
+
+test('ocrText: keeps uncertain grades and short words in joined rows', () => {
+  for (const value of ['A', 'I', 'C', '10', '1a', 'an', 'to']) {
+    const r = D.ocrText(engineJson([
+      [['Course', 20, 90, 14, 34], ['First', 200, 250, 0, 20]],
+      [['Second', 200, 270, 25, 45], [value, 400, 420, 14, 34, 40]],
+    ]));
+    assert.equal(r.text, `Course\tFirst Second\t${value}`, value);
+    assert.deepEqual(r.unsure, [r.text]);
+    assert.equal(r.conf, 81);
+  }
+});
+
+test('ocrText: keeps small conjunctions and plus signs outside bulleted table lists', () => {
+  for (const word of ['e', 'o', '+']) {
+    const r = D.ocrText(engineJson([[[word, 20, 30, 30, 40, 60], ['Material', 46, 140, 20, 40]] ]));
+    assert.equal(r.text, `${word} Material`);
+    assert.deepEqual(r.unsure, [r.text]);
+  }
+});
+
+test('ocrText: confidence describes the words retained in a joined row', () => {
+  const r = D.ocrText(engineJson([
+    [['Course', 20, 90, 14, 34], ['e', 180, 188, 10, 20, 0], ['First', 200, 250, 0, 20]],
+    [['e', 180, 188, 35, 45, 0], ['Second', 200, 270, 25, 45]],
+  ]));
+  assert.equal(r.text, 'Course\tFirst · Second');
+  assert.deepEqual(r.unsure, []);
+  assert.equal(r.conf, 95, 'discarded bullet guesses are not recognized words');
+});
+
+test('ocrText: a dense 4000 pixel page has bounded layout cost', (t) => {
+  // Small type in a dense numerical table: 40,000 words in a 4000 × 4000 image.
+  // A percent in every cell used to search the whole page for a chart neighbor.
+  const json = engineJson(Array.from({ length: 400 }, (_, y) => Array.from({ length: 100 }, (_, x) =>
+    ['10%', x * 40, x * 40 + 20, y * 10, y * 10 + 8])));
+  const cpu = process.cpuUsage(), start = performance.now();
+  const r = D.ocrText(json);
+  const elapsed = performance.now() - start, used = process.cpuUsage(cpu);
+  t.diagnostic(`4000x4000, 40000 words: ${elapsed.toFixed(1)} ms wall, ${((used.user + used.system) / 1000).toFixed(1)} ms CPU`);
+  assert.equal(r.text.split('\n').length, 400);
+  assert.equal(r.text.split(/\s+/).length, 40000);
+  assert.ok(used.user + used.system < 1_000_000, 'layout alone must use less than one second of CPU');
+});
+
+test('ocrText: a table row whose cells are several lines, or centred in it, is one line; level rows and a paragraph stay lines', () => {
+  // A course calendar laid out as the engine reads it in one block: the week's dates centred in their cell, so the
+  // engine puts them on a line with the second line of the cells beside them, or on a line of their own; bullets read
+  // as "e"; the week's number in a coloured disc read as a tall "Ge"; specks.
+  const r = D.ocrText(engineJson([
+    [['Week', 260, 340, 352, 387], ['&', 355, 370, 352, 386], ['Dates', 385, 470, 353, 387], ['Topics', 1175, 1290, 352, 387], ['Work', 2146, 2230, 352, 387]],
+    [['Unit', 760, 830, 472, 503], ['1', 845, 860, 473, 503], ['e', 1897, 1913, 481, 496, 80], ['Reading', 1940, 2070, 473, 504], ['quiz', 2085, 2150, 473, 512]],
+    [['Ge', 98, 214, 455, 570, 74], ['Sep.', 260, 330, 509, 540], ['7', 352, 372, 509, 540], ['–', 386, 404, 524, 528], ['13', 416, 453, 509, 540],
+      ['Chapter', 760, 890, 528, 559], ['2:', 905, 930, 528, 559], ['Cells', 945, 1030, 528, 559],
+      ['e', 1897, 1913, 536, 552, 88], ['Lab', 1940, 2000, 528, 559], ['report', 2015, 2120, 528, 566], ['#1:', 2135, 2190, 528, 559], ['Microscopes', 2205, 2420, 528, 566]],
+    [['Unit', 760, 830, 670, 701], ['2', 845, 860, 670, 701], ['e', 1897, 1913, 650, 666], ['Problem', 1940, 2080, 642, 673], ['set', 2095, 2150, 642, 673], ['1', 2165, 2180, 642, 673]],
+    // A cell's border read as two words the engine was unsure of.
+    [['E', 2101, 2120, 661, 714, 63], ['e', 1897, 1913, 705, 721], ['Midterm', 1940, 2090, 697, 728], ['exam', 2105, 2190, 697, 728], ['ae', 2336, 2380, 709, 723, 47]],
+    [['Sep.', 260, 330, 707, 738], ['14', 352, 390, 707, 738], ['–', 404, 422, 722, 726], ['20', 436, 473, 707, 738], ['Chapter', 760, 890, 725, 756], ['3:', 905, 930, 725, 756], ['Energy', 945, 1060, 725, 763]],
+    [['e', 1897, 1913, 760, 776], ['Essay', 1940, 2030, 752, 783], ['outline', 2045, 2160, 752, 783], ['due', 2175, 2235, 752, 783]],
+  ], [
+    // A timetable's rows close together but each level across: two lines.
+    [['BIO', 100, 160, 900, 931], ['1100', 175, 250, 900, 931], ['Biology', 760, 880, 900, 938], ['MWF', 1940, 2020, 900, 931]],
+    [['CHEM', 100, 190, 935, 966], ['1210', 205, 280, 935, 966], ['Chemistry', 760, 920, 935, 973], ['TR', 1940, 1980, 935, 966]],
+  ], [
+    // A paragraph, its lines close together: three lines.
+    [['Late', 322, 390, 1100, 1130], ['work', 405, 480, 1100, 1130], ['loses', 495, 580, 1100, 1130], ['ten', 595, 650, 1100, 1130], ['points', 665, 770, 1100, 1137]],
+    [['a', 322, 340, 1135, 1165], ['day,', 355, 420, 1135, 1172], ['up', 435, 470, 1135, 1172], ['to', 485, 515, 1135, 1165], ['five', 530, 600, 1135, 1165]],
+    [['days.', 322, 410, 1170, 1200]],
+  ]));
+  assert.equal(r.text, [
+    'Week & Dates\tTopics\tWork',
+    'Sep. 7 – 13\tUnit 1 Chapter 2: Cells\tReading quiz · Lab report #1: Microscopes',
+    'Sep. 14 – 20\tUnit 2 Chapter 3: Energy\tProblem set 1 · Midterm exam · Essay outline due',
+    'BIO 1100\tBiology\tMWF',
+    'CHEM 1210\tChemistry\tTR',
+    'Late work loses ten points',
+    'a day, up to five',
+    'days.',
+  ].join('\n'));
+  assert.deepEqual(r.unsure, [], 'the icon is no word, so it makes nothing unsure');
+  // The syllabus reads a row's date with what is due on the same line (lib/syllabus.js is line by line).
+  require('../scripts/import-truth.js');
+  const dates = require('../lib/syllabus.js').extract(r.text, { start: Date.UTC(2026, 8, 7), hint: 'en' }).dates;
+  assert.ok(dates.some((d) => /Lab report #1/.test(d.title)), JSON.stringify(dates));
+  assert.ok(dates.some((d) => /Midterm exam/.test(d.title)), JSON.stringify(dates));
+});
+
+test('ocrText: a chart\'s label over its value is one line; a table\'s column of values is not', () => {
+  // A pie chart read in sparse blocks: a title, then each label's words over its value; one label level with another's
+  // value on the other side of the pie.
+  const chart = D.ocrText(engineJson(
+    [[['GRADE', 343, 486, 44, 82], ['BREAKDOWN', 503, 800, 44, 82]]],
+    [[['Projects', 234, 400, 140, 164]]], [[['40%', 291, 353, 188, 212]]],
+    [[['Weekly', 92, 200, 344, 370]]], [[['quizzes', 60, 230, 392, 422]]], [[['25%', 108, 170, 440, 464]]],
+    [[['Final', 944, 1030, 436, 462], ['exam', 1045, 1150, 436, 462]]], [[['35%', 997, 1060, 484, 508]]],
+  ));
+  assert.equal(chart.text, 'GRADE BREAKDOWN\nProjects 40%\nWeekly quizzes 25%\nFinal exam 35%');
+  const S = require('../lib/syllabus.js');
+  assert.equal(S.weightsText(S.extract(chart.text).weights.value), 'Projects 40%, Weekly quizzes 25%, Final exam 35%');
+  // A table: each value is its row's, under the column's heading.
+  const table = D.ocrText(engineJson([
+    [['Category', 100, 260, 600, 630], ['Weight', 900, 1020, 600, 630]],
+    [['Labs', 100, 170, 650, 680], ['30%', 900, 960, 650, 680]],
+    [['Exams', 100, 210, 700, 730], ['70%', 900, 960, 700, 730]],
+  ]));
+  assert.equal(table.text, 'Category\tWeight\nLabs\t30%\nExams\t70%');
 });
 
 // ---- features/import.js: the reader's frame -------------------------------------------------------------------------
@@ -408,11 +612,11 @@ const ACCURACY = [
   ['timetable-photo.jpg', 'OCR, phone photo', 0.4],
   ['syllabus.png', 'OCR, screenshot', 20 / 21],
   ['transcript-photo.jpg', 'OCR, phone photo, sharp', 1],
-  // The class schedule's own list on Canvas: a course on one line, its times on the next, buttons beside it. The times
-  // come through; BIO 1100L's and ENG 1100's headings carry OCR specks that make lib/classes.js file their times under
-  // the course above, and places without a word like "Hall" aren't recognised as places.
-  ['canvas-schedule-light.png', 'OCR, Canvas screenshot, light', 0.5],
-  ['canvas-schedule-dark.png', 'OCR, Canvas screenshot, dark', 0.3],
+  // The class schedule's own list on Canvas: a course on one line, its times on the next, buttons centred beside both,
+  // which make the three one row. On the dark one BIO 1100L's heading isn't joined to its times; on both, a place
+  // followed by " - Days off: 1" is read with it, and so isn't the place.
+  ['canvas-schedule-light.png', 'OCR, Canvas screenshot, light', 0.8],
+  ['canvas-schedule-dark.png', 'OCR, Canvas screenshot, dark', 0.6],
 ];
 
 test('the OCR worker starts on the bundled models only, and refuses a language it doesn\'t have', async () => {

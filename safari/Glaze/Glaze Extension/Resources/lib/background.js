@@ -1917,7 +1917,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const SAFARI = new URL(chrome.runtime.getURL('')).protocol === 'safari-web-extension:';
 // Features that move (lib/motion.js): the worker puts it in ahead of any of them, so each finds it already there.
 const MOVERS = ['features/coursetabs.js', 'features/widgets.js', 'features/todo.js', 'features/reminders.js', 'features/coursemenu.js', 'features/folders.js', 'features/sidebar.js'];
-const LOADABLE = new Set(['lib/motion.js', 'lib/scene-host.js', 'lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-moodle.js', 'features/navbar.js', 'features/navbar-widgets.js', 'features/settingspage.js', 'lib/stream.js', 'features/stream.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'lib/sidebar.js', 'features/sidebar.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'lib/lookset.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/docreview.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/lmsq.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js', 'features/routes.js', 'lib/popup.js', 'features/popup.js', 'lib/announce.js', 'features/announce.js', 'lib/rubric.js', 'features/rubric.js']);
+const LOADABLE = new Set(['lib/motion.js', 'lib/scene-host.js', 'lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-moodle.js', 'features/navbar.js', 'features/navbar-widgets.js', 'features/settingspage.js', 'lib/stream.js', 'features/stream.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'lib/sidebar.js', 'features/sidebar.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'lib/lookset.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/docreview.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'lib/syllabus-ai.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/lmsq.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js', 'features/routes.js', 'lib/popup.js', 'features/popup.js', 'lib/announce.js', 'features/announce.js', 'lib/rubric.js', 'features/rubric.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];
@@ -1959,6 +1959,69 @@ const loadInto = (m, sender, files, reply) => {
     reply({ ok: true });
   }).catch((e) => reply({ ok: false, error: String(e?.message || e) }));
 };
+
+// AI (lib/ai/broker.js, docs/ai-harness.md): off by default, and nothing of it loads until a feature opens a 'glaze:ai' port.
+// Who may: Glaze's own pages, or Glaze in a frame of a site it runs on (lmsPage), never a quiz's, a test's or a tool's page
+// (modQuiet). The connections live in the worker's own store; only Settings' top frame reads and writes them
+// ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
+// worker's importScripts calls name (scripts/package-firefox.sh). A task (lib/ai/tasks/<id>.js) goes in this list too.
+const aiFiles = () => importScripts('ai/schema.js', 'ai/request.js', 'ai/stream.js', 'ai/failure.js', 'ai/endpoint.js', 'ai/text.js', 'ai/models.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/providers/device.js', 'ai/providers/apple.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/tasks/syllabus-read.js', 'ai/settings.js', 'ai/broker.js');
+globalThis.addEventListener?.('install', aiFiles);
+const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
+let aiVault = null, aiRevision = 0;
+chrome.storage.onChanged.addListener((changes, area) => {
+  if ((area === 'local' && changes.ai) || (area === 'sync' && changes.enabled)) aiRevision++;
+});
+chrome.permissions?.onRemoved?.addListener(() => { aiRevision++; });
+const aiEnv = () => ({
+  settings: async () => (await chrome.storage.local.get(GZ_AI_SETTINGS.KEY))[GZ_AI_SETTINGS.KEY],
+  enabled: async () => (await chrome.storage.sync.get('enabled')).enabled !== false,
+  revision: () => aiRevision,
+  vault: (aiVault ||= GZ_AI_BROKER.vault()), local: brokerArea('local'), reach: reachable, fetch: (u, i) => fetch(u, i), task: (id) => GZ_AI_TASKS.get(id),
+  say: (m) => chrome.runtime.sendMessage?.(m)?.catch?.(() => {}), // the device model's download progress, to Settings
+});
+const aiSender = async (s) => {
+  if (s.id !== chrome.runtime.id) return false;
+  if (fromGlaze(s)) return s.frameId === 0 || (s.frameId === undefined && !s.tab);
+  if (!Number.isInteger(s.frameId) || s.frameId < 0 || !Number.isInteger(s.tab?.id)) return false;
+  const safe = async (sender, top) => {
+    let u, parent;
+    try { u = new URL(addressOf(sender)); parent = new URL(top); } catch { return false; }
+    if (sender.origin !== undefined && sender.origin !== u.origin) return false;
+    if (parent.origin !== u.origin || modQuiet(decodeURIComponent(u.pathname)) || modQuiet(decodeURIComponent(parent.pathname))) return false;
+    return !!await lmsPage(sender);
+  };
+  if (!await safe(s, s.tab.url)) return false;
+  // A Port's sender URL is a snapshot. Re-read the isolated document and its tab so SPA navigation or an assessment
+  // ancestor cannot retain an earlier course page's authority. documentId pins the frame where the browser supplies it.
+  const target = s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] };
+  const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target,
+    func: () => {
+      try {
+        const ancestors = [];
+        for (let frame = window; frame !== frame.top;) { frame = frame.parent; ancestors.push(frame.location.href); }
+        return { href: location.href, origin: globalThis.origin || location.origin, ancestors };
+      } catch { return null; }
+    } })]);
+  const page = frames?.[0]?.result;
+  if (typeof page?.href !== 'string' || typeof page.origin !== 'string' || !Array.isArray(page.ancestors)) return false;
+  for (const address of page.ancestors) {
+    let parent;
+    try { parent = new URL(address); } catch { return false; }
+    if (parent.origin !== page.origin || modQuiet(decodeURIComponent(parent.pathname))) return false;
+  }
+  return safe({ ...s, url: page.href, origin: page.origin, tab }, tab.url);
+};
+chrome.runtime.onConnect.addListener((p) => {
+  if (p.name !== 'glaze:ai') return;
+  ai().connect(p, { ...aiEnv(), who: String(p.sender?.tab?.id ?? 'none'), allowed: () => aiSender(p.sender || {}) });
+});
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:ai-config') return;
+  if (!fromEditor(s) || s.frameId !== 0 || !extensionOrigin(s)) { reply({ ok: false, error: 'sender' }); return; }
+  ai().config(m, aiEnv()).then(reply, () => reply({ ok: false, error: 'failed' }));
+  return true;
+});
 
 // The mod blocklist (lib/blocklist.js): a signed list of mods to stop, asked for at most daily and only while a code mod is
 // installed on Chrome and the setting is on. Nothing is scheduled: a page loading the mods runtime (glaze:load above) and the editor
