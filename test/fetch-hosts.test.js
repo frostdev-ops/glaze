@@ -93,6 +93,7 @@ const SITES = {
   'content-canvas.js': [{ at: 'fetch(`${location.origin}/courses/${cid}/grades`', kind: 'page' }],
   // An announcement from the page's own site, and Canvas's read mark, through the site's queue (lib/lmsq.js).
   'features/announce.js': [{ at: 'const q = (url, init) => GZ_LMSQ.fetch(url', kind: 'page' }, { at: 'f: (u, i) => GZ_LMSQ.fetch(u, i, prio)', kind: 'page' }, { at: 'GZ_LMSQ.fetch(m.url,', kind: 'page' }],
+  'features/announce-read.js': [{ at: 'GZ_LMSQ.fetch(url,', kind: 'page' }],
   'features/popup.js': [{ at: 'GZ_LMSQ.fetch(src,', kind: 'page' }],
   // Rubric definitions and the current student's evaluation, read-only through the page's own LMS queue.
   'features/rubric.js': [{ at: 'const res = await GZ_LMSQ.fetch(url,', kind: 'page' }, { at: 'f: (...args) => GZ_LMSQ.fetch(...args, 0, live)', kind: 'page' }],

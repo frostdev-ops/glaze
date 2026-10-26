@@ -1,6 +1,10 @@
 // German for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).de = {
+  "Mark all as read": "Alle als gelesen markieren",
+  "Marking…": "Wird markiert…",
+  "All announcements marked as read": "Alle Ankündigungen als gelesen markiert",
+  "Could not mark all announcements as read. Try again.": "Nicht alle Ankündigungen konnten als gelesen markiert werden. Versuche es erneut.",
 
   "Redirected file: download it from Canvas": "Weitergeleitete Datei: Lade sie in Canvas herunter",  "Activity Stream": "Aktivitätsstream",
   "Timeline dates": "Zeitleistendaten",

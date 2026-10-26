@@ -746,6 +746,13 @@ you import) are bundled. It makes requests in these cases:
   after its delay, asks the same read-only request on Canvas and Blackboard and marks nothing; on Moodle it asks nothing.
   If the announcement can't be read, the site's own page opens instead.
   These, the nickname and color edits, the read mark and the ticks above are the only changes Glaze makes to any site.
+- **Announcement read controls on Blackboard Ultra.** Checking or unchecking a native announcement control keeps your
+  scroll position while Blackboard refreshes its list. **Mark all as read** first reads that course's paged announcement
+  list (`GET /learn/api/v1/courses/<course>/announcements`) through the shared queue with your existing session, refusing
+  redirects and pagination outside that course. It keeps unread IDs in memory for the operation and activates Blackboard's
+  own read controls one at a time, including announcements on later pages. Already-read items are skipped. User input,
+  leaving the list or switching Glaze off stops further marks; an update already sent by Blackboard may still finish.
+  Nothing is stored or sent to another site.
 - **Rubrics** (Canvas and Blackboard Ultra, Automatic by default). On a recognized assignment page, Glaze first uses the shared account lookup
   (Canvas `GET /api/v1/users/self/profile`; Ultra `GET /learn/api/v1/users/me`) to identify your account.
   It then reads the rubric and your own published rubric scores and feedback from your own site with your existing session, through paced,
