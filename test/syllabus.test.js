@@ -1336,3 +1336,10 @@ test('review: parenthetical comments do not end an exception list', () => {
   assert.deepEqual(S.extract(text, reviewOpts).dates, []);
   assert.deepEqual(S.extract('Quizzes are due every Friday, weeks 1–4 (except September 11 and September 18).', reviewOpts).dates.map((d) => d.day), ['2026-09-04', '2026-09-25']);
 });
+
+test('review: weekly exceptions and release windows use their course year across New Year', () => {
+  const opts = { start: Date.UTC(2027, 0, 11), md: true };
+  const weekly = 'Quizzes are due every Friday from December 18, 2026 until January 15, 2027, except December 25 and January 1.';
+  assert.deepEqual(S.extract(weekly, opts).dates.map((d) => d.day), ['2026-12-18', '2027-01-08', '2027-01-15']);
+  assert.deepEqual(S.extract('Classes run December 28, 2026 – January 15, 2027.\nQuiz released December 30; due January 4', opts).dates.map((d) => `${d.day} ${d.kind}`), ['2027-01-04 exam']);
+});
