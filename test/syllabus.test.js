@@ -6,6 +6,19 @@ const assert = require('node:assert/strict');
 const S = require('../lib/syllabus.js');
 const D = require('../lib/doctext.js');
 
+test('section-like digits and contents leaders stay bounded at the input limit', () => {
+  const { spawnSync } = require('node:child_process');
+  const probe = spawnSync(process.execPath, ['-e', `
+    const S = require(${JSON.stringify(require.resolve('../lib/syllabus.js'))});
+    for (const text of [
+      ('1.' + '1'.repeat(1990) + '!\\n').repeat(101),
+      ('Quiz ' + '. '.repeat(990) + '!\\n').repeat(101),
+    ]) S.extract(text, { start: Date.UTC(2026, 7, 31) });
+  `], { timeout: 3000, encoding: 'utf8' });
+  assert.equal(probe.error, undefined, 'long digit runs must not cause exponential section matching');
+  assert.equal(probe.status, 0, probe.stderr);
+});
+
 const FALL = Date.UTC(2026, 7, 24); // Fall 2026 starts August 24
 const SPRING = Date.UTC(2027, 0, 11);
 const pick = (r) => ({
