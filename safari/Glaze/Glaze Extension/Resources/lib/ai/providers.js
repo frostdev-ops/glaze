@@ -2,14 +2,16 @@
 // here with:
 //   id: 'openai', /^[a-z][a-z0-9-]{0,31}$/
 //   config(raw) → its settings cleaned ({ base, model, key } for openai), or null. The broker keeps them in the worker only.
-//   caps(cfg) → { text, images, json, tools, stream } (booleans), and context (tokens it reads) when known
-//   status(cfg, { fetch, signal }) → { state: 'ready' | 'download' | 'downloading' | 'unavailable', reason? }
-//   run(request, cfg, { signal, onDelta, fetch }) → { text, toolCalls?, usage?, model, finish } (lib/ai/request.js result)
-//   origin(cfg) → the host pattern it sends to ('https://api.example.com/*'), for a provider that goes over the network;
-//     the broker refuses while the browser doesn't hold it.
-// run() below is the one way in: it cleans the request, checks the provider can do what it asks, holds it to its time, and
-// reads and checks a JSON answer against the request's schema, whatever the provider promised. Classic script for the
-// worker; module.exports for node.
+//   caps(cfg) → { text, images, json, tools, stream, context }: true or false where known; unknown is absent, never false
+//   status(cfg, { fetch, signal, cache }) → { state: 'ready' | 'download' | 'downloading' | 'unavailable', reason? }
+//   run(request, cfg, { signal, onDelta, onThinking, fetch }) → { text, toolCalls?, usage?, model, finish }
+//   origin?(cfg) → the host pattern it sends to ('https://api.example.com/*'), for one that goes over the network: the
+//     broker refuses while the browser doesn't hold it. catalog?(cfg, env) → lib/ai/models.js list().
+// run() below is the one way in, Rimeward's runModel (src/lib/agent/provider.ts, MIT) on Glaze's request: it cleans the
+// request, refuses what the provider is known not to do, holds the call to its own deadline raced with the caller's cancel
+// (late output never re-enters), and turns any failure into a category with a reference (lib/ai/failure.js). A schema
+// request's answer is read and checked against the schema whatever the provider promised; an answer cut off at maxTokens is
+// a refusal, never parsed. Classic script for the worker; module.exports for node.
 var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
   const R = () => (typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('./request.js'));
   const S = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('./schema.js'));
@@ -24,21 +26,15 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
   const get = (id) => all.get(id) || null;
   const list = () => [...all.keys()];
   const CAPS = ['text', 'images', 'json', 'tools', 'stream'];
-  const caps = (p, cfg) => { const c = p.caps(cfg) || {}; return { ...Object.fromEntries(CAPS.map((k) => [k, c[k] === true])), ...(Number.isSafeInteger(c.context) && c.context > 0 && { context: c.context }) }; };
+  const caps = (p, cfg) => { const c = p.caps(cfg) || {}; return { ...Object.fromEntries(CAPS.filter((k) => typeof c[k] === 'boolean').map((k) => [k, c[k]])), ...(Number.isSafeInteger(c.context) && c.context > 0 && { context: c.context }) }; };
   const DEFAULT_TIMEOUT = 120000;
+  const F = () => (typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('./failure.js'));
+  // The harness's own refusals pass as they are; anything else from a model call is a failure category.
+  const OWN = ['request', 'setup', 'caps', 'changed', 'refusal', 'permission'];
 
-  // A signal that aborts with the caller's, or with a TimeoutError after ms. → { signal, done() }.
-  const deadline = (outer, ms) => {
-    const c = new AbortController();
-    const stop = () => c.abort(outer.reason ?? new DOMException('Cancelled', 'AbortError'));
-    if (outer?.aborted) stop(); else outer?.addEventListener('abort', stop, { once: true });
-    const timer = setTimeout(() => c.abort(new DOMException('Timed out', 'TimeoutError')), ms);
-    return { signal: c.signal, done: () => { clearTimeout(timer); outer?.removeEventListener('abort', stop); } };
-  };
-
-  // run(provider (id or object), request, cfg, { signal, onDelta, fetch }) → the result, with json when the request had a
-  // schema and the model answered with words. Throws { code } (lib/ai/request.js CODES).
-  const run = async (provider, request, cfg, { signal, onDelta, fetch } = {}) => {
+  // run(provider (id or object), request, cfg, { signal, onDelta, onThinking, fetch }) → the result, with json when the
+  // request had a schema. Throws { code } (lib/ai/request.js CODES; a failure also carries category, status?, reference).
+  const run = async (provider, request, cfg, { signal, onDelta, onThinking, fetch } = {}) => {
     const Q = R();
     const p = typeof provider === 'string' ? get(provider) : provider;
     if (!p) throw Q.error('setup', 'provider');
@@ -47,26 +43,28 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
     const c = p.config(cfg);
     if (!c) throw Q.error('setup', 'config');
     const can = caps(p, c);
-    if ((Q.images(req) && !can.images) || (req.tools && !can.tools) || (req.schema && !can.json)) throw Q.error('caps');
-    if (signal?.aborted) throw Q.error('cancelled');
-    const d = deadline(signal, req.timeoutMs || DEFAULT_TIMEOUT);
+    if ((Q.images(req) && can.images === false) || (req.tools && can.tools === false) || (req.schema && can.json === false)) throw Q.error('caps');
+    if (signal?.aborted) throw F().modelFailure(signal.reason, { aborted: true });
+    const timer = F().deadline(req.timeoutMs || DEFAULT_TIMEOUT), both = F().anySignal([signal, timer.signal]);
+    let active = true, rejectAbort;
+    const cancelled = new Promise((_, reject) => { rejectAbort = () => reject(both.signal.reason); both.signal.addEventListener('abort', rejectAbort, { once: true }); });
     let raw;
     try {
-      raw = await p.run(req, c, { signal: d.signal, fetch, onDelta: typeof onDelta === 'function' && can.stream ? (t) => { if (typeof t === 'string' && t && !d.signal.aborted) onDelta(t); } : undefined });
+      raw = await Promise.race([p.run(req, c, { signal: both.signal, fetch,
+        onDelta: typeof onDelta === 'function' && can.stream !== false ? (t) => { if (active && typeof t === 'string' && t && !both.signal.aborted) onDelta(t); } : undefined,
+        onThinking: (x) => { if (active && !both.signal.aborted) onThinking?.(x); } }), cancelled]);
     } catch (e) {
-      if (d.signal.aborted) throw Q.error(d.signal.reason?.name === 'TimeoutError' ? 'timeout' : 'cancelled');
-      throw Q.CODES.includes(e?.code) ? e : Q.error(Q.code(e));
-    } finally { d.done(); }
-    if (d.signal.aborted) throw Q.error(d.signal.reason?.name === 'TimeoutError' ? 'timeout' : 'cancelled');
+      if (OWN.includes(e?.code) && !both.signal.aborted) throw Object.assign(Q.error(e.code), { detail: e.message });
+      throw F().modelFailure(both.signal.aborted && !signal?.aborted && timer.signal.aborted ? Object.assign(new Error('timed out'), { name: 'TimeoutError' }) : e, { aborted: !!signal?.aborted });
+    } finally { active = false; timer.done(); both.done(); both.signal.removeEventListener('abort', rejectAbort); }
     const out = Q.result({ ...raw, provider: p.id });
-    if (!out) throw Q.error('format', 'result');
-    if (out.finish === 'refusal') throw Q.error('refusal');
+    if (!out) throw F().modelFailure({ category: 'invalid-response' });
     if (req.schema && !out.toolCalls) {
-      if (out.finish === 'length') throw Q.error('size', 'the answer was cut off at maxTokens');
+      if (out.finish === 'length') throw Q.error('refusal', 'the answer was cut off at maxTokens');
       const json = S().parse(out.text);
-      if (json === undefined) throw Q.error('format', 'not JSON');
+      if (json === undefined) throw Object.assign(F().modelFailure({ category: 'invalid-response' }), { detail: 'not a JSON object' });
       const errors = S().validate(json, req.schema);
-      if (errors.length) throw Q.error('format', errors);
+      if (errors.length) throw Object.assign(F().modelFailure({ category: 'invalid-response' }), { detail: errors });
       out.json = json;
     }
     return out;

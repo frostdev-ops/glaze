@@ -1,14 +1,16 @@
 // The AI harness's one request and one result (docs/ai-harness.md), whatever the provider. A request:
 //   { messages: [{ role: 'system' | 'user' | 'assistant' | 'tool', content: [{ type: 'text', text } | { type: 'image', mime,
 //     data (base64) }], toolCalls?: [{ id, name, args }] (assistant), toolCallId? (tool) }],
-//     schema? (lib/ai/schema.js, an object at the root), tools?: [{ name, description, params }], temperature?, maxTokens?,
-//     timeoutMs? }
+//     schema? (lib/ai/schema.js, an object at the root), tools?: [{ name, description, parameters }], temperature?,
+//     maxTokens?, timeoutMs? }
 // A message's content may be given as a string (one text part) and an image's data as bytes (Uint8Array or ArrayBuffer):
 // clean() turns them into the form above, which is plain JSON, so it crosses a runtime port and goes into an eval's log as
-// it is. A result: { text, json?, toolCalls?, usage?: { input, output }, provider, model, finish }.
+// it is. A result: { text, json?, toolCalls?, usage?: { input, cached?, cacheWrite?, output? } (Rimeward's names), provider,
+// model, finish: 'stop' | 'length' | 'tool' }.
 // Everything here may have come from a page, a model or a document, so a cleaner refuses (null) on an unknown key, a wrong
 // type, or a count or size over its limit; nothing is truncated. Errors are { code } (CODES): what a page is told, never a
-// provider's own words. Classic script for the worker; module.exports for node.
+// provider's own words; a model request's failure is one of lib/ai/failure.js CATEGORIES, with a reference.
+// Classic script for the worker; module.exports for node.
 var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
   const S = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('./schema.js'));
   // A plain object, from this realm or another (a message from a page, a test's): no class instance.
@@ -17,16 +19,16 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
   const LIMIT = { messages: 64, parts: 32, text: 1 << 20, chars: 2e6, images: 8, image: 8 << 20, tools: 32, calls: 16, args: 64 << 10, description: 1024, maxTokens: 32768, timeout: [1000, 300000] };
   const ROLES = ['system', 'user', 'assistant', 'tool'];
   const MIME = { 'image/png': [0x89, 0x50, 0x4e, 0x47], 'image/jpeg': [0xff, 0xd8, 0xff], 'image/gif': [0x47, 0x49, 0x46, 0x38], 'image/webp': [0x52, 0x49, 0x46, 0x46] };
-  const FINISH = ['stop', 'length', 'tool', 'filter', 'refusal'];
-  // What went wrong, as a page or the eval is told. Providers' (auth … server), the broker's (off … often), the tasks' and the
-  // loop's (input … steps).
-  const CODES = ['request', 'setup', 'caps', 'auth', 'denied', 'model', 'endpoint', 'rate', 'size', 'server', 'network', 'timeout', 'cancelled', 'format', 'refusal',
-    'off', 'feature', 'task', 'permission', 'busy', 'often', 'input', 'check', 'limit', 'steps', 'tool', 'failed'];
+  const FINISH = ['stop', 'length', 'tool'];
+  // What went wrong, as a page or the eval is told: a model request's failure category (lib/ai/failure.js), then the
+  // harness's own refusals: the request, the connection and caps, the broker's (off … often), the tasks' and the loop's.
+  const CATEGORIES = ['cancelled', 'timeout', 'provider-unavailable', 'request-rejected', 'invalid-response', 'connection-lost'];
+  const CODES = [...CATEGORIES, 'request', 'setup', 'caps', 'changed', 'refusal', 'off', 'feature', 'task', 'permission', 'busy', 'often', 'input', 'size', 'check', 'limit', 'steps', 'tool', 'failed'];
   // An error a provider, a task or the broker throws: its code (one of CODES, else 'failed') and, for a developer, detail
   // (a status, the schema's complaints): never shown on a page, and never a key (providers redact it first).
   const error = (code, detail) => Object.assign(new Error(CODES.includes(code) ? code : 'failed'), { code: CODES.includes(code) ? code : 'failed', ...(detail !== undefined && { detail }) });
   // An error as it may leave: its code, or 'cancelled'/'timeout' for an abort, else 'failed'.
-  const code = (e) => (CODES.includes(e?.code) ? e.code : e?.name === 'TimeoutError' ? 'timeout' : e?.name === 'AbortError' ? 'cancelled' : 'failed');
+  const code = (e) => (CODES.includes(e?.code) ? e.code : CATEGORIES.includes(e?.category) ? e.category : e?.name === 'TimeoutError' ? 'timeout' : e?.name === 'AbortError' ? 'cancelled' : 'failed');
 
   // ---- bytes ----------------------------------------------------------------------------------------------------------
   const B64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -84,9 +86,9 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
     return content.length || out.toolCalls ? out : null;
   };
   const tool = (v) => {
-    if (!isObj(v) || Object.keys(v).some((k) => !['name', 'description', 'params'].includes(k)) || !NAME.test(v.name) || str(v.description, LIMIT.description) === null) return null;
-    const params = S().clean(v.params);
-    return params && params.type === 'object' ? { name: v.name, description: v.description, params } : null;
+    if (!isObj(v) || Object.keys(v).some((k) => !['name', 'description', 'parameters'].includes(k)) || !NAME.test(v.name) || str(v.description, LIMIT.description) === null) return null;
+    const parameters = S().clean(v.parameters);
+    return parameters && parameters.type === 'object' ? { name: v.name, description: v.description, parameters } : null;
   };
   const OPTS = { temperature: (v) => (Number.isFinite(v) && v >= 0 && v <= 2 ? v : null), maxTokens: (v) => (Number.isSafeInteger(v) && v >= 1 && v <= LIMIT.maxTokens ? v : null),
     timeoutMs: (v) => (Number.isSafeInteger(v) && v >= LIMIT.timeout[0] && v <= LIMIT.timeout[1] ? v : null) };
@@ -120,10 +122,13 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
     if (typeof text !== 'string' || text.length > LIMIT.text) return null;
     const out = { text, provider: raw.provider, model: typeof raw.model === 'string' && raw.model.length <= 200 ? raw.model : '', finish: raw.finish };
     if (raw.toolCalls !== undefined && raw.toolCalls.length) { const calls = list(raw.toolCalls, LIMIT.calls, call); if (!calls) return null; out.toolCalls = calls; }
-    if (isObj(raw.usage)) { const input = count(raw.usage.input), output = count(raw.usage.output); if (input !== null && output !== null) out.usage = { input, output }; }
+    if (isObj(raw.usage) && count(raw.usage.input) !== null) {
+      out.usage = { input: raw.usage.input };
+      for (const k of ['cached', 'cacheWrite', 'output']) if (count(raw.usage[k]) !== null) out.usage[k] = raw.usage[k];
+    }
     return out;
   };
 
-  return { LIMIT, ROLES, MIME, FINISH, CODES, NAME, error, code, clean, result, images, sniff, b64, isObj };
+  return { LIMIT, ROLES, MIME, FINISH, CATEGORIES, CODES, NAME, error, code, clean, result, images, sniff, b64, isObj };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_REQUEST; else GZ_AI_REQUEST;

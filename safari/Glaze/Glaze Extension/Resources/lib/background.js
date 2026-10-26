@@ -1965,14 +1965,14 @@ const loadInto = (m, sender, files, reply) => {
 // (modQuiet). The connections live in the worker's own store; only Settings' top frame reads and writes them
 // ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
 // worker's importScripts calls name (scripts/package-firefox.sh). A task (lib/ai/tasks/<id>.js) goes in this list too.
-const aiFiles = () => importScripts('ai/schema.js', 'ai/request.js', 'ai/text.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/settings.js', 'ai/broker.js');
+const aiFiles = () => importScripts('ai/schema.js', 'ai/request.js', 'ai/stream.js', 'ai/failure.js', 'ai/endpoint.js', 'ai/text.js', 'ai/models.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/settings.js', 'ai/broker.js');
 globalThis.addEventListener?.('install', aiFiles);
 const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
 let aiVault = null;
 const aiEnv = () => ({
   settings: async () => (await chrome.storage.local.get(GZ_AI_SETTINGS.KEY))[GZ_AI_SETTINGS.KEY],
   enabled: async () => (await chrome.storage.sync.get('enabled')).enabled !== false,
-  vault: (aiVault ||= GZ_AI_BROKER.vault()), reach: reachable, fetch: (u, i) => fetch(u, i), task: (id) => GZ_AI_TASKS.get(id),
+  vault: (aiVault ||= GZ_AI_BROKER.vault()), local: brokerArea('local'), reach: reachable, fetch: (u, i) => fetch(u, i), task: (id) => GZ_AI_TASKS.get(id),
 });
 const aiSender = async (s) => {
   if (s.id !== chrome.runtime.id) return false;
