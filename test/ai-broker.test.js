@@ -481,3 +481,24 @@ test('syllabus admission accepts the exact disclosed host and port without revea
   assert.equal(calls.length, 2);
   p.close();
 });
+
+test('a disclosed task retains its admitted destination when a pending tool is confirmed', async () => {
+  const task = T.define({ ...planner, id: 'example.disclosed-plan', disclose: true });
+  const fetch = async (url) => (url.endsWith('/models') ? models() : json({ choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'reminder_add', arguments: '{"at":"2026-11-02","reason":"Soon."}' } }] }, finish_reason: 'tool_calls' }] }));
+  for (const changed of [false, true]) {
+    B._reset(); M._reset();
+    const e = env({ fetch, task: async () => task, reach: async () => true }), p = open(e);
+    try {
+      p.say(run(undefined, { task: task.id, to: 'api.example.com' }));
+      await flush();
+      const pending = p.posted.at(-1)?.pending;
+      assert.ok(pending, 'the run was admitted and proposed a tool');
+      if (changed) e.vaultData.set('connections', { main: { ...CONN, base: 'https://changed.example.test/v1', generation: 'gen-2' } });
+      p.say({ id: 2, op: 'confirm', confirmId: pending.confirmId, approve: true, to: 'changed.example.test' });
+      await flush();
+      assert.deepEqual(p.posted.at(-1), changed
+        ? { id: 2, type: 'error', error: 'changed' }
+        : { id: 2, type: 'confirmed', result: { kind: 'reminder', at: '2026-11-02' } }, 'confirmation uses the parked destination, never a new caller-supplied one');
+    } finally { p.close(); }
+  }
+});

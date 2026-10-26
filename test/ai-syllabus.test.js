@@ -366,3 +366,116 @@ test('context budgeting includes instructions, schema and the reserved answer be
   const X = require('../lib/ai/text.js');
   for (const req of cfg.seen) assert.ok(X.estimateTokens({ messages: req.messages, schema: req.schema }) + req.maxTokens <= 3000, 'every request fits the existing token estimate plus its reserved answer');
 });
+
+test('AI fills an office its quote labels or gives on the professor\'s contact line, never a phone number', () => {
+  const text = 'Dr. Margit Grunewald\nmgrunewald@music.ashcombe.edu · Fine Arts 214 · 555-0142\nOffice: Law Building 4.22. Office hours: Tuesdays after class';
+  const heur = L.extract(text, OPTS);
+  const read = (office) => A.merge(heur, A.interpret(task.check({ ...blank(), prof: { ...blank().prof, office } }, { text }), OPTS, heur, text)).prof.office.value;
+  assert.equal(heur.prof.office.value, '');
+  assert.equal(read({ text: 'Fine Arts 214', quote: 'mgrunewald@music.ashcombe.edu · Fine Arts 214' }), 'Fine Arts 214');
+  assert.equal(read({ text: 'Law Building 4.22', quote: 'Office: Law Building 4.22.' }), 'Law Building 4.22');
+  assert.equal(read({ text: '555-0142', quote: 'mgrunewald@music.ashcombe.edu · Fine Arts 214 · 555-0142' }), '');
+  assert.equal(read({ text: 'Fine Arts 214', quote: 'Dr. Margit Grunewald' }), '');
+  const hours = 'Office hours: Mondays in Library 2';
+  assert.equal(A.interpret(task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Library 2', quote: hours } } }, { text: hours }), OPTS, L.extract(hours, OPTS), hours).prof.office.value, '', 'where office hours are held is not the office');
+});
+
+test('every copied syllabus value must occur in its own quote, including titles and numeric expressions', () => {
+  const text = 'HW 3 · Fri 9/25\nA: 93-100\nB: 83-92\nC: 73-82\nExams 60%\nLabs 40%\nOffice hours: Mon 1-2 PM\nOpening: August 24';
+  const out = task.check({ ...blank(),
+    dates: [{ title: 'HW 99', kind: 'due', when: 'Fri 9/25', quote: 'HW 3 · Fri 9/25' }],
+    scale: [['A', 'below 93', 'A: 93-100'], ['B', 'below 83', 'B: 83-92'], ['C', 'below 73', 'C: 73-82']].map(([letter, range, quote]) => ({ letter, range, quote })),
+    weights: [{ name: 'Exams', weight: '40%', quote: 'Exams 60%' }],
+    hours: [{ label: null, when: 'Mon 1-3 PM', where: null, quote: 'Office hours: Mon 1-2 PM' }],
+    week1: { text: 'September 14', quote: 'Opening: August 24' },
+  }, { text });
+  assert.deepEqual(out.dates, [], 'a shared word cannot ground an invented assignment number');
+  assert.deepEqual(out.scale, [], 'quoted numbers cannot ground an invented comparison');
+  assert.deepEqual(out.weights, []);
+  assert.deepEqual(out.hours, []);
+  assert.deepEqual(out.week1, none);
+});
+
+test('copied syllabus identifiers must be whole tokens, preserving short values and harmless typography', () => {
+  const text = 'Instructor: Li\nEmail: not-ada@example.edu\nOffice: Room 2140\nHW 3 · Fri 9/25\nA: 93–100\nB+: 83–92\nC: 73–82';
+  const out = task.check({ ...blank(), prof: { ...blank().prof,
+    name: { text: 'Li', quote: 'Instructor: Li' },
+    email: { text: 'ada@example.edu', quote: 'Email: not-ada@example.edu' },
+    office: { text: 'Room 21', quote: 'Office: Room 2140' },
+  }, dates: [{ title: 'ＨＷ ３', kind: 'due', when: 'Fri\u00a09/25', quote: 'hw 3 · Fri 9/25' }],
+  scale: [['A', '93-100'], ['B+', '83-92'], ['C', '73-82']].map(([letter, range]) => ({ letter, range, quote: `${letter}: ${range}` })),
+  }, { text });
+  assert.deepEqual(out.prof.email, none, 'an e-mail suffix is a different address');
+  assert.deepEqual(out.prof.office, none, 'a room number prefix is a different room');
+  assert.equal(out.prof.name.text, 'Li', 'the quote length floor must not drop a short copied value');
+  assert.equal(out.dates.length, 1, 'case, NFKC and whitespace normalization remain supported');
+  assert.equal(out.scale.length, 3, 'one-letter grades and normalized dashes remain supported');
+});
+
+test('AI office candidates reject labelled phone numbers and clocks without a weekday', () => {
+  for (const value of ['Phone: 555-0142', 'Tel. +1 (555) 123-4567', '9:30 AM', '14:30 Uhr', '2 PM']) {
+    const text = `Email: ada@example.edu\nada@example.edu · ${value}`;
+    const heur = L.extract(text, OPTS);
+    const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: value, quote: text.split('\n')[1] } } }, { text });
+    assert.equal(out.prof.office.text, value, 'the candidate really occurs in the cited contact line');
+    assert.equal(heur.prof.office.value, '');
+    assert.equal(A.merge(heur, A.interpret(out, OPTS, heur, text)).prof.office.value, '', value);
+  }
+});
+
+test('AI office evidence must describe the candidate location, not a classroom or an office-hours venue', () => {
+  const cases = [
+    ['Classroom: Room 214', 'Room 214'],
+    ['Room for lecture: Fine Arts 214', 'Fine Arts 214'],
+    ['Office hours: Mondays in room Library 2', 'Library 2'],
+    ['Office hours: Mondays in Library 2\nEmail: ada@example.edu', 'Library 2'],
+    ['Email: ada@example.edu\nClass location: Fine Arts 214 · ada@example.edu', 'Fine Arts 214'],
+    ['Email: ada@example.edu\nReading: Chapter 12', 'Chapter 12'],
+    ['Office: Fine Arts 214 · Classroom: Room 310', 'Room 310'],
+  ];
+  for (const [text, value] of cases) {
+    const heur = L.extract(text, OPTS);
+    const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: value, quote: text } } }, { text });
+    assert.equal(out.prof.office.text, value);
+    assert.equal(A.interpret(out, OPTS, heur, text).prof.office.value, '', text);
+  }
+  const text = 'Office: Law Building 4.22. Office hours: Tuesdays after class';
+  const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Law Building 4.22', quote: text } } }, { text });
+  assert.equal(A.interpret(out, OPTS, L.extract(text, OPTS), text).prof.office.value, 'Law Building 4.22', 'a later hours clause does not erase an explicit office');
+});
+
+test('office context survives normalized quote whitespace and cannot borrow a conflicting AI e-mail', () => {
+  for (const [text, quote, value] of [
+    ['Email: ada@example.edu\nReading: Chapter 12', 'Email: ada@example.edu Reading: Chapter 12', 'Chapter 12'],
+    ['Heures de bureau: lundi dans la salle Bibliothèque 2', 'Heures de bureau: lundi dans la salle Bibliothèque 2', 'Bibliothèque 2'],
+    ['Email: ada@example.edu\nada@example.edu · 2\u200b PM', 'ada@example.edu · 2\u200b PM', '2\u200b PM'],
+    ['Office: Fine Arts 214; Reading: Chapter 12', 'Office: Fine Arts 214; Reading: Chapter 12', 'Chapter 12'],
+  ]) {
+    const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: value, quote } } }, { text });
+    assert.equal(out.prof.office.text, value);
+    assert.equal(A.interpret(out, OPTS, L.extract(text, OPTS), text).prof.office.value, '', text);
+  }
+  const text = 'Instructor email: ada@example.edu\nTA: helper@example.edu · Fine Arts 214';
+  const heur = L.extract(text, OPTS);
+  assert.equal(heur.prof.email.value, 'ada@example.edu');
+  const out = task.check({ ...blank(), prof: { ...blank().prof,
+    email: { text: 'helper@example.edu', quote: 'TA: helper@example.edu' },
+    office: { text: 'Fine Arts 214', quote: 'TA: helper@example.edu · Fine Arts 214' },
+  } }, { text });
+  assert.equal(A.interpret(out, OPTS, heur, text).prof.office.value, '');
+});
+
+test('e-mail local-part punctuation cannot separate a copied suffix from its actual address', () => {
+  for (const prefix of ['not#', 'not%', 'not&', 'not=', 'not!', 'not~']) {
+    const text = `Email: ${prefix}ada@example.edu`;
+    const out = task.check({ ...blank(), prof: { ...blank().prof, email: { text: 'ada@example.edu', quote: text } } }, { text });
+    assert.deepEqual(out.prof.email, none, prefix);
+  }
+});
+
+test('explicit office wording still identifies a room without a colon', () => {
+  for (const quote of ['Office Law Building 4.22', 'My office is Law Building 4.22', 'Office\tLaw Building 4.22']) {
+    const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Law Building 4.22', quote } } }, { text: quote });
+    assert.equal(A.interpret(out, OPTS, L.extract(quote, OPTS), quote).prof.office.value, 'Law Building 4.22', quote);
+  }
+});
