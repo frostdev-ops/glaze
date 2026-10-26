@@ -565,3 +565,20 @@ test('a date edited and saved again to Better To Do keeps whether it was done, a
   assert.equal(T.clean(d).tasks.find((x) => x.id === 'syl-25-brandnew').done, 0, 'a new one starts not done');
   assert.equal(T.clean(d).tasks.find((x) => x.id === 'syl-25-new').done, 0, 'whatever the caller says');
 });
+
+// Syllabi as a PDF's text layer gives them (lib/doctext.js pdfText): icon glyphs and tabs before labels, tables read cell
+// by cell, a table of contents, numbered sections. Shapes copied from real syllabi; names, courses and numbers made up.
+test('an office-hours note comes from a line the label starts, not a heading that lists it or a sentence that mentions it', () => {
+  const r = S.extract(`Department secretary's telephone number and e-mail address:
+Telephone No.: (555)-010-2000\tE-mail address: deptoffice@example.edu
+Semester offered: Fall 2026
+Faculty member's name, office hours, and e-mail address:
+Instructor’s Name: Dr. Lindqvist
+Office Hours: Per student's requests
+E-mail: lindqviste@example.edu (preferred method of contact)`, { start: FALL, md: true });
+  assert.deepEqual([r.prof.name.value, r.prof.email.value, r.prof.note.value], ['Dr. Lindqvist', 'lindqviste@example.edu', "Per student's requests"]);
+  const said = S.extract('•\tI encourage you to attend office hours regularly and take advantage of the free tutoring\nservices available through the Learning Center.');
+  assert.equal(said.prof.note.value, '');
+  assert.equal(S.extract('▪\tVirtual Office Hours: by appointment').prof.note.value, 'by appointment');
+  assert.equal(S.extract('Office hours by appointment only').prof.note.value, 'by appointment only');
+});
