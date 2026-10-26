@@ -220,11 +220,16 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       const m = OFFICE.exec(lines[i]);
       if (m && !HOURS_RE.test(lines[i])) office = field(clean(m[1].split(EMAIL)[0]).slice(0, 120), 'sure', at(lines, i));
     }
-    // Office hours with no time to read ("By appointment"): kept as words.
+    // Office hours with no time to read ("By appointment"): kept as words, from a line their label starts, after a bullet
+    // or an icon and a word or two ("▪ Virtual office hours:"), never from a heading that lists them ("Name, office hours,
+    // and e-mail address:") or a sentence that mentions them ("attend office hours regularly and…").
     let note = field();
     for (let i = 0; i < lines.length && !note.value; i++) {
       const m = HOURS_RE.exec(lines[i]);
-      if (m && !CL().meetings(lines[i], { lang }).length) note = field(clean(lines[i].slice(m.index + m[0].length).replace(/^\s*[:\t-]/, '')).slice(0, 200), 'check', at(lines, i));
+      if (!m) continue;
+      const before = lines[i].slice(0, m.index).replace(/^[\s\p{So}\p{Co}•*·-]+/u, ''), after = lines[i].slice(m.index + m[0].length);
+      if (before && !(/^(?:[\p{L}'’-]+\s+){1,2}$/u.test(before) && /^\s*(?:[:\t-]|$)/.test(after))) continue;
+      if (!CL().meetings(lines[i], { lang }).length) note = field(clean(after.replace(/^\s*[:\t-]/, '')).slice(0, 200), 'check', at(lines, i));
     }
     return { name, email, office, note };
   };
