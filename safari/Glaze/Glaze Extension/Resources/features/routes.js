@@ -18,6 +18,7 @@ var GZ_ROUTES = globalThis.GZ_ROUTES || (() => {
   const LISTS = { ultra: /^\/ultra\/(?:stream|courses\/_\d+_\d+\/announcements)(?:\/|$)/, canvas: /^\/(?:courses\/\d+(?:\/(?:announcements|activity_stream))?\/?)?$/, moodle: /\/(?:course|mod\/forum)\/view\.php$/ };
   add((l, site) => LISTS[site]?.test(l.pathname) || (site === 'canvas' && /^\/courses\/\d+\/discussion_topics\/?$/.test(l.pathname) && /[?&]only_announcements=(?:1|true)\b/.test(l.search || '')),
     'features/announce.js', 'GZ_ANNOUNCE');
+  add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/announcements\/?$/.test(l.pathname), 'features/announce-read.js', 'GZ_ANNOUNCE_READ');
   const sync = () => {
     for (const e of table) {
       let yes = false;

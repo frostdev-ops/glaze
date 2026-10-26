@@ -1,6 +1,10 @@
 // Dutch for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).nl = {
+  "Mark all as read": "Alles als gelezen markeren",
+  "Marking…": "Bezig met markeren…",
+  "All announcements marked as read": "Alle aankondigingen gemarkeerd als gelezen",
+  "Could not mark all announcements as read. Try again.": "Niet alle aankondigingen konden als gelezen worden gemarkeerd. Probeer het opnieuw.",
 
   "Redirected file: download it from Canvas": "Omgeleid bestand: download het vanuit Canvas",  "Activity Stream": "Activiteitenstream",
   "Timeline dates": "Tijdlijndatums",
