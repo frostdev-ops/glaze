@@ -1300,3 +1300,12 @@ test('review: every part of an exception list must be resolved before weekly exp
   assert.deepEqual(S.extract('Quizzes are due every Friday, weeks 1–4, except Sep. 11 and Sep. 18.', reviewOpts).dates.map((d) => d.day), ['2026-09-04', '2026-09-25']);
   assert.deepEqual(S.extract('Quizzes are due every Friday, weeks 1–6, except September 11, September 18, September 25, October 2 and October 9.', reviewOpts).dates.map((d) => d.day), ['2026-09-04']);
 });
+
+test('review: a weight header does not make topics or zero-weight rows deadlines', () => {
+  for (const text of [
+    'Date\tTopic\tWeight\nSeptember 7\tElasticity\t0%',
+    'Date\tTopic\tWeight\nSeptember 7\tElasticity\t20%',
+    'Titre\tDate\tPondération\nRévision\tSeptember 7\t0 %',
+  ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
+  assert.deepEqual(S.extract('Titre\tDate\tPondération\nRapport d\'étape\tSeptember 7\t10 %', reviewOpts).dates.map((d) => `${d.day} ${d.kind}`), ['2026-09-07 due']);
+});
