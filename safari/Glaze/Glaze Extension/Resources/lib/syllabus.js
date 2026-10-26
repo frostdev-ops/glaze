@@ -14,7 +14,8 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   const norm = (s) => String(s || '').replace(/\r\n?/g, '\n').replace(/[\u2010-\u2015\u2212]/g, '-').replace(/[\u00a0\u2007\u202f]/g, ' ')
     .replace(/[ \f\v]+/g, ' ').replace(/^(\p{L}[\p{L} ]{2,30}):[ \t]*\n+(?![A-F][+-]?[ \t]*:?[ \t]*\n)/gmu, '$1: ')
     .replace(/(\d)[ \t]*-[ \t]*\n[ \t]*(?=\d)/g, '$1-');
-  const clean = (s) => String(s).replace(/\t+/g, ' · ').replace(/\s+/g, ' ').replace(/(?: ·)+ /g, ' · ').replace(/^[\s,:;.\-·|•*–]+|[\s,:;\-·|•*–]+$/g, '');
+  // An icon a PDF puts before a label (● ✉ ▦ ▶ ▪, or an icon font's private character) is a bullet.
+  const clean = (s) => String(s).replace(/\t+/g, ' · ').replace(/\s+/g, ' ').replace(/(?: ·)+ /g, ' · ').replace(/^[\s,:;.\-·|•*–\p{So}\p{Co}]+|[\s,:;\-·|•*–]+$/gu, '');
   const at = (lines, i) => clean(lines[i] || '').slice(0, 300);
   const any = (words) => new RegExp(`(?<![\\p{L}])(?:${words})(?![\\p{L}])`, 'iu');
 
@@ -143,10 +144,12 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const label = found.length ? clean(line.slice(0, found[0].at)) || (/:\s*$/.test(prev) ? clean(prev) : '') : '';
     return found.map((m, i) => {
       const tail = line.slice(m.to, found[i + 1]?.at ?? line.length).replace(/^\s*(?:uhr|uur|h)(?![\p{L}])/iu, '');
-      const location = clean(clean(tail.split(/;|\.(?!\d)|\bor\b|\band\b|\boder\b|\bou\b|\bo\b|\bof\b/)[0]).replace(/^(?:in|at|im|en|à|au|em|no|na|op)\s+/i, ''));
+      // A title at the place's end lost its name to the next line ("via Teams - Prof." / "Moreno's room"): cut with it.
+      const location = clean(clean(tail.split(/;|\.(?!\d)|\bor\b|\band\b|\boder\b|\bou\b|\bo\b|\bof\b/)[0]).replace(/^(?:in|at|im|en|à|au|em|no|na|op|via)\s+/i, '').replace(CUT_TITLE, ''));
       return { label: label.replace(/[:]\s*$/, '').slice(0, 80), days: ordered(m.days.map((d) => DAYS[(d + 6) % 7])), start: hhmm(m.start), end: hhmm(m.end), location: location.slice(0, 80), unsure: m.unsure.length > 0, at: m.at };
     });
   };
+  const CUT_TITLE = /[\s,·-]*(?<![\p{L}])(?:prof(?:essor|essora|esseur)?|dr|dra|mr|mrs|ms|herr|frau|sr|sra|mme|dhr|mevr)\.?$/iu;
   // Lines with days and a time, skipping one-off events (a line with a date). Office hours: a line with their label, and
   // the lines right after it that start with a day and a time.
   const scan = (lines, lang) => {
@@ -349,6 +352,18 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     return { ...f, issues: whole ? [] : [{ kind: 'sum', total: Math.round(best.sum * 100) / 100 }] };
   };
 
+  // The same office hours given twice (a contact box, then the instructor's section) are one, with the label and place of
+  // the one that gives more; two places at the same time stay two.
+  const once = (rows) => {
+    const out = [];
+    const more = (m) => !!m.label + !!m.location;
+    for (const m of rows) {
+      const k = out.findIndex((x) => x.days.join() === m.days.join() && x.start === m.start && x.end === m.end && (!x.location || !m.location || x.location === m.location));
+      if (k < 0) out.push(m); else if (more(m) > more(out[k])) out[k] = m;
+    }
+    return out;
+  };
+
   // ---- everything -------------------------------------------------------------------------------------------------
   // text: the syllabus as plain text. opts.start: when the course's term starts (ms), for dates without a year; leave it out
   // when the course has no term dates, and today stands in for it, its dates read by the year nearest today (dayOf);
@@ -371,7 +386,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const all = scan(lines, lang);
     return {
       prof: professor(lines, lang),
-      hours: all.filter((m) => m.hours).map(({ hours, ...m }) => m),
+      hours: once(all.filter((m) => m.hours).map(({ hours, ...m }) => m)),
       meetings: all.filter((m) => !m.hours).map(({ hours, ...m }) => m),
       dates: dateRows(lines, o),
       scale: scale(s, lines, starts),
