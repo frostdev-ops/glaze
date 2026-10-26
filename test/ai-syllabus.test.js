@@ -411,3 +411,35 @@ test('copied syllabus identifiers must be whole tokens, preserving short values 
   assert.equal(out.dates.length, 1, 'case, NFKC and whitespace normalization remain supported');
   assert.equal(out.scale.length, 3, 'one-letter grades and normalized dashes remain supported');
 });
+
+test('AI office candidates reject labelled phone numbers and clocks without a weekday', () => {
+  for (const value of ['Phone: 555-0142', 'Tel. +1 (555) 123-4567', '9:30 AM', '14:30 Uhr', '2 PM']) {
+    const text = `Email: ada@example.edu\nada@example.edu · ${value}`;
+    const heur = L.extract(text, OPTS);
+    const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: value, quote: text.split('\n')[1] } } }, { text });
+    assert.equal(out.prof.office.text, value, 'the candidate really occurs in the cited contact line');
+    assert.equal(heur.prof.office.value, '');
+    assert.equal(A.merge(heur, A.interpret(out, OPTS, heur, text)).prof.office.value, '', value);
+  }
+});
+
+test('AI office evidence must describe the candidate location, not a classroom or an office-hours venue', () => {
+  const cases = [
+    ['Classroom: Room 214', 'Room 214'],
+    ['Room for lecture: Fine Arts 214', 'Fine Arts 214'],
+    ['Office hours: Mondays in room Library 2', 'Library 2'],
+    ['Office hours: Mondays in Library 2\nEmail: ada@example.edu', 'Library 2'],
+    ['Email: ada@example.edu\nClass location: Fine Arts 214 · ada@example.edu', 'Fine Arts 214'],
+    ['Email: ada@example.edu\nReading: Chapter 12', 'Chapter 12'],
+    ['Office: Fine Arts 214 · Classroom: Room 310', 'Room 310'],
+  ];
+  for (const [text, value] of cases) {
+    const heur = L.extract(text, OPTS);
+    const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: value, quote: text } } }, { text });
+    assert.equal(out.prof.office.text, value);
+    assert.equal(A.interpret(out, OPTS, heur, text).prof.office.value, '', text);
+  }
+  const text = 'Office: Law Building 4.22. Office hours: Tuesdays after class';
+  const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Law Building 4.22', quote: text } } }, { text });
+  assert.equal(A.interpret(out, OPTS, L.extract(text, OPTS), text).prof.office.value, 'Law Building 4.22', 'a later hours clause does not erase an explicit office');
+});
