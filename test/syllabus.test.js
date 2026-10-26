@@ -680,3 +680,65 @@ ${pie}`).weights;
   assert.equal(pick(S.extract(`Points\tGrade\n59 and below\tF\n${pie}`)).weights, 'Homework 40%, Unit tests 20%, Audio recordings 10%, Video Projects 20%, Discussions 10%', 'the chart\'s title is no category');
   assert.equal(pick(S.extract('Breakdown\n10%\nParticipation\n40%\nEssays\n50%\nFinal portfolio')).weights, '', 'a label at each end, and neither a heading: either reading could be right');
 });
+
+// Deadlines by course week: days from week 1's first day, the anchor, which is a start the text states, else the course's
+// own (opts.week1), else the term's (opts.start); never a guess without one.
+test('deadlines by course week become days from week 1, which the text, the course or the term gives', () => {
+  const rows = (r) => r.dates.map((d) => `${d.day} ${d.kind} ${d.title}${d.week ? ` w${d.week}/${d.wd}` : ''} ${d.conf}`);
+  const week1 = (r) => [r.week1.value, r.week1.from, r.week1.conf];
+  const table = `Due dates of quizzes and assignments for each Unit will be the 7th day (Sunday) of each week.
+Name\tWeight\tDate/Schedule
+${[1, 2, 3].map((k) => `UNIT ${k}\nHomework ${k}\nQuiz ${k}\n${k === 2 ? 14 : 18}%\n${16}%\n7th day of week ${k}`).join('\n')}
+`;
+  const term = S.extract(table, { start: Date.UTC(2026, 7, 31), md: true });
+  assert.deepEqual(rows(term), [
+    '2026-09-06 due Homework 1 w1/6 check', '2026-09-06 exam Quiz 1 w1/6 check', '2026-09-13 due Homework 2 w2/6 check',
+    '2026-09-13 exam Quiz 2 w2/6 check', '2026-09-20 due Homework 3 w3/6 check', '2026-09-20 exam Quiz 3 w3/6 check']);
+  assert.deepEqual(week1(term), ['2026-08-31', 'term', 'check']);
+  assert.match(term.week1.src, /./);
+  const course = S.extract(table, { start: Date.UTC(2026, 7, 31), week1: Date.UTC(2026, 9, 19), md: true });
+  assert.deepEqual([course.dates[1].day, course.dates[5].day, ...week1(course)], ['2026-10-25', '2026-11-08', '2026-10-19', 'course', 'sure'], 'the course\'s own start beats the term\'s');
+
+  const stated = S.extract(`Our 7-week course runs from November 2 to December 20, 2026.
+Week 5 – Friday: Lab report 2 due
+Quiz 4 (end of week 4)
+Reflection paper due Sunday of Week 2`, { start: Date.UTC(2026, 7, 31), week1: Date.UTC(2026, 9, 19), md: true });
+  assert.deepEqual(rows(stated), ['2026-12-04 due Lab report 2 due w5/4 check', '2026-11-29 exam Quiz 4 w4/6 check', '2026-11-15 due Reflection paper due w2/6 check']);
+  assert.deepEqual(week1(stated), ['2026-11-02', 'text', 'sure'], 'a start the text states beats the course\'s and the term\'s');
+
+  // A schedule that dates its own weeks: each week's dates place its deadlines, not arithmetic.
+  const schedule = S.extract(`Week 1 (Aug 24–28)
+Syllabus quiz due Friday
+Week 3 (Sept 14–18)
+Reading: Chapter 4
+Essay 1 due Friday
+Week 4 (Sept 21–25)
+Quiz 2 on Wednesday`, { start: Date.UTC(2026, 8, 7), md: true });
+  assert.deepEqual(rows(schedule), ['2026-08-28 exam Syllabus quiz due check', '2026-09-18 due Essay 1 due check', '2026-09-23 exam Quiz 2 check']);
+  assert.deepEqual(week1(schedule), ['2026-08-24', 'text', 'check']);
+
+  // Week 1 starts on the anchor's own day: a course that starts on a Wednesday has Wednesday-to-Tuesday weeks.
+  const midweek = S.extract('Lab 1 due Friday of week 1\nLab 2 due Monday of week 2', { week1: Date.UTC(2026, 8, 2) });
+  assert.deepEqual(rows(midweek), ['2026-09-04 due Lab 1 due w1/2 check', '2026-09-14 due Lab 2 due w2/5 check']);
+
+  const oct12 = { start: Date.UTC(2026, 9, 12) };
+  const one = (text, hint) => rows(S.extract(text, { ...oct12, hint }));
+  assert.deepEqual(one('Abgabe Essay: Freitag der Woche 3', 'de'), ['2026-10-30 due Abgabe Essay w3/4 check']);
+  assert.deepEqual(one('Hausarbeit: Freitag, KW 45', 'de'), ['2026-11-06 due Hausarbeit check'], 'a calendar week is the year\'s, Monday first');
+  assert.deepEqual(one('Entrega del ensayo: viernes de la semana 2', 'es'), ['2026-10-23 due Entrega del ensayo w2/4 check']);
+  assert.deepEqual(one('Rendu du dossier : vendredi de la semaine 2', 'fr'), ['2026-10-23 due Rendu du dossier w2/4 check']);
+  assert.deepEqual(one('Inleveren verslag: vrijdag van week 2', 'nl'), ['2026-10-23 due Inleveren verslag w2/4 check']);
+  assert.deepEqual(one('Entrega do trabalho: sexta-feira da semana 2', 'pt'), ['2026-10-23 due Entrega do trabalho w2/4 check']);
+
+  // No anchor at all: no week-based rows, and no week 1.
+  const none = S.extract('Quiz 4 (end of week 4)\nLab report due Friday of week 2');
+  assert.deepEqual([none.dates, week1(none)], [[], ['', '', '']]);
+  assert.deepEqual(week1(S.extract('Exam: Oct 14', oct12)), ['', '', ''], 'no week-based date, no week 1');
+  assert.deepEqual(S.extract('Due dates for each module will be the 7th day (Sunday) of each week.\nWeek 2: no class', oct12).dates, []);
+
+  assert.equal(S.weekDay('2026-11-02', 5, 4), '2026-12-04');
+  assert.equal(S.weekDay('2026-08-31', 1, 6), '2026-09-06');
+  assert.equal(S.weekDay('2026-02-30', 1, 0), '');
+  assert.equal(S.weekDay('2026-08-31', 0, 0), '');
+  assert.equal(S.weekDay('2026-08-31', 1, 7), '');
+});
