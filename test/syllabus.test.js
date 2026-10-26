@@ -37,6 +37,40 @@ test('only distinct consecutive numbered weight items fold into a category', () 
   }
 });
 
+test('week anchors use the course year and reject unrelated start dates', () => {
+  const course = Date.UTC(2030, 9, 7);
+  for (const [hint, header, due] of [
+    ['en', 'Week 1 (October 7)', 'Quiz due Friday of week 2'],
+    ['de', 'Woche 1 (7. Oktober)', 'Abgabe Freitag der Woche 2'],
+    ['es', 'Semana 1 (7 de octubre)', 'Entrega viernes de la semana 2'],
+    ['fr', 'Semaine 1 (7 octobre)', 'Rendu vendredi de la semaine 2'],
+    ['nl', 'Week 1 (7 oktober)', 'Inleveren vrijdag van week 2'],
+    ['pt', 'Semana 1 (7 de outubro)', 'Entrega sexta-feira da semana 2'],
+  ]) {
+    const r = S.extract(`${header}\n${due}`, { week1: course, hint });
+    assert.equal(r.week1.value, '2030-10-07');
+    assert.equal(r.dates[0].day, '2030-10-18');
+  }
+  for (const label of ['Project start date: October 12', 'The course project starts October 12']) {
+    const r = S.extract(`${label}\nQuiz due Friday of week 2`, { start: FALL });
+    assert.equal(r.week1.value, '2026-08-24');
+    assert.equal(r.dates.at(-1).day, '2026-09-04');
+  }
+  const toc = S.extract('Week 1 (October 12) ........ 4\nQuiz due Friday of week 2', { start: FALL });
+  assert.equal(toc.week1.value, '2026-08-24');
+});
+
+test('week context ends at a section break and ambiguous weekdays stay empty', () => {
+  const r = S.extract('Week 2\nQuiz due Friday\n\nOffice policies\nProject proposals may be discussed on Monday during office hours.', { start: FALL });
+  assert.deepEqual(r.dates.map((d) => [d.day, d.title]), [['2026-09-04', 'Quiz due']]);
+  for (const text of ['Week 2: Monday quiz, Friday project due', 'Quiz due Friday of week 2 or Friday of week 3']) {
+    assert.deepEqual(S.extract(text, { start: FALL }).dates, []);
+  }
+  assert.deepEqual(S.extract('Week 2 (Sept 7-9)\nQuiz due Friday', { start: FALL }).dates, []);
+  const dated = S.extract('Week 2 (Sept 7-11): Quiz due Friday', { start: FALL });
+  assert.deepEqual(dated.dates.map((d) => [d.day, d.title]), [['2026-09-11', 'Quiz due']]);
+});
+
 const FALL = Date.UTC(2026, 7, 24); // Fall 2026 starts August 24
 const SPRING = Date.UTC(2027, 0, 11);
 const pick = (r) => ({
