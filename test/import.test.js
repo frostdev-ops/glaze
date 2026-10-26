@@ -187,6 +187,17 @@ test('ocrText: a distant tiny mark does not turn a horizontal schedule into skew
   assert.deepEqual(r.unsure, []);
 });
 
+test('ocrText: counts visual lines rather than word fragments in a multiline table cell', () => {
+  // Gaps split each line into three cells, while the staggered spans still form
+  // one column beside its centred action. Six fragments are only two lines.
+  const r = D.ocrText(engineJson([
+    [['Alpha', 20, 120, 20, 40], ['Beta', 150, 250, 20, 40], ['Gamma', 280, 380, 20, 40]],
+    [['Edit', 500, 550, 30, 65]],
+    [['Delta', 70, 170, 55, 75], ['Epsilon', 200, 300, 55, 75], ['Zeta', 330, 430, 55, 75]],
+  ]));
+  assert.equal(r.text, 'Alpha Beta Gamma Delta Epsilon Zeta\tEdit');
+});
+
 test('ocrText: keeps large single letters and numbers as text instead of icons', () => {
   for (const heading of ['A', 'I', 'C', '10', '1a', 'An']) {
     const r = D.ocrText(engineJson([
