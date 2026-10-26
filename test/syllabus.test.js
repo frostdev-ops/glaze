@@ -1246,3 +1246,23 @@ test('two days with "and" share the second\'s month, and a range may name its we
   assert.deepEqual(r.dates.map((d) => d.day), ['2026-09-18', '2026-09-21']);
   assert.deepEqual(rows('Examen parcial: del lunes 21 al viernes 25 de septiembre', { start: Date.UTC(2026, 7, 3), hint: 'es' }), ['2026-09-25 exam']);
 });
+
+// Owner, 2026-10-26: a TA's, a tutor's or an assistant's times are office hours, labelled with the role as written.
+test('a line a staff role starts gives that person\'s hours, not a class', () => {
+  const r = S.extract(`Graduate Assistant · Ines Varga · desk crits Tuesdays 6–8 PM in studio (Hollister 300)
+Studio\tMWF 1:30–5:20 PM, Hollister 300
+Teaching Fellow: Marcus Lin · mlin@whitcombe.edu · Thursdays 12–1 pm (Zoom)
+Community TA: Ines Wakeman-Osei — live chat in the forum, Fridays 14:00–15:00 UTC.
+Skills Lab Coordinator (Ms. Dana Okwuosa, RN): open lab Mon & Wed 1500–1700, Skills Lab B.
+TA: Jane Doe — discussion section Wednesdays 10–11 am, Room 5`, { start: FALL, md: true, hint: 'en' });
+  assert.deepEqual(r.hours.map((m) => `${m.label} | ${m.days.join(' ')} ${m.start}-${m.end}`), ['Graduate Assistant | TU 18:00-20:00', 'Teaching Fellow | TH 12:00-13:00', 'Community TA | FR 14:00-15:00', 'Skills Lab Coordinator | MO WE 15:00-17:00']);
+  assert.deepEqual(r.meetings.map((m) => `${m.days.join(' ')} ${m.start}-${m.end}`), ['MO WE FR 13:30-17:20', 'WE 10:00-11:00'], 'a TA\'s discussion section is a class');
+  const es = S.extract('Ayudante\tTomás Fuenzalida · tf@alumnos.umaipo.cl ·\natención de alumnos martes 12:00–13:00, Sala B-12', { start: FALL, hint: 'es' });
+  assert.deepEqual(slots(es.hours).map((s) => s.replace(/^.*\| (?=\w\w \d)/, '')), ['TU 12:00-13:00 | Sala B-12']);
+  assert.deepEqual(es.meetings, []);
+});
+
+test('a course\'s weeks ("weeks 4–14") are no hours', () => {
+  const r = S.extract('Clinical: Thursdays 0630–1500 on your assigned unit (weeks 4–14)\nCare maps are due every Friday by 0800 during clinical weeks (weeks 4–14).', { start: SPRING, md: true });
+  assert.deepEqual(r.meetings.map((m) => `${m.days.join(' ')} ${m.start}-${m.end}`), ['TH 06:30-15:00']);
+});
