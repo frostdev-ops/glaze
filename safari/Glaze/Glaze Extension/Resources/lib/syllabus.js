@@ -63,8 +63,8 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     [new RegExp(`(?<![\\d.])(\\d{1,2})(?:\\.|º|°|er|st|nd|rd|th)?\\s*(?:de\\s+)?${MON}(?![\\p{L}])(?:\\s+(?:de\\s+)?(\\d{4}))?`, 'giu'), (m) => ({ mo: monthOf(m[2]), d: +m[1], y: m[3], named: true })],
     // "2026-10-12"
     [/(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/g, (m) => ({ y: m[1], mo: +m[2] - 1, d: +m[3], named: true })],
-    // "12.10." or "12.10.2026" (day first)
-    [/(?<![\d.])(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2}(?!\d))?/g, (m) => ({ d: +m[1], mo: +m[2] - 1, y: m[3] })],
+    // "12.10." or "12.10.2026" (day first), not a section's number that goes on ("3.3.1.")
+    [/(?<![\d.])(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2}(?!\d))?(?!\d)/g, (m) => ({ d: +m[1], mo: +m[2] - 1, y: m[3] })],
     // "10/12" or "10/12/26": month first where the page's language writes it so (US English), else day first
     [/(?<![\d/])(\d{1,2})\/(\d{1,2})(?:\/(\d{4}|\d{2}))?(?![\d/%])(?!\s*(?:of|der|des|de|van|do|da)\b)/g, (m, o) => ({ ...(o.md ? { mo: +m[1] - 1, d: +m[2] } : { d: +m[1], mo: +m[2] - 1 }), y: m[3], amb: +m[1] <= 12 && +m[2] <= 12 && m[1] !== m[2] })],
   ];
@@ -110,12 +110,20 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   const EXAM = 'exams?|midterms?|mid-term|final exams?|finals|(?<=^\\s*)final(?=\\s*[:\\t-])|quiz(?:zes)?|tests?|practicals?|klausur(?:en)?|prüfung(?:en)?|examen|parcial(?:es)?|prueba|partiel|contrôle|controle|tentamen|toets|prova|exame|avaliação';
   const DUE = 'due|deadline|projects?|papers?|essays?|reports?|presentations?|assignments?|homework|portfolio|abgabe|fällig|referat|hausarbeit|projekt|präsentation|entrega|proyecto|ensayo|presentación|trabajo|rendu|remise|à rendre|projet|devoir|exposé|dossier|inleveren|verslag|opdracht|presentatie|projeto|apresentação|relatório|seminário';
   const EXAM_RE = any(EXAM), DUE_RE = any(DUE);
+  // A table of contents' line (dot leaders and a page number) is no date, nor is a numbered section's heading: "4.2." at a
+  // line's start where "4." starts a line too, and so does "4.1." or "4.3.". German "Klausur am 4.2.", or a schedule's
+  // row "11.11.\tAbgabe", is still the day it says.
+  const TOC = /(?:(?:\.[ \t]?){4,}|…{2,}|_{4,})[ \t]*\d{1,4}[ \t]*$/;
+  const SECTION = /^\s*(\d{1,2})\.(?:(\d{1,2})\.?(?:\d{1,2}\.?)*)?[ \t]+\p{L}/u;
   const dateRows = (lines, o) => {
-    const out = [];
+    const out = [], heads = new Set(), subs = new Set();
+    for (const l of lines) { const m = SECTION.exec(l); if (m) (m[2] ? subs : heads).add(m[2] ? `${+m[1]}.${+m[2]}` : +m[1]); }
     lines.forEach((raw, i) => {
       const kind = EXAM_RE.test(raw) ? 'exam' : DUE_RE.test(raw) ? 'due' : '';
-      if (!kind) return; // a schedule's every lecture topic is noise
-      const found = datesIn(raw, o);
+      if (!kind || TOC.test(raw)) return; // a schedule's every lecture topic is noise
+      const sec = SECTION.exec(raw);
+      const numbered = sec?.[2] && heads.has(+sec[1]) && (subs.has(`${+sec[1]}.${+sec[2] - 1}`) || subs.has(`${+sec[1]}.${+sec[2] + 1}`));
+      const found = datesIn(raw, o).filter((f) => !(numbered && f.at === raw.search(/\d/)));
       if (!found.length) return;
       // The title: the line without its dates and the weekday right before each.
       let title = raw;
