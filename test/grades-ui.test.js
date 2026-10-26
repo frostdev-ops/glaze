@@ -1182,8 +1182,8 @@ test('Ultra syllabus import: on the outline under Ultra\'s details, from a docum
 // Ultra documents as bb.wpunj.edu answered (2026-10-26), with synthetic names and text: a document is a folder with
 // contentHandler.isBbPage, its text in document children ("blocks") titled like it, "ultraDocumentBody" or anything; a
 // block's body can be only a file's anchor (data-bbfile, HTML-escaped JSON, on /bbcswebdav/ of the site), or text and files.
-const bbfile = (rid, name, mimeType) => {
-  const j = JSON.stringify({ linkName: name, displayName: name, mimeType, alternativeText: name, render: 'inline', resourceUrl: `/bbcswebdav/xid-${rid}_1`, viewerUrl: `/ultra/viewer/${rid}` });
+const bbfile = (rid, name, mimeType, more = {}) => {
+  const j = JSON.stringify({ linkName: name, displayName: name, mimeType, alternativeText: name, render: 'inline', resourceUrl: `/bbcswebdav/xid-${rid}_1`, viewerUrl: `/ultra/viewer/${rid}`, ...more });
   return `<div><div><a href="${UO}/bbcswebdav/pid-9${rid}-dt-content-rid-${rid}_1/xid-${rid}_1" data-bbfile="${j.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></a></div></div>`;
 };
 const item = (id, parentId, title, handler, more = {}) => ({ id, parentId, title, contentHandler: { id: `resource/x-bb-${handler}`, ...(handler === 'folder' && { isBbPage: !!more.page }) }, availability: { available: 'Yes' }, ...(more.body != null && { body: more.body }) });
@@ -1200,13 +1200,13 @@ const PAGES = { results: [
 // A file Ultra's /bbcswebdav/ address answers (after its redirect to the file store), its fetches noted in got.
 const served = (got, size, type) => (url, o) => {
   got.push({ url: url.replace(UO, ''), credentials: o?.credentials, redirect: o?.redirect, signal: o?.signal });
-  return { ok: true, status: 200, headers: { get: (h) => (h.toLowerCase() === 'content-length' ? String(size) : null) }, blob: async () => ({ size, type }) };
+  return new Response(new Uint8Array(size), { headers: { 'content-length': String(size), 'content-type': type } });
 };
 // The outline with PAGES, the import dialog open; GZ_IMPORT stands in for features/import.js.
 const docsPage = async (GZ_IMPORT, files = {}, setup = () => {}) => {
   const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': PAGES, ...files } });
   p.ctx.GZ_IMPORT = GZ_IMPORT;
-  p.ctx.File = class File { constructor(parts, name, o) { Object.assign(this, { parts, name, type: o?.type }); } };
+  p.ctx.File = File;
   setup(p);
   vm.runInContext(read('features/syllabus.js'), p.ctx);
   p.ctx.GZ_SYL_UI.sync(true);
@@ -1381,6 +1381,65 @@ test('Ultra syllabus import: the document is chosen at the click, before the tex
   held.shift()();
   await settle(12);
   assert.equal(got.length, 1, 'the clicked document is read even if the selection changes while loading');
+  assert.equal(p.readText(), SYL_TEXT);
+});
+
+// Small bounds exercise the exact byte-limit behavior without allocating large files.
+const smallSylLimit = (p) => {
+  vm.runInContext(read('lib/doctext.js'), p.ctx);
+  p.ctx.GZ_DOCTEXT.READ.pdf = 8;
+};
+const streamedSylFile = (length) => {
+  const state = { pulls: 0, cancelled: false };
+  const body = new ReadableStream({
+    pull(controller) { state.pulls++; controller.enqueue(new Uint8Array(5)); if (state.pulls === 20) controller.close(); },
+    cancel() { state.cancelled = true; },
+  }, { highWaterMark: 0 });
+  return { state, response: new Response(body, { headers: { 'content-type': 'application/pdf', ...(length == null ? {} : { 'content-length': String(length) }) } }) };
+};
+
+test('Ultra syllabus import: a known oversized file is rejected before fetching it', async () => {
+  const got = [];
+  const pages = structuredClone(PAGES);
+  pages.results.find((c) => c.id === '_807_1').body = bbfile(504, 'Too big.pdf', 'application/pdf', { fileSize: 9 });
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }) }, {
+    '/contents?': pages, '/bbcswebdav/': served(got, 9, 'application/pdf'),
+  }, smallSylLimit);
+  await p.pick('Math Syllabus');
+  assert.equal(got.length, 0, 'the metadata already puts the file over the byte limit');
+  assert.equal(p.status(), 'That file is too large.');
+});
+
+test('Ultra syllabus import: an oversized Content-Length cancels the unread response body', async () => {
+  const { state, response } = streamedSylFile(100);
+  const p = await docsPage({ read: async () => { assert.fail('oversized files must not be read'); } }, { '/bbcswebdav/': () => response }, smallSylLimit);
+  await p.pick('Math Syllabus');
+  assert.equal(state.pulls, 0, 'the size header is checked before reading bytes');
+  assert.equal(state.cancelled, true, 'rejecting headers must also end the download');
+  assert.equal(p.status(), 'That file is too large.');
+});
+
+for (const length of [null, 1]) test(`Ultra syllabus import: a ${length == null ? 'missing' : 'false'} size header cannot cause an unbounded download`, async () => {
+  const { state, response } = streamedSylFile(length);
+  let reads = 0;
+  const p = await docsPage({ read: async () => { reads++; return { text: SYL_TEXT }; } }, { '/bbcswebdav/': () => response }, smallSylLimit);
+  await p.pick('Math Syllabus');
+  assert.equal(state.pulls, 2, 'stop as soon as the received bytes exceed the limit');
+  assert.equal(state.cancelled, true, 'cancel the rest of the stream');
+  assert.equal(reads, 0);
+  assert.equal(p.status(), 'That file is too large.');
+});
+
+test('Ultra syllabus import: a file exactly at the download limit retains its bytes, name and type', async () => {
+  const files = [];
+  const p = await docsPage({ read: async (file) => { files.push(file); return { text: SYL_TEXT }; }, note: () => '', doubt: () => false }, {
+    '/bbcswebdav/': () => new Response('12345678', { headers: { 'content-type': 'application/pdf', 'content-length': '8' } }),
+  }, smallSylLimit);
+  await p.pick('Math Syllabus');
+  assert.equal(files.length, 1);
+  assert.equal(files[0].name, 'Math Syllabus Fall.pdf');
+  assert.equal(files[0].type, 'application/pdf');
+  assert.equal(await files[0].text(), '12345678');
   assert.equal(p.readText(), SYL_TEXT);
 });
 
