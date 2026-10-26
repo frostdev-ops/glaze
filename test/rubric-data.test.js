@@ -236,14 +236,16 @@ test('Canvas incomplete scored criteria and ratings stay native', () => {
   }
 });
 
-test('Ultra each own-attempt state requires exactly its visibility flag', () => {
+test('Ultra shows the definition in every own-attempt state, as its own rubric link does; selections need graded and displayGraded', () => {
+  // Real Ultra keeps "This item is graded with a rubric" on a submitted, ungraded item whose association says displayAfter:
+  // false, and its link opens the rubric; the page's link, not the flag, decides whether the definition shows.
   for (const [state, flag] of [['before', 'displayBefore'], ['after', 'displayAfter'], ['graded', 'displayGraded']]) {
-    const a = association(); a[flag] = false;
-    assert.equal(lib().parse.ultra(ultra(), a, evaluation(), { ...uc, state }), null);
-    a[flag] = true;
-    const m = lib().parse.ultra(ultra(), a, evaluation(), { ...uc, state });
-    assert.ok(m); assert.equal(!!m.result, state === 'graded');
-    delete a[flag]; assert.equal(lib().parse.ultra(ultra(), a, evaluation(), { ...uc, state }), null);
+    for (const value of [false, true, undefined]) {
+      const a = association(); if (value === undefined) delete a[flag]; else a[flag] = value;
+      const m = lib().parse.ultra(ultra(), a, evaluation(), { ...uc, state });
+      assert.ok(m, `${state} with ${flag} ${value} shows the definition`);
+      assert.equal(!!m.result, state === 'graded' && value === true, `${state} with ${flag} ${value}: selections only once graded and displayGraded`);
+    }
   }
   assert.equal(lib().parse.ultra(ultra(), association(), evaluation(), { ...uc, state: 'COMPLETED' }), null);
 });

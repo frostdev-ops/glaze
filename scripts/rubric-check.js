@@ -147,10 +147,11 @@ const tableInfo = function () {
       const x=await until(()=>info(cdp),'unopened own assessment rubric');
       check(x.selected===0&&!x.text.includes('Strong evidence.')&&!requests.slice(start).some(r=>r.path.includes('/gradebook/attempts/')),'an unopened own assessment without status fields displays its permitted definition without evaluation');await page.close();
     }
+    // Ultra keeps its own rubric link, which opens the rubric, on a submitted item whatever displayAfter says: the
+    // definition shows as it does there, and nothing short of a graded row with displayGraded releases selections.
     for (const kind of ['submitted','released-ungraded','graded-hidden']) if(run(kind)) {
-      const {page}=await open({kind});
-      check(!await page.locator('#gz-rubric,#gz-popup').count(),`${kind}: an evaluation cannot bypass the attempt state's visibility flag`);
-      await page.locator('#native-rubric').click();await page.waitForSelector('#native-rubric-panel');check(true,'an unavailable after-submission rubric retains its native control');await page.close();
+      const {page,cdp}=await open({kind}), x=await until(()=>info(cdp),`${kind} rubric definition`);
+      check(x.selected===0&&!x.text.includes('Strong evidence.'),`${kind}: the definition shows without selections`);await page.close();
     }
     for (const kind of ['foreign-user','foreign-attempt','foreign-association']) if(run(kind)) {
       const {page,cdp}=await open({kind}), x=await until(()=>info(cdp),'graded rubric with a foreign evaluation');

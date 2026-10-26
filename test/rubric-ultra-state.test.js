@@ -1,6 +1,6 @@
 // features/rubric.js on Ultra's assessment overview, against the response shapes a real graded assignment returns
-// (fixtures/ultra-rubric-graded.json): the attempt's state decides which visibility flag applies, and the evaluation's
-// selections show only once the grade is posted and the evaluation belongs to the student's own attempt.
+// (fixtures/ultra-rubric-graded.json): the definition shows wherever Ultra's own rubric link does, and the evaluation's
+// selections show only once the grade is posted, displayGraded allows it, and the evaluation is the student's own attempt's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -98,22 +98,19 @@ test('a completed ungraded attempt cannot use column release settings or display
   for (const post of [(d) => { d.column.gradesReleased = true; }, (d) => { d.grade.displayGrade = {}; }, (d) => { d.grade.displayGrade = { scaleType: 'PERCENT', score: 85 }; }]) {
     const d = real(); d.grade.submissionStatus = { status: 'SUBMITTED' }; post(d);
     const p = await show(d);
-    assert.equal(!!p.node, false, 'SUBMITTED follows displayAfter, even on a released column or with a display grade');
-    assert.equal(p.nativeHidden, false);
-    d.column.rubricAssociations[0].displayAfter = true;
-    const after = await show(d);
-    assert.ok(after.node, 'displayAfter permits the definition');
-    assert.deepEqual(after.selected, [], 'an ungraded attempt has no selections');
-    assert.doesNotMatch(after.shadow.textContent, /Synthetic note\./);
+    assert.ok(p.node, 'the definition shows, as Ultra\'s own link does');
+    assert.deepEqual(p.selected, [], 'an ungraded attempt has no selections, even on a released column or with a display grade');
+    assert.doesNotMatch(p.shadow.textContent, /Synthetic note\./);
   }
 });
 
-test('submitted but not graded follows displayAfter: false keeps the native link, and no selections leak', async () => {
+test('submitted but not graded shows the definition Ultra\'s own link opens, whatever displayAfter says, and no selections leak', async () => {
   for (const attempt of ['NEEDS_GRADING', 'COMPLETED']) {
     const d = real(); d.grade.submissionStatus = { status: 'SUBMITTED' }; d.attempt.status = attempt; d.grade.lastAttempt.status = attempt;
     const p = await show(d);
-    assert.equal(p.node, null, `${attempt} without a posted grade is not graded`);
-    assert.equal(p.nativeHidden, false);
+    assert.ok(p.node, `${attempt}: the rubric shows with displayAfter false`);
+    assert.deepEqual(p.selected, [], `${attempt} without a posted grade is not graded`);
+    assert.doesNotMatch(p.shadow.textContent, /Synthetic note\./);
   }
   const d = real(); d.grade.submissionStatus = { status: 'SUBMITTED' }; d.attempt.status = 'NEEDS_GRADING'; d.column.rubricAssociations[0].displayAfter = true;
   const p = await show(d);
@@ -121,7 +118,7 @@ test('submitted but not graded follows displayAfter: false keeps the native link
   assert.deepEqual(p.selected, [], 'without the evaluation');
 });
 
-test('before a first attempt the rubric follows displayBefore, with no attempt read', async () => {
+test('before a first attempt the rubric shows bare, with no attempt read', async () => {
   const d = real();
   for (const k of ['lastAttemptId', 'lastAttempt', 'submissionStatus']) delete d.grade[k];
   const p = await show(d);
@@ -129,7 +126,7 @@ test('before a first attempt the rubric follows displayBefore, with no attempt r
   assert.deepEqual(p.selected, []);
   assert.ok(!p.asked.some((x) => x.includes('/gradebook/attempts/')));
   d.column.rubricAssociations[0].displayBefore = false;
-  assert.equal((await show(d)).node, null);
+  assert.ok((await show(d)).node, 'the page\'s own rubric link, not displayBefore, decides');
 });
 
 test('an evaluation naming another user shows the graded rubric without its selections', async () => {
@@ -181,11 +178,13 @@ test('a graded NUMERIC rubric shows the selected levels with their points, in th
   assert.equal(wide.selected.length, 2);
 });
 
-test('the other states real Ultra columns are in: submitted without evaluations stays native, unopened shows the rubric bare', async () => {
+test('the other states real Ultra columns are in: submitted without evaluations and unopened both show the rubric bare', async () => {
   const d = real();
   Object.assign(d.column.rubricAssociations[0], { isWithEvaluations: false });
   d.grade.submissionStatus = { status: 'SUBMITTED' }; d.grade.lastAttempt.status = 'NEEDS_GRADING'; d.attempt.status = 'NEEDS_GRADING'; delete d.attempt.rubricEvaluation;
-  assert.equal((await show(d)).node, null);
+  const s = await show(d);
+  assert.ok(s.node, 'submitted with displayAfter false shows the rubric, as Ultra does');
+  assert.deepEqual(s.selected, []);
   const u = real();
   for (const k of ['lastAttemptId', 'lastAttempt']) delete u.grade[k];
   u.grade.submissionStatus = { status: 'UNOPENED' };
@@ -193,4 +192,20 @@ test('the other states real Ultra columns are in: submitted without evaluations 
   assert.ok(p.node);
   assert.deepEqual(p.selected, []);
   assert.ok(!p.asked.some((x) => x.includes('/gradebook/attempts/')));
+});
+
+test('a graded attempt whose association hides graded rubrics shows the definition without selections', async () => {
+  const d = real(); d.column.rubricAssociations[0].displayGraded = false;
+  const p = await show(d);
+  assert.ok(p.node);
+  assert.deepEqual(p.selected, []);
+  assert.doesNotMatch(p.shadow.textContent, /Synthetic note\./);
+});
+
+test('the inline rubric keeps sideways scrolling to itself and lets the page scroll vertically over it', () => {
+  const css = fs.readFileSync(path.join(root, 'features/rubric.js'), 'utf8').match(/const CSS = `([\s\S]*?)`;/)[1];
+  const scroll = css.match(/\.scroll \{([^}]*)\}/)[1];
+  assert.match(scroll, /overflow-x:auto/);
+  assert.match(scroll, /overscroll-behavior-x:contain/);
+  assert.doesNotMatch(scroll, /overscroll-behavior:|overscroll-behavior-y:contain|overflow:auto/, 'a wheel over the rubric reaches the page');
 });
