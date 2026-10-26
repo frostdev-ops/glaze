@@ -1273,3 +1273,11 @@ test('an office and its office hours on one line: the office ends where their la
   assert.equal(S.extract('Office: HS 340 · Office hours: Mon 11:00–12:00, Thu 2:00–3:00', { start: FALL, md: true }).prof.office.value, 'HS 340');
   assert.equal(S.extract('Office hours: Tue 2–3 PM (office: by the lab)', { start: FALL, md: true }).prof.office.value, '', 'an office named after its hours\' label is not read');
 });
+
+test('review: frequencies need an explicit end, not another assignment date', () => {
+  const text = 'Titre\tDate\tPondération\nQuiz en ligne\tChaque vendredi\t10 %\nExamen\tDecember 11\t30 %';
+  assert.deepEqual(reviewWeekly(text), []);
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday.\nFinal exam: December 11'), []);
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday, weeks 2–3.').map((d) => d.day), ['2026-09-11', '2026-09-18']);
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday.\nCourse ends: September 18').map((d) => d.day), ['2026-09-04', '2026-09-11', '2026-09-18']);
+});
