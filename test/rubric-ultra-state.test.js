@@ -146,3 +146,10 @@ test('an attempt of another user is never read as the student\'s', async () => {
   const d = real(); d.attempt.userId = '_43_1';
   assert.equal((await show(d)).node, null);
 });
+
+test('a graded row whose latest attempt is still being graded shows the rubric without that attempt\'s selections', async () => {
+  const d = real(); d.attempt.status = 'NEEDS_GRADING'; d.grade.lastAttempt.status = 'NEEDS_GRADING';
+  const p = await show(d);
+  assert.ok(p.node);
+  assert.deepEqual(p.selected, []);
+});
