@@ -169,6 +169,8 @@
   .sites li { grid-template-columns: minmax(0, 1fr) auto; }
   /* Settings → AI (lib/editor-ai.js). */
   .ai-device, .ai-endpoint { display: grid; gap: .6rem; margin-block-start: .75rem; }
+  #ai-connection > .seg { justify-self: start; inline-size: max-content; max-inline-size: 100%; flex-wrap: wrap; }
+  #ai-connection .seg label:has(input:disabled) { opacity: .5; cursor: not-allowed; }
   #ai-device-progress { inline-size: min(100%, 18rem); accent-color: var(--gz-accent); }
   #ai-said.err, #ai-failure { color: var(--gz-err); }
   #ai-model-unverified { color: var(--gz-ink-faint); }
