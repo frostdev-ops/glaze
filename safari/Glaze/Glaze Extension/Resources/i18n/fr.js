@@ -1178,6 +1178,7 @@
   "Kind": "Type",
   "Add to To Do": "Ajouter à Better To Do",
   "Important dates": "Dates importantes",
+  "Week 1 starts": "Début de la semaine 1",
   "Homework 20%, Exams 50%, …": "Devoirs 20 %, Examens 50 %, …",
   "Write weights as names and percents: Homework 20%, Exams 50%.": "Écrivez les pondérations sous forme de noms et de pourcentages : Devoirs 20 %, Examens 50 %.",
   "That e-mail address looks wrong.": "Cette adresse e-mail semble incorrecte.",

@@ -1178,6 +1178,7 @@
   "Kind": "Tipo",
   "Add to To Do": "Añadir a Better To Do",
   "Important dates": "Fechas importantes",
+  "Week 1 starts": "Inicio de la semana 1",
   "Homework 20%, Exams 50%, …": "Tareas 20 %, Exámenes 50 %, …",
   "Write weights as names and percents: Homework 20%, Exams 50%.": "Escribe las ponderaciones como nombres y porcentajes: Tareas 20 %, Exámenes 50 %.",
   "That e-mail address looks wrong.": "Esa dirección de correo parece incorrecta.",

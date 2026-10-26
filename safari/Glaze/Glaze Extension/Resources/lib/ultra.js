@@ -140,6 +140,16 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     }
     return out;
   };
+  // A course's own dates, for week 1 of a syllabus's dates by course week: → { known, start (ms, a date range's first
+  // instant, else undefined) }. The course list's course (memberships?expand=course) gives only its durationType
+  // (CONTINUOUS on the courses measured); the public course (v3 courses/{id}?fields=availability) gives a DateRange's
+  // days. known: false when nothing was said, or a date range without its start.
+  const ownDates = (k) => {
+    const pub = k?.availability?.duration, type = pub ? pub.type : k?.durationType;
+    if (typeof type !== 'string' || !type) return { known: false };
+    const start = pub && type === 'DateRange' ? Date.parse(str(pub.start, 40)) : NaN;
+    return { known: !/^date_?range$/i.test(type) || Number.isFinite(start), start: Number.isFinite(start) ? start : undefined };
+  };
   // The same courses in Canvas's course list's shape (id, name, course_code, a term with start_at and end_at, and
   // access_restricted_by_date for a closed one), for the planning features that read Canvas's: Better To Do's courses
   // and names, the class schedule's matching, the calendar file's "This term".
@@ -487,7 +497,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     },
   };
 
-  return { SEARCH_KINDS, searchItems, PEEK_FIELDS, peekItem, FILES_FIELDS, attachments, files, courses, list, current, standing, due, work, grade, trend, slices, read, planner, excepts, page, STALE };
+  return { SEARCH_KINDS, searchItems, PEEK_FIELDS, peekItem, FILES_FIELDS, attachments, files, courses, ownDates, list, current, standing, due, work, grade, trend, slices, read, planner, excepts, page, STALE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_ULTRA; else GZ_ULTRA;

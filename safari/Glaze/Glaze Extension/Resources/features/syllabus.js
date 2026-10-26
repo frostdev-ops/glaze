@@ -54,11 +54,15 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     // Ultra: you are the course list's user; the course's term (its start dates the syllabus's) is lib/ultra.js's reading.
     if (ultra) await need('lib/ultra.js', () => globalThis.GZ_ULTRA);
     const mem = ultra && await X.myCourses();
-    const [p, list] = ultra ? [{ id: mem.find((m) => m?.courseId === cid)?.userId }, Object.entries(GZ_ULTRA.courses(mem)).map(([id, c]) => ({ ...c, id }))]
+    const m = ultra && mem.find((x) => x?.courseId === cid);
+    const [p, list] = ultra ? [{ id: m?.userId }, Object.entries(GZ_ULTRA.courses(mem)).map(([id, c]) => ({ ...c, id }))]
       : await Promise.all([X.profile(), X.canvasCourses()]);
     if (!cid || !(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(String(p?.id))) throw new Error('no course or profile');
     const course = list.find((c) => String(c.id) === cid) || null;
-    const w = { uid: String(p.id), cid, key: L.key(location.origin, String(p.id), cid), course };
+    // The course's own dates (own: { known, start }), for week 1: Canvas's when they override the term; Ultra's kind from
+    // the course list, a date range's start asked when needed (ownStart).
+    const own = ultra ? GZ_ULTRA.ownDates(m?.course) : { known: true, start: course?.restrict_enrollments_to_course_dates ? Date.parse(course.start_at || '') : undefined };
+    const w = { uid: String(p.id), cid, key: L.key(location.origin, String(p.id), cid), course, own };
     const kept = L.tidy(await get('local', w.key));
     if (cid !== cidHere()) throw new Error('another course now');
     [who, rec] = [w, kept];
@@ -146,15 +150,44 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   // ---- reading ----------------------------------------------------------------------------------------------------
   const fromPage = () => open(null, true);
-  // ocr: what came from a picture (features/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
-  const extract = (text, ocr) => {
+  // An instant → UTC midnight of its day here (lib/syllabus.js week1), or undefined.
+  const dayOf = (ms) => { if (!Number.isFinite(ms)) return undefined; const d = new Date(ms); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
+  const options = (week1) => {
     const c = opened.course;
     const startAt = Date.parse(c?.term?.start_at || c?.start_at || '');
     // No start for a course with no term dates: the reader then places a year-less date by today, not as if today began the term.
-    const r = L.extract(text, { start: Number.isFinite(startAt) ? startAt : undefined, md: monthFirst(), hint: locale() });
+    return { start: Number.isFinite(startAt) ? startAt : undefined, md: monthFirst(), hint: locale(), week1 };
+  };
+  // ocr: what came from a picture (features/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
+  // week1: the course's own first day, for dates by course week.
+  const extract = (text, ocr, week1 = dayOf(opened.own.start)) => {
+    const r = L.extract(text, options(week1));
     if (!ocr) return r;
     const d = (f) => (GZ_IMPORT.doubt(ocr, f.src) ? { ...f, conf: 'check' } : f);
-    return { ...r, ocr, prof: Object.fromEntries(Object.entries(r.prof).map(([k, f]) => [k, d(f)])), hours: r.hours.map(d), meetings: r.meetings.map(d), dates: r.dates.map(d), scale: d(r.scale), weights: d(r.weights) };
+    return { ...r, ocr, prof: Object.fromEntries(Object.entries(r.prof).map(([k, f]) => [k, d(f)])), hours: r.hours.map(d), meetings: r.meetings.map(d), dates: r.dates.map(d), scale: d(r.scale), weights: d(r.weights), week1: r.week1.src ? d(r.week1) : r.week1 };
+  };
+  // Ultra: a course the course list doesn't say has no dates of its own, asked once (one GET of its public availability,
+  // never contentDetail). → its date range's start (ms), or undefined; a failed ask is asked again next time.
+  const ownStart = (w) => (w.own.known ? Promise.resolve(w.own.start)
+    : (w.asking ||= GZ_ULTRA.read({ origin: location.origin }).get(`/learn/api/public/v3/courses/${w.cid}?fields=availability`)
+      .then((j) => { w.own = { known: true, start: GZ_ULTRA.ownDates(j).start }; return w.own.start; }, () => { w.asking = null; return undefined; })));
+  // p's answer, or undefined after 5 s; Stop or closing the dialog (signal) ends the wait as a cancelled read.
+  const until = (p, signal) => new Promise((res, rej) => {
+    const stop = () => rej(Object.assign(new Error('stopped'), { cancelled: true }));
+    if (signal.aborted) { stop(); return; }
+    signal.addEventListener('abort', stop, { once: true });
+    setTimeout(() => res(undefined), 5000);
+    p.then(res);
+  });
+  // A text read, for review. On Ultra the course's own start is asked only when the text has dates by course week that
+  // would otherwise count from the term, or from nothing at all.
+  const reviewed = async (text, ocr, signal) => {
+    const w = opened, r = extract(text, ocr);
+    if (w.own.known || r.week1.from === 'text') return r;
+    const weekly = r.week1.value || (!Number.isFinite(options().start) && L.extract(text, options(dayOf(Date.now()))).week1.from === 'course');
+    if (!weekly) return r;
+    const start = dayOf(await until(ownStart(w), signal));
+    return Number.isFinite(start) ? extract(text, ocr, start) : r;
   };
 
   // ---- the dialog -------------------------------------------------------------------------------------------------
@@ -210,7 +243,9 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
         }
         if (ctl.signal.aborted) return;
         if (!text.trim()) { say.textContent = t('Choose a file or paste the text first.'); return; }
-        review(extract(text, ocr), text);
+        const r = await reviewed(text, ocr, ctl.signal);
+        if (ctl.signal.aborted) return;
+        review(r, text);
       } catch (e) { if (reading === ctl) say.textContent = e?.cancelled ? t('Stopped.') : e?.mine ? e.message : t("Glaze couldn't read that file."); }
       finally { if (reading === ctl) { reading = null; stop.hidden = true; } }
     };
@@ -326,7 +361,9 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
           // confidence by page.
           const n = ocrs.reduce((k, o) => k + o.pages, 0);
           const ocr = ocrs.length ? { pages: n, conf: Math.round(ocrs.reduce((k, o) => k + o.conf * o.pages, 0) / n), unsure: ocrs.flatMap((o) => o.unsure), blank: ocrs.reduce((k, o) => k + (o.blank || 0), 0) } : null;
-          review(extract(text, ocr), text);
+          const r = await reviewed(text, ocr, signal);
+          check();
+          review(r, text);
         } catch (e) { if (reading === ctl) say.textContent = signal.aborted ? t('Stopped.') : t("Glaze couldn't read that file."); }
         finally { if (reading === ctl) { reading = null; stop.hidden = true; } }
       };
@@ -387,16 +424,22 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     // The row's own id, from the first review of it: its To Do task follows the row through edits.
     row.dataset.id = d.id || L.newId([...list.children].map((r) => r.dataset.id).concat((kept?.dates || []).map((x) => x.id)));
     const add = todo && make('label', { className: 'gz-syl-todo' }, make('input', { type: 'checkbox', className: 'gz-syl-task' }), ` ${t('Add to To Do')}`);
+    // A date by course week moves with Week 1 starts until the student sets its day.
+    if (Number.isInteger(d.week) && Number.isInteger(d.wd)) {
+      Object.assign(row.dataset, { week: String(d.week), wd: String(d.wd) });
+      for (const type of ['input', 'change']) day.addEventListener(type, () => { row.dataset.own = '1'; });
+    }
     const [tag, src] = note(title, d.conf, d.src, saved || !d.src);
     row.append(title, day, kind, add || '', x(name, () => { row.remove(); list.querySelector('input')?.focus(); }), tag, src);
     return row;
   };
-  const rows = (legend, items, make1, blank) => {
+  // lead: a field above the rows (the dates' Week 1 starts).
+  const rows = (legend, items, make1, blank, lead) => {
     const list = make('div', { className: 'gz-syl-rows' });
     items.forEach((m, i) => list.append(make1(list, m, i + 1)));
     const add = button(t('Add'), '', () => { const r = make1(list, blank, list.children.length + 1); list.append(r); r.querySelector('input')?.focus(); });
     attr(add, { 'aria-label': `${t('Add')}: ${legend}` });
-    return make('fieldset', { className: 'gz-syl-set' }, make('legend', { textContent: legend }), list, add);
+    return make('fieldset', { className: 'gz-syl-set' }, make('legend', { textContent: legend }), lead, list, add);
   };
 
   const review = (r, read) => {
@@ -414,7 +457,19 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const blank = { label: '', days: [], start: '', end: '', location: '' };
     const hours = rows(t('Office hours'), r.hours, (l, m, n) => timeRow(l, m, n, saved), blank);
     const meets = rows(t('Class times'), r.meetings, (l, m, n) => timeRow(l, m, n, saved), blank);
-    const dates = rows(t('Important dates'), L.ids(r.dates, kept?.dates), (l, d, n) => dateRow(l, d, n, saved, todo, kept), { title: '', day: '', kind: 'exam' });
+    // The day dates by course week count from (lib/syllabus.js week1): the syllabus's (with its line), the course's own, or
+    // the term's ("Check this"). Changing it moves each of those rows whose day the student hasn't set.
+    const wk = r.week1?.value ? make('input', { type: 'date', value: r.week1.value }) : null;
+    const wkSrc = r.week1?.from === 'text' ? r.week1.src : '';
+    const week1 = wk && field(t('Week 1 starts'), wk, { conf: r.week1.conf, src: wkSrc }, saved || (r.week1.conf !== 'check' && !wkSrc));
+    const dates = rows(t('Important dates'), L.ids(r.dates, kept?.dates), (l, d, n) => dateRow(l, d, n, saved, todo, kept), { title: '', day: '', kind: 'exam' }, week1);
+    const move = () => {
+      for (const row of dates.querySelectorAll('.gz-syl-date')) {
+        const day = !row.dataset.own && row.dataset.week && L.weekDay(wk.value, +row.dataset.week, +row.dataset.wd);
+        if (day) row.querySelector('input[type="date"]').value = day;
+      }
+    };
+    for (const type of ['input', 'change']) wk?.addEventListener(type, move);
     const scale = text(r.scale.value ? r.scale.value.map(([l, v]) => `${l} ${v}`).join(', ') : '', { maxLength: 300, placeholder: 'A 93, A- 90, B+ 87, …' });
     // Used for the GPA without asking only when it's sure: a guess, or ranges that overlap or leave gaps, wait for a tick.
     const issues = r.scale.issues || [];
