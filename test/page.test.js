@@ -365,6 +365,18 @@ test('files in content items, as the content API sends them', () => {
   for (const item of [null, {}, { body: { rawText: '<a data-bbfile="not json" href="/bbcswebdav/x">x</a>' } }]) assert.deepEqual(P.files(item, o), []);
 });
 
+test('file anchors accept HTML quoting and never take attributes from inside another value', () => {
+  const origin = 'https://learn.example.edu';
+  const data = '{&quot;linkName&quot;:&quot;Syllabus.pdf&quot;}';
+  for (const body of [
+    `<a data-bbfile='{"linkName":"Syllabus.pdf"}' href='/bbcswebdav/xid-1'>Read</a>`,
+    `<a title="Read > download" data-bbfile="${data}" href="/bbcswebdav/xid-1">Read</a>`,
+    `<a DATA-BBFILE = '${data}' HREF = /bbcswebdav/xid-1>Read</a>`,
+  ]) assert.deepEqual(P.files({ body }, origin), [{ url: `${origin}/bbcswebdav/xid-1`, name: 'Syllabus.pdf', size: undefined }]);
+  const fake = `<a title=' data-bbfile="${data}" href="/bbcswebdav/fake"' href="https://other.example/file">Not a file</a>`;
+  assert.deepEqual(P.files({ body: fake }, origin), [], 'quoted prose is not an attribute of the anchor');
+});
+
 test('reading time and progress for focus mode', () => {
   assert.equal(P.readMinutes(''), 0);
   assert.equal(P.readMinutes(null), 0);

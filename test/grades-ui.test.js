@@ -1443,6 +1443,59 @@ test('Ultra syllabus import: a file exactly at the download limit retains its by
   assert.equal(p.readText(), SYL_TEXT);
 });
 
+for (const [name, anchor] of [
+  ['single-quoted attributes', `<a data-bbfile='{"linkName":"Quoted.pdf"}' href='${UO}/bbcswebdav/xid-504_1'></a>`],
+  ['a quoted greater-than sign', `<a title="Read > download" data-bbfile="{&quot;linkName&quot;:&quot;Quoted.pdf&quot;}" href="${UO}/bbcswebdav/xid-504_1"></a>`],
+]) test(`Ultra syllabus import: file anchors with ${name} are read in place`, async () => {
+  const got = [], pages = structuredClone(PAGES);
+  pages.results.find((c) => c.id === '_807_1').body = `<p>Before the file</p>${anchor}<p>After the file</p>`;
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }), note: () => '', doubt: () => false }, {
+    '/contents?': pages, '/bbcswebdav/': served(got, 8, 'application/pdf'),
+  });
+  await p.pick('Math Syllabus');
+  assert.equal(got.length, 1, 'valid HTML quoting must not hide a file link');
+  assert.equal(p.readText(), `Before the file\n\n${SYL_TEXT}\n\nAfter the file`);
+});
+
+test('Ultra syllabus import: only real file anchors on this origin and path are fetched, and only after a trusted click', async () => {
+  const got = [], pages = structuredClone(PAGES);
+  const data = '{&quot;linkName&quot;:&quot;Linked.pdf&quot;}';
+  const urls = ['https://other.example/bbcswebdav/x', `${UO}/learn/api/private`, '/bbcswebdav/../learn/api/private', '//other.example/bbcswebdav/x', 'javascript:alert(1)'];
+  pages.results.find((c) => c.id === '_807_1').body = urls.map((u) => `<a data-bbfile="${data}" href="${u}"></a>`).join('')
+    + `<a title=' data-bbfile="${data}" href="/bbcswebdav/fake"' href="https://other.example/file"></a>`
+    + `<div title='<a data-bbfile="${data}" href="/bbcswebdav/in-title">'></div>`
+    + `<!-- <a data-bbfile="${data}" href="/bbcswebdav/in-comment"></a> -->`
+    + `<script>const example = '<a data-bbfile="${data}" href="/bbcswebdav/in-script"></a>';</script>`
+    + bbfile(504, 'Real.pdf', 'application/pdf');
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }), note: () => '', doubt: () => false }, {
+    '/contents?': pages, '/bbcswebdav/': served(got, 8, 'application/pdf'),
+  });
+  p.doc.getElementById('gz-syl-doc').value = '1';
+  byText(p.dlg, 'Read this document').fire('click', false);
+  await settle(12);
+  assert.equal(got.length, 0, 'a page script cannot start a download');
+  await p.pick('Math Syllabus');
+  assert.deepEqual(got.map((f) => f.url), ['/bbcswebdav/pid-9504-dt-content-rid-504_1/xid-504_1']);
+  assert.equal(p.readText(), SYL_TEXT);
+});
+
+test('Ultra syllabus import: multiple OCR results retain weighted confidence, unsure lines and blank pages', async () => {
+  const notes = [];
+  const p = await docsPage({
+    read: async (file) => file.name.endsWith('.jpg')
+      ? { text: 'Chart text', ocr: { pages: 1, conf: 70, unsure: ['Chart text'] } }
+      : { text: SYL_TEXT, ocr: { pages: 3, conf: 90, unsure: ['Instructor: Dr. Test Person'], blank: 1 } },
+    note: (ocr) => { notes.push(JSON.parse(JSON.stringify(ocr))); return 'OCR note'; },
+    doubt: (ocr, line) => !!line && ocr.unsure.some((u) => line.includes(u)),
+  }, {
+    '/bbcswebdav/pid-9501-': served([], 8, 'image/jpeg'),
+    '/bbcswebdav/pid-9503-': served([], 8, 'application/pdf'),
+  });
+  await p.pick('Course Syllabus');
+  assert.deepEqual(notes, [{ pages: 4, conf: 85, unsure: ['Chart text', 'Instructor: Dr. Test Person'], blank: 1 }]);
+  assert.match(p.dlg.textContent, /Check this/);
+});
+
 // Codex B4 #3: Ultra moves from course to course in one document; what's saved belongs to the course on the page.
 const sylPage = () => {
   const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': { results: [] } } });
