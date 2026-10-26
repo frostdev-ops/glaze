@@ -360,6 +360,8 @@ test('files in content items, as the content API sends them', () => {
     { url: `${o}/bbcswebdav/pid-3-dt-content-rid-4_1/xid-4_1`, name: 'Syllabus & Schedule.pdf', size: undefined },
     { url: `${o}/bbcswebdav/pid-3-dt-content-rid-5_1/xid-5_1`, name: 'Foto.jpg', size: 72864 },
   ]);
+  // The public API's body is the HTML itself.
+  assert.deepEqual(P.files({ body: rawText }, o).map((f) => f.name), ['Syllabus & Schedule.pdf', 'Foto.jpg']);
   for (const item of [null, {}, { body: { rawText: '<a data-bbfile="not json" href="/bbcswebdav/x">x</a>' } }]) assert.deepEqual(P.files(item, o), []);
 });
 

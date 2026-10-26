@@ -765,6 +765,8 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     state.asked.push([o?.method, o?.redirect, url.replace(UO, '')]);
     if (failAsk(url)) return Promise.resolve({ ok: false, status: 503 });
     const body = Object.entries(answers).find(([k]) => url.includes(k))?.[1];
+    // A function answers as it likes (a file, say): (url, options) → the response.
+    if (typeof body === 'function') return Promise.resolve(body(url, o));
     return Promise.resolve(body ? { ok: true, text: async () => JSON.stringify(body) } : { ok: false, status: 404 });
   };
   // Promise or callback, as Chrome answers either.
@@ -1162,7 +1164,7 @@ test('Ultra syllabus import: on the outline under Ultra\'s details, from a docum
   const sel = p.doc.getElementById('gz-syl-doc');
   // Documents only, available ones only, a syllabus first; a page's text is its blocks'.
   assert.deepEqual(sel.children.map((o) => o.textContent), ['Course Syllabus', 'Reading: cells']);
-  assert.deepEqual(p.state.asked.map(([m, r, u]) => [m, r, u]), [['GET', 'error', '/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,availability.available']]);
+  assert.deepEqual(p.state.asked.map(([m, r, u]) => [m, r, u]), [['GET', 'error', '/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,contentHandler.isBbPage,availability.available']]);
   sel.value = '0';
   byText(dlg, 'Read this document').fire('click');
   await settle(12);
@@ -1175,6 +1177,127 @@ test('Ultra syllabus import: on the outline under Ultra\'s details, from a docum
   assert.ok(kept, 'kept under this site, user and course');
   assert.deepEqual(kept.scale, [['A', 93], ['B', 83], ['C', 73], ['D', 63], ['F', 0]]);
   assert.match(dlg.textContent, /Blackboard's own weights are the ones that count/);
+});
+
+// Ultra documents as bb.wpunj.edu answered (2026-10-26), with synthetic names and text: a document is a folder with
+// contentHandler.isBbPage, its text in document children ("blocks") titled like it, "ultraDocumentBody" or anything; a
+// block's body can be only a file's anchor (data-bbfile, HTML-escaped JSON, on /bbcswebdav/ of the site), or text and files.
+const bbfile = (rid, name, mimeType) => {
+  const j = JSON.stringify({ linkName: name, displayName: name, mimeType, alternativeText: name, render: 'inline', resourceUrl: `/bbcswebdav/xid-${rid}_1`, viewerUrl: `/ultra/viewer/${rid}` });
+  return `<div><div><a href="${UO}/bbcswebdav/pid-9${rid}-dt-content-rid-${rid}_1/xid-${rid}_1" data-bbfile="${j.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></a></div></div>`;
+};
+const item = (id, parentId, title, handler, more = {}) => ({ id, parentId, title, contentHandler: { id: `resource/x-bb-${handler}`, ...(handler === 'folder' && { isBbPage: !!more.page }) }, availability: { available: 'Yes' }, ...(more.body != null && { body: more.body }) });
+const PAGES = { results: [
+  item('_800_1', '_700_1', 'Week 1', 'folder'),
+  item('_801_1', '_700_1', 'Welcome', 'folder', { page: true }),
+  item('_802_1', '_801_1', 'Welcome', 'document', { body: '<p>Welcome to the course.</p>' }),
+  item('_803_1', '_801_1', 'ultraDocumentBody', 'document', { body: '<p>Read the course outline first.</p>' }),
+  item('_804_1', '_700_1', 'Course Syllabus', 'folder', { page: true }),
+  item('_805_1', '_804_1', 'ultraDocumentBody', 'document', { body: `<p>Office hours: Thursday 10:00-11:30</p>${bbfile(501, 'Grade chart.jpg', 'image/jpeg')}<p>Final exam week</p>${bbfile(502, 'Missing.pdf', 'application/pdf')}${bbfile(503, 'Syllabus 1234.pdf', 'application/pdf')}` }),
+  item('_806_1', '_700_1', 'Math Syllabus', 'folder', { page: true }),
+  item('_807_1', '_806_1', 'Math Syllabus', 'document', { body: bbfile(504, 'Math Syllabus Fall.pdf', 'application/pdf') }),
+] };
+// A file Ultra's /bbcswebdav/ address answers (after its redirect to the file store), its fetches noted in got.
+const served = (got, size, type) => (url, o) => {
+  got.push({ url: url.replace(UO, ''), credentials: o?.credentials, redirect: o?.redirect, signal: o?.signal });
+  return { ok: true, status: 200, headers: { get: (h) => (h.toLowerCase() === 'content-length' ? String(size) : null) }, blob: async () => ({ size, type }) };
+};
+// The outline with PAGES, the import dialog open; GZ_IMPORT stands in for features/import.js.
+const docsPage = async (GZ_IMPORT, files = {}) => {
+  const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': PAGES, ...files } });
+  p.ctx.GZ_IMPORT = GZ_IMPORT;
+  p.ctx.File = class File { constructor(parts, name, o) { Object.assign(this, { parts, name, type: o?.type }); } };
+  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  p.ctx.GZ_SYL_UI.sync(true);
+  await settle(12);
+  byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
+  await settle(12);
+  const dlg = p.doc.getElementById('gz-syl-dlg');
+  const pick = async (title) => {
+    const sel = p.doc.getElementById('gz-syl-doc');
+    sel.value = String(sel.children.findIndex((o) => o.textContent === title));
+    byText(dlg, 'Read this document').fire('click');
+    await settle(20);
+  };
+  return { ...p, dlg, pick, status: () => find(dlg, (e) => /\bgz-syl-status\b/.test(e.className)).textContent, readText: () => find(dlg, (e) => e.tagName === 'PRE')?.textContent || '' };
+};
+const SYL_TEXT = 'Instructor: Dr. Test Person\nEmail: test.person@example.edu\nGrading scale: A 93, B 83, C 73, D 63, F 0';
+
+test('Ultra syllabus import: a document is a page (a folder Ultra marks isBbPage) listed under its own title, its blocks read together in order', async () => {
+  const p = await docsPage({ read: async () => ({ text: '', ocr: null }), note: () => '', doubt: () => false });
+  const sel = p.doc.getElementById('gz-syl-doc');
+  assert.deepEqual(sel.children.map((o) => o.textContent), ['Course Syllabus', 'Math Syllabus', 'Welcome'], 'pages, not their blocks ("ultraDocumentBody"), syllabus-like first');
+  const asked = p.state.asked.map(([, , u]) => u);
+  assert.deepEqual(asked, ['/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,contentHandler.isBbPage,availability.available'], 'no file is fetched while listing');
+  assert.doesNotMatch(asked[0], /contentDetail|contentHandler(,|&|$)/, 'never contentDetail or the whole contentHandler (LTI secrets)');
+  await p.pick('Welcome');
+  assert.match(p.dlg.textContent, /Check what Glaze found/);
+  assert.match(p.readText(), /Welcome to the course\.[\s\S]*Read the course outline first\./, 'both blocks, in order');
+});
+
+test("Ultra syllabus import: a page whose only block is a file's link reads the file, fetched with the session, into the review", async () => {
+  const got = [], reads = [];
+  const GZ_IMPORT = { read: async (file, opts) => { reads.push({ file, opts }); return { text: SYL_TEXT, ocr: null }; }, note: () => '', doubt: () => false };
+  const p = await docsPage(GZ_IMPORT, { '/bbcswebdav/pid-9504-': served(got, 2048, 'application/pdf') });
+  assert.equal(got.length, 0, 'not fetched before the click');
+  await p.pick('Math Syllabus');
+  assert.deepEqual(got.map(({ url, credentials, redirect }) => ({ url, credentials, redirect })), [{ url: '/bbcswebdav/pid-9504-dt-content-rid-504_1/xid-504_1', credentials: 'same-origin', redirect: undefined }], 'same-origin credentials, the redirect to the file store followed');
+  assert.equal(reads.length, 1);
+  assert.equal(reads[0].file.name, 'Math Syllabus Fall.pdf');
+  assert.equal(reads[0].file.type, 'application/pdf');
+  assert.equal(reads[0].opts.signal, got[0].signal, 'one AbortController for the fetch and the read');
+  assert.match(p.dlg.textContent, /Check what Glaze found/);
+  assert.match(p.dlg.textContent, /Dr\. Test Person/);
+  assert.match(p.readText(), /Grading scale: A 93/);
+});
+
+test("Ultra syllabus import: a block's text and its files are read in the block's order; a file that fails is left out, and pictures' OCR is noted", async () => {
+  const got = [], reads = [];
+  const out = { 'Grade chart.jpg': { text: 'Homework 40%\nExams 60%', ocr: { pages: 1, conf: 70, unsure: ['Homework 40%'] } }, 'Syllabus 1234.pdf': { text: SYL_TEXT, ocr: null } };
+  const GZ_IMPORT = { read: async (file) => { reads.push(file.name); return out[file.name]; }, note: (o) => `OCR ${o.pages} ${o.conf} ${o.unsure.join('|')} ${o.blank}`, doubt: (o, line) => o.unsure.some((u) => line.includes(u)) };
+  const p = await docsPage(GZ_IMPORT, {
+    '/bbcswebdav/pid-9501-': served(got, 1000, 'image/jpeg'),
+    '/bbcswebdav/pid-9502-': (url) => { got.push({ url: url.replace(UO, '') }); return { ok: false, status: 404 }; },
+    '/bbcswebdav/pid-9503-': served(got, 3000, 'application/pdf'),
+  });
+  await p.pick('Course Syllabus');
+  assert.deepEqual(got.map((g) => g.url.split('/')[2]), ['pid-9501-dt-content-rid-501_1', 'pid-9502-dt-content-rid-502_1', 'pid-9503-dt-content-rid-503_1'], 'in document order');
+  assert.deepEqual(reads, ['Grade chart.jpg', 'Syllabus 1234.pdf'], 'the file that failed to fetch is skipped');
+  const text = p.readText();
+  const at = ['Office hours: Thursday', 'Homework 40%', 'Final exam week', 'Instructor: Dr. Test Person'].map((s) => text.indexOf(s));
+  assert.ok(at.every((i, n) => i >= 0 && (n === 0 || i > at[n - 1])), `in order: ${JSON.stringify(text)}`);
+  assert.match(p.dlg.textContent, /Dr\. Test Person/);
+  assert.match(p.dlg.textContent, /OCR 1 70 Homework 40% 0/, "the picture's OCR, for the review's note");
+});
+
+test("Ultra syllabus import: a document with nothing readable says so; a file's read stops with Stop, and when the dialog closes", async () => {
+  const held = [];
+  const GZ_IMPORT = { read: (file, opts) => new Promise((resolve, reject) => { held.push({ opts, resolve }); opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('cancelled'), { cancelled: true }))); }), note: () => '', doubt: () => false };
+  let fail = true;
+  const got = [];
+  const p = await docsPage(GZ_IMPORT, { '/bbcswebdav/pid-9504-': (url, o) => (fail ? { ok: false, status: 403 } : served(got, 2048, 'application/pdf')(url, o)) });
+  await p.pick('Math Syllabus');
+  assert.equal(p.status(), "Glaze couldn't read that file.");
+  assert.doesNotMatch(p.dlg.textContent, /Check what Glaze found/);
+  fail = false;
+  await p.pick('Math Syllabus');
+  assert.equal(held.length, 1);
+  assert.equal(p.status(), 'Reading…');
+  const stop = byText(p.dlg, 'Stop reading');
+  assert.equal(stop.hidden, false);
+  stop.fire('click');
+  await settle(12);
+  assert.equal(held[0].opts.signal.aborted, true);
+  assert.equal(p.status(), 'Stopped.');
+  assert.equal(stop.hidden, true);
+  await p.pick('Math Syllabus');
+  assert.equal(held.length, 2);
+  p.dlg.close();
+  await settle(12);
+  assert.equal(held[1].opts.signal.aborted, true, 'closing the dialog calls the read off');
+  held[1].resolve({ text: SYL_TEXT, ocr: null });
+  await settle(12);
+  assert.doesNotMatch(p.dlg.textContent, /Check what Glaze found/);
 });
 
 // Codex B4 #3: Ultra moves from course to course in one document; what's saved belongs to the course on the page.
