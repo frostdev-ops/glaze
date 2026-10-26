@@ -12,7 +12,7 @@ const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 12) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ORIGIN = 'https://school.instructure.com';
-const TEXT = 'Instructor: Dr. Amara Okafor\nMidterm exam: October 14, 2026\nHW 3 · Fri 9/25/2026';
+const TEXT = 'Instructor: Dr. Amara Okafor\nMidterm exam: October 14, 2026\nHW 3 · Fri 9/25/2026\nHW 4 · Fri 10/2/2026';
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const shadows = new WeakMap(); // Visible to the student, inaccessible through the page DOM.
 
@@ -88,8 +88,8 @@ const broker = ({ status = { on: true, allowed: true, ready: true, provider: 'de
   if (m.op === 'run') runs.push({ m, end: (output) => post({ id: m.id, type: 'end', output, meta: {} }), fail: (error) => post({ id: m.id, type: 'error', error }) });
 };
 const none = { text: null, quote: null };
-const OUTPUT = { prof: { name: none, email: none, office: { text: 'Hollis 2140', quote: 'Instructor: Dr. Amara Okafor' }, note: none }, hours: [], meetings: [], scale: [], weights: [],
-  dates: [{ title: 'HW 3', kind: 'due', when: 'Fri 9/25/2026', quote: 'HW 3 · Fri 9/25/2026' }], week1: none };
+const OUTPUT = { prof: { name: none, email: none, office: none, note: none }, hours: [], meetings: [], scale: [], weights: [],
+  dates: [{ title: 'HW 3', kind: 'due', when: 'Fri 9/25/2026', quote: 'HW 3 · Fri 9/25/2026' }, { title: 'HW 4', kind: 'due', when: 'Fri 10/2/2026', quote: 'HW 4 · Fri 10/2/2026' }], week1: none };
 const reviewDates = (dlg) => dlg.all.filter((e) => /gz-syl-date/.test(e.className || '')).map((row) => row.children[0].value);
 
 test('AI off, no connection, or syllabus import not allowed: no port is opened and the review is Glaze\'s own', async () => {
@@ -118,7 +118,7 @@ test('AI on: "Reading with AI…" while it reads, then the merged review with AI
   runs[0].end(OUTPUT);
   await settle();
   assert.equal(p.title(dlg), 'Check what Glaze found');
-  assert.deepEqual(reviewDates(dlg), ['Midterm exam', 'HW 3']);
+  assert.deepEqual(reviewDates(dlg), ['Midterm exam', 'HW 3', 'HW 4']);
   const marks = dlg.all.filter((e) => /gz-syl-ai/.test(e.className || ''));
   assert.ok(marks.length >= 2 && marks.every((e) => e.text === 'Check this'), 'AI\'s values: "Check this", marked as AI\'s');
   assert.ok(dlg.all.some((e) => e.text === 'From: “HW 3 · Fri 9/25/2026”'), 'with their quote');
@@ -330,7 +330,7 @@ test('Read this syllabus on Canvas\'s page: AI on this computer reads it too, an
     await settle();
     const dlg = p.body.children[0];
     assert.equal(p.title(dlg), 'Check what Glaze found');
-    assert.deepEqual(reviewDates(dlg), runsWanted ? ['Midterm exam', 'HW 3'] : ['Midterm exam']);
+    assert.deepEqual(reviewDates(dlg), runsWanted ? ['Midterm exam', 'HW 3', 'HW 4'] : ['Midterm exam']);
   }
   // AI off: straight to the review, as without AI.
   const p = page({ syllabus: html, broker: broker() });
