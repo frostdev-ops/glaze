@@ -133,7 +133,7 @@ const engineJson = (...blocks) => {
 test('ocrText: a table row whose cells are several lines, or centred in it, is one line; level rows and a paragraph stay lines', () => {
   // A course calendar laid out as the engine reads it in one block: the week's dates centred in their cell, so the
   // engine puts them on a line with the second line of the cells beside them, or on a line of their own; bullets read
-  // as "e"; the week's number in a coloured disc read as a tall "Ge".
+  // as "e"; the week's number in a coloured disc read as a tall "Ge"; specks.
   const r = D.ocrText(engineJson([
     [['Week', 260, 340, 352, 387], ['&', 355, 370, 352, 386], ['Dates', 385, 470, 353, 387], ['Topics', 1175, 1290, 352, 387], ['Work', 2146, 2230, 352, 387]],
     [['Unit', 760, 830, 472, 503], ['1', 845, 860, 473, 503], ['e', 1897, 1913, 481, 496, 80], ['Reading', 1940, 2070, 473, 504], ['quiz', 2085, 2150, 473, 512]],
@@ -141,7 +141,8 @@ test('ocrText: a table row whose cells are several lines, or centred in it, is o
       ['Chapter', 760, 890, 528, 559], ['2:', 905, 930, 528, 559], ['Cells', 945, 1030, 528, 559],
       ['e', 1897, 1913, 536, 552, 88], ['Lab', 1940, 2000, 528, 559], ['report', 2015, 2120, 528, 566], ['#1:', 2135, 2190, 528, 559], ['Microscopes', 2205, 2420, 528, 566]],
     [['Unit', 760, 830, 670, 701], ['2', 845, 860, 670, 701], ['e', 1897, 1913, 650, 666], ['Problem', 1940, 2080, 642, 673], ['set', 2095, 2150, 642, 673], ['1', 2165, 2180, 642, 673]],
-    [['e', 1897, 1913, 705, 721], ['Midterm', 1940, 2090, 697, 728], ['exam', 2105, 2190, 697, 728]],
+    // A cell's border read as two words the engine was unsure of.
+    [['E', 2101, 2120, 661, 714, 63], ['e', 1897, 1913, 705, 721], ['Midterm', 1940, 2090, 697, 728], ['exam', 2105, 2190, 697, 728], ['ae', 2336, 2380, 709, 723, 47]],
     [['Sep.', 260, 330, 707, 738], ['14', 352, 390, 707, 738], ['–', 404, 422, 722, 726], ['20', 436, 473, 707, 738], ['Chapter', 760, 890, 725, 756], ['3:', 905, 930, 725, 756], ['Energy', 945, 1060, 725, 763]],
     [['e', 1897, 1913, 760, 776], ['Essay', 1940, 2030, 752, 783], ['outline', 2045, 2160, 752, 783], ['due', 2175, 2235, 752, 783]],
   ], [
