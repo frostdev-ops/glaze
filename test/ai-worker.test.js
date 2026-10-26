@@ -63,7 +63,7 @@ test('a run from a page reaches only the connection\'s server, with the key, and
   await w.send({ type: 'glaze:ai-config', op: 'set', provider: 'openai', cfg: { base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY } }, editor());
   const { port, say } = w.connect('glaze:ai', lms());
   await w.settle();
-  // A task the worker would import from its own files (lib/ai/broker.js TASK_FILES); here added in its realm.
+  // A task the worker would import with the harness (lib/background.js aiFiles); here added in its realm.
   require('node:vm').runInContext(`GZ_AI_TASKS.add({ id: 'example.echo', version: 1, input: (r) => r, check: (o) => o,
     build: (i, { text }) => text.request({ system: 'Echo.', data: [{ label: 'text', text: i.text }] }),
     output: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false } })`, w.context);
@@ -113,4 +113,14 @@ test('nothing of AI is in a page\'s first script, and the worker loads it only w
   assert.ok(!/^importScripts\([^)]*ai\//m.test(bg), 'not in the worker\'s first imports');
   const w = worker();
   assert.equal(w.context.GZ_AI_BROKER, undefined);
+});
+
+test('Firefox\'s event page loads every file of the harness the worker would import, by name', () => {
+  // scripts/package-firefox.sh: the files named in the worker's importScripts calls, as it reads them.
+  const bg = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+  const named = new Set([...bg.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => `lib/${f}`)));
+  const shipped = fs.readdirSync(path.join(__dirname, '..', 'lib/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js').map((f) => `lib/ai/${f}`);
+  assert.ok(shipped.length >= 10);
+  for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
+  assert.ok(!named.has('lib/ai/providers/mock.js'), 'the mock is for tests and the eval');
 });
