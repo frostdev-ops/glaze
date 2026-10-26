@@ -367,6 +367,7 @@ const STYLE_READS = [
   ['features/petworld.js', 'getComputedStyle(n)', 1], // at most 30 ancestors when a pet/toy acquires a content anchor; never in the scroll handler
   ['features/petworld.js', 'getComputedStyle(e)', 1], // only matching panel roots with layout boxes, while the pet is wandering
   ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
+  ['features/announce-read.js', 'getComputedStyle(p)', 1], // the scroller above Ultra's Announcements list, once per read-circle click or Mark all as read
   ['features/coursetabs.js', 'getComputedStyle(p)', 1], // the scroller above the course tabs, once a tab switch lands
   ['features/coursetabs.js', 'getComputedStyle(list)', 1], // the tab strip's direction, once per arrow key
   // A course tab's sketch (lib/coursetabs.js sketch): off-screen subtrees stop at their outer box, without reading their
