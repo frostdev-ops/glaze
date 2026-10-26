@@ -172,6 +172,21 @@ test('ocrText: preserves engine lines on skewed and quarter turned pages', () =>
   assert.equal(D.ocrText(turned).text, 'First line\nSecond line');
 });
 
+test('ocrText: a distant tiny mark does not turn a horizontal schedule into skewed text', () => {
+  // Like the light Canvas fixture: a button speck extends the heading's estimated
+  // baseline, although its actual words are level. The heading and times still join.
+  const json = engineJson([
+    [['CHEM', 20, 80, 20, 40], ['1200', 85, 140, 20, 40], ['i', 920, 924, 37, 41, 90]],
+    [['Edit', 890, 940, 33, 68], ['Delete', 980, 1060, 37, 58]],
+    [['Tue', 20, 60, 59, 79], ['2:00', 70, 120, 59, 79], ['-', 130, 140, 69, 72],
+      ['4:50', 150, 200, 59, 79], ['PM', 210, 240, 59, 79]],
+  ]);
+  json.blocks[0].paragraphs[0].lines[0].baseline = { x0: 20, y0: 39, x1: 924, y1: 50 };
+  const r = D.ocrText(json);
+  assert.equal(r.text, 'CHEM 1200 Tue 2:00 - 4:50 PM\tEdit i\tDelete');
+  assert.deepEqual(r.unsure, []);
+});
+
 test('ocrText: keeps large single letters and numbers as text instead of icons', () => {
   for (const heading of ['A', 'I', 'C', '10', '1a', 'An']) {
     const r = D.ocrText(engineJson([
