@@ -39,6 +39,15 @@ const assignment = { id: '22', course_id: '11', name: 'Evidence and reasoning', 
   rubric_settings: { id: '33', title: 'Evidence and reasoning', points_possible: 20, hide_points: false, hide_score_total: false },
   rubric: ['Evidence', 'Reasoning'].map((description, r) => ({ id: `c${r}`, points: 10, description, long_description: 'Readable criterion', ratings: [10,5,0].map((points, i) => ({ id: `r${r}${i}`, points, description: ['Excellent','Developing','Beginning'][i], long_description: 'Readable detail' })) })) };
 const canvasHTML = (kind) => `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assignment</title><link rel="stylesheet" href="/dist/brandable_css/rubric.css"><style>body{margin:0;padding:1rem;font:1rem/1.5 system-ui}*{box-sizing:border-box}</style></head><body class="assignments show"><div id="application" class="ic-app"><header id="header"></header><nav id="section-tabs"></nav><main id="content"><h1>A fictional assessment</h1><div id="assignments-2-student-header"></div>${kind === 'observer' ? '<div id="observer-picker-mountpoint"></div>' : ''}<section data-testid="rubric-tab"><button id="native-rubric" data-testid="fill-out-rubric-toggle" aria-expanded="${kind === 'visible'}">View Rubric</button><div data-testid="rubric-preview" ${kind === 'visible' ? '' : 'hidden'}>Native rubric</div></section></main></div><script>window.ENV={current_user_id:'42',ISOBSERVER:${kind === 'observer'},peer_review_mode_enabled:${kind === 'peer'},restrict_quantitative_data:false};window.__nativeRubricClicks=0;document.getElementById('native-rubric').addEventListener('click',function(){window.__nativeRubricClicks++;this.setAttribute('aria-expanded','true');document.querySelector('[data-testid="rubric-preview"]').hidden=false;});</script></body></html>`;
+// The other two pages with Ultra's rubric link, in the real pages' shapes (2026-10-26): a discussion's Details panel beside
+// the thread, and the attempt page View instructions opens (React; the link known only by its analytics id).
+const hostHTML = (kind) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="/ultra/"><title>Blackboard Learn</title><style>
+* { box-sizing:border-box; } body { margin:0; font:1rem/1.5 system-ui; } content-page-header { display:block; padding:1rem 1.5rem; border-bottom:1px solid; }
+.course-main-container, .makeStylescontainer-0-2-1034 { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:24px; padding:24px; } #native-rubric-panel { padding:1rem; border:1px solid; }
+</style></head><body><div id="site-wrap">${kind === 'discussion'
+  ? '<section class="routed-page route-view-container"><content-page-header>Synthetic course / Discussion</content-page-header><div class="routed-page-body"><section class="panel-content"><div id="discussions-tabpanel"><div class="panel-content-inner"><div id="full-discussions" class="full course-discussion js-course-skip-link-target"><div class="course-main-container"><div class="thread"><h1>A fictional discussion</h1><p>The thread, with replies.</p></div><div class="layer-details"><div><bb-discussion-settings><div class="full-panel-details"><div class="discussion-settings student-details"><div class="full-panel-details-info"><h3>Details &amp; Information</h3><div class="element-card discussion-info-list"><div class="element-details discussion-info-details"><span>Grading rubric</span><div class="settings-link"><a id="native-rubric" class="rubric-title" href="javascript:void(0);" analytics-id="components.directives.discussionSettings.gradedWithRubric.li">This item is graded with a rubric</a></div></div></div></div></div></div></bb-discussion-settings></div></div></div></div></div></div></section></div></section>'
+  : '<section class="routed-page route-view-container bb-offcanvas-container"><content-page-header>Synthetic course / Attempt</content-page-header><div class="routed-page-body"><bb-assignment-attempt-authoring-panel class="react-container"><div><div class="makeStylespanelRoot-0-2-1056"><div class="makeStylesbaseBody-0-2-1059"><div class="makeStylesheaderRoot-0-2-1062"><h1>A fictional assignment</h1></div><div class="makeStylescontentRoot-0-2-1064"><div class="makeStylesbody-0-2-1120"><div class="makeStylescontainer-0-2-1034"><div class="makeStylesauthoring-0-2-1036"><h2>Assignment instructions</h2><p>Explain how you evaluated the evidence.</p><div id="bb-editorassignment-attempt-authoring-submission" role="textbox" contenteditable="true">Untouched draft</div></div><div class="makeStylesdetails-0-2-1037"><div class="makeStylessidePanelContentMarginFix-0-2-1049"><h2>Details &amp; Information</h2><div class="makeStyleslistWrapper-0-2-204"><div class="makeStylesroot-0-2-205"><div class="makeStylescontentRoot-0-2-206"><span>Grading rubric</span><a id="native-rubric" class="MuiTypography-root MuiLink-root MuiLink-underlineAlways" data-analytics-id="assignment.attempt.authoring.rubric.view.link" href="/ultra/courses/_101_1/assessment/_8120_1/attempt/create">This item is graded with a rubric</a></div></div></div></div><div><h3>Grading</h3><p>Maximum points: 20</p></div></div></div></div></div><div class="makeStylesfooterWrapper-0-2-1068"><footer class="makeStylesfooterRoot-0-2-1140"><button id="save" type="button">Save and Close</button><button id="submit" type="button">Submit</button></footer></div></div></div></div></bb-assignment-attempt-authoring-panel></div></section>'}</div>
+<script>window.__nativeRubricClicks=0;document.getElementById('native-rubric').addEventListener('click',e=>{e.preventDefault();window.__nativeRubricClicks++;if(!document.getElementById('native-rubric-panel')){const p=document.createElement('section');p.id='native-rubric-panel';p.textContent='Native rubric';document.body.append(p);}});</script></body></html>`;
 const find = (node, test) => {
   if (test(node)) return node;
   for (const n of [...node.children || [], ...node.shadowRoots || [], ...(node.contentDocument ? [node.contentDocument] : [])]) { const v = find(n, test); if (v) return v; }
@@ -87,6 +96,7 @@ const tableInfo = function () {
       requests.push({ method: req.method(), origin:u.origin, path:u.pathname, query:u.search });
       if (req.method() !== 'GET' || ![site,canvas].includes(u.origin)) return r.abort();
       if (u.origin === site && u.pathname === '/frame-shell') return r.fulfill({ contentType:'text/html',body:`<!doctype html><style>body{margin:0}iframe{width:100%;height:900px;border:0}</style><iframe name="gz-ctab:_101_1" src="${site}${assessment}"></iframe>` });
+      if (req.isNavigationRequest() && u.origin === site && /\/(discussion|attempt)\//.test(u.pathname)) return r.fulfill({ contentType:'text/html',body:hostHTML(u.pathname.includes('/discussion/') ? 'discussion' : 'attempt') });
       if (req.isNavigationRequest()) return r.fulfill({ contentType:'text/html',body:u.origin === canvas ? canvasHTML(scenario) : scenario === 'review' ? fs.readFileSync(path.join(__dirname,'../test/fixtures/ultra-docreview.html'),'utf8').replace('<head>','<head><base href="/ultra/">') : html });
       if (u.pathname.endsWith('/rubric.css')) return r.fulfill({contentType:'text/css',body:''});
       let data = { results:[] };
@@ -109,8 +119,9 @@ const tableInfo = function () {
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts);
     const setMode = async (show='auto',inline=true) => worker.evaluate(async rubric=>chrome.storage.sync.set({rubric}),{show,inline});
     const open = async ({width=1440,kind='normal',url=`${site}${assessment}`,show='auto',inline=true,rtl=false,large=false,reduced=false,light=false,sidebar=false}={}) => {
-      await worker.evaluate(async enhance=>chrome.storage.sync.set({enhance}),{...settings.enhance,sidebar});
-      scenario=kind; await setMode(show,inline); await worker.evaluate(async ({preset,colors})=>chrome.storage.sync.set({preset,colors}), {preset:light?'Paper':'Frost',colors:G.GZ_PRESETS.find(([name])=>name===(light?'Paper':'Frost'))[1]}); const p=await context.newPage(); p.on('pageerror',e=>errors.push(e.message)); await p.setViewportSize({width,height:900}); await p.emulateMedia({reducedMotion:reduced?'reduce':'no-preference'});
+      // One write per page: chrome.storage.sync allows 120 a minute, and a full run opens dozens of pages.
+      const look=light?'Paper':'Frost'; scenario=kind;
+      await worker.evaluate(async s=>chrome.storage.sync.set(s),{enhance:{...settings.enhance,sidebar},rubric:{show,inline},preset:look,colors:G.GZ_PRESETS.find(([name])=>name===look)[1]}); const p=await context.newPage(); p.on('pageerror',e=>errors.push(e.message)); await p.setViewportSize({width,height:900}); await p.emulateMedia({reducedMotion:reduced?'reduce':'no-preference'});
       const finalRead = show !== 'site' && !['visible','peer','observer','slow','review'].includes(kind) && !url.endsWith('/frame-shell') ? p.waitForResponse(r => url.startsWith(canvas) ? r.url().includes('/submissions/self?') : r.url().includes(['forbidden','unopened'].includes(kind) ? '/gradebook/columns/_300_1?' : '/gradebook/attempts/_400_1?')).then(response=>({response}),error=>({error})) : null;
       await p.goto(url); if (!url.endsWith('/frame-shell')) await p.waitForFunction(()=>document.documentElement.hasAttribute('data-gz-motion')); 
       if(rtl||large) await p.evaluate(({rtl,large})=>{if(rtl)document.documentElement.dir='rtl';if(large)document.documentElement.style.fontSize='24px';},{rtl,large});
@@ -229,6 +240,27 @@ const tableInfo = function () {
       await setMode('popup'); await until(async()=>!await info(cdp),'popup screenshot mode');
       await page.locator('#native-rubric').click(); await until(()=>info(cdp,'gz-popup'),'popup screenshot');
       await page.waitForTimeout(450); await screenshot(page,`popup-${width}-${look}`); await page.close();
+    }
+    // A discussion's and View instructions' rubric links: Glaze's pop-up, out of the link with the genie, in place of Ultra's
+    // Rubric Details; in Glaze's sidebar and in Ultra's own column, light and dark.
+    for(const [name,url,kind] of [['discussion',`${site}/ultra/courses/_101_1/discussion/_8120_1`,'normal'],['attempt',`${site}/ultra/courses/_101_1/assessment/_8120_1/attempt/create`,'submitted']].filter(([n])=>run(n))) {
+      await worker.evaluate(async motion=>chrome.storage.sync.set({motion}),{...settings.motion,level:'expressive',followSystem:false});
+      for(const [sidebar,light] of [[true,false],[true,true],[false,false]]) {
+        const where=`${name}${sidebar?' in the sidebar':''}${light?' (light)':''}`, {page,cdp}=await open({url,kind,sidebar,light});
+        if(sidebar) await page.waitForSelector('[data-gz-sidebar-host="native"] #native-rubric');
+        await page.waitForFunction(()=>document.documentElement.getAttribute('data-gz-motion')==='expressive');
+        check(!await page.locator('#gz-rubric').count(),`${where}: nothing goes inline beside Ultra's rubric link`);
+        await page.locator('#native-rubric').click(); const x=await until(()=>info(cdp,'gz-popup'),`${where} pop-up`);
+        check(x.rows===2&&x.cols===4&&x.selected===(kind==='normal'?1:0)&&x.dialogFits&&x.focused,`${where}: the link opens Glaze's rubric pop-up ${kind==='normal'?'with the graded selection':'with no selections before grading'}`);
+        check(x.animations.includes(420),`${where}: the pop-up opens with the genie (${x.animations.join(',')} ms)`);
+        check(await page.evaluate(()=>window.__nativeRubricClicks===0&&!document.getElementById('native-rubric-panel'))&&new URL(page.url()).pathname===new URL(url).pathname,`${where}: Ultra's own Rubric Details does not open`);
+        if(name==='attempt') check(await page.locator('#bb-editorassignment-attempt-authoring-submission').textContent()==='Untouched draft','the attempt\'s draft is untouched');
+        await screenshot(page,`${name}-popup${sidebar?'-sidebar':''}-${light?'light':'dark'}`);
+        await page.keyboard.press('Escape'); await until(async()=>!await page.locator('#gz-popup').count(),`${where} pop-up closes`);
+        await until(()=>page.evaluate(()=>document.activeElement?.id==='native-rubric'),`${where} focus returns`); check(true,`${where}: closing returns focus to the link`);
+        await page.close();
+      }
+      await worker.evaluate(async motion=>chrome.storage.sync.set({motion}),settings.motion);
     }
     if(run('sidebar')) {
       const {page,cdp}=await open({sidebar:true}); await until(()=>info(cdp),'inline with sidebar');

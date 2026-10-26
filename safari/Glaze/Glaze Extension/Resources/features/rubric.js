@@ -1,4 +1,4 @@
-// Assignment rubrics, read with the student's session. The site's controls stay in place and work until a complete
+// Assignment and discussion rubrics, read with the student's session. The site's controls stay in place and work until a complete
 // rubric is ready; the same read-only table goes inline or into Glaze's shared pop-up. Loaded by features/routes.js.
 var GZ_RUBRIC_UI = globalThis.GZ_RUBRIC_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -39,7 +39,14 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
   };
   const host = (route) => {
     if (ctx.site === 'ultra') {
-      if (route.view !== 'overview') return null;
+      if (route.view !== 'overview') {
+        // A discussion's Details panel and the attempt page View instructions opens have no room beside the link: Glaze's
+        // pop-up opens from it in place of Ultra's Rubric Details panel.
+        const links = [...document.querySelectorAll(route.view === 'discussion'
+          ? 'a.rubric-title[analytics-id="components.directives.discussionSettings.gradedWithRubric.li"]'
+          : 'a[data-analytics-id="assignment.attempt.authoring.rubric.view.link"]')].filter((e) => shown(e) || active?.link === e);
+        return links.length === 1 ? { box: links[0].parentElement, row: links[0], link: links[0], inline: false } : null;
+      }
       const links = [...document.querySelectorAll('.assessment-details-section li.js-rubric-overview a.graded-with-rubric-button[analytics-id="course.content.assessment.overview.gradedWithRubric"]')].filter((e) => shown(e) || active?.link === e);
       if (links.length !== 1) return null;
       const link = links[0];
