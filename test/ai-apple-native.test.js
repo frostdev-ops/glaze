@@ -53,11 +53,8 @@ test('native errors carry only fixed categories and reasons', { skip: !supported
   assert.deepEqual(result.rate, { ok: false, error: 'request-rejected', reason: 'rate', status: 429 });
   assert.deepEqual(result.cancelled, { ok: false, error: 'cancelled' });
 });
-test('native PCC availability alone never proves this extension can use it', { skip: !supported }, () => {
-  assert.equal(result.cloud.state, 'unavailable');
-  if (!['device', 'not-ready', 'unknown', 'quota'].includes(result.cloud.reason)) {
-    assert.equal(result.cloud.reason, 'unverified'); assert.equal(result.cloud.unverified, true);
-  }
+test('the native side refuses any model but the one on this device', { skip: !supported }, () => {
+  assert.deepEqual(result.cloud, { ok: false, error: 'request-rejected', reason: 'model' });
 });
 test('native cancellation arriving before registration prevents the run', { skip: !supported }, () => {
   assert.deepEqual(result.earlyRun, { ok: false, error: 'cancelled' });
