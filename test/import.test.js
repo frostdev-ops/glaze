@@ -489,9 +489,9 @@ const ACCURACY = [
   ['syllabus.png', 'OCR, screenshot', 20 / 21],
   ['transcript-photo.jpg', 'OCR, phone photo, sharp', 1],
   // The class schedule's own list on Canvas: a course on one line, its times on the next, buttons centred beside both,
-  // which make the three one row. ENG 1100's heading carries OCR specks that keep its times apart from it, and places
-  // without a word like "Hall" aren't recognised as places.
-  ['canvas-schedule-light.png', 'OCR, Canvas screenshot, light', 0.7],
+  // which make the three one row. On the dark one BIO 1100L's heading isn't joined to its times; on both, a place
+  // followed by " - Days off: 1" is read with it, and so isn't the place.
+  ['canvas-schedule-light.png', 'OCR, Canvas screenshot, light', 0.8],
   ['canvas-schedule-dark.png', 'OCR, Canvas screenshot, dark', 0.6],
 ];
 
