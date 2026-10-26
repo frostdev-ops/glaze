@@ -20,12 +20,6 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   const LIMIT = { message: 16 << 20, perMinute: 6, all: 30, test: 20000 };
   const FEATURE = /^[a-z][a-z0-9-]{0,31}$/;
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
-  // The tasks Glaze ships, by id → their file (under lib/, as the worker imports it). lib/background.js imports each at install.
-  const TASK_FILES = {};
-  const load = (id) => {
-    if (!T().get(id) && Object.hasOwn(TASK_FILES, id) && typeof importScripts === 'function') importScripts(TASK_FILES[id]);
-    return T().get(id);
-  };
 
   // ---- the connections ------------------------------------------------------------------------------------------------
   // The worker's own IndexedDB (glaze-ai, store vault): no page's script can read it, unlike storage.local, and it is in no
@@ -198,6 +192,6 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     return { ok: false, error: 'op' };
   });
 
-  return { LIMIT, TASK_FILES, CONNECTIONS, load, vault, connect, status, config, _reset: () => { inflight.clear(); starts.clear(); } };
+  return { LIMIT, CONNECTIONS, vault, connect, status, config, _reset: () => { inflight.clear(); starts.clear(); } };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_BROKER; else GZ_AI_BROKER;
