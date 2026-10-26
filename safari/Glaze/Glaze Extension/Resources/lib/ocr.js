@@ -8,7 +8,9 @@ const LANGS = new Set(['eng', 'deu', 'spa', 'fra', 'nld', 'por']);
 const here = (f) => new URL(`tesseract/${f}`, location.href).href;
 
 const start = async (langs) => {
-  M = await TesseractCore({ locateFile: here, TesseractProgress: (p) => postMessage({ type: 'progress', p: Math.max(0, (p - 30) / 70) }) });
+  // The engine's own notes ("Estimating resolution as 330", "Image too small to scale!!") go nowhere: Chrome lists each
+  // console line of the extension as an error. A failure still throws and is posted as 'error'.
+  M = await TesseractCore({ locateFile: here, print: () => {}, printErr: () => {}, TesseractProgress: (p) => postMessage({ type: 'progress', p: Math.max(0, (p - 30) / 70) }) });
   for (const l of langs) {
     const r = await fetch(here(`${l}.traineddata.gz`));
     if (!r.ok) throw new Error(`no ${l} model`);
