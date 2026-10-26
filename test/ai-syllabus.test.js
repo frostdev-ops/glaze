@@ -376,4 +376,6 @@ test('AI fills an office its quote labels or gives on the professor\'s contact l
   assert.equal(read({ text: 'Law Building 4.22', quote: 'Office: Law Building 4.22.' }), 'Law Building 4.22');
   assert.equal(read({ text: '555-0142', quote: 'mgrunewald@music.ashcombe.edu · Fine Arts 214 · 555-0142' }), '');
   assert.equal(read({ text: 'Fine Arts 214', quote: 'Dr. Margit Grunewald' }), '');
+  const hours = 'Office hours: Mondays in Library 2';
+  assert.equal(A.interpret(task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Library 2', quote: hours } } }, { text: hours }), OPTS, L.extract(hours, OPTS), hours).prof.office.value, '', 'where office hours are held is not the office');
 });
