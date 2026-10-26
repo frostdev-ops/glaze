@@ -1290,3 +1290,11 @@ test('review: a weekday and week range do not make quiz commentary a recurring e
   assert.deepEqual(ruleDays('Quiz en ligne chaque vendredi (semaines 2 à 3).', { ...reviewOpts, hint: 'fr' }), ['09-11 exam', '09-18 exam']);
   assert.deepEqual(ruleDays('Controles semanales: los viernes, semanas 2 a 3.', { ...reviewOpts, hint: 'es' }), ['09-11 exam', '09-18 exam']);
 });
+
+test('review: every part of an exception list must be resolved before weekly expansion', () => {
+  for (const except of ['September 11, 18 and 25', 'September 11 and the final week', 'spring break and the final week']) {
+    assert.deepEqual(reviewWeekly(`Quizzes are due every Friday, weeks 1–6, except ${except}.\nSpring break: September 18\nCourse ends: October 9`), [], except);
+  }
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday, weeks 1–4, except September 11 and September 18.').map((d) => d.day), ['2026-09-04', '2026-09-25']);
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday from December 18 until January 15, except December 25 and January 1.').map((d) => d.day), ['2026-12-18', '2027-01-08', '2027-01-15']);
+});
