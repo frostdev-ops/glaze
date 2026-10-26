@@ -271,11 +271,16 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
           const texts = [], ocrs = [];
           const tooLarge = () => Object.assign(new Error(t('That file is too large.')), { mine: true });
           let why = null;
-          // The HTML split at its anchors: an anchor files() takes is a file, the rest is text.
-          for (const [i, s] of html(chosen).split(/(<a\s[^>]*>)/i).entries()) {
+          // Tokenize real tags, not anchor-like text inside attributes, comments or scripts.
+          const source = html(chosen);
+          let at = 0;
+          for (const tk of D.tokens(source, new Set(['script', 'style', 'template', 'noscript', 'textarea', 'title']))) {
             check();
-            const f = i % 2 ? GZ_PAGE.files({ body: s }, location.origin)[0] : null;
-            if (!f) { texts.push(s); continue; }
+            if (tk.name?.toLowerCase() !== 'a' || tk.close) continue;
+            const f = GZ_PAGE.files({ body: source.slice(tk.at, tk.end) }, location.origin)[0];
+            if (!f) continue;
+            texts.push(source.slice(at, tk.at));
+            at = tk.end;
             try {
               // Bound the download by the largest file the importer reads, even without a trustworthy size header.
               // The importer checks the detected kind's own limit afterwards (a renamed file can still be a PDF).
@@ -311,6 +316,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
             } catch (e) { if (signal.aborted) throw e; why = e; }
           }
           check();
+          texts.push(source.slice(at));
           // Runs of HTML become text together, so a split never cuts a line in two.
           const parts = [];
           for (const x of texts) if (typeof x === 'string' && typeof parts.at(-1) === 'string') parts[parts.length - 1] += x; else parts.push(x);
