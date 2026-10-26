@@ -269,6 +269,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
           check();
           const D = globalThis.GZ_DOCTEXT;
           const texts = [], ocrs = [];
+          const tooLarge = () => Object.assign(new Error(t('That file is too large.')), { mine: true });
           let why = null;
           // The HTML split at its anchors: an anchor files() takes is a file, the rest is text.
           for (const [i, s] of html(chosen).split(/(<a\s[^>]*>)/i).entries()) {
@@ -276,18 +277,34 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
             const f = i % 2 ? GZ_PAGE.files({ body: s }, location.origin)[0] : null;
             if (!f) { texts.push(s); continue; }
             try {
-              // Only what features/import.js reads, by its name, no larger than the largest it reads (a PDF), checked
-              // by the size Ultra's store says before it's fetched; features/import.js checks each kind's own after.
+              // Bound the download by the largest file the importer reads, even without a trustworthy size header.
+              // The importer checks the detected kind's own limit afterwards (a renamed file can still be a PDF).
               if (!D.kind(f.name)) continue;
+              if (+f.size > D.READ.pdf) throw tooLarge();
               const r = await fetch(f.url, { credentials: 'same-origin', signal });
-              check();
-              if (!r.ok || +r.headers.get('content-length') > D.READ.pdf) continue;
-              const b = await r.blob();
-              check();
-              if (b.size > D.READ.pdf) continue;
+              const body = r.body?.getReader();
+              let file;
+              try {
+                check();
+                if (!r.ok) continue;
+                if (+r.headers.get('content-length') > D.READ.pdf) throw tooLarge();
+                if (!body) continue;
+                const chunks = [];
+                let size = 0;
+                for (;;) {
+                  const { done, value } = await body.read();
+                  check();
+                  if (done) break;
+                  if ((size += value.byteLength) > D.READ.pdf) throw tooLarge();
+                  chunks.push(value);
+                }
+                file = new File(chunks, f.name, { type: r.headers.get('content-type') || '' });
+                chunks.length = 0;
+                if (file.size > D.READ.pdf) throw tooLarge();
+              } finally { if (body) { body.cancel().catch(() => {}); body.releaseLock(); } }
               await need('features/import.js', () => globalThis.GZ_IMPORT);
               check();
-              const got = await GZ_IMPORT.read(new File([b], f.name, { type: b.type }), { signal, progress: (w) => { if (live() && reading === ctl && !signal.aborted) say.textContent = w; } });
+              const got = await GZ_IMPORT.read(file, { signal, progress: (w) => { if (live() && reading === ctl && !signal.aborted) say.textContent = w; } });
               check();
               texts.push({ text: got.text || '' });
               if (got.ocr) ocrs.push(got.ocr);
