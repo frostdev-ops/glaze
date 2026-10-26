@@ -85,6 +85,9 @@ Error codes: the model request's category (`cancelled`, `timeout`, `provider-una
 Settings' top frame (`options.html`) manages connections with `chrome.runtime.sendMessage({ type: 'glaze:ai-config', op })`:
 `get`, `set { id, cfg: { provider, base, model, key?, images?, context? } }`, `remove { id }`, `test { id }`,
 `models { id }`. Request the host from a click first with `chrome.permissions.request({ origins: [origin] })`.
+Settings → AI (`lib/editor-ai.js`) keeps two connections, `endpoint` and `device`, and asks for the host with
+`GZ_SITE.reach` from the Save or Test click. The device's download is `{ op: 'prepare', provider: 'device' }`; its progress
+comes as runtime messages `{ type: 'glaze:ai-config', op: 'progress', provider: 'device', progress | loaded, total? }`.
 
 ## Limits
 
