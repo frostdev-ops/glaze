@@ -627,7 +627,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     let block = 0, role = '', col = -1;
     lines.forEach((line, i) => {
       const cells = line.split('\t');
-      if (cells.length > 1 && cells.every((c) => c.length <= 40 && !/\d/.test(c))) col = cells.findIndex((c) => HOURS_RE.test(c));
+      if (cells.filter((c) => /\p{L}{2}/u.test(c)).length > 1 && cells.every((c) => c.length <= 40 && !/\d/.test(c))) col = cells.findIndex((c) => HOURS_RE.test(c));
       else if (cells.length < 2) col = -1;
       const hoursHere = HOURS_RE.test(line) && col < 0;
       const found = meetingsIn(line, lines[i - 1] || '', lang);
@@ -649,9 +649,9 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   };
 
   // ---- the professor ----------------------------------------------------------------------------------------------
-  const PROF = 'instructors?|course instructor|professors?|professora|lecturers?|teachers?|faculty|taught by|dozent(?:in|en)?|lehrende[rnm]?|lehrkraft|lehrperson|profesor(?:a|es)?|docentes?|enseignant(?:e|es)?|professeure?s?|chargée? de cours|intervenante?|docent(?:e|en)?|hoogleraar|instructeur|leraar|professor(?:a|es)?';
+  const PROF = 'instructors?|course instructor|facilitators?|professors?|professora|lecturers?|teachers?|faculty|taught by|dozent(?:in|en)?|lehrende[rnm]?|lehrkraft|lehrperson|profesor(?:a|es)?|docentes?|enseignant(?:e|es)?|professeure?s?|chargée? de cours|intervenante?|docent(?:e|en)?|hoogleraar|instructeur|leraar|professor(?:a|es)?';
   const HON = "(?:(?:prof(?:essor|essora|esseur|\\.)?|dr|dra|doctor|mr|mrs|ms|mx|miss|herr|frau|sr|sra|srta|m|mme|mlle|dhr|mevr|mw)\\.?\\s+)*";
-  const NAME = "(\\p{Lu}[\\p{L}'’-]*\\.?(?:\\s+(?:(?:van|von|de|da|del|der|den|di|dos|das|du|la|le|ter|ten|zu)\\s+)*\\p{Lu}[\\p{L}'’-]*\\.?){0,4})";
+  const NAME = "(\\p{Lu}[\\p{L}'’-]*\\.?(?:[^\\S\\t\\n]+(?:(?:van|von|de|da|del|der|den|di|dos|das|du|la|le|ter|ten|zu)[^\\S\\t\\n]+)*\\p{Lu}[\\p{L}'’-]*\\.?){0,4})"; // within one cell
   // Labels match in any case; a name starts with a capital, so it is matched apart.
   const PROF_LINE = new RegExp(`^[\\s•*-]*(?:${PROF})[^:\\t\\n]{0,24}?[:\\t]\\s*(.*)$`, 'iu');
   const HON_RE = new RegExp(`^${HON}`, 'iu');
@@ -697,7 +697,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     for (let i = 0; i < lines.length && !email.value; i++) if (/^\s*(?:e-?mail|correo|courriel|mail)/i.test(lines[i]) && EMAIL.test(lines[i])) email = field(EMAIL.exec(lines[i])[0], 'check', at(lines, i));
     for (let i = 0; i < lines.length && !email.value; i++) if (EMAIL.test(lines[i])) email = field(EMAIL.exec(lines[i])[0], 'check', at(lines, i));
     let office = field();
-    const OFFICE = /^[\s•*-]*(?:office(?:\s+(?:location|room))?|büro|raum|sprechzimmer|despacho|oficina|bureau|kantoor|kamer|gabinete)\s*[:\t]\s*(.+)$/iu;
+    const OFFICE = /(?:^|\s·\s)[\s•*-]*(?:office(?:\s+(?:location|room))?|büro|raum|sprechzimmer|despacho|oficina|bureau|kantoor|kamer|gabinete)\s*[:\t]\s*(.+)$/iu;
     for (let i = 0; i < lines.length && !office.value; i++) {
       const m = OFFICE.exec(lines[i]);
       if (m && !HOURS_RE.test(lines[i])) office = field(clean(m[1].split(EMAIL)[0]).slice(0, 120), 'sure', at(lines, i));
@@ -739,9 +739,9 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     return v === 0 || v >= 10 ? { min: v, max: null } : null;
   };
   const SCALE_LABEL = any('grading scale|grade scale|grading|letter grades?|grade distribution|notenskala|notenschlüssel|notenspiegel|bewertungsschema|escala de calificaci[oó]n(?:es)?|calificaciones|barème|bareme|échelle de notation|cijferschaal|beoordelingsschaal|escala de notas|conceitos');
-  const scale = (s, lines, starts) => {
+  const scale = (s, lines, starts, shown = lines) => {
     const found = [];
-    const pair = new RegExp(`(?:^|[\\s(;,|•])${LETTER}(?![\\p{L}\\d+])[ \\t]*(?:[:=]|\\(|-(?=\\s))?[ \\t]*\\(?[ \\t]*${RANGE}`, 'gmu');
+    const pair = new RegExp(`(?<![^\\s(;,|•])${LETTER}(?![\\p{L}\\d+])[ \\t]*(?:[:=]|\\(|-(?=\\s))?[ \\t]*\\(?[ \\t]*${RANGE}`, 'gmu');
     for (const m of s.matchAll(pair)) {
       const r = range(m, 2);
       if (r && r.min <= 100) found.push({ letter: m[1].toUpperCase(), ...r, at: m.index + m[0].indexOf(m[1]) });
@@ -767,17 +767,30 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     }
     // The longest run, in text order (each within 160 characters of the one before), of different letters whose lowest
     // percentages fall. A letter inside the run that breaks the order is counted: the scale is out of order.
+    // A table of two columns read across ("A 93–100\tC+ 77–79.99" / "A- 90–92.99\tC 70–76.99") is its letters ranked by
+    // their percentages, where that is the letters' own order (A+, A, A-, B+ … F) and the ranges meet.
     found.sort((a, b) => a.at - b.at);
+    const rank = (l) => 'ABCDEF'.indexOf(l[0]) * 3 + (l[1] === '+' ? 0 : l[1] === '-' ? 2 : 1);
     let best = [], order = 0;
     for (let i = 0; i < found.length; i++) {
       const run = [found[i]];
-      let skipped = 0, kept = 0;
-      for (let j = i + 1; j < found.length && j < i + 40 && found[j].at - found[j - 1].at < 160; j++) {
+      let skipped = 0, kept = 0, j = i + 1;
+      for (; j < found.length && j < i + 40 && found[j].at - found[j - 1].at < 160; j++) {
         if (found[j].min < run.at(-1).min && !run.some((r) => r.letter === found[j].letter)) { run.push(found[j]); kept = skipped; } else skipped++;
       }
+      const across = found.slice(i, j).filter((e, k, a) => a.findIndex((x) => x.letter === e.letter) === k).sort((x, y) => y.min - x.min);
+      const fits = across.every((e, k) => !k || (rank(e.letter) > rank(across[k - 1].letter) && (e.max == null || (e.max < across[k - 1].min && across[k - 1].min - e.max <= 1 + 1e-9))));
       if (run.length > best.length) [best, order] = [run, kept];
+      if (fits && across.length > best.length) [best, order] = [across, 0];
     }
     if (best.length < 3) return field();
+    // A failing letter written after the run with what it is below ("60-69% D, below 60% F").
+    const lastF = best.at(-1), tail = s.slice(lastF.at, lastF.at + 80);
+    const failing = !/^[EF]/.test(lastF.letter) && new RegExp(`^[^\\n]*?(?:(?:${UNDER})\\s*${NUM}\\s*%?\\s*[:=]?\\s*\\(?([EF])(?![\\p{L}\\d+])|(?<![\\p{L}])([EF])\\s*[:=]?\\s*\\(?(?:${UNDER})\\s*${NUM})`, 'iu').exec(tail);
+    if (failing && Math.abs(n(failing[1] || failing[4]) - lastF.min) < 0.51) best = [...best, { letter: (failing[2] || failing[3]).toUpperCase(), min: 0, max: n(failing[1] || failing[4]) - 0.01, at: lastF.at + failing.index }];
+    // Letters on a 0–10 or a 0–20 scale (conceitos "A: 9,0 a 10,0") are read as percents.
+    const top = Math.max(...best.map((e) => e.max ?? e.min)), k = top >= 9 && top <= 10 ? 10 : top >= 16 && top <= 20 ? 5 : 1;
+    if (k > 1) best = best.map((e) => ({ ...e, min: e.min * k, max: e.max == null ? null : e.max * k }));
     // What makes the scale a guess: ranges that overlap, leave a gap (more than a point), or letters out of order.
     const issues = order ? [{ kind: 'order' }] : [];
     const show = (e) => `${e.letter} ${e.min}${e.max != null ? `–${Math.round(e.max * 100) / 100}` : ''}`;
@@ -787,10 +800,19 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       if (lo.max >= hi.min) issues.push({ kind: 'overlap', a: show(hi), b: show(lo) });
       else if (hi.min - lo.max > 1 + 1e-9) issues.push({ kind: 'gap', a: show(hi), b: show(lo) });
     }
-    const [a, b] = [lineAt(starts, best[0].at), lineAt(starts, best.at(-1).at)];
+    const [a, b] = [lineAt(starts, Math.min(...best.map((e) => e.at))), lineAt(starts, Math.max(...best.map((e) => e.at)))];
     const near = lines.slice(Math.max(0, a - 6), a + 1).some((l) => SCALE_LABEL.test(l));
-    const f = field(best.map(({ letter, min }) => [letter, Math.round(min * 100) / 100]), near && !issues.length ? 'sure' : 'check', clean(lines.slice(a, b + 1).join(' · ')).slice(0, 300));
+    const f = field(best.map(({ letter, min }) => [letter, Math.round(min * 100) / 100]), near && !issues.length && k === 1 && shown === lines ? 'sure' : 'check', clean(shown.slice(a, b + 1).join(' · ')).slice(0, 300));
     return { ...f, ranges: best.map(({ letter, min, max }) => [letter, min, max]), issues };
+  };
+  // A scale in points ("A\t900–1000"), where the grading gives its total, as percents of that total.
+  const pointScale = (s, lines, starts, pts) => {
+    const f = scale(s, lines, starts);
+    if (f.value || !(pts > 100)) return f;
+    const pct = (l) => l.replace(/(?<![\d.,])\d{3,5}(?:[.,]\d+)?(?![\d%])/g, (x) => (n(x) <= pts ? String(Math.round((n(x) / pts) * 10000) / 100) : x));
+    const ls = lines.map(pct), st = [];
+    for (let i = 0, k = 0; k < ls.length; k++) { st.push(i); i += ls[k].length + 1; }
+    return scale(ls.join('\n'), ls, st, lines);
   };
   const lineAt = (starts, i) => { let lo = 0, hi = starts.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (starts[mid] <= i) lo = mid; else hi = mid - 1; } return lo; };
 
@@ -823,8 +845,10 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       .replace(/\s*,\s*/g, ' / ').trim().slice(0, 60); // a row of several ("Homework, Tests 75%") as one name the review screen can save
     const pair = (m, name, w) => ({ name: tidy(name), weight: n(w), at: m.index, end: m.index + m[0].length });
     const ok = (p) => p.name && /\p{L}{2}/u.test(p.name) && p.weight > 0 && p.weight <= 100 && !TOTAL.test(p.name);
-    const forward = [...t.matchAll(/(\p{L}[\p{L}\p{M}\d &/'’.,()-]{1,60}?)[ \t]*[:\t=–-]?[ \t]*(\d{1,3}(?:[.,]\d+)?)[ \t]*%/gu)].map((m) => pair(m, m[1], m[2])).filter(ok);
+    const forward = [...t.matchAll(/(\p{L}[\p{L}\p{M}\d &/'’.,()+-]{1,60}?)[ \t]*[:\t=–-]?[ \t]*(\d{1,3}(?:[.,]\d+)?)[ \t]*%/gu)].map((m) => pair(m, m[1], m[2])).filter(ok);
     const backward = [...t.matchAll(/(\d{1,3}(?:[.,]\d+)?)[ \t]*%[ \t]*[:\t–-]?[ \t]*(\p{Lu}[\p{L}\p{M}\d &/'’-]{2,40})/gu)].map((m) => pair(m, m[2], m[1])).filter(ok);
+    // Where a position's line starts, looking back 200 characters at most.
+    const home = (k) => { const a = Math.max(0, k - 200); return a + t.slice(a, k).lastIndexOf('\n') + 1; };
     // Next to each other: at most 40 characters and two line breaks between one and the next; 20 at most a block.
     const blocks = (pairs) => {
       const out = [];
@@ -832,13 +856,25 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       for (const p of pairs) {
         const prev = cur.at(-1);
         const gap = prev && t.slice(prev.end, p.at);
-        // A line that starts a labelled section of its own ("Grading scale: A 90%") starts a new block.
-        const section = prev && gap.includes('\n') && /^\s*\p{L}[\p{L} ]{2,30}:/u.test(lines[lineAt(starts, p.at)]);
+        // A line that starts a labelled section of its own ("Grading scale: A 90%") starts a new block, not one whose label
+        // is the item's name ("Final exam: 25%").
+        const ls = home(p.at), lab = /^\s*\p{L}[\p{L} ]{2,30}:/u.exec(t.slice(ls, p.at + 1));
+        const section = prev && gap.includes('\n') && lab && ls + lab[0].length <= p.at;
         if (prev && (section || p.at - prev.end > 40 || (gap.match(/\n/g) || []).length > 2 || cur.length >= 20)) { out.push(cur); cur = []; }
         cur.push(p);
       }
       if (cur.length) out.push(cur);
-      return out.filter((b) => b.length >= 2).map((b) => ({ b, sum: b.reduce((x, p) => x + p.weight, 0) }));
+      return out.filter((b) => b.length >= 2).map((b) => ({ b, sum: b.reduce((x, p) => x + p.weight, 0) })).map(trim);
+    };
+    // A sentence's percent at a block's end ("To pass you need 70% overall:", "a late penalty of 10% per day") is no
+    // category, when without it the block adds up to 100.
+    const prose = (p) => { const ls = home(p.at), le = t.slice(p.end, p.end + 200).indexOf('\n') + p.end; return p.name.split(' ').length > 5 || /[.!?]\s/.test(p.name) || /\p{L}{2}.*\s\S/u.test(t.slice(ls, p.at)) || /(?:[ \p{P}]+\p{L}+){2}/u.test(t.slice(p.end, le < p.end ? p.end + 200 : le).split('\t')[0]); };
+    const trim = (x) => {
+      if (Math.abs(x.sum - 100) < 0.6) return x;
+      let b = x.b;
+      while (b.length > 2 && prose(b[0]) && Math.abs(x.sum - 100) >= 0.6) { x = { b: b.slice(1), sum: x.sum - b[0].weight }; b = x.b; }
+      while (b.length > 2 && prose(b.at(-1)) && Math.abs(x.sum - 100) >= 0.6) { x = { b: b.slice(0, -1), sum: x.sum - b.at(-1).weight }; b = x.b; }
+      return x;
     };
     // A table or a chart read column by column puts each percent on a line of its own: labels first ("Homework" / "45%",
     // a chart's labels, one wrapped as "Oral audio" / "recordings"), percents first ("10%" / "Participation"), or a
@@ -903,10 +939,39 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const labelled = ({ b }) => { const a = lineAt(starts, b[0].at); return lines.slice(Math.max(0, a - 6), a + 1).some((l) => WEIGHT_LABEL.test(l)); };
     const whole = all.find((x) => Math.abs(x.sum - 100) < 0.6);
     const best = whole || all.find(labelled);
-    if (!best) return field();
+    if (!best) return points(lines);
     const [a, b] = [lineAt(starts, best.b[0].at), lineAt(starts, best.b.at(-1).at)];
     const f = field(fold(best.b), whole && labelled(best) ? 'sure' : 'check', clean(lines.slice(a, b + 1).join(' · ')).slice(0, 300));
     return { ...f, issues: whole ? [] : [{ kind: 'sum', total: Math.round(best.sum * 100) / 100 }] };
+  };
+
+  // Grading in points only (owner, 2026-10-26): a table of categories and their points ("Essays (4 × 100)\t400" …
+  // "Total\t1000") under a header that says points, as percents of the total; the total row, where there is one, must be
+  // the sum. To check, with the lines it came from; points: the total, for a scale in points.
+  const POINTS = any('points|pts|punkte|puntos|pontos|punten|puntaje|puntuación|pontuação');
+  const PTS_ROW = /^[\s•*▪-]*(\p{L}[^\t\n]{0,60}?)\s*(?:\t|:|\s[-–]\s|\.{3,}|\()\s*(\d{1,5})\s*(?:pts?\.?|points?|punkte|puntos|pontos|punten)?\s*\)?\s*$/iu;
+  const PTS_UNIT = /\d\s*(?:pts?\.?|points?|punkte|puntos|pontos|punten)\s*\)?\s*$/iu;
+  const points = (lines) => {
+    for (let i = 0; i < lines.length; i++) {
+      // A header that says points ("Assignment\tPoints"), or rows that each do ("Homework – 150 points").
+      const head = lines[i].split('\t'), titled = head.length > 1 && head.some((c) => POINTS.test(c)) && !head.some((c) => /\d/.test(c));
+      if (!titled && !(PTS_ROW.test(lines[i]) && PTS_UNIT.test(lines[i]))) continue;
+      const rows = [];
+      let total = 0, j = titled ? i + 1 : i;
+      for (; j < lines.length && j < i + 22; j++) {
+        const m = PTS_ROW.exec(lines[j]);
+        if (!m || (!titled && !PTS_UNIT.test(lines[j]))) break;
+        const name = clean(m[1].replace(/\s*\([^)]*\)/g, ' ').replace(/^[^:]{2,30}:\s+(?=\p{L}{2})/u, '')).slice(0, 60); // a heading joined to it
+        if (TOTAL.test(name.split(/\s/)[0])) { total = +m[2]; j++; break; }
+        if (!/\p{L}{2}/u.test(name)) break;
+        rows.push({ name, pts: +m[2] });
+      }
+      const sum = rows.reduce((x, r) => x + r.pts, 0);
+      if (rows.length < 2 || !sum || (total && Math.abs(total - sum) > 0.005 * sum)) { i = Math.max(i, j - 1); continue; }
+      const f = field(rows.map((r) => ({ name: r.name, weight: Math.round((r.pts / sum) * 10000) / 100 })), 'check', clean(lines.slice(i, j).join(' · ')).slice(0, 300));
+      return { ...f, issues: [], points: sum };
+    }
+    return field();
   };
 
   // The same office hours given twice (a contact box, then the instructor's section) are one, with the label and place of
@@ -944,15 +1009,15 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     // The text's language by its day names, else the page's (opts.hint), for W14's day tables.
     const lang = CL().detect(s, opts.hint || 'en');
     const all = scan(lines, lang);
-    const wk = deadlines(lines, { ...o, lang }, opts.week1);
+    const wk = deadlines(lines, { ...o, lang }, opts.week1), w = weights(s, lines, starts);
     return {
       prof: professor(lines, lang),
       hours: once(all.filter((m) => m.hours).map(({ hours, ...m }) => m)),
       meetings: all.filter((m) => !m.hours).map(({ hours, ...m }) => m),
       dates: wk.rows.map(({ i, ...d }) => d).slice(0, 100),
       week1: wk.week1,
-      scale: scale(s, lines, starts),
-      weights: weights(s, lines, starts),
+      scale: pointScale(s, lines, starts, w.points),
+      weights: w.points ? (({ points, ...x }) => x)(w) : w,
       truncated: all0.length > MAX,
     };
   };
