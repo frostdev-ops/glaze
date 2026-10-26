@@ -94,17 +94,99 @@ test('policy: a read-only run refuses writes, an unattended one declines what wo
   const unattended = mock([{ toolCalls: [call('r', 'reminder_add', { at: 'x', reason: 'y' })] }, { text: 'ok' }]);
   await go(unattended, { headless: true });
   assert.deepEqual(answers(unattended.seen[1]), [{ id: 'r', declined: true, note: "This needs the student's confirmation and nobody is watching. Nothing was run." }]);
-  // approvals 'off' would run a write; the policy turns read-only after the batch is triaged, just before the call runs.
+  // A policy narrowing while the model answers prevents the proposed write.
   let ran = false, current = { tools: 'all', approvals: 'off' };
   const w = TL.define({ ...erase, run: async () => { ran = true; } });
   const later = mock([{ toolCalls: [call('w', 'notes_clear', { reason: 'Tidy up.' })] }, { text: 'ok' }]);
-  const out = await L.run({ request, tools: [w], call: (r, o) => P.run('mock', r, later, o), policy: () => current,
-    emit: (e) => { if (e.type === 'step_start') current = { tools: 'read-only', approvals: 'off' }; } });
+  const out = await L.run({ request, tools: [w], call: async (r, o) => { const result = await P.run('mock', r, later, o); current = { tools: 'read-only', approvals: 'off' }; return result; }, policy: () => current });
   assert.equal(ran, false);
-  assert.equal(out.steps[0].error, 'This run is now read-only. Nothing ran.');
+  assert.equal(out.steps[0].error, 'read-only');
   assert.equal(L.narrow({ tools: 'read-only', approvals: 'off' }, { tools: 'all', approvals: 'off' }).tools, 'read-only', 'a policy only narrows');
   assert.equal(L.narrow({ tools: 'all', approvals: 'outbound' }, { tools: 'all', approvals: 'off' }).approvals, 'outbound');
-  assert.ok(L.pauses('all', 'write') && L.pauses('outbound', 'confirm') && !L.pauses('outbound', 'write') && !L.pauses('off', 'confirm') && !L.pauses('all', 'read'));
+  assert.ok(L.pauses('all', 'write') && L.pauses('outbound', 'confirm') && L.pauses('outbound', 'write') && L.pauses('off', 'confirm') && !L.pauses('all', 'read'));
+});
+
+test('every write and confirm waits for approval even when the requested approval policy is off or outbound', async () => {
+  for (const approvals of ['off', 'outbound', 'all']) for (const kind of ['write', 'confirm']) {
+    let ran = false;
+    const tool = TL.define({ name: 'change_it', kind, description: 'Change something.', run: async () => { ran = true; } });
+    const cfg = mock([{ toolCalls: [call('w', 'change_it', { reason: 'Change it.' })] }, { text: 'Done.' }]);
+    const out = await L.run({ request, tools: [tool], policy: { tools: 'all', approvals }, call: (r, o) => P.run('mock', r, cfg, o) });
+    assert.equal(ran, false, `${approvals}/${kind}`);
+    assert.equal(out.pending?.tool, 'change_it');
+  }
+});
+
+test('a policy restriction observed during a round remains in later rounds', async () => {
+  let policy = { tools: 'all', approvals: 'all' }, n = 0;
+  const read = TL.define({ name: 'read_it', kind: 'read', description: 'Read.', run: async () => { policy = { tools: 'all', approvals: 'all' }; return null; } });
+  const requests = [];
+  const out = await L.run({ request, tools: [read, erase], policy: () => policy, call: async (r) => {
+    requests.push(r);
+    if (n++ === 0) { policy = { tools: 'read-only', approvals: 'all' }; return { text: '', toolCalls: [call('r', 'read_it', { reason: 'Read.' })] }; }
+    if (n === 2) return { text: '', toolCalls: [call('w', 'notes_clear', { reason: 'Clear.' })] };
+    return { text: 'Done.' };
+  } });
+  assert.deepEqual(requests[1].tools.map((t) => t.name), ['read_it']);
+  assert.equal(out.pending, undefined);
+  assert.equal(out.steps.at(-1).error, 'read-only');
+});
+
+test('mutating the original policy object cannot restore write authority', async () => {
+  const policy = { tools: 'read-only', approvals: 'all' };
+  let n = 0; const requests = [];
+  const out = await L.run({ request, tools: [courses, erase], policy: () => policy, call: async (r) => {
+    requests.push(r);
+    policy.tools = 'all';
+    if (n++ === 0) return { text: '', toolCalls: [call('r', 'courses_list', { term: 'fall', reason: 'Read.' })] };
+    return n === 2 ? { text: '', toolCalls: [call('w', 'notes_clear', { reason: 'Clear.' })] } : { text: 'Done.' };
+  } });
+  assert.deepEqual(requests[1].tools.map((t) => t.name), ['courses_list']);
+  assert.equal(out.pending, undefined);
+  assert.equal(out.steps.at(-1).error, 'read-only');
+});
+
+test('cancellation during a read cannot leave the same batch with a claimable approval', async () => {
+  const controller = new AbortController(), confirms = new Map(), events = [];
+  const read = TL.define({ name: 'cancel_read', kind: 'read', description: 'Read.', run: async () => { controller.abort(); return null; } });
+  const outcome = await L.run({ request, tools: [read, erase], signal: controller.signal, confirms, emit: (e) => events.push(e),
+    call: async () => ({ text: '', toolCalls: [call('w', 'notes_clear', { reason: 'Clear.' }), call('r', 'cancel_read', { reason: 'Read.' })] }),
+  }).then(() => 'completed', (e) => e.code);
+  assert.equal(outcome, 'cancelled');
+  assert.equal(confirms.size, 0);
+  assert.ok(!events.some((e) => e.type === 'pending'));
+});
+
+test('cancellation during an approval summary cannot insert or emit a late approval', async () => {
+  const controller = new AbortController(), confirms = new Map(), events = [];
+  let started, release;
+  const entered = new Promise((r) => { started = r; }), gate = new Promise((r) => { release = r; });
+  const tool = TL.define({ ...erase, summarize: async () => { started(); await gate; return 'Clear notes?'; } });
+  const running = L.run({ request, tools: [tool], signal: controller.signal, confirms, emit: (e) => events.push(e),
+    call: async () => ({ text: '', toolCalls: [call('w', 'notes_clear', { reason: 'Clear.' })] }),
+  }).then(() => 'completed', (e) => e.code);
+  await entered;
+  controller.abort(); release();
+  assert.equal(await running, 'cancelled');
+  assert.equal(confirms.size, 0);
+  assert.ok(!events.some((e) => e.type === 'pending'));
+});
+
+test('cancellation settles without waiting for a tool and suppresses its late events', async () => {
+  const controller = new AbortController(), events = [];
+  let started, release, outcome;
+  const entered = new Promise((r) => { started = r; }), gate = new Promise((r) => { release = r; });
+  const tool = TL.define({ name: 'slow_read', kind: 'read', description: 'Read.', run: async () => { started(); await gate; return { ok: true }; } });
+  const running = L.run({ request, tools: [tool], signal: controller.signal, emit: (e) => events.push(e),
+    call: async () => ({ text: '', toolCalls: [call('r', 'slow_read', { reason: 'Read.' })] }),
+  }).then(() => { outcome = 'completed'; }, (e) => { outcome = e.code; });
+  await entered; controller.abort();
+  for (let i = 0; i < 5; i++) await new Promise(setImmediate);
+  const beforeRelease = outcome, count = events.length;
+  release(); await running;
+  for (let i = 0; i < 5; i++) await new Promise(setImmediate);
+  assert.equal(beforeRelease, 'cancelled', 'the cancelled run must settle while the tool is still pending');
+  assert.equal(events.length, count, 'a late tool completion cannot emit after cancellation');
 });
 
 test('a stop while the model answers runs nothing: every call is answered { notRun }', async () => {

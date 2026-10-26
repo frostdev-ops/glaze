@@ -107,3 +107,24 @@ test('a result is one shape whatever the provider, and errors are codes', () => 
   assert.equal(R.code(new DOMException('x', 'AbortError')), 'cancelled');
   assert.equal(R.code(new Error('boom')), 'failed');
 });
+
+test('an image within the base64 limit is accepted without exhausting the regex stack', () => {
+  const bytes = Buffer.alloc(R.LIMIT.image * 3 / 4);
+  PNG.copy(bytes);
+  const data = bytes.toString('base64');
+  assert.equal(data.length, R.LIMIT.image);
+  const cleaned = R.clean(user([{ type: 'image', mime: 'image/png', data }]));
+  assert.ok(cleaned);
+  assert.equal(cleaned.messages[0].content[0].data, data);
+  for (const bad of [data.slice(0, -1), data.slice(0, -4) + '=AAA', data.slice(0, -4) + 'A===']) {
+    assert.equal(R.clean(user([{ type: 'image', mime: 'image/png', data: bad }])), null);
+  }
+});
+
+test('request and result tool-call IDs must be strings, never coerced values', () => {
+  for (const id of [undefined, null, 123, true]) {
+    const toolCalls = [{ id, name: 'a', args: {} }];
+    assert.equal(R.clean({ messages: [{ role: 'user', content: 'x' }, { role: 'assistant', content: [], toolCalls }] }), null, `request ID ${String(id)}`);
+    assert.equal(R.result({ provider: 'p', finish: 'tool', toolCalls }), null, `result ID ${String(id)}`);
+  }
+});

@@ -127,3 +127,33 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
   assert.ok(!named.has('lib/ai/providers/mock.js'), 'the mock is for tests and the eval');
 });
+
+test('AI rejects opaque frames, foreign top pages and assessment ancestors', async () => {
+  const w = make();
+  for (const sender of [
+    lms('/courses/1', { origin: 'null' }),
+    lms('/courses/1', { frameId: 2, tab: { id: 4, url: `${CANVAS}/courses/1/quizzes/3` } }),
+    lms('/courses/1', { frameId: 2, tab: { id: 4, url: 'https://evil.example.com/' } }),
+    editor({ frameId: 2, tab: { id: 9, url: 'https://evil.example.com/' } }),
+  ]) {
+    const { port, reply } = await status(w, sender);
+    assert.equal(port.hungUp, true, JSON.stringify(sender));
+    assert.equal(reply, undefined);
+  }
+});
+
+test('an existing AI port loses authority after SPA navigation to an assessment', async () => {
+  const w = make();
+  let href = `${CANVAS}/courses/1`;
+  w.context.chrome.tabs.get = async () => ({ id: 4, url: href });
+  w.context.chrome.scripting.executeScript = async () => [{ result: { href, origin: CANVAS } }];
+  const { port, say } = w.connect('glaze:ai', lms());
+  say({ id: 1, op: 'status', feature: 'syllabus' });
+  await w.settle();
+  assert.equal(port.posted[0].type, 'status');
+  href = `${CANVAS}/courses/1/quizzes/3`;
+  say({ id: 2, op: 'status', feature: 'syllabus' });
+  await w.settle();
+  assert.equal(port.hungUp, true);
+  assert.equal(port.posted.length, 1);
+});

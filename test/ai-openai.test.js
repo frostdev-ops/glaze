@@ -196,3 +196,42 @@ test('status asks the catalog: ready when it lists the model, why not otherwise'
   assert.deepEqual(await O.status(O.config(cfg({ base: 'https://auth.example.com/v1' })), { fetch: server(json({}, 401)).fetch }), { state: 'unavailable', reason: 'request-rejected' });
   assert.deepEqual(await O.status(O.config(cfg({ base: 'https://down.example.com/v1' })), { fetch: async () => { throw new TypeError('down'); } }), { state: 'unavailable', reason: 'connection-lost' });
 });
+
+for (const field of ['text', 'model', 'tool argument', 'tool object key', 'parsed JSON']) {
+  test(`credential echoes in ${field} are refused before leaving the provider`, async () => {
+    let response;
+    let request = ask();
+    if (field === 'text') response = done(KEY);
+    if (field === 'model') response = json({ model: KEY, choices: [{ message: { content: 'safe' }, finish_reason: 'stop' }] });
+    if (field.startsWith('tool')) response = done('', { message: { tool_calls: [{ id: 'c1', type: 'function', function: {
+      name: 'look_up', arguments: JSON.stringify(field === 'tool argument' ? { query: KEY } : { [KEY]: 'value' }),
+    } }] }, finish: 'tool_calls' });
+    if (field === 'parsed JSON') {
+      const escaped = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
+      response = done(`{"answer":"${escaped}"}`);
+      request = ask({ schema: SCHEMA });
+    }
+    const s = server(response);
+    await assert.rejects(P.run('openai', request, cfg(), { fetch: s.fetch }), { code: 'invalid-response' });
+    assert.equal(s.calls.length, 1, 'a credential echo never replays inference');
+  });
+}
+
+test('a key split across streamed deltas is stopped before any credential bytes are emitted', async () => {
+  const deltas = [];
+  const s = server(sse([chunk({ content: 'Safe prefix. ' + KEY.slice(0, 9) }), chunk({ content: KEY.slice(9) }), chunk({}, 'stop')]));
+  await assert.rejects(P.run('openai', ask(), cfg(), { fetch: s.fetch, onDelta: (d) => deltas.push(d) }), { code: 'invalid-response' });
+  assert.equal(deltas.join(''), 'Safe prefix. ');
+  assert.equal(s.calls.length, 1);
+});
+
+test('credential echoes never survive in streamed errors, parser errors, or nested network causes', async () => {
+  const inspect = require('node:util').inspect;
+  for (const fixture of ['stream', 'json', 'network']) {
+    const fetch = fixture === 'network' ? async () => { throw new Error(`transport ${KEY}`, { cause: new Error(KEY) }); }
+      : server(fixture === 'stream' ? sse([{ error: { message: KEY, code: 500 } }]) : new Response(`not JSON ${KEY}`)).fetch;
+    const e = await P.run('openai', ask(), cfg(), { fetch, onDelta: () => {} }).catch((x) => x);
+    assert.ok(e instanceof Error, fixture);
+    assert.ok(!inspect(e, { depth: 20, showHidden: true }).includes(KEY), fixture);
+  }
+});

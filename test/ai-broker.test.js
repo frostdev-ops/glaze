@@ -285,3 +285,80 @@ test('the vault is an IndexedDB store of the worker\'s own, read back as written
   assert.equal(await v.remove('connections'), true);
   assert.equal(await v.get('connections'), undefined);
 });
+
+test('a pending confirmation rechecks feature, connection and tool authority before running', async () => {
+  const fetch = async (url) => (url.endsWith('/models') ? models() : json({ choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'reminder_add', arguments: '{"at":"2026-11-02","reason":"Soon."}' } }] }, finish_reason: 'tool_calls' }] }));
+  for (const change of ['feature', 'connection', 'generation', 'permission', 'tool', 'task']) {
+    B._reset(); M._reset();
+    const e = env({ fetch }), p = open(e);
+    p.say(run(undefined, { task: 'example.plan' }));
+    await flush();
+    const id = p.posted.at(-1).pending.confirmId;
+    if (change === 'feature') e.settings = async () => ({ on: true, use: 'main', features: { syllabus: false } });
+    if (change === 'connection') e.settings = async () => ({ on: true, use: 'other', features: { syllabus: true } });
+    if (change === 'generation') e.vaultData.set('connections', { main: { ...CONN, generation: 'replacement' } });
+    if (change === 'permission') e.reach = async () => false;
+    if (change === 'tool') e.tools = TL.registry();
+    if (change === 'task') e.task = async () => null;
+    p.say({ id: 2, op: 'confirm', confirmId: id, approve: true });
+    await flush();
+    assert.equal(p.posted.at(-1).type, 'error', change);
+  }
+});
+
+test('cancelling a pending run invalidates its confirmation', async () => {
+  const fetch = async (url) => (url.endsWith('/models') ? models() : json({ choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'reminder_add', arguments: '{"at":"2026-11-02","reason":"Soon."}' } }] }, finish_reason: 'tool_calls' }] }));
+  const p = open(env({ fetch }));
+  p.say(run(undefined, { task: 'example.plan' }));
+  await flush();
+  const id = p.posted.at(-1).pending.confirmId;
+  p.say({ id: 1, op: 'cancel' });
+  p.say({ id: 2, op: 'confirm', confirmId: id, approve: true });
+  await flush();
+  assert.equal(p.posted.at(-1).type, 'error');
+});
+
+test('closing a port while confirmation admission waits prevents the tool from running', async () => {
+  let ran = 0, release;
+  const tool = TL.define({ ...remind, run: async () => { ran++; return { ok: true }; } });
+  const tools = TL.registry(); tools.add(tool);
+  const fetch = async (url) => (url.endsWith('/models') ? models() : json({ choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'reminder_add', arguments: '{"at":"2026-11-02","reason":"Soon."}' } }] }, finish_reason: 'tool_calls' }] }));
+  const e = env({ fetch, tools }), p = open(e);
+  p.say(run(undefined, { task: 'example.plan' }));
+  await flush();
+  const id = p.posted.at(-1).pending.confirmId;
+  e.enabled = () => new Promise((r) => { release = r; });
+  p.say({ id: 2, op: 'confirm', confirmId: id, approve: true });
+  await flush();
+  p.close(); release(true);
+  await flush();
+  assert.equal(ran, 0);
+});
+
+test('a changed credential invalidates an inference already in flight', async () => {
+  let finish;
+  const e = env({ fetch: async (url) => url.endsWith('/models') ? models() : new Promise((r) => { finish = r; }) }), p = open(e);
+  p.say(run());
+  await flush();
+  e.vaultData.set('connections', { main: { ...CONN, generation: 'replacement', key: 'new-key' } });
+  finish(answer({ text: 'obsolete' }));
+  await flush();
+  assert.equal(p.posted.at(-1).error, 'changed');
+  assert.ok(!JSON.stringify(p.posted).includes('obsolete'));
+});
+
+test('a hanging catalog cannot hold the configuration queue after its deadline', async () => {
+  const before = B.LIMIT.catalog; B.LIMIT.catalog = 20;
+  try {
+    const e = env({ fetch: async () => new Promise(() => {}) });
+    let timeout;
+    const result = await Promise.race([
+      B.config({ op: 'models', id: 'main' }, e),
+      new Promise((resolve) => { timeout = setTimeout(() => resolve({ stuck: true }), 150); }),
+    ]);
+    clearTimeout(timeout);
+    assert.equal(result.stuck, undefined);
+    assert.equal(result.ok, false);
+    assert.equal((await B.config({ op: 'get' }, e)).ok, true);
+  } finally { B.LIMIT.catalog = before; }
+});

@@ -55,3 +55,25 @@ test('select: a live list must name the model; no list leaves it unverified; a k
   assert.throws(() => M.select('m1', live, { images: true }), (e) => e.code === 'caps' && /vision model/.test(e.message));
   assert.throws(() => M.select('', live), { code: 'setup' });
 });
+
+test('a credential echoed in a catalog is refused before it is returned or cached', async () => {
+  const key = 'localserver-SECRET-9876', cache = store();
+  await assert.rejects(M.list({ base: 'https://echo.example.com/v1', key, generation: 'echo' }, {
+    fetch: async () => json({ data: [{ id: key }] }), cache,
+  }), (e) => e.category === 'invalid-response' || e.code === 'invalid-response');
+  assert.ok(!JSON.stringify([...cache.m]).includes(key));
+});
+
+test('catalog cancellation settles even when fetch ignores abort and does not cache its late answer', async () => {
+  const c = new AbortController(), cache = store();
+  let release;
+  const pending = M.list({ base: 'https://late.example.com/v1', generation: 'late' }, {
+    signal: c.signal, cache, fetch: () => new Promise((resolve) => { release = resolve; }),
+  }).then(() => 'resolved', (e) => e.name);
+  c.abort(new DOMException('cancelled', 'AbortError'));
+  const observed = await Promise.race([pending, new Promise((resolve) => setTimeout(() => resolve('still pending'), 50))]);
+  release(json({ data: [{ id: 'late-model' }] }));
+  await pending;
+  assert.equal(observed, 'AbortError');
+  assert.equal(cache.m.size, 0, 'late answers cannot update the catalog after cancellation');
+});
