@@ -19,6 +19,22 @@ test('section-like digits and contents leaders stay bounded at the input limit',
   assert.equal(probe.status, 0, probe.stderr);
 });
 
+test('unmatched parentheses at the input limit are read in one pass', () => {
+  const cpu = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
+  for (const text of ['('.repeat(S.MAX), '(word '.repeat(S.MAX / 6), `Homework (${'1 '.repeat(S.MAX / 2 - 10)}%`, `${'(Quiz 10% '.repeat(S.MAX / 10)}`]) {
+    const t0 = cpu();
+    S.extract(text, { start: Date.UTC(2026, 7, 31) });
+    assert.ok(cpu() - t0 < 1500, `${Math.round(cpu() - t0)} ms for ${JSON.stringify(text.slice(0, 12))}…`);
+  }
+});
+
+test('nested section numbers are no dates; a two-digit year still is', () => {
+  const o = { start: Date.UTC(2026, 7, 31) };
+  assert.deepEqual(S.extract('4. Assessment\n4.1. Exams\n4.1.10. Final exam rules\n4.1.11. Quiz policy', o).dates, []);
+  assert.deepEqual(S.extract('Klausur 4.1.10.\nSee 3.2.1. Exam format', o).dates, []);
+  assert.deepEqual(S.extract('Klausur am 4.2.27\nAbgabe: 11.11.', { ...o, hint: 'de' }).dates.map((d) => d.day), ['2027-02-04', '2026-11-11']);
+});
+
 test('weight columns reject extra category cells instead of shifting their percentages', () => {
   for (const labels of ['Homework\nQuizzes\nFinal project', 'Homework\nFinal\nproject']) {
     assert.equal(S.extract(`Grading\n${labels}\n20%\n80%`).weights.value, '');
