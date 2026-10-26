@@ -443,3 +443,24 @@ test('AI office evidence must describe the candidate location, not a classroom o
   const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Law Building 4.22', quote: text } } }, { text });
   assert.equal(A.interpret(out, OPTS, L.extract(text, OPTS), text).prof.office.value, 'Law Building 4.22', 'a later hours clause does not erase an explicit office');
 });
+
+test('office context survives normalized quote whitespace and cannot borrow a conflicting AI e-mail', () => {
+  for (const [text, quote, value] of [
+    ['Email: ada@example.edu\nReading: Chapter 12', 'Email: ada@example.edu Reading: Chapter 12', 'Chapter 12'],
+    ['Heures de bureau: lundi dans la salle Bibliothèque 2', 'Heures de bureau: lundi dans la salle Bibliothèque 2', 'Bibliothèque 2'],
+    ['Email: ada@example.edu\nada@example.edu · 2\u200b PM', 'ada@example.edu · 2\u200b PM', '2\u200b PM'],
+    ['Office: Fine Arts 214; Reading: Chapter 12', 'Office: Fine Arts 214; Reading: Chapter 12', 'Chapter 12'],
+  ]) {
+    const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: value, quote } } }, { text });
+    assert.equal(out.prof.office.text, value);
+    assert.equal(A.interpret(out, OPTS, L.extract(text, OPTS), text).prof.office.value, '', text);
+  }
+  const text = 'Instructor email: ada@example.edu\nTA: helper@example.edu · Fine Arts 214';
+  const heur = L.extract(text, OPTS);
+  assert.equal(heur.prof.email.value, 'ada@example.edu');
+  const out = task.check({ ...blank(), prof: { ...blank().prof,
+    email: { text: 'helper@example.edu', quote: 'TA: helper@example.edu' },
+    office: { text: 'Fine Arts 214', quote: 'TA: helper@example.edu · Fine Arts 214' },
+  } }, { text });
+  assert.equal(A.interpret(out, OPTS, heur, text).prof.office.value, '');
+});
