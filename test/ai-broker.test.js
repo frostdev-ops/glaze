@@ -253,7 +253,7 @@ test('Settings keeps connections by name: the key comes back masked, follows the
   const stored = e.vaultData.get('connections').main;
   assert.deepEqual({ ...stored, generation: typeof stored.generation }, { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY, generation: 'string' });
   const got = await B.config({ op: 'get' }, e);
-  assert.deepEqual(got, { ok: true, connections: { main: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: 'sk-l••••6789', origin: 'https://api.example.com/*' } } });
+  assert.deepEqual(got, { ok: true, providers: ['openai'], connections: { main: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: 'sk-l••••6789', origin: 'https://api.example.com/*' } } });
   assert.ok(!JSON.stringify(got).includes(KEY));
   const g1 = stored.generation;
   await B.config({ op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://API.example.com/v1/', model: 'gpt-y' } }, e);
@@ -284,6 +284,14 @@ test('the vault is an IndexedDB store of the worker\'s own, read back as written
   assert.deepEqual(await B.vault(idb).get('connections'), { main: CONN }, 'another worker start reads it');
   assert.equal(await v.remove('connections'), true);
   assert.equal(await v.get('connections'), undefined);
+});
+
+test('Settings\' Test of a failing endpoint gives its category, HTTP status and a reference, never the server\'s words', async () => {
+  const e = env({ reach: async () => true, fetch: async () => json({ error: { message: `bad key ${KEY}` } }, 401) });
+  const r = await B.config({ op: 'test', id: 'main' }, e);
+  assert.deepEqual({ ...r, reference: typeof r.reference }, { ok: true, state: 'unavailable', reason: 'request-rejected', status: 401, reference: 'string' });
+  assert.match(r.reference, /^[0-9a-f-]{36}$/);
+  assert.ok(!JSON.stringify(r).includes('bad key'));
 });
 
 test('a pending confirmation rechecks feature, connection and tool authority before running', async () => {
@@ -416,4 +424,13 @@ test('cancelling while the vault is pending releases admission without a late re
   release();
   await flush();
   assert.equal(e.calls.filter((c) => c.url.endsWith('/chat/completions')).length, 1);
+});
+
+test('Settings lists only shipped providers registered in this browser', async () => {
+  const settings = require('../lib/ai/settings.js'), providers = require('../lib/ai/providers.js');
+  settings.PROVIDERS.push('apple'); // Safari's package can ship a provider that does not register elsewhere.
+  try {
+    assert.equal(providers.get('apple'), null);
+    assert.deepEqual((await B.config({ op: 'get' }, env())).providers, ['openai']);
+  } finally { settings.PROVIDERS.pop(); }
 });

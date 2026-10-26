@@ -222,10 +222,10 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
   };
 
   // Settings' Test: the connection's catalog (lib/ai/models.js), and whether it names the model. → { state, reason?,
-  // source? }.
+  // status?, reference?, source? }: a failure's category, HTTP status and reference, never the server's words.
   const status = async (cfg, { fetch = globalThis.fetch, signal, cache } = {}) => {
     let catalog;
-    try { catalog = await M.list(cfg, { fetch, signal, cache }); } catch (e) { return { state: 'unavailable', reason: F.modelFailure(e, { aborted: !!signal?.aborted }).category }; }
+    try { catalog = await M.list(cfg, { fetch, signal, cache }); } catch (e) { const f = F.modelFailure(e, { aborted: !!signal?.aborted }); return { state: 'unavailable', reason: f.category, ...(f.status && { status: f.status }), reference: f.reference }; }
     try { const s = M.select(cfg.model, catalog); return { state: 'ready', source: catalog.source, ...(s.unverified && { unverified: true }) }; } catch { return { state: 'unavailable', reason: 'model', source: catalog.source }; }
   };
 

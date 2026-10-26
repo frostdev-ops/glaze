@@ -17,6 +17,8 @@
 		3B8EDA81307C30D500B0DD77 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA80307C30D500B0DD77 /* Assets.xcassets */; };
 		3B8EDA88307C30D500B0DD77 /* Glaze Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3B8EDA87307C30D500B0DD77 /* Glaze Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3B8EDA8D307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */; };
+		3B8EDF02307C30D500B0DD77 /* GlazeAI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */; };
+		3B8EDF03307C30D500B0DD77 /* GlazeAI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */; };
 		3B8EDAA9307C30D500B0DD77 /* preview.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA99307C30D500B0DD77 /* preview.html */; };
 		3B8EDAAA307C30D500B0DD77 /* ui.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9A307C30D500B0DD77 /* ui.js */; };
 		3B8EDAAB307C30D500B0DD77 /* theme.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9B307C30D500B0DD77 /* theme.css */; };
@@ -133,6 +135,7 @@
 		3B8EDA82307C30D500B0DD77 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		3B8EDA87307C30D500B0DD77 /* Glaze Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Glaze Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlazeAI.swift; sourceTree = "<group>"; };
 		3B8EDA8E307C30D500B0DD77 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		3B8EDA99307C30D500B0DD77 /* preview.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = preview.html; path = Resources/preview.html; sourceTree = "<group>"; };
 		3B8EDA9A307C30D500B0DD77 /* ui.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = ui.js; path = Resources/ui.js; sourceTree = "<group>"; };
@@ -243,6 +246,7 @@
 			children = (
 				3B8EDA98307C30D500B0DD77 /* Resources */,
 				3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */,
+				3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */,
 				3B8EDA8E307C30D500B0DD77 /* Info.plist */,
 			);
 			path = "Glaze Extension";
@@ -549,6 +553,7 @@
 			isa = PBXSourcesBuildPhase;
 			files = (
 				3B8EDA8D307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */,
+				3B8EDF02307C30D500B0DD77 /* GlazeAI.swift in Sources */,
 			);
 		};
 		3B8EDC0B307C30D500B0DD77 /* Sources */ = {
@@ -561,6 +566,7 @@
 			isa = PBXSourcesBuildPhase;
 			files = (
 				3B8EDC22307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */,
+				3B8EDF03307C30D500B0DD77 /* GlazeAI.swift in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */
