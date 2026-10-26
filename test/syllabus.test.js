@@ -1309,3 +1309,16 @@ test('review: a weight header does not make topics or zero-weight rows deadlines
   ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
   assert.deepEqual(S.extract('Titre\tDate\tPondération\nRapport d\'étape\tSeptember 7\t10 %', reviewOpts).dates.map((d) => `${d.day} ${d.kind}`), ['2026-09-07 due']);
 });
+
+test('review: a staff line can name its class section after the time', () => {
+  for (const text of [
+    'TA: Jane Doe — Wednesdays 10–11 am, discussion section, Room 5',
+    'TA: Sam Lee — Mondays 9–10 am, class sections 101 and 102',
+    'TA: Sam Lee — sections 101 and 102, Mondays 9–10 am',
+  ]) {
+    const r = S.extract(text, reviewOpts);
+    assert.deepEqual(r.hours, [], text);
+    assert.equal(r.meetings.length, 1, text);
+  }
+  assert.equal(S.extract('Teaching Assistant: Sam Lee · Office hours: Mondays 9–10 am, Room 5', reviewOpts).hours.length, 1);
+});
