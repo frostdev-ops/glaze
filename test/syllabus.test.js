@@ -601,3 +601,34 @@ Varga's Virtual Room. (Please allow up to 24 hours for email replies).`, { start
   assert.deepEqual(r.hours.map((m) => [m.label, m.days.join(' '), m.start, m.end, m.location]), [['Virtual Office Hours', 'WE', '14:00', '15:30', 'Microsoft Teams']]);
   assert.deepEqual([r.prof.name.value, r.prof.email.value], ['Prof. Elena Varga-Ruiz', 'vargaruize@example.edu']);
 });
+
+test('a table of contents and numbered section headings are not dates; a day-first date still is', () => {
+  const r = S.extract(`Table of contents (clickable links)
+1.\tCOURSE INFORMATION.......................................................... 2
+1.1.\tYOUR INSTRUCTOR ............................................................ 2
+3.\tGRADING INFORMATION.......................................................... 8
+3.1.\tGRADE DISTRIBUTION AND SCALE ............................................... 8
+3.2.\tQUIZZES .................................................................... 9
+3.3.\tHOMEWORK AND LATE WORK POLICY .............................................. 9
+3.4.\tVIDEO ASSIGNMENTS........................................................... 9
+6.\tRUBRICS..................................................................... 18
+6.1.\tORAL PRESENTATIONS.......................................................... 18
+6.2.\tDISCUSSION BOARDS .......................................................... 19
+
+1. Course Information
+1.1. Your instructor
+3. Grading Information
+3.1. Grade Distribution And Scale
+3.2. Quizzes
+•\tYou will have four tests throughout the course.
+3.3. Homework And Late Work Policy
+3.3.1. Late homework
+3.4. Video Assignments
+6. Rubrics
+6.1. Oral Presentations
+6.2. Discussion Boards`, { start: FALL, md: true });
+  assert.deepEqual(pick(r).dates, []);
+  // Day-first dates as German syllabi write them, alone or at a schedule row's start, are still dates.
+  const de = S.extract('Klausur am 4.2.\n11.11.\tAbgabe des Exposés\n1. Sitzung: Einführung', { start: Date.UTC(2026, 9, 12) });
+  assert.deepEqual(pick(de).dates, ['2027-02-04 exam Klausur', '2026-11-11 due Abgabe des Exposés']);
+});
