@@ -10,7 +10,8 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   // Features that may ask, each off until the student allows it. A feature's id is the one its port messages carry.
   const FEATURES = ['syllabus'];
   // The providers a connection may use, as Glaze ships them (the mock is for tests and the eval only).
-  const PROVIDERS = ['openai', 'device'];
+  const safari = (() => { try { return new URL((typeof globalThis.browser?.runtime?.getURL === 'function' ? globalThis.browser.runtime : globalThis.chrome?.runtime).getURL('')).protocol === 'safari-web-extension:'; } catch { return false; } })();
+  const PROVIDERS = ['openai', 'device', ...(safari ? ['apple'] : [])];
   const CONNECTION = /^[a-z0-9][a-z0-9-]{0,39}$/;
   const DEFAULTS = Object.freeze({ on: false, use: null, features: Object.freeze(Object.fromEntries(FEATURES.map((f) => [f, false]))) });
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);

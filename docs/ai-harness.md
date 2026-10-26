@@ -16,6 +16,7 @@ until the student has turned AI on, chosen a connection and allowed that feature
 | `lib/ai/providers.js` | The provider registry and `run`, the one way to call a model. |
 | `lib/ai/providers/openai.js` | Any Chat Completions server. `mock.js` is for tests and evals only; the worker never loads it. |
 | `lib/ai/providers/device.js` | Chrome's Prompt API (Gemini Nano, Chrome 138+), in the worker itself. Unavailable elsewhere. |
+| `lib/ai/providers/apple.js` | Safari only: Apple's Foundation Models on this device, through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
 | `lib/ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
 | `lib/ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
 | `lib/ai/task.js` | Task definitions and `run`. Tasks live in `lib/ai/tasks/<id>.js`. |
@@ -120,3 +121,19 @@ Feature status reports `ready: false` with `why: 'download' | 'downloading' | 'u
   inference that may have run is never replayed.
 - The call record (`storage.local aiCalls`) keeps ids, task, feature, provider, state, category, status, timing and usage:
   no prompts, answers, addresses or keys.
+
+## Safari's Apple provider
+
+An `apple` connection uses `model: 'on-device'`, Apple Intelligence on this device; text stays on the device. It is
+registered and offered by Settings only on Safari, and needs macOS 27 or iOS 27; older systems return `unavailable` with
+reason `os`.
+
+`ai.run` is one native request and reply. Refusals stay `refusal`; a reply reaching `maximumResponseTokens` is marked
+`length`, and structured output is refused even if guided generation closed the JSON. Rate and quota limits carry 429.
+Schemas are converted to `DynamicGenerationSchema`; the worker validates every answer against the full original schema.
+Native messages and errors never log or forward prompt text through diagnostics.
+
+Cancel and timeout end the worker's wait immediately and send `ai.cancel` for that request id. Native cancellation is
+cooperative and confined to the same extension process; `cancelled: true` means a registered task received cancellation,
+not that computation has already stopped. An early cancel is remembered for five minutes (up to 256 ids), duplicate runs
+cannot replace an active task, and late output is discarded. A different native process cannot cancel the original task.
