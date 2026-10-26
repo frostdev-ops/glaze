@@ -623,12 +623,19 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
       const b = bands.at(-1);
       if (b && c.y0 <= b.y1 + 0.25 * c.h) { b.cells.push(c); b.y1 = Math.max(b.y1, c.y1); } else bands.push({ cells: [c], y1: c.y1 });
     }
-    for (const { cells: band } of bands) {
+    // A cell of a few letters the engine was unsure of, in a row, is most often a cell's border or shading read as
+    // letters ("ae", "an"); it neither decides nor joins a row.
+    const speck = (c) => c.text.length <= 3 && c.words.every((x) => x.w.confidence < LOW);
+    const lay = (cs) => {
       const rows = [];
-      for (const c of [...band].sort((a, b) => a.cy - b.cy)) {
+      for (const c of [...cs].sort((a, b) => a.cy - b.cy)) {
         const r = rows.at(-1);
         if (r && level(r[0], c)) r.push(c); else rows.push([c]);
       }
+      return rows;
+    };
+    for (const { cells: all } of bands) {
+      const band = all.filter((c) => !speck(c)), rows = lay(band);
       const cols = [];
       for (const c of [...band].sort((a, b) => a.x0 - b.x0)) {
         const k = cols.at(-1);
@@ -638,9 +645,9 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
       const one = rows.length > 1 && cols.length > 1 && cols.every((k) => k.cells.length <= 4)
         && rows.filter((r) => cols.every((k) => r.some((c) => k.cells.includes(c)))).length <= 1
         && (cols[0].cells.length === 1 || band.some((c) => !band.some((o) => col(o) !== col(c) && level(o, c))));
-      const emit = (cs, text) => out.push({ y: band[0].y0, k: out.length, text, low: cs.some((c) => c.low) });
+      const emit = (cs, text) => out.push({ y: all[0].y0, k: out.length, text, low: cs.some((c) => c.low) });
       if (one) emit(band, cols.map((k) => k.cells.sort((a, b) => a.y0 - b.y0).map((c, i) => (i && c.bullet ? '· ' : '') + c.text).join(' ')).join('\t'));
-      else for (const r of rows) emit(r, r.sort((a, b) => a.x0 - b.x0).map((c) => c.text).join('\t'));
+      else for (const r of lay(all)) emit(r, r.sort((a, b) => a.x0 - b.x0).map((c) => c.text).join('\t'));
     }
     const unsure = [], text = [];
     for (const l of out.sort((a, b) => a.y - b.y || a.k - b.k)) {
