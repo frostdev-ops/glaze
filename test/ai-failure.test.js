@@ -67,3 +67,17 @@ test('an endpoint address: https, or http only to this computer; no credentials,
   assert.ok(E.ID.test('my-ollama') && !E.ID.test('My Ollama') && !E.ID.test('-x') && !E.ID.test('x'.repeat(41)));
   assert.notEqual(E.generation(), E.generation());
 });
+
+test('waiting races cancellation, skips already-cancelled work and handles late failures', async () => {
+  const c = new AbortController();
+  let rejectLate, started = 0;
+  const pending = F.wait(() => { started++; return new Promise((_, reject) => { rejectLate = reject; }); }, c.signal);
+  c.abort(new DOMException('cancelled', 'AbortError'));
+  await assert.rejects(pending, { name: 'AbortError' });
+  rejectLate(new Error('late failure'));
+  await assert.rejects(F.wait(() => { started++; }, c.signal), { name: 'AbortError' });
+  await assert.rejects(F.wait(Promise.reject(new Error('already started')), c.signal), { name: 'AbortError' });
+  await new Promise(setImmediate);
+  assert.equal(started, 1);
+  assert.equal(await F.wait(() => 42), 42);
+});

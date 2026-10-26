@@ -21,9 +21,14 @@ var GZ_AI_STREAM = globalThis.GZ_AI_STREAM || (() => {
   // over 16 MB throws.
   const FRAME = 16000000;
   const sseParser = (receive) => {
-    let buffer = '', data = [];
-    const line = (value) => {
+    let buffer = '', data = [], frameBytes = 0;
+    const bytes = (text) => new TextEncoder().encode(text).length;
+    const bounded = (n) => { if (n > FRAME) throw Object.assign(Error('Stream frame is too large.'), { category: 'invalid-response' }); };
+    const line = (value, delimiter) => {
+      frameBytes += bytes(value) + delimiter;
+      bounded(frameBytes);
       if (!value) {
+        frameBytes = 0;
         if (data.length) { const payload = data.join('\n'); data = []; receive(payload); }
       } else if (value === 'data' || value.startsWith('data:')) data.push(value.slice(5).replace(/^ /, ''));
     };
@@ -34,23 +39,26 @@ var GZ_AI_STREAM = globalThis.GZ_AI_STREAM || (() => {
         if (!end) break;
         const value = buffer.slice(0, end.index);
         buffer = buffer.slice(end.index + end[0].length);
-        line(value);
+        line(value, end[0].length);
       }
-      if (buffer.length > FRAME) throw Error('Stream frame is too large.');
+      bounded(frameBytes + bytes(buffer));
     };
     return { push, finish() { push('\n\n'); } };
   };
   // A response body read to its end through sseParser; progress() on each chunk. A cancel stops the read.
-  const readSse = async (body, receive, progress, signal) => {
+  const readSse = async (body, receive, progress, signal, limit = 10 << 20) => {
     signal?.throwIfAborted();
     const reader = body.getReader(), decoder = new TextDecoder(), parser = sseParser(receive);
     const cancel = () => { reader.cancel().catch(() => {}); };
+    let size = 0;
     signal?.addEventListener('abort', cancel, { once: true });
     try {
       for (;;) {
         const { done, value } = await reader.read();
         signal?.throwIfAborted();
         if (done) break;
+        size += value.byteLength;
+        if (size > limit) throw Object.assign(Error('Stream response is too large.'), { category: 'invalid-response' });
         progress?.();
         parser.push(decoder.decode(value, { stream: true }));
       }

@@ -80,3 +80,23 @@ test('the wire converters: neutral messages to Chat Completions and back', () =>
   assert.deepEqual(O.fromWire({ content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }], tool_calls: [{ id: 'x', function: { name: 'n', arguments: '{bad' } }, { function: { name: 'no-id' } }] }),
     { text: 'ab', calls: [{ id: 'x', name: 'n', args: '{bad' }], refusal: '' });
 });
+
+test('the SSE frame cap includes accumulated data lines and terminated oversized lines', () => {
+  const parser = ST.sseParser(() => {});
+  assert.throws(() => {
+    for (let i = 0; i < 17; i++) parser.push('data: ' + 'x'.repeat(1_000_000) + '\n');
+    parser.push('\n');
+  }, /too large|exceeds/i);
+  assert.throws(() => ST.sseParser(() => {}).push('data: ' + 'x'.repeat(16_000_001) + '\n\n'), /too large|exceeds/i);
+});
+
+test('an SSE response made of many small frames has a cumulative byte bound', async () => {
+  let cancelled = false, chunks = 0;
+  const bytes = new TextEncoder().encode('data: ' + 'x'.repeat(1 << 20) + '\n\n');
+  const body = new ReadableStream({
+    pull(c) { if (++chunks <= 20) c.enqueue(bytes); else c.close(); },
+    cancel() { cancelled = true; },
+  });
+  await assert.rejects(ST.readSse(body, () => {}), /too large|exceeds/i);
+  assert.ok(cancelled, 'the transport is cancelled as soon as the byte limit is hit');
+});

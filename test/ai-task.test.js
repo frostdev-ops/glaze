@@ -67,6 +67,24 @@ test('a cancel and a whole-run deadline end a task with their codes', async () =
   await assert.rejects(T.run(T.define({ ...dates, limits: { ms: 20 } }), { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [{ ...answer([]), wait: 5000 }] } }), { code: 'timeout' });
 });
 
+test('the whole-run deadline settles while a tool is still pending', async (t) => {
+  const TL = require('../lib/ai/tools.js');
+  const tools = TL.registry();
+  let started, release, outcome;
+  const entered = new Promise((r) => { started = r; }), gate = new Promise((r) => { release = r; });
+  tools.add({ name: 'slow_read', kind: 'read', description: 'Read.', run: async () => { started(); await gate; return null; } });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const task = T.define({ ...dates, tools: ['slow_read'], limits: { ms: 5000 } });
+  const cfg = { replies: [{ toolCalls: [{ id: 'r', name: 'slow_read', args: { reason: 'Read.' } }] }] };
+  const running = T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg, tools }).then(() => { outcome = 'completed'; }, (e) => { outcome = e.code; });
+  await entered;
+  t.mock.timers.tick(5001);
+  for (let i = 0; i < 5; i++) await new Promise(setImmediate);
+  const beforeRelease = outcome;
+  release(); await running;
+  assert.equal(beforeRelease, 'timeout', 'deadline must release the run without waiting for the tool');
+});
+
 test('a long input goes in parts within the provider\'s budget, and the parts\' answers are merged before the check', async () => {
   const long = Array.from({ length: 40 }, (_, i) => `Week ${i + 1}: Lab ${i + 1} due 2026-09-${String((i % 28) + 1).padStart(2, '0')}.`).join('\n\n');
   const task = T.define({ ...dates, id: 'example.long',
