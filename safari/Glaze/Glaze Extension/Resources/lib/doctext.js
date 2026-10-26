@@ -621,8 +621,6 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
         // Only a multi-letter outlier beside normal-size text can be an icon.
         // A heading, a grade, a number or an alphanumeric label is still text.
         if (!s || (/^\p{L}{2,3}$/u.test(s) && w.confidence < 90 && tall(w) > 2.5 * Math.max(page, h))) continue;
-        sum += w.confidence;
-        n++;
         if (!cell || Math.abs(w.bbox.x0 - prev.bbox.x1) > h) cells.push(cell = { words: [] });
         cell.words.push({ s, w });
         prev = w;
@@ -657,7 +655,7 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
         parts.unshift(up);
       }
       if (parts.length < 2) continue;
-      out.push({ y: parts[0].y0, k: 0, text: parts.map((c) => c.text).join(' '), low: parts.some((c) => c.low) });
+      out.push({ y: parts[0].y0, k: 0, text: parts.map((c) => c.text).join(' '), low: parts.some((c) => c.low), words: parts.flatMap((c) => c.words) });
       left = left.filter((c) => !parts.includes(c));
     }
     // Rows: cells touching from top to bottom, then laid out as above.
@@ -691,7 +689,7 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
       const one = rows.length > 1 && cols.length > 1 && cols.every((k) => k.cells.length <= 4)
         && rows.filter((r) => cols.every((k) => r.some((c) => k.cells.includes(c)))).length <= 1
         && (cols[0].cells.length === 1 || band.some((c) => !band.some((o) => col(o) !== col(c) && level(o, c))));
-      const emit = (cs, text) => out.push({ y: all[0].y0, k: out.length, text, low: cs.some((c) => c.low) });
+      const emit = (cs, text) => out.push({ y: all[0].y0, k: out.length, text, low: cs.some((c) => c.low), words: cs.flatMap((c) => c.words) });
       if (one) {
         for (const k of cols) {
           const list = k.cells.filter((c) => c.bullet).length > 1;
@@ -713,6 +711,7 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
       // Mended here, line by line, so an unsure line is reported as the text has it and the review can find it.
       const t = tidy(l.text).replace(/(\d{1,2}:\d{2}(?: ?[AaPp]\.?[Mm]\.?)?)[ \t]+(?=\d{1,2}:\d{2})/g, '$1 - ');
       if (!t) continue;
+      for (const { w } of l.words) { sum += w.confidence; n++; }
       text.push(t);
       if (l.low) unsure.push(t);
     }
