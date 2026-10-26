@@ -864,6 +864,15 @@ Quiz 2 on Wednesday`, { start: Date.UTC(2026, 8, 7), md: true });
   assert.deepEqual(week1(S.extract('Exam: Oct 14', oct12)), ['', '', ''], 'no week-based date, no week 1');
   assert.deepEqual(S.extract('Due dates for each module will be the 7th day (Sunday) of each week.\nWeek 2: no class', oct12).dates, []);
 
+  // A named weekday stays that weekday when the student moves week 1 to another weekday; "7th day of week 3" moves with it.
+  const named = S.extract('Lab report due Friday of week 2\nQuiz 3 due on the 7th day of week 3', { week1: Date.UTC(2026, 8, 2) }).dates;
+  assert.deepEqual(named.map((d) => [d.day, d.week, d.wd, d.dow]), [['2026-09-11', 2, 2, 'FR'], ['2026-09-22', 3, 6, undefined]]);
+  assert.deepEqual(named.map((d) => S.weekDay('2026-09-02', d.week, d.wd, d.dow)), ['2026-09-11', '2026-09-22'], 'Wednesday anchor');
+  assert.deepEqual(named.map((d) => S.weekDay('2026-08-31', d.week, d.wd, d.dow)), ['2026-09-11', '2026-09-20'], 'Monday anchor');
+  for (const [text, dow] of [['Freitag der Woche 10', 'FR'], ['Week 5 – Friday: Lab report 2 due', 'FR'], ['Due Sunday of Week 2', 'SU']]) {
+    assert.equal(S.extract(`Abgabe ${text}`, { week1: Date.UTC(2026, 8, 2), hint: 'de' }).dates[0]?.dow, dow, text);
+  }
+  assert.equal(S.weekDay('2026-08-31', 2, 2, 'XX'), '');
   assert.equal(S.weekDay('2026-11-02', 5, 4), '2026-12-04');
   assert.equal(S.weekDay('2026-08-31', 1, 6), '2026-09-06');
   assert.equal(S.weekDay('2026-02-30', 1, 0), '');
