@@ -9,6 +9,7 @@ All notable changes to Glaze are documented here. The format follows
 ### Fixed
 
 - Blackboard: a discussion's rubric link, and the one on the page View instructions opens, show Glaze's rubric pop-up instead of Blackboard's own rubric panel.
+- Settings: Blackboard's preview repaints its course cards as you change them.
 
 ## [3.4.5] — 2026-10-26
 
