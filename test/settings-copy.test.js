@@ -73,6 +73,8 @@ const LMS_SECTIONS = {
   'study/schedule': ['Canvas', 'Blackboard Ultra'],
   'pages/content': ['Canvas', 'Blackboard Ultra'], 'pages/documents': ['Canvas', 'Blackboard Ultra'], 'pages/dashboard': ['Blackboard Ultra'],
   'pages/declutter': ['Canvas', 'Blackboard Ultra'], 'pages/shortcuts': ALL,
+  // Announcements open in Glaze's pop-up on all three; the pop-up is every site's.
+  'pages/announcements': ALL, 'pages/popups': ALL,
 };
 // Settings that work on other sites than their section: the badge beside each.
 const SETTING_BADGES = {

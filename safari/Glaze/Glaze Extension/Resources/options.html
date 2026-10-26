@@ -413,7 +413,7 @@
 <div data-editor-jumps="navigation" hidden><a href="#navigation/bar" data-editor-jump>Navigation</a><a href="#navigation/items" data-editor-jump>Navigation items</a><a href="#navigation/tabs" data-editor-jump>Course tabs</a><a href="#navigation/sidebar" data-editor-jump>Sidebar</a></div>
 <div data-editor-jumps="courses" hidden><a href="#courses/list" data-editor-jump>Your courses</a><a href="#courses/cards" data-editor-jump>Course cards</a></div>
 <div data-editor-jumps="study" hidden><a href="#study/todo" data-editor-jump>To Do</a><a href="#study/grades" data-editor-jump>Grades and GPA</a><a href="#study/reminders" data-editor-jump>Reminders and streak</a><a href="#study/widgets" data-editor-jump>Notes and widgets</a><a href="#study/pet" data-editor-jump>Pet habitat</a><a href="#study/imports" data-editor-jump>Syllabus and insights</a><a href="#study/schedule" data-editor-jump>Calendar export</a></div>
-<div data-editor-jumps="pages" hidden><a href="#pages/content" data-editor-jump>Course content</a><a href="#pages/documents" data-editor-jump>Documents and quizzes</a><a href="#pages/dashboard" data-editor-jump>Blackboard Dashboard</a><a href="#pages/declutter" data-editor-jump>Declutter</a><a href="#pages/shortcuts" data-editor-jump>Search and shortcuts</a></div>
+<div data-editor-jumps="pages" hidden><a href="#pages/content" data-editor-jump>Course content</a><a href="#pages/announcements" data-editor-jump>Announcements</a><a href="#pages/documents" data-editor-jump>Documents and quizzes</a><a href="#pages/dashboard" data-editor-jump>Blackboard Dashboard</a><a href="#pages/declutter" data-editor-jump>Declutter</a><a href="#pages/shortcuts" data-editor-jump>Search and shortcuts</a><a href="#pages/popups" data-editor-jump>Pop-ups</a></div>
 <div data-editor-jumps="sharing" hidden><a href="#sharing/sessions" data-editor-jump>Share sessions</a><a href="#sharing/relay" data-editor-jump>Relay</a><a href="#sharing/calendar" data-editor-jump data-gcal-link hidden>Google Calendar sync</a></div>
 <div data-editor-jumps="mods" hidden><a href="#mods/installed" data-editor-jump>Installed mods</a><a href="#mods/add" data-editor-jump>Add a mod</a><a href="#mods/widget" data-editor-jump>Widget builder</a><a href="#mods/dev" data-editor-jump>Mod development</a></div>
 <div data-editor-jumps="backup" hidden><a href="#backup/privacy" data-editor-jump>Backup and reset</a><a href="#backup/sites" data-editor-jump>Sites</a></div>
@@ -1210,8 +1210,16 @@
 <div class="info-pop" id="info-enhance-place" popover><span class="desc">Coming back to a course, its content opens the folders you left open and scrolls back to where you were, kept on this device.</span></div></div>
 </details>
 </section>
+<section id="pages-announcements" data-editor-section="pages/announcements" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-pages-announcements">
+<p class="section-path" data-editor-breadcrumb><a href="#pages/announcements" data-editor-alias>Announcements</a></p><div class="section-heading"><h2 id="heading-pages-announcements">Announcements</h2><button type="button" class="section-reset" data-reset-section="pages/announcements">Reset section</button></div>
+<div class="row">
+            <label>Open announcements <select data-key="announce.open"><option value="popup">In a pop-up</option><option value="site">On the site's page</option></select></label>
+          </div>
+<label class="check"><input type="checkbox" data-key="announce.preview"><span>Preview on hover</span></label>
+</section>
 <section id="canvas-documents" data-editor-section="pages/documents" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-pages-documents">
 <p class="section-path" data-editor-breadcrumb><a href="#pages/documents" data-editor-alias>Documents and quizzes</a></p><div class="section-heading"><h2 id="heading-pages-documents">Documents and quizzes</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="pages/documents">Reset section</button></div>
+<div class="row"><label>Rubrics <select data-key="rubric.show"><option value="auto">Automatic</option><option value="popup">Pop-up</option><option value="site">The site's own</option></select></label></div>
 <div class="row has-info">
           <label><span id="docpages-name">Dark documents</span> <select data-key="enhance.docPages" aria-describedby="docpages-note"><option value="plain">Off</option><option value="dim">Dimmed</option><option value="dark">Inverted</option></select></label><button type="button" class="info" popovertarget="docpages-note" aria-labelledby="info-more docpages-name" aria-describedby="docpages-note"></button>
         </div>
@@ -1273,6 +1281,35 @@
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.keys" aria-describedby="info-enhance-keys"><span id="info-enhance-keys-name">Keyboard shortcuts</span></label><button type="button" class="info" popovertarget="info-enhance-keys" aria-labelledby="info-more info-enhance-keys-name" aria-describedby="info-enhance-keys"></button>
 <div class="info-pop" id="info-enhance-keys" popover><span class="desc">g then c, a, g, m or s for Courses, Calendar, Grades, Messages, Activity; / to search; ? for the list.</span>
           <span class="desc">On Canvas: g then d, c, a, g or m for Dashboard, Courses, Calendar, Grades, Inbox; g then ? for the list.</span></div></div>
+</section>
+<section id="pages-popups" data-editor-section="pages/popups" data-sites="Canvas · Blackboard Ultra · Moodle" data-editor-power aria-labelledby="heading-pages-popups">
+<p class="section-path" data-editor-breadcrumb><a href="#pages/popups" data-editor-alias>Pop-ups</a></p><div class="section-heading"><h2 id="heading-pages-popups">Pop-ups</h2><button type="button" class="section-reset" data-reset-section="pages/popups">Reset section</button></div>
+<div class="group" id="announce-from" role="group" aria-labelledby="announce-from-h">
+          <h3 id="announce-from-h">Open announcements from</h3>
+          <div class="row">
+            <label>Better To Do, widgets and search <select data-key="announce.glaze"><option value="default">Default</option><option value="popup">Pop-up</option><option value="site">Site's page</option></select></label>
+            <label><span translate="no">Blackboard</span> <select data-key="announce.ultra"><option value="default">Default</option><option value="popup">Pop-up</option><option value="site">Site's page</option></select></label>
+            <label><span translate="no">Canvas</span> <select data-key="announce.canvas"><option value="default">Default</option><option value="popup">Pop-up</option><option value="site">Site's page</option></select></label>
+            <label><span translate="no">Moodle</span> <select data-key="announce.moodle"><option value="default">Default</option><option value="popup">Pop-up</option><option value="site">Site's page</option></select></label>
+          </div>
+        </div>
+<div class="row">
+            <label class="field"><span>Preview delay</span><input type="range" data-key="announce.delay" min="200" max="2000" step="100"><output data-for="announce.delay" data-format="sec"></output></label>
+            <label class="field"><span>Preview lines</span><input type="range" data-key="announce.lines" min="1" max="8" step="1"><output data-for="announce.lines"></output></label>
+          </div>
+<div class="group" id="announce-preview" role="group" aria-labelledby="announce-preview-h">
+          <h3 id="announce-preview-h">Preview on hover</h3>
+          <div class="row">
+            <label class="check"><input type="checkbox" data-key="announce.glazePreview"><span>Better To Do, widgets and search</span></label>
+            <label class="check"><input type="checkbox" data-key="announce.ultraPreview"><span translate="no">Blackboard</span></label>
+            <label class="check"><input type="checkbox" data-key="announce.canvasPreview"><span translate="no">Canvas</span></label>
+            <label class="check"><input type="checkbox" data-key="announce.moodlePreview"><span translate="no">Moodle</span></label>
+          </div>
+        </div>
+<label class="check"><input type="checkbox" data-key="rubric.inline"><span>Show inline when there's room</span></label>
+<div class="row">
+            <label>Pop-up animation <select data-key="popup.anim"><option value="genie">Genie</option><option value="fade">Fade</option><option value="none">None</option></select></label>
+          </div>
 </section>
 </div>
 <div id="panel-sharing" role="tabpanel" aria-labelledby="tab-sharing" data-editor-panel="sharing" data-no-preview hidden>

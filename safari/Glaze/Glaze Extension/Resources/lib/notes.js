@@ -28,7 +28,8 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   // italic, underline, strikethrough, lists and checklists, links, quotes, code, tables. Links: http(s) and mailto only,
   // made absolute (against `base`, the page a paste came from), opened with rel="noopener noreferrer". Pictures: only
   // Glaze's own stored ones (data-gz-file; the page shows them through revocable blob: addresses); any other picture
-  // becomes a link to it, so opening a note never loads anything from anywhere.
+  // becomes a link to it, so opening a note never loads anything from anywhere. `pictures(href)` (an announcement, from
+  // the school's own site) keeps the pictures it says yes to as <img src>.
   const RAW = set('script style template noscript textarea title xmp iframe noembed noframes plaintext');
   const DROP = set('script style template noscript textarea title xmp iframe noembed noframes plaintext head svg math object embed applet select option optgroup datalist button input canvas video audio source track picture link meta base frameset frame map area param keygen dialog portal');
   const VOID = set('area base br col embed hr img input link meta param source track wbr keygen');
@@ -67,7 +68,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
     : /text-decoration[^;]*underline/i.test(style) ? 'u' : /text-decoration[^;]*line-through/i.test(style) ? 's' : null);
   const clip = (s, n) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, n);
   // What an open tag becomes: an element { tag, attrs, kids }, or null to keep only what's inside it.
-  const element = (name, a, base) => {
+  const element = (name, a, base, pictures) => {
     let tag = MAP[name] || null;
     if (name === 'span' || name === 'font' || (name === 'b' && /font-weight\s*:\s*(normal|[1-4]00)/i.test(a.get('style') || ''))) tag = styled(a.get('style') || '');
     if (!tag) return null;
@@ -87,6 +88,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         // Another site's picture: a link to it instead, named by its alt text or its file name.
         const href = safeUrl((a.get('src') || '').trim(), base);
         if (!href || href.startsWith('mailto:')) return { drop: true };
+        if (pictures?.(href)) return { tag: 'img', attrs: { src: href, ...(a.get('alt') && { alt: clip(a.get('alt'), LIMIT.title) }) }, kids: [] };
         const last = new URL(href).pathname.split('/').pop() || '';
         let label = clip(a.get('alt') || '', LIMIT.title).trim();
         try { label ||= decodeURIComponent(last); } catch { label ||= last; }
@@ -104,7 +106,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   const WALL = set('li td th blockquote div table ul ol');
   // The tree of what's kept: { kids } of { tag, attrs, kids } and strings; `steps` counts the stack frames looked at; `cut`
   // is true when input was left unread because a budget (nodes, tags, or twice the body limit of text) ran out.
-  const parse = (html, { base } = {}) => {
+  const parse = (html, { base, pictures } = {}) => {
     const src = String(html || '');
     const root = { kids: [], steps: 0, cut: src.length > LIMIT.body * 2 };
     const stack = []; // { name, node }, node null for an element kept only for what's inside it
@@ -142,7 +144,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         continue;
       }
       if (DROP.has(name)) { if (!VOID.has(name) && !tk.empty) drop = { name, depth: 1 }; continue; }
-      const el = element(name, attrsOf(tk.attrs), base);
+      const el = element(name, attrsOf(tk.attrs), base, pictures);
       if (el?.drop) continue;
       const tag = el?.tag;
       if (tag && ENDS_P.has(tag)) { const i = find((e, out) => out === 'p', WALL); if (i >= 0) popTo(i); }

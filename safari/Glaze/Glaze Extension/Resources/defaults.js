@@ -115,6 +115,10 @@ const GZ_SPEC = {
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
   // lib/blocklist.js
   mods: { blocklist: [true, 'bool'] },
+  // Announcements and pop-ups (features/announce.js).
+  announce: { open: ['popup', ['popup', 'site']], ...Object.fromEntries(['glaze', 'ultra', 'canvas', 'moodle'].flatMap((k) => [[k, ['default', ['default', 'popup', 'site']]], [k + 'Preview', [true, 'bool']]])), preview: [true, 'bool'], delay: [600, [200, 2000]], lines: [3, [1, 8]] },
+  popup: { anim: ['genie', ['genie', 'fade', 'none']] },
+  rubric: { show: ['auto', ['auto', 'popup', 'site']], inline: [true, 'bool'] },
 };
 
 const GZ_DEFAULTS = {

@@ -1,6 +1,7 @@
 #!/bin/sh
 # Rewrites a copy of manifest.json for Safari, in place. Safari rejects options_ui.open_in_tab and
-# doesn't support use_dynamic_url; the App Store caps the description at 112 characters. Safari has no
+# doesn't support use_dynamic_url; the App Store caps the description at 112 characters and may reject a name that
+# carries other companies' trademarks, so Safari keeps the plain name Glaze. Safari has no
 # identity API, so Google Calendar sync's oauth2 key and optional identity permission go (S3 §4).
 # Code mods need Chrome: the sandbox page, its CSP and its files (mods/, beside the manifest) go too;
 # content.js starts code mods only where the manifest has the sandbox. Declarative widgets stay (features/modwidgets.js,
@@ -21,6 +22,7 @@ if optional:
     manifest['optional_permissions'] = optional
 else:
     manifest.pop('optional_permissions', None)
+manifest['name'] = 'Glaze'
 manifest['description'] = 'Restyle Blackboard Ultra, Canvas and Moodle: palettes, fonts, backgrounds and motion, plus handy extras.'
 for entry in manifest.get('web_accessible_resources', []):
     entry.pop('use_dynamic_url', None)

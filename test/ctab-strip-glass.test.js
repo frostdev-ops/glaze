@@ -131,6 +131,11 @@ test('Gradebook\'s student overview draws no band or light line under the course
   for (const [prop, v] of [['background', 'transparent'], ['border-bottom', '0'], ['box-shadow', 'none']]) assert.match(b, new RegExp(`${prop}:\\s*${v} !important`), prop);
 });
 
+test('a graded attempt\'s feedback and rubric column is a panel like the submission beside it, not the bare ground', () => {
+  const b = body(THEME, ':is(student-view-submission-panel, .student-view-submission-panel) main > aside');
+  assert.match(b, /background:\s*var\(--gz-surface-grain, none\), var\(--gz-surface-fill, var\(--gz-surface\)\) !important/);
+});
+
 test('a routed page\'s breadcrumb row is a floating glass panel like the course header, its title a gap below', () => {
   const row = body(THEME, 'content-page-header > header, .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"]');
   assert.ok(row, 'the routed header row rule');

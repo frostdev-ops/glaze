@@ -1,0 +1,80 @@
+<!doctype html>
+<!--
+  Synthetic text and IDs in Blackboard Ultra's observed markup (student read-only probe, 2026-10-25).
+  The course Announcements page is a top-level document at /ultra/courses/<cid>/announcements: announcement-list,
+  tr.announcement-item-row (is-read when read), td.announcement-header-column[role=gridcell], div.announcement-header,
+  div.click-message-detail, div.announcement-title-detail, a#list-item-title-<id>.list-item-title[href="#"]. The title is
+  the row's only clickable control. Stream title links have class js-title-link and analytics-id="stream.entry.title";
+  course links use analytics-id="stream.entry.course". The discussion, content and grade destinations below are synthetic.
+  No announcement was present in the live stream. The positive announcement-detail URL below tests the known detail
+  route only; it does not claim the live stream uses that href.
+  How a harness serves it: https://bb.school.test/ultra/** (any path) this file, text/html; everything else abort.
+  A plain click on an announcement title does what Ultra does: the address becomes
+  /ultra/stream/announcement-detail?courseId=<cid>&announcementId=<id> and a full panel covers the page
+  (window.__opened counts them). Modifier clicks are left to the browser.
+-->
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blackboard Learn</title>
+<base href="/ultra/">
+<style>
+  body { margin: 0; font: 14px/1.4 sans-serif; }
+  #site-wrap { padding: 24px; }
+  table { border-collapse: collapse; width: 100%; max-width: 900px; }
+  td { padding: 10px 8px; border-bottom: 1px solid #ccc; vertical-align: top; }
+  .list-item-body { margin: 4px 0 0; color: #555; }
+  .activity-feed { list-style: none; padding: 0; max-width: 900px; }
+  .element-card { padding: 12px; border: 1px solid #ccc; margin-bottom: 12px; }
+  .bb-offcanvas-panel.full { position: fixed; inset: 0; background: #fff; padding: 24px; }
+  html[data-route="stream"] .course-announcement-layer, html[data-route="course"] #activity-stream { display: none; }
+</style>
+</head><body>
+<div id="site-wrap">
+<h1 id="course-title">BIO 1100: Cell Biology</h1>
+<announcement-list><div><div class="page-announcement course-announcement-layer"><div class="guidance-wrapper "><span>2 Total</span></div><div class="list-announcement-content"><div class="row collapse"><div class="tabular-list-container"><div class="tabular-list">
+<table class="table-content sortable-table" role="grid" aria-readonly="true" aria-labelledby="announcement-table-caption"><caption id="announcement-table-caption" class="sr-only">Course Announcements</caption>
+<tbody>
+<tr class="announcement-item-row" role="row"><td class="announcement-header-column" role="gridcell"><div class="announcement-header"><div class="click-message-detail"><div class="announcement-title-detail"><a id="list-item-title-_7001_1" class="list-item-title  " href="#" data-analytics-id="course.announcements.listPanel.listItem.open.link">Lab moved to room 2</a></div><p class="list-item-body three-lines">This week's lab is in room 2 of the Science Building. Bring your lab coat and goggles.</p></div></div></td><td class="announcement-status-column" role="gridcell"><div class="item-status-info"><div><span class="list-item-status"></span><span class="list-item-date-sent">10/21/26, 1:55 PM</span></div></div></td></tr>
+<tr class="announcement-item-row is-read" role="row"><td class="announcement-header-column" role="gridcell"><div class="announcement-header"><div class="click-message-detail"><div class="announcement-title-detail"><a id="list-item-title-_7002_1" class="list-item-title  " href="#" data-analytics-id="course.announcements.listPanel.listItem.open.link">Exam seating plan</a></div><p class="list-item-body three-lines">Seats are assigned by last name.</p></div></div></td><td class="announcement-status-column" role="gridcell"><div class="item-status-info"><div><span class="list-item-status"></span><span class="list-item-date-sent">10/14/26, 9:00 AM</span></div></div></td></tr>
+</tbody></table>
+</div></div></div></div></div></div></announcement-list>
+<section class="js-base-stream-container"><div id="activity-stream" class="activity-stream"><div class="activity-group"><h2 class="activity-group-title">Recent</h2><ul class="activity-feed">
+<!-- Synthetic announcement-detail link: the live stream's announcement href is still unverified. -->
+<li id="stream-announcement" class="stream-item-container"><div class="stream-item"><div class="element-card"><div class="element-details"><div class="context"><a analytics-id="stream.entry.course" href="/ultra/courses/_101_1/outline">BIO 1100: Cell Biology</a></div><div class="name"><a class="js-title-link" analytics-id="stream.entry.title" href="/ultra/stream/announcement-detail?courseId=_101_1&amp;announcementId=_7001_1">Lab moved to room 2</a></div><div class="content">This week's lab is in room 2 of the Science Building.</div></div></div></div></li>
+<li id="stream-discussion" class="stream-item-container"><div class="stream-item"><div class="element-card"><div class="element-details"><div class="context"><a analytics-id="stream.entry.course" href="/ultra/courses/_101_1/outline">BIO 1100: Cell Biology</a></div><div class="name"><a class="js-title-link" analytics-id="stream.entry.title" href="/ultra/courses/_101_1/outline/discussion/_7010_1"><span>Week 7 discussion</span></a></div></div></div></div></li>
+<li id="stream-content" class="stream-item-container"><div class="stream-item"><div class="element-card"><div class="element-details"><div class="context"><a analytics-id="stream.entry.course" href="/ultra/courses/_101_1/outline">BIO 1100: Cell Biology</a></div><div class="name"><a class="js-title-link" analytics-id="stream.entry.title" href="/ultra/courses/_101_1/outline/edit/document/_7011_1"><span>Week 7 reading</span></a></div></div></div></div></li>
+<li id="stream-grade" class="stream-item-container"><div class="stream-item"><div class="element-card"><div class="element-details"><div class="context"><a analytics-id="stream.entry.course" href="/ultra/courses/_101_1/outline">BIO 1100: Cell Biology</a></div><div class="name"><a class="js-title-link" analytics-id="stream.entry.title" href="/ultra/courses/_101_1/grades"><span>Lab report grade</span></a></div></div></div></div></li>
+</ul></div></div></section>
+</div>
+<script>
+(() => {
+  window.__opened = 0;
+  const route = () => { document.documentElement.dataset.route = /^\/ultra\/stream/.test(location.pathname) ? 'stream' : 'course'; };
+  const panel = (title) => {
+    document.querySelector('.bb-offcanvas-panel')?.remove();
+    const p = document.createElement('div');
+    p.className = 'bb-offcanvas-panel full';
+    p.innerHTML = '<button class="js-close-announcement" type="button" aria-label="Close">×</button><h1></h1><p>Ultra\'s own panel.</p>';
+    p.querySelector('h1').textContent = title;
+    document.body.append(p);
+  };
+  // Ultra's own handling: bubbling, a plain click only, nothing already prevented.
+  document.addEventListener('click', (e) => {
+    const t = e.target instanceof Element ? e.target : null;
+    if (t?.closest('.js-close-announcement')) { t.closest('.bb-offcanvas-panel').remove(); return; }
+    const a = t?.closest('announcement-list a.list-item-title, #activity-stream .name a');
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (a.closest('#activity-stream') && !a.href.includes('announcement-detail')) return;
+    e.preventDefault();
+    const id = a.id.replace('list-item-title-', '') || new URL(a.href).searchParams.get('announcementId');
+    const cid = location.pathname.match(/\/courses\/(_\d+_\d+)\//)?.[1] || new URL(a.href).searchParams.get('courseId');
+    history.pushState(null, '', `${location.origin}/ultra/stream/announcement-detail?courseId=${cid}&announcementId=${id}`);
+    window.__opened++;
+    panel(a.textContent);
+  });
+  addEventListener('popstate', route);
+  route();
+})();
+</script>
+</body></html>

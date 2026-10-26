@@ -535,8 +535,9 @@ const REVIEW = {
   'PATCH /reviewSubmissions/sub-1': {},
   'GET /reviewSubmissions/sub-1': { data: { id: 'sub-1', attributes: { state: 'WAITING_FOR_REVIEW' } } },
 };
-// The live record today: English only, on a live app info and a new editable one that a new version brings.
-const EN_INFO = { id: 'ail-en', attributes: { locale: 'en-US', name: 'Glaze for Safari', subtitle: 'Your courses, your colors', privacyPolicyUrl: 'https://example.test/privacy', privacyChoicesUrl: null } };
+// The live record: English only, already matching the sources' name and subtitle, on a live app info and a new editable
+// one that a new version brings.
+const enInfo = () => ({ id: 'ail-en', attributes: { locale: 'en-US', name: listings.en.apple.name, subtitle: listings.en.apple.subtitle, privacyPolicyUrl: 'https://example.test/privacy', privacyChoicesUrl: null } });
 const enVersionLocale = (over = {}) => ({ id: 'loc-en', attributes: { locale: 'en-US', description: listings.en.apple.description, keywords: listings.en.apple.keywords, promotionalText: 'An older promotional text.', whatsNew: 'Older notes', supportUrl: 'https://example.test/support', marketingUrl: 'https://example.test/glaze', ...over } });
 const created = (type) => (call) => { const a = bodyOf(call).data.attributes; return reply({ data: { id: `${type}-${a.locale}`, attributes: a } }, 201); };
 
@@ -550,7 +551,7 @@ test('submitApple submits a new version released once approved, with every langu
       'PATCH /appStoreVersions/ver-1': {},
       'PATCH /appStoreVersions/ver-1/relationships/build': {},
       'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }, { id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
-      'GET /appInfos/info-1/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+      'GET /appInfos/info-1/appInfoLocalizations?limit=200': { data: [enInfo()] },
       'POST /appInfoLocalizations': created('ail'),
       'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
       'POST /appStoreVersionLocalizations': created('loc'),
@@ -627,7 +628,7 @@ test('with no live version yet (a first release still in review), the Apple dry 
       'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.4.3': { data: [] },
       'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&limit=20': { data: [{ id: 'ver-first', attributes: { appVersionState: 'WAITING_FOR_REVIEW', versionString: '3.3.5' } }] },
       'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'WAITING_FOR_REVIEW' } }] },
-      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [enInfo()] },
       'GET /appStoreVersions/ver-first/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
     }));
     const changes = await previewAppleListing(e, 'IOS', '3.4.3', listings);
@@ -646,7 +647,7 @@ test('a language created where no English exists yet is not told to borrow its o
       'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.4.3': { data: [] },
       'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&limit=20': { data: [] },
       'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] },
-      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [enInfo()] },
     }));
     const changes = await previewAppleListing(e, 'IOS', '3.4.3', listings);
     assert.ok(!changes.some((c) => c.field === 'screenshots' && c.locale === 'en-US'));
@@ -660,7 +661,7 @@ test('the Apple dry run compares with the live version when this one does not ex
       'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.4.3': { data: [] },
       'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&limit=20': { data: versions },
       'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] },
-      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [EN_INFO] },
+      'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [enInfo()] },
       'GET /appStoreVersions/ver-live/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
     });
     stubFetch(table([{ id: 'ver-live', attributes: { appVersionState: 'READY_FOR_DISTRIBUTION', versionString: '3.3.8' } }]));
@@ -793,7 +794,7 @@ test('Apple listing writes fail closed when the version state is missing or unkn
 test('an existing Apple review draft synchronizes every locale before submission and resumes partial updates', async () => {
   const { submitApple } = await load(), { dir, env: e } = appleEnv();
   try {
-    const infoLocales = [EN_INFO], versionLocales = [enVersionLocale()];
+    const infoLocales = [enInfo()], versionLocales = [enVersionLocale()];
     let failed = false;
     const table = {
       'GET /apps/app-1/appStoreVersions*': { data: [{ id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION', releaseType: 'AFTER_APPROVAL' } }] },

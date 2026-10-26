@@ -21,6 +21,8 @@ test('public search lists project only safe fields; bodies become text, unavaila
   assert.doesNotMatch(JSON.stringify(rows), /forbiddenword|files.example.com|isRead|contentDetail|topic/);
   assert.equal(rows[1].url, '/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_701_1');
   assert.equal(rows[3].url, '/ultra/courses/_101_1/announcements');
+  assert.deepEqual([rows[3].cid, rows[3].aid], ['_101_1', '_801_1'], 'an announcement keeps what Glaze\'s pop-up asks for');
+  assert.ok(rows.filter((r) => r.kind !== 'Announcement').every((r) => !('aid' in r)));
   assert.equal(rows[4].url, '/ultra/courses/_101_1/engagement');
   assert.deepEqual(U.searchItems(U.SEARCH_KINDS[0], fixture.contents, { id: '../bad' }, D.html), []);
   for (const k of U.SEARCH_KINDS) assert.doesNotMatch(k.fields, /contentDetail|contentHandler(?:,|$)|isRead|secret|key|url|links/);

@@ -106,6 +106,64 @@ const check = async (name, test) => {
       await page.fill('#find', '');
       assert.equal(await page.locator('#bb-navigation').evaluate((e) => e.open), false, 'clearing search restores More options');
     });
+    await check('announcement-settings', async () => {
+      await open('pages/announcements');
+      if (await page.locator('#editor-all').isChecked()) await page.locator('#editor-all').uncheck();
+      for (const key of ['announce.open', 'announce.preview']) assert.equal(await page.locator(`[data-key="${key}"]`).isVisible(), true, `${key} is an everyday setting`);
+      assert.equal(await page.locator('[data-editor-section="pages/popups"]').evaluate((s) => s.hasAttribute('data-folded')), true, 'Pop-ups is under All settings');
+      for (const [query, key] of [['Pop-up animation', 'popup.anim'], ['Preview delay', 'announce.delay'], ['Open announcements from', 'announce.glaze']]) {
+        await page.fill('#find', query);
+        assert.equal(await page.locator(`[data-key="${key}"]`).isVisible(), true, `${query} reveals its control`);
+      }
+      await page.fill('#find', '');
+      await page.locator('#editor-all').check();
+      await page.selectOption('[data-key="popup.anim"]', 'fade');
+      await page.waitForFunction(() => new Promise((r) => chrome.storage.sync.get('popup', (x) => r(x.popup?.anim === 'fade'))));
+      await page.locator('[data-reset-section="pages/popups"]').click();
+      await page.waitForFunction(() => new Promise((r) => chrome.storage.sync.get('popup', (x) => r((x.popup?.anim ?? 'genie') === 'genie'))));
+      assert.equal(await page.locator('[data-key="popup.anim"]').inputValue(), 'genie', 'Reset section puts the animation back');
+      await page.locator('#editor-all').uncheck();
+    });
+    await check('rubric-settings', async () => {
+      await open('pages/documents');
+      await page.evaluate(async () => {
+        const s = GZ_SANITIZE();
+        await chrome.storage.sync.set({ rubric: s.rubric });
+      });
+      await open('pages/documents');
+      if (await page.locator('#editor-all').isChecked()) await page.locator('#editor-all').uncheck();
+      const mode = page.locator('[data-key="rubric.show"]'), inline = page.locator('[data-key="rubric.inline"]');
+      assert.equal(await mode.isVisible(), true, 'Rubrics is an everyday setting');
+      assert.equal(await mode.inputValue(), 'auto');
+      assert.equal(await inline.isVisible(), false, 'inline waits for All settings');
+      await page.fill('#find', "Show inline when there's room");
+      assert.equal(await inline.isVisible(), true, 'search finds the inline preference');
+      assert.equal(await inline.isChecked(), true);
+      await page.fill('#find', '');
+      assert.equal(await inline.isVisible(), false, 'clearing search restores everyday controls');
+      await page.locator('#editor-all').check();
+      assert.equal(await inline.isVisible(), true);
+      await mode.selectOption('site');
+      await inline.uncheck();
+      await page.waitForFunction(async () => {
+        const { rubric } = await chrome.storage.sync.get('rubric');
+        return rubric?.show === 'site' && rubric?.inline === false;
+      });
+      await open('pages/documents');
+      assert.equal(await mode.inputValue(), 'site', 'the selected mode survives a reload');
+      assert.equal(await inline.isChecked(), false, 'the inline preference survives a reload');
+      await page.locator('[data-reset-section="pages/documents"]').click();
+      await page.waitForFunction(async () => {
+        const { rubric } = await chrome.storage.sync.get('rubric');
+        return rubric?.show === 'auto' && rubric?.inline === false;
+      });
+      assert.equal(await mode.inputValue(), 'auto', 'Reset section restores Automatic');
+      assert.equal(await inline.isChecked(), false, 'Documents reset preserves the Pop-ups preference');
+      await page.locator('[data-reset-section="pages/popups"]').click();
+      await page.waitForFunction(async () => (await chrome.storage.sync.get('rubric')).rubric?.inline === true);
+      assert.equal(await inline.isChecked(), true, 'Pop-ups reset restores inline');
+      await page.locator('#editor-all').uncheck();
+    });
     await check('legacy-section-hashes', async () => {
       const host = await context.newPage();
       try {
@@ -209,7 +267,7 @@ const check = async (name, test) => {
           await editor.locator('#editor-all').check();
           for (const dir of ['ltr', 'rtl']) {
             await editor.evaluate((direction) => { document.documentElement.dir = direction; }, dir);
-            for (const route of ['look/type', 'navigation/bar', 'navigation/tabs', 'navigation/sidebar', 'study/todo', 'pages/documents']) {
+            for (const route of ['look/type', 'navigation/bar', 'navigation/tabs', 'navigation/sidebar', 'study/todo', 'pages/documents', 'pages/popups']) {
               await editor.evaluate((hash) => { location.hash = hash; }, route);
               await pause(100);
               const tag = `${lang} ${embedded ? 'embedded' : 'standalone'} ${dir} ${route}`;
@@ -301,7 +359,7 @@ const check = async (name, test) => {
             }, variant);
             assert.equal(await host.locator('[data-key="navbar.on"]').isChecked(), true, 'narrow layout includes the default navigation controls after earlier checks');
             const routes = await host.evaluate(() => [...document.querySelectorAll('[data-editor-section]')].map((s) => s.dataset.editorSection));
-            assert.equal(routes.length, 37, 'every settings route is swept');
+            assert.equal(routes.length, 39, 'every settings route is swept');
             const panels = new Set();
             for (const route of routes) {
               await host.evaluate((hash) => { location.hash = hash; }, route);

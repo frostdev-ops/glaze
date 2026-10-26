@@ -445,6 +445,8 @@
   // The Look's LMS rules (features/rules.js), once it has any: each pass puts them back on what the page redrew.
   const syncRules = () => { if (globalThis.GZ_RULES) GZ_RULES.sync(); else if (GZ_CTX.parts()?.rules?.length) need('features/rules.js', () => globalThis.GZ_RULES).then(() => GZ_RULES.sync(), () => {}); };
   document.addEventListener('glaze:parts', syncRules);
+  // Features of some pages only (features/routes.js).
+  const routes = () => need('features/routes.js', () => globalThis.GZ_ROUTES).then(() => GZ_ROUTES.sync(), no);
   const flush = () => {
     timer = 0;
     if (hid()) { dirty.clear(); full = true; return; }
@@ -461,6 +463,7 @@
     globalThis.GZ_XPARTS_PAGE?.pass();
     placeScene();
     syncRules();
+    routes();
     if (!said) return;
     if (all) X.syncNav();
     X.renderProgress();
@@ -520,6 +523,7 @@
     recordCourses();
     if (!ultra) X.paintCourses();
     syncRules();
+    routes();
     if (!words()) { wordsLate = true; return; }
     tagExtras([document.body]);
     watchDrafts();

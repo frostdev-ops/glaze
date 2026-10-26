@@ -1,15 +1,15 @@
 // A school's own sites stay registered while Glaze's registrations are brought up to date, headless, with the real unpacked
-// extension and its real worker: a staged copy holding https://canvas.school.test and https://bb.school.test (the student's
-// grants), both on their LMS's list. With nothing changed, the worker's pass over the registrations makes no call (Chrome's
-// own answers read as what Glaze asked for); with an older file list and older matches registered, it updates both in
+// extension and its real worker: a staged copy holding https://canvas.school.test, https://another.school.test and
+// https://bb.school.test (the student's grants), all on their LMS's list. With nothing changed, the worker's pass over the
+// registrations makes no call (Chrome's own answers, match patterns sorted, read as what Glaze asked for); with an older file list and older matches registered, it updates both in
 // place, never unregistering, and their pages get Glaze. (chrome.runtime.reload() leaves a --load-extension copy
 // unloaded headless, so the update itself is test/register-update.test.js's.)
 // NODE_PATH=<installed playwright> nice node scripts/register-update-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const C = 'https://canvas.school.test', B = 'https://bb.school.test';
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${C}/*`, `${B}/*`]);
+const C = 'https://canvas.school.test', A = 'https://another.school.test', B = 'https://bb.school.test';
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${C}/*`, `${A}/*`, `${B}/*`]);
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-register-update-'));
@@ -60,9 +60,10 @@ const worker = async (ctx) => until(async () => ctx.serviceWorkers().find((w) =>
     });
     const sw = await worker(ctx);
     check(!!sw, 'the worker is up');
-    await sw.evaluate(async (o) => { await chrome.storage.local.set(o); }, { canvas: [`${C}/*`], ultra: [B] });
+    // Notes' hook takes both Canvas sites, listed out of the order Chrome sorts them in.
+    await sw.evaluate(async (o) => { await chrome.storage.local.set(o); }, { canvas: [`${C}/*`, `${A}/*`], ultra: [B] });
     const ids = [`${C}/*`, `ultra:${B}`];
-    check(await until(async () => { const r = await registered(sw); return ids.every((x) => x in r); }), 'both listed sites are registered');
+    check(await until(async () => { const r = await registered(sw); return [...ids, `${A}/*`].every((x) => x in r) && r['gz-notes-home']?.matches.includes(`${A}/courses/*`); }), 'the listed sites and Notes\' hook on them are registered');
     const want = await registered(sw);
     check(JSON.stringify(await pass(sw)) === '[]', 'with nothing changed, the pass makes no call');
 

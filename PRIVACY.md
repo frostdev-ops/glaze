@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-22_
+_Last updated: 2026-10-25_
 
 ## User-installed mods
 
@@ -586,8 +586,8 @@ you import) are bundled. It makes requests in these cases:
   course's assignment groups with your submissions, and its grading periods where it has them. These never follow a
   redirect, and the next page is asked for only on your own Canvas site.
   Glaze never writes grades or what-if scores to Canvas.
-  These requests are read-only GETs to your own Canvas site with your existing session; opt-in planner ticks and
-  nickname/color edits are described below. The due list, course details, course-list snapshot, badge records and
+  These requests are read-only GETs to your own Canvas site with your existing session; opt-in planner ticks,
+  nickname/color edits and an announcement's read mark are described below. The due list, course details, course-list snapshot, badge records and
   saved feature summaries described above are kept; search and calculator source answers stay in page memory.
   For supported Inbox draft recovery, Glaze reads your profile id and, when offering a copy or checking
   a send, your sent conversations and matching conversation details without marking mail read. It
@@ -715,7 +715,26 @@ you import) are bundled. It makes requests in these cases:
   the page's own CSRF token, then takes you to the login page. On Moodle, the bar's **Edit mode** switch operates
   Moodle's own control (it flips Moodle's checkbox, so Moodle's script does what it always does, or submits Moodle's
   form if that script hasn't started), and only on your click. On Ultra and Moodle, Sign out is the site's own link.
-  These, the nickname and color edits and the ticks above are the only changes Glaze makes to any site.
+- **Marking an announcement read when you open it** (Glaze's announcement pop-up, on by default). Only when you open
+  one, from Better To Do, a widget, Ctrl+K search or the site's own lists, Glaze asks your own site for that announcement, with your
+  existing session (Canvas `GET /api/v1/courses/<course>/discussion_topics/<topic>`; Blackboard's public
+  `GET /learn/api/public/v1/courses/<course>/announcements/<announcement>`; Moodle's `mod_forum_get_discussion_posts`
+  through `/lib/ajax/service.php` with the page's session key), and marks it read as the site's own page does when you
+  open it there: on Canvas, `PUT /api/v1/courses/<course>/discussion_topics/<topic>/read` with the page's own CSRF token,
+  only for one Canvas calls unread; on Moodle, Moodle's own answer marks its posts read when the forum tracks them automatically, as
+  its page does. Blackboard is not marked. The pop-up shows the body through Glaze's sanitizer, pictures only from your
+  school's site, fetched without following redirects; their temporary image addresses are released when the pop-up closes.
+  The announcement is kept in the page's memory for the page's life and never stored. A preview on hover or focus,
+  after its delay, asks the same read-only request on Canvas and Blackboard and marks nothing; on Moodle it asks nothing.
+  If the announcement can't be read, the site's own page opens instead.
+  These, the nickname and color edits, the read mark and the ticks above are the only changes Glaze makes to any site.
+- **Rubrics** (Canvas and Blackboard Ultra, Automatic by default). On a recognized assignment page, Glaze first uses the shared account lookup
+  (Canvas `GET /api/v1/users/self/profile`; Ultra `GET /learn/api/v1/users/me`) to identify your account.
+  It then reads the rubric and your own published rubric scores and feedback from your own site with your existing session, through paced,
+  same-origin GETs that never follow a redirect (Canvas `/api/v1/courses/<course>/assignments/<assignment>` and its
+  `submissions/self`; on Ultra, your grades for the course, the assignment's gradebook column and your attempt). It writes
+  nothing and marks nothing read. The rubric stays in the page's memory until you leave the assignment, hide the tab or
+  turn Glaze off, and is never stored. When Glaze can't read or recognize a rubric, the site's own view stays.
 - **Dashboard notes and widgets** (Canvas; widgets on by default, with the fresh-install starter layout above). The notes and widgets that need your account ask your own Canvas site for your profile (user id
   and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
   items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one

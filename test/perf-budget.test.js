@@ -211,6 +211,14 @@ const TABS_AUTO = { ultra: 337 + 371, canvas: 337 + 103, moodle: 337 };
 // extras.pointerOn and its migration from System pointer, and content.js loading the pointer's code only while it is on:
 // 146 bytes on every site. Measured against eb966413.
 const POINTER_SWITCH = 146;
+// Glaze's pop-up (announcements, then rubrics; a named raise under the owner's 2026-10-19 approval, the coordinator's ask
+// that its settings be static GZ_SPEC entries): defaults.js's announce and popup groups (397 bytes on every site) and
+// content.js's one hook for features that belong to some pages only, features/routes.js (195). The pop-up, previews, the
+// router and each routed feature load on demand. Measured against 70397bbf.
+const POPUP_CORE = 592;
+// Rubric preferences are static settings; its parser and UI load only on assignment pages. The rubric group adds
+// 81 bytes in defaults.js on every site, measured against db5deabb (2026-10-25, coordinator-approved named allowance).
+const RUBRIC_SETTINGS = 81;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -219,7 +227,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content-ultra.js')), c
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH;
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS;
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -322,6 +330,7 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
+  ['features/rubric.js', 'getComputedStyle(a.box)', 1], // One recognized rubric section's padding and font per layout pass; no descendant sweep.
   ['lib/editor.js', 'getComputedStyle(doc.documentElement)', 1], // One root direction read per category keypress, never on scroll or an LMS page.
   ['lib/scene-host.js', 'getComputedStyle(c)', 1], // only direct siblings of the course/routed shell, when deciding whether it covers visible content
   ['features/coursemenu.js', 'getComputedStyle(g)', 1], // WP-N2: only the focused roving group, once per horizontal arrow key

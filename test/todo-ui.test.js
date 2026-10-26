@@ -632,3 +632,36 @@ test("the head: Add task and ⋯ only; ⋯ opens Share sessions and Export, and 
   assert.equal(row(), undefined, 'choosing one closes it');
   await settle();
 });
+
+// An announcement in the list opens in Glaze's pop-up (features/announce.js, stood in for here) as its settings say, and
+// keeps the browser's own for a modifier or middle click; once Canvas has it as read, the list says so too.
+test('an announcement opens through GZ_ANNOUNCE for a plain click; Ctrl, Cmd, Shift, Alt keep the browser\'s', async () => {
+  const f = feature();
+  const gone = [];
+  f.c.GZ_ANNOUNCE = { ready: Promise.resolve(), go: (r) => gone.push(r) };
+  const loaded = [];
+  f.c.GZ_CTX.need = async (file) => { loaded.push(file); };
+  const ann = { type: 'announcement', id: '7', cid: '25', course: 'BIO', title: 'Lab moved', at: Date.now() - 864e5, url: '/courses/25/discussion_topics/7', read: false };
+  f.p.seed({ prefs: O, cache: { key: 'todo:https://canvas.test/3', at: Date.now(), items: [ann], grading: [], sums: {} } });
+  f.p.render(true);
+  const a = { dataset: { ann: 'announcement:7' }, href: 'https://canvas.test/courses/25/discussion_topics/7' };
+  const click = (o = {}) => ({ target: { closest: (s) => (s === 'a[data-ann]' ? a : null) }, button: 0, isTrusted: true, prevented: false, preventDefault() { this.prevented = true; }, ...o });
+  for (const mod of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }, { isTrusted: false }]) {
+    const e = click(mod);
+    f.p.onClick(e);
+    assert.equal(e.prevented, false, JSON.stringify(mod));
+  }
+  await settle();
+  assert.deepEqual(gone, []);
+  const e = click();
+  f.p.onClick(e);
+  assert.equal(e.prevented, true);
+  await settle();
+  assert.deepEqual(loaded, ['features/announce.js']);
+  const r = gone[0];
+  assert.deepEqual({ site: r.site, entry: r.entry, courseId: r.courseId, id: r.id, url: r.url, title: r.title, course: r.course },
+    { site: 'canvas', entry: 'glaze', courseId: '25', id: '7', url: 'https://canvas.test/courses/25/discussion_topics/7', title: 'Lab moved', course: 'BIO' });
+  assert.equal(typeof r.from, 'function', 'focus goes back to the link as drawn after the list redraws');
+  r.onRead();
+  assert.equal(f.p.get().cache.items[0].read, true, 'read once Canvas has it');
+});

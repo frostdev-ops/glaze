@@ -17,6 +17,7 @@ const FORMAT = {
   deg: (v) => `${v}°`,
   presence: (v) => t(['Faint', 'Soft', 'Clear', 'Bold'][Math.min(3, Math.floor(v / 25))]),
   themepx: (v) => (v < 0 ? t('Theme') : `${v}px`),
+  sec: (v) => `${GZ_I18N.num(v / 1000, GZ_I18N.ui())} s`,
 };
 
 let hintTimer = 0, undoHeld = false;

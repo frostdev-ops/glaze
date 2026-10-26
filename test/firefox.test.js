@@ -15,6 +15,10 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     const zip = path.join(dist, `glaze-v${version}-firefox.zip`);
     const files = new Set(execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).split('\n'));
     const m = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json'], { encoding: 'utf8' }));
+    assert.equal(m.name, 'Glaze (Firefox development)');
+    assert.equal(m.short_name, 'Glaze');
+    assert.equal(m.default_locale, 'en');
+    for (const lang of ['en', 'de', 'es', 'fr', 'nl', 'pt_BR']) assert.ok(files.has(`_locales/${lang}/messages.json`));
     assert.equal(m.background.service_worker, undefined);
     assert.deepEqual(m.background.scripts.slice(0, 1), ['lib/firefox-background.js']);
     assert.equal(m.background.scripts.at(-1), 'lib/background.js');

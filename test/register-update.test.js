@@ -25,8 +25,13 @@ const covers = (p, o) => {
   return ph === '*' || ph === oh || (ph.startsWith('*.') && (oh === ph.slice(2) || oh.endsWith(ph.slice(1))));
 };
 
-// `registered`: what the browser kept from the version before; `update: false`, a browser without updateContentScripts.
-const worker = ({ registered = [], update = true, ignoreUpdate = [], local = {}, sync = {}, held = [`${C}/*`, `${M}/*`, `${B}/*`] } = {}) => {
+// A registration as Chrome hands it back (logged from Chromium 153): its defaults filled in, match patterns sorted.
+const chromeBack = (s) => ({ allFrames: false, matchOriginAsFallback: false, persistAcrossSessions: true, runAt: 'document_idle', world: 'ISOLATED', ...s,
+  matches: [...s.matches].sort(), ...s.excludeMatches && { excludeMatches: [...s.excludeMatches].sort() } });
+
+// `registered`: what the browser kept from the version before; `update: false`, a browser without updateContentScripts;
+// `chrome`: registrations read back as Chrome gives them.
+const worker = ({ registered = [], update = true, ignoreUpdate = [], local = {}, sync = {}, held = [`${C}/*`, `${M}/*`, `${B}/*`], chrome = false } = {}) => {
   const store = { local: structuredClone(local), sync: structuredClone(sync), session: {} };
   const installed = [], startup = [], changed = [], added = [], removed = [];
   const listen = (list) => ({ addListener: (f) => list.push(f) });
@@ -41,7 +46,7 @@ const worker = ({ registered = [], update = true, ignoreUpdate = [], local = {},
   });
   const step = (name, ids) => { ids = plain(ids); w.calls.push([name, ids]); w.steps.push({ name, ids, have: new Map([...w.reg].map(([id, s]) => [id, structuredClone(s)])) }); };
   const scripting = {
-    getRegisteredContentScripts: async () => { const list = [...w.reg.values()].map(plain); await w.read?.(); return list; },
+    getRegisteredContentScripts: async () => { const list = [...w.reg.values()].map((s) => plain(chrome ? chromeBack(s) : s)); await w.read?.(); return list; },
     registerContentScripts: async (list) => {
       await w.write?.('register');
       for (const s of list) if (w.reg.has(s.id)) throw Error(`Duplicate script ID '${s.id}'`);
@@ -203,6 +208,18 @@ for (const [id, key, value, expected] of [
   w.calls.length = 0;
   await w.pass();
   assert.deepEqual(w.calls, [], 'a second pass has no stale fields left to update');
+});
+
+test('Chrome\'s read-back, match patterns sorted: a pass with nothing changed unregisters nothing and updates nothing', async () => {
+  const other = 'https://canvas.another.edu/*';
+  const w = worker({ local: { ...local, canvas: [`${C}/*`, other] }, sync: { enhance: { notes: true, gradescope: true } },
+    held: [`${C}/*`, `${M}/*`, `${B}/*`, other, 'https://*/*'], chrome: true });
+  await w.install('install');
+  assert.deepEqual(['gz-detect', 'gz-gradescope', 'gz-notes-home'].filter((id) => !w.reg.has(id)), [], 'every kind of registration');
+  w.calls.length = 0;
+  await w.pass();
+  assert.deepEqual(w.calls.filter(([name]) => name === 'unregister'), []);
+  assert.deepEqual(w.calls, []);
 });
 
 test('browser defaults and full extension file URLs leave equivalent registrations alone', async () => {

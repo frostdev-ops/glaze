@@ -453,3 +453,11 @@ test('review: Canvas pagination stops before another page when Glaze switches of
   await assert.rejects(c.X.ctx.moduleItems('7', '42', true), /stale/);
   assert.equal(c.asked.length, 1);
 });
+
+test('a 204 answer (a write such as Canvas\'s read mark) comes back through the queue, even with an empty body stream', async () => {
+  const q = lmsq(() => [204]);
+  q.g.fetch = async () => ({ ok: true, status: 204, statusText: 'No Content', headers: new Headers(), body: new Response('').body, arrayBuffer: async () => new ArrayBuffer(0) });
+  const r = await q.Q.fetch(`${ORIGIN}/api/v1/courses/1/discussion_topics/2/read`, { method: 'PUT' });
+  assert.equal(r.status, 204);
+  assert.equal(r.ok, true);
+});

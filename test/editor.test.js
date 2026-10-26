@@ -6,7 +6,7 @@ for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(p
 const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
 const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'sharing', 'mods', 'backup', 'about'];
-const GROUP = { stream: 'pages/dashboard', docreview: 'pages/documents', auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'navigation/bar', navbar: 'navigation/bar', sidebar: 'navigation/sidebar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'pages/declutter', card: 'courses/cards', courses: 'courses/list', mods: 'backup/privacy' };
+const GROUP = { stream: 'pages/dashboard', docreview: 'pages/documents', auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'navigation/bar', navbar: 'navigation/bar', sidebar: 'navigation/sidebar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'pages/declutter', card: 'courses/cards', courses: 'courses/list', mods: 'backup/privacy', announce: 'pages/popups', popup: 'pages/popups', rubric: 'pages/popups' };
 const ENHANCE = {
   'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'newcontent', 'drafts', 'download', 'place'],
   'pages/shortcuts': ['palette', 'search', 'keys'],
@@ -24,6 +24,8 @@ const ENHANCE = {
 const OVERRIDE = {
   enabled: 'header', footer: 'pages/declutter', preset: 'look/palette', presets: 'look/palette',
   'widgets.land': 'pages/dashboard',
+  // The everyday announcement choices; each entry point's, the previews' timing and the pop-up's motion are All settings only.
+  'announce.open': 'pages/announcements', 'announce.preview': 'pages/announcements', 'rubric.show': 'pages/documents',
   // The student's pointer, its switch and its animation have a section of their own; the rest of extras is stickers and rotation.
   'extras.pointer': 'look/pointer', 'extras.pointerOn': 'look/pointer', 'extras.pointerAnim': 'look/pointer',
   ...Object.fromEntries(['radius', 'glass', 'depth', ...Object.keys(D.GZ_SPEC.look).filter((k) => /^(surface|shadow)/.test(k))].map((k) => [`look.${k}`, 'look/surfaces'])),
@@ -75,7 +77,7 @@ const MORE = {
     'nav-link-tab', 'nav-link-save', 'nav-link-cancel', 'nav-reset', 'nbar-items', 'nbar-links', 'nbar-link-form', 'nbar-mods', 'card-set', 'card-set-clear', 'pet-library'],
 };
 // Sections only for power users: shown with All settings, while searching, or when an address leads to them.
-const POWER = ['look/nav-layout', 'look/rules', 'study/schedule', 'sharing/relay', 'mods/widget', 'mods/dev'];
+const POWER = ['look/nav-layout', 'look/rules', 'study/schedule', 'pages/popups', 'sharing/relay', 'mods/widget', 'mods/dev'];
 // Every address the settings had before the regrouping, and the categories' old names a stored editorTab may hold.
 const OLD_ROUTES = ['look/palette', 'look/type', 'look/surfaces', 'look/background', 'look/cards', 'look/courses', 'look/navigation', 'look/nav-layout', 'look/rules', 'look/motion', 'look/pointer', 'look/extras',
   'navigation/bar', 'navigation/items', 'navigation/sidebar', 'navigation/tabs', 'blackboard/nav', 'blackboard/dashboard', 'blackboard/stream', 'blackboard/folders', 'blackboard/declutter', 'blackboard/tabs',
@@ -356,6 +358,17 @@ test('IA: everyday controls stay in view and the rest sit in each section\'s Mor
   const withMore = sections.filter((sec) => nodes.some((n) => n.tag === 'details' && (n.attrs.class || '').includes('more') && n.parents.includes(sec))).map((n) => n.attrs['data-editor-section']);
   assert.deepEqual(withMore, ['look/palette', 'look/type', 'look/surfaces', 'look/background', 'look/motion', 'look/pointer', 'navigation/bar', 'navigation/items', 'navigation/tabs', 'navigation/sidebar',
     'courses/cards', 'study/todo', 'study/grades', 'study/widgets', 'study/pet', 'pages/content', 'pages/documents', 'pages/dashboard']);
+});
+
+test('IA: rubric mode is everyday in Documents and quizzes and inline waits in Pop-ups', () => {
+  const mode = controlsOf('rubric.show'), inline = controlsOf('rubric.inline');
+  assert.equal(mode.length, 1); assert.equal(inline.length, 1);
+  assert.equal(owner(mode[0]), 'pages/documents');
+  assert.equal(owner(inline[0]), 'pages/popups');
+  assert.equal(inMore(mode[0]), false);
+  assert.ok(![mode[0], ...mode[0].parents].some((n) => Object.hasOwn(n.attrs, 'data-editor-power')));
+  assert.ok([inline[0], ...inline[0].parents].some((n) => Object.hasOwn(n.attrs, 'data-editor-power')));
+  assert.deepEqual(nodes.filter((n) => n.tag === 'option' && n.parents.includes(mode[0])).map((n) => n.attrs.value), ['auto', 'popup', 'site']);
 });
 
 test('IA: power-user sections are marked, and All settings is a local switch in the header', () => {

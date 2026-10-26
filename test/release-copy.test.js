@@ -15,64 +15,70 @@ test('3.3.6 release claims keep typing effects private and the pointer choice ou
   assert.match(latest, /Safari: Settings opened inside/);
 });
 
-const fresh = {
-  '': ['Chrome: Glaze asks at install', 'Firefox: Glaze asks at install', 'Moodle on moodlecloud.com', 'sketch of the course'],
-  de: ['Chrome: Glaze fordert', 'Firefox: Glaze fordert', 'Moodle auf moodlecloud.com', 'Skizze des Kurses'],
-  es: ['Chrome: Al instalarse', 'Firefox: Al instalarse', 'Moodle en moodlecloud.com', 'boceto del curso'],
-  fr: ['Chrome : À l’installation', 'Firefox : À l’installation', 'Moodle sur moodlecloud.com', 'esquisse du cours'],
-  nl: ['Chrome: Bij installatie', 'Firefox: Bij installatie', 'Moodle op moodlecloud.com', 'schets van de cursus'],
-  'pt-BR': ['Chrome: Na instalação', 'Firefox: Na instalação', 'Moodle em moodlecloud.com', 'esboço do curso'],
-};
-for (const [lang, expected] of Object.entries(fresh)) test(`3.4 listing ${lang || 'en'} names both browsers' install access, MoodleCloud and the course sketch`, () => {
-  const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
-  const block = text.slice(text.indexOf(' 3.4\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
-  for (const term of expected) assert.ok(block.includes(term), term);
-});
+const listing = (lang) => read(`store/listing${lang ? `-${lang}` : ''}.md`);
+const part = (text, heading) => text.split(`\n## ${heading}`)[1].replace(/^[^\n]*\n\n/, '').split(/\n## /)[0];
+const description = (lang) => part(listing(lang), 'Detailed description');
 
-const settings = {
-  '': ['\nFROM 3.4\n', 'More options', 'All settings', 'pet habitat', 'Automatic', 'Moodle: Density'],
-  de: ['\nAUS 3.4\n', '„Weitere Optionen“', '„Alle Einstellungen“', 'Haustier-Zuhause', '„Automatisch“', 'Moodle: Dichte'],
-  es: ['\nDE 3.4\n', '«Más opciones»', '«Todos los ajustes»', 'hábitat de la mascota', '«Automático»', 'Moodle: la densidad'],
-  fr: ['\nDE LA VERSION 3.4\n', '« Plus d’options »', '« Tous les réglages »', 'habitat du compagnon', '« Automatique »', 'Moodle : la densité'],
-  nl: ['\nUIT 3.4\n', '“Meer opties”', '“Alle instellingen”', 'huisdierverblijf', '“Automatisch”', 'Moodle: dichtheid'],
-  'pt-BR': ['\nDA 3.4\n', '“Mais opções”', '“Todas as configurações”', 'habitat do mascote', '“Automática”', 'Moodle: densidade'],
+// From 3.4: install access covers hosted LMS domains, the gallery and relay; a school's own address is added in Sites.
+const access = {
+  '': ['Settings › Privacy and data › Sites', 'course tab sketches stay in memory'],
+  de: ['Einstellungen › Datenschutz und Daten › Websites', 'Skizzen der Kurs-Tabs bleiben im Arbeitsspeicher'],
+  es: ['Ajustes › Privacidad y datos › Sitios', 'bocetos de las pestañas de cursos se quedan en la memoria'],
+  fr: ['Réglages › Confidentialité et données › Sites', 'esquisses des onglets de cours restent en mémoire'],
+  nl: ['Instellingen › Privacy en gegevens › Sites', 'schetsen van cursustabbladen blijven in het geheugen'],
+  'pt-BR': ['Configurações › Privacidade e dados › Sites', 'esboços das abas de cursos ficam na memória'],
 };
-for (const [lang, expected] of Object.entries(settings)) test(`3.4 listing ${lang || 'en'} keeps 3.4.2's regrouped settings, the habitat, Automatic course tabs and Moodle's density`, () => {
-  const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
-  const block = text.slice(text.indexOf(expected[0])).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
-  for (const term of expected) assert.ok(block.includes(term), term);
-  assert.ok(!/(?:ten tabs|zehn Tabs|diez pestañas|dix onglets|tien tabbladen|dez abas)/.test(text), 'no settings editor in ten tabs');
+const disclosures = {
+  '': ['Glaze does not collect or sell your data.', 'ordinary network requests', 'encoded streams and visible pixels remain', 'editor recovery', 'Files-folder zips', 'unread counts', 'up to 4 course pages'],
+  de: ['Glaze sammelt und verkauft deine Daten nicht.', 'gewöhnliche Netzwerkanfragen', 'kodierte Datenströme und sichtbare Pixel bleiben', 'Texteingabe-Wiederherstellung', 'ZIP-Downloads aus Dateiordnern', 'Ungelesen-Zähler', 'bis zu 4 Kursseiten'],
+  es: ['Glaze no recopila ni vende tus datos.', 'solicitudes de red normales', 'flujos codificados y los píxeles visibles', 'recuperación del editor', 'ZIP de carpetas de archivos', 'contadores de no leídos', 'hasta 4 páginas de cursos'],
+  fr: ['Glaze ne collecte ni ne vend vos données.', 'requêtes réseau ordinaires', 'flux encodés et pixels visibles restent', 'récupération de texte', 'ZIP de dossiers de fichiers', 'compteurs de non-lus', 'jusqu’à 4 pages de cours'],
+  nl: ['Glaze verzamelt en verkoopt je gegevens niet.', 'gewone netwerkverzoeken', 'gecodeerde streams en zichtbare pixels blijven', 'editorherstel', 'ZIP-downloads van bestandsmappen', 'ongelezen-tellers', 'maximaal 4 cursuspagina’s'],
+  'pt-BR': ['O Glaze não coleta nem vende seus dados.', 'requisições de rede comuns', 'fluxos codificados e os pixels visíveis permanecem', 'recuperação de texto', 'ZIPs de pastas de arquivos', 'contadores de não lidos', 'até 4 páginas de cursos'],
+};
+for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || 'en'} names the hosts Glaze works on from install, where to add a school's own address, and that course sketches stay in memory`, () => {
+  const text = description(lang);
+  for (const term of ['instructure.com', 'blackboard.com', 'moodlecloud.com', 'share.frostdev.io', ...expected]) assert.ok(text.toLowerCase().includes(term.toLowerCase()), term);
+  for (const term of disclosures[lang]) assert.ok(text.includes(term), term);
+  for (const store of ['firefox', 'app-store']) {
+    assert.ok(read(`store/${store}${lang ? `-${lang}` : ''}.md`).includes(disclosures[lang][0]), `${store}: collect and sell`);
+  }
+  assert.ok(!/(?:ten tabs|zehn Tabs|diez pestañas|dix onglets|tien tabbladen|dez abas)/.test(listing(lang)), 'no settings editor in ten tabs');
 });
 
 const backup = {
   '': ['NEW IN 3.4.3', 'Look › Pointer', 'Custom pointer', 'Back up…', 'Restore…', 'Draft backup', 'Restoring Notes', 'Stop reading', 'narrow windows', 'signed-in account'],
-  de: ['NEU IN 3.4.3', 'Look › Mauszeiger', '„Eigener Mauszeiger“', '„Sichern…“', '„Wiederherstellen…“', 'Entwurfssicherung', 'Wiederherstellen von Notizen', '„Lesen abbrechen“', 'schmale Fenster', 'angemeldet'],
-  es: ['NOVEDADES DE 3.4.3', 'Look › Puntero', '«Puntero personalizado»', '«Hacer una copia…»', '«Restaurar…»', 'copia de borradores', 'restaurar las Notas', '«Dejar de leer»', 'ventanas estrechas', 'sesión iniciada'],
-  fr: ['NOUVEAUTÉS DE LA VERSION 3.4.3', 'Look › Pointeur', '« Pointeur personnalisé »', '« Sauvegarder… »', '« Restaurer… »', 'sauvegarde de brouillon', 'Restaurer les Notes', '« Arrêter la lecture »', 'fenêtres étroites', 'compte connecté'],
-  nl: ['NIEUW IN 3.4.3', 'Look › Aanwijzer', '“Eigen aanwijzer”', '“Back-up maken…”', '“Herstellen…”', 'Back-up van concepten', 'herstellen van Notities', '“Stoppen met lezen”', 'smalle vensters', 'ingelogd'],
-  'pt-BR': ['NOVO NA 3.4.3', 'Look › Ponteiro', '“Ponteiro personalizado”', '“Fazer backup…”', '“Restaurar…”', 'backup de rascunhos', 'Restaurar as Notas', '“Parar a leitura”', 'janelas estreitas', 'conta conectada'],
+  de: ['NEU IN 3.4.3', 'Aussehen › Mauszeiger', '„Eigener Mauszeiger“', '„Sichern…“', '„Wiederherstellen…“', 'Entwurfssicherung', 'Wiederherstellen von Notizen', '„Lesen abbrechen“', 'schmale Fenster', 'angemeldet'],
+  es: ['NOVEDADES DE 3.4.3', 'Aspecto › Puntero', '«Puntero personalizado»', '«Hacer una copia…»', '«Restaurar…»', 'copia de borradores', 'restaurar las Notas', '«Dejar de leer»', 'ventanas estrechas', 'sesión iniciada'],
+  fr: ['NOUVEAUTÉS DE LA VERSION 3.4.3', 'Apparence › Pointeur', '« Pointeur personnalisé »', '« Sauvegarder… »', '« Restaurer… »', 'sauvegarde de brouillon', 'Restaurer les Notes', '« Arrêter la lecture »', 'fenêtres étroites', 'compte connecté'],
+  nl: ['NIEUW IN 3.4.3', 'Uiterlijk › Aanwijzer', '“Eigen aanwijzer”', '“Back-up maken…”', '“Herstellen…”', 'Back-up van concepten', 'herstellen van Notities', '“Stoppen met lezen”', 'smalle vensters', 'ingelogd'],
+  'pt-BR': ['NOVO NA 3.4.3', 'Aparência › Ponteiro', '“Ponteiro personalizado”', '“Fazer backup…”', '“Restaurar…”', 'backup de rascunhos', 'Restaurar as Notas', '“Parar a leitura”', 'janelas estreitas', 'conta conectada'],
 };
-for (const [lang, expected] of Object.entries(backup)) test(`3.4.3 listing ${lang || 'en'} names the pointer switch, one-file Back up and Restore, drafts, Notes, the schedule, narrow settings and mods' account`, () => {
-  const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
-  const block = text.slice(text.indexOf(expected[0])).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.4\n/)[0];
+for (const [lang, expected] of Object.entries(backup)) test(`3.4.3 release notes ${lang || 'en'} name the pointer switch, one-file Back up and Restore, drafts, Notes, the schedule, narrow settings and mods' account`, () => {
+  const text = listing(lang), block = part(text, 'Release notes');
+  const context = {};
+  if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
+  const ui = (key) => lang ? context.GZ_LANGS[lang][key] : key;
+  assert.ok(block.includes(`${ui('Look')} › ${ui('Pointer')}`), 'the release notes use the UI path');
+  for (const key of ['Back up…', 'Restore…', 'Custom pointer']) assert.ok(block.includes(ui(key)), key);
   for (const term of expected) assert.ok(block.includes(term), term);
   assert.ok(!/\b(?:CI|audit)\b/i.test(block), 'no internal process in store copy');
   assert.ok(!/(?:Export and import all your settings|Exportiere und importiere alle|Exporta e importa todos|Exportez et importez tous|Exporteer en importeer al|Exporte e importe todas)/.test(text), 'one-file backup replaces settings export');
-  assert.ok(text.split(expected[3]).length > 2, 'the everywhere paragraph names Back up… too');
+  assert.ok(description(lang).includes(expected[3]), 'the description names Back up… too');
 });
 
+// Typing effects (3.3.6) draw at the caret: the listing says they never read what is typed and stay out of password fields.
 const terms = {
-  '': ['never read what you type', 'Look › Pointer', 'Safari: Settings'],
-  de: ['lesen nie, was du tippst', 'Look › Mauszeiger', 'Safari: Die Einstellungen'],
-  es: ['Nunca leen lo que escribes', 'Look › Puntero', 'Safari: la configuración'],
-  fr: ['ne lisent jamais ce que vous tapez', 'Look › Pointeur', 'Safari : les réglages'],
-  nl: ['lezen nooit wat je typt', 'Look › Aanwijzer', 'Safari: instellingen'],
-  'pt-BR': ['nunca leem o que você digita', 'Look › Ponteiro', 'Safari: as configurações'],
+  '': ['never read what you type', 'password', 'Look › Pointer'],
+  de: ['nie lesen, was du tippst', 'Passwort', 'Aussehen › Mauszeiger'],
+  es: ['nunca leen lo que escribes', 'contraseña', 'Aspecto › Puntero'],
+  fr: ['ne lisent jamais ce que vous tapez', 'mot de passe', 'Apparence › Pointeur'],
+  nl: ['nooit lezen wat je typt', 'wachtwoord', 'Uiterlijk › Aanwijzer'],
+  'pt-BR': ['nunca leem o que você digita', 'senha', 'Aparência › Ponteiro'],
 };
-for (const [lang, expected] of Object.entries(terms)) test(`3.3.6 listing ${lang || 'en'} keeps typing privacy, the pointer choice and the Safari fix`, () => {
-  const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
-  const block = text.slice(text.indexOf('3.3.6\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
-  for (const term of expected) assert.ok(block.includes(term), term);
+for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'en'} keeps typing privacy and the pointer setting's path`, () => {
+  const text = description(lang);
+  for (const term of expected) assert.ok(text.includes(term), term);
 });
 
 test('3.4.3 versions agree and the exact pure notes transform fits Apple', () => {
@@ -94,11 +100,9 @@ test('3.4.3 versions agree and the exact pure notes transform fits Apple', () =>
   assert.ok(!result.includes('## [3.4.2]'));
 });
 
-test('review: Step 4 copy discloses redirected Download all files in every language\'s 3.4 notes', () => {
+test('review: Step 4 copy discloses redirected Download all files in every language\'s description', () => {
   for (const file of ['PRIVACY.md', 'CHANGELOG.md', 'store/listing.md']) assert.match(read(file), /redirected files/i, file);
   for (const [lang, term] of Object.entries({ '': 'redirected files', de: 'Weitergeleitete Dateien', es: 'archivos redirigidos', fr: 'fichiers redirigés', nl: 'omgeleide bestanden', 'pt-BR': 'arquivos redirecionados' })) {
-    const file = `store/listing${lang ? `-${lang}` : ''}.md`, text = read(file);
-    const block = text.slice(text.indexOf(' 3.4\n')).split(/\n(?:FROM|AUS|DE|DE LA VERSION|UIT|DA) 3.3/)[0];
-    assert.ok(block.toLowerCase().includes(term.toLowerCase()), `${file}: redirected file limit`);
+    assert.ok(description(lang).toLowerCase().includes(term.toLowerCase()), `${lang || 'en'}: redirected file limit`);
   }
 });

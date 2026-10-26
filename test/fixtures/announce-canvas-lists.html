@@ -1,0 +1,46 @@
+<!doctype html>
+<!--
+  A synthetic Canvas page with the two dashboard lists of announcements Glaze's pop-up takes over, built from Canvas's
+  own templates (~/Projects/canvas-lms, 2026-04): Recent Activity (app/views/shared/_recent_activity.html.erb and
+  _recent_activity_item.html.erb; an announcement's path is /courses/<id>/announcements/<id>, stream_items_helper.rb) and
+  the widget dashboard's Announcements (ui/features/widget_dashboard/.../AnnouncementsWidget/AnnouncementItem.tsx, its
+  "Read more" link to html_url). Everything else in it is invented. No scripts run in it but the harness's own.
+-->
+<html dir="ltr" lang="en"><head>
+<meta charset="utf-8">
+<title>Dashboard</title>
+<link rel="stylesheet" href="/dist/brandable_css/new_styles_normal_contrast/bundles/common-0.css" media="all">
+<style>
+  body { margin: 0; font: 14px/1.4 sans-serif; }
+  #content { padding: 24px; max-width: 900px; }
+  .screenreader-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table { border-collapse: collapse; width: 100%; } td { padding: 8px; border-bottom: 1px solid #ccc; }
+  [data-testid^="announcement-item-"] { padding: 8px 0; border-bottom: 1px solid #ccc; }
+</style>
+</head><body class="dashboard-is-planner">
+<div id="application" class="ic-app"><div id="wrapper"><div id="main"><div id="content">
+<div id="dashboard-activity" class="ic-Dashboard-Activity">
+<div class="page_header_container"><h2 class="recent-activity-header">Recent Activity</h2></div>
+<ul class="recent_activity unstyled_list">
+<li class="stream-category stream-announcement" data-category="Announcement">
+<div class="stream_header"><div class="image-block"><div class=image-block-image><i class="icon-announcement"></i></div><div class=image-block-content><div class=title>2 Announcements</div><strong class="unread-count"><span aria-hidden="true">1</span><span class="screenreader-only"><span>1 unread item</span></span></strong></div></div><div class=header-right-side><a href="#" role="button" class="toggle-details" aria-controls="details_container"></a></div></div>
+<div class='details_container'><table id="announcement-details" class="stream-details"><caption class="screenreader-only">Announcement Details</caption>
+<tbody>
+<tr><td><div class="unread"><span class="screenreader-only">Unread</span></div></td><td><a href="/courses/25/announcements/7" class="content_summary"><span class="fake-link">BIO 1100 · Cell Biology</span> <strong></strong> Lab moved to room 2 this week</a></td><td class="date"><span>Oct 21 at 2pm</span></td><td class="remove"><a class="close ignore-item" href="#" data-url="/api/v1/users/self/activity_stream/3" data-remove='tr' title="Ignore Lab moved to room 2 this week" aria-label="Ignore Lab moved to room 2 this week" role="button"><i class="icon-x" aria-hidden="true"></i></a></td></tr>
+<tr><td></td><td><a href="/groups/4/announcements/12" class="content_summary"><span class="fake-link">Lab group A</span> <strong></strong> Group meeting moved</a></td><td class="date"><span>Oct 20 at 9am</span></td><td class="remove"></td></tr>
+</tbody></table></div>
+</li>
+<li class="stream-category stream-discussion_topic" data-category="DiscussionTopic">
+<div class="stream_header"><div class="image-block"><div class=image-block-content><div class=title>1 Discussion</div></div></div></div>
+<div class='details_container'><table id="discussion_topic-details" class="stream-details"><tbody>
+<tr><td></td><td><a href="/courses/25/discussion_topics/9" class="content_summary"><span class="fake-link">BIO 1100 · Cell Biology</span> <strong></strong> Week 3 discussion</a></td><td class="date"><span>Oct 19</span></td><td class="remove"></td></tr>
+</tbody></table></div>
+</li>
+</ul>
+</div>
+<section id="widget-announcements" aria-label="Announcements">
+<h2>Announcements</h2>
+<div data-testid="announcement-item-10" role="group" aria-label="Exam seating plan"><div><span role="img" aria-label="Dr. Ana Rivera">AR</span></div><div><span class="css-text-bold">Exam seating plan</span><button type="button" aria-pressed="false" data-testid="mark-read-10">Mark as read</button></div><div><span>Sent by Dr. Ana Rivera | Oct 20, 2026</span></div><div><span data-testid="course-name-10">BIO 1100 · Cell Biology</span></div><div><span>Seats are assigned by last name. Check the list before Friday.</span></div><div><a href="/courses/25/discussion_topics/10" class="css-link">Read more</a></div></div>
+</section>
+</div></div></div></div>
+</body></html>

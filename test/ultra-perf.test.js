@@ -116,7 +116,7 @@ test('a queued flush stays paused while hidden and rediscovers native roots on r
     outermost: () => [], words: () => true, sweepAll: () => sweeps++, sweepRoots() {},
     document: { body }, X, tagExtras: (r) => tags.push(r), themeEditors() {}, tip: null,
     tintKey: () => '', tinted: '', lookHere: () => '', looked: '', placeScene() {},
-    surfaceCourse: () => '', html: { style: { getPropertyValue: () => '' } }, keepPlace() {}, watchDrafts() {}, syncDownloads() {}, syncDocTools() {}, syncCourseMenu() {}, syncRules() {},
+    surfaceCourse: () => '', html: { style: { getPropertyValue: () => '' } }, keepPlace() {}, watchDrafts() {}, syncDownloads() {}, syncDocTools() {}, syncCourseMenu() {}, syncRules() {}, routes() {},
   });
   const flush = vm.runInContext(`${core.slice(start, end)} flush`, context);
   flush();

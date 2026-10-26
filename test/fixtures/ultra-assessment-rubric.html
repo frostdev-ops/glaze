@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Invented student assessment. The rubric hook follows the read-only Ultra overview probe; no account data. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<base href="/ultra/"><title>Blackboard Learn</title><style>
+* { box-sizing:border-box; } body { margin:0; font:1rem/1.5 system-ui; } a { color:inherit; }
+#site-wrap { min-width:0; } content-page-header { display:block; padding:1rem 1.5rem; border-bottom:1px solid; }
+.standard-content-body { padding:1.5rem; } h1 { margin:0 0 1.5rem; font-size:1.75rem; }
+.assessment-overview-grid { display:grid; container-type:inline-size; grid-template-columns:minmax(0,1fr) 0 352px; gap:24px; }
+.assessment-overview-grid > .main-section-container { grid-column:1 / span 2; min-width:0; }
+.overview-attempts-section { grid-area:1 / 3 / span 3 / span 1; padding:1rem; border:1px solid; border-radius:12px; }
+h2 { font-size:1.2rem; margin:0 0 1rem; } ul { padding:0; list-style:none; } .grid-item-label { display:block; }
+.assessment-details-section { min-width:0; } #native-rubric-panel { padding:1rem; border:1px solid; }
+@media(max-width:760px) { .standard-content-body { padding:1rem; } .assessment-overview-grid { display:flex; flex-direction:column; } }
+</style></head><body><div id="site-wrap"><section class="assessment-overview-modern-panel routed-page route-view-container bb-offcanvas-container">
+<content-page-header>Synthetic course / Assessment</content-page-header><learning-module-panel-view class="routed-page-body">
+<div class="table-of-contents-disabled"><div class="panel-content-body"><div class="root-learning-module-panel"><div id="learningModulePanelContainerId" class="content-item-container">
+<div class="content-item-container-children"><content-body><div class="base-body"><div class="content-root"><div class="standard-content-body">
+<h1>A fictional assessment</h1><div class="assessment-overview-grid">
+<div class="overview-section overview-description-section main-section-container" role="region"><h2 class="section-label">Description</h2><p>Explain how you evaluated the evidence.</p></div>
+<div class="overview-section overview-due-date-section main-section-container" role="region"><h2 class="section-label">Details</h2><p>No due date</p></div>
+<div class="overview-section overview-attempts-section overview-attempts-section-container"><h2 id="grades-attempts-header" class="section-label">Grades / Attempts</h2><p>Maximum points: 20</p><a class="button button-attempt js-attempt-submitted" href="#submission">View submission</a></div>
+<div class="overview-section assessment-details-section main-section-container" role="region"><h2 class="section-label">Assessment Details</h2><ul class="section-content"><li class="details-list-item js-rubric-overview"><div class="details-list-info"><span class="grid-item-label">Grading rubric</span><a id="native-rubric" class="graded-with-rubric-button" analytics-id="course.content.assessment.overview.gradedWithRubric" href="#rubric">This item is graded with a rubric</a></div></li></ul></div>
+</div></div></div></div></div></content-body></div></div></div></div></div></learning-module-panel-view></section></div>
+<script>
+window.__nativeRubricClicks=0;
+document.getElementById('native-rubric').addEventListener('click',e=>{e.preventDefault();window.__nativeRubricClicks++;if(!document.getElementById('native-rubric-panel')){const p=document.createElement('section');p.id='native-rubric-panel';p.textContent='Native rubric';document.body.append(p);}});
+</script></body></html>

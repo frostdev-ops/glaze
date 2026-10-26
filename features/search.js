@@ -34,6 +34,14 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
   const get = (path, signal) => fetch(`${location.origin}/api/v1${path}`, { credentials: 'same-origin', headers: { accept: 'application/json+canvas-string-ids' }, signal })
     .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))).then((s) => JSON.parse(s.replace(/^while\(1\);/, '')));
 
+  const go = (url) => globalThis.GZ_CTABS?.bar?.open(url) || location.assign(url);
+  // An announcement opens in Glaze's pop-up (features/announce.js) where the settings say so, for the student's own Enter or
+  // click; with Ctrl, Cmd, Shift or Alt, or the pop-up unavailable, its page opens as before.
+  const announce = (r, e) => {
+    if (!e?.isTrusted || e.button > 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return go(r.url);
+    ctx.need('features/announce.js', () => globalThis.GZ_ANNOUNCE).then(() => GZ_ANNOUNCE.ready)
+      .then(() => GZ_ANNOUNCE.go({ site: ultra ? 'ultra' : 'canvas', entry: 'glaze', courseId: r.cid, id: r.aid, url: new URL(r.url, location.origin).href, title: r.title, course: r.course }), () => go(r.url));
+  };
   // cmd is the open palette ({ input, list, found, seeking, stop }); show(true) redraws it keeping the choice where it is.
   const attach = async (cmd, show) => {
     const [, r] = await Promise.all([ctx.need('lib/seek.js', () => globalThis.GZ_SEEK), fromStorage(),
@@ -118,7 +126,7 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
         const n = await S.search({
           term, courses, cache: ultra ? null : kept, signal: c.signal, get: (p) => get(p, c.signal), ...adapter,
           onBatch: (rs) => {
-            cmd.found.push(...rs.map((r) => ({ label: r.title, hint: r.course, group: r.kind, run: () => globalThis.GZ_CTABS?.bar?.open(r.url) || location.assign(r.url) })));
+            cmd.found.push(...rs.map((r) => ({ label: r.title, hint: r.course, group: r.kind, run: r.aid ? (e) => announce(r, e) : () => go(r.url) })));
             show(true);
           },
         });

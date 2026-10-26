@@ -334,6 +334,9 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) div.todo-p
 /* A course gradebook's student header is an <aside> too, but not a side panel: no ground behind it, and none of Ultra's
    rules (a 5px one under it, a light one drawn above it as a shadow) as a band under the course header. */
 aside.student-grade-overview { background: transparent !important; border-left: 0 !important; border-bottom: 0 !important; box-shadow: none !important; }
+/* A graded attempt's feedback and rubric column is an <aside> beside the submission: a panel like it, not the bare ground,
+   or a scene shows through its rubric. */
+:is(student-view-submission-panel, .student-view-submission-panel) main > aside { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 /* Table header bands (the gradebook's) end in rounded corners; collapsed tables ignore border-radius. */
 #site-wrap thead:has(.MuiTableCell-head) { clip-path: inset(0 round var(--gz-radius-sm)); }
 .MuiAccordion-root { overflow: hidden; }
