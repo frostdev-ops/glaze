@@ -254,3 +254,35 @@ test('a course with no term dates gives the date reader no start, one with a ter
   assert.equal(await startsFor({ id: '25', term: { start_at: '2026-08-24T00:00:00Z' } }), Date.UTC(2026, 7, 24), 'the term\'s start');
   assert.equal(await startsFor({ id: '25', start_at: '2026-01-19T00:00:00Z', term: { start_at: null } }), Date.UTC(2026, 0, 19), 'the course\'s own start');
 });
+
+// Week-based dates count from the course's own start where Canvas has one that overrides the term (the course list's
+// start_at with restrict_enrollments_to_course_dates), from what Glaze has read already: nothing more is asked.
+test("Canvas: a course's own dates give week 1 to the date reader; a term's don't, and nothing more is asked", async () => {
+  const TEXT = 'Instructor: Dr. Amara Okafor\nWeek 2 - Friday: Essay 1 due';
+  const run = async (course) => {
+    const p = page({ GZ_IMPORT: { read: async () => ({ text: TEXT, ocr: null }), note: () => '', doubt: () => false } });
+    p.ctx.GZ_CTX.canvasCourses = () => Promise.resolve([course]);
+    const opening = p.UI.open();
+    await settle();
+    p.release();
+    await opening;
+    await settle();
+    const seen = [];
+    const extract = p.ctx.GZ_SYLLABUS.extract;
+    p.ctx.GZ_SYLLABUS.extract = (text, opts) => { seen.push(opts); return extract(text, opts); };
+    const dlg = p.body.children[0];
+    dlg.all.find((e) => e.id === 'gz-syl-file').files = [{ name: 'syllabus.pdf' }];
+    dlg.all.find((e) => e.tagName === 'BUTTON' && e.text === 'Read it').fire('click');
+    await settle();
+    const label = dlg.all.find((e) => e.tagName === 'LABEL' && e.text === 'Week 1 starts');
+    const input = label && dlg.all.find((e) => e.id === label.htmlFor);
+    const marks = label ? label.parentNode.children.filter((e) => /\bgz-syl-conf\b/.test(e.className || '')).map((e) => e.text) : null;
+    return { week1: seen.map((o) => o.week1), value: input?.value, marks };
+  };
+  const term = { start_at: '2026-08-24T05:00:00Z' };
+  assert.deepEqual(await run({ id: '25', start_at: '2026-11-02T12:00:00Z', restrict_enrollments_to_course_dates: true, term }),
+    { week1: [Date.UTC(2026, 10, 2)], value: '2026-11-02', marks: [] }, "the course's own start, the day it is here");
+  assert.deepEqual(await run({ id: '25', start_at: '2026-11-02T12:00:00Z', restrict_enrollments_to_course_dates: false, term }),
+    { week1: [undefined], value: '2026-08-24', marks: ['Check this'] }, "a course that follows its term: the term's start, to check");
+  assert.deepEqual(await run({ id: '25', term }), { week1: [undefined], value: '2026-08-24', marks: ['Check this'] });
+});

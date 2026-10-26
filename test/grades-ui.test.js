@@ -1679,3 +1679,112 @@ test('review: category endpoint preserves teacher names and localizes system met
   assert.match(names[2], /^DISCUSSION\.NAME/);
   assert.match(names[0], /^Aufgabe/);
 });
+
+// Week-based dates ("Week 2 – Friday: Essay 1 due") count from week 1: the syllabus's own start, else the course's own
+// (Ultra: its availability when that is a date range), else the term's, which the review marks "Check this". The review's
+// "Week 1 starts" moves every such row, except one whose day the student set by hand; a save keeps concrete days.
+const WEEKS = { results: [
+  item('_810_1', '_700_1', 'Course Syllabus', 'folder', { page: true }),
+  item('_811_1', '_810_1', 'ultraDocumentBody', 'document', { body: '<p>Instructor: Dr. Test Person</p><p>Week 2 – Friday: Essay 1 due</p><p>Week 4 – Monday: Quiz 2 due</p><p>Midterm exam: October 14, 2026</p>' }),
+  item('_812_1', '_700_1', 'Welcome', 'folder', { page: true }),
+  item('_813_1', '_812_1', 'Welcome', 'document', { body: '<p>Instructor: Dr. Test Person</p><p>Midterm exam: October 14, 2026</p>' }),
+] };
+const COURSE_V3 = '/learn/api/public/v3/courses/_101_1?fields=availability';
+// course(c): the membership's course as the test wants it (its durationType, say).
+const weeksPage = async ({ course = () => {}, answers = {} } = {}) => {
+  const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': WEEKS, ...answers } });
+  const mem = ufix('memberships').results;
+  for (const m of mem) course(m.course);
+  p.ctx.GZ_CTX.myCourses = () => Promise.resolve(mem);
+  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  p.ctx.GZ_SYL_UI.sync(true);
+  await settle(12);
+  byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
+  await settle(12);
+  const dlg = p.doc.getElementById('gz-syl-dlg');
+  const pick = async (title) => {
+    const sel = p.doc.getElementById('gz-syl-doc');
+    sel.value = String(sel.children.findIndex((o) => o.textContent === title));
+    byText(dlg, 'Read this document').fire('click');
+    await settle(20);
+  };
+  const week1 = () => {
+    const label = find(dlg, (e) => e.tagName === 'LABEL' && e.textContent === 'Week 1 starts');
+    return label && { label, input: find(dlg, (e) => e.id === label.htmlFor), box: label.parentNode.parentNode };
+  };
+  const rows = () => dlg.querySelectorAll('.gz-syl-date').map((r) => ({ row: r, title: r.querySelector('.gz-syl-label').value, day: r.querySelector('input[type="date"]') }));
+  const days = () => Object.fromEntries(rows().map((r) => [r.title, r.day.value]));
+  const v3 = () => p.state.asked.filter(([, , u]) => u.includes('/public/v3/'));
+  return { ...p, dlg, pick, week1, rows, days, v3 };
+};
+
+test("Ultra syllabus import: week-based dates count from the term, marked Check this; Week 1 starts moves them, a row set by hand stays, and a save keeps days", async () => {
+  // bb.wpunj.edu's courses are CONTINUOUS (the course list says so): no date of their own, nothing more to ask.
+  const p = await weeksPage();
+  await p.pick('Course Syllabus');
+  assert.match(p.dlg.textContent, /Check what Glaze found/);
+  assert.deepEqual(p.v3(), [], "a course the course list says is continuous isn't asked about");
+  const w = p.week1();
+  assert.ok(w, 'a Week 1 starts field');
+  assert.equal(w.input.type, 'date');
+  assert.equal(w.input.value, '2026-08-31', "the term's start");
+  assert.ok(w.input.id && w.label.htmlFor === w.input.id, 'labelled');
+  assert.equal(find(w.box, (e) => /\bgz-syl-check\b/.test(e.className))?.textContent, 'Check this');
+  const set = w.box.parentNode;
+  assert.equal(set.tagName, 'FIELDSET');
+  assert.equal(set.children[0].textContent, 'Important dates', 'with the dates');
+  assert.ok(set.children.indexOf(w.box) < set.children.indexOf(set.querySelector('.gz-syl-rows')), 'before the rows it moves');
+  assert.deepEqual(p.days(), { 'Essay 1 due': '2026-09-11', 'Quiz 2 due': '2026-09-21', 'Midterm exam': '2026-10-14' });
+  // The student sets the quiz's day, then week 1.
+  const quiz = p.rows().find((r) => r.title === 'Quiz 2 due').day;
+  quiz.value = '2026-09-25';
+  quiz.fire('input');
+  w.input.value = '2026-11-02';
+  w.input.fire('input');
+  assert.deepEqual(p.days(), { 'Essay 1 due': '2026-11-13', 'Quiz 2 due': '2026-09-25', 'Midterm exam': '2026-10-14' }, 'week rows move, a row set by hand and a dated row stay');
+  w.input.value = '';
+  w.input.fire('input');
+  assert.equal(p.days()['Essay 1 due'], '2026-11-13', 'an emptied Week 1 moves nothing');
+  byText(p.dlg, 'Save').fire('click');
+  await settle(20);
+  const kept = p.store.data[`syllabus:${UO}/_900_1/_101_1`];
+  // (The stand-in's select has no value, so every kind is kept as 'other' here.)
+  assert.deepEqual(kept.dates.map(({ id, kind, ...d }) => d), [
+    { title: 'Essay 1 due', day: '2026-11-13' },
+    { title: 'Quiz 2 due', day: '2026-09-25' },
+    { title: 'Midterm exam', day: '2026-10-14' },
+  ], 'concrete days, nothing about weeks');
+});
+
+test("Ultra syllabus import: a course with a date range of its own gives week 1, asked once and only when week-based dates need it", async () => {
+  const p = await weeksPage({ course: (c) => { c.durationType = 'DATE_RANGE'; }, answers: { [COURSE_V3]: { availability: { available: 'Yes', duration: { type: 'DateRange', start: '2026-11-02T12:00:00.000Z', end: '2026-12-20T12:00:00.000Z' } } } } });
+  await p.pick('Welcome');
+  assert.match(p.dlg.textContent, /Check what Glaze found/);
+  assert.equal(p.week1(), undefined, 'no week-based dates: no Week 1 field');
+  assert.deepEqual(p.v3(), [], 'and nothing asked');
+  byText(p.dlg, 'Back').fire('click');
+  await settle(12);
+  await p.pick('Course Syllabus');
+  assert.deepEqual(p.v3().map(([m, r, u]) => [m, r, u]), [['GET', 'error', COURSE_V3]]);
+  const w = p.week1();
+  assert.equal(w.input.value, '2026-11-02', "the course's own start");
+  assert.equal(find(w.box, (e) => /\bgz-syl-conf\b/.test(e.className)), undefined, 'no Check this, no Not found');
+  assert.deepEqual(p.days(), { 'Essay 1 due': '2026-11-13', 'Quiz 2 due': '2026-11-23', 'Midterm exam': '2026-10-14' });
+  byText(p.dlg, 'Back').fire('click');
+  await settle(12);
+  await p.pick('Course Syllabus');
+  assert.equal(p.v3().length, 1, 'asked once for the course');
+  assert.equal(p.week1().input.value, '2026-11-02');
+});
+
+test("Ultra syllabus import: a continuous course (Ultra's answer) leaves week 1 to the term", async () => {
+  const p = await weeksPage({ course: (c) => { delete c.durationType; }, answers: { [COURSE_V3]: { availability: { available: 'Yes', duration: { type: 'Continuous' } } } } });
+  const seen = [];
+  const extract = p.ctx.GZ_SYLLABUS.extract;
+  p.ctx.GZ_SYLLABUS.extract = (text, opts) => { seen.push(opts.week1); return extract(text, opts); };
+  await p.pick('Course Syllabus');
+  assert.equal(p.v3().length, 1, 'the course list said nothing: asked');
+  assert.ok(seen.length && seen.every((x) => x === undefined), 'no course start');
+  assert.equal(p.week1().input.value, '2026-08-31');
+  assert.equal(find(p.week1().box, (e) => /\bgz-syl-check\b/.test(e.className))?.textContent, 'Check this');
+});
