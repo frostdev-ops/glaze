@@ -5,7 +5,7 @@ const root = path.resolve(__dirname, '..'), D = require(path.join(root, 'default
 for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(path.join(root, `lib/${file}.js`));
 const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
-const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'sharing', 'mods', 'backup', 'about'];
+const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'sharing', 'mods', 'ai', 'backup', 'about'];
 const GROUP = { stream: 'pages/dashboard', docreview: 'pages/documents', auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'navigation/bar', navbar: 'navigation/bar', sidebar: 'navigation/sidebar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'pages/declutter', card: 'courses/cards', courses: 'courses/list', mods: 'backup/privacy', announce: 'pages/popups', popup: 'pages/popups', rubric: 'pages/popups' };
 const ENHANCE = {
   'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'newcontent', 'drafts', 'download', 'place'],
@@ -376,7 +376,7 @@ test('IA: power-user sections are marked, and All settings is a local switch in 
   const all = byId('editor-all');
   assert.equal(all.length, 1); assert.equal(all[0].attrs.type, 'checkbox'); assert.ok(Object.hasOwn(all[0].attrs, 'data-local'));
   assert.ok(all[0].parents.some((n) => n.tag === 'header'));
-  assert.deepEqual(nodes.filter((n) => Object.hasOwn(n.attrs, 'data-no-preview')).map((n) => n.attrs['data-editor-panel']), ['sharing', 'mods', 'backup', 'about']);
+  assert.deepEqual(nodes.filter((n) => Object.hasOwn(n.attrs, 'data-no-preview')).map((n) => n.attrs['data-editor-panel']), ['sharing', 'mods', 'ai', 'backup', 'about']);
 });
 
 test('IA: one navigation section swaps its body on Glaze navigation, with one logo picker after both', () => {

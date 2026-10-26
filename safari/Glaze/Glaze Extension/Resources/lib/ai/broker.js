@@ -236,7 +236,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   //     keeps the kept one, but only for the same address: a key never follows a changed address. A new address or key is a
   //     new generation.
   //   { op: 'remove', id } → { ok }
-  //   { op: 'test', id } → { ok, state, reason?, source? }: the provider's status, once its host is held.
+  //   { op: 'test', id } → { ok, state, reason?, status?, reference?, source? }: the provider's status, once its host is held.
   //   { op: 'models', id } → { ok, models, source, at } | { ok: false, error }: its catalog, for a model picker.
   //   { op: 'test', provider: 'device' } → { ok, state, reason? }: a provider with a model on this computer, before any
   //     connection uses it. { op: 'prepare', provider: 'device' } (from a click) → { ok, state, reason? } once its model is
@@ -263,7 +263,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         const { key, generation: _, ...shown } = use.cfg;
         out[id] = { provider: use.p.id, ...shown, key: key ? E().mask(key) : '', ...(use.p.origin && { origin: use.p.origin(use.cfg) }) };
       }
-      return { ok: true, connections: out };
+      return { ok: true, connections: out, providers: A().PROVIDERS.filter((id) => P().get(id)) };
     }
     if (typeof m?.id !== 'string' || !E().ID.test(m.id)) return { ok: false, error: 'setup', note: 'A connection name is 1 to 40 lowercase letters, digits or dashes.' };
     if (m.op === 'set') {
@@ -289,7 +289,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       let st;
       try { st = await F().wait(() => use.p.status(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: timer.signal }), timer.signal); }
       catch { st = { state: 'unavailable', reason: 'failed' }; } finally { timer.done(); }
-      return { ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }), ...(st?.source && { source: st.source }), ...(st?.unverified && { unverified: true }) };
+      return { ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }), ...(Number.isInteger(st?.status) && { status: st.status }), ...(typeof st?.reference === 'string' && { reference: st.reference }), ...(st?.source && { source: st.source }), ...(st?.unverified && { unverified: true }) };
     }
     if (m.op === 'models') {
       if (!await reaches(env, use)) return { ok: false, error: 'permission' };

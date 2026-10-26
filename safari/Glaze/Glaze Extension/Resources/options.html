@@ -167,6 +167,14 @@
   .courses .name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 0.78em; color: var(--gz-ink-faint); }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
   .sites li { grid-template-columns: minmax(0, 1fr) auto; }
+  /* Settings → AI (lib/editor-ai.js). */
+  .ai-device, .ai-endpoint { display: grid; gap: .6rem; margin-block-start: .75rem; }
+  #ai-connection > .seg { justify-self: start; inline-size: max-content; max-inline-size: 100%; flex-wrap: wrap; }
+  #ai-connection .seg label:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+  #ai-device-progress { inline-size: min(100%, 18rem); accent-color: var(--gz-accent); }
+  #ai-said.err, #ai-failure { color: var(--gz-err); }
+  #ai-model-unverified { color: var(--gz-ink-faint); }
+  #ai-calls .name small { white-space: normal; overflow-wrap: anywhere; }
   .site-add { flex-wrap: nowrap; margin: .75rem 0 .25rem; }
   .site-add .field { flex: 1; min-width: 0; }
   .site-add button[aria-busy="true"] { opacity: .6; cursor: progress; }
@@ -407,7 +415,7 @@
   <span id="info-more" hidden>More about</span>
   <div class="layout">
     <div class="editor-nav">
-    <div class="editor-tabs" role="tablist" aria-label="Settings tabs" aria-orientation="vertical"><button type="button" role="tab" id="tab-look" data-editor-tab="look" aria-controls="panel-look" aria-selected="true" tabindex="0">Look</button><button type="button" role="tab" id="tab-navigation" data-editor-tab="navigation" aria-controls="panel-navigation" aria-selected="false" tabindex="-1">Navigation</button><button type="button" role="tab" id="tab-courses" data-editor-tab="courses" aria-controls="panel-courses" aria-selected="false" tabindex="-1">Courses</button><button type="button" role="tab" id="tab-study" data-editor-tab="study" aria-controls="panel-study" aria-selected="false" tabindex="-1">Study</button><button type="button" role="tab" id="tab-pages" data-editor-tab="pages" aria-controls="panel-pages" aria-selected="false" tabindex="-1">Course pages</button><button type="button" role="tab" id="tab-sharing" data-editor-tab="sharing" aria-controls="panel-sharing" aria-selected="false" tabindex="-1">Sharing</button><button type="button" role="tab" id="tab-mods" data-editor-tab="mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button><button type="button" role="tab" id="tab-backup" data-editor-tab="backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1">Privacy and data</button><button type="button" role="tab" id="tab-about" data-editor-tab="about" aria-controls="panel-about" aria-selected="false" tabindex="-1">About</button></div>
+    <div class="editor-tabs" role="tablist" aria-label="Settings tabs" aria-orientation="vertical"><button type="button" role="tab" id="tab-look" data-editor-tab="look" aria-controls="panel-look" aria-selected="true" tabindex="0">Look</button><button type="button" role="tab" id="tab-navigation" data-editor-tab="navigation" aria-controls="panel-navigation" aria-selected="false" tabindex="-1">Navigation</button><button type="button" role="tab" id="tab-courses" data-editor-tab="courses" aria-controls="panel-courses" aria-selected="false" tabindex="-1">Courses</button><button type="button" role="tab" id="tab-study" data-editor-tab="study" aria-controls="panel-study" aria-selected="false" tabindex="-1">Study</button><button type="button" role="tab" id="tab-pages" data-editor-tab="pages" aria-controls="panel-pages" aria-selected="false" tabindex="-1">Course pages</button><button type="button" role="tab" id="tab-sharing" data-editor-tab="sharing" aria-controls="panel-sharing" aria-selected="false" tabindex="-1">Sharing</button><button type="button" role="tab" id="tab-mods" data-editor-tab="mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button><button type="button" role="tab" id="tab-ai" data-editor-tab="ai" aria-controls="panel-ai" aria-selected="false" tabindex="-1">AI</button><button type="button" role="tab" id="tab-backup" data-editor-tab="backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1">Privacy and data</button><button type="button" role="tab" id="tab-about" data-editor-tab="about" aria-controls="panel-about" aria-selected="false" tabindex="-1">About</button></div>
     <nav class="jumps" aria-label="Sections">
 <div data-editor-jumps="look"><a href="#look/palette" data-editor-jump>Looks and colors</a><a href="#look/type" data-editor-jump>Text</a><a href="#look/surfaces" data-editor-jump>Shape and surfaces</a><a href="#look/background" data-editor-jump>Background</a><a href="#look/motion" data-editor-jump>Motion</a><a href="#look/pointer" data-editor-jump>Pointer</a><a href="#look/extras" data-editor-jump>Stickers and rotation</a><a href="#look/nav-layout" data-editor-jump>This Look's navigation</a><a href="#look/rules" data-editor-jump>Page tweaks</a></div>
 <div data-editor-jumps="navigation" hidden><a href="#navigation/bar" data-editor-jump>Navigation</a><a href="#navigation/items" data-editor-jump>Navigation items</a><a href="#navigation/tabs" data-editor-jump>Course tabs</a><a href="#navigation/sidebar" data-editor-jump>Sidebar</a></div>
@@ -416,6 +424,7 @@
 <div data-editor-jumps="pages" hidden><a href="#pages/content" data-editor-jump>Course content</a><a href="#pages/announcements" data-editor-jump>Announcements</a><a href="#pages/documents" data-editor-jump>Documents and quizzes</a><a href="#pages/dashboard" data-editor-jump>Blackboard Dashboard</a><a href="#pages/declutter" data-editor-jump>Declutter</a><a href="#pages/shortcuts" data-editor-jump>Search and shortcuts</a><a href="#pages/popups" data-editor-jump>Pop-ups</a></div>
 <div data-editor-jumps="sharing" hidden><a href="#sharing/sessions" data-editor-jump>Share sessions</a><a href="#sharing/relay" data-editor-jump>Relay</a><a href="#sharing/calendar" data-editor-jump data-gcal-link hidden>Google Calendar sync</a></div>
 <div data-editor-jumps="mods" hidden><a href="#mods/installed" data-editor-jump>Installed mods</a><a href="#mods/add" data-editor-jump>Add a mod</a><a href="#mods/widget" data-editor-jump>Widget builder</a><a href="#mods/dev" data-editor-jump>Mod development</a></div>
+<div data-editor-jumps="ai" hidden><a href="#ai/setup" data-editor-jump>AI</a><a href="#ai/features" data-editor-jump>Features</a><a href="#ai/activity" data-editor-jump>Activity</a></div>
 <div data-editor-jumps="backup" hidden><a href="#backup/privacy" data-editor-jump>Backup and reset</a><a href="#backup/sites" data-editor-jump>Sites</a></div>
 <div data-editor-jumps="about" hidden><a href="#about/glaze" data-editor-jump>About Glaze</a></div>
     </nav>
@@ -1447,6 +1456,46 @@
           <p class="desc" id="mod-key-said" role="status" aria-live="polite"></p>
         </div>
 </section></div>
+<div id="panel-ai" role="tabpanel" aria-labelledby="tab-ai" data-editor-panel="ai" data-no-preview hidden>
+<section id="ai" data-editor-section="ai/setup" data-sites="Extension only" aria-labelledby="heading-ai-setup">
+<p class="section-path" data-editor-breadcrumb><a href="#ai/setup" data-editor-alias>AI</a></p><div class="section-heading"><h2 id="heading-ai-setup">AI</h2></div>
+<label class="check"><input type="checkbox" id="ai-on" data-local><span>Use AI</span></label>
+<div class="group" id="ai-connection" hidden>
+          <h3 id="ai-connection-head">Connection</h3>
+          <div class="seg" role="radiogroup" aria-labelledby="ai-connection-head">
+            <label id="ai-choice-device" hidden><input type="radio" name="ai-use" value="device" id="ai-use-device" data-local>On this device</label>
+            <label id="ai-choice-endpoint" hidden><input type="radio" name="ai-use" value="endpoint" id="ai-use-endpoint" data-local>Endpoint</label>
+          </div>
+          <p class="desc" id="ai-device-off" hidden>Not available in this browser</p>
+          <div class="ai-device" id="ai-device" hidden>
+            <p class="desc" id="ai-device-state" role="status" aria-live="polite"></p>
+            <progress id="ai-device-progress" max="1" value="0" aria-labelledby="ai-device-state" hidden></progress>
+            <div class="row"><button type="button" id="ai-device-download" hidden>Download</button></div>
+          </div>
+          <div class="ai-endpoint" id="ai-endpoint" hidden>
+            <label class="field wide"><span>Address</span><input id="ai-base" type="url" maxlength="500" dir="ltr" translate="no" placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false" data-local></label>
+            <label class="field wide"><span>Model</span><input id="ai-model" type="text" list="ai-models" maxlength="200" dir="ltr" translate="no" autocomplete="off" spellcheck="false" aria-describedby="ai-model-unverified" data-local></label>
+            <datalist id="ai-models"></datalist>
+            <p class="desc" id="ai-model-unverified" hidden>Unverified</p>
+            <label class="field wide"><span>Key</span><input id="ai-key" type="password" maxlength="512" dir="ltr" translate="no" autocomplete="off" spellcheck="false" data-local></label>
+            <div class="row"><button type="button" id="ai-save" class="primary">Save</button><button type="button" id="ai-test">Test</button></div>
+            <p class="desc" id="ai-said" role="status" aria-live="polite"></p>
+          </div>
+          <p class="desc" id="ai-where" hidden></p>
+          <p class="desc" id="ai-failure" hidden></p>
+        </div>
+</section>
+<section id="ai-features" data-editor-section="ai/features" data-sites="Extension only" aria-labelledby="heading-ai-features" hidden>
+<p class="section-path" data-editor-breadcrumb><a href="#ai/features" data-editor-alias>Features</a></p><div class="section-heading"><h2 id="heading-ai-features">Features</h2></div>
+<div class="stack" id="ai-feature-list"></div>
+</section>
+<section id="ai-activity" data-editor-section="ai/activity" data-sites="Extension only" aria-labelledby="heading-ai-activity" hidden>
+<p class="section-path" data-editor-breadcrumb><a href="#ai/activity" data-editor-alias>Activity</a></p><div class="section-heading"><h2 id="heading-ai-activity">Activity</h2></div>
+<ul class="courses sites" id="ai-calls"></ul>
+<p class="desc" id="ai-calls-empty">None yet</p>
+<div class="row"><button type="button" id="ai-calls-clear" disabled>Clear</button></div>
+</section>
+</div>
 <div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" data-no-preview hidden>
 <section id="data" data-editor-section="backup/privacy" data-sites="Extension only" aria-labelledby="heading-backup-privacy">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/privacy" data-editor-alias>Backup and reset</a></p><div class="section-heading"><h2 id="heading-backup-privacy">Backup and reset</h2></div>
@@ -1601,6 +1650,9 @@
   <script src="lib/petplayer.js"></script>
   <script src="lib/petlibrary.js"></script>
   <script src="lib/site.js"></script>
+  <script src="lib/ai/settings.js"></script>
+  <script src="lib/ai/endpoint.js"></script>
+  <script src="lib/editor-ai.js"></script>
   <script src="options.js"></script>
   <script src="lib/notes.js"></script>
   <script src="lib/sessions-ui.js"></script>
