@@ -95,7 +95,7 @@ test('a long syllabus goes in parts sized to the context, pictures with the firs
   const text = `Instructor: Dr. Mariela Okonkwo-Hart\nQuiz 1 due Sept 4\n${body}\nQuiz 1 due Sept 4\nFinal exam December 10`;
   const png = { type: 'image', mime: 'image/png', data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]).toString('base64') };
   const quiz = { title: 'Quiz 1', kind: 'due', when: 'Sept 4', quote: 'Quiz 1 due Sept 4' };
-  const cfg = { caps: { context: 3000, images: true }, seen: [], replies: (req, n) => answer(n === 0 ? { prof: { ...blank().prof, name: { text: 'Dr. Mariela Okonkwo-Hart', quote: 'Instructor: Dr. Mariela Okonkwo-Hart' } }, dates: [quote(quiz)] }
+  const cfg = { caps: { context: 4096, images: true }, seen: [], replies: (req, n) => answer(n === 0 ? { prof: { ...blank().prof, name: { text: 'Dr. Mariela Okonkwo-Hart', quote: 'Instructor: Dr. Mariela Okonkwo-Hart' } }, dates: [quote(quiz)] }
     : { dates: [quote(quiz), ...(req.messages[1].content[0].text.includes('Final exam') ? [{ title: 'Final exam', kind: 'exam', when: 'December 10', quote: 'Final exam December 10' }] : [])] }) };
   const quote = (d) => ({ ...d });
   const notes = [];
@@ -111,7 +111,7 @@ test('a long syllabus goes in parts sized to the context, pictures with the firs
 
 test('a syllabus that would take more parts than allowed is refused before anything is sent', async () => {
   const text = Array.from({ length: 2000 }, (_, i) => `Line ${i}: reading and practice problems for the week, with a short reflection.`).join('\n');
-  const cfg = { caps: { context: 2000 }, seen: [], replies: () => answer({}) };
+  const cfg = { caps: { context: 4096 }, seen: [], replies: () => answer({}) };
   await assert.rejects(T.run(task, { text }, { provider: 'mock', cfg }), { code: 'size' });
   assert.equal(cfg.seen.length, 0, 'nothing sent');
 });
@@ -327,10 +327,12 @@ test('an office quote must identify an office, not just contain a number', () =>
 });
 
 test('room numbers cannot supply invented percentage weights', () => {
-  const text = 'Exams are in room 160\nLabs are in room 240';
-  const heur = L.extract(text, OPTS);
-  const out = task.check({ ...blank(), weights: [{ name: 'Exams', weight: '60%', quote: 'Exams are in room 160' }, { name: 'Labs', weight: '40%', quote: 'Labs are in room 240' }] }, { text });
-  assert.deepEqual(A.merge(heur, A.interpret(out, OPTS, heur, text)).weights, heur.weights);
+  for (const rooms of [[160, 240], [60, 40]]) {
+    const lines = [`Exams are in room ${rooms[0]}`, `Labs are in room ${rooms[1]}`], text = lines.join('\n');
+    const heur = L.extract(text, OPTS);
+    const out = task.check({ ...blank(), weights: [{ name: 'Exams', weight: '60%', quote: lines[0] }, { name: 'Labs', weight: '40%', quote: lines[1] }] }, { text });
+    assert.deepEqual(A.merge(heur, A.interpret(out, OPTS, heur, text)).weights, heur.weights);
+  }
 });
 
 test('a scale threshold must be a whole number in its quote', () => {
