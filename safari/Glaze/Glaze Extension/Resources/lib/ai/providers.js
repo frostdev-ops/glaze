@@ -15,6 +15,7 @@
 var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
   const R = () => (typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('./request.js'));
   const S = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('./schema.js'));
+  const E = () => (typeof GZ_AI_ENDPOINT !== 'undefined' ? GZ_AI_ENDPOINT : require('./endpoint.js'));
   const ID = /^[a-z][a-z0-9-]{0,31}$/;
   const all = new Map();
   const add = (p) => {
@@ -46,26 +47,48 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
     if ((Q.images(req) && can.images === false) || (req.tools && can.tools === false) || (req.schema && can.json === false)) throw Q.error('caps');
     if (signal?.aborted) throw F().modelFailure(signal.reason, { aborted: true });
     const timer = F().deadline(req.timeoutMs || DEFAULT_TIMEOUT), both = F().anySignal([signal, timer.signal]);
+    // JSON escapes can conceal a credential until the complete object is parsed. Hold keyed schema deltas within the
+    // answer limit, then release the original chunks only after both schema and credential validation succeed.
+    const buffered = req.schema && c.key ? [] : null;
+    let bufferedSize = 0;
     let active = true, rejectAbort;
     const cancelled = new Promise((_, reject) => { rejectAbort = () => reject(both.signal.reason); both.signal.addEventListener('abort', rejectAbort, { once: true }); });
     let raw;
     try {
       raw = await Promise.race([p.run(req, c, { signal: both.signal, fetch,
-        onDelta: typeof onDelta === 'function' && can.stream !== false ? (t) => { if (active && typeof t === 'string' && t && !both.signal.aborted) onDelta(t); } : undefined,
+        onDelta: typeof onDelta === 'function' && can.stream !== false ? (t) => {
+          if (!active || typeof t !== 'string' || !t || both.signal.aborted) return;
+          if (buffered) {
+            bufferedSize += t.length;
+            if (bufferedSize > Q.LIMIT.text) throw Object.assign(new Error('Stream response is too large.'), { category: 'invalid-response' });
+            buffered.push(t);
+          } else onDelta(t);
+        } : undefined,
         onThinking: (x) => { if (active && !both.signal.aborted) onThinking?.(x); } }), cancelled]);
     } catch (e) {
+      e = E().safeError(e, c.key);
       if (OWN.includes(e?.code) && !both.signal.aborted) throw Object.assign(Q.error(e.code), { detail: e.message });
       throw F().modelFailure(both.signal.aborted && !signal?.aborted && timer.signal.aborted ? Object.assign(new Error('timed out'), { name: 'TimeoutError' }) : e, { aborted: !!signal?.aborted });
     } finally { active = false; timer.done(); both.done(); both.signal.removeEventListener('abort', rejectAbort); }
     const out = Q.result({ ...raw, provider: p.id });
     if (!out) throw F().modelFailure({ category: 'invalid-response' });
+    try { E().guard(out, c.key); } catch (e) { throw F().modelFailure(e); }
     if (req.schema && !out.toolCalls) {
       if (out.finish === 'length') throw Q.error('refusal', 'the answer was cut off at maxTokens');
       const json = S().parse(out.text);
       if (json === undefined) throw Object.assign(F().modelFailure({ category: 'invalid-response' }), { detail: 'not a JSON object' });
+      try { E().guard(json, c.key); } catch (e) { throw F().modelFailure(e); }
       const errors = S().validate(json, req.schema);
       if (errors.length) throw Object.assign(F().modelFailure({ category: 'invalid-response' }), { detail: errors });
       out.json = json;
+    }
+    if (buffered?.length) {
+      const text = buffered.join('');
+      try { E().guard(text, c.key); E().guard(S().parse(text), c.key); } catch (e) { throw F().modelFailure(e); }
+      for (const delta of buffered) {
+        if (signal?.aborted) throw F().modelFailure(signal.reason, { aborted: true });
+        onDelta(delta);
+      }
     }
     return out;
   };

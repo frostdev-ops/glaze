@@ -85,14 +85,20 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
         thinking.text(typeof reasoningText === 'string' && reasoningText ? reasoningText
           : (delta.reasoning_details ?? []).filter((d) => d.type === 'reasoning.text').map((d) => (typeof d.text === 'string' ? d.text : '')).join(''), false);
         const text = delta.content ?? delta.refusal;
-        if (typeof text === 'string' && text) { msg.content += text; onText?.(text); }
+        if (typeof text === 'string' && text) {
+          if (msg.content.length + text.length > R.LIMIT.text) throw Object.assign(Error('Stream response is too large.'), { category: 'invalid-response' });
+          msg.content += text; onText?.(text);
+        }
         if (typeof delta.refusal === 'string') msg.refusal = (msg.refusal ?? '') + delta.refusal;
         for (const tc of delta.tool_calls ?? []) {
           if (!Number.isInteger(tc.index) || tc.index < 0 || tc.index >= R.LIMIT.calls) throw Error('Invalid streamed tool index');
           const item = calls.get(tc.index) ?? { id: '', type: 'function', function: { name: '', arguments: '' } };
           if (tc.id) item.id = tc.id;
           if (tc.function?.name) item.function.name = tc.function.name; // sent whole, some servers repeat it per chunk
-          if (tc.function?.arguments) item.function.arguments += tc.function.arguments;
+          if (tc.function?.arguments) {
+            if (item.function.arguments.length + tc.function.arguments.length > R.LIMIT.args) throw Object.assign(Error('Stream tool arguments are too large.'), { category: 'invalid-response' });
+            item.function.arguments += tc.function.arguments;
+          }
           calls.set(tc.index, item);
         }
         if (chunk.usage) thinking.usage(usage.completion_tokens_details?.reasoning_tokens);
@@ -153,11 +159,7 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
   const modes = new Map(); // `${base}\n${model}` → { mode, until }
   const remember = (k, mode) => { modes.delete(k); if (mode !== FIRST) modes.set(k, { mode, until: Date.now() + LIMIT.remember }); if (modes.size > 50) modes.delete(modes.keys().next().value); };
   // A server's words, for a developer's eyes only (an Error's cause): the key, and anything shaped like one, out.
-  const redact = (s, cfg) => {
-    let t = String(s ?? '');
-    if (cfg.key) t = t.split(cfg.key).join('[key]');
-    return t.replace(/\b(?:sk|rk|pk|gsk|xai)[-_]\S+/gi, '[key]').replace(/\bBearer\s+\S+/gi, 'Bearer [key]').slice(0, 300);
-  };
+  const redact = (s, cfg) => E.redact(s, cfg.key);
   const pause = (ms, signal) => new Promise((resolve, reject) => {
     const t = setTimeout(() => { signal?.removeEventListener('abort', stop); resolve(); }, ms);
     const stop = () => { clearTimeout(t); reject(signal.reason); };
@@ -166,7 +168,7 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
 
   // run(request, cfg, { signal, onDelta, onThinking, fetch }) → the result (lib/ai/request.js). No cookies, no referrer,
   // no redirect (a redirect would take the key elsewhere).
-  const run = async (req, cfg, { signal, onDelta, onThinking, fetch = globalThis.fetch } = {}) => {
+  const request = async (req, cfg, { signal, onDelta, onThinking, fetch = globalThis.fetch } = {}) => {
     const k = `${cfg.base}\n${cfg.model}`, kept = modes.get(k), stream = typeof onDelta === 'function';
     let mode = kept && kept.until > Date.now() ? kept.mode : FIRST, retried = false;
     for (let i = 0; i < 6; i++) {
@@ -178,7 +180,7 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
       } catch (err) {
         // A cancel, or a refusal before anything was sent (the broker's pinned fetch: another host, a changed connection).
         if (signal?.aborted || typeof err?.code === 'string') throw err;
-        throw new Error(`compat: ${redact(err?.message, cfg)}`, { cause: err });
+        throw E.safeError(err, cfg.key);
       }
       if (res.status < 200 || res.status >= 300) {
         const text = await F.bounded(res, LIMIT.error).catch((e) => { if (signal?.aborted) throw e; return ''; });
@@ -188,20 +190,24 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
         if (res.status === 400 && R.images(req) && /image|vision|modalit|multimodal/i.test(text)) throw Object.assign(new Error(`"${cfg.model}" does not take pictures. Pick a vision model.`), { code: 'caps' });
         throw Object.assign(new Error(`compat: ${res.status} ${redact(text, cfg)}`), { status: res.status });
       }
-      let data;
+      let data, safe;
       if (/text\/event-stream/i.test(res.headers.get('content-type') || '')) {
         // A server may answer a stream request with one JSON body; this one streams.
-        const s = chatStream(onDelta, onThinking);
-        await ST.readSse(res.body, (payload) => { if (payload !== '[DONE]') s.push(JSON.parse(payload)); }, undefined, signal);
+        safe = E.safeStream(onDelta, cfg.key);
+        const s = chatStream((text) => safe.push(text), onThinking);
+        await ST.readSse(res.body, (payload) => { if (payload !== '[DONE]') s.push(E.guard(JSON.parse(payload), cfg.key)); }, undefined, signal);
         data = s.result();
       } else data = JSON.parse(await F.bounded(res, LIMIT.body));
+      E.guard(data, cfg.key);
       const choice = data?.choices?.[0], raw = choice?.message;
       if (!raw) throw Object.assign(new Error('compat: empty response'), { category: 'invalid-response' });
       const finish = choice.finish_reason ?? 'stop';
       if (!['stop', 'tool_calls', 'function_call', 'length'].includes(finish)) throw Object.assign(new Error(`Incomplete response (${finish})`), { category: 'invalid-response' });
       const { text, calls, refusal } = fromWire(raw);
+      E.guard({ text, calls }, cfg.key);
       if (refusal) throw Object.assign(new Error('The model declined to answer.'), { code: 'refusal' });
       if (!text && !calls.length && finish !== 'length') throw Object.assign(new Error('compat: empty response'), { category: 'invalid-response' });
+      safe?.finish();
       remember(k, mode);
       const u = data.usage;
       return { text, ...(calls.length && { toolCalls: calls }), model: typeof data.model === 'string' ? data.model : '',
@@ -210,6 +216,9 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
           ...(Number.isSafeInteger(u.prompt_tokens_details?.cache_write_tokens) && { cacheWrite: u.prompt_tokens_details.cache_write_tokens }), ...(Number.isSafeInteger(u.completion_tokens) && { output: u.completion_tokens }) } }) };
     }
     throw Object.assign(new Error('compat: every step down was refused'), { status: 400 });
+  };
+  const run = async (req, cfg, env) => {
+    try { return await request(req, cfg, env); } catch (error) { throw E.safeError(error, cfg.key); }
   };
 
   // Settings' Test: the connection's catalog (lib/ai/models.js), and whether it names the model. → { state, reason?,

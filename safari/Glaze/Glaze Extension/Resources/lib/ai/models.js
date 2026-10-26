@@ -25,18 +25,21 @@ var GZ_AI_MODELS = globalThis.GZ_AI_MODELS || (() => {
   // cfg: { base, key?, generation? }; env: { fetch, cache?: { get(k), set(k, v) }, now? } → { models: [{ id, name, context?,
   // tools?, vision?, json? }], source: 'live' | 'cache', at }. Throws when there is neither a live nor a kept list.
   const list = async (cfg, { fetch, cache, now = Date.now, signal } = {}) => {
+    signal?.throwIfAborted();
     const shared = isOpenRouter(cfg.base);
     const revision = shared ? 'openrouter' : `${E().normalize(cfg.base)}\n${cfg.generation || ''}`;
     const kept = memory.get(revision);
-    if (kept && now() - kept.at < TTL) return kept.list;
+    if (kept && now() - kept.at < TTL) return E().guard(kept.list, cfg.key);
     const store = `models:${shared ? 'openrouter' : cfg.generation || E().normalize(cfg.base)}`;
     const t = F().deadline(TIMEOUT), s = F().anySignal([signal, t.signal]);
     try {
       // The catalog is public: no key goes to it, whoever's connection asks.
-      const res = await fetch(shared ? OPENROUTER : `${cfg.base}/models`, { method: 'GET', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', cache: 'no-store',
-        headers: { accept: 'application/json', ...(!shared && cfg.key && { authorization: `Bearer ${cfg.key}` }) }, signal: s.signal });
+      const res = await F().wait(() => fetch(shared ? OPENROUTER : `${cfg.base}/models`, { method: 'GET', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', cache: 'no-store',
+        headers: { accept: 'application/json', ...(!shared && cfg.key && { authorization: `Bearer ${cfg.key}` }) }, signal: s.signal }), s.signal);
+      s.signal.throwIfAborted();
       if (!res.ok) { res.body?.cancel?.().catch(() => {}); throw Object.assign(new Error(`models ${res.status}`), { status: res.status }); }
-      const data = JSON.parse(await F().bounded(res, BODY));
+      const data = E().guard(JSON.parse(await F().wait(() => F().bounded(res, BODY), s.signal)), cfg.key);
+      s.signal.throwIfAborted();
       const models = (Array.isArray(data?.data) ? data.data : []).filter((m) => typeof m?.id === 'string' && m.id.length <= 200).map((m) => {
         if (!shared) return { id: m.id, name: m.id };
         const params = m.supported_parameters, inputs = m.architecture?.input_modalities, c = context(m);
@@ -46,13 +49,16 @@ var GZ_AI_MODELS = globalThis.GZ_AI_MODELS || (() => {
       }).sort((a, b) => a.id.localeCompare(b.id));
       if (!models.length) throw new Error('empty model list');
       const out = { models, source: 'live', at: now() };
+      await F().wait(() => Promise.resolve(cache?.set(store, { at: out.at, models })).catch(() => {}), s.signal);
+      s.signal.throwIfAborted();
       memory.set(revision, { at: out.at, list: out });
-      await cache?.set(store, { at: out.at, models }).catch?.(() => {});
       return out;
     } catch (err) {
-      const last = await Promise.resolve(cache?.get(store)).catch(() => null);
-      if (!Array.isArray(last?.models) || !last.models.length) throw err;
-      return { models: last.models, source: 'cache', at: last.at || 0 };
+      if (s.signal.aborted) throw E().safeError(s.signal.reason, cfg.key);
+      const last = await F().wait(() => Promise.resolve(cache?.get(store)).catch(() => null), s.signal);
+      s.signal.throwIfAborted();
+      if (!Array.isArray(last?.models) || !last.models.length) throw E().safeError(err, cfg.key);
+      return E().guard({ models: last.models, source: 'cache', at: last.at || 0 }, cfg.key);
     } finally { t.done(); s.done(); }
   };
   // Check a model before a run: an id a live list doesn't name is refused; a stale or missing list marks it unverified; a
