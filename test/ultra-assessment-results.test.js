@@ -1,5 +1,5 @@
 // A test's overview: its Assessment Results section puts the heading in its own header and its content in a plain
-// section-content with no well. It gets the other overview sections' label pill and surface, so it never sits bare on
+// ul.section-content with no well. It gets the other overview sections' label pill and surface, so it never sits bare on
 // the background.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -28,7 +28,7 @@ const rules = (file) => {
 const THEME = rules('theme.css');
 const LABEL = '.assessment-overview-grid > .overview-section > h2.section-label';
 const RESULTS_LABEL = '.assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label';
-const RESULTS_WELL = '.assessment-results-section > div.section-content';
+const RESULTS_WELL = '.assessment-results-section > .section-content';
 
 test('the Assessment Results heading wears every rule the other overview section labels do', () => {
   const pills = THEME.filter(([s]) => s.includes(LABEL));
@@ -39,6 +39,8 @@ test('the Assessment Results heading wears every rule the other overview section
 });
 
 test('the Assessment Results content gets the wells\' surface, padding and solid-background treatment', () => {
+  const fixture = read('test/fixtures/ultra-assessment-rubric.html');
+  assert.match(fixture, /assessment-results-section main-section-container"><div class="assessment-results-header">[\s\S]*?<\/div><ul class="section-content"><li class="details-list-item assessment-result-options">/, 'the Results fixture uses the native list shape');
   const wells = THEME.filter(([s]) => s.includes('.section-well'));
   assert.ok(wells.length >= 2, 'the well surface and its solid-background rule');
   for (const [s] of wells) assert.ok(s.includes(RESULTS_WELL), `${s.slice(0, 80)}… also covers the Assessment Results content`);

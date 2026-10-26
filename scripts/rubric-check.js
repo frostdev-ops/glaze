@@ -159,17 +159,14 @@ const tableInfo = function () {
     if(run('results')) {
       const {page,cdp}=await open(); await until(()=>info(cdp),'rubric before results styles');
       await page.evaluate(()=>{
-        const section=document.createElement('div');section.className='overview-section assessment-results-section main-section-container';
-        section.innerHTML='<div class="assessment-results-header"><h2 class="section-label">Assessment Results</h2></div><div class="section-content">Results</div>';
-        document.querySelector('.assessment-overview-grid').append(section);
         const other=document.createElement('div');other.id='other-section';other.innerHTML='<div class="section-content">Other content</div>';document.querySelector('#site-wrap').append(other);
       });
       const styles=()=>page.evaluate(()=>{
         const css=s=>getComputedStyle(document.querySelector(s)), body=css('.assessment-results-section > .section-content'), label=css('.assessment-results-header > .section-label'), other=css('#other-section > .section-content');
-        return {radius:body.borderTopLeftRadius,padding:body.paddingInlineStart,border:body.borderTopWidth,fill:body.backgroundColor,blur:body.backdropFilter,labelRadius:label.borderTopLeftRadius,labelDisplay:label.display,otherBorder:other.borderTopWidth};
+        return {tag:document.querySelector('.assessment-results-section > .section-content').tagName,radius:body.borderTopLeftRadius,padding:body.paddingInlineStart,border:body.borderTopWidth,fill:body.backgroundColor,blur:body.backdropFilter,labelRadius:label.borderTopLeftRadius,labelDisplay:label.display,otherBorder:other.borderTopWidth};
       });
       const glass=await styles();
-      check(parseFloat(glass.radius)>0&&parseFloat(glass.padding)>0&&glass.border==='1px'&&glass.fill!=='rgba(0, 0, 0, 0)','Assessment Results content has a rounded padded surface');
+      check(glass.tag==='UL'&&parseFloat(glass.radius)>0&&parseFloat(glass.padding)>0&&glass.border==='1px'&&glass.fill!=='rgba(0, 0, 0, 0)','Assessment Results list has a rounded padded surface');
       check(glass.labelRadius==='999px'&&glass.labelDisplay==='inline-flex'&&glass.otherBorder==='0px','the nested Results heading is a pill and unrelated section content has no panel border');
       await page.evaluate(()=>document.documentElement.setAttribute('data-gz-bg','solid'));
       check((await styles()).blur==='none','Assessment Results disables backdrop blur with a solid background');await page.close();
@@ -211,7 +208,7 @@ const tableInfo = function () {
       check(x.text.includes('Strong evidence.') && x.selected>0,'the graded evaluation\'s feedback and a non-colour selected rating are present');
       check(!x.unsafe && !await page.evaluate(()=>window.__rubricUnsafe),'rubric descriptions use the shared safe HTML path');
       check(x.pageFits && await page.locator('.assessment-details-section #gz-rubric').count()===1,'the inline rubric stays inside Assessment Details without page overflow');
-      check(await page.locator('.assessment-overview-grid').evaluate(e=>e.children.length===4),'the assessment grid retains its native children');
+      check(await page.locator('.assessment-overview-grid').evaluate(e=>e.children.length===5),'the assessment grid retains its native children');
       await screenshot(page,'desktop-inline'); await page.close();
     }
     if(run('screenshots')) for(const light of [true,false]) for(const width of [1440,390]) {
