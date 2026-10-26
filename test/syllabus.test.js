@@ -973,18 +973,17 @@ test('worked examples, ungraded work and topics that only mention a thing handed
 });
 
 // Owner, 2026-10-26: a weekly rule is a row on each of its days across the course, to check, marked as one rule.
-test('a weekly rule is a row each week within stated course dates, without the breaks the text names', () => {
+test('a weekly rule is a row each week from week 1 to the course\'s last deadline, without the breaks the text names', () => {
   const rule = (text, opts) => S.extract(text, opts).dates.filter((d) => d.rule === 'weekly').map((d) => `${d.day} ${d.kind} ${d.title}`);
   const text = `Weekly online quizzes are due Mondays at 11:59 PM.
 Mon 9/7 - Labor Day: no class
 Sat 10/10 - Tue 10/13 - Fall break
-Final exam: Sat 10/24
-Course ends: October 24`;
+Final exam: Sat 10/24`;
   assert.deepEqual(rule(text, { start: FALL, md: true, week1: FALL }), ['2026-08-31', '2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-19'].map((d) => `${d} exam Weekly online quizzes`));
   assert.ok(S.extract(text, { start: FALL, md: true, week1: FALL }).dates.filter((d) => d.rule).every((d) => d.conf === 'check'));
   for (const [hint, line] of [['de', 'Abgabe der Übungsblätter jeweils freitags bis 12 Uhr.'], ['es', 'Las tareas se entregan todos los viernes.'], ['fr', 'Les devoirs sont à remettre chaque vendredi.'],
     ['nl', 'Opdrachten inleveren elke vrijdag.'], ['pt', 'Os trabalhos devem ser entregues toda sexta-feira.'], ['en', 'Reading responses close every Friday.']]) {
-    assert.deepEqual(rule(`${line}\nCourse ends: Sept 30, 2026`, { week1: Date.UTC(2026, 8, 7), hint }).map((d) => d.slice(0, 14)), ['2026-09-11 due', '2026-09-18 due', '2026-09-25 due'], line);
+    assert.deepEqual(rule(`${line}\nExam: Sept 30, 2026`, { week1: Date.UTC(2026, 8, 7), hint }).map((d) => d.slice(0, 14)), ['2026-09-11 due', '2026-09-18 due', '2026-09-25 due'], line);
   }
   assert.deepEqual(rule('Assignments are released on Wednesdays and due two weeks later.\nFinal exam: Dec 10', { week1: FALL }), [], 'released, not due, on Wednesdays');
   assert.deepEqual(rule('Weekly quizzes are due Mondays.', { week1: FALL }), [], 'no last day to stop at');
