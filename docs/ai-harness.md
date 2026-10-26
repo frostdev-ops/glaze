@@ -15,6 +15,7 @@ until the student has turned AI on, chosen a connection and allowed that feature
 | `lib/ai/models.js` | Catalogs (a server's `/models`, OpenRouter's public list) with provenance, and `select`. |
 | `lib/ai/providers.js` | The provider registry and `run`, the one way to call a model. |
 | `lib/ai/providers/openai.js` | Any Chat Completions server. `mock.js` is for tests and evals only; the worker never loads it. |
+| `lib/ai/providers/apple.js` | Safari only: Apple's Foundation Models (on this device, or Private Cloud Compute) through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
 | `lib/ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
 | `lib/ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
 | `lib/ai/task.js` | Task definitions and `run`. Tasks live in `lib/ai/tasks/<id>.js`. |

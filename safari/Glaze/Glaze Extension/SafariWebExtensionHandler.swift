@@ -46,6 +46,16 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         }
         #endif
 
+        // The AI harness's apple provider (GlazeAI.swift). Answered before the log below, which would record its text.
+        if let command = message as? [String: Any], (command["type"] as? String)?.hasPrefix("ai.") == true {
+            Task {
+                let response = NSExtensionItem()
+                response.userInfo = [SFExtensionMessageKey: await GlazeAI.reply(to: command) ?? [:]]
+                context.completeRequest(returningItems: [response], completionHandler: nil)
+            }
+            return
+        }
+
         os_log(.default, "Received message from browser.runtime.sendNativeMessage: %@ (profile: %@)", String(describing: message), profile?.uuidString ?? "none")
 
         let response = NSExtensionItem()
