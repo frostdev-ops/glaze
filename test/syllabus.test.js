@@ -1282,3 +1282,11 @@ test('review: frequencies need an explicit end, not another assignment date', ()
   assert.deepEqual(reviewWeekly('Quizzes are due every Friday, weeks 2–3.').map((d) => d.day), ['2026-09-11', '2026-09-18']);
   assert.deepEqual(reviewWeekly('Quizzes are due every Friday.\nCourse ends: September 18').map((d) => d.day), ['2026-09-04', '2026-09-11', '2026-09-18']);
 });
+
+test('review: a weekday and week range do not make quiz commentary a recurring exam', () => {
+  for (const line of ['Quiz feedback is available every Friday', 'Quizzes are discussed every Friday', 'We discuss quizzes every Friday']) {
+    assert.deepEqual(reviewWeekly(`${line}, weeks 3–5.\nCourse ends: September 25`), [], line);
+  }
+  assert.deepEqual(ruleDays('Quiz en ligne chaque vendredi (semaines 2 à 3).', { ...reviewOpts, hint: 'fr' }), ['09-11 exam', '09-18 exam']);
+  assert.deepEqual(ruleDays('Controles semanales: los viernes, semanas 2 a 3.', { ...reviewOpts, hint: 'es' }), ['09-11 exam', '09-18 exam']);
+});
