@@ -130,6 +130,48 @@ const engineJson = (...blocks) => {
   }) };
 };
 
+test('ocrText: preserves the engine reading order of separate prose columns', () => {
+  const columns = [
+    [[['Read', 20, 60, 20, 40], ['this', 65, 100, 20, 40]], [['column', 20, 90, 50, 70], ['first.', 95, 150, 50, 70]]],
+    [[['Then', 300, 350, 20, 40], ['read', 355, 400, 20, 40]], [['this', 300, 340, 50, 70], ['column.', 345, 420, 50, 70]]],
+  ];
+  const blocks = engineJson(...columns);
+  const expected = 'Read this\ncolumn first.\nThen read\nthis column.';
+  assert.equal(D.ocrText(blocks).text, expected);
+  // The same columns can be paragraphs of one engine block.
+  assert.equal(D.ocrText({ blocks: [{ paragraphs: blocks.blocks.flatMap((b) => b.paragraphs) }] }).text, expected);
+});
+
+test('ocrText: preserves RTL and mixed direction word order', () => {
+  for (const words of [
+    [['مرحبا', 240, 300, 20, 40], ['بكم', 180, 230, 20, 40]],
+    [['ציון', 260, 300, 20, 40], ['C', 230, 240, 20, 40, 40], ['10', 180, 200, 20, 40]],
+  ]) {
+    const json = engineJson([words]);
+    json.blocks[0].paragraphs[0].is_ltr = false;
+    const r = D.ocrText(json);
+    assert.equal(r.text, words.map((w) => w[0]).join(' '));
+    assert.deepEqual(r.unsure, words.some((w) => w[5] < 65) ? [r.text] : []);
+  }
+});
+
+test('ocrText: preserves engine lines on skewed and quarter turned pages', () => {
+  for (const slope of [-0.2, 0.2]) {
+    const json = engineJson(Array.from({ length: 3 }, (_, i) => Array.from({ length: 4 }, (_, k) =>
+      [`row${i}word${k}`, k * 100, k * 100 + 90, 100 + i * 35 + slope * k * 100, 120 + i * 35 + slope * k * 100])));
+    for (const [i, line] of json.blocks[0].paragraphs[0].lines.entries()) {
+      line.baseline = { x0: 0, y0: 120 + i * 35, x1: 390, y1: 120 + i * 35 + slope * 390 };
+    }
+    assert.equal(D.ocrText(json).text, Array.from({ length: 3 }, (_, i) => Array.from({ length: 4 }, (_, k) => `row${i}word${k}`).join(' ')).join('\n'));
+  }
+  const turned = engineJson([
+    [['First', 100, 120, 100, 160], ['line', 100, 120, 170, 220]],
+    [['Second', 70, 90, 100, 170], ['line', 70, 90, 180, 230]],
+  ]);
+  for (const line of turned.blocks[0].paragraphs[0].lines) line.baseline = { x0: line.bbox.x0, x1: line.bbox.x0, y0: 100, y1: 230 };
+  assert.equal(D.ocrText(turned).text, 'First line\nSecond line');
+});
+
 test('ocrText: a table row whose cells are several lines, or centred in it, is one line; level rows and a paragraph stay lines', () => {
   // A course calendar laid out as the engine reads it in one block: the week's dates centred in their cell, so the
   // engine puts them on a line with the second line of the cells beside them, or on a line of their own; bullets read
