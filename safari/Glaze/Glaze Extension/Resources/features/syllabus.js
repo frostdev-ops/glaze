@@ -221,7 +221,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     frame(t('Import a syllabus'),
       make('p', { className: 'gz-syl-desc', textContent: t('Glaze reads it on this device. Nothing is sent anywhere, and nothing is kept until you check it and save.') }),
       page()?.textContent.trim() && button(t("Read this course's Syllabus page"), 'page', async () => { await docIn().catch(() => {}); if (globalThis.GZ_DOCTEXT) { const text = pageText(); review(extract(text), text); } }),
-      ultra && docPicker(say),
+      ultra && docPicker(say, stop),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-file', textContent: t('A file') }), file,
         make('small', { textContent: t('A PDF, a picture or screenshot, Word, PowerPoint, a web page or text.') })),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-paste', textContent: t('Or paste the text, or a screenshot') }), paste),
@@ -230,30 +230,74 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       say);
     first(file);
   };
-  // Ultra: a document of the course's, read from the public content API (its text and its blocks'; a list of metadata and text, which
-  // [I] marks nothing as opened: not measured), listed once the dialog asks, syllabus-like titles first. Shown only when the
-  // course has one.
+  // Ultra: a document of the course's, read from the public content API (a list of metadata and text, which [I] marks
+  // nothing as opened: not measured), listed once the dialog asks, syllabus-like titles first. Shown only when the course
+  // has one. A document is a page: a folder Ultra marks isBbPage (as Ultra writes them), or a document with documents in
+  // it; its text sits in its blocks (its children), titled like it, "ultraDocumentBody" or anything, so it's listed by its
+  // own title, the blocks read as part of it, in order. A block can be only a file's link (data-bbfile on /bbcswebdav/,
+  // lib/page.js files()): on the student's click, never while listing, each such file is fetched with the session (Ultra
+  // sends it on to its file store) and read by features/import.js, in its place among the blocks' text, with the read's
+  // progress, Stop, and its end when the dialog closes, as a chosen file is. A file that can't be fetched or read is left
+  // out; with nothing read at all, the reason (the last file's own, or that it couldn't be read). Only the student's own
+  // click reads, as Read it.
   const SYL = /syllab|course (outline|info)|programa|lehrplan|plan de cours|studiewijzer/i;
-  const docPicker = (say) => {
+  const docPicker = (say, stop) => {
     const box = make('div', { className: 'gz-syl-f', hidden: true });
     const cid = opened.cid, mine = dlg;
+    // Never contentDetail or the whole contentHandler: an LTI link keeps its tool's secret there (lib/ultra.js).
     need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, live: () => dlg === mine && allowed(cid) })
-      .all(`/learn/api/public/v1/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,availability.available`)).then((all) => {
+      .all(`/learn/api/public/v1/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,contentHandler.isBbPage,availability.available`)).then((all) => {
       const avail = all.filter((c) => c?.availability?.available === 'Yes'); // not items held back from you (B0)
       const html = (d) => [d.body, ...avail.filter((c) => c.parentId === d.id).map((c) => c.body)].filter((b) => typeof b === 'string').join('\n');
       const isDoc = (c) => c?.contentHandler?.id === 'resource/x-bb-document';
-      const pages = new Set(avail.filter(isDoc).map((c) => c.id));
-      // A document's blocks are documents too: they're read as part of it, not listed.
-      const docs = avail.filter((c) => isDoc(c) && !pages.has(c.parentId) && html(c).trim()).sort((a, b) => SYL.test(b.title) - SYL.test(a.title));
+      const pages = new Set(avail.filter((c) => isDoc(c) || c?.contentHandler?.isBbPage === true).map((c) => c.id));
+      const docs = avail.filter((c) => pages.has(c.id) && !pages.has(c.parentId) && html(c).trim()).sort((a, b) => SYL.test(b.title) - SYL.test(a.title));
       if (!docs.length || !box.isConnected) return;
       const sel = make('select', { id: 'gz-syl-doc' }, ...docs.slice(0, 200).map((d, i) => make('option', { value: String(i), textContent: String(d.title || '').slice(0, 200) })));
       const read = async () => {
-        await docIn().catch(() => {});
-        const text = globalThis.GZ_DOCTEXT?.html(html(docs[+sel.value])) || '';
-        if (!text.trim()) { say.textContent = t("Glaze couldn't read that file."); return; }
-        review(extract(text), text);
+        // One read at a time, as go()'s: a newer one, Stop, another step or closing the dialog calls this one off.
+        reading?.abort();
+        say.textContent = t('Reading…');
+        const ctl = reading = new AbortController(), signal = ctl.signal;
+        stop.hidden = false;
+        try {
+          await docIn();
+          const D = globalThis.GZ_DOCTEXT;
+          const texts = [], ocrs = [];
+          let why = null;
+          // The HTML split at its anchors: an anchor files() takes is a file, the rest is text.
+          for (const [i, s] of html(docs[+sel.value]).split(/(<a\s[^>]*>)/i).entries()) {
+            const f = i % 2 ? GZ_PAGE.files({ body: s }, location.origin)[0] : null;
+            if (!f) { texts.push(s); continue; }
+            try {
+              // Only what features/import.js reads, by its name, no larger than the largest it reads (a PDF), checked
+              // by the size Ultra's store says before it's fetched; features/import.js checks each kind's own after.
+              if (!D.kind(f.name)) continue;
+              const r = await fetch(f.url, { credentials: 'same-origin', signal });
+              if (!r.ok || +r.headers.get('content-length') > D.READ.pdf) continue;
+              const b = await r.blob();
+              if (b.size > D.READ.pdf) continue;
+              await need('features/import.js', () => globalThis.GZ_IMPORT);
+              const got = await GZ_IMPORT.read(new File([b], f.name, { type: b.type }), { signal, progress: (w) => { say.textContent = w; } });
+              texts.push({ text: got.text || '' });
+              if (got.ocr) ocrs.push(got.ocr);
+            } catch (e) { if (signal.aborted) throw e; why = e; }
+          }
+          signal.throwIfAborted();
+          // Runs of HTML become text together, so a split never cuts a line in two.
+          const parts = [];
+          for (const x of texts) if (typeof x === 'string' && typeof parts.at(-1) === 'string') parts[parts.length - 1] += x; else parts.push(x);
+          const text = parts.map((x) => (typeof x === 'string' ? D.html(x) : x.text).trim()).filter(Boolean).join('\n\n');
+          if (!text) { say.textContent = why?.mine ? why.message : t("Glaze couldn't read that file."); return; }
+          // The pictures' OCR as one (features/import.js note and doubt): pages, blank pages and unsure lines added up,
+          // confidence by page.
+          const n = ocrs.reduce((k, o) => k + o.pages, 0);
+          const ocr = ocrs.length ? { pages: n, conf: Math.round(ocrs.reduce((k, o) => k + o.conf * o.pages, 0) / n), unsure: ocrs.flatMap((o) => o.unsure), blank: ocrs.reduce((k, o) => k + (o.blank || 0), 0) } : null;
+          review(extract(text, ocr), text);
+        } catch (e) { if (reading === ctl) say.textContent = signal.aborted ? t('Stopped.') : t("Glaze couldn't read that file."); }
+        finally { if (reading === ctl) { reading = null; stop.hidden = true; } }
       };
-      box.append(make('label', { htmlFor: 'gz-syl-doc', textContent: t('A document in this course') }), sel, button(t('Read this document'), 'doc', read));
+      box.append(make('label', { htmlFor: 'gz-syl-doc', textContent: t('A document in this course') }), sel, button(t('Read this document'), 'doc', (e) => { if (e.isTrusted) read(); }));
       box.hidden = false;
     }, () => {});
     return box;

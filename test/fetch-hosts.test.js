@@ -105,6 +105,8 @@ const SITES = {
   'features/notes.js': [{ at: 'await fetch(url,', kind: 'page' }],
   'features/reminders.js': [{ at: 'await fetch(url,', kind: 'page' }],
   'features/search.js': [{ at: 'fetch(`${location.origin}/api/v1${path}`', kind: 'page' }],
+  // A file an Ultra document links (/bbcswebdav/ on the page's site), read on the student's click for the syllabus import.
+  'features/syllabus.js': [{ at: 'await fetch(f.url,', kind: 'page' }],
   'features/todo.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: 'fetch(`${location.origin}/api/v1/planner/overrides', kind: 'page' }],
 };
 const KINDS = ['required', 'extension', 'asked', 'page', 'via', 'open'];

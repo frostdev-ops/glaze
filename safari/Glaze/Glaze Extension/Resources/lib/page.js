@@ -333,14 +333,14 @@ const GZ_PAGE = (() => {
     return n?.length === 2 ? { done: someDone ? Math.min(...n) : 0, total: Math.max(...n) } : null;
   };
 
-  // The files a content item from Ultra's content API links in its text: anchors with data-bbfile on a
-  // /bbcswebdav/ address of `origin` (videos and tool links have neither). A File item's own file is
-  // lib/ultra.js's. [{ url, name, size }], size when Ultra knows it.
+  // The files a content item from Ultra's content API links in its text (body.rawText, or the public API's body):
+  // anchors with data-bbfile on a /bbcswebdav/ address of `origin` (videos and tool links have neither). A File
+  // item's own file is lib/ultra.js's. [{ url, name, size }], size when Ultra knows it.
   const ENT = { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", '#39': "'" };
   const unescape = (s) => s.replace(/&(quot|amp|lt|gt|apos|#39);/g, (_, e) => ENT[e]);
   const files = (item, origin) => {
     const out = [];
-    for (const [tag] of (item?.body?.rawText || '').matchAll(/<a\s[^>]*>/gi)) {
+    for (const [tag] of String(item?.body?.rawText ?? item?.body ?? '').matchAll(/<a\s[^>]*>/gi)) {
       const attr = (n) => { const m = tag.match(new RegExp(`\\s${n}="([^"]*)"`, 'i')); return m ? unescape(m[1]) : ''; };
       try {
         const bf = JSON.parse(attr('data-bbfile'));
