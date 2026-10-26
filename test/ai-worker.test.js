@@ -53,10 +53,11 @@ test('only Settings\' own top frame keeps connections, and the key never leaves 
   assert.deepEqual(JSON.parse(JSON.stringify(got.connections.main)), { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: 'sk-p••••6789', origin: 'https://api.example.com/*' });
   const kept = JSON.stringify([w.store.local, w.store.sync, w.store.session, got]);
   assert.ok(!kept.includes(KEY), 'not in storage.local, sync or session, nor read back');
-  // The page asks; the worker answers with what it may know.
+  // The page asks; the worker answers with what it may know: the host the text would go to (the import dialog says it),
+  // never the address's path, the model or the key.
   const { reply } = await status(w, lms());
-  assert.deepEqual(reply, { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'openai', caps: { text: true, json: true, stream: true } });
-  assert.ok(!JSON.stringify(reply).includes('api.example.com'));
+  assert.deepEqual(reply, { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'openai', caps: { text: true, json: true, stream: true }, to: 'api.example.com' });
+  assert.ok(!/\/v1|gpt|sk-/.test(JSON.stringify(reply)));
 });
 
 test('a run from a page reaches only the connection\'s server, with the key, and the page gets the checked output', async () => {

@@ -235,12 +235,12 @@ test('a confirm tool ends the run pending; the student\'s answer is claimed once
   assert.deepEqual([p.posted.at(-1).type, p.posted.at(-1).error], ['error', 'request'], 'once only');
 });
 
-test('status says whether a feature may ask and could start, with the provider\'s caps, and nothing about the connection or anything fetched', async () => {
+test('status says whether a feature may ask and could start, with the provider\'s caps and the host an endpoint sends to, and nothing else about the connection or anything fetched', async () => {
   const ask = async (e) => { const p = open(e); p.say({ id: 4, op: 'status', feature: 'syllabus' }); await flush(); return p.posted[0]; };
   const e = env();
-  assert.deepEqual(await ask(e), { id: 4, type: 'status', on: true, allowed: true, ready: true, provider: 'openai', caps: { text: true, json: true, stream: true } });
+  assert.deepEqual(await ask(e), { id: 4, type: 'status', on: true, allowed: true, ready: true, provider: 'openai', caps: { text: true, json: true, stream: true }, to: 'api.example.com' });
   assert.equal(e.calls.length, 0);
-  assert.deepEqual(await ask(env({ reach: async () => false })), { id: 4, type: 'status', on: true, allowed: true, ready: false, why: 'permission', provider: 'openai', caps: { text: true, json: true, stream: true } });
+  assert.deepEqual(await ask(env({ reach: async () => false })), { id: 4, type: 'status', on: true, allowed: true, ready: false, why: 'permission', provider: 'openai', caps: { text: true, json: true, stream: true }, to: 'api.example.com' });
   assert.deepEqual(await ask(env({ vault: { get: async () => undefined } })), { id: 4, type: 'status', on: true, allowed: true, ready: false, why: 'setup' });
   assert.deepEqual(await ask(env({ settings: async () => ({ on: true, use: 'main', features: {} }) })), { id: 4, type: 'status', on: true, allowed: false });
   assert.deepEqual(await ask(env({ enabled: async () => false })), { id: 4, type: 'status', on: false, allowed: false });
