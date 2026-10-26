@@ -19,6 +19,24 @@ test('section-like digits and contents leaders stay bounded at the input limit',
   assert.equal(probe.status, 0, probe.stderr);
 });
 
+test('weight columns reject extra category cells instead of shifting their percentages', () => {
+  for (const labels of ['Homework\nQuizzes\nFinal project', 'Homework\nFinal\nproject']) {
+    assert.equal(S.extract(`Grading\n${labels}\n20%\n80%`).weights.value, '');
+  }
+  assert.equal(pick(S.extract('Grading\nUNIT 1\nHomework\nQuizzes\n20%\n80%')).weights, 'Homework 20%, Quizzes 80%');
+});
+
+test('only distinct consecutive numbered weight items fold into a category', () => {
+  for (const names of [['CO2', 'CO3', 'CO4'], ['Homework 1', 'Homework 1', 'Homework 2'], ['Quiz 1', 'Quiz 3', 'Quiz 5']]) {
+    const rows = names.map((name, i) => ({ name, weight: [20, 30, 50][i] }));
+    assert.deepEqual(S.extract(`Grading\n${S.weightsText(rows).replaceAll(', ', '\n')}`).weights.value, rows);
+  }
+  for (const name of ['Homework', 'Hausaufgabe', 'Tarea', 'Devoir', 'Opdracht', 'Trabalho']) {
+    assert.deepEqual(S.extract(`Grading\n${[1, 2, 3].map((i) => `${name} ${i} ${[20, 30, 50][i - 1]}%`).join('\n')}`).weights.value,
+      [{ name, weight: 100 }]);
+  }
+});
+
 const FALL = Date.UTC(2026, 7, 24); // Fall 2026 starts August 24
 const SPRING = Date.UTC(2027, 0, 11);
 const pick = (r) => ({
