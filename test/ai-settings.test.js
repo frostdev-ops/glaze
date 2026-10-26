@@ -11,6 +11,7 @@ const AS = require('../lib/ai/settings.js');
 const B = require('../lib/ai/broker.js');
 const M = require('../lib/ai/models.js');
 require('../lib/ai/providers/openai.js');
+const D = require('../lib/ai/providers/device.js');
 
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -22,7 +23,7 @@ const listing = (ids) => json({ data: ids.map((id) => ({ id })) });
 
 // page({ ai, calls, granted, device, features, server }): Settings with the AI tab mounted.
 //   device(m): the device provider's worker side (undefined: Glaze doesn't ship it here); server(url, init): the endpoint.
-const page = ({ ai, calls, granted = true, device, features, server = async () => listing(['gpt-x', 'gpt-y']) } = {}) => {
+const page = ({ ai, calls, granted = true, device, providers, features, server = async () => listing(['gpt-x', 'gpt-y']) } = {}) => {
   const ids = new Map(), sent = [], asked = [], onChanged = [], onMessage = [], held = new Set(), vault = new Map(), fetched = [];
   const data = { ...(ai && { ai: structuredClone(ai) }), ...(calls && { aiCalls: structuredClone(calls) }) };
   let gesture = false;
@@ -47,6 +48,7 @@ const page = ({ ai, calls, granted = true, device, features, server = async () =
     vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
     reach: async (url) => { const u = new URL(url); return held.has(`${u.protocol}//${u.hostname}/*`); },
     fetch: async (url, init) => { fetched.push(url); return server(url, init); },
+    say: (m) => { for (const f of onMessage) f(m, { id: 'glaze' }); },
   };
   const chrome = {
     runtime: {
@@ -55,15 +57,16 @@ const page = ({ ai, calls, granted = true, device, features, server = async () =
         sent.push(structuredClone(m));
         if (m.type === 'glaze:allow') return { ok: true };
         if (m.type !== 'glaze:ai-config') return undefined;
-        if (m.id === 'device' || m.provider === 'device') return device ? device(m) : { ok: false, error: 'setup' };
-        return B.config(m, env);
+        if (device && (m.id === 'device' || m.provider === 'device')) return device(m, gesture);
+        const r = await B.config(m, env);
+        return m.op === 'get' && providers ? { ...r, providers } : r;
       },
       onMessage: { addListener: (f) => onMessage.push(f) },
     },
     storage: { local, onChanged: { addListener: (f) => onChanged.push(f) } },
     permissions: { request: ({ origins }) => { asked.push([[...origins], gesture]); if (granted) origins.forEach((o) => held.add(o)); return Promise.resolve(granted); } },
   };
-  const settings = { ...AS, ...(device && { PROVIDERS: [...AS.PROVIDERS, 'device'] }), ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
+  const settings = { ...AS, ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
   const ctx = vm.createContext({ chrome, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
     GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../lib/ai/endpoint.js') });
   vm.runInContext(read('lib/site.js'), ctx);
@@ -79,7 +82,7 @@ const page = ({ ai, calls, granted = true, device, features, server = async () =
     click: async (id) => { fire(id, 'click'); await settle(); },
     change: async (id, checked) => { $(id).checked = checked; fire(id, 'change'); await settle(); },
     type: async (id, value) => { $(id).value = value; fire(id, 'input'); await settle(); },
-    progress: async (m, sender = { id: 'glaze' }) => { for (const f of onMessage) f({ type: 'glaze:ai-config', op: 'progress', provider: 'device', ...m }, sender); await settle(); },
+    progress: async (m, sender = { id: 'glaze' }) => { for (const f of onMessage) f({ type: 'glaze:ai-config', event: 'progress', provider: 'device', ...m }, sender); await settle(); },
   };
 };
 const open = async (opts) => {
@@ -92,7 +95,7 @@ const open = async (opts) => {
   return p;
 };
 const shown = (e) => !e.hidden;
-test.beforeEach(() => { B._reset(); M._reset(); });
+test.beforeEach(() => { B._reset(); M._reset(); D._reset(); });
 
 test('off by default: the switch is off, only it shows, and the worker is asked for nothing but the kept connections', async () => {
   const p = await open();
@@ -262,7 +265,7 @@ test('the model picker is the connection\'s catalog; a model it doesn\'t list, o
 
 test('on this device: its status from the worker, a download the student starts, its progress, and why it can\'t run', async () => {
   let state = 'download';
-  const device = async (m) => (m.op === 'set' ? { ok: true } : m.op === 'test' ? (state === 'none' ? { ok: false, error: 'setup' } : { ok: true, state, ...(state === 'unavailable' && { reason: 'browser' }) }) : m.op === 'prepare' ? { ok: true } : { ok: false, error: 'op' });
+  const device = async (m) => (m.op === 'set' ? { ok: true } : ['test', 'prepare'].includes(m.op) ? { ok: true, state, ...(state === 'unavailable' && { reason: 'browser' }) } : { ok: false, error: 'op' });
   const p = await open({ device });
   assert.equal(p.$('ai-use-device').disabled, false);
   assert.equal(p.$('ai-device-off').hidden, true);
@@ -294,22 +297,79 @@ test('on this device: its status from the worker, a download the student starts,
   const q = await open({ device, ai: { on: true, use: 'device' } });
   assert.equal(q.$('ai-device-state').textContent, 'Not available in this browser');
   assert.equal(q.$('ai-device-download').hidden, true);
-  // A first choice makes the device's connection, then asks its status.
-  state = 'none';
-  const r = await open({ device: async (m) => { if (m.op === 'set') state = 'ready'; return device(m); } });
+  // A first choice makes the device's connection, then asks the provider's status.
+  state = 'ready';
+  const r = await open({ device });
   await r.change('ai-on', true);
   await r.change('ai-use-device', true);
-  assert.deepEqual(r.sent.filter((m) => m.id === 'device').map((m) => m.op), ['test', 'set', 'test']);
+  assert.deepEqual(r.sent.filter((m) => m.id === 'device' || m.provider === 'device').map((m) => m.op), ['set', 'test']);
+  assert.deepEqual(r.sent.find((m) => m.op === 'test'), { type: 'glaze:ai-config', op: 'test', provider: 'device' });
   assert.deepEqual(r.sent.find((m) => m.op === 'set'), { type: 'glaze:ai-config', op: 'set', id: 'device', cfg: { provider: 'device' } });
   assert.equal(r.$('ai-device-state').textContent, 'Ready');
 });
 
-test('where Glaze has no device provider, On this device is disabled and says why', async () => {
-  const p = await open({ ai: { on: true } });
+test('the connection choices include only providers registered by this browser', async () => {
+  const p = await open({ ai: { on: true }, providers: ['openai'] });
   assert.equal(p.$('ai-use-device').disabled, true);
-  assert.ok(shown(p.$('ai-device-off')));
-  assert.match(read('options.html'), /id="ai-use-device" aria-describedby="ai-device-off"/);
+  assert.equal(p.$('ai-choice-device').hidden, true);
+  assert.equal(p.$('ai-choice-endpoint').hidden, false);
   assert.equal(p.$('ai-device').hidden, true);
+  await p.change('ai-use-device', true);
+  assert.equal(p.data.ai.use, undefined, 'an unregistered choice cannot be saved');
+  const q = await open({ ai: { on: true }, providers: ['device'] });
+  assert.equal(q.$('ai-choice-endpoint').hidden, true);
+  assert.equal(q.$('ai-use-endpoint').disabled, true);
+});
+
+test('the shipped device provider drives progress and completion through the real broker', async () => {
+  let finish, notify;
+  globalThis.LanguageModel = {
+    availability: async () => 'downloadable',
+    create: ({ monitor }) => {
+      monitor({ addEventListener: (name, f) => { notify = f; }, removeEventListener() {} });
+      return new Promise((r) => { finish = () => r({ contextWindow: 4096, destroy() {} }); });
+    },
+  };
+  try {
+    const p = await open({ ai: { on: true } });
+    await p.change('ai-use-device', true);
+    assert.equal(p.vault.get('connections').device.provider, 'device');
+    await p.click('ai-device-download');
+    notify({ loaded: 0.42 }); await settle();
+    assert.equal(p.$('ai-device-state').textContent, 'Downloading 42%');
+    assert.equal(p.$('ai-device-progress').value, 0.42);
+    finish(); await settle();
+    assert.equal(p.$('ai-device-state').textContent, 'Ready', 'prepare is authoritative even if availability lags');
+    assert.equal(p.$('ai-device-progress').hidden, true);
+  } finally { finish?.(); await settle(); delete globalThis.LanguageModel; D._reset(); }
+});
+
+test('activation keeps Download available and retries prepare directly from the next click', async () => {
+  let attempts = 0;
+  const p = await open({ ai: { on: true, use: 'device' }, device: async (m, gesture) => {
+    if (m.op === 'prepare') {
+      assert.equal(gesture, true, 'prepare is dispatched before yielding the click');
+      return ++attempts === 1 ? { ok: true, state: 'download', reason: 'activation' } : { ok: true, state: 'ready' };
+    }
+    return m.op === 'set' ? { ok: true } : { ok: true, state: 'download' };
+  } });
+  await p.click('ai-device-download');
+  assert.equal(p.$('ai-device-state').textContent, 'Click Download to continue');
+  assert.equal(p.$('ai-device-download').hidden, false);
+  await p.click('ai-device-download');
+  assert.equal(attempts, 2);
+  assert.equal(p.$('ai-device-state').textContent, 'Ready');
+});
+
+test('registered device support stays selectable and reports browser, hardware and timeout reasons', async () => {
+  const p = await open({ ai: { on: true, use: 'device' } });
+  assert.equal(p.$('ai-use-device').disabled, false);
+  assert.equal(p.$('ai-device-state').textContent, 'Not available in this browser');
+  for (const [reason, text] of [['device', 'Not available on this device'], ['timeout', 'Not available: Timed out']]) {
+    const q = await open({ ai: { on: true, use: 'device' }, device: async (m) => m.op === 'set' ? { ok: true } : { ok: true, state: 'unavailable', reason } });
+    assert.equal(q.$('ai-device-state').textContent, text);
+    assert.equal(q.$('ai-device-download').hidden, true);
+  }
 });
 
 test('activity: the recent calls, newest first, metadata only, and Clear', async () => {

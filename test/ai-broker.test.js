@@ -253,7 +253,7 @@ test('Settings keeps connections by name: the key comes back masked, follows the
   const stored = e.vaultData.get('connections').main;
   assert.deepEqual({ ...stored, generation: typeof stored.generation }, { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY, generation: 'string' });
   const got = await B.config({ op: 'get' }, e);
-  assert.deepEqual(got, { ok: true, connections: { main: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: 'sk-l••••6789', origin: 'https://api.example.com/*' } } });
+  assert.deepEqual(got, { ok: true, providers: ['openai'], connections: { main: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: 'sk-l••••6789', origin: 'https://api.example.com/*' } } });
   assert.ok(!JSON.stringify(got).includes(KEY));
   const g1 = stored.generation;
   await B.config({ op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://API.example.com/v1/', model: 'gpt-y' } }, e);
@@ -424,4 +424,13 @@ test('cancelling while the vault is pending releases admission without a late re
   release();
   await flush();
   assert.equal(e.calls.filter((c) => c.url.endsWith('/chat/completions')).length, 1);
+});
+
+test('Settings lists only shipped providers registered in this browser', async () => {
+  const settings = require('../lib/ai/settings.js'), providers = require('../lib/ai/providers.js');
+  settings.PROVIDERS.push('apple'); // Safari's package can ship a provider that does not register elsewhere.
+  try {
+    assert.equal(providers.get('apple'), null);
+    assert.deepEqual((await B.config({ op: 'get' }, env())).providers, ['openai']);
+  } finally { settings.PROVIDERS.pop(); }
 });
