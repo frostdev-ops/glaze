@@ -366,3 +366,14 @@ test('context budgeting includes instructions, schema and the reserved answer be
   const X = require('../lib/ai/text.js');
   for (const req of cfg.seen) assert.ok(X.estimateTokens({ messages: req.messages, schema: req.schema }) + req.maxTokens <= 3000, 'every request fits the existing token estimate plus its reserved answer');
 });
+
+test('AI fills an office its quote labels or gives on the professor\'s contact line, never a phone number', () => {
+  const text = 'Dr. Margit Grunewald\nmgrunewald@music.ashcombe.edu · Fine Arts 214 · 555-0142\nOffice: Law Building 4.22. Office hours: Tuesdays after class';
+  const heur = L.extract(text, OPTS);
+  const read = (office) => A.merge(heur, A.interpret(task.check({ ...blank(), prof: { ...blank().prof, office } }, { text }), OPTS, heur, text)).prof.office.value;
+  assert.equal(heur.prof.office.value, '');
+  assert.equal(read({ text: 'Fine Arts 214', quote: 'mgrunewald@music.ashcombe.edu · Fine Arts 214' }), 'Fine Arts 214');
+  assert.equal(read({ text: 'Law Building 4.22', quote: 'Office: Law Building 4.22.' }), 'Law Building 4.22');
+  assert.equal(read({ text: '555-0142', quote: 'mgrunewald@music.ashcombe.edu · Fine Arts 214 · 555-0142' }), '');
+  assert.equal(read({ text: 'Fine Arts 214', quote: 'Dr. Margit Grunewald' }), '');
+});
