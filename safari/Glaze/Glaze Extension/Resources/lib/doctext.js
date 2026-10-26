@@ -587,7 +587,19 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
         column = { x1: Math.max(column.x1, r.x1), y0: Math.min(column.y0, r.y0), y1: Math.max(column.y1, r.y1) };
       } else column = r;
     }
-    if (columns || lines.some((l) => l.rtl || (l.baseline && Math.abs(l.baseline.y1 - l.baseline.y0) > mid((l.words || []).map(tall)) / 2))) {
+    const tilted = (l) => {
+      const b = l.baseline;
+      if (!b) return false;
+      const h = mid((l.words || []).map(tall)), rise = Math.abs(b.y1 - b.y0);
+      if (rise <= h / 2) return false;
+      // A distant speck can stretch and tilt the engine's estimated baseline.
+      // Measure its rise over the normal-size text, not over that empty gap.
+      const boxes = (l.words || []).filter((w) => tall(w) >= h / 2 && mend(w.text)).map((w) => w.bbox);
+      if (!boxes.length) return false;
+      const width = Math.max(...boxes.map((w) => w.x1)) - Math.min(...boxes.map((w) => w.x0));
+      return rise * Math.min(1, width / Math.max(1, Math.abs(b.x1 - b.x0))) > h / 2;
+    };
+    if (columns || lines.some((l) => l.rtl || tilted(l))) {
       const text = [], unsure = [];
       let sum = 0, n = 0;
       for (const l of lines) {
@@ -704,7 +716,7 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
       const columnOf = new Map();
       cols.forEach((k, i) => k.cells.forEach((c) => columnOf.set(c, i)));
       const col = (c) => columnOf.get(c);
-      const one = rows.length > 1 && cols.length > 1 && cols.every((k) => k.cells.length <= 4)
+      const one = rows.length > 1 && cols.length > 1 && cols.every((k) => lay(k.cells).length <= 4)
         && rows.filter((r) => new Set(r.map(col)).size === cols.length).length <= 1
         && (cols[0].cells.length === 1 || band.some((c) => !band.some((o) => col(o) !== col(c) && level(o, c))));
       const emit = (cs, text) => out.push({ y: all[0].y0, k: out.length, text, low: cs.some((c) => c.low), words: cs.flatMap((c) => c.words) });
