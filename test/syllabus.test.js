@@ -1115,7 +1115,7 @@ test('review: weekly expansion rejects negation, examples, optional work and unr
   for (const line of [
     'No quizzes are due every Friday.', 'Quizzes are not due every Friday.',
     'Optional quizzes are due every Friday.', 'For example, quizzes are due every Friday.',
-    'Quizzes are due every Friday except the first week.', 'Quizzes are due every Friday of weeks 3–5.',
+    'Quizzes are due every Friday except the first week.', 'Quizzes are due every Friday, except during spring break.',
     'Keine Abgabe jeweils freitags.', 'Las tareas no se entregan todos los viernes.',
     'Les devoirs ne sont pas à remettre chaque vendredi.', 'Geen opdrachten inleveren elke vrijdag.',
     'Os trabalhos não devem ser entregues toda sexta-feira.',
@@ -1147,4 +1147,214 @@ test('review: wrapped holiday records and unknown due cells do not invent deadli
   ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
   assert.deepEqual(S.extract('Week 2\nMon\tNo quiz\nWed\tProject due', reviewOpts).dates.map((d) => d.day), ['2026-09-09']);
   assert.deepEqual(S.extract('Quiz 1 due October 5; Paper 2 due October 19', reviewOpts).dates.map((d) => d.day), ['2026-10-05', '2026-10-19']);
+});
+
+// Recall on syllabi the heuristics were not written against (2026-10-26): layouts and words real schedules use.
+const rows = (text, opts) => S.extract(text, opts).dates.map((d) => `${d.day} ${d.kind}`);
+test('a dated row\'s cells are no sentences: a question as a topic leaves the row its date', () => {
+  assert.deepEqual(rows('1\t1–7 Feb\tWhy stories?\tQuiz 1', { start: Date.UTC(2027, 0, 19) }), ['2027-02-07 exam']);
+});
+
+test('a day, a dash and a month ("26-Jan", "4-Feb-2027") is a date', () => {
+  const r = S.extract('Session\tDay\tDate\tCase / Topic\tDeliverable\n3\tTue\t26-Jan\tCase: Harrow\tCase write-up due 9:00 a.m.\n6\tThu\t4-Feb-2027\tCase: Kestrel\tCase write-up due 9:00 a.m.', { start: Date.UTC(2027, 0, 19), md: true });
+  assert.deepEqual(r.dates.map((d) => `${d.day} ${d.kind}`), ['2027-01-26 due', '2027-02-04 due']);
+});
+
+test('"the last day of week 3" is that week\'s seventh day, in each language', () => {
+  for (const [hint, line] of [['en', 'Quiz 1 — by 23:59 on the last day of Week 3'], ['de', 'Test 1 — am letzten Tag der Woche 3'], ['es', 'Prueba 1: el último día de la semana 3'],
+    ['fr', 'Quiz 1 : le dernier jour de la semaine 3'], ['nl', 'Toets 1: laatste dag van week 3'], ['pt', 'Prova 1: último dia da semana 3']]) {
+    assert.deepEqual(S.extract(line, { week1: SPRING, hint }).dates.map((d) => `${d.day} ${d.week}`), ['2027-01-31 3'], line);
+  }
+});
+
+test('auditions, a Chilean solemne, a German compound test, work collected and a French "date limite" are deadlines', () => {
+  assert.deepEqual(rows('Seating auditions: Monday, August 31, 6:00–9:00 p.m.', { start: FALL, md: true }), ['2026-08-31 exam']);
+  assert.deepEqual(rows('Solemne 1: 09/10/2026\nCertamen 2: 13/11/2026', { start: FALL, hint: 'es' }), ['2026-10-09 exam', '2026-11-13 exam']);
+  assert.deepEqual(rows('Zwischentest (Kapitel 1–4): Donnerstag, 19.11.2026\nAbschlussklausur: 25.02.2027', { start: Date.UTC(2026, 9, 12), hint: 'de' }), ['2026-11-19 exam', '2027-02-25 exam']);
+  assert.deepEqual(rows('Process books are collected for a check on Friday, September 25.', { start: FALL, md: true }), ['2026-09-25 due']);
+  assert.deepEqual(rows('Travail 1 – Analyse de cas : date limite le 21 février 2027\nRapport d\'étape : 12 février 2027', { start: SPRING, hint: 'fr' }), ['2027-02-21 due', '2027-02-12 due']);
+  assert.deepEqual(rows('Practice logs are due Sunday, August 30.', { start: FALL, md: true }), ['2026-08-30 due'], 'a practice log is work, not a practice test');
+  assert.deepEqual(rows('Practice quiz (ungraded): Friday, August 28.\nThe contest closes on Sept 4.', { start: FALL, md: true }), [], 'a practice test, and a word that only ends in "test"');
+});
+
+test('work released on one day and due on another is one row on the day it is due', () => {
+  const r = S.extract('Final exam • Take-home: released Friday, December 11, 9:00 a.m.; due Monday, December 14, 5:00 p.m.', { start: FALL, md: true });
+  assert.deepEqual(r.dates.map((d) => `${d.day} ${d.kind}`), ['2026-12-14 exam']);
+  assert.match(r.dates[0].title, /released Friday, December 11/);
+  assert.deepEqual(rows('Exam 2 posted Oct 5, due Oct 7.\nPaper 1 opens Oct 5; Quiz 3 due Oct 7.', { start: FALL, md: true }), ['2026-10-07 exam', '2026-10-05 due', '2026-10-07 exam']);
+});
+
+test('a deliverables column names its own work, before its date', () => {
+  const r = S.extract('Wk\tDates\tStudio\tDeliverables\n3\tSep 7–Sep 11\tP1: precedent analysis\tPin-up: P1 concept boards — Friday, Sep. 11th\n5\tSep 21–Sep 25\tP1 development\tP1 Final Review, 1:30–5:20, Gallery — Wednesday, Sep. 23rd\n11\tNov 2–Nov 6\tP2 detailing\tP2 Midterm Review (guest critics) — Wednesday, Nov. 4th\n12\tNov 9–Nov 13\tP3: urban block',
+    { start: FALL, md: true });
+  assert.deepEqual(r.dates.map((d) => `${d.day} ${d.kind} ${d.title}`), ['2026-09-11 due Pin-up: P1 concept boards', '2026-09-23 due P1 Final Review, Gallery', '2026-11-04 due P2 Midterm Review (guest critics)']);
+  assert.deepEqual(rows('Session\tDate\tTopic\tDeliverable\n25\t4/20\tGroup presentations (slot A)\tGroup presentation (assigned slot)\n24\t4/15\tGroup project workshop', { start: SPRING, md: true }), ['2027-04-20 due']);
+});
+
+test('a table with a weight column lists graded work: each dated row is a deadline', () => {
+  const fr = S.extract('Titre\tDate\tPondération\nRapport d\'étape (équipe)\t12 février 2027\tPondération 10 %\nExamen intra\t15 mars 2027 de 12 h 30 à 15 h 20\tPondération 25 %\nQuiz en ligne\tChaque vendredi\tPondération 10 %', { start: SPRING, hint: 'fr' });
+  assert.deepEqual(fr.dates.filter((d) => !d.rule).map((d) => `${d.day} ${d.kind} ${d.title}`), ['2027-02-12 due Rapport d\'étape (équipe)', '2027-03-15 exam Examen intra']);
+  assert.deepEqual(rows('Evaluación\tFecha\tPonderación\nInforme 1\t10/09/2026\t10%\nSolemne 1\t09/10/2026\t25%', { start: Date.UTC(2026, 7, 3), hint: 'es' }), ['2026-09-10 due', '2026-10-09 exam']);
+  assert.deepEqual(rows('Week\tDate\tTopic\nWeek 2\tSept 4\tElasticity', { start: FALL, md: true }), [], 'no weight column: a topic stays a topic');
+});
+
+test('a heading names the date on the line under it', () => {
+  assert.deepEqual(rows('Seating auditions\nMonday, August 31, 6:00–9:00 p.m. Sign up for a 10-minute slot.', { start: FALL, md: true }), ['2026-08-31 exam']);
+  assert.deepEqual(rows('Assignments\nOct 3: Lab 1 due', { start: FALL, md: true }), ['2026-10-03 due'], 'a line with its own work keeps it, once');
+  assert.deepEqual(rows('Course schedule\nMonday, August 31: introductions', { start: FALL, md: true }), [], 'a heading that names no work');
+});
+
+test('a day a sentence excepts is no deadline', () => {
+  assert.deepEqual(S.extract('Hausübungen: Abgabe jeweils montags bis 10 Uhr (außer in der vorlesungsfreien Zeit 21.12.–03.01.).', { start: Date.UTC(2026, 9, 12), hint: 'de' }).dates.filter((d) => !d.rule), []);
+  assert.deepEqual(rows('Problem sets are due on Fridays, except Nov. 27.', { start: FALL, md: true }), []);
+});
+
+// Owner, 2026-10-26: recurring rules are expanded; the weeks, start, end and days off a rule's own sentence gives bound it.
+const ruleDays = (text, opts) => S.extract(text, opts).dates.filter((d) => d.rule === 'weekly').map((d) => `${d.day.slice(5)} ${d.kind}`);
+test('a weekly rule\'s own weeks bound it, and the breaks it excepts are left out', () => {
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday of weeks 3–5.\nCourse ends: September 25').map((d) => d.day), ['2026-09-18', '2026-09-25']);
+  assert.deepEqual(ruleDays('Pre-lab quizzes close every Monday at 8:00 a.m., weeks 2–13. They cover that week\'s lab handout.\nMLK Day (Mon 1/18): no lecture. Spring Break (March 15–19): no lecture or lab.\nFinal Exam: Monday, May 3', { week1: SPRING, md: true }),
+    ['01-25', '02-01', '02-08', '02-15', '02-22', '03-01', '03-08', '03-22', '03-29', '04-05'].map((d) => `${d} exam`));
+  const fr = 'Quiz en ligne chaque vendredi (semaines 2 à 12, sauf la semaine de lecture), à faire sur monPortail avant 23 h 59.\nSemaine de lecture : du 1er mars 2027 au 5 mars 2027. Congés universitaires : Vendredi saint (vendredi 26 mars 2027).';
+  const want = ['01-22', '01-29', '02-05', '02-12', '02-19', '02-26', '03-12', '03-19', '04-02'].map((d) => `${d} exam`);
+  assert.deepEqual(ruleDays(fr, { week1: SPRING, hint: 'fr' }), want);
+  assert.deepEqual(ruleDays(`Titre\tDate\tPondération\nQuiz en ligne (10, les 8 meilleurs comptent)\tChaque vendredi\tPondération 10 %\n${fr}`, { week1: SPRING, hint: 'fr' }), want, 'the table\'s row and the sentence are one rule');
+  assert.deepEqual(ruleDays('Quizzes are due every Friday, except during spring break.\nFinal exam: Friday, December 11', { start: FALL, md: true }), [], 'a break the text never dates can\'t be left out');
+});
+
+test('a weekly rule starts at the course week it names and skips the dates it excepts', () => {
+  assert.deepEqual(ruleDays('Vorlesungsbeginn: 12.10.2026 · Vorlesungsende: 05.02.2027\nHausübungen: Abgabe jeweils montags bis 10 Uhr (ab der 3. Vorlesungswoche, außer in der vorlesungsfreien Zeit 21.12.–03.01.) im Briefkasten.', { start: Date.UTC(2026, 9, 12), hint: 'de' }),
+    ['10-26', '11-02', '11-09', '11-16', '11-23', '11-30', '12-07', '12-14', '01-04', '01-11', '01-18', '01-25', '02-01'].map((d) => `${d} due`));
+  assert.deepEqual(ruleDays('Quizzes are due every Friday starting in week 3.\nCourse ends: September 25', reviewOpts), ['09-18 exam', '09-25 exam']);
+});
+
+test('a weekly rule\'s own first and last day bound it; days off, and days of the exams it skips, are left out', () => {
+  const es = `Controles semanales: los viernes, en línea, desde el viernes 14 de agosto hasta el viernes 20 de noviembre; no hay control en las semanas de feriado, de receso ni de solemne.
+El viernes 18 y el sábado 19 de septiembre son feriados legales. La Semana de receso va del lunes 21 al viernes 25 de septiembre.
+Solemne 1: 09/10/2026
+Solemne 2: 13/11/2026`;
+  assert.deepEqual(ruleDays(es, { start: Date.UTC(2026, 7, 3), hint: 'es' }), ['08-14', '08-21', '08-28', '09-04', '09-11', '10-02', '10-16', '10-23', '10-30', '11-06', '11-20'].map((d) => `${d} exam`));
+});
+
+test('"classes run" a span of days: its first day starts week 1 and its last ends the weekly rules', () => {
+  const text = 'Classes run August 24 – December 4. Fall break (Oct 10–13): no rehearsal. Thanksgiving recess Nov 25–29.\nPractice logs are due every Sunday by 11:59 p.m. on Canvas (minimum 4 hours a week).';
+  assert.deepEqual(ruleDays(text, { start: Date.UTC(2026, 7, 17), md: true }), ['08-30', '09-06', '09-13', '09-20', '09-27', '10-04', '10-18', '10-25', '11-01', '11-08', '11-15', '11-22'].map((d) => `${d} due`));
+});
+
+test('two days with "and" share the second\'s month, and a range may name its weekdays', () => {
+  const r = S.extract('El viernes 18 y el sábado 19 de septiembre son feriados.\nTarea 1: entrega el viernes 18 y el lunes 21 de septiembre', { start: Date.UTC(2026, 7, 3), hint: 'es' });
+  assert.deepEqual(r.dates.map((d) => d.day), ['2026-09-18', '2026-09-21']);
+  assert.deepEqual(rows('Examen parcial: del lunes 21 al viernes 25 de septiembre', { start: Date.UTC(2026, 7, 3), hint: 'es' }), ['2026-09-25 exam']);
+});
+
+// Owner, 2026-10-26: a TA's, a tutor's or an assistant's times are office hours, labelled with the role as written.
+test('a line a staff role starts gives that person\'s hours, not a class', () => {
+  const r = S.extract(`Graduate Assistant · Ines Varga · desk crits Tuesdays 6–8 PM in studio (Hollister 300)
+Studio\tMWF 1:30–5:20 PM, Hollister 300
+Teaching Fellow: Marcus Lin · mlin@whitcombe.edu · Thursdays 12–1 pm (Zoom)
+Community TA: Ines Wakeman-Osei — live chat in the forum, Fridays 14:00–15:00 UTC.
+Skills Lab Coordinator (Ms. Dana Okwuosa, RN): open lab Mon & Wed 1500–1700, Skills Lab B.
+TA: Jane Doe — discussion section Wednesdays 10–11 am, Room 5`, { start: FALL, md: true, hint: 'en' });
+  assert.deepEqual(r.hours.map((m) => `${m.label} | ${m.days.join(' ')} ${m.start}-${m.end}`), ['Graduate Assistant | TU 18:00-20:00', 'Teaching Fellow | TH 12:00-13:00', 'Community TA | FR 14:00-15:00', 'Skills Lab Coordinator | MO WE 15:00-17:00']);
+  assert.deepEqual(r.meetings.map((m) => `${m.days.join(' ')} ${m.start}-${m.end}`), ['MO WE FR 13:30-17:20', 'WE 10:00-11:00'], 'a TA\'s discussion section is a class');
+  const es = S.extract('Ayudante\tTomás Fuenzalida · tf@alumnos.umaipo.cl ·\natención de alumnos martes 12:00–13:00, Sala B-12', { start: FALL, hint: 'es' });
+  assert.deepEqual(slots(es.hours).map((s) => s.replace(/^.*\| (?=\w\w \d)/, '')), ['TU 12:00-13:00 | Sala B-12']);
+  assert.deepEqual(es.meetings, []);
+});
+
+test('a course\'s weeks ("weeks 4–14") are no hours', () => {
+  const r = S.extract('Clinical: Thursdays 0630–1500 on your assigned unit (weeks 4–14)\nCare maps are due every Friday by 0800 during clinical weeks (weeks 4–14).', { start: SPRING, md: true });
+  assert.deepEqual(r.meetings.map((m) => `${m.days.join(' ')} ${m.start}-${m.end}`), ['TH 06:30-15:00']);
+});
+
+test('an office and its office hours on one line: the office ends where their label starts', () => {
+  const r = S.extract('Professor • Professor Adaeze Wolfenden-Liu.\nOffice: Law Building 4.22. Office hours:\nTuesdays after class and by appointment.\nLab TA: Office: HS 318', { start: FALL, md: true });
+  assert.deepEqual([r.prof.office.value, r.prof.note.value], ['Law Building 4.22', 'Tuesdays after class and by appointment.']);
+  assert.equal(S.extract('Office: HS 340 · Office hours: Mon 11:00–12:00, Thu 2:00–3:00', { start: FALL, md: true }).prof.office.value, 'HS 340');
+  assert.equal(S.extract('Office hours: Tue 2–3 PM (office: by the lab)', { start: FALL, md: true }).prof.office.value, '', 'an office named after its hours\' label is not read');
+});
+
+test('review: a frequency without its own end runs to the course end, else up to the last dated deadline', () => {
+  const text = 'Titre\tDate\tPondération\nQuiz en ligne\tChaque vendredi\t10 %\nExamen\tDecember 11\t30 %';
+  for (const t of [text, 'Quizzes are due every Friday.\nFinal exam: December 11']) {
+    const days = reviewWeekly(t).map((d) => d.day);
+    assert.deepEqual([days.length, days[0], days.at(-1)], [14, '2026-09-04', '2026-12-04'], t);
+  }
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday, weeks 2–3.').map((d) => d.day), ['2026-09-11', '2026-09-18']);
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday.\nCourse ends: September 18').map((d) => d.day), ['2026-09-04', '2026-09-11', '2026-09-18']);
+});
+
+test('review: a weekday and week range do not make quiz commentary a recurring exam', () => {
+  for (const line of ['Quiz feedback is available every Friday', 'Quizzes are discussed every Friday', 'We discuss quizzes every Friday']) {
+    assert.deepEqual(reviewWeekly(`${line}, weeks 3–5.\nCourse ends: September 25`), [], line);
+  }
+  assert.deepEqual(ruleDays('Quiz en ligne chaque vendredi (semaines 2 à 3).', { ...reviewOpts, hint: 'fr' }), ['09-11 exam', '09-18 exam']);
+  assert.deepEqual(ruleDays('Controles semanales: los viernes, semanas 2 a 3.', { ...reviewOpts, hint: 'es' }), ['09-11 exam', '09-18 exam']);
+});
+
+test('review: every part of an exception list must be resolved before weekly expansion', () => {
+  for (const except of ['September 11, 18 and 25', 'September 11 and the final week', 'spring break and the final week']) {
+    assert.deepEqual(reviewWeekly(`Quizzes are due every Friday, weeks 1–6, except ${except}.\nSpring break: September 18\nCourse ends: October 9`), [], except);
+  }
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday, weeks 1–4, except September 11 and September 18.').map((d) => d.day), ['2026-09-04', '2026-09-25']);
+  assert.deepEqual(reviewWeekly('Quizzes are due every Friday from December 18 until January 15, except December 25 and January 1.').map((d) => d.day), ['2026-12-18', '2027-01-08', '2027-01-15']);
+  assert.deepEqual(S.extract('Quizzes are due every Friday, weeks 1–4, except Sep. 11 and Sep. 18.', reviewOpts).dates.map((d) => d.day), ['2026-09-04', '2026-09-25']);
+  assert.deepEqual(S.extract('Quizzes are due every Friday, weeks 1–6, except September 11, September 18, September 25, October 2 and October 9.', reviewOpts).dates.map((d) => d.day), ['2026-09-04']);
+});
+
+test('review: a weight header does not make topics or zero-weight rows deadlines', () => {
+  for (const text of [
+    'Date\tTopic\tWeight\nSeptember 7\tElasticity\t0%',
+    'Date\tTopic\tWeight\nSeptember 7\tElasticity\t20%',
+    'Titre\tDate\tPondération\nRévision\tSeptember 7\t0 %',
+  ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
+  assert.deepEqual(S.extract('Titre\tDate\tPondération\nRapport d\'étape\tSeptember 7\t10 %', reviewOpts).dates.map((d) => `${d.day} ${d.kind}`), ['2026-09-07 due']);
+});
+
+test('review: a staff line can name its class section after the time', () => {
+  for (const text of [
+    'TA: Jane Doe — Wednesdays 10–11 am, discussion section, Room 5',
+    'TA: Sam Lee — Mondays 9–10 am, class sections 101 and 102',
+    'TA: Sam Lee — sections 101 and 102, Mondays 9–10 am',
+  ]) {
+    const r = S.extract(text, reviewOpts);
+    assert.deepEqual(r.hours, [], text);
+    assert.equal(r.meetings.length, 1, text);
+  }
+  assert.equal(S.extract('Teaching Assistant: Sam Lee · Office hours: Mondays 9–10 am, Room 5', reviewOpts).hours.length, 1);
+});
+
+test('review: topic cells cannot override an empty deliverables column', () => {
+  for (const text of [
+    'Date\tTopic\tDeliverables\nSeptember 7\tAuditions\tNone',
+    'Date\tTopic\tAssignments\nSeptember 7\tQuiz design\tNone',
+  ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
+  assert.deepEqual(S.extract('Date\tTopic\tDeliverables\nSeptember 7\tAuditions\tProject due', reviewOpts).dates.map((d) => `${d.day} ${d.kind}`), ['2026-09-07 due']);
+});
+
+test('review: parenthetical comments do not end an exception list', () => {
+  const text = 'Quizzes are due every Friday, except September 11 (orientation) and September 18.\nCourse ends: September 25';
+  assert.deepEqual(S.extract(text, reviewOpts).dates, []);
+  assert.deepEqual(S.extract('Quizzes are due every Friday, weeks 1–4 (except September 11 and September 18).', reviewOpts).dates.map((d) => d.day), ['2026-09-04', '2026-09-25']);
+});
+
+test('review: weekly exceptions and release windows use their course year across New Year', () => {
+  const opts = { start: Date.UTC(2027, 0, 11), md: true };
+  const weekly = 'Quizzes are due every Friday from December 18, 2026 until January 15, 2027, except December 25 and January 1.';
+  assert.deepEqual(S.extract(weekly, opts).dates.map((d) => d.day), ['2026-12-18', '2027-01-08', '2027-01-15']);
+  assert.deepEqual(S.extract('Classes run December 28, 2026 – January 15, 2027.\nQuiz released December 30; due January 4', opts).dates.map((d) => `${d.day} ${d.kind}`), ['2027-01-04 exam']);
+});
+
+test('review: audition topics and preparation dates are not assessments', () => {
+  for (const text of [
+    'Date\tTopic\nSeptember 7\tAudition techniques',
+    'Audition preparation: September 7',
+    'Auditions\nSeptember 7: techniques and preparation',
+  ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
+  assert.deepEqual(S.extract('Seating auditions\nSeptember 7: sign up for a slot.', reviewOpts).dates.map((d) => `${d.day} ${d.kind}`), ['2026-09-07 exam']);
+});
+
+test('review: excepted week ranges cannot become recurrence bounds', () => {
+  const text = 'Quizzes are due every Friday, except September 11 and weeks 3–5.\nCourse ends: October 9';
+  assert.deepEqual(S.extract(text, reviewOpts).dates, []);
 });

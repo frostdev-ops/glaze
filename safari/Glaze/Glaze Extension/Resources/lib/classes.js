@@ -142,7 +142,10 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
   // A 24-hour range written without a colon ("1230–1430", nursing and military schedules) is read only as a range.
   const TIME = /(?<![\p{L}\d.:,\/])(\d{1,2})(?:\s?([:.hH])\s?(\d{2}))?(?:\s*(a\.?\s?m\.?|p\.?\s?m\.?|uhr|uur|h)(?![\p{L}]))?(?![\d:])|(?<![\p{L}])(noon|midday|mittag|mediod[ií]a|midi|middag|meio-dia)(?![\p{L}])|(?<![\p{L}\d.:,\/-])([01]\d|2[0-3])([0-5]\d)(?=\s*[-–]\s*(?:[01]\d|2[0-3])[0-5]\d(?![\d:]))|(?<=(?<![\d.:,\/-])(?:[01]\d|2[0-3])[0-5]\d\s*[-–]\s*)([01]\d|2[0-3])([0-5]\d)(?![\d:])/giu;
   const TIME_SEP = /^\s*(?:-|–|—|~|to|till|until|bis|a|al|à|às|as|tot|até)\s*$/iu;
+  // A number a course counts by ("weeks 4–14", "pp. 12–30", "Kapitel 3–5") is no time.
+  const COUNTED = /(?<![\p{L}])(?:weeks?|wks?\.?|semanas?|semaines?|wochen?|weken|kw|pp?\.|pages?|chapters?|chs?\.|kapitel|cap[ií]tulos?|chapitres?|hoofdstukken|units?|modules?|lessons?)[^\S\t\n]*\(?[^\S\t\n]*$/iu;
   const times = (line) => [...line.matchAll(TIME)].map((m) => {
+    if (m[1] && !m[2] && !m[4] && COUNTED.test(line.slice(Math.max(0, m.index - 16), m.index))) return null;
     if (m[5]) return { at: m.index, end: m.index + m[0].length, h: 12, min: 0, mer: 'p', clear: true };
     if (m[6] || m[8]) return { at: m.index, end: m.index + m[0].length, h: +(m[6] || m[8]), min: +(m[7] || m[9]), mer: '', h24: true, clear: true };
     const h = +m[1], min = m[3] ? +m[3] : 0, sep = m[2] || '', suf = (m[4] || '').toLowerCase().replace(/[.\s]/g, '');
