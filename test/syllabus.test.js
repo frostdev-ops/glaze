@@ -582,3 +582,22 @@ E-mail: lindqviste@example.edu (preferred method of contact)`, { start: FALL, md
   assert.equal(S.extract('▪\tVirtual Office Hours: by appointment').prof.note.value, 'by appointment');
   assert.equal(S.extract('Office hours by appointment only').prof.note.value, 'by appointment only');
 });
+
+test('office hours given twice are one, with the icon before their label taken as a bullet and the place kept whole', () => {
+  const r = S.extract(`CONTACT INFORMATION
+●\tProf. Elena Varga-Ruiz
+✉\tEmail: vargaruize@example.edu
+Replies within 24 hours on weekdays.
+▦\tVirtual Office Hours
+Wednesdays, 2:00–3:30 p.m.
+▶\tMicrosoft Teams
+Prof. Varga’s Virtual Room
+
+1.1. Your instructor
+▪\tContact Info: Prof. Elena Varga-Ruiz
+▪\tEmail: vargaruize@example.edu
+▪\tVirtual Office Hours: Wednesdays, 2:00 PM – 3:30 PM via Microsoft Teams - Prof.
+Varga's Virtual Room. (Please allow up to 24 hours for email replies).`, { start: FALL, md: true });
+  assert.deepEqual(r.hours.map((m) => [m.label, m.days.join(' '), m.start, m.end, m.location]), [['Virtual Office Hours', 'WE', '14:00', '15:30', 'Microsoft Teams']]);
+  assert.deepEqual([r.prof.name.value, r.prof.email.value], ['Prof. Elena Varga-Ruiz', 'vargaruize@example.edu']);
+});
