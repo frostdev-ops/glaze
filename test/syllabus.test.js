@@ -1266,3 +1266,10 @@ test('a course\'s weeks ("weeks 4–14") are no hours', () => {
   const r = S.extract('Clinical: Thursdays 0630–1500 on your assigned unit (weeks 4–14)\nCare maps are due every Friday by 0800 during clinical weeks (weeks 4–14).', { start: SPRING, md: true });
   assert.deepEqual(r.meetings.map((m) => `${m.days.join(' ')} ${m.start}-${m.end}`), ['TH 06:30-15:00']);
 });
+
+test('an office and its office hours on one line: the office ends where their label starts', () => {
+  const r = S.extract('Professor • Professor Adaeze Wolfenden-Liu.\nOffice: Law Building 4.22. Office hours:\nTuesdays after class and by appointment.\nLab TA: Office: HS 318', { start: FALL, md: true });
+  assert.deepEqual([r.prof.office.value, r.prof.note.value], ['Law Building 4.22', 'Tuesdays after class and by appointment.']);
+  assert.equal(S.extract('Office: HS 340 · Office hours: Mon 11:00–12:00, Thu 2:00–3:00', { start: FALL, md: true }).prof.office.value, 'HS 340');
+  assert.equal(S.extract('Office hours: Tue 2–3 PM (office: by the lab)', { start: FALL, md: true }).prof.office.value, '', 'an office named after its hours\' label is not read');
+});
