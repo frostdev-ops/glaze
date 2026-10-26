@@ -667,7 +667,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   // Someone else on the course staff, whose contact details follow their own name.
   const OTHER_ROLE = any("TAs?|teaching assistants?|teaching fellows?|tutors?|graders?|course assistants?|lab instructors?|co-instructors?|tutor(?:in|en)?|hilfskr(?:a|ä)fte?|wissenschaftliche[rn]? mitarbeiter(?:in)?|ayudantes?|asistentes?|monitor(?:a|es)?|chargée? de td|assistante?s?|student-assistent(?:en)?|werkcollegedocent|assistente|übungsleit(?:ung|er|erin)|auxiliaires? d’enseignement|auxiliaires? d'enseignement");
   const field = (value, conf, src) => ({ value: value || '', conf: value ? conf : '', src: value ? src : '' });
-  const professor = (lines, lang) => {
+  const professor = (lines, lang, hours = []) => {
     let name = field(), at0 = -1;
     for (let i = 0; i < lines.length && !name.value; i++) {
       const rest = !HOURS_RE.test(lines[i]) && PROF_LINE.exec(lines[i])?.[1];
@@ -697,11 +697,17 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     for (let i = 0; i < lines.length && !email.value; i++) if (/^\s*(?:e-?mail|correo|courriel|mail)/i.test(lines[i]) && EMAIL.test(lines[i])) email = field(EMAIL.exec(lines[i])[0], 'check', at(lines, i));
     for (let i = 0; i < lines.length && !email.value; i++) if (EMAIL.test(lines[i])) email = field(EMAIL.exec(lines[i])[0], 'check', at(lines, i));
     let office = field();
-    const OFFICE = /(?:^|\s·\s)[\s•*-]*(?:office(?:\s+(?:location|room))?|büro|raum|sprechzimmer|despacho|oficina|bureau|kantoor|kamer|gabinete)\s*[:\t]\s*(.+)$/iu;
+    // A room's own word stays before a number ("Cubículo: 14, Edificio D" is "Cubículo 14, Edificio D").
+    const OFFICE = /(?:^|\s·\s)[\s•*-]*(?:office(?:\s+(?:location|room))?|büro|(raum|cubículo|cubiculo|kamer|sala|salle|local)|sprechzimmer|despacho|oficina|bureau|kantoor|gabinete)\s*[:\t]\s*(.+)$/iu;
     for (let i = 0; i < lines.length && !office.value; i++) {
       const m = OFFICE.exec(lines[i]);
-      if (m && !HOURS_RE.test(lines[i])) office = field(clean(m[1].split(EMAIL)[0]).slice(0, 120), 'sure', at(lines, i));
+      const v = m && clean(m[2].split(EMAIL)[0]);
+      if (m && !HOURS_RE.test(lines[i])) office = field(`${m[1] && /^\d/.test(v) ? `${m[1]} ` : ''}${v}`.slice(0, 120), 'sure', at(lines, i));
     }
+    // With no office named, the professor's own office hours' place, when it is a room ("Mon 2–3:30 PM, Gates Hall 412"),
+    // not a call ("via Zoom"): to check.
+    const own = !office.value && hours.find((h) => !h.label.match(OTHER_ROLE) && /\p{L}{2}.*\d|\d.*\p{L}{2}/u.test(h.location) && !/zoom|teams|online|virtual|meet|webex|skype|discord|appointment|link/i.test(h.location));
+    if (own) office = field(own.location.slice(0, 120), 'check', own.src);
     // Office hours with no time to read ("By appointment"): kept as words, from a line their label starts, after a bullet
     // or an icon and a word or two ("▪ Virtual office hours:"), never from a heading that lists them ("Name, office hours,
     // and e-mail address:") or a sentence that mentions them ("attend office hours regularly and…").
@@ -740,6 +746,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   };
   const SCALE_LABEL = any('grading scale|grade scale|grading|letter grades?|grade distribution|notenskala|notenschlüssel|notenspiegel|bewertungsschema|escala de calificaci[oó]n(?:es)?|calificaciones|barème|bareme|échelle de notation|cijferschaal|beoordelingsschaal|escala de notas|conceitos');
   const scale = (s, lines, starts, shown = lines) => {
+    s = s.replace(/(?<![\p{L}])(?:Below|Under|Less than|Unter|Weniger als|Menos de|Moins de|En dessous de|Minder dan|Onder|Abaixo de|Inferior a)(?![\p{L}])/gu, (x) => x.toLowerCase()); // "Below 55\tF"
     const found = [];
     const pair = new RegExp(`(?<![^\\s(;,|•])${LETTER}(?![\\p{L}\\d+])[ \\t]*(?:[:=]|\\(|-(?=\\s))?[ \\t]*\\(?[ \\t]*${RANGE}`, 'gmu');
     for (const m of s.matchAll(pair)) {
@@ -779,7 +786,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
         if (found[j].min < run.at(-1).min && !run.some((r) => r.letter === found[j].letter)) { run.push(found[j]); kept = skipped; } else skipped++;
       }
       const across = found.slice(i, j).filter((e, k, a) => a.findIndex((x) => x.letter === e.letter) === k).sort((x, y) => y.min - x.min);
-      const fits = across.every((e, k) => !k || (rank(e.letter) > rank(across[k - 1].letter) && (e.max == null || (e.max < across[k - 1].min && across[k - 1].min - e.max <= 1 + 1e-9))));
+      const fits = across.every((e, k) => !k || (rank(e.letter) > rank(across[k - 1].letter) && e.min < across[k - 1].min && (e.max == null || (e.max < across[k - 1].min && across[k - 1].min - e.max <= 1 + 1e-9))));
       if (run.length > best.length) [best, order] = [run, kept];
       if (fits && across.length > best.length) [best, order] = [across, 0];
     }
@@ -1011,7 +1018,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const all = scan(lines, lang);
     const wk = deadlines(lines, { ...o, lang }, opts.week1), w = weights(s, lines, starts);
     return {
-      prof: professor(lines, lang),
+      prof: professor(lines, lang, once(all.filter((m) => m.hours))),
       hours: once(all.filter((m) => m.hours).map(({ hours, ...m }) => m)),
       meetings: all.filter((m) => !m.hours).map(({ hours, ...m }) => m),
       dates: wk.rows.map(({ i, ...d }) => d).slice(0, 100),
