@@ -234,3 +234,10 @@ test('dates by course week count from the start the syllabus states, even when e
   assert.deepEqual(add.dates.map((d) => d.day), ['2026-11-27'], 'week 12 of the stated 7 September, not of the course\'s 31 August');
   assert.deepEqual([add.week1.value, add.week1.from], ['2026-09-07', 'text']);
 });
+
+test('an AI row is named as a deadline is: a word Glaze knows for one, or a piece of work by its number', () => {
+  const text = 'Wed 9/23: Workshop. Bring 5 pages of your draft.\nWed 9/23: Week 5 reading\nWed 9/23: Problem Set 4\nWed 9/23: Self-check (ungraded)\nWed 9/23: Essay draft';
+  const at = (title) => ({ title, kind: 'due', when: 'Wed 9/23', quote: text.split('\n').find((l) => l.includes(title.split(' ')[0])) });
+  const add = A.interpret({ ...blank(), dates: ['Bring 5 pages of your draft', 'Week 5 reading', 'Problem Set 4', 'Self-check', 'Essay draft'].map(at) }, OPTS, L.extract(text, OPTS), text);
+  assert.deepEqual(add.dates.map((d) => d.title), ['Problem Set 4', 'Essay draft']);
+});
