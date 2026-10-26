@@ -118,7 +118,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     place(box);
     if (f) box.querySelector(`[data-f="${f}"]`)?.focus();
   };
-  const button = (text, f, run, cls = '') => { const b = make('button', { type: 'button', className: `gz-syl-btn ${cls}`.trim(), textContent: text }); b.dataset.f = f; b.addEventListener('click', run); return b; };
+  const button = (text, f, run, cls = '') => { const b = make('button', { type: 'button', className: `gz-syl-btn ${cls}`.trim(), textContent: text }); b.dataset.f = f; b.addEventListener('click', (e) => { if (e.isTrusted) run(e); }); return b; };
   const bar = () => {
     const box = make('section', { id: 'gz-syl', className: `gz-syl-bar${ultra ? ' outline-action-block' : ''}` },
       make('p', { textContent: ultra ? t('Glaze can read a syllabus into this course, your GPA and To Do. It stays on this device.') : t('Glaze can read this syllabus into your course home, GPA and To Do. It stays on this device.') }),
@@ -199,10 +199,11 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // ---- AI (docs/ai-harness.md) ------------------------------------------------------------------------------------
   // Asked only when storage.local ai says AI is on, a connection is chosen and syllabus import may use it; otherwise no
   // port is opened and the dialog is as without AI. One port a dialog, closed with it (which cancels a run).
-  let port = null, asked = 0;
+  let port = null, asked = 0, portVersion = 0;
   const waits = new Map(); // message id → its answer's handler
   const aiOn = async () => { const s = await get('local', 'ai'); return !!s && s.on === true && typeof s.use === 'string' && !!s.use && s.features?.syllabus === true; };
   const hangUp = () => {
+    portVersion++;
     const p = port;
     port = null;
     for (const w of waits.values()) w({ type: 'error', error: 'connection-lost' });
@@ -225,15 +226,27 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     }), { id });
   };
   // Where the text would go now: null (AI won't read), '' (this computer), or the endpoint's host.
-  const aiWhere = async () => {
-    if (!await aiOn()) return null;
+  const aiWhere = async (signal) => {
+    const box = dlg, version = portVersion;
+    const live = () => dlg === box && box?.open && version === portVersion && !signal?.aborted;
+    if (!await aiOn() || !live()) return null;
     const st = await ask({ op: 'status', feature: 'syllabus' });
-    return st.allowed && st.ready ? { to: typeof st.to === 'string' ? st.to : '', caps: st.caps || {} } : null;
+    return live() && st.allowed && st.ready ? { to: typeof st.to === 'string' ? st.to : '', caps: st.caps || {} } : null;
   };
-  // The dialog's line on where the text goes, kept to what it says (shown: '' for this computer).
+  // The host and the consent snapshot stay out of the page's DOM. The student sees the disclosure in a closed root;
+  // only a later click, after a paint, can authorize that destination ('' means this computer).
+  const destinations = new WeakMap();
   const privacy = (desc) => {
-    desc.dataset.to = '';
-    aiWhere().then((w) => { if (w?.to && desc.isConnected !== false) { desc.dataset.to = w.to; desc.textContent = t('Glaze reads it and sends the text to {host}. Nothing is kept until you check it and save.', { host: w.to }); } }, () => {});
+    destinations.set(desc, '');
+    const box = dlg;
+    aiWhere().then((w) => {
+      if (!w?.to || dlg !== box || !box.open || desc.isConnected === false || !desc.attachShadow) return;
+      const root = desc.attachShadow({ mode: 'closed' });
+      desc.textContent = '';
+      desc.setAttribute('role', 'status');
+      root.textContent = t('Glaze reads it and sends the text to {host}. Nothing is kept until you check it and save.', { host: w.to });
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (dlg === box && box.open && desc.isConnected !== false) destinations.set(desc, w.to); }));
+    }, () => {});
   };
   // Pictures for a model that takes them: PNG, JPEG, WebP or GIF files, each at most 6 MB, 12 MB in all, eight at most.
   const MIME = [['image/png', [0x89, 0x50, 0x4e, 0x47]], ['image/jpeg', [0xff, 0xd8, 0xff]], ['image/gif', [0x47, 0x49, 0x46, 0x38]], ['image/webp', [0x52, 0x49, 0x46, 0x46]]];
@@ -262,7 +275,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // controller (a newer read or closing the dialog ends AI too); files: pictures read. → the result to review; when AI
   // didn't finish, Glaze's own with aiSaid, a few words on why.
   const withAI = async (r, text, { read, say, stop, shown = '', files = [] }) => {
-    const w = await aiWhere().catch(() => null);
+    if (text.length > L.MAX) return { ...r, aiSaid: t('That syllabus is too long for AI. This is what Glaze read.') };
+    const w = await aiWhere(read.signal).catch(() => null);
     if (!w || w.to !== shown || read.signal.aborted) return r;
     const ctl = asking = new AbortController();
     const off = () => ctl.abort();
@@ -277,9 +291,9 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     }, { once: true }));
     try {
       const names = [opened.course?.name, opened.course?.course_code].filter((n) => typeof n === 'string' && n.trim()).map((n) => n.trim().slice(0, 200));
-      const input = { text: text.slice(0, L.MAX), images: w.caps.images === true ? await pictures(files) : [], names: [...new Set(names)] };
+      const input = { text, images: w.caps.images === true ? await pictures(files) : [], names: [...new Set(names)] };
       if (ctl.signal.aborted) throw new Error('stopped');
-      const run = ask({ op: 'run', feature: 'syllabus', task: 'syllabus.read', input });
+      const run = ask({ op: 'run', feature: 'syllabus', task: 'syllabus.read', input, to: shown });
       id = run.id;
       const end = await Promise.race([run, cancelled]);
       if (end.type !== 'end' || !end.output) throw Object.assign(new Error('ai'), { code: end.error });
@@ -307,6 +321,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const aiPage = usePage && await aiOn().catch(() => false);
     if (!allowed(cid)) return;
     opener = document.activeElement;
+    reading?.abort(); asking?.abort(); hangUp();
     opened = who;
     dlg?.close();
     const box = (dlg = attr(make('dialog', { id: 'gz-syl-dlg' }), { 'aria-labelledby': 'gz-syl-title' }));
@@ -333,12 +348,13 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const file = make('input', { type: 'file', id: 'gz-syl-file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.docx,.pptx,.html,.htm,.txt,.md,application/pdf,image/*' });
     const paste = make('textarea', { id: 'gz-syl-paste', rows: 8 });
     // Stop ends AI's reading alone while it reads (Glaze's own reading is then reviewed), else the file's.
-    const stop = button(t('Stop reading'), 'stop', () => (asking ? asking.abort() : reading?.abort()));
+    const stop = button(t('Stop reading'), 'stop', () => { if (asking) asking.abort(); else reading?.abort(); hangUp(); });
     const desc = make('p', { className: 'gz-syl-desc', textContent: t('Glaze reads it on this device. Nothing is sent anywhere, and nothing is kept until you check it and save.') });
     privacy(desc);
     stop.hidden = true;
     // pasted: a screenshot pasted into the text box, read instead of what's typed there.
     const go = async (pasted) => {
+      const shown = destinations.get(desc);
       const f = pasted instanceof File ? pasted : file.files[0];
       // Only the newest read is wanted: one still under way is called off, and says nothing more.
       reading?.abort();
@@ -353,7 +369,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
         }
         if (ctl.signal.aborted) return;
         if (!text.trim()) { say.textContent = t('Choose a file or paste the text first.'); return; }
-        const r = await withAI(await reviewed(text, ocr, ctl.signal), text, { read: ctl, say, stop, shown: desc.dataset.to, files: f ? [f] : [] });
+        const r = await withAI(await reviewed(text, ocr, ctl.signal), text, { read: ctl, say, stop, shown, files: f ? [f] : [] });
         if (ctl.signal.aborted) return;
         review(r, text);
       } catch (e) { if (reading === ctl) say.textContent = e?.cancelled ? t('Stopped.') : e?.mine ? e.message : t("Glaze couldn't read that file."); }
@@ -365,13 +381,14 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     });
     // Canvas's Syllabus page, as it's shown; with AI, read after Glaze's own reading like a file.
     const fromHere = async () => {
+      const shown = destinations.get(desc);
       await docIn().catch(() => {});
       if (!globalThis.GZ_DOCTEXT) return;
       const text = pageText();
       reading?.abort();
       const ctl = reading = new AbortController();
       try {
-        const r = await withAI(extract(text), text, { read: ctl, say, stop, shown: desc.dataset.to });
+        const r = await withAI(extract(text), text, { read: ctl, say, stop, shown });
         if (!ctl.signal.aborted) review(r, text);
       } finally { if (reading === ctl) { reading = null; stop.hidden = true; } }
     };
@@ -413,6 +430,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       const sel = make('select', { id: 'gz-syl-doc' }, ...docs.slice(0, 200).map((d, i) => make('option', { value: String(i), textContent: String(d.title || '').slice(0, 200) })));
       const live = () => dlg === mine && mine.open && box.isConnected && allowed(cid);
       const read = async () => {
+        const shown = destinations.get(desc);
         const chosen = docs[+sel.value];
         if (!live() || !chosen) return;
         // One read at a time, as go()'s: a newer one, Stop, another step or closing the dialog calls this one off.
@@ -484,7 +502,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
           // confidence by page.
           const n = ocrs.reduce((k, o) => k + o.pages, 0);
           const ocr = ocrs.length ? { pages: n, conf: Math.round(ocrs.reduce((k, o) => k + o.conf * o.pages, 0) / n), unsure: ocrs.flatMap((o) => o.unsure), blank: ocrs.reduce((k, o) => k + (o.blank || 0), 0) } : null;
-          const r = await withAI(await reviewed(text, ocr, signal), text, { read: ctl, say, stop, shown: desc.dataset.to, files });
+          const r = await withAI(await reviewed(text, ocr, signal), text, { read: ctl, say, stop, shown, files });
           check();
           review(r, text);
         } catch (e) { if (reading === ctl) say.textContent = signal.aborted ? t('Stopped.') : t("Glaze couldn't read that file."); }

@@ -111,7 +111,7 @@ test('AI on: "Reading with AI…" while it reads, then the merged review with AI
   p.button(dlg, 'Read it').fire('click');
   await settle();
   assert.equal(runs.length, 1);
-  assert.deepEqual(Object.keys(runs[0].m).sort(), ['feature', 'id', 'input', 'op', 'task']);
+  assert.deepEqual(Object.keys(runs[0].m).sort(), ['feature', 'id', 'input', 'op', 'task', 'to']);
   assert.deepEqual([runs[0].m.feature, runs[0].m.task, runs[0].m.input.text, runs[0].m.input.names], ['syllabus', 'syllabus.read', TEXT, ['BIO 101 Cells']]);
   assert.equal(p.statusLine(dlg), 'Reading with AI…');
   assert.equal(p.button(dlg, 'Stop reading').hidden, false);
