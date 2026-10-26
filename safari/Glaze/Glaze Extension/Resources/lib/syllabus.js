@@ -135,6 +135,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   const DUE = `${DUE_VERB}|${DUE_THING}`;
   const EXAM_RE = any(EXAM), DUE_RE = any(DUE), DUE_VERB_RE = any(DUE_VERB);
   const NOT_AFTER = /^\s+(?:#?\d{1,2}\s+)?(?:workshops?|conferences?|reviews?|periods?|weeks?|schedules?|sessions?|polic(?:y|ies)|guidelines|instructions|rubrics?|formats?|tips|topics?|ideas?|strategies|zeitraum|phase|woche|períodos?|periodos?|semanas?|périodes?|semaines?|periode)(?![\p{L}])/iu;
+  const EXAM_TOPIC = /^\s+(?:techniques?|preparation|préparation|vorbereitung|preparación|preparação|voorbereiding|design|feedback|results?|résultats?|resultados?|ergebnisse?|uitslagen)(?![\p{L}])/iu;
   const NO_BEFORE = /(?<![\p{L}])(?:no(?:\s+hay)?|kein(?:e[nmrs]?)?|pas\s+de|geen|sem|não\s+há|sin)\s+(?:[\p{L}-]+\s+){0,3}$/iu;
   const ARTICLE = /(?<![\p{L}])(?:the|a|an|this|that)\s+$/iu;
   // An item that counts for nothing ("(no puntúa)", "ungraded", "optional") is no deadline.
@@ -151,7 +152,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     for (const [re, kind, strong] of MARKS) {
       for (const m of s.matchAll(new RegExp(re.source, 'giu'))) {
         const end = m.index + m[0].length, before = s.slice(0, m.index);
-        if (NOT_AFTER.test(s.slice(end, end + 40)) || NO_BEFORE.test(before.slice(-60)) || (strong < 2 && ARTICLE.test(before.slice(-8)))) continue;
+        if (NOT_AFTER.test(s.slice(end, end + 40)) || (kind === 'exam' && EXAM_TOPIC.test(s.slice(end, end + 40))) || NO_BEFORE.test(before.slice(-60)) || (strong < 2 && ARTICLE.test(before.slice(-8)))) continue;
         const own = kind === 'exam' && new RegExp(`^\\s+(?:${DUE_THING})(?![\\p{L}])`, 'iu').test(s.slice(end, end + 30)) ? 'due' : kind;
         out.push({ at: m.index, end, kind: own, strong: own === kind ? strong : 1 });
       }
@@ -203,7 +204,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       if (t.includes('\t') && tableOf(t.split('\t').map((c) => c.trim()))) { out.push({ t, i }); continue; } // a table's header
       // A heading that names work ("Seating auditions") over a line that starts with its date and names none.
       const under = lines[i + 1] || '', d0 = LBL.test(t) && !timed(t) && marksIn(t).length && datesIn(under, o)[0];
-      if (d0 && !marksIn(under).length && !/\p{L}{2}/u.test(under.slice(0, d0.at).replace(new RegExp(`(?<![\\p{L}])${W}(?![\\p{L}])`, 'giu'), ''))) { out.push({ t: `${t.replace(/[\s:]+$/, '')}: ${under.trim()}`, i }); i++; continue; }
+      if (d0 && !(EXAM_RE.test(t) && EXAM_TOPIC.test(` ${under.slice(d0.at + d0.len).replace(/^[\s:;-]*/, '')}`)) && !marksIn(under).length && !/\p{L}{2}/u.test(under.slice(0, d0.at).replace(new RegExp(`(?<![\\p{L}])${W}(?![\\p{L}])`, 'giu'), ''))) { out.push({ t: `${t.replace(/[\s:]+$/, '')}: ${under.trim()}`, i }); i++; continue; }
       // A date alone on its line takes its row's other cells after it.
       const row = (next) => next.trim() && !BARE_DAY.test(next) && !HEADER.test(next) && !TOC.test(next) && !SECTION.test(next) && !timed(next) && !/^\s*\d{1,3}\s*\t/.test(next);
       for (let rec = false; n < 6 && i + n < lines.length && t.length < 1500; n++) {
@@ -222,13 +223,14 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   // ---- schedule tables ----------------------------------------------------------------------------------------------
   // A table whose header names a date or week column, and maybe the column of what is due ("Assignment Due", "Abgabe",
   // "Actividad evaluable", "Lectures et remises"; not "Reading Due"). In its rows a thing handed in counts only in that
-  // column, so a topic ("Research essay workshop", "Apresentação da disciplina") is no deadline; an exam word or a "due"
-  // counts anywhere. A due column's own date is the deadline ("Released\tDue"). A row is read by its cells' places when it
+  // column, so a topic ("Research essay workshop", "Apresentação da disciplina") is no deadline. A topic cannot override
+  // an empty work column. A due column's own date is the deadline ("Released\tDue"). A row is read by its cells' places when it
   // starts with its date or number; a row a PDF or a picture's text broke up, from its end: its last cell is what is due
   // when the header ends with that column. A blank line or a numbered section ends the table.
   const DATE_COL = any('dates?|datum|termine?|fechas?|datas?|jour|dag|dia|days?|tag|wk|weeks?|woche|semanas?|semaines?|released');
   const ACT_COL = any('due|deliverables?|assignments?|assessments?|work|activit(?:y|ies)|actividad(?:es)?|atividades?|evaluaci[oó]n(?:es)?|evaluations?|évaluations?|avaliaç(?:ão|ões)|remises?|abgabe|aufgaben?|leistungen?|opdracht(?:en)?|deadlines?|tasks?|tarefas?|tareas?|entregas?|homework|exams?|tests?|prüfung(?:en)?|übungsblatt');
   const READ_COL = any('readings?|lektüre|literatur|lecturas?|leituras?|literatuur');
+  const TOPIC_COL = any('topics?|themes?|thema|themen|sujets?|temas?|contenidos?|conteúdos?|onderwerpen');
   const DUE_COL = any('due|deliverables?|livrables?|entregables?|abgabe|deadlines?|entregas?|remises?|inleveren|fällig|prazo');
   // A column of each row's weight or points: the table lists graded work ("Titre\tDate\tPondération").
   const WEIGHT_COL = any('weights?|weighting|weighted|percent(?:age)?|%|worth|points?|pts|pondération|ponderación|ponderacion|ponderação|porcentaje|pourcentage|gewichtung|gewicht|anteil|prozent|weging|peso|valor|valeur|wert|punkte|puntos|pontos|punten|puntaje');
@@ -237,7 +239,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const date = cells.map((c) => DATE_COL.test(c) || dayIdx(c.trim()) >= 0);
     if (!date.some(Boolean)) return null;
     const act = cells.map((c) => { const w = ACT_COL.exec(c) || DUE_RE.exec(c) || EXAM_RE.exec(c); return !!w && !(READ_COL.test(c) && /^due$/i.test(w[0])); });
-    return { n: cells.length, act, due: cells.map((c, k) => act[k] && DUE_COL.test(c)), thing: cells.map((c) => DUE_RE.test(c) || EXAM_RE.test(c)), graded: cells.some((c) => WEIGHT_COL.test(c)) };
+    return { n: cells.length, act, due: cells.map((c, k) => act[k] && DUE_COL.test(c)), thing: cells.map((c) => DUE_RE.test(c) || EXAM_RE.test(c)), topic: cells.map((c) => TOPIC_COL.test(c)), weight: cells.map((c) => WEIGHT_COL.test(c)), graded: cells.some((c) => WEIGHT_COL.test(c)) && !cells.some((c) => TOPIC_COL.test(c)) };
   };
 
   // ---- deadlines by course week -----------------------------------------------------------------------------------
@@ -305,6 +307,9 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   // freitags", "todos los viernes", "chaque vendredi", "tous les vendredis", "elke vrijdag", "todas as sextas-feiras").
   const WEEKLY = new RegExp(`(?<![\\p{L}])(?:${DUE_VERB}|${EXAM}|closes?|closed|cierran|ferment|sluiten|fecham|schließen)(?![\\p{L}])[^.;\\n]{0,30}?(?:(?:every|each|jeden|jede|cada|todos los|chaque|tous les|elke|iedere|toda|todas as|los|las|les|aux|às|aos)\\s+${FD}s?|(?<![\\p{L}])((?:mon|tues|wednes|thurs|fri|satur|sun)days)|(?<![\\p{L}])(?:jeweils\\s+)?((?:mon|diens|mittwoch|donners|frei|sams|sonn)tags|mittwochs))(?![\\p{L}])`, 'iu');
   const WEEKLY_DE = ['mon', 'die', 'mit', 'don', 'fre', 'sam', 'son'];
+  const WEEKLY_ACTION = any(`${DUE_VERB}|closes?|closed|cierran|ferment|sluiten|fecham|schließen`);
+  // Without a due/closing verb, accept only a nominal assessment label, not prose about one.
+  const RULE_LABEL = any('weekly|online|pre-lab|in-class|en ligne|semanales?|hebdomadaires?|wöchentlich(?:e[nrs]?)?|wekelijks(?:e)?');
   const END_RE = any('classes end|last day of classes|course ends|term ends|semester ends|vorlesungsende|vorlesungsschluss|fin del periodo lectivo|fin de (?:las )?clases|fin des cours|einde van de colleges|término das aulas|fim das aulas|course dates');
   const BREAK_RE = any('holidays?|break|recess|receso|no class(?:es)?|no school|no lectures?|labou?r day|thanksgiving|memorial day|reading week|feiertage?|ferien|vorlesungsfrei|keine vorlesung|festivos?|vacaciones|sin clases|no hay clases|congés?|férié|relâche|semaine de lecture|vakantie|geen college|feriados?|recesso|não haverá aula|sem aulas?');
   // A span of the course's days ("Classes run August 24 – December 4", "Vorlesungszeit: 12.10.2026–05.02.2027"): its last day ends it.
@@ -317,7 +322,25 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   // la semaine de lecture", "no hay control en las semanas de feriado").
   const RULE_WEEKS = new RegExp(`(?<![\\p{L}\\d])(?:weeks?|wks?\\.?|semanas?|semaines?|wochen?|weken|vorlesungswochen?)\\s*(\\d{1,2})\\s*(?:-|to|through|thru|à|a|al|au|bis|tot|t/m|até)\\s*(\\d{1,2})(?!\\d)`, 'iu');
   const RULE_FROM = new RegExp(`(?<![\\p{L}\\d])(?:from|starting|beginning|ab|a partir de|à partir de|vanaf|desde|dès|depuis)(?:\\s+(?:in|with|the|der|la|le|de|da|el))*\\s+(?:(?:week|semana|semaine|woche|vorlesungswoche|lesweek)\\s*(\\d{1,2})|(\\d{1,2})(?:\\.|st|nd|rd|th|e|ª|º)?\\s*(?:vorlesungs|semester|lehr)?(?:week|woche|semana|semaine))(?![\\p{L}\\d])`, 'iu');
-  const RULE_EXCEPT = /(?<![\p{L}])(?:except(?:ing)?|excluding|but not|ausgenommen|außer|ausser|salvo|excepto|exceptuando|sauf|excepté|behalve|uitgezonderd|exceto)(?![\p{L}])(?:[^.;)]|\.(?!\s+\p{Lu}|\s*$))*/giu;
+  const EXCEPTION = 'except(?:ing)?|excluding|but not|ausgenommen|außer|ausser|salvo|excepto|exceptuando|sauf|excepté|behalve|uitgezonderd|exceto';
+  const EXCEPT_START = new RegExp(any(EXCEPTION).source, 'giu');
+  // Parentheses within an exception are comments; the closing parenthesis around a rule ends it.
+  const exceptionsIn = (s) => {
+    const out = [];
+    for (const m of s.matchAll(EXCEPT_START)) {
+      if (out.length && m.index < out.at(-1).end) continue;
+      let end = m.index + m[0].length, depth = 0;
+      for (; end < s.length; end++) {
+        const c = s[end];
+        if (c === '(') depth++;
+        else if (c === ')') { if (!depth) break; depth--; }
+        else if (!depth && (/[;!?]/.test(c) || (c === '.' && /^(?:\s+\p{Lu}|\s*$)/u.test(s.slice(end + 1))))) break;
+      }
+      out.push({ text: s.slice(m.index, end), at: m.index, end });
+    }
+    return out;
+  };
+  const EXCEPT_CONTEXT = any('and|und|y|e|et|en|in|during|the|der|den|des|die|la|las|los|les|le|de|du|del|da|das|do|dos|el|o|a|as|os|em|no|na|nas|nos|on|am|im|op|au|aux|van|vom|durante|durant|pendant|vorlesungsfreie[nr]?|zeit|spring|fall|winter|summer');
   const FROM_DAY = /(?<![\p{L}])(?:from|starting|beginning|desde|ab|vom|du|dès|à partir du|a partir de|vanaf|van|de)(?:\s+(?:the|el|le|o|a))?\s*$/iu;
   const TO_DAY = /(?<![\p{L}])(?:until|till|through|thru|to|hasta|bis(?: zum)?|au|jusqu'au|tot(?: en met)?|t\/m|até|a)(?:\s+(?:the|el|le|o|a))?\s*$/iu;
   const NEG = any('no|not|never|kein(?:e[nmrs]?)?|nicht|pas|geen|niet|não|sem|sin|ni');
@@ -325,8 +348,6 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   const OPEN = /(?<![\p{L}])(?:opens?|available|released|posted|distributed|handed out|ausgegeben|publicad[oa]|publié|from|between|starting|ab|vom|desde|del|à partir du|du|vanaf|van|a partir de|disponible|beschikbaar|disponível)\s*(?:on\s+)?$/iu;
   const CLOSE = /(?<![\p{L}])(?:until|till|by|through|thru|to|closes?|due|bis|hasta|jusqu'au|au|tot|até)(?![\p{L}])/iu;
   const WEEK_OF = /(?<![\p{L}])(?:the\s+)?(?:week of|semana del?|semaine du|woche vom|week van)\s*$/iu;
-  // A day after "except" in its clause ("außer in der vorlesungsfreien Zeit 21.12.–03.01.", "except Nov. 27") is a day off.
-  const EXCEPT = /(?<![\p{L}])(?:except(?:ing)?|excluding|but not|ausgenommen|außer|ausser|salvo|excepto|exceptuando|sauf|excepté|behalve|uitgezonderd|exceto|excepto)(?![\p{L}])[^.;:!?]*$/iu;
   const DAY_BEFORE = new RegExp(`(?<![\\p{L}])${W}\\s*,?\\s*$`, 'iu');
   const DAY_SPAN_END = new RegExp(`(?:${W}|${FD})\\s*(?:-|to|through|thru|bis|a|à|au|al|tot|até)\\s*$`, 'iu');
   const SHORT_DAY = /(?<![\p{L}])(?:Mon|Tues?|Wed|Thu(?:rs?)?|Fri|Sat|Sun|MON|TUES?|WED|THU|FRI|SAT|SUN)\.?(?![\p{L}])/gu; // English's
@@ -361,6 +382,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     }
     if (!anchor && Number.isFinite(week1)) anchor = { day: iso(week1), from: 'course', conf: 'sure', src: '' };
     if (!anchor && o.known) anchor = { day: iso(o.start), from: 'term', conf: 'check', src: '' };
+    if (anchor && anchor.from !== 'term') o = { ...o, start: Date.parse(anchor.day), known: true };
     // → { day } from a week's own dates or a calendar week, { day, week, wd, dow? } from the anchor, or null.
     const place = (ref) => {
       if (ref.kw != null) {
@@ -388,7 +410,8 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     // The line's times, in its order: { at, end, type: 'date' | 'range' | 'week' | 'day', … }.
     const timesIn = (raw, numbered) => {
       const out = [];
-      const ds = datesIn(raw, o).filter((f) => !(numbered && f.at === raw.search(/\d/)) && !EXCEPT.test(raw.slice(Math.max(0, f.at - 60), f.at)));
+      const except = exceptionsIn(raw);
+      const ds = datesIn(raw, o).filter((f) => !(numbered && f.at === raw.search(/\d/)) && !except.some((x) => f.at >= x.at && f.at < x.end));
       // What stands right before a position (a weekday, "opens", "week of"): the 40 characters before it, as its index.
       const before = (re, k) => { const a = Math.max(0, k - 40), m = re.exec(raw.slice(a, k)); return m && Object.assign(m, { index: m.index + a }); };
       for (let k = 0; k < ds.length; k++) {
@@ -486,16 +509,11 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       const q = { off: [] };
       let rest = raw;
       const blank = (a, z) => { rest = rest.slice(0, a) + ' '.repeat(z - a) + rest.slice(z); };
+      const except = exceptionsIn(rest);
+      for (const x of except) blank(x.at, x.end);
       let m = RULE_WEEKS.exec(rest);
       if (m) { q.from = +m[1]; q.to = +m[2]; blank(m.index, m.index + m[0].length); }
       else if ((m = RULE_FROM.exec(rest))) { q.from = +(m[1] || m[2]); blank(m.index, m.index + m[0].length); }
-      for (const x of rest.matchAll(RULE_EXCEPT)) {
-        const ds = datesIn(x[0], o);
-        if (ds.length) q.off.push(...ds.map((f) => [f.day, f.end || f.day]));
-        else if (BREAK_RE.test(x[0])) q.breaks = true;
-        else return null;
-        blank(x.index, x.index + x[0].length);
-      }
       // "no hay control en las semanas de feriado, de receso…", "no quizzes during spring break": the breaks are left out.
       for (const x of rest.matchAll(/[^.;]+/g)) if (NEG.test(x[0]) && BREAK_RE.test(x[0]) && !/\d/.test(x[0])) { q.breaks = true; blank(x.index, x.index + x[0].length); }
       for (const f of datesIn(rest, o)) {
@@ -504,6 +522,19 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
         else if (TO_DAY.test(back) && !f.end) q.last = f.day;
         else return null;
         blank(f.at, f.at + f.len);
+      }
+      const ruleOpts = q.first ? { ...o, start: Date.parse(q.first), known: true } : o;
+      for (const x of except) {
+        const ds = datesIn(x.text, ruleOpts);
+        let left = x.text;
+        for (const f of [...ds].reverse()) left = left.slice(0, f.at) + ' '.repeat(f.len) + left.slice(f.at + f.len);
+        left = left.replace(new RegExp(any(EXCEPTION).source, 'giu'), '').replace(new RegExp(`(?<![\\p{L}])${W}(?![\\p{L}])`, 'giu'), '')
+          .replace(new RegExp(BREAK_RE.source, 'giu'), '').replace(new RegExp(EXCEPT_CONTEXT.source, 'giu'), '');
+        // A partially read list is unsafe: bare days, week exclusions and other qualifiers remain unresolved.
+        if (/[\p{L}\d]/u.test(left)) return null;
+        if (ds.length) q.off.push(...ds.map((f) => [f.day, f.end || f.day]));
+        else if (BREAK_RE.test(x.text)) q.breaks = true;
+        else return null;
       }
       return RULE_UNCLEAR.test(rest) ? null : q;
     };
@@ -549,12 +580,16 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
             if (name) { zone[0] = Math.min(zone[0], dueCell.at - 1); ms.push({ at: dueCell.at - 1, end: dueCell.at, kind: EXAM_RE.test(raw) ? 'exam' : 'due', strong: 2, name }); }
           }
         }
-        // A table of graded work: a dated row with no word for what it is names it in its first cell of words.
-        if (!ms.length && table.graded && times.length) {
+        // A dated row in a table of graded work needs its own positive weight, not just a weight header.
+        const weighted = table.graded && cs.some((c) => table.weight[c.k] && Number(cells[c.k].replace(WEIGHT_COL, '').trim().replace(/\s*%$/, '').replace(',', '.')) > 0);
+        if (!ms.length && weighted && times.length) {
           const c = cs.find((x) => !timeIn(x) && /\p{L}{2}/u.test(cells[x.k]) && !WEIGHT_COL.test(cells[x.k]) && !/\d\s*%/.test(cells[x.k]));
           if (c) { zone = [0, raw.length]; ms = [{ at: c.at, end: c.end, kind: marksIn(cells[c.k]).some((m) => m.kind === 'exam') ? 'exam' : 'due', strong: 2, name: titled(cells[c.k], cells[c.k]), own: true }]; }
         }
-        if (!ms.length) { zone = [0, raw.length]; ms = marksIn(raw).filter((m) => m.strong > 1); }
+        if (!ms.length) {
+          zone = [0, raw.length];
+          ms = marksIn(raw).filter((m) => m.strong > 1 && !(act.length && cs.some((c) => table.topic[c.k] && m.at >= c.at && m.at < c.end)));
+        }
         // The row's own time: its date cell, or a weekday cell under a week's heading ("Mon\t…\tQuiz 2").
         def = times.find((r) => !inZone(r)) || null;
         // What an activities column names on a dated session ("Peer review", "Group project") may be only what is done
@@ -645,7 +680,6 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       }
       return '';
     })();
-    const end = stated || (dated.length ? dated.reduce((a, r) => (r.day > a ? r.day : a), '') : '');
     const off = [];
     for (const t of clauses) if (BREAK_RE.test(t)) for (const f of datesIn(t, o)) off.push([f.day, f.end || f.day]);
     // One rule per weekday, kind and subject: a table's row ("Quiz en ligne\tChaque vendredi") and the sentence that bounds
@@ -663,6 +697,10 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       if (!own && dated.filter((r) => r.kind === kind && monday(Date.parse(r.day)) === wd).length >= 2) return;
       // The title: what the rule is about, without its weekday ("Weekly Canvas quizzes", "Abgabe der Übungsblätter").
       const upto = m.index + m[0].search(/(?:every|each|jeden|jede|cada|todos|chaque|tous|elke|iedere|toda|jeweils|los|las|les|aux|às|aos|\p{L}+(?:days|tags|wochs))\s*\p{L}*$/iu);
+      if (!WEEKLY_ACTION.test(m[0])) {
+        const label = raw.slice(0, upto).replace(new RegExp(EXAM_RE.source, 'giu'), '').replace(new RegExp(RULE_LABEL.source, 'giu'), '');
+        if (/\p{L}/u.test(label)) return;
+      }
       const name = raw.slice(0, upto).replace(/\s*(?:(?:are|is|sind|werden|son|se|sont|zijn|são)\s+)?(?:due|close[sd]?|entregan?|cierran|ferment|sluiten|fecham)?\s*(?:on|am|el|le|op|às|aux|les|los)?\s*$/iu, '');
       const title = titled(name.trim() ? name : raw.slice(0, upto), raw);
       const subject = `${wd}|${kind}|${(title.toLowerCase().match(/\p{L}+/u) || [''])[0]}`;
@@ -679,7 +717,8 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       const a0 = anchor && Date.parse(anchor.day);
       const start = q.first ? after(Date.parse(q.first)) : q.from ? Date.parse(weekDay(anchor.day, q.from, 0, DAYS[wd])) : a0 + ((wd - monday(a0) + 7) % 7 || 7) * DAY;
       const own = q.last ? iso(Date.parse(q.last) + DAY) : q.to ? iso(Date.parse(weekDay(anchor.day, q.to, 0)) + 7 * DAY) : '';
-      const stop = own && stated ? (own < stated ? own : stated) : own || end;
+      // An unrelated dated assessment cannot say when a recurring assignment stops.
+      const stop = own && stated ? (own < stated ? own : stated) : own || stated;
       if (!stop || !Number.isFinite(start)) continue;
       let k = 0;
       for (let d = start; iso(d) < stop && k < 20; d += 7 * DAY) {
@@ -739,7 +778,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
         if (!named && (unsure || !CLOCKY.test(line.slice(a, to)))) continue;
         const staff = cell && a >= cell[0] && a < cell[1];
         // A staff member's line, unless it names a class they teach ("TA: … discussion section Wednesdays 10–11").
-        const theirs = !inBlock && !staff && lead && !CLASS_RE.test(line.slice(lead[0].length, a).replace(/open labs?/giu, ''));
+        const theirs = !inBlock && !staff && lead && !CLASS_RE.test(line.slice(lead[0].length).replace(/open labs?/giu, ''));
         const hours = inBlock || staff || theirs;
         const label = staff ? (OTHER_ROLE.exec(cells[0])?.[0] || '') : theirs ? clean(lead[1]) : hours && role ? role : row.label;
         out.push({ ...row, label, hours, conf: named && !unsure ? 'sure' : 'check', src: at(lines, i) });
