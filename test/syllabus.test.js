@@ -1193,7 +1193,7 @@ test('a deliverables column names its own work, before its date', () => {
 
 test('a table with a weight column lists graded work: each dated row is a deadline', () => {
   const fr = S.extract('Titre\tDate\tPondération\nRapport d\'étape (équipe)\t12 février 2027\tPondération 10 %\nExamen intra\t15 mars 2027 de 12 h 30 à 15 h 20\tPondération 25 %\nQuiz en ligne\tChaque vendredi\tPondération 10 %', { start: SPRING, hint: 'fr' });
-  assert.deepEqual(fr.dates.map((d) => `${d.day} ${d.kind} ${d.title}`), ['2027-02-12 due Rapport d\'étape (équipe)', '2027-03-15 exam Examen intra']);
+  assert.deepEqual(fr.dates.filter((d) => !d.rule).map((d) => `${d.day} ${d.kind} ${d.title}`), ['2027-02-12 due Rapport d\'étape (équipe)', '2027-03-15 exam Examen intra']);
   assert.deepEqual(rows('Evaluación\tFecha\tPonderación\nInforme 1\t10/09/2026\t10%\nSolemne 1\t09/10/2026\t25%', { start: Date.UTC(2026, 7, 3), hint: 'es' }), ['2026-09-10 due', '2026-10-09 exam']);
   assert.deepEqual(rows('Week\tDate\tTopic\nWeek 2\tSept 4\tElasticity', { start: FALL, md: true }), [], 'no weight column: a topic stays a topic');
 });
