@@ -160,6 +160,7 @@ const tableInfo = function () {
     if(run('results')) {
       const {page,cdp}=await open(); await until(()=>info(cdp),'rubric before results styles');
       await page.evaluate(()=>{
+        document.querySelector('.assessment-overview-grid').append(document.querySelector('#assessment-results-fixture').content.cloneNode(true));
         const other=document.createElement('div');other.id='other-section';other.innerHTML='<div class="section-content">Other content</div>';document.querySelector('#site-wrap').append(other);
       });
       const styles=()=>page.evaluate(()=>{
@@ -209,7 +210,7 @@ const tableInfo = function () {
       check(x.text.includes('Strong evidence.') && x.selected>0,'the graded evaluation\'s feedback and a non-colour selected rating are present');
       check(!x.unsafe && !await page.evaluate(()=>window.__rubricUnsafe),'rubric descriptions use the shared safe HTML path');
       check(x.pageFits && await page.locator('.assessment-details-section #gz-rubric').count()===1,'the inline rubric stays inside Assessment Details without page overflow');
-      check(await page.locator('.assessment-overview-grid').evaluate(e=>e.children.length===5),'the assessment grid retains its native children');
+      check(await page.locator('.assessment-overview-grid').evaluate(e=>e.children.length===4),'the assessment grid retains its native children');
       await screenshot(page,'desktop-inline'); await page.close();
     }
     if(run('screenshots')) for(const light of [true,false]) for(const width of [1440,390]) {
