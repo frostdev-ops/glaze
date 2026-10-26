@@ -1,6 +1,6 @@
 # AI harness
 
-Glaze's AI is off by default. Nothing in `lib/ai/` loads until a feature opens a `glaze:ai` port, and nothing is sent
+Glaze's AI is off by default. The service worker caches its scripts at installation and loads them when AI is used; Firefox loads them with its event page. Nothing is sent
 until the student has turned AI on, chosen a connection and allowed that feature. Its conventions follow
 [Rimeward](https://github.com/frostdev-ops/rimeward)'s agent harness (MIT), and the files ported from it say so at the top.
 
@@ -60,7 +60,7 @@ GZ_AI_TOOLS.add({ name: 'courses_list', kind: 'read' | 'write' | 'confirm', desc
 ```
 
 Names are snake_case. Every call must carry a `reason` (added to the schema for you). `read` runs; `confirm` waits for the
-student and its summary comes from `summarize`, never from the model's words; `write` waits too and needs its own review
+student and its summary comes from `summarize`, never from the model's words; `write` waits too under every approval policy and needs its own review
 before Glaze ships one. Errors a tool throws go back to the model as `{ error }`.
 
 ## The port
@@ -76,7 +76,7 @@ port.postMessage({ id: 3, op: 'confirm', confirmId, approve: true });
 A run posts events `{ id, type, … }`: `thinking`, `text_delta { delta, offset }` (stream tasks only), `says`, `note
 { part, parts }`, `step_start`, `step { step }`, `pending { pending }`, `usage`, `reply`; an event's own id is `event`. It
 ends with `{ id, type: 'end', output?, pending?, steps?, meta }` or `{ id, type: 'error', error, reference?, status? }`.
-Show `text_delta` and model output as text only. Keep the port open while a run is in flight; closing it cancels the run.
+Show `text_delta` and model output as text only. Credentialed structured replies release deltas only after parsing and credential checks. Keep the port open while a run is in flight; closing it cancels the run.
 
 Error codes: the model request's category (`cancelled`, `timeout`, `provider-unavailable`, `request-rejected`,
 `invalid-response`, `connection-lost`), or `off`, `feature`, `task`, `setup`, `caps`, `permission`, `changed`, `busy`,
@@ -94,15 +94,17 @@ Settings' top frame (`options.html`) manages connections with `chrome.runtime.se
 | Runs | one at a time per tab and feature; 6 a minute per tab and feature, 30 in all |
 | Loop | 24 rounds; 120 s (at most 300 s); 60k tokens (at most 500k); tool answers 12k characters |
 | Model call | 120 s unless the request says; one retry for a 429, none for anything that may have run |
-| Answers | 10 MB; 64 KB of an error body is read |
+| Answers | 10 MB across the entire response, including SSE; 64 KB of an error body is read |
 
 ## Security rules
 
 - Keys and connections live only in the worker's IndexedDB (`glaze-ai`), never in storage.local, sync, a Back up file,
   a shared Look or a page. Settings sees a key only masked.
 - A key goes only over https, or to localhost/127.0.0.1; redirects are refused. A request goes only to the connection's
-  host, and only while the connection keeps the generation the run was admitted on.
-- Senders: Glaze's own pages, or Glaze in a frame of a site it runs on; never quiz, assessment or LTI pages.
+  exact origin, including its port, and only while the connection keeps the generation the run was admitted on.
+- Senders: Glaze's own top-level pages, or Glaze in a same-origin LMS frame whose full ancestor chain is safe; never quiz, assessment or LTI pages. Every message rechecks the live document, including SPA navigation.
+- Confirmations are single-use, owned by their port and cancelled with their run; feature, task, tool, connection and sender authority are checked again before execution.
+- Provider replies and catalogs that echo a credential are refused before display or caching. Errors retain only safe diagnostics.
 - Everything from a page, a document or a model is data. Answers are checked against the schema and the task's `check`;
   inference that may have run is never replayed.
 - The call record (`storage.local aiCalls`) keeps ids, task, feature, provider, state, category, status, timing and usage:
