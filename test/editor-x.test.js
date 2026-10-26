@@ -74,6 +74,26 @@ test('the Ultra preview accepts settings and parts only from its editor parent a
   assert.deepEqual(writes, [data.gzPreviewParts]);
 });
 
+test('the Ultra preview sanitizes and repaints card edits even when motion stays unchanged', () => {
+  const source = read('lib/editor-preview.js'), start = source.indexOf("    addEventListener('message'", source.indexOf("if (site === 'ultra')"));
+  const block = source.slice(start, source.indexOf('    // The mock supplies', start));
+  const cards = require('../lib/cards.js'), parent = {}, origin = 'chrome-extension://fixture';
+  let receive;
+  const painted = [], state = D.GZ_SANITIZE();
+  const context = vm.createContext({ parent, location: { origin }, addEventListener: (_, fn) => { receive = fn; },
+    GZ_CARDS: cards, GZ_CTX: { settings: () => state }, GZ_CARD_UI: { paint: () => painted.push(structuredClone(state.card)) },
+  });
+  vm.runInContext(block, context);
+  const data = { gzPreview: { card: { width: 400 } } };
+  receive({ origin: 'https://foreign.test', source: parent, data });
+  receive({ origin, source: {}, data });
+  assert.equal(painted.length, 0, 'only the editor parent can change the card preview');
+  for (const card of [{ width: 400, hover: 'glow', condensed: true }, { width: 999, hover: 'invalid' }, undefined]) {
+    receive({ origin, source: parent, data: { gzPreview: { card } } });
+    assert.deepEqual(painted.at(-1), cards.settings(card));
+  }
+});
+
 test('the preview saying why its background stopped: a context the browser took back is not a shader the device refused', () => {
   const source = read('lib/editor-xbg.js'), a = source.indexOf('  const sceneSays = (d) => {'), b = source.indexOf('\n  };\n', a);
   assert.ok(a > 0 && b > a);
