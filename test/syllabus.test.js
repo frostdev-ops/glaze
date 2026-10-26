@@ -107,6 +107,17 @@ test('dated table cells remain dates when a section number matches their day', (
   }
 });
 
+test('week schedules do not create deadlines for explicitly absent assessments', () => {
+  for (const [header, row] of [
+    ['Week 2', 'Monday\tNo quiz this week'], ['Week 2', 'Monday\tLabor Day - no due dates'],
+    ['Woche 2', 'Montag\tKeine Prüfung diese Woche'], ['Semana 2', 'lunes\tNo hay examen esta semana'],
+    ['Semaine 2', 'lundi\tPas de contrôle cette semaine'], ['Week 2', 'maandag\tGeen tentamen deze week'],
+    ['Semana 2', 'segunda-feira\tSem prova nesta semana'],
+  ]) assert.deepEqual(S.extract(`${header}\n${row}`, { start: FALL }).dates, [], row);
+  assert.deepEqual(S.extract('Week 2 (Sept 7-11): Monday quiz, Friday project due', { start: FALL }).dates, [],
+    'an ambiguous week row must not fall back to using the week start as its deadline');
+});
+
 const FALL = Date.UTC(2026, 7, 24); // Fall 2026 starts August 24
 const SPRING = Date.UTC(2027, 0, 11);
 const pick = (r) => ({
