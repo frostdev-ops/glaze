@@ -163,15 +163,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
           // tracking) and gradebook record say where the work stands.
           const item = el.closest('.content-list-item[data-content-id]');
           const circle = item?.querySelector('.js-review-state-icon-button')?.getAttribute('aria-checked') ?? null;
-          // An assignment's own page: the due date in its details card, its id in the address.
-          const pageId = !item && el.closest('.due-date-container') && location.pathname.match(/\/assessment\/(_\d+_\d+)\//)?.[1];
+          // An assignment's own page: its card's date (not the label), the id in its address.
+          const pageId = !item && /\d/.test(n.data) && el.closest('.due-date-container') && location.pathname.match(/\/assessment\/(_\d+_\d+)\//)?.[1];
           // A discussion's outline item is a link with its own id; the gradebook knows the discussion's.
           const grades = (item || pageId) && gradesIn();
           const grade = !grades ? undefined : pageId ? grades.get(pageId) : grades.get(item.dataset.contentId)
             ?? grades.get(item.querySelector('a[href*="/discussion/"]')?.getAttribute('href').match(/\/discussion\/(_\d+_\d+)/)?.[1]);
           const late = !!grade && !!books.get(courseId())?.late?.has(grade.columnId);
-          // The date itself from the gradebook where it has one, so it reads in any locale; otherwise
-          // from the text, in Ultra's locale.
+          // The date from the gradebook where it has one, so it reads in any locale; else the text's, in Ultra's.
           const at = grade?.column?.dueDate && dueLabelled(el) ? new Date(grade.column.dueDate) : text;
           // Nothing is urgent once it's done. Elsewhere a past date may well be done, and the stream
           // says "Past due" itself.

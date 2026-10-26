@@ -918,10 +918,10 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
 #site-wrap .layer-content::after { display: none !important; }
 #site-wrap .layer-details :is(.full-panel-details-title, .separation-border, .guidance-wrapper, [class*="makeStyleselementDetails-"], .element-details) { border-bottom: 0 !important; }
 #site-wrap .layer-details .discussion-participants li::before { display: none !important; }
-/* Item pages' wells and lists (an assignment's due date, attempts and details; a profile's lists; a group set with
-   nothing in it): panels on Glaze's surface with the Look's corners. Ultra painted the wells in the page's own colour,
-   square, so they read as empty outlines. */
-#site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .base-profile section ul, .group-empty-state) {
+/* Item pages' wells and lists (an assignment's due date, attempts and details; a test's results, which have no well; a
+   profile's lists; a group set with nothing in it): panels on Glaze's surface with the Look's corners. Ultra painted the
+   wells in the page's own colour, square, so they read as empty outlines. */
+#site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > div.section-content, .base-profile section ul, .group-empty-state) {
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
 }
@@ -935,8 +935,8 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
   .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
   bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]), #site-wrap .outline-action-block,
   #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),
-  #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .base-profile section ul, .group-empty-state)) { backdrop-filter: none; }
-#site-wrap .assessment-details-section > ul.section-content { padding: 0.75rem 1rem !important; }
+  #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > div.section-content, .base-profile section ul, .group-empty-state)) { backdrop-filter: none; }
+#site-wrap :is(.assessment-details-section > ul.section-content, .assessment-results-section > div.section-content) { padding: 0.75rem 1rem !important; }
 #site-wrap .base-profile section ul { overflow: hidden; } /* its rows paint their own fill: kept inside the corners */
 /* Item type at a glance: the type icon carries its name as aria-label. */
 #site-wrap .content-list-item svg[aria-label] { color: var(--gz-type, var(--gz-accent)) !important; }
@@ -997,7 +997,7 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 #site-wrap .discussion-board .reply-input-wrapper .bb-editor-container:not(.is-read-only) { border: 0 !important; border-radius: 0 0 var(--gz-radius-sm) var(--gz-radius-sm) !important; }
 #site-wrap .discussion-board .reply-control { padding-inline: 0.5rem; }
 #site-wrap .discussion-board .discussion-sorting-wrapper { margin-block: 1rem; }
-#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label,
+#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
   .activity-stream .activity-group-title, .base-profile .profile-content h2),
 #site-wrap .discussion-board :is(.discussion-full-panel-detail-header,
   discussion-refresh-button button, discussion-follow-button button, bb-discussion-sorting-options button, discussion-reply-button button) {
@@ -1007,7 +1007,7 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
   border-radius: 999px !important;
 }
 /* Section-heading pills retain the native heading text and scale with the active Look. */
-#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label,
+#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
   .activity-stream .activity-group-title, .base-profile .profile-content h2),
 #site-wrap .discussion-board .discussion-full-panel-detail-header { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button { min-width: 2.25rem; min-height: 2.25rem; padding: 0.35rem 0.85rem; }

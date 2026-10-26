@@ -24,10 +24,11 @@ const definition = {
     cells: [100, 50, 0].map((percentage, c) => ({ id: `_${630+r*3+c}_1`, rubricRowId: `_${620+r}_1`, rubricColumnId: `_${610+c}_1`, position: c, percentage,
       description: `<p>${header} level ${c+1}. <strong>Readable detail</strong></p><script>window.__rubricUnsafe=1</script><img src="https://outside.invalid/leak" onerror="window.__rubricUnsafe=1">` })) })),
 };
-const association = { id: '_500_1', entityId: '_300_1', rubricId: '_600_1', percentOfGrade: 100, displayBefore: true, displayAfter: true, displayGraded: true, rubricDefinition: definition };
-const evaluation = { id: '_700_1', attemptId: '_400_1', rubricAssociationId: '_500_1', userId: '_42_1', published: true, completed: true, maxScore: 20, totalScore: 15,
+const association = { id: '_500_1', entityId: '_300_1', rubricId: '_600_1', percentOfGrade: 100, displayBefore: true, displayAfter: false, displayGraded: true, isWithEvaluations: true, rubricDefinition: definition };
+// Ultra's own shapes for a graded attempt: the evaluation unpublished and without a userId, the row's status GRADED.
+const evaluation = { id: '_700_1', attemptId: '_400_1', rubricAssociationId: '_500_1', userId: null, submitted: true, published: false, completed: true, editable: false, maxScore: 20, totalScore: 15,
   cells: [{ id: '_710_1', rubricRowId: '_620_1', rubricCellId: '_630_1', selectedPercent: 100, feedback: { rawText: '<p>Strong evidence.</p>' } }] };
-const grade = { courseId: '_101_1', userId: '_42_1', columnId: '_300_1', lastAttemptId: '_400_1', status: 'Graded', displayGrade: '15', column: { id: '_300_1', contentId: '_8120_1', pointsPossible: 20 }, lastAttempt: { id: '_400_1', status: 'COMPLETED', graded: true }, submissionStatus: 'Submitted' };
+const grade = { id: '_510_1', courseId: '_101_1', userId: '_42_1', columnId: '_300_1', lastAttemptId: '_400_1', column: { id: '_300_1', contentId: '_8120_1', possible: 20 }, lastAttempt: { id: '_400_1', status: 'COMPLETED' }, submissionStatus: { status: 'GRADED' } };
 const assignment = { id: '22', course_id: '11', name: 'Evidence and reasoning', restrict_quantitative_data: false, use_rubric_for_grading: true,
   rubric_settings: { id: '33', title: 'Evidence and reasoning', points_possible: 20, hide_points: false, hide_score_total: false },
   rubric: ['Evidence', 'Reasoning'].map((description, r) => ({ id: `c${r}`, points: 10, description, long_description: 'Readable criterion', ratings: [10,5,0].map((points, i) => ({ id: `r${r}${i}`, points, description: ['Excellent','Developing','Beginning'][i], long_description: 'Readable detail' })) })) };
@@ -84,13 +85,13 @@ const tableInfo = function () {
       if (u.pathname.endsWith('/rubric.css')) return r.fulfill({contentType:'text/css',body:''});
       let data = { results:[] };
       if (u.pathname.endsWith('/users/me') || u.pathname.endsWith('/users/self/profile')) data = { id:u.origin === canvas ? '42' : '_42_1',name:'Synthetic student' };
-      else if (u.pathname.includes('/gradebook/grades')) { const row={...grade}; if(scenario==='unopened')for(const k of ['lastAttemptId','lastAttempt','status','submissionStatus'])delete row[k]; data={results:[row]}; }
+      else if (u.pathname.includes('/gradebook/grades')) { const row={...grade}; if(scenario==='unopened')for(const k of ['lastAttemptId','lastAttempt','status','submissionStatus'])delete row[k]; if(scenario==='submitted')Object.assign(row,{lastAttempt:{id:'_400_1',status:'NEEDS_GRADING'},submissionStatus:{status:'SUBMITTED'}}); data={results:[row]}; }
       else if (u.pathname.includes('/contents/')) data = { id:'_8120_1', contentDetail:{'resource/x-bb-asmt-test-link':{test:{gradingColumn:{id:'_300_1'},assessment:{gradableItemId:'_300_1'}}}} };
       else if (u.pathname.includes('/gradebook/columns/_300_1')) {
         if (scenario === 'forbidden') return r.fulfill({status:403,contentType:'application/json',body:'{}'});
         if (scenario === 'slow') { slowSeen = true; await new Promise(done => { releaseSlow = done; }); }
-        data = { id:'_300_1',courseId:'_101_1',contentId:'_8120_1',possible:20,rubricAssociations:[{...association,...(scenario==='foreign-gate'?{displayAfter:false}: {})}] };
-      } else if (u.pathname.includes('/gradebook/attempts/')) data = { id:'_400_1',courseId:'_101_1',columnId:'_300_1',userId:'_42_1',status:'COMPLETED',rubricEvaluation:{...evaluation,...(scenario==='foreign-gate'?{rubricAssociationId:'_501_1'}:{})} };
+        data = { id:'_300_1',courseId:'_101_1',contentId:'_8120_1',possible:20,rubricAssociations:[association] };
+      } else if (u.pathname.includes('/gradebook/attempts/')) data = { id:'_400_1',courseId:'_101_1',columnId:'_300_1',userId:'_42_1',status:scenario==='submitted'?'NEEDS_GRADING':'COMPLETED',rubricEvaluation:{...evaluation,...(scenario==='submitted'?{published:true,userId:'_42_1'}:scenario==='foreign-user'?{userId:'_43_1'}:{})} };
       else if (u.origin === canvas && /\/assignments\/22\/submissions\/self$/.test(u.pathname)) data = { assignment_id:'22',user_id:'42',rubric_assessment:{c0:{rating_id:'r00',points:10,comments:'Strong evidence.'}} };
       else if (u.origin === canvas && /\/assignments\/22$/.test(u.pathname)) data = assignment;
       return r.fulfill({contentType:'application/json',body:JSON.stringify(data)});
@@ -140,10 +141,14 @@ const tableInfo = function () {
       const x=await until(()=>info(cdp),'unopened own assessment rubric');
       check(x.selected===0&&!x.text.includes('Strong evidence.')&&!requests.slice(start).some(r=>r.path.includes('/gradebook/attempts/')),'an unopened own assessment without status fields displays its permitted definition without evaluation');await page.close();
     }
-    if(run('foreign-gate')) {
-      const {page}=await open({kind:'foreign-gate'});
-      check(!await page.locator('#gz-rubric,#gz-popup').count(),'a foreign published evaluation cannot promote after-submission rubric visibility');
+    if(run('submitted')) {
+      const {page}=await open({kind:'submitted'});
+      check(!await page.locator('#gz-rubric,#gz-popup').count(),'a published evaluation of an ungraded submission cannot promote after-submission rubric visibility');
       await page.locator('#native-rubric').click();await page.waitForSelector('#native-rubric-panel');check(true,'an unavailable after-submission rubric retains its native control');await page.close();
+    }
+    if(run('foreign-user')) {
+      const {page,cdp}=await open({kind:'foreign-user'}), x=await until(()=>info(cdp),'graded rubric with a foreign evaluation');
+      check(x.selected===0&&!x.text.includes('Strong evidence.'),'an evaluation naming another user shows the graded rubric without its selections');await page.close();
     }
     if(run('description')) {
       const {page,cdp}=await open(), x=await until(()=>info(cdp),'rubric description');
@@ -174,7 +179,7 @@ const tableInfo = function () {
     if(run('desktop')) {
       const {page,cdp}=await open(); const x=await until(()=>info(cdp),'automatic inline rubric');
       check(x.caption && x.rows===2 && x.cols===4,'desktop Automatic renders a captioned table with criterion and level headers');
-      check(x.text.includes('Strong evidence.') && x.selected>0,'published feedback and a non-colour selected rating are present');
+      check(x.text.includes('Strong evidence.') && x.selected>0,'the graded evaluation\'s feedback and a non-colour selected rating are present');
       check(!x.unsafe && !await page.evaluate(()=>window.__rubricUnsafe),'rubric descriptions use the shared safe HTML path');
       check(x.pageFits && await page.locator('.assessment-details-section #gz-rubric').count()===1,'the inline rubric stays inside Assessment Details without page overflow');
       check(await page.locator('.assessment-overview-grid').evaluate(e=>e.children.length===4),'the assessment grid retains its native children');
