@@ -599,8 +599,8 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
 
   // ---- meetings (class times and office hours) --------------------------------------------------------------------
   // The shape W14's schedule parser shares: { label, days, start, end, location }, plus conf and src here.
-  const CLASS_RE = any('lectures?|class(?:es)?|meets?|meetings?|meeting times?|sections?|labs?|laborator(?:y|ies)|discussion|recitation|seminars?|tutorials?|vorlesung(?:en)?|übung(?:en)?|praktikum|unterricht|clases?|horario|cours|td|tp|séances?|hoorcollege|werkcollege|college|practicum|aulas?|horário');
-  const HOURS_RE = any('office hours?|student hours|drop-in hours|sprechstunden?|sprechzeiten?|horarios? de (?:atención|tutorías|oficina)|horas de (?:oficina|atención)|tutorías|heures? de (?:bureau|permanence|réception)|permanences?|spreekuur|spreekuren|horários? de atendimento|atendimento');
+  const CLASS_RE = any('lectures?|class(?:es)?|meets?|meetings?|meeting times?|sections?|labs?|laborator(?:y|ies)|discussion|recitation|seminars?|tutorials?|vorlesung(?:en)?|übung(?:en)?|praktikum|unterricht|clases?|horario|cours|td|tp|séances?|hoorcollege|werkcollege|college|practicum|clinicals?|aulas?|horário');
+  const HOURS_RE = any('office hours?|student hours|drop-in hours|sprechstunden?|sprechzeit(?:en)?|horarios? de (?:atención|tutorías|oficina)|horas de (?:oficina|atención)|tutorías|heures? de (?:bureau|permanence|réception)|permanences?|spreekuur|spreekuren|horários? de atendimento|atendimento|disponibilit[ée]s?');
   // A line's meetings, from W14's reader (days Sunday-first there, Glaze's MO…SU here), with the line's label before the
   // first and each one's place after it.
   const meetingsIn = (line, prev, lang) => {
@@ -608,26 +608,41 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const label = found.length ? clean(line.slice(0, found[0].at)) || (/:\s*$/.test(prev) ? clean(prev) : '') : '';
     return found.map((m, i) => {
       const tail = line.slice(m.to, found[i + 1]?.at ?? line.length).replace(/^\s*(?:uhr|uur|h)(?![\p{L}])/iu, '');
+      // German "10–12 Uhr (c.t.)": a quarter past to a quarter to.
+      const ct = /^\s*\(?\s*c\.\s?t\.\s*\)?/i.test(tail) ? 15 : 0;
       // A title at the place's end lost its name to the next line ("via Teams - Prof." / "Moreno's room"): cut with it.
-      const location = clean(clean(tail.split(/;|\.(?!\d)|\bor\b|\band\b|\boder\b|\bou\b|\bo\b|\bof\b/)[0]).replace(/^(?:in|at|im|en|à|au|em|no|na|op|via)\s+/i, '').replace(CUT_TITLE, ''));
-      return { label: label.replace(/[:]\s*$/, '').slice(0, 80), days: ordered(m.days.map((d) => DAYS[(d + 6) % 7])), start: hhmm(m.start), end: hhmm(m.end), location: location.slice(0, 80), unsure: m.unsure.length > 0, at: m.at };
+      const location = clean(clean(tail.replace(/^\s*\(?\s*[cs]\.\s?t\.\s*\)?/i, '').split(/;|\.(?!\d)|\bor\b|\band\b|\boder\b|\bou\b|\bo\b|\bof\b/)[0]).replace(/^(?:in|at|im|en|à|au|em|no|na|op|via)\s+/i, '').replace(CUT_TITLE, ''));
+      return { label: label.replace(/[:]\s*$/, '').slice(0, 80), days: ordered(m.days.map((d) => DAYS[(d + 6) % 7])), start: hhmm(m.start + ct), end: hhmm(m.end - ct), location: location.slice(0, 80), unsure: m.unsure.length > 0, at: m.at };
     });
   };
   const CUT_TITLE = /[\s,·-]*(?<![\p{L}])(?:prof(?:essor|essora|esseur)?|dr|dra|mr|mrs|ms|herr|frau|sr|sra|mme|dhr|mevr)\.?$/iu;
-  // Lines with days and a time, skipping one-off events (a line with a date). Office hours: a line with their label, and
-  // the lines right after it that start with a day and a time.
+  // Lines with days and a time, skipping one-off events (a line with a date). Office hours: a line with their label, the
+  // lines right after it that start with a day and a time, and a staff table's office-hours column. A TA's, a tutor's or
+  // an Übungsleitung's are office hours too, labelled with the role as written (owner, 2026-10-26). A line that names no
+  // class and no office hours keeps only times written as clock times, and no lone time with a guessed end: not "15–18
+  // hours of work per week", "Monday 12:00 a.m. through Sunday", or a deadline's "vrijdag 17.00 uur".
+  const CLOCKY = /\d\s?[:.h]\s?\d|[ap]\.?\s?m(?![\p{L}])|uhr|uur|\dh(?![\p{L}])|\d{4}\s*-\s*\d{4}/iu;
   const scan = (lines, lang) => {
     const out = [];
-    let block = 0;
+    let block = 0, role = '', col = -1;
     lines.forEach((line, i) => {
-      const hoursHere = HOURS_RE.test(line);
+      const cells = line.split('\t');
+      if (cells.length > 1 && cells.every((c) => c.length <= 40 && !/\d/.test(c))) col = cells.findIndex((c) => HOURS_RE.test(c));
+      else if (cells.length < 2) col = -1;
+      const hoursHere = HOURS_RE.test(line) && col < 0;
       const found = meetingsIn(line, lines[i - 1] || '', lang);
       block = hoursHere ? 4 : block && found[0]?.at <= 2 ? block - 1 : 0;
+      if (hoursHere) role = OTHER_ROLE.exec(line)?.[0] || '';
       const inBlock = hoursHere || block > 0;
-      if (datesIn(line, { start: 0, known: true }).some((d) => d.sure)) return; // only whether a date is named: any year will do
-      for (const { unsure, at: _, ...row } of found) {
-        const sure = inBlock || CLASS_RE.test(line) || CLASS_RE.test(lines[i - 1] || '');
-        out.push({ ...row, hours: inBlock, conf: sure && !unsure ? 'sure' : 'check', src: at(lines, i) });
+      if (datesIn(line, { start: 0, known: true }).length || datesIn(line, { start: 0, known: true, md: true }).length) return; // any year, either way round
+      const cell = col >= 0 && cells.length > col ? [cells.slice(0, col).join('\t').length + (col && 1), cells.slice(0, col + 1).join('\t').length] : null;
+      const named = inBlock || cell || CLASS_RE.test(line) || CLASS_RE.test(lines[i - 1] || '');
+      for (const { unsure, at: a, to, ...row } of found) {
+        if (!named && (unsure || !CLOCKY.test(line.slice(a, to)))) continue;
+        const staff = cell && a >= cell[0] && a < cell[1];
+        const hours = inBlock || staff;
+        const label = staff ? (OTHER_ROLE.exec(cells[0])?.[0] || '') : hours && role ? role : row.label;
+        out.push({ ...row, label, hours, conf: named && !unsure ? 'sure' : 'check', src: at(lines, i) });
       }
     });
     return out.slice(0, 40);
@@ -650,7 +665,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   };
   const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
   // Someone else on the course staff, whose contact details follow their own name.
-  const OTHER_ROLE = any("TAs?|teaching assistants?|teaching fellows?|tutors?|graders?|course assistants?|lab instructors?|co-instructors?|tutor(?:in|en)?|hilfskr(?:a|ä)fte?|wissenschaftliche[rn]? mitarbeiter(?:in)?|ayudantes?|asistentes?|monitor(?:a|es)?|chargée? de td|assistante?s?|student-assistent(?:en)?|werkcollegedocent|assistente");
+  const OTHER_ROLE = any("TAs?|teaching assistants?|teaching fellows?|tutors?|graders?|course assistants?|lab instructors?|co-instructors?|tutor(?:in|en)?|hilfskr(?:a|ä)fte?|wissenschaftliche[rn]? mitarbeiter(?:in)?|ayudantes?|asistentes?|monitor(?:a|es)?|chargée? de td|assistante?s?|student-assistent(?:en)?|werkcollegedocent|assistente|übungsleit(?:ung|er|erin)|auxiliaires? d’enseignement|auxiliaires? d'enseignement");
   const field = (value, conf, src) => ({ value: value || '', conf: value ? conf : '', src: value ? src : '' });
   const professor = (lines, lang) => {
     let name = field(), at0 = -1;

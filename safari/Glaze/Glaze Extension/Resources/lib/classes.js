@@ -139,26 +139,29 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
   const weekday = (n) => (((n + 4) % 7) + 7) % 7;
 
   // ---- times ---------------------------------------------------------------------------------------------------
-  const TIME = /(?<![\p{L}\d.:,\/])(\d{1,2})(?:\s?([:.hH])\s?(\d{2}))?(?:\s*(a\.?\s?m\.?|p\.?\s?m\.?|uhr|h)(?![\p{L}]))?(?![\d:])|(?<![\p{L}])(noon|midday|mittag|mediod[ií]a|midi|middag|meio-dia)(?![\p{L}])/giu;
+  // A 24-hour range written without a colon ("1230–1430", nursing and military schedules) is read only as a range.
+  const TIME = /(?<![\p{L}\d.:,\/])(\d{1,2})(?:\s?([:.hH])\s?(\d{2}))?(?:\s*(a\.?\s?m\.?|p\.?\s?m\.?|uhr|uur|h)(?![\p{L}]))?(?![\d:])|(?<![\p{L}])(noon|midday|mittag|mediod[ií]a|midi|middag|meio-dia)(?![\p{L}])|(?<![\p{L}\d.:,\/-])([01]\d|2[0-3])([0-5]\d)(?=\s*[-–]\s*(?:[01]\d|2[0-3])[0-5]\d(?![\d:]))|(?<=(?<![\d.:,\/-])(?:[01]\d|2[0-3])[0-5]\d\s*[-–]\s*)([01]\d|2[0-3])([0-5]\d)(?![\d:])/giu;
   const TIME_SEP = /^\s*(?:-|–|—|~|to|till|until|bis|a|al|à|às|as|tot|até)\s*$/iu;
   const times = (line) => [...line.matchAll(TIME)].map((m) => {
     if (m[5]) return { at: m.index, end: m.index + m[0].length, h: 12, min: 0, mer: 'p', clear: true };
+    if (m[6] || m[8]) return { at: m.index, end: m.index + m[0].length, h: +(m[6] || m[8]), min: +(m[7] || m[9]), mer: '', h24: true, clear: true };
     const h = +m[1], min = m[3] ? +m[3] : 0, sep = m[2] || '', suf = (m[4] || '').toLowerCase().replace(/[.\s]/g, '');
     if (h > 24 || min > 59 || (sep === '.' && !m[3])) return null;
     const mer = suf === 'am' ? 'a' : suf === 'pm' ? 'p' : '';
     // A 24-hour clock: no am/pm, and an hour past 12, a leading zero, "14h30" or "Uhr".
     const h24 = !mer && (h > 12 || h === 0 || /^0\d/.test(m[1]) || /h/i.test(sep) || suf === 'h' || suf === 'uhr');
     if (mer && (h > 12 || h === 0)) return null;
-    return { at: m.index, end: m.index + m[0].length, h, min, mer, h24, bare: !sep && !suf, clear: !!(sep || suf) };
+    // "SR 1.07", "Raum 3.09": a dotted number alone is a room's, not a time, unless it says Uhr or h.
+    return { at: m.index, end: m.index + m[0].length, h, min, mer, h24, bare: !sep && !suf, clear: !!(sep || suf), dot: sep === '.' && !suf };
   }).filter(Boolean);
   // Minutes since midnight for a start and an end, the meridiem worked out where only one side (or neither) says it.
   // → { start, end, unsure } or null.
   const span = (a, b) => {
     const at = (t, pm) => (t.h % 12) * 60 + t.min + (pm ? 720 : 0);
-    const ok = (s, e) => e > s && e - s >= 10 && e - s <= 480;
+    const ok = (s, e, long) => e > s && e - s >= 10 && e - s <= (long ? 720 : 480);
     if (a.h24 || b.h24) {
       const s = a.h * 60 + a.min, e = (b.h === 24 ? 1440 : b.h * 60 + b.min);
-      return ok(s, e) && !a.mer && !b.mer ? { start: s, end: e, unsure: false } : null;
+      return ok(s, e, true) && !a.mer && !b.mer ? { start: s, end: e, unsure: false } : null; // a clinical shift: 12 hours
     }
     if (a.mer || b.mer) {
       const pick = (sides) => sides.map(([pa, pb]) => [at(a, pa), at(b, pb)]).find(([s, e]) => ok(s, e));
@@ -179,7 +182,7 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
   // A word as days: a name ("Wednesday", "mié", "Mondays") or a run of abbreviations and capitals ("MoWeFr", "TTh",
   // "MWF"). → [day…] or null.
   const asDays = (w, tb) => {
-    const lw = w.toLowerCase();
+    const lw = w.toLowerCase().replace(/s(-feira)s$/, '$1'); // "quartas-feiras"
     if (tb.names.has(lw)) return [tb.names.get(lw)];
     if (/s$/.test(lw) && tb.names.has(lw.slice(0, -1)) && lw.length > 5) return [tb.names.get(lw.slice(0, -1))];
     // Runs: capitals, or capital + lower abbreviations of two or three letters, all of the word.
@@ -201,7 +204,7 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
   const THROUGH = /^\s*(?:-|–|—|to|through|thru|bis|a|à|au|al|tot|t\/m|até)\s*$/iu;
   const DASH = /^\s*[-–]\s*$/;
   const LINK = /^(?:and|und|y|e|et|en|to|through|thru|bis|a|à|au|al|tot|até)$/i;
-  const WORD = /[\p{L}]+(?:-feira)?/gu;
+  const WORD = /[\p{L}]+(?:-feiras?)?/gu;
   // Groups of days in a line: [{ at, end, days, strong }]. Strong: a name of three letters or more, a run like "MWF", or
   // several words; a lone "M" or "Mo" is weak and counts only beside a time or as a table cell of its own.
   const dayGroups = (line, tb) => {
@@ -256,7 +259,7 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
         const s = span(a, b);
         if (s) { ranges.push({ ...s, at: a.at, to: b.end }); i++; continue; }
       }
-      if (a.clear && !a.bare) ranges.push({ at: a.at, to: a.end, single: a });
+      if (a.clear && !a.bare && !a.dot) ranges.push({ at: a.at, to: a.end, single: a });
     }
     // Each time takes the days between it and its neighbours: those before it ("MWF 9:00"), or after it ("9:00 MWF") once
     // the line has shown it writes them that way; days shared by two times ("TR 9:30–10:45 and 11:00–12:15") are reused.
