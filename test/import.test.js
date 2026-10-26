@@ -541,11 +541,11 @@ const pdfText = async (bytes) => {
 // lib/ocr.js itself, in a vm with what a worker in the extension has: importScripts, fetch of its own files (anything
 // else fails the test), DecompressionStream, postMessage.
 const ocrWorker = () => {
-  const asked = [];
+  const asked = [], said = [];
   let answer = null, started = null;
   const own = (u) => { const url = new URL(u); asked.push(url.href); assert.ok(url.href.startsWith('chrome-extension://glaze/lib/'), `fetched ${url.href}`); return fs.readFileSync(path.join(root, url.pathname)); };
   const ctx = {
-    console: { log() {}, warn() {}, error() {} }, URL, TextDecoder, TextEncoder, WebAssembly, Response, DecompressionStream, setTimeout, clearTimeout, performance, crypto,
+    console: { log: (...a) => said.push(a.join(' ')), warn: (...a) => said.push(a.join(' ')), error: (...a) => said.push(a.join(' ')) }, URL, TextDecoder, TextEncoder, WebAssembly, Response, DecompressionStream, setTimeout, clearTimeout, performance, crypto,
     location: { href: 'chrome-extension://glaze/lib/ocr.js' },
     fetch: async (u) => new Response(own(String(u)), { headers: { 'content-type': String(u).endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream' } }),
     postMessage: (m) => { if (m.type !== 'progress') answer?.(m); },
@@ -558,7 +558,7 @@ const ocrWorker = () => {
   const ask = (m) => new Promise((r) => { answer = r; ctx.onmessage({ data: m }); });
   // Started as the reader starts it for an English page, with a language it hasn't got thrown in.
   const start = () => (started ||= ask({ type: 'start', langs: ['eng', 'klingon'] }));
-  return { asked, start, read: async (image) => { await start(); const r = await ask({ type: 'read', image }); assert.equal(r.type, 'done', r.why); return D.ocrText(JSON.parse(r.json)); } };
+  return { asked, said, start, read: async (image) => { await start(); const r = await ask({ type: 'read', image }); assert.equal(r.type, 'done', r.why); return D.ocrText(JSON.parse(r.json)); } };
 };
 // A Chrome screenshot (8-bit RGB or RGBA PNG) as canvas pixels, for D.pgm as the reader makes it.
 const png = (buf) => {
@@ -655,4 +655,6 @@ test('extraction accuracy, per fixture', async (t) => {
   }
   t.diagnostic(`accuracy\n${table.join('\n')}`);
   assert.deepEqual(low, []);
+  // Chrome lists each console line of an extension's worker as an error on chrome://extensions.
+  assert.deepEqual([...new Set(ocr.said)], [], 'the OCR engine writes nothing to the console');
 });
