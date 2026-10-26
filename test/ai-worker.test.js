@@ -13,7 +13,7 @@ const KEY = 'sk-proj-WORKERKEY0123456789';
 const lms = (p = '/courses/1', extra = {}) => ({ id: 'glaze', frameId: 0, url: `${CANVAS}${p}`, origin: CANVAS, tab: { id: 4, url: `${CANVAS}${p}` }, ...extra });
 const editor = (extra = {}) => ({ id: 'glaze', frameId: 0, url: `${EXT}/options.html`, origin: EXT, tab: { id: 9, url: `${EXT}/options.html` }, ...extra });
 const make = (fetch) => worker({ globals: fakeIDB(), fetch, grants: new Set(['https://api.example.com/*']),
-  store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, use: 'openai', features: { syllabus: true } } }, session: {} } });
+  store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, use: 'main', features: { syllabus: true } } }, session: {} } });
 const status = async (w, sender) => {
   const { port, say } = w.connect('glaze:ai', sender);
   say({ id: 1, op: 'status', feature: 'syllabus' });
@@ -39,18 +39,18 @@ test('Glaze in a page of a site it runs on, and Glaze\'s own pages, may open the
 
 test('only Settings\' own top frame keeps connections, and the key never leaves the worker\'s own store', async () => {
   const w = make();
-  const set = { type: 'glaze:ai-config', op: 'set', provider: 'openai', cfg: { base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY } };
+  const set = { type: 'glaze:ai-config', op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY } };
   for (const sender of [lms(), editor({ frameId: 3 }), { ...editor(), url: `${EXT}/popup.html` }, { ...editor(), origin: 'https://evil.example.com' }]) {
     assert.deepEqual(await w.send(set, sender), { ok: false, error: 'sender' }, sender.url);
   }
   assert.deepEqual(await w.send(set, editor()), { ok: true, origin: 'https://api.example.com/*' });
   const got = await w.send({ type: 'glaze:ai-config', op: 'get' }, editor());
-  assert.deepEqual(got.connections.openai, { base: 'https://api.example.com/v1', model: 'gpt-x', images: false, key: true, origin: 'https://api.example.com/*' });
+  assert.deepEqual(JSON.parse(JSON.stringify(got.connections.main)), { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: 'sk-p••••6789', origin: 'https://api.example.com/*' });
   const kept = JSON.stringify([w.store.local, w.store.sync, w.store.session, got]);
   assert.ok(!kept.includes(KEY), 'not in storage.local, sync or session, nor read back');
   // The page asks; the worker answers with what it may know.
   const { reply } = await status(w, lms());
-  assert.deepEqual(reply, { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'openai', caps: { text: true, images: false, json: true, tools: true, stream: true } });
+  assert.deepEqual(reply, { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'openai', caps: { text: true, json: true, stream: true } });
   assert.ok(!JSON.stringify(reply).includes('api.example.com'));
 });
 
@@ -58,9 +58,10 @@ test('a run from a page reaches only the connection\'s server, with the key, and
   const calls = [];
   const w = make(async (url, init) => {
     calls.push({ url, init });
+    if (url.endsWith('/models')) return new Response(JSON.stringify({ data: [{ id: 'gpt-x' }] }), { headers: { 'content-type': 'application/json' } });
     return new Response(JSON.stringify({ choices: [{ message: { content: '{"text":"ok"}' }, finish_reason: 'stop' }] }), { headers: { 'content-type': 'application/json' } });
   });
-  await w.send({ type: 'glaze:ai-config', op: 'set', provider: 'openai', cfg: { base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY } }, editor());
+  await w.send({ type: 'glaze:ai-config', op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY } }, editor());
   const { port, say } = w.connect('glaze:ai', lms());
   await w.settle();
   // A task the worker would import with the harness (lib/background.js aiFiles); here added in its realm.
@@ -70,16 +71,18 @@ test('a run from a page reaches only the connection\'s server, with the key, and
   say({ id: 2, op: 'run', feature: 'syllabus', task: 'example.echo', input: { text: 'hi' } });
   await w.settle();
   assert.deepEqual(JSON.parse(JSON.stringify(port.posted.at(-1).output)), { text: 'ok' });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'https://api.example.com/v1/chat/completions');
-  assert.equal(calls[0].init.headers.authorization, `Bearer ${KEY}`);
+  assert.deepEqual(calls.map((c) => c.url), ['https://api.example.com/v1/models', 'https://api.example.com/v1/chat/completions']);
+  assert.equal(calls[1].init.headers.authorization, `Bearer ${KEY}`);
   assert.ok(!JSON.stringify(port.posted).includes(KEY));
+  // The run's row: metadata only, in storage.local aiCalls.
+  assert.equal(w.store.local.aiCalls.length, 1);
+  assert.ok(!JSON.stringify(w.store.local.aiCalls).includes(KEY) && !JSON.stringify(w.store.local.aiCalls).includes('api.example.com'));
   // The host taken back: refused before anything is sent.
   w.grants.delete('https://api.example.com/*');
   say({ id: 3, op: 'run', feature: 'syllabus', task: 'example.echo', input: { text: 'hi' } });
   await w.settle();
   assert.deepEqual(JSON.parse(JSON.stringify(port.posted.at(-1))), { id: 3, type: 'error', error: 'permission' });
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
 
 test('AI is off by default: a fresh worker has no settings for it, and a page is told it may not ask', async () => {
@@ -93,13 +96,13 @@ test('a Back up file and a shared Look carry none of AI\'s settings, its connect
   const G = require('../defaults.js');
   const BK = require('../lib/backup.js');
   const SH = require('../lib/share.js');
-  const local = { ai: { on: true, use: 'openai', features: { syllabus: true } }, connections: { openai: { key: KEY } }, aiKey: KEY };
+  const local = { ai: { on: true, use: 'main', features: { syllabus: true } }, aiCalls: [{ id: 'r', task: 't', state: 'completed' }], connections: { main: { key: KEY } }, aiKey: KEY };
   const settings = G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ai: { on: true }, aiKey: KEY });
   assert.equal(settings.ai, undefined, 'not a synced setting');
   const entries = BK.pack({ settings, tasks: { tasks: {} }, local });
   const text = entries.map((e) => Buffer.from(e.data).toString()).join('\n');
   assert.ok(!text.includes(KEY));
-  assert.ok(!/"ai"\s*:/.test(text), 'storage.local ai is not in the file');
+  assert.ok(!/"ai"\s*:|aiCalls/.test(text), 'storage.local ai and the call record are not in the file');
   const code = await SH.encode({ ...settings, ai: { on: true }, aiKey: KEY }, {}, null);
   const look = JSON.stringify(await SH.decode(code));
   assert.match(look, /"colors"/, 'a Look, read back');
@@ -120,7 +123,7 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   const bg = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
   const named = new Set([...bg.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => `lib/${f}`)));
   const shipped = fs.readdirSync(path.join(__dirname, '..', 'lib/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js').map((f) => `lib/ai/${f}`);
-  assert.ok(shipped.length >= 10);
+  assert.ok(shipped.length >= 14);
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
   assert.ok(!named.has('lib/ai/providers/mock.js'), 'the mock is for tests and the eval');
 });

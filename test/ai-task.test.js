@@ -24,7 +24,9 @@ test('a task runs: input cleaned, request fenced with instructions only in syste
   const cfg = { replies: [answer([{ title: 'Midterm', date: '2026-10-12', quote: 'Midterm exam - Oct 12, 2026' }, { title: 'Quiz 9', date: '2026-11-01', quote: 'Quiz 9 on Nov 1' }])], seen: [] };
   const out = await T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg });
   assert.deepEqual(out.output, { items: [{ title: 'Midterm', date: '2026-10-12', quote: 'Midterm exam - Oct 12, 2026' }] }, 'the item quoting words not in the text is dropped');
-  assert.deepEqual(out.meta, { task: 'example.dates', version: 2, provider: 'mock', finish: 'stop', usage: { input: 0, output: 0 }, steps: 1, parts: 1 });
+  const { usage, ...meta } = out.meta;
+  assert.deepEqual(meta, { task: 'example.dates', version: 2, provider: 'mock', finish: 'stop', rounds: 1, parts: 1 });
+  assert.ok(usage.input > 0 && usage.output > 0, 'counted from the text when a provider doesn\'t say');
   const [req] = cfg.seen;
   assert.deepEqual(req.schema, dates.output);
   assert.equal(req.maxTokens, 400);
@@ -36,11 +38,12 @@ test('a task runs: input cleaned, request fenced with instructions only in syste
 test('each refusal has its code: input, an answer outside the schema, the task\'s check, caps, setup', async () => {
   const task = T.define(dates);
   await assert.rejects(T.run(task, { text: '   ' }, { provider: 'mock', cfg: { replies: [] } }), { code: 'input' });
-  await assert.rejects(T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [answer([{ title: 'x', date: 'Oct 12', quote: 'Oct 12' }])] } }), (e) => e.code === 'format' && /date: does not match/.test(e.detail));
+  await assert.rejects(T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [answer([{ title: 'x', date: 'Oct 12', quote: 'Oct 12' }])] } }), (e) => e.code === 'invalid-response' && /date: does not match/.test(e.detail) && /Reference/.test(e.message));
   await assert.rejects(T.run(T.define({ ...dates, check: () => null }), { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [answer([])] } }), { code: 'check' });
   await assert.rejects(T.run(T.define({ ...dates, caps: { images: true } }), { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [], caps: { images: false } } }), { code: 'caps' });
   await assert.rejects(T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg: null }), { code: 'setup' });
-  await assert.rejects(T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [{ error: 'rate' }] } }), { code: 'rate' });
+  await assert.rejects(T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [{ error: { status: 429 } }] } }), (e) => e.code === 'request-rejected' && e.status === 429);
+  await assert.rejects(T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [{ ...answer([]), finish: 'length' }] } }), { code: 'refusal' }, 'an answer cut off is never parsed');
   await assert.rejects(T.run(T.define({ ...dates, tools: ['nowhere'] }), { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [] } }), { code: 'tool' });
 });
 
@@ -70,10 +73,10 @@ test('a long input goes in parts within the provider\'s budget, and the parts\' 
     split: (input, { budget, text }) => text.chunks(input.text, { size: budget, overlap: 0 }).map((c) => ({ text: c.text })),
     merge: (outs) => ({ items: outs.flatMap((o) => o.items) }) });
   const progress = [];
-  const cfg = { caps: { context: 400 }, seen: [], replies: (req, n) => answer([{ title: `Lab ${n + 1}`, date: '2026-09-01', quote: req.messages[1].content[0].text.split('\n')[1] }]) };
-  const out = await T.run(task, { text: long }, { provider: 'mock', cfg, onProgress: (p) => progress.push(p) });
+  const cfg = { caps: { context: 400 }, seen: [], replies: (req, n) => answer([{ title: `Lab ${n + 1}`, date: '2026-09-01', quote: req.messages[1].content[0].text.split('\n')[2] }]) };
+  const out = await T.run(task, { text: long }, { provider: 'mock', cfg, emit: (e) => e.type === 'note' && progress.push(e) });
   assert.ok(cfg.seen.length > 1, `${cfg.seen.length} parts`);
-  for (const req of cfg.seen) assert.ok(X.tokens(req.messages[1].content[0].text) <= 400);
+  for (const req of cfg.seen) assert.ok(X.estimateTokens(req.messages[1].content[0].text) <= 400);
   assert.equal(out.meta.parts, cfg.seen.length);
   assert.equal(out.output.items.length, cfg.seen.length);
   assert.deepEqual(progress.map((p) => p.part), cfg.seen.map((_, i) => i + 1));
@@ -82,16 +85,18 @@ test('a long input goes in parts within the provider\'s budget, and the parts\' 
 test('a task that streams lets the deltas through; one that doesn\'t, doesn\'t', async () => {
   const words = [];
   const cfg = () => ({ replies: [{ deltas: ['{"items"', ':[]}'] }] });
-  await T.run(T.define(dates), { text: SYLLABUS }, { provider: 'mock', cfg: cfg(), onDelta: (d) => words.push(d) });
+  const emit = (e) => e.type === 'text_delta' && words.push(e.delta);
+  await T.run(T.define(dates), { text: SYLLABUS }, { provider: 'mock', cfg: cfg(), emit });
   assert.deepEqual(words, []);
-  await T.run(T.define({ ...dates, stream: true }), { text: SYLLABUS }, { provider: 'mock', cfg: cfg(), onDelta: (d) => words.push(d) });
+  await T.run(T.define({ ...dates, stream: true }), { text: SYLLABUS }, { provider: 'mock', cfg: cfg(), emit });
   assert.deepEqual(words, ['{"items"', ':[]}']);
 });
 
 test('the settings model is off by default, local, and lets a feature ask only when AI is on, a provider chosen and it is allowed', () => {
   assert.deepEqual(A.clean(undefined), { on: false, use: null, features: { syllabus: false } });
-  assert.deepEqual(A.clean({ on: 'yes', use: 'mock', features: { syllabus: 1, other: true } }), { on: false, use: null, features: { syllabus: false } }, 'the mock is not a provider Glaze ships');
-  const s = A.clean({ on: true, use: 'openai', features: { syllabus: true } });
+  assert.deepEqual(A.clean({ on: 'yes', use: 'Bad Name', features: { syllabus: 1, other: true } }), { on: false, use: null, features: { syllabus: false } });
+  const s = A.clean({ on: true, use: 'my-ollama', features: { syllabus: true } });
+  assert.equal(s.use, 'my-ollama');
   assert.equal(A.allowed(s, 'syllabus'), true);
   assert.equal(A.allowed({ ...s, on: false }, 'syllabus'), false);
   assert.equal(A.allowed({ ...s, use: null }, 'syllabus'), false);

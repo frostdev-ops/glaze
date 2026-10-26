@@ -42,11 +42,14 @@ test('strict() is true only for schemas OpenAI-style strict output can take as t
   assert.equal(S.strict({ type: 'array', items: { type: 'string' } }), false, 'the root is an object');
 });
 
-test('parse reads a JSON answer, plain or in one fence, and nothing else', () => {
+test('parse reads a JSON answer as Rimeward\'s askJson does: first { to last }, an object only', () => {
   assert.deepEqual(S.parse(' {"a":1} '), { a: 1 });
   assert.deepEqual(S.parse('```json\n{"a":1}\n```'), { a: 1 });
-  assert.equal(S.parse('Sure! {"a":1}'), undefined);
+  assert.deepEqual(S.parse('Sure! {"a":{"b":2}} Hope that helps.'), { a: { b: 2 } });
+  assert.equal(S.parse('[1, 2]'), undefined);
+  assert.equal(S.parse('no JSON'), undefined);
   assert.equal(S.parse(42), undefined);
+  assert.deepEqual(S.obj({ a: S.str('A.') }, ['a']), { type: 'object', properties: { a: { type: 'string', description: 'A.' } }, required: ['a'], additionalProperties: false });
 });
 
 test('a request is cleaned to its one form: string content to a text part, bytes to base64 checked against the mime', () => {
@@ -79,25 +82,26 @@ test('a request refuses anything outside its limits or its shape, rather than cu
     ['a timeout too short', { ...user('x'), timeoutMs: 10 }],
     ['a schema outside the subset', { ...user('x'), schema: { type: 'object', format: 'x' } }],
     ['a schema that is not an object at its root', { ...user('x'), schema: { type: 'array' } }],
-    ['a tool name a server refuses', { ...user('x'), tools: [{ name: 'courses.list', description: 'd', params: { type: 'object' } }] }],
-    ['two tools of one name', { ...user('x'), tools: [{ name: 'a', description: 'd', params: { type: 'object' } }, { name: 'a', description: 'd', params: { type: 'object' } }] }],
+    ['a tool name a server refuses', { ...user('x'), tools: [{ name: 'courses.list', description: 'd', parameters: { type: 'object' } }] }],
+    ['two tools of one name', { ...user('x'), tools: [{ name: 'a', description: 'd', parameters: { type: 'object' } }, { name: 'a', description: 'd', parameters: { type: 'object' } }] }],
   ]) assert.equal(R.clean(bad), null, why);
 });
 
 test('a conversation with tool calls keeps each answer after its call', () => {
   const r = R.clean({ messages: [{ role: 'user', content: 'x' }, { role: 'assistant', content: [], toolCalls: [{ id: 'c1', name: 'a', args: { q: 1 } }] }, { role: 'tool', toolCallId: 'c1', content: '{"data":1}' }],
-    tools: [{ name: 'a', description: 'd', params: { type: 'object', properties: { q: { type: 'number' } } } }] });
+    tools: [{ name: 'a', description: 'd', parameters: { type: 'object', properties: { q: { type: 'number' } } } }] });
   assert.deepEqual(r.messages[1].toolCalls, [{ id: 'c1', name: 'a', args: { q: 1 } }]);
   assert.equal(r.messages[2].toolCallId, 'c1');
   assert.equal(R.clean({ messages: [{ role: 'user', content: 'x' }, { role: 'user', content: [], toolCalls: [{ id: 'c1', name: 'a', args: {} }] }] }), null, 'only an assistant calls');
 });
 
 test('a result is one shape whatever the provider, and errors are codes', () => {
-  assert.deepEqual(R.result({ text: 'hi', provider: 'p', model: 'm', finish: 'stop', usage: { input: 3, output: 1 } }), { text: 'hi', provider: 'p', model: 'm', finish: 'stop', usage: { input: 3, output: 1 } });
+  assert.deepEqual(R.result({ text: 'hi', provider: 'p', model: 'm', finish: 'stop', usage: { input: 3, cached: 1, output: 1, junk: 5 } }), { text: 'hi', provider: 'p', model: 'm', finish: 'stop', usage: { input: 3, cached: 1, output: 1 } });
   assert.equal(R.result({ text: 'hi', provider: 'p', finish: 'done' }), null);
   assert.equal(R.result({ text: 5, provider: 'p', finish: 'stop' }), null);
-  const e = R.error('auth', '401');
-  assert.equal(e.code, 'auth');
+  const e = R.error('setup', 'why');
+  assert.equal(e.code, 'setup');
+  assert.equal(R.code({ category: 'provider-unavailable' }), 'provider-unavailable');
   assert.equal(R.error('whatever').code, 'failed');
   assert.equal(R.code(new DOMException('x', 'TimeoutError')), 'timeout');
   assert.equal(R.code(new DOMException('x', 'AbortError')), 'cancelled');

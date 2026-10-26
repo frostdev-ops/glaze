@@ -59,13 +59,11 @@ const SITES = {
   ],
   'lib/modbundle.js': [{ at: 'fetch(`${GALLERY}${g.id}', kind: 'required', host: 'https://frostdev.io', literal: "'https://frostdev.io/glaze/mods/api/mods/'" }],
   'lib/modbroker.js': [{ at: 'env.fetch(u.href', kind: 'asked', flow: 'a mod\'s network:<host>: its install or its switch asked for the host (lib/editor-mods.js)', guard: /if \(!await env\.reach\(u\.href\)\)/ }],
-  // AI: the connection's endpoint, whose host Settings asks for from a click; the broker refuses while the browser doesn't
-  // hold it, and hands the provider a fetch pinned to that host.
-  'lib/ai/broker.js': [{ at: '? env.fetch(url, init) :', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'lib/ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
-  'lib/ai/providers/openai.js': [
-    { at: 'r = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'lib/ai/broker.js', guard: /fetch: pinned\(env, use\)/ },
-    { at: 'r = await fetch(`${cfg.base}/models`', kind: 'asked', flow: 'Settings\' Test, through the broker\'s pinned fetch once the host is held', in: 'lib/ai/broker.js', guard: /if \(!await reaches\(env, \{ p, cfg \}\)\) return \{ ok: true, state: 'unavailable', reason: 'permission' \};\n\s*const st = await p\.status\(cfg, \{ fetch: pinned\(/ },
-  ],
+  // AI: the connection's endpoint, whose host Settings asks for from a click. The broker refuses while the browser doesn't
+  // hold it, and the provider and the catalog reach it only through the broker's fetch pinned to that host and generation.
+  'lib/ai/broker.js': [{ at: 'return env.fetch(url, init);', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'lib/ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
+  'lib/ai/providers/openai.js': [{ at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'lib/ai/broker.js', guard: /fetch: pinned\(env, use\)/ }],
+  'lib/ai/models.js': [{ at: 'const res = await fetch(shared ? OPENROUTER', kind: 'asked', flow: 'the connection\'s catalog, through the broker\'s pinned fetch (OpenRouter\'s public catalog is on the connection\'s own host)', in: 'lib/ai/broker.js', guard: /use\.p\.catalog\(use\.cfg, \{ fetch: pinned\(env, use\)/ }],
   'lib/blocklist.js': [{ at: 'env.fetch(ENDPOINT', kind: 'required', host: 'https://frostdev.io', literal: "'https://frostdev.io/glaze/mods/api/blocklist'" }],
   'lib/modchannel.js': [{ at: 'const client = (st, fetch) =>', kind: 'via', to: 'lib/background.js' }],
   'lib/sessions.js': [
