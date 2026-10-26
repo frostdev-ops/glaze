@@ -303,3 +303,9 @@ test('a restarted MV3 worker can import the drafts broker from its installation 
   assert.equal(response.ok, true, `first draft after worker restart: ${JSON.stringify(response)}`);
   assert.equal(D.unpack(store.local[UKEY])[0]?.text, essay);
 });
+
+test('restored draft HTML is parsed inertly with DOMParser, never assigned as markup (AMO lint)', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'lib/drafts.js'), 'utf8');
+  assert.doesNotMatch(src, /\.(?:inner|outer)HTML\s*=/);
+  assert.match(src, /parseFromString\(/);
+});
