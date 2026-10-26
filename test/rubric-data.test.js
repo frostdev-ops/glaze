@@ -385,10 +385,12 @@ test('Mode resolves only the rubric settings with default sanitation', () => {
   for (const s of [undefined, {}, { rubric: { show: 'junk', inline: 'false' } }]) assert.equal(lib().mode(s), 'auto-inline');
 });
 
-test('Routes accept only complete assignment and Ultra overview or attempt paths', () => {
+test('Routes accept only complete assignment and Ultra overview, attempt or discussion paths', () => {
   assert.deepEqual(lib().route('canvas', '/courses/101/assignments/7/'), { courseId: '101', assignmentId: '7', view: 'assignment' });
   assert.deepEqual(lib().route('ultra', '/ultra/courses/_101_1/assessment/_7_1/overview'), { courseId: '_101_1', contentId: '_7_1', view: 'overview' });
   for (const suffix of ['attempt', 'attempt/', 'attempt/create']) assert.equal(lib().route('ultra', `/ultra/courses/_101_1/assessment/_7_1/${suffix}`).view, 'attempt');
+  assert.deepEqual(lib().route('ultra', '/ultra/courses/_101_1/discussion/_7_1'), { courseId: '_101_1', contentId: '_7_1', view: 'discussion' });
+  for (const p of ['/ultra/courses/_101_1/discussion/_7_1/rubric-view', '/ultra/courses/_101_1/discussion/7', '/ultra/courses/_101_1/discussions']) assert.equal(lib().route('ultra', p), null, p);
   for (const [site, p] of [['canvas', '/courses/101/assignments/7/submissions/21'], ['canvas', '/courses/101/assignments/7?courseId=102'], ['canvas', '/courses/101/assignments/%37'], ['ultra', '/ultra/courses/_101_1/assessment/_7_1/overview/student-submission-view'], ['ultra', '/ultra/courses/_101_1/grades/student-submission-view'], ['ultra', '/ultra/courses/_101_1/assessment/_7_1/attempt/_3_1'], ['other', '/courses/101/assignments/7']]) assert.equal(lib().route(site, p), null);
 });
 

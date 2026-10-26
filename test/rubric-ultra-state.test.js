@@ -13,6 +13,7 @@ const fixture = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, `fixtu
 const real = () => fixture('ultra-rubric-graded'), numeric = () => fixture('ultra-rubric-numeric');
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ORIGIN = 'https://bb.school.test', PATH = '/ultra/courses/_101_1/assessment/_8120_1/overview';
+const PATHS = { overview: PATH, discussion: '/ultra/courses/_101_1/discussion/_8120_1', attempt: '/ultra/courses/_101_1/assessment/_8120_1/attempt/create' };
 
 class Box extends El {
   matches(sel) { return matches(this, sel); }
@@ -20,15 +21,32 @@ class Box extends El {
 }
 
 // The overview's Assessment Details section, 706 px wide, with the native rubric link; the school answers from data.
-const page = (data, width = 706) => {
+// kind 'discussion' and 'attempt' are the other pages with Ultra's rubric link, in the markup the real pages have: a
+// discussion's Details panel (inside Glaze's sidebar) and the attempt page View instructions opens (React, no stable class).
+const page = (data, width = 706, kind = 'overview') => {
   const asked = [], listeners = [], popups = [];
   const doc = { activeElement: null, hidden: false, fire() {} };
   const make = (tag, cls = '', ...kids) => { const e = new Box(tag, doc); e.className = cls; e.append(...kids); return e; };
   doc.root = make('html');
-  const link = make('a', 'graded-with-rubric-button', 'This item is graded with a rubric');
-  link.setAttribute('analytics-id', 'course.content.assessment.overview.gradedWithRubric');
-  const row = make('li', 'details-list-item js-rubric-overview', make('div', 'details-list-info', make('span', 'grid-item-label', 'Grading rubric'), link));
-  const box = make('div', 'overview-section assessment-details-section main-section-container', make('h2', 'section-label', 'Assessment Details'), make('ul', 'section-content', row));
+  let link, row, box;
+  if (kind === 'discussion') {
+    link = make('a', 'rubric-title', 'This item is graded with a rubric');
+    link.setAttribute('analytics-id', 'components.directives.discussionSettings.gradedWithRubric.li'); link.setAttribute('href', 'javascript:void(0);');
+    row = make('div', 'settings-link', link);
+    box = make('div', 'layer-details', make('bb-discussion-settings', '', make('div', 'full-panel-details', make('div', 'discussion-settings student-details',
+      make('div', 'full-panel-details-info', make('div', 'element-card discussion-info-list', make('div', 'element-details discussion-info-details', row)))))));
+    box.setAttribute('data-gz-sidebar-host', 'native');
+  } else if (kind === 'attempt') {
+    link = make('a', 'MuiTypography-root MuiLink-root MuiLink-underlineAlways', 'This item is graded with a rubric');
+    link.setAttribute('data-analytics-id', 'assignment.attempt.authoring.rubric.view.link'); link.setAttribute('href', ORIGIN + PATHS.attempt);
+    row = make('div', 'makeStylescontentRoot-0-2-206', make('span', '', 'Grading rubric'), link);
+    box = make('div', 'makeStylesdetails-0-2-92', make('div', 'makeStyleslistWrapper-0-2-204', make('div', 'makeStylesroot-0-2-205', row)));
+  } else {
+    link = make('a', 'graded-with-rubric-button', 'This item is graded with a rubric');
+    link.setAttribute('analytics-id', 'course.content.assessment.overview.gradedWithRubric');
+    row = make('li', 'details-list-item js-rubric-overview', make('div', 'details-list-info', make('span', 'grid-item-label', 'Grading rubric'), link));
+    box = make('div', 'overview-section assessment-details-section main-section-container', make('h2', 'section-label', 'Assessment Details'), make('ul', 'section-content', row));
+  }
   box.box = { left: 0, top: 0, width, height: 200 };
   doc.root.append(make('body', '', make('div', 'assessment-overview-grid', box)));
   const document = Object.assign(doc, {
@@ -49,7 +67,7 @@ const page = (data, width = 706) => {
   };
   const globals = {
     GZ_RUBRIC_LIB: undefined, GZ_LMSQ: undefined, GZ_POPUP: undefined, GZ_ULTRA: undefined,
-    document, location: { origin: ORIGIN, pathname: PATH, search: '' }, console, Promise, Intl, URL, URLSearchParams, AbortController,
+    document, location: { origin: ORIGIN, pathname: PATHS[kind], search: kind === 'overview' ? '' : '?courseId=_101_1' }, console, Promise, Intl, URL, URLSearchParams, AbortController,
     queueMicrotask, Response, Error, Object, Array, Map, Set, String, Number, JSON, Math, RegExp,
     getComputedStyle: () => ({ paddingLeft: '0px', paddingRight: '0px', fontSize: '16px' }),
     ResizeObserver: class { observe() {} disconnect() {} }, MutationObserver: class { observe() {} disconnect() {} },
@@ -73,8 +91,8 @@ const page = (data, width = 706) => {
   return { c, box, row, link, asked, listeners, popups };
 };
 
-const show = async (data, width) => {
-  const p = page(data, width);
+const show = async (data, width, kind) => {
+  const p = page(data, width, kind);
   await p.c.GZ_RUBRIC_UI.ready;
   p.c.GZ_RUBRIC_UI.sync();
   await settle();
@@ -208,4 +226,61 @@ test('the inline rubric keeps sideways scrolling to itself and lets the page scr
   assert.match(scroll, /overflow-x:auto/);
   assert.match(scroll, /overscroll-behavior-x:contain/);
   assert.doesNotMatch(scroll, /overscroll-behavior:|overscroll-behavior-y:contain|overflow:auto/, 'a wheel over the rubric reaches the page');
+});
+
+// Discussions and the attempt page (View instructions): Ultra's link there opens its own Rubric Details panel. Glaze's
+// pop-up takes its place, opening from the link; these pages have no room for the table, so it never goes inline.
+const press = (p) => {
+  const e = { defaultPrevented: false, button: 0, target: p.link, prevented: false, stopped: false };
+  e.preventDefault = () => { e.prevented = true; }; e.stopImmediatePropagation = () => { e.stopped = true; };
+  p.listeners.find((l) => l.type === 'click').f(e);
+  return e;
+};
+test('a graded discussion\'s rubric link opens Glaze\'s pop-up from the link, with the selections, never inline', async () => {
+  const p = await show(real(), 1400, 'discussion');
+  assert.equal(p.node, null, 'nothing goes into the Details panel, however wide');
+  assert.equal(p.nativeHidden, false, 'the link stays');
+  const e = press(p);
+  assert.ok(e.prevented && e.stopped, 'Ultra\'s own panel does not open');
+  assert.equal(p.popups.length, 1);
+  assert.equal(p.popups[0].source, p.link, 'the pop-up opens from the link');
+  assert.equal(marks(p.popups[0].body.shadowForTest).length, 2, 'with the graded selections');
+});
+
+test('View instructions on a submitted, ungraded attempt: the rubric link opens the pop-up with the definition only', async () => {
+  const d = real(); d.grade.submissionStatus = { status: 'SUBMITTED' }; d.attempt.status = 'NEEDS_GRADING'; d.grade.lastAttempt.status = 'NEEDS_GRADING';
+  const p = await show(d, 1400, 'attempt');
+  assert.equal(p.node, null);
+  const e = press(p);
+  assert.ok(e.prevented && e.stopped);
+  assert.equal(p.popups.length, 1);
+  assert.equal(p.popups[0].source, p.link);
+  const shadow = p.popups[0].body.shadowForTest;
+  assert.deepEqual(marks(shadow), [], 'no selections before the grade is posted');
+  assert.doesNotMatch(shadow.textContent, /Synthetic note\./);
+});
+
+test('until Glaze has the rubric, the discussion and attempt links still open Ultra\'s own', async () => {
+  for (const kind of ['discussion', 'attempt']) {
+    const d = real(); d.grade = null;
+    const p = await show(d, 1400, kind);
+    const e = press(p);
+    assert.ok(!e.prevented && !e.stopped, kind);
+    assert.equal(p.popups.length, 0, kind);
+  }
+});
+
+test('routes: features/rubric.js loads on Ultra\'s overview, attempt and discussion pages, and Canvas\'s assignment page', async () => {
+  const where = async (site, pathname) => {
+    const loaded = [];
+    const ctx = vm.createContext({ GZ_CTX: { site, need: async (f) => { loaded.push(f); ctx.GZ_RUBRIC_UI = { sync() {} }; ctx.GZ_ANNOUNCE = { sync() {} }; } }, location: { pathname, search: '' }, Set, Promise });
+    ctx.globalThis = ctx;
+    vm.runInContext(fs.readFileSync(path.join(root, 'features/routes.js'), 'utf8'), ctx);
+    ctx.GZ_ROUTES.sync(); await settle();
+    return loaded.includes('features/rubric.js');
+  };
+  for (const p of [PATHS.overview, PATHS.discussion, PATHS.attempt, '/ultra/courses/_101_1/assessment/_8120_1/attempt']) assert.equal(await where('ultra', p), true, p);
+  assert.equal(await where('canvas', '/courses/101/assignments/7'), true);
+  for (const p of ['/ultra/courses/_101_1/discussion/_8120_1/rubric-view', '/ultra/courses/_101_1/assessment/_8120_1/attempt/create/rubric-view',
+    '/ultra/courses/_101_1/discussions', '/ultra/courses/_101_1/outline', '/ultra/courses/_101_1/assessment/_8120_1/attempt/_3_1']) assert.equal(await where('ultra', p), false, p);
 });
