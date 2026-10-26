@@ -225,7 +225,7 @@ test('ocrText: a dense 4000 pixel page has bounded layout cost', (t) => {
   t.diagnostic(`4000x4000, 40000 words: ${elapsed.toFixed(1)} ms wall, ${((used.user + used.system) / 1000).toFixed(1)} ms CPU`);
   assert.equal(r.text.split('\n').length, 400);
   assert.equal(r.text.split(/\s+/).length, 40000);
-  assert.ok(used.user + used.system < 2_000_000, 'layout alone must use less than two seconds of CPU');
+  assert.ok(used.user + used.system < 1_000_000, 'layout alone must use less than one second of CPU');
 });
 
 test('ocrText: a table row whose cells are several lines, or centred in it, is one line; level rows and a paragraph stay lines', () => {
