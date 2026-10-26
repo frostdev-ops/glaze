@@ -197,7 +197,7 @@ test('an already cancelled adapter call sends no text and timeout cancels a pend
   await assert.rejects(A.run(ask(), { model: 'on-device' }, { signal: stopped.signal }));
   assert.equal(sent.length, 0);
   native = async (m) => m.type === 'ai.cancel' ? { ok: true, cancelled: false } : new Promise(() => {});
-  await assert.rejects(P.run('apple', ask({ timeoutMs: 10 }), { model: 'on-device' }), { category: 'timeout' });
+  await assert.rejects(P.run('apple', ask({ timeoutMs: require('../lib/ai/request.js').LIMIT.timeout[0] }), { model: 'on-device' }), { category: 'timeout' });
   assert.deepEqual(sent.map((s) => s.m.type), ['ai.run', 'ai.cancel']);
   assert.equal(sent[0].m.id, sent[1].m.id);
 });
