@@ -1343,3 +1343,12 @@ test('review: weekly exceptions and release windows use their course year across
   assert.deepEqual(S.extract(weekly, opts).dates.map((d) => d.day), ['2026-12-18', '2027-01-08', '2027-01-15']);
   assert.deepEqual(S.extract('Classes run December 28, 2026 – January 15, 2027.\nQuiz released December 30; due January 4', opts).dates.map((d) => `${d.day} ${d.kind}`), ['2027-01-04 exam']);
 });
+
+test('review: audition topics and preparation dates are not assessments', () => {
+  for (const text of [
+    'Date\tTopic\nSeptember 7\tAudition techniques',
+    'Audition preparation: September 7',
+    'Auditions\nSeptember 7: techniques and preparation',
+  ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
+  assert.deepEqual(S.extract('Seating auditions\nSeptember 7: sign up for a slot.', reviewOpts).dates.map((d) => `${d.day} ${d.kind}`), ['2026-09-07 exam']);
+});
