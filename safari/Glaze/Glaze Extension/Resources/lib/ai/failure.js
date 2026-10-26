@@ -66,6 +66,18 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
     const t = setTimeout(() => c.abort(new DOMException('Model response timed out.', 'TimeoutError')), ms);
     return { signal: c.signal, done: () => clearTimeout(t) };
   };
+  // Race even work that ignores cancellation. A function is not invoked if already aborted; late rejection is handled.
+  const wait = (work, signal) => new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      if (typeof work !== 'function') Promise.resolve(work).catch(() => {});
+      reject(signal.reason); return;
+    }
+    const stop = () => { signal?.removeEventListener('abort', stop); reject(signal.reason); };
+    signal?.addEventListener('abort', stop, { once: true });
+    let pending;
+    try { pending = typeof work === 'function' ? work() : work; } catch (error) { pending = Promise.reject(error); }
+    Promise.resolve(pending).then(resolve, reject).finally(() => signal?.removeEventListener('abort', stop));
+  });
   // The bounded call record: area { get, set } (storage.local in the worker), key, record { id, … }: replaces the row with
   // its id, keeps the last LIMIT.calls. Never prompts, answers, addresses or keys. A failed write never blocks a call.
   const KEYS = ['id', 'task', 'feature', 'provider', 'state', 'category', 'status', 'startedAt', 'ms', 'usage', 'steps', 'parts'];
@@ -76,6 +88,6 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
       await area.set({ [key]: [...(Array.isArray(rows) ? rows.filter((r) => r?.id !== row.id).slice(-(LIMIT.calls - 1)) : []), clean] });
     } catch { /* Diagnostic metadata must never block a model call. */ }
   };
-  return { CATEGORIES, LIMIT, modelFailure, transient, bounded, anySignal, deadline, record, reference };
+  return { CATEGORIES, LIMIT, modelFailure, transient, bounded, anySignal, deadline, wait, record, reference };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_FAILURE; else GZ_AI_FAILURE;

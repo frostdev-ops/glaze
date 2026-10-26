@@ -31,7 +31,9 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
   const code = (e) => (CODES.includes(e?.code) ? e.code : CATEGORIES.includes(e?.category) ? e.category : e?.name === 'TimeoutError' ? 'timeout' : e?.name === 'AbortError' ? 'cancelled' : 'failed');
 
   // ---- bytes ----------------------------------------------------------------------------------------------------------
-  const B64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+  // A flat alphabet scan avoids regex-stack growth on multi-megabyte pictures. The length check below supplies the
+  // four-character grouping; the final assertion rejects even a trailing newline (unlike $).
+  const B64 = /^[A-Za-z0-9+/]*={0,2}(?![\s\S])/;
   const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); };
   const head = (data, n = 16) => Uint8Array.from(atob(data.slice(0, Math.ceil(n / 3) * 4)), (c) => c.charCodeAt(0));
   // The picture's type from its first bytes, so a part's mime is what it holds (WebP: RIFF, then WEBP at 8).
@@ -53,13 +55,13 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
     let data = v.data;
     if (data instanceof ArrayBuffer) data = new Uint8Array(data);
     if (data instanceof Uint8Array) data = data.length && data.length <= LIMIT.image * 0.75 ? b64(data) : null;
-    if (typeof data !== 'string' || !data.length || data.length > LIMIT.image || !B64.test(data)) return null;
+    if (typeof data !== 'string' || !data.length || data.length > LIMIT.image || data.length % 4 !== 0 || !B64.test(data)) return null;
     return sniff(data) === v.mime ? { type: 'image', mime: v.mime, data } : null;
   };
   // A tool call the model made: { id, name, args }. args is what the model sent, parsed when it was JSON (the loop checks it
   // against the tool's own schema, and tells the model when it doesn't fit).
   const call = (v) => {
-    if (!isObj(v) || !ID.test(v.id) || typeof v.name !== 'string' || v.name.length > 64) return null;
+    if (!isObj(v) || typeof v.id !== 'string' || !ID.test(v.id) || typeof v.name !== 'string' || v.name.length > 64) return null;
     let size;
     try { size = JSON.stringify(v.args ?? null).length; } catch { return null; }
     return size <= LIMIT.args ? { id: v.id, name: v.name, args: v.args ?? null } : null;

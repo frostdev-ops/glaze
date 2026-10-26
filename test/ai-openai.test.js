@@ -158,14 +158,14 @@ test('each failure is a category with a reference, and nothing a page or the err
   // A key with no recognisable shape is taken out by its exact text.
   const plainKey = 'localserver-SECRET-9876';
   const odd = await P.run('openai', ask(), cfg({ key: plainKey, base: 'https://odd.example.com/v1' }), { fetch: server(json({ error: { message: `bad key ${plainKey}` } }, 401)).fetch }).catch((x) => x);
-  assert.ok(odd.cause?.message.includes('[key]') && !odd.cause.message.includes(plainKey), odd.cause?.message);
+  assert.equal(odd.cause?.message, 'Model request failed.');
   const net = await P.run('openai', ask(), cfg(), { fetch: async () => { throw new TypeError(`fetch failed for ${KEY}`); } }).catch((x) => x);
   assert.equal(net.code, 'connection-lost');
   assert.ok(!JSON.stringify(net).includes(KEY) && !net.message.includes(KEY));
   // A text-only model asked about a picture: the one failure the student fixes by picking a model.
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64');
   await assert.rejects(P.run('openai', { messages: [{ role: 'user', content: [{ type: 'image', mime: 'image/png', data: png }] }] }, cfg(), { fetch: server(json({ error: { message: 'This model does not support image input' } }, 400)).fetch }),
-    (e) => e.code === 'caps' && /vision model/.test(e.detail));
+    (e) => e.code === 'caps' && e.detail === 'Model request failed.');
 });
 
 test('a cancel and a timeout end the request with their categories; a known lack refuses before anything is sent', async () => {
@@ -195,4 +195,77 @@ test('status asks the catalog: ready when it lists the model, why not otherwise'
   assert.deepEqual(await O.status(O.config(cfg({ base: 'https://other.example.com/v1' })), { fetch: server(list(['other'])).fetch }), { state: 'unavailable', reason: 'model', source: 'live' });
   assert.deepEqual(await O.status(O.config(cfg({ base: 'https://auth.example.com/v1' })), { fetch: server(json({}, 401)).fetch }), { state: 'unavailable', reason: 'request-rejected' });
   assert.deepEqual(await O.status(O.config(cfg({ base: 'https://down.example.com/v1' })), { fetch: async () => { throw new TypeError('down'); } }), { state: 'unavailable', reason: 'connection-lost' });
+});
+
+for (const field of ['text', 'model', 'tool argument', 'tool object key', 'parsed JSON']) {
+  test(`credential echoes in ${field} are refused before leaving the provider`, async () => {
+    let response;
+    let request = ask();
+    if (field === 'text') response = done(KEY);
+    if (field === 'model') response = json({ model: KEY, choices: [{ message: { content: 'safe' }, finish_reason: 'stop' }] });
+    if (field.startsWith('tool')) response = done('', { message: { tool_calls: [{ id: 'c1', type: 'function', function: {
+      name: 'look_up', arguments: JSON.stringify(field === 'tool argument' ? { query: KEY } : { [KEY]: 'value' }),
+    } }] }, finish: 'tool_calls' });
+    if (field === 'parsed JSON') {
+      const escaped = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
+      response = done(`{"answer":"${escaped}"}`);
+      request = ask({ schema: SCHEMA });
+    }
+    const s = server(response);
+    await assert.rejects(P.run('openai', request, cfg(), { fetch: s.fetch }), { code: 'invalid-response' });
+    assert.equal(s.calls.length, 1, 'a credential echo never replays inference');
+  });
+}
+
+test('a key split across streamed deltas is stopped before any credential bytes are emitted', async () => {
+  const deltas = [];
+  const s = server(sse([chunk({ content: 'Safe prefix. ' + KEY.slice(0, 9) }), chunk({ content: KEY.slice(9) }), chunk({}, 'stop')]));
+  await assert.rejects(P.run('openai', ask(), cfg(), { fetch: s.fetch, onDelta: (d) => deltas.push(d) }), { code: 'invalid-response' });
+  assert.equal(deltas.join(''), 'Safe prefix. ');
+  assert.equal(s.calls.length, 1);
+});
+
+test('credential echoes never survive in streamed errors, parser errors, or nested network causes', async () => {
+  const inspect = require('node:util').inspect;
+  for (const fixture of ['stream', 'json', 'network']) {
+    const fetch = fixture === 'network' ? async () => { throw new Error(`transport ${KEY}`, { cause: new Error(KEY) }); }
+      : server(fixture === 'stream' ? sse([{ error: { message: KEY, code: 500 } }]) : new Response(`not JSON ${KEY}`)).fetch;
+    const e = await P.run('openai', ask(), cfg(), { fetch, onDelta: () => {} }).catch((x) => x);
+    assert.ok(e instanceof Error, fixture);
+    assert.ok(!inspect(e, { depth: 20, showHidden: true }).includes(KEY), fixture);
+  }
+});
+
+test('streamed schema JSON cannot disclose a key through Unicode escapes before final validation', async () => {
+  const escaped = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
+  const content = `{"answer":"${escaped}"}`, deltas = [];
+  const events = [];
+  for (let i = 0; i < content.length; i += 5) events.push(chunk({ content: content.slice(i, i + 5) }));
+  events.push(chunk({}, 'stop'));
+  await assert.rejects(P.run('openai', ask({ schema: SCHEMA }), cfg(), {
+    fetch: server(sse(events)).fetch, onDelta: (d) => deltas.push(d),
+  }), { code: 'invalid-response' });
+  assert.ok(!deltas.join('').includes(escaped), 'the content script can decode the complete key before the final refusal');
+});
+
+test('encoded credential echoes do not survive in provider diagnostics', async () => {
+  const escaped = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
+  for (const fixture of ['stream', 'network']) {
+    const fetch = fixture === 'stream' ? server(sse([{ error: { message: escaped, code: 500 } }])).fetch
+      : async () => { throw new Error(`transport ${escaped}`); };
+    const error = await P.run('openai', ask(), cfg(), { fetch, onDelta: () => {} }).catch((e) => e);
+    assert.ok(error instanceof Error);
+    for (let e = error; e; e = e.cause) assert.ok(!String(e.message).includes(escaped), fixture);
+  }
+});
+
+test('a schema tool-call round cannot emit a Unicode-escaped credential in its text', async () => {
+  const escaped = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
+  const deltas = [];
+  const events = [chunk({ content: `Provider text: ${escaped}` }), chunk({ tool_calls: [{ index: 0, id: 'c1', type: 'function',
+    function: { name: 'look_up', arguments: '{}' } }] }, 'tool_calls')];
+  await assert.rejects(P.run('openai', ask({ schema: SCHEMA }), cfg(), {
+    fetch: server(sse(events)).fetch, onDelta: (d) => deltas.push(d),
+  }), { code: 'invalid-response' });
+  assert.equal(deltas.length, 0);
 });
