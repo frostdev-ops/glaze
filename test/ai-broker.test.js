@@ -434,3 +434,50 @@ test('Settings lists only shipped providers registered in this browser', async (
     assert.deepEqual((await B.config({ op: 'get' }, env())).providers, ['openai']);
   } finally { settings.PROVIDERS.pop(); }
 });
+
+test('syllabus admission requires the disclosed destination before even fetching the catalog', async () => {
+  const task = require('../lib/ai/tasks/syllabus-read.js').task;
+  for (const to of [undefined, '', 'previous.example.test']) {
+    const e = env({ task: async () => task }), p = open(e);
+    p.say(run({ text: 'Instructor: Dr. Ada Example' }, { task: task.id, ...(to !== undefined && { to }) }));
+    await flush();
+    assert.equal(e.calls.length, 0, `undisclosed host: ${String(to)}`);
+    assert.equal(p.posted.at(-1)?.error, 'changed');
+    p.close();
+  }
+});
+
+test('a connection changed after syllabus status cannot send to a host the dialog did not disclose', async () => {
+  const task = require('../lib/ai/tasks/syllabus-read.js').task;
+  const e = env({ task: async () => task, reach: async () => true }), p = open(e);
+  p.say({ id: 10, op: 'status', feature: 'syllabus' });
+  await flush();
+  const shown = p.posted.at(-1).to;
+  assert.equal(shown, 'api.example.com');
+  e.vaultData.set('connections', { main: { ...CONN, base: 'https://changed.example.test/v1', generation: 'gen-2' } });
+  p.say(run({ text: 'Instructor: Dr. Ada Example' }, { task: task.id, to: shown }));
+  await flush();
+  assert.equal(e.calls.length, 0);
+  assert.equal(p.posted.at(-1)?.error, 'changed');
+  p.close();
+});
+
+test('syllabus admission accepts the exact disclosed host and port without revealing a path or key', async () => {
+  const task = require('../lib/ai/tasks/syllabus-read.js').task;
+  const none = { text: null, quote: null };
+  const output = { prof: { name: none, email: none, office: none, note: none }, hours: [], meetings: [], scale: [], weights: [], dates: [], week1: none };
+  const calls = [];
+  const e = env({ task: async () => task, reach: async () => true, fetch: async (url) => { calls.push(url); return url.endsWith('/models') ? models() : answer(output); } });
+  e.vaultData.set('connections', { main: { ...CONN, base: 'https://api.example.com:8443/private/v1' } });
+  const p = open(e);
+  p.say({ id: 10, op: 'status', feature: 'syllabus' });
+  await flush();
+  const shown = p.posted.at(-1).to;
+  assert.equal(shown, 'api.example.com:8443');
+  assert.ok(!JSON.stringify(p.posted).includes('/private') && !JSON.stringify(p.posted).includes(KEY));
+  p.say(run({ text: 'Instructor: Dr. Ada Example' }, { task: task.id, to: shown }));
+  await flush();
+  assert.equal(p.posted.at(-1)?.type, 'end');
+  assert.equal(calls.length, 2);
+  p.close();
+});
