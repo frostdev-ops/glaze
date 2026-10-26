@@ -8,6 +8,8 @@
 //   check(output, input) → the output cleaned (grounded, in range), or null (refused),
 //   tools?: [names] (lib/ai/tools.js; run through lib/ai/loop.js), limits?: { steps (rounds), ms, tokens, maxTokens },
 //   stream?: true (the page may see the model's words as they come; off for JSON answers, which are only read checked),
+//   disclose?: true (the feature shows the student where the text goes first: a run must carry status's `to`, and a
+//     connection over the network runs only to that host),
 //   split?(input, { budget, text }) → [input] and merge([output], input) → output: a long input in parts, each its own
 //     request, put back together before check. budget: tokens a part's data may take on this provider.
 // A run emits lib/ai/loop.js's events (thinking, text_delta, says, step_start, step, pending, usage, reply) and a note
@@ -24,7 +26,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
   // parts: most requests one run makes; context: tokens assumed when a provider doesn't say; ms: a whole run's default.
   const LIMIT = { parts: 20, context: 16000, ms: 180000 };
   const fn = (v) => typeof v === 'function';
-  const KEYS = ['id', 'version', 'caps', 'input', 'build', 'output', 'check', 'tools', 'limits', 'stream', 'split', 'merge'];
+  const KEYS = ['id', 'version', 'caps', 'input', 'build', 'output', 'check', 'tools', 'limits', 'stream', 'disclose', 'split', 'merge'];
   // → the task, frozen; throws a TypeError that says what is wrong with it.
   const define = (def) => {
     const d = R().isObj(def) ? def : {};
@@ -36,9 +38,10 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       || ((d.tools !== undefined && (!Array.isArray(d.tools) || !d.tools.length || !d.tools.every((n) => R().NAME.test(n)))) && 'tools')
       || ((lim !== undefined && (!R().isObj(lim) || Object.entries(lim).some(([k, v]) => !['steps', 'ms', 'tokens', 'maxTokens'].includes(k) || !Number.isSafeInteger(v) || v <= 0))) && 'limits')
       || ((d.stream !== undefined && typeof d.stream !== 'boolean') && 'stream')
+      || ((d.disclose !== undefined && typeof d.disclose !== 'boolean') && 'disclose')
       || ((fn(d.split) !== fn(d.merge) || (d.split !== undefined && !fn(d.split))) && 'split and merge');
     if (why) throw new TypeError(`task ${typeof d.id === 'string' ? d.id.slice(0, 64) : '?'}: ${why}`);
-    const t = Object.freeze({ ...d, caps: Object.freeze({ ...d.caps }), limits: Object.freeze({ ...d.limits }), stream: d.stream === true });
+    const t = Object.freeze({ ...d, caps: Object.freeze({ ...d.caps }), limits: Object.freeze({ ...d.limits }), stream: d.stream === true, disclose: d.disclose === true });
     defined.add(t);
     return t;
   };
