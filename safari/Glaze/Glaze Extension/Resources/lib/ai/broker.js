@@ -190,8 +190,13 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     if (!on || s.features[m.feature] !== true) return { on, allowed: false };
     const use = await using(env, s.use);
     if (!use) return { on, allowed: true, ready: false, why: 'setup' };
-    const ok = await reaches(env, use);
-    return { on, allowed: true, ready: ok, ...(!ok && { why: 'permission' }), provider: use.p.id, caps: P().caps(use.p, use.cfg) };
+    let ready = await reaches(env, use), why = ready ? undefined : 'permission';
+    if (ready && typeof use.p.prepare === 'function') {
+      const st = await use.p.status(use.cfg, {}).catch(() => ({ state: 'unavailable' }));
+      ready = st.state === 'ready';
+      if (!ready) why = ['download', 'downloading'].includes(st.state) ? st.state : 'unavailable';
+    }
+    return { on, allowed: true, ready, ...(why && { why }), provider: use.p.id, caps: P().caps(use.p, use.cfg) };
   };
 
   // ---- Settings' connections (lib/background.js 'glaze:ai-config', from options.html's top frame only) ------------------
