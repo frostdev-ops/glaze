@@ -306,3 +306,61 @@ test('swapped category weights disagree even when the percentages are the same s
   add.weights.value = [...value].reverse();
   assert.equal(A.merge(heur, add).weights.conf, 'sure', 'row ordering alone is not a disagreement');
 });
+
+test('copied values belong to their cited quote, not another part of the syllabus', () => {
+  const text = 'Office: Room 2140\nReading: Chapter 12\n60% -> Exams\n40% -> Labs';
+  const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Room 2140', quote: 'Reading: Chapter 12' } },
+    weights: [{ name: 'Exams', weight: '40%', quote: '40% -> Labs' }, { name: 'Labs', weight: '60%', quote: '60% -> Exams' }] }, { text });
+  assert.deepEqual(out.prof.office, none);
+  assert.deepEqual(out.weights, []);
+  const weightsText = '60% -> Exams\n40% -> Labs';
+  const heur = L.extract(weightsText, OPTS);
+  const weightsOut = task.check({ ...blank(), weights: [{ name: 'Exams', weight: '40%', quote: '40% -> Labs' }, { name: 'Labs', weight: '60%', quote: '60% -> Exams' }] }, { text: weightsText });
+  assert.deepEqual(A.merge(heur, A.interpret(weightsOut, OPTS, heur, weightsText)).weights, heur.weights);
+});
+
+test('an office quote must identify an office, not just contain a number', () => {
+  const text = 'Reading: Chapter 12';
+  const heur = L.extract(text, OPTS);
+  const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Chapter 12', quote: text } } }, { text });
+  assert.deepEqual(A.merge(heur, A.interpret(out, OPTS, heur, text)).prof.office, heur.prof.office);
+});
+
+test('room numbers cannot supply invented percentage weights', () => {
+  const text = 'Exams are in room 160\nLabs are in room 240';
+  const heur = L.extract(text, OPTS);
+  const out = task.check({ ...blank(), weights: [{ name: 'Exams', weight: '60%', quote: 'Exams are in room 160' }, { name: 'Labs', weight: '40%', quote: 'Labs are in room 240' }] }, { text });
+  assert.deepEqual(A.merge(heur, A.interpret(out, OPTS, heur, text)).weights, heur.weights);
+});
+
+test('a scale threshold must be a whole number in its quote', () => {
+  const text = 'A requires 93-100 percent\nB requires 83-92 percent\nC requires 73-82 percent';
+  const heur = L.extract(text, OPTS);
+  const scale = [['A', '93-100'], ['B', '83-92'], ['C', '3-82']].map(([letter, range], i) => ({ letter, range, quote: text.split('\n')[i] }));
+  const out = task.check({ ...blank(), scale }, { text });
+  assert.deepEqual(A.merge(heur, A.interpret(out, OPTS, heur, text)).scale, heur.scale, '3 is not the quoted threshold 73');
+  scale[2].range = '73-82';
+  const good = task.check({ ...blank(), scale }, { text });
+  assert.deepEqual(A.interpret(good, OPTS, heur, text).scale.value, [['A', 93], ['B', 83], ['C', 73]]);
+});
+
+test('the output schema refuses oversized strings and lists before task checking', async () => {
+  const oversized = [
+    { dates: Array.from({ length: LIMIT.dates + 1 }, () => ({ title: 'Exam', kind: 'exam', when: 'Oct 1', quote: 'Exam Oct 1' })) },
+    { hours: Array.from({ length: LIMIT.hours + 1 }, () => ({ label: null, when: 'Mon 1-2 PM', where: null, quote: 'Mon 1-2 PM' })) },
+    { dates: [{ title: 'x'.repeat(LIMIT.value + 1), kind: 'exam', when: 'Oct 1', quote: 'Exam Oct 1' }] },
+    { week1: { text: 'Oct 1', quote: 'x'.repeat(LIMIT.quote + 1) } },
+  ];
+  for (const over of oversized) await assert.rejects(T.run(task, { text: TEXT }, { provider: 'mock', cfg: { replies: [answer(over)] } }), { code: 'invalid-response' });
+});
+
+test('context budgeting includes instructions, schema and the reserved answer before sending', async () => {
+  const text = Array.from({ length: 40 }, () => 'Syllabus reading and practice problems for this course.').join('\n');
+  const tooSmall = { caps: { context: 2000 }, seen: [], replies: () => answer({}) };
+  await assert.rejects(T.run(task, { text }, { provider: 'mock', cfg: tooSmall }), { code: 'size' });
+  assert.equal(tooSmall.seen.length, 0, 'even an empty input part cannot fit the overhead and answer');
+  const cfg = { caps: { context: 3000 }, seen: [], replies: () => answer({}) };
+  await T.run(task, { text }, { provider: 'mock', cfg });
+  const X = require('../lib/ai/text.js');
+  for (const req of cfg.seen) assert.ok(X.estimateTokens({ messages: req.messages, schema: req.schema }) + req.maxTokens <= 3000, 'every request fits the existing token estimate plus its reserved answer');
+});
