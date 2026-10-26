@@ -47,8 +47,8 @@ It never moves a published tag or replaces a published asset with different byte
    - Chrome Web Store: `sh scripts/publish-chrome.sh release/<v>/chrome-web-store/glaze-v<v>.zip`, or upload it in the dashboard.
      Given no zip, the script packages a fresh checkout of the committed `HEAD` and refuses a dirty working tree.
    - Firefox Add-ons: upload `release/<v>/firefox/glaze-v<v>-firefox.zip` at addons.mozilla.org. When it asks for source
-     code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js has fixed local imports and a compatibility
-     shim, three.js is a custom build, and lottie-web's player is the official light canvas build with one comment line on top. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh` and `scripts/vendor-lottie.sh`.
+     code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js is the readable legacy build with a compatibility
+     shim and core-js's old-IE fallback cut, three.js is a custom build, and lottie-web's player is the official light canvas build with one comment line on top. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh` and `scripts/vendor-lottie.sh`.
      `vendor-three.sh` installs exact versions with install scripts off, checks every installed package against a pinned
      SHA-512 integrity before running anything, and compares the result with the recorded hash of `lib/three.min.js`.
    - App Store: `sh scripts/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh scripts/appstore-ios.sh`.

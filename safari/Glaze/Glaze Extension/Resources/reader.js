@@ -59,8 +59,8 @@
 
   const pdf = async (file, langs, say) => {
     if (file.size > R.pdf) fail('size');
-    const pdfjs = await import(url('lib/pdfjs/pdf.min.mjs'));
-    pdfjs.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.min.mjs');
+    const pdfjs = await import(url('lib/pdfjs/pdf.mjs'));
+    pdfjs.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.mjs');
     // maxImageSize: a picture inside the PDF over the same pixel limit as a photo is left undecoded (its page then reads
     // as blank, which the review says), whatever the size the page is drawn at.
     const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), wasmUrl: url('lib/pdfjs/'), maxImageSize: R.pixels, enableXfa: false, disableFontFace: true, useSystemFonts: false, verbosity: 0 });

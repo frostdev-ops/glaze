@@ -209,7 +209,7 @@ test('import: text, web pages and Word stay in the page; other files are refused
 // createImageBitmap records each decode (and fails); the worker redeems a pass once, as lib/background.js does.
 const stand = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-reader-test-'));
 fs.mkdirSync(path.join(stand, 'lib/pdfjs'), { recursive: true });
-fs.writeFileSync(path.join(stand, 'lib/pdfjs/pdf.min.mjs'), `export const GlobalWorkerOptions = {};
+fs.writeFileSync(path.join(stand, 'lib/pdfjs/pdf.mjs'), `export const GlobalWorkerOptions = {};
 export const getDocument = (opts) => { (globalThis.__glazeReaderPdf ||= []).push(opts); return { promise: Promise.reject(Object.assign(new Error('stand-in'), { name: 'InvalidPDFException' })), destroy: async () => {} }; };\n`);
 test.after(() => fs.rmSync(stand, { recursive: true, force: true }));
 const reader = () => {
@@ -319,8 +319,8 @@ const pdf = async (bytes) => {
   if (!pdfjs) {
     const [log, warn] = [console.log, console.warn];
     console.log = console.warn = () => {}; // pdf.js warns at import that node has no canvas; text needs none
-    try { pdfjs = await import(pathToFileURL(path.join(root, 'lib/pdfjs/pdf.min.mjs')).href); } finally { [console.log, console.warn] = [log, warn]; }
-    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(root, 'lib/pdfjs/pdf.worker.min.mjs')).href;
+    try { pdfjs = await import(pathToFileURL(path.join(root, 'lib/pdfjs/pdf.mjs')).href); } finally { [console.log, console.warn] = [log, warn]; }
+    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(root, 'lib/pdfjs/pdf.worker.mjs')).href;
   }
   return pdfjs.getDocument({ data: new Uint8Array(bytes), verbosity: 0 });
 };
