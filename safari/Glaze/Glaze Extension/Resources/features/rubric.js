@@ -181,10 +181,9 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
       catch (e) { if (!live()) throw e; return null; }
       if (attempt.id !== attemptId || attempt.courseId !== route.courseId || attempt.userId !== uid) return null;
     }
-    // Graded once Ultra says so, or the student's completed attempt has a posted grade; the evaluation never decides it, and
-    // an attempt still being graded shows none.
+    // The student's grade row releases selections; column settings and display grades cannot release a new attempt.
     const evaluation = attempt?.status === 'COMPLETED' ? attempt.rubricEvaluation : null;
-    const graded = row.status === 'GRADED' || row.submissionStatus?.status === 'GRADED' || attempt?.status === 'COMPLETED' && (!!row.displayGrade || column.gradesReleased === true);
+    const graded = row.status === 'GRADED' || row.submissionStatus?.status === 'GRADED';
     const unopened = !attemptId && !row.lastAttempt && !row.status && (!row.submissionStatus || typeof row.submissionStatus === 'object' && !row.submissionStatus.status);
     const state = graded ? 'graded'
       : unopened || attempt?.status === 'IN_PROGRESS' || ['UNOPENED', 'NOT_SUBMITTED'].includes(row.submissionStatus?.status) ? 'before'
