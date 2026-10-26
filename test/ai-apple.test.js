@@ -31,12 +31,10 @@ test('only on Safari: elsewhere the file adds no provider', () => {
   assert.equal(out, 'null');
 });
 
-test('config takes a model on this device or on Private Cloud Compute; caps say JSON and pictures, no tools, no streaming', () => {
-  assert.deepEqual(A.config({ model: 'on-device' }), { model: 'on-device' });
-  assert.deepEqual(A.config({ model: 'private-cloud', base: 'x', key: 'k' }), { model: 'private-cloud' });
-  for (const bad of [null, {}, { model: 'gpt' }, { model: 1 }]) assert.equal(A.config(bad), null);
+test('config takes only the model on this device; caps say JSON and pictures, no tools, no streaming', () => {
+  assert.deepEqual(A.config({ model: 'on-device', base: 'x', key: 'k' }), { model: 'on-device' });
+  for (const bad of [null, {}, { model: 'gpt' }, { model: 1 }, { model: 'private-cloud' }]) assert.equal(A.config(bad), null);
   assert.deepEqual(P.caps(A, A.config({ model: 'on-device' })), { text: true, images: true, json: true, tools: false, stream: false, context: 8192 });
-  assert.equal(P.caps(A, A.config({ model: 'private-cloud' })).context, 32768);
   assert.equal(A.origin, undefined, 'nothing goes over the network from the worker: no host to hold');
 });
 
@@ -202,18 +200,19 @@ test('an already cancelled adapter call sends no text and timeout cancels a pend
   assert.equal(sent[0].m.id, sent[1].m.id);
 });
 
-test('PCC is unverified without an entitlement check and its model label discloses encrypted transmission', async () => {
-  native = async () => ({ ok: true, state: 'unavailable', reason: 'unverified', unverified: true });
-  assert.deepEqual(await A.status({ model: 'private-cloud' }), { state: 'unavailable', reason: 'unverified', unverified: true });
+test('the catalog offers only the model on this device, and nothing names Private Cloud Compute', async () => {
   const list = await A.catalog();
-  assert.match(list.models.find((m) => m.id === 'private-cloud').name, /sends text encrypted to Apple/);
-  assert.match(list.models.find((m) => m.id === 'on-device').name, /on this device/i);
+  assert.deepEqual(list.models.map((m) => m.id), ['on-device']);
+  assert.match(list.models[0].name, /on this device/i);
+  const fs = require('node:fs');
+  for (const f of ['lib/ai/providers/apple.js', 'safari/Glaze/Glaze Extension/GlazeAI.swift', 'docs/ai-harness.md'])
+    assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), /private.?cloud|PrivateCloudCompute|\bPCC\b/i, f);
 });
 
 test('feature status checks Apple readiness even though it has no model download operation', async () => {
   const env = { enabled: async () => true, settings: async () => ({ on: true, use: 'mac', features: { syllabus: true } }),
-    vault: { get: async () => ({ mac: { provider: 'apple', model: 'private-cloud' } }) } };
-  native = async () => ({ ok: true, state: 'unavailable', reason: 'unverified', unverified: true });
+    vault: { get: async () => ({ mac: { provider: 'apple', model: 'on-device' } }) } };
+  native = async () => ({ ok: true, state: 'downloading', reason: 'not-ready' });
   assert.equal((await B.status({ feature: 'syllabus' }, env)).ready, false);
   assert.equal(sent.length, 1);
 });
