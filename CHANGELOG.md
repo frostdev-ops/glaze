@@ -4,6 +4,15 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.4] — 2026-10-26
+
+### Fixed
+
+- Blackboard: rubrics show on graded assignments with your scores and feedback, and wherever Blackboard's own rubric link appears, including submitted work not yet graded.
+- Blackboard: the page scrolls while the pointer is over a rubric.
+- Blackboard: a test's Assessment Results sits on a panel like the other sections.
+- Blackboard: an assessment's due date shows one countdown chip instead of two.
+
 ## [3.4.3] — 2026-10-25
 
 ### Added

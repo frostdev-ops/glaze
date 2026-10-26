@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.3 (French)
+# Chrome Web Store listing — Glaze 3.4.4 (French)
 
 ## Short summary (132 character maximum)
 
@@ -58,7 +58,7 @@ Canvas est une marque d’Instructure, Inc. Blackboard est une marque d’Anthol
 
 ## Release notes
 
-NOUVEAUTÉS DE LA VERSION 3.4.3
+NOUVEAUTÉS DE LA VERSION 3.4.4
 
 • Apparence › Pointeur : l’interrupteur « Pointeur personnalisé » passe au pointeur du système sur chaque page, puis revient à votre choix.
 • « Sauvegarder… » et « Restaurer… », dans Réglages › Confidentialité et données, gardent tout dans un seul fichier : réglages, styles, tâches, notes et emplois du temps.

@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.3
+# Chrome Web Store listing — Glaze 3.4.4
 
 ## Name
 
@@ -66,7 +66,7 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 ## Release notes
 
-NEW IN 3.4.3
+NEW IN 3.4.4
 
 • Look › Pointer has a Custom pointer switch: off gives you the system pointer on every page, on brings your choice back.
 • Back up… and Restore… in Settings › Privacy and data save and bring back everything in one file: settings, Looks, tasks, notes, schedules and more.
