@@ -680,6 +680,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       }
       return '';
     })();
+    const end = stated || (dated.length ? dated.reduce((a, r) => (r.day > a ? r.day : a), '') : '');
     const off = [];
     for (const t of clauses) if (BREAK_RE.test(t)) for (const f of datesIn(t, o)) off.push([f.day, f.end || f.day]);
     // One rule per weekday, kind and subject: a table's row ("Quiz en ligne\tChaque vendredi") and the sentence that bounds
@@ -717,8 +718,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
       const a0 = anchor && Date.parse(anchor.day);
       const start = q.first ? after(Date.parse(q.first)) : q.from ? Date.parse(weekDay(anchor.day, q.from, 0, DAYS[wd])) : a0 + ((wd - monday(a0) + 7) % 7 || 7) * DAY;
       const own = q.last ? iso(Date.parse(q.last) + DAY) : q.to ? iso(Date.parse(weekDay(anchor.day, q.to, 0)) + 7 * DAY) : '';
-      // An unrelated dated assessment cannot say when a recurring assignment stops.
-      const stop = own && stated ? (own < stated ? own : stated) : own || stated;
+      const stop = own && stated ? (own < stated ? own : stated) : own || end;
       if (!stop || !Number.isFinite(start)) continue;
       let k = 0;
       for (let d = start; iso(d) < stop && k < 20; d += 7 * DAY) {
