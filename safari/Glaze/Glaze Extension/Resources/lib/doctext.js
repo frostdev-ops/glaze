@@ -538,43 +538,120 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
     return out;
   }).join('\n\n'));
 
-  // What the OCR engine read (its JSON: blocks → paragraphs → lines → words { text, confidence, bbox }) as lines,
-  // a gap wider than the line's letters are tall a tab (a table's next cell), with its usual slips mended: "|" or "!"
-  // alone is "I" ("Calculus |", "Chemistry I!"), stray marks at a word's edges ("‘Principles", "MTWR_") or as words of their
-  // own ("©", "=") go. → { text, conf: the words' mean confidence (0–100), unsure: the lines with a word it was less
-  // sure of than LOW }.
+  // What the OCR engine read (its JSON: blocks → paragraphs → lines → words { text, confidence, bbox }) as lines, laid
+  // out again from where the words are, since the engine's own lines follow its page segmentation, not the page:
+  // - a run of words is a cell; a gap wider than the letters are tall (or a step back) starts the next, as pdfText;
+  // - cells level with each other are a line, as pdfText's runs;
+  // - a table's row whose cells are several lines, or centred in the row ("Nov. 2 – 8" beside "Module 1" over
+  //   "Lesson 5"), is one line, each cell's lines joined (a bulleted list's items by " · "); rows with their cells
+  //   level stay lines, as do a paragraph's: only touching lines are a row, with at most one of them across every
+  //   column, and either a cell level with nothing beside it or a single cell in the first column;
+  // - a chart's label over its value ("Video" / "Assignments" / "10%") is one line ("Video Assignments 10%").
+  // Its usual slips are mended: "|" or "!" alone is "I" ("Calculus |", "Chemistry I!"), stray marks at a word's edges
+  // ("‘Principles", "MTWR_") or as words of their own ("©", "=") go, as do an icon read as a word (a few letters
+  // several times the page's letters tall). → { text, conf: the words' mean confidence
+  // (0–100), unsure: the lines with a word it was less sure of than LOW }.
   const LOW = 65;
+  const BULLET = /^[•·∙●○◦▪■□►▸‣*+«°eo©]$/u;
+  const PERCENT = /^\d{1,3}(?:[.,]\d+)?\s?%$/;
+  const mend = (text) => {
+    const s = String(text || '').trim();
+    if (/^[|!I]{1,3}$/.test(s) && /[|!]/.test(s)) return 'I'.repeat(s.length);
+    if (/[\p{L}\p{N}]/u.test(s)) return s.replace(/[_~«»©®]+/g, ' ').trim().replace(/^[‘’“”`´|=—]+|[‘’“”`´|=—]+$/g, '');
+    // A dash between times stays, as do "&", "/", "%" and "+"; a lone "—" is most often a table's rule, and a lone ".",
+    // ":" or ";" a speck (real punctuation sits on its word). "•" is kept here for the bullet test below.
+    return /^[-–&/%+•·]$/.test(s) ? s : '';
+  };
   const ocrText = (json) => {
-    const lines = [], unsure = [];
+    const tall = (w) => w.bbox.y1 - w.bbox.y0;
+    // The middle height, not a box's: a tilted line's box is taller than its letters, and an icon is no letter.
+    const mid = (xs) => { const s = xs.sort((a, b) => a - b); return Math.max(1, s[s.length >> 1] || 0); };
+    const lines = [];
+    for (const bl of json?.blocks || []) for (const p of bl.paragraphs || []) for (const ln of p.lines || []) lines.push(ln.words || []);
+    const page = mid(lines.flat().map(tall));
     let sum = 0, n = 0;
-    for (const bl of json?.blocks || []) for (const p of bl.paragraphs || []) for (const ln of p.lines || []) {
-      // The words' middle height, not the line's box: a tilted line's box is taller than its letters.
-      const hs = (ln.words || []).map((w) => w.bbox.y1 - w.bbox.y0).sort((a, b) => a - b);
-      const h = Math.max(1, hs[hs.length >> 1] || 0);
-      let out = '', prev = null, low = false;
-      for (const w of ln.words || []) {
-        let s = String(w.text || '').trim();
-        if (/^[|!I]{1,3}$/.test(s) && /[|!]/.test(s)) s = 'I'.repeat(s.length);
-        else if (/[\p{L}\p{N}]/u.test(s)) s = s.replace(/[_~«»©®]+/g, ' ').trim().replace(/^[‘’“”`´|=—]+|[‘’“”`´|=—]+$/g, '');
-        // A dash between times stays, as do "&", "/" and "%"; a lone "—" is most often a table's rule, and a lone
-        // ".", ":" or ";" a speck (real punctuation sits on its word).
-        else if (!/^[-–&/%+]$/.test(s)) s = '';
-        if (!s) continue;
+    const cells = [];
+    for (const words of lines) {
+      const h = mid(words.map(tall));
+      let cell = null, prev = null;
+      for (const w of words) {
+        const s = mend(w.text);
+        if (!s || (s.length <= 3 && w.confidence < 90 && tall(w) > 2.5 * page)) continue;
         sum += w.confidence;
         n++;
-        if (w.confidence < LOW) low = true;
-        if (prev) out += w.bbox.x0 - prev.bbox.x1 > h ? '\t' : ' ';
-        out += s;
+        if (!cell || Math.abs(w.bbox.x0 - prev.bbox.x1) > h) cells.push(cell = { words: [] });
+        cell.words.push({ s, w });
         prev = w;
       }
-      if (!out) continue;
+    }
+    for (const c of cells) {
+      const [b, next] = c.words;
+      // A bullet: one small mark or letter starting the cell, well apart from its first word.
+      if (next && BULLET.test(b.s) && tall(b.w) <= 0.7 * tall(next.w) && next.w.bbox.x0 - b.w.bbox.x1 >= 0.5 * tall(next.w)) { c.bullet = true; c.words.shift(); }
+      else if (c.words.length === 1 && /^[•·]$/.test(b.s)) c.words = [];
+      const ws = c.words.map((x) => x.w);
+      Object.assign(c, {
+        text: c.words.map((x) => x.s).join(' '), low: ws.some((w) => w.confidence < LOW), h: mid(ws.map(tall)),
+        x0: Math.min(...ws.map((w) => w.bbox.x0)), x1: Math.max(...ws.map((w) => w.bbox.x1)), y0: Math.min(...ws.map((w) => w.bbox.y0)), y1: Math.max(...ws.map((w) => w.bbox.y1)),
+      });
+      c.cy = (c.y0 + c.y1) / 2;
+    }
+    let left = cells.filter((c) => c.text);
+    const level = (a, b) => Math.abs(a.cy - b.cy) <= Math.min(a.h, b.h) / 2;
+    const over = (a, b) => a.x0 < b.x1 && b.x0 < a.x1;
+    const out = []; // { y, text, low }
+    // A chart's labels: a value alone ("45%"; one with a cell level with it on its left is that row's), not one of a
+    // column of them, under at most three short lines of words, each with nothing close beside it, stacked closely.
+    const below = (a, b) => b.y0 >= a.y1 - a.h * 0.3 && b.y0 - a.y1 <= 1.25 * Math.max(a.h, b.h) && over(a, b);
+    const near = (a) => left.some((o) => o !== a && level(o, a) && Math.max(o.x0 - a.x1, a.x0 - o.x1) < 3 * Math.max(a.h, o.h));
+    for (const v of left.filter((c) => PERCENT.test(c.text) && !near(c) && !left.some((o) => o.x1 <= c.x0 && level(o, c)))) {
+      if (left.some((o) => o !== v && below(v, o) && PERCENT.test(o.text))) continue;
+      const parts = [v];
+      while (parts.length < 4) {
+        const up = left.filter((a) => !parts.includes(a) && below(a, parts[0])).sort((a, b) => b.y1 - a.y1)[0];
+        if (!up || up.text.length > 30 || /\d\s?%/.test(up.text) || !/\p{L}/u.test(up.text) || near(up)) break;
+        parts.unshift(up);
+      }
+      if (parts.length < 2) continue;
+      out.push({ y: parts[0].y0, k: 0, text: parts.map((c) => c.text).join(' '), low: parts.some((c) => c.low) });
+      left = left.filter((c) => !parts.includes(c));
+    }
+    // Rows: cells touching from top to bottom, then laid out as above.
+    left.sort((a, b) => a.y0 - b.y0);
+    const bands = [];
+    for (const c of left) {
+      const b = bands.at(-1);
+      if (b && c.y0 <= b.y1 + 0.25 * c.h) { b.cells.push(c); b.y1 = Math.max(b.y1, c.y1); } else bands.push({ cells: [c], y1: c.y1 });
+    }
+    for (const { cells: band } of bands) {
+      const rows = [];
+      for (const c of [...band].sort((a, b) => a.cy - b.cy)) {
+        const r = rows.at(-1);
+        if (r && level(r[0], c)) r.push(c); else rows.push([c]);
+      }
+      const cols = [];
+      for (const c of [...band].sort((a, b) => a.x0 - b.x0)) {
+        const k = cols.at(-1);
+        if (k && c.x0 < k.x1) { k.cells.push(c); k.x1 = Math.max(k.x1, c.x1); } else cols.push({ cells: [c], x1: c.x1 });
+      }
+      const col = (c) => cols.findIndex((k) => k.cells.includes(c));
+      const one = rows.length > 1 && cols.length > 1 && cols.every((k) => k.cells.length <= 4)
+        && rows.filter((r) => cols.every((k) => r.some((c) => k.cells.includes(c)))).length <= 1
+        && (cols[0].cells.length === 1 || band.some((c) => !band.some((o) => col(o) !== col(c) && level(o, c))));
+      const emit = (cs, text) => out.push({ y: band[0].y0, k: out.length, text, low: cs.some((c) => c.low) });
+      if (one) emit(band, cols.map((k) => k.cells.sort((a, b) => a.y0 - b.y0).map((c, i) => (i && c.bullet ? '· ' : '') + c.text).join(' ')).join('\t'));
+      else for (const r of rows) emit(r, r.sort((a, b) => a.x0 - b.x0).map((c) => c.text).join('\t'));
+    }
+    const unsure = [], text = [];
+    for (const l of out.sort((a, b) => a.y - b.y || a.k - b.k)) {
       // A thin dash between two clock times is often lost ("11:00 AM  12:15 PM"): two times side by side are a range.
       // Mended here, line by line, so an unsure line is reported as the text has it and the review can find it.
-      out = tidy(out).replace(/(\d{1,2}:\d{2}(?: ?[AaPp]\.?[Mm]\.?)?)[ \t]+(?=\d{1,2}:\d{2})/g, '$1 - ');
-      lines.push(out);
-      if (low) unsure.push(out);
+      const t = tidy(l.text).replace(/(\d{1,2}:\d{2}(?: ?[AaPp]\.?[Mm]\.?)?)[ \t]+(?=\d{1,2}:\d{2})/g, '$1 - ');
+      if (!t) continue;
+      text.push(t);
+      if (l.low) unsure.push(t);
     }
-    return { text: tidy(lines.join('\n')), conf: n ? Math.round(sum / n) : 0, unsure };
+    return { text: tidy(text.join('\n')), conf: n ? Math.round(sum / n) : 0, unsure };
   };
 
   return { unzip, docx, pptx, html, decode, tokens, LIMITS, READ, kind, imageSize, pgm, pdfText, ocrText };
