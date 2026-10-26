@@ -235,3 +235,26 @@ test('credential echoes never survive in streamed errors, parser errors, or nest
     assert.ok(!inspect(e, { depth: 20, showHidden: true }).includes(KEY), fixture);
   }
 });
+
+test('streamed schema JSON cannot disclose a key through Unicode escapes before final validation', async () => {
+  const escaped = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
+  const content = `{"answer":"${escaped}"}`, deltas = [];
+  const events = [];
+  for (let i = 0; i < content.length; i += 5) events.push(chunk({ content: content.slice(i, i + 5) }));
+  events.push(chunk({}, 'stop'));
+  await assert.rejects(P.run('openai', ask({ schema: SCHEMA }), cfg(), {
+    fetch: server(sse(events)).fetch, onDelta: (d) => deltas.push(d),
+  }), { code: 'invalid-response' });
+  assert.ok(!deltas.join('').includes(escaped), 'the content script can decode the complete key before the final refusal');
+});
+
+test('encoded credential echoes do not survive in provider diagnostics', async () => {
+  const escaped = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
+  for (const fixture of ['stream', 'network']) {
+    const fetch = fixture === 'stream' ? server(sse([{ error: { message: escaped, code: 500 } }])).fetch
+      : async () => { throw new Error(`transport ${escaped}`); };
+    const error = await P.run('openai', ask(), cfg(), { fetch, onDelta: () => {} }).catch((e) => e);
+    assert.ok(error instanceof Error);
+    for (let e = error; e; e = e.cause) assert.ok(!String(e.message).includes(escaped), fixture);
+  }
+});

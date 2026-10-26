@@ -362,3 +362,20 @@ test('a hanging catalog cannot hold the configuration queue after its deadline',
     assert.equal((await B.config({ op: 'get' }, e)).ok, true);
   } finally { B.LIMIT.catalog = before; }
 });
+
+test('feature revocation while a confirmation waits for its live sender check prevents execution', async () => {
+  let ran = 0, release, checks = 0;
+  const tools = TL.registry(); tools.add(TL.define({ ...remind, run: async () => { ran++; return { ok: true }; } }));
+  const fetch = async (url) => (url.endsWith('/models') ? models() : json({ choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'reminder_add', arguments: '{"at":"2026-11-02","reason":"Soon."}' } }] }, finish_reason: 'tool_calls' }] }));
+  const e = env({ fetch, tools, allowed: () => ++checks === 3 ? new Promise((r) => { release = r; }) : true }), p = open(e);
+  p.say(run(undefined, { task: 'example.plan' }));
+  await flush();
+  const id = p.posted.at(-1).pending.confirmId;
+  p.say({ id: 2, op: 'confirm', confirmId: id, approve: true });
+  await flush();
+  e.settings = async () => ({ on: true, use: 'main', features: { syllabus: false } });
+  release(true);
+  await flush();
+  assert.equal(ran, 0);
+  assert.equal(p.posted.at(-1).error, 'feature');
+});

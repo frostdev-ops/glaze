@@ -14,7 +14,12 @@ const lms = (p = '/courses/1', extra = {}) => ({ id: 'glaze', frameId: 0, url: `
 const editor = (extra = {}) => ({ id: 'glaze', frameId: 0, url: `${EXT}/options.html`, origin: EXT, tab: { id: 9, url: `${EXT}/options.html` }, ...extra });
 const make = (fetch) => worker({ globals: fakeIDB(), fetch, grants: new Set(['https://api.example.com/*']),
   store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, use: 'main', features: { syllabus: true } } }, session: {} } });
+const live = (w, sender) => {
+  w.context.chrome.tabs.get = async () => sender.tab;
+  w.context.chrome.scripting.executeScript = async () => [{ result: { href: sender.url, origin: sender.origin } }];
+};
 const status = async (w, sender) => {
+  live(w, sender);
   const { port, say } = w.connect('glaze:ai', sender);
   say({ id: 1, op: 'status', feature: 'syllabus' });
   await w.settle();
@@ -62,6 +67,7 @@ test('a run from a page reaches only the connection\'s server, with the key, and
     return new Response(JSON.stringify({ choices: [{ message: { content: '{"text":"ok"}' }, finish_reason: 'stop' }] }), { headers: { 'content-type': 'application/json' } });
   });
   await w.send({ type: 'glaze:ai-config', op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY } }, editor());
+  live(w, lms());
   const { port, say } = w.connect('glaze:ai', lms());
   await w.settle();
   // A task the worker would import with the harness (lib/background.js aiFiles); here added in its realm.
@@ -156,4 +162,15 @@ test('an existing AI port loses authority after SPA navigation to an assessment'
   await w.settle();
   assert.equal(port.hungUp, true);
   assert.equal(port.posted.length, 1);
+});
+
+test('AI checks every ancestor of a same-site course frame', async () => {
+  const w = make(), href = `${CANVAS}/courses/1`;
+  w.context.chrome.tabs.get = async () => ({ id: 4, url: href });
+  w.context.chrome.scripting.executeScript = async () => [{ result: { href, origin: CANVAS, ancestors: [`${CANVAS}/courses/1/quizzes/3`, href] } }];
+  const { port, say } = w.connect('glaze:ai', lms('/courses/1', { frameId: 2 }));
+  say({ id: 1, op: 'status', feature: 'syllabus' });
+  await w.settle();
+  assert.equal(port.hungUp, true);
+  assert.equal(port.posted.length, 0);
 });
