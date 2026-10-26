@@ -126,7 +126,8 @@ var GZ_AI_TASK_SYLLABUS = globalThis.GZ_AI_TASK_SYLLABUS || (() => {
       // a sentence; between letters or numbers it joins an identifier (ada.lin, not-ada, Room 4.22).
       const left = /[\p{L}\p{M}\p{N}_@](?:[.'+\/-])?$/u, right = /^(?:[.'+\/-])?[\p{L}\p{M}\p{N}_@]/u;
       for (let at = source.indexOf(value); at !== -1; at = source.indexOf(value, at + 1)) {
-        if (!left.test(source.slice(0, at)) && !right.test(source.slice(at + value.length))) return val(v);
+        const before = source.slice(0, at);
+        if (!left.test(before) && !(value.includes('@') && /[.!#$%&*+/=?^_`{|}~@-]$/.test(before)) && !right.test(source.slice(at + value.length))) return val(v);
       }
       return null;
     };
