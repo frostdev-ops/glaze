@@ -18,6 +18,11 @@ var GZ_SYLLABUS_AI = globalThis.GZ_SYLLABUS_AI || (() => {
   const words = (s) => fold(s).match(/[\p{L}\p{N}][\p{L}\p{N}.]*[\p{L}\p{N}]/gu) || [];
   // Rows that aren't the student's work: enrolment deadlines, holidays, days without class.
   const ADMIN = /(?<![\p{L}])(?:last day|add\/drop|drop|withdraw\w*|holiday|no class(?:es)?|recess|break|reading week|feiertag|vorlesungsfrei|rückmeldung|festivo|feriado|vacaciones|sin clases|congé|relâche|vakantie|collegevrij|recesso|sem aula)(?![\p{L}])/iu;
+  // A title that names a piece of work by its number ("Problem Set 4", "HW 1", "Práctica 2", "A3"), not a count of
+  // something ("Bring 5 pages").
+  const NUMBERED = /(?<![\p{L}\d])\p{L}[\p{L}\p{M}'’.-]*(?:\s+\p{L}[\p{L}\p{M}'’.-]*){0,2}\s?#?\d{1,2}(?:\.\d{1,2})?(?![\d\p{L}])(?!\s*(?:pages?|words?|minutes?|min|hours?|points?|pts|slides?|questions?|%|seiten|wörter|páginas|palabras|pages|mots|pagina's|woorden|palavras))/iu;
+  // Numbers that place something rather than name it: a week, a unit, a chapter, a day.
+  const PLACE = /(?<![\p{L}])(?:week|wk|woche|kw|semana|semaine|unit|module|modul|chapter|ch|kapitel|cap[ií]tulo|chapitre|hoofdstuk|day|tag|d[ií]a|jour|dag)\.?\s*#?\d+/giu;
   const re = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   // ---- reading AI's values with Glaze's readers --------------------------------------------------------------------
@@ -87,6 +92,8 @@ var GZ_SYLLABUS_AI = globalThis.GZ_SYLLABUS_AI || (() => {
       if ((d.kind !== 'exam' && d.kind !== 'due') || ADMIN.test(d.title) || ADMIN.test(d.quote)) continue;
       const q = new Set(words(d.quote));
       if (!words(d.title).some((w) => q.has(w))) continue;
+      // Named as a deadline is: an exam or deadline word Glaze knows (extract() takes it as a row), or work by its number.
+      if (!NUMBERED.test(d.title.replace(PLACE, ' ')) && !S.extract(`${d.title}: ${d.when}`, o).dates.length) continue;
       const rows = S.extract(`${d.kind === 'exam' ? 'Exam' : 'Due'}: ${d.when}`, o).dates;
       const inQuote = S.extract(`Due: ${d.quote}`, o).dates;
       const days = inQuote.filter((x) => !x.week).flatMap((x) => [x.day, x.end].filter(Boolean));
