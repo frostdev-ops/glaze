@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.4 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 3.4.5 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -58,7 +58,7 @@ Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology In
 
 ## Release notes
 
-NOVO NA 3.4.4
+NOVO NA 3.4.5
 
 • Aparência › Ponteiro tem o interruptor “Ponteiro personalizado”: desligado, você usa o ponteiro do sistema em todas as páginas; ligado, sua escolha volta.
 • “Fazer backup…” e “Restaurar…”, em Configurações › Privacidade e dados, salvam e trazem de volta tudo em um só arquivo: configurações, estilos, tarefas, notas, grades de aulas e mais.

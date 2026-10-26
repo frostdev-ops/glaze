@@ -4,6 +4,12 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.5] — 2026-10-26
+
+### Changed
+
+- The PDF reader behind imports (pdf.js) ships as readable code, as the Chrome Web Store requires.
+
 ## [3.4.4] — 2026-10-26
 
 ### Fixed
