@@ -1352,3 +1352,8 @@ test('review: audition topics and preparation dates are not assessments', () => 
   ]) assert.deepEqual(S.extract(text, reviewOpts).dates, [], text);
   assert.deepEqual(S.extract('Seating auditions\nSeptember 7: sign up for a slot.', reviewOpts).dates.map((d) => `${d.day} ${d.kind}`), ['2026-09-07 exam']);
 });
+
+test('review: excepted week ranges cannot become recurrence bounds', () => {
+  const text = 'Quizzes are due every Friday, except September 11 and weeks 3–5.\nCourse ends: October 9';
+  assert.deepEqual(S.extract(text, reviewOpts).dates, []);
+});
