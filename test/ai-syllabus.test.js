@@ -379,3 +379,35 @@ test('AI fills an office its quote labels or gives on the professor\'s contact l
   const hours = 'Office hours: Mondays in Library 2';
   assert.equal(A.interpret(task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Library 2', quote: hours } } }, { text: hours }), OPTS, L.extract(hours, OPTS), hours).prof.office.value, '', 'where office hours are held is not the office');
 });
+
+test('every copied syllabus value must occur in its own quote, including titles and numeric expressions', () => {
+  const text = 'HW 3 · Fri 9/25\nA: 93-100\nB: 83-92\nC: 73-82\nExams 60%\nLabs 40%\nOffice hours: Mon 1-2 PM\nOpening: August 24';
+  const out = task.check({ ...blank(),
+    dates: [{ title: 'HW 99', kind: 'due', when: 'Fri 9/25', quote: 'HW 3 · Fri 9/25' }],
+    scale: [['A', 'below 93', 'A: 93-100'], ['B', 'below 83', 'B: 83-92'], ['C', 'below 73', 'C: 73-82']].map(([letter, range, quote]) => ({ letter, range, quote })),
+    weights: [{ name: 'Exams', weight: '40%', quote: 'Exams 60%' }],
+    hours: [{ label: null, when: 'Mon 1-3 PM', where: null, quote: 'Office hours: Mon 1-2 PM' }],
+    week1: { text: 'September 14', quote: 'Opening: August 24' },
+  }, { text });
+  assert.deepEqual(out.dates, [], 'a shared word cannot ground an invented assignment number');
+  assert.deepEqual(out.scale, [], 'quoted numbers cannot ground an invented comparison');
+  assert.deepEqual(out.weights, []);
+  assert.deepEqual(out.hours, []);
+  assert.deepEqual(out.week1, none);
+});
+
+test('copied syllabus identifiers must be whole tokens, preserving short values and harmless typography', () => {
+  const text = 'Instructor: Li\nEmail: not-ada@example.edu\nOffice: Room 2140\nHW 3 · Fri 9/25\nA: 93–100\nB+: 83–92\nC: 73–82';
+  const out = task.check({ ...blank(), prof: { ...blank().prof,
+    name: { text: 'Li', quote: 'Instructor: Li' },
+    email: { text: 'ada@example.edu', quote: 'Email: not-ada@example.edu' },
+    office: { text: 'Room 21', quote: 'Office: Room 2140' },
+  }, dates: [{ title: 'ＨＷ ３', kind: 'due', when: 'Fri\u00a09/25', quote: 'hw 3 · Fri 9/25' }],
+  scale: [['A', '93-100'], ['B+', '83-92'], ['C', '73-82']].map(([letter, range]) => ({ letter, range, quote: `${letter}: ${range}` })),
+  }, { text });
+  assert.deepEqual(out.prof.email, none, 'an e-mail suffix is a different address');
+  assert.deepEqual(out.prof.office, none, 'a room number prefix is a different room');
+  assert.equal(out.prof.name.text, 'Li', 'the quote length floor must not drop a short copied value');
+  assert.equal(out.dates.length, 1, 'case, NFKC and whitespace normalization remain supported');
+  assert.equal(out.scale.length, 3, 'one-letter grades and normalized dashes remain supported');
+});
