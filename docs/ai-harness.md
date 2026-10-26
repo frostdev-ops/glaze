@@ -86,12 +86,12 @@ Error codes: the model request's category (`cancelled`, `timeout`, `provider-una
 
 Settings' top frame (`options.html`) manages connections with `chrome.runtime.sendMessage({ type: 'glaze:ai-config', op })`:
 `get`, `set { id, cfg: { provider, base, model, key?, images?, context? } }`, `remove { id }`, `test { id }`,
-`models { id }`. Request the host from a click first with `chrome.permissions.request({ origins: [origin] })`.
+`models { id }`. `get` also returns `providers`, the shipped providers registered in this browser. Request the host from a click first with `chrome.permissions.request({ origins: [origin] })`.
 Settings → AI (`lib/editor-ai.js`) keeps two connections, `endpoint` and `device`, and asks for the host with
 `GZ_SITE.reach` from the Save or Test click.
 The model on this computer: `test { provider: 'device' }` → `{ ok, state, reason? }`, and from a click `prepare { provider:
 'device' }`, which answers once the model is ready and meanwhile sends `{ type: 'glaze:ai-config', event: 'progress',
-provider, loaded }` (0 to 1) to Glaze's pages.
+provider, loaded }` (0 to 1) to Glaze's pages. A `download` reply with reason `activation` keeps Download available for another click.
 Concurrent prepare calls share one attempt, limited to four minutes; a timeout answers `unavailable` with reason `timeout`.
 If the worker stops or the attempt times out, ask `test` again and let the student retry; inference is never replayed.
 Feature status reports `ready: false` with `why: 'download' | 'downloading' | 'unavailable'` until Chrome reports ready.

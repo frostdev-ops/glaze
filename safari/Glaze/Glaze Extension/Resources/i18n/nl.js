@@ -3086,4 +3086,6 @@
   "Testing…": "Testen…",
   "Use an https address, or http on localhost or 127.0.0.1.": "Gebruik een https-adres, of http op localhost of 127.0.0.1.",
   "Enter a model.": "Voer een model in.",
+  "Click Download to continue": "Klik op Downloaden om door te gaan",
+  "Not available: {reason}": "Niet beschikbaar: {reason}",
 };

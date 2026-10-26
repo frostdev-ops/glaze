@@ -3086,4 +3086,6 @@
   "Testing…": "Probando…",
   "Use an https address, or http on localhost or 127.0.0.1.": "Usa una dirección https, o http en localhost o 127.0.0.1.",
   "Enter a model.": "Escribe un modelo.",
+  "Click Download to continue": "Haz clic en Descargar para continuar",
+  "Not available: {reason}": "No disponible: {reason}",
 };

@@ -27,9 +27,10 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   const reason = (r, t) => (r === 'permission' ? t('Glaze isn’t allowed to reach this address.') : r === 'model' ? t('This endpoint doesn’t list that model.')
     : CATEGORIES.includes(r) ? outcome(r, t) : t('Not ready'));
   // The device provider's status: { state: 'ready' | 'download' | 'downloading' | 'unavailable', reason?, progress? (0 to 1) }.
-  const deviceText = (st, t, pct) => (st.state === 'ready' ? t('Ready') : st.state === 'download' ? t('Needs a download')
+  const deviceText = (st, t, pct) => (st.state === 'ready' ? t('Ready') : st.reason === 'activation' ? t('Click Download to continue') : st.state === 'download' ? t('Needs a download')
     : st.state === 'downloading' ? (typeof st.progress === 'number' ? t('Downloading {pct}', { pct: pct(st.progress) }) : t('Downloading…'))
-      : st.reason === 'browser' ? t('Not available in this browser') : t('Not available on this device'));
+      : st.reason === 'browser' ? t('Not available in this browser') : st.reason === 'device' ? t('Not available on this device')
+        : t('Not available: {reason}', { reason: reason(st.reason, t) }));
   // A download's progress message: { progress } or { loaded, total? } (Chrome's downloadprogress gives a fraction) → 0 to 1, or null.
   const progress = (m) => {
     const n = typeof m?.progress === 'number' ? m.progress : typeof m?.loaded === 'number' ? (m.total > 0 ? m.loaded / m.total : m.loaded) : NaN;
@@ -55,8 +56,12 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   const mount = ({ t, when = (at) => new Date(at).toLocaleString(), pct = (x) => `${Math.round(x * 100)}%` }) => {
     const $ = (id) => document.getElementById(id);
     const c = globalThis.chrome, local = c.storage.local, S = A(), KEY = S.KEY;
-    const send = (m) => Promise.resolve().then(() => c.runtime.sendMessage({ type: TYPE, ...m })).then((r) => (isObj(r) ? r : { ok: false, error: 'failed' }), () => ({ ok: false, error: 'failed' }));
-    const offered = S.PROVIDERS.includes(DEVICE);
+    // Dispatch before yielding, so prepare still belongs to the Download click.
+    const send = (m) => {
+      try { return Promise.resolve(c.runtime.sendMessage({ type: TYPE, ...m })).then((r) => (isObj(r) ? r : { ok: false, error: 'failed' }), () => ({ ok: false, error: 'failed' })); }
+      catch { return Promise.resolve({ ok: false, error: 'failed' }); }
+    };
+    let providers = [], preparing = false;
     let s = S.clean(), conns = {}, calls = [], tested = null, device = null, catalog = null, unverified = false, shownKey = '', busy = false;
 
     // ---- the switches (storage.local ai) -------------------------------------------------------------------------------
@@ -93,7 +98,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     };
     const renderDevice = () => {
       $('ai-device-state').textContent = device ? deviceText(device, t, pct) : '';
-      $('ai-device-download').hidden = device?.state !== 'download';
+      $('ai-device-download').hidden = device?.state !== 'download' && device?.reason !== 'activation';
       const bar = $('ai-device-progress');
       bar.hidden = !(device?.state === 'downloading' && typeof device.progress === 'number');
       if (!bar.hidden) bar.value = device.progress;
@@ -116,12 +121,16 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       $('ai-on').checked = s.on;
       $('ai-connection').hidden = !s.on;
       const dev = $('ai-use-device'), end = $('ai-use-endpoint');
+      const offered = providers.includes(DEVICE), endpoint = providers.includes('openai');
       dev.disabled = !offered;
-      $('ai-device-off').hidden = offered;
+      end.disabled = !endpoint;
+      $('ai-choice-device').hidden = !offered;
+      $('ai-choice-endpoint').hidden = !endpoint;
+      $('ai-device-off').hidden = true;
       dev.checked = s.use === DEVICE;
       end.checked = s.use === ENDPOINT;
       $('ai-device').hidden = !(offered && s.use === DEVICE);
-      $('ai-endpoint').hidden = s.use !== ENDPOINT;
+      $('ai-endpoint').hidden = !endpoint || s.use !== ENDPOINT;
       const host = s.use === ENDPOINT ? hostOf(conns[ENDPOINT]?.base) : '';
       $('ai-where').hidden = !host;
       $('ai-where').textContent = host ? t('Sent to {host}', { host: iso(host) }) : '';
@@ -154,8 +163,10 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const load = async () => {
       const r = await send({ op: 'get' });
       conns = r.ok && isObj(r.connections) ? r.connections : {};
+      providers = r.ok && Array.isArray(r.providers) ? r.providers.filter((id) => S.PROVIDERS.includes(id)) : [];
       fill();
       render();
+      if (s.on && s.use === DEVICE && providers.includes(DEVICE)) await deviceStatus();
     };
     const models = async () => {
       const r = await send({ op: 'models', id: ENDPOINT });
@@ -201,32 +212,42 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     $('ai-model').addEventListener('focus', () => { if (!catalog && conns[ENDPOINT]) models(); });
 
     // On this device: the provider's status, a download the student starts, and its progress as the worker reports it.
-    const deviceStatus = async () => {
-      let r = await send({ op: 'test', id: DEVICE });
-      if (!r.ok && r.error === 'setup' && (await send({ op: 'set', id: DEVICE, cfg: { provider: DEVICE } })).ok) r = await send({ op: 'test', id: DEVICE });
+    const deviceResult = (r) => {
       device = r.ok ? { state: r.state, ...(typeof r.reason === 'string' && { reason: r.reason }) } : { state: 'unavailable', reason: r.error };
       renderDevice();
     };
+    const deviceStatus = async () => {
+      if (!providers.includes(DEVICE)) return;
+      if (!conns[DEVICE]) {
+        const r = await send({ op: 'set', id: DEVICE, cfg: { provider: DEVICE } });
+        if (!r.ok) return deviceResult(r);
+        conns[DEVICE] = { provider: DEVICE };
+      }
+      deviceResult(await send({ op: 'test', provider: DEVICE }));
+    };
     $('ai-device-download').addEventListener('click', (e) => {
-      if (!e?.isTrusted || device?.state !== 'download') return;
+      if (!e?.isTrusted || preparing || !providers.includes(DEVICE) || (device?.state !== 'download' && device?.reason !== 'activation')) return;
+      preparing = true;
       device = { state: 'downloading' };
       renderDevice();
-      send({ op: 'prepare', provider: DEVICE }).then(deviceStatus);
+      send({ op: 'prepare', provider: DEVICE }).then(async (r) => {
+        if (r.ok) deviceResult(r); else await deviceStatus();
+      }).finally(() => { preparing = false; });
     });
     c.runtime.onMessage?.addListener((m, sender) => {
-      if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.op !== 'progress' || m.provider !== DEVICE) return;
+      if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.event !== 'progress' || m.provider !== DEVICE || !providers.includes(DEVICE)) return;
       const n = progress(m);
       if (n === null) return;
       device = { state: 'downloading', progress: n };
       renderDevice();
-      if (n >= 1) deviceStatus();
+      if (n >= 1 && !preparing) deviceStatus();
     });
 
     // ---- the student's changes -----------------------------------------------------------------------------------------
     $('ai-on').addEventListener('change', () => write(() => ({ on: $('ai-on').checked })));
     for (const [id, use] of [['ai-use-device', DEVICE], ['ai-use-endpoint', ENDPOINT]]) {
       $(id).addEventListener('change', () => {
-        if (!$(id).checked) return;
+        if (!$(id).checked || !providers.includes(use === ENDPOINT ? 'openai' : DEVICE)) return;
         write(() => ({ use }));
         if (use === DEVICE) deviceStatus();
       });
@@ -249,7 +270,6 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       s = S.clean(got?.[KEY]);
       calls = Array.isArray(got?.[CALLS]) ? got[CALLS] : [];
       render();
-      if (s.on && s.use === DEVICE && offered) deviceStatus();
     });
     load();
   };

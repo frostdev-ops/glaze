@@ -1463,8 +1463,8 @@
 <div class="group" id="ai-connection" hidden>
           <h3 id="ai-connection-head">Connection</h3>
           <div class="seg" role="radiogroup" aria-labelledby="ai-connection-head">
-            <label><input type="radio" name="ai-use" value="device" id="ai-use-device" aria-describedby="ai-device-off" data-local>On this device</label>
-            <label><input type="radio" name="ai-use" value="endpoint" id="ai-use-endpoint" data-local>Endpoint</label>
+            <label id="ai-choice-device" hidden><input type="radio" name="ai-use" value="device" id="ai-use-device" data-local>On this device</label>
+            <label id="ai-choice-endpoint" hidden><input type="radio" name="ai-use" value="endpoint" id="ai-use-endpoint" data-local>Endpoint</label>
           </div>
           <p class="desc" id="ai-device-off" hidden>Not available in this browser</p>
           <div class="ai-device" id="ai-device" hidden>
