@@ -59,9 +59,10 @@ var GZ_DRAFTS = globalThis.GZ_DRAFTS || (() => {
     const escape = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     const plain = () => escape(copy.text || '').replace(/\n/g, '<br>');
     try {
-      const template = doc.createElement('template'), out = doc.createElement('div');
-      if (!template.content) return plain();
-      template.innerHTML = copy.html;
+      const Parser = doc.defaultView?.DOMParser || globalThis.DOMParser, out = doc.createElement('div');
+      if (!Parser) return plain();
+      // An inert document: nothing in it runs or loads, and nothing is assigned as markup to the page.
+      const parsed = new Parser().parseFromString(copy.html, 'text/html');
       const tags = new Set('P DIV SPAN BR STRONG B EM I U S STRIKE SUB SUP BLOCKQUOTE PRE CODE H1 H2 H3 H4 H5 H6 UL OL LI A IMG TABLE THEAD TBODY TFOOT TR TH TD HR AUDIO VIDEO SOURCE'.split(' '));
       const skip = new Set('SCRIPT STYLE IFRAME OBJECT EMBED TEMPLATE NOSCRIPT LINK META BASE HEAD TITLE FORM INPUT BUTTON TEXTAREA SELECT'.split(' '));
       const url = (raw, image = false) => {
@@ -90,7 +91,7 @@ var GZ_DRAFTS = globalThis.GZ_DRAFTS || (() => {
         }
         for (const child of node.childNodes) walk(child, el);
       };
-      for (const child of template.content.childNodes) walk(child, out);
+      for (const child of parsed.body.childNodes) walk(child, out);
       return out.innerHTML || plain();
     } catch { return plain(); }
   };
