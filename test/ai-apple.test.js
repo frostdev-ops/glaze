@@ -1,0 +1,155 @@
+// The AI harness's `apple` provider (lib/ai/providers/apple.js): Apple's Foundation Models through Safari's native handler
+// (safari/Glaze/Glaze Extension/GlazeAI.swift), here against a stand-in browser.runtime.sendNativeMessage. Only on Safari;
+// one message, one reply (no streaming); the status words; the run's message; failures as categories; a cancel reaching
+// the native side; and a connection kept by the broker with no host to hold.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
+const path = require('node:path');
+
+let native = async () => { throw new Error('no native handler'); };
+const sent = [];
+globalThis.chrome = { runtime: { getURL: (p = '') => `safari-web-extension://ABC/${p}` } };
+globalThis.browser = { runtime: { sendNativeMessage: async (app, m) => { sent.push({ app, m: structuredClone(m) }); return native(m); } } };
+const P = require('../lib/ai/providers.js');
+const A = require('../lib/ai/providers/apple.js');
+const B = require('../lib/ai/broker.js');
+const T = require('../lib/ai/task.js');
+const S = require('../lib/ai/schema.js');
+test.beforeEach(() => { sent.length = 0; native = async () => { throw new Error('no native handler'); }; B._reset(); });
+
+const SCHEMA = { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'], additionalProperties: false };
+const ask = (over = {}) => ({ messages: [{ role: 'system', content: 'Answer.' }, { role: 'user', content: 'Q' }], ...over });
+const ok = (text, extra = {}) => ({ ok: true, text, model: 'AFM 3 Core Advanced', usage: { input: 12, cached: 0, output: 4 }, ...extra });
+
+test('only on Safari: elsewhere the file adds no provider', () => {
+  assert.equal(P.get('apple'), A, 'added on Safari');
+  const out = execFileSync(process.execPath, ['-e', `
+    globalThis.chrome = { runtime: { getURL: () => 'chrome-extension://abc/' } };
+    const P = require('./lib/ai/providers.js'); require('./lib/ai/providers/apple.js');
+    process.stdout.write(String(P.get('apple')));`], { cwd: path.join(__dirname, '..') }).toString();
+  assert.equal(out, 'null');
+});
+
+test('config takes a model on this device or on Private Cloud Compute; caps say JSON and pictures, no tools, no streaming', () => {
+  assert.deepEqual(A.config({ model: 'on-device' }), { model: 'on-device' });
+  assert.deepEqual(A.config({ model: 'private-cloud', base: 'x', key: 'k' }), { model: 'private-cloud' });
+  for (const bad of [null, {}, { model: 'gpt' }, { model: 1 }]) assert.equal(A.config(bad), null);
+  assert.deepEqual(P.caps(A, A.config({ model: 'on-device' })), { text: true, images: true, json: true, tools: false, stream: false, context: 8192 });
+  assert.equal(P.caps(A, A.config({ model: 'private-cloud' })).context, 32768);
+  assert.equal(A.origin, undefined, 'nothing goes over the network from the worker: no host to hold');
+});
+
+test('status: the native answer in the harness\'s words; no handler or a strange answer is unavailable', async () => {
+  const cfg = A.config({ model: 'on-device' });
+  native = async () => ({ ok: true, state: 'ready', context: 8192, images: true });
+  assert.deepEqual(await A.status(cfg), { state: 'ready' });
+  assert.deepEqual(sent.map((s) => s.m), [{ type: 'ai.status', model: 'on-device' }]);
+  native = async () => ({ ok: true, state: 'downloading', reason: 'not-ready' });
+  assert.deepEqual(await A.status(cfg), { state: 'downloading', reason: 'not-ready' });
+  native = async () => ({ ok: true, state: 'unavailable', reason: 'off' });
+  assert.deepEqual(await A.status(cfg), { state: 'unavailable', reason: 'off' });
+  native = async () => ({ ok: true, state: 'unavailable', reason: 'quota', quota: 'reached' });
+  assert.deepEqual(await A.status(A.config({ model: 'private-cloud' })), { state: 'unavailable', reason: 'quota' });
+  native = async () => { throw new Error('Native messaging host not found'); };
+  assert.deepEqual(await A.status(cfg), { state: 'unavailable', reason: 'native' });
+  for (const odd of [null, 'ready', { ok: true, state: 'great' }, { ok: false }]) {
+    native = async () => odd;
+    assert.deepEqual(await A.status(cfg), { state: 'unavailable', reason: 'native' }, JSON.stringify(odd));
+  }
+});
+
+test('a run is one message with the cleaned request and the schema; the JSON answer is read and checked', async () => {
+  native = async () => ok('{"answer":"42"}');
+  const deltas = [];
+  const out = await P.run('apple', ask({ schema: SCHEMA, temperature: 0, maxTokens: 300 }), { model: 'on-device' }, { onDelta: (d) => deltas.push(d) });
+  assert.deepEqual(out, { text: '{"answer":"42"}', json: { answer: '42' }, provider: 'apple', model: 'AFM 3 Core Advanced', finish: 'stop', usage: { input: 12, cached: 0, output: 4 } });
+  assert.deepEqual(deltas, [], 'nothing streams');
+  assert.equal(sent.length, 1);
+  const { app, m } = sent[0];
+  assert.equal(app, 'io.frostdev.Glaze');
+  assert.match(m.id, /^[\w-]{8,64}$/);
+  assert.deepEqual({ ...m, id: 'x' }, { type: 'ai.run', id: 'x', model: 'on-device', schema: SCHEMA, temperature: 0, maxTokens: 300,
+    messages: [{ role: 'system', content: [{ type: 'text', text: 'Answer.' }] }, { role: 'user', content: [{ type: 'text', text: 'Q' }] }] });
+});
+
+test('pictures go as base64 parts; a request with tools is refused before anything is sent', async () => {
+  native = async () => ok('It says hi.');
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64');
+  await P.run('apple', { messages: [{ role: 'user', content: [{ type: 'text', text: 'Read it.' }, { type: 'image', mime: 'image/png', data: png }] }] }, { model: 'on-device' });
+  assert.deepEqual(sent[0].m.messages[0].content[1], { type: 'image', mime: 'image/png', data: png });
+  sent.length = 0;
+  await assert.rejects(P.run('apple', ask({ tools: [{ name: 'today', description: 'Date.', parameters: { type: 'object', properties: {} } }] }), { model: 'on-device' }), { code: 'caps' });
+  assert.equal(sent.length, 0);
+});
+
+test('failures: a refusal is the harness\'s refusal; the rest are categories with a reference, never the native words', async () => {
+  const cfg = { model: 'on-device' };
+  native = async () => ({ ok: false, error: 'refusal', reason: 'guardrail' });
+  await assert.rejects(P.run('apple', ask(), cfg), { code: 'refusal' });
+  const cases = [
+    [{ ok: false, error: 'provider-unavailable', reason: 'ModelManagerServices.ModelManagerError 1046' }, 'provider-unavailable'],
+    [{ ok: false, error: 'request-rejected', reason: 'context', context: 8192, tokens: 9100 }, 'request-rejected'],
+    [{ ok: false, error: 'timeout' }, 'timeout'],
+    [{ ok: false, error: 'connection-lost', reason: 'network' }, 'connection-lost'],
+    [{ ok: false, error: 'something new' }, 'invalid-response'],
+    [{ ok: true }, 'invalid-response'],
+    ['text', 'invalid-response'],
+    [undefined, 'invalid-response'],
+  ];
+  for (const [reply, category] of cases) {
+    native = async () => reply;
+    const e = await P.run('apple', ask(), cfg).catch((x) => x);
+    assert.equal(e.category, category, JSON.stringify(reply));
+    assert.match(e.reference, /^[\w-]{36}$/);
+    assert.ok(!e.message.includes('ModelManager'), 'the native reason stays out of the message');
+  }
+  native = async () => ({ ok: false, error: 'request-rejected', reason: 'rate', status: 429 });
+  assert.equal((await P.run('apple', ask(), cfg).catch((x) => x)).status, 429);
+  native = async () => { throw new Error('Native messaging host io.frostdev.Glaze is not available'); };
+  assert.equal((await P.run('apple', ask(), cfg).catch((x) => x)).category, 'provider-unavailable', 'no handler: unavailable, not a lost connection');
+  native = async () => ok('not json');
+  assert.equal((await P.run('apple', ask({ schema: SCHEMA }), cfg).catch((x) => x)).category, 'invalid-response', 'the harness checks the answer');
+});
+
+test('a cancel ends the run at once and asks the native side to stop the same run', async () => {
+  let release;
+  native = (m) => (m.type === 'ai.cancel' ? Promise.resolve({ ok: true, cancelled: true }) : new Promise((r) => { release = r; }));
+  const c = new AbortController();
+  const running = P.run('apple', ask(), { model: 'on-device' }, { signal: c.signal });
+  await new Promise(setImmediate);
+  c.abort(new DOMException('Cancelled', 'AbortError'));
+  await assert.rejects(running, { category: 'cancelled' });
+  await new Promise(setImmediate);
+  assert.deepEqual(sent.map((s) => s.m.type), ['ai.run', 'ai.cancel']);
+  assert.equal(sent[1].m.id, sent[0].m.id);
+  release(ok('late'));
+});
+
+test('the broker keeps an apple connection, tests it and runs a task on it, with no host permission involved', async () => {
+  const vault = new Map();
+  const env = {
+    who: '3', allowed: Promise.resolve(true), enabled: async () => true,
+    settings: async () => ({ on: true, use: 'mac', features: { syllabus: true } }),
+    vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
+    reach: async () => { throw new Error('an apple connection never asks for a host'); },
+    fetch: async () => { throw new Error('nothing is fetched'); },
+    task: async () => echo,
+  };
+  const echo = T.define({ id: 'example.echo', version: 1, input: (raw) => raw, build: (input, { text }) => text.request({ system: 'Repeat.', data: [{ label: 'text', text: input.text }] }),
+    output: S.obj({ text: S.str('The text.') }, ['text']), check: (o) => o });
+  assert.deepEqual(await B.config({ op: 'set', id: 'mac', cfg: { provider: 'apple', model: 'on-device' } }, env), { ok: true });
+  assert.deepEqual((await B.config({ op: 'get' }, env)).connections, { mac: { provider: 'apple', model: 'on-device', key: '' } });
+  native = async (m) => (m.type === 'ai.status' ? { ok: true, state: 'ready', context: 8192 } : ok('{"text":"hello"}'));
+  assert.deepEqual(await B.config({ op: 'test', id: 'mac' }, env), { ok: true, state: 'ready' });
+  const posted = [];
+  const on = [];
+  B.connect({ postMessage: (m) => posted.push(m), disconnect() {}, onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener() {} } }, env);
+  on.forEach((f) => f({ id: 1, op: 'status', feature: 'syllabus' }));
+  on.forEach((f) => f({ id: 2, op: 'run', feature: 'syllabus', task: 'example.echo', input: { text: 'hello' } }));
+  for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+  assert.deepEqual(posted.find((m) => m.id === 1), { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'apple', caps: { text: true, images: true, json: true, tools: false, stream: false, context: 8192 } });
+  const end = posted.find((m) => m.id === 2 && m.type === 'end');
+  assert.deepEqual(end.output, { text: 'hello' });
+  assert.equal(end.meta.provider, 'apple');
+});
