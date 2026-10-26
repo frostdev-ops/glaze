@@ -608,6 +608,30 @@ test('without an editable app info, existing version languages can still be brou
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a language Apple adds to the version itself, when its app info gets that language, is updated rather than created twice', async () => {
+  const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    // App Store Connect gives an editable version the app info's new language on its own; creating it again answers 409.
+    const auto = { id: 'loc-de-auto', attributes: { locale: 'de-DE' } };
+    let added = false;
+    stubFetch(route({
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
+      'GET /appInfos/info-1/appInfoLocalizations?limit=200': { data: [enInfo()] },
+      'POST /appInfoLocalizations': (call) => { added = true; return created('ail')(call); },
+      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': () => reply({ data: [enVersionLocale({ whatsNew: listings.en.apple.whatsNew }), ...added ? [auto] : []] }),
+      'POST /appStoreVersionLocalizations': () => reply({ errors: [{ status: '409', code: 'ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE', detail: 'Entity with locale: de-DE already exists. Try updating.' }] }, 409),
+      'PATCH /appStoreVersionLocalizations/*': {},
+      'PATCH /appInfoLocalizations/*': {},
+    }));
+    await syncAppleListing(e, 'app-1', 'MAC_OS', { id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION' } }, { en: listings.en, de: listings.de });
+    const patches = calls.filter((c) => c.method === 'PATCH' && c.url.endsWith('/appStoreVersionLocalizations/loc-de-auto')).map((c) => bodyOf(c).data.attributes);
+    assert.ok(patches.length, 'the version\'s own German copy is filled in');
+    const fields = Object.assign({}, ...patches);
+    assert.equal(fields.description, listings.de.apple.description);
+    assert.equal(fields.whatsNew, listings.de.apple.whatsNew);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('a version in review is never edited', async () => {
   const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
   try {
