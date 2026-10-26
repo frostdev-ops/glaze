@@ -464,3 +464,18 @@ test('office context survives normalized quote whitespace and cannot borrow a co
   } }, { text });
   assert.equal(A.interpret(out, OPTS, heur, text).prof.office.value, '');
 });
+
+test('e-mail local-part punctuation cannot separate a copied suffix from its actual address', () => {
+  for (const prefix of ['not#', 'not%', 'not&', 'not=', 'not!', 'not~']) {
+    const text = `Email: ${prefix}ada@example.edu`;
+    const out = task.check({ ...blank(), prof: { ...blank().prof, email: { text: 'ada@example.edu', quote: text } } }, { text });
+    assert.deepEqual(out.prof.email, none, prefix);
+  }
+});
+
+test('explicit office wording still identifies a room without a colon', () => {
+  for (const quote of ['Office Law Building 4.22', 'My office is Law Building 4.22', 'Office\tLaw Building 4.22']) {
+    const out = task.check({ ...blank(), prof: { ...blank().prof, office: { text: 'Law Building 4.22', quote } } }, { text: quote });
+    assert.equal(A.interpret(out, OPTS, L.extract(quote, OPTS), quote).prof.office.value, 'Law Building 4.22', quote);
+  }
+});
