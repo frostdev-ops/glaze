@@ -398,3 +398,22 @@ test('an authority revision changed during the final connection read refuses con
   assert.equal(ran, 0);
   assert.equal(p.posted.at(-1).type, 'error');
 });
+
+test('cancelling while the vault is pending releases admission without a late request', async () => {
+  let release;
+  const e = env(), get = e.vault.get;
+  e.vault.get = () => new Promise((r) => { release = () => r({ main: CONN }); });
+  const p = open(e);
+  p.say(run());
+  await flush();
+  p.say({ id: 1, op: 'cancel' });
+  await flush();
+  assert.equal(p.posted.at(-1)?.error, 'cancelled');
+  e.vault.get = get;
+  p.say(run(undefined, { id: 2 }));
+  await flush();
+  assert.equal(p.posted.at(-1).type, 'end');
+  release();
+  await flush();
+  assert.equal(e.calls.filter((c) => c.url.endsWith('/chat/completions')).length, 1);
+});
