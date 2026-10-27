@@ -158,6 +158,17 @@ test('insertText adds plain text in the current marks; a newline starts a block 
   assert.equal(run(blank(), 'insertText', '').ok, false);
 });
 
+test('insertText replaces the selection even when its first line is empty', () => {
+  for (const mode of ['compose', 'paper']) {
+    const st = select(make('<p>a😀c</p>', mode), '😀');
+    const inserted = run(st, 'insertText', '\n');
+    assert.equal(html(inserted.st), '<p>a</p><p>c</p>');
+    assert.equal(inserted.st.selection.empty, true);
+    assert.equal(S.text(inserted.st.doc).offsetAt(inserted.st.selection.from), 2);
+    assert.equal(html(run(inserted.st, 'undo').st), '<p>a😀c</p>');
+  }
+});
+
 test('paper only: page breaks split the paragraph, footnotes keep their text, line spacing is set per line', () => {
   const compose = E.commands(S.compose);
   for (const name of ['pageBreak', 'footnote', 'lineSpacing']) assert.equal(name in compose, false, name);
