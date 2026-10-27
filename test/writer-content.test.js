@@ -152,3 +152,13 @@ test('a refusal after the student wrote in Writer still hands their words back f
   assert.equal(b.editor.textContent, 'Written first');
   assert.ok(!b.root.previousElementSibling?.matches?.('iframe.gz-writer'));
 });
+
+test('a page answering after the real write, with a wrong claim, can\'t make a confirmed write look failed', async () => {
+  const c = content(); await c.start();
+  const b = c.native(), frame = b.root.previousElementSibling;
+  c.doc.addEventListener('gz-writer:set', (e) => { const m = JSON.parse(e.detail); c.doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: false }) })); });
+  c.emit({ type: 'change', html: '<p>Written for real</p>', text: 'Written for real', words: 3 });
+  c.emit({ type: 'native' });
+  assert.ok(!frame.isConnected, 'the box goes back: the native editor holds the words');
+  assert.equal(b.editor.textContent, 'Written for real');
+});
