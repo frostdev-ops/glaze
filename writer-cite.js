@@ -176,12 +176,12 @@
     'article-journal': [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Journal'], ['volume', 'Volume'], ['issue', 'Issue'], ['page', 'Pages'], ['issued', 'Date'], ['DOI', 'DOI'], ['URL', 'URL']],
     'article-magazine': [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Magazine'], ['issued', 'Date'], ['page', 'Pages'], ['URL', 'URL']],
     'article-newspaper': [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Newspaper'], ['issued', 'Date'], ['page', 'Pages'], ['URL', 'URL']],
-    webpage: [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Website'], ['publisher', 'Publisher'], ['issued', 'Date'], ['URL', 'URL'], ['accessed', 'Accessed']],
+    webpage: [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Website'], ['publisher', 'Publisher'], ['issued', 'Date'], ['URL', 'URL'], ['accessed', 'Accessed'], ['retrieval', 'Changes over time']],
     motion_picture: [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Platform'], ['publisher', 'Uploaded by'], ['issued', 'Date'], ['URL', 'URL']],
     report: [['author', 'Authors'], ['title', 'Title'], ['publisher', 'Publisher'], ['number', 'Report number'], ['issued', 'Date'], ['URL', 'URL']],
   };
   const LIST = new Set(['author', 'editor']), DATES = new Set(['issued', 'accessed']);
-  const showField = (src, k) => (LIST.has(k) ? (src[k] || []).map(S.showName).join('\n') : DATES.has(k) ? S.showDate(src[k]) : k === 'title' || k === 'container-title' ? String(src[k] || '').replace(/<\/?i>/g, '') : String(src[k] ?? ''));
+  const showField = (src, k) => (k === 'retrieval' ? src[k] === true : LIST.has(k) ? (src[k] || []).map(S.showName).join('\n') : DATES.has(k) ? S.showDate(src[k]) : k === 'title' || k === 'container-title' ? String(src[k] || '').replace(/<\/?i>/g, '') : String(src[k] ?? ''));
   // host ← a form for src; done(source) on submit, cancel() on Cancel, drop(id) on Remove (an existing source).
   const form = (host, src, { submit, done, cancel, drop }) => {
     let kind = src.type === 'book' && src.editor?.length && !src.author?.length ? 'edited' : FIELDS[src.type] ? src.type : 'book';
@@ -193,10 +193,10 @@
     const draw = () => {
       grid.replaceChildren(...FIELDS[kind].map(([k, label]) => {
         const id = `gzc-${k}`;
-        const input = LIST.has(k) ? el('textarea', { id, rows: 2, spellcheck: 'false', placeholder: t('Last, First') }) : el('input', { id, type: 'text', spellcheck: k === 'title' || k === 'container-title' ? 'true' : 'false' });
-        input.value = values[k] || '';
+        const input = LIST.has(k) ? el('textarea', { id, rows: 2, spellcheck: 'false', placeholder: t('Last, First') }) : el('input', { id, type: k === 'retrieval' ? 'checkbox' : 'text', spellcheck: k === 'title' || k === 'container-title' ? 'true' : 'false' });
+        if (k === 'retrieval') input.checked = values[k] === true; else input.value = values[k] || '';
         input.dataset.field = k;
-        input.addEventListener('input', () => { values[k] = input.value; });
+        input.addEventListener('input', () => { values[k] = k === 'retrieval' ? input.checked : input.value; });
         return el('label', { class: `gzc-field${k === 'title' || LIST.has(k) || k === 'container-title' || k === 'URL' ? ' wide' : ''}`, for: id }, el('span', { text: t(label) }), input);
       }));
     };
@@ -212,7 +212,7 @@
     f.addEventListener('submit', (e) => {
       e.preventDefault();
       const raw = { id: src.id, type: kind === 'edited' ? 'book' : kind };
-      for (const [k] of FIELDS[kind]) { const v = (values[k] || '').trim(); if (v) raw[k] = LIST.has(k) ? S.names(v) : DATES.has(k) ? S.date(v) || undefined : v; }
+      for (const [k] of FIELDS[kind]) { if (k === 'retrieval') { raw[k] = values[k] === true; continue; } const v = (values[k] || '').trim(); if (v) raw[k] = LIST.has(k) ? S.names(v) : DATES.has(k) ? S.date(v) || undefined : v; }
       // A title left as it was keeps its italics (the field shows it plain).
       for (const k of ['title', 'container-title']) if (src[k] && raw[k] === showField(src, k)) raw[k] = src[k];
       // What the lookup found but the form doesn't show stays (title-short, archive, …).
