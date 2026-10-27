@@ -185,7 +185,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         const r = await new Promise((resolve) => {
           const timer = setTimeout(() => resolve({ ok: false, error: 'page' }), 85000);
           waiting = { run, step: (st) => { if (st === 'attach') submit.textContent = t('Attaching…'); else submit.textContent = t('Submitting…'); }, done: (x) => { clearTimeout(timer); resolve(x); } };
-          frame.say({ type: 'submit:go', run, name, bytes, note: note.value, text, until });
+          frame.say({ type: 'submit:go', run, key: snapshot.key, name, bytes, note: note.value, text, until });
         });
         if (waiting?.run === run) waiting = null;
         if (mine.cancelled || sheet !== mine) return;
