@@ -30,7 +30,7 @@ test('a minimum, said every way prompts say it', () => {
     ['In 250 words or more, explain the author\'s argument.', { minWords: 250 }],
     ['Your response must be no fewer than 175 words.', { minWords: 175 }],
     ['No less than 200 words, please.', { minWords: 200 }],
-    ['Your post should be more than 150 words.', { minWords: 150 }],
+    ['Your post should be more than 150 words.', { minWords: 151 }],
     ['Write at least two hundred fifty words.', { minWords: 250 }],
     ['Write at least two hundred and fifty words.', { minWords: 250 }],
     ['at least one thousand words', { minWords: 1000 }],
@@ -44,7 +44,7 @@ test('a minimum, said every way prompts say it', () => {
 test('a maximum', () => {
   cases([
     ['No more than 500 words.', { maxWords: 500 }],
-    ['Keep your post under 400 words.', { maxWords: 400 }],
+    ['Keep your post under 400 words.', { maxWords: 399 }],
     ['Do not exceed 750 words.', { maxWords: 750 }],
     ['Your reflection should not exceed 600 words.', { maxWords: 600 }],
     ['Posts that exceed 500 words will be penalized.', { maxWords: 500 }],
@@ -54,7 +54,7 @@ test('a maximum', () => {
     ['A maximum of 1,000 words.', { maxWords: 1000 }],
     ['Word limit: 1,000', { maxWords: 1000 }],
     ['There is a 500-word limit.', { maxWords: 500 }],
-    ['Answer in fewer than 100 words.', { maxWords: 100 }],
+    ['Answer in fewer than 100 words.', { maxWords: 99 }],
     ['Your summary should be at most 150 words.', { maxWords: 150 }],
   ]);
 });
@@ -257,5 +257,25 @@ test('alternatives, per-part counts and optional counts stay unknown', () => {
     ['Write 250-300 words or 2 pages.', {}],
     ['Your response may not exceed 300 words.', { maxWords: 300 }],
     ['1. Write at least 250 words.\n2. Cite 2 sources.', { minWords: 250, sources: 2 }],
+  ]);
+});
+
+
+test('strict word comparisons keep their direction and exact integer boundary', () => {
+  cases([
+    ['Your post should exceed 250 words.', { minWords: 251 }],
+    ['Write more than 150 words.', { minWords: 151 }],
+    ['Write over 200 words.', { minWords: 201 }],
+    ['Write in excess of 200 words.', { minWords: 201 }],
+    ['Use less than 100 words.', { maxWords: 99 }],
+    ['Cite more than two sources.', { sources: 3 }],
+    ['Reply to more than two classmates.', { replies: 3 }],
+    ['Use not more than three sources.', {}],
+    ['Do not exceed three sources.', {}],
+    ['Posts under 250 words will lose points.', { minWords: 250 }],
+    ['Posts over 500 words will be penalized.', { maxWords: 500 }],
+    ['Posts that exceed 500 words will be penalized.', { maxWords: 500 }],
+    ['Do not exceed 500 words.', { maxWords: 500 }],
+    ['Use at least 250 words and no more than 500 words.', { minWords: 250, maxWords: 500 }],
   ]);
 });
