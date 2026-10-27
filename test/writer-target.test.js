@@ -215,3 +215,25 @@ test('another language is a RULES entry, read by the same matcher', () => {
     assert.deepEqual(T.parse('at least 250 words', { lang: 'xx' }), want({ minWords: 250 }), 'a language without rules reads as English');
   } finally { delete T.RULES.fr; }
 });
+
+test('examples, optional or negated instructions and input lengths never become targets', () => {
+  cases([
+    ['For example, "Write at least 250 words and cite 2 sources." Explain why that instruction is unclear.', {}],
+    ['Read the passage: “Respond in 300 words.” Then reply to one classmate.', { replies: 1 }],
+    ['Example: write at least 250 words, cite two sources and reply to two classmates.', {}],
+    ['Do not write 300 words. Do not cite two sources or reply to two classmates.', {}],
+    ['Your post does not need at least 250 words.', {}],
+    ['You may cite two sources, but sources are optional.', {}],
+    ['Please review a 300-word article. Summarize it in 2 pages.', {}],
+    ['Your sources must be no more than 3 sources.', {}],
+    ['Reply to no more than 2 classmates.', {}],
+    ['250.5 words minimum', {}],
+    ['Part 1: Write 200 words. Part 2: Write 200 words.', {}],
+    ['Each of the two parts must be at least 250 words.', {}],
+    ['Write 250-300 words total across your two replies.', {}],
+    ['Write 2 pages. Read pages 250-300. Due 10/27, worth 20 points.', {}],
+    ['Escriba dos páginas. Entrega: 27/10, 20 puntos.', {}],
+    ['Write 250-300 words per reply.', { reply: { minWords: 250, maxWords: 300 } }],
+    ['Use a minimum of 3 scholarly sources and 2 replies.', { sources: 3, replies: 2 }],
+  ]);
+});
