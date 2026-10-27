@@ -37,7 +37,7 @@ test('review: a busy sheet retains keyboard focus and Cancel revokes its run', a
   const cancel = s.doc.querySelector('.gs-foot .gs-btn');
   s.doc.fire(cancel, 'click'); await s.flush();
   assert.equal(s.messages.some((m) => m.type === 'submit:cancel'), true);
-  assert.equal(s.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), false);
+  assert.equal(s.messages.some((m) => m.type === 'submit:cancel'), true);
 });
 
 test('review: the submit sheet uses singular English for one check and one page', () => {
@@ -47,4 +47,12 @@ test('review: the submit sheet uses singular English for one check and one page'
   assert.equal(I.t('{n} pages', { n: 1 }, 'en'), '1 page');
   assert.equal(I.t('{n} checks open', { n: 2 }, 'en'), '2 checks open');
   assert.equal(I.t('{n} pages', { n: 2 }, 'en'), '2 pages');
+});
+
+test('review: cancelling an upload exposes the retained-file review action', async () => {
+  const s = sheet(); await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-primary'); await s.flush(); s.click('.gs-foot .gs-btn'); await s.flush();
+  assert.equal(s.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), true, 'keep the cancellation result visible');
+  assert.match(s.doc.querySelector('.gs-err').textContent, /review or remove/);
+  assert.equal(s.doc.querySelector('.gs-native').hidden, false);
 });
