@@ -14,6 +14,8 @@
 var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const L = () => globalThis.GZ_WRITER_SUBMIT_LIB;
   const armed = new Map(); // box → whether it's still features/writer.js's
+  const submitted = new WeakSet();
+  const runs = new WeakMap(), tokens = new WeakMap();
   const attached = new WeakMap(); // box → the file name this page already attached for it
   let passing = null, running = false, down = null;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -123,15 +125,21 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   };
   const go = async (box, m, ok) => {
     const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error }); return false; };
-    if (running) return fail('busy');
+    if (running || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= (runs.get(box) || 0)) return fail('busy');
+    runs.set(box, m.run);
     const name = m.name, bytes = m.bytes;
     if (!L().safeName(name) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
+    const token = tokens.get(box) || crypto.randomUUID();
+    tokens.set(box, token);
+    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user: box.context?.paper?.user }))?.ok === true;
     try {
       const d = L().delta({ note: m.note, text: m.text || '' });
       let s = L().advance(L().advance(L().start({ text: !!d }), { step: 'save' }), { step: 'docx' });
       const here = () => ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
+      if (!here()) return fail('page');
+      if (!await permit('claim')) return fail('claimed');
       if (!here()) return fail('page');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
       const file = new File([bytes], name, { type: L().MIME, lastModified: Date.now() });
@@ -149,6 +157,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000);
       if (!b) return fail('submit');
       if (!here() || !L().may(s, 'submit') || L().listed(L().panelOf(box.editor), name, visible) <= 0) return fail('page');
+      if (!await permit('commit') || !here() || !L().enabled(b) || b !== L().footer(box.editor).submit) return fail('page');
+      submitted.add(box);
       pass(b);
       say(box, { type: 'submit:done', run: m.run, ok: true });
       return true;

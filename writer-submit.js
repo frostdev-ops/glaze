@@ -22,6 +22,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     text: 'The text didn’t go into Ultra’s text box. Nothing was submitted.',
     submit: 'Ultra’s Submit didn’t turn on. Nothing was submitted.',
     page: 'The attempt page changed. Nothing was submitted.',
+    claimed: 'This attempt is already being submitted or needs review. Use Blackboard editor to continue.',
   };
   const h = (tag, props = {}, ...kids) => {
     const e = document.createElement(tag);
