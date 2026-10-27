@@ -17,10 +17,12 @@ const shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-cite-shots';
 const NEWS = 'https://news.example.com/2019/03/22/forgetting.html';
 const checks = [], requests = [], errors = [], failures = [];
 const review = (v, label) => { checks.push(label); if (!v) { failures.push(label); console.log(`FAIL ${label}`); } else console.log(`ok ${label}`); };
+let debugFrame;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 10000) => {
   const start = Date.now(); let last;
   while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(60); }
+  if (debugFrame) console.error(await debugFrame.evaluate(() => ({ pop: document.querySelector('.gz-cite')?.outerHTML.slice(0, 5000), focus: document.activeElement?.outerHTML.slice(0, 200) })));
   throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
 };
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
@@ -54,17 +56,19 @@ const HARNESS = `(() => {
     env.noFirstRun(context); context.setDefaultTimeout(10000);
     // The lookups' answers, as doi.org (after its redirect), Open Library and a news site give them.
     const ANSWERS = {
-      'https://doi.org/10.5555/gz.2026.001': { contentType: 'application/vnd.citationstyles.csl+json', body: fixture('writer-cite-doi.json') },
+      'https://doi.org/10.5555/gz.2026.001': { status: 302, headers: { location: 'https://api.crossref.org/v1/works/10.5555%2Fgz.2026.001/transform' } },
+      'https://api.crossref.org/v1/works/10.5555%2Fgz.2026.001/transform': { contentType: 'application/vnd.citationstyles.csl+json', body: fixture('writer-cite-doi.json') },
       'https://doi.org/10.5555/slow': { contentType: 'application/vnd.citationstyles.csl+json', body: fixture('writer-cite-doi.json') },
       'https://doi.org/10.5555/missing': { status: 404, contentType: 'text/html', body: 'not found' },
       'https://openlibrary.org/api/books?bibkeys=ISBN:9780306406157&format=json&jscmd=data': { contentType: 'application/json', body: fixture('writer-cite-openlibrary.json') },
+      'https://news.example.com/redirect': { status: 302, headers: { location: 'https://www.example.com/final' } },
       [NEWS]: { contentType: 'text/html; charset=utf-8', body: fixture('writer-cite-page.html') },
     };
     await context.route('**/*', async (r) => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
       requests.push({ method: req.method(), url: u.href, cookie: !!(await req.allHeaders()).cookie, referer: (await req.allHeaders()).referer || '', accept: (await req.allHeaders()).accept || '' });
-      if (ANSWERS[u.href] && req.method() === 'GET') { if (u.href.endsWith('/slow')) await pause(500); return r.fulfill(ANSWERS[u.href]); }
+      if (ANSWERS[u.href] && req.method() === 'GET') { if (u.href.endsWith('/slow')) await pause(500); return r.fulfill({ ...ANSWERS[u.href], headers: { 'access-control-allow-origin': '*', ...ANSWERS[u.href].headers } }); }
       if (req.method() !== 'GET' || u.origin !== site) return r.abort();
       if (u.pathname === '/gz-check/quill.js') return r.fulfill({ contentType: 'text/javascript', body: quill });
       if (u.pathname === '/gz-check/harness.js') return r.fulfill({ contentType: 'text/javascript', body: HARNESS });
@@ -82,7 +86,7 @@ const HARNESS = `(() => {
     p.on('pageerror', (e) => errors.push(`page: ${e.message}`));
     await p.goto(`${site}/ultra/courses/_101_1/discussion/_9_1`);
     const el = await until(async () => { const h = await p.$('iframe.gz-writer[data-gz-writer-frame="post"]'); return h && await h.evaluate((f) => !f.style.opacity && f.offsetHeight > 100) && h; }, 'post frame shown');
-    const fr = await until(() => el.contentFrame(), 'frame document');
+    const fr = await until(() => el.contentFrame(), 'frame document'); debugFrame = fr;
     await until(() => fr.evaluate(() => !!document.querySelector('.ProseMirror') && !!globalThis.GZ_WRITER_CITE?.open), 'editor and citations in the frame');
     fr.page().on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text()}`); });
     const shot = async (target, name) => { fs.mkdirSync(shots, { recursive: true }); await pause(250); const f = path.join(shots, name); await target.screenshot({ path: f }); return f; };
@@ -125,6 +129,7 @@ const HARNESS = `(() => {
     await until(() => fr.evaluate(() => document.querySelector('.gzc-form [data-field="title"]')?.value === 'Rememory and the River in Beloved'), 'DOI lookup fills the form');
     check(await fr.evaluate(() => document.querySelector('.gzc-type').value === 'article-journal' && document.querySelector('[data-field="author"]').value === 'Okafor, Ana\nPark, Lee' && document.querySelector('[data-field="container-title"]').value === 'Journal of Synthetic Studies'), 'doi.org\'s CSL-JSON becomes a journal article, authors one a line');
     check(requests.some((r) => r.url === 'https://doi.org/10.5555/gz.2026.001' && r.accept === 'application/vnd.citationstyles.csl+json' && !r.cookie && !r.referer), 'the worker asks doi.org for CSL-JSON, with no cookie or referrer');
+    check(requests.some((r) => r.url.startsWith('https://api.crossref.org/')), 'an opaque DOI redirect resolves through the fixed Crossref CSL endpoint');
     check(await fr.evaluate(() => __asks.length === 0), 'a DOI asks the browser for no host (doi.org answers every origin)');
     saved.form = await shot(el, 'cite-form.png');
     await fr.fill('.gzc-acts .gzc-page', '115');
@@ -149,6 +154,20 @@ const HARNESS = `(() => {
     await fr.click('.gzc-acts .sbtn[type="submit"]');
     await until(async () => (await edText()).includes('Forgetting is active (Carey)'), 'page citation inserted');
     check(true, 'a page with no page number cites as "(Carey)"');
+
+    check(await worker.evaluate(async (origin) => {
+      await granting(`${origin}/*`);
+      const state = await chrome.storage.local.get(['ultra', 'canvas', 'moodle']);
+      const scripts = await chrome.scripting.getRegisteredContentScripts();
+      return Object.values(state).every((list) => !list?.some((v) => v.includes(origin))) && !scripts.some((s) => s.matches?.some((v) => v.includes(origin)));
+    }, new URL(NEWS).origin), 'the actual feature-grant handler never enrolls or registers the citation host as an LMS');
+    await fr.evaluate(() => GZ_WRITER_CITE.open());
+    await fr.fill('.gzc-in', 'https://news.example.com/redirect');
+    await fr.click('.gzc-row .sbtn');
+    await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite [data-field="URL"]')), 'opaque page redirect fallback');
+    check(await fr.evaluate(() => document.querySelector('.gz-cite .gzc-status').textContent === 'This page redirects. Use its final address or add it manually.') && !requests.some((r) => r.url === 'https://www.example.com/final'), 'an opaque page redirect opens the manual form without touching its unheld destination');
+    await fr.click('.gz-cite [data-do="cancel"]');
+    await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'redirect Cancel restores the lookup row');
 
     // ---- an ISBN, and a failed lookup ----
     await fr.evaluate(() => GZ_WRITER_CITE.open());
@@ -239,11 +258,13 @@ const HARNESS = `(() => {
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite [data-field="URL"]')), 'no-permissions manual URL form');
     check(await fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-status').textContent && document.querySelector('.gz-cite [data-field="URL"]').value === 'https://news.example.com/2019/03/22/forgetting.html'), 'without permissions, URL lookup opens the manual form with a one-line reason');
     await fr.click('.gz-cite [data-do="cancel"]');
+    await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'Cancel restores the lookup row');
     await fr.fill('.gzc-in', '10.5555/gz.2026.001');
     await fr.click('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gz-cite [data-field="title"]')?.value === 'Rememory and the River in Beloved'), 'DOI without permissions API');
     check(true, 'DOI lookup still works without the permissions API');
     await fr.click('.gz-cite [data-do="cancel"]');
+    await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'Cancel restores the lookup row');
     await fr.fill('.gzc-in', '9780306406157');
     await fr.click('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gz-cite [data-field="title"]')?.value === 'The River Keeps: A novel'), 'ISBN without permissions API');
