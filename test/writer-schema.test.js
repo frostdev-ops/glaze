@@ -248,6 +248,13 @@ test('links: only what Quill keeps, and a bare domain when asked', () => {
   assert.equal(S.href('not a url', true), null);
 });
 
+test('HTML entities preserve accented and mathematical text without decoding markup twice', () => {
+  assert.equal(S.text(S.parse(C, '<p>&eacute; &Alpha; &NotEqualTilde; &AMP; &notin;</p>')).text, 'é Α ≂̸ & ∉');
+  assert.equal(out('<p>&amp;lt; &notit; &#0000000000060; &#x00000000003e; &#128;</p>'), '<p>&amp;lt; ¬it; &lt; &gt; €</p>');
+  assert.equal(out('<p><a href="https://a.b/?x=&notit;&y=&copy=1">x</a></p>'), '<p><a href="https://a.b/?x=&amp;notit;&amp;y=&amp;copy=1" rel="noopener noreferrer" target="_blank">x</a></p>');
+  assert.equal(out('<p><a href="java&Tab;script:alert(1)">x</a><a href="javascript&colon;alert(1)">y</a></p>'), '<p>xy</p>');
+});
+
 test('untrusted HTML refuses excessive depth, size, tokens and table spans before parsing', () => {
   const bad = [
     '<span>'.repeat(5000) + 'x' + '</span>'.repeat(5000),
