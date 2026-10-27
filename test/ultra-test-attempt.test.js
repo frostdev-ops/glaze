@@ -109,3 +109,9 @@ test('rubric title band, Grades tabs and empty states sit on surfaces', () => {
   }), []);
   assert.deepEqual(clear({ 'rubric title': with_(chain(...RUBRIC, 'h2.panel-section-header-text'), { 'data-gz-light': '' }) }), []);
 });
+
+
+test('editable question editors keep their control boundary', () => {
+  const root = chain(...QUESTION('essay'), 'form', 'div.question-content', 'div.bb-editor-wrapper', 'div.bb-editor-root');
+  assert.match(winner(theme, root, 'border')[0], /1px solid/, 'the editor remains a bordered control inside the question card');
+});
