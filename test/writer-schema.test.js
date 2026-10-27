@@ -241,6 +241,26 @@ test('untrusted HTML refuses excessive depth, size, tokens and table spans befor
   assert.equal(out('<p>' + '<span>'.repeat(32) + 'safe' + '</span>'.repeat(32) + '</p>'), '<p>safe</p>');
 });
 
+test('loses refuses unsupported Ultra formats and empty embedded blots before takeover', () => {
+  const cases = [
+    ['<p dir="rtl">שלום</p>', 'format'],
+    ['<p class="ql-direction-rtl">عربي</p>', 'format'],
+    ['<p style="line-height:2">double</p>', 'format'],
+    ['<p style="text-indent:.5in">first</p>', 'format'],
+    ['<p class="ql-indent-9">deep</p>', 'format'],
+    ['<span class="ql-customcolor-red">red</span>', 'format'],
+    ['<span class="embedded-app" data-id="1"></span>', 'attachment'],
+    ['<bb-embedded-app data-id="1"></bb-embedded-app>', 'attachment'],
+    ['<span class="ql-math" data-value="x"></span>', 'math'],
+    ['<span class="video-studio"></span>', 'media'],
+    ['<div class="ql-table-cell">cell</div>', 'table'],
+    ['<p><sup class="gz-footnote" data-footnote="note"></sup></p>', 'attachment'],
+    ['<p><a href="/relative">link</a></p>', 'format'],
+  ];
+  for (const [input, loss] of cases) assert.ok(S.loses(C, input).includes(loss), input);
+  assert.deepEqual(S.loses(C, '<p dir="ltr" style="font-weight:700;text-align:center">safe</p>'), []);
+});
+
 test('both files are classic scripts that load after lib/pm.js in a page, once', () => {
   for (const f of ['lib/writer-schema.js', 'lib/writer-editor.js']) {
     const src = fs.readFileSync(path.join(root, f), 'utf8');
