@@ -163,7 +163,11 @@ const HARNESS = `(() => {
     await pause(150);
     check(await reply.fr.evaluate(() => { const r = document.getElementById('tb').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; }), 'selection toolbar stays inside a narrow editor');
     await reply.el.evaluate((f, w) => { f.style.width = w; }, originalWidth);
+    await until(async () => (await reply.fr.evaluate(() => innerWidth)) === Math.round(await reply.el.evaluate((f) => f.getBoundingClientRect().width)), 'reply frame width restored');
+    await reply.fr.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     await reply.fr.click('.ProseMirror');
+    await until(() => reply.fr.evaluate(() => document.hasFocus() && !!document.activeElement?.closest('.ProseMirror')), 'reply refocused after resizing');
     await p.keyboard.press('End');
     // Synthetic delayed enablement: a sync write restarts the native render, so redundant writes would lose this send.
     await p.evaluate((s) => {
@@ -174,7 +178,8 @@ const HARNESS = `(() => {
     }, REPLY);
     await p.keyboard.press(`${MOD}+Enter`);
     await p.keyboard.press(`${MOD}+Enter`);
-    await pause(400);
+    await until(async () => (await clicks(p)).includes('Reply'), 'Reply clicked after native enablement');
+    await pause(200);
     check((await clicks(p)).filter((c) => c === 'Reply').length === 1, 'Ctrl/Cmd+Enter clicks the native Reply once');
     // Ultra clears its box after a post: the frame follows.
     await p.evaluate((s) => __quill(s).setContents([], 'user'), REPLY);
