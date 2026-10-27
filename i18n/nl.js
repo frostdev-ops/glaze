@@ -3291,4 +3291,6 @@
   "Add the year": "Voeg het jaar toe",
   "{list} is out of order": "{list} staat niet op volgorde",
   "{name} is never cited": "{name} wordt nergens geciteerd",
+  "Personal dictionary": "Persoonlijk woordenboek",
+  "Saved sources": "Opgeslagen bronnen",
 };

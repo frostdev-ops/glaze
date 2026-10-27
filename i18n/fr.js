@@ -3291,4 +3291,6 @@
   "Add the year": "Ajoutez l’année",
   "{list} is out of order": "{list} n’est pas dans l’ordre",
   "{name} is never cited": "{name} n’est jamais cité",
+  "Personal dictionary": "Dictionnaire personnel",
+  "Saved sources": "Sources enregistrées",
 };

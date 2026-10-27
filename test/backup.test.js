@@ -12,6 +12,9 @@ const T = require('../lib/todo.js');
 const D = require('../defaults.js');
 const SHARE = require('../lib/sharing.js');
 const SHARE_KEY = SHARE.exportKeys(SHARE.create('collection'));
+const SR = require('../lib/writer-sources.js');
+const SOURCES = SR.key({ school: 'https://bb.school.test', user: '_900_1', course: '_101_1', item: '_7_1' });
+const source = (title, id) => SR.normalize({ id, type: 'book', title, author: [{ family: 'Doe', given: 'Jane' }], issued: { 'date-parts': [[2020]] } });
 
 const SITE = 'https://school.instructure.com';
 const ACCOUNT = `notesIdx:${SITE}/5`;
@@ -55,6 +58,8 @@ const seeded = async () => {
     lookFavorites: [{ code: 'mark-code', name: 'MARK-FAVORITE', at: NOW }],
     [`todo:${SITE}/5`]: T.clean({ tasks: [{ id: 'k1', title: 'MARK-TASK', at: NOW }] }),
     [ACCOUNT]: N.clean({}),
+    writerWords: ['Glazeword', 'MARK-WORD'],
+    [SOURCES]: { sources: [source('MARK-SOURCE', 's-mark-1')], at: NOW },
   });
   await a.send('notesFile', { key: ACCOUNT, file: { id: id(9), note: id(1), kind: 'image', name: 'pic.png', data: N.b64(PNG) } });
   assert.equal((await a.notes({ op: 'save', id: id(1), base: 0, sid: 'a', title: 'MARK-NOTE', html: `<p>MARK-NOTE-BODY</p><p><img data-gz-file="${id(9)}" alt=""></p>` })).ok, true);
@@ -120,6 +125,42 @@ test('Papers, their JSON documents, versions and presets survive a backup restor
   a.stop(); b.stop();
 });
 
+test('the writer\'s dictionary and saved sources join what is here, and a damaged one refuses the file', async () => {
+  const a = await seeded(), file = await backUp(a);
+  const b = device({ writerWords: ['Local', 'glazeword'], [SOURCES]: { sources: [source('Local source', 's-local-1')], at: NOW + 5 } });
+  try {
+    const { plan, out } = await restore(b, file, ['writerWords', 'sources']);
+    assert.deepEqual(plan.cats.writerWords, ['Glazeword', 'MARK-WORD']);
+    assert.deepEqual(out.failed, []);
+    // A word this device has in another case stays as it is; the backup's others go ahead of this device's own.
+    assert.deepEqual(b.store.writerWords, ['MARK-WORD', 'Local', 'glazeword']);
+    assert.deepEqual(b.store[SOURCES].sources.map((x) => x.title), ['Local source', 'MARK-SOURCE']);
+    assert.equal(b.store[SOURCES].at, NOW + 5);
+    const before = structuredClone(b.store);
+    await restore(b, file, ['writerWords', 'sources']);
+    assert.deepEqual(b.store, before, 'restoring again changes nothing');
+    // The same work saved on both devices is kept once, with this device's id.
+    const c = device({ [SOURCES]: { sources: [source('MARK-SOURCE', 's-other-1')], at: NOW } });
+    await restore(c, file, ['sources']);
+    assert.deepEqual(c.store[SOURCES].sources.map((x) => x.id), ['s-other-1']);
+    c.stop();
+  } finally { a.stop(); b.stop(); }
+  for (const [what, local] of [
+    ['', { writerWords: ['ok'] }],
+    ['a word that is no string', { writerWords: ['ok', 5] }],
+    ['a word too long for the dictionary', { writerWords: ['x'.repeat(61)] }],
+    ['a source key no box has', { 'writer:sources:nope': { sources: [], at: NOW } }],
+    ['a source that is no source', { [SOURCES]: { sources: [{ id: 's-bad-1', type: 'book' }], at: NOW } }],
+    ['a source list without its time', { [SOURCES]: { sources: [source('T', 's-bad-2')] } }],
+  ]) {
+    const entries = B.pack({ settings: SETTINGS, tasks: { tasks: {}, pets: {} }, local: {}, version: '9.9.9' });
+    const manifest = JSON.parse(new TextDecoder().decode(entries[0].data));
+    if (local.writerWords) manifest.writerWords = local.writerWords; else manifest.sources = local;
+    entries[0].data = new TextEncoder().encode(JSON.stringify(manifest));
+    assert.equal(await reasonOf(B.read(await zipFile(entries))), what ? 'bad' : 'read', what);
+  }
+});
+
 test('a backup of every category comes back whole on a new device', async () => {
   const a = await seeded(), b = device();
   try {
@@ -149,7 +190,7 @@ test('a backup of every category comes back whole on a new device', async () => 
     assert.deepEqual(N.unb64(pic.data), PNG);
     // Only these categories: nothing Glaze read from the school.
     const raw = JSON.parse(await (await unzipped(file)).text(B.MANIFEST));
-    assert.deepEqual(Object.keys(raw).sort(), ['classes', 'dashNotes', 'format', 'glaze', 'gpa', 'made', 'notes', 'papers', 'settings', 'tasks', 'version', 'widgets']);
+    assert.deepEqual(Object.keys(raw).sort(), ['classes', 'dashNotes', 'format', 'glaze', 'gpa', 'made', 'notes', 'papers', 'settings', 'sources', 'tasks', 'version', 'widgets', 'writerWords']);
   } finally { a.stop(); b.stop(); }
 });
 const unzipped = async (file) => require('../lib/doctext.js').unzip(file.bytes);
@@ -208,6 +249,8 @@ test('an unticked category is left as it is', async () => {
       if (off === 'classes') assert.deepEqual(b.store[`classes:${SITE}/5`], mine[`classes:${SITE}/5`]);
       if (off === 'gpa') assert.equal(b.store[`gpaTerms:${SITE}:5`], undefined);
       if (off === 'papers') assert.equal(b.store['writerPaper:bb.school.test|_900_1|_101_1|_7_1'], undefined);
+      if (off === 'writerWords') assert.equal(b.store.writerWords, undefined);
+      if (off === 'sources') assert.equal(b.store[SOURCES], undefined);
       if (off === 'widgets') assert.equal(b.store.widgetLayout, undefined);
       if (off === 'settings') { assert.deepEqual(b.settings, []); assert.deepEqual(b.store.lookFavorites, []); }
       // Tasks without the settings still come back, through the worker's own record write, with nothing of the settings.
