@@ -73,7 +73,10 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     await P().need(['lib/writer-submit.js']);
     if (sheet) return;
     const ctx = api.context() || {}, paper = api.paper() || {}, view = api.editor.view;
-    const title = L().shortTitle(ctx.assignment?.title || paper.title || '');
+    const snapshot = { doc: view.state.doc, format: JSON.stringify(api.format()), key: api.key(), title: ctx.assignment?.title || paper.title || '' };
+    const same = () => P()?.current() === api && view.state.doc === snapshot.doc && JSON.stringify(api.format()) === snapshot.format && api.key() === snapshot.key &&
+      (api.context()?.assignment?.title || api.paper()?.title || '') === snapshot.title;
+    const title = L().shortTitle(snapshot.title);
     const F = globalThis.GZ_WRITER_FORMAT;
     const surname = F?.surname(view.state.doc, api.format()) || ctx.user?.family || '';
     // Whom the note is for: Ultra's name for them, else the one the student typed in the paper's heading.
@@ -112,7 +115,10 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
 
     // The file's size, once it's built (nothing leaves the frame until Submit).
     let built = null;
-    const build = () => api.docx().then((out) => { built = { doc: view.state.doc, format: api.format(), out }; return out; });
+    const build = () => {
+      const doc = view.state.doc, format = JSON.stringify(api.format()), key = api.key();
+      return api.docx().then((out) => { built = { doc, format, key, out }; return out; });
+    };
     build().then((out) => { if (sheet === mine) size.textContent = `${t('{n} pages', { n: pages })} · ${t('{n} KB', { n: nf(L().kb(out.bytes.length)) })}`; }, () => {});
 
     sw.addEventListener('click', () => { if (!mine.busy) sw.setAttribute('aria-checked', String(sw.getAttribute('aria-checked') !== 'true')); });
@@ -148,12 +154,14 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       const text = paste ? api.editor.text() : null;
       let s = L().start({ text: !!L().delta({ note: note.value, text: text || '' }) });
       try {
+        if (!same()) throw 'page';
         if (!await api.version('submit')) throw 'save';
+        if (!same()) throw 'page';
         s = L().advance(s, { step: 'save' });
         let out;
-        try { out = built && built.doc === view.state.doc && built.format === api.format() ? built.out : await build(); } catch (e) { console.error(e); throw 'docx'; }
+        try { out = built && built.doc === snapshot.doc && built.format === snapshot.format && built.key === snapshot.key ? built.out : await build(); } catch (e) { console.error(e); throw 'docx'; }
         s = L().advance(s, { step: 'docx' });
-        if (!L().may(s, 'attach') || sheet !== mine) throw 'page';
+        if (!same() || !L().may(s, 'attach') || sheet !== mine) throw 'page';
         const bytes = out.bytes.slice().buffer, until = Date.now() + 80000;
         const r = await new Promise((resolve) => {
           const timer = setTimeout(() => resolve({ ok: false, error: 'page' }), 85000);
