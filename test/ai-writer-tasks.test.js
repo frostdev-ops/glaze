@@ -91,7 +91,7 @@ test('writer.complete never starts a new sentence or paragraph, never repeats, n
   assert.equal(said('it arrives uninvited and sta', { truncated: true }), ' arrives uninvited and', 'cut short: the last word may be cut too');
   assert.equal(said('it arrives, I think, unasked.'), ' arrives, I think, unasked.', 'I is not an opener');
   const open = C.task.input({ before: 'Baldwin calls history "the price of the' });
-  assert.equal(C.finish('the ticket," he writes.', open), ' ticket," he writes.', 'a quote the student opened may close');
+  assert.equal(open, null, 'completion cannot invent the rest of an unfinished quotation');
 });
 
 test('writer.complete runs only where the gray text may show, and never on a test', () => {

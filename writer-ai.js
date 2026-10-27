@@ -15,10 +15,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const sentence = (before) => {
     const s = before.split('\n').pop();
     let at = 0;
-    for (const m of s.matchAll(/[.!?…]+["'”’)\]]*\s+/gu)) at = m.index + m[0].length;
+    for (const m of s.matchAll(/[.!?…。！？]+["'”’)\]]*\s*/gu)) at = m.index + m[0].length;
     return s.slice(at);
   };
-  const fits = (before, after = '') => typeof before === 'string' && TAIL.test(before) && !/^[^\S\n]*[^\s]/.test(after)
+  const inQuote = (s) => ((s.replace(/(?<=[\p{L}\p{N}])['’](?=[\p{L}\p{N}])/gu, '').match(/["“”'‘’«»]/g) || []).length % 2) === 1;
+  const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && TAIL.test(before) && !/^[^\S\n]*[^\s]/.test(after)
     && sentence(before).split(/\s+/).filter((w) => WORD.test(w)).length >= 3;
   // The next word of the gray text, with the space before it: what ⌥→ takes.
   const nextWord = (ghost) => /^\s*\S+/.exec(ghost)?.[0] || '';
