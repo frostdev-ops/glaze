@@ -844,7 +844,7 @@
     const m = ed.closest('#compose-message-modal'), BBID = /_\d+_\d+/;
     let near = '';
     for (let p = ultra && ed.parentElement, i = 0; p && !near && i < 15; p = p.parentElement, i++) {
-      for (const a of p.attributes) if ((a.name === 'id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
+      for (const a of p.attributes) if ((a.name === 'id' || a.name === 'message-id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
     }
     return { ed, id: ed.id, near, path: location.pathname, at: Date.now(), text: ultra ? ed.textContent : ed.value, html: ultra ? ed.innerHTML : ed.value,
       subject: m?.querySelector('input[data-testid="subject-input"]')?.value, name: m?.querySelector('input[data-testid="course-select-modal"]')?.value,
