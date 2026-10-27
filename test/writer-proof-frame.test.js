@@ -9,7 +9,7 @@ const flush = async () => { for (let n = 0; n < 20; n++) await Promise.resolve()
 const frame = (options = {}) => {
   const events = {}, hooks = [], ports = [], timers = new Map(), life = {};
   let tid = 0;
-  const doc = { activeElement: null, createElement: (t) => new El(t, doc) };
+  const doc = { activeElement: null, createElement: (t) => { const e = new El(t, doc); e.classList = { toggle() {} }; return e; } };
   doc.root = doc.body = new El('body', doc);
   const proof = { ...P };
   const view = { dom: new El('div', doc), composing: false, hasFocus: () => true, focus() {}, coordsAtPos: () => ({ left: 10, top: 10, bottom: 25 }),
@@ -65,4 +65,21 @@ test('a missing SharedWorker uses a Worker and closes its port on pagehide', asy
   const f = frame({ noShared: true }); await flush();
   assert.equal(f.proof.mode, 'worker'); f.life.pagehide();
   assert.ok(f.ports[0].terminated);
+});
+
+test('decide cannot apply a verdict after the surrounding sentence changes', async () => {
+  const f = frame({ html: '<p></p>' }); await flush();
+  const plugin = f.view.state.plugins.find((p) => p.spec.key === P.key);
+  for (const ch of 'Their going home. ') {
+    const { from, to } = f.view.state.selection;
+    if (!plugin.props.handleTextInput(f.view, from, to, ch)) f.view.dispatch(f.view.state.tr.insertText(ch));
+  }
+  let resolve;
+  f.proof.decide = () => new Promise((r) => { resolve = r; });
+  await f.run(150);
+  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: 5, kind: 'Grammar', problem: 'Their', suggestions: [{ k: 0, t: "They're" }] }] });
+  assert.equal(typeof resolve, 'function');
+  f.view.dispatch(f.view.state.tr.insertText('going home was surprising. ', 7, f.view.state.doc.content.size - 1));
+  resolve('apply'); await flush();
+  assert.equal(f.view.state.doc.textContent, 'Their going home was surprising. ');
 });
