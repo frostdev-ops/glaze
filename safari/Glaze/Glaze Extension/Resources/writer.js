@@ -176,7 +176,7 @@
       const b = document.createElement('button');
       b.type = 'button'; b.setAttribute('role', 'menuitem'); b.textContent = text;
       b.addEventListener('click', () => { shut(); fn(); });
-      menu.querySelector('[data-do="native"]').before(b);
+      menu.append(b); // after Blackboard editor, the mockup's first entry
       return b;
     },
   };

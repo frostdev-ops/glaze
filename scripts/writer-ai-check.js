@@ -228,7 +228,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       await p.keyboard.press('Escape');
       await p.click('#more');
       const items = await p.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].filter((b) => !b.hidden).map((b) => b.textContent));
-      assert.deepEqual(items, [`Check with AI${MAC ? '⌘⇧K' : 'Ctrl+Shift+K'}`, 'Blackboard editor']);
+      assert.deepEqual(items, ['Blackboard editor', `Check with AI${MAC ? '⌘⇧K' : 'Ctrl+Shift+K'}`]);
       await p.keyboard.press('Escape');
     });
     await check('Tab leaves the chip menu and closes it without losing focus', async () => {
