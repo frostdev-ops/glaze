@@ -53,7 +53,9 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
       if (v.getUint16(p + 34, true)) throw new Error('multi-disk zip files are not supported');
       const e = { flags: v.getUint16(p + 8, true), method: v.getUint16(p + 10, true), crc: v.getUint32(p + 16, true), csize: v.getUint32(p + 20, true), size: v.getUint32(p + 24, true), at: v.getUint32(p + 42, true), name: buf.subarray(p + 46, p + 46 + nameLen), cdAt };
       if (e.csize === 0xffffffff || e.size === 0xffffffff || e.at === 0xffffffff) throw new Error('zip64 files are not supported');
-      out.set(new TextDecoder().decode(e.name), e);
+      const name = new TextDecoder().decode(e.name);
+      if (L.duplicates && out.has(name)) throw new Error('duplicate zip entry');
+      out.set(name, e);
       p = next;
     }
     if (p !== cdAt + cdSize) throw new Error('damaged zip file');
