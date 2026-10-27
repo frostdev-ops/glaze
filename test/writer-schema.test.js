@@ -223,6 +223,24 @@ test('links: only what Quill keeps, and a bare domain when asked', () => {
   assert.equal(S.href('not a url', true), null);
 });
 
+test('untrusted HTML refuses excessive depth, size, tokens and table spans before parsing', () => {
+  const bad = [
+    '<span>'.repeat(5000) + 'x' + '</span>'.repeat(5000),
+    '<p>' + 'x'.repeat(2000001) + '</p>',
+    '<br>'.repeat(50001),
+  ];
+  for (const schema of [C, P]) for (const input of bad) {
+    for (const read of [S.parse, S.slice]) assert.throws(() => read(schema, input), { code: 'WRITER_INPUT_LIMIT' });
+    assert.deepEqual(S.loses(schema, input), ['limit'], 'takeover must refuse an input that cannot be read safely');
+  }
+  for (const span of ['colspan="1000000"', 'rowspan="1000000"', 'colspan="0"', 'rowspan="-1"']) {
+    const input = `<table><tr><td ${span}>x</td></tr></table>`;
+    assert.throws(() => S.parse(P, input), { code: 'WRITER_INPUT_LIMIT' });
+    assert.deepEqual(S.loses(P, input), ['limit']);
+  }
+  assert.equal(out('<p>' + '<span>'.repeat(32) + 'safe' + '</span>'.repeat(32) + '</p>'), '<p>safe</p>');
+});
+
 test('both files are classic scripts that load after lib/pm.js in a page, once', () => {
   for (const f of ['lib/writer-schema.js', 'lib/writer-editor.js']) {
     const src = fs.readFileSync(path.join(root, f), 'utf8');
