@@ -34,11 +34,17 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     if (ed.closest('.reply-input-wrapper')) return ed.closest('.comment-and-reply') ? 'reply' : 'unknown';
     return !ed.closest('.comment-and-reply') && ed.closest('bb-rich-text-editor[analytics-id="components.directives.discussion.message.onEditorClick"]') ? 'post' : 'unknown';
   };
-  const MODE = { assignment: 'paper' };
-  // Until a frame can round-trip Ultra's embeds and extra formats, leave that entire editor native.
+  // Every box writes compose for now, which Ultra's Quill keeps exactly. Paper mode (MODE.assignment = 'paper') comes with
+  // the .docx submit, since a paper's page breaks, notes and quotes have no place in Ultra's text box.
+  const MODE = {};
+  // A quick look before a frame opens: a box with Ultra's embeds or extra formats stays native. It passes everything
+  // compose itself writes (Quill's indent and alignment classes, its code blocks and cursor), so a box Writer has synced
+  // stays Writer's; the frame's own check (lib/writer-schema.js loses) has the last word.
   const TAGS = new Set('P BR STRONG B EM I U S STRIKE DEL SUP SUB A H3 H4 OL UL LI PRE CODE SPAN'.split(' '));
-  const canEdit = (ed) => [...ed.querySelectorAll('*')].every((e) => TAGS.has(e.tagName) && !e.getAttribute('style') &&
-    (!e.getAttribute('class') || (e.tagName === 'PRE' && e.getAttribute('class') === 'ql-syntax')) &&
+  const CLASS = { P: /^(ql-indent-[1-8]|ql-align-(center|right|justify))$/, H3: null, H4: null, LI: null, PRE: /^ql-syntax$/, SPAN: /^ql-cursor$/ };
+  CLASS.H3 = CLASS.H4 = CLASS.LI = CLASS.P;
+  const classes = (e) => { const c = (e.getAttribute('class') || '').split(/\s+/).filter(Boolean); return !c.length || (!!CLASS[e.tagName] && c.every((k) => CLASS[e.tagName].test(k))); };
+  const canEdit = (ed) => [...ed.querySelectorAll('*')].every((e) => TAGS.has(e.tagName) && !e.getAttribute('style') && classes(e) &&
     (e.tagName !== 'A' || /^(https?:|mailto:)/i.test(e.getAttribute('href') || '')) && !e.hasAttribute('dir') && !e.hasAttribute('start'));
 
 

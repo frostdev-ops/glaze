@@ -1,7 +1,9 @@
 // Glaze Writer (enhance.writer), loaded on demand: content.js loads this once an Ultra editor box is on the page or
 // written in, and hands it each pass. Every box lib/writer-ultra.js knows gets Glaze's editor (writer.html) in a frame in
 // its place. Ultra's own editor stays in the page, hidden, and is kept in step through lib/writer-main.js in the page's
-// world, so Ultra's Post, Reply, Send and Submit send what was written and its word count and drafts follow. Ctrl/Cmd+Enter
+// world (the frame's Quill ops, written as they are), so Ultra's Post, Reply, Send and Submit send what was written and
+// its word count and drafts follow. A box holding what Writer can't keep (an attachment, a table, maths, right-to-left
+// text…) stays Blackboard's, untouched: the frame checks before anything is written. Ctrl/Cmd+Enter
 // in the frame clicks Post, Reply or Send when Ultra allows it (never an attempt's Submit). ⋯ → Blackboard editor gives
 // the box back, to Ultra and to draft backup (features/drafts.js skips boxes marked data-gz-writer). Whatever fails leaves
 // Ultra's editor, or keeps the draft in Writer until a native write succeeds.
@@ -57,7 +59,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     (box.kind !== 'reply' || U().replyTo(box.editor) === (box.context.post?.id || ''));
   let seq = 0;
   const mount = async (b) => {
-    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, path: location.pathname, editorId: b.editor.id, destination: X.draftAt(b.editor), display: null };
+    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, delta: null, path: location.pathname, editorId: b.editor.id, destination: X.draftAt(b.editor), display: null };
     boxes.set(b.editor, box);
     try { await drafts(); if (!await GZ_DRAFT_UI.ready(b.editor)) { declined.add(b.editor); drop(box); return; } } catch { drop(box); return; }
     if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
@@ -125,9 +127,10 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     back.addEventListener('click', () => giveBack(box, true));
     field.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); } });
     field.addEventListener('input', () => {
-      const p = document.createElement('p'); p.textContent = field.value;
-      box.snapshot = { ...box.destination, html: p.outerHTML, text: field.value, at: Date.now() };
-      sync(box, box.snapshot.html); remember(box);
+      const lines = field.value.replace(/\r\n?/g, '\n').split('\n'), wrap = document.createElement('div');
+      for (const l of lines) { const p = document.createElement('p'); if (l) p.textContent = l; else p.append(document.createElement('br')); wrap.append(p); }
+      box.snapshot = { ...box.destination, html: wrap.innerHTML, text: field.value, at: Date.now() };
+      sync(box, box.snapshot.html, [{ insert: `${lines.join('\n')}\n` }]); remember(box);
     });
     wrap.append(field, back);
     box.frame = wrap;
@@ -140,7 +143,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const ed = box.editor, f = box.frame, typing = box.root.contains(document.activeElement);
     const l = look();
     worn = JSON.stringify(l);
-    if (!box.recovered) box.latest = ed.innerHTML;
+    if (!box.recovered) { box.latest = ed.innerHTML; box.delta = null; }
     box.nativeHTML = ed.innerHTML;
     box.ready = true;
     box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, html: box.latest, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
@@ -162,6 +165,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       remember(box);
       box.text = now;
       box.latest = box.nativeHTML = ed.innerHTML;
+      box.delta = null;
       box.sending = false;
       box.port.postMessage({ type: 'html', html: ed.innerHTML });
     });
@@ -174,9 +178,10 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       box.snapshot = { ...box.destination, html: m.html, text: m.text, at: Date.now() };
       clearTimeout(box.backup);
       box.backup = setTimeout(() => remember(box), 1000);
-      sync(box, m.html);
+      sync(box, m.html, Array.isArray(m.delta) ? m.delta : null);
     }
     else if (m.type === 'send') send(box);
+    else if (m.type === 'native' && typeof m.reason === 'string' && m.reason) refuse(box);
     else if (m.type === 'native') giveBack(box, true);
   };
   // A page-world reply is untrusted. Check the native DOM too, and keep Writer's copy on every failure.
@@ -185,11 +190,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     d.innerHTML = h;
     return (d.content || d).textContent === ed.textContent;
   };
-  const sync = (box, h) => {
-    if (!sameBox(box)) { box.latest = h; box.unsynced = true; return false; }
+  // h: what the frame shows; d: its Quill ops, or null when it came from Ultra's editor (which then already holds it).
+  const sync = (box, h, d = h === box.latest ? box.delta : null) => {
+    if (!sameBox(box)) { box.latest = h; box.delta = d; box.unsynced = true; return false; }
     if (h !== box.latest) box.sending = false;
     box.latest = h;
-    const r = main('set', { id: box.id, html: h });
+    box.delta = d;
+    const r = d ? main('set', { id: box.id, delta: d }) : { ok: box.editor.innerHTML === h, html: box.editor.innerHTML };
     const ok = r?.ok && r.html === box.editor.innerHTML && sameText(box.editor, h);
     box.unsynced = !ok;
     if (ok) { box.text = squash(box.editor.textContent); box.nativeHTML = box.editor.innerHTML; }
@@ -228,6 +235,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (box.display && !box.display[0]) box.root.style.removeProperty('display');
     box.root.removeAttribute('data-gz-writer');
     box.container.removeAttribute('data-gz-writer-id');
+  };
+  // The frame found what it can't keep in the box (lib/writer-schema.js loses) before writing anything: the box stays
+  // Blackboard's as it is, nothing synced.
+  const refuse = (box) => {
+    if (box.snapshot) { giveBack(box, false); return; }
+    drop(box);
+    declined.add(box.editor);
   };
   // Back to Blackboard's editor, which this editor then stays.
   const giveBack = (box, focus) => {
