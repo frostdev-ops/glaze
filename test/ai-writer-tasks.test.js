@@ -193,6 +193,28 @@ test('writer.complete after a space keeps a capital word that goes on the senten
   assert.equal(C.finish('andThe end.', C.task.input({ before: 'The novel ends with the clearing and' })), null, 'a capital glued to the word, with no space');
 });
 
+test('writer.complete asks a model on this computer for the next words only, and joins its plain continuation', async () => {
+  // Apple Intelligence (FoundationModels) on the owner's Mac, 2026-10-27: asked to repeat the caret's word first, it only
+  // repeated the student's words; asked for the next words, it went on (0.4–0.8 s), ignoring instructions in the data.
+  const ctx = { kind: 'assignment', course: { id: '_1_1', name: 'Orientation' }, assignment: { title: 'Explore an Assignment', instructions: 'List three things you learned in this course.' } };
+  const local = async (before, reply) => {
+    const cfg = { replies: [{ text: reply }], seen: [], caps: { local: true } };
+    const out = await T.run(C.task, { before, mode: 'paper', kind: 'assignment', context: ctx }, { provider: 'mock', cfg, emit() {} }).catch((e) => ({ output: null, code: e.code }));
+    return { output: out.output, req: parts(cfg.seen[0]) };
+  };
+  const a = await local('The first thing I learned is that the discussion board', 'can be used to share ideas with others.');
+  assert.equal(a.output, ' can be used to share ideas with others.');
+  assert.match(a.req.system, /only the next words/);
+  assert.doesNotMatch(a.req.system, /first the word right before the caret/);
+  assert.match(a.req.data, /\[the sentence the student is typing/);
+  assert.equal((await local('Three things I learned in this course are how to ', 'manage complex data sets effectively.')).output, 'manage complex data sets effectively.', 'after a space');
+  assert.equal((await local('In this assignment I learned how to submit them and ', 'I learned three things.')).output, 'I learned three things.', 'a capital I goes on');
+  assert.equal((await local('Three things I learned in this course are how to ', 'learned how to')).output, null, 'only the student\'s words again');
+  assert.equal((await local('Three things I learned in this course are how to', 'to manage data.')).output, ' manage data.', 'the caret\'s word repeated once');
+  assert.equal((await local('When Sethe returns, the memory arriv', 'arrives uninvited.')).output, 'es uninvited.', 'a cut-off word finished');
+  assert.equal((await local('Three things I learned in this course are how to ', 'Then I left.')).output, null, 'an opener starts a new sentence');
+});
+
 test('writer.complete runs only where the gray text may show, and never on a test', () => {
   const ok = (before, after = '', extra = {}) => C.task.input({ before, after, ...extra }) !== null;
   assert.equal(ok(BEFORE), true);
