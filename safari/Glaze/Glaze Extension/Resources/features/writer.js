@@ -34,10 +34,11 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     for (const box of boxes.values()) { box.port?.postMessage({ type: 'look', look: l }); if (box.frame) box.frame.style.colorScheme = l.dark ? 'dark' : 'light'; }
   }).observe(html, { attributes: true, attributeFilter: ['style', 'data-gz-dark-theme', 'data-gz-motion'] });
 
-  // lib/writer-main.js, in the page's world: its answer comes back inside the dispatch, or not at all.
+  // lib/writer-main.js, in the page's world: its answer comes back inside the dispatch, or not at all. Every answer for
+  // the id is kept, since the page can add its own: what counts is the one the native editor bears out.
   const main = (op, m) => {
-    let got = null;
-    const hear = (e) => { try { const d = JSON.parse(e.detail); if (d?.id === m.id) got = d; } catch { /* not ours */ } };
+    const got = [];
+    const hear = (e) => { try { const d = JSON.parse(e.detail); if (d?.id === m.id) got.push(d); } catch { /* not ours */ } };
     document.addEventListener('gz-writer:done', hear);
     try { document.dispatchEvent(new CustomEvent(`gz-writer:${op}`, { detail: JSON.stringify(m) })); } finally { document.removeEventListener('gz-writer:done', hear); }
     return got;
@@ -196,8 +197,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (h !== box.latest) box.sending = false;
     box.latest = h;
     box.delta = d;
-    const r = d ? main('set', { id: box.id, delta: d }) : { ok: box.editor.innerHTML === h, html: box.editor.innerHTML };
-    const ok = r?.ok && r.html === box.editor.innerHTML && sameText(box.editor, h);
+    const said = d ? main('set', { id: box.id, delta: d }) : [{ ok: box.editor.innerHTML === h, html: box.editor.innerHTML }];
+    const ok = said.some((r) => r?.ok && r.html === box.editor.innerHTML) && sameText(box.editor, h);
     box.unsynced = !ok;
     if (ok) { box.text = squash(box.editor.textContent); box.nativeHTML = box.editor.innerHTML; }
     return ok;
