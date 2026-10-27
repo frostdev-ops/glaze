@@ -141,6 +141,8 @@ var GZ_AI_TASK_WRITER_COMPLETE = globalThis.GZ_AI_TASK_WRITER_COMPLETE || (() =>
         // SYSTEM_WORD: the caret's word first, finished or whole; without it the join is unknown.
         if (fold(s.slice(0, inp.word.length)) !== fold(inp.word)) return null;
         s = s.slice(inp.word.length);
+        // Punctuation straight after the word ("comp, loses, track") is a guess at a word it couldn't finish.
+        if (/^[^\p{L}\p{N}\s]/u.test(s)) return null;
       } else if (cut) s = s.slice(cut);
       else s = ` ${s}`;
       // A few of the sentence's own words again, out of order, are nothing new.
