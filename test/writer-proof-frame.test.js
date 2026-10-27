@@ -118,3 +118,12 @@ test('simultaneous dictionary additions in two frames are both persisted', async
   x.dispatchEvent({ type: 'click' }); y.dispatchEvent({ type: 'click' }); await flush();
   assert.deepEqual(stored.slice().sort(), ['Glazeville', 'Sethe']);
 });
+
+test('proofing reconnects when a cached page returns after pagehide', async () => {
+  const f = frame(); await flush();
+  f.life.pagehide();
+  f.life.pageshow?.({ persisted: true }); await flush();
+  f.view.dispatch(f.view.state.tr.insertText('x', 4)); await f.run(150);
+  assert.equal(f.ports.length, 2);
+  assert.ok(f.ports[1].sent.some((m) => m.op === 'lint'));
+});
