@@ -274,6 +274,9 @@ test('on an Ultra attempt the writer\'s features wait for the tab\'s Glaze to sa
   assert.equal(await ask(w, frame(ATTEMPT), 'syllabus'), 'hung up', 'everything else stays quiet');
   assert.deepEqual(await report(w, 'test'), { ok: true });
   assert.equal(await ask(w, frame(ATTEMPT)), 'attempt', 'the last word counts');
+  assert.deepEqual(await report(w, 'assignment'), { ok: true });
+  assert.deepEqual(await report(w, 'unknown'), { ok: true });
+  assert.equal(await ask(w, frame(ATTEMPT)), 'attempt', 'unknown takes an assignment back');
   // A content script on the attempt itself is still never an AI sender.
   const { port, say } = w.connect('glaze:ai', top(ATTEMPT));
   say({ id: 1, op: 'status', feature: 'completion' });

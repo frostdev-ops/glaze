@@ -4,12 +4,14 @@
 // (lib/background.js 'glaze:writer') and then talks to the page over that job's MessageChannel only:
 //   page → frame: init { mode, kind, html, placeholder, look { tokens, dark, motion }, context, locale }, look { look },
 //                 context { context }, focus, html { html } (Ultra changed its own editor: a post went, a draft came back);
-//   frame → page: ready, height { px }, change { html, text, words }, send (Mod-Enter), native (back to Blackboard's editor).
+//   frame → page: ready, height { px }, change { html, text, words, delta } (delta: compose's Quill ops, what the page
+//                 writes into Ultra's editor), send (Mod-Enter), native (back to Blackboard's editor; with a reason, the
+//                 box holds what Writer can't keep and nothing was written).
 // It keeps nothing and asks the extension for nothing but that pass.
 (() => {
   const root = document.documentElement;
   const $ = (id) => document.getElementById(id);
-  let port = null, ed = null, locale = 'en', quiet = false, words = 0, context = {};
+  let port = null, ed = null, locale = 'en', quiet = false, words = 0, context = {}, refused = false;
   const t = (k, v) => GZ_I18N.t(k, v, locale);
   const say = (m) => port?.postMessage(m);
 
@@ -122,16 +124,23 @@
   const onChange = (c) => {
     words = c.words;
     count();
-    if (!quiet && c.docChanged !== false) say({ type: 'change', html: c.html, text: c.text, words: c.words });
+    if (quiet || c.docChanged === false) return;
+    const delta = root.dataset.mode === 'compose' && ed?.view ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null;
+    say({ type: 'change', html: c.html, text: c.text, words: c.words, delta });
   };
   const ON = {
     init: (m) => {
-      if (ed) return;
+      if (ed || refused) return;
       look(m.look);
       root.dataset.mode = m.mode === 'paper' ? 'paper' : 'compose';
       root.dataset.kind = typeof m.kind === 'string' ? m.kind : '';
       context = m.context && typeof m.context === 'object' ? m.context : {};
       const html = typeof m.html === 'string' ? m.html : '';
+      // A box holding what Writer can't keep (an attachment, a table, maths, right-to-left text, a checklist, too much
+      // to load) stays Blackboard's: said before the editor exists, so nothing is ever written back.
+      let lost;
+      try { lost = GZ_WRITER_SCHEMA.loses(root.dataset.mode === 'paper' ? GZ_WRITER_SCHEMA.paper : GZ_WRITER_SCHEMA.compose, html); } catch { lost = ['error']; }
+      if (lost.length) { refused = true; say({ type: 'native', reason: lost.join(' ') }); return; }
       ed = GZ_WRITER_EDITOR.create({ mount: $('body'), mode: root.dataset.mode, html, placeholder: typeof m.placeholder === 'string' ? m.placeholder : '', onChange, onSelection,
         keys: { 'Mod-Enter': () => { say({ type: 'send' }); return true; } } });
       words = ed.words();

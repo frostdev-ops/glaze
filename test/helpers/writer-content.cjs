@@ -30,16 +30,23 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recov
     addEventListener: (type, fn) => doc.addEventListener(type, fn),
   });
   ctx.window = ctx; ctx.top = ctx;
+  // Quill as far as these tests need it: each line of the ops' text a paragraph. 'spoof' claims a write it never made.
+  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const render = (d) => d.map((op) => op.insert).join('').replace(/\n$/, '').split('\n').map((l) => `<p>${l ? esc(l) : '<br>'}</p>`).join('');
+  const sets = [];
   doc.addEventListener('gz-writer:set', (e) => {
     const m = JSON.parse(e.detail), ed = doc.querySelector(`.ql-container[data-gz-writer-id="${m.id}"]`)?.querySelector('.ql-editor');
-    if (mode === 'ok') ed.innerHTML = m.html;
-    if (mode !== 'absent') doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: mode !== 'fail', html: m.html }) }));
+    sets.push(m);
+    const html = Array.isArray(m.delta) ? render(m.delta) : null;
+    if (mode === 'ok' && html !== null) ed.innerHTML = html;
+    if (mode !== 'absent') doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: mode !== 'fail' && html !== null, html }) }));
   });
   vm.runInContext(fs.readFileSync(process.env.WRITER_CONTENT_SOURCE || path.join(__dirname, '../../features/writer.js'), 'utf8'), ctx);
   const start = async () => { ctx.GZ_WRITER.pass(); await new Promise(setImmediate); for (const p of ports) p.onmessage({ data: { type: 'ready' } }); };
   const native = (index = 0) => U.boxes(doc, { path: location.pathname })[index];
-  const emit = (m, index = 0) => ports[index].onmessage({ data: m });
+  // A frame's change carries its Quill ops; these tests write plain paragraphs, so the ops come from the text.
+  const emit = (m, index = 0) => ports[index].onmessage({ data: m.type === 'change' && !('delta' in m) ? { ...m, delta: [{ insert: `${m.text}\n` }] } : m });
   const mutate = (ed) => { for (const o of observers) if (o.target === ed) o.fn([]); };
   const tick = (ms) => { for (const [id, t] of [...timers]) if (t.ms === ms) { timers.delete(id); t.f(); } };
-  return { ctx, doc, location, ports, messages, clicks, kept, observers, timers, start, native, emit, mutate, tick, helper: (v) => { mode = v; } };
+  return { ctx, doc, location, ports, messages, clicks, kept, observers, timers, sets, start, native, emit, mutate, tick, helper: (v) => { mode = v; } };
 };

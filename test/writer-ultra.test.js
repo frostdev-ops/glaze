@@ -55,12 +55,13 @@ test('messages compose is a message, sent by its Send', () => {
   assert.deepEqual(box.context, {});
 });
 
-test('an assignment attempt: paper mode in Ultra\'s authoring panel, its Submit, its instructions as the prompt', () => {
+test('an assignment attempt: compose for now in Ultra\'s authoring panel, its Submit, its instructions as the prompt', () => {
   const body = page('ultra-writer-attempt.html');
   const at = (attempt) => U.boxes(body, { path: ATTEMPT, attempt });
   const [box, ...rest] = at('');
   assert.equal(rest.length, 0, 'the read-only instructions are not a box');
-  assert.deepEqual([box.kind, box.mode, box.send.textContent, box.send.getAttribute('data-analytics-id')], ['assignment', 'paper', 'Submit', 'assignment.attempt.authoring.footer.submit']);
+  // Compose until paper mode lands with the .docx submit: what Ultra's text box gets is exactly what was written.
+  assert.deepEqual([box.kind, box.mode, box.send.textContent, box.send.getAttribute('data-analytics-id')], ['assignment', 'compose', 'Submit', 'assignment.attempt.authoring.footer.submit']);
   assert.ok(box.root.className.includes('bb-editor-root') && !box.root.querySelector('input[type="file"]'), 'its file area stays Ultra\'s, outside the box');
   assert.deepEqual(box.context, { prompt: 'Essay 2\nWrite 1,200 words on memory in Beloved, in MLA format, citing at least three sources.' });
   assert.deepEqual(at('test').map((b) => [b.kind, b.mode]), [['test', 'compose']], 'a gradebook that says test keeps the AI off');
@@ -97,11 +98,29 @@ test('native attachments and formatting outside the frame schema are never taken
   for (const make of [
     (doc) => new El('img', doc),
     (doc) => new El('table', doc),
-    (doc) => { const p = new El('p', doc); p.className = 'ql-align-center'; p.textContent = 'Centered text'; return p; },
+    (doc) => { const p = new El('p', doc); p.className = 'ql-direction-rtl ql-align-right'; p.textContent = 'Right to left'; return p; },
+    (doc) => { const p = new El('p', doc); p.className = 'ql-indent-1 ql-font-serif'; p.textContent = 'Another font'; return p; },
     (doc) => { const s = new El('span', doc); s.setAttribute('style', 'color: red'); s.textContent = 'Colored text'; return s; },
   ]) {
     const body = page('ultra-writer-discussion.html'), [post] = U.boxes(body, { path: DISCUSSION });
     post.editor.append(make(body.doc));
     assert.ok(!U.boxes(body, { path: DISCUSSION }).some((b) => b.editor === post.editor), 'unsupported content stays in Blackboard');
   }
+});
+
+// The quick look and the frame's own check agree where it matters: everything compose itself writes into Ultra's editor
+// passes the quick look, so a box Writer has synced is never taken back from it; the frame (lib/writer-schema.js loses)
+// has the last word on the rest.
+test('what compose writes into Ultra\'s editor passes the quick look', () => {
+  const S = require('../lib/writer-schema.js');
+  const doc = S.parse(S.compose, '<h3>Title</h3><p class="ql-align-center">Centered <strong>bold</strong> <a href="https://x.test/a">link</a></p>'
+    + '<ol><li>One</li><li class="ql-indent-1">One a</li></ol><ul><li class="ql-indent-2 ql-align-right">Bullet</li></ul><p class="ql-indent-3">Indented <em>it</em> <s>s</s> <u>u</u> x<sup>2</sup> H<sub>2</sub>O</p>'
+    + '<pre class="ql-syntax" spellcheck="false">code\n</pre><h4 class="ql-align-justify">Small</h4><p><br></p>');
+  const written = S.serialize(S.compose, doc);
+  assert.deepEqual(S.loses(S.compose, written), []);
+  const body = page('ultra-writer-discussion.html'), [post] = U.boxes(body, { path: DISCUSSION });
+  post.editor.replaceChildren(...parse(`<body>${written}</body>`, body.doc).children);
+  post.editor.append(Object.assign(new El('span', body.doc), { className: 'ql-cursor' }));
+  assert.ok(U.canEdit(post.editor), written);
+  assert.ok(U.boxes(body, { path: DISCUSSION }).some((b) => b.editor === post.editor));
 });

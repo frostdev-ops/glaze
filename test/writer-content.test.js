@@ -129,3 +129,26 @@ test('an invalidated extension throwing before a new frame pass still exposes th
   b.root.previousElementSibling.dispatchEvent({ type: 'load' }); await new Promise(setImmediate);
   assert.equal(c.doc.querySelector('textarea[data-gz-writer-recovery]')?.value, 'Keep me');
 });
+
+test('a box the frame refuses (content Writer can\'t keep) stays Blackboard\'s exactly as it was, with nothing written', async () => {
+  const c = content(); await c.start();
+  const b = c.native(), before = b.editor.innerHTML, frame = b.root.previousElementSibling;
+  c.emit({ type: 'native', reason: 'attachment format' });
+  assert.ok(!frame.isConnected, 'the frame goes');
+  assert.notEqual(b.root.style.display, 'none', 'Ultra\'s editor is back in view');
+  assert.ok(!b.root.hasAttribute('data-gz-writer'));
+  assert.equal(b.editor.innerHTML, before, 'its HTML is untouched');
+  assert.equal(c.sets.length, 0, 'nothing was ever written into it');
+  const opened = c.ports.length;
+  c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  assert.equal(c.ports.length, opened, 'and it isn\'t taken over again on later passes');
+});
+
+test('a refusal after the student wrote in Writer still hands their words back first', async () => {
+  const c = content(); await c.start();
+  const b = c.native();
+  c.emit({ type: 'change', html: '<p>Written first</p>', text: 'Written first', words: 2 });
+  c.emit({ type: 'native', reason: 'limit' });
+  assert.equal(b.editor.textContent, 'Written first');
+  assert.ok(!b.root.previousElementSibling?.matches?.('iframe.gz-writer'));
+});

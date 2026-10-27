@@ -14,7 +14,12 @@ const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', 
 const ROUTES = {
   '/ultra/courses/_101_1/discussion/_9_1': 'ultra-writer-discussion.html', '/ultra/messages/create': 'ultra-writer-messages.html',
   '/ultra/courses/_101_1/assessment/_7_1/attempt/create': 'ultra-writer-attempt.html', '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1': 'ultra-writer-test.html',
+  '/ultra/courses/_101_1/discussion/_10_1': 'ultra-writer-discussion.html',
 };
+// The same discussion with boxes Writer must leave alone: a checklist in the composer (the quick look passes it, the frame
+// refuses it) and right-to-left text in the reply (the quick look refuses it).
+const KEPT = (html) => html.replace('data-placeholder="Type a post"><p><br></p>', 'data-placeholder="Type a post"><ul data-checked="true"><li>Read chapter 4</li></ul>')
+  .replace('data-placeholder="Type a reply"><p><br></p>', 'data-placeholder="Type a reply"><p class="ql-direction-rtl ql-align-right">نهر الذاكرة</p>');
 const out = process.argv[2], shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-shots', lock = require('./check-env.js').lockPath();
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 const checks = [], requests = [], errors = []; let passed = false;
@@ -29,7 +34,7 @@ const check = (v, label) => { assert.ok(v, label); checks.push(label); console.l
 // In the page's world: a real Quill on each writable box, and Ultra's behaviour around it as the probe saw it: Post, Reply
 // and Save Draft, an attempt's Save and Close and Submit (and here Send) disabled while the box is empty, the status bar's word count. Every button click counted.
 const HARNESS = `(() => {
-  window.__clicks = [];
+  window.__clicks = []; window.__initial = [];
   document.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) __clicks.push(b.textContent.trim()); }, true);
   for (const c of document.querySelectorAll('.ql-container:not(.is-read-only)')) {
     const old = c.querySelector('.ql-editor'), html = old.innerHTML, id = old.id, role = old.getAttribute('role'), placeholder = old.getAttribute('data-placeholder');
@@ -45,6 +50,7 @@ const HARNESS = `(() => {
     const sync = () => { const t = q.getText().trim(); for (const b of buttons) b.disabled = !t; if (status) status.textContent = 'Word count: ' + (t ? t.split(/\\s+/).length : 0); };
     q.on('text-change', sync);
     sync();
+    __initial.push(q.root.innerHTML);
   }
   window.__quill = (sel) => document.querySelector(sel).closest('.ql-container').__quill;
 })();`;
@@ -75,7 +81,7 @@ const HARNESS = `(() => {
       if (req.method() !== 'GET' || u.origin !== site) return r.abort();
       if (u.pathname === '/gz-check/quill.js') return r.fulfill({ contentType: 'text/javascript', body: quill });
       if (u.pathname === '/gz-check/harness.js') return r.fulfill({ contentType: 'text/javascript', body: HARNESS });
-      if (req.isNavigationRequest() && ROUTES[u.pathname]) return r.fulfill({ contentType: 'text/html', body: fixture(ROUTES[u.pathname]).replace('<head>', '<head><base href="/ultra/">').replace('</body>', '<script src="/gz-check/quill.js"></script><script src="/gz-check/harness.js"></script></body>') });
+      if (req.isNavigationRequest() && ROUTES[u.pathname]) return r.fulfill({ contentType: 'text/html', body: (u.pathname.endsWith('/_10_1') ? KEPT : (h) => h)(fixture(ROUTES[u.pathname])).replace('<head>', '<head><base href="/ultra/">').replace('</body>', '<script src="/gz-check/quill.js"></script><script src="/gz-check/harness.js"></script></body>') });
       if (req.isNavigationRequest()) return r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Blank</title>' });
       let data = { results: [] };
       if (u.pathname.endsWith('/users/me')) data = { id: '_42_1', userName: 'synthetic' };
@@ -206,6 +212,16 @@ const HARNESS = `(() => {
     check(await quillText(p, POST) === kept, 'native recovery receives every word before the frame closes');
     await p.close();
 
+    // ---- boxes Writer can't keep stay Blackboard's, byte for byte ----
+    p = await open('/ultra/courses/_101_1/discussion/_10_1');
+    const before = await p.evaluate(() => __initial.slice());
+    await pause(1500);
+    check(await p.evaluate(() => !document.querySelector('iframe.gz-writer') && ![...document.querySelectorAll('bb-rich-text-editor')].some((r) => r.hasAttribute('data-gz-writer') || getComputedStyle(r).display === 'none')), 'a checklist (refused by the frame) and right-to-left text (refused before it) stay in Blackboard\'s editor, in view');
+    check(JSON.stringify(await p.evaluate(() => [...document.querySelectorAll('.ql-container:not(.is-read-only) .ql-editor')].map((e) => e.innerHTML))) === JSON.stringify(before), 'their HTML is byte-identical afterwards');
+    await p.evaluate(() => document.querySelector('.ql-container:not(.is-read-only) .ql-editor').dispatchEvent(new InputEvent('input', { bubbles: true }))); await pause(800);
+    check(await p.evaluate(() => !document.querySelector('iframe.gz-writer')), 'and later passes leave them alone');
+    await p.close();
+
     // ---- messages ----
     p = await open('/ultra/messages/create?courseId=_101_1');
     const msg = await box(p, 'message');
@@ -221,7 +237,7 @@ const HARNESS = `(() => {
     await worker.evaluate(() => chrome.runtime.onMessage.addListener((m) => { if (m?.type === 'glaze:attempt-kind') (globalThis.__kinds ||= []).push(m.kind); }));
     p = await open('/ultra/courses/_101_1/assessment/_7_1/attempt/create');
     const paper = await box(p, 'assignment');
-    check(await paper.fr.evaluate(() => document.documentElement.dataset.mode === 'paper' && document.querySelector('.ProseMirror').textContent === "Toni Morrison's Beloved treats memory less as a record than as a debt."), 'assignment attempt mounts in paper mode with the saved text imported');
+    check(await paper.fr.evaluate(() => document.documentElement.dataset.mode === 'compose' && document.documentElement.dataset.kind === 'assignment' && document.querySelector('.ProseMirror').textContent === "Toni Morrison's Beloved treats memory less as a record than as a debt."), 'assignment attempt mounts (compose until paper mode) with the saved text imported');
     check(await p.evaluate(() => getComputedStyle(document.querySelector('[class*="makeStylespreview-"]')).display !== 'none'), 'its file area stays Ultra\'s, in view');
     check(await p.evaluate(() => !document.querySelector('[data-analytics-id="assignment.attempt.authoring.footer.submit"]').disabled), 'Submit enabled with the imported text');
     await paper.fr.click('.ProseMirror'); await p.keyboard.press(`${MOD}+Enter`); await pause(400);

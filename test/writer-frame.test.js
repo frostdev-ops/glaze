@@ -54,22 +54,15 @@ test('a writer pass is redeemed once, by writer.html in the tab that asked, and 
 
 test('a claimed writer pass tells the AI broker the frame and the page it works for, before the frame hears back', async () => {
   const w = worker();
-  const hosted = [];
   const ultra = { id: 'glaze', tab: { id: 7 }, frameId: 2, documentId: 'doc-7', url: 'https://school.blackboard.com/ultra/courses/_1_1/assessment/_2_1/attempt/create' };
-  const writer = { id: 'glaze', tab: { id: 7 }, frameId: 5, url: 'chrome-extension://x/writer.html' };
-  const pass = crypto.randomUUID(), again = crypto.randomUUID();
+  const writer = { id: 'glaze', tab: { id: 7 }, frameId: 5, documentId: 'writer-doc', url: 'chrome-extension://x/writer.html' };
+  const pass = crypto.randomUUID();
   await w.send({ type: 'glaze:writer', op: 'job', pass }, ultra);
-  await w.send({ type: 'glaze:writer', op: 'job', pass: again }, ultra);
-  assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'claim', pass }, writer), { ok: true }, 'without the AI harness, the editor still opens');
-  w.context.aiFrameHost = async (claim, job) => { hosted.push(JSON.parse(JSON.stringify({ claim: claim.frameId, job }))); };
-  assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'claim', pass: again }, writer), { ok: true });
-  assert.deepEqual(hosted, [{ claim: 5, job: { tab: { id: 7 }, frameId: 2, documentId: 'doc-7' } }]);
-  const third = crypto.randomUUID();
-  await w.send({ type: 'glaze:writer', op: 'job', pass: third }, ultra);
-  w.context.aiFrameHost = async () => { throw new Error('refused'); };
-  assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'claim', pass: third }, writer), { ok: true }, 'a refused AI host leaves the editor working');
+  assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'claim', pass }, writer), { ok: true });
+  await w.settle?.();
+  assert.deepEqual(JSON.parse(JSON.stringify(w.store.session.aiHosts)), { '7|5': { frameId: 2, documentId: 'doc-7', writerDocumentId: 'writer-doc' } }, 'the host is known by the time the frame hears back');
   assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'claim', pass: crypto.randomUUID() }, writer), { ok: false });
-  assert.equal(hosted.length, 1, 'no host for a pass that fails');
+  assert.deepEqual(Object.keys(w.store.session.aiHosts), ['7|5'], 'no host for a pass that fails');
 });
 
 test('both frames load on demand: lib/writer-ultra.js and features/writer.js are loadable; the helper is not', () => {
@@ -88,8 +81,8 @@ const pageWorld = () => {
   doc.documentElement = { hasAttribute: (k) => attrs.has(k), setAttribute: (k) => attrs.add(k) };
   const quill = (version) => ({
     constructor: { version }, root: { innerHTML: '<p><br></p>', isConnected: true }, text: '\n',
-    clipboard: { convert: (h) => ({ from: h }) },
-    setContents(d, source) { calls.push({ d, source }); this.root.innerHTML = typeof d.from === 'string' ? d.from : d.from.html; this.text = 'Hello\n'; },
+    clipboard: { convert: () => { calls.push('convert'); return []; } },
+    setContents(d, source) { calls.push({ d, source }); this.root.innerHTML = `<p>${d.map((o) => o.insert).join('').trim()}</p>`; this.text = d.map((o) => o.insert).join(''); },
     getText() { return this.text; }, focus() { calls.push('focus'); },
   });
   const boxes = { 'gzw-1': { __quill: quill('dev') }, 'gzw-2': { __quill: quill('2.0.2') } };
@@ -108,24 +101,34 @@ const pageWorld = () => {
   return { run, ask, calls, boxes };
 };
 
-test('page world: set puts the HTML in as the student\'s edit, get reads it back, and focus is never touched', () => {
+test('page world: set writes compose\'s Quill ops as the student\'s edit, get reads it back, and focus is never touched', () => {
   const p = pageWorld();
   assert.equal(p.run(), true, 'ends on a value, as executeScript reports');
   p.run(); // a second job's injection adds no second listener
-  assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-1', html: '<p>Hello</p>' })), [{ id: 'gzw-1', ok: true, html: '<p>Hello</p>', text: 'Hello\n' }]);
-  assert.deepEqual(p.calls, [{ d: { from: '<p>Hello</p>' }, source: 'user' }], 'clipboard.convert(html), source user, once');
-  assert.deepEqual(p.ask('get', JSON.stringify({ id: 'gzw-1' })), [{ id: 'gzw-1', ok: true, html: '<p>Hello</p>', text: 'Hello\n' }]);
-  p.ask('set', JSON.stringify({ id: 'gzw-2', html: '<p>Two</p>' }));
-  assert.deepEqual(JSON.parse(JSON.stringify(p.calls[1].d)), { from: { html: '<p>Two</p>' } }, 'Quill 2 takes { html }');
-  assert.ok(!p.calls.includes('focus'));
+  const delta = [{ insert: 'Hello' }, { insert: ' world', attributes: { bold: true, link: 'https://x.test/a' } }, { insert: '\n', attributes: { header: 3 } }];
+  assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-1', delta })), [{ id: 'gzw-1', ok: true, html: '<p>Hello world</p>', text: 'Hello world\n' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.calls)), [{ d: delta, source: 'user' }], 'setContents(ops, user), once, no clipboard');
+  assert.deepEqual(p.ask('get', JSON.stringify({ id: 'gzw-1' })), [{ id: 'gzw-1', ok: true, html: '<p>Hello world</p>', text: 'Hello world\n' }]);
+  assert.ok(!p.calls.includes('focus') && !p.calls.includes('convert'));
+});
+
+test('page world: ops outside what compose writes are refused before Quill sees them', () => {
+  const p = pageWorld();
+  p.run();
+  for (const delta of [
+    'x', [], [{ insert: 'no newline' }], [{ insert: 'x\n', attributes: { color: 'red' } }], [{ insert: 'x\n', attributes: { link: 'javascript:alert(1)' } }],
+    [{ insert: { image: 'https://x.test/a.png' } }, { insert: '\n' }], [{ insert: 'x\n', attributes: { header: 1 } }], [{ insert: 'x\n', attributes: { indent: 9 } }],
+    [{ insert: 'x\n', retain: 3 }], [{ insert: 'x\n', attributes: { list: 'checked' } }], [{ insert: '' }, { insert: '\n' }],
+  ]) assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-1', delta })), [{ id: 'gzw-1', ok: false }], JSON.stringify(delta));
+  assert.equal(p.calls.length, 0);
 });
 
 test('page world: an unknown box, a bad id or a bad message answers not ok, or not at all', () => {
   const p = pageWorld();
   p.run();
-  assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-9', html: '<p>x</p>' })), [{ id: 'gzw-9', ok: false }]);
-  assert.deepEqual(p.ask('set', JSON.stringify({ id: '"] *, [x="', html: '<p>x</p>' })), [{ id: '"] *, [x="', ok: false }], 'an id is never a selector');
-  assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-1', html: 7 })), [{ id: 'gzw-1', ok: false }]);
+  assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-9', delta: [{ insert: 'x\n' }] })), [{ id: 'gzw-9', ok: false }]);
+  assert.deepEqual(p.ask('set', JSON.stringify({ id: '"] *, [x="', delta: [{ insert: 'x\n' }] })), [{ id: '"] *, [x="', ok: false }], 'an id is never a selector');
+  assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-1', html: '<p>x</p>' })), [{ id: 'gzw-1', ok: false }], 'HTML is no longer taken');
   assert.deepEqual(p.ask('set', 'not json'), []);
   assert.equal(p.calls.length, 0);
 });
@@ -151,7 +154,7 @@ const frame = ({ claim = true } = {}) => {
   const listeners = [], asked = [], made = [];
   const editor = (opts) => {
     let html = opts.html;
-    const ed = { opts, set: [], focused: 0, html: () => html, words: () => (html.replace(/<[^>]*>/g, ' ').match(/\S+/g) || []).length, setHTML: (h) => { ed.set.push(h); html = h; opts.onChange({ html: h, text: h, words: 1, docChanged: true }); }, focus: () => { ed.focused++; }, run: () => true, active: () => ({}) };
+    const ed = { opts, set: [], focused: 0, view: { state: { doc: 'the doc' } }, html: () => html, words: () => (html.replace(/<[^>]*>/g, ' ').match(/\S+/g) || []).length, setHTML: (h) => { ed.set.push(h); html = h; opts.onChange({ html: h, text: h, words: 1, docChanged: true }); }, focus: () => { ed.focused++; }, run: () => true, active: () => ({}) };
     made.push(ed);
     return ed;
   };
@@ -161,6 +164,8 @@ const frame = ({ claim = true } = {}) => {
     addEventListener: (type, f) => { if (type === 'message') listeners.push(f); },
     chrome: { runtime: { sendMessage: async (m) => { asked.push(m); return { ok: claim }; } } },
     GZ_WRITER_EDITOR: { create: editor },
+    // lib/writer-schema.js as the frame uses it: compose's ops for a doc, and what a box holds that compose can't keep.
+    GZ_WRITER_SCHEMA: { compose: 'compose', paper: 'paper', delta: (doc) => [{ insert: `ops of ${doc}\n` }], loses: (schema, h) => [...(/class="attachment"/.test(h) ? ['attachment'] : []), ...(h.length > 5000 ? ['limit'] : [])] },
   });
   ctx.globalThis = ctx;
   vm.runInContext(read('lib/i18n.js'), ctx);
@@ -208,7 +213,7 @@ test('frame: init builds the editor in the Look\'s tokens; changes, Mod-Enter an
   assert.equal(f.made.length, 1, 'a second init builds nothing');
   p.sent.length = 0;
   ed.opts.onChange({ html: '<p>Hi there, Jordan</p>', text: 'Hi there, Jordan', words: 3, docChanged: true });
-  assert.deepEqual(p.sent, [{ type: 'change', html: '<p>Hi there, Jordan</p>', text: 'Hi there, Jordan', words: 3 }]);
+  assert.deepEqual(p.sent, [{ type: 'change', html: '<p>Hi there, Jordan</p>', text: 'Hi there, Jordan', words: 3, delta: [{ insert: 'ops of the doc\n' }] }], 'with compose\'s Quill ops, what the page writes');
   assert.equal(ed.opts.keys['Mod-Enter'](), true);
   assert.deepEqual(p.sent.at(-1), { type: 'send' });
   f.to(p, { type: 'focus' });
@@ -235,6 +240,28 @@ test('frame: Ultra changing its own editor shows in the frame without echoing ba
 test('page world: a stale Quill pointer never writes into another editor', () => {
   const p = pageWorld(); p.run();
   p.boxes['gzw-1'].__quill = p.boxes['gzw-2'].__quill;
-  assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-1', html: '<p>Wrong destination</p>' })), [{ id: 'gzw-1', ok: false }]);
+  assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-1', delta: [{ insert: 'Wrong destination\n' }] })), [{ id: 'gzw-1', ok: false }]);
   assert.equal(p.calls.length, 0);
+});
+
+test('frame: a box holding what Writer can\'t keep is refused before the editor exists, so nothing is ever written back', async () => {
+  for (const [html, reason] of [['<p>See</p><div class="attachment">f.docx</div>', 'attachment'], [`<p>${'x'.repeat(6000)}</p>`, 'limit']]) {
+    const f = frame();
+    const p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+    p.sent.length = 0;
+    f.to(p, { ...INIT, html });
+    assert.equal(f.made.length, 0, `${reason}: no editor`);
+    assert.deepEqual(p.sent, [{ type: 'native', reason }], `${reason}: the page hears why, and nothing else`);
+    f.to(p, INIT);
+    assert.equal(f.made.length, 0, `${reason}: a later init builds nothing either`);
+  }
+});
+
+test('frame: paper mode sends no ops, so a paper is never squeezed into Ultra\'s text box', async () => {
+  const f = frame();
+  const p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, { ...INIT, mode: 'paper', kind: 'assignment' });
+  p.sent.length = 0;
+  f.made[0].opts.onChange({ html: '<p>A paper</p>', text: 'A paper', words: 2, docChanged: true });
+  assert.equal(p.sent.at(-1).delta, null);
 });
