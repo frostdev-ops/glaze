@@ -81,3 +81,22 @@ test('waiting races cancellation, skips already-cancelled work and handles late 
   assert.equal(started, 1);
   assert.equal(await F.wait(() => 42), 42);
 });
+
+
+test('concurrent diagnostic writes preserve rows, ordered tally renames and the 40-row cap', async () => {
+  const data = {};
+  const area = { get: async (k) => ({ [k]: structuredClone(data[k]) }), set: async (v) => { await new Promise(setImmediate); Object.assign(data, structuredClone(v)); } };
+  await Promise.all(Array.from({ length: 45 }, (_, i) => F.record(area, 'aiCalls', { id: `r${i}`, count: 1 })));
+  assert.equal(data.aiCalls.length, 40, 'concurrent calls must not overwrite each other');
+  assert.equal(data.aiCalls[0].id, 'r5');
+  await Promise.all([
+    F.record(area, 'aiCalls', { id: 'failure-1', count: 2 }, 'r44'),
+    F.record(area, 'aiCalls', { id: 'failure-2', count: 3 }, 'failure-1'),
+    F.record(area, 'aiCalls', { id: 'failure-2', count: 4 }),
+    F.record(area, 'aiCalls', { id: 'other', count: 1 }),
+  ]);
+  assert.equal(data.aiCalls.length, 40);
+  assert.equal(data.aiCalls.filter((r) => /r44|failure-/.test(r.id)).length, 1);
+  assert.deepEqual(data.aiCalls.find((r) => r.id === 'failure-2'), { id: 'failure-2', count: 4 });
+  assert.ok(data.aiCalls.some((r) => r.id === 'other'));
+});
