@@ -54,10 +54,17 @@ var GZ_AI_APPLE = globalThis.GZ_AI_APPLE || (() => {
       throw Object.assign(new Error('apple'), { category, ...(r.status === 429 && { status: 429 }) });
     } finally { signal?.removeEventListener('abort', stop); }
   };
+  // A warm-up: the native side makes and prewarms a session with the request's instructions (ai.warm), which the next run
+  // with them takes (GlazeAI.swift). Nothing is asked of the model.
+  const warm = async (req, cfg, { signal } = {}) => {
+    const instructions = req.messages.filter((m) => m.role === 'system').flatMap((m) => m.content.filter((p) => p.type === 'text').map((p) => p.text)).join('\n\n');
+    if (!instructions) return false;
+    try { return (await F.wait(() => send({ type: 'ai.warm', model: cfg.model, instructions }), signal)).ok === true; } catch { return false; }
+  };
   const catalog = async () => ({ models: Object.entries(MODELS).map(([id, m]) => ({ id, name: m.name })), source: 'none', at: Date.now() });
   // A connection changed: the native side drops its warm sessions (GlazeAI.swift).
   const release = () => { send({ type: 'ai.release' }).catch(() => {}); };
-  const provider = { id: 'apple', config, caps, status, run, catalog, release };
+  const provider = { id: 'apple', config, caps, status, run, warm, catalog, release };
   return safari() ? P.add(provider) : provider;
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_APPLE; else GZ_AI_APPLE;

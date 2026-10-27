@@ -31,7 +31,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
   // parts: most requests one run makes; context: tokens assumed when a provider doesn't say; ms: a whole run's default.
   const LIMIT = { parts: 20, context: 16000, ms: 180000 };
   const fn = (v) => typeof v === 'function';
-  const KEYS = ['id', 'version', 'caps', 'input', 'build', 'output', 'check', 'tools', 'limits', 'stream', 'disclose', 'rate', 'split', 'merge'];
+  const KEYS = ['id', 'version', 'caps', 'input', 'build', 'output', 'check', 'tools', 'limits', 'stream', 'disclose', 'rate', 'split', 'merge', 'warm'];
   // rate.perMinute at most: a supersede task's runs are short and replace each other.
   const RATE = 120;
   // → the task, frozen; throws a TypeError that says what is wrong with it.
@@ -46,10 +46,11 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       || ((lim !== undefined && (!R().isObj(lim) || Object.entries(lim).some(([k, v]) => !['steps', 'ms', 'tokens', 'maxTokens'].includes(k) || !Number.isSafeInteger(v) || v <= 0))) && 'limits')
       || ((d.stream !== undefined && typeof d.stream !== 'boolean') && 'stream')
       || ((d.disclose !== undefined && typeof d.disclose !== 'boolean') && 'disclose')
+      || ((d.warm !== undefined && typeof d.warm !== 'boolean') && 'warm')
       || ((d.rate !== undefined && (!R().isObj(d.rate) || !Object.keys(d.rate).length || Object.entries(d.rate).some(([k, v]) => (k === 'perMinute' ? !(Number.isSafeInteger(v) && v > 0 && v <= RATE) : k !== 'supersede' || typeof v !== 'boolean')))) && 'rate')
       || ((fn(d.split) !== fn(d.merge) || (d.split !== undefined && !fn(d.split))) && 'split and merge');
     if (why) throw new TypeError(`task ${typeof d.id === 'string' ? d.id.slice(0, 64) : '?'}: ${why}`);
-    const t = Object.freeze({ ...d, caps: Object.freeze({ ...d.caps }), limits: Object.freeze({ ...d.limits }), stream: d.stream === true, disclose: d.disclose === true, ...(d.rate && { rate: Object.freeze({ ...d.rate }) }) });
+    const t = Object.freeze({ ...d, caps: Object.freeze({ ...d.caps }), limits: Object.freeze({ ...d.limits }), stream: d.stream === true, disclose: d.disclose === true, warm: d.warm === true, ...(d.rate && { rate: Object.freeze({ ...d.rate }) }) });
     defined.add(t);
     return t;
   };
@@ -116,6 +117,18 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     return { output, ...(steps.length && { steps }), meta };
   };
 
-  return { LIMIT, ID, define, add, get, run, list: () => [...all.keys()] };
+  // prepare(task, raw input, { provider, cfg }) → the request a run of it would send first, or null: what a warm-up
+  // (lib/ai/broker.js op warm) gives the provider so it reads the instructions before the run comes. A split task: null.
+  const prepare = (task, raw, { provider, cfg } = {}) => {
+    const p = typeof provider === 'string' ? P().get(provider) : provider;
+    const c = p && p.config(cfg);
+    if (!c || task.split) return null;
+    const input = task.input(raw);
+    if (input === null || input === undefined) return null;
+    const built = task.build(input, { caps: P().caps(p, c), text: X(), fence: X().fence() });
+    return R().isObj(built) ? { ...built, ...(task.output !== 'text' && { schema: task.output }) } : null;
+  };
+
+  return { LIMIT, ID, define, add, get, run, prepare, list: () => [...all.keys()] };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASKS; else GZ_AI_TASKS;

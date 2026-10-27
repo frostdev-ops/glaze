@@ -68,7 +68,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const ask = (m) => {
     const id = ++asked;
     return Object.assign(new Promise((resolve) => {
-      waits.set(id, (a) => { if (['status', 'end', 'error'].includes(a?.type)) { waits.delete(id); resolve(a); } });
+      waits.set(id, (a) => { if (['status', 'end', 'error', 'warmed'].includes(a?.type)) { waits.delete(id); resolve(a); } });
       try {
         if (!port) {
           const p = port = chrome.runtime.connect({ name: 'glaze:ai' });
@@ -117,6 +117,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     generation++;
     status.completion = status.writing = null;
     stopFlight();
+    warmedAt = 0;
     hangUp();
     if (view()) clear(view());
     fb.done?.();
@@ -140,6 +141,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       next[f] = st?.type === 'status' ? st : null;
     }
     Object.assign(status, next);
+    warmUp();
     said = s && typeof s === 'object' ? s : {};
     checking = false;
     clearTimeout(attemptTimer);
@@ -166,6 +168,17 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const trackers = new Set();
   const track = () => { const m = new Mapping(); trackers.add(m); return { m, done: () => trackers.delete(m) }; };
   let score = 0.5, timer = 0, flight = 0, shown = 0;
+  // The gray text's model, readied as the box opens, on focus a minute later, and every WARM.keep while focused, so the first
+  // pause is as quick as the next (the owner, 2026-10-27; lib/ai/broker.js op warm: nothing is asked of the model). After a
+  // space and mid-word it reads different instructions (lib/ai/tasks/writer-complete.js), so both are readied.
+  const WARM = { again: 60000, keep: 90000 };
+  let warmedAt = 0, keeping = 0;
+  const warmUp = (now = false) => {
+    if (!ok('completion') || (!now && Date.now() - warmedAt < WARM.again)) return;
+    warmedAt = Date.now();
+    const base = { after: '', mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context() };
+    for (const before of ['Words to warm with ', 'Words to warm with']) ask({ op: 'warm', feature: 'completion', task: 'writer.complete', input: { ...base, before } });
+  };
   const stopFlight = () => { clearTimeout(timer); timer = 0; if (flight) { cancel(flight); flight = 0; } };
   const set = (v, g) => v.dispatch(v.state.tr.setMeta(KEY, g).setMeta('addToHistory', false));
   const clear = (v) => { if (KEY.getState(v.state)) set(v, null); };
@@ -241,7 +254,8 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       },
       handleDOMEvents: {
         compositionstart: (v) => { stopFlight(); clear(v); return false; },
-        blur: (v) => { stopFlight(); clear(v); return false; },
+        blur: (v) => { stopFlight(); clear(v); clearInterval(keeping); keeping = 0; return false; },
+        focus: () => { warmUp(); clearInterval(keeping); keeping = setInterval(() => warmUp(true), WARM.keep); return false; },
       },
     },
     // A change to the text starts the pause again; any change at all ends the run in flight.
@@ -251,7 +265,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
         stopFlight();
         if (v.state.doc !== prev.doc && !KEY.getState(v.state) && ok('completion')) timer = setTimeout(complete, pause(score));
       },
-      destroy: stopFlight,
+      destroy: () => { stopFlight(); clearInterval(keeping); keeping = 0; },
     }),
   });
 

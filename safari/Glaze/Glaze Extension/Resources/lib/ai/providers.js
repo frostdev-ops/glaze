@@ -23,7 +23,7 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
   const ID = /^[a-z][a-z0-9-]{0,31}$/;
   const all = new Map();
   const add = (p) => {
-    if (!p || !ID.test(p.id) || !['config', 'caps', 'status', 'run'].every((k) => typeof p[k] === 'function') || (p.origin !== undefined && typeof p.origin !== 'function')) throw new TypeError('provider');
+    if (!p || !ID.test(p.id) || !['config', 'caps', 'status', 'run'].every((k) => typeof p[k] === 'function') || ['origin', 'warm'].some((k) => p[k] !== undefined && typeof p[k] !== 'function')) throw new TypeError('provider');
     if (all.has(p.id) && all.get(p.id) !== p) throw new TypeError(`provider ${p.id} is already added`);
     all.set(p.id, Object.freeze(p));
     return p;
@@ -37,6 +37,15 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
   // The harness's own refusals pass as they are; anything else from a model call is a failure category.
   const OWN = ['request', 'setup', 'caps', 'changed', 'refusal', 'permission'];
 
+  // warm(provider (id or object), request, cfg, { signal }) → true when the provider readied a session for the request's
+  // instructions (its optional warm(); nothing is asked of the model), false when it has none or can't now. Never throws.
+  const warm = async (provider, request, cfg, { signal } = {}) => {
+    const p = typeof provider === 'string' ? get(provider) : provider;
+    if (typeof p?.warm !== 'function') return false;
+    const req = R().clean(request), c = req && p.config(cfg);
+    if (!c) return false;
+    try { return (await p.warm(req, c, { signal })) === true; } catch { return false; }
+  };
   // run(provider (id or object), request, cfg, { signal, onDelta, onThinking, fetch }) → the result, with json when the
   // request had a schema. Throws { code } (lib/ai/request.js CODES; a failure also carries category, status?, reference).
   const run = async (provider, request, cfg, { signal, onDelta, onThinking, fetch } = {}) => {
@@ -97,6 +106,6 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
     return out;
   };
 
-  return { add, get, list, caps, run, ID };
+  return { add, get, list, caps, run, warm, ID };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_PROVIDERS; else GZ_AI_PROVIDERS;

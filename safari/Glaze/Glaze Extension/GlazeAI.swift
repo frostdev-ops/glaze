@@ -10,6 +10,8 @@
 //      → { ok: true, text, model, finish: 'stop' | 'length', usage? } | { ok: false, error, reason? }
 //    { type: 'ai.cancel', id } → { ok: true, cancelled }
 //    { type: 'ai.release' } → { ok: true }: the warm sessions dropped (a connection changed)
+//    { type: 'ai.warm', model, instructions } → { ok: true }: a session with these instructions made and prewarmed for the
+//      next run that has them (one already warm stays, its time renewed); nothing is asked of the model
 //  messages are lib/ai/request.js's (system → instructions; earlier turns → the transcript; the last user message → the
 //  prompt; images as base64). schema is lib/ai/schema.js's subset, turned into a DynamicGenerationSchema so the model is
 //  held to it; the answer goes back as JSON text and the worker checks it again. error is one of lib/ai/failure.js's
@@ -37,6 +39,7 @@ enum GlazeAI {
             case "ai.run": return await Native.run(m)
             case "ai.cancel": return Native.cancel(m)
             case "ai.release": return Native.release()
+            case "ai.warm": return Native.warm(m)
             default: return ["ok": false, "error": "request-rejected", "reason": "type"]
             }
         }
@@ -86,6 +89,7 @@ private enum Native {
 
     static func warmCount() -> Int { lock.withLock { warm.count } }
 
+
     static func cancel(_ m: [String: Any]) -> [String: Any] {
         guard let id = m["id"] as? String, !id.isEmpty, id.count <= 128 else { return ["ok": false, "error": "request-rejected", "reason": "id"] }
         let found = lock.withLock {
@@ -96,6 +100,32 @@ private enum Native {
             return false
         }
         return ["ok": true, "cancelled": found]
+    }
+
+    /// ai.warm: the warm session the next run with these instructions takes, made and prewarmed now; one already warm stays,
+    /// its time renewed. Nothing is asked of the model.
+    static func warm(_ m: [String: Any]) -> [String: Any] {
+        guard m["model"] as? String == "on-device" else { return ["ok": false, "error": "request-rejected", "reason": "model"] }
+        guard let instructions = m["instructions"] as? String, !instructions.isEmpty, instructions.count <= maxChars else {
+            return ["ok": false, "error": "request-rejected", "reason": "instructions"]
+        }
+        let model = SystemLanguageModel.default
+        guard model.isAvailable else { return ["ok": false, "error": "provider-unavailable", "reason": "unavailable"] }
+        let revision: UInt? = lock.withLock {
+            warm = warm.filter { $0.value.at.addingTimeInterval(warmFor) > Date() }
+            if let kept = warm[instructions] { warm[instructions] = (kept.session, Date()); return nil }
+            return warmRevision
+        }
+        guard let revision else { return ["ok": true] }
+        let entries: [Transcript.Entry] = [.instructions(Transcript.Instructions(segments: [.text(.init(content: instructions))], toolDefinitions: []))]
+        let session = LanguageModelSession(model: model, transcript: Transcript(entries: entries))
+        session.prewarm()
+        lock.withLock {
+            guard warmRevision == revision, warm[instructions] == nil else { return }
+            warm[instructions] = (session, Date())
+            while warm.count > maxWarm, let oldest = warm.min(by: { $0.value.at < $1.value.at })?.key { warm[oldest] = nil }
+        }
+        return ["ok": true]
     }
 
     static func status(_ m: [String: Any]) async -> [String: Any] {

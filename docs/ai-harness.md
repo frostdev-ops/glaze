@@ -61,6 +61,7 @@ One file, `lib/ai/providers/<id>.js`, that calls `GZ_AI_PROVIDERS.add({ … })`:
   run(request, cfg, { signal, onDelta, onThinking, fetch }) → { text, toolCalls?, usage?, model, finish },
   origin?(cfg) → 'https://host/*', catalog?(cfg, env) → models.list(),
   prepare?(cfg, { onProgress }) → status, for a model that downloads to this computer,
+  warm?(request, cfg, { signal }) → true when it readied a session for the request's instructions (nothing asked),
   release?() → drops what it keeps warm between requests; the broker calls it when a connection changes }
 ```
 
@@ -77,7 +78,7 @@ Throw errors with a `status` or a `category`; `providers.run` turns them into a 
   input(raw) → input | null, build(input, { caps, text, fence }) → request (no schema),
   output: JSON Schema (object root) | 'text', check(output, input, { truncated, caps }) → output | null,
   tools?: ['name'], limits?: { steps, ms, tokens, maxTokens }, stream?: false,
-  rate?: { perMinute?: 1..120, supersede?: true },
+  rate?: { perMinute?: 1..120, supersede?: true }, warm?: true,
   split?(input, { budget, text }) → [input], merge([output], input) → output }
 ```
 
@@ -131,13 +132,17 @@ port.postMessage({ id: 1, op: 'run', feature: 'syllabus', task: 'syllabus.read',
 port.postMessage({ id: 1, op: 'cancel' });
 port.postMessage({ id: 2, op: 'status', feature: 'syllabus' });
 port.postMessage({ id: 3, op: 'confirm', confirmId, approve: true });
+port.postMessage({ id: 4, op: 'warm', feature: 'completion', task: 'writer.complete', input });
 ```
 
 A run posts events `{ id, type, … }`: `thinking`, `text_delta { delta, offset }` (stream tasks only), `says`, `note
 { part, parts }`, `step_start`, `step { step }`, `pending { pending }`, `usage`, `reply`; an event's own id is `event`. It
 ends with `{ id, type: 'end', output?, pending?, steps?, meta }` (a text task's `meta.truncated`) or `{ id, type: 'error',
 error, reference?, status? }`. A port's messages are taken in the order they were sent. A cancelled run gives up its place
-at once.
+at once. A `warm` (a task with `warm: true`) is admitted as a run is, builds the run's first request (`tasks.prepare`) and has
+the provider ready a session for its instructions (`providers.warm`), then posts `{ id, type: 'warmed', ok }`; nothing is
+asked of the model, counted or recorded. Writer warms `writer.complete` as a box opens, on focus a minute later and every 90
+seconds while focused.
 Show `text_delta` and model output as text only. Credentialed structured replies release deltas only after parsing and credential checks. Keep the port open while a run is in flight; closing it cancels the run.
 
 Error codes: the model request's category (`cancelled`, `timeout`, `provider-unavailable`, `request-rejected`,
@@ -207,6 +212,8 @@ has its own session, destroyed after it.
 Apple's native side keeps a warm session per instructions (at most four, five minutes each), made and `prewarm()`ed when a
 request with those instructions comes, so the next starts on it. A session answers once, since its transcript would carry
 that answer into the next request. `{ type: 'ai.release' }` drops them; the worker sends it when a connection changes.
+`{ type: 'ai.warm', model, instructions }` makes and prewarms one before any request, or renews one already warm; the
+device provider's `warm` does the same with its warm `create()`, never starting a download.
 
 ## Safari's Apple provider
 

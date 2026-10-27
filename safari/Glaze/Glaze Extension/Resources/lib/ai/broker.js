@@ -2,11 +2,14 @@
 // the connections (an endpoint's address, model and key). A feature asks over a runtime port named 'glaze:ai'
 // (lib/background.js checks who opened it: Glaze's own pages, or Glaze in a frame of a site it runs on, never a quiz's page).
 //   page → { id, op: 'run', feature, task, input }  { id, op: 'cancel' }  { id, op: 'status', feature }
-//          { id, op: 'confirm', confirmId, approve }
+//          { id, op: 'confirm', confirmId, approve }  { id, op: 'warm', feature, task, input }
 //   worker → the run's events, each { id, type, … } (lib/ai/loop.js: thinking, text_delta, says, note, step_start, step,
 //          pending, usage, reply), then { id, type: 'end', output?, pending?, steps?, meta } or { id, type: 'error', error,
 //          reference?, status? }. status → { id, type: 'status', on, allowed, ready?, why?, provider?, caps?, to? }. confirm →
-//          { id, type: 'confirmed', result } | { id, type: 'declined' } | { id, type: 'error', error, note }.
+//          { id, type: 'confirmed', result } | { id, type: 'declined' } | { id, type: 'error', error, note }. warm → { id,
+//          type: 'warmed', ok }: a task with warm: true has its first request built as a run's would be and the provider
+//          readies a session for its instructions (lib/ai/providers.js warm), admitted as a run is; nothing is asked of the
+//          model, counted or recorded.
 // A run is checked here before anything is sent: Glaze and AI on, the feature allowed (lib/ai/settings.js), the task known,
 // the chosen connection's settings clean, the model one its catalog lists (lib/ai/models.js select; unverified when no
 // list could be had), what the task needs within what the provider and catalog say, the browser holding the connection's
@@ -191,7 +194,23 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       if (m.op === 'status') return post({ id: m.id, type: 'status', ...await status(m, env) });
       if (m.op === 'run') return run(m, def);
       if (m.op === 'confirm') return confirm(m);
+      if (m.op === 'warm') return warmUp(m);
       post({ id: m.id, type: 'error', error: 'request' });
+    };
+    const warmUp = async (m) => {
+      const done = (ok) => post({ id: m.id, type: 'warmed', ok });
+      if (mine.has(m.id) || typeof m.feature !== 'string' || !FEATURE.test(m.feature) || typeof m.task !== 'string' || !T().ID.test(m.task)
+        || Object.keys(m).some((k) => !['id', 'op', 'feature', 'task', 'input'].includes(k))) return post({ id: m.id, type: 'error', error: 'request' });
+      let size;
+      try { size = JSON.stringify(m.input ?? null).length; } catch { return done(false); }
+      if (size > LIMIT.message) return done(false);
+      const control = new AbortController(), deadline = F().deadline(LIMIT.catalog), both = F().anySignal([control.signal, deadline.signal]);
+      mine.set(m.id, control);
+      try {
+        const { task, use } = await F().wait(() => admit(m), both.signal);
+        const req = task.warm === true && typeof use.p.warm === 'function' && T().prepare(task, m.input, { provider: use.p, cfg: use.cfg });
+        done(!!req && await P().warm(use.p, req, use.cfg, { signal: both.signal }));
+      } catch { done(false); } finally { mine.delete(m.id); deadline.done(); both.done(); }
     };
     // Admission: → { s, task, use } or throws a code.
     const admit = async (m) => {

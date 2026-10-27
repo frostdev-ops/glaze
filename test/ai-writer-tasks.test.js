@@ -40,6 +40,7 @@ const fenced = (data, needle) => {
 // ---- writer.complete ----------------------------------------------------------------------------------------------
 test('writer.complete: a streamed text task at 60 a minute that supersedes; instructions only in the system message, every page text fenced', async () => {
   assert.equal(T.get('writer.complete'), C.task);
+  assert.equal(C.task.warm, true, 'warmed as a box opens (lib/ai/broker.js op warm)');
   assert.deepEqual({ output: C.task.output, stream: C.task.stream, rate: { ...C.task.rate } }, { output: 'text', stream: true, rate: { perMinute: 60, supersede: true } });
   const { output, req, events } = await go(C.task, { before: BEFORE, after: '', mode: 'compose', kind: 'reply', context: CONTEXT },
     { deltas: ['it arrives', ' uninvited and rearranges the present.', ' Then it leaves.'] });
