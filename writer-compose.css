@@ -1,0 +1,15 @@
+/* Glaze Writer's compose bar (writer-compose.js), as glaze-plans/writer/mockups (A) draws it: the target ring, the sources
+   pill, and compose's quotes as a block. Nothing animates. */
+.gz-ring { width: 22px; height: 22px; flex: none; transform: rotate(-90deg); }
+.gz-ring circle { fill: none; stroke-width: 4; }
+.gz-ring .track { stroke: var(--gz-line-strong); }
+.gz-ring .arc { stroke: var(--gz-accent); stroke-linecap: round; }
+.slot[data-slot="target"][data-state="ok"] .arc { stroke: var(--gz-ok); }
+.slot[data-slot="target"][data-state="over"] .arc { stroke: var(--gz-warn); }
+.slot[data-slot="sources"] { gap: 6px; }
+.slot[data-slot="sources"][data-state="ok"] .gz-mark { color: var(--gz-ok); }
+.gz-num { font-variant-numeric: tabular-nums; }
+
+.ProseMirror p.gz-quote { margin: 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--gz-accent); color: var(--gz-ink-muted); }
+.ProseMirror p.gz-quote-by { padding-top: 0; font-size: 12px; color: var(--gz-ink-faint); }
+.ProseMirror p.gz-quote-end { margin-bottom: 12px; }

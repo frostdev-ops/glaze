@@ -1,0 +1,103 @@
+{
+  "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. The public discussions list (/learn/api/public/v1/courses/{cid}/discussions) as test/fixtures/ultra-discussions.json has it; its ids are the forum ids the messages API takes, not the content ids in Ultra's discussion route (probe 2026-10-26/27).",
+  "results": [
+    {
+      "id": "_1099_1",
+      "title": "Introductions",
+      "available": true,
+      "gradable": false,
+      "groupDiscussion": false,
+      "createdDate": "2026-10-13T12:00:00.000Z",
+      "modifiedDate": "2026-10-13T12:00:00.000Z",
+      "topic": {
+        "id": "_1100_1",
+        "discussionId": "_1099_1",
+        "parentId": null,
+        "threadId": null,
+        "groupId": null,
+        "status": "Published",
+        "body": "<p>Tell us about yourself.</p>",
+        "postDate": "2026-10-13T12:00:00.000Z",
+        "editDate": "2026-10-13T12:00:00.000Z",
+        "createdDate": "2026-10-13T12:00:00.000Z",
+        "modifiedDate": "2026-10-13T12:00:00.000Z",
+        "isRead": true
+      }
+    },
+    {
+      "id": "_1101_1",
+      "title": "Week 6: Memory and Place",
+      "available": true,
+      "gradable": true,
+      "groupDiscussion": false,
+      "createdDate": "2026-10-13T12:00:00.000Z",
+      "modifiedDate": "2026-10-13T12:00:00.000Z",
+      "topic": {
+        "id": "_1102_1",
+        "discussionId": "_1101_1",
+        "parentId": null,
+        "threadId": null,
+        "groupId": null,
+        "status": "Published",
+        "body": "<p>How does Morrison use the river and the clearing as places of memory? Respond in <strong>at least 250 words</strong>, cite two sources, and reply to two classmates.</p>",
+        "postDate": "2026-10-13T12:00:00.000Z",
+        "editDate": "2026-10-13T12:00:00.000Z",
+        "createdDate": "2026-10-13T12:00:00.000Z",
+        "modifiedDate": "2026-10-13T12:00:00.000Z",
+        "isRead": true
+      },
+      "gradebookColumnId": "_820_1"
+    },
+    {
+      "id": "_1103_1",
+      "title": "Week 7: Ghosts",
+      "available": true,
+      "gradable": false,
+      "groupDiscussion": false,
+      "createdDate": "2026-10-13T12:00:00.000Z",
+      "modifiedDate": "2026-10-13T12:00:00.000Z",
+      "topic": {
+        "id": "_1104_1",
+        "discussionId": "_1103_1",
+        "parentId": null,
+        "threadId": null,
+        "groupId": null,
+        "status": "Published",
+        "body": "<p>Write a 300-word post on Beloved as a ghost story.</p>",
+        "postDate": "2026-10-13T12:00:00.000Z",
+        "editDate": "2026-10-13T12:00:00.000Z",
+        "createdDate": "2026-10-13T12:00:00.000Z",
+        "modifiedDate": "2026-10-13T12:00:00.000Z",
+        "isRead": true
+      }
+    },
+    {
+      "id": "_1105_1",
+      "title": "Week 8: In Brief",
+      "available": true,
+      "gradable": true,
+      "groupDiscussion": false,
+      "createdDate": "2026-10-13T12:00:00.000Z",
+      "modifiedDate": "2026-10-13T12:00:00.000Z",
+      "topic": {
+        "id": "_1106_1",
+        "discussionId": "_1105_1",
+        "parentId": null,
+        "threadId": null,
+        "groupId": null,
+        "status": "Published",
+        "body": "<p>Sum up the novel’s ending in 10–20 words.</p>",
+        "postDate": "2026-10-13T12:00:00.000Z",
+        "editDate": "2026-10-13T12:00:00.000Z",
+        "createdDate": "2026-10-13T12:00:00.000Z",
+        "modifiedDate": "2026-10-13T12:00:00.000Z",
+        "isRead": true
+      },
+      "gradebookColumnId": "_830_1"
+    }
+  ],
+  "paging": {
+    "limit": 200,
+    "offset": 0
+  }
+}

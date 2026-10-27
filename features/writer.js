@@ -148,6 +148,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.nativeHTML = ed.innerHTML;
     box.ready = true;
     box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, html: box.latest, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
+    if (['post', 'reply', 'message'].includes(box.kind)) X.need('lib/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
+    if (box.kind === 'reply') X.need('features/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
     box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
     box.root.style.setProperty('display', 'none', 'important');
     for (const k of ['position', 'opacity', 'pointer-events']) f.style.removeProperty(k);
