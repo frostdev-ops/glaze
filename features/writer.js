@@ -230,6 +230,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     remember(box);
     boxes.delete(box.editor);
     globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.unwatch(box);
+    globalThis.GZ_WRITER_QUOTE?.disarm(box);
     clearTimeout(box.wait);
     clearTimeout(box.retry);
     box.observer?.disconnect();

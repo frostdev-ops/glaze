@@ -1,7 +1,7 @@
 // Glaze Writer's Quote pop, loaded with features/writer.js: while a reply box is open in Glaze's editor, selecting text in a
 // post of the thread shows the mockup's "Quote" above the selection. It puts the text, with its author from the thread
 // data (lib/writer-context-discussion.js; none when that isn't read), into the reply that answers the post (else the reply
-// box opened last), as compose's quote. It only listens to the selection, never changes it before the click. It sits
+// box in the same thread), as compose's quote. It only listens to the selection, never changes it before the click. It sits
 // right after the post's text, so Tab from the selection reaches it and Tab again goes on to the post's own controls;
 // scrolling, leaving the window, Escape or a new selection take it away.
 // Classic script, through GZ_CTX; a second injection keeps the first. Without GZ_CTX (node), module.exports has place, clean.
@@ -22,8 +22,9 @@ var GZ_WRITER_QUOTE = globalThis.GZ_WRITER_QUOTE || (() => {
   const X = globalThis.GZ_CTX;
   if (!X || typeof document === 'undefined') { if (typeof module !== 'undefined') module.exports = { clean, place }; return null; }
 
+  const on = () => X.on() && X.settings().enabled !== false && !!X.settings().enhance?.writer;
   const boxes = []; // reply boxes, in the order they opened
-  const live = (box) => box.kind === 'reply' && box.ready && !!box.port && !!box.frame?.isConnected;
+  const live = (box) => (!box.path || box.path === location.pathname) && box.kind === 'reply' && box.ready && !!box.port && !!box.frame?.isConnected;
   const BODY = '.ql-editor[contenteditable="false"]';
   const elOf = (n) => (n?.nodeType === 1 ? n : n?.parentElement);
   // The read-only post body a node is in, and the post's message id, or null (an editor, Glaze's own, no id).
@@ -33,12 +34,12 @@ var GZ_WRITER_QUOTE = globalThis.GZ_WRITER_QUOTE || (() => {
     const post = body.closest('[message-id]:not([message-id=""])');
     return post ? { body, id: post.getAttribute('message-id') } : null;
   };
-  // The reply that answers this post, else one in its thread, else the one opened last.
+  // The reply that answers this post, else one in its thread, never a box in another thread.
   const replyFor = (post) => {
     const open = boxes.filter(live);
     const answers = (b) => (globalThis.GZ_WRITER_ULTRA?.replyTo?.(b.editor) || b.context?.post?.id) === post.id;
     const thread = post.body.closest('.comment-and-reply');
-    return open.find(answers) || open.find((b) => thread?.contains(b.root)) || open[open.length - 1] || null;
+    return open.find(answers) || open.find((b) => thread?.contains(b.root)) || null;
   };
 
   // ---- the pop ----------------------------------------------------------------------------------------------------------
@@ -107,7 +108,7 @@ svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width:
   const quote = () => {
     const s = shown;
     hide();
-    if (!s || !live(s.box)) return;
+    if (!s || !on() || !live(s.box)) return;
     const author = globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.author?.(s.id) || '';
     s.box.port.postMessage({ type: 'quote', text: s.text, author });
     s.box.frame.focus();
@@ -116,37 +117,54 @@ svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width:
   };
 
   // ---- the selection --------------------------------------------------------------------------------------------------
-  let queued = false;
+  let queued = false, raf = 0;
   const update = () => {
-    queued = false;
+    queued = false; raf = 0;
     if (host?.matches(':focus-within')) return; // the student reached the pop by Tab: it stays for them
     const sel = getSelection();
-    if (!X.on() || !sel || sel.isCollapsed || !sel.rangeCount) { hide(); return; }
+    if (!on() || !sel || sel.isCollapsed || !sel.rangeCount) { hide(); return; }
     const post = postOf(sel.anchorNode);
     if (!post || postOf(sel.focusNode)?.body !== post.body) { hide(); return; }
     const box = replyFor(post);
     if (!box) { hide(); return; }
     show(sel, post, box);
   };
-  const later = () => { if (!queued) { queued = true; requestAnimationFrame(update); } };
+  const later = () => { if (!queued) { queued = true; raf = requestAnimationFrame(update); } };
   let listening = false;
+  const dismiss = () => { if (shown) hide(); };
+  const escape = (e) => { if (shown && e.key === 'Escape' && !e.defaultPrevented) hide(); };
   const listen = () => {
     if (listening) return;
     listening = true;
     document.addEventListener('selectionchange', later);
-    addEventListener('scroll', () => { if (shown) hide(); }, { capture: true, passive: true });
-    addEventListener('blur', () => { if (shown) hide(); });
-    addEventListener('resize', () => { if (shown) hide(); });
-    document.addEventListener('keydown', (e) => { if (shown && e.key === 'Escape' && !e.defaultPrevented) hide(); }, true);
+    addEventListener('scroll', dismiss, { capture: true, passive: true });
+    addEventListener('blur', dismiss);
+    addEventListener('resize', dismiss);
+    document.addEventListener('keydown', escape, true);
+  };
+  const disarm = (box) => {
+    const i = boxes.indexOf(box);
+    if (i !== -1) boxes.splice(i, 1);
+    if (shown?.box === box) hide();
+    if (boxes.length) return;
+    hide();
+    document.removeEventListener('selectionchange', later);
+    removeEventListener('scroll', dismiss, true);
+    removeEventListener('blur', dismiss);
+    removeEventListener('resize', dismiss);
+    document.removeEventListener('keydown', escape, true);
+    cancelAnimationFrame(raf);
+    raf = 0; queued = listening = false;
+    host = button = null;
   };
   // features/writer.js, as a reply box's frame comes up (and again when it reopens).
   const arm = (box) => {
-    if (box?.kind !== 'reply') return;
+    if (!on() || box?.kind !== 'reply' || !live(box)) return;
     if (!boxes.includes(box)) boxes.push(box);
     for (let i = boxes.length - 1; i >= 0; i--) if (boxes[i].frame && !boxes[i].frame.isConnected) boxes.splice(i, 1);
     listen();
   };
-  return { clean, place, arm };
+  return { clean, place, arm, disarm };
 })();
 if (typeof module !== 'undefined' && GZ_WRITER_QUOTE) module.exports = GZ_WRITER_QUOTE;
 GZ_WRITER_QUOTE;
