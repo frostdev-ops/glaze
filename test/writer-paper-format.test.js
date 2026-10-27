@@ -128,3 +128,15 @@ test('Chicago blocks a quotation at five lines, even below one hundred words', (
   assert.ok(issue);
   assert.match(issue.message, /five lines/);
 });
+
+test('the Outline: the paper\'s title, its headings by level, and its list of sources, each where it starts', () => {
+  const par = (text) => ({ type: 'paragraph', attrs: { align: null, indent: 0, line: null, first: null }, content: [{ type: 'text', text }] });
+  const h = (level, text) => ({ type: 'heading', attrs: { level }, content: [{ type: 'text', text }] });
+  const d = node(F.template(ST.FORMATS.mla9, v, [par('Body.'), h(1, 'Memory'), par('More.'), h(2, 'The river')]));
+  const o = F.outline(d, ST.FORMATS.mla9);
+  assert.deepEqual(o.map((x) => [x.kind, x.level, x.text]), [['title', 0, 'Essay 2'], ['heading', 1, 'Memory'], ['heading', 2, 'The river'], ['list', 0, 'Works Cited']]);
+  for (const x of o) assert.equal(d.resolve(x.pos + 1).parent.textContent, x.text, `${x.text} starts at its pos`);
+  const apa = node(F.template(ST.FORMATS.apa7, v));
+  assert.deepEqual(F.outline(apa, ST.FORMATS.apa7).map((x) => [x.kind, x.text]), [['title', 'Essay 2'], ['list', 'References']]);
+  assert.deepEqual(F.outline(node({ type: 'doc', content: [par('Only a paragraph.')] }), ST.FORMATS.mla9), [], 'nothing to outline');
+});
