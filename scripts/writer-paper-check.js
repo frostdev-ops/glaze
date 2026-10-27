@@ -226,6 +226,7 @@ const HARNESS = `(() => {
     check(true, 'Fix restores heading order through the shared issues integration');
     for (const fid of ['mla9', 'apa7', 'chicago17']) {
       await load(fr, FX.papers[fid](), fid);
+      check(await fr.evaluate(() => GZ_WRITER_CITE.style() === ({ mla: 'mla9', apa: 'apa7', chicago: 'chicago17' })[GZ_WRITER_PAPER.current().format().cite]), `${fid}: citations follow the paper's format`);
       await pause(400);
       const issues = await fr.evaluate(() => GZ_WRITER_ISSUES.list().map(({ source, message, rule }) => ({ source, message, rule })));
       console.log(`${fid} clean issue sources`, JSON.stringify(issues.reduce((n, i) => ({ ...n, [i.source]: (n[i.source] || 0) + 1 }), {})));

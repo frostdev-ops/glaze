@@ -294,6 +294,41 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
     });
     await p.close();
 
+    await check('paper Focus gives ghost text, proof cards and citation dialogs first Escape; Tab still takes a ghost in a list', async () => {
+      const q = await frame({ mode: 'paper', kind: 'assignment', html: `<p>${LAST}</p>`, ctx: { kind: 'assignment' } });
+      try {
+        await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()), 'paper mounted');
+        await next(q, 'writer.complete', GHOST);
+        await q.evaluate(() => GZ_WRITER_PAPER.current().focus(true));
+        await end(q); await q.keyboard.type(' it');
+        await until(() => ghost(q), 'paper ghost');
+        await q.keyboard.press('Escape');
+        assert.equal(await ghost(q), null, 'Escape dismisses the ghost first');
+        assert.equal(await q.getAttribute('.gp-tbtn[aria-label="Focus"]', 'aria-pressed'), 'true', 'Focus stays on');
+        await q.evaluate(() => {
+          const v = GZ_WRITER_FRAME.editor().view;
+          GZ_WRITER_ISSUES.set('ai', [{ from: 1, to: 5, kind: 'style', message: 'Review this wording.', suggestions: ['Then'] }]);
+          v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, 2))); v.focus();
+        });
+        await q.keyboard.press('Alt+Enter');
+        await until(() => q.evaluate(() => !document.querySelector('.gp-card').hidden), 'proof card');
+        await q.keyboard.press('Escape');
+        assert.equal(await q.getAttribute('.gp-tbtn[aria-label="Focus"]', 'aria-pressed'), 'true', 'proof Escape keeps Focus');
+        await q.evaluate(() => GZ_WRITER_CITE.open());
+        await q.keyboard.press('Escape');
+        assert.equal(await q.getAttribute('.gp-tbtn[aria-label="Focus"]', 'aria-pressed'), 'true', 'citation Escape keeps Focus');
+        await q.evaluate(() => GZ_WRITER_FRAME.editor().focus());
+        await q.keyboard.press('Escape');
+        assert.equal(await q.getAttribute('.gp-tbtn[aria-label="Focus"]', 'aria-pressed'), 'false', 'next Escape leaves Focus');
+        await q.evaluate(() => GZ_WRITER_FRAME.editor().setHTML('<ul><li><p>One</p></li><li><p>These words will</p></li></ul>'));
+        await end(q); await q.keyboard.type(' it');
+        await until(() => ghost(q), 'paper list ghost');
+        await q.keyboard.press('Tab');
+        assert.equal(await ghost(q), null);
+        assert.equal(await q.evaluate(() => document.querySelectorAll('.ProseMirror li').length), 2, 'Tab takes text without nesting the list');
+      } finally { await q.close(); }
+    });
+
     await check('a test\'s box: no port, no chip, no gray text', async () => {
       const q = await frame({ kind: 'test' });
       await end(q);
