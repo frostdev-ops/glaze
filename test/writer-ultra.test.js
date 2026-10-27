@@ -46,6 +46,18 @@ test('a discussion box off a discussion page, or editing a post in the thread, s
   assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['post']);
 });
 
+test('a collapsed discussion composer stays native until Ultra activates its editor', () => {
+  // Live Ultra, 2026-10-27: the collapsed Post has no toolbar. Clicking it initializes the message model and draws
+  // the toolbar; taking it over before that leaves Post disabled even when Quill holds Writer's text.
+  const body = page('ultra-writer-discussion.html'), [post] = U.boxes(body, { path: DISCUSSION });
+  const toolbar = post.root.querySelector('.bb-editor-toolbar');
+  toolbar.remove();
+  assert.equal(U.kindOf(post.editor, { path: DISCUSSION }), 'post', 'its destination is still a discussion post');
+  assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['reply'], 'native activation stays reachable');
+  post.root.querySelector('.bb-editor-root').append(toolbar);
+  assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['post', 'reply'], 'the activated editor can mount Writer');
+});
+
 test('messages compose is a message, sent by its Send', () => {
   const [box, ...rest] = U.boxes(page('ultra-writer-messages.html'), { path: MESSAGES });
   assert.equal(rest.length, 0);
