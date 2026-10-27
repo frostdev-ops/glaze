@@ -142,7 +142,7 @@
       let lost;
       try { lost = GZ_WRITER_SCHEMA.loses(root.dataset.mode === 'paper' ? GZ_WRITER_SCHEMA.paper : GZ_WRITER_SCHEMA.compose, html); } catch { lost = ['error']; }
       if (lost.length) { refused = true; say({ type: 'native', reason: lost.join(' ') }); return; }
-      ed = GZ_WRITER_EDITOR.create({ mount: $('body'), mode: root.dataset.mode, html, placeholder: typeof m.placeholder === 'string' ? m.placeholder : '', onChange, onSelection, plugins: plugins.splice(0),
+      ed = GZ_WRITER_EDITOR.create({ mount: $('body'), mode: root.dataset.mode, html, selection: m.selection, placeholder: typeof m.placeholder === 'string' ? m.placeholder : '', onChange, onSelection, plugins: plugins.splice(0),
         keys: { 'Mod-Enter': () => { say({ type: 'send' }); return true; } } });
       words = ed.words();
       lang(m.locale);
