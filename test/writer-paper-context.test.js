@@ -30,8 +30,8 @@ test('everything Ultra says about the paper', async () => {
   assert.equal(c.prompt.text, c.assignment.instructions);
   assert.equal(c.kind, 'assignment');
   assert.equal(c.assignment.rubric.title, 'Synthetic points rubric');
-  assert.ok(c.assignment.rubric.criteria.length >= 2 && c.assignment.rubric.criteria[0].levels.length === 5);
-  assert.deepEqual(Object.keys(c.assignment.rubric.criteria[0].levels[0]), ['level', 'detail', 'value']);
+  assert.ok(c.assignment.rubric.criteria.length >= 2 && c.assignment.rubric.criteria[0].cells.length === 5);
+  assert.deepEqual(Object.keys(c.assignment.rubric.criteria[0].cells[0]), ['level', 'detail', 'value']);
 });
 
 test('what fails stays empty; without the student\'s id there is no key, so nothing is saved under a guess', async () => {

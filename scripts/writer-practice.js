@@ -70,8 +70,8 @@ const stage = (src, to, hosts = []) => {
 // ---- AI in the practice window ----------------------------------------------------------------------------------------
 // What the proxy lets through: an address one of Glaze's AI connections names (the worker's own store, glaze-ai/vault,
 // lib/ai/broker.js) and Glaze holds the grant for. Read in the worker, the one place that may ask (a key never leaves it):
-// again for an address not on the last list once it is 300 ms old (one just saved in Settings), else every 2 s (the
-// browser's own background requests come to the proxy too).
+// for every previously allowed address (a removed connection or grant must stop working at once). Unknown addresses
+// share a negative cache for 300 ms, so the browser's own background requests don't keep waking the worker.
 const connections = async (context, id) => {
   const w = context?.serviceWorkers().find((x) => x.url().startsWith(`chrome-extension://${id}/`));
   if (!w) return [];
@@ -96,8 +96,7 @@ const reachable = (context, id) => {
   const told = new Set();
   return async ({ protocol, host, port }) => {
     const has = async () => (await kept.list).some((c) => c.protocol === protocol && c.host === host && c.port === port);
-    if (kept && Date.now() - kept.at < 2000 && await has()) return true;
-    if (!kept || Date.now() - kept.at > 300) kept = { at: Date.now(), list: connections(context(), id()) };
+    if (!kept || Date.now() - kept.at > 300 || await has()) kept = { at: Date.now(), list: connections(context(), id()) };
     const ok = await has(), at = `${protocol}//${host}:${port}`;
     if (ok && !told.has(at)) { told.add(at); console.log(`[practice] Glaze's AI connection reaches ${at}`); }
     return ok;
@@ -280,7 +279,7 @@ const run = async ({ context, mock, shots, errors, ai }) => {
   check(ready, `with AI set up, Feedback offers to run on the assignment (it said: ${squash(await fr.$eval(fb, (e) => e.textContent).catch(() => ''))})`);
   await fr.click(`${fb} .gz-fb-run`);
   const cards = await until(() => fr.evaluate((fb) => { const c = document.querySelectorAll(`${fb} .gz-fb-item`); return c.length && [...c].map((x) => x.querySelector('b')?.textContent || ''); }, fb), 'Feedback from the stand-in model', 20000);
-  check(cards.length >= 2 && await fr.evaluate((fb) => document.querySelectorAll(`${fb} .gz-fb-quote`).length > 0, fb), `Feedback came back per requirement, with passages of the draft (${cards.join(' | ')})`);
+  check(cards.join('|') === 'Criterion one|Criterion two' && await fr.evaluate((fb) => document.querySelectorAll(`${fb} .gz-fb-quote`).length > 0, fb), `Feedback came back for both rubric criteria, with passages of the draft (${cards.join(' | ')})`);
   await shot(p, 'practice-feedback.png');
   await fr.click('#gp-tab-checks');
   const docText = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.text());

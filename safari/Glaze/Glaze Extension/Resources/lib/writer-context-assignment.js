@@ -13,7 +13,9 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   // The rubric as the AI reads it: criteria with their levels, from lib/rubric.js's model.
   const rubricOf = (m) => (m && Array.isArray(m.criteria) ? {
     title: str(m.title), total: m.total ?? null,
-    criteria: m.criteria.map((c) => ({ label: str(c.label), points: c.points ?? null, weight: c.weight ?? null, levels: c.cells.map((cell) => ({ level: str(m.levels.find((l) => l.id === cell.level)?.label), detail: str(String(cell.detail || '').replace(/<[^>]*>/g, ' '), 2000), value: cell.value?.n ?? null })) })),
+    levels: m.levels.map((l) => ({ id: l.id, label: str(l.label) })),
+    criteria: m.criteria.map((c) => ({ id: c.id, label: str(c.label), detail: str(c.detail), points: c.points ?? null, weight: c.weight ?? null,
+      cells: c.cells.map((cell) => ({ level: cell.level, detail: str(String(cell.detail || '').replace(/<[^>]*>/g, ' '), 2000), value: cell.value?.n ?? null })) })),
   } : null);
 
   // o: { school, path, uid() → id, me() → /users/me, courses() → memberships, rows() → gradebook rows (expand=column),

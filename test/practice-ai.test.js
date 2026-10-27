@@ -58,3 +58,19 @@ test('the stand-in\'s Feedback, gray text and autocorrect call pass Writer\'s ow
   const decide = T.get('writer.decide'), di = decide.input({ sentence: 'They put there coats down.', from: 7, to: 12, suggestions: ['their', "they're"], context: {} });
   assert.deepEqual(decide.check(JSON.parse(NET.answer({ messages: decide.build(di, { text: X }).messages })), di), { verdict: 'suggest', choice: 'their' });
 });
+
+test('closing the loopback proxy cancels a pending tunnel admission before it can connect', async () => {
+  let allow;
+  const upstream = [];
+  const p = await NET.proxy({ allowed: () => new Promise((r) => { allow = r; }), connect: () => { const s = new net.Socket(); upstream.push(s); return s; } });
+  try {
+    const pending = through(p.port, 'CONNECT ai.example:443 HTTP/1.1\r\nHost: ai.example:443\r\n\r\n');
+    for (let i = 0; i < 20 && !allow; i++) await new Promise(setImmediate);
+    assert.equal(typeof allow, 'function');
+    await p.close();
+    assert.equal(await pending, 'closed');
+    allow(true);
+    for (let i = 0; i < 4; i++) await new Promise(setImmediate);
+    assert.equal(upstream.length, 0, 'no connection can start after close resolves');
+  } finally { for (const s of upstream) s.destroy(); await p.close(); }
+});

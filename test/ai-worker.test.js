@@ -402,3 +402,32 @@ test('a replaced writer document must claim its own seat, including after worker
   await seat(again, replaced);
   assert.equal(await ask(again, replaced), 'allowed', 'a fresh claim admits the replacement');
 });
+
+
+test('a delayed assignment report cannot overwrite a newer unknown classification', async () => {
+  const w = writerOn(); w.page = ATTEMPT;
+  await seat(w);
+  const get = w.context.chrome.storage.sync.get;
+  let release;
+  w.context.chrome.storage.sync.get = (key) => {
+    if (key !== 'enabled') return get(key);
+    w.context.chrome.storage.sync.get = get;
+    return new Promise((r) => { release = () => r({ enabled: true }); });
+  };
+  const old = report(w, 'assignment');
+  await w.settle();
+  assert.equal(typeof release, 'function');
+  assert.deepEqual(await report(w, 'unknown'), { ok: true });
+  release();
+  assert.deepEqual(await old, { ok: false }, 'the newer refusal wins even when the older read finishes last');
+  assert.equal(await ask(w, frame(ATTEMPT)), 'attempt');
+  assert.equal(await ask(w, frame(ATTEMPT), 'writing'), 'attempt');
+});
+
+test('a classification report waking the worker preserves the Writer seat in session storage', async () => {
+  const w = writerOn(); w.page = ATTEMPT;
+  await seat(w); await report(w, 'assignment');
+  const again = live2(worker({ globals: fakeIDB(), store: structuredClone(w.store) })); again.page = ATTEMPT;
+  assert.deepEqual(await report(again, 'assignment'), { ok: true });
+  assert.equal(await ask(again, frame(ATTEMPT)), 'allowed', 'a report is not a navigation and must hydrate the claimed seat');
+});

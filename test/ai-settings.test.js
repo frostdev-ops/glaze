@@ -24,9 +24,9 @@ const listing = (ids) => json({ data: ids.map((id) => ({ id })) });
 // page({ ai, calls, granted, device, features, server }): Settings with the AI tab mounted.
 //   device(m): the device provider's worker side (undefined: Glaze doesn't ship it here); apple(m): the apple connection's;
 //   server(url, init): the endpoint.
-const page = ({ ai, calls, granted = true, device, apple, providers, features, embedded = false, save = true, server = async () => listing(['gpt-x', 'gpt-y']) } = {}) => {
-  const ids = new Map(), sent = [], asked = [], reads = [], onChanged = [], onMessage = [], held = new Set(), vault = new Map(), fetched = [];
-  const data = { ...(ai && { ai: structuredClone(ai) }), ...(calls && { aiCalls: structuredClone(calls) }) };
+const page = ({ ai, calls, granted = true, device, apple, providers, features, embedded = false, save = true, shared, locks, server = async () => listing(['gpt-x', 'gpt-y']) } = {}) => {
+  const ids = new Map(), sent = [], asked = [], reads = [], onChanged = shared?.listeners || [], onMessage = [], held = new Set(), vault = new Map(), fetched = [];
+  const data = shared?.data || { ...(ai && { ai: structuredClone(ai) }), ...(calls && { aiCalls: structuredClone(calls) }) };
   let gesture = false;
   const doc = { activeElement: null };
   const el = (tag = 'div') => {
@@ -70,17 +70,17 @@ const page = ({ ai, calls, granted = true, device, apple, providers, features, e
   };
   const settings = { ...AS, ...(apple && { PROVIDERS: [...AS.PROVIDERS, 'apple'] }), ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
   const window = {}; window.top = embedded ? {} : window;
-  const ctx = vm.createContext({ chrome, window, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
+  const ctx = vm.createContext({ chrome, window, navigator: { locks }, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
     GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../lib/ai/endpoint.js') });
   vm.runInContext(read('lib/site.js'), ctx);
   vm.runInContext(read('lib/editor-ai.js'), ctx);
   ctx.GZ_AIEDIT.mount({ t: (k, v) => I.t(k, v, 'en'), when: (at) => `@${at}`, pct: (x) => `${Math.round(x * 100)}%` });
   const $ = (id) => doc.getElementById(id);
-  const fire = (id, type, more = {}) => { gesture = true; try { for (const f of $(id).on[type] || []) f({ isTrusted: true, target: $(id), currentTarget: $(id), ...more }); } finally { gesture = false; } };
+  const fire = (id, type, more = {}) => { gesture = true; try { return Promise.all(($(id).on[type] || []).map((f) => f({ isTrusted: true, target: $(id), currentTarget: $(id), ...more }))); } finally { gesture = false; } };
   // Every word and value on the page, to look for what must never be there.
   const all = (e = null) => (e ? [e.textContent, e.value, ...e.children.flatMap((k) => all(k))] : [...ids.values()].flatMap((x) => all(x)));
   return {
-    $, data, sent, asked, reads, held, vault, fetched, doc, all,
+    $, data, sent, asked, reads, held, vault, fetched, doc, all, local, fire,
     ops: () => sent.filter((m) => m.type === 'glaze:ai-config').map((m) => m.op),
     click: async (id) => { fire(id, 'click'); await settle(); },
     change: async (id, checked) => { $(id).checked = checked; fire(id, 'change'); await settle(); },
@@ -506,4 +506,38 @@ test('the helpers: a download\'s progress, the record\'s rows and the last failu
     [{ at: 5, feature: 'syllabus', provider: 'openai', state: 'completed', reference: 'a' }]);
   assert.equal(E.lastFailure([{ id: 'a', startedAt: 1, state: 'timeout', category: 'timeout' }], { at: 2, failed: false }), null, 'a later good test');
   assert.equal(E.lastFailure([{ id: 'a', startedAt: 3, state: 'timeout', category: 'timeout' }], { at: 2, failed: false }).reference, 'a');
+});
+
+
+for (const op of ['get', 'set']) test(`a failed Settings ${op} is reported and later changes still save`, async () => {
+  const p = await open({ ai: { on: false, use: 'endpoint' } });
+  const original = p.local[op];
+  p.local[op] = async (...args) => { p.local[op] = original; throw Error('synthetic storage failure'); };
+  p.$('ai-on').checked = true;
+  await assert.doesNotReject(p.fire('ai-on', 'change'));
+  await settle();
+  assert.equal(p.$('ai-said').textContent, 'Could not save. Try again.');
+  assert.equal(p.$('ai-on').checked, false, 'the failed change does not look saved');
+  await p.change('ai-on', true);
+  const writing = p.$('ai-feature-list').children.at(-1).children[0];
+  writing.checked = true; for (const f of writing.on.change) f({ isTrusted: true });
+  await settle();
+  assert.equal(p.data.ai.on, true);
+  assert.equal(p.data.ai.features.writing, true, 'a failed write never poisons the queue');
+});
+
+
+test('two Settings tabs preserve simultaneous feature changes in the same extension origin', async () => {
+  const shared = { data: { ai: { on: true, use: 'endpoint' } }, listeners: [] };
+  let turn = Promise.resolve();
+  const locks = { request: (name, save) => { assert.equal(name, 'glaze:ai-settings'); const next = turn.then(save); turn = next.catch(() => {}); return next; } };
+  const a = await open({ shared, locks }), b = await open({ shared, locks });
+  const first = a.$('ai-feature-list').children[0].children[0];
+  const last = b.$('ai-feature-list').children.at(-1).children[0];
+  first.checked = true; last.checked = true;
+  for (const f of first.on.change) f({ isTrusted: true });
+  for (const f of last.on.change) f({ isTrusted: true });
+  await settle();
+  assert.deepEqual(shared.data.ai.features, { syllabus: true, completion: false, writing: true });
+  assert.equal(first.checked, true); assert.equal(last.checked, true);
 });

@@ -89,8 +89,9 @@ const model = (req, res, path) => {
 
 // ---- the proxy ------------------------------------------------------------------------------------------------------------
 const proxy = async ({ allowed, model: serve = false, connect = (port, host) => net.connect(port, host) }) => {
-  let me = 0;
-  const tunnels = new Set(); // CONNECT sockets leave the server's own count: closed by close()
+  let me = 0, closed = false, closing = null;
+  const sockets = new Set(); // both sides, including CONNECT sockets outside the server's connection count
+  const track = (s) => { sockets.add(s); s.on('close', () => sockets.delete(s)); return s; };
   const ask = (target) => Promise.resolve().then(() => allowed(target)).catch(() => false);
   const server = http.createServer((req, res) => {
     let u;
@@ -102,25 +103,25 @@ const proxy = async ({ allowed, model: serve = false, connect = (port, host) => 
     if (u.protocol !== 'http:') { refuse(); return; }
     const port = Number(u.port || 80);
     ask({ protocol: 'http:', host: u.hostname, port }).then((ok) => {
-      if (!ok) { refuse(); return; }
+      if (!ok || closed || req.socket.destroyed) { refuse(); return; }
       const { 'proxy-connection': _, ...headers } = req.headers;
       const up = http.request({ host: u.hostname, port, method: req.method, path: u.pathname + u.search, headers }, (r) => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+      up.on('socket', track);
+      res.on('close', () => up.destroy());
       up.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
       req.pipe(up);
     });
   });
+  server.on('connection', track);
   server.on('connect', (req, socket, head) => {
-    tunnels.add(socket);
-    socket.on('close', () => tunnels.delete(socket));
     socket.on('error', () => {});
     const m = /^(\[[^\]]+\]|[^:]+):(\d+)$/.exec(req.url || '');
     if (!m) { socket.destroy(); return; }
     const host = m[1].replace(/^\[|\]$/g, ''), port = Number(m[2]);
     ask({ protocol: 'https:', host, port }).then((ok) => {
-      if (!ok) { socket.destroy(); return; }
-      const up = connect(port, host);
-      tunnels.add(up);
-      up.on('close', () => tunnels.delete(up));
+      if (!ok || closed || socket.destroyed) { socket.destroy(); return; }
+      let up;
+      try { up = track(connect(port, host)); } catch { socket.destroy(); return; }
       up.on('connect', () => { socket.write('HTTP/1.1 200 Connection Established\r\n\r\n'); if (head?.length) up.write(head); up.pipe(socket); socket.pipe(up); });
       up.on('error', () => socket.destroy());
       socket.on('close', () => up.destroy());
@@ -128,7 +129,12 @@ const proxy = async ({ allowed, model: serve = false, connect = (port, host) => 
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   me = server.address().port;
-  return { port: me, close: () => new Promise((resolve) => { server.close(() => resolve()); server.closeAllConnections?.(); for (const s of tunnels) s.destroy(); }) };
+  return { port: me, close: () => (closing ||= new Promise((resolve) => {
+    closed = true;
+    server.close(() => resolve());
+    server.closeAllConnections?.();
+    for (const s of sockets) s.destroy();
+  })) };
 };
 
 module.exports = { proxy, answer, blocks, least };

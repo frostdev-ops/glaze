@@ -509,7 +509,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   });
   F.on('context', refresh);
   // The page's word that the worker now knows this attempt's kind: a frame that asked before then asks again.
-  F.handle?.('ai', () => { if (!ok('writing') || !ok('completion')) refresh(); });
+  F.handle?.('ai', refresh);
   // The model's download, as the worker tells Settings: its progress here too, and a new check once it's in.
   try {
     chrome.runtime.onMessage?.addListener((m) => {

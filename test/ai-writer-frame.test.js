@@ -132,3 +132,33 @@ test('a download in progress shows its share and checks again once it is in', as
   f.hooks.runtime({ type: 'glaze:ai-config', event: 'progress', provider: 'device', loaded: 1 }); await flush();
   assert.equal(f.ai.allowed('writing'), true);
 });
+
+
+test('a later attempt nudge rechecks both ready features and closes admission on refusal', async () => {
+  let allowed = true;
+  const f = frame({ answer: () => allowed ? { allowed: true, ready: true } : { allowed: false, why: 'attempt' } });
+  await f.start();
+  assert.equal(f.ai.allowed('writing'), true);
+  assert.equal(f.ai.allowed('completion'), true);
+  allowed = false;
+  f.hooks['page:ai']();
+  assert.equal(f.ai.allowed('writing'), false, 'admission closes before the asynchronous status check');
+  await flush();
+  assert.equal(f.ai.allowed('completion'), false);
+  assert.equal(f.ai.allowed('writing'), false);
+});
+
+test('Feedback availability copy is translated in all five catalogues', () => {
+  const I = require('../lib/i18n.js');
+  const keys = ['Checking…', 'Writing feedback is off in Settings → AI.', 'Choose a model in Settings → AI.',
+    'Allow Glaze to reach {host} in Settings → AI.', 'Download the model in Settings → AI.', 'Downloading…',
+    'Downloading {pct}', 'AI isn’t available on this attempt.', 'AI isn’t available right now.', 'Settings'];
+  for (const locale of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
+    require(`../i18n/${locale}.js`);
+    const catalogue = globalThis.GZ_LANGS[locale];
+    for (const key of keys) {
+      assert.equal(typeof catalogue[key], 'string', `${locale}: ${key}`);
+      assert.notEqual(I.t(key, { host: 'ai.example', pct: '42%' }, locale), key);
+    }
+  }
+});

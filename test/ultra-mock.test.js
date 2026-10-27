@@ -132,3 +132,28 @@ test('an upload and a submission: the file, the text box and the request kept; t
     assert.equal((await call(mock, { url: done.files[0].url })).status, 404);
   } finally { fs.rmSync(out, { recursive: true, force: true }); }
 });
+
+
+test('the practice rubric reaches Feedback as parsed criteria and level cells, not only a title', async () => {
+  const out = scratch();
+  try {
+    const mock = M.create({ quill: Buffer.alloc(0), out });
+    const get = async (url) => (await call(mock, { url })).json();
+    const context = await require('../lib/writer-context-assignment.js').build({
+      school: new URL(M.SITE).host, path: M.ROUTES.attempt, uid: async () => M.ME.id,
+      me: async () => M.ME, courses: async () => (await get(`/learn/api/v1/users/${M.ME.id}/memberships`)).results,
+      rows: async () => (await get('/learn/api/v1/courses/_101_1/gradebook/grades')).results,
+      get, R: require('../lib/rubric.js'), instructions: async () => 'Write 1,200 words on memory in Beloved.',
+    });
+    const original = require('./fixtures/ultra-rubric-numeric.json').column.rubricAssociations[0].rubricDefinition;
+    const rubric = require('../lib/ai/tasks/writer-context.js').rubric(context.assignment.rubric);
+    assert.deepEqual(rubric.ids, original.rows.map((r) => ({ id: r.id, label: r.header })));
+    assert.match(rubric.text, /Level A: One A/);
+    const T = require('../lib/ai/task.js'); require('../lib/ai/tasks/writer-feedback.js');
+    const task = T.get('writer.feedback');
+    const input = task.input({ text: 'A synthetic draft about memory.', context });
+    const request = task.build(input, { text: require('../lib/ai/text.js') });
+    const answer = JSON.parse(require('../scripts/practice-ai.js').answer({ messages: request.messages }));
+    assert.deepEqual(task.check(answer, input).criteria.map((c) => [c.id, c.label]), rubric.ids.map((c) => [c.id, c.label]));
+  } finally { fs.rmSync(out, { recursive: true, force: true }); }
+});
