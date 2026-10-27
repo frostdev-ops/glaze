@@ -17,20 +17,23 @@
     /ultra/courses/_101_1/announcements                        no announcements
     /ultra/courses/_101_1/discussion/_8128_1                   discussion, no posts
 -->
-<html lang="en"><head><meta charset="utf-8"><title>Ultra test attempt</title><style>
+<html lang="en"><head><meta charset="utf-8"><base href="/ultra/"><title>Ultra test attempt</title><style>
 * { box-sizing: border-box; } html, body { margin: 0; height: 100%; font: 14px/1.4 sans-serif; color: #262626; background: #fff; }
 .off-canvas-wrap, .inner-wrap { position: relative; height: 100%; }
-.routed-page.bb-offcanvas-container { position: fixed; inset: 0; z-index: 20; background: #fff; }
-.routed-page-body { position: absolute; inset: 0; }
+.routed-page.bb-offcanvas-container { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: #fff; }
+content-page-header { display: block; flex: none; } content-page-header > header { display: flex; align-items: center; gap: 12px; height: 47px; padding: 0 16px; background: #262626; color: #fff; }
+.routed-page-body { position: relative; flex: 1; min-height: 0; }
 .tests.test-attempt { height: 30px; }
-.assessment-attempt-panel { position: absolute; inset: 0 0 78px 0; z-index: 0; overflow: hidden auto; padding: 0 30px; }
-.black-panel-header { display: flex; align-items: center; height: 56px; margin: 0 -30px; padding: 0 8px; background: #262626; color: #fff; }
+.assessment-attempt-panel { position: absolute; inset: 0 0 78px 0; z-index: 0; overflow: hidden auto; }
+.assessment-attempt-panel > section.panel-content { position: absolute; left: 0; top: 3rem; width: 100%; padding: 1rem; }
+@media only screen and (min-width: 40em) { .assessment-attempt-panel > section.panel-content { top: 3.5rem; padding: 1.5rem; } .panel-header.persistent-white-header { margin-top: -1.5rem; } }
+.black-panel-header { display: flex; align-items: center; height: 56px; padding: 0 8px; background: #262626; color: #fff; }
 .black-header-contents { display: flex; align-items: center; gap: 8px; width: 100%; }
 .black-header-contents h1 { flex: 1; margin: 0; font-size: 16px; text-align: center; }
 panel-header-exit-button { position: absolute; inset-inline-start: 5px; }
 .black-header-contents button { width: 32px; height: 28px; }
 @media only screen and (min-width: 64em) { .black-panel-header { display: none; } }
-.panel-header.persistent-white-header { display: flex; align-items: center; min-height: 107px; margin: 0 -30px; padding: 30px; background: #fff; }
+.panel-header.persistent-white-header { display: flex; align-items: center; min-height: 107px; padding: 30px; background: #fff; }
 .panel-title.secondary-title { margin: 0; font-size: 32px; font-weight: 300; } .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .ng-hide { display: none !important; }
 .assessment-attempt__partial-and-negative-credit-banner { margin: 16px 0; padding: 12px; border: 1px solid #cdcdcd; }
@@ -66,6 +69,7 @@ panel-header-exit-button { position: absolute; inset-inline-start: 5px; }
 .bb-editor-toolbar-button-container { position: relative; display: flex; }
 .bb-editor-toolbar-button { min-width: 32px; height: 32px; border: 1px solid #cdcdcd; background: #fff; }
 .bb-editor-toolbar.bb-editor-toolbar-submenu { position: absolute; top: 100%; inset-inline-start: 0; z-index: 10; display: block; width: 122px; margin: 0; padding: 0; list-style: none; border: 1px solid #cdcdcd; }
+.bb-editor-toolbar.bb-editor-toolbar-submenu[hidden] { display: none; }
 .bb-editor-toolbar-submenu li > div > button { display: flex; align-items: center; gap: 8px; width: 122px; height: 40px; border: 0; background: #fff; }
 .bb-editor-toolbar.bb-editor-toolbar-submenu .picker-color { border-radius: 50%; background-color: var(--palette-background-b5, #cdcdcd); min-height: 1.5rem; min-width: 1.5rem; }
 .bb-editor-toolbar.bb-editor-toolbar-submenu .picker-color.color-black { background-color: var(--palette-text-primary, #000000); }
@@ -103,7 +107,7 @@ footer.panel-footer-in-content { position: absolute; bottom: 0; z-index: 2; disp
 course-student-grades { display: block; margin-top: 1px; } course-student-grades table { width: 100%; }
 .no-result-message, .is-empty-wrapper { padding: 40px 0; text-align: center; }
 </style></head><body class="default">
-<div id="site-wrap" class="off-canvas-wrap"><div class="inner-wrap"><section class="routed-page route-view-container bb-offcanvas-container"><div class="routed-page-body js-skip-link-target"></div></section></div></div>
+<div id="site-wrap" class="off-canvas-wrap"><div class="inner-wrap"><section class="routed-page route-view-container bb-offcanvas-container"><content-page-header class="react-container"><header class="makeStylesheader-fx"><button type="button" aria-label="Close">×</button><a href="/ultra/courses/_101_1/outline">Sample Course</a> › <span class="gz-fx-crumb">Item</span></header></content-page-header><div class="routed-page-body js-skip-link-target"></div></section></div></div>
 <script>
 (() => {
   const body = document.querySelector('.routed-page-body');
@@ -139,8 +143,8 @@ course-student-grades { display: block; margin-top: 1px; } course-student-grades
         <div class="bb-editor-root bb-editor-heading-h4" role="presentation"><div><div class="bb-editor-toolbar no-select" role="toolbar" aria-label="Text Formatting">${tool('Text style')}${tool('Text font')}${tool('Font size')}
           <div role="presentation" class="bb-editor-toolbar-button-container bb-editor-toolbar-dropdown-container"><button type="button" class="bb-editor-toolbar-button bb-editor-toolbar-button--main bb-editor-submenu-is-closed bb-editor-toolbar-dropdown color-picker-normal" aria-expanded="false" aria-haspopup="true" aria-label="Color picker">C</button><ul class="bb-editor-toolbar bb-editor-toolbar-submenu" id="color-picker" hidden>${swatches}</ul></div>
           ${tool('Bold')}${tool('Italic')}${tool('Underline')}${tool('Insert link')}</div></div>
-          <div class="editor-content-container keyboard-tooltip-container"><div class="bb-editor-container ql-container"><div class="ql-editor ql-blank bb-editor" contenteditable="true" data-placeholder="Drag and drop files here or click to add text." aria-labelledby="additional-content-editor" role="textbox"><p><br></p></div></div></div>
-          <div class="status-bar"><span>Word count: 0</span></div></div>
+          <div class="editor-content-container keyboard-tooltip-container"><div class="bb-editor-container ql-container is-active"><div class="ql-editor ql-blank bb-editor" contenteditable="true" data-placeholder="Drag and drop files here or click to add text." aria-labelledby="additional-content-editor" role="textbox"><p><br></p></div></div>
+          <div class="status-bar"><span class="word-count">Word count: 0</span></div></div></div>
       </bb-rich-text-editor></form></div></div></bb-freeform-response-editor></ng-form></div></div></bb-attempt-canvas></div>
       <div class="panel-content-info assessment-summary"><div class="row collapse"><div class="small-10 columns"><h2>Details &amp; Information</h2></div></div>
         <ul class="row assessment-features"><li><bb-ui-icon-medium-calendar class="react-container"><svg width="24" height="24"></svg></bb-ui-icon-medium-calendar><div class="js-date-box"><span class="settings-label">Assessment due date</span><span class="settings-link">No due date</span></div></li><li><bb-svg-icon><svg width="24" height="24"></svg></bb-svg-icon><div><span class="settings-label">Attempts</span><span class="settings-link"><span>Unlimited</span></span></div></li></ul>
@@ -159,7 +163,7 @@ course-student-grades { display: block; margin-top: 1px; } course-student-grades
   const pages = [
     [/\/assessment\/_\d+_\d+\/attempt\//, attempt],
     [/\/journal\//, () => item('View Journal', 'Practice Journal', '<div class="journal-topic"><h2>Journal Topic</h2><p>Invented prompt.</p></div>')],
-    [/\/file\//, () => item('File', 'Course Takeaway', '<div class="file-viewer"><iframe title="Invented file"></iframe></div>')],
+    [/\/file\//, () => item('File', 'Course Takeaway', '<div class="file-viewer"><iframe title="Invented file" src="/bbcswebdav/pid-1-dt-content-rid-1_1/xid-1_1?render=inline"></iframe></div>')],
     [/\/outline\/roster/, () => full('tabular-user-list', 'SAMPLE-101 • Sample Course', 'Roster', '<div class="page-roster course-roster-layer"><p>Invented member list.</p></div>')],
     [/\/assessment\/_\d+_\d+\/overview/, () => `<div class="item-panel"><content-body><div class="base-body"><div class="content-root"><div class="rubric-details-panel"><div class="panel-section-header"><div class="panel-section-header-icon react-container"><svg width="30" height="30"></svg></div><h2 class="panel-section-header-text">Rubric Details</h2><button class="bb-close" type="button" aria-label="Close rubric">×</button></div><div class="rubric-criteria"><p>Invented criterion</p></div></div></div></div></content-body></div>`],
     [/\/grades/, () => `<div class="item-panel"><bb-course-grades-student><div class="base-grades course-grades-instructor"><div class="grades-list"><bb-ui-student-tabs><div class="makeStylesstudentTabs-fx"><div class="MuiTabs-root"><div class="MuiTabs-scroller MuiTabs-fixed"><div class="MuiTabs-list MuiTabs-flexContainer" role="tablist"><button class="MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary Mui-selected js-student-tab-grades" type="button" role="tab" aria-selected="true" id="student-tab-grades">Grades</button></div><span class="MuiTabs-indicator"></span></div></div></div></bb-ui-student-tabs>
