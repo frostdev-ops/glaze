@@ -120,6 +120,11 @@ const HELPERS = `
         await page.keyboard.press('Shift');
         const focus = await ev(() => { const i = document.querySelector('.js-multiple-answer-answer-0 input'); i.focus(); return getComputedStyle(i.closest('label')).outlineStyle; });
         check(focus === 'solid', `${tag}: keyboard focus outlines the row`, focus);
+        const disabled = await ev(() => { const i = document.querySelector('.js-multiple-answer-answer-0 input'), l = i.closest('label');
+          i.disabled = true; l.click();
+          const s = getComputedStyle(l), result = { checked: i.checked, cursor: s.cursor, opacity: +s.opacity };
+          i.disabled = false; return result; });
+        check(!disabled.checked && disabled.cursor === 'not-allowed' && disabled.opacity < 1, `${tag}: disabled answers stay unchanged and visibly disabled`, disabled);
         if (w === 1800) {
           await page.locator('.js-multiple-answer-answer-1').click();
           const chosen = await ev(() => { const l = document.querySelector('.js-multiple-answer-answer-1'), o = document.querySelector('.js-multiple-answer-answer-2');
@@ -145,7 +150,23 @@ const HELPERS = `
         check(ed.placeholder === 'normal', `${tag}: placeholder in plain type`, ed.placeholder);
         check(ed.swatches.black === 'rgb(0, 0, 0)' && ed.swatches.grey === 'rgb(102, 102, 102)' && ed.swatches.purple === 'rgb(162, 52, 181)', `${tag}: swatches keep their colours`, ed.swatches);
         if (w >= 1024 || bg === 'scene') await shot(`${slug(tag)}-menu`);
+        const submenu = await ev(() => { const e = document.querySelector('.bb-editor-toolbar-submenu'), s = getComputedStyle(e);
+          return { painted: window.__gz.painted(e), border: parseFloat(s.borderTopWidth), radius: window.__gz.radius(e) }; });
+        check(submenu.painted && submenu.border >= 1 && submenu.radius > 2, `${tag}: toolbar submenu keeps its own surface and edge`, submenu);
         await ev(() => document.querySelector('[aria-label="Color picker"]').click());
+
+        const rtl = await ev(() => { const g = window.__gz, p = document.querySelector('.assessment-attempt-panel');
+          document.documentElement.dir = 'rtl'; p.scrollTop = 0;
+          const exit = document.querySelector('[aria-label="Exit"]'), title = document.querySelector('.black-header-contents > h1');
+          const range = document.createRange(); range.selectNodeContents(title); const tr = range.getBoundingClientRect();
+          const headerClear = !exit.getClientRects().length || !g.meets(g.rect(exit), { x: tr.x, y: tr.y, r: tr.right, b: tr.bottom });
+          const editor = document.createElement('div'); editor.className = 'bb-editor-wrapper';
+          editor.innerHTML = '<div class="bb-editor-root"><div class="bb-editor-toolbar">Tools</div><div class="bb-editor-container"><div class="ql-editor" contenteditable="true">Editable response</div></div></div>';
+          document.querySelector('.assessment-question').append(editor);
+          const border = parseFloat(getComputedStyle(editor.firstElementChild).borderTopWidth); editor.remove();
+          document.documentElement.removeAttribute('dir');
+          return { headerClear, border }; });
+        check(rtl.headerClear && rtl.border >= 1, `${tag}: RTL header stays clear and editable question controls retain a border`, rtl);
 
         if (w < 1024) {
           const narrow = await ev(() => { const g = window.__gz, p = document.querySelector('.assessment-attempt-panel'); p.scrollTop = 0;

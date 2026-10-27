@@ -50,7 +50,21 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     for (const [w, h] of [[1800, 987], [1280, 800], [1024, 768]]) {
       await page.setViewportSize({ width: w, height: h });
       await page.goto(site + ATTEMPT);
-      await page.waitForSelector('html[data-gz-sidebar]', { timeout: 20000 });
+      await page.waitForSelector('html[data-gz-sidebar]', { timeout: 20000 }).catch(async (e) => {
+        console.error('Sidebar startup diagnostics', JSON.stringify({ errors, tabs: ctx.pages().map((p) => p.url()), page: await page.evaluate(() => ({
+          visibility: document.visibilityState,
+          html: Object.fromEntries([...document.documentElement.attributes].map((a) => [a.name, a.value])),
+          hosts: [...document.querySelectorAll('[data-gz-sidebar-host]')].map((e) => e.className),
+        })), content: await opts.evaluate(async (url) => {
+          const [tab] = await chrome.tabs.query({ url });
+          if (!tab) return null;
+          return { registered: await chrome.scripting.getRegisteredContentScripts(), storage: await chrome.storage.local.get('ultra'), execution: await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({
+            started: !!window.__gzGlaze, ultra: typeof GZ_SITE_ULTRA, colors: typeof GZ_COLOR, base: !!document.head?.querySelector('base[href*="/ultra/"]'), ctx: !!globalThis.GZ_CTX, on: globalThis.GZ_CTX?.on(), sidebar: !!globalThis.GZ_SIDEBAR_UI,
+            state: globalThis.GZ_SIDEBAR_UI?.context(),
+          }) }) };
+        }, site + ATTEMPT) }));
+        throw e;
+      });
       await pause(800);
       const mode = await page.evaluate(() => document.documentElement.dataset.gzSidebar);
       const host = await page.evaluate(() => { const d = document.querySelector('.assessment-summary'); return { native: d?.getAttribute('data-gz-sidebar-host'), kind: document.documentElement.dataset.gzSbAssessment,
@@ -89,6 +103,15 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
       check(await hitsInside('button[aria-label="Red"]') && red.b <= foot.t, `${w}: the colour menu's last colour is in view above the footer`, { red, foot });
       await page.screenshot({ path: path.join(out, `test-${w}-color-menu.png`) });
       await page.click('button[aria-label="Color picker"]'); await pause(150);
+      await page.evaluate(() => { document.documentElement.dir = 'rtl'; document.querySelector('.assessment-attempt-panel').scrollTop = 0; });
+      await pause(300);
+      const rtlQuestions = await box('.panel-content-full'), rtlDetails = await box('.assessment-summary');
+      if (w >= 1280) check(rtlDetails.r <= rtlQuestions.l && rtlDetails.l >= 0, `${w}: RTL keeps details beside the questions inside the window`, { questions: rtlQuestions, details: rtlDetails });
+      else {
+        const rtlLaunch = await box('#gz-sb-launch'), rtlSubmit = await box('.panel-footer-fixed .js-send-draft-button');
+        check(disjoint(rtlLaunch, rtlSubmit), `${w}: RTL drawer opener stays off Submit`, { launch: rtlLaunch, submit: rtlSubmit });
+      }
+      await page.evaluate(() => document.documentElement.removeAttribute('dir'));
     }
     check(!errors.length, 'no page errors', errors);
     console.log(JSON.stringify({ fails, out }));
