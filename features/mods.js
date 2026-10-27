@@ -533,7 +533,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
       return { key: k, el: railBoxes.get(k) };
     });
   };
-  const NAV_ROOT = { ultra: 'nav[class*="makeStylesnavigation"], nav#base_tools', canvas: '#header .ic-app-header__main-navigation', moodle: '.primary-navigation' };
+  const NAV_ROOT = { ultra: 'nav[class*="makeStylesnavigation-"], nav#base_tools', canvas: '#header .ic-app-header__main-navigation', moodle: '.primary-navigation' };
   let navTaken = null; // { mode: 'bar' | 'native', root, display, box, k }
   // Where Glaze's bar is drawn, the mod's nav stands in its place (the rail, the top bar or a phone's tabs), over the room
   // the bar keeps; Glaze's bar hides (features/navbar.js asks navStands) and the school's own stays hidden. The box is put

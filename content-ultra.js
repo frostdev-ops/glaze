@@ -609,7 +609,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 
   html.removeAttribute?.('data-gz-nav-expanded');
   const navRoots = new Set(), renamed = new Map();
-  const navSelector = 'nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]';
+  const navSelector = 'nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]';
   let navDirty = false, navQueued = false;
   const syncDashboard = () => {
     if (!chrome.runtime?.id) return;

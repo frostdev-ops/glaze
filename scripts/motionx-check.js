@@ -365,7 +365,7 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
     await pv.screenshot({ path: path.join(out, 'preview-look.png') });
     // The two knobs with no built-in animation: dashboard tiles, and a rail's items once it is open.
     const tile = () => pv.evaluate(() => getComputedStyle(document.querySelector('.gz-w')).animationName);
-    const rail = () => pv.evaluate(() => getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation"] a')).animationName);
+    const rail = () => pv.evaluate(() => getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation-"] a')).animationName);
     ok(/^gz-x-/.test(await tile()), `a dashboard tile enters with the Look's animation: ${await tile()}`);
     ok((await rail()) === 'none', 'a closed rail does not animate');
     await pv.evaluate(() => document.documentElement.setAttribute('data-gz-nav-expanded', ''));

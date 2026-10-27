@@ -1035,7 +1035,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 // items last read on this site (storage.local navbarSeen:<origin>, this device only) stand in, else Ultra's usual ones,
 // and open as plain links.
 function GZ_NAVBAR_ULTRA(X) {
-  const ROOT = '[data-gz-nav-root], nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]';
+  const ROOT = '[data-gz-nav-root], nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]';
   const SEEN = `navbarSeen:${location.origin}`;
   const USUAL = [['institution-page', 'Institution page'], ['stream', 'Activity'], ['course', 'Courses'], ['organization', 'Organizations'], ['calendar', 'Calendar'], ['messages', 'Messages'], ['grades', 'Grades'], ['tools', 'Tools'], ['profile', 'Profile']];
   let mo = null, swap = null, watched = null, notify = null, seen = null, saved = '';
