@@ -12,7 +12,7 @@
 import { LocalLinter, Dialect } from './index.js';
 import { slimBinary } from './slimBinary.js';
 
-const WORKER = crypto.randomUUID(), MAX_TEXT = 200000, MAX_WORDS = 5000;
+const WORKER = crypto.randomUUID(), MAX_TEXT = 200000, MAX_WORDS = 5000, MAX_QUEUE = 64, MAX_IGNORED = 2000;
 let IDLE = 5 * 60 * 1000;
 const frames = new Map(); // port → { queue: [{ id, key, text }], words: Set, ignored: Set }
 const order = []; // ports, the next one to be served first
@@ -21,8 +21,10 @@ let linter = null, loading = null, loads = 0, lints = 0, busy = false, timer = 0
 
 const load = () => (loading ||= (async () => {
   const l = new LocalLinter({ binary: slimBinary, dialect: Dialect.American });
-  await l.setup();
-  if (shared.size) await l.importWords([...shared]);
+  try {
+    await l.setup();
+    if (shared.size) await l.importWords([...shared]);
+  } catch (e) { await l.dispose().catch(() => {}); throw e; }
   loads++;
   linter = l;
   return l;
@@ -33,22 +35,38 @@ const lower = (w) => w.toLowerCase();
 // A lint as plain data, Harper's handles freed.
 const shape = (l) => {
   const span = l.span();
-  const out = { start: span.start, end: span.end, kind: l.lint_kind(), message: l.message(), problem: l.get_problem_text(), suggestions: [] };
-  span.free?.();
-  for (const s of l.suggestions()) { out.suggestions.push({ k: s.kind(), t: s.get_replacement_text() }); s.free?.(); }
+  let out;
+  try { out = { start: span.start, end: span.end, kind: l.lint_kind(), message: l.message(), problem: l.get_problem_text(), suggestions: [] }; }
+  finally { span.free?.(); }
+  const suggestions = l.suggestions();
+  try { for (const s of suggestions) out.suggestions.push({ k: s.kind(), t: s.get_replacement_text() }); }
+  finally { for (const s of suggestions) s.free?.(); }
   return out;
 };
 const known = (f, w) => shared.has(lower(w)) || f.words.has(lower(w));
 const keep = (f, l) => !((l.kind === 'Spelling' || l.kind === 'Typo') && known(f, l.problem)) && !f.ignored.has(`${l.kind}\u0000${l.problem}\u0000${l.message}`);
 
 const idle = () => { clearTimeout(timer); timer = setTimeout(quit, IDLE); };
-const quit = () => {
+const quit = async () => {
+  if (closing) return;
   if (busy || order.some((p) => frames.get(p)?.queue.length)) { idle(); return; }
   closing = true;
-  for (const p of frames.keys()) p.postMessage({ op: 'closing' });
-  linter?.dispose?.();
+  clearTimeout(timer);
+  try { await linter?.dispose(); } catch { /* closing releases the whole worker */ }
+  for (const p of frames.keys()) { p.postMessage({ op: 'closing' }); p.close?.(); }
+  frames.clear();
+  order.length = 0;
   close();
 };
+const detach = (port) => {
+  frames.delete(port);
+  const k = order.indexOf(port);
+  if (k >= 0) order.splice(k, 1);
+  port.onmessage = port.onmessageerror = null;
+  port.close?.();
+  if (!frames.size && !busy) quit();
+};
+const send = (port, m) => { if (frames.has(port)) try { port.postMessage(m); } catch { detach(port); } };
 
 // One lint at a time, frames in turn.
 const pump = async () => {
@@ -63,51 +81,64 @@ const pump = async () => {
       const f = frames.get(port), job = f.queue.shift();
       try {
         const l = linter || await load();
+        if (!frames.has(port)) continue;
         const t0 = performance.now();
         const raw = await l.lint(job.text, { language: 'plaintext' });
         const out = [];
-        for (const x of raw) { const s = shape(x); x.free?.(); if (keep(f, s)) out.push(s); }
+        try { for (const x of raw) { const s = shape(x); if (out.length < 2000 && keep(f, s)) out.push(s); } }
+        finally { for (const x of raw) x.free?.(); }
         lints++;
-        port.postMessage({ op: 'lint', id: job.id, lints: out, ms: performance.now() - t0 });
+        send(port, { op: 'lint', id: job.id, lints: out, ms: performance.now() - t0 });
       } catch (e) {
-        port.postMessage({ op: 'lint', id: job.id, error: String(e?.message || e) });
-      }
+        send(port, { op: 'lint', id: job.id, error: String(e?.message || e) });
+      } finally { f.ids.delete(job.id); }
     }
   } finally {
     busy = false;
-    idle();
+    if (!frames.size) quit(); else idle();
   }
 };
 
 const ON = {
   lint: (port, f, m) => {
-    if (typeof m.id !== 'number' || typeof m.text !== 'string') return;
-    const key = typeof m.key === 'string' ? m.key : '';
-    if (key) for (let i = f.queue.length - 1; i >= 0; i--) if (f.queue[i].key === key) port.postMessage({ op: 'lint', id: f.queue.splice(i, 1)[0].id, stale: true });
-    f.queue.push({ id: m.id, key, text: m.text.slice(0, MAX_TEXT) });
+    if (!Number.isSafeInteger(m.id) || m.id < 0 || typeof m.text !== 'string') return;
+    if (m.text.length > MAX_TEXT || (m.key !== undefined && (typeof m.key !== 'string' || m.key.length > 160))) {
+      send(port, { op: 'lint', id: m.id, error: 'Invalid lint request' }); return;
+    }
+    if (f.ids.has(m.id)) return;
+    const key = m.key || '';
+    if (key) for (let i = f.queue.length - 1; i >= 0; i--) if (f.queue[i].key === key) {
+      const old = f.queue.splice(i, 1)[0];
+      f.ids.delete(old.id);
+      send(port, { op: 'lint', id: old.id, stale: true });
+    }
+    if (f.queue.length >= MAX_QUEUE) { send(port, { op: 'lint', id: m.id, error: 'Lint queue is full' }); return; }
+    f.ids.add(m.id);
+    f.queue.push({ id: m.id, key, text: m.text });
     pump();
   },
   words: (_port, f, m) => { f.words = new Set(words(m.words).map(lower)); },
   dict: async (_port, _f, m) => {
-    const fresh = words(m.words).map(lower).filter((w) => !shared.has(w));
+    const fresh = [...new Set(words(m.words).map(lower))].filter((w) => !shared.has(w)).slice(0, MAX_WORDS - shared.size);
     if (!fresh.length) return;
     for (const w of fresh) shared.add(w);
     if (linter) await linter.importWords(fresh);
   },
-  ignore: (_port, f, m) => { if ([m.kind, m.problem, m.message].every((v) => typeof v === 'string')) f.ignored.add(`${m.kind}\u0000${m.problem}\u0000${m.message}`); },
+  ignore: (_port, f, m) => { if (f.ignored.size < MAX_IGNORED && [m.kind, m.problem, m.message].every((v) => typeof v === 'string' && v.length <= 500)) f.ignored.add(`${m.kind}\u0000${m.problem}\u0000${m.message}`); },
   stats: (port, _f, m) => port.postMessage({ op: 'stats', id: m.id, worker: WORKER, ports: frames.size, loads, lints, loaded: !!linter }),
   idle: (_port, _f, m) => { if (Number.isFinite(m.ms) && m.ms >= 1000) { IDLE = m.ms; idle(); } },
-  bye: (port) => { frames.delete(port); const k = order.indexOf(port); if (k >= 0) order.splice(k, 1); },
+  bye: detach,
 };
 
 const attach = (port) => {
-  if (closing) return;
-  frames.set(port, { queue: [], words: new Set(), ignored: new Set() });
+  if (closing) { port.postMessage({ op: 'closing' }); port.close?.(); return; }
+  frames.set(port, { queue: [], ids: new Set(), words: new Set(), ignored: new Set() });
   order.push(port);
   port.onmessage = ({ data: m }) => {
     const f = frames.get(port);
-    if (f && m && typeof m.op === 'string' && Object.hasOwn(ON, m.op)) ON[m.op](port, f, m);
+    if (f && m && typeof m.op === 'string' && Object.hasOwn(ON, m.op)) Promise.resolve(ON[m.op](port, f, m)).catch(() => {});
   };
+  port.onmessageerror = () => detach(port);
   idle();
 };
 
