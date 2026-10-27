@@ -79,15 +79,60 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     f.style.cssText = `display:block;border:0;width:calc(100% + 6px);margin:-3px;height:${Math.max(120, Math.round(box.root.getBoundingClientRect().height)) + 6}px;background:transparent;color-scheme:${html.hasAttribute('data-gz-dark-theme') ? 'dark' : 'light'};position:absolute;opacity:0;pointer-events:none`;
     const ch = new MessageChannel();
     box.frame = f;
+    box.ready = false;
     box.port = ch.port1;
     ch.port1.onmessage = ({ data }) => { if (boxes.get(box.editor) === box && data && typeof data.type === 'string') hear(box, data); };
     box.wait = setTimeout(() => { failed.set(box.editor, Date.now()); drop(box); }, 15000);
     // Only to Glaze's own origin (spelled out: URL.origin of an extension scheme is "null" in some engines), so a frame
     // the page navigated elsewhere gets nothing.
     const origin = src.slice(0, src.indexOf('/', src.indexOf('://') + 3));
-    f.addEventListener('load', () => f.contentWindow?.postMessage({ type: 'glaze:writer', pass }, origin, [ch.port2]), { once: true });
+    let offered = false;
+    f.addEventListener('load', () => {
+      if (boxes.get(box.editor) !== box || box.frame !== f) return;
+      if (offered || box.ready) { reopen(box); return; }
+      offered = true;
+      f.contentWindow?.postMessage({ type: 'glaze:writer', pass }, origin, [ch.port2]);
+    });
     f.src = src;
     box.root.before(f);
+  };
+  // A crashed or navigated frame gets a fresh one-use channel, initialized from Writer's buffered document.
+  const reopen = async (box) => {
+    if (box.reopening || boxes.get(box.editor) !== box) return;
+    box.reopening = true;
+    remember(box);
+    clearTimeout(box.wait);
+    box.observer?.disconnect();
+    box.port?.close();
+    box.port = null;
+    box.frame?.remove();
+    box.frame = null;
+    box.ready = false;
+    const pass = crypto.randomUUID();
+    const ok = await Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'job', pass })).then((r) => r?.ok === true, () => false);
+    if (boxes.get(box.editor) !== box) return;
+    box.reopening = false;
+    box.recovered = true;
+    if (ok && sameBox(box)) { open(box, pass); return; }
+    // Even an invalidated extension keeps the student's plain text available to copy or hand back. Never insert it as HTML.
+    const wrap = document.createElement('div'), field = document.createElement('textarea'), back = document.createElement('button');
+    field.setAttribute('data-gz-writer-recovery', '');
+    field.setAttribute('aria-label', X.t('Glaze Writer'));
+    field.value = box.snapshot?.text || box.editor.textContent;
+    field.style.cssText = 'display:block;width:100%;min-height:190px;font:inherit;color:inherit;background:transparent';
+    back.type = 'button';
+    back.textContent = X.t('Blackboard editor');
+    back.addEventListener('click', () => giveBack(box, true));
+    field.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); } });
+    field.addEventListener('input', () => {
+      const p = document.createElement('p'); p.textContent = field.value;
+      box.snapshot = { ...box.destination, html: p.outerHTML, text: field.value, at: Date.now() };
+      sync(box, box.snapshot.html); remember(box);
+    });
+    wrap.append(field, back);
+    box.frame = wrap;
+    if (box.root.isConnected) box.root.before(wrap); else document.body.append(wrap);
+    field.focus();
   };
   // The frame is up: it takes the box's text and place, and the box hides (still in the page, still synced).
   const swap = (box) => {
@@ -95,9 +140,11 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const ed = box.editor, f = box.frame, typing = box.root.contains(document.activeElement);
     const l = look();
     worn = JSON.stringify(l);
-    box.latest = box.nativeHTML = ed.innerHTML;
-    box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, html: ed.innerHTML, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
-    box.display = [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
+    if (!box.recovered) box.latest = ed.innerHTML;
+    box.nativeHTML = ed.innerHTML;
+    box.ready = true;
+    box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, html: box.latest, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
+    box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
     box.root.style.setProperty('display', 'none', 'important');
     for (const k of ['position', 'opacity', 'pointer-events']) f.style.removeProperty(k);
     if (l.motion !== 'off' && !matchMedia('(prefers-reduced-motion: reduce)').matches) f.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
@@ -121,7 +168,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.observer.observe(ed, { childList: true, subtree: true, characterData: true });
   };
   const hear = (box, m) => {
-    if (m.type === 'ready' && !box.display) swap(box);
+    if (m.type === 'ready' && !box.ready) swap(box);
     else if (m.type === 'height' && Number.isFinite(m.px)) box.frame.style.height = `${Math.max(40, Math.min(20000, Math.round(m.px)))}px`;
     else if (m.type === 'change' && typeof m.html === 'string' && typeof m.text === 'string') {
       box.snapshot = { ...box.destination, html: m.html, text: m.text, at: Date.now() };
@@ -191,6 +238,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     globalThis.GZ_DRAFT_UI?.write({ type: 'input', target: box.editor }); // drafts keep what it holds from now
   };
   const dropAll = () => { for (const box of [...boxes.values()]) { if (box.unsynced && sameBox(box) && box.frame?.isConnected && !sync(box, box.latest)) { remember(box); continue; } drop(box); } };
+  addEventListener('beforeunload', (e) => { if ([...boxes.values()].some((box) => box.unsynced && box.snapshot?.text)) { e.preventDefault(); e.returnValue = ''; } });
   addEventListener('pagehide', () => { for (const box of boxes.values()) remember(box); });
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'sync' && (c.enabled?.newValue === false || c.enhance?.newValue?.writer === false)) dropAll();
@@ -215,7 +263,10 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // content.js's pass: boxes gone or unframed go, new ones open.
   const pass = () => {
     if (!on()) { dropAll(); return; }
-    for (const box of [...boxes.values()]) if (!sameBox(box) || (box.frame && !box.frame.isConnected)) drop(box);
+    for (const box of [...boxes.values()]) {
+      if (!sameBox(box)) drop(box);
+      else if (box.frame && !box.frame.isConnected) { if (box.unsynced) reopen(box); else drop(box); }
+    }
     if (!U()) { X.need('lib/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
     const at = { path: location.pathname, attempt: attempt() };
     for (const b of U().boxes(document, at, (ed) => boxes.has(ed) || declined.has(ed) || Date.now() - (failed.get(ed) || 0) < 60000)) {

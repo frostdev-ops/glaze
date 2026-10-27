@@ -110,7 +110,7 @@ const HARNESS = `(() => {
 
     // ---- a discussion: the composer and a reply ----
     let p = await open('/ultra/courses/_101_1/discussion/_9_1');
-    const reply = await box(p, 'reply'), post = await box(p, 'post');
+    const reply = await box(p, 'reply'); let post = await box(p, 'post');
     const REPLY = '.ql-editor[data-placeholder="Type a reply"]', POST = '.ql-editor[data-placeholder="Type a post"]';
     check(await p.evaluate(() => [...document.querySelectorAll('[data-gz-writer]')].every((r) => getComputedStyle(r).display === 'none' && r.isConnected)), 'discussion: post and reply boxes mount; Ultra\'s editors stay in the page, hidden');
     check(await reply.fr.evaluate(() => document.documentElement.dataset.mode === 'compose' && document.documentElement.dataset.kind === 'reply'), 'reply box mounts in compose mode');
@@ -193,6 +193,11 @@ const HARNESS = `(() => {
     const kept = 'Every word stays in Writer when native sync fails.';
     await p.keyboard.type(kept, { delay: 2 });
     check(await post.fr.evaluate((t) => document.querySelector('.ProseMirror').textContent === t, kept), 'failed sync retains the complete draft in the live frame');
+    const oldFrame = post.el;
+    await post.fr.evaluate(() => setTimeout(() => location.reload(), 0));
+    await until(() => oldFrame.evaluate((f) => !f.isConnected), 'old frame retired');
+    post = await box(p, 'post');
+    check(await post.fr.evaluate((t) => document.querySelector('.ProseMirror').textContent === t, kept), 'a reloaded frame restores its unsynced buffered document');
     await post.fr.click('#more'); await post.fr.click('[data-do="native"]');
     check(await post.el.isVisible() && await quillText(p, REPLY) !== kept, 'a forged success cannot hand back an unsynced draft');
     await p.evaluate((s) => { document.querySelector(s).closest('.ql-container').__quill = __savedQuill; }, POST);
