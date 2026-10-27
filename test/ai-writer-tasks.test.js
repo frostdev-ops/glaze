@@ -202,17 +202,38 @@ test('writer.complete asks a model on this computer for the next words only, and
     const out = await T.run(C.task, { before, mode: 'paper', kind: 'assignment', context: ctx }, { provider: 'mock', cfg, emit() {} }).catch((e) => ({ output: null, code: e.code }));
     return { output: out.output, req: parts(cfg.seen[0]) };
   };
-  const a = await local('The first thing I learned is that the discussion board', 'can be used to share ideas with others.');
-  assert.equal(a.output, ' can be used to share ideas with others.');
+  const a = await local('The first thing I learned is that the discussion board ', 'can be used to share ideas with others.');
+  assert.equal(a.output, 'can be used to share ideas with others.');
   assert.match(a.req.system, /only the next words/);
   assert.doesNotMatch(a.req.system, /first the word right before the caret/);
   assert.match(a.req.data, /\[the sentence the student is typing/);
   assert.equal((await local('Three things I learned in this course are how to ', 'manage complex data sets effectively.')).output, 'manage complex data sets effectively.', 'after a space');
   assert.equal((await local('In this assignment I learned how to submit them and ', 'I learned three things.')).output, 'I learned three things.', 'a capital I goes on');
   assert.equal((await local('Three things I learned in this course are how to ', 'learned how to')).output, null, 'only the student\'s words again');
-  assert.equal((await local('Three things I learned in this course are how to', 'to manage data.')).output, ' manage data.', 'the caret\'s word repeated once');
+  assert.equal((await local('Three things I learned in this course are how to', 'to manage data.')).output, ' manage data.', 'mid-word: the caret\'s word first');
   assert.equal((await local('When Sethe returns, the memory arriv', 'arrives uninvited.')).output, 'es uninvited.', 'a cut-off word finished');
   assert.equal((await local('Three things I learned in this course are how to ', 'Then I left.')).output, null, 'an opener starts a new sentence');
+});
+
+test('writer.complete mid-word asks a model on this computer for its last word in full first, so the join is exact', async () => {
+  // Live, 2026-10-27: asked for the next words mid-word, Gemini Nano went on with the rest of the word ("open" → "s a new
+  // assignment") and Writer put a space before it ("open s"). Asked to write the word in full first (Apple Intelligence):
+  const ctx = { kind: 'assignment', course: { id: '_1_1', name: 'Orientation' } };
+  const local = async (before, reply) => {
+    const cfg = { replies: [{ text: reply }], seen: [], caps: { local: true } };
+    const out = await T.run(C.task, { before, mode: 'paper', kind: 'assignment', context: ctx }, { provider: 'mock', cfg, emit() {} }).catch(() => ({ output: null }));
+    return { output: out.output, req: parts(cfg.seen[0]) };
+  };
+  const a = await local('I think it should load when the writer open', 'opens a new assignment.');
+  assert.equal(a.output, 's a new assignment.');
+  assert.match(a.req.system, /last word written in full/);
+  assert.match(a.req.data, /\[its last word, maybe cut off[^\n]*\n<<<DATA-[0-9a-f]+\nopen\n/);
+  assert.equal((await local('when stopping mid-word the tab comp', 'completion seems to work fine.')).output, 'letion seems to work fine.');
+  assert.equal((await local('I think it should load when the writer open', 'open the application for speed.')).output, ' the application for speed.', 'the word was whole');
+  assert.equal((await local('In this assignment I learned how to subm', 'it to the Word document')).output, null, 'without the word first the join is unknown');
+  const after = await local('Three things I learned in this course are how to ', 'manage data.');
+  assert.equal(after.output, 'manage data.', 'after a space: the next words, as before');
+  assert.match(after.req.system, /only the next words/);
 });
 
 test('writer.complete runs only where the gray text may show, and never on a test', () => {
