@@ -44,7 +44,7 @@ test('the forum behind a route: by the gradebook column its content id has, else
 test('the prompt is topic.body as text, and its requirements come from lib/writer-target.js', () => {
   const p = C.promptOf(LIST.results[1], text);
   assert.equal(p.text, 'How does Morrison use the river and the clearing as places of memory? Respond in at least 250 words, cite two sources, and reply to two classmates.');
-  assert.deepEqual(T.forKind(T.parse(p.text), 'reply'), { minWords: 250, maxWords: null, sources: 2, replies: 2 });
+  assert.deepEqual(T.forKind(T.parse(p.text), 'reply'), { minWords: null, maxWords: null, sources: null, replies: 2 });
   assert.equal(C.promptOf({ topic: { body: '<p> </p>' } }, text), null);
   assert.equal(C.promptOf(null, text), null);
   assert.equal(C.promptOf({ topic: { body: `<p>${'x'.repeat(30000)}</p>` } }, text).text.length, C.LIMIT.prompt);

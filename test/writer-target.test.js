@@ -198,12 +198,12 @@ test('two different counts of the same thing leave it unknown', () => {
   ]);
 });
 
-test('a box takes what its kind answers to: a reply its replies\' counts, else the post\'s', () => {
+test('a box takes what its kind answers to: a reply only its explicitly scoped counts', () => {
   const req = T.parse('Your initial post should be 250-300 words and cite two sources. Reply to two classmates with at least 100 words each.');
   assert.deepEqual(T.forKind(req, 'post'), { minWords: 250, maxWords: 300, sources: 2, replies: 2 });
-  assert.deepEqual(T.forKind(req, 'reply'), { minWords: 100, maxWords: null, sources: 2, replies: 2 });
+  assert.deepEqual(T.forKind(req, 'reply'), { minWords: 100, maxWords: null, sources: null, replies: 2 });
   const mock = T.parse('Respond in at least 250 words, cite two sources, and reply to two classmates.');
-  assert.deepEqual(T.forKind(mock, 'reply'), { minWords: 250, maxWords: null, sources: 2, replies: 2 }, 'with none of their own, a reply takes the post\'s');
+  assert.deepEqual(T.forKind(mock, 'reply'), { minWords: null, maxWords: null, sources: null, replies: 2 }, 'a post target is not evidence of a reply target');
   assert.deepEqual(T.forKind(null, 'reply'), { minWords: null, maxWords: null, sources: null, replies: null });
 });
 
