@@ -8,8 +8,8 @@
 // The rules the gray text follows (fits, nextWord, consume, pause) are plain functions, for node tests.
 var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // ---- the gray text's rules -----------------------------------------------------------------------------------------
-  // The same place lib/ai/tasks/writer-complete.js fits() takes: the caret right after a word, in a sentence of at least
-  // three words, with only white space after it in its line.
+  // The same place lib/ai/tasks/writer-complete.js fits() takes: the caret right after a word or one space after it, in a
+  // sentence of at least three words, with only white space after it in its line.
   const WORD = /[\p{L}\p{N}\p{M}]/u;
   const TAIL = /[\p{L}\p{N}\p{M}]+(?:['’-][\p{L}\p{N}\p{M}]+)*['’-]?$/u;
   const sentence = (before) => {
@@ -22,8 +22,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const q = s.replace(/(?<=[\p{L}\p{N}])['’](?=[\p{L}\p{N}])/gu, '');
     return [/["“”]/g, /['‘’]/g, /[«»]/g].some((re) => (q.match(re) || []).length % 2 === 1);
   };
-  const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && TAIL.test(before) && !/^[^\S\n]*[^\s]/.test(after)
-    && sentence(before).split(/\s+/).filter((w) => WORD.test(w)).length >= 3;
+  const word = (before) => (/[^ ] $/.test(before) ? before.slice(0, -1) : before);
+  const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && TAIL.test(word(before)) && !/^[^\S\n]*[^\s]/.test(after)
+    && sentence(word(before)).split(/\s+/).filter((w) => WORD.test(w)).length >= 3;
   // The next word of the gray text, with the space before it: what ⌥→ takes.
   const nextWord = (ghost) => /^\s*\S+/.exec(ghost)?.[0] || '';
   // What is left of the gray text once `typed` is typed at its place, or null when it isn't its start (quotes as the

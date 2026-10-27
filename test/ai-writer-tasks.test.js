@@ -78,6 +78,7 @@ test('writer.complete after a space: the reply\'s first word is the one before t
   const inp = C.task.input({ before });
   assert.equal(C.finish('towns forget.', inp), null, 'the word before the space changed: where it joins is unknown');
   assert.equal(C.finish('town', inp), null, 'nothing after the word');
+  assert.equal(C.finish('1990 The war ended.', C.task.input({ before: 'It all began in 1990 ' })), null, 'a capital opener right at the caret');
 });
 
 test('writer.complete never starts a new sentence or paragraph, never repeats, never quotes or cites, never runs long', async () => {
