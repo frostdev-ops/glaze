@@ -29,7 +29,7 @@ const tell = (m) => { if (/-extension:$/.test(location.protocol) && parent !== w
 
 let lottieLoad = null, lottieAttempt = 0;
 // A rejected module URL stays failed in the browser, even after its promise is forgotten.
-const loadLottie = () => (lottieLoad ||= import(chrome.runtime.getURL(`lib/lottie/lottie_light_canvas.min.js?gzMediaRetry=${lottieAttempt++}`)).then(() => {
+const loadLottie = () => (lottieLoad ||= import(chrome.runtime.getURL(`lib/lottie/lottie_light_canvas.js?gzMediaRetry=${lottieAttempt++}`)).then(() => {
   if (typeof globalThis.lottie?.loadAnimation !== 'function') throw new Error('lottie');
   return globalThis.lottie;
 }).catch((error) => {

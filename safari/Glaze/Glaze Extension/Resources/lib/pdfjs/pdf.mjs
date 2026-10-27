@@ -1710,8 +1710,8 @@ module.exports =
   check(typeof self == 'object' && self) ||
   check(typeof global == 'object' && global) ||
   check(typeof this == 'object' && this) ||
-  // eslint-disable-next-line no-new-func -- fallback
-  (function () { return this; })() || Function('return this')();
+  // scripts/vendor-pdfjs.sh cut core-js's function-from-text fallback here: every browser Glaze supports has globalThis.
+  (function () { return this; })();
 
 });
 

@@ -11,7 +11,7 @@ const {
   WebGLRenderer, Scene, OrthographicCamera, PerspectiveCamera, Mesh, Points, PlaneGeometry,
   BufferGeometry, Float32BufferAttribute, ShaderMaterial, RawShaderMaterial, Color, ColorManagement,
   CustomBlending, AddEquation, OneFactor, DstColorFactor, OneMinusSrcAlphaFactor, OneMinusSrcColorFactor,
-} = await import(`./three.min.js${new URL(import.meta.url).search}`);
+} = await import(`./three.js${new URL(import.meta.url).search}`);
 
 // Colors pass through as written, the way CSS mixes them, so a scene matches the gradient under it.
 ColorManagement.enabled = false;
