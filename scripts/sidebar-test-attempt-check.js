@@ -1,12 +1,14 @@
 // Ultra's older test attempt with Glaze loaded (test/fixtures/ultra-test-attempt.html): its Details & Information is the
 // sidebar beside the questions, the drawer's opener stays off Save and Submit, and an editor menu opened at the page's foot
 // is in view. Synthetic page, no account or network.
+// A manifest-covered synthetic host avoids a Chromium startup race where a new dynamic registration is listed but
+// not yet injected into the renderer. Host registration has its own checks; this check exercises the sidebar.
 // NODE_PATH=<playwright> nice node scripts/sidebar-test-attempt-check.js <out dir>   (EXT=<checkout> to check another)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://school.blackboard.com/*']);
 const G = require(path.join(ext, 'defaults.js'));
-const site = 'https://bb.school.test', uid = '_42_1';
+const site = 'https://school.blackboard.com', uid = '_42_1';
 const out = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sidebar-test-')));
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_8123_1/attempt/_8124_1';
 const html = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-test-attempt.html'), 'utf8');
