@@ -80,7 +80,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     const mac = A().PROVIDERS.includes('apple') && usable('apple', all.apple || { provider: 'apple', model: 'on-device' });
     if (!mac) return dev;
     // Kept under Settings' id (a change to it reaches runs on either); its own generation keeps the catalogs apart.
-    const apple = { ...mac, id: 'device', generation: `apple:${mac.generation || ''}` };
+    const apple = { ...mac, id: 'device', generation: `apple:${mac.generation || ''}`, kept: { device: all.device?.generation, apple: mac.generation } };
     const st = await mac.p.status(mac.cfg, {}).catch(() => ({ state: 'unavailable' }));
     if (st.state !== 'unavailable' || !['off', 'os', 'device'].includes(st.reason) || !dev) return apple;
     return (await dev.p.status(dev.cfg, {}).catch(() => ({ state: 'unavailable' }))).state === 'unavailable' ? apple : dev;
@@ -89,8 +89,10 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   const reaches = async (env, { p, cfg }) => !p.origin || !!await env.reach(p.origin(cfg).replace(/\*$/, ''));
   // The connection's host only, and only while the connection is the one admitted: a request anywhere else, or after the
   // address or key changed, is refused before it is made.
+  // A connection On this device resolved to Apple is held by both stored records it came from (use.kept).
   const unchanged = async (env, use, signal) => {
-    if ((await F().wait(() => connections(env), signal))[use.id]?.generation !== use.generation) throw R().error('changed');
+    const all = await F().wait(() => connections(env), signal);
+    if (Object.entries(use.kept || { [use.id]: use.generation }).some(([id, g]) => all[id]?.generation !== g)) throw R().error('changed');
   };
   const pinned = (env, use) => async (url, init) => {
     let u;
