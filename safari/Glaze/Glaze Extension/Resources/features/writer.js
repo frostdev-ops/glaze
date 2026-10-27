@@ -297,7 +297,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   });
 
   // An attempt's kind, from the course's gradebook ('' until it answers). Once known, the top frame tells the worker, which
-  // lets the AI work on an assignment's attempt and keeps it off a test's (lib/background.js 'glaze:attempt-kind').
+  // lets the AI work on an assignment's attempt and keeps it off a test's (lib/background.js 'glaze:attempt-kind'). Once the
+  // worker has it, each frame on the page is told ('ai'): one that asked before then asks again.
   let told = '';
   const attempt = () => {
     const a = U().attemptAt(location.pathname);
@@ -308,7 +309,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const key = `${location.pathname}|${kind}`;
     if (window.top === window && told !== key) {
       told = key;
-      Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:attempt-kind', kind: kind || 'unknown' })).catch(() => {});
+      Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:attempt-kind', kind: kind || 'unknown' }))
+        .then((r) => { if (r?.ok && told === key) for (const b of boxes.values()) b.port?.postMessage({ type: 'ai' }); }).catch(() => {});
     }
     return kind;
   };

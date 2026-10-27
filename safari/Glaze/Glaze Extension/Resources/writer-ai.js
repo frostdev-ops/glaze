@@ -81,7 +81,22 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const status = { completion: null, writing: null };
   const ok = (f) => !quiet() && status[f]?.allowed === true && status[f]?.ready === true;
   const quiet = () => F.kind() === 'test' || F.context()?.kind === 'test' || !F.editor();
-  let checked = 0;
+  // What Settings → AI said at the last check (null until it answers), whether a check is under way, since when the worker
+  // has refused this attempt for its kind, and the model's download (0 to 1, from the worker's progress, or null).
+  let checked = 0, said = null, checking = false, attemptSince = 0, loaded = null, attemptTimer = 0;
+  // Why Feedback can't ask now: '' when it can; 'checking' | 'off' | 'setup' | 'permission' | 'download' | 'downloading' |
+  // 'attempt' (an attempt the worker hasn't been told is an assignment: it goes once the page says so, else after 10 s) |
+  // 'unavailable'.
+  const why = () => {
+    if (ok('writing')) return '';
+    if (quiet() || checking || !said) return 'checking';
+    if (said.on !== true || said.features?.writing !== true) return 'off';
+    if (typeof said.use !== 'string' || !said.use) return 'setup';
+    const st = status.writing;
+    if (!st) return 'unavailable';
+    if (!st.allowed) return st.why === 'attempt' ? (Date.now() - attemptSince < 10000 ? 'checking' : 'attempt') : st.why ? 'unavailable' : 'off';
+    return ['setup', 'permission', 'download', 'downloading'].includes(st.why) ? st.why : 'unavailable';
+  };
   const invalidate = () => {
     generation++;
     status.completion = status.writing = null;
@@ -94,6 +109,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     render();
   };
   const refresh = async () => {
+    checking = true;
     invalidate(); // close admission before either asynchronous read can yield
     const gen = generation;
     checked = Date.now();
@@ -108,6 +124,14 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       next[f] = st?.type === 'status' ? st : null;
     }
     Object.assign(status, next);
+    said = s && typeof s === 'object' ? s : {};
+    checking = false;
+    clearTimeout(attemptTimer);
+    if (next.writing?.why === 'attempt') {
+      attemptSince ||= Date.now();
+      attemptTimer = setTimeout(paint, Math.max(0, attemptSince + 10000 - Date.now()) + 50);
+    } else attemptSince = 0;
+    if (next.writing?.why !== 'downloading') loaded = null;
     render();
   };
   try { chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.ai) refresh(); }); } catch { /* no storage */ }
@@ -299,10 +323,31 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     v.focus();
     return true;
   };
+  // Settings → AI, in a tab of its own; where this frame has no tabs API (Firefox), Settings as the worker opens it.
+  const settings = () => {
+    try {
+      if (chrome.tabs?.create) chrome.tabs.create({ url: chrome.runtime.getURL('options.html#ai/setup') }).catch(() => {});
+      else Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {});
+    } catch { /* gone */ }
+  };
   const draw = (box) => {
     box.textContent = '';
     box.setAttribute('aria-busy', String(fb.state === 'running'));
-    if (!ok('writing')) { box.append(el('p', 'gz-fb-note', t('Writing feedback is off in Settings → AI.'))); return; }
+    const no = why();
+    if (no) {
+      const host = status.writing?.to || '';
+      box.append(el('p', 'gz-fb-note', no === 'checking' ? t('Checking…') : no === 'off' ? t('Writing feedback is off in Settings → AI.')
+        : no === 'setup' ? t('Choose a model in Settings → AI.') : no === 'permission' && host ? t('Allow Glaze to reach {host} in Settings → AI.', { host })
+          : no === 'download' ? t('Download the model in Settings → AI.') : no === 'downloading' ? (loaded === null ? t('Downloading…') : t('Downloading {pct}', { pct: `${Math.round(loaded * 100)}%` }))
+            : no === 'attempt' ? t('AI isn’t available on this attempt.') : t('AI isn’t available right now.')));
+      if (['off', 'setup', 'permission', 'download'].includes(no)) {
+        const go = el('button', 'gz-fb-run', t('Settings'));
+        go.type = 'button';
+        go.addEventListener('click', settings);
+        box.append(go);
+      }
+      return;
+    }
     if (!assignment()) { box.append(el('p', 'gz-fb-note', t('No instructions or rubric to check against.'))); return; }
     const go = el('button', 'gz-fb-run', fb.state === 'running' ? t('Reading your draft…') : fb.state === 'done' ? t('Check again') : t('Get feedback'));
     go.type = 'button';
@@ -463,6 +508,16 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     refresh();
   });
   F.on('context', refresh);
+  // The page's word that the worker now knows this attempt's kind: a frame that asked before then asks again.
+  F.handle?.('ai', () => { if (!ok('writing') || !ok('completion')) refresh(); });
+  // The model's download, as the worker tells Settings: its progress here too, and a new check once it's in.
+  try {
+    chrome.runtime.onMessage?.addListener((m) => {
+      if (m?.type !== 'glaze:ai-config' || m.event !== 'progress' || typeof m.loaded !== 'number' || status.writing?.why !== 'downloading') return;
+      loaded = Math.min(1, Math.max(0, m.loaded));
+      if (loaded >= 1) refresh(); else paint();
+    });
+  } catch { /* no runtime */ }
   return Object.assign(api, { feedbackView, feedback, review, decide, requirements, cite, allowed: ok, refresh, dismissCompletion });
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_AI;
