@@ -229,8 +229,6 @@ const HARNESS = `(() => {
       check(await fr.evaluate(() => GZ_WRITER_CITE.style() === ({ mla: 'mla9', apa: 'apa7', chicago: 'chicago17' })[GZ_WRITER_PAPER.current().format().cite]), `${fid}: citations follow the paper's format`);
       await pause(400);
       const issues = await fr.evaluate(() => GZ_WRITER_ISSUES.list().map(({ source, message, rule }) => ({ source, message, rule })));
-      console.log(`${fid} clean issue sources`, JSON.stringify(issues.reduce((n, i) => ({ ...n, [i.source]: (n[i.source] || 0) + 1 }), {})));
-      // The fixture's bibliography is plain text, not Sources records: citation-panel warnings are separate from format checks.
       const clean = await fr.evaluate(() => document.querySelectorAll('.gp-issue[data-rule]').length);
       check(clean === 0 && !issues.some((i) => ['format', 'cite'].includes(i.source)), `${fid}: a clean paper has no format or citation issues in Checks`);
       for (const [rule, json] of FX.seeded[fid]()) {

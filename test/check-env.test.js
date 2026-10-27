@@ -117,7 +117,7 @@ test('school-host readiness waits for Ultra registration, with static entries an
   const { ultraReady } = require('../scripts/check-env.js');
   assert.equal(typeof ultraReady, 'function', 'a stored approval must not race the first navigation');
   let predicate;
-  await ultraReady({ evaluate: async (fn) => { predicate = fn; return true; }, evaluate: async (fn) => { predicate = fn; return true; } });
+  await ultraReady({ evaluate: async (fn) => { predicate = fn; return true; } });
   const vm = require('node:vm');
   let matches = ['https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*'], registered = [];
   const context = vm.createContext({ URL, chrome: {

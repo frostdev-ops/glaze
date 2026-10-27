@@ -87,14 +87,18 @@
 		D24A100000000000000000A2 /* writer-ai.css in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F2 /* writer-ai.css */; };
 		D24A100000000000000000C2 /* writer-ai.css in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F2 /* writer-ai.css */; };
 		D24A100000000000000000A1 /* writer-ai.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F1 /* writer-ai.js */; };
-		D24A100000000000000000C1 /* writer-ai.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F1 /* writer-ai.js */; };		D24000000000000000002FA1 /* writer-compose.js in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF1 /* writer-compose.js */; };
+		D24A100000000000000000C1 /* writer-ai.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F1 /* writer-ai.js */; };
+		D24000000000000000002FA1 /* writer-compose.js in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF1 /* writer-compose.js */; };
 		D24000000000000000002FC1 /* writer-compose.js in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF1 /* writer-compose.js */; };
 		D24000000000000000002FA2 /* writer-compose.css in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF2 /* writer-compose.css */; };
-		D24000000000000000002FC2 /* writer-compose.css in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF2 /* writer-compose.css */; };		D241000000000000000000C1 /* writer-proof.js in Resources */ = {isa = PBXBuildFile; fileRef = D241000000000000000000F1 /* writer-proof.js */; };
-		D241000000000000000000C2 /* writer-proof.css in Resources */ = {isa = PBXBuildFile; fileRef = D241000000000000000000F2 /* writer-proof.css */; };		D24C170000000000000000A1 /* writer-cite.js in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F1 /* writer-cite.js */; };
+		D24000000000000000002FC2 /* writer-compose.css in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF2 /* writer-compose.css */; };
+		D241000000000000000000C1 /* writer-proof.js in Resources */ = {isa = PBXBuildFile; fileRef = D241000000000000000000F1 /* writer-proof.js */; };
+		D241000000000000000000C2 /* writer-proof.css in Resources */ = {isa = PBXBuildFile; fileRef = D241000000000000000000F2 /* writer-proof.css */; };
+		D24C170000000000000000A1 /* writer-cite.js in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F1 /* writer-cite.js */; };
 		D24C170000000000000000C1 /* writer-cite.js in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F1 /* writer-cite.js */; };
 		D24C170000000000000000A2 /* writer-cite.css in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F2 /* writer-cite.css */; };
-		D24C170000000000000000C2 /* writer-cite.css in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F2 /* writer-cite.css */; };		D2400000000000000000A400 /* writer-paper.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F400 /* writer-paper.js */; };
+		D24C170000000000000000C2 /* writer-cite.css in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F2 /* writer-cite.css */; };
+		D2400000000000000000A400 /* writer-paper.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F400 /* writer-paper.js */; };
 		D2400000000000000000C400 /* writer-paper.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F400 /* writer-paper.js */; };
 		D2400000000000000000A500 /* writer-paper.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F500 /* writer-paper.css */; };
 		D24500000000000000000A01 /* writer-submit.js in Resources */ = {isa = PBXBuildFile; fileRef = D24500000000000000000F01 /* writer-submit.js */; };
@@ -201,10 +205,14 @@
 		D240000000000000000000F2 /* writer.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer.js; path = Resources/writer.js; sourceTree = "<group>"; };
 		D240000000000000000000F3 /* writer.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer.css; path = Resources/writer.css; sourceTree = "<group>"; };
 		D24A100000000000000000F2 /* writer-ai.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = "writer-ai.css"; path = "Resources/writer-ai.css"; sourceTree = "<group>"; };
-		D24A100000000000000000F1 /* writer-ai.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "writer-ai.js"; path = "Resources/writer-ai.js"; sourceTree = "<group>"; };		D24000000000000000002FF1 /* writer-compose.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-compose.js; path = Resources/writer-compose.js; sourceTree = "<group>"; };
-		D24000000000000000002FF2 /* writer-compose.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-compose.css; path = Resources/writer-compose.css; sourceTree = "<group>"; };		D241000000000000000000F1 /* writer-proof.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "writer-proof.js"; path = "Resources/writer-proof.js"; sourceTree = "<group>"; };
-		D241000000000000000000F2 /* writer-proof.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = "writer-proof.css"; path = "Resources/writer-proof.css"; sourceTree = "<group>"; };		D24C170000000000000000F1 /* writer-cite.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-cite.js; path = Resources/writer-cite.js; sourceTree = "<group>"; };
-		D24C170000000000000000F2 /* writer-cite.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-cite.css; path = Resources/writer-cite.css; sourceTree = "<group>"; };		D2400000000000000000F400 /* writer-paper.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-paper.js; path = Resources/writer-paper.js; sourceTree = "<group>"; };
+		D24A100000000000000000F1 /* writer-ai.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "writer-ai.js"; path = "Resources/writer-ai.js"; sourceTree = "<group>"; };
+		D24000000000000000002FF1 /* writer-compose.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-compose.js; path = Resources/writer-compose.js; sourceTree = "<group>"; };
+		D24000000000000000002FF2 /* writer-compose.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-compose.css; path = Resources/writer-compose.css; sourceTree = "<group>"; };
+		D241000000000000000000F1 /* writer-proof.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "writer-proof.js"; path = "Resources/writer-proof.js"; sourceTree = "<group>"; };
+		D241000000000000000000F2 /* writer-proof.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = "writer-proof.css"; path = "Resources/writer-proof.css"; sourceTree = "<group>"; };
+		D24C170000000000000000F1 /* writer-cite.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-cite.js; path = Resources/writer-cite.js; sourceTree = "<group>"; };
+		D24C170000000000000000F2 /* writer-cite.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-cite.css; path = Resources/writer-cite.css; sourceTree = "<group>"; };
+		D2400000000000000000F400 /* writer-paper.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-paper.js; path = Resources/writer-paper.js; sourceTree = "<group>"; };
 		D2400000000000000000F500 /* writer-paper.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-paper.css; path = Resources/writer-paper.css; sourceTree = "<group>"; };
 		D24500000000000000000F01 /* writer-submit.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-submit.js; path = Resources/writer-submit.js; sourceTree = "<group>"; };
 		D24500000000000000000F02 /* writer-submit.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-submit.css; path = Resources/writer-submit.css; sourceTree = "<group>"; };
@@ -326,10 +334,14 @@
 				D240000000000000000000F2 /* writer.js */,
 				D240000000000000000000F3 /* writer.css */,
 				D24A100000000000000000F2 /* writer-ai.css */,
-				D24A100000000000000000F1 /* writer-ai.js */,				D24000000000000000002FF1 /* writer-compose.js */,
-				D24000000000000000002FF2 /* writer-compose.css */,				D241000000000000000000F1 /* writer-proof.js */,
-				D241000000000000000000F2 /* writer-proof.css */,				D24C170000000000000000F1 /* writer-cite.js */,
-				D24C170000000000000000F2 /* writer-cite.css */,				D2400000000000000000F400 /* writer-paper.js */,
+				D24A100000000000000000F1 /* writer-ai.js */,
+				D24000000000000000002FF1 /* writer-compose.js */,
+				D24000000000000000002FF2 /* writer-compose.css */,
+				D241000000000000000000F1 /* writer-proof.js */,
+				D241000000000000000000F2 /* writer-proof.css */,
+				D24C170000000000000000F1 /* writer-cite.js */,
+				D24C170000000000000000F2 /* writer-cite.css */,
+				D2400000000000000000F400 /* writer-paper.js */,
 				D2400000000000000000F500 /* writer-paper.css */,
 				D24500000000000000000F01 /* writer-submit.js */,
 				D24500000000000000000F02 /* writer-submit.css */,
@@ -524,10 +536,14 @@
 				D240000000000000000000A2 /* writer.js in Resources */,
 				D240000000000000000000A3 /* writer.css in Resources */,
 				D24A100000000000000000A2 /* writer-ai.css in Resources */,
-				D24A100000000000000000A1 /* writer-ai.js in Resources */,				D24000000000000000002FA1 /* writer-compose.js in Resources */,
-				D24000000000000000002FA2 /* writer-compose.css in Resources */,				D241000000000000000000A1 /* writer-proof.js in Resources */,
-				D241000000000000000000A2 /* writer-proof.css in Resources */,				D24C170000000000000000A1 /* writer-cite.js in Resources */,
-				D24C170000000000000000A2 /* writer-cite.css in Resources */,				D2400000000000000000A400 /* writer-paper.js in Resources */,
+				D24A100000000000000000A1 /* writer-ai.js in Resources */,
+				D24000000000000000002FA1 /* writer-compose.js in Resources */,
+				D24000000000000000002FA2 /* writer-compose.css in Resources */,
+				D241000000000000000000A1 /* writer-proof.js in Resources */,
+				D241000000000000000000A2 /* writer-proof.css in Resources */,
+				D24C170000000000000000A1 /* writer-cite.js in Resources */,
+				D24C170000000000000000A2 /* writer-cite.css in Resources */,
+				D2400000000000000000A400 /* writer-paper.js in Resources */,
 				D2400000000000000000A500 /* writer-paper.css in Resources */,
 				D24500000000000000000A01 /* writer-submit.js in Resources */,
 				D24500000000000000000A02 /* writer-submit.css in Resources */,
@@ -580,10 +596,14 @@
 				D240000000000000000000C2 /* writer.js in Resources */,
 				D240000000000000000000C3 /* writer.css in Resources */,
 				D24A100000000000000000C2 /* writer-ai.css in Resources */,
-				D24A100000000000000000C1 /* writer-ai.js in Resources */,				D24000000000000000002FC1 /* writer-compose.js in Resources */,
-				D24000000000000000002FC2 /* writer-compose.css in Resources */,				D241000000000000000000C1 /* writer-proof.js in Resources */,
-				D241000000000000000000C2 /* writer-proof.css in Resources */,				D24C170000000000000000C1 /* writer-cite.js in Resources */,
-				D24C170000000000000000C2 /* writer-cite.css in Resources */,				D2400000000000000000C400 /* writer-paper.js in Resources */,
+				D24A100000000000000000C1 /* writer-ai.js in Resources */,
+				D24000000000000000002FC1 /* writer-compose.js in Resources */,
+				D24000000000000000002FC2 /* writer-compose.css in Resources */,
+				D241000000000000000000C1 /* writer-proof.js in Resources */,
+				D241000000000000000000C2 /* writer-proof.css in Resources */,
+				D24C170000000000000000C1 /* writer-cite.js in Resources */,
+				D24C170000000000000000C2 /* writer-cite.css in Resources */,
+				D2400000000000000000C400 /* writer-paper.js in Resources */,
 				D2400000000000000000C500 /* writer-paper.css in Resources */,
 				D24500000000000000000C01 /* writer-submit.js in Resources */,
 				D24500000000000000000C02 /* writer-submit.css in Resources */,
