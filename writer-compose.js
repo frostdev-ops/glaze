@@ -91,9 +91,6 @@ var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   mark.setAttribute('aria-hidden', 'true');
   mark.textContent = '❝';
   cited.className = 'gz-num';
-  // writer.js writes "Word count: N" into this slot as it counts: here that only asks for the ring to be drawn.
-  const own = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent');
-  Object.defineProperty(target, 'textContent', { configurable: true, get() { return own.get.call(this); }, set() { later(); } });
 
   // The cite stream's count replaces the stand-in when it is there: GZ_WRITER_CITE.count({ doc, text }) → sources cited.
   const count = (ed, text) => (typeof globalThis.GZ_WRITER_CITE?.count === 'function' ? Number(GZ_WRITER_CITE.count({ doc: ed.view.state.doc, text })) || 0 : citations(text));
@@ -120,7 +117,7 @@ var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
     if (got >= want) sources.dataset.state = 'ok'; else delete sources.dataset.state;
   };
   api.refresh = later;
-  for (const ev of ['ready', 'change', 'context', 'look']) F.on(ev, later);
+  for (const ev of ['ready', 'change', 'context', 'look', 'count']) F.on(ev, later);
 
   // ---- quotes ---------------------------------------------------------------------------------------------------------
   // The page's Quote pop: what was selected in a post, and who wrote it (from the thread, '' when unknown).

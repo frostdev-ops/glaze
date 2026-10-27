@@ -27,7 +27,7 @@
     root.dataset.motion = ['off', 'subtle', 'expressive'].includes(l.motion) ? l.motion : 'subtle';
   };
   const LABELS = { bold: 'Bold', italic: 'Italic', underline: 'Underline', link: 'Link', bulletList: 'List', quote: 'Quote' };
-  const count = () => { $('words').textContent = ed ? t('Word count: {n}', { n: words }) : ''; };
+  const count = () => { if (hooks.count.length) { emit('count', words); return; } $('words').textContent = ed ? t('Word count: {n}', { n: words }) : ''; };
   const label = () => {
     for (const b of $('tb').querySelectorAll('[data-run]')) { b.title = t(LABELS[b.dataset.run]); b.setAttribute('aria-label', b.title); }
     $('tb').setAttribute('aria-label', t('Formatting'));
@@ -161,10 +161,10 @@
     },
   };
   // What later parts of the frame (proofing, targets, AI) build on: each is its own script after this one in writer.html.
-  // on(event, fn): 'ready' (editor, init), 'change' (onChange's report), 'context' (context), 'look' (look); handle(type, fn)
+  // on(event, fn): 'count' (words; owns the target slot), 'ready' (editor, init), 'change' (onChange's report), 'context' (context), 'look' (look); handle(type, fn)
   // takes a page → frame message type this file doesn't; plugin(p) adds a ProseMirror plugin (before the editor exists, it
   // goes in at create); slot(name) is a bottom-bar or toolbar slot; item(label, fn) adds a ⋯ menu entry.
-  const hooks = { ready: [], change: [], context: [], look: [] }, plugins = [];
+  const hooks = { ready: [], change: [], context: [], look: [], count: [] }, plugins = [];
   const emit = (ev, ...a) => { for (const fn of hooks[ev]) try { fn(...a); } catch (e) { console.error(e); } };
   globalThis.GZ_WRITER_FRAME = {
     editor: () => ed, context: () => context, say, t, mode: () => root.dataset.mode, kind: () => root.dataset.kind,
