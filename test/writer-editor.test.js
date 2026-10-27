@@ -282,7 +282,7 @@ test('Enter, Backspace and Tab behave as in Quill and Word around lists and inde
 test('a tab survives the round trips: Quill\'s HTML, its delta, and the paper\'s .docx', () => {
   const st = press(caret(make('<p>ab</p>'), 'a'), 'Tab').st;
   assert.equal(S.serialize(st.schema, S.parse(st.schema, html(st))), '<p>a\tb</p>', 'parsed back from the HTML Quill keeps');
-  assert.deepEqual(S.delta(st.doc).ops.map((o) => o.insert).join(''), 'a\tb\n', 'the delta written into Ultra\'s Quill');
+  assert.deepEqual(S.delta(st.doc).map((o) => o.insert).join(''), 'a\tb\n', 'the delta written into Ultra\'s Quill');
   const X = require('../lib/writer-docx.js');
   const paper = press(caret(make('<p>ab</p>', 'paper'), 'a'), 'Tab').st;
   assert.match(X.exportDocx(paper.doc, { format: 'mla9', date: new Date(2026, 9, 27) }).parts['word/document.xml'], /<w:t xml:space="preserve">a<\/w:t><w:tab\/><w:t xml:space="preserve">b<\/w:t>/, 'a tab is a Word tab');

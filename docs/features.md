@@ -127,6 +127,7 @@ On by default on Blackboard Ultra (Settings → Course pages → Course content 
 - **Submit sheet**: Submit… (or Ultra's own Submit) on a paper shows its first two pages, the .docx it makes (Lastname_Title.docx), a note to your instructor, **Also paste the text in the text box** and the checks still open. Its Submit saves a submitted version, attaches the .docx through Ultra's own upload, writes the note and clicks Ultra's Submit once; anything that fails stops before that click and says why.
 - **Papers page** (a paper's Versions → All papers): every paper on this device, newest first, each opened in the same paper editor, exported as a .docx or brought back to an earlier version.
 - **Tests** get compose mode with proofing on this device only: no completion, no AI, no paper, no submit sheet.
+- **Tab** writes a tab, as Word and Blackboard's editor do (in a list it indents, and Shift+Tab outdents); press Esc, then Tab, to leave the editor.
 
 **Back up…** carries your papers, their versions and presets, your dictionary and saved sources.
 

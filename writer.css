@@ -28,7 +28,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gw::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 18%, transparent); opacity: 0; pointer-events: none; transition: opacity var(--t) ease-out; }
 .gw:focus-within::after { opacity: 1; }
 .gw-body { position: relative; font-size: 15px; line-height: 1.65; }
-.ProseMirror { min-height: 190px; padding: 18px 20px 8px; outline: none; caret-color: var(--gz-accent); }
+.ProseMirror { min-height: 190px; padding: 18px 20px 8px; outline: none; caret-color: var(--gz-accent); tab-size: 4; }
 .ProseMirror p { margin: 0 0 10px; }
 .ProseMirror h3, .ProseMirror h4 { margin: 4px 0 10px; line-height: 1.35; font-weight: 600; }
 .ProseMirror h3 { font-size: 1.2em; } .ProseMirror h4 { font-size: 1.05em; }

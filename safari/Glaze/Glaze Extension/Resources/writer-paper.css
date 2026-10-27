@@ -75,7 +75,7 @@
 
 /* The paper's text (the format adds font, size, spacing and indents) */
 /* Spaces at a line's end hang into the margin, as Word lays them out (ProseMirror's break-spaces would count them). */
-.gp-flow .ProseMirror { min-height: 0; padding: 0; white-space: pre-wrap; color: #111; caret-color: #111; font-kerning: none; font-variant-ligatures: none; outline: none; }
+.gp-flow .ProseMirror { min-height: 0; padding: 0; white-space: pre-wrap; tab-size: 0.5in; color: #111; caret-color: #111; font-kerning: none; font-variant-ligatures: none; outline: none; }
 .gp-flow .ProseMirror a { color: #0b57d0; }
 .gp-flow .ProseMirror ::selection { background: rgba(37, 99, 235, .22); }
 .gp-flow .ProseMirror sup, .gp-flow .ProseMirror sub { line-height: 0; }
