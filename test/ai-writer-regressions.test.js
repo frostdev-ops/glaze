@@ -83,3 +83,20 @@ test('completion keeps quote types separate, and number words cannot match insid
   assert.equal(C.task.input({ before: `The author writes "the 'river always` }), null);
   assert.equal(RQ.states('Discuss someone remembered in the novel.', 1), false);
 });
+
+test('review suggestions cannot smuggle citations, links or invented numbers into a short replacement', () => {
+  const inp = RV.task.input({ text: 'The memory seems quiet.' });
+  const issue = { quote: 'memory', before: 'The', after: 'seems', kind: 'grammar', message: 'Grammar.',
+    suggestions: ['(Morrison)', 'example.org', '73', '"debt"', 'memories'] };
+  for (const suggestion of issue.suggestions.slice(0, -1)) {
+    assert.deepEqual(RV.task.check({ issues: [{ ...issue, suggestions: [suggestion, 'memories'] }] }, inp).issues[0].suggestions, ['memories'], suggestion);
+  }
+});
+
+test('citation fields need whole tokens rather than fragments of names or numbers', () => {
+  const inp = CT.task.input({ text: 'A Study of Memory. By James Baldwin. Published 1985.' });
+  const out = CT.task.check({ ...citation({ year: null, month: null, day: null, quote: null }),
+    authors: [{ given: 'Jam', family: 'Bald', literal: null }], volume: '19' }, inp);
+  assert.deepEqual(out.author, []);
+  assert.equal(out.volume, undefined);
+});
