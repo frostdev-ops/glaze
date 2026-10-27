@@ -226,3 +226,26 @@ test('Apple status stops waiting when its caller cancels', async () => {
   assert.notEqual(out, 'hung');
   assert.equal(out.state, 'unavailable');
 });
+
+test('a text task on Apple sends no schema and gives the words back, cut ones marked truncated', async () => {
+  const finish = T.define({ id: 'example.finish', version: 1, output: 'text', input: (raw) => raw, check: (text) => text,
+    build: (input, { text }) => text.request({ system: 'Finish it.', data: [{ label: 'before', text: input.text }], maxTokens: 20 }) });
+  native = async () => ok(' runs to the', { finish: 'length' });
+  const out = await T.run(finish, { text: 'The river' }, { provider: 'apple', cfg: { model: 'on-device' } });
+  assert.equal(out.output, ' runs to the');
+  assert.equal(out.meta.truncated, true);
+  assert.equal('schema' in sent[0].m, false);
+  assert.equal(sent[0].m.maxTokens, 20);
+});
+
+test('a changed connection asks the native side to drop its warm sessions', async () => {
+  const vault = new Map();
+  const env = { vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async () => true } };
+  native = async () => ({ ok: true });
+  assert.deepEqual(await B.config({ op: 'set', id: 'mac', cfg: { provider: 'apple', model: 'on-device' } }, env), { ok: true });
+  await new Promise(setImmediate);
+  assert.deepEqual(sent.map((s) => s.m), [{ type: 'ai.release' }]);
+  assert.deepEqual(await B.config({ op: 'remove', id: 'mac' }, env), { ok: true });
+  await new Promise(setImmediate);
+  assert.equal(sent.length, 2);
+});

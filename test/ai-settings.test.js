@@ -22,8 +22,9 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 const listing = (ids) => json({ data: ids.map((id) => ({ id })) });
 
 // page({ ai, calls, granted, device, features, server }): Settings with the AI tab mounted.
-//   device(m): the device provider's worker side (undefined: Glaze doesn't ship it here); server(url, init): the endpoint.
-const page = ({ ai, calls, granted = true, device, providers, features, embedded = false, save = true, server = async () => listing(['gpt-x', 'gpt-y']) } = {}) => {
+//   device(m): the device provider's worker side (undefined: Glaze doesn't ship it here); apple(m): the apple connection's;
+//   server(url, init): the endpoint.
+const page = ({ ai, calls, granted = true, device, apple, providers, features, embedded = false, save = true, server = async () => listing(['gpt-x', 'gpt-y']) } = {}) => {
   const ids = new Map(), sent = [], asked = [], reads = [], onChanged = [], onMessage = [], held = new Set(), vault = new Map(), fetched = [];
   const data = { ...(ai && { ai: structuredClone(ai) }), ...(calls && { aiCalls: structuredClone(calls) }) };
   let gesture = false;
@@ -58,6 +59,7 @@ const page = ({ ai, calls, granted = true, device, providers, features, embedded
         if (m.type === 'glaze:allow') return { ok: true };
         if (m.type !== 'glaze:ai-config') return undefined;
         if (device && (m.id === 'device' || m.provider === 'device')) return device(m, gesture);
+        if (apple && m.id === 'apple') return apple(m);
         const r = await B.config(m, env);
         return m.op === 'get' && providers ? { ...r, providers } : r;
       },
@@ -66,7 +68,7 @@ const page = ({ ai, calls, granted = true, device, providers, features, embedded
     storage: { local, onChanged: { addListener: (f) => onChanged.push(f) } },
     permissions: { request: ({ origins }) => { asked.push([[...origins], gesture]); if (granted) origins.forEach((o) => held.add(o)); return Promise.resolve(granted); } },
   };
-  const settings = { ...AS, ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
+  const settings = { ...AS, ...(apple && { PROVIDERS: [...AS.PROVIDERS, 'apple'] }), ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
   const window = {}; window.top = embedded ? {} : window;
   const ctx = vm.createContext({ chrome, window, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
     GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../lib/ai/endpoint.js') });
@@ -106,7 +108,7 @@ test('off by default: the switch is off, only it shows, and the worker is asked 
   assert.deepEqual(p.asked, []);
   assert.deepEqual(p.data, {}, 'opening Settings writes nothing');
   assert.match(read('options.html'), /<input type="checkbox" id="ai-on" data-local>/, 'the switch is not checked in the page');
-  assert.deepEqual(AS.clean(undefined), { on: false, use: null, features: { syllabus: false } });
+  assert.deepEqual(AS.clean(undefined), { on: false, use: null, features: { syllabus: false, completion: false, writing: false } });
 });
 
 test('embedded Settings does not initialize AI controls or read its connections and activity', async () => {
@@ -129,7 +131,7 @@ test('enabling AI refreshes a saved device connection without starting a downloa
 test('the switch and the connection are kept in storage.local ai, cleaned; the features stay off until each is turned on', async () => {
   const p = await open();
   await p.change('ai-on', true);
-  assert.deepEqual(p.data.ai, { on: true, use: null, features: { syllabus: false } });
+  assert.deepEqual(p.data.ai, { on: true, use: null, features: { syllabus: false, completion: false, writing: false } });
   assert.ok(shown(p.$('ai-connection')) && shown(p.$('ai-features')));
   assert.equal(p.$('ai-endpoint').hidden, true);
   await p.change('ai-use-endpoint', true);
@@ -140,9 +142,9 @@ test('the switch and the connection are kept in storage.local ai, cleaned; the f
   assert.equal(name.textContent, 'Syllabus import');
   assert.equal(box.checked, false, 'off until the student turns it on');
   box.checked = true; for (const f of box.on.change) f({ isTrusted: true }); await settle();
-  assert.deepEqual(p.data.ai.features, { syllabus: true });
+  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: false, writing: false });
   await p.change('ai-on', false);
-  assert.deepEqual(p.data.ai, { on: false, use: 'endpoint', features: { syllabus: true } }, 'off keeps the choices');
+  assert.deepEqual(p.data.ai, { on: false, use: 'endpoint', features: { syllabus: true, completion: false, writing: false } }, 'off keeps the choices');
   assert.equal(p.$('ai-connection').hidden, true);
 });
 
@@ -349,6 +351,35 @@ test('the connection choices include only providers registered by this browser',
   assert.equal(q.$('ai-use-endpoint').disabled, true);
 });
 
+test('on Safari, Apple Intelligence is a choice: its connection kept the first time, then its state; elsewhere it isn\'t offered', async () => {
+  const asked = [];
+  let state = { ok: true, state: 'unavailable', reason: 'off' };
+  const apple = async (m) => { asked.push(structuredClone(m)); return m.op === 'set' ? { ok: true } : state; };
+  const p = await open({ ai: { on: true, use: 'endpoint' }, providers: ['openai', 'device', 'apple'], apple });
+  assert.equal(p.$('ai-choice-apple').hidden, false);
+  assert.equal(p.$('ai-use-apple').disabled, false);
+  assert.equal(p.$('ai-apple').hidden, true);
+  await p.change('ai-use-apple', true);
+  assert.equal(p.data.ai.use, 'apple');
+  assert.deepEqual(asked.map((m) => [m.op, m.cfg]), [['set', { provider: 'apple', model: 'on-device' }], ['test', undefined]]);
+  assert.equal(p.$('ai-apple').hidden, false);
+  assert.equal(p.$('ai-endpoint').hidden, true);
+  assert.equal(p.$('ai-apple-state').textContent, 'Apple Intelligence is off');
+  state = { ok: true, state: 'ready' };
+  await p.change('ai-on', false); await p.change('ai-on', true);
+  assert.equal(p.$('ai-apple-state').textContent, 'Ready');
+  assert.deepEqual(asked.map((m) => m.op), ['set', 'test', 'test'], 'kept once');
+  const E = require('../lib/editor-ai.js'), t = (k, v) => I.t(k, v, 'en');
+  assert.equal(E.appleText({ state: 'unavailable', reason: 'os' }, t), 'Not available on this device');
+  assert.equal(E.appleText({ state: 'downloading', reason: 'not-ready' }, t), 'Downloading…');
+  assert.equal(E.appleText({ state: 'unavailable', reason: 'native' }, t), 'Not available: Not ready');
+  assert.equal(E.providerName('apple', t), 'Apple Intelligence');
+  const q = await open({ ai: { on: true, use: 'apple' }, providers: ['openai', 'device'] });
+  assert.equal(q.$('ai-choice-apple').hidden, true);
+  assert.equal(q.$('ai-use-apple').disabled, true);
+  assert.equal(q.$('ai-apple').hidden, true);
+});
+
 test('the shipped device provider drives progress and completion through the real broker', async () => {
   let finish, notify;
   globalThis.LanguageModel = {
@@ -409,6 +440,8 @@ test('activity: the recent calls, newest first, metadata only, and Clear', async
   assert.ok(shown(p.$('ai-activity')), 'a record shows with AI off too, so it can be cleared');
   const text = p.$('ai-calls').children.map((li) => li.children[0].children.map((x) => x.textContent).join(' | '));
   assert.deepEqual(text, ['Syllabus import · On this device | @2000 · Refused', 'Syllabus import · Endpoint | @1000 · 1,234 tokens · Done']);
+  const tallied = await open({ calls: [{ id: 'r3', task: 'example.finish', feature: 'completion', provider: 'device', state: 'completed', startedAt: 3000, ms: 1200, count: 12 }] });
+  assert.deepEqual(tallied.$('ai-calls').children.map((li) => li.children[0].children.map((x) => x.textContent).join(' | ')), ['Sentence completion · On this device | @3000 · ×12 · Done'], 'a minute\'s completions in one row');
   assert.ok(!p.all().some((x) => /secret words|api\.example\.com|sk-live/.test(String(x))), 'nothing but metadata');
   assert.equal(p.$('ai-calls-empty').hidden, true);
   await p.click('ai-calls-clear');
@@ -434,7 +467,7 @@ test('the page: an AI tab before Privacy and data, kept out of embedded Settings
   const panel = html.slice(html.indexOf('<div id="panel-ai"'), html.indexOf('<div id="panel-backup"'));
   assert.match(panel, /<input id="ai-key" type="password"[^>]*autocomplete="off"/);
   for (const [, tag] of panel.matchAll(/(<input[^>]*>)/g)) assert.match(tag, /data-local/, tag);
-  for (const id of ['ai-said', 'ai-device-state']) assert.match(panel, new RegExp(`id="${id}" role="status" aria-live="polite"`), id);
+  for (const id of ['ai-said', 'ai-device-state', 'ai-apple-state']) assert.match(panel, new RegExp(`id="${id}" role="status" aria-live="polite"`), id);
   assert.match(panel, /role="radiogroup" aria-labelledby="ai-connection-head"/);
   assert.match(panel, /<progress id="ai-device-progress"[^>]*aria-labelledby="ai-device-state"/);
   for (const id of ['ai-base', 'ai-model', 'ai-key']) assert.match(panel, new RegExp(`id="${id}"[^>]*dir="ltr"`), `${id} keeps its direction`);

@@ -1,7 +1,9 @@
 // The AI harness's broker (lib/ai/broker.js) on a stand-in port, storage and server: every check before anything is sent, the
 // model checked against the connection's catalog, the run's events and its end, one run at a time for a tab's feature, a
 // rate limit, cancel and a closed port ending the request, a connection changed mid-run sending nothing more, confirms
-// claimed once, and no address, model or key ever going to a page. The worker's own wiring is test/ai-worker.test.js.
+// claimed once, and no address, model or key ever going to a page; then the writer's modes: plain text streamed, supersede,
+// messages in order, a task's own rate, tallied rows, the kept catalog, and per-message refusals. The worker's own wiring
+// is test/ai-worker.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const B = require('../lib/ai/broker.js');
@@ -501,4 +503,176 @@ test('a disclosed task retains its admitted destination when a pending tool is c
         : { id: 2, type: 'confirmed', result: { kind: 'reminder', at: '2026-11-02' } }, 'confirmation uses the parked destination, never a new caller-supplied one');
     } finally { p.close(); }
   }
+});
+
+// ---- the writer's harness modes ---------------------------------------------------------------------------------------
+const P = require('../lib/ai/providers.js');
+const finish = T.define({ id: 'example.finish', version: 1, output: 'text', stream: true, rate: { supersede: true, perMinute: 30 },
+  input: (raw) => (typeof raw?.text === 'string' ? raw : null), check: (text) => text,
+  build: (input, { text }) => text.request({ system: 'Finish the sentence.', context: [{ label: 'prompt', text: 'Rivers' }], data: [{ label: 'before', text: input.text }] }) });
+const quick = T.define({ ...echo, id: 'example.quick', rate: { perMinute: 8 } });
+Object.assign(TASKS, { 'example.finish': finish, 'example.quick': quick });
+const writer = (over = {}) => env({ settings: async () => ({ on: true, use: 'main', features: { syllabus: true, completion: true, writing: true } }), ...over });
+const complete = (id, text = 'The river', extra = {}) => ({ id, op: 'run', feature: 'completion', task: 'example.finish', input: { text }, ...extra });
+// A server-sent stream the test writes as it goes.
+const sse = () => {
+  let ctl;
+  const enc = new TextEncoder(), body = new ReadableStream({ start(c) { ctl = c; } });
+  const frame = (o) => ctl.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`));
+  return { response: new Response(body, { headers: { 'content-type': 'text/event-stream' } }), push: (content) => frame({ choices: [{ delta: { content } }] }),
+    end: () => { frame({ choices: [{ delta: {}, finish_reason: 'stop' }] }); ctl.enqueue(enc.encode('data: [DONE]\n\n')); ctl.close(); } };
+};
+const deltas = (p) => p.posted.filter((m) => m.type === 'text_delta').map((m) => m.delta);
+
+test('a text task streams live from a keyed endpoint, held back only where a key could begin, and ends with the text', async () => {
+  const s = sse(), sent = [];
+  const p = open(writer({ fetch: async (url, init) => { if (url.endsWith('/models')) return models(); sent.push(JSON.parse(init.body)); return s.response; } }));
+  p.say(complete(1));
+  await flush();
+  s.push(' runs to'); await flush();
+  assert.deepEqual(deltas(p), [' runs to'], 'on the page before the answer ends');
+  s.push(' the s'); await flush();
+  assert.deepEqual(deltas(p), [' runs to', ' the '], 'an s could begin the key: held');
+  s.push('ea.'); s.end(); await flush();
+  assert.deepEqual(deltas(p), [' runs to', ' the ', 'sea.']);
+  assert.deepEqual(p.posted.at(-1).output, ' runs to the sea.');
+  assert.equal(sent[0].response_format, undefined, 'no JSON asked for');
+  assert.equal(sent[0].stream, true);
+});
+
+test('a key in a streamed text answer is refused before any of it reaches the page; a keyless endpoint streams it all', async () => {
+  const s = sse();
+  const p = open(writer({ fetch: async (url) => (url.endsWith('/models') ? models() : s.response) }));
+  p.say(complete(1));
+  await flush();
+  s.push('ok '); s.push(KEY.slice(0, 8)); await flush();
+  s.push(KEY.slice(8)); s.end(); await flush();
+  assert.equal(p.posted.at(-1).error, 'invalid-response');
+  assert.ok(!JSON.stringify(p.posted).includes(KEY.slice(0, 8)), 'not even its start');
+  const t = sse(), e = writer({ fetch: async (url) => (url.endsWith('/models') ? models() : t.response) });
+  e.vaultData.set('connections', { main: { ...CONN, key: undefined } });
+  const q = open(e);
+  q.say(complete(2));
+  await flush();
+  t.push(' the s'); await flush();
+  assert.deepEqual(deltas(q), [' the s'], 'nothing to hold back without a key');
+  t.push('ea.'); t.end(); await flush();
+  assert.equal(q.posted.at(-1).output, ' the sea.');
+});
+
+test('a supersede task\'s new run cancels the one in flight instead of being busy; completion and writing never block each other', async () => {
+  const waiting = [];
+  const slow = writer({ fetch: (url, init) => (url.endsWith('/models') ? Promise.resolve(models()) : new Promise((res, rej) => {
+    init.signal.addEventListener('abort', () => rej(init.signal.reason));
+    waiting.push(() => res(json({ choices: [{ message: { content: '{"text":"done."}' }, finish_reason: 'stop' }] })));
+  })) });
+  const p = open(slow);
+  p.say(complete(1));
+  p.say({ id: 2, op: 'run', feature: 'writing', task: 'example.echo', input: { text: 'x' } });
+  await flush();
+  p.say(complete(3, 'The river runs'));
+  await flush();
+  assert.deepEqual(p.posted.filter((m) => m.type === 'error'), [{ id: 1, type: 'error', error: 'cancelled' }], 'the old completion ended; nothing busy');
+  assert.equal(waiting.length, 3, 'the writing run and both completions reached the server');
+  for (const w of waiting) w();
+  await flush();
+  assert.deepEqual(p.posted.filter((m) => m.type === 'end').map((m) => m.id).sort(), [2, 3]);
+  // Another tab's completion is its own.
+  const q = open({ ...slow, who: '8' });
+  p.say(complete(4)); q.say(complete(5));
+  await flush();
+  assert.equal(p.posted.concat(q.posted).filter((m) => m.type === 'error').length, 1, 'neither cancelled the other');
+});
+
+test('a cancel frees the run\'s place at once: a run sent right after it is not busy', async () => {
+  const hang = writer({ fetch: (url, init) => (url.endsWith('/models') ? Promise.resolve(models()) : new Promise((res, rej) => init.signal.addEventListener('abort', () => rej(init.signal.reason)))) });
+  const p = open(hang);
+  p.say(run());
+  await flush();
+  p.say({ id: 1, op: 'cancel' });
+  p.say(run(undefined, { id: 2 }));
+  await flush();
+  assert.deepEqual(p.posted.filter((m) => m.type === 'error'), [{ id: 1, type: 'error', error: 'cancelled' }]);
+});
+
+test('a port\'s messages are taken in the order sent, however long each sender check takes', async () => {
+  let n = 0;
+  const waiting = [];
+  const e = writer({ allowed: () => new Promise((res) => setTimeout(() => res(true), ++n === 1 ? 30 : 0)),
+    fetch: (url, init) => (url.endsWith('/models') ? Promise.resolve(models()) : new Promise((res, rej) => {
+      init.signal.addEventListener('abort', () => rej(init.signal.reason));
+      waiting.push(() => res(json({ choices: [{ message: { content: 'done.' }, finish_reason: 'stop' }] })));
+    })) });
+  const p = open(e);
+  p.say(complete(1, 'first')); p.say(complete(2, 'second'));
+  await new Promise((r) => setTimeout(r, 60)); await flush();
+  for (const w of waiting) w();
+  await flush();
+  assert.deepEqual(p.posted.filter((m) => m.type === 'error'), [{ id: 1, type: 'error', error: 'cancelled' }], 'the later run is the one that stays');
+  assert.equal(p.posted.find((m) => m.type === 'end').id, 2);
+});
+
+test('a task\'s own rate replaces the broker\'s per-feature limit and counts apart from every other task\'s', async () => {
+  let t = 0;
+  const e = writer({ now: () => t }), p = open(e);
+  for (let i = 1; i <= 9; i++) { p.say({ ...run(undefined, { id: i }), task: 'example.quick' }); await flush(); }
+  assert.deepEqual(p.posted.filter((m) => m.type === 'error'), [{ id: 9, type: 'error', error: 'often' }], 'eight a minute, not six');
+  for (let i = 10; i < 10 + B.LIMIT.perMinute; i++) { p.say(run(undefined, { id: i })); await flush(); }
+  assert.equal(p.posted.filter((m) => m.type === 'error').length, 1, 'the feature\'s own six still run');
+  t = 61000;
+  p.say({ ...run(undefined, { id: 99 }), task: 'example.quick' }); await flush();
+  assert.equal(p.posted.at(-1).type, 'end');
+});
+
+test('a supersede task\'s runs make one call-record row a minute per tab and feature, with their count, total time and last state', async () => {
+  let t = 1000;
+  const fail = { on: false };
+  const e = writer({ now: () => t, fetch: async (url) => (url.endsWith('/models') ? models() : fail.on ? new Response('no', { status: 503 })
+    : json({ choices: [{ message: { content: 'ok.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 1 } })) });
+  const p = open(e);
+  for (const [i, at] of [[1, 1000], [2, 11000], [3, 21000]]) { t = at; p.say(complete(i)); await flush(); }
+  p.say(run(undefined, { id: 4 })); await flush();
+  const rows = e.local.data.aiCalls;
+  assert.equal(rows.length, 2, 'the completions\' one row, and the syllabus run\'s own');
+  const [row] = rows;
+  assert.deepEqual({ ...row, id: typeof row.id }, { id: 'string', feature: 'completion', task: 'example.finish', provider: 'openai', state: 'completed', startedAt: 1000, count: 3, ms: 0, usage: { input: 12, output: 3 } });
+  fail.on = true; t = 30000; p.say(complete(5)); await flush();
+  const after = e.local.data.aiCalls.filter((r) => r.feature === 'completion');
+  assert.equal(after.length, 1, 'still one row');
+  assert.deepEqual([after[0].count, after[0].state, after[0].category, after[0].status], [4, 'provider-unavailable', 'provider-unavailable', 503]);
+  assert.equal(after[0].id, p.posted.at(-1).reference, 'named by the failure the student can quote');
+  fail.on = false; t = 62000; p.say(complete(6)); await flush();
+  const later = e.local.data.aiCalls.filter((r) => r.feature === 'completion');
+  assert.deepEqual(later.map((r) => [r.count, r.state]), [[4, 'provider-unavailable'], [1, 'completed']], 'a new minute, a new row');
+});
+
+test('a connection\'s catalog is asked for once per generation, not every run; a changed connection asks again', async () => {
+  const e = writer();
+  const p = open(e);
+  p.say(run()); await flush();
+  p.say(run(undefined, { id: 2 })); await flush();
+  assert.deepEqual(e.calls.map((c) => c.url.split('/').pop()), ['models', 'completions', 'completions']);
+  let released = 0;
+  P.add({ id: 'warm-test', config: (c) => c, caps: () => ({}), status: async () => ({ state: 'ready' }), run: async () => ({ text: '', finish: 'stop' }), release: () => { released++; } });
+  assert.deepEqual(await B.config({ op: 'set', id: 'main', cfg: { provider: 'openai', base: CONN.base, model: 'gpt-x', key: 'sk-live-ANOTHERKEY000000' } }, e), { ok: true, origin: 'https://api.example.com/*' });
+  assert.equal(released, 1, 'warm sessions dropped with the old connection');
+  p.say(run(undefined, { id: 3 })); await flush();
+  assert.deepEqual(e.calls.map((c) => c.url.split('/').pop()), ['models', 'completions', 'completions', 'models', 'completions']);
+  assert.equal(p.posted.at(-1).type, 'end');
+});
+
+test('the sender check may refuse one message with a code and keep the port; it is told the feature, a confirm\'s too', async () => {
+  const asked = [];
+  const e = writer({ allowed: (what) => { asked.push(what); return what.feature === 'completion' ? 'attempt' : true; } });
+  const p = open(e);
+  p.say({ id: 1, op: 'status', feature: 'completion' });
+  p.say(complete(2));
+  p.say({ id: 3, op: 'cancel' });
+  p.say(run(undefined, { id: 4 }));
+  await flush();
+  assert.equal(p.hungUp, false);
+  assert.deepEqual(p.posted.filter((m) => m.id !== 4), [{ id: 1, type: 'status', on: true, allowed: false, why: 'attempt' }, { id: 2, type: 'error', error: 'attempt' }]);
+  assert.equal(p.posted.at(-1).type, 'end', 'the other feature ran');
+  assert.deepEqual(asked, [{ op: 'status', feature: 'completion' }, { op: 'run', feature: 'completion' }, { op: 'cancel' }, { op: 'run', feature: 'syllabus' }]);
+  assert.equal(e.calls.filter((c) => c.url.endsWith('/completions')).length, 1);
 });

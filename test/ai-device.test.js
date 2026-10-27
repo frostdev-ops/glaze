@@ -1,7 +1,8 @@
 // The AI harness's `device` provider (lib/ai/providers/device.js): Chrome's Prompt API (LanguageModel, Gemini Nano) in the
 // worker, against a stand-in LanguageModel: availability → status, a download with progress, a request mapped to a session
 // (system prompt, history, pictures, a schema as responseConstraint, temperature only with topK), deltas streamed, a cancel,
-// input over the context window refused before it is sent, every session destroyed, and the broker's prepare and test.
+// input over the context window refused before it is sent, every session destroyed, the broker's prepare and test, and
+// warm sessions prompted through clone().
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const P = require('../lib/ai/providers.js');
@@ -18,10 +19,11 @@ const quotaError = () => Object.assign(new Error('too large'), { name: 'QuotaExc
 
 // A stand-in for Chrome's LanguageModel. avail: what availability() says (by 'text' or 'image' when they differ); window,
 // used: the session's context window and what its initial prompts took; cost(input): tokens measured for an input;
-// chunks: the answer, streamed as deltas; legacy: Chrome 138's names (inputQuota, inputUsage, measureInputUsage).
+// chunks: the answer, streamed as deltas; legacy: Chrome 138's names (inputQuota, inputUsage, measureInputUsage); clone:
+// sessions have clone() (a create logged with cloned: true, and the signal it was given).
 const stub = ({ avail = 'available', imageAvail, window = 1000, used = 10, cost = () => 20, chunks = ['{"text":', '"ok"}'], legacy = false, params = { defaultTopK: 3, maxTopK: 128, defaultTemperature: 1, maxTemperature: 2 },
-  promptError, overflow = false, gate, availabilityError, createError, progress = [0, 0.5, 1] } = {}) => {
-  const log = { availability: [], create: [], prompts: [], measured: [], destroyed: 0, sessions: 0 };
+  promptError, overflow = false, gate, availabilityError, createError, progress = [0, 0.5, 1], clone = false } = {}) => {
+  const log = { availability: [], create: [], prompts: [], measured: [], destroyed: 0, sessions: 0, bases: () => log.create.filter((c) => !c.cloned) };
   const LM = {
     availability: async (o = {}) => {
       log.availability.push(structuredClone(o));
@@ -43,7 +45,8 @@ const stub = ({ avail = 'available', imageAvail, window = 1000, used = 10, cost 
       const s = new EventTarget();
       const measure = async (input, opts) => { log.measured.push({ input, opts }); return cost(input, opts); };
       Object.assign(s, legacy ? { inputQuota: window, inputUsage: used, measureInputUsage: measure } : { contextWindow: window, contextUsage: used, measureContextUsage: measure });
-      s.destroy = () => { log.destroyed++; };
+      s.destroy = () => { log.destroyed++; s.gone = true; };
+      if (clone) s.clone = async (o = {}) => { if (s.gone) throw new DOMException('destroyed', 'InvalidStateError'); return LM.create({ ...rest, cloned: true, ...(o.signal && { signal: o.signal }) }); };
       const answer = async (input, opts = {}) => {
         log.prompts.push({ input, opts: { ...opts, signal: !!opts.signal } });
         if (overflow) s.dispatchEvent(new Event(legacy ? 'quotaoverflow' : 'contextoverflow'));
@@ -66,6 +69,7 @@ const stub = ({ avail = 'available', imageAvail, window = 1000, used = 10, cost 
       return s;
     },
     ...(params !== null && { params: async () => params }),
+    ...(clone && { prototype: { clone() {} } }),
   };
   return { LM, log };
 };
@@ -503,4 +507,75 @@ test('a restarted worker reads current download state and never replays a sessio
   s.LM.availability = async () => 'available';
   assert.deepEqual(await restarted.send({ type: 'glaze:ai-config', op: 'test', provider: 'device' }, editor), { ok: true, state: 'ready' });
   assert.equal(s.log.create.length, 0);
+});
+
+test('requests with one system prompt prompt clones of one warm session, which read it once; other prompts and earlier turns get their own', async () => {
+  const { log } = install(stub({ clone: true, chunks: ['ok'] }));
+  const text = (system, more = []) => ({ messages: [{ role: 'system', content: system }, ...more, { role: 'user', content: 'go' }] });
+  await P.run('device', text('Finish it.'), {});
+  await P.run('device', text('Finish it.'), {});
+  assert.equal(log.bases().length, 1, 'one session read the instructions');
+  assert.deepEqual(log.bases()[0].initialPrompts, [{ role: 'system', content: 'Finish it.' }]);
+  assert.equal(log.create.filter((c) => c.cloned).length, 2, 'each request on a clone');
+  assert.equal(log.prompts.length, 2);
+  assert.equal(log.destroyed, 2, 'the clones, not the warm session');
+  await P.run('device', text('Review it.'), {});
+  assert.equal(log.bases().length, 2, 'another system prompt, another warm session');
+  await P.run('device', text('Finish it.', [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }]), {});
+  assert.equal(log.bases().length, 3, 'earlier turns: a session of its own');
+  assert.equal(log.bases()[2].initialPrompts.length, 3);
+  assert.equal(log.destroyed, 4, 'and it is destroyed after its request');
+  D.release();
+  await settle();
+  assert.equal(log.destroyed, log.sessions, 'release destroys the warm sessions');
+  await P.run('device', text('Finish it.'), {});
+  assert.equal(log.bases().length, 4, 'made again after release');
+});
+
+test('a warm session goes after WARM.ms unused, after its call fails or times out, but not when the caller cancels', async () => {
+  const ms = D.WARM.ms;
+  try {
+    D.WARM.ms = 5;
+    const { log } = install(stub({ clone: true, chunks: ['ok'] }));
+    await P.run('device', req({ schema: undefined }), {});
+    assert.equal(log.destroyed, 1);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(log.destroyed, 2, 'idle: destroyed');
+  } finally { D.WARM.ms = ms; }
+  let release;
+  const s = install(stub({ clone: true, gate: (signal) => new Promise((resolve, reject) => { release = resolve; signal?.addEventListener('abort', () => reject(signal.reason), { once: true }); }) }));
+  const c = new AbortController();
+  const running = P.run('device', req(), {}, { signal: c.signal });
+  for (let i = 0; i < 20 && !release; i++) await new Promise(setImmediate);
+  c.abort(new DOMException('Cancelled', 'AbortError'));
+  assert.equal((await running.catch((x) => x)).code, 'cancelled');
+  await settle();
+  assert.equal(s.log.destroyed, 1, 'the clone only: the warm session outlives a cancel');
+  const late = P.run('device', req(), {});
+  for (let i = 0; i < 20; i++) await new Promise(setImmediate);
+  release();
+  assert.deepEqual((await late).json, { text: 'ok' });
+  assert.equal(s.log.bases().length, 1, 'and the next request uses it');
+  D._reset();
+  const f = install(stub({ clone: true, promptError: new Error('broken') }));
+  await assert.rejects(P.run('device', req(), {}));
+  await settle();
+  assert.equal(f.log.destroyed, f.log.sessions, 'a failed call takes its warm session with it');
+});
+
+test('a session without clone() is each request\'s own, as before', async () => {
+  const { log } = install(stub());
+  await P.run('device', req(), {});
+  await P.run('device', req(), {});
+  assert.equal(log.sessions, 2);
+  assert.equal(log.destroyed, 2);
+});
+
+test('plain text streams from the device with no response constraint', async () => {
+  install(stub({ clone: true, chunks: [' runs', ' to the sea.'] }));
+  const seen = [];
+  const out = await P.run('device', { messages: [{ role: 'system', content: 'Finish it.' }, { role: 'user', content: 'The river' }] }, {}, { onDelta: (t) => seen.push(t) });
+  assert.deepEqual(seen, [' runs', ' to the sea.']);
+  assert.equal(out.text, ' runs to the sea.');
+  assert.equal(out.json, undefined);
 });

@@ -111,12 +111,54 @@ test('a task that streams lets the deltas through; one that doesn\'t, doesn\'t',
 });
 
 test('the settings model is off by default, local, and lets a feature ask only when AI is on, a provider chosen and it is allowed', () => {
-  assert.deepEqual(A.clean(undefined), { on: false, use: null, features: { syllabus: false } });
-  assert.deepEqual(A.clean({ on: 'yes', use: 'Bad Name', features: { syllabus: 1, other: true } }), { on: false, use: null, features: { syllabus: false } });
+  assert.deepEqual(A.clean(undefined), { on: false, use: null, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(A.clean({ on: 'yes', use: 'Bad Name', features: { syllabus: 1, other: true } }), { on: false, use: null, features: { syllabus: false, completion: false, writing: false } });
   const s = A.clean({ on: true, use: 'my-ollama', features: { syllabus: true } });
   assert.equal(s.use, 'my-ollama');
   assert.equal(A.allowed(s, 'syllabus'), true);
   assert.equal(A.allowed({ ...s, on: false }, 'syllabus'), false);
   assert.equal(A.allowed({ ...s, use: null }, 'syllabus'), false);
   assert.equal(A.allowed(s, 'grades'), false);
+});
+
+// example.finish: plain text, streamed, the rest of the sentence at the caret.
+const finish = {
+  id: 'example.finish', version: 1, output: 'text', stream: true, rate: { perMinute: 60, supersede: true }, limits: { maxTokens: 40 },
+  input: (raw) => (typeof raw?.before === 'string' && raw.before.length <= 2000 ? { before: raw.before } : null),
+  build: (input, { text }) => text.request({ system: 'Finish the sentence. Answer with the words only.', context: [{ label: 'prompt', text: 'Rivers' }], data: [{ label: 'before', text: input.before }] }),
+  check: (text, input, { truncated }) => { const cut = text.split(/(?<=[.!?])\s/)[0]; return cut.trim() && !cut.startsWith(input.before) ? (truncated ? cut.trimEnd() : cut) : null; },
+};
+
+test('a text task: no schema, its words streamed as they come, check given the text; a provider without JSON may run it', async () => {
+  const task = T.define(finish);
+  assert.equal(task.output, 'text');
+  assert.deepEqual(task.rate, { perMinute: 60, supersede: true });
+  assert.ok(Object.isFrozen(task.rate));
+  const words = [], seen = [];
+  const out = await T.run(task, { before: 'The river' }, { provider: 'mock', cfg: { replies: [{ deltas: [' runs to', ' the sea.', ' Then more.'] }], seen, caps: { json: false } },
+    emit: (e) => e.type === 'text_delta' && words.push([e.delta, e.offset]) });
+  assert.deepEqual(words, [[' runs to', 0], [' the sea.', 8], [' Then more.', 17]], 'every delta, live, with its offset');
+  assert.equal(out.output, ' runs to the sea.', 'the task\'s check cut it at the sentence end');
+  assert.equal(out.meta.finish, 'stop');
+  assert.equal('truncated' in out.meta, false);
+  assert.equal(seen[0].schema, undefined, 'no schema asked for');
+  assert.equal(seen[0].maxTokens, 40);
+  await assert.rejects(T.run(task, { before: 'The river' }, { provider: 'mock', cfg: { replies: [{ text: 'The river' }] } }), { code: 'check' }, 'check still refuses');
+});
+
+test('a text task cut off at maxTokens gives the words so far, marked truncated; a JSON task cut off is still a refusal', async () => {
+  const out = await T.run(T.define(finish), { before: 'The river' }, { provider: 'mock', cfg: { replies: [{ text: ' runs to the ', finish: 'length' }] } });
+  assert.equal(out.output, ' runs to the');
+  assert.equal(out.meta.truncated, true);
+  assert.equal(out.meta.finish, 'length');
+  await assert.rejects(T.run(T.define(dates), { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [{ ...answer([]), finish: 'length' }] } }), { code: 'refusal' });
+});
+
+test('a definition\'s rate and text output are checked', () => {
+  for (const rate of [{}, { perMinute: 0 }, { perMinute: 121 }, { perMinute: 1.5 }, { supersede: 'yes' }, { other: true }, 'fast']) {
+    assert.throws(() => T.define({ ...finish, rate }), /: rate$/, JSON.stringify(rate));
+  }
+  assert.throws(() => T.define({ ...finish, output: 'words' }), /: output$/);
+  assert.equal(T.define({ ...finish, rate: { supersede: true } }).rate.perMinute, undefined);
+  assert.equal(T.define(dates).rate, undefined, 'a task without one keeps the broker\'s limits');
 });

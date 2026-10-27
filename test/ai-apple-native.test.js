@@ -35,6 +35,8 @@ if #available(macOS 27.0, *) {
     out["earlyCancel"] = Native.cancel(["id": "cancel-before-registration"])
     out["earlyRun"] = await Native.run(["id": "cancel-before-registration"])
     out["emptyCancel"] = Native.cancel(["id": ""])
+    out["release"] = Native.release()
+    out["warm"] = Native.warmCount()
     out["nullSchema"] = Native.checkSchema(["type": "object", "properties": ["answer": ["anyOf": [["type": "string"], ["type": "null"]]]], "required": ["answer"]])
     print(String(data: try JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]), encoding: .utf8)!)
 }
@@ -62,6 +64,10 @@ test('native cancellation arriving before registration prevents the run', { skip
 });
 test('native schema conversion accepts null branches in an object', { skip: !supported }, () => {
   assert.equal(result.nullSchema, true);
+});
+test('ai.release drops the warm sessions; none are made until a run', { skip: !supported }, () => {
+  assert.deepEqual(result.release, { ok: true });
+  assert.equal(result.warm, 0);
 });
 test('native tasks pass complete sendability checking', { skip: !supported }, () => {
   assert.doesNotMatch(diagnostics, /warning:|error:/);

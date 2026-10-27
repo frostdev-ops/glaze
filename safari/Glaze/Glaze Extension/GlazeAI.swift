@@ -9,10 +9,14 @@
 //    { type: 'ai.run', id, model, messages, schema?, temperature?, maxTokens? }
 //      → { ok: true, text, model, finish: 'stop' | 'length', usage? } | { ok: false, error, reason? }
 //    { type: 'ai.cancel', id } → { ok: true, cancelled }
+//    { type: 'ai.release' } → { ok: true }: the warm sessions dropped (a connection changed)
 //  messages are lib/ai/request.js's (system → instructions; earlier turns → the transcript; the last user message → the
 //  prompt; images as base64). schema is lib/ai/schema.js's subset, turned into a DynamicGenerationSchema so the model is
 //  held to it; the answer goes back as JSON text and the worker checks it again. error is one of lib/ai/failure.js's
 //  categories, or 'refusal'. Needs macOS or iOS 27; earlier systems answer unavailable ('os').
+//  A request with no earlier turns starts on a warm session: one that has read only the same instructions, made and
+//  prewarmed when the last such request came. A session answers once (its transcript would carry that answer into the
+//  next request), so taking one makes the next. Kept by their instructions, at most Native.maxWarm, each for warmFor.
 //
 
 import Foundation
@@ -32,6 +36,7 @@ enum GlazeAI {
             case "ai.status": return await Native.status(m)
             case "ai.run": return await Native.run(m)
             case "ai.cancel": return Native.cancel(m)
+            case "ai.release": return Native.release()
             default: return ["ok": false, "error": "request-rejected", "reason": "type"]
             }
         }
@@ -52,6 +57,32 @@ private enum Native {
     // Safari may deliver the separate cancel message before the run registers. Keep a bounded, short-lived tombstone.
     nonisolated(unsafe) private static var cancelled: [String: Date] = [:]
     private static let lock = NSLock()
+    // Warm sessions by their instructions, each with when it was made.
+    static let maxWarm = 4, warmFor: TimeInterval = 300
+    nonisolated(unsafe) private static var warm: [String: (session: LanguageModelSession, at: Date)] = [:]
+
+    static func release() -> [String: Any] {
+        lock.withLock { warm.removeAll() }
+        return ["ok": true]
+    }
+
+    /// The warm session for these instructions, or a new one; either way the next is made and prewarmed.
+    private static func warmSession(_ instructions: String?, _ entries: [Transcript.Entry], model: SystemLanguageModel) -> LanguageModelSession {
+        let key = instructions ?? ""
+        let kept: LanguageModelSession? = lock.withLock {
+            warm = warm.filter { $0.value.at.addingTimeInterval(warmFor) > Date() }
+            return warm.removeValue(forKey: key)?.session
+        }
+        let next = LanguageModelSession(model: model, transcript: Transcript(entries: entries))
+        next.prewarm()
+        lock.withLock {
+            warm[key] = (next, Date())
+            while warm.count > maxWarm, let oldest = warm.min(by: { $0.value.at < $1.value.at })?.key { warm[oldest] = nil }
+        }
+        return kept ?? LanguageModelSession(model: model, transcript: Transcript(entries: entries))
+    }
+
+    static func warmCount() -> Int { lock.withLock { warm.count } }
 
     static func cancel(_ m: [String: Any]) -> [String: Any] {
         guard let id = m["id"] as? String, !id.isEmpty, id.count <= 128 else { return ["ok": false, "error": "request-rejected", "reason": "id"] }
@@ -124,7 +155,7 @@ private enum Native {
             case "on-device":
                 let model = SystemLanguageModel.default
                 guard model.isAvailable else { return ["ok": false, "error": "provider-unavailable", "reason": "unavailable"] }
-                session = LanguageModelSession(model: model, transcript: Transcript(entries: entries))
+                session = history.isEmpty ? warmSession(instructions, entries, model: model) : LanguageModelSession(model: model, transcript: Transcript(entries: entries))
                 name = model.variant.displayName
             default:
                 return ["ok": false, "error": "request-rejected", "reason": "model"]
