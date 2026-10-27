@@ -160,7 +160,7 @@ const HELPERS = `
           return { rest, folded, back: { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight } }; });
         check(!fold.rest.stuck && fold.folded.stuck && fold.folded.h <= 44 && fold.folded.w <= fold.folded.col / 2 && fold.folded.endGap <= 24 && fold.folded.radius > 14 && fold.folded.readable,
           `${tag}: scrolled under, the progress band folds into a small readable pill at the column's end`, fold);
-        check(Math.abs(fold.folded.q - fold.rest.q) <= 0.5, `${tag}: folding moves nothing under the progress band`, [fold.rest.q, fold.folded.q]);
+        check(Math.abs(fold.folded.q - fold.rest.q) <= 0.05, `${tag}: folding moves nothing under the progress band`, [fold.rest.q, fold.folded.q]);
         check(!fold.back.stuck && Math.abs(fold.back.h - fold.rest.h) <= 0.5, `${tag}: back in its place the progress band is whole`, fold);
         await ev(async () => { document.querySelector('.assessment-attempt-panel').scrollTop = 600; await new Promise((res) => setTimeout(res, 120)); });
         if (w >= 1024 || bg === 'scene') await shot(`${slug(tag)}-scrolled`);
