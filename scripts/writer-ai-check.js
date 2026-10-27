@@ -60,8 +60,9 @@ const STUB = `(() => {
       },
     };
   };
-  window.chrome = { runtime: { sendMessage: async () => ({ ok: true }), connect },
-    storage: { local: { get: async () => ({ ai: JSON.parse(JSON.stringify(ai.settings)) }) }, onChanged: { addListener: (f) => ai.changed.push(f) } } };
+  const data = {}, local = { get: async () => ({ ...data, ai: JSON.parse(JSON.stringify(ai.settings)) }), set: async (o) => Object.assign(data, o), remove: async (k) => { delete data[k]; } };
+  window.chrome = { runtime: { sendMessage: async (m) => m.type === 'glaze:writerPapers' ? { ok: true, value: await GZ_WRITER_PAPERS.open(local)[m.op](...m.args) } : { ok: true }, connect },
+    storage: { local, onChanged: { addListener: (f) => ai.changed.push(f) } } };
 })();`;
 const CONTEXT = {
   kind: 'reply', course: { id: '_101_1', name: 'ENGL 2110' },
@@ -326,6 +327,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
         await q.keyboard.press('Tab');
         assert.equal(await ghost(q), null);
         assert.equal(await q.evaluate(() => document.querySelectorAll('.ProseMirror li').length), 2, 'Tab takes text without nesting the list');
+        assert.equal(await q.evaluate(() => document.querySelectorAll('.ProseMirror li li').length), 0);
       } finally { await q.close(); }
     });
 
