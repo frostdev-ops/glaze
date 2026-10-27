@@ -18,9 +18,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     for (const m of s.matchAll(/[.!?…。！？]+["'”’)\]]*\s*/gu)) at = m.index + m[0].length;
     return s.slice(at);
   };
+  // An open quotation in the caret's paragraph: straight double quotes by parity, the others by more openers than closers.
+  // A ’ before a letter or digit (don’t, ’90s) is an apostrophe, and so is one closing nothing (students’).
   const inQuote = (s) => {
-    const q = s.replace(/(?<=[\p{L}\p{N}])['’](?=[\p{L}\p{N}])/gu, '');
-    return [/["“”]/g, /['‘’]/g, /[«»]/g].some((re) => (q.match(re) || []).length % 2 === 1);
+    const p = s.slice(s.lastIndexOf('\n') + 1), n = (re) => (p.match(re) || []).length;
+    return n(/"/g) % 2 === 1 || n(/“/g) > n(/”/g) || n(/«/g) > n(/»/g) || n(/‘/g) > n(/’(?![\p{L}\p{N}])/gu);
   };
   const word = (before) => (/[^ ] $/.test(before) ? before.slice(0, -1) : before);
   const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && TAIL.test(word(before)) && !/^[^\S\n]*[^\s]/.test(after)
@@ -265,6 +267,20 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (now.doc !== st.doc || !now.selection.eq(selection) || v.composing || !v.hasFocus()) return;
     set(v, { pos: selection.head, text: end.output, fresh: true, id: ++shown });
     say(t('Suggestion: {text}', { text: end.output.trim() }));
+  };
+
+  // Why the gray text isn't showing at the caret now, from the frame's console: GZ_WRITER_AI.gate().
+  const gate = () => {
+    const v = view();
+    if (!v) return 'no editor';
+    if (!ok('completion')) return `not allowed: ${JSON.stringify(status.completion)}`;
+    if (v.composing) return 'composing';
+    if (!v.hasFocus()) return 'no focus';
+    const st = v.state, { selection } = st;
+    if (!selection.empty) return 'a selection';
+    const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
+    if (!fits(tx.text.slice(Math.max(0, off - 8000), off), tx.text.slice(off, off + 2000))) return 'not at this caret';
+    return KEY.getState(st) ? 'showing' : flight ? 'asking' : timer ? 'waiting for the pause' : 'ready: type a letter or a space';
   };
 
   // ---- Check with AI -----------------------------------------------------------------------------------------------
@@ -532,6 +548,6 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       if (loaded >= 1) refresh(); else paint();
     });
   } catch { /* no runtime */ }
-  return Object.assign(api, { feedbackView, feedback, review, decide, requirements, cite, allowed: ok, refresh, dismissCompletion });
+  return Object.assign(api, { feedbackView, feedback, review, decide, requirements, cite, allowed: ok, refresh, dismissCompletion, gate });
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_AI;

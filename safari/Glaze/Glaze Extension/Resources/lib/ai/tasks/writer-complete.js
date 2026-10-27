@@ -32,9 +32,11 @@ var GZ_AI_TASK_WRITER_COMPLETE = globalThis.GZ_AI_TASK_WRITER_COMPLETE || (() =>
   // Where the gray text may show: the caret right after a word, or one space after it (where students pause), in a
   // sentence of at least LIMIT.sentence words, with only white space after it in its line. The frame asks the same before
   // it runs the task.
+  // An open quotation in the caret's paragraph: straight double quotes by parity, the others by more openers than closers.
+  // A ’ before a letter or digit (don’t, ’90s) is an apostrophe, and so is one closing nothing (students’).
   const inQuote = (s) => {
-    const q = s.replace(/(?<=[\p{L}\p{N}])['’](?=[\p{L}\p{N}])/gu, '');
-    return [/["“”]/g, /['‘’]/g, /[«»]/g].some((re) => (q.match(re) || []).length % 2 === 1);
+    const p = s.slice(s.lastIndexOf('\n') + 1), n = (re) => (p.match(re) || []).length;
+    return n(/"/g) % 2 === 1 || n(/“/g) > n(/”/g) || n(/«/g) > n(/»/g) || n(/‘/g) > n(/’(?![\p{L}\p{N}])/gu);
   };
   const word = (before) => (/[^ ] $/.test(before) ? before.slice(0, -1) : before);
   const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && TAIL.test(word(before)) && !/^[^\S\n]*[^\s]/.test(after) && words(sentence(word(before))).length >= LIMIT.sentence;
