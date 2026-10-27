@@ -579,3 +579,32 @@ test('plain text streams from the device with no response constraint', async () 
   assert.equal(out.text, ' runs to the sea.');
   assert.equal(out.json, undefined);
 });
+
+
+test('a warm create ignoring abort expires at its own deadline and destroys its late session once', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const s = install(stub({ clone: true }));
+  const create = s.LM.create;
+  let finish, result;
+  s.LM.create = (o) => o.cloned ? create(o) : new Promise((resolve) => { finish = async () => resolve(await create({ ...o, signal: undefined })); });
+  const job = P.run('device', req(), {}).then((r) => { result = r; }, (e) => { result = e; });
+  try {
+    await settle();
+    t.mock.timers.tick(20001); await settle();
+    assert.equal(result?.code, 'timeout', 'the shared create has its own 20-second deadline');
+  } finally {
+    await finish(); await job; await settle(); D.release(); await settle();
+  }
+  assert.equal(s.log.destroyed, 1, 'late base destroyed exactly once');
+  s.LM.create = create;
+  assert.deepEqual((await P.run('device', req(), {})).json, { text: 'ok' }, 'retry creates a fresh base');
+});
+
+test('release during a warm create destroys its late base exactly once', async () => {
+  const s = install(stub({ clone: true })), create = s.LM.create;
+  let finish;
+  s.LM.create = (o) => o.cloned ? create(o) : new Promise((resolve) => { finish = async () => resolve(await create({ ...o, signal: undefined })); });
+  const job = P.run('device', req(), {}).catch((e) => e);
+  await settle(); D.release(); await finish(); await job; await settle();
+  assert.equal(s.log.destroyed, s.log.sessions, 'a released base must have one owner for destruction');
+});
