@@ -219,6 +219,14 @@ test('smart quotes and dashes, never in code, and Backspace takes one back', () 
   assert.equal(html(press(type(blank(), '- '), 'Backspace').st), '<p>-&nbsp;</p>');
 });
 
+test('Shift-Enter in paper code inserts a newline without leaving the code block', () => {
+  const st = caret(make('<pre>a😀c</pre>', 'paper'), 'a');
+  const split = press(st, 'Shift-Enter').st;
+  assert.equal(html(split), '<pre class="ql-syntax" spellcheck="false">a\n😀c\n</pre>');
+  assert.equal(split.selection.$from.parent.type.name, 'code_block');
+  assert.equal(html(run(split, 'undo').st), '<pre class="ql-syntax" spellcheck="false">a😀c\n</pre>');
+});
+
 test('Enter, Backspace and Tab behave as in Quill and Word around lists and indents', () => {
   let st = caret(make('<ul><li>a</li><li class="ql-indent-1"><br></li></ul>'), 'a');
   st = st.apply(st.tr.setSelection(TextSelection.create(st.doc, st.doc.content.size - 2)));
