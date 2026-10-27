@@ -120,3 +120,16 @@ test('review: an empty note selection on retry cannot submit the previous note',
   p.setEnabled(true); await p.go({ run: 2, note: '' });
   assert.equal(p.clicks.length, 0, 'the stale note must be reviewed or removed first');
 });
+
+test('review: changing the paper identity during upload cannot submit the earlier paper', async () => {
+  const p = page({ listed: false }); await p.go();
+  p.box.context.paper = { ...p.box.context.paper, user: '_901_1' };
+  p.addRow('Rivera_Essay2.docx'); await p.tick();
+  assert.equal(p.clicks.length, 0, 'the transaction belongs to the original student and paper');
+});
+
+test('review: a frame for a different paper cannot upload into this attempt', async () => {
+  const p = page(); await p.go({ key: 'school.blackboard.com|_900_1|_101_1|_99_1' });
+  assert.equal(p.uploads.length, 0);
+  assert.equal(p.clicks.length, 0);
+});

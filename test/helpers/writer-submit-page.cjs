@@ -43,6 +43,6 @@ module.exports = ({ listed = true, enabled = true, worker } = {}) => {
   hear({ type: 'submit:arm' });
   const flush = async () => { for (let i = 0; i < 15; i++) await new Promise(setImmediate); };
   const tick = async (ms = 1000) => { clock += ms; for (const [n, t] of [...timers]) { timers.delete(n); t.fn(); } await flush(); };
-  const go = async (extra = {}) => { hear({ type: 'submit:go', run: 1, name: 'Rivera_Essay2.docx', bytes: new Uint8Array([1, 2, 3]).buffer, note: '', text: null, until: clock + 80000, ...extra }); await flush(); };
+  const go = async (extra = {}) => { hear({ type: 'submit:go', run: 1, key: 'school.blackboard.com|_900_1|_101_1|_7_1', name: 'Rivera_Essay2.docx', bytes: new Uint8Array([1, 2, 3]).buffer, note: '', text: null, until: clock + 80000, ...extra }); await flush(); };
   return { doc, ctx, box, sent, uploads, clicks, fire, hear, go, flush, tick, addRow, button, setEnabled, setText, input, timers, own: (v) => { owned = v; }, now: () => clock };
 };
