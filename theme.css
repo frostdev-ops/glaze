@@ -1092,9 +1092,9 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 #site-wrap .assessment-attempt-panel .assessment-question { margin-block: 0 1rem; padding: 1rem 1.25rem !important; }
 #site-wrap .assessment-attempt-panel .question-header { margin-block-end: 0.75rem; }
 #site-wrap .assessment-attempt-panel .additional-content-label { margin-block-end: 0.75rem; }
-/* Inside a card nothing paints its own square: the prompt's and each answer's Quill layers are see-through. */
-#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label),
-#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label) :is(.bb-editor-root, .editor-content-container, .bb-editor-container, .ql-container, .ql-editor) { background: transparent !important; border: 0 !important; }
+/* Inside a card nothing paints its own square: the prompt's, the instructions' and each answer's Quill layers are see-through. */
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor),
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor) :is(.bb-editor-root, .editor-content-container, .bb-editor-container, .ql-container, .ql-editor) { background: transparent !important; border: 0 !important; }
 /* An answer: the whole row is the control, its letter and its text, one rounded fill with one edge. The edge marks where
    the pointer is, the chosen answer and the keyboard's place; the box's own edge is ink, not a faint line. */
 #site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root {
