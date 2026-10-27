@@ -87,6 +87,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   // Canvas and Ultra alike: the notes app (features/notes.js: the library, a new note, and this course's notes), Glaze's
   // own commands, and every extra with its switch (features/widgets.js), whether or not the widgets are on.
   const apps = (cid) => [
+    ...(ultra ? [{ label: t('Papers'), hint: 'Glaze', group: 'Glaze', run: (e) => { if (e?.isTrusted) { try { Promise.resolve(chrome.runtime.sendMessage('papers')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } } }] : []),
     ...(ctx.settings().enhance.pet ? [{ label: t('Pet habitat'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => need('features/pet.js', () => globalThis.GZ_PET_UI)).then(() => GZ_PET_UI.open(), () => {}) }] : []),
     ...(ctx.settings().enhance.notes ? [
       { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },

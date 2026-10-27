@@ -3,6 +3,7 @@
 (globalThis.GZ_LANGS ||= {}).de = {
   "Quotes of five lines or more go in a block quote": "Zitate ab fünf Zeilen gehören in ein Blockzitat",
   "Another editor’s draft": "Entwurf aus einem anderen Editor",
+  "Document outline": "Gliederung",
   "Papers": "Arbeiten",
   "Mark all as read": "Alle als gelesen markieren",
   "Marking…": "Wird markiert…",

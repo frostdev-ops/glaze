@@ -73,7 +73,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const pageL = h('span'), wordsL = h('span'), fontL = h('span'), versionsB = btn({ 'aria-haspopup': 'menu' }, t('Versions'));
     const status = h('div', { class: 'gp-status' }, pageL, wordsL, h('span', { class: 'grow' }), fontL, versionsB);
     const tabs = {}, panes = {}, badges = {};
-    for (const [id, label] of [['checks', 'Checks'], ['sources', 'Sources'], ['feedback', 'Feedback'], ['outline', 'Outline']]) {
+    for (const [id, label] of [['checks', 'Checks'], ['sources', 'Sources'], ['feedback', 'Feedback'], ['outline', 'Document outline']]) {
       badges[id] = h('span', { class: 'gp-badge' });
       tabs[id] = btn({ class: 'gp-tab', role: 'tab', 'aria-selected': String(id === 'checks'), tabindex: id === 'checks' ? '0' : '-1', 'aria-controls': `gp-${id}`, id: `gp-tab-${id}` }, t(label), badges[id]);
       panes[id] = h('div', { class: 'gp-pane', role: 'tabpanel', id: `gp-${id}`, 'aria-labelledby': `gp-tab-${id}`, hidden: id !== 'checks' });
@@ -593,7 +593,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         }
         setDoc(doc.toJSON());
         toast(r.warnings.length ? r.warnings.map((w) => t(w)).join(' ') : t('Imported. The last version is in Versions.'));
-      } catch (e) { console.error(e); toast(e instanceof RangeError && e.message ? t(e.message) : t('That file could not be read as a Word document.')); }
+      } catch (e) {
+        console.error(e);
+        const message = e instanceof RangeError && ['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.'].includes(e.message) ? e.message : 'That file could not be read as a Word document.';
+        toast(t(message));
+      }
       finally { if (replacing) { root.inert = false; view.setProps({ editable }); view.focus(); } }
     };
     file.addEventListener('change', () => { importFile(file.files[0]); file.value = ''; });

@@ -78,9 +78,10 @@ const GZ_I18N = (() => {
   // 0-100 → "82.45%", "82,45 %".
   const pct = (x, tag) => pcts(locale(tag)).format(x / 100);
 
+  const LABELS = { 'Document outline': 'Outline' }; // keep appearance and document meanings separate
   const t = (key, vars = {}, tag) => {
     const [loc, cat] = pick(tag);
-    let m = cat[key] ?? EN[key] ?? key;
+    let m = cat[key] ?? EN[key] ?? LABELS[key] ?? key;
     if (typeof m === 'object') m = m[plurals(key in cat ? loc : 'en').select(vars.n)] ?? m.other;
     return m.replace(/\{(\w+)(\|lower)?\}/g, (s, k, low) => {
       if (!(k in vars)) return s;

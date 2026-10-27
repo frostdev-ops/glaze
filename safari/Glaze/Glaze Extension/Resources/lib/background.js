@@ -1075,6 +1075,7 @@ const openEditor = () => {
   try { Promise.resolve(chrome.runtime.openOptionsPage()).catch(tab); } catch { tab(); }
 };
 chrome.runtime.onMessage.addListener((m, s) => { if (m === 'options') Promise.resolve(fromGlaze(s) || lmsPage(s)).then((ok) => { if (ok) openEditor(); }, () => {}); });
+chrome.runtime.onMessage.addListener((m, s) => { if (m === 'papers') Promise.resolve(lmsPage(s)).then((ok) => { if (ok) return chrome.tabs.create({ url: chrome.runtime.getURL('papers.html') }); }).catch(() => {}); });
 
 // The manifest's content script entries, each file by its path in the package: Firefox's getManifest gives each one as its
 // full address. entryWith: the entry that runs `file`.

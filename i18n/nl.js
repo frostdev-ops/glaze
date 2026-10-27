@@ -3,6 +3,7 @@
 (globalThis.GZ_LANGS ||= {}).nl = {
   "Quotes of five lines or more go in a block quote": "Citaten van vijf regels of meer horen in een blokcitaat",
   "Another editor’s draft": "Concept uit een andere editor",
+  "Document outline": "Structuur",
   "Papers": "Werkstukken",
   "Mark all as read": "Alles als gelezen markeren",
   "Marking…": "Bezig met markeren…",
