@@ -168,6 +168,19 @@
 .gp-paper .gp-row, .gp-row { display: flex; gap: 8px; }
 .gp-paper a.gp-sbtn { text-decoration: none; }
 @media (max-width: 1200px) { .gp-tabs { padding: 10px 8px 0; } .gp-tab { padding: 8px 6px 10px; } }
+/* Keep the page wide enough to write on; checks retain their own scroller below it. */
+@media screen and (max-width: 800px) {
+  .gp-work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(140px, 35%); }
+  .gp-side { border-left: 0; border-top: 1px solid var(--gz-line); }
+  .gp-tabs { overflow-x: auto; }
+  .gp-status { gap: 12px; padding-inline: 12px; overflow-x: auto; overflow-y: hidden; }
+  .gp-status > * { flex-shrink: 0; }
+}
+@media screen and (max-width: 600px) {
+  .gp-top { padding-inline: 16px; gap: 10px; }
+  .gp-top .gp-due { display: none; }
+}
+
 
 .gp-print { display: none; }
 @media print {
