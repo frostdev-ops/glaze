@@ -11,7 +11,7 @@ const refusedImport = async (error, lang) => {
   const source = read('writer-paper.js'), start = source.indexOf('    const importFile = '), end = source.indexOf("    file.addEventListener('change'", start);
   const toasts = [];
   const importFile = vm.runInNewContext(`${source.slice(start, end)} importFile`, {
-    RangeError, Uint8Array, console: { error() {} }, view: { props: {} }, need: async () => {}, DOCX: [],
+    RangeError, Uint8Array, console: { error() {} }, view: { props: {} }, need: async () => {}, DOCX: [], format: 'mla9',
     GZ_WRITER_DOCX: { importDocx: async () => { throw error; } },
     t: (key) => I.t(key, {}, lang), toast: (text) => toasts.push(text),
   });
