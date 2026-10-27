@@ -203,13 +203,18 @@ test('the other states real Ultra columns are in: submitted without evaluations 
   const s = await show(d);
   assert.ok(s.node, 'submitted with displayAfter false shows the rubric, as Ultra does');
   assert.deepEqual(s.selected, []);
+  // An item never opened: Ultra's row has only these keys, no userId (live, 2026-10-27: the owner's rubric links opened
+  // Ultra's panel on every such item), though the query asked for the student's rows alone.
   const u = real();
-  for (const k of ['lastAttemptId', 'lastAttempt']) delete u.grade[k];
+  for (const k of Object.keys(u.grade)) if (!['columnId', 'courseId', 'averageScore', 'submissionStatus', 'column', 'isCorrupt', 'columnUrl'].includes(k)) delete u.grade[k];
   u.grade.submissionStatus = { status: 'UNOPENED' };
   const p = await show(u);
   assert.ok(p.node);
   assert.deepEqual(p.selected, []);
   assert.ok(!p.asked.some((x) => x.includes('/gradebook/attempts/')));
+  // Another user's row is still no row of the student's.
+  const o = real(); o.grade.userId = '_43_1';
+  assert.equal((await show(o)).node, null);
 });
 
 test('a graded attempt whose association hides graded rubrics shows the definition without selections', async () => {
