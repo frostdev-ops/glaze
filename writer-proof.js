@@ -339,8 +339,11 @@
     fixTimer = setTimeout(closeFix, FIX_MS);
   };
   fixPop.addEventListener('mousedown', (e) => e.preventDefault());
+  fixPop.addEventListener('focusin', () => clearTimeout(fixTimer));
+  fixPop.addEventListener('focusout', (e) => { if (!fixPop.contains(e.relatedTarget)) fixTimer = setTimeout(closeFix, FIX_MS); });
+  fixPop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); closeFix(); view?.focus(); } });
   fixPop.addEventListener('mouseenter', () => clearTimeout(fixTimer));
-  fixPop.addEventListener('mouseleave', () => { fixTimer = setTimeout(closeFix, 600); });
+  fixPop.addEventListener('mouseleave', () => { if (!fixPop.contains(document.activeElement)) fixTimer = setTimeout(closeFix, 600); });
 
   // ---- the count in the bar -------------------------------------------------------------------------------------------
   const count = (list) => {
