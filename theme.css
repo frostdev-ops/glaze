@@ -1576,7 +1576,7 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) [class*="headerRoot"]:has(bb-close, .bb-close) #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
   html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap > .bb-close-offset > .bb-close { inset-inline-start: 6px !important; }
   /* The button sits over the header's start there: its title begins past it. */
-  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap > .panel-wrap > .panel-header.simple-header { padding-inline-start: 56px !important; }
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap .panel-wrap > .panel-header.simple-header:not(.bb-offcanvas-panel .bb-offcanvas-panel *) { padding-inline-start: 56px !important; }
   /* A legacy test attempt places its content a black bar's height from the panel's top; with the strip first in the panel
      that put the title band under the bar. In flow, it follows the bar wherever the strip leaves it. */
   .assessment-attempt-panel > #gz-ctabs ~ section.panel-content { position: relative !important; top: 0 !important; }
