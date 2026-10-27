@@ -77,3 +77,17 @@ test('an empty editor with a recovery copy stays native so draft recovery is ava
   assert.equal(c.doc.querySelectorAll('iframe.gz-writer').length, 0, 'Writer must not hide the recovery offer');
   assert.equal(c.doc.querySelectorAll('[data-gz-writer]').length, 0);
 });
+
+test('a test-shaped attempt reports test even if its gradebook cache says assignment', async () => {
+  const c = content({ fixture: 'test' }); await c.start();
+  assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['test']);
+});
+
+test('an attempt report is revoked when its assignment classification becomes unknown', async () => {
+  const c = content({ fixture: 'attempt' });
+  c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
+  c.ctx.GZ_CTX.bookFor = () => ({ results: [{ column: { contentId: '_7_1', assessmentSubtype: 'Assignment' } }] });
+  await c.start();
+  c.ctx.GZ_CTX.bookFor = () => ({ results: [] }); c.ctx.GZ_WRITER.pass();
+  assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment', 'unknown']);
+});

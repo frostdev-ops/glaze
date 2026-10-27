@@ -86,3 +86,9 @@ test('an attempt\'s kind comes from its gradebook column, and is unknown without
   assert.equal(U.attemptKind(undefined, '_7_1'), '');
   assert.equal(U.attemptKind([{ column: { contentId: '_7_1' } }], '_7_1'), '', 'a column without a subtype names nothing');
 });
+
+test('conflicting gradebook rows can never turn a test into an assignment', () => {
+  const col = (assessmentSubtype) => ({ column: { contentId: '_7_1', assessmentSubtype } });
+  assert.equal(U.attemptKind([col('Assignment'), col('Test')], '_7_1'), 'test');
+  assert.equal(U.attemptKind([col('Assignment'), col(undefined)], '_7_1'), '', 'incomplete conflicting evidence fails closed');
+});
