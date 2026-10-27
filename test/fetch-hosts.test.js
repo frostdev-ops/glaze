@@ -39,6 +39,7 @@ const covered = (origin) => manifest.host_permissions.some((p) => {
 // file → [{ at: text on the call's line, kind, … }]. `n`: how many calls on lines with that text (1 when absent).
 const SITES = {
   'lib/background.js': [
+    { at: 'return GZ_WRITER_LOOKUP.listener', kind: 'via', to: 'lib/writer-lookup.js' },
     { at: "{ fetch: (u, i) => fetch(u, i), allow", kind: 'via', to: 'lib/media.js' },
     { at: 'GZ_MEDIA.fromGallery(h, m.type, { fetch:', kind: 'via', to: 'lib/media.js' },
     { at: 'GZ_MODBUNDLE.offer(g, { fetch:', kind: 'via', to: 'lib/modbundle.js' },
