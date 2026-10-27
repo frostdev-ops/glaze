@@ -32,14 +32,17 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
   const OFFERS = [
     /\b(?:try|consider)\s+(?:writing|saying|adding|phrasing|wording|opening with|starting with|something like)\b/i,
     /\b(?:you|u)\s+(?:could|might|can|should)\s+(?:write|say|add|phrase|word|open with|start with|begin with|end with|conclude with|replace)\b/i,
+    /\b(?:try|use|write|say)\s*["\u201c\u2018']/i, /\b(?:rewrite|revise|rephrase|reword|try|instead|replace (?:it|this|that) with)\s*:/i,
     /\bfor (?:example|instance)\s*[:,]/i, /\bsuch as\s*[:,]?\s*["\u201c\u2018']/i, /:\s*["\u201c\u2018']/,
     /\bhere(?:'|\u2019)?s\s+(?:a|an|one|how)\b|\bhere is\s+(?:a|an|one)\b/i,
     /\b(?:a|an)\s+(?:thesis|sentence|opening|topic sentence|conclusion|transition)\s+(?:like|such as)\b/i,
   ];
   const QUOTED = /["\u201c\u2018']([^"\u201d\u2019']{3,})["\u201d\u2019']/g;
+  // An assessment speaks to the student or about the draft; a bare sentence with neither is wording for the paper.
+  const ABOUT = /\b(?:you|your|yours|draft|paper|essay|post|reply|paragraph|sentence|thesis|claim|argument|evidence|sources?|citations?|quotes?|quotation|introduction|conclusion|section|analysis|requirement|rubric|criterion|instructions|prompt|words?|length|organization|structure|transition)\b/i;
   const assesses = (comment, sources) => {
     const c = comment.trim();
-    if (!c || c.length > LIMIT.comment || (c.match(/[.!?](\s|$)/g) || []).length > 2 || OFFERS.some((r) => r.test(c))) return '';
+    if (!c || c.length > LIMIT.comment || (c.match(/[.!?](\s|$)/g) || []).length > 2 || !ABOUT.test(c) || OFFERS.some((r) => r.test(c))) return '';
     for (const m of c.matchAll(QUOTED)) if (m[1].trim().split(/\s+/).length >= 3 && !sources.some((x) => x.has(m[1]))) return '';
     return c;
   };
