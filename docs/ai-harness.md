@@ -38,7 +38,7 @@ whole thread with no extra step (owner, 2026-10-26).
 | --- | --- | --- | --- |
 | `writer.complete` (text, streamed; 60 a minute, supersede) | completion | up to 4,000 characters before the caret and 1,000 after; the course name, citation style, discussion prompt, assignment title, instructions and rubric, the thread (posts with their authors, 24,000 characters at most) and the post being answered | the rest of the current sentence: begun with the caret's word (so the join is exact), cut at the first sentence end, refused if it starts a new sentence or paragraph, repeats the text after or just before the caret, quotes, cites or links, or runs past 25 words |
 | `writer.review` | writing | the draft (in parts when long), the course name, style, prompt and assignment; no thread | at most 40 issues, each anchored to its words in the draft (`text.anchor`), suggestions that replace only those words |
-| `writer.feedback` | writing | the draft, the assignment's title, instructions and rubric (`lib/rubric.js`'s shape as text) | per rubric criterion (or requirement copied from the instructions): met, partly or missing, a comment, up to two anchored passages; a comment quoting words in neither the draft nor the assignment is dropped |
+| `writer.feedback` | writing | the draft, the assignment's title, instructions and rubric (`lib/rubric.js`'s shape as text) | per rubric criterion (or requirement copied from the instructions): met, partly or missing, a comment, up to two anchored passages; a comment quoting words in neither the draft nor the assignment is dropped; comments assess and never supply wording (an example sentence, a quoted suggestion, "try writing…", or quoted words the draft and assignment don't hold drops the comment) |
 | `writer.requirements` | writing | the prompt | `{ minWords, maxWords, sources, replies }`, each number only if the prompt states it in digits or words |
 | `writer.cite` | writing | the first 30,000 characters of the page the student asked to cite, and its address | the source (CSL-JSON subset), every value found in that text; a date only from a quote holding its year; no title, no answer |
 | `writer.decide` | writing | the sentence around a flagged word (1,000 characters at most), the word, the candidate fixes, the course name, style, prompt and assignment | `apply`, `suggest` or `keep`, with a choice only among the candidates |
@@ -46,8 +46,8 @@ whole thread with no extra step (owner, 2026-10-26).
 The frame's results: the gray text after an adaptive pause (about 500 ms; Tab takes it, ⌥→ or Ctrl+→ a word, Esc
 dismisses it, typing it consumes it, any other key, a click or an IME composition ends it and the run in flight); Check with
 AI (⌘⇧K, the chip's menu and ⋯) sets `GZ_WRITER_ISSUES.set('ai', …)` with positions mapped through every edit since the run
-began; `GZ_WRITER_AI.feedbackView(container)` is the Feedback panel; `GZ_WRITER_PROOF.decide` answers `apply` only when the
-model takes the first candidate. `GZ_WRITER_AI.requirements(prompt)` and `cite({ text, url })` give the other parts of the
+began; `GZ_WRITER_AI.feedbackView(container)` is the Feedback panel; `GZ_WRITER_PROOF.decide` answers `{ verdict: 'apply'|'suggest'|'keep', choice }`, the
+choice an index into the candidates (-1 with keep). `GZ_WRITER_AI.requirements(prompt)` and `cite({ text, url })` give the other parts of the
 writer those tasks' outputs, or null. `lib/writer-tools.js` declares editor tools (read: document, issues, sources,
 assignment; confirm: insert a citation, apply a fix) for a later MCP integration; nothing offers them to a model yet.
 

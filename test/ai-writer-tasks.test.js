@@ -173,6 +173,29 @@ test('writer.feedback: without a rubric, a requirement must be in the instructio
   assert.equal(FB.task.input({ text: 'x', context: { ...ASSIGN, kind: 'test' } }), null);
 });
 
+test('writer.feedback: a comment says what the draft does, specifically; one offering wording for the paper is dropped', async () => {
+  const draft = 'Morrison treats memory as a debt every character inherits. The river is where it comes due. The plot follows Sethe.';
+  const comments = [
+    ['The second paragraph summarizes the plot but never ties it back to your claim about memory.', true],
+    ['Your claim is clear, and "memory as a debt every character inherits" states it well.', true],
+    ['The rubric asks for "a clear, arguable thesis"; yours is clear but not yet arguable.', true],
+    ['Try writing "Memory in Beloved is an inheritance no one chooses."', false],
+    ['You could open with a question about the river.', false],
+    ['For example: Sethe carries the past like a debt.', false],
+    ['Consider adding a sentence such as "The river keeps what the town forgets."', false],
+    ['Here is a stronger thesis you can use.', false],
+    ['Rewrite the last sentence as a claim about the clearing.', true],
+    ['Rephrase it to "memory is a ledger the town keeps."', false],
+    ['A thesis like "memory is a ledger" would work.', false],
+    ['It cites "the price of the ticket," which is not in the draft.', false],
+    ['One. Two. Three. Four sentences is too many.', false],
+  ];
+  const { output } = await go(FB.task, { text: draft, context: ASSIGN }, { json: { criteria: comments.map(([comment], i) => ({ criterion: i % 2 ? '_11_1' : '_10_1', status: 'partly', comment, quotes: [] })) } });
+  assert.equal(output.criteria.length, 2);
+  assert.equal(output.criteria[0].comment, comments[0][0], 'a specific comment survives');
+  for (const [c, ok] of comments) assert.equal(FB.assesses(c, [draft, ASSIGN.assignment.instructions, '[_10_1] Thesis: A clear, arguable thesis.'].map((x) => require('../lib/ai/text.js').source(x))) === c.trim(), ok, c);
+});
+
 // ---- writer.requirements ------------------------------------------------------------------------------------------
 test('writer.requirements: a number stays only when the prompt says it, in digits or words', async () => {
   const prompt = CONTEXT.prompt.text;
