@@ -4,7 +4,7 @@
 // world, so Ultra's Post, Reply, Send and Submit send what was written and its word count and drafts follow. Ctrl/Cmd+Enter
 // in the frame clicks Post, Reply or Send when Ultra allows it (never an attempt's Submit). ⋯ → Blackboard editor gives
 // the box back, to Ultra and to draft backup (features/drafts.js skips boxes marked data-gz-writer). Whatever fails leaves
-// Ultra's editor, or puts it back with the text.
+// Ultra's editor, or keeps the draft in Writer until a native write succeeds.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const X = globalThis.GZ_CTX;
@@ -45,7 +45,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // ---- a box's life: asked for, opened, written in, given back -------------------------------------------------------
   let seq = 0;
   const mount = async (b) => {
-    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), display: null };
+    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, display: null };
     boxes.set(b.editor, box);
     b.root.setAttribute('data-gz-writer', b.kind);
     b.container.setAttribute('data-gz-writer-id', box.id);
@@ -90,6 +90,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     // Ultra changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text, not
     // its markup, says so: Quill tidies markup after each sync.
     box.observer = new MutationObserver(() => {
+      if (box.unsynced) return;
       const now = squash(ed.textContent);
       if (now === box.text) return;
       box.text = now;
@@ -104,21 +105,24 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'send') send(box);
     else if (m.type === 'native') giveBack(box, true);
   };
-  // Each change goes into Ultra's editor as the student's own edit.
+  // A page-world reply is untrusted. Check the native DOM too, and keep Writer's copy on every failure.
+  const sameText = (ed, h) => {
+    const d = document.createElement('template');
+    d.innerHTML = h;
+    return (d.content || d).textContent === ed.textContent;
+  };
   const sync = (box, h) => {
+    box.latest = h;
     const r = main('set', { id: box.id, html: h });
-    if (r?.ok) { box.text = squash(box.editor.textContent); return; }
-    // Ultra's editor can't be reached: it comes back with what was written, typed in through the browser's own editing.
-    giveBack(box, false);
-    const ed = box.editor;
-    ed.focus();
-    getSelection().selectAllChildren(ed);
-    document.execCommand('insertHTML', false, h);
+    const ok = r?.ok && r.html === box.editor.innerHTML && sameText(box.editor, h);
+    box.unsynced = !ok;
+    if (ok) box.text = squash(box.editor.textContent);
+    return ok;
   };
   // Ctrl/Cmd+Enter: Post, Reply or Send, once, when Ultra allows it (its Angular may enable the button a moment after
   // the edit that fills the box).
   const send = (box, again = true) => {
-    if (!SENDS.has(box.kind)) return;
+    if (!SENDS.has(box.kind) || !sync(box, box.latest)) return;
     const b = box.send?.isConnected ? box.send : U().sendOf(box.editor, box.kind);
     if (U().enabled(b)) b.click();
     else if (again) setTimeout(() => { if (boxes.get(box.editor) === box) send(box, false); }, 60);
@@ -137,6 +141,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   };
   // Back to Blackboard's editor, which this editor then stays.
   const giveBack = (box, focus) => {
+    if (!sync(box, box.latest)) return;
     drop(box);
     declined.add(box.editor);
     if (focus) box.editor.focus();
