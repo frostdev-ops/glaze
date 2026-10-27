@@ -114,3 +114,9 @@ test('review: APA citation years identify the work and reference entries do not 
   assert.deepEqual(C.count('A result (Morrison, 1987).', [MORRISON, later], 'apa7'), { cited: 1, total: 2 });
   assert.deepEqual(C.count('References\nMorrison, T. (1987). Beloved. Knopf.', [MORRISON], 'apa7'), { cited: 0, total: 1 });
 });
+
+test('review: Chicago compose checks recognize their own shortened notes', () => {
+  const text = 'A result (Smith, Swing Time, 320).';
+  assert.deepEqual(C.check(text, [SMITH], 'chicago17'), []);
+  assert.deepEqual(C.count(text, [SMITH], 'chicago17'), { cited: 1, total: 1 });
+});
