@@ -8,7 +8,7 @@
       { "problem": "teh", "kind": "spelling", "rule": "Typo", "sure": true, "first": "the" } ] },
     { "text": "this is is a test and i think it works.", "expect": [
       { "problem": "this", "kind": "grammar", "rule": "Capitalization", "sure": true, "first": "This" },
-      { "problem": "is is", "kind": "grammar", "rule": "Repetition", "sure": true, "first": "is" },
+      { "problem": "is is", "kind": "grammar", "rule": "Repetition", "sure": false, "first": "is" },
       { "problem": "i", "kind": "grammar", "rule": "Capitalization", "sure": true, "first": "I" } ] },
     { "text": "Their going to the river tomorrow.", "expect": [
       { "problem": "Their", "kind": "grammar", "rule": "Grammar", "sure": false, "first": "They're" } ] },

@@ -18,7 +18,7 @@ const editor = (html = '', o = {}) => {
     composing: false, state: null,
     dispatch(tr) { this.state = this.state.apply(tr); },
   };
-  view.state = E.state({ html, mode: o.mode || 'compose', plugins: [P.plugin({ onFix: (_v, f) => fixes.push(f) }), I.plugin()] });
+  view.state = E.state({ html, mode: o.mode || 'compose', plugins: [P.plugin({ words: o.words, onFix: (_v, f) => fixes.push(f) }), I.plugin()] });
   const plugins = view.state.plugins;
   const proof = plugins.find((p) => p.spec.key === P.key), rules = plugins.find((p) => p.spec.isInputRules);
   const type = (text) => {
@@ -41,14 +41,14 @@ const editor = (html = '', o = {}) => {
 // ---- the sure fixes -----------------------------------------------------------------------------------------------
 test('fix: the typo table, i → I and doubled words, as typed', () => {
   assert.deepEqual(P.fix('I think teh'), { from: 8, to: 11, was: 'teh', now: 'the', rule: 'typo' });
-  assert.equal(P.fix('Teh').now, 'The', 'capitalised where a sentence starts');
-  assert.equal(P.fix('It ended. Teh').now, 'The');
+  assert.equal(P.fix('Teh'), null, 'a capital may be a name even at the start');
+  assert.equal(P.fix('It ended. Teh'), null);
   assert.equal(P.fix('We met Teh'), null, 'a capital mid-sentence may be a name');
   assert.equal(P.fix('TEH'), null);
   assert.equal(P.fix('so i').now, 'I');
   assert.equal(P.fix('i’m').now, 'I’m');
   assert.equal(P.fix("i'll").now, "I'll");
-  assert.equal(P.fix('you dont').now, 'don’t');
+  assert.equal(P.fix('you dont'), null, 'dont is a word in French');
   assert.deepEqual(P.fix('read the the'), { from: 5, to: 12, was: 'the the', now: 'the', rule: 'twice' });
   assert.equal(P.fix('what he had had'), null, 'doubled on purpose');
   assert.equal(P.fix('he said that that'), null);
@@ -323,4 +323,21 @@ test('typing after a space correction has a separate undo group', () => {
   assert.equal(e.text(), 'one two');
   e.back(); assert.equal(e.text(), 'one ', 'undo typing only');
   e.back(); assert.equal(e.text(), 'one  ', 'undo correction only');
+});
+
+
+test('sure fixes preserve valid repetition, capitalised names and dictionary words', () => {
+  for (const problem of ['had had', 'that that', 'No no', 'very very', 'is is']) {
+    const first = problem.split(' ')[0];
+    assert.equal(P.toIssue({ kind: 'Repetition', problem, suggestions: [{ k: 0, t: first }] }).sure, false, problem);
+  }
+  assert.equal(P.toIssue({ kind: 'Typo', problem: 'cat', suggestions: [{ k: 0, t: 'bat' }] }).sure, false, 'edit distance is not confidence');
+  for (const text of ['Teh is here ', 'we use a calender ', 'ce dont je parle ']) {
+    const e = editor(); e.type(text); assert.equal(e.text(), text);
+  }
+  const e = editor('', { words: ['teh'] }); e.type('teh '); assert.equal(e.text(), 'teh ');
+  e.type('and this one');
+  e.view.dispatch(e.view.state.tr.setMeta(P.key, { words: ['teh', 'this'] }));
+  assert.equal(P.autofix(e.view, { ...e.at('this'), suggestions: ['This'], rule: 'Capitalization' }), null);
+  for (const before of ['well-teh', 'pre-teh', "'teh", '“teh']) assert.equal(P.fix(before), null, before);
 });
