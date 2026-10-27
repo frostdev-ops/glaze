@@ -87,12 +87,13 @@ const pageWorld = () => {
   const attrs = new Set(), calls = [];
   doc.documentElement = { hasAttribute: (k) => attrs.has(k), setAttribute: (k) => attrs.add(k) };
   const quill = (version) => ({
-    constructor: { version }, root: { innerHTML: '<p><br></p>' }, text: '\n',
+    constructor: { version }, root: { innerHTML: '<p><br></p>', isConnected: true }, text: '\n',
     clipboard: { convert: (h) => ({ from: h }) },
     setContents(d, source) { calls.push({ d, source }); this.root.innerHTML = typeof d.from === 'string' ? d.from : d.from.html; this.text = 'Hello\n'; },
     getText() { return this.text; }, focus() { calls.push('focus'); },
   });
   const boxes = { 'gzw-1': { __quill: quill('dev') }, 'gzw-2': { __quill: quill('2.0.2') } };
+  for (const b of Object.values(boxes)) { const root = b.__quill.root; b.querySelector = () => root; }
   doc.querySelector = (sel) => boxes[sel.match(/data-gz-writer-id="([^"]+)"/)?.[1]] || null;
   const ctx = vm.createContext({ document: doc, CustomEvent, JSON });
   const run = () => vm.runInContext(read('lib/writer-main.js'), ctx);
@@ -228,4 +229,12 @@ test('frame: Ultra changing its own editor shows in the frame without echoing ba
   assert.equal(f.made[0].set.length, 1);
   f.to(p, { type: 'unknown-op' });
   f.to(p, { type: 'constructor' });
+});
+
+
+test('page world: a stale Quill pointer never writes into another editor', () => {
+  const p = pageWorld(); p.run();
+  p.boxes['gzw-1'].__quill = p.boxes['gzw-2'].__quill;
+  assert.deepEqual(p.ask('set', JSON.stringify({ id: 'gzw-1', html: '<p>Wrong destination</p>' })), [{ id: 'gzw-1', ok: false }]);
+  assert.equal(p.calls.length, 0);
 });
