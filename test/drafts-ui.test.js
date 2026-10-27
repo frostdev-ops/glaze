@@ -1087,3 +1087,9 @@ test('Ultra: Writer snapshots survive a detached editor and remain available to 
   next.press(next.shown()[0], 'Restore'); await next.advance(1500);
   assert.equal(next.text(), FIRST);
 });
+
+test('Ultra: a reply\'s observed message-id scopes Writer recovery to the post being answered', async () => {
+  const p = await page();
+  Object.defineProperty(p.ed.parentNode, 'attributes', { value: [{ name: 'message-id', value: '_201_1' }] });
+  assert.equal(p.ctx.api.draftAt(p.ed).near, '_201_1');
+});
