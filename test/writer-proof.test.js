@@ -317,3 +317,10 @@ test('a pending text input cannot lend provenance to composition', () => {
   e.view.composing = false; e.type(' ');
   assert.equal(e.text(), 'teh ');
 });
+
+test('typing after a space correction has a separate undo group', () => {
+  const e = editor(); e.type('one  two');
+  assert.equal(e.text(), 'one two');
+  e.back(); assert.equal(e.text(), 'one ', 'undo typing only');
+  e.back(); assert.equal(e.text(), 'one  ', 'undo correction only');
+});
