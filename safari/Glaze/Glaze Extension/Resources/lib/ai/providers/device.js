@@ -24,6 +24,11 @@
 //   contextoverflow (138: quotaoverflow). Glaze measures first and refuses either way: nothing is cut silently.
 // - Tool calls exist in Chromium's main behind expectedOutputs 'tool-call', not in what Chrome 138 ships: not claimed.
 // - No maxTokens: the API takes no output limit.
+// - clone() copies a session with what it has read (LanguageModel.prototype.clone, with a signal), so a request with no
+//   earlier turns prompts a clone of a warm session that read its system prompt once: one per system prompt (and
+//   sampling and pictures), destroyed WARM.ms after its last use, when a call on it fails or times out, and when a
+//   connection changes (release). A create() signal that aborts later destroys its session, so a warm one has its own.
+//   Without clone(), each request has its own session, as before.
 // cfg: {} (generation kept by the broker). Classic script; module.exports for node.
 var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
   const P = typeof GZ_AI_PROVIDERS !== 'undefined' ? GZ_AI_PROVIDERS : require('../providers.js');
@@ -36,6 +41,8 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
   const refuse = (code, message) => Object.assign(new Error(message), { code });
   let windowSize = 0; // the context window a session reported, once one has
   let preparing = null; // the download in progress: { done, listeners }
+  const WARM = { ms: 120000, n: 3 };
+  const warm = new Map(); // key → { ready: a promise of the session, control, timer }, oldest first
 
   const destroy = (s) => { try { s?.destroy(); } catch { /* gone */ } };
   // Some API operations notice an abort only when their reply arrives (138's measureInputUsage does). Stop waiting now;
@@ -130,6 +137,30 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
     : { type: 'image', value: new Blob([Uint8Array.from(atob(p.data), (c) => c.charCodeAt(0))], { type: p.mime }) }));
   const words = (m) => m.content.map((p) => p.text).join('\n\n');
 
+  const cool = (k) => {
+    const w = warm.get(k);
+    if (!w) return;
+    warm.delete(k); clearTimeout(w.timer); w.control.abort();
+    w.ready.then(destroy, () => {});
+  };
+  const release = () => { for (const k of [...warm.keys()]) cool(k); };
+  const idle = (k, w) => { clearTimeout(w.timer); w.timer = setTimeout(() => cool(k), WARM.ms); w.timer.unref?.(); };
+  // The warm session for `k`, made with `opts` if there is none: shared by the calls that ask together, bounded by its own
+  // deadline, never by one call's signal (the call stops waiting; the session stays).
+  const warmFor = (LM, k, opts, signal) => {
+    let w = warm.get(k);
+    if (w) { warm.delete(k); warm.set(k, w); } else {
+      const control = new AbortController(), t = setTimeout(() => control.abort(new DOMException('Model response timed out.', 'TimeoutError')), 20000);
+      w = { control, timer: null };
+      w.ready = Promise.resolve().then(() => LM.create({ ...opts, signal: control.signal })).finally(() => clearTimeout(t));
+      w.ready.then((s) => { if (warm.get(k) !== w) destroy(s); }, () => { if (warm.get(k) === w) warm.delete(k); });
+      warm.set(k, w);
+      while (warm.size > WARM.n) cool(warm.keys().next().value);
+    }
+    idle(k, w);
+    return wait(w.ready, signal);
+  };
+
   const run = async (req, cfg, { signal, onDelta } = {}) => {
     if (req.tools || req.messages.some((m) => m.role === 'tool' || m.toolCalls)) throw refuse('caps', 'The model on this device does not take tool calls.');
     const last = req.messages.at(-1);
@@ -150,10 +181,17 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
     }
     const prompt = [{ role: 'user', content: content(last) }];
     const options = { ...(req.schema && { responseConstraint: req.schema }), ...(signal && { signal }) };
-    let s, dropped = false;
+    const opts = { expectedInputs: inputs(images), initialPrompts: [...(system ? [{ role: 'system', content: system }] : []), ...history], ...sampling };
+    const k = !history.length && typeof LM.prototype?.clone === 'function' ? JSON.stringify([system, sampling, images]) : null;
+    let s, dropped = false, ok = false;
     try {
       try {
-        s = await wait(LM.create({ expectedInputs: inputs(images), initialPrompts: [...(system ? [{ role: 'system', content: system }] : []), ...history], ...sampling, ...(signal && { signal }) }), signal, destroy);
+        const base = k && await warmFor(LM, k, opts, signal);
+        if (base && typeof base.clone === 'function') { learn(base); s = await wait(base.clone({ ...(signal && { signal }) }), signal, destroy); }
+        else {
+          if (base) cool(k);
+          s = await wait(LM.create({ ...opts, ...(signal && { signal }) }), signal, destroy);
+        }
       } catch (e) {
         if (e?.name === 'QuotaExceededError') throw fail('request-rejected', 'The instructions and earlier turns are longer than the model on this device can read.');
         throw e;
@@ -189,8 +227,13 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
       }
       if (dropped) throw fail('request-rejected', 'The model on this device dropped earlier turns to fit the text.');
       if (typeof text !== 'string') throw fail('invalid-response', 'The model on this device gave no text.');
+      ok = true;
       return { text, model: MODEL, finish: 'stop', ...(Number.isSafeInteger(Math.round(input)) && input > 0 && { usage: { input: Math.round(input) } }) };
-    } finally { destroy(s); }
+    } finally {
+      destroy(s);
+      // A warm session whose call failed or timed out (not the caller's cancel) may be what failed: the next call makes another.
+      if (k && !ok && (!signal?.aborted || signal.reason?.name === 'TimeoutError')) cool(k);
+    }
   };
 
   // A check for a real Chrome, from the worker's console (chrome://extensions → Glaze → service worker):
@@ -211,6 +254,6 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
     return out;
   };
 
-  return P.add({ id: 'device', config, caps, status, run, catalog, prepare, check, _reset: () => { windowSize = 0; preparing = null; } });
+  return P.add({ id: 'device', config, caps, status, run, catalog, prepare, check, release, WARM, _reset: () => { windowSize = 0; preparing = null; release(); } });
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_DEVICE; else GZ_AI_DEVICE;
