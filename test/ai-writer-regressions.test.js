@@ -100,3 +100,14 @@ test('citation fields need whole tokens rather than fragments of names or number
   assert.deepEqual(out.author, []);
   assert.equal(out.volume, undefined);
 });
+
+test('review rejects same-length rewrites, single-quoted wording and sentences joined without spaces', () => {
+  for (const [quote, suggestions, expected] of [
+    ['Memory is a debt.', ['History is a prison.', 'Memory is a debt. Zebras win.'], []],
+    ['memory', ["'debt'", 'the.Baldwin.claims.', 'memories'], ['memories']],
+  ]) {
+    const inp = RV.task.input({ text: quote });
+    const out = RV.task.check({ issues: [{ quote, before: '', after: '', kind: 'style', message: 'Unclear wording.', suggestions }] }, inp);
+    assert.deepEqual(out.issues[0].suggestions, expected);
+  }
+});
