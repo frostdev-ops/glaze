@@ -96,7 +96,7 @@ test('writer.complete never starts a new sentence or paragraph, never repeats, n
   assert.equal(said('it arrives, as Smith et al. argue.'), null);
   assert.equal(said(`it ${Array.from({ length: 26 }, (_, i) => `w${i}`).join(' ')}.`), null, 'more than 25 words');
   assert.equal(said('arrives uninvited.'), ' arrives uninvited.', 'a plain lower-case continuation of a whole word');
-  assert.equal(said('its arrival.'), null, 'a variant of the caret\'s word: where it joins is unknown');
+  assert.equal(C.finish('arrived late.', C.task.input({ before: 'Every evening the memory arrives' })), null, 'a form of the caret\'s word: where it joins is unknown');
   assert.equal(said('it'), null, 'nothing after the word');
   assert.equal(said('it arrives uninvited and stays'), ' arrives uninvited and stays', 'a finish without a full stop');
   assert.equal(said('it arrives uninvited and sta', { truncated: true }), ' arrives uninvited and', 'cut short: the last word may be cut too');
@@ -120,11 +120,11 @@ test('writer.complete sends an on-device model only the caret\'s end of the text
   const long = `${'The river keeps what the town would rather forget, and the clearing keeps the rest. '.repeat(60)}Three things I learned are how to`;
   const ctx = { kind: 'assignment', course: { id: '_1_1', name: 'ENGL 2110' }, assignment: { title: 'Essay 2', instructions: `Write about memory. ${'Detail. '.repeat(400)}`, rubric: 'Thesis: 10 points' }, style: 'mla9' };
   const run = async (caps) => {
-    const cfg = { replies: ['use the board.'], seen: [], caps };
+    const cfg = { replies: [{ text: 'use the board.' }], seen: [], caps };
     await T.run(C.task, { before: long, mode: 'paper', kind: 'assignment', context: ctx }, { provider: 'mock', cfg, emit() {} });
     return parts(cfg.seen[0]).data;
   };
-  const full = await run(undefined), small = await run({ local: true }), narrow = await run({ context: { window: 6144, inputLimit: 5530 } });
+  const full = await run(undefined), small = await run({ local: true }), narrow = await run({ context: 6144 });
   for (const data of [small, narrow]) {
     assert.ok(data.length < 2600, `brief: ${data.length} characters`);
     assert.match(data, /Three things I learned are how to/);

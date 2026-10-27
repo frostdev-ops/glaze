@@ -34,7 +34,7 @@ test('only on Safari: elsewhere the file adds no provider', () => {
 test('config takes only the model on this device; caps say JSON and pictures, no tools, no streaming', () => {
   assert.deepEqual(A.config({ model: 'on-device', base: 'x', key: 'k' }), { model: 'on-device' });
   for (const bad of [null, {}, { model: 'gpt' }, { model: 1 }, { model: 'private-cloud' }]) assert.equal(A.config(bad), null);
-  assert.deepEqual(P.caps(A, A.config({ model: 'on-device' })), { text: true, images: true, json: true, tools: false, stream: false, context: 8192 });
+  assert.deepEqual(P.caps(A, A.config({ model: 'on-device' })), { text: true, images: true, json: true, tools: false, stream: false, local: true, context: 8192 });
   assert.equal(A.origin, undefined, 'nothing goes over the network from the worker: no host to hold');
 });
 
@@ -155,7 +155,7 @@ test('the broker keeps an apple connection, tests it and runs a task on it, with
   on.forEach((f) => f({ id: 1, op: 'status', feature: 'syllabus' }));
   on.forEach((f) => f({ id: 2, op: 'run', feature: 'syllabus', task: 'example.echo', input: { text: 'hello' } }));
   for (let i = 0; i < 40; i++) await new Promise(setImmediate);
-  assert.deepEqual(posted.find((m) => m.id === 1), { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'apple', caps: { text: true, images: true, json: true, tools: false, stream: false, context: 8192 } });
+  assert.deepEqual(posted.find((m) => m.id === 1), { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'apple', caps: { text: true, images: true, json: true, tools: false, stream: false, local: true, context: 8192 } });
   const end = posted.find((m) => m.id === 2 && m.type === 'end');
   assert.deepEqual(end.output, { text: 'hello' });
   assert.equal(end.meta.provider, 'apple');

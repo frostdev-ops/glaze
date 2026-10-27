@@ -101,8 +101,8 @@ test('status: no Prompt API, an unsupported device, a model to download, downloa
 });
 
 test('caps: text, JSON and streaming; pictures and context only when known; tools never claimed', () => {
-  assert.deepEqual(D.caps({ model: 'gemini-nano' }), { text: true, json: true, stream: true });
-  assert.deepEqual(D.caps({ model: 'gemini-nano', images: true, context: 900 }), { text: true, json: true, stream: true, images: true, context: 900 });
+  assert.deepEqual(D.caps({ model: 'gemini-nano' }), { text: true, json: true, stream: true, local: true });
+  assert.deepEqual(D.caps({ model: 'gemini-nano', images: true, context: 900 }), { text: true, json: true, stream: true, local: true, images: true, context: 900 });
   assert.equal('tools' in D.caps({}), false);
 });
 
@@ -308,7 +308,7 @@ test('a run on the device connection goes through the broker to the model in the
   for (const f of on) f({ id: 1, op: 'status', feature: 'syllabus' });
   for (const f of on) f({ id: 2, op: 'run', feature: 'syllabus', task: 'example.echo', input: { text: 'hello' } });
   for (let i = 0; i < 60; i++) await new Promise(setImmediate);
-  assert.deepEqual(posted[0], { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'device', caps: { text: true, json: true, stream: true } });
+  assert.deepEqual(posted[0], { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'device', caps: { text: true, json: true, stream: true, local: true } });
   const end = posted.find((m) => m.type === 'end');
   assert.ok(end, JSON.stringify(posted));
   assert.deepEqual(end.output, { text: 'hello' });
