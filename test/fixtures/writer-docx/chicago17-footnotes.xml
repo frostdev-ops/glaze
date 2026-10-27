@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<w:footnote w:type="separator" w:id="-1">
+<w:p>
+<w:pPr>
+<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>
+<w:ind w:firstLine="0"/>
+</w:pPr>
+<w:r>
+<w:separator/>
+</w:r>
+</w:p>
+</w:footnote>
+<w:footnote w:type="continuationSeparator" w:id="0">
+<w:p>
+<w:pPr>
+<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>
+<w:ind w:firstLine="0"/>
+</w:pPr>
+<w:r>
+<w:continuationSeparator/>
+</w:r>
+</w:p>
+</w:footnote>
+<w:footnote w:id="1">
+<w:p>
+<w:pPr>
+<w:pStyle w:val="FootnoteText"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:rStyle w:val="FootnoteReference"/>
+</w:rPr>
+<w:footnoteRef/>
+</w:r>
+<w:r>
+<w:t xml:space="preserve"> </w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">Toni Morrison, </w:t>
+</w:r>
+<w:r>
+<w:rPr>
+<w:i/>
+<w:iCs/>
+</w:rPr>
+<w:t xml:space="preserve">Beloved</w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve"> (New York: Knopf, 1987), 35.</w:t>
+</w:r>
+</w:p>
+</w:footnote>
+<w:footnote w:id="2">
+<w:p>
+<w:pPr>
+<w:pStyle w:val="FootnoteText"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:rStyle w:val="FootnoteReference"/>
+</w:rPr>
+<w:footnoteRef/>
+</w:r>
+<w:r>
+<w:t xml:space="preserve"> </w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">James Baldwin, </w:t>
+</w:r>
+<w:r>
+<w:rPr>
+<w:i/>
+<w:iCs/>
+</w:rPr>
+<w:t xml:space="preserve">The Price of the Ticket</w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve"> (New York: St. Martin&apos;s, 1985), xix.</w:t>
+</w:r>
+</w:p>
+</w:footnote>
+<w:footnote w:id="3">
+<w:p>
+<w:pPr>
+<w:pStyle w:val="FootnoteText"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:rStyle w:val="FootnoteReference"/>
+</w:rPr>
+<w:footnoteRef/>
+</w:r>
+<w:r>
+<w:t xml:space="preserve"> </w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">Morrison, </w:t>
+</w:r>
+<w:r>
+<w:rPr>
+<w:i/>
+<w:iCs/>
+</w:rPr>
+<w:t xml:space="preserve">Beloved</w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">, 88.</w:t>
+</w:r>
+</w:p>
+</w:footnote>
+<w:footnote w:id="4">
+<w:p>
+<w:pPr>
+<w:pStyle w:val="FootnoteText"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:rStyle w:val="FootnoteReference"/>
+</w:rPr>
+<w:footnoteRef/>
+</w:r>
+<w:r>
+<w:t xml:space="preserve"> </w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">Morrison, </w:t>
+</w:r>
+<w:r>
+<w:rPr>
+<w:i/>
+<w:iCs/>
+</w:rPr>
+<w:t xml:space="preserve">Beloved</w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">, 274.</w:t>
+</w:r>
+</w:p>
+</w:footnote>
+<w:footnote w:id="5">
+<w:p>
+<w:pPr>
+<w:pStyle w:val="FootnoteText"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:rStyle w:val="FootnoteReference"/>
+</w:rPr>
+<w:footnoteRef/>
+</w:r>
+<w:r>
+<w:t xml:space="preserve"> </w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">Baldwin, </w:t>
+</w:r>
+<w:r>
+<w:rPr>
+<w:i/>
+<w:iCs/>
+</w:rPr>
+<w:t xml:space="preserve">Price of the Ticket</w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">, xx.</w:t>
+</w:r>
+</w:p>
+</w:footnote>
+</w:footnotes>
