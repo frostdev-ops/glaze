@@ -136,6 +136,8 @@
 .gp-outline { padding: 12px; display: grid; gap: 2px; }
 .gp-outline button { text-align: start; padding: 6px 8px; border-radius: 7px; font-size: 13px; color: var(--gz-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gp-outline button:hover { background: var(--gz-line); color: var(--gz-ink); }
+.gp-outline button[data-kind="title"], .gp-outline button[data-kind="list"] { color: var(--gz-ink); font-weight: 600; }
+.gp-outline .gp-empty { margin: 0; padding: 6px 8px; font-size: 13px; color: var(--gz-ink-faint); }
 
 /* Menus and popovers (writer.css .pop's look and motion) */
 .gp-menu { position: fixed; z-index: 5; min-width: 180px; max-width: calc(100vw - 8px); max-height: calc(100vh - 16px); overflow: auto; padding: 6px; transform-origin: top left; }

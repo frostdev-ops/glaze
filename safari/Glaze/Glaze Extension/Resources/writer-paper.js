@@ -246,11 +246,16 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       fontL.textContent = `${format.font} ${format.size} · ${t(SPACING[format.line] || String(format.line))}`;
       pill.replaceChildren(format.label, icon('caret', 'gp-ico gp-caret'));
     };
+    // The title, headings and list of sources (F.outline); a paper with none of them says so.
     const outlineDraw = () => {
-      const items = [];
-      view.state.doc.descendants((n, pos) => { if (n.type.name === 'heading' && n.textContent.trim()) items.push({ n, pos }); return !n.isTextblock; });
-      outline.replaceChildren(...items.map(({ n, pos }) => btn({ onclick: () => go(pos + 1, pos + 1) }, n.textContent)));
-      items.forEach(({ n }, i) => { outline.children[i].style.paddingLeft = `${8 + (n.attrs.level - 1) * 14}px`; });
+      const items = F.outline(view.state.doc, format);
+      if (!items.length) { outline.replaceChildren(h('p', { class: 'gp-empty' }, t('No title or headings yet.'))); return; }
+      outline.replaceChildren(...items.map(({ kind, level, text, pos }) => {
+        const b = btn({ onclick: () => go(pos + 1, pos + 1) }, text);
+        b.dataset.kind = kind;
+        b.style.paddingInlineStart = `${8 + Math.max(0, level - 1) * 14}px`;
+        return b;
+      }));
     };
     const go = (from, to) => {
       const tr = view.state.tr.setSelection(PM.state.TextSelection.create(view.state.doc, from, to)).scrollIntoView();

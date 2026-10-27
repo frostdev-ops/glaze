@@ -3,6 +3,7 @@
 (globalThis.GZ_LANGS ||= {})['pt-BR'] = {
   "Quotes of five lines or more go in a block quote": "Citações de cinco linhas ou mais devem ficar em bloco",
   "Another editor’s draft": "Rascunho de outro editor",
+  "No title or headings yet.": "Ainda não há título nem títulos de seção.",
   "Document outline": "Estrutura",
   "Papers": "Trabalhos",
   "Mark all as read": "Marcar tudo como lido",

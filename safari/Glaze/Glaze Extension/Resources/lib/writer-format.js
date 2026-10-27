@@ -241,7 +241,24 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     return { issues, rows };
   };
 
-  return { template, opening, closing, read, surname, restyle, check, DATE };
+  // The Outline: the paper's title (as read() finds it), its headings, and its list of sources, in order. doc: a paper
+  // Node. → [{ kind: 'title' | 'heading' | 'list', level (headings' 1-4, else 0), text, pos (where the block starts) }]
+  const outline = (doc, f) => {
+    const top = [];
+    doc.forEach((n, pos) => top.push(pos));
+    const title = read(doc, f)?.at?.title, list = ST().listAt(doc), out = [];
+    doc.descendants((n, pos) => {
+      if (n.type.name === 'heading' && n.textContent.trim()) out.push({ kind: 'heading', level: n.attrs.level, text: n.textContent.trim(), pos });
+      return !n.isTextblock;
+    });
+    for (const [kind, i] of [['title', title], ['list', list?.title]]) {
+      const n = Number.isInteger(i) && doc.child(i);
+      if (n && n.textContent.trim()) out.push({ kind, level: 0, text: n.textContent.trim(), pos: top[i] });
+    }
+    return out.sort((a, b) => a.pos - b.pos);
+  };
+
+  return { template, opening, closing, read, surname, restyle, check, outline, DATE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_FORMAT; else GZ_WRITER_FORMAT;
