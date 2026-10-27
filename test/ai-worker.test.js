@@ -385,3 +385,17 @@ test('navigation while an attempt report awaits admission invalidates the report
   assert.deepEqual(await pending, { ok: false });
   assert.equal(await ask(w, frame(ATTEMPT)), 'attempt');
 });
+
+
+test('a replaced writer document must claim its own seat, including after worker restart', async () => {
+  const w = writerOn(); w.page = COURSE;
+  const claimed = frame(COURSE, { documentId: 'writer-old' });
+  await seat(w, claimed);
+  assert.equal(await ask(w, claimed), 'allowed');
+  const replaced = frame(COURSE, { documentId: 'writer-new' });
+  assert.equal(await ask(w, replaced), 'hung up', 'a frame id does not identify the claimed writer document');
+  const again = live2(worker({ globals: fakeIDB(), store: structuredClone(w.store) })); again.page = COURSE;
+  assert.equal(await ask(again, replaced), 'hung up', 'session hydration must preserve the writer document binding');
+  await seat(again, replaced);
+  assert.equal(await ask(again, replaced), 'allowed', 'a fresh claim admits the replacement');
+});
