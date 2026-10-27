@@ -1,0 +1,44 @@
+// Content-side Writer lifecycle, with the fixture DOM and synchronous page-world replies.
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
+const U = require('../../lib/writer-ultra.js');
+module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false } = {}) => {
+  const doc = { activeElement: null, listeners: [] }, timers = new Map(), observers = [], ports = [], messages = [], clicks = [];
+  doc.root = new El('html', doc); doc.documentElement = doc.root;
+  doc.body = parse(fs.readFileSync(path.join(__dirname, `../fixtures/ultra-writer-${fixture}.html`), 'utf8'), doc);
+  for (const el of doc.root.all()) el.style.getPropertyPriority = () => '';
+  for (const name of ['querySelector', 'querySelectorAll', 'addEventListener', 'removeEventListener', 'dispatchEvent']) doc[name] = El.prototype[name].bind(doc.root);
+  doc.createElement = (tag) => { const el = new El(tag, doc); el.style.getPropertyPriority = () => ''; return el; };
+  doc.execCommand = (name, ui, html) => { if (insert) doc.activeElement.innerHTML = html; return insert; };
+  doc.fire = (el, type) => { if (type === 'click') clicks.push(el); };
+  const location = { origin: 'https://school.blackboard.com', pathname: fixture === 'discussion' ? '/ultra/courses/_101_1/discussion/_9_1' : '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1' };
+  let timer = 0, mode = helper;
+  const ctx = vm.createContext({
+    document: doc, location, crypto, CustomEvent, console, Element: El,
+    GZ_COLORS: [], GZ_WRITER_ULTRA: U,
+    GZ_CTX: { on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true } }), t: (k) => k, locale: () => 'en', bookFor: () => ({ results: [{ column: { contentId: '_8_1', assessmentSubtype: 'Assignment' } }] }) },
+    chrome: { runtime: { getURL: (s) => `chrome-extension://x/${s}`, sendMessage: async (m) => { messages.push(m); return { ok: true }; } }, storage: { onChanged: { addListener() {} } } },
+    getComputedStyle: () => ({ getPropertyValue: () => '' }), matchMedia: () => ({ matches: true }),
+    getSelection: () => ({ selectAllChildren() {} }),
+    setTimeout: (f, ms) => { timers.set(++timer, { f, ms }); return timer; }, clearTimeout: (id) => timers.delete(id),
+    MutationObserver: class { constructor(fn) { this.fn = fn; observers.push(this); } observe(target) { this.target = target; } disconnect() { this.target = null; } },
+    MessageChannel: class { constructor() { this.port1 = { sent: [], postMessage(m) { this.sent.push(m); }, close() { this.closed = true; } }; this.port2 = {}; ports.push(this.port1); } },
+    addEventListener: (type, fn) => doc.addEventListener(type, fn),
+  });
+  ctx.window = ctx; ctx.top = ctx;
+  doc.addEventListener('gz-writer:set', (e) => {
+    const m = JSON.parse(e.detail), ed = doc.querySelector(`.ql-container[data-gz-writer-id="${m.id}"]`)?.querySelector('.ql-editor');
+    if (mode === 'ok') ed.innerHTML = m.html;
+    if (mode !== 'absent') doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: mode !== 'fail', html: m.html }) }));
+  });
+  vm.runInContext(fs.readFileSync(process.env.WRITER_CONTENT_SOURCE || path.join(__dirname, '../../features/writer.js'), 'utf8'), ctx);
+  const start = async () => { ctx.GZ_WRITER.pass(); await new Promise(setImmediate); for (const p of ports) p.onmessage({ data: { type: 'ready' } }); };
+  const native = (index = 0) => U.boxes(doc, { path: location.pathname })[index];
+  const emit = (m, index = 0) => ports[index].onmessage({ data: m });
+  const mutate = (ed) => { for (const o of observers) if (o.target === ed) o.fn([]); };
+  const tick = (ms) => { for (const [id, t] of [...timers]) if (t.ms === ms) { timers.delete(id); t.f(); } };
+  return { ctx, doc, location, ports, messages, clicks, observers, timers, start, native, emit, mutate, tick, helper: (v) => { mode = v; } };
+};
