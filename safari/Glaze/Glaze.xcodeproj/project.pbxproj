@@ -85,7 +85,10 @@
 		D24A100000000000000000A2 /* writer-ai.css in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F2 /* writer-ai.css */; };
 		D24A100000000000000000C2 /* writer-ai.css in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F2 /* writer-ai.css */; };
 		D24A100000000000000000A1 /* writer-ai.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F1 /* writer-ai.js */; };
-		D24A100000000000000000C1 /* writer-ai.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F1 /* writer-ai.js */; };
+		D24A100000000000000000C1 /* writer-ai.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F1 /* writer-ai.js */; };		D24000000000000000002FA1 /* writer-compose.js in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF1 /* writer-compose.js */; };
+		D24000000000000000002FC1 /* writer-compose.js in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF1 /* writer-compose.js */; };
+		D24000000000000000002FA2 /* writer-compose.css in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF2 /* writer-compose.css */; };
+		D24000000000000000002FC2 /* writer-compose.css in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF2 /* writer-compose.css */; };
 		B0B1000000000000000000A4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000C4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
@@ -181,7 +184,8 @@
 		D240000000000000000000F2 /* writer.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer.js; path = Resources/writer.js; sourceTree = "<group>"; };
 		D240000000000000000000F3 /* writer.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer.css; path = Resources/writer.css; sourceTree = "<group>"; };
 		D24A100000000000000000F2 /* writer-ai.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = "writer-ai.css"; path = "Resources/writer-ai.css"; sourceTree = "<group>"; };
-		D24A100000000000000000F1 /* writer-ai.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "writer-ai.js"; path = "Resources/writer-ai.js"; sourceTree = "<group>"; };
+		D24A100000000000000000F1 /* writer-ai.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "writer-ai.js"; path = "Resources/writer-ai.js"; sourceTree = "<group>"; };		D24000000000000000002FF1 /* writer-compose.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-compose.js; path = Resources/writer-compose.js; sourceTree = "<group>"; };
+		D24000000000000000002FF2 /* writer-compose.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-compose.css; path = Resources/writer-compose.css; sourceTree = "<group>"; };
 		B0B1000000000000000000F4 /* features */ = {isa = PBXFileReference; lastKnownFileType = folder; name = features; path = Resources/features; sourceTree = "<group>"; };
 		B0B1000000000000000000F5 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
 		D6B0000000000000000000F1 /* sharing */ = {isa = PBXFileReference; lastKnownFileType = folder; name = sharing; path = Resources/sharing; sourceTree = "<group>"; };
@@ -298,7 +302,8 @@
 				D240000000000000000000F2 /* writer.js */,
 				D240000000000000000000F3 /* writer.css */,
 				D24A100000000000000000F2 /* writer-ai.css */,
-				D24A100000000000000000F1 /* writer-ai.js */,
+				D24A100000000000000000F1 /* writer-ai.js */,				D24000000000000000002FF1 /* writer-compose.js */,
+				D24000000000000000002FF2 /* writer-compose.css */,
 				D6B0000000000000000000F1 /* sharing */,
 				B0B1000000000000000000F4 /* features */,
 				B0B1000000000000000000F5 /* assets */,
@@ -488,7 +493,8 @@
 				D240000000000000000000A2 /* writer.js in Resources */,
 				D240000000000000000000A3 /* writer.css in Resources */,
 				D24A100000000000000000A2 /* writer-ai.css in Resources */,
-				D24A100000000000000000A1 /* writer-ai.js in Resources */,
+				D24A100000000000000000A1 /* writer-ai.js in Resources */,				D24000000000000000002FA1 /* writer-compose.js in Resources */,
+				D24000000000000000002FA2 /* writer-compose.css in Resources */,
 				D6B0000000000000000000A1 /* sharing in Resources */,
 				B0B1000000000000000000A4 /* features in Resources */,
 				B0B1000000000000000000A5 /* assets in Resources */,
@@ -536,7 +542,8 @@
 				D240000000000000000000C2 /* writer.js in Resources */,
 				D240000000000000000000C3 /* writer.css in Resources */,
 				D24A100000000000000000C2 /* writer-ai.css in Resources */,
-				D24A100000000000000000C1 /* writer-ai.js in Resources */,
+				D24A100000000000000000C1 /* writer-ai.js in Resources */,				D24000000000000000002FC1 /* writer-compose.js in Resources */,
+				D24000000000000000002FC2 /* writer-compose.css in Resources */,
 				D6B0000000000000000000C1 /* sharing in Resources */,
 				B0B1000000000000000000C4 /* features in Resources */,
 				B0B1000000000000000000C5 /* assets in Resources */,
