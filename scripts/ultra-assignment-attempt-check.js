@@ -1,7 +1,7 @@
 // Ultra's current assignment attempt with Glaze loaded (test/fixtures/ultra-test-attempt.html): it scrolls as one page, its
 // title going up with the instructions; Save and Submit stay at the bottom, reachable, on a painted dock; the sidebar's
 // column ends above them; the end of the page clears them; and the title has no room kept for a course strip that is in
-// the breadcrumb row above it. Four window sizes; a dark and a light Look.
+// the breadcrumb row above it. Off with its setting, Ultra's own scrolling. Four window sizes; a dark and a light Look.
 // EXT=<checkout> NODE_PATH=<playwright> nice node scripts/ultra-assignment-attempt-check.js <out dir> [--looks=a,b]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -55,9 +55,9 @@ const measure = () => {
     const page = await ctx.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
     // The owner's layout: Glaze's rail, the course strip above (on a routed page, in its breadcrumb row), the sidebar.
-    const setup = async (look) => {
+    const setup = async (look, extra = {}) => {
       const base = G.GZ_DEFAULTS, L = G.GZ_LOOKS.find((l) => l.name === look);
-      const settings = { ...base, ...G.GZ_LOOK_APPLY(base, L), motion: { ...base.motion, level: 'off' }, tabs: { ...G.GZ_SANITIZE({}).tabs, at: 'above' } };
+      const settings = { ...base, ...G.GZ_LOOK_APPLY(base, L), motion: { ...base.motion, level: 'off' }, tabs: { ...G.GZ_SANITIZE({}).tabs, at: 'above' }, enhance: { ...base.enhance, ...extra } };
       await opts.evaluate(async ({ settings, site, uid }) => {
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.session.clear();
         await chrome.storage.sync.set(settings);
@@ -94,6 +94,18 @@ const measure = () => {
         await shot(`${slug(look)}-${w}-end`);
       }
     }
+    // Off with its setting (enhance.titleScroll): Ultra's own layout, the content scrolling under the title.
+    await setup(LOOKS[0], { titleScroll: false });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(site + ATTEMPT);
+    await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-accent').trim() && document.querySelector('h1.js-header-text'), null, { timeout: 20000 });
+    await pause(900);
+    const offTop = await page.evaluate(measure);
+    await page.mouse.move(Math.round(offTop.title.x + 40), Math.round((offTop.foot.y + offTop.title.b) / 2));
+    await page.mouse.wheel(0, 400); await pause(400);
+    const off = await page.evaluate(measure);
+    check(off.base === 0 && off.content > 300 && Math.abs(off.title.y - offTop.title.y) <= 1, 'off with its setting, the content scrolls under the title, as Ultra has it', { body: off.base, content: off.content, title: [offTop.title.y, off.title.y] });
+    await shot('setting-off-scrolled');
     check(errors.length === 0, 'no page errors', errors);
   } finally {
     await ctx?.close(); fs.rmSync(tmp, { recursive: true, force: true });

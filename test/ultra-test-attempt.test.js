@@ -126,7 +126,19 @@ test('an assignment attempt scrolls as one page: its title goes up with it, Save
   // content under the title; its body, a scroller already, now takes the scroll.
   const BASE = [...ROUTED, 'bb-assignment-attempt-authoring-panel.react-container', 'div', 'div.makeStylespanelRoot-0-2-46.makeStylespanelRootWithFooter-0-2-47',
     'div.makeStylesbaseBody-0-2-49.makeStylesbodyWithStandardHeader-0-2-51.makeStylesbaseBodyWithResponsiveFooter-0-2-50'];
-  const base = chain(...BASE), content = chain(...BASE, 'div.makeStylescontentRoot-0-2-54.makeStylescontentRootWithFooter-0-2-55'), foot = chain(...BASE, 'div.makeStylesfooterWrapper-0-2-58');
+  const parts = (on) => {
+    const base = chain(...BASE);
+    let root = base; while (root.parent) root = root.parent;
+    if (on) root.attrs = { 'data-gz-enhance-titleScroll': '' };
+    const at = (spec) => Object.assign(chain(spec), { parent: base });
+    return [base, at('div.makeStylescontentRoot-0-2-54.makeStylescontentRootWithFooter-0-2-55'), at('div.makeStylesfooterWrapper-0-2-58')];
+  };
+  // Off with its setting (enhance.titleScroll): Ultra's own scrolling.
+  const [offBase, offContent, offFoot] = parts(false);
+  assert.equal(winner(theme, offBase, 'overflow-y'), null);
+  assert.equal(winner(theme, offContent, 'flex'), null);
+  assert.equal(winner(theme, offFoot, 'position'), null);
+  const [base, content, foot] = parts(true);
   assert.equal(winner(theme, base, 'overflow-y')[0], 'auto');
   assert.equal(winner(theme, content, 'flex')[0], 'none', 'the content no longer takes the room left to scroll in');
   assert.equal(winner(theme, content, 'overflow')[0], 'visible');

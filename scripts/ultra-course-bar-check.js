@@ -1,7 +1,7 @@
 // A course's top bar with Glaze loaded (test/fixtures/ultra-course.html): whole at the top of the course; scrolled, a small
 // pill of its tools at the end with no backing, the page under it reachable beside it and not moved by the fold; whole
-// again under keyboard focus and back at the top. With Glaze's course strip in it the strip stays as it is. Four window
-// sizes; a dark and a light Look.
+// again under keyboard focus and back at the top. With Glaze's course strip in it the strip stays as it is. Off with its
+// setting, the bar stays whole. Four window sizes; a dark and a light Look.
 // EXT=<checkout> NODE_PATH=<playwright> nice node scripts/ultra-course-bar-check.js <out dir> [--looks=a,b]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -72,10 +72,10 @@ const measure = () => {
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     const page = await ctx.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
-    const setup = async (look, strip) => {
+    const setup = async (look, strip, extra = {}) => {
       const base = G.GZ_DEFAULTS, L = G.GZ_LOOKS.find((l) => l.name === look);
       const settings = { ...base, ...G.GZ_LOOK_APPLY(base, L), navbar: { ...base.navbar, on: true, place: 'top', style: 'float' }, motion: { ...base.motion, level: 'off' },
-        enhance: { ...base.enhance, tabs: !!strip }, ...(strip ? { tabs: { ...G.GZ_SANITIZE({}).tabs, at: strip } } : {}) };
+        enhance: { ...base.enhance, tabs: !!strip, ...extra }, ...(strip ? { tabs: { ...G.GZ_SANITIZE({}).tabs, at: strip } } : {}) };
       await opts.evaluate(async ({ settings, site, uid }) => {
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.session.clear();
         await chrome.storage.sync.set(settings);
@@ -154,6 +154,13 @@ const measure = () => {
       const back = await scroll(0);
       check(!back.stuck && Math.abs(back.item - top.item) <= 0.05 && (await stripAt()).h > 30, `strip ${at}: whole again at the top`);
     }
+    // Off with its setting (enhance.fold): the bar stays whole when scrolled, its veil behind it as before.
+    await setup(LOOKS[0], false, { fold: false });
+    await go(false);
+    const offTop = await scroll(0), off = await scroll(400);
+    check(!off.stuck && off.head.h > 30 && off.veil[0] !== 'none' && off.veil[1] === '1' && Math.abs(off.item - (offTop.item - 400)) <= 0.05, 'off with its setting, the bar stays whole when scrolled',
+      { stuck: off.stuck, head: off.head.h, veil: off.veil, shift: off.item - (offTop.item - 400) });
+    await shot('setting-off-scrolled');
     check(errors.length === 0, 'no page errors', errors);
   } finally {
     await ctx?.close(); fs.rmSync(tmp, { recursive: true, force: true });

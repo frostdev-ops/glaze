@@ -63,7 +63,7 @@ const load = (kind = 'progress') => {
   let frameId = 0;
   const flush = () => { const pending = [...frames.values()]; frames.clear(); for (const f of pending) f(); };
   const c = { document: doc, requestAnimationFrame: (f) => { frames.set(++frameId, f); return frameId; }, cancelAnimationFrame: (id) => frames.delete(id),
-    GZ_CTX: { site: 'ultra', on: () => c.glazeOn }, glazeOn: true, ...on('window') };
+    GZ_CTX: { site: 'ultra', on: () => c.glazeOn, settings: () => c.settings }, glazeOn: true, settings: { enhance: { fold: true } }, ...on('window') };
   c.globalThis = c;
   vm.createContext(c);
   const ui = vm.runInContext(read('features/sticky-fold.js'), c);
@@ -104,6 +104,21 @@ test('one set of listeners however often the page syncs; none, and no fold, once
   ui.sync();
   assert.deepEqual(listeners, []);
   assert.equal(header.hasAttribute('data-gz-stuck'), false);
+});
+
+test('off with its setting: nothing folds, and what was folded unfolds', () => {
+  for (const kind of ['progress', 'bar']) {
+    const { c, ui, header, scrollTo } = load(kind);
+    ui.sync();
+    scrollTo(400);
+    assert.equal(header.hasAttribute('data-gz-stuck'), true, `${kind}: on by default`);
+    c.settings = { enhance: { fold: false } };
+    ui.sync();
+    assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: unfolded when turned off`);
+    assert.equal(header.style.getPropertyValue('--gz-fold') + header.style.getPropertyValue('--gz-whole'), '');
+    scrollTo(500);
+    assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: stays whole`);
+  }
 });
 
 test('routed on a course\'s pages (its tools, a test attempt), and loadable', () => {
