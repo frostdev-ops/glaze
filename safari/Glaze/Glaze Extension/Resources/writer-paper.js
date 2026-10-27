@@ -179,7 +179,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         handleKeyDown: (_v, e) => {
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return true; }
           // Ahead of ProseMirror's own Escape (select the parent node).
-          if (e.key === 'Escape' && focus) { setFocus(false); return true; }
+          if (e.key === 'Escape' && focus) { if (!globalThis.GZ_WRITER_AI?.dismissCompletion?.()) setFocus(false); return true; }
           return false;
         },
       },

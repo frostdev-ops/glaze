@@ -126,6 +126,12 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const stopFlight = () => { clearTimeout(timer); timer = 0; if (flight) { cancel(flight); flight = 0; } };
   const set = (v, g) => v.dispatch(v.state.tr.setMeta(KEY, g).setMeta('addToHistory', false));
   const clear = (v) => { if (KEY.getState(v.state)) set(v, null); };
+  const dismissCompletion = () => {
+    const v = view();
+    if (!v || !KEY.getState(v.state)) return false;
+    score = learn(score, false); set(v, null);
+    return true;
+  };
   // The gray text: its words, then the Tab keycap, faded in when it first shows and never while typing into it.
   const ghostDom = (g) => () => {
     const s = document.createElement('span');
@@ -184,7 +190,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
         const plain = !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey;
         if (e.key === 'Tab' && plain) { take(v, g, g.text); return true; }
         if (e.key === 'ArrowRight' && !e.shiftKey && (mac ? e.altKey && !e.ctrlKey && !e.metaKey : e.ctrlKey && !e.altKey && !e.metaKey)) { take(v, g, nextWord(g.text)); return true; }
-        if (e.key === 'Escape') { score = learn(score, false); set(v, null); return true; }
+        if (e.key === 'Escape') return dismissCompletion();
         if (['Shift', 'Alt', 'Control', 'Meta', 'CapsLock', 'Fn', 'AltGraph'].includes(e.key) || (e.key.length === 1 && !e.ctrlKey && !e.metaKey)) return false;
         score = learn(score, false);
         set(v, null);
@@ -457,6 +463,6 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     refresh();
   });
   F.on('context', refresh);
-  return Object.assign(api, { feedbackView, feedback, review, decide, requirements, cite, allowed: ok, refresh });
+  return Object.assign(api, { feedbackView, feedback, review, decide, requirements, cite, allowed: ok, refresh, dismissCompletion });
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_AI;
