@@ -499,7 +499,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 /* It scrolls as one page, as a document does: the title goes up with the instructions instead of staying over them (Ultra
    scrolls only the content under it). Ultra's body, already a scroller, takes the scroll; Save and Submit stay at its
    bottom, on glass over what passes under them. */
-bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"]:has(> [class*="makeStylescontentRoot-"]) { overflow-y: auto !important; }
+bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"] { overflow-y: auto !important; }
 bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"] > [class*="makeStylescontentRoot-"] { flex: none !important; overflow: visible !important; }
 bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"] {
   position: sticky; inset-block-end: 0; z-index: 3; margin-block-start: auto;

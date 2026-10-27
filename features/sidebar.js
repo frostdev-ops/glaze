@@ -923,13 +923,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setVar('--gz-sb-foot', `${r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0}px`);
   };
   // A bar the site fixes along the window's bottom holds its actions at its end, where the edge buttons are: Ultra's Save
-  // and Submit (content.js tags them; an older test's footer Ultra places absolutely, untagged) and its help button,
+  // and Submit (content.js tags them; an older test's footer Ultra places absolutely, an assignment attempt's in its flex
+  // column, both untagged) and its help button,
   // Canvas's Previous and Next; the site's CSS stands them on Glaze's bar. The button showing stands above the highest one
   // under it (--gz-sb-bar). A layer the window's height is no bar.
   const bars = () => {
     const b = [launch, edge].find((x) => !x.hidden)?.getBoundingClientRect();
     let up = 0;
-    if (b?.width) for (const e of document.querySelectorAll('[data-gz-fixed-bottom], .pagehelp-directive, #module_sequence_footer, footer.submit-footer.panel-footer-fixed')) {
+    if (b?.width) for (const e of document.querySelectorAll('[data-gz-fixed-bottom], .pagehelp-directive, #module_sequence_footer, footer.submit-footer.panel-footer-fixed, bb-assignment-attempt-authoring-panel [class*="makeStylesfooterWrapper-"]')) {
       const r = e.getBoundingClientRect();
       if (r.height && r.height < innerHeight / 2 && r.left < b.right && r.right > b.left && !host.el.contains(e)) up = Math.max(up, Math.round(innerHeight - r.top));
     }
