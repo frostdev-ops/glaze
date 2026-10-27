@@ -141,7 +141,8 @@ test('a field\'s edge is a control\'s outline: faint ink at rest, muted ink hove
 test('words are never in the faint ink, and words on the accent tint are in the bright accent', () => {
   // Faint ink is for edges and what is switched off (under 4.5:1 on the light palettes); muted ink is the quiet text.
   const muted = /(^|[;{\s])color: var\(--gz-ink-muted\) !important/;
-  for (const start of ['#site-wrap .peek .panel-sub-title', '#site-wrap .bb-editor-wrapper:not(.read-only) .ql-editor.ql-blank::before', '#site-wrap .bb-editor-wrapper:not(.read-only) .status-bar {',
+  for (const start of ['#site-wrap .peek .panel-sub-title', '#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .ql-editor.ql-blank::before',
+    '#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .status-bar {',
     '#site-wrap :is(.js-empty-state, [class*="empty-state"])', '#gz-footer {', '#gz-footer a {']) assert.ok(rule(start, muted) >= 0, `${start} in muted ink`);
   // The accent on its own tint is 4.24:1 on Paper; the tonal controls whose colour wins on the page.
   const hi = /(^|[;{\s])color: var\(--gz-accent-hi\) !important/;

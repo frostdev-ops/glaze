@@ -78,8 +78,12 @@ test('answer rows: the whole row, control and letter included, is one rounded pa
   }
 });
 
-test('the sticky progress header has a surface of its own', () => {
+test('the sticky progress header and the narrow bar have surfaces, and nothing inside paints a patch', () => {
   assert.match(bg(chain(...FULL, 'div.assessment-progress-header'))[0], SURFACE);
+  assert.match(bg(chain(...PANEL, 'header.black-panel-header'))[0], SURFACE);
+  assert.deepEqual(clear({ 'progress row': chain(...FULL, 'div.assessment-progress-header', 'div.assessment-progress-header-first-row'),
+    'bar contents': chain(...PANEL, 'header.black-panel-header', 'div.black-header-contents'),
+    'question header': chain(...QUESTION('eitherOr'), 'form', 'div.question-header.has-question-title.is-read-only') }), []);
 });
 
 test('the Additional content editor is one rounded card', () => {
