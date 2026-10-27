@@ -58,6 +58,7 @@ const seeded = async () => {
   });
   await a.send('notesFile', { key: ACCOUNT, file: { id: id(9), note: id(1), kind: 'image', name: 'pic.png', data: N.b64(PNG) } });
   assert.equal((await a.notes({ op: 'save', id: id(1), base: 0, sid: 'a', title: 'MARK-NOTE', html: `<p>MARK-NOTE-BODY</p><p><img data-gz-file="${id(9)}" alt=""></p>` })).ok, true);
+  await require('../lib/writer-papers.js').open(a.local, () => NOW).save('bb.school.test|_900_1|_101_1|_7_1', { title: 'MARK-PAPER', format: 'mla9', doc: require('../lib/writer-schema.js').parse(require('../lib/writer-schema.js').paper, '<p>MARK-PAPER-BODY</p>').toJSON() });
   a.keys.push(SHARE_KEY);
   return a;
 };
@@ -148,7 +149,7 @@ test('a backup of every category comes back whole on a new device', async () => 
     assert.deepEqual(N.unb64(pic.data), PNG);
     // Only these categories: nothing Glaze read from the school.
     const raw = JSON.parse(await (await unzipped(file)).text(B.MANIFEST));
-    assert.deepEqual(Object.keys(raw).sort(), ['classes', 'dashNotes', 'format', 'glaze', 'gpa', 'made', 'notes', 'settings', 'tasks', 'version', 'widgets']);
+    assert.deepEqual(Object.keys(raw).sort(), ['classes', 'dashNotes', 'format', 'glaze', 'gpa', 'made', 'notes', 'papers', 'settings', 'tasks', 'version', 'widgets']);
   } finally { a.stop(); b.stop(); }
 });
 const unzipped = async (file) => require('../lib/doctext.js').unzip(file.bytes);
@@ -206,6 +207,7 @@ test('an unticked category is left as it is', async () => {
       if (off === 'dashNotes') assert.equal(b.store[`notes:${SITE}/5`].text, 'mine');
       if (off === 'classes') assert.deepEqual(b.store[`classes:${SITE}/5`], mine[`classes:${SITE}/5`]);
       if (off === 'gpa') assert.equal(b.store[`gpaTerms:${SITE}:5`], undefined);
+      if (off === 'papers') assert.equal(b.store['writerPaper:bb.school.test|_900_1|_101_1|_7_1'], undefined);
       if (off === 'widgets') assert.equal(b.store.widgetLayout, undefined);
       if (off === 'settings') { assert.deepEqual(b.settings, []); assert.deepEqual(b.store.lookFavorites, []); }
       // Tasks without the settings still come back, through the worker's own record write, with nothing of the settings.

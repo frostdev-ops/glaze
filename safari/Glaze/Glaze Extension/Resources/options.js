@@ -1493,7 +1493,7 @@ GZ_UI.load().then((s) => {
   // and the pet beside them, card styles and bookmarks (a picture kept on this computer stays here), Look favorites, every
   // Notes account, and this device's own records. Restore… lists what a file holds; each ticked category joins what is here.
   const backupNames = () => ({ settings: t('Settings and Looks'), notes: t('Notes'), tasks: t('Tasks and pet'), dashNotes: t('Dashboard notes'),
-    classes: t('Class schedules'), gpa: t('GPA past terms'), widgets: t('Widgets'), shareKeys: t('Share keys') });
+    classes: t('Class schedules'), gpa: t('GPA past terms'), widgets: t('Widgets'), shareKeys: t('Share keys'), papers: t('Papers') });
   const sessionsOp = async (op, rest = {}) => {
     const r = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op, ...rest });
     if (!r?.ok) throw new Error(r?.error || 'storage');
