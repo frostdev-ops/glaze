@@ -348,7 +348,9 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await target.waitForFunction(() => location.pathname.endsWith('/grades') && !document.querySelector('.spinner'));
     await target.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 600; });
     await pictured('_101_1', '/ultra/courses/_101_1/grades');
-    await target.click('[data-analytics-id="course.header.home"]');
+    // Scrolled, the bar is folded and its header row out of view: a pointer click would scroll the course back to its top
+    // to show the Home link, and that place would be kept.
+    await target.locator('[data-analytics-id="course.header.home"]').evaluate((e) => e.click());
     await target.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'page');
     ok(true, 'outside a course, the strip shows above the page');
     await target.click('a[href="/ultra/courses/_102_1/outline"]');
@@ -372,9 +374,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       const drawnNow = await standIn(), sketch = Object.values(await session()).find((v) => v?.cid === '_101_1' && v.boxes);
       fs.writeFileSync(path.join(out, 'stand-in-sketch.json'), JSON.stringify(sketch, null, 1));
       ok(sketch && drawnNow?.parts === CTABS.drawn(sketch).length && drawnNow.pictures === 0, `the stand-in is drawn from the course's sketch, with no picture in it (${JSON.stringify(drawnNow)})`);
-      // The Gradebook's rows (text bars right of Ultra's menu, under the course's header) and its header's blocks.
+      // The Gradebook's rows (text bars right of Ultra's menu, under the course's header) and its header's blocks: one, the
+      // tools' pill, as the bar is folded at the place kept.
       const rows = sketch?.boxes.filter(([x, y, , , k]) => k === 't' && x > 230 && y > 170).length, header = sketch?.boxes.filter(([x, y, w, , k]) => 'bc'.includes(k) && x >= 220 && y < 170 && w > 500).length;
-      ok(rows >= 8 && header >= 2, `the sketch is of the course's page: its rows and its header (${rows} rows, ${header} header blocks)`);
+      ok(rows >= 8 && header >= 1, `the sketch is of the course's page: its rows and its header (${rows} rows, ${header} header blocks)`);
       await page.screenshot({ path: path.join(out, 'switch-copy-frost-1280.png') });
     } finally { holdCourse = ''; releaseCourse?.(); }
     await showing('_101_1');

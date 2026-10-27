@@ -137,7 +137,7 @@ test('a course\'s bar stays whole at the top and folds once the course scrolls u
   }
 });
 
-test('a course\'s bar holding Glaze\'s course strip folds as well', () => {
+test('a course\'s bar holding Glaze\'s course strip folds as well, its strip kept', () => {
   const { ui, header, scrollTo, el } = load('bar');
   const strip = el('div', '');
   strip.id = 'gz-ctabs';
@@ -165,38 +165,43 @@ test('folded, the band is a small pill at the column\'s end, its filters row hid
 
 test('folded, a course\'s bar is its tools in a small pill at the end, with no backing; at the top it is as it was', () => {
   const theme = cssRules('theme.css');
-  const PANEL = ['html', 'body', 'div#site-wrap', 'div.course-content-container', 'div.panel-wrap', 'section.course'];
+  // As read on a real course: the bar is the scroller's first child; its tools row is a toolbar in bb-course-navigation.
+  const PANEL = ['html', 'body', 'div#site-wrap', 'div.course-content-container', 'div.panel-wrap.hide-in-background.modern'];
   const at = (bar, ...rest) => rest.reduce((parent, spec) => Object.assign(chain(spec), { parent }), bar);
   const whole = chain(...PANEL, 'div.bb-course-navigation');
   const stuck = Object.assign(chain(...PANEL, 'div.bb-course-navigation'), { attrs: { 'data-gz-stuck': '' } });
-  const tools = (bar) => at(bar, 'bb-course-navigation', 'div.makeStylestoolbar-0-2-11');
+  const tools = (bar) => at(bar, 'bb-course-navigation', 'div.makeStylesroot-0-2-75.makeStylesbasic-0-2-76.makeStylestoolbar-0-2-70');
   assert.equal(winner(theme, tools(stuck), 'border-radius')[0], '999px');
   assert.equal(winner(theme, tools(stuck), 'inline-size')[0], 'fit-content');
   assert.equal(winner(theme, tools(stuck), 'margin-inline-start')[0], 'auto');
   assert.equal(winner(theme, tools(stuck), 'pointer-events')[0], 'auto');
   assert.equal(winner(theme, stuck, 'pointer-events')[0], 'none', 'beside the pill the page takes the pointer');
-  assert.equal(winner(theme, stuck, 'background(?:-color)?')[0], 'transparent');
   assert.match(winner(theme, stuck, 'block-size')[0], /var\(--gz-whole/, 'its height kept, so nothing under it moves');
+  assert.match(winner(theme, stuck, 'min-block-size')[0], /var\(--gz-whole/, 'also where Ultra\'s scroller, a flex column, would shrink it');
   // The header row is out of view, not out of the page: still read by assistive tech.
+  const head = at(stuck, 'course-page-header');
+  assert.equal(winner(theme, head, 'position')[0], 'absolute');
+  assert.equal(winner(theme, head, 'clip-path')[0], 'inset(50%)');
+  assert.equal(winner(theme, head, 'display'), null);
+  // Glaze's course strip stays where it is, and takes the pointer: a course is switched to and back from at any place.
   const strip = Object.assign(at(stuck, 'div'), { id: 'gz-ctabs' });
-  for (const [name, row] of [['header', at(stuck, 'course-page-header')], ['strip', strip]]) {
-    assert.equal(winner(theme, row, 'position')[0], 'absolute', name);
-    assert.equal(winner(theme, row, 'clip-path')[0], 'inset(50%)', name);
-    assert.equal(winner(theme, row, 'display'), null, name);
+  assert.equal(winner(theme, strip, 'pointer-events')[0], 'auto');
+  assert.equal(winner(theme, strip, 'position'), null);
+  assert.equal(winner(theme, strip, 'clip-path'), null);
+  // The pill keeps the window's gap above it, or the strip's after it: the bar's own top padding goes.
+  assert.match(winner(theme, tools(stuck), 'margin-(?:top|block-start)')[0], /var\(--gz-float-gap/);
+  for (const at of ['above', 'between', 'below']) {
+    const html = Object.assign(chain('html'), { attrs: { 'data-gz-ctabs': at } });
+    const bar = Object.assign(chain('body', 'div.bb-course-navigation'), { attrs: { 'data-gz-stuck': '' } });
+    bar.parent.parent = html;
+    assert.equal(winner(theme, bar, 'padding-(?:top|block-start)')[0], '0', at);
+    assert.match(winner(theme, tools(bar), 'margin-(?:top|block-start)')[0], /var\(--gz-float-gap/, at);
   }
-  // The strip's own rule (features/coursetabs.css) gives way too.
-  assert.equal(winner([...theme, ...cssRules('features/coursetabs.css')], strip, 'position')[0], 'absolute');
-  // At the strip's places the pill keeps the window's gap above it and none of its own.
-  const between = Object.assign(chain('html'), { attrs: { 'data-gz-ctabs': 'between' } });
-  const stuckBetween = Object.assign(chain('body', 'div#site-wrap', 'div.course-content-container', 'div.panel-wrap', 'section.course', 'div.bb-course-navigation'), { attrs: { 'data-gz-stuck': '' } });
-  for (let e = stuckBetween; e; e = e.parent) if (!e.parent) { e.parent = between; break; }
-  assert.equal(winner(theme, tools(stuckBetween), 'margin-(?:top|block-start)')[0], '0');
-  const above = Object.assign(chain('html'), { attrs: { 'data-gz-ctabs': 'above' } });
-  const stuckAbove = Object.assign(chain('body', 'div.bb-course-navigation'), { attrs: { 'data-gz-stuck': '' } });
-  stuckAbove.parent.parent = above;
-  assert.match(winner(theme, stuckAbove, 'padding-(?:top|block-start)')[0], /var\(--gz-float-gap/);
-  const link = at(tools(stuck), 'div.js-course-navigation', 'div.makeStylesscrollArea-0-2-12', 'nav', 'ul.MuiList-root.bb-ui-navigation-list-horizontal', 'li', 'a.MuiButtonBase-root');
+  const link = at(tools(stuck), 'div.makeStylesroot-0-2-77.js-course-navigation', 'div.makeStylesscrollArea-0-2-78', 'nav.makeStylesroot-0-2-79',
+    'ul.MuiList-root.bb-ui-navigation-list-horizontal', 'li', 'a.MuiButtonBase-root.MuiListItemButton-root');
   assert.equal(winner(theme, link, 'font-size')[0], '0.75rem');
+  // The name is a Typography span with a size of its own: it takes the link's.
+  assert.equal(winner(theme, at(link, 'div.MuiListItemText-root', 'span.MuiTypography-root.MuiTypography-body1'), 'font-size')[0], 'inherit');
   // No backing behind it: the veil is off while it is folded.
   assert.ok(theme.some(([sel, body]) => /^div\.bb-course-navigation\[data-gz-stuck\].*::before$/.test(sel) && /display:\s*none/.test(body)));
   // At the top: the two rows as before.

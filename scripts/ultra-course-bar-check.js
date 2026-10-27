@@ -1,7 +1,7 @@
 // A course's top bar with Glaze loaded (test/fixtures/ultra-course.html): whole at the top of the course; scrolled, a small
 // pill of its tools at the end with no backing, the page under it reachable beside it and not moved by the fold; whole
-// again under keyboard focus and back at the top; the same with Glaze's course strip in it. Four window sizes; a dark and
-// a light Look.
+// again under keyboard focus and back at the top. With Glaze's course strip in it the strip stays as it is. Four window
+// sizes; a dark and a light Look.
 // EXT=<checkout> NODE_PATH=<playwright> nice node scripts/ultra-course-bar-check.js <out dir> [--looks=a,b]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -12,7 +12,22 @@ const out = path.resolve(process.argv[2] || 'ultra-course-bar-evidence');
 const lookArg = process.argv.find((a) => a.startsWith('--looks='));
 const LOOKS = lookArg ? lookArg.slice(8).split(',') : ['Frostdev', 'Library'];
 const SIZES = [[1800, 987], [1280, 800], [1024, 768], [768, 900]];
-const fixture = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-course.html'), 'utf8');
+// The live nesting, as read on a real course (2026-10-27): the bar is the first child of the scroller, a flex column, beside
+// the course's content, unpainted; its header row (course-page-header) and tools (bb-course-navigation) are inline siblings
+// in it; each tool's name is a Typography span with a size of its own.
+const swap = (html, from, to) => { if (!html.includes(from)) throw Error(`fixture changed: ${from}`); return html.replace(from, to); };
+const fixture = [
+  ['.bb-course-navigation { position: sticky; top: 0; z-index: 10; background: Canvas; }', '.bb-course-navigation { position: sticky; top: 0; z-index: 10; }'],
+  ['bb-course-navigation, course-page-header { display: block; }', ''],
+  ['`<div class="bb-course-navigation"><bb-course-navigation>`', '`<div class="bb-course-navigation">`'],
+  ['`<course-page-header><header>`', '`<course-page-header class="react-container"><header class="makeStylesheader-0-2-45">`'],
+  ['`</header></course-page-header>`', '`</header></course-page-header><bb-course-navigation>`'],
+  ['<div class="makeStylestoolbar-0-2-11">', '<div class="makeStylesroot-0-2-75 makeStylestoolbar-0-2-11" role="toolbar" aria-label="Course Navigation">'],
+  ['href="/ultra/courses/${c.id}/${path}">${label}</a>', 'href="/ultra/courses/${c.id}/${path}"><div class="MuiListItemText-root"><span class="MuiTypography-root MuiTypography-body1" data-title="${label}">${label}</span></div></a>'],
+  ['<div class="panel-wrap hide-in-background modern"><section class="course course-color-${r.course.color}" bb-course-membership-markups="${r.course.id}">${barHtml(r.course, r.tool)}</section></div>',
+    '<div class="panel-wrap hide-in-background modern">${barHtml(r.course, r.tool)}<section class="course course-color-${r.course.color}" bb-course-membership-markups="${r.course.id}"></section></div>'],
+  ['</style>', '  .course-content-container > .panel-wrap { display: flex; flex-direction: column; }\n  .MuiListItemText-root { margin: 4px 0; }\n  .MuiTypography-body1 { margin: 0; font-size: 14px; line-height: 1.5; }\n</style>'],
+].reduce((html, [from, to]) => swap(html, from, to), fs.readFileSync(path.join(ext, 'test/fixtures/ultra-course.html'), 'utf8'));
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const results = [];
 const check = (v, label, actual) => { results.push({ pass: !!v, label, actual }); console.log(`${v ? 'ok  ' : 'FAIL'} ${label}${actual === undefined ? '' : ' ' + JSON.stringify(actual)}`); };
@@ -33,7 +48,7 @@ const measure = () => {
   const scroller = document.querySelector('.course-content-container > .panel-wrap');
   return { st: scroller.scrollTop, stuck: bar.hasAttribute('data-gz-stuck'), fold: bar.style.getPropertyValue('--gz-fold'), bar: r(bar), tools: r(tools), head: r(head), item: item.getBoundingClientRect().top,
     veil: [veil.display, veil.opacity], paint: getComputedStyle(bar).backgroundColor, radius: parseFloat(t.borderTopLeftRadius) || 0, end: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gz-float-end')) || 12,
-    font: parseFloat(getComputedStyle(link).fontSize), linkHit: !!hit && link.contains(hit), beside: !!beside && !bar.contains(beside), vw: innerWidth };
+    font: parseFloat(getComputedStyle(link.querySelector('.MuiTypography-root') || link).fontSize), linkHit: !!hit && link.contains(hit), beside: !!beside && !bar.contains(beside), vw: innerWidth };
 };
 
 (async () => {
@@ -110,24 +125,31 @@ const measure = () => {
         check(!back.stuck && back.head.h > 30 && Math.abs(back.item - top.item) <= 0.05, `${tag}: back at the top it is whole and nothing moved`, { shift: back.item - top.item, fold: back.fold });
       }
     }
-    // With Glaze's course strip in the bar (above, between or below its rows) the strip folds away with the header row.
+    // With Glaze's course strip in the bar (above, between or below its rows) the strip stays, on its own glass, and takes the
+    // pointer; the header row folds away and the tools are the pill.
     await page.setViewportSize({ width: 1280, height: 800 });
     for (const at of ['above', 'between', 'below']) {
       await setup(LOOKS[0], at);
       await go(true);
       const top = await scroll(0);
-      const stripAt = () => page.evaluate(() => { const b = document.querySelector('div.bb-course-navigation #gz-ctabs').getBoundingClientRect(); return { w: b.width, h: b.height }; });
+      const stripAt = () => page.evaluate(() => {
+        const s = document.querySelector('div.bb-course-navigation #gz-ctabs'), b = s.getBoundingClientRect(), tab = s.querySelector('[data-course-id="_102_1"]').getBoundingClientRect();
+        const hit = document.elementFromPoint(tab.x + tab.width / 2, tab.y + tab.height / 2);
+        return { y: b.y, w: b.width, h: b.height, hit: !!hit && s.contains(hit) };
+      });
       const whole = await stripAt();
       check(!top.stuck && whole.h > 30, `strip ${at}: at the top the bar and strip are whole`, whole);
       const down = await scroll(400), folded = await stripAt();
-      check(down.stuck && down.veil[0] === 'none' && /^rgba\(0, 0, 0, 0\)$/.test(down.paint) && folded.w <= 1 && folded.h <= 1, `strip ${at}: scrolled, the strip folds away with no backing`, { folded, veil: down.veil });
-      check(down.tools.h <= 44 && down.tools.y - down.bar.y <= 16 && Math.abs(down.bar.h - top.bar.h) <= 0.05, `strip ${at}: the tools pill at the bar's top, its height kept`, { y: down.tools.y - down.bar.y, h: down.tools.h, bar: down.bar.h, was: top.bar.h });
+      check(down.stuck && down.veil[0] === 'none' && /^rgba\(0, 0, 0, 0\)$/.test(down.paint) && down.head.w <= 1, `strip ${at}: scrolled, the header row folds away with no backing`, { veil: down.veil, head: down.head });
+      check(folded.h === whole.h && folded.w === whole.w && folded.hit, `strip ${at}: the strip stays whole and takes the pointer`, { folded, whole });
+      const pillGap = at === 'below' ? down.tools.y - down.bar.y : down.tools.y - (folded.y + folded.h);
+      check(down.tools.h <= 44 && Math.abs(pillGap - 12) <= 1 && Math.abs(down.bar.h - top.bar.h) <= 0.05, `strip ${at}: the tools pill a gap from the ${at === 'below' ? 'window' : 'strip'}, the bar's height kept`, { gap: pillGap, h: down.tools.h, bar: down.bar.h, was: top.bar.h });
       check(down.st === 400 && Math.abs(down.item - (top.item - 400)) <= 0.05 && down.beside && down.linkHit, `strip ${at}: nothing moved, the page and the pill take the pointer`, { shift: down.item - (top.item - 400), beside: down.beside, link: down.linkHit });
       await shot(`strip-${at}-folded`);
       await page.locator('div.bb-course-navigation #gz-ctabs [data-course-id]').first().focus();
       await pause(200);
       const focused = await page.evaluate(measure), open = await stripAt();
-      check(open.h > 30 && Math.abs(focused.item - down.item) <= 0.05, `strip ${at}: keyboard focus on a course tab shows the bar whole, moving nothing`, { strip: open, shift: focused.item - down.item });
+      check(focused.head.h > 30 && open.h > 30 && Math.abs(focused.item - down.item) <= 0.05, `strip ${at}: keyboard focus on a course tab shows the bar whole, moving nothing`, { strip: open, shift: focused.item - down.item });
       await page.evaluate(() => document.activeElement?.blur());
       const back = await scroll(0);
       check(!back.stuck && Math.abs(back.item - top.item) <= 0.05 && (await stripAt()).h > 30, `strip ${at}: whole again at the top`);
