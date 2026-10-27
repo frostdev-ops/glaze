@@ -93,13 +93,16 @@ var GZ_WRITER_TARGET = globalThis.GZ_WRITER_TARGET || (() => {
   const instructions = (s) => {
     const blank = (m) => ' '.repeat(m.length);
     s = s.replace(/"[^"\n]*(?:"|$)|`[^`]*(?:`|$)|(?<![\p{L}\p{N}])'[^'\n]+'(?![\p{L}\p{N}])/gu, blank);
-    if ((s.match(/\bpart\s+(?:\d+|[a-z])\s*:/g) || []).length > 1 || /\beach (?:of (?:the )?)?(?:\d+ )?parts?\b/.test(s)) return '';
+    if ((s.match(/\bpart\s+(?:\d+|[a-z])\s*[:.)]/g) || []).length > 1 || /\beach (?:of (?:the )?)?(?:\d+ )?parts?\b/.test(s)) return '';
+    if ((s.match(/(?:^|\n)\s*\d+[.)] /g) || []).length > 1 && (s.match(/\bwords?\b/g) || []).length > 1) return '';
     return s;
   };
   const uncertain = (s, x, counts = false) => {
     const sentence = s.slice(...sentenceOf(s, x.start));
+    const qualified = sentence.replace(/\b(?:should|must|may|can|does|do|will|shall)(?: not|n't) exceed\b/g, ' ');
     // These qualifiers change whether a count is required, what it measures, or whether it is per reply.
-    if (/\b(?:examples?|for instance|optional|optionally|may|might|could|need not|(?:do|does|did|must|should|is|are) not (?!exceed)|don’t|don't|doesn't|isn't|aren't)\b/.test(sentence) || /\d\.\d/.test(sentence) || /\b(?:total|combined|altogether|across)\b.*\b(?:replies|responses)\b/.test(sentence)) return true;
+    if (/\b(?:examples?|for instance|optional|optionally|may|might|could|can|need not|no need|does not need|(?:do|does|did|must|should|is|are) not (?!exceed)|don’t|don't|doesn't|isn't|aren't)\b/.test(qualified) || /\d\.\d/.test(sentence) || /\b(?:total|combined|altogether|across)\b.*\b(?:replies|responses)\b/.test(sentence)) return true;
+    if (/\b(?:each of (?:your|the) \d+ (?:posts|parts)|exclud(?:ing|e)|except|or \d+ pages?)\b/.test(sentence) || /\b(?:the|this|assigned|provided) (?:article|passage|excerpt|chapter|text) (?:contains?|has|is)\b/.test(sentence)) return true;
     if (/\b(?:read|review|summarize|analyse|analyze)\b.*\b\d+[ -]words? (?:article|passage|excerpt|chapter|text|example)\b/.test(sentence)) return true;
     // sources/replies have only a minimum field; an upper bound must never masquerade as that minimum.
     return counts && /\b(?:no more than|at most|up to|maximum|max|fewer than|less than|under|or fewer|or less)\b/.test(sentence);
