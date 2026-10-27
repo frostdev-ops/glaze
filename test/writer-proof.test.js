@@ -341,3 +341,25 @@ test('sure fixes preserve valid repetition, capitalised names and dictionary wor
   assert.equal(P.autofix(e.view, { ...e.at('this'), suggestions: ['This'], rule: 'Capitalization' }), null);
   for (const before of ['well-teh', 'pre-teh', "'teh", '“teh']) assert.equal(P.fix(before), null, before);
 });
+
+test('issue capacity keeps decorations equal to live issues across sources', () => {
+  const e = editor('<p>word</p>');
+  const many = Array.from({ length: 2000 }, (_, n) => ({ from: 1, to: 5, id: String(n), kind: 'spelling' }));
+  e.issues.set('harper', many);
+  e.issues.set('ai', [{ from: 1, to: 5, id: 'ai', kind: 'style' }]);
+  const st = I.key.getState(e.view.state), ids = new Set(st.issues.map((i) => i.id));
+  assert.equal(st.deco.find().length, st.issues.length);
+  assert.ok(st.deco.find().every((d) => ids.has(d.spec.id)));
+  e.issues.clear('harper');
+  assert.equal(I.key.getState(e.view.state).deco.find().length, e.issues.list().length);
+});
+
+test('issues reject spans that split a surrogate pair', () => {
+  const e = editor('<p>😀 wrong</p>');
+  e.issues.set('ai', [{ from: 1, to: 2, suggestions: ['x'] }, { from: 2, to: 3, suggestions: ['x'] }]);
+  assert.equal(e.issues.list().length, 0);
+  e.issues.set('ai', [{ from: 1, to: 3, suggestions: ['🙂'] }]);
+  assert.equal(e.issues.list().length, 1);
+  assert.ok(e.issues.apply(e.issues.list()[0]));
+  assert.equal(e.text(), '🙂 wrong');
+});
