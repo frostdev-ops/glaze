@@ -120,3 +120,22 @@ test('editable question editors keep their control boundary', () => {
   const root = chain(...QUESTION('essay'), 'form', 'div.question-content', 'div.bb-editor-wrapper', 'div.bb-editor-root');
   assert.match(winner(theme, root, 'border')[0], /1px solid/, 'the editor remains a bordered control inside the question card');
 });
+
+test('an assignment attempt scrolls as one page: its title goes up with it, Save and Submit stay at the bottom on a dock', () => {
+  // The owner (2026-10-27): "no reason this header should follow our scroll in an assignment". Ultra scrolled only the
+  // content under the title; its body, a scroller already, now takes the scroll.
+  const BASE = [...ROUTED, 'bb-assignment-attempt-authoring-panel.react-container', 'div', 'div.makeStylespanelRoot-0-2-46.makeStylespanelRootWithFooter-0-2-47',
+    'div.makeStylesbaseBody-0-2-49.makeStylesbodyWithStandardHeader-0-2-51.makeStylesbaseBodyWithResponsiveFooter-0-2-50'];
+  const base = chain(...BASE), content = chain(...BASE, 'div.makeStylescontentRoot-0-2-54.makeStylescontentRootWithFooter-0-2-55'), foot = chain(...BASE, 'div.makeStylesfooterWrapper-0-2-58');
+  assert.equal(winner(theme, base, 'overflow-y')[0], 'auto');
+  assert.equal(winner(theme, content, 'flex')[0], 'none', 'the content no longer takes the room left to scroll in');
+  assert.equal(winner(theme, content, 'overflow')[0], 'visible');
+  assert.equal(winner(theme, foot, 'position')[0], 'sticky');
+  assert.equal(winner(theme, foot, 'inset-block-end')[0], '0');
+  assert.match(bg(foot)[0], SURFACE, 'what passes under Save and Submit is behind a dock');
+  // The title has no room kept for a course strip: on a page with a breadcrumb row, the strip goes there.
+  const extras = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'extras.css'), 'utf8');
+  for (const rule of extras.match(/^html\[data-gz-ctabs[^\n]*\[class\*="headerRoot"\]:not\(:has\(#gz-ctabs\)\)[^\n]*$/gm)) {
+    assert.match(rule, /\.routed-page\.bb-offcanvas-container:not\(:has\(content-page-header > header\)\)/, rule);
+  }
+});

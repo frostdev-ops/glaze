@@ -5,10 +5,12 @@
   attempt (.assessment-attempt-panel with its sticky progress header, three question types, the Additional content editor
   and its color menu, the details column, and the footer Ultra positions absolutely below the scroller), a journal and a
   file page's title band, the roster's full panel header, an overview's rubric details, the student Grades tabs, and the
-  empty Announcements and discussion states. The <style> block stands in for Ultra's own layout, as measured.
+  empty Announcements and discussion states, and the current (React) assignment attempt: its title, instructions and
+  details in a body under the title, Save and Submit below. The <style> block stands in for Ultra's own layout, as measured.
 
   Served for every https://bb.school.test/ultra/** path (scripts/ultra-test-attempt-check.js); the path picks the page:
     /ultra/courses/_101_1/assessment/_8123_1/attempt/_8124_1   test attempt
+    /ultra/courses/_101_1/assessment/_8129_1/attempt/create    assignment attempt
     /ultra/courses/_101_1/journal/_8125_1                      journal
     /ultra/courses/_101_1/file/_8126_1                         file
     /ultra/courses/_101_1/outline/roster                       roster
@@ -112,6 +114,21 @@ footer.panel-footer-in-content { position: absolute; bottom: 0; z-index: 2; disp
 .MuiTab-root.Mui-selected { box-shadow: inset 0 -2px #262626; }
 course-student-grades { display: block; margin-top: 1px; } course-student-grades table { width: 100%; }
 .no-result-message, .is-empty-wrapper { padding: 40px 0; text-align: center; }
+/* The assignment attempt (2026-10-27, probe of a live attempt): a flex column filling the item's body, its header,
+   then the content that scrolls under it (Ultra's body would scroll too, but the content takes all the room), then the
+   footer. The details column sticks in the content. */
+.makeStylespanelRoot-fx { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.makeStylesbaseBody-fx { display: flex; flex-direction: column; flex: 1 1; min-height: 0; overflow-y: hidden; }
+.makeStylesbodyWithStandardHeader-fx { overflow-y: auto; }
+.makeStylesheaderRoot-fx { flex: 0 1 auto; }
+.makeStylespanelHeaderContainerRoot-fx { padding: 30px; } .makeStylesheaderText-fx { margin: 0; font-size: 32px; font-weight: 300; }
+.makeStylescontentRoot-fx { flex: 1 1 auto; overflow-y: auto; }
+.makeStylesbody-fx { padding: 30px; } .makeStylescontainer-fx { display: flex; gap: 30px; }
+.makeStylesauthoring-fx { flex: 1 1 auto; min-width: 0; }
+.makeStylesdetails-fx { flex: 0 0 352px; position: sticky; top: 0; max-height: 749px; overflow-y: auto; padding: 0 16px 16px; }
+.makeStylesfooterWrapper-fx { flex: 0 0 auto; } .makeStylesfooterRoot-fx { display: flex; justify-content: flex-end; gap: 12px; height: 71px; padding: 16px 30px; }
+.gz-fx-instructions { min-height: 900px; } #bb-editorassignment-attempt-authoring-submission { min-height: 240px; border: 1px solid #cdcdcd; padding: 10px 15px; }
+.gz-fx-upload { min-height: 200px; margin-top: 16px; border: 1px dashed #cdcdcd; }
 </style></head><body class="default">
 <div id="site-wrap" class="off-canvas-wrap"><div class="inner-wrap"><section class="routed-page route-view-container bb-offcanvas-container"><content-page-header class="react-container"><header class="makeStylesheader-fx"><button type="button" aria-label="Close">×</button><a href="/ultra/courses/_101_1/outline">Sample Course</a> › <span class="gz-fx-crumb">Item</span></header></content-page-header><div class="routed-page-body js-skip-link-target"></div></section></div></div>
 <script>
@@ -169,7 +186,21 @@ course-student-grades { display: block; margin-top: 1px; } course-student-grades
   const item = (kind, title, inner) => `<div class="table-of-contents-disabled item-panel"><div class="panel-content-body"><div class="root-learning-module-panel"><div class="content-item-container"><div class="content-header-large"><content-header>
     <header class="black-panel-header"><div class="black-header-contents"><h1 class="panel-title">${kind}</h1><a class="standard-button dark-background" href="details" title="Details" aria-label="Details">i</a></div></header>${titleBand(title)}</content-header></div>${inner}</div></div></div></div>`;
 
+  // The assignment attempt, as React draws it (the nesting the sidebar's guard reads: one wrapper, the panel, its body
+  // holding the header, the content and the footer).
+  const assignment = () => `<bb-assignment-attempt-authoring-panel class="react-container"><div><div class="makeStylespanelRoot-fx makeStylespanelRootWithFooter-fx">
+    <div class="makeStylesbaseBody-fx makeStylesbodyWithStandardHeader-fx makeStylesbaseBodyWithResponsiveFooter-fx">
+    <div class="makeStylesheaderRoot-fx makeStylesheaderRootWithFooter-fx"><div class="makeStylespanelHeaderContainerRoot-fx"><div class="makeStylescontainerWrapper-fx"><div class="makeStylesheadingWrapperContainer-fx"><div class="makeStylesheaderWrapper-fx"><h1 class="MuiTypography-root MuiTypography-h3 makeStylesheaderText-fx js-header-text js-readonly-header-text">Practice Assignment</h1></div></div></div></div></div>
+    <div class="makeStylescontentRoot-fx makeStylescontentRootWithFooter-fx"><div class="makeStylesbody-fx"><div class="makeStylescontainer-fx">
+      <div class="makeStylesauthoring-fx makeStylessidePanelContentMarginFix-fx"><div class="gz-fx-instructions"><h2>Instructions</h2>${readOnly('Invented instructions for a practice assignment.')}</div>
+        <div class="makeStylessubmission-fx"><h2 class="MuiTypography-root MuiTypography-h2">Submission</h2><div id="bb-editorassignment-attempt-authoring-submission" class="ql-editor bb-editor" contenteditable="true" role="textbox" aria-label="Submission"></div><div class="gz-fx-upload">Drag files here</div></div></div>
+      <div class="makeStylesdetails-fx"><div class="makeStylessidePanelContentMarginFix-fx"><h2>Details &amp; Information</h2><p>Assessment due date: No due date</p><p>Attempts: Unlimited</p></div><div><h3>Grading</h3><p>Maximum points: 100 points</p></div></div>
+    </div></div></div>
+    <div class="makeStylesfooterWrapper-fx"><footer class="makeStylesfooterRoot-fx"><button type="button" class="gz-fx-save">Save and Close</button><button type="button" class="gz-fx-submit">Submit</button></footer></div>
+    </div></div></div></bb-assignment-attempt-authoring-panel>`;
+
   const pages = [
+    [/\/assessment\/_8129_1\/attempt\//, assignment],
     [/\/assessment\/_\d+_\d+\/attempt\//, attempt],
     [/\/journal\//, () => item('View Journal', 'Practice Journal', '<div class="journal-topic"><h2>Journal Topic</h2><p>Invented prompt.</p></div>')],
     [/\/file\//, () => item('File', 'Course Takeaway', '<div class="file-viewer"><iframe title="Invented file" src="/bbcswebdav/pid-1-dt-content-rid-1_1/xid-1_1?render=inline"></iframe></div>')],

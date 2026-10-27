@@ -14,8 +14,8 @@ const overview = (toc = 'enabled') => {
 
 // Structure observed on the live attempt/create page: the editable authoring column and the read-only details
 // column are siblings; Save/Submit live in a separate footer outside their scroll container.
-const attempt = () => {
-  const p = page({ at: 'stream', width: 1800, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+const attempt = (width = 1800) => {
+  const p = page({ at: 'stream', width, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
   p.c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
   const editor = p.el('div', '', 'A draft answer');
   editor.id = 'bb-editorassignment-attempt-authoring-submission';
@@ -179,4 +179,14 @@ test('assessment sidebar hosts reject every native editable form while allowing 
     await p.pass();
     assert.ok(p.host() !== details, `${kind}: inherited native editing stays outside the sidebar`);
   }
+});
+
+test("the attempt's Save / Submit footer lifts the drawer's opener, though it is a row of Ultra's flex column, not fixed", async () => {
+  const { p, footer } = attempt(1024);
+  const boxOf = p.doc.boxOf;
+  p.doc.boxOf = (e) => e.id === 'gz-sb-launch' ? { left: 932, top: 818, width: 80, height: 34 } : boxOf?.(e);
+  footer.box = { left: 0, top: 797, width: 1024, height: 71 };
+  await p.pass();
+  assert.equal(p.mode(), 'drawer');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-bar'), `${p.c.innerHeight - 797}px`, 'the footer\'s top, from the window\'s bottom');
 });

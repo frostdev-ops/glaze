@@ -810,7 +810,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       const scrollRect = nativeScroller === document ? null : nativeScroller?.getBoundingClientRect();
       setVar('--gz-sb-native-offset', `${Math.max(0, top - (scrollRect?.top || 0))}px`);
       setVar('--gz-sb-native-top', `${Math.max(top, host.el.getBoundingClientRect().top)}px`);
-      setVar('--gz-sb-native-end', `${scrollRect ? Math.max(0, innerHeight - scrollRect.bottom) : 0}px`);
+      // An attempt's Save and Submit stay over the bottom of the body that scrolls it (theme.css): the column ends above them.
+      const foot = host.kind === 'attempt' ? nativeScroller?.querySelector?.(':scope > [class*="makeStylesfooterWrapper-"]') : null;
+      const bottom = Math.min(scrollRect ? scrollRect.bottom : innerHeight, foot ? foot.getBoundingClientRect().top : Infinity);
+      setVar('--gz-sb-native-end', `${Math.max(0, innerHeight - bottom)}px`);
     }
     foot();
     pageHead.hidden = pageEmpty;
