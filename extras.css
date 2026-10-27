@@ -129,6 +129,8 @@ html[data-gz-motion="expressive"] :is(.element-card, .content-list-item > .itemC
 html[data-gz-enhance-reading] #site-wrap :is(.bb-editor-container.is-read-only .ql-editor, .bbml-content) { max-width: 72ch; }
 /* …in the middle of its card, which is often wider than the measure. */
 html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { margin-inline: auto; }
+/* …except a test's prompts and answers, which keep to the start of their card and rows, in line with each other. */
+html[data-gz-enhance-reading] #site-wrap .assessment-question .bb-editor-container.is-read-only .ql-editor { margin-inline: 0; }
 html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { font-size: 1.04em; }
 
 /* Shorter descriptions: three lines until the item is hovered or focused. Not on touch screens, which
