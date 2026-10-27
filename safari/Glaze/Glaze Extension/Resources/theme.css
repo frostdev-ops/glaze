@@ -1012,7 +1012,7 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 #site-wrap .discussion-board .discussion-sorting-wrapper { margin-block: 1rem; }
 #site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
   .activity-stream .activity-group-title, .base-profile .profile-content h2,
-  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2),
+  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2, .assessment-summary div.row > .settings-label),
   bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
 #site-wrap .discussion-board :is(.discussion-full-panel-detail-header,
   discussion-refresh-button button, discussion-follow-button button, bb-discussion-sorting-options button, discussion-reply-button button) {
@@ -1024,9 +1024,11 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 /* Section-heading pills retain the native heading text and scale with the active Look. */
 #site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
   .activity-stream .activity-group-title, .base-profile .profile-content h2,
-  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2),
+  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2, .assessment-summary div.row > .settings-label),
   bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
 #site-wrap .discussion-board .discussion-full-panel-detail-header { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
+/* A test's Grading and Description labels head their own rows: the pill on its own line above the value. */
+#site-wrap .assessment-attempt-panel .assessment-summary div.row > .settings-label { display: flex; inline-size: fit-content; margin-block: 0.75rem 0.5rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button { min-width: 2.25rem; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button:is(:hover, :focus-visible, [aria-pressed="true"]) {
   background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border-color: var(--gz-accent) !important;
@@ -1092,9 +1094,9 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 #site-wrap .assessment-attempt-panel .assessment-question { margin-block: 0 1rem; padding: 1rem 1.25rem !important; }
 #site-wrap .assessment-attempt-panel .question-header { margin-block-end: 0.75rem; }
 #site-wrap .assessment-attempt-panel .additional-content-label { margin-block-end: 0.75rem; }
-/* Inside a card nothing paints its own square: the prompt's and each answer's Quill layers are see-through. */
-#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label),
-#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label) :is(.bb-editor-root, .editor-content-container, .bb-editor-container, .ql-container, .ql-editor) { background: transparent !important; border: 0 !important; }
+/* Inside a card nothing paints its own square: the prompt's, the instructions' and each answer's Quill layers are see-through. */
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor),
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor) :is(.bb-editor-root, .editor-content-container, .bb-editor-container, .ql-container, .ql-editor) { background: transparent !important; border: 0 !important; }
 /* An answer: the whole row is the control, its letter and its text, one rounded fill with one edge. The edge marks where
    the pointer is, the chosen answer and the keyboard's place; the box's own edge is ink, not a faint line. */
 #site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root {
@@ -1114,6 +1116,22 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 /* The progress bar stays at the top of the scroller as a whole band (Ultra parks it 30px above the edge, which cut off
    its top and left the rest see-through over the questions). */
 #site-wrap .assessment-attempt-panel .assessment-progress-header { top: 0 !important; z-index: 3; margin-block-end: 1rem; padding: 0.75rem 1rem !important; }
+/* Once the questions scroll under it, it folds into a pill at the column's end: a short bar and the count
+   (features/test-progress.js marks it and gives the folded height back below it, so nothing moves). */
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] {
+  display: flex !important; align-items: center; gap: 0.75rem; inline-size: fit-content; max-inline-size: 100%; margin-inline-start: auto;
+  margin-block-end: calc(1rem + var(--gz-progress-fold, 0px)); padding: 0.375rem 0.875rem !important; border-radius: 999px !important;
+}
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > * { margin: 0 !important; padding: 0 !important; border: 0 !important; }
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-first-row { flex: none; inline-size: 4.5rem; }
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-first-row p:empty,
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-third-row { display: none; }
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-second-row,
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-second-row * { font-size: 0.75rem; line-height: 1.4; white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-gz-motion="off"]) #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] { animation: gz-progress-fold 160ms ease-out; }
+}
+@keyframes gz-progress-fold { from { opacity: 0; transform: translateY(-4px) scale(0.97); } }
 /* Below Ultra's 64em the panel opens with its own bar (Exit, the item's type, its details): a band like the title's, in
    Ultra's place (the content below is placed a bar's height down). */
 #site-wrap .assessment-attempt-panel > .black-panel-header {
