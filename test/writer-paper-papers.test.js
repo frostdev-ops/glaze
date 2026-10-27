@@ -110,3 +110,11 @@ test('versions restore the matching format and count encoded bytes', async () =>
   assert.equal(v.bytes, new TextEncoder().encode(JSON.stringify(doc('é'.repeat(100)))).length);
   assert.equal((await P.restore(k, v.id)).paper.format, 'mla9');
 });
+
+test('submitting a stale tab also keeps the newer draft from the other editor', async () => {
+  const s = store(), a = PA.open(s), b = PA.open(s), k = PA.keyOf(K);
+  await a.save(k, { doc: doc('Original.') }); await b.get(k);
+  await a.save(k, { doc: doc('Other editor.') });
+  await b.save(k, { doc: doc('Submitted version.') }, { reason: 'submit' });
+  assert.ok((await Promise.all((await b.versions(k)).map((v) => b.version(k, v.id)))).some((v) => v.doc.content[0].content[0].text === 'Other editor.'));
+});
