@@ -87,7 +87,7 @@
     timer = setTimeout(() => {
       const ed = F.editor(), I = globalThis.GZ_WRITER_ISSUES;
       if (!ed?.view || !I?.set) return;
-      try { I.set('cite', C.check(ed.view.state.doc, sources, style, { t })); } catch (e) { console.error(e); }
+      try { I.set('cite', C.check(ed.view.state.doc, sources, style, { t, shape: F.mode() !== 'paper' })); } catch (e) { console.error(e); }
     }, 600);
   };
   F.on('change', recheck);

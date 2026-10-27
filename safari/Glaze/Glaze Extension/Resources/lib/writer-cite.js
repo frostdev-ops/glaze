@@ -413,7 +413,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
         issues.push(ISSUE(from, to, t('{name} is cited but has no entry', { name: c.name }), { title: listName, name: c.name, action: 'add-source' }));
         continue;
       }
-      if (k === 'mla9' && c.kind === 'paren' && c.sep === ',' && c.page && /^[\dxivlc]/i.test(c.page)) {
+      if (opts.shape !== false && k === 'mla9' && c.kind === 'paren' && c.sep === ',' && c.page && /^[\dxivlc]/i.test(c.page)) {
         const fixed = c.text.replace(`${c.name}, ${c.page}`, `${c.name} ${c.page}`);
         if (fixed !== c.text) issues.push({ ...ISSUE(from, to, t('MLA citation'), { title: t('MLA citation') }), suggestions: [fixed], sure: true });
       }
