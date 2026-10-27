@@ -295,6 +295,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   };
   const draw = (box) => {
     box.textContent = '';
+    box.setAttribute('aria-busy', String(fb.state === 'running'));
     if (!ok('writing')) { box.append(el('p', 'gz-fb-note', t('Writing feedback is off in Settings → AI.'))); return; }
     if (!assignment()) { box.append(el('p', 'gz-fb-note', t('No instructions or rubric to check against.'))); return; }
     const go = el('button', 'gz-fb-run', fb.state === 'running' ? t('Reading your draft…') : fb.state === 'done' ? t('Check again') : t('Get feedback'));
@@ -320,10 +321,14 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       box.append(card);
     }
   };
-  const paint = () => { for (const box of views) draw(box); };
+  const paint = () => { for (const box of views) { const focused = box.contains(document.activeElement); draw(box); if (focused) box.focus({ preventScroll: true }); } };
   // The Feedback panel, in any container (the paper's side panel tab; compose's popover over the chip). → { destroy }.
   const feedbackView = (container) => {
     const box = el('div', 'gz-fb');
+    box.tabIndex = -1;
+    box.setAttribute('role', 'region');
+    box.setAttribute('aria-label', t('Feedback'));
+    box.setAttribute('aria-live', 'polite');
     container.append(box);
     views.add(box);
     draw(box);
@@ -340,10 +345,13 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const menu = el('div', 'pop menu gz-ai-menu');
   menu.setAttribute('role', 'menu');
   menu.hidden = true;
-  const item = (cls, fn) => { const b = el('button', cls); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.addEventListener('click', () => { shut(); fn(); }); menu.append(b); return b; };
+  const item = (cls, fn) => { const b = el('button', cls); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.addEventListener('click', () => { shut(); chip.focus(); fn(); }); menu.append(b); return b; };
   const checkItem = item('gz-ai-check', review), fbItem = item('gz-ai-fb', () => openFeedback());
   const pop = el('div', 'pop gz-ai-pop');
   pop.hidden = true;
+  pop.tabIndex = -1;
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', t('Feedback'));
   let moreItem = null, fbView = null;
   const label = (b, text, keys) => { b.textContent = text; if (keys) b.append(el('span', 'gz-keys', keys)); };
   // Shown by a fade and scale (writer.css .pop), hidden at once.
@@ -351,6 +359,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const shut = () => {
     for (const p of [menu, pop]) { p.hidden = true; p.removeAttribute('data-open'); }
     chip.setAttribute('aria-expanded', 'false');
+    chip.setAttribute('aria-haspopup', 'menu');
     fbView?.destroy();
     fbView = null;
   };
@@ -382,8 +391,10 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     shut();
     fbView = feedbackView(pop);
     chip.setAttribute('aria-expanded', 'true');
+    chip.setAttribute('aria-haspopup', 'dialog');
     open(pop);
     place(pop);
+    pop.focus({ preventScroll: true });
     if (fb.state === 'idle') feedback();
   };
   chip.addEventListener('click', () => {
@@ -397,10 +408,12 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   });
   menu.addEventListener('keydown', (e) => {
     const items = [...menu.querySelectorAll('[role="menuitem"]:not([hidden])')], i = items.indexOf(document.activeElement);
-    if (e.key === 'Escape') { e.preventDefault(); shut(); chip.focus(); } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
+    if (e.key === 'Tab') { shut(); chip.focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); shut(); chip.focus(); } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
   });
   pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); shut(); chip.focus(); } });
   document.addEventListener('pointerdown', (e) => { if ((!menu.hidden || !pop.hidden) && !menu.contains(e.target) && !pop.contains(e.target) && !chip.contains(e.target)) shut(); }, true);
+  document.addEventListener('focusin', (e) => { if ((!menu.hidden || !pop.hidden) && !menu.contains(e.target) && !pop.contains(e.target) && e.target !== chip) shut(); });
   addEventListener('resize', () => { if (!menu.hidden) place(menu); if (!pop.hidden) place(pop); });
 
   // ---- the autocorrect's calls -------------------------------------------------------------------------------------
