@@ -257,7 +257,7 @@
       done(s);
     });
     host.replaceChildren(f);
-    (f.querySelector('[data-field="title"]:placeholder-shown') || f.querySelector('[data-field="title"]'))?.focus();
+    (f.querySelector('[data-field="title"]:placeholder-shown') || f.querySelector('[data-field="title"]'))?.focus({ preventScroll: true });
     return f;
   };
   // Keeps a source: a new one joins the list (or fills the one it duplicates), an edited one replaces itself.
@@ -296,7 +296,7 @@
     if (F.mode() !== 'compose') return;
     const gw = document.getElementById('gw');
     gwPx = gw ? Math.ceil(gw.getBoundingClientRect().height) + 6 : 0;
-    const need = pop.hidden ? gwPx : Math.max(gwPx, Math.ceil(pop.getBoundingClientRect().bottom + scrollY) + 6);
+    const need = pop.hidden ? gwPx : Math.max(gwPx, pop.offsetTop + pop.offsetHeight + 6);
     F.say({ type: 'height', px: need });
   };
   const ro = new ResizeObserver(() => { if (!pop.hidden) fit(); });
@@ -343,7 +343,7 @@
     const manual = el('button', { type: 'button', class: 'sbtn ghost2', 'data-do': 'manual', text: t('Add manually') });
     manual.addEventListener('click', () => drawForm({ type: 'book' }, true));
     pop.replaceChildren(...[dialogClose(), find.row, find.status, ordered.length ? list : null, el('div', { class: 'gzc-foot' }, page, el('span', { class: 'grow' }), manual)].filter(Boolean));
-    if (!pop.hidden) { fit(); find.input.focus(); }
+    if (!pop.hidden) { fit(); find.input.focus({ preventScroll: true }); }
   };
   // The form: a found or new source (Cite saves it and puts it in), or a saved one to edit (Save, Remove).
   const drawForm = (src, cite, note) => {
@@ -370,7 +370,7 @@
     show(pop);
     place();
     fit();
-    pop.querySelector('.gzc-in, [data-field="title"]')?.focus();
+    pop.querySelector('.gzc-in, [data-field="title"]')?.focus({ preventScroll: true });
   };
   pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); } });
   document.addEventListener('pointerdown', (e) => { if (!pop.hidden && !pop.contains(e.target) && !undoBox.contains(e.target) && !(anchor && anchor.contains?.(e.target))) close(); }, true);
