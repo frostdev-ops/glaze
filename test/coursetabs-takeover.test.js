@@ -156,3 +156,20 @@ test('the editor preview never sends a takeover or clears its existing page mark
   assert.ok(p.html.hasAttribute('data-gz-placing'));
   assert.ok(p.html.hasAttribute('data-gz-ctab-framed'));
 });
+
+test('a fresh Ultra destination is not covered by the course shown over a different address', async () => {
+  for (const [pathname, search] of [['/ultra/messages/create', '?courseId=_53708_1'], ['/ultra/stream', '']]) {
+    const p = page(), local = { [L.storeKey(origin, '_9_1')]: { tabs: [{ cid: '_1_1', at: 1 }, { cid: course, at: 2 }] } };
+    p.session.setItem('gz-ctabs-shown', course);
+    p.session.setItem('gz-ctabs-from', '/ultra/courses/_1_1/outline');
+    const fresh = glaze(p, local, (c) => {
+      Object.assign(c.location, { pathname, search, href: origin + pathname + search });
+      c.GZ_CTX.courseId = () => '';
+    });
+    fresh.api.sync(true);
+    await settle();
+    assert.equal(fresh.api.showing(), '', `${pathname}: the requested native page stays visible`);
+    assert.equal(frames(p).length, 0, 'no old course is reopened over it');
+    assert.equal(local[L.storeKey(origin, '_9_1')].tabs.length, 2, 'saved course tabs remain intact');
+  }
+});
