@@ -106,3 +106,17 @@ test('review: cancelling the sheet while upload runs prevents the final native c
   p.addRow('Rivera_Essay2.docx'); await p.tick();
   assert.equal(p.clicks.length, 0);
 });
+
+test('review: replacing a listed row with the same name does not prove the original upload', async () => {
+  const p = page({ enabled: false }); await p.go(); await p.tick(16000);
+  const L = require('../lib/writer-submit.js');
+  L.listings(L.areaOf(p.box.editor), 'Rivera_Essay2.docx')[0].remove();
+  p.addRow('Rivera_Essay2.docx'); p.setEnabled(true); await p.go({ run: 2 });
+  assert.equal(p.clicks.length, 0, 'a replacement same-named file has unknown bytes');
+});
+
+test('review: an empty note selection on retry cannot submit the previous note', async () => {
+  const p = page({ enabled: false }); await p.go({ note: 'An earlier note.' }); await p.tick(16000);
+  p.setEnabled(true); await p.go({ run: 2, note: '' });
+  assert.equal(p.clicks.length, 0, 'the stale note must be reviewed or removed first');
+});
