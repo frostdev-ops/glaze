@@ -116,7 +116,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
         const got = arr(await r.all(`${base}/${id}/replies?limit=10&offset=0&sort=draft(desc),postDate(desc)`));
         out.push(...got);
         read += got.reduce((n, m) => n + (Number(m?.bodyLength) || 0), 0);
-      } catch (e) { if (/budget|stale/i.test(e?.message)) break; }
+      } catch (e) { if (/budget|stale|HTTP (?:401|403|429|5\d\d)\b/i.test(e?.message)) break; }
     }
     return out;
   };
@@ -136,8 +136,8 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     return blocks.length ? blocks.map((b) => squash(b.textContent)).filter(Boolean).join('\n') : squash(t.content.textContent);
   };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const reader = (live) => X.need('lib/lmsq.js', () => globalThis.GZ_LMSQ).then(() => X.need('lib/ultra.js', () => globalThis.GZ_ULTRA))
-    .then(() => GZ_ULTRA.read({ origin: location.origin, live, f: (u, o) => GZ_LMSQ.fetch(u, o, 1, live), maxPages: LIMIT.pages, maxRequests: LIMIT.requests }));
+  const reader = (live, signal) => X.need('lib/lmsq.js', () => globalThis.GZ_LMSQ).then(() => X.need('lib/ultra.js', () => globalThis.GZ_ULTRA))
+    .then(() => GZ_ULTRA.read({ origin: location.origin, live, signal, f: (u, o) => GZ_LMSQ.fetch(u, o, 1, live), maxPages: LIMIT.pages, maxRequests: LIMIT.requests }));
   // The course's gradebook rows as content-ultra.js has them (bookFor asks once a minute at most), waited for a little.
   const rowsOf = async (cid, live) => {
     for (let i = 0; i < 16 && live(); i++) {
@@ -154,12 +154,13 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     return { id: cid, name: squash(str(m?.course?.displayName) || str(m?.course?.name)).slice(0, LIMIT.name) };
   };
   // What a page's boxes share: the student, the course, the discussion and its prompt. Each part alone may fail.
-  const loadBase = async (where, live) => {
+  const loadBase = async (where, live, signal) => {
+    if (!live()) throw Error('stale');
     // The student's id as content-ultra.js already asked it (users/me, once a page).
     const meP = Promise.resolve().then(() => X.me()).then((id) => (ID.test(id || '') ? { id } : null), () => null);
     const courseP = courseOf(where.course);
     if (!where.content) return { me: await meP, course: await courseP, discussion: null, prompt: null };
-    const r = await reader(live);
+    const r = await reader(live, signal);
     const discussion = await Promise.all([discussions(r, where.course), rowsOf(where.course, live)])
       .then(([list, rows]) => discussionOf(list, { content: where.content, rows, titles: titles() })).catch(() => null);
     const prompt = discussion ? promptOf(discussion, htmlText) : null;
@@ -167,12 +168,12 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     return { me: await meP, course: await courseP, discussion, prompt, raw };
   };
   // Each thread read has its own request budget.
-  const loadThread = (p, first) => reader(p.live).then((r) => messages(r, p.where.course, p.data.base.discussion.id, { first })).catch(() => []);
+  const loadThread = (p, first) => reader(p.live, p.abort.signal).then((r) => messages(r, p.where.course, p.data.base.discussion.id, { first })).catch(() => []);
   const replyId = (box) => globalThis.GZ_WRITER_ULTRA?.replyTo?.(box.editor) || box.context?.post?.id || '';
 
   // One box's context from what the page has read so far, sent when it differs from what that frame last got.
   const send = (box) => {
-    if (!page || !box.port || !box.ready || !alive(box)) return;
+    if (!page?.live() || !box.port || !box.ready || !alive(box)) return;
     const d = page.data || {};
     const me = d.base?.me, raw = d.messages || [];
     const thread = d.base?.discussion ? threadOf(raw, { me: me?.id, keep: [...boxes].filter((b) => b.kind === 'reply').map(replyId), text: htmlText }) : [];
@@ -190,22 +191,22 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
   const signature = () => [...document.querySelectorAll('[message-id]')].map((e) => e.getAttribute('message-id')).filter(Boolean).join(' ');
   // A new post (or one gone) on the page reads the thread again, at most every 20 s.
   const readThread = () => {
-    if (!page?.data?.base?.discussion) return;
+    if (!page?.live() || !page.data?.base?.discussion || page.thread) return;
     const p = page, first = [...boxes].filter((b) => b.kind === 'reply').map(replyId).find(Boolean) || '';
     p.threadAt = Date.now();
     p.sig = signature();
-    loadThread(p, first).then((m) => {
-      if (page !== p) return;
+    p.thread = loadThread(p, first).then((m) => {
+      if (!p.live()) return;
       p.data.messages = m;
       p.authors = new Map(m.filter((x) => ID.test(x?.id || '')).map((x) => [x.id, authorOf(x, !!p.data.base.me?.id && x.userId === p.data.base.me.id)]));
       sendAll();
-    });
+    }).finally(() => { p.thread = null; });
   };
   const check = () => {
     page && (page.timer = 0);
     for (const box of [...boxes]) if (!alive(box)) boxes.delete(box);
-    if (!boxes.size) { observer?.disconnect(); observer = null; return; }
-    if (!page?.data?.base?.discussion || signature() === page.sig) return;
+    if (!boxes.size || !on()) { clear(); return; }
+    if (!page?.live() || !page.data?.base?.discussion || signature() === page.sig) return;
     const wait = page.threadAt + 20000 - Date.now();
     if (wait > 0) page.timer = setTimeout(check, wait);
     else readThread();
@@ -215,30 +216,45 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     observer = new MutationObserver(() => { if (page && !page.timer) page.timer = setTimeout(check, 2000); });
     observer.observe(document.body, { childList: true, subtree: true });
   };
+  const on = () => X?.on() && X.settings().enabled !== false && !!X.settings().enhance?.writer;
+  const clear = () => {
+    clearTimeout(page?.timer);
+    page?.abort.abort();
+    page = null;
+    boxes.clear();
+    observer?.disconnect();
+    observer = null;
+  };
+  const unwatch = (box) => {
+    boxes.delete(box);
+    sent.delete(box);
+    if (!boxes.size) clear();
+  };
   // features/writer.js, as a box's frame comes up (and again when it reopens): context for post, reply and message boxes.
   const watch = (box, ctx) => {
     if (!box || !KINDS.has(box.kind) || !ctx) return;
     X = ctx;
+    if (!on()) return;
     const where = route(location.pathname, location.search);
     if (!where) return;
-    boxes.add(box);
     const key = `${location.pathname}?${where.content ? '' : where.course}`;
     if (page?.key !== key) {
-      clearTimeout(page?.timer);
-      const path = location.pathname, p = { key, where, data: null, threadAt: 0, sig: '', timer: 0, authors: new Map() };
-      p.live = () => page === p && location.pathname === path && boxes.size > 0;
+      clear();
+      const path = location.pathname, search = location.search, p = { key, where, data: null, threadAt: 0, sig: '', timer: 0, authors: new Map(), thread: null, abort: new AbortController() };
+      p.live = () => page === p && on() && location.pathname === path && location.search === search && [...boxes].some(alive);
       page = p;
       X.need('lib/writer-target.js', () => globalThis.GZ_WRITER_TARGET).catch(() => {})
-        .then(() => loadBase(where, p.live))
-        .then((base) => { if (page !== p) return; p.data = { base, messages: [] }; sendAll(); readThread(); }, () => {});
+        .then(() => loadBase(where, p.live, p.abort.signal))
+        .then((base) => { if (!p.live()) return; p.data = { base, messages: [] }; sendAll(); readThread(); }, () => {});
     }
+    boxes.add(box);
     send(box);
     observe();
   };
   // Who wrote a message in this page's thread ('' when unknown): the Quote pop's author (features/writer-quote.js).
   const author = (id) => page?.authors?.get(id) || '';
 
-  return { route, discussionOf, promptOf, authorOf, threadOf, replyToOf, userOf, contextOf, discussions, messages, forumPath, watch, author, LIMIT };
+  return { route, discussionOf, promptOf, authorOf, threadOf, replyToOf, userOf, contextOf, discussions, messages, forumPath, watch, unwatch, author, LIMIT };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CONTEXT_DISCUSSION;
 GZ_WRITER_CONTEXT_DISCUSSION;
