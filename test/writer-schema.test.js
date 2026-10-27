@@ -202,6 +202,18 @@ test('text() joins blocks with newlines and maps UTF-16 offsets to positions bot
   assert.deepEqual(S.text(S.parse(C, '')).text, '');
 });
 
+test('paper trailing hard breaks survive serialization and preserve UTF-16 anchors', () => {
+  for (const count of [1, 2, 3]) {
+    const paragraph = P.nodes.paragraph.create(null, [P.text('😀 שלום'), ...Array.from({ length: count }, () => P.nodes.hard_break.create())]);
+    const doc = P.nodes.doc.create(null, [paragraph]), html = S.serialize(P, doc), restored = S.parse(P, html);
+    assert.ok(restored.eq(doc), html);
+    assert.equal(S.text(restored).text, '😀 שלום' + '\n'.repeat(count));
+    const t = S.text(restored);
+    for (let i = 0; i <= t.text.length; i++) assert.equal(t.offsetAt(t.posAt(i)), i);
+  }
+  assert.equal(out('<p>x<br><br></p>', P), '<p>x<br><br></p>', 'one trailing br is the rendering placeholder');
+});
+
 test('delta() writes the Quill 1.x ops setContents takes', () => {
   const doc = S.parse(C, '<h3>T</h3><p class="ql-indent-1 ql-align-center"><a href="https://a.b"><strong>x</strong></a><sup>2</sup>&nbsp;&nbsp;y</p>'
     + '<ol><li>o</li></ol><ul><li class="ql-indent-2">u</li></ul><pre class="ql-syntax" spellcheck="false">a\n\nb\n</pre><p><s><u>z</u></s><sub>s</sub></p>');
