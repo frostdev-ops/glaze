@@ -76,3 +76,37 @@ test('the native handler never logs native message bodies, including malformed A
   const source = fs.readFileSync(path.join(root, 'safari/Glaze/Glaze Extension/SafariWebExtensionHandler.swift'), 'utf8');
   assert.doesNotMatch(source, /String\(describing: message\)/);
 });
+
+
+// Run the shipped cache methods against an inert session. No model, app bundle or inference is involved.
+test('native release cannot be undone by a spare session prewarming concurrently', { skip: process.platform !== 'darwin' }, () => {
+  const source = fs.readFileSync(nativeFile, 'utf8');
+  const cache = source.slice(source.indexOf('    private static let lock = NSLock()'), source.indexOf('    static func cancel('));
+  const dir = fs.mkdtempSync(path.join(root, '.native-cache-'));
+  try {
+    const file = path.join(dir, 'Cache.swift');
+    fs.writeFileSync(file, `import Foundation
+struct SystemLanguageModel {}
+struct Transcript { struct Entry {}; init(entries: [Entry]) {} }
+final class LanguageModelSession: @unchecked Sendable {
+    static let entered = DispatchSemaphore(value: 0), proceed = DispatchSemaphore(value: 0)
+    init(model: SystemLanguageModel, transcript: Transcript) {}
+    func prewarm() { Self.entered.signal(); Self.proceed.wait() }
+}
+private enum Native {
+${cache}
+    static func take() { _ = warmSession("instructions", [], model: SystemLanguageModel()) }
+}
+let finished = DispatchSemaphore(value: 0)
+DispatchQueue.global().async { Native.take(); finished.signal() }
+LanguageModelSession.entered.wait()
+_ = Native.release()
+LanguageModelSession.proceed.signal()
+finished.wait()
+print(Native.warmCount())
+`);
+    const run = spawnSync('xcrun', ['swift', ...flags, file], { encoding: 'utf8', timeout: 30000 });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout.trim(), '0', 'release must invalidate a spare started before it');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
