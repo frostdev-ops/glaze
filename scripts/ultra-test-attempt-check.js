@@ -151,10 +151,10 @@ const HELPERS = `
           const q = document.querySelectorAll('.assessment-attempt-panel .assessment-question')[2], at = () => q.getBoundingClientRect().top + p.scrollTop;
           const wait = () => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(res, 50))));
           p.scrollTop = 0; p.dispatchEvent(new Event('scroll')); await wait();
-          const rest = { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight, q: at() };
+          const rest = { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight, exact: band.getBoundingClientRect().height, q: at() };
           p.scrollTop = 600; await wait();
           const col = g.rect(band.parentElement), r = g.rect(band);
-          const folded = { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight, w: r.r - r.x, col: col.r - col.x, endGap: Math.abs(col.r - r.r), q: at(), radius: g.radius(band),
+          const folded = { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight, exact: band.getBoundingClientRect().height, fold: band.style.getPropertyValue('--gz-progress-fold'), w: r.r - r.x, col: col.r - col.x, endGap: Math.abs(col.r - r.r), q: at(), radius: g.radius(band),
             readable: g.hit(document.querySelector('#assessment-question-counts-description')) };
           p.scrollTop = 0; await wait();
           return { rest, folded, back: { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight } }; });
