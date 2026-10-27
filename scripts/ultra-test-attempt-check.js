@@ -154,7 +154,7 @@ const HELPERS = `
           const rest = { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight, exact: band.getBoundingClientRect().height, q: at() };
           p.scrollTop = 600; await wait();
           const col = g.rect(band.parentElement), r = g.rect(band);
-          const folded = { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight, exact: band.getBoundingClientRect().height, fold: band.style.getPropertyValue('--gz-progress-fold'), w: r.r - r.x, col: col.r - col.x, endGap: Math.abs(col.r - r.r), q: at(), radius: g.radius(band),
+          const folded = { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight, exact: band.getBoundingClientRect().height, fold: band.style.getPropertyValue('--gz-fold'), w: r.r - r.x, col: col.r - col.x, endGap: Math.abs(col.r - r.r), q: at(), radius: g.radius(band),
             readable: g.hit(document.querySelector('#assessment-question-counts-description')) };
           p.scrollTop = 0; await wait();
           return { rest, folded, back: { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight } }; });

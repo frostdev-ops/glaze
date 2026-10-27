@@ -272,6 +272,27 @@ div.bb-course-navigation::before, .routed-page.bb-offcanvas-container [class*="h
   }
 }
 @keyframes gz-bar-veil { to { opacity: 1; } }
+/* Scrolled, the course bar folds to its tools: a small pill at the end, no backing, the page under it reachable beside it
+   (features/sticky-fold.js marks it and keeps its height, so nothing moves). Its header row and Glaze's course strip stay
+   for assistive tech; keyboard focus inside the bar shows it whole. */
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) {
+  box-sizing: border-box; block-size: var(--gz-whole, auto) !important; padding-block-start: var(--gz-float-gap, 12px) !important; background: transparent !important;
+  pointer-events: none;
+}
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible))::before { display: none; }
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) :is(course-page-header, #gz-ctabs) {
+  position: absolute !important; inline-size: 1px !important; block-size: 1px !important; padding: 0 !important; overflow: hidden !important; clip-path: inset(50%); white-space: nowrap;
+}
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] {
+  inline-size: fit-content !important; max-inline-size: calc(100% - var(--gz-float-start, 12px) - var(--gz-float-end, 12px)); block-size: auto !important; min-block-size: 0 !important;
+  margin-block-start: 0 !important; margin-inline-start: auto !important; padding: 0.125rem 0.25rem !important; border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: 999px !important; pointer-events: auto;
+}
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] .bb-ui-navigation-list-horizontal a {
+  block-size: 1.875rem !important; min-block-size: 0 !important; padding-block: 0 !important; padding-inline: 0.625rem !important; font-size: 0.75rem !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-gz-motion="off"]) div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] { animation: gz-fold 160ms ease-out; }
+}
 /* A routed page (a document, a discussion, an assignment): its breadcrumb row, or its header's title row where it has no
    breadcrumbs, is a panel of its own under the strip, inset as the course header is. A discussion's title panel keeps a
    gap from it. */
@@ -1122,10 +1143,10 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
    its top and left the rest see-through over the questions). */
 #site-wrap .assessment-attempt-panel .assessment-progress-header { top: 0 !important; z-index: 3; margin-block-end: 1rem; padding: 0.75rem 1rem !important; }
 /* Once the questions scroll under it, it folds into a pill at the column's end: a short bar and the count
-   (features/test-progress.js marks it and gives the folded height back below it, so nothing moves). */
+   (features/sticky-fold.js marks it and gives the folded height back below it, so nothing moves). */
 #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] {
   display: flex !important; align-items: center; gap: 0.75rem; inline-size: fit-content; max-inline-size: 100%; margin-inline-start: auto;
-  margin-block-end: calc(1rem + var(--gz-progress-fold, 0px)); padding: 0.375rem 0.875rem !important; border-radius: 999px !important;
+  margin-block-end: calc(1rem + var(--gz-fold, 0px)); padding: 0.375rem 0.875rem !important; border-radius: 999px !important;
 }
 #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > * { margin: 0 !important; padding: 0 !important; border: 0 !important; }
 #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-first-row { flex: none; inline-size: 4.5rem; }
@@ -1134,9 +1155,9 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-second-row,
 #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-second-row * { font-size: 0.75rem; line-height: 1.4; white-space: nowrap; }
 @media (prefers-reduced-motion: no-preference) {
-  html:not([data-gz-motion="off"]) #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] { animation: gz-progress-fold 160ms ease-out; }
+  html:not([data-gz-motion="off"]) #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] { animation: gz-fold 160ms ease-out; }
 }
-@keyframes gz-progress-fold { from { opacity: 0; transform: translateY(-4px); } } /* no scale: the fold is measured off its box */
+@keyframes gz-fold { from { opacity: 0; transform: translateY(-4px); } } /* no scale: the fold is measured off its box */
 /* Below Ultra's 64em the panel opens with its own bar (Exit, the item's type, its details): a band like the title's, in
    Ultra's place (the content below is placed a bar's height down). */
 #site-wrap .assessment-attempt-panel > .black-panel-header {
