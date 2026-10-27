@@ -532,6 +532,29 @@ test('requests with one system prompt prompt clones of one warm session, which r
   assert.equal(log.bases().length, 4, 'made again after release');
 });
 
+test('a warm-up makes the warm session a later run with the same instructions clones, and asks the model nothing', async () => {
+  const { log } = install(stub({ clone: true, chunks: ['ok'] }));
+  const text = (system) => ({ messages: [{ role: 'system', content: system }, { role: 'user', content: 'go' }], temperature: 0.2 });
+  assert.equal(await P.warm('device', text('Finish it.'), {}), true);
+  assert.equal(log.bases().length, 1, 'the instructions read once, now');
+  assert.equal(log.prompts.length, 0, 'nothing asked of the model');
+  assert.equal(await P.warm('device', text('Finish it.'), {}), true);
+  assert.equal(log.bases().length, 1, 'already warm: nothing new');
+  await P.run('device', text('Finish it.'), {});
+  assert.equal(log.bases().length, 1, 'the run clones the session the warm-up made');
+  assert.equal(log.create.filter((c) => c.cloned).length, 1);
+});
+
+test('a warm-up never starts a download, and needs clone()', async () => {
+  const text = { messages: [{ role: 'system', content: 'Finish it.' }, { role: 'user', content: 'go' }] };
+  let s = install(stub({ avail: 'downloadable', clone: true }));
+  assert.equal(await P.warm('device', text, {}), false);
+  assert.equal(s.log.create.length, 0);
+  s = install(stub({ clone: false }));
+  assert.equal(await P.warm('device', text, {}), false, 'no warm session to keep');
+  assert.equal(s.log.create.length, 0);
+});
+
 test('a warm session goes after WARM.ms unused, after its call fails or times out, but not when the caller cancels', async () => {
   const ms = D.WARM.ms;
   try {

@@ -316,3 +316,42 @@ test('On this device is the browser\'s model outside Safari, and Apple is never 
     B.status({ feature: 'syllabus' }, env).then((st) => process.stdout.write(JSON.stringify([st.provider, st.ready])));`], { cwd: path.join(__dirname, '..') }).toString();
   assert.deepEqual(JSON.parse(out), ['device', true]);
 });
+
+test('a warm-up asks the native side to prewarm a session with the request\'s instructions, and nothing else', async () => {
+  native = async () => ({ ok: true });
+  assert.equal(await P.warm(A, { messages: [{ role: 'system', content: 'Finish it.' }, { role: 'user', content: 'go' }] }, { model: 'on-device' }), true);
+  assert.deepEqual(sent.map((x) => x.m), [{ type: 'ai.warm', model: 'on-device', instructions: 'Finish it.' }]);
+  native = async () => ({ ok: false, error: 'provider-unavailable' });
+  assert.equal(await P.warm(A, { messages: [{ role: 'system', content: 'Finish it.' }, { role: 'user', content: 'go' }] }, { model: 'on-device' }), false);
+});
+
+test('a warm-up through the broker readies Apple Intelligence for the task\'s instructions, gated like a run', async () => {
+  browserModel = { state: 'unavailable', reason: 'browser' };
+  native = async (m) => (m.type === 'ai.status' ? { ok: true, state: 'ready', context: 8192 } : { ok: true });
+  const warmTask = T.define({ id: 'example.warm', version: 1, warm: true, input: (raw) => raw, output: 'text', check: (o) => o,
+    build: (input, { text }) => text.request({ system: 'Finish it.', data: [{ label: 'text', text: input.text }] }) });
+  const coldTask = T.define({ ...warmTask, id: 'example.cold', warm: false });
+  const vault = new Map();
+  const env = (features) => ({ who: '5', allowed: Promise.resolve(true), enabled: async () => true,
+    settings: async () => ({ on: true, use: 'device', features }),
+    vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
+    reach: async () => true, fetch: async () => { throw new Error('nothing is fetched'); },
+    task: async (id) => ({ 'example.warm': warmTask, 'example.cold': coldTask }[id] || null) });
+  const open = (e) => { const posted = [], on = []; B.connect({ postMessage: (m) => posted.push(m), disconnect() {}, onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener() {} } }, e); return { posted, send: (m) => on.forEach((f) => f(m)) }; };
+  let c = open(env({ syllabus: true }));
+  c.send({ id: 1, op: 'warm', feature: 'syllabus', task: 'example.warm', input: { text: 'hello' } });
+  for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+  assert.deepEqual(c.posted.find((m) => m.id === 1), { id: 1, type: 'warmed', ok: true });
+  const w = sent.find((x) => x.m.type === 'ai.warm');
+  assert.ok(w && w.m.instructions.startsWith('Finish it.\n\n'), 'the run\'s own instructions, its data fence rule included');
+  assert.equal(sent.some((x) => x.m.type === 'ai.run'), false, 'nothing asked of the model');
+  sent.length = 0;
+  c.send({ id: 2, op: 'warm', feature: 'syllabus', task: 'example.cold', input: { text: 'hello' } });
+  c = open(env({ syllabus: false }));
+  c.send({ id: 3, op: 'warm', feature: 'syllabus', task: 'example.warm', input: { text: 'hello' } });
+  for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+  assert.deepEqual(c.posted.find((m) => m.id === 3), { id: 3, type: 'warmed', ok: false }, 'the feature off');
+  assert.equal(sent.some((x) => x.m.type === 'ai.warm'), false, 'a task that doesn\'t warm, or a feature that is off: nothing');
+  assert.throws(() => T.define({ ...warmTask, id: 'example.bad', warm: 'yes' }), /warm/);
+});
+

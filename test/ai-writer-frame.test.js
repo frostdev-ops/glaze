@@ -49,6 +49,18 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
     context: (c) => { ctx = c; hooks.context(c); }, hold: () => { holdStatus = true; } };
 }
 
+test('a box whose gray text may run warms the model for writer.complete as it opens, both ways it asks; none when it may not', async () => {
+  // Owner, 2026-10-27: "I think the model should be loaded into memory when the writer opens a new assignment."
+  const warms = (f) => f.sent.filter((m) => m.op === 'warm');
+  const f = frame(); await f.start();
+  assert.deepEqual(warms(f).map((m) => [m.feature, m.task, / $/.test(m.input.before)]), [['completion', 'writer.complete', true], ['completion', 'writer.complete', false]]);
+  assert.ok(warms(f).every((m) => m.input.context && m.input.kind === 'reply'), 'with the page\'s context, as a run sends it');
+  const off = frame({ settings: { on: true, use: 'main', features: { completion: false, writing: true } } }); await off.start();
+  assert.equal(warms(off).length, 0, 'completion off');
+  const no = frame({ answer: (m) => (m.feature === 'completion' ? { allowed: false, why: 'attempt' } : { allowed: true, ready: true }) }); await no.start();
+  assert.equal(warms(no).length, 0, 'refused here');
+});
+
 test('decide and the proof hook preserve the original candidate index, including duplicate candidates and keep', async () => {
   const f = frame(); await f.start();
   for (const [verdict, choice, expected] of [['apply', "they're", { verdict: 'apply', choice: 2 }], ['suggest', "they're", { verdict: 'suggest', choice: 2 }], ['keep', null, { verdict: 'keep', choice: -1 }]]) {

@@ -37,6 +37,9 @@ if #available(macOS 27.0, *) {
     out["emptyCancel"] = Native.cancel(["id": ""])
     out["release"] = Native.release()
     out["warm"] = Native.warmCount()
+    out["warmModel"] = Native.warm(["model": "private-cloud", "instructions": "Finish it."])
+    out["warmEmpty"] = Native.warm(["model": "on-device", "instructions": ""])
+    out["warmNone"] = Native.warm(["model": "on-device"])
     out["nullSchema"] = Native.checkSchema(["type": "object", "properties": ["answer": ["anyOf": [["type": "string"], ["type": "null"]]]], "required": ["answer"]])
     print(String(data: try JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]), encoding: .utf8)!)
 }
@@ -68,6 +71,10 @@ test('native schema conversion accepts null branches in an object', { skip: !sup
 test('ai.release drops the warm sessions; none are made until a run', { skip: !supported }, () => {
   assert.deepEqual(result.release, { ok: true });
   assert.equal(result.warm, 0);
+});
+test('ai.warm takes only the model on this device and its instructions', { skip: !supported }, () => {
+  assert.deepEqual(result.warmModel, { ok: false, error: 'request-rejected', reason: 'model' });
+  for (const k of ['warmEmpty', 'warmNone']) assert.deepEqual(result[k], { ok: false, error: 'request-rejected', reason: 'instructions' });
 });
 test('native tasks pass complete sendability checking', { skip: !supported }, () => {
   assert.doesNotMatch(diagnostics, /warning:|error:/);
