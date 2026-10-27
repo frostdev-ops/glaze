@@ -78,3 +78,8 @@ test('feedback accepts only rubric criteria actually sent within the bounded con
   assert.ok(r.ids.length > 0 && r.ids.length < criteria.length);
   for (const { id, label } of r.ids) assert.ok(r.text.includes(`[${id}] ${label}`), id);
 });
+
+test('completion keeps quote types separate, and number words cannot match inside ordinary words', () => {
+  assert.equal(C.task.input({ before: `The author writes "the 'river always` }), null);
+  assert.equal(RQ.states('Discuss someone remembered in the novel.', 1), false);
+});
