@@ -134,6 +134,9 @@ const HARNESS = `(() => {
     await reply.fr.click('.ProseMirror');
     saved.compose = await shot(await p.$('.comment-and-reply'), 'writer-compose.png');
     saved.page = path.join(shots, 'writer-compose-page.png'); await p.screenshot({ path: saved.page, fullPage: true });
+    // Unsolicited native clears must not erase the live draft.
+    await p.evaluate((s) => __quill(s).setContents([], 'user'), REPLY); await pause(150);
+    check(await reply.fr.evaluate((t) => document.querySelector('.ProseMirror').textContent === t, typed), 'an unsolicited native clear preserves Writer text');
     // The selection toolbar and ⋯ (mockup B).
     await reply.fr.evaluate(() => { const v = document.querySelector('.ProseMirror'), t = v.firstChild.firstChild, r = document.createRange(); r.setStart(t, 2); r.setEnd(t, 40); getSelection().removeAllRanges(); getSelection().addRange(r); });
     await until(() => reply.fr.evaluate(() => !document.getElementById('tb').hidden), 'selection toolbar');
@@ -142,6 +145,11 @@ const HARNESS = `(() => {
     await until(async () => (await p.evaluate((s) => document.querySelector(s).innerHTML, REPLY)).includes('<strong>'), 'bold reaches Quill');
     check(true, 'toolbar Bold reaches the native Quill as <strong>');
     saved.toolbar = await shot(reply.el, 'writer-toolbar.png');
+    const originalWidth = await reply.el.evaluate((f) => f.style.width);
+    await reply.el.evaluate((f) => { f.style.width = '180px'; });
+    await pause(150);
+    check(await reply.fr.evaluate(() => { const r = document.getElementById('tb').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; }), 'selection toolbar stays inside a narrow editor');
+    await reply.el.evaluate((f, w) => { f.style.width = w; }, originalWidth);
     await reply.fr.click('.ProseMirror');
     await p.keyboard.press('End');
     await p.keyboard.press(`${MOD}+Enter`);
@@ -162,18 +170,33 @@ const HARNESS = `(() => {
     await reply.fr.click('#more');
     await until(() => reply.fr.evaluate(() => !document.getElementById('menu').hidden), 'menu');
     saved.menu = await shot(reply.el, 'writer-menu.png');
+    await reply.el.evaluate((f) => { f.style.width = '180px'; });
+    await reply.fr.click('#more'); await reply.fr.click('#more');
+    check(await reply.fr.evaluate(() => { const r = document.getElementById('menu').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; }), 'Blackboard editor menu stays inside a narrow editor');
+    saved.narrow = await shot(reply.el, 'writer-narrow-menu.png');
+    await reply.el.evaluate((f, w) => { f.style.width = w; }, originalWidth);
     check(await reply.fr.evaluate(() => document.activeElement?.dataset.do === 'native'), '⋯ opens its menu with "Blackboard editor" focused');
     await p.keyboard.press('Enter');
     await until(() => p.evaluate(() => !document.querySelector('iframe[data-gz-writer-frame="reply"]')), 'reply frame gone');
     check(await p.evaluate((s) => { const r = document.querySelector(s).closest('bb-rich-text-editor'); return getComputedStyle(r).display !== 'none' && !r.hasAttribute('data-gz-writer') && document.querySelector(s).textContent === 'Back to Blackboard.'; }, REPLY), '"Blackboard editor" restores the native editor with the text');
     await p.evaluate((s) => __quill(s).insertText(0, 'x', 'user'), REPLY); await pause(800);
     check(await p.evaluate(() => !document.querySelector('iframe[data-gz-writer-frame="reply"]')), 'and it stays Ultra\'s through later passes');
-    // Ultra's editor out of reach: the box comes back with what was written.
-    await p.evaluate((s) => { delete document.querySelector(s).closest('.ql-container').__quill; }, POST);
+    // A failed or forged sync keeps the entire draft in Writer, including on hand-back.
+    await p.evaluate((s) => {
+      const c = document.querySelector(s).closest('.ql-container');
+      window.__savedQuill = c.__quill; delete c.__quill;
+      document.addEventListener('gz-writer:set', (e) => { const m = JSON.parse(e.detail); document.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: true, html: m.html }) })); });
+    }, POST);
     await post.fr.click('.ProseMirror');
-    await p.keyboard.type('Kept', { delay: 2 });
-    await until(() => p.evaluate(() => !document.querySelector('iframe[data-gz-writer-frame="post"]')), 'post frame gives way');
-    check(await p.evaluate((s) => document.querySelector(s).textContent.includes('K') && getComputedStyle(document.querySelector(s).closest('bb-rich-text-editor')).display !== 'none', POST), 'when sync fails the native editor comes back with the text');
+    const kept = 'Every word stays in Writer when native sync fails.';
+    await p.keyboard.type(kept, { delay: 2 });
+    check(await post.fr.evaluate((t) => document.querySelector('.ProseMirror').textContent === t, kept), 'failed sync retains the complete draft in the live frame');
+    await post.fr.click('#more'); await post.fr.click('[data-do="native"]');
+    check(await post.el.isVisible() && await quillText(p, REPLY) !== kept, 'a forged success cannot hand back an unsynced draft');
+    await p.evaluate((s) => { document.querySelector(s).closest('.ql-container').__quill = __savedQuill; }, POST);
+    await post.fr.click('#more'); await post.fr.click('[data-do="native"]');
+    await until(() => p.evaluate(() => !document.querySelector('iframe[data-gz-writer-frame="post"]')), 'hand-back after native recovery');
+    check(await quillText(p, POST) === kept, 'native recovery receives every word before the frame closes');
     await p.close();
 
     // ---- messages ----
@@ -196,7 +219,7 @@ const HARNESS = `(() => {
     check(await p.evaluate(() => !document.querySelector('[data-analytics-id="assignment.attempt.authoring.footer.submit"]').disabled), 'Submit enabled with the imported text');
     await paper.fr.click('.ProseMirror'); await p.keyboard.press(`${MOD}+Enter`); await pause(400);
     check(!(await clicks(p)).includes('Submit'), 'Ctrl/Cmd+Enter never submits an attempt');
-    check((await until(() => worker.evaluate(() => globalThis.__kinds?.slice()), 'attempt kind told')).join() === 'assignment', 'the top frame tells the worker the attempt is an assignment, once');
+    check((await until(() => worker.evaluate(() => globalThis.__kinds?.filter((k) => k !== 'unknown')), 'attempt kind told')).join() === 'assignment', 'the top frame tells the worker the attempt is an assignment, once');
     await p.close();
     p = await open('/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1');
     const essay = await box(p, 'test');
@@ -207,7 +230,7 @@ const HARNESS = `(() => {
     check(await p.evaluate(() => !document.querySelector('[analytics-id="course.content.assessment.footer.buttons.submit"]').disabled), 'the test\'s Submit follows content');
     await p.keyboard.press(`${MOD}+Enter`); await pause(400);
     check(!(await clicks(p)).some((c) => c === 'Submit' || c === 'Save and Close'), 'Ctrl/Cmd+Enter never saves or submits a test');
-    check((await until(() => worker.evaluate(() => globalThis.__kinds?.length > 1 && globalThis.__kinds.slice()), 'test kind told')).join() === 'assignment,test', 'and a test\'s attempt a test');
+    check((await until(() => worker.evaluate(() => globalThis.__kinds?.includes('test') && globalThis.__kinds.filter((k) => k !== 'unknown')), 'test kind told')).join() === 'assignment,test', 'and a test\'s attempt a test');
     await p.close();
 
     check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);
