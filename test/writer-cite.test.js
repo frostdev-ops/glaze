@@ -243,3 +243,43 @@ test('entries escape what a source holds; titles keep only their italics', () =>
   assert.ok(!/<(?!\/?i>)/.test(e), e);
   assert.match(e, /&amp; <i>B<\/i>/);
 });
+
+// Additional rule checks, with synthetic works. MLA 9: style.mla.org/works-cited-a-quick-guide/ and
+// style.mla.org/works-cited/citations-by-format/. APA 7: apastyle.apa.org/style-grammar-guidelines/references/elements-list-entry
+// (title, date and source), /examples/newspaper-article-references; list order: MLA Handbook 9, 5.123;
+// Chicago 17, 14.71 (same author, alphabetical titles), contrasted with APA 7, 9.46 (chronological).
+test('MLA: a first author without a given name still takes a comma before et al.', () => {
+  const s = { type: 'book', title: 'Collected Work', author: [p('Beyoncé'), p('Smith'), p('Jones')] };
+  assert.equal(C.format(s, 'mla9').entry, 'Beyoncé, et al. <i>Collected Work</i>.');
+});
+
+test('MLA: an organization that is also publisher is cited by the title that leads its entry', () => {
+  const s = { type: 'report', title: 'Annual Findings', author: [L('Research Council')], publisher: 'Research Council', issued: d(2020) };
+  assert.equal(C.format(s, 'mla9').inText('4'), '(<i>Annual Findings</i> 4)');
+});
+
+test('MLA and Chicago alphabetize the same author by title; APA orders by date', () => {
+  const works = [{ id: 'zeta', type: 'book', author: [p('Lee', 'Alex')], title: 'Zeta', issued: d(2000) }, { id: 'alpha', type: 'book', author: [p('Lee', 'Alex')], title: 'The Alpha', issued: d(2020) }];
+  for (const style of ['mla9', 'chicago17']) assert.deepEqual(C.list(works, style).entries.map((e) => e.id), ['alpha', 'zeta']);
+  assert.deepEqual(C.list(works, 'apa7').entries.map((e) => e.id), ['zeta', 'alpha']);
+});
+
+test('APA: an anonymous standalone webpage has an italicized title in text', () => {
+  const f = C.format({ type: 'webpage', title: 'A guide to research', issued: d(2020) }, 'apa7');
+  assert.equal(f.inText(), '(<i>Guide to Research</i>, 2020)');
+});
+
+test('APA: print newspaper page ranges take pp., journal page ranges do not', () => {
+  const s = { type: 'article-newspaper', author: [p('Lee', 'Alex')], title: 'A new finding', 'container-title': 'Daily News', page: '2-4', issued: d(2020, 4, 2) };
+  assert.equal(C.format(s, 'apa7').entry, 'Lee, A. (2020, April 2). A new finding. <i>Daily News</i>, pp. 2–4.');
+});
+
+test('APA: no date alone does not require a retrieval date or override the DOI', () => {
+  const s = { type: 'webpage', author: [p('Lee', 'Alex')], title: 'A stable page', URL: 'https://example.org/page', accessed: d(2026, 10, 27), DOI: '10.5555/page' };
+  assert.equal(C.format(s, 'apa7').entry, 'Lee, A. (n.d.). <i>A stable page</i>. https://doi.org/10.5555/page');
+});
+
+test('APA: book volumes join the edition outside the italic title', () => {
+  const s = { type: 'book', author: [p('Lee', 'Alex')], title: 'Research methods', edition: '2', volume: '3', publisher: 'Press', issued: d(2020) };
+  assert.equal(C.format(s, 'apa7').entry, 'Lee, A. (2020). <i>Research methods</i> (2nd ed., Vol. 3). Press.');
+});
