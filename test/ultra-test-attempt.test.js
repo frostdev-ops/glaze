@@ -65,8 +65,10 @@ test('each question is one card; nothing inside it paints a square slab', () => 
   }
   const prompt = [...QUESTION('eitherOr'), 'form', 'div.question-content', 'bb-question-attempt', 'div.MuiFormControl-root', 'div.js-true-false-group-label', 'div.bb-editor-wrapper.read-only'];
   const answer = [...LABEL('multipleanswer', 'js-multiple-answer-option'), 'span.MuiTypography-root.MuiFormControlLabel-label', 'div.makeStylesanswerOptionText-0-2-163'];
-  const layers = (base) => Object.fromEntries(READ_ONLY.map((c, i) => [c, chain(...base, ...READ_ONLY.slice(0, i + 1))]));
-  assert.deepEqual(clear({ ...layers(prompt), ...Object.fromEntries(Object.entries(layers(answer)).map(([k, v]) => [`answer ${k}`, v])) }), []);
+  // The instructions block has no .bb-editor-wrapper: its editor sits straight in .question-container.
+  const intro = [...QUESTION('presentation'), 'form', 'div.question-content', 'div.question-container', 'bb-rich-text-editor.rich-text-editor'];
+  const layers = (base, tag = '') => Object.fromEntries(READ_ONLY.map((c, i) => [`${tag}${c}`, chain(...base, ...READ_ONLY.slice(0, i + 1))]));
+  assert.deepEqual(clear({ ...layers(prompt), ...layers(answer, 'answer '), ...layers(intro, 'instructions ') }), []);
 });
 
 test('answer rows: the whole row, control and letter included, is one rounded painted row', () => {
