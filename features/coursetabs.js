@@ -1342,7 +1342,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     ctx.scene();
     for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI', 'GZ_DOCREVIEW']) globalThis[n]?.cover?.();
     globalThis.GZ_PET_WORLD?.refresh();
-    try { if (cid) sessionStorage.setItem('gz-ctabs-shown', cid); else sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
+    try {
+      if (cid) { sessionStorage.setItem('gz-ctabs-shown', cid); if (ctx.site === 'ultra') sessionStorage.setItem('gz-ctabs-from', shownFrom); }
+      else { sessionStorage.removeItem('gz-ctabs-shown'); sessionStorage.removeItem('gz-ctabs-from'); }
+    } catch { /* blocked */ }
     keepPage();
     // Keyboard focus goes with it: into the frame (over one not drawn yet, to its tab), or back to this page's strip.
     if (f && strip?.parentElement === host) { if (!strip.contains(document.activeElement)) (list.querySelector(`[data-course-id="${cid}"]`) || f.el).focus({ preventScroll: true }); }
@@ -1781,7 +1784,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     readPrefs().then(() => { drawn = ''; pass(); });
     if (preview) { tabs = L.order(DEMO.map((x) => ({ ...x }))); loaded = true; return; }
     // A reload while a tab's frame was on screen: that tab again.
-    const was = (() => { try { return framed ? '' : sessionStorage.getItem('gz-ctabs-shown'); } catch { return ''; } })();
+    // Restore only over the address that frame covered. A new native destination (such as New Message) owns its page.
+    const was = (() => { try { return framed || (ctx.site === 'ultra' && sessionStorage.getItem('gz-ctabs-from') !== location.pathname + location.search) ? '' : sessionStorage.getItem('gz-ctabs-shown'); } catch { return ''; } })();
     const wasPage = (() => { try { return was === PAGE && ctx.site === 'canvas' ? L.outside(...split(sessionStorage.getItem('gz-ctabs-page') || '')) : null; } catch { return null; } })();
     ctx.me().then((uid) => {
       if (!on) return;
@@ -1895,7 +1899,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       host = null;
       html.removeAttribute('data-gz-ctab-framed');
       ctx.scene();
-      try { sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
+      try { sessionStorage.removeItem('gz-ctabs-shown'); sessionStorage.removeItem('gz-ctabs-from'); } catch { /* blocked */ }
       // Switched off (Glaze or the tabs): nothing of the courses is kept in memory any more.
       snaps.clear();
       send({ op: 'drop' });
