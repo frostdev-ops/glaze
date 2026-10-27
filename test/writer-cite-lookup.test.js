@@ -219,3 +219,12 @@ test('review: DOI punctuation preserves balanced suffix parentheses', () => {
   assert.equal(S.doi('https://doi.org/10.5555/work(part)'), '10.5555/work(part)');
   assert.equal(S.doi('(10.5555/work(part)).'), '10.5555/work(part)');
 });
+
+test('review: reserved home-network and localdomain aliases are never public lookup hosts', async () => {
+  for (const value of ['https://localhost.localdomain/', 'https://printer.localdomain/', 'https://router.home.arpa/']) {
+    assert.equal(L.pageUrl(value), '', value);
+    let fetched = false;
+    assert.deepEqual(await L.serve({ kind: 'url', value }, sender, env({ reach: async () => true, fetch: async () => { fetched = true; } })), { ok: false, error: 'input' });
+    assert.equal(fetched, false);
+  }
+});
