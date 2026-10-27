@@ -51,7 +51,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (globalThis.GZ_DRAFT_UI?.keep) GZ_DRAFT_UI.keep(s);
     else drafts().then(() => GZ_DRAFT_UI.keep(s), () => {});
   };
-  const sameBox = (box) => box.path === location.pathname && box.editor.isConnected && box.root === U().rootOf(box.editor) &&
+  const sameBox = (box) => box.path === location.pathname && box.editor.isConnected && U().canEdit(box.editor) && box.root === U().rootOf(box.editor) &&
     box.container === box.editor.closest('.ql-container') && box.editor.id === box.editorId &&
     U().kindOf(box.editor, { path: location.pathname, attempt: box.kind === 'test' ? 'test' : '' }) === box.kind &&
     (box.kind !== 'reply' || U().replyTo(box.editor) === (box.context.post?.id || ''));
