@@ -1,6 +1,8 @@
 // Dutch for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).nl = {
+  "Quotes of five lines or more go in a block quote": "Citaten van vijf regels of meer horen in een blokcitaat",
+  "Another editor’s draft": "Concept uit een andere editor",
   "Papers": "Werkstukken",
   "Mark all as read": "Alles als gelezen markeren",
   "Marking…": "Bezig met markeren…",

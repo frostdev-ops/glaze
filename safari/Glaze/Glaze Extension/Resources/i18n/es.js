@@ -1,6 +1,8 @@
 // Spanish for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).es = {
+  "Quotes of five lines or more go in a block quote": "Las citas de cinco líneas o más van en un bloque de cita",
+  "Another editor’s draft": "Borrador de otro editor",
   "Papers": "Trabajos",
   "Mark all as read": "Marcar todo como leído",
   "Marking…": "Marcando…",

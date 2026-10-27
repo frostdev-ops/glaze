@@ -1,6 +1,8 @@
 // German for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).de = {
+  "Quotes of five lines or more go in a block quote": "Zitate ab fünf Zeilen gehören in ein Blockzitat",
+  "Another editor’s draft": "Entwurf aus einem anderen Editor",
   "Papers": "Arbeiten",
   "Mark all as read": "Alle als gelesen markieren",
   "Marking…": "Wird markiert…",
