@@ -3,8 +3,6 @@
 // lookups answered from saved synthetic responses (test/fixtures/writer-cite-*), the citation at the caret and in Ultra's
 // Quill, ⋯ Add references, the cite issues, and the paper side panel's Sources view. No outside network from the browser:
 // every request is routed here, and anything unexpected is refused and fails the check.
-// Until lib/background.js wires lib/writer-lookup.js, the check puts GZ_WRITER_LOOKUP.listener into the worker itself, as
-// that wiring would (it is the only thing added to the extension).
 // NODE_PATH=<playwright> nice -n 10 node scripts/writer-cite-check.js (under the shared heavy-browser lock)
 // WRITER_SHOTS names where the screenshots go (default /tmp/gz-writer-cite-shots).
 const { chromium } = require('playwright');
@@ -49,7 +47,7 @@ const HARNESS = `(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-writer-cite-'));
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
-    ext = require('./check-env.js').staged(root, [`${site}/*`]);
+    ext = require('./check-env.js').staged(root, [`${site}/*`, `${new URL(NEWS).origin}/*`]);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(10000);
@@ -76,10 +74,6 @@ const HARNESS = `(() => {
     const G = require(path.join(root, 'defaults.js'));
     const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
     await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
-    // The worker's lookup, wired as lib/background.js would: GZ_WRITER_SOURCES, GZ_WRITER_LOOKUP, its listener; a page's
-    // host counts as held when the browser holds it (the frame's grant, answered below).
-    await worker.evaluate(`${fs.readFileSync(path.join(root, 'lib/writer-sources.js'), 'utf8')}\n${fs.readFileSync(path.join(root, 'lib/writer-lookup.js'), 'utf8')}\n;globalThis.__held = new Set();
-      chrome.runtime.onMessage.addListener(GZ_WRITER_LOOKUP.listener(() => ({ fetch: (u, i) => fetch(u, i), reach: async (u) => __held.has(new URL(u).hostname), id: chrome.runtime.id, page: chrome.runtime.getURL('writer.html') }))); true`);
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
 
     const p = await context.newPage();
@@ -144,8 +138,6 @@ const HARNESS = `(() => {
     await fr.evaluate(() => GZ_WRITER_CITE.open());
     await fr.fill('.gzc-in', NEWS);
     await fr.evaluate(() => { document.querySelector('.gzc-row .sbtn').addEventListener('click', () => { window.__clickActive = navigator.userActivation.isActive; }, { once: true }); });
-    // The answer to the browser's prompt: the worker sees the grant once the frame's request says yes.
-    await worker.evaluate(() => __held.add('news.example.com'));
     await fr.click('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gzc-form [data-field="title"]')?.value === 'Can We Get Better at Forgetting?'), 'page lookup fills the form');
     check(await fr.evaluate(() => JSON.stringify(__asks) === JSON.stringify([[['https://news.example.com/*'], true]])), 'a page\'s lookup asks for exactly https://news.example.com/*, inside the click');
