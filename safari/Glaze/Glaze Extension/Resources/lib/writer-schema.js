@@ -10,6 +10,8 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const { Schema, DOMParser } = PM.model;
 
   const MAX_INDENT = 8, ALIGNS = ['center', 'right', 'justify'];
+  const MAX_INPUT = 2000000, MAX_TOKENS = 50000, MAX_DEPTH = 64;
+  const limit = () => { throw Object.assign(new RangeError('writer-schema: input exceeds safe limits'), { code: 'WRITER_INPUT_LIMIT' }); };
   const FONTS = ['Times New Roman', 'Arial', 'Calibri', 'Courier New'];
   const SAME_METRICS = { tinos: 'Times New Roman', arimo: 'Arial', carlito: 'Calibri', cousine: 'Courier New' };
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
@@ -248,13 +250,14 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
 
   const tree = (html, o) => {
     const root = el('body'), stack = [{ e: root, src: 'body' }];
-    let skip = null, depth = 0, at = 0;
+    let skip = null, depth = 0, at = 0, tokens = 0;
     const top = () => stack.at(-1).e;
     const add = (n) => { top().childNodes.push(n); };
     const closeTo = (i) => { stack.length = i; };
     const find = (names, stop) => { for (let i = stack.length - 1; i > 0; i--) { if (names.includes(stack[i].src)) return i; if (stop?.includes(stack[i].e.nodeName)) return -1; } return -1; };
     const text = (s) => { if (s && !skip) add(txt(decode(s))); };
     for (const t of tags(html)) {
+      if (++tokens > MAX_TOKENS) limit();
       text(html.slice(at, t.start));
       at = t.end;
       const name = t.name;
@@ -290,7 +293,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       if (kind === 'img' && !(o.paper && imageSrc(keep.src))) continue;
       const e = el(kind, keep);
       add(e);
-      if (!VOID.has(kind)) stack.push({ e, src: name });
+      if (!VOID.has(kind)) { if (stack.length >= MAX_DEPTH) limit(); stack.push({ e, src: name }); }
     }
     text(html.slice(at));
     return root;
@@ -388,6 +391,26 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     const rows = [];
     const walk = (n) => { for (const c of n.childNodes) { if (c.nodeName === 'TR') rows.push(c); else if (['THEAD', 'TBODY', 'TFOOT'].includes(c.nodeName)) walk(c); } };
     walk(t);
+    let width = 0;
+    for (const r of rows) {
+      let cols = 0;
+      for (const c of r.childNodes.filter((n) => n.nodeName === 'TD' || n.nodeName === 'TH')) {
+        const span = (key, max) => {
+          const v = c.getAttribute(key);
+          if (v == null) return 1;
+          if (!/^\d{1,4}$/.test(v) || +v < 1 || +v > max) limit();
+          return +v;
+        };
+        const col = span('colspan', 100), row = span('rowspan', 1000);
+        cols += col;
+        o.cells += col * row;
+        if (o.cells > 10000) limit();
+        const widths = c.getAttribute('data-colwidth');
+        if (widths && (!/^\d{1,4}(,\d{1,4})*$/.test(widths) || widths.split(',').length !== col)) delete c.attrs['data-colwidth'];
+      }
+      width = Math.max(width, cols);
+    }
+    if (width * rows.length > 10000) limit();
     const out = rows.map((r) => el('tr', {}, r.childNodes.filter((c) => c.nodeName === 'TD' || c.nodeName === 'TH').map((c) => {
       const inner = blocks(c, o);
       return el(c.nodeName.toLowerCase(), { ...c.attrs }, inner.length ? inner : [el('p')]);
@@ -436,8 +459,10 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   };
   const link = (e) => { e.childNodes.forEach((c, i) => { c.parentNode = e; c.index = i; if (c.nodeType === 1) link(c); }); return e; };
   const prepare = (schema, html) => {
-    const o = { paper: !!schema.nodes.page_break, lost: new Set() };
-    const root = link(el('body', {}, blocks(tree(String(html ?? ''), o), o)));
+    html = String(html ?? '');
+    if (html.length > MAX_INPUT) limit();
+    const o = { paper: !!schema.nodes.page_break, lost: new Set(), cells: 0 };
+    const root = link(el('body', {}, blocks(tree(html, o), o)));
     return { root, o };
   };
   const parsers = new WeakMap();
@@ -447,8 +472,11 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const parse = (schema, html) => parser(schema).parse(prepare(schema, html).root, { preserveWhitespace: true });
   // HTML → an open Slice, for paste and drop (the view's clipboardParser).
   const slice = (schema, html) => parser(schema).parseSlice(prepare(schema, html).root, { preserveWhitespace: true });
-  // What a schema would drop from this HTML: 'media', 'math', 'table', 'attachment', 'format' (colour, font, size).
-  const loses = (schema, html) => [...prepare(schema, html).o.lost].sort();
+  // 'limit' refuses takeover too, before parsing an input that would exhaust the editor.
+  const loses = (schema, html) => {
+    try { return [...prepare(schema, html).o.lost].sort(); }
+    catch (e) { if (e.code === 'WRITER_INPUT_LIMIT') return ['limit']; throw e; }
+  };
 
   // ---- HTML out: a string renderer over the schema's own toDOM, so attribute order and escaping are exact
   const escText = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\u00a0/g, '&nbsp;');
@@ -503,10 +531,15 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     return out;
   };
   // Inline HTML (marks only), as a footnote keeps it.
+  let inlineDepth = 0;
   const inline = (html) => {
+    if (inlineDepth >= 16) limit();
+    inlineDepth++;
+    try {
     const doc = parse(paperSchema, `<p>${String(html ?? '').slice(0, 20000)}</p>`), parts = [];
     doc.descendants((n) => { if (!n.isTextblock) return true; parts.push(inlineHTML(n.type.create(null, n.content.content.filter((c) => c.isText)))); return false; });
-    return parts.filter(Boolean).join(' ');
+      return parts.filter(Boolean).join(' ');
+    } finally { inlineDepth--; }
   };
 
   // A compose doc as Quill 1.x ops (setContents takes them as they are; no clipboard heuristics in between).
@@ -582,7 +615,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   };
 
   const compose = make(false), paperSchema = make(true);
-  return { compose, paper: paperSchema, parse, slice, serialize, delta, text, loses, href, inline, MAX_INDENT, FONTS };
+  return { compose, paper: paperSchema, parse, slice, serialize, delta, text, loses, href, inline, MAX_INDENT, MAX_INPUT, FONTS };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SCHEMA; else GZ_WRITER_SCHEMA;
