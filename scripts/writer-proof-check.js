@@ -175,7 +175,7 @@ const rss = (profile) => {
     await until(async () => { await p.keyboard.press('ArrowRight'); return reply.fr.evaluate(() => document.activeElement.textContent === 'Add to dictionary'); }, 'to Add to dictionary', 3000);
     await p.keyboard.press('Enter');
     await until(() => reply.fr.evaluate(() => ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'Sethe')), 'Sethe unflagged');
-    check((await worker.evaluate(() => chrome.storage.local.get('writerWords'))).writerWords.includes('Sethe'), 'Add to dictionary keeps the word in chrome.storage.local writerWords');
+    check(await until(async () => (await worker.evaluate(() => chrome.storage.local.get('writerWords'))).writerWords?.includes('Sethe'), 'dictionary persisted'), 'Add to dictionary keeps the word in chrome.storage.local writerWords');
     memory.oneTab = rss(profile);
 
     // ---- more tabs on other schools: one worker ----
