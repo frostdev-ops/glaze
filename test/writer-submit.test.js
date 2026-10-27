@@ -121,3 +121,12 @@ test('the steps: Ultra\'s Submit is reachable only after every step before it, i
   assert.equal(skip.error, 'order', 'a step out of order (the .docx not built) ends the run');
   assert.equal(S.may(skip, 'submit'), false);
 });
+
+test('review: listing requires an exact name, including a full title on visually truncated names', () => {
+  const body = page(), area = S.areaOf(editorOf(body));
+  const row = new El('span', body.doc); area.append(row);
+  row.textContent = 'Rivera_Essay2_old.docx';
+  assert.equal(S.listed(area, 'Rivera_Essay2.docx'), 0, 'a prefix is not the requested file');
+  row.textContent = 'Rivera_Ess…'; row.setAttribute('title', 'Rivera_Essay2.docx');
+  assert.equal(S.listed(area, 'Rivera_Essay2.docx'), 1, 'the full title proves a truncated listing');
+});

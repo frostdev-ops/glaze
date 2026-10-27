@@ -34,3 +34,40 @@ test('review: worker serializes a durable attempt claim across tabs and worker r
   assert.equal((await restarted.send({ ...m, token: 'c'.repeat(36) }, sender(2))).ok, false, 'a dispatched attempt stays fenced after MV3 restart');
   assert.equal((await restarted.send(m, { ...sender(4), id: 'other' })).ok, false);
 });
+
+test('review: an edited retry never submits cached bytes or uploads a second copy', async () => {
+  const p = page({ enabled: false });
+  await p.go();
+  await p.tick(16000);
+  assert.equal(p.uploads.length, 1);
+  p.setEnabled(true);
+  await p.go({ run: 2, bytes: new Uint8Array([9, 8, 7]).buffer });
+  assert.equal(p.clicks.length, 0, 'the listed bytes belong to the earlier paper');
+  assert.equal(p.uploads.length, 1, 'changed bytes require review in Blackboard, never a second attachment');
+});
+
+test('review: a timed-out upload is not repeated when the student retries', async () => {
+  const p = page({ listed: false });
+  await p.go(); await p.tick(31000);
+  await p.go({ run: 2 });
+  assert.equal(p.uploads.length, 1, 'the first upload may still finish in Ultra');
+  assert.equal(p.clicks.length, 0);
+});
+
+test('review: a pre-existing filename is a conflict', async () => {
+  const existing = page(); existing.addRow('Rivera_Essay2.docx');
+  await existing.go();
+  assert.equal(existing.uploads.length, 0, 'do not add a second same-named attachment');
+  assert.equal(existing.clicks.length, 0);
+});
+
+test('review: unrelated properties dialogs are never saved', async () => {
+  const p = page({ listed: false });
+  const { El } = require('./stand-in-dom.js');
+  const dialog = new El('div', p.doc), save = new El('button', p.doc);
+  dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-labelledby', 'file-properties-dialog-title');
+  save.setAttribute('data-analytics-id', 'editor.modelEditAttachment.dialogFooter.save.button');
+  dialog.append(save); p.doc.body.append(dialog);
+  await p.go();
+  assert.equal(p.clicks.includes(save), false, 'a dialog from another attachment is not this run');
+});
