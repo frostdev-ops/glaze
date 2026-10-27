@@ -293,7 +293,7 @@ test('the attempt\'s kind counts only from the tab\'s own top frame, on that att
   assert.deepEqual(await report(w, 'quiz'), { ok: false }, 'a kind it doesn\'t know');
   assert.deepEqual(await report(w, 'assignment', top(ATTEMPT, { tab: { id: 6, url: ATTEMPT } })), { ok: true });
   assert.equal(await ask(w, frame(ATTEMPT)), 'attempt', 'another tab\'s word is that tab\'s');
-  assert.deepEqual(await report(w, 'assignment', top(OTHER)), { ok: true });
+  assert.deepEqual(await report(w, 'assignment', top(OTHER)), { ok: false });
   assert.equal(await ask(w, frame(ATTEMPT)), 'attempt', 'said of another attempt than the one the tab shows');
   w.store.sync.enabled = false;
   assert.deepEqual(await report(w, 'assignment'), { ok: false }, 'Glaze switched off');
@@ -355,7 +355,7 @@ test('attempt reports cannot authorize a stale route or a replaced top document'
   assert.equal(await ask(w, frame(ATTEMPT)), 'attempt');
   w.topDocument = 'new-top-doc';
   assert.deepEqual(await report(w, 'assignment', top(ATTEMPT)), { ok: false }, 'a replaced document at the same URL');
-  assert.equal(await ask(w, frame(ATTEMPT)), 'attempt');
+  assert.equal(await ask(w, frame(ATTEMPT)), 'hung up', 'the old seat belongs to the replaced document');
 });
 
 test('same-URL reloads and navigation before session hydration discard attempt authority', async () => {
@@ -381,6 +381,7 @@ test('navigation while an attempt report awaits admission invalidates the report
   await w.settle();
   for (const f of w.updated) f(5, { url: COURSE });
   release();
+  w.context.chrome.storage.sync.get = get;
   assert.deepEqual(await pending, { ok: false });
   assert.equal(await ask(w, frame(ATTEMPT)), 'attempt');
 });
