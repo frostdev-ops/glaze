@@ -496,6 +496,16 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"] { padding: 1
 bb-assignment-attempt-authoring-panel .MuiAccordion-root :is(.MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root, .bb-editor-container, .ql-editor, .ql-container, .editor-content-container, .bb-editor-root) { background: transparent !important; }
 bb-assignment-attempt-authoring-panel .MuiAccordionSummary-root { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-right: 0 !important; }
+/* It scrolls as one page, as a document does: the title goes up with the instructions instead of staying over them (Ultra
+   scrolls only the content under it). Ultra's body, already a scroller, takes the scroll; Save and Submit stay at its
+   bottom, on glass over what passes under them. */
+bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"] { overflow-y: auto !important; }
+bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"] > [class*="makeStylescontentRoot-"] { flex: none !important; overflow: visible !important; }
+bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"] {
+  position: sticky; inset-block-end: 0; z-index: 3; margin-block-start: auto;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
+}
 /* Previous / Next above an item: Ultra sits them on a hard-coded #262626 bar the sweep leaves alone
    (it only recolors light fills). */
 #site-wrap div:has(> .js-content-navigator-previous, > .js-content-navigator-next) { background: transparent !important; gap: 0.5rem; }
@@ -976,7 +986,7 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
   #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before,
   .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
-  bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]), #site-wrap .outline-action-block,
+  bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"], [class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"]), #site-wrap .outline-action-block,
   #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),
   #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state,
   .assessment-attempt-panel :is(.assessment-question, .assessment-progress-header), .rubric-details-panel > .panel-section-header,
