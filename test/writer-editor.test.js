@@ -219,6 +219,19 @@ test('smart quotes and dashes, never in code, and Backspace takes one back', () 
   assert.equal(html(press(type(blank(), '- '), 'Backspace').st), '<p>-&nbsp;</p>');
 });
 
+test('input rules leave existing links and Unicode word interiors literal', () => {
+  const st = caret(make('<p><a href="https://a.b">https://a.b/path</a></p>'), 'https:');
+  assert.equal(S.text(type(st, '--').doc).text, 'https:--//a.b/path');
+  for (const word of ['сло*во*', 'مق*طع*', '漢*字*', 'e\u0301*x*']) assert.equal(S.text(type(blank(), word).doc).text, word);
+  assert.equal(html(type(blank(), 'слово *да*')), '<p>слово <em>да</em></p>');
+  assert.equal(S.text(type(blank(), '«Привет» -- l\'été')).text, '«Привет» — l’été');
+});
+
+test('a Markdown link preserves the existing marks inside its label', () => {
+  const st = caret(make('<p>[<strong>bold</strong> <em>it</em>](https://a.b</p>'), 'https://a.b');
+  assert.equal(html(type(st, ')')), '<p><a href="https://a.b" rel="noopener noreferrer" target="_blank"><strong>bold</strong> <em>it</em></a></p>');
+});
+
 test('Shift-Enter in paper code inserts a newline without leaving the code block', () => {
   const st = caret(make('<pre>a😀c</pre>', 'paper'), 'a');
   const split = press(st, 'Shift-Enter').st;
