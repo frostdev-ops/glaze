@@ -68,3 +68,13 @@ test('editor read tools bound a single long paragraph', () => {
   assert.ok(pages.every((p) => p.length <= WT.LIMIT.page));
   assert.equal(pages.join(''), 'x'.repeat(30000));
 });
+
+test('feedback accepts only rubric criteria actually sent within the bounded context', () => {
+  const W = require('../lib/ai/tasks/writer-context.js');
+  const criteria = Array.from({ length: 50 }, (_, i) => ({ id: `row${i}`, label: `Criterion ${i}`, detail: 'x'.repeat(600),
+    cells: Array.from({ length: 12 }, (_, j) => ({ level: `l${j}`, detail: 'y'.repeat(600) })) }));
+  const r = W.rubric({ title: 'Rubric', criteria });
+  assert.ok(r.text.length <= W.LIMIT.rubric);
+  assert.ok(r.ids.length > 0 && r.ids.length < criteria.length);
+  for (const { id, label } of r.ids) assert.ok(r.text.includes(`[${id}] ${label}`), id);
+});
