@@ -1136,7 +1136,7 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 @media (prefers-reduced-motion: no-preference) {
   html:not([data-gz-motion="off"]) #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] { animation: gz-progress-fold 160ms ease-out; }
 }
-@keyframes gz-progress-fold { from { opacity: 0; transform: translateY(-4px) scale(0.97); } }
+@keyframes gz-progress-fold { from { opacity: 0; transform: translateY(-4px); } } /* no scale: the fold is measured off its box */
 /* Below Ultra's 64em the panel opens with its own bar (Exit, the item's type, its details): a band like the title's, in
    Ultra's place (the content below is placed a bar's height down). */
 #site-wrap .assessment-attempt-panel > .black-panel-header {
