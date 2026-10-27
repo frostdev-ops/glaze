@@ -1,5 +1,5 @@
-// Headless EditorView regressions. Run with NODE_PATH=/Users/jame/Projects/gemino/node_modules
-// nice -n 10 lockf -k /private/tmp/claude-501/glaze-heavy.lock node scripts/writer-core-check.js [name pattern].
+// Headless EditorView regressions: node scripts/writer-core-check.js [name pattern].
+// Run under the shared heavy-browser lock; NODE_PATH may supply Playwright and CHROME may select Chromium.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -8,7 +8,8 @@ const { execFileSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] || '.');
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  await require('./wait-for-browser.js')();
+  const browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch() });
   let failures = 0, checks = 0;
   try {
     const page = await browser.newPage(), errors = [];
