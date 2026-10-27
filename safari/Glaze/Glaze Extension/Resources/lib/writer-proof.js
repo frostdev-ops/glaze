@@ -43,8 +43,8 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   const plausible = (rule, was, now) => {
     const a = was.toLowerCase(), b = now.toLowerCase();
     if (rule === 'Capitalization') return a === b && was !== now;
-    if (rule === 'Repetition') return spaces(now) < spaces(was) && a.split(/\s+/).includes(b.trim());
-    return rule === 'Typo' && spaces(now) === spaces(was) && /^[\p{L}\p{M}'’ -]+$/u.test(now) && distance(a, b) <= 2;
+    if (rule === 'Repetition') return !TWICE.has(b.trim()) && a === `${b} ${b}`;
+    return rule === 'Typo' && was === a && Object.hasOwn(TYPOS, a) && TYPOS[a] === now;
   };
   // Kinds a decision model may rule on when the lint isn't sure (their/there, a typo with two readings).
   const ASK = new Set(['Typo', 'Capitalization', 'Repetition', 'WordChoice', 'Eggcorn', 'Malapropism', 'Agreement', 'Grammar']);
@@ -118,7 +118,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     untill: 'until', alot: 'a lot', atleast: 'at least', aswell: 'as well', noone: 'no one', accomodate: 'accommodate',
     acheive: 'achieve', acheived: 'achieved', adress: 'address', agian: 'again', aginst: 'against', allready: 'already',
     arguement: 'argument', arguements: 'arguments', basicly: 'basically', begining: 'beginning', buisness: 'business',
-    calender: 'calendar', cemetary: 'cemetery', collegue: 'colleague', comming: 'coming', commited: 'committed',
+    cemetary: 'cemetery', collegue: 'colleague', comming: 'coming', commited: 'committed',
     completly: 'completely', concious: 'conscious', curiousity: 'curiosity', decieve: 'deceive', dissapoint: 'disappoint',
     embarass: 'embarrass', enviroment: 'environment', existance: 'existence', experiance: 'experience', familar: 'familiar',
     finaly: 'finally', foriegn: 'foreign', freind: 'friend', freinds: 'friends', frist: 'first', futher: 'further',
@@ -132,7 +132,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     speach: 'speech', strenght: 'strength', succesful: 'successful', sucessful: 'successful', suprise: 'surprise',
     tommorow: 'tomorrow', tommorrow: 'tomorrow', tounge: 'tongue', truely: 'truly', unfortunatly: 'unfortunately',
     wierd: 'weird', writting: 'writing', yeild: 'yield', probaly: 'probably', probobly: 'probably', beautifull: 'beautiful',
-    dont: `don${R}t`, doesnt: `doesn${R}t`, didnt: `didn${R}t`, isnt: `isn${R}t`, wasnt: `wasn${R}t`, arent: `aren${R}t`,
+    doesnt: `doesn${R}t`, didnt: `didn${R}t`, isnt: `isn${R}t`, wasnt: `wasn${R}t`, arent: `aren${R}t`,
     werent: `weren${R}t`, havent: `haven${R}t`, hasnt: `hasn${R}t`, hadnt: `hadn${R}t`, couldnt: `couldn${R}t`,
     wouldnt: `wouldn${R}t`, shouldnt: `shouldn${R}t`, thats: `that${R}s`, whats: `what${R}s`, theyre: `they${R}re`,
     wouldve: `would${R}ve`, couldve: `could${R}ve`, shouldve: `should${R}ve`,
@@ -148,7 +148,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     if (!m) return null;
     const word = m[1].replace(/^['’]+/, ''), to = before.length, from = to - word.length, ahead = before.slice(0, from);
     const token = (/(\S*)$/.exec(ahead)?.[1] || '') + word;
-    if (!word || unsafe(token) || kept.has(word.toLowerCase())) return null;
+    if (!word || unsafe(token) || /[-'’“”]$/.test(ahead) || kept.has(word.toLowerCase())) return null;
     const lower = word.toLowerCase(), start = sentenceStart(ahead);
     // i, i'm, i'll, i'd, i've → I…
     if (/^i(['’](m|ll|d|ve))?$/.test(word)) return { from, to, was: word, now: 'I' + word.slice(1), rule: 'i' };
@@ -160,7 +160,6 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     if (!Object.hasOwn(TYPOS, lower)) return null;
     // As typed: lower case anywhere, Capitalised only where a sentence starts (elsewhere it may be a name).
     if (word === lower) return { from, to, was: word, now: TYPOS[lower], rule: 'typo' };
-    if (word === cap(lower) && start) return { from, to, was: word, now: cap(TYPOS[lower]), rule: 'typo' };
     return null;
   };
 
@@ -226,7 +225,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
       if (!$pos.parent.isTextblock || $pos.parent.type.spec.code) return false;
       const start = $pos.start(), before = blockText($pos.parent).slice(0, $pos.parentOffset);
       const f = fix(before, st.kept);
-      if (!f) return false;
+      if (!f || st.words.has(f.was.toLowerCase())) return false;
       const from = start + f.from, to = start + f.to;
       if (!within(st.typed, from, to) || guarded(view.state.doc, from, to)) return false;
       return commit(view, { ...f, from, to });
@@ -234,10 +233,10 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     return new Plugin({
       key,
       state: {
-        init: () => ({ ver: 0, log: [], typed: [], fixes: [], kept: new Set(o.kept || []) }),
+        init: () => ({ ver: 0, log: [], typed: [], fixes: [], kept: new Set(o.kept || []), words: new Set((o.words || []).map((w) => w.toLowerCase())) }),
         apply(tr, v, _old, next) {
           const meta = tr.getMeta(key);
-          let { ver, log, typed, fixes, kept } = v;
+          let { ver, log, typed, fixes, kept, words } = v;
           if (tr.docChanged) {
             ver++;
             log = [...(log.length >= LOG ? log.slice(1 - LOG) : log), { ver, maps: tr.mapping.maps }];
@@ -259,7 +258,8 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
           if (meta?.fix) fixes = [...fixes.slice(-50), meta.fix];
           if (meta?.typed) typed = addRange(typed, meta.typed[0], meta.typed[1]);
           if (meta?.kept) { kept = new Set(kept); kept.add(meta.kept); }
-          return ver === v.ver && log === v.log && typed === v.typed && fixes === v.fixes && kept === v.kept ? v : { ver, log, typed, fixes, kept };
+          if (meta?.words) words = new Set(meta.words.map((w) => w.toLowerCase()));
+          return words === v.words && ver === v.ver && log === v.log && typed === v.typed && fixes === v.fixes && kept === v.kept ? v : { ver, log, typed, fixes, kept, words };
         },
       },
       props: {
@@ -284,7 +284,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
             return commit(view, { from: from - 1, to: from + 1, was: '  ', now: ' ', rule: 'space' });
           }
           const before = $from.parent.textBetween(0, $from.parentOffset, null, leaf), f = fix(before, st.kept);
-          if (!f) return false;
+          if (!f || st.words.has(f.was.toLowerCase())) return false;
           const a = $from.start() + f.from, b = $from.start() + f.to;
           if (!within(st.typed, a, b) || guarded(view.state.doc, a, b)) return false;
           // The boundary goes in as typing (its own undo group with the word), the fix after it as its own step.
@@ -328,13 +328,15 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     const st = key.getState(view.state), { from, to } = issue, doc = view.state.doc;
     if (view.composing || typeof now !== 'string' || !Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to <= from || to > doc.content.size) return null;
     const was = doc.textBetween(from, to, '\n', ' '), $to = doc.resolve(to);
-    if ((typeof issue.text === 'string' && issue.text !== was) || st.kept.has(was.toLowerCase()) || !within(st.typed, from, to) || guarded(doc, from, to)) return null;
+    if ((typeof issue.text === 'string' && issue.text !== was) || (st.kept.has(was.toLowerCase()) || st.words.has(was.toLowerCase())) || !within(st.typed, from, to) || guarded(doc, from, to)) return null;
     if (!finished(view.state, from, to)) return null;
     const $from = doc.resolve(from), before = $from.parent.textBetween(0, $from.parentOffset, null, leaf);
     const token = (/(\S*)$/.exec(before)?.[1] || '') + was + ($to.parent.textBetween($to.parentOffset, $to.parent.content.size, null, leaf).match(/^\S*/)?.[0] || '');
     if (unsafe(token.replace(/[.,;:!?"'”’)\]]+$/u, ''))) return null;
-    // A capitalised word mid-sentence may be a name: only a capitalisation fix may touch it.
+    // A capitalised word may be a name. Capitalisation is safe only at a sentence start or for English i.
     if (issue.rule !== 'Capitalization' && /^\p{Lu}/u.test(was) && !sentenceStart(before)) return null;
+    if (issue.sure && issue.rule === 'Typo' && /^\p{Lu}/u.test(was)) return null;
+    if (issue.sure && issue.rule === 'Capitalization' && !sentenceStart(before) && !/^i(['’](m|ll|d|ve))?$/.test(was)) return null;
     return commitFix(view, { from, to, was, now, rule: issue.rule || 'harper' });
   };
   // Which fix was the last change, per view: revert takes it back with the editor's own undo.

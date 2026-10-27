@@ -179,6 +179,7 @@
     if (starting) return;
     starting = true;
     dict = new Set([...dict, ...await words()]);
+    drop([...dict]);
     started = true;
     connect();
     lintDoc();
@@ -198,6 +199,7 @@
     try { await store()?.set({ [DICT]: list.slice(-MAX_DICT) }); } catch (e) { console.error(e); }
   };
   const drop = (list) => {
+    if (view) view.dispatch(view.state.tr.setMeta(P.key, { words: [...context, ...dict] }).setMeta('addToHistory', false));
     const low = new Set(list.map((w) => w.toLowerCase()));
     for (const i of I.list()) if (i.source === 'harper' && i.kind === 'spelling' && low.has(i.text.toLowerCase())) I.ignore(i);
   };
