@@ -145,7 +145,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       const previous = phase; phase = `native-open:${cid}`;
       try {
         if (await target.locator('.routed-page a').count()) await target.click('.routed-page a');
-        await target.click('[data-analytics-id="course.header.home"]');
+        // A course scrolled has its bar folded, its Home link out of view (as above).
+        await target.locator('[data-analytics-id="course.header.home"]').first().evaluate((e) => e.click());
         target = page;
         await target.waitForSelector(`a[href="/ultra/courses/${cid}/outline"]`);
         await target.click(`a[href="/ultra/courses/${cid}/outline"]`);
