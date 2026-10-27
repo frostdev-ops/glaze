@@ -113,6 +113,12 @@ test('writer.complete runs only where the gray text may show, and never on a tes
   assert.equal(ok('Three words here  '), false, 'after two spaces');
   assert.equal(ok('Three words here. '), false, 'after a full stop and a space: a new sentence');
   assert.equal(ok('Three words here \t'), false, 'after a tab');
+  assert.equal(ok('He said “hello.\n\nThree things I learned are how to'), true, 'an open quote in an earlier paragraph');
+  assert.equal(ok('The students’ posts were long, so I learned how to'), true, 'a plural possessive');
+  assert.equal(ok('Songs from the ’90s taught me how to'), true, 'an elided year');
+  assert.equal(ok('Baldwin calls it “the price of the'), false, 'inside a quotation in this paragraph');
+  assert.equal(ok('Baldwin calls it ‘the price of the'), false, 'inside a single-quoted phrase');
+  assert.equal(ok('Baldwin calls it “the price,” and I think the'), true, 'after a closed quotation');
   assert.equal(ok('Three words here.'), false, 'after a full stop');
   assert.equal(ok('Three words here', ' and more'), false, 'words after the caret in its line');
   assert.equal(ok('Three words here', '  \nNext line'), true, 'only white space, then another block');
