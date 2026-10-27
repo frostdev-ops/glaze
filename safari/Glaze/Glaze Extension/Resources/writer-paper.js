@@ -42,6 +42,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   // paper) }. → the paper's API (also GZ_WRITER_PAPER.current()).
   let current = null;
   const mount = async (host) => {
+    const editable = host.editor.view.props.editable;
+    host.editor.view.setProps({ editable: () => false });
     await need(LIBS);
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PG = GZ_WRITER_PAGINATE, PA = GZ_WRITER_PAPERS, S = GZ_WRITER_SCHEMA, PM = GZ_PM;
     const ed = host.editor, view = ed.view, t = (k, v) => host.t(k, v), store = PA.open();
@@ -349,23 +351,40 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
 
     // ---- saving
     const values = () => ({ name: ctx.user?.name || '', instructor: ctx.instructor || '', course: ctx.course?.name || '', date: ST.dateText(format), title: ctx.assignment?.title || '' });
-    let saveTimer = 0, dirty = false;
+    let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false;
+    const initialBody = view.state.doc.content.content.filter((n) => n.textContent.trim() || n.type.name !== 'paragraph').map((n) => n.toJSON());
+    const recoveryScope = host.key || ctx.recovery || 'paper';
+    const recoverySlot = `gz-paper-pending:${recoveryScope}`, keySlot = `gz-paper-key:${recoveryScope}`;
+    let recoveryKey;
+    try { recoveryKey = sessionStorage.getItem(keySlot); } catch { /* storage can be unavailable */ }
+    recoveryKey ||= `recovery:${crypto.randomUUID()}`;
+    try { sessionStorage.setItem(keySlot, recoveryKey); } catch { /* the durable copy is still in Papers */ }
     const setState = (k) => { state.textContent = k ? t(k) : ''; };
     const record = () => ({
       doc: view.state.doc.toJSON(), words: ed.words(), format: format.base ? ST.preset(format) : format.id,
       title: ctx.assignment?.title || paper?.title || '', due: ctx.assignment?.due || paper?.due || null, url: ctx.paper?.url || paper?.url || '',
       courseName: ctx.course?.name || paper?.courseName || '', ...(ctx.paper ? { school: ctx.paper.school, user: ctx.paper.user, course: ctx.paper.course, content: ctx.paper.content } : {}),
     });
+    const emergency = () => {
+      try { sessionStorage.setItem(recoverySlot, JSON.stringify({ key, record: record() })); sessionSafe = true; }
+      catch { sessionSafe = false; }
+    };
     const save = async (reason = 'auto') => {
       clearTimeout(saveTimer);
       if (!key) { setState('Not saved'); return null; }
-      dirty = false;
+      const at = edits;
+      emergency();
       setState('Saving…');
-      try { const r = await store.save(key, record(), { reason }); paper = r.paper; if (!dirty) setState('Saved'); return r; }
-      catch (e) { console.error(e); setState('Not saved'); return null; }
+      try {
+        const r = await store.save(key, record(), { reason }); paper = r.paper;
+        if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(recoverySlot); } catch {} }
+        return r;
+      } catch (e) { dirty = true; console.error(e); setState('Not saved'); return null; }
     };
     const changed = () => {
-      dirty = true;
+      if (initializing) return;
+      edits++; dirty = true;
+      emergency();
       setState(key ? 'Saving…' : 'Not saved');
       clearTimeout(saveTimer);
       saveTimer = setTimeout(save, 800);
@@ -374,6 +393,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       clearTimeout(outlineDraw.t);
       outlineDraw.t = setTimeout(outlineDraw, 400);
     };
+    addEventListener('beforeunload', (e) => { if (dirty && !sessionSafe) { e.preventDefault(); e.returnValue = ''; } });
     addEventListener('pagehide', () => { if (dirty) save(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) save(); });
 
@@ -385,7 +405,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     const setFormat = async (f, { save: keep = true } = {}) => {
       if (!f) return;
-      if (keep && dirty) await save();
+      if (keep && dirty && !await save()) return;
       const before = format;
       format = f;
       noteCache.clear();
@@ -485,14 +505,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
 
     // ---- versions, import and export
-    const REASONS = { submit: 'Submitted', import: 'Before import', restore: 'Before restore', format: 'Before format change', edit: 'Before a big edit', auto: 'Autosave', start: 'First draft' };
+    const REASONS = { conflict: 'Another editor’s draft', submit: 'Submitted', import: 'Before import', restore: 'Before restore', format: 'Before format change', edit: 'Before a big edit', auto: 'Autosave', start: 'First draft' };
     versionsB.addEventListener('click', async () => {
       if (open?.opener === versionsB) { close(); return; }
       const list = key ? await store.versions(key) : [];
       const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
       const el = h('div', { class: 'gp-menu gp-versions', role: 'menu' },
         ...list.slice(0, 40).map((v) => h('div', { class: 'gp-mi' }, h('span', {}, when.format(v.at), ' ', h('small', { text: `${t(REASONS[v.reason] || 'Autosave')} · ${t('{n} words', { n: nf(v.words) })}` })),
-          btn({ role: 'menuitem', onclick: async () => { close(); await save(); const r = await store.restore(key, v.id); if (r) { setDoc(r.paper.doc); toast(t('Version restored')); } } }, t('Restore')))),
+          btn({ role: 'menuitem', onclick: async () => { close(); if (!await save()) return; const r = await store.restore(key, v.id); if (r) { paper = r.paper; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored')); } } }, t('Restore')))),
         list.length ? h('div', { class: 'gp-hr' }) : null,
         btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
         btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, t('Import .docx…')),
@@ -520,7 +540,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         await need(DOCX);
         const r = await GZ_WRITER_DOCX.importDocx(new Uint8Array(await f.arrayBuffer()), { format });
         const doc = S.parse(S.paper, r.html);
-        if (key) await store.save(key, { ...record(), doc: doc.toJSON() }, { reason: 'import' });
+        if (key) {
+          if (!await save()) throw new Error('paper could not be saved before import');
+          const saved = await store.save(key, { ...record(), doc: doc.toJSON() }, { reason: 'import' });
+          paper = saved.paper;
+        }
         setDoc(doc.toJSON());
         toast(r.warnings.length ? r.warnings.map((w) => t(w)).join(' ') : t('Imported. The last version is in Versions.'));
       } catch (e) { console.error(e); toast(e instanceof RangeError && e.message ? t(e.message) : t('That file could not be read as a Word document.')); }
@@ -543,21 +567,25 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const d = ctx.assignment?.due || paper?.due;
       due.textContent = d && Number.isFinite(Date.parse(d)) ? t('Due {when}', { when: new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(d)) }) : '';
     };
-    let loading = null;
+    let loading = null, recovered = false;
     const load = () => (loading ||= (async () => {
-      key = host.key || PA.keyOf(ctx.paper || {});
-      paper = key ? await store.get(key) : null;
+      key = host.key || PA.keyOf(ctx.paper || {}) || recoveryKey;
+      paper = await store.get(key);
+      recovered = key === recoveryKey && !!paper?.doc;
+      let pending = null;
+      try { const p = JSON.parse(sessionStorage.getItem(recoverySlot)); if (p?.key === key && p.record?.doc) pending = p.record; } catch {}
+      if (pending) paper = { ...paper, ...pending };
       if (paper?.doc) {
         format = ST.get(paper.format);
         setDoc(paper.doc, true);
       } else {
         format = ST.get(paper?.format || 'mla9');
         // A new paper: the format's opening and list page around what Ultra's box already held.
-        const body = [];
-        view.state.doc.forEach((n) => { if (n.textContent.trim() || n.type.name !== 'paragraph') body.push(n.toJSON()); });
-        setDoc(F.template(format, values(), body), true);
+        setDoc(F.template(format, values(), initialBody), true);
         if (key) await save('auto');
       }
+      initializing = false;
+      if (pending) { dirty = true; await save(); }
       const scope = PA.scopeOf(ctx.paper || paper || {});
       presets = scope ? await store.presets(scope) : [];
       restyleCSS();
@@ -567,13 +595,27 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       PG.relayout(view);
       runChecks();
       outlineDraw();
-      setState(key ? 'Saved' : 'Not saved');
+      if (!dirty) setState('Saved');
     })());
     host.onContext?.((c) => {
       ctx = c && typeof c === 'object' ? c : {};
       head();
-      if (!loading && (ctx.paper || host.key)) load();
-      else if (loading && !key && PA.keyOf(ctx.paper || {})) { key = PA.keyOf(ctx.paper); save(); }
+      const target = host.key || PA.keyOf(ctx.paper || {});
+      if (target && key === recoveryKey) (async () => {
+        await loading;
+        if (key !== recoveryKey || !await save()) return;
+        const existing = await store.get(target);
+        key = target;
+        if (!edits && !recovered) {
+          paper = existing;
+          format = ST.get(paper?.format || 'mla9');
+          initializing = true;
+          setDoc(paper?.doc || F.template(format, values(), initialBody), true);
+          initializing = false;
+          restyleCSS(); counts(); PG.relayout(view); runChecks();
+        }
+        if (await save('import')) await store.remove(recoveryKey);
+      })().catch((e) => { console.error(e); setState('Not saved'); });
     });
     restyleCSS();
     counts();
@@ -586,10 +628,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       focused: (on) => { focus = on; focusB.setAttribute('aria-pressed', String(on)); },
       pages: () => layout?.pages.length || 0,
     };
-    // The paper waits for its key (the page's context builder asks Ultra who the student is); without one in 15 s it opens
-    // unsaved, and saves once the key comes.
-    if (host.key || PA.keyOf(ctx.paper || {})) await load();
-    else setTimeout(() => { if (!loading) load(); }, 15000);
+    await load();
+    view.setProps({ editable: editable || (() => true) });
 
     current = api;
     hooks();

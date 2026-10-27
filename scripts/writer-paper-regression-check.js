@@ -34,8 +34,9 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
       await p.evaluate(() => GZ_WRITER_PAPER.current().save());
       const saved = await p.evaluate(async () => Object.values(await chrome.storage.local.get(null)).some((v) => v?.doc && JSON.stringify(v.doc).includes('Recover this unknown paper.')));
       assert.ok(saved, 'unknown-key paper must have a durable copy');
-      await p.reload(); await p.waitForFunction(() => !!globalThis.GZ_WRITER_PAPERS); await p.close();
-      p = await page(); await pause(100); assert.ok(await p.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('Recover this unknown paper.')), 'unknown draft reopens'); await p.close();
+      await p.reload(); await p.waitForFunction(() => !!globalThis.GZ_WRITER_PAPERS);
+      await p.evaluate(async () => { const m = document.createElement('div'); document.body.append(m); const editor = GZ_WRITER_EDITOR.create({ mount: m, mode: 'paper', html: '<p>Native body.</p>' }); await GZ_WRITER_PAPER.mount({ editor, t: (k) => k, standalone: true, context: () => ({ recovery: 'https://school.test/assignment/unknown' }) }); });
+      await pause(100); assert.ok(await p.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('Recover this unknown paper.')), 'unknown draft reopens'); await p.close();
     });
     await run('import', async () => {
       const p = await page('review-import'); await type(p, 'Unsaved typing before import.');
