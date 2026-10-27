@@ -99,3 +99,10 @@ test('review: Save and Close replies are correlated, including timers and double
   assert.equal(p.clicks.length, 1);
   assert.equal(p.uploads.length, 0);
 });
+
+test('review: cancelling the sheet while upload runs prevents the final native click', async () => {
+  const p = page({ listed: false });
+  await p.go(); p.hear({ type: 'submit:cancel', run: 1 });
+  p.addRow('Rivera_Essay2.docx'); await p.tick();
+  assert.equal(p.clicks.length, 0);
+});
