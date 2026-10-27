@@ -142,19 +142,20 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error }); return false; };
     if (running || box.saved || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= (runs.get(box) || 0)) return fail('busy');
     runs.set(box, m.run);
-    const name = m.name, bytes = m.bytes;
-    if (!L().safeName(name) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
+    const name = m.name, bytes = m.bytes, key = m.key;
+    if (!key || key !== L().paperKey(box.context?.paper) || !L().safeName(name) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
+    const user = box.context.paper.user;
     const transaction = active = { box, run: m.run, cancelled: false };
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
-    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user: box.context?.paper?.user }))?.ok === true;
+    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user }))?.ok === true;
     try {
       const d = L().delta({ note: m.note, text: m.text || '' });
       if (!d && written.has(box)) return fail('review');
       let s = L().advance(L().advance(L().start({ text: !!d }), { step: 'save' }), { step: 'docx' });
-      const here = () => !transaction.cancelled && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
+      const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
       if (!here()) return fail('page');
       if (!await permit('claim')) return fail('claimed');
       if (!here()) return fail('page');
