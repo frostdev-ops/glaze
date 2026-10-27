@@ -92,3 +92,16 @@ test('conflicting gradebook rows can never turn a test into an assignment', () =
   assert.equal(U.attemptKind([col('Assignment'), col('Test')], '_7_1'), 'test');
   assert.equal(U.attemptKind([col('Assignment'), col(undefined)], '_7_1'), '', 'incomplete conflicting evidence fails closed');
 });
+
+test('native attachments and formatting outside the frame schema are never taken over and discarded', () => {
+  for (const make of [
+    (doc) => new El('img', doc),
+    (doc) => new El('table', doc),
+    (doc) => { const p = new El('p', doc); p.className = 'ql-align-center'; p.textContent = 'Centered text'; return p; },
+    (doc) => { const s = new El('span', doc); s.setAttribute('style', 'color: red'); s.textContent = 'Colored text'; return s; },
+  ]) {
+    const body = page('ultra-writer-discussion.html'), [post] = U.boxes(body, { path: DISCUSSION });
+    post.editor.append(make(body.doc));
+    assert.ok(!U.boxes(body, { path: DISCUSSION }).some((b) => b.editor === post.editor), 'unsupported content stays in Blackboard');
+  }
+});
