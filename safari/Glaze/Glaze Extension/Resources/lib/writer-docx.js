@@ -71,8 +71,11 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       const id = rel(`${R}/image`, name);
       let size = null;
       try { size = TEXT().imageSize?.(bytes) || null; } catch { size = null; }
-      const wpx = Math.min(node.attrs.width || size?.width || 320, ST().geometry(f).content);
-      const hpx = size?.width && size?.height ? Math.round((wpx * size.height) / size.width) : Math.round(wpx * 0.625);
+      const geo = ST().geometry(f);
+      let wpx = Math.min(node.attrs.width || size?.w || 320, geo.content);
+      let hpx = size?.w && size?.h ? (wpx * size.h) / size.w : wpx * 0.625;
+      const maxHeight = geo.body - ST().lineHeight(f);
+      if (hpx > maxHeight) { wpx *= maxHeight / hpx; hpx = maxHeight; }
       const cx = Math.round(wpx * 9525), cy = Math.round(hpx * 9525);
       return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${n}" name="Picture ${n}" descr="${esc(node.attrs.alt)}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${n}" name="Picture ${n}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${id}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
     };

@@ -153,6 +153,7 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
       `${s} blockquote p { text-indent: 0; line-height: ${lineHeight(f, { line: q.line })}px; padding-bottom: ${r3(pt2px(q.after))}px; }`,
       `${s} pre { font-family: "Courier New"; text-indent: 0; white-space: pre-wrap; }`,
       `${s} li { text-indent: 0; padding-left: 0.5in; }`,
+      `${s} img { max-height: ${g.body - lh}px; object-fit: contain; }`,
       `${s} p.gp-entry { padding-left: ${f.list.hanging}in; text-indent: -${f.list.hanging}in; line-height: ${lineHeight(f, { line: f.list.line })}px; padding-bottom: ${r3(pt2px(f.list.after))}px; }`,
     ];
     f.headings.forEach((h, i) => out.push(`${s} h${i + 1} { font-size: inherit; font-weight: ${h.bold ? 700 : 400}; font-style: ${h.italic ? 'italic' : 'normal'}; text-align: ${h.align}; text-indent: ${h.first || 0}in; }`));

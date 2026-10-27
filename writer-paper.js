@@ -108,8 +108,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
 
     // ---- menus and popovers (writer.css .pop: they scale in and fade; they go at once)
     let open = null;
-    const close = (back) => { if (!open) return; const o = open; open = null; o.el.remove(); o.opener?.setAttribute('aria-expanded', 'false'); if (back) o.opener?.focus(); };
-    const popup = (opener, el, { above = false } = {}) => {
+    const close = (back) => { if (!open) return; const o = open; open = null; o.onClose?.(); o.el.remove(); o.opener?.setAttribute('aria-expanded', 'false'); if (back) o.opener?.focus(); };
+    const popup = (opener, el, { above = false, onClose = null } = {}) => {
       close();
       el.classList.add('pop');
       document.body.append(el);
@@ -125,7 +125,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
       opener.setAttribute('aria-expanded', 'true');
-      open = { el, opener };
+      open = { el, opener, onClose };
       el.querySelector('button, input, select, textarea')?.focus();
     };
     const menu = (opener, items, o) => {
@@ -528,20 +528,21 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const area = h('textarea', { 'aria-label': t('Footnote'), maxlength: '4000' });
       area.value = plain;
       const el = h('div', { class: 'gp-menu gp-note', role: 'dialog', 'aria-label': t('Footnote') }, area);
-      const done = (keep) => {
+      const done = (keep, returnFocus = true) => {
         if (!el.isConnected) return;
+        if (open?.el === el) open.onClose = null;
         close();
         const now = view.state.doc.nodeAt(pos);
         if (now?.type.name !== 'footnote_ref') return;
         const text = area.value.replace(/\s+/g, ' ').trim();
         if (keep && text !== plain) view.dispatch(text ? view.state.tr.setNodeMarkup(pos, null, { content: S.inline(text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])) }) : view.state.tr.delete(pos, pos + 1));
         else if (!keep && fresh && !plain) view.dispatch(view.state.tr.delete(pos, pos + 1));
-        view.focus();
+        if (returnFocus) view.focus();
       };
       area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); done(true); } else if (e.key === 'Escape') { e.preventDefault(); done(false); } });
       area.addEventListener('blur', () => setTimeout(() => done(true), 0));
       const anchor = view.nodeDOM(pos) || view.dom;
-      popup(anchor.nodeType === 1 ? anchor : view.dom, el);
+      popup(anchor.nodeType === 1 ? anchor : view.dom, el, { onClose: () => done(true, false) });
     };
 
     // ---- versions, import and export
@@ -576,10 +577,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     const importFile = async (f) => {
       if (!f) return;
+      const editable = view.props.editable;
+      let replacing = false;
       try {
         await need(DOCX);
         const r = await GZ_WRITER_DOCX.importDocx(new Uint8Array(await f.arrayBuffer()), { format });
         const doc = S.parse(S.paper, r.html);
+        replacing = true; root.inert = true; view.setProps({ editable: () => false });
         if (key) {
           if (!await save()) throw new Error('paper could not be saved before import');
           const saved = await store.save(key, { ...record(), doc: doc.toJSON() }, { reason: 'import' });
@@ -588,6 +592,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         setDoc(doc.toJSON());
         toast(r.warnings.length ? r.warnings.map((w) => t(w)).join(' ') : t('Imported. The last version is in Versions.'));
       } catch (e) { console.error(e); toast(e instanceof RangeError && e.message ? t(e.message) : t('That file could not be read as a Word document.')); }
+      finally { if (replacing) { root.inert = false; view.setProps({ editable }); view.focus(); } }
     };
     file.addEventListener('change', () => { importFile(file.files[0]); file.value = ''; });
     canvas.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) { e.preventDefault(); canvas.classList.add('gp-drop'); } });
