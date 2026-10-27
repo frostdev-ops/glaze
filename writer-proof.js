@@ -15,20 +15,25 @@
   const pending = new Map(), asked = new Set(), stats = new Map();
 
   // ---- the shared worker ------------------------------------------------------------------------------------------
+  // A worker that can't load (it errs before it answers) is given up for this box: no retry loop, the text stays.
+  let broken = false;
   const post = (m) => { if (connect()) port.postMessage(m); };
   const connect = () => {
-    if (port) return port;
+    if (port || broken) return port;
+    const fail = (e) => { console.error('Glaze Writer: proofing is off here', e?.message || e); broken = true; port = null; pending.clear(); };
     try {
       if (typeof SharedWorker === 'function') {
         const w = new SharedWorker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' });
+        w.addEventListener('error', fail);
         port = w.port;
         port.start();
         P.mode = 'shared';
       } else {
         port = new Worker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' });
+        port.addEventListener('error', fail);
         P.mode = 'worker';
       }
-    } catch (e) { console.error(e); port = null; return null; }
+    } catch (e) { fail(e); return null; }
     port.onmessage = ({ data }) => onWorker(data);
     port.postMessage({ op: 'words', words: context });
     if (dict.size) port.postMessage({ op: 'dict', words: [...dict] });
@@ -148,7 +153,7 @@
     for (const i of I.list()) {
       const k = `${i.rule}\u0000${i.text}\u0000${i.from}`;
       if (i.source !== 'harper' || i.sure || !P.ASK.has(i.rule) || !i.suggestions.length || asked.has(k) || i.from < from || i.to > to + 64) continue;
-      if (!P.within(P.key.getState(view.state).typed, i.from, i.to)) continue;
+      if (!P.within(P.key.getState(view.state).typed, i.from, i.to) || !P.finished(view.state, i.from, i.to)) continue;
       asked.add(k);
       rule(i);
     }
@@ -157,16 +162,24 @@
     const $from = view.state.doc.resolve(i.from), start = $from.start();
     let said = null;
     try { said = await P.decide({ text: P.blockText($from.parent), from: i.from - start, to: i.to - start, suggestions: i.suggestions.slice(), context: F.context() }); } catch (e) { console.error(e); }
-    if (said !== 'apply' || !view) return;
-    const now = I.list().find((x) => x.id === i.id);
-    if (now) { const made = P.autofix(view, now); if (made) showFix(made); }
+    const v = P.verdict(said, i.suggestions.length), now = view && I.list().find((x) => x.id === i.id);
+    if (!v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
+    if (v.verdict === 'apply') { const made = P.autofix(view, now, now.suggestions[v.choice]); if (made) showFix(made); return; }
+    // 'suggest': the choice first on the card.
+    const list = now.suggestions.slice(), [pick] = list.splice(v.choice, 1), bare = (x) => ({ ...x, id: x.id.replace(/^harper:/, '') });
+    const others = I.list().filter((x) => x.source === 'harper' && x.id !== now.id && x.from >= now.from && x.to <= now.to);
+    I.set('harper', [...others.map(bare), { ...bare(now), suggestions: [pick, ...list] }], { from: now.from, to: now.to });
   };
 
   // ---- start, context and the dictionary --------------------------------------------------------------------------
+  // The dictionary is read before anything is asked, so the worker has it first; what is typed meanwhile is in the
+  // full lint that starts it.
+  let starting = false;
   const start = async () => {
-    if (started) return;
+    if (starting) return;
+    starting = true;
+    dict = new Set([...dict, ...await words()]);
     started = true;
-    dict = new Set(await words());
     connect();
     lintDoc();
   };

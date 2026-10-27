@@ -13,9 +13,9 @@ rm -f "$OUT"
 # Everything packaged is world-readable: a Safari app installed by the App Store is owned by root, and a
 # file only its owner can read (the icons were 0600 here) would be unreadable to Safari.
 chmod -R a+rX manifest.json content.js content-ultra.js content-canvas.js defaults.js lib i18n _locales theme.css motion.css extras.css canvas.css moodle.css features \
-  popup.html popup.js options.html options.js preview.html reader.html reader.js writer.html writer.js writer.css writer-ai.js writer-ai.css writer-compose.js writer-compose.css sharing mods ui.js ui.css fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders
+  popup.html popup.js options.html options.js preview.html reader.html reader.js writer.html writer.js writer.css writer-ai.js writer-ai.css writer-compose.js writer-compose.css writer-proof.js writer-proof.css sharing mods ui.js ui.css fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders
 zip -q -r -X "$OUT" manifest.json content.js content-ultra.js content-canvas.js defaults.js lib i18n _locales theme.css motion.css extras.css canvas.css moodle.css features \
-  popup.html popup.js options.html options.js preview.html reader.html reader.js writer.html writer.js writer.css writer-ai.js writer-ai.css writer-compose.js writer-compose.css sharing mods ui.js ui.css fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders -x '*.DS_Store'
+  popup.html popup.js options.html options.js preview.html reader.html reader.js writer.html writer.js writer.css writer-ai.js writer-ai.css writer-compose.js writer-compose.css writer-proof.js writer-proof.css sharing mods ui.js ui.css fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders -x '*.DS_Store'
 
 # Google Calendar sync waits behind its build-time switch (lib/gcal.js ON) until Google verifies the app. While it's
 # off, the packaged manifest carries neither its oauth2 client nor the optional identity permission it would ask for.

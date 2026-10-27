@@ -14,6 +14,8 @@
       { "problem": "Their", "kind": "grammar", "rule": "Grammar", "sure": false, "first": "They're" } ] },
     { "text": "When Sethe returns to the clearing, the memory is not something she owns.", "expect": [
       { "problem": "Sethe", "kind": "spelling", "rule": "Spelling", "sure": false, "first": "Seth" } ] },
+    { "text": "Then Beloved arives.", "expect": [
+      { "problem": "arives", "kind": "spelling", "rule": "Typo", "sure": false, "first": "a rives" } ] },
     { "text": "Visit www.example.com or email teh@school.edu for the readme.", "expect": [] }
   ]
 }

@@ -22,8 +22,8 @@ const walk = (p) => {
   if (!fs.existsSync(f)) return [];
   return fs.statSync(f).isDirectory() ? fs.readdirSync(f).flatMap((x) => walk(path.posix.join(p, x))) : [p];
 };
-// Vendored engines (pdf.js, Tesseract, three.js, Lottie) load only their own files, from the extension.
-const VENDORED = /^lib\/(pdfjs|tesseract|lottie)\/|^lib\/three\.min\.js$/;
+// Vendored engines (pdf.js, Tesseract, three.js, Lottie, Harper) load only their own files, from the extension.
+const VENDORED = /^lib\/(pdfjs|tesseract|lottie)\/|^lib\/harper\/(?!shared\.js$)|^lib\/three\.min\.js$/;
 const FILES = roots.flatMap(walk).filter((f) => /\.m?js$/.test(f));
 // Each line without its comment: a comment line, or what follows ` // ` (an address's `://` has no space before it).
 const lines = (js) => js.split('\n').map((l) => (/^\s*(\/\/|\/?\*)/.test(l) ? '' : l.replace(/\s\/\/\s.*$/, '')));

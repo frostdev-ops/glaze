@@ -35,7 +35,7 @@ const editor = (html = '', o = {}) => {
   const caret = (pos) => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos)));
   const end = () => caret(view.state.doc.content.size - 1);
   const back = () => undo(view.state, (tr) => view.dispatch(tr));
-  return { view, type, text, at, caret, end, back, fixes, issues: I.bind(view) };
+  return { view, type, text, at, caret, end, back, fixes, proof, issues: I.bind(view) };
 };
 
 // ---- the sure fixes -----------------------------------------------------------------------------------------------
@@ -118,6 +118,11 @@ test('typing: only what was typed here, never loaded or pasted text, code, links
   e.view.dispatch(e.view.state.tr.insertText('pasted teh'));
   e.type(' ');
   assert.equal(e.text(), 'pasted teh ', 'pasted text');
+  e = editor();
+  e.proof.props.handleTextInput(e.view, 1, 1, 'x');
+  e.view.dispatch(e.view.state.tr.insertText('pasted teh').setMeta('uiEvent', 'paste'));
+  e.type(' ');
+  assert.equal(e.text(), 'pasted teh ', 'a paste after a keystroke that never landed');
   e = editor('<pre class="ql-syntax">x</pre>');
   e.end();
   e.type(' teh ');
@@ -174,6 +179,15 @@ test('revert: the pop\'s Undo takes back the last fix with the editor\'s undo, a
   assert.equal(g.text(), 'teh cat sat teh ', 'kept after an Undo too');
 });
 
+test('verdict: decide\'s answer as a string or { verdict, choice }, the choice checked', () => {
+  assert.deepEqual(P.verdict('apply', 2), { verdict: 'apply', choice: 0 });
+  assert.deepEqual(P.verdict('suggest', 1), { verdict: 'suggest', choice: 0 });
+  assert.deepEqual(P.verdict({ verdict: 'apply', choice: 1 }, 2), { verdict: 'apply', choice: 1 });
+  assert.deepEqual(P.verdict({ verdict: 'suggest', choice: 1 }, 3), { verdict: 'suggest', choice: 1 });
+  for (const bad of [null, undefined, 'keep', { verdict: 'keep', choice: 0 }, { verdict: 'apply', choice: 2 }, { verdict: 'apply', choice: -1 }, { verdict: 'apply', choice: '1' }, { verdict: 'apply', choice: 0.5 }, 'yes', 7]) assert.equal(P.verdict(bad, 2), null, JSON.stringify(bad));
+  assert.equal(P.verdict('apply', 0), null, 'nothing to apply');
+});
+
 // ---- Harper's lints and text ------------------------------------------------------------------------------------------
 test('toIssue: kinds, suggestions as the span\'s new text, and what is sure', () => {
   const l = (kind, suggestions, problem = 'teh') => P.toIssue({ start: 0, end: problem.length, kind, message: 'm', problem, suggestions });
@@ -185,6 +199,12 @@ test('toIssue: kinds, suggestions as the span\'s new text, and what is sure', ()
   assert.deepEqual(l('Punctuation', [{ k: 2, t: ',' }], 'However').suggestions, ['However,']);
   assert.deepEqual(l('Typo', [{ k: 0, t: 'x' }, { k: 0, t: 'x' }, { k: 0, t: 'teh' }]).suggestions, ['x'], 'deduped, no no-op');
   assert.deepEqual(l('Grammar', [{ k: 0, t: "They're" }, { k: 0, t: "They're " }], 'Their').suggestions, ["They're"], 'edge spaces trimmed, then deduped');
+  assert.equal(l('Typo', [{ k: 0, t: 'a rives' }], 'arives').sure, false, 'a typo whose one suggestion splits the word');
+  assert.equal(l('Typo', [{ k: 0, t: 'thermometer' }], 'tehr').sure, false, 'too far off');
+  assert.equal(l('Capitalization', [{ k: 0, t: 'These' }], 'this').sure, false, 'more than the case');
+  assert.equal(l('Repetition', [{ k: 0, t: 'the' }], 'the the').sure, true);
+  assert.equal(l('Repetition', [{ k: 0, t: 'and' }], 'the the').sure, false);
+  assert.deepEqual([P.distance('teh', 'the'), P.distance('recieve', 'receive'), P.distance('cat', 'dog'), P.distance('a', 'abcd')], [1, 1, 3, 3]);
   for (const [k, kind] of [['Capitalization', 'grammar'], ['WordChoice', 'grammar'], ['Agreement', 'grammar'], ['Style', 'style'], ['Redundancy', 'style'], ['Spelling', 'spelling']]) assert.equal(P.kindOf(k), kind, k);
 });
 
