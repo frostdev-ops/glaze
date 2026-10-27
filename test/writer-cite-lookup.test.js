@@ -166,3 +166,56 @@ test('sources: cleaned, told apart and merged; a box\'s key needs every part', a
   assert.equal(await S.save(k, [], area), true);
   assert.equal(store[k], undefined);
 });
+
+const redirect = (to) => ({ ok: false, status: 302, headers: { get: (k) => k === 'location' ? to : null }, body: { cancel: async () => {} } });
+test('review: redirects are inspected before any next fetch; only held public HTTPS destinations are followed', async () => {
+  for (const to of ['https://127.0.0.1/', 'https://[::1]/', 'https://printer.local/', 'http://www.example.org/', 'https://other.example.org/']) {
+    const calls = [];
+    const e = env({ reach: async (u) => new URL(u).hostname === 'example.org', fetch: async (url, init) => { calls.push([url, init.redirect]); return redirect(to); } });
+    const r = await L.serve({ kind: 'url', value: 'https://example.org/' }, sender, e);
+    assert.equal(r.ok, false, to);
+    assert.deepEqual(calls, [['https://example.org/', 'manual']], to);
+  }
+  const calls = [];
+  const e = env({ reach: async (u) => ['example.org', 'www.example.org'].includes(new URL(u).hostname), fetch: async (url) => { calls.push(url); return calls.length === 1 ? redirect('https://www.example.org/') : response('<title>Final</title>', { url, type: 'text/html' }); } });
+  assert.equal((await L.serve({ kind: 'url', value: 'https://example.org/' }, sender, e)).url, 'https://www.example.org/');
+  assert.deepEqual(calls, ['https://example.org/', 'https://www.example.org/']);
+});
+
+test('review: opaque DOI redirects use fixed agency routes; opaque page redirects never auto-follow', async () => {
+  const calls = [];
+  const e = env({ reach: async () => true, fetch: async (url, init) => {
+    calls.push([url, init.redirect]);
+    return calls.length === 1 ? { type: 'opaqueredirect', status: 0, headers: new Headers() } : response('{"title":"A work"}', { url });
+  } });
+  assert.equal((await L.serve({ kind: 'doi', value: '10.5555/work' }, sender, e)).ok, true);
+  assert.deepEqual(calls, [['https://doi.org/10.5555/work', 'manual'], ['https://api.crossref.org/v1/works/10.5555%2Fwork/transform', 'manual']]);
+  calls.length = 0;
+  assert.deepEqual(await L.serve({ kind: 'url', value: 'https://example.org/' }, sender, e), { ok: false, error: 'redirect' });
+  assert.equal(calls.length, 1);
+});
+
+test('review: an oversized or failed stream is cancelled and its reader released', async () => {
+  let cancelled = 0, released = 0;
+  const e = env({ fetch: async () => ({ ok: true, headers: new Headers({ 'content-type': 'application/json' }), body: { getReader: () => ({ read: async () => ({ done: false, value: new Uint8Array(L.LIMIT.bytes + 1) }), cancel: async () => { cancelled++; }, releaseLock: () => { released++; } }) } }) });
+  assert.deepEqual(await L.serve({ kind: 'doi', value: '10.5555/work' }, sender, e), { ok: false, error: 'size' });
+  assert.equal(cancelled, 1);
+  assert.equal(released, 1);
+});
+
+test('review: a deadline also bounds a hung response body', async () => {
+  const original = L.LIMIT.time;
+  let cancelled = 0;
+  L.LIMIT.time = 25;
+  try {
+    const e = env({ fetch: async () => ({ ok: true, headers: new Headers({ 'content-type': 'application/json' }), body: { getReader: () => ({ read: () => new Promise(() => {}), cancel: async () => { cancelled++; }, releaseLock() {} }) } }) });
+    const result = await Promise.race([L.serve({ kind: 'doi', value: '10.5555/work' }, sender, e), new Promise((r) => setTimeout(() => r('hung'), 150))]);
+    assert.deepEqual(result, { ok: false, error: 'timeout' });
+    assert.equal(cancelled, 1);
+  } finally { L.LIMIT.time = original; }
+});
+
+test('review: DOI punctuation preserves balanced suffix parentheses', () => {
+  assert.equal(S.doi('https://doi.org/10.5555/work(part)'), '10.5555/work(part)');
+  assert.equal(S.doi('(10.5555/work(part)).'), '10.5555/work(part)');
+});
