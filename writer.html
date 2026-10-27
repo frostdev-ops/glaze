@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<!-- Nothing but Glaze's own files: what is written here goes only to the page that opened the frame, over its channel. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Glaze Writer</title>
+<link rel="stylesheet" href="lib/pm.css">
+<link rel="stylesheet" href="writer.css">
+<body>
+<div class="gw" id="gw">
+  <div class="gw-body" id="body"></div>
+  <div class="gw-bar">
+    <span class="slot" data-slot="target" id="words"></span>
+    <span class="slot" data-slot="sources"></span>
+    <span class="slot" data-slot="issues"></span>
+    <span class="grow"></span>
+    <span class="slot" data-slot="ai"></span>
+    <button class="more" id="more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="menu"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+  </div>
+</div>
+<div class="pop tb" id="tb" role="toolbar" hidden>
+  <button type="button" data-run="bold">B</button><button type="button" data-run="italic"><i>I</i></button><button type="button" data-run="underline"><u>U</u></button><span class="sepv"></span>
+  <button type="button" data-run="link"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
+  <button type="button" data-run="bulletList"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+  <button type="button" data-run="quote"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h4v4c0 3-2 5-4 6M15 7h4v4c0 3-2 5-4 6"/></svg></button>
+  <span class="slot" data-slot="cite"></span>
+  <input class="href" id="href" type="url" placeholder="https://" spellcheck="false" hidden>
+</div>
+<div class="pop menu" id="menu" role="menu" hidden>
+  <button type="button" role="menuitem" data-do="native"></button>
+</div>
+<script src="lib/i18n.js"></script>
+<script src="lib/pm.js"></script>
+<script src="writer.js"></script>
+</html>

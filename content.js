@@ -870,8 +870,14 @@
     const ed = e.target.closest(DRAFT_ED);
     if (ed) { draftWait(ed); draftsIn(); } else if (!ultra && e.target.closest('#compose-message-modal')) watchDrafts();
   }, true);
+  // Glaze Writer (enhance.writer): Glaze's editor in place of Ultra's editor boxes (features/writer.js), on the same cue.
+  const writerIn = () => {
+    if (globalThis.GZ_WRITER) GZ_WRITER.pass();
+    else if (ultra && settings.enhance.writer && observer && document.querySelector(DRAFT_ED)) need('features/writer.js', () => globalThis.GZ_WRITER).then(() => GZ_WRITER.pass(), () => {});
+  };
   // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
   const watchDrafts = () => {
+    writerIn();
     if (globalThis.GZ_DRAFT_UI) return GZ_DRAFT_UI.watch();
     // Read again each pass while it loads: a paste lands in Quill after its event.
     for (const [ed] of draftsWaiting) if (ed.isConnected) draftWait(ed);

@@ -1,0 +1,192 @@
+{
+  "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. Shape from the owner's Ultra, 2026-10-27: gradebook/grades?expand=column rows as test/fixtures/ultra-grades.json has them, plus column.assessmentSubtype ('Assignment', 'Test'), the field lib/ultra.js reads for tests. That field wasn't seen live yet.",
+  "paging": {
+    "limit": 200,
+    "offset": 0
+  },
+  "results": [
+    {
+      "firstAttemptId": "_801_1",
+      "lastAttemptId": "_801_1",
+      "averageScore": 80,
+      "isCalculatedColumnGrade": false,
+      "studentReviewedTimestamp": null,
+      "courseId": "_101_1",
+      "userId": "_900_1",
+      "manualGrade": null,
+      "pointsPossible": 100,
+      "lowestAttemptId": null,
+      "highestAttemptId": null,
+      "columnId": "_810_1",
+      "id": "_1710_1",
+      "version": 1,
+      "manualStatus": "NO_OVERRIDE",
+      "isExempt": false,
+      "gradeScoreDesignation": "-",
+      "isCorrupt": false,
+      "hasAllAttemptsExcluded": false,
+      "column": {
+        "visible": true,
+        "calculationType": "NON_CALCULATED",
+        "multipleAttempts": 1,
+        "possible": 100,
+        "description": {
+          "rawText": "",
+          "displayText": ""
+        },
+        "courseId": "_101_1",
+        "scoreProviderHandle": "resource/x-bb-assessment",
+        "peerGrading": false,
+        "gradingSchemaId": "_401_1",
+        "contentId": "_7_1",
+        "dueDate": "2026-09-21T03:59:00.000Z",
+        "anonymousGrading": false,
+        "deleted": false,
+        "columnName": "Essay 2: Memory in Beloved",
+        "userCreatedColumn": false,
+        "permanentAnonymous": false,
+        "scorable": true,
+        "aggregationModel": "LAST",
+        "visibleInBook": true,
+        "ltiDomainId": null,
+        "ltiTag": "",
+        "ltiResourceId": "",
+        "gradesReleased": true,
+        "enforceDueDate": false,
+        "hasAnonymousSubmissions": false,
+        "gradebookCategory": {
+          "description": "",
+          "courseId": "_101_1",
+          "title": "Assignment",
+          "localizableTitle": {
+            "languageKey": "gradebook.category.assignment",
+            "bundle": "common"
+          },
+          "isUserDefined": false,
+          "id": "_201_1"
+        },
+        "id": "_810_1",
+        "learningOutcome": {
+          "columnScale": [],
+          "isSignature": false,
+          "entityScale": []
+        },
+        "localizedColumnName": {
+          "languageKey": "",
+          "bundle": ""
+        },
+        "effectiveColumnName": "Lab Report 1",
+        "isAttemptBased": true,
+        "gradeScoreDesignation": "-",
+        "isFormative": false,
+        "gradebookCategoryId": "_201_1",
+        "position": 1,
+        "groupContent": false,
+        "assessmentSubtype": "Assignment"
+      },
+      "columnUrl": "https://lms.example.edu/learn/api/v1/courses/_101_1/gradebook/columns/_601_1",
+      "status": "GRADED",
+      "displayGrade": {
+        "isOverride": false,
+        "requiresSchemaKnowledgeToDisplay": false,
+        "score": 90
+      },
+      "effectiveScore": 90,
+      "hasBeenViewedByStudent": true,
+      "lastAttemptUrl": "https://lms.example.edu/learn/api/v1/x",
+      "firstAttemptUrl": "https://lms.example.edu/learn/api/v1/x"
+    },
+    {
+      "firstAttemptId": "_801_1",
+      "lastAttemptId": "_801_1",
+      "averageScore": 80,
+      "isCalculatedColumnGrade": false,
+      "studentReviewedTimestamp": null,
+      "courseId": "_101_1",
+      "userId": "_900_1",
+      "manualGrade": null,
+      "pointsPossible": 100,
+      "lowestAttemptId": null,
+      "highestAttemptId": null,
+      "columnId": "_811_1",
+      "id": "_1711_1",
+      "version": 1,
+      "manualStatus": "NO_OVERRIDE",
+      "isExempt": false,
+      "gradeScoreDesignation": "-",
+      "isCorrupt": false,
+      "hasAllAttemptsExcluded": false,
+      "column": {
+        "visible": true,
+        "calculationType": "NON_CALCULATED",
+        "multipleAttempts": 1,
+        "possible": 100,
+        "description": {
+          "rawText": "",
+          "displayText": ""
+        },
+        "courseId": "_101_1",
+        "scoreProviderHandle": "resource/x-bb-assessment",
+        "peerGrading": false,
+        "gradingSchemaId": "_401_1",
+        "contentId": "_8_1",
+        "dueDate": "2026-09-21T03:59:00.000Z",
+        "anonymousGrading": false,
+        "deleted": false,
+        "columnName": "Unit 3 test",
+        "userCreatedColumn": false,
+        "permanentAnonymous": false,
+        "scorable": true,
+        "aggregationModel": "LAST",
+        "visibleInBook": true,
+        "ltiDomainId": null,
+        "ltiTag": "",
+        "ltiResourceId": "",
+        "gradesReleased": true,
+        "enforceDueDate": false,
+        "hasAnonymousSubmissions": false,
+        "gradebookCategory": {
+          "description": "",
+          "courseId": "_101_1",
+          "title": "Assignment",
+          "localizableTitle": {
+            "languageKey": "gradebook.category.assignment",
+            "bundle": "common"
+          },
+          "isUserDefined": false,
+          "id": "_201_1"
+        },
+        "id": "_811_1",
+        "learningOutcome": {
+          "columnScale": [],
+          "isSignature": false,
+          "entityScale": []
+        },
+        "localizedColumnName": {
+          "languageKey": "",
+          "bundle": ""
+        },
+        "effectiveColumnName": "Lab Report 1",
+        "isAttemptBased": true,
+        "gradeScoreDesignation": "-",
+        "isFormative": false,
+        "gradebookCategoryId": "_201_1",
+        "position": 1,
+        "groupContent": false,
+        "assessmentSubtype": "Test"
+      },
+      "columnUrl": "https://lms.example.edu/learn/api/v1/courses/_101_1/gradebook/columns/_601_1",
+      "status": "GRADED",
+      "displayGrade": {
+        "isOverride": false,
+        "requiresSchemaKnowledgeToDisplay": false,
+        "score": 90
+      },
+      "effectiveScore": 90,
+      "hasBeenViewedByStudent": true,
+      "lastAttemptUrl": "https://lms.example.edu/learn/api/v1/x",
+      "firstAttemptUrl": "https://lms.example.edu/learn/api/v1/x"
+    }
+  ],
+  "permissions": {}
+}

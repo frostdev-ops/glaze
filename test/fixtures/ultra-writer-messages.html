@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>New message</title>
+<!-- _note: shape from the owner's Ultra, 2026-10-27, synthetic values. Messages compose (/ultra/messages/create?courseId=…)
+as glaze-plans/writer/probe/notes.md records it: the panel, form and React editor nesting, the editor's id, role and
+placeholder, and Send by its data-analytics-id. Where Send sits in the form and the page around it are stand-ins. -->
+<style>
+body { margin:0; font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gz-surface-2, #060d18); color:var(--gz-ink, #e8f2fa); }
+.message-panel { width:760px; margin:40px auto; } .message-reply { margin-bottom:12px; }
+.bb-editor-root { border:1px solid var(--gz-line-strong, #24405f); border-radius:12px; background:var(--gz-surface, #0d1b2e); }
+.ql-editor { min-height:120px; padding:12px 16px; outline:none; } .ql-editor p { margin:0; }
+.send-row { display:flex; justify-content:flex-end; gap:10px; }
+.send-row button { font:inherit; font-weight:600; padding:8px 18px; border-radius:999px; border:1px solid var(--gz-line-strong, #24405f); background:none; color:inherit; }
+.send-row button.send { background:var(--gz-accent, #17c8f4); color:var(--gz-accent-ink, #04121f); border-color:transparent; } .send-row button:disabled { opacity:.45; }
+</style></head>
+<body><div id="site-wrap"><div id="main-content-inner">
+<bb-course-conversation><div id="message-panel" class="message-panel"><div class="panel-content flex-messages-panel-layout is-new"><div class="message-reply-container"><div class="message-reply-panel">
+  <form>
+    <div class="message-reply"><react-editor-wrapper class="react-container"><div class="bb-editor-root bb-editor-heading-h4"><div class="editor-content-container"><div class="bb-editor-container ql-container"><div id="message-reply" class="ql-editor ql-blank" role="textbox" contenteditable="true" data-placeholder="Type a message"><p><br></p></div></div></div></div></react-editor-wrapper></div>
+    <div class="send-row"><button type="button" aria-label="Menu">⋯</button><button type="button" class="send" data-analytics-id="components.directives.messages.courseConversation.sendMessage.button" disabled>Send</button></div>
+  </form>
+</div></div></div></div></bb-course-conversation>
+</div></div></body></html>

@@ -157,15 +157,17 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
 // page (opaque origin, no extension APIs) under its own CSP, which lets no request, frame or inline script out, and eval in
 // that sandbox only. Its bootstrap, mods/boot.js, is the only other file it exposes. Both on dynamic URLs.
 const SANDBOX_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
-test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; Settings (as a page beside the navigation) and its live preview, the reader, the Notes share panel, Download all\'s Allow frame and the mods host are the pages a site may frame, and load only Glaze\'s files', () => {
+test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; Settings (as a page beside the navigation) and its live preview, the reader, the writer, the Notes share panel, Download all\'s Allow frame and the mods host are the pages a site may frame, and load only Glaze\'s files', () => {
   assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'", sandbox: SANDBOX_CSP });
-  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'sharing/quick.html', 'options.html', 'preview.html', 'features/allow.html', 'mods/host.html']);
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'writer.html', 'sharing/quick.html', 'options.html', 'preview.html', 'features/allow.html', 'mods/host.html']);
   // Download all's Allow frame: one button, Glaze's files only, no network from the page itself.
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'features/allow.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // The Notes share panel: Glaze's files only, no network from the page itself (the worker talks to the relay).
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'sharing/quick.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');
   assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  // Glaze Writer's editor frame: Glaze's files only, no network from the page itself.
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
 });
 
 test('the mods host is the one sandbox page: no same-origin, no inline script, no requests, and only it and its bootstrap are exposed', () => {

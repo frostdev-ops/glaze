@@ -8,7 +8,7 @@ const cards = require(path.join(root, 'lib/cards.js'));
 const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'sharing', 'mods', 'ai', 'backup', 'about'];
 const GROUP = { stream: 'pages/dashboard', docreview: 'pages/documents', auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'navigation/bar', navbar: 'navigation/bar', sidebar: 'navigation/sidebar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'pages/declutter', card: 'courses/cards', courses: 'courses/list', mods: 'backup/privacy', announce: 'pages/popups', popup: 'pages/popups', rubric: 'pages/popups' };
 const ENHANCE = {
-  'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'fold', 'previews', 'progress', 'newcontent', 'drafts', 'download', 'place'],
+  'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'fold', 'previews', 'progress', 'newcontent', 'drafts', 'writer', 'download', 'place'],
   'pages/shortcuts': ['palette', 'search', 'keys'],
   'pages/documents': ['docPages', 'toggles', 'docTheme', 'docInk', 'quizLight', 'titleScroll'],
   'courses/list': ['coursemenu'],

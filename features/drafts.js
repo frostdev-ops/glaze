@@ -15,6 +15,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const ultra = ctx.site === 'ultra';
   const { t, locale, capi, profile, canvasCourses, local } = ctx;
   const EDITOR = ctx.draftEditor; // Ultra's Quill editors, or Canvas's Inbox compose body
+  const writer = (ed) => !!ed?.closest?.('[data-gz-writer]'); // Glaze Writer's (features/writer.js) until it's given back
   let account = null; // who you are: { user }, and on Canvas your courses, which its Inbox key names
   let accountLoading = false;
   let accountRetry = 0;
@@ -210,6 +211,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const write = (e) => {
     if (!ultra && e.type !== 'input') return;
     const ed = ctx.settings().enhance.drafts && ctx.on() && e.target instanceof Element && e.target.closest(EDITOR);
+    if (writer(ed)) return;
     if (!ed) {
       // Controlled inputs can change value without a DOM mutation, so destination edits also run the pass.
       if (!ultra && ctx.settings().enhance.drafts && ctx.on() && e.target.closest?.('#compose-message-modal')) watchInboxDrafts();
@@ -349,7 +351,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const offerDraft = (ed) => {
     const key = draftKey(ed);
     if (!key) return;
-    const here = () => ctx.settings().enhance.drafts && ctx.on() && ed.isConnected && draftKey(ed) === key;
+    const here = () => ctx.settings().enhance.drafts && ctx.on() && ed.isConnected && !writer(ed) && draftKey(ed) === key;
     read(key, async () => {
       const d = held.get(key)?.[0];
       if (!d || !here()) return;
@@ -391,13 +393,13 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     }
     // A bar steps aside while its editor has text (Ultra's own saved draft, or you're writing), and goes with it.
     for (const [bar, ed] of bars) {
-      if (!bar.isConnected || !ed.isConnected || draftKey(ed) !== barKeys.get(bar)) { bar.remove(); bars.delete(bar); } else bar.hidden = !!ed.textContent.trim();
+      if (!bar.isConnected || !ed.isConnected || writer(ed) || draftKey(ed) !== barKeys.get(bar)) { bar.remove(); bars.delete(bar); } else bar.hidden = !!ed.textContent.trim();
     }
     // An editor offers its copy once, after it has sat empty for a moment: Ultra may still be filling it. Its key needs who you are.
     if (!account) { if (document.querySelector(EDITOR)) loadAccount(); return; }
     for (const ed of document.querySelectorAll(EDITOR)) {
       const key = draftKey(ed);
-      if (!key || offered.get(ed) === key) continue;
+      if (!key || offered.get(ed) === key || writer(ed)) continue;
       read(key, () => {
         offered.set(ed, key);
         if (!ed.textContent.trim()) setTimeout(() => offerDraft(ed), 800);
