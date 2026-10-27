@@ -271,7 +271,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
           return marks.get(fixes);
         },
         handleTextInput(view, from, to, text) {
-          if (view.composing) return false;
+          if (view.composing) { expect = null; return false; }
           expect = from;
           if (!BOUNDARY.test(text) || from !== to) return false;
           const st = key.getState(view.state), $from = view.state.doc.resolve(from);
@@ -326,9 +326,9 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   // A sure Harper fix the student has typed past: applied as its own undo step, like the ones above. → fix or null.
   const autofix = (view, issue, now = issue.suggestions[0]) => {
     const st = key.getState(view.state), { from, to } = issue, doc = view.state.doc;
-    if (typeof now !== 'string' || to <= from || to > doc.content.size) return null;
+    if (view.composing || typeof now !== 'string' || !Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to <= from || to > doc.content.size) return null;
     const was = doc.textBetween(from, to, '\n', ' '), $to = doc.resolve(to);
-    if (st.kept.has(was.toLowerCase()) || !within(st.typed, from, to) || guarded(doc, from, to)) return null;
+    if ((typeof issue.text === 'string' && issue.text !== was) || st.kept.has(was.toLowerCase()) || !within(st.typed, from, to) || guarded(doc, from, to)) return null;
     if (!finished(view.state, from, to)) return null;
     const $from = doc.resolve(from), before = $from.parent.textBetween(0, $from.parentOffset, null, leaf);
     const token = (/(\S*)$/.exec(before)?.[1] || '') + was + ($to.parent.textBetween($to.parentOffset, $to.parent.content.size, null, leaf).match(/^\S*/)?.[0] || '');
