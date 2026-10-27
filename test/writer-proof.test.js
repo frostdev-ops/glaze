@@ -296,3 +296,24 @@ test('typing provenance excludes pasted and replaced text inside or beside typed
   e.end(); e.type(' and');
   assert.equal(P.autofix(e.view, { from: 1, to: 4, suggestions: ['the'], rule: 'Typo' }), null);
 });
+
+test('delayed autocorrect refuses composition, stale text and invalid ranges', () => {
+  const e = editor(); e.type('wait. this one');
+  const issue = { ...e.at('this'), text: 'this', suggestions: ['This'], rule: 'Capitalization' };
+  e.view.composing = true;
+  assert.equal(P.autofix(e.view, issue), null, 'a worker or decide reply must not change an active composition');
+  assert.equal(e.text(), 'wait. this one');
+  e.view.composing = false;
+  assert.equal(P.autofix(e.view, { ...issue, text: 'that' }), null, 'the original issue text must still match');
+  for (const from of [-1, NaN, 1.5]) assert.equal(P.autofix(e.view, { ...issue, from }), null);
+});
+
+test('a pending text input cannot lend provenance to composition', () => {
+  const e = editor(); e.type('t');
+  e.proof.props.handleTextInput(e.view, 2, 2, 'x');
+  e.view.composing = true;
+  e.proof.props.handleTextInput(e.view, 2, 2, 'eh');
+  e.view.dispatch(e.view.state.tr.insertText('eh'));
+  e.view.composing = false; e.type(' ');
+  assert.equal(e.text(), 'teh ');
+});
