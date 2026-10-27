@@ -66,24 +66,12 @@ test('confirm tools: summaries in Glaze\'s words from the document; only a sourc
   assert.deepEqual(b.done, [['cite', 'baldwin', '12'], ['fix', 'ai-0-4', 'seems']]);
 });
 
-test('a model on this computer is asked mid-word only where the spelling check can judge the join', () => {
-  // Live with Apple Intelligence and Gemini Nano, 2026-10-27: mid-word ("…open", "…subm") a small model goes on with the
-  // rest of the word ("s a new…", "it to…"), which a space would split ("open s").
-  assert.equal(AI.asks('Three things I learned are how to subm', { local: true }), false, 'nothing to judge the join with');
-  assert.equal(AI.asks('Three things I learned are how to subm', { local: true }, true), true);
-  assert.equal(AI.asks('Three things I learned are how to ', { local: true }), true, 'after a space the word is whole');
-  assert.equal(AI.asks('Three things I learned are how to subm', { local: false }), true, 'a large model joins exactly');
-});
-
-test('the join after a word: glued when the two make a word and one of them is not one, spaced when the next is a word', () => {
-  const ok = new Set(['open', 'opens', 'completion', 'submit', 'how', 'to', 'create', 'some', 'thing', 'something', 'it', 'belongs']);
-  assert.equal(AI.joins('open', 's', ok), 'glue', 'open + s = opens');
-  assert.equal(AI.joins('comp', 'letion', ok), 'glue');
-  assert.equal(AI.joins('subm', 'it', ok), 'glue');
-  assert.equal(AI.joins('to', 'create', ok), 'space');
-  assert.equal(AI.joins('it', 'belongs', ok), 'space');
-  assert.equal(AI.joins('some', 'thing', ok), 'space', 'both words already: kept apart');
-  assert.equal(AI.joins('ow', 'ows', ok), null, 'neither reading is a word: dropped');
+test('a model on this computer is asked only after a space, where the word is known to be whole', () => {
+  // Live with Apple Intelligence, 2026-10-27: asked mid-word ("…how to subm", "…she ow") it joined or garbled the word.
+  assert.equal(AI.asks('Three things I learned are how to subm', { local: true }), false);
+  assert.equal(AI.asks('Three things I learned are how to ', { local: true }), true);
+  assert.equal(AI.asks('Three things I learned are how to subm', { local: false }), true, 'a large model may finish the word');
+  assert.equal(AI.asks('Three things I learned are how to subm', undefined), true);
 });
 
 test('the gray text shows where the task would run, Tab-word takes one word, typing consumes it, and the pause adapts', () => {
