@@ -55,3 +55,28 @@ test('the paper Outline uses document translations while appearance Outline keep
   assert.equal(I.t(key, {}, 'fr'), 'Plan');
   assert.equal(I.t('Outline', {}, 'de'), 'Umrandung');
 });
+
+test('Papers opens only from a Glaze content script on an approved LMS page', async () => {
+  const listeners = [], opened = [];
+  const local = { ultra: ['https://school.test'] };
+  const area = (data) => ({ get: async (key) => ({ [key]: data[key] }), set: async () => {}, remove: async () => {} });
+  const context = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa,
+    navigator: {}, importScripts: (...files) => { for (const file of files) vm.runInContext(read(`lib/${file}`), context); },
+    chrome: {
+      runtime: { id: 'glaze', getURL: (file = '') => `chrome-extension://glaze/${file}`, getManifest: () => require('../manifest.json'),
+        onMessage: { addListener: (fn) => listeners.push(fn) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      storage: { local: area(local), sync: area({}), onChanged: { addListener() {} } },
+      tabs: { create: async (opts) => opened.push(opts.url) },
+    },
+  });
+  vm.runInContext(read('lib/background.js'), context);
+  const sender = { id: 'glaze', frameId: 0, tab: { id: 1 }, url: 'https://school.test/ultra/course' };
+  const send = async (s) => {
+    for (const fn of listeners) fn('papers', s, () => {});
+    for (let i = 0; i < 10; i++) await new Promise(setImmediate);
+  };
+  for (const s of [{ ...sender, id: 'other' }, { ...sender, tab: undefined }, { ...sender, url: 'https://unapproved.test/ultra/course' }, { ...sender, url: 'https://school.test/unrelated' }]) await send(s);
+  assert.deepEqual(opened, []);
+  await send(sender);
+  assert.deepEqual(opened, ['chrome-extension://glaze/papers.html']);
+});
