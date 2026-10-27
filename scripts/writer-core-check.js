@@ -51,6 +51,24 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
       assert.equal(result.text, input);
       assert.equal(result.html, '<p>&nbsp;&nbsp;😀&nbsp;&nbsp;x</p><p><br></p><p>שלום&nbsp;&nbsp;</p>');
     });
+    await check('clipboard metadata cannot restore attributes outside the allowlist', async () => {
+      const result = await page.evaluate(() => {
+        const html = `<p data-pm-slice='0 0 ["paragraph",{"line":"1;background:red"}]'>safe</p>`;
+        const slice = GZ_PM.view.__parseFromClipboard(ed.view, '', html, false, ed.view.state.selection.$from);
+        return JSON.stringify(slice.toJSON());
+      });
+      assert.doesNotMatch(result, /background/);
+    });
+    await check('oversized or deeply nested paste is refused without a page error', async () => {
+      const result = await page.evaluate(() => {
+        ed.run('insertText', 'keep');
+        const data = new DataTransfer(); data.setData('text/html', '<span>'.repeat(5000) + 'x' + '</span>'.repeat(5000));
+        ed.view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+        return ed.text();
+      });
+      assert.equal(result, 'keep');
+      assert.deepEqual(errors, []);
+    });
     assert.deepEqual(errors, [], 'no page errors');
     await page.evaluate(() => ed.destroy());
   } finally { await browser.close(); }
