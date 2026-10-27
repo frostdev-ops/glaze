@@ -127,3 +127,19 @@ test('review: MLA title-led organization reports match the title used by the for
   assert.deepEqual(C.check(node, [s], 'mla9'), []);
   assert.deepEqual(C.count(node, [s], 'mla9'), { cited: 1, total: 1 });
 });
+
+for (const style of ['mla9', 'apa7', 'chicago17']) {
+  test(`${style}: typed paper references satisfy citations without saved source metadata`, () => {
+    const FX = require('./fixtures/writer-paper-fixtures.js');
+    const node = W.paper.nodeFromJSON(FX.papers[style]());
+    assert.deepEqual(C.check(node, [], style), []);
+  });
+}
+
+test('typed references preserve citation fixes and reject absent authors, surname prefixes and wrong APA years', () => {
+  const list = '\nWorks Cited\nMorrison, Toni. Beloved. Knopf, 1987.';
+  assert.deepEqual(msgs(C.check(`A claim (Morrison, 42).${list}`, [], 'mla9')), ['MLA citation']);
+  assert.deepEqual(msgs(C.check(`A claim (Baldwin xix).${list}`, [], 'mla9')), ['Baldwin is cited but has no entry']);
+  assert.deepEqual(msgs(C.check(`A claim (Morrisonson 42).${list}`, [], 'mla9')), ['Morrisonson is cited but has no entry']);
+  assert.deepEqual(msgs(C.check('A claim (Morrison, 1992).\nReferences\nMorrison, T. (1987). Beloved. Knopf.', [], 'apa7')), ['Morrison is cited but has no entry']);
+});
