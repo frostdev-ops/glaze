@@ -75,7 +75,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const tabs = {}, panes = {}, badges = {};
     for (const [id, label] of [['checks', 'Checks'], ['sources', 'Sources'], ['feedback', 'Feedback'], ['outline', 'Outline']]) {
       badges[id] = h('span', { class: 'gp-badge' });
-      tabs[id] = btn({ class: 'gp-tab', role: 'tab', 'aria-selected': String(id === 'checks'), 'aria-controls': `gp-${id}`, id: `gp-tab-${id}` }, t(label), badges[id]);
+      tabs[id] = btn({ class: 'gp-tab', role: 'tab', 'aria-selected': String(id === 'checks'), tabindex: id === 'checks' ? '0' : '-1', 'aria-controls': `gp-${id}`, id: `gp-tab-${id}` }, t(label), badges[id]);
       panes[id] = h('div', { class: 'gp-pane', role: 'tabpanel', id: `gp-${id}`, 'aria-labelledby': `gp-tab-${id}`, hidden: id !== 'checks' });
     }
     const issuesEl = h('div', { class: 'gp-issues' }), checklist = h('div', { class: 'gp-list' }), outline = h('div', { class: 'gp-outline' });
@@ -117,6 +117,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       el.style.left = `${Math.max(4, Math.min(r.left, innerWidth - w - 4))}px`;
       el.style.top = `${above ? Math.max(4, r.top - hh - 6) : Math.min(r.bottom + 6, innerHeight - hh - 4)}px`;
       el.style.transformOrigin = above ? 'bottom left' : 'top left';
+      el.addEventListener('keydown', (e) => {
+        const all = [...el.querySelectorAll('[role^=menuitem]')], i = all.indexOf(document.activeElement);
+        if (e.key === 'Escape') { e.preventDefault(); close(true); }
+        else if (all.length && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); all[e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowUp' ? all.length - 1 : 1)) % all.length]?.focus(); }
+      });
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
       opener.setAttribute('aria-expanded', 'true');
@@ -201,7 +206,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         notesEl.style.bottom = `${geo.bottom}px`;
         const rule = h('div', { class: 'gp-sep' }, h('div', { class: 'gp-rule' }));
         rule.style.height = `${sep}px`;
-        notesEl.replaceChildren(...(pg.notes.length ? [rule, ...pg.notes.map((k) => noteBody(layout.notes[k] || '', k + 1))] : []));
+        notesEl.replaceChildren(...(pg.notes.length ? [rule, ...pg.fragments.map((part) => {
+          const body = noteBody(layout.notes[part.id] || '', part.id + 1);
+          if (!part.from && part.height === part.total) return body;
+          const clip = h('div'); clip.style.cssText = `height:${part.height}px;overflow:hidden`;
+          body.style.transform = `translateY(-${part.from}px)`; clip.append(body); return clip;
+        })] : []));
       });
       flow.style.visibility = '';
       selected();
@@ -292,6 +302,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           h('div', { class: 'gp-fix' }, what),
           h('div', { class: 'gp-row' }, i.suggestions.length || i.fix ? btn({ class: 'gp-sbtn', onclick: (e) => { e.stopPropagation(); fixIssue(i); } }, t('Fix')) : null, btn({ class: 'gp-sbtn gp-ghost', onclick: (e) => { e.stopPropagation(); ignoreIssue(i); } }, t('Ignore'))));
         card.querySelector('.gp-dot').style.background = color;
+        card.addEventListener('keydown', (e) => { if (e.target === card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); card.click(); } });
         card.addEventListener('click', () => { picked = i; if (i.to > i.from || i.from > 0) go(Math.max(1, i.from), Math.max(1, i.to)); runChecksSoon(); });
         return card;
       }));
@@ -476,9 +487,38 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     submit.addEventListener('click', () => { if (typeof GZ_WRITER_PAPER.submit === 'function') GZ_WRITER_PAPER.submit(api); });
     for (const [id, tab] of Object.entries(tabs)) tab.addEventListener('click', () => {
-      for (const [k, x] of Object.entries(tabs)) { x.setAttribute('aria-selected', String(k === id)); panes[k].hidden = k !== id; }
+      for (const [k, x] of Object.entries(tabs)) { x.setAttribute('aria-selected', String(k === id)); x.tabIndex = k === id ? 0 : -1; panes[k].hidden = k !== id; }
       if (id === 'outline') outlineDraw();
     });
+
+    side.querySelector('[role=tablist]').addEventListener('keydown', (e) => {
+      const all = Object.values(tabs), i = all.indexOf(document.activeElement);
+      if (i < 0 || !['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault(); const tab = all[e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowLeft' ? all.length - 1 : 1)) % all.length];
+      tab.click(); tab.focus();
+    });
+    root.querySelector('[role=toolbar]').addEventListener('keydown', (e) => {
+      const all = [...root.querySelectorAll('.gp-tool button:not(:disabled)')], i = all.indexOf(document.activeElement);
+      if (i < 0 || !['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault(); all[e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowLeft' ? all.length - 1 : 1)) % all.length].focus();
+    });
+
+    // Print a clipped copy of the measured flow on each physical Letter page, at full size.
+    let printCopy = null;
+    addEventListener('beforeprint', () => {
+      printCopy?.remove();
+      printCopy = h('div', { class: 'gp-print' });
+      const geo = ST.geometry(format), stride = geo.height + GAP;
+      [...sheets.children].forEach((sheet, i) => {
+        const page = sheet.cloneNode(true), clip = h('div', { class: 'gp-print-body' }), copy = flow.cloneNode(true);
+        clip.style.cssText = `position:absolute;top:${geo.top}px;left:0;width:${geo.width}px;height:${geo.body}px;overflow:hidden`;
+        copy.style.top = `${-i * stride}px`;
+        copy.querySelector('.ProseMirror').removeAttribute('contenteditable');
+        clip.append(copy); page.append(clip); printCopy.append(page);
+      });
+      document.body.append(printCopy);
+    });
+    addEventListener('afterprint', () => { printCopy?.remove(); printCopy = null; });
 
     // A footnote's text, in a small editor by its mark. A new note left empty goes again.
     const editNote = (pos, fresh = false) => {

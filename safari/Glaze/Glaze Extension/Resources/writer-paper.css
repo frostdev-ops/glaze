@@ -168,3 +168,18 @@
 .gp-paper .gp-row, .gp-row { display: flex; gap: 8px; }
 .gp-paper a.gp-sbtn { text-decoration: none; }
 @media (max-width: 1200px) { .gp-tabs { padding: 10px 8px 0; } .gp-tab { padding: 8px 6px 10px; } }
+
+.gp-print { display: none; }
+@media print {
+  @page { size: letter; margin: 0; }
+  html, body { height: auto !important; overflow: visible !important; background: white !important; }
+  body > * { display: none !important; }
+  body > .gp-print { display: block !important; }
+  .gp-print .gp-sheet { position: relative; top: auto !important; break-after: page; box-shadow: none !important; overflow: hidden; }
+  .gp-print .gp-sheet:last-child { break-after: auto; }
+  .gp-print .gp-flow .ProseMirror { background: transparent; }
+  .gp-print .gp-cur { outline: none; background: transparent; }
+}
+
+.gp-flow .ProseMirror .gp-gap-row { display: table-row; }
+.gp-flow .ProseMirror .gp-gap-row > td { border: 0; padding: 0; }

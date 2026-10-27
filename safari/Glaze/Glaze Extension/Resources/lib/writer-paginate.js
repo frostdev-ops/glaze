@@ -16,20 +16,36 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
   // separator over a page's notes) }. → { pages: [{ notes: [index] }], breaks: [{ b, l, gap }] }: before block b's line l
   // a gap of `gap` px takes the flow to the next page's top.
   const plan = (blocks, geo) => {
-    const pages = [{ notes: [] }], breaks = [];
+    const pages = [{ notes: [], fragments: [] }], breaks = [], pending = [];
     let y = 0, notesH = 0, force = false;
     const page = () => pages.at(-1);
-    const next = (b, l) => {
-      breaks.push({ b, l, gap: Math.max(0, geo.stride - y) });
-      pages.push({ notes: [] });
-      y = 0; notesH = 0;
+    const sep = geo.sep || 0, unit = geo.noteLine || 1;
+    const slice = (id, from, height, total) => {
+      if (!page().notes.includes(id)) page().notes.push(id);
+      page().fragments.push({ id, from, height, total });
+      notesH += height + (notesH ? 0 : sep);
+    };
+    const advance = (b, l, flow) => {
+      if (flow) breaks.push({ b, l, gap: Math.max(0, geo.stride - y) });
+      pages.push({ notes: [], fragments: [] }); y = 0; notesH = 0;
+    };
+    const next = (b, l, flow = true) => {
+      advance(b, l, flow);
+      while (pending.length) {
+        const n = pending[0], room = Math.floor((geo.body - notesH - (notesH ? 0 : sep)) / unit) * unit;
+        const take = Math.min(n.total - n.from, Math.max(0, room));
+        if (take) { slice(n.id, n.from, take, n.total); n.from += take; }
+        if (n.from >= n.total) pending.shift();
+        if (pending.length || (flow && notesH + (blocks[b]?.lines[l]?.h || 0) > geo.body)) advance(b, l, flow);
+      }
     };
     const noteH = (ids) => ids.reduce((n, i) => n + (geo.notes?.[i] || 0), 0);
     // How many of b's lines from i fit on this page.
     const fit = (b, i) => {
+      if (pending.length) return 0;
       let k = 0, yy = y, nh = notesH;
       while (i + k < b.lines.length) {
-        const L = b.lines[i + k], add = L.notes?.length ? noteH(L.notes) + (nh ? 0 : geo.sep || 0) : 0;
+        const L = b.lines[i + k], add = L.notes?.length ? Math.min(noteH(L.notes), Math.max(0, geo.body - L.h - sep)) + (nh ? 0 : sep) : 0;
         if (yy + L.h > geo.body - nh - add + 0.01) break;
         yy += L.h; nh += add; k++;
       }
@@ -38,7 +54,12 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
     const place = (b, i, k) => {
       for (let j = i; j < i + k; j++) {
         const L = b.lines[j];
-        if (L.notes?.length) { notesH += noteH(L.notes) + (notesH ? 0 : geo.sep || 0); page().notes.push(...L.notes); }
+        if (L.notes?.length) for (const id of L.notes) {
+          const total = geo.notes?.[id] || 0, room = Math.max(0, geo.body - y - L.h - notesH - (notesH ? 0 : sep));
+          const take = total <= room ? total : Math.floor(room / unit) * unit;
+          if (take) slice(id, 0, take, total);
+          if (take < total) pending.push({ id, from: take, total });
+        }
         y += L.h;
       }
     };
@@ -54,11 +75,11 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
         const nb = blocks[bi + 1];
         if (fit(b, 0) < n) next(bi, 0);
         else if (nb?.kind === 'text') {
-          const save = { y, notesH, kept: page().notes.length };
+          const save = { y, notesH, kept: page().notes.length, fragments: page().fragments.length, pending: pending.length };
           place(b, 0, n);
           y += b.after;
           const ok = fit(nb, 0) >= head(nb);
-          y = save.y; notesH = save.notesH; page().notes.length = save.kept;
+          y = save.y; notesH = save.notesH; page().notes.length = save.kept; page().fragments.length = save.fragments; pending.length = save.pending;
           if (!ok) next(bi, 0);
         }
       }
@@ -80,15 +101,17 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
       }
       y += b.after;
     });
+    if (pending.length) next(0, 0, false);
     return { pages, breaks };
   };
 
   // ---- the editor side
   const PM = () => GZ_PM;
   const key = () => (key.k ||= new (PM().state.PluginKey)('gz-paginate'));
-  const gapDOM = (inline, h) => () => {
-    const e = document.createElement(inline ? 'span' : 'div');
-    e.className = inline ? 'gp-gap gp-gap-line' : 'gp-gap';
+  const gapDOM = (inline, h, cols = 0) => () => {
+    const e = document.createElement(cols ? 'tr' : inline ? 'span' : 'div');
+    if (cols) { const cell = document.createElement('td'); cell.colSpan = cols; cell.style.height = `${h}px`; e.append(cell); }
+    e.className = cols ? 'gp-gap gp-gap-row' : inline ? 'gp-gap gp-gap-line' : 'gp-gap';
     e.style.height = `${h}px`;
     e.setAttribute('aria-hidden', 'true');
     return e;
@@ -102,7 +125,7 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
       const entry = list && index >= list.from && index < list.to;
       const visit = (node, pos, where) => {
         if (node.type.name === 'page_break') { out.push({ kind: 'break', node, pos }); return; }
-        if (node.type.name === 'table') { out.push({ kind: 'atom', node, pos, where, note }); node.descendants((n) => { if (n.type.name === 'footnote_ref') note++; }); return; }
+        if (node.type.name === 'table') { out.push({ kind: 'table', node, pos, where, note }); node.descendants((n) => { if (n.type.name === 'footnote_ref') note++; }); return; }
         if (node.isTextblock) {
           const first = note;
           node.forEach((c) => { if (c.type.name === 'footnote_ref') note++; });
@@ -121,6 +144,19 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
   const measure = (view, blk, f, scale) => {
     const dom = view.nodeDOM(blk.pos), box = ST().blockBox(f, blk.node.attrs, blk.where);
     if (!dom || dom.nodeType !== 1) return { lines: [{ h: box.line, at: 0, notes: [] }], after: box.after };
+    if (blk.kind === 'table') {
+      const rows = [...dom.querySelectorAll('tr')].filter((r) => !r.classList.contains('gp-gap-row') && r.closest('table') === (dom.matches('table') ? dom : dom.querySelector('table')));
+      const lines = []; let note = blk.note, until = 0;
+      blk.node.forEach((row, off, i) => {
+        const refs = []; row.descendants((n) => { if (n.type.name === 'footnote_ref') refs.push(note++); });
+        let span = 1; row.forEach((c) => { span = Math.max(span, c.attrs.rowspan || 1); });
+        const h = rows[i]?.getBoundingClientRect().height / scale || box.line;
+        if (i < until && lines.length) { lines.at(-1).h += h; lines.at(-1).notes.push(...refs); }
+        else lines.push({ h, at: off, notes: refs });
+        until = Math.max(until, i + span);
+      });
+      return { lines, after: 0 };
+    }
     if (blk.kind === 'atom') {
       const r = dom.getBoundingClientRect(), count = dom.querySelectorAll('sup.gz-footnote').length;
       const notes = Array.from({ length: count }, (_, i) => blk.note + i);
@@ -217,11 +253,11 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
           const contents = [];
           doc.descendants((n) => { if (n.type.name === 'footnote_ref') contents.push(n.attrs.content || ''); });
           const notes = contents.length ? opts.notes(contents) : [];
-          const p = plan(blocks, { body: geo.body, stride: geo.height + (opts.gap || 0), notes, sep: notes.length ? ST().lineHeight(f, { line: 1 }) : 0 });
-          const decos = p.breaks.map((br) => {
+          const p = plan(blocks, { body: geo.body, stride: geo.height + (opts.gap || 0), notes, sep: notes.length ? ST().lineHeight(f, { line: 1 }) : 0, noteLine: ST().lineHeight(f, { size: f.notes.size, line: f.notes.line }) });
+          const decos = p.breaks.map((br, index) => {
             const b = blocks[br.b], gap = Math.round(br.gap * 1000) / 1000;
-            if (br.l === 0) return Decoration.widget(b.pos, gapDOM(false, gap), { side: -1, key: `gp:b:${gap}`, ignoreSelection: true });
-            return Decoration.widget(b.pos + 1 + b.lines[br.l].at, gapDOM(true, gap), { side: -1, key: `gp:l:${gap}`, ignoreSelection: true, marks: [] });
+            if (br.l === 0) return Decoration.widget(b.pos, gapDOM(false, gap), { side: -1, key: `gp:b:${index}:${gap}`, ignoreSelection: true });
+            return Decoration.widget(b.pos + 1 + b.lines[br.l].at, gapDOM(true, gap, b.kind === 'table' ? b.node.firstChild.content.content.reduce((n, c) => n + (c.attrs.colspan || 1), 0) : 0), { side: -1, key: `gp:l:${index}:${gap}`, ignoreSelection: true, marks: [] });
           });
           const sig = p.breaks.map((br) => `${blocks[br.b].pos}:${br.l}:${br.l ? blocks[br.b].lines[br.l].at : 0}:${Math.round(br.gap * 100)}`).join('|');
           const current = key().getState(view.state);
