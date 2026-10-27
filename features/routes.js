@@ -21,6 +21,10 @@ var GZ_ROUTES = globalThis.GZ_ROUTES || (() => {
   add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/announcements\/?$/.test(l.pathname), 'features/announce-read.js', 'GZ_ANNOUNCE_READ');
   add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/engagement\/?$/.test(l.pathname)
     && (globalThis.GZ_DISCUSSION_NAV?.pending() || sessionStorage.getItem('gz-discussion-jump')), 'features/discussion-nav.js', 'GZ_DISCUSSION_NAV');
+  // An editor's toolbar menu brought into view where Ultra opens it under its scroller's edge: a test or assignment
+  // attempt, a journal, a discussion.
+  add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/(?:outline\/)?(?:assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)|journal\/_\d+_\d+|discussion\/_\d+_\d+)\/?$/.test(l.pathname),
+    'features/editor-menu.js', 'GZ_EDITOR_MENU');
   const sync = () => {
     for (const e of table) {
       let yes = false;
