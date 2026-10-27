@@ -224,7 +224,7 @@ test('input rules leave existing links and Unicode word interiors literal', () =
   assert.equal(S.text(type(st, '--').doc).text, 'https:--//a.b/path');
   for (const word of ['сло*во*', 'مق*طع*', '漢*字*', 'e\u0301*x*']) assert.equal(S.text(type(blank(), word).doc).text, word);
   assert.equal(html(type(blank(), 'слово *да*')), '<p>слово <em>да</em></p>');
-  assert.equal(S.text(type(blank(), '«Привет» -- l\'été')).text, '«Привет» — l’été');
+  assert.equal(S.text(type(blank(), '«Привет» -- l\'été').doc).text, '«Привет» — l’été');
 });
 
 test('a Markdown link preserves the existing marks inside its label', () => {
