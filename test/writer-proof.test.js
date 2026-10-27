@@ -371,3 +371,11 @@ test('contextual issues expire when their sentence changes outside the marked wo
   assert.deepEqual(e.issues.list().map((i) => i.text), ['Another']);
   assert.equal(I.key.getState(e.view.state).deco.find().length, 1);
 });
+
+test('a cancelled input cannot mark a later programmatic replacement as typed', () => {
+  const e = editor();
+  e.proof.props.handleTextInput(e.view, 1, 1, 'x');
+  e.view.dispatch(e.view.state.tr.insertText('teh'));
+  e.type(' ');
+  assert.equal(e.text(), 'teh ');
+});
