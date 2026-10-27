@@ -313,7 +313,7 @@ const HARNESS = `(() => {
     check(await fr.evaluate(() => !document.querySelector('.gs-foot .gs-btn').disabled && document.activeElement?.closest('.gs-layer')), 'busy: focus stays in the sheet and Cancel remains available');
     await fr.click('.gs-foot .gs-btn:not(.gs-primary)');
     await pause(700);
-    check(await p.evaluate(() => !__clicks.length && __uploads.length === 1) && await fr.evaluate(() => !document.querySelector('.gs-layer')), 'Cancel during upload closes the sheet and never submits (the upload is left for Blackboard review)');
+    check(await p.evaluate(() => !__clicks.length && __uploads.length === 1) && await fr.evaluate(() => /review or remove/.test(document.querySelector('.gs-err').textContent) && !document.querySelector('.gs-native').hidden), 'Cancel during upload never submits and offers Blackboard review of the retained upload');
     await p.close();
 
     // ---- a same-named file needs native review; hand-back immediately releases capture interception

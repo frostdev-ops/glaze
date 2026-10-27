@@ -22,7 +22,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     text: 'The text didn’t go into Ultra’s text box. Nothing was submitted.',
     submit: 'Ultra’s Submit didn’t turn on. Nothing was submitted.',
     page: 'The attempt page changed. Nothing was submitted.',
+    busy: 'This attempt is already being submitted or needs review. Use Blackboard editor to continue.',
     review: 'Ultra may already have the file. Use Blackboard editor to review or remove it before submitting.',
+    cancel: 'Submission stopped. Use Blackboard editor to review or remove any upload before submitting.',
     claimed: 'This attempt is already being submitted or needs review. Use Blackboard editor to continue.',
   };
   const h = (tag, props = {}, ...kids) => {
@@ -128,6 +130,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       if (mine.busy) {
         frame.say({ type: 'submit:cancel', run: mine.run });
         if (waiting?.run === mine.run) waiting.done({ ok: false, error: 'page' });
+        lock(false); submit.disabled = true; native.hidden = false;
+        err.textContent = t(SAYS.cancel);
+        return;
       }
       close();
     };
