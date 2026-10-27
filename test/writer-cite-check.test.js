@@ -90,3 +90,27 @@ test('translated and localized messages come from the caller\'s t()', () => {
   const issues = C.check('A claim (Baldwin xix).', [], 'mla9', { t });
   assert.deepEqual(issues.map((i) => [i.message, i.title]), [['«Baldwin is cited but has no entry»', '«Works Cited»']]);
 });
+
+test('review: ordinary parenthetical prose, figure labels and dates are not citations', () => {
+  const bait = 'We compared two versions (see Figure 2). The draft (Version 2) improved (In 2020). Morrison was born in (1931).';
+  assert.equal(C.check(bait, [MORRISON], 'mla9').some((i) => i.action === 'add-source'), false);
+  assert.deepEqual(C.count(bait, [MORRISON], 'mla9'), { cited: 0, total: 1 });
+});
+
+test('review: names sharing an eight-character prefix are distinct sources', () => {
+  const s = { ...MORRISON, id: 'longname', author: [{ family: 'Richardson' }] };
+  assert.equal(C.check('A result (Richardsonson 42).', [s], 'mla9').some((i) => i.action === 'add-source'), true);
+});
+
+test('review: adding one APA year preserves the other citations and introductory text', () => {
+  const node = doc('<p>A result (see Morrison, p. 42; Grady et al., 2019).</p>');
+  const issue = C.check(node, [MORRISON, GRADY], 'apa7').find((i) => i.message === 'Add the year');
+  assert.equal(at(node, issue), '(see Morrison, p. 42; Grady et al., 2019)');
+  assert.deepEqual(issue.suggestions, ['(see Morrison, 1987, p. 42; Grady et al., 2019)']);
+});
+
+test('review: APA citation years identify the work and reference entries do not cite themselves', () => {
+  const later = { ...MORRISON, id: 'later', title: 'Jazz', issued: d(1992) };
+  assert.deepEqual(C.count('A result (Morrison, 1987).', [MORRISON, later], 'apa7'), { cited: 1, total: 2 });
+  assert.deepEqual(C.count('References\nMorrison, T. (1987). Beloved. Knopf.', [MORRISON], 'apa7'), { cited: 0, total: 1 });
+});
