@@ -162,7 +162,7 @@ const HARNESS = `(() => {
     check(await fr.evaluate(() => ['.gp-top h1', '.gp-pill', '.gp-box', '[data-run="bold"]', '[data-run="italic"]', '[data-run="underline"]', '[data-run="bulletList"]', '[data-run="orderedList"]', '.gp-submit', '.gp-tabs', '.gp-status'].every((s) => document.querySelector(s))
       && [...document.querySelectorAll('.gp-tbtn')].map((b) => b.textContent.trim()).filter(Boolean).join('|') === 'Cite|Footnote|Page break'
       && [...document.querySelectorAll('.gp-tab')].map((b) => b.firstChild.textContent).join('|') === 'Checks|Sources|Feedback|Outline'), 'paper chrome: toolbar, tabs, status bar');
-    check(await fr.evaluate(() => document.querySelector('.gp-submit').disabled), 'Submit… waits for the submit step (disabled, no fake)');
+    check(await fr.evaluate(() => !document.querySelector('.gp-submit').disabled), 'Submit… opens the assignment submit sheet');
     check(await fr.evaluate(() => document.querySelector('.gp-top h1').textContent === 'Essay 2: Memory in Beloved' && /^Due /.test(document.querySelector('.gp-due').textContent)), 'title bar: assignment title and due date from the gradebook column');
     const opening = await fr.evaluate(() => { const d = GZ_WRITER_PAPER.current().editor.view.state.doc; return [0, 1, 2, 3, 4, 5].map((i) => d.child(i).textContent); });
     const today = await fr.evaluate(() => GZ_WRITER_STYLES.dateText(GZ_WRITER_STYLES.FORMATS.mla9));
