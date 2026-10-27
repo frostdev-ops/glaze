@@ -221,7 +221,7 @@ const HARNESS = `(() => {
     review(await fr.evaluate(() => !!document.querySelector('.gz-cite [aria-label="Close"]')), 'review: the dialog has a keyboard and screen-reader Close control');
     await fr.press('.gz-cite [data-field="title"]', 'Escape');
     await fr.click('.gzc-card:first-child [data-do="cancel"]');
-    await fr.evaluate(() => GZ_WRITER_CITE.open({ anchor: document.getElementById('more') }));
+    await fr.evaluate(() => { document.querySelector('aside').hidden = true; GZ_WRITER_CITE.open({ anchor: document.getElementById('more') }); });
     await fr.press('.gzc-in', 'Escape');
     review(await fr.evaluate(() => document.activeElement?.id === 'more'), 'review: Escape returns focus to the dialog invoker');
     await fr.evaluate(() => GZ_WRITER_CITE.open());
@@ -250,6 +250,7 @@ const HARNESS = `(() => {
     check(true, 'ISBN lookup still works without the permissions API');
     await fr.evaluate(() => { chrome.permissions = window.__permissions; });
     await fr.press('.gz-cite [data-field="title"]', 'Escape');
+    await fr.evaluate(() => { document.querySelector('aside').hidden = false; });
     await fr.click('.gzc-view .gzc-head .sbtn');
     check(await fr.evaluate(() => document.activeElement?.classList.contains('gzc-in') && !document.querySelector('.gzc-adder').hidden), 'Add source opens the lookup in the panel');
     saved.add = await shot(el, 'cite-sources-add.png');
