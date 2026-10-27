@@ -62,6 +62,41 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
 };
 // And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
 const JS = ['sharing/quick.js', 'features/welcome.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-pointer.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/editor-navbar.js', 'lib/editor-ai.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
+// Glaze Writer's frame (writer.html, papers.html) and the libraries whose words it shows. lib/writer-docx.js's t() reads
+// a run's marks, so only its warnings and refusals are words (below).
+const WRITER = ['writer.js', 'papers.js', ...fs.readdirSync(root).filter((f) => /^writer-.+\.js$/.test(f)), ...fs.readdirSync(path.join(root, 'lib')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `lib/${f}`)];
+JS.push(...WRITER);
+// The capitalised strings of a `const NAME = …;` table (its labels and messages, not its ids, CSS or numbers).
+const tableOf = (f, ...names) => {
+  const js = withoutComments(read(f));
+  return names.flatMap((name) => {
+    const at = js.indexOf(`const ${name} = `);
+    assert.ok(at >= 0, `${f} has no table ${name}`);
+    let i = at, depth = 0;
+    for (let q = null; i < js.length; i++) {
+      const c = js[i];
+      if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
+      if (c === "'" || c === '"' || c === '`') q = c;
+      else if ('([{'.includes(c)) depth++;
+      else if (')]}'.includes(c)) depth--;
+      else if ((c === ';' || c === '\n') && depth === 0 && i > at + name.length + 9) break;
+    }
+    return literalsOf(js.slice(at, i)).filter((s) => /^\p{Lu}/u.test(s));
+  });
+};
+const writerWords = [
+  ...tableOf('writer.js', 'LABELS'), ...tableOf('writer-cite.js', 'TYPES', 'FIELDS'), ...tableOf('writer-ai.js', 'STATUS'),
+  ...tableOf('writer-submit.js', 'SAYS'), ...tableOf('writer-proof.js', 'LABEL'),
+  ...tableOf('writer-paper.js', 'SPACING', 'KIND', 'STYLES', 'REASONS'), ...tableOf('lib/writer-format.js', 'ROWS', 'names'),
+  // Labels handed to the paper chrome's helpers, which translate them.
+  ...fromJs(read('writer-paper.js'), /\b(?:mark\('\w+',|row\(|setState\()\s*/g),
+  ...[...read('writer-paper.js').matchAll(/\['\w+', '([A-Z][^']*)'\]/g)].map((m) => m[1]),
+  // Format messages (the frame translates each issue's key) and the list titles they name.
+  ...fromJs(read('lib/writer-format.js'), /\badd\('\w+',\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*/g),
+  ...Object.values(require('../lib/writer-styles.js').FORMATS).map((f) => f.list.title), ...Object.values(require('../lib/writer-cite.js').TITLES),
+  // .docx import warnings and the refusals worded for students.
+  ...[...read('lib/writer-docx.js').matchAll(/\b(?:warn|RangeError)\('((?:[^'\\]|\\.)+)'\)/g)].map((m) => m[1].replace(/\\(.)/g, '$1')).filter((s) => /^[A-Z]/.test(s)),
+];
 // Tables and generated labels reach t() through variables, not literal arguments.
 const tableWords = [
   ...Object.values(PET.DECOR).map((item) => item.name), ...Object.values(PET.HABITATS),
@@ -77,7 +112,7 @@ const tableWords = [
   ...Object.values(require('../lib/gradecalc.js').ULTRA_CATS),
 ];
 const used = new Set([
-  ...tableWords,
+  ...tableWords, ...writerWords,
   ...fromJs(read('lib/editor-xparts.js'), /\bheading\([^,]+,\s*/g),
   ...[...read('lib/editor-xparts.js').matchAll(/const (?:WIDGETS|ICONS|PLACES|GROUPS|ACTS|STYLE|SHADOWS) = ([^\n]+);/g)].flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((s) => s[1])),
   // Shader diagnostics are translated when the editor groups them by line.
