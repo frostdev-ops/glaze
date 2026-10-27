@@ -342,6 +342,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   const commitFix = (view, f) => {
     const id = `fix${++seq}`;
     view.dispatch(closeHistory(view.state.tr.insertText(f.now, f.from, f.to)).setMeta(key, { fix: { ...f, id, to: f.from + f.now.length } }));
+    view.dispatch(closeHistory(view.state.tr));
     const st = key.getState(view.state);
     last.set(view, { id, ver: st.ver });
     return st.fixes.find((x) => x.id === id) || null;
