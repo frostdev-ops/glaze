@@ -84,17 +84,20 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // What Settings → AI said at the last check (null until it answers), whether a check is under way, since when the worker
   // has refused this attempt for its kind, and the model's download (0 to 1, from the worker's progress, or null).
   let checked = 0, said = null, checking = false, attemptSince = 0, loaded = null, attemptTimer = 0;
-  // Why Feedback can't ask now: '' when it can; 'checking' | 'off' | 'setup' | 'permission' | 'download' | 'downloading' |
-  // 'attempt' (an attempt the worker hasn't been told is an assignment: it goes once the page says so, else after 10 s) |
-  // 'unavailable'.
+  // Why Feedback can't ask now: '' when it can; 'checking' | 'ai-off' | 'off' (the feature) | 'setup' | 'permission' |
+  // 'download' | 'downloading' | 'device' (the chosen on-device model can't run here) | 'unverified' (the worker didn't
+  // answer for this page) | 'attempt' (an attempt the worker hasn't been told is an assignment: it goes once the page says
+  // so, else after 10 s) | 'unavailable'.
   const why = () => {
     if (ok('writing')) return '';
     if (quiet() || checking || !said) return 'checking';
-    if (said.on !== true || said.features?.writing !== true) return 'off';
+    if (said.on !== true) return 'ai-off';
+    if (said.features?.writing !== true) return 'off';
     if (typeof said.use !== 'string' || !said.use) return 'setup';
     const st = status.writing;
-    if (!st) return 'unavailable';
+    if (!st) return 'unverified';
     if (!st.allowed) return st.why === 'attempt' ? (Date.now() - attemptSince < 10000 ? 'checking' : 'attempt') : st.why ? 'unavailable' : 'off';
+    if (st.why === 'unavailable' && ['device', 'apple'].includes(st.provider)) return 'device';
     return ['setup', 'permission', 'download', 'downloading'].includes(st.why) ? st.why : 'unavailable';
   };
   const invalidate = () => {
@@ -336,11 +339,20 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const no = why();
     if (no) {
       const host = status.writing?.to || '';
-      box.append(el('p', 'gz-fb-note', no === 'checking' ? t('Checking…') : no === 'off' ? t('Writing feedback is off in Settings → AI.')
-        : no === 'setup' ? t('Choose a model in Settings → AI.') : no === 'permission' && host ? t('Allow Glaze to reach {host} in Settings → AI.', { host })
-          : no === 'download' ? t('Download the model in Settings → AI.') : no === 'downloading' ? (loaded === null ? t('Downloading…') : t('Downloading {pct}', { pct: `${Math.round(loaded * 100)}%` }))
-            : no === 'attempt' ? t('AI isn’t available on this attempt.') : t('AI isn’t available right now.')));
-      if (['off', 'setup', 'permission', 'download'].includes(no)) {
+      const say = {
+        checking: () => t('Checking whether AI can run here…'),
+        'ai-off': () => t('AI is off. Turn it on in Settings → AI.'),
+        off: () => t('Writing feedback is off. Turn it on in Settings → AI.'),
+        setup: () => t('No AI model is chosen. Choose one in Settings → AI.'),
+        permission: () => (host ? t('Glaze needs permission to reach {host}. Allow it in Settings → AI.', { host }) : t('AI isn’t available right now.')),
+        download: () => t('The on-device model isn’t downloaded. Download it in Settings → AI.'),
+        downloading: () => (loaded === null ? t('Downloading the model…') : t('Downloading the model: {pct}', { pct: `${Math.round(loaded * 100)}%` })),
+        device: () => t('{provider} can’t run on this computer. Choose another model in Settings → AI.', { provider: providerName(status.writing, t) }),
+        unverified: () => t('Glaze couldn’t confirm this page may use AI. Reload the page to try again.'),
+        attempt: () => t('AI runs on assignments only, never on tests, and Glaze couldn’t confirm this is an assignment.'),
+      }[no];
+      box.append(el('p', 'gz-fb-note', say ? say() : t('AI isn’t available right now.')));
+      if (['ai-off', 'off', 'setup', 'permission', 'download', 'device'].includes(no)) {
         const go = el('button', 'gz-fb-run', t('Settings'));
         go.type = 'button';
         go.addEventListener('click', settings);
