@@ -51,7 +51,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (globalThis.GZ_DRAFT_UI?.keep) GZ_DRAFT_UI.keep(s);
     else drafts().then(() => GZ_DRAFT_UI.keep(s), () => {});
   };
-  const sameBox = (box) => box.path === location.pathname && box.editor.isConnected && U().canEdit(box.editor) && box.root === U().rootOf(box.editor) &&
+  const sameBox = (box) => box.path === location.pathname && box.editor.isConnected && box.root === U().rootOf(box.editor) &&
     box.container === box.editor.closest('.ql-container') && box.editor.id === box.editorId &&
     U().kindOf(box.editor, { path: location.pathname, attempt: box.kind === 'test' ? 'test' : '' }) === box.kind &&
     (box.kind !== 'reply' || U().replyTo(box.editor) === (box.context.post?.id || ''));
@@ -95,7 +95,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const ed = box.editor, f = box.frame, typing = box.root.contains(document.activeElement);
     const l = look();
     worn = JSON.stringify(l);
-    box.latest = ed.innerHTML;
+    box.latest = box.nativeHTML = ed.innerHTML;
     box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, html: ed.innerHTML, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
     box.display = [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
     box.root.style.setProperty('display', 'none', 'important');
@@ -105,13 +105,16 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     // Ultra changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text, not
     // its markup, says so: Quill tidies markup after each sync.
     box.observer = new MutationObserver(() => {
-      if (!sameBox(box) || box.unsynced) return;
+      if (!sameBox(box)) return;
+      if (ed.innerHTML === box.nativeHTML) return;
+      if (!U().canEdit(ed)) { drop(box); return; }
+      if (box.unsynced) return;
       const now = squash(ed.textContent);
       if (now === box.text) return;
       if (box.snapshot && !box.sending) { box.unsynced = true; return; }
       remember(box);
       box.text = now;
-      box.latest = ed.innerHTML;
+      box.latest = box.nativeHTML = ed.innerHTML;
       box.sending = false;
       box.port.postMessage({ type: 'html', html: ed.innerHTML });
     });
@@ -142,7 +145,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const r = main('set', { id: box.id, html: h });
     const ok = r?.ok && r.html === box.editor.innerHTML && sameText(box.editor, h);
     box.unsynced = !ok;
-    if (ok) box.text = squash(box.editor.textContent);
+    if (ok) { box.text = squash(box.editor.textContent); box.nativeHTML = box.editor.innerHTML; }
     return ok;
   };
   // Ctrl/Cmd+Enter: Post, Reply or Send, once, when Ultra allows it (its Angular may enable the button a moment after
@@ -215,8 +218,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     for (const box of [...boxes.values()]) if (!sameBox(box) || (box.frame && !box.frame.isConnected)) drop(box);
     if (!U()) { X.need('lib/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
     const at = { path: location.pathname, attempt: attempt() };
-    for (const b of U().boxes(document, at)) {
-      if (boxes.has(b.editor) || declined.has(b.editor) || Date.now() - (failed.get(b.editor) || 0) < 60000) continue;
+    for (const b of U().boxes(document, at, (ed) => boxes.has(ed) || declined.has(ed) || Date.now() - (failed.get(ed) || 0) < 60000)) {
       mount(b);
     }
   };
