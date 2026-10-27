@@ -231,14 +231,49 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       assert.deepEqual(items, [`Check with AI${MAC ? '⌘⇧K' : 'Ctrl+Shift+K'}`, 'Blackboard editor']);
       await p.keyboard.press('Escape');
     });
-    await check('the autocorrect hook asks writer.decide and applies only the first candidate it is sure of', async () => {
+    await check('Tab leaves the chip menu and closes it without losing focus', async () => {
+      await p.click('.gz-ai-chip');
+      await p.keyboard.press('Tab');
+      assert.equal(await p.evaluate(() => document.querySelector('.gz-ai-menu').hidden), true);
+      assert.equal(await p.evaluate(() => document.activeElement.closest('.gz-ai-menu') !== null), false);
+    });
+    await check('completion stays quiet during continuous typing, and selection changes discard a late result', async () => {
+      await reset(p);
+      const n = await runs(p);
+      await p.keyboard.type(' words keep coming steadily', { delay: 60 });
+      assert.equal(await runs(p), n);
+      await next(p, 'writer.complete', { ...GHOST, wait: 1000 });
+      await reset(p); await p.keyboard.type(' it');
+      await until(async () => (await runs(p)) > n, 'run');
+      await p.evaluate(() => {
+        const ed = GZ_WRITER_FRAME.editor(), st = ed.view.state;
+        ed.view.dispatch(st.tr.setSelection(GZ_PM.state.TextSelection.create(st.doc, 2, 5)));
+      });
+      await pause(1200);
+      assert.equal(await ghost(p), null);
+    });
+    await check('ghost motion stops with reduced motion and motion off, and consuming text does not animate', async () => {
+      await reset(p); await next(p, 'writer.complete', GHOST);
+      await p.keyboard.type(' it'); await until(() => ghost(p), 'ghost');
+      await p.emulateMedia({ reducedMotion: 'reduce' });
+      assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('.gz-ghost')).animationDuration), '0s');
+      await p.emulateMedia({ reducedMotion: 'no-preference' });
+      await p.evaluate(() => __page.port.postMessage({ type: 'look', look: { dark: true, motion: 'off' } }));
+      await until(() => p.evaluate(() => document.documentElement.dataset.motion === 'off'), 'motion off');
+      assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('.gz-ghost')).animationDuration), '0s');
+      await p.keyboard.type(' a');
+      assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('.gz-ghost')).animationName), 'none');
+      await p.keyboard.press('Escape');
+      await p.evaluate(() => __page.port.postMessage({ type: 'look', look: { dark: true, motion: 'subtle' } }));
+    });
+    await check("the autocorrect hook keeps the model's verdict and chosen candidate index", async () => {
       await next(p, 'writer.decide', { json: { verdict: 'apply', choice: 'their' } });
       const said = await p.evaluate(() => GZ_WRITER_PROOF.decide({ text: 'I agree. They put there coats on the bed. Then left.', from: 18, to: 23, suggestions: ['their', 'they\'re'] }));
-      assert.equal(said, 'apply');
+      assert.deepEqual(said, { verdict: 'apply', choice: 0 });
       const input = await p.evaluate(() => __ai.runs.at(-1).input);
       assert.deepEqual([input.sentence, input.from, input.to], ['They put there coats on the bed.', 9, 14]);
       await next(p, 'writer.decide', { json: { verdict: 'apply', choice: 'they\'re' } });
-      assert.equal(await p.evaluate(() => GZ_WRITER_PROOF.decide({ text: 'They put there coats down.', from: 9, to: 14, suggestions: ['their', 'they\'re'] })), 'suggest');
+      assert.deepEqual(await p.evaluate(() => GZ_WRITER_PROOF.decide({ text: 'They put there coats down.', from: 9, to: 14, suggestions: ['their', 'they\'re'] })), { verdict: 'apply', choice: 1 });
     });
     await check('nothing with completion off: no run, no gray text; the chip stays for writing', async () => {
       await p.evaluate(() => { __ai.settings.features.completion = false; __ai.changed.forEach((f) => f({ ai: {} }, 'local')); });
@@ -277,6 +312,17 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       assert.deepEqual(await q.evaluate(() => [...document.querySelectorAll('.gz-fb-item')].map((c) => c.querySelector('.gz-fb-lbl').textContent)), ['ThesisPartly met', 'EvidenceMissing']);
       await pause(250);
       await q.screenshot({ path: path.join(shots, 'compose-feedback.png') });
+      await check('Feedback is a named dialog, receives focus, and Escape returns to the chip', async () => {
+        assert.equal(await q.evaluate(() => document.querySelector('.gz-ai-pop').getAttribute('role')), 'dialog');
+        assert.equal(await q.evaluate(() => document.querySelector('.gz-ai-pop').getAttribute('aria-label')), 'Feedback');
+        assert.equal(await q.evaluate(() => document.querySelector('.gz-ai-pop').contains(document.activeElement)), true);
+        await q.keyboard.press('Escape');
+        assert.equal(await q.evaluate(() => document.activeElement.className), 'gz-ai-chip');
+        await q.keyboard.press('Enter');
+        await q.keyboard.press('ArrowDown');
+        await q.keyboard.press('Enter');
+        await until(() => q.evaluate(() => !document.querySelector('.gz-ai-pop').hidden), 'feedback reopened');
+      });
       await q.click('.gz-fb-quote');
       const sel = await q.evaluate(() => { const { state } = GZ_WRITER_FRAME.editor().view; return state.doc.textBetween(state.selection.from, state.selection.to); });
       assert.equal(sel, 'Morrison is definately less interested in nostalgia');
