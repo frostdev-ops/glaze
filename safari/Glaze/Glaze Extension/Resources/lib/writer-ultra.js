@@ -90,9 +90,9 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const boxes = (root, at = {}, skip = () => false) => [...root.querySelectorAll(EDITOR)].map((editor) => {
     if (skip(editor)) return null;
     const kind = kindOf(editor, at), container = editor.closest('.ql-container');
-    // Ultra's collapsed Post has not initialized its message model. Let its first click activate the native editor;
-    // the toolbar appears then, and the next pass can replace it without bypassing that activation.
-    if (kind === 'post' && !rootOf(editor).querySelector('.bb-editor-toolbar')) return null;
+    // Focus can draw the toolbar before Ultra's click activates the message model. Keep that click reachable until
+    // its controls are active; replacing a collapsed Post leaves its native send state behind.
+    if (kind === 'post' && (!rootOf(editor).querySelector('.bb-editor-toolbar') || editor.closest('form').querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]'))) return null;
     return kind === 'unknown' || !container || !canEdit(editor) ? null : { editor, container, root: rootOf(editor), kind, mode: MODE[kind] || 'compose', send: sendOf(editor, kind), context: contextOf(editor, kind) };
   }).filter(Boolean);
 
