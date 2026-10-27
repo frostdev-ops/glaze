@@ -133,3 +133,9 @@ test('review: a frame for a different paper cannot upload into this attempt', as
   assert.equal(p.uploads.length, 0);
   assert.equal(p.clicks.length, 0);
 });
+
+test('review: a cancellation arriving before a delayed go still revokes that run', async () => {
+  const p = page(); p.hear({ type: 'submit:cancel', run: 1 }); await p.go();
+  assert.equal(p.uploads.length, 0);
+  assert.equal(p.clicks.length, 0);
+});
