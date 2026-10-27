@@ -273,22 +273,28 @@ div.bb-course-navigation::before, .routed-page.bb-offcanvas-container [class*="h
 }
 @keyframes gz-bar-veil { to { opacity: 1; } }
 /* Scrolled, the course bar folds to its tools: a small pill at the end, no backing, the page under it reachable beside it
-   (features/sticky-fold.js marks it and keeps its height, so nothing moves). Its header row and Glaze's course strip stay
-   for assistive tech; keyboard focus inside the bar shows it whole. */
+   (features/sticky-fold.js marks it and keeps its height, also as a flex item of Ultra's scroller, so nothing moves).
+   Glaze's course strip stays as it is, on its own glass, so a course can be switched to and back from at any place. The
+   header row stays for assistive tech; keyboard focus inside the bar shows it whole. */
 div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) {
-  box-sizing: border-box; block-size: var(--gz-whole, auto) !important; padding-block-start: var(--gz-float-gap, 12px) !important; background: transparent !important;
+  box-sizing: border-box; block-size: var(--gz-whole, auto) !important; min-block-size: var(--gz-whole, auto) !important; padding-block-start: 0 !important;
   pointer-events: none;
 }
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) #gz-ctabs { pointer-events: auto; }
 div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible))::before { display: none; }
-div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) :is(course-page-header, #gz-ctabs) {
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) course-page-header {
   position: absolute !important; inline-size: 1px !important; block-size: 1px !important; padding: 0 !important; overflow: hidden !important; clip-path: inset(50%); white-space: nowrap;
 }
 div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] {
   inline-size: fit-content !important; max-inline-size: calc(100% - var(--gz-float-start, 12px) - var(--gz-float-end, 12px)); block-size: auto !important; min-block-size: 0 !important;
-  margin-block-start: 0 !important; margin-inline-start: auto !important; padding: 0.125rem 0.25rem !important; border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: 999px !important; pointer-events: auto;
+  margin-block-start: var(--gz-float-gap, 12px) !important; margin-inline-start: auto !important; padding: 0.125rem 0.25rem !important; border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: 999px !important; pointer-events: auto;
 }
 div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] .bb-ui-navigation-list-horizontal a {
   block-size: 1.875rem !important; min-block-size: 0 !important; padding-block: 0 !important; padding-inline: 0.625rem !important; font-size: 0.75rem !important;
+}
+/* Ultra sets the tool's name in a Typography span with a size of its own. */
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] .bb-ui-navigation-list-horizontal a :is(.MuiListItemText-root, .MuiTypography-root) {
+  margin-block: 0 !important; font-size: inherit !important; line-height: 1.2 !important;
 }
 @media (prefers-reduced-motion: no-preference) {
   html:not([data-gz-motion="off"]) div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] { animation: gz-fold 160ms ease-out; }
