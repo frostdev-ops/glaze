@@ -264,6 +264,20 @@ const HARNESS = `(() => {
     await fr.click('.gp-issue[data-rule="cite-shape"]');
     await settle(fr);
     saved.paper = await shot(p, 'paper.png');
+    for (const width of [390, 768]) {
+      await p.setViewportSize({ width, height: 844 });
+      await settle(fr);
+      const narrow = await fr.evaluate(() => {
+        const col = document.querySelector('.gp-col').getBoundingClientRect(), side = document.querySelector('.gp-side').getBoundingClientRect();
+        const status = document.querySelector('.gp-status').getBoundingClientRect();
+        return { width: innerWidth, paper: col.width, bottom: col.bottom, side: side.top, sideHeight: side.height, status: status.right };
+      });
+      check(narrow.paper >= narrow.width - 2 && narrow.side >= narrow.bottom - 1 && narrow.sideHeight >= 140, `${width}px: paper keeps its full width with scrollable checks below it (${JSON.stringify(narrow)})`);
+      check(narrow.status <= narrow.width + 1, `${width}px: paper status stays inside the viewport`);
+      saved[`narrow${width}`] = await shot(p, `paper-${width}.png`);
+    }
+    await p.setViewportSize({ width: 1440, height: 900 });
+    await settle(fr);
     await fr.focus('.gp-flow .ProseMirror');
     await p.keyboard.press('Escape');
     if (process.env.PAPER_PROBE) console.log('PROBE esc', await fr.evaluate(() => [document.activeElement?.className, document.hasFocus(), document.querySelector('.gp-tbtn[aria-label="Focus"]').getAttribute('aria-pressed'), !!document.querySelector('.gp-menu')]));
