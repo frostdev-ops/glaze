@@ -19,7 +19,7 @@ const covers = (p, want) => {
   const host = a[2] === '*' || a[2] === b[2] || (a[2].startsWith('*.') && (b[2] === a[2].slice(2) || b[2].endsWith(a[2].slice(1))));
   return (a[1] === '*' ? /^https?$/.test(b[1]) : a[1] === b[1]) && host && (!a[3] || a[3] === b[3]);
 };
-module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [] }, session: {} }, session = true, sessionArea, fetch, grants = new Set(), revoked = [], manifest: edit, globals = {} } = {}) => {
+module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [] }, session: {} }, session = true, sessionArea, fetch, grants = new Set(), revoked = [], manifest: edit, globals = {}, background = read('lib/background.js') } = {}) => {
   const manifest = JSON.parse(read('manifest.json'));
   if (edit) edit(manifest);
   const perms = { requested: [], removed: [], added: [], gone: [] };
@@ -61,7 +61,7 @@ module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, 
         unregisterContentScripts: async ({ ids } = {}) => { for (const id of ids || [...registered.keys()]) registered.delete(id); }, executeScript: async () => [{ result: true }] },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(background, context);
   const send = (msg, sender) => new Promise((res) => {
     let kept = false;
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r ?? null)))) === true) kept = true;
