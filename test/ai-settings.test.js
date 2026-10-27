@@ -124,7 +124,7 @@ test('enabling AI refreshes a saved device connection without starting a downloa
   const p = await open({ ai: { on: false, use: 'device' } });
   assert.deepEqual(p.ops(), ['get']);
   await p.change('ai-on', true);
-  assert.equal(p.$('ai-device-state').textContent, 'Not available in this browser');
+  assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Not available in this browser');
   assert.equal(p.ops().includes('prepare'), false);
 });
 
@@ -365,7 +365,8 @@ test('On this device is one choice: Apple Intelligence on a Mac that has it, Gem
   assert.doesNotMatch(markup, /ai-use-apple|ai-choice-apple|id="ai-apple/, 'no separate Apple choice');
   const said = { state: 'ready', provider: 'apple' };
   const device = async (m) => (m.op === 'set' ? { ok: true } : m.op === 'test' ? { ok: true, ...said } : { ok: false, error: 'op' });
-  const mac = await open({ ai: { on: true, use: 'endpoint' }, providers: ['openai', 'device', 'apple'], device });
+  const safari = async () => ({ ok: true }); // Safari's Settings: lib/ai/settings.js PROVIDERS has apple
+  const mac = await open({ ai: { on: true, use: 'endpoint' }, providers: ['openai', 'device', 'apple'], device, apple: safari });
   assert.equal(mac.$('ai-choice-device').hidden, false);
   await mac.change('ai-use-device', true);
   assert.equal(mac.data.ai.use, 'device');
@@ -379,7 +380,7 @@ test('On this device is one choice: Apple Intelligence on a Mac that has it, Gem
   await mac.change('ai-on', false); await mac.change('ai-on', true);
   assert.equal(mac.$('ai-device-state').textContent, 'Apple Intelligence · Downloading…');
   // Safari without the browser's model: still offered, and its connection isn't one Settings has to make.
-  const only = await open({ ai: { on: true }, providers: ['openai', 'apple'], device });
+  const only = await open({ ai: { on: true }, providers: ['openai', 'apple'], device, apple: safari });
   assert.equal(only.$('ai-choice-device').hidden, false);
   await only.change('ai-use-device', true);
   assert.deepEqual(only.sent.filter((m) => m.id === 'device').map((m) => m.op), ['test']);
@@ -400,7 +401,7 @@ test('a saved Apple Intelligence choice is On this device now, with nothing lost
   assert.equal(AS.clean({ on: true, use: 'apple' }).use, 'device');
   assert.equal(AS.clean({ use: 'mac' }).use, 'mac', 'any other connection stays as it is');
   const device = async (m) => (m.op === 'test' ? { ok: true, state: 'ready', provider: 'apple' } : { ok: true });
-  const p = await open({ ai: { on: true, use: 'apple', features: { completion: true } }, providers: ['openai', 'device', 'apple'], device });
+  const p = await open({ ai: { on: true, use: 'apple', features: { completion: true } }, providers: ['openai', 'device', 'apple'], device, apple: async () => ({ ok: true }) });
   assert.equal(p.$('ai-use-device').checked, true);
   assert.equal(p.$('ai-device').hidden, false);
   assert.equal(p.$('ai-device-state').textContent, 'Apple Intelligence · Ready');
@@ -422,10 +423,10 @@ test('the shipped device provider drives progress and completion through the rea
     assert.equal(p.vault.get('connections').device.provider, 'device');
     await p.click('ai-device-download');
     notify({ loaded: 0.42 }); await settle();
-    assert.equal(p.$('ai-device-state').textContent, 'Downloading 42%');
+    assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Downloading 42%');
     assert.equal(p.$('ai-device-progress').value, 0.42);
     finish(); await settle();
-    assert.equal(p.$('ai-device-state').textContent, 'Ready', 'prepare is authoritative even if availability lags');
+    assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Ready', 'prepare is authoritative even if availability lags');
     assert.equal(p.$('ai-device-progress').hidden, true);
   } finally { finish?.(); await settle(); delete globalThis.LanguageModel; D._reset(); }
 });
@@ -440,18 +441,18 @@ test('activation keeps Download available and retries prepare directly from the 
     return m.op === 'set' ? { ok: true } : { ok: true, state: 'download' };
   } });
   await p.click('ai-device-download');
-  assert.equal(p.$('ai-device-state').textContent, 'Click Download to continue');
+  assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Click Download to continue');
   assert.equal(p.$('ai-device-download').hidden, false);
   await p.click('ai-device-download');
   assert.equal(attempts, 2);
-  assert.equal(p.$('ai-device-state').textContent, 'Ready');
+  assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Ready');
 });
 
 test('registered device support stays selectable and reports browser, hardware and timeout reasons', async () => {
   const p = await open({ ai: { on: true, use: 'device' } });
   assert.equal(p.$('ai-use-device').disabled, false);
-  assert.equal(p.$('ai-device-state').textContent, 'Not available in this browser');
-  for (const [reason, text] of [['device', 'Not available on this device'], ['timeout', 'Not available: Timed out']]) {
+  assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Not available in this browser');
+  for (const [reason, text] of [['device', 'Gemini Nano · Not available on this device'], ['timeout', 'Gemini Nano · Not available: Timed out']]) {
     const q = await open({ ai: { on: true, use: 'device' }, device: async (m) => m.op === 'set' ? { ok: true } : { ok: true, state: 'unavailable', reason } });
     assert.equal(q.$('ai-device-state').textContent, text);
     assert.equal(q.$('ai-device-download').hidden, true);
@@ -494,7 +495,7 @@ test('the page: an AI tab before Privacy and data, kept out of embedded Settings
   const panel = html.slice(html.indexOf('<div id="panel-ai"'), html.indexOf('<div id="panel-backup"'));
   assert.match(panel, /<input id="ai-key" type="password"[^>]*autocomplete="off"/);
   for (const [, tag] of panel.matchAll(/(<input[^>]*>)/g)) assert.match(tag, /data-local/, tag);
-  for (const id of ['ai-said', 'ai-device-state', 'ai-apple-state']) assert.match(panel, new RegExp(`id="${id}" role="status" aria-live="polite"`), id);
+  for (const id of ['ai-said', 'ai-device-state']) assert.match(panel, new RegExp(`id="${id}" role="status" aria-live="polite"`), id);
   assert.match(panel, /role="radiogroup" aria-labelledby="ai-connection-head"/);
   assert.match(panel, /<progress id="ai-device-progress"[^>]*aria-labelledby="ai-device-state"/);
   for (const id of ['ai-base', 'ai-model', 'ai-key']) assert.match(panel, new RegExp(`id="${id}"[^>]*dir="ltr"`), `${id} keeps its direction`);

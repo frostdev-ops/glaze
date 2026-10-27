@@ -149,9 +149,9 @@ keeps the port: the writer's features on an Ultra attempt not known to be an ass
 Settings' top frame (`options.html`) manages connections with `chrome.runtime.sendMessage({ type: 'glaze:ai-config', op })`:
 `get`, `set { id, cfg: { provider, base, model, key?, images?, context? } }`, `remove { id }`, `test { id }`,
 `models { id }`. `get` also returns `providers`, the shipped providers registered in this browser. Request the host from a click first with `chrome.permissions.request({ origins: [origin] })`.
-Settings → AI (`lib/editor-ai.js`) keeps up to three connections, `endpoint`, `device` and, on Safari, `apple` (`{ provider:
-'apple', model: 'on-device' }`, kept the first time it is chosen, then `test`ed for its state), and asks for the host with
-`GZ_SITE.reach` from the Save or Test click.
+Settings → AI (`lib/editor-ai.js`) keeps the connections `endpoint` and `device` (On this device, `test { id: 'device' }`
+→ `{ ok, state, reason?, provider }`, the resolved provider naming the status line: "Apple Intelligence · Ready", "Gemini
+Nano · Needs a download"), and asks for the host with `GZ_SITE.reach` from the Save or Test click.
 The model on this computer: `test { provider: 'device' }` → `{ ok, state, reason? }`, and from a click `prepare { provider:
 'device' }`, which answers once the model is ready and meanwhile sends `{ type: 'glaze:ai-config', event: 'progress',
 provider, loaded }` (0 to 1) to Glaze's pages. A `download` reply with reason `activation` keeps Download available for another click.
@@ -211,8 +211,13 @@ that answer into the next request. `{ type: 'ai.release' }` drops them; the work
 ## Safari's Apple provider
 
 An `apple` connection uses `model: 'on-device'`, Apple Intelligence on this device; text stays on the device. It is
-registered and offered by Settings only on Safari, and needs macOS 27 or iOS 27; older systems return `unavailable` with
-reason `os`.
+registered only on Safari, and needs macOS 27 or iOS 27; older systems return `unavailable` with reason `os`.
+
+Settings offers one **On this device** choice (connection id `device`), and the broker resolves it at each status, test and
+run (`lib/ai/broker.js` `onDevice`): Apple Intelligence where Safari registers `apple`, unless its status is `unavailable`
+for `off`, `os` or `device` and the browser's own model (`device`) can run; otherwise the browser's model. Status, test and
+the call record name the provider it resolved to, and a status for an unavailable provider carries its `reason` (Writer
+says "Apple Intelligence is off" for `off`). A saved `use: 'apple'` reads as `device` (`lib/ai/settings.js` `clean`).
 
 `ai.run` is one native request and reply. Refusals stay `refusal`; a reply reaching `maximumResponseTokens` is marked
 `length`, and structured output is refused even if guided generation closed the JSON. Rate and quota limits carry 429.

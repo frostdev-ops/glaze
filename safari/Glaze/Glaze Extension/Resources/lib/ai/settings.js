@@ -18,7 +18,9 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const clean = (raw) => {
     const r = isObj(raw) ? raw : {}, f = isObj(r.features) ? r.features : {};
-    return { on: r.on === true, use: typeof r.use === 'string' && CONNECTION.test(r.use) ? r.use : null, features: Object.fromEntries(FEATURES.map((k) => [k, f[k] === true])) };
+    // Apple Intelligence was its own choice; it is On this device now (lib/ai/broker.js onDevice).
+    const use = r.use === 'apple' ? 'device' : r.use;
+    return { on: r.on === true, use: typeof use === 'string' && CONNECTION.test(use) ? use : null, features: Object.fromEntries(FEATURES.map((k) => [k, f[k] === true])) };
   };
   // Whether `feature` may ask now: AI on, a connection chosen, the feature allowed.
   const allowed = (s, feature) => s.on === true && !!s.use && s.features?.[feature] === true;

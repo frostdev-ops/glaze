@@ -3241,6 +3241,7 @@
   "Downloading the model…": "Téléchargement du modèle…",
   "Downloading the model: {pct}": "Téléchargement du modèle : {pct}",
   "{provider} is unavailable. Choose another model in Settings → AI.": "{provider} est indisponible. Choisissez un autre modèle dans Réglages → IA.",
+  "Apple Intelligence is off. Turn it on in System Settings.": "Apple Intelligence est désactivée. Activez-la dans Réglages Système.",
   "Glaze couldn’t confirm this page may use AI. Reload the page to try again.": "Glaze n’a pas pu confirmer que cette page peut utiliser l’IA. Rechargez la page pour réessayer.",
   "AI is only available on confirmed assignments, never on tests.": "L’IA est disponible uniquement pour les devoirs confirmés, jamais pour les tests.",
   "AI isn’t available right now.": "L’IA n’est pas disponible pour le moment.",

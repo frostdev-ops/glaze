@@ -3241,6 +3241,7 @@
   "Downloading the model…": "Modell wird heruntergeladen…",
   "Downloading the model: {pct}": "Modell wird heruntergeladen: {pct}",
   "{provider} is unavailable. Choose another model in Settings → AI.": "{provider} ist nicht verfügbar. Wähle ein anderes Modell in Einstellungen → KI.",
+  "Apple Intelligence is off. Turn it on in System Settings.": "Apple Intelligence ist aus. Schalte sie in den Systemeinstellungen ein.",
   "Glaze couldn’t confirm this page may use AI. Reload the page to try again.": "Glaze konnte nicht bestätigen, dass diese Seite KI nutzen darf. Lade die Seite neu und versuch es noch einmal.",
   "AI is only available on confirmed assignments, never on tests.": "KI ist nur bei bestätigten Aufgaben verfügbar, nie bei Tests.",
   "AI isn’t available right now.": "KI ist gerade nicht verfügbar.",

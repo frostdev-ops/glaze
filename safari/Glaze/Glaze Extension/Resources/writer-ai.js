@@ -95,7 +95,8 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // has refused this attempt for its kind, and the model's download (0 to 1, from the worker's progress, or null).
   let checked = 0, said = null, checking = false, attemptSince = 0, loaded = null, attemptTimer = 0;
   // Why Feedback can't ask now: '' when it can; 'checking' | 'ai-off' | 'off' (the feature) | 'setup' | 'permission' |
-  // 'download' | 'downloading' | 'device' (the chosen on-device model can't run here) | 'unverified' (the worker didn't
+  // 'download' | 'downloading' | 'apple-off' (Apple Intelligence is off in System Settings) | 'device' (the chosen on-device
+  // model can't run here) | 'unverified' (the worker didn't
   // answer for this page) | 'attempt' (an attempt the worker hasn't been told is an assignment: it goes once the page says
   // so, else after 10 s) | 'unavailable'.
   const why = () => {
@@ -108,6 +109,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const st = status.writing;
     if (!st) return 'unverified';
     if (!st.allowed) return st.why === 'attempt' ? (Date.now() - attemptSince < 10000 ? 'checking' : 'attempt') : st.why ? 'unavailable' : 'off';
+    if (st.why === 'unavailable' && st.provider === 'apple' && st.reason === 'off') return 'apple-off';
     if (st.why === 'unavailable' && ['device', 'apple'].includes(st.provider)) return 'device';
     return ['setup', 'permission', 'download', 'downloading'].includes(st.why) ? st.why : 'unavailable';
   };
@@ -379,6 +381,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
         permission: () => (host ? t('Glaze needs permission to reach {host}. Allow it in Settings → AI.', { host }) : t('AI isn’t available right now.')),
         download: () => t('The on-device model isn’t downloaded. Download it in Settings → AI.'),
         downloading: () => (loaded === null ? t('Downloading the model…') : t('Downloading the model: {pct}', { pct: `${Math.round(loaded * 100)}%` })),
+        'apple-off': () => t('Apple Intelligence is off. Turn it on in System Settings.'),
         device: () => t('{provider} is unavailable. Choose another model in Settings → AI.', { provider: providerName(status.writing, t) }),
         unverified: () => t('Glaze couldn’t confirm this page may use AI. Reload the page to try again.'),
         attempt: () => t('AI is only available on confirmed assignments, never on tests.'),

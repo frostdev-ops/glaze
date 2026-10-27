@@ -1,5 +1,5 @@
-// Settings → AI (docs/ai-harness.md): the switch, the connection (a model on this device, Apple Intelligence on Safari, or
-// an endpoint), which of Glaze's
+// Settings → AI (docs/ai-harness.md): the switch, the connection (On this device: Apple Intelligence where the Mac has it,
+// else the browser's model; or an endpoint), which of Glaze's
 // features may use it, and the record of recent calls. storage.local `ai` (lib/ai/settings.js) holds the switches; the
 // connections and keys stay in the worker (lib/ai/broker.js 'glaze:ai-config': get, set, test, models, and the device
 // provider's prepare), and a key comes back only masked. Save and Test ask the browser for exactly the address's host
@@ -12,8 +12,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   const TYPE = 'glaze:ai-config', CALLS = 'aiCalls';
   // The connections Settings keeps, by their id in the broker's store (and storage.local ai.use); each is also its provider's
   // id but the endpoint's (openai).
+  // On this device (DEVICE) is the worker's to resolve: Apple Intelligence or the browser's model (lib/ai/broker.js onDevice).
   const ENDPOINT = 'endpoint', DEVICE = 'device', APPLE = 'apple';
-  const PROVIDER = { [ENDPOINT]: 'openai', [DEVICE]: DEVICE, [APPLE]: APPLE };
   // A model request's failure categories (lib/ai/failure.js CATEGORIES).
   const CATEGORIES = ['cancelled', 'timeout', 'provider-unavailable', 'request-rejected', 'invalid-response', 'connection-lost'];
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -71,7 +71,9 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       catch { return Promise.resolve({ ok: false, error: 'failed' }); }
     };
     let providers = [], preparing = false;
-    let s = S.clean(), conns = {}, calls = [], tested = null, device = null, apple = null, catalog = null, unverified = false, shownKey = '', busy = false;
+    // device: On this device's status from the worker, with the provider it resolved to ({ state, reason?, provider, progress? }).
+    let s = S.clean(), conns = {}, calls = [], tested = null, device = null, catalog = null, unverified = false, shownKey = '', busy = false;
+    const offered = () => providers.includes(DEVICE) || providers.includes(APPLE);
 
     // ---- the switches (storage.local ai) -------------------------------------------------------------------------------
     // Read again before each write, so a change elsewhere (another Settings tab) isn't written over; one at a time, so a
@@ -115,14 +117,18 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       const m = $('ai-model').value.trim();
       $('ai-model-unverified').hidden = !(conns[ENDPOINT] && m && (catalog ? catalog.source !== 'live' || !catalog.ids.includes(m) : unverified));
     };
+    // The model it runs on, then its state ("Apple Intelligence is off" says both).
+    const deviceLine = (st) => {
+      if (st.provider === APPLE) { const text = appleText(st, t), name = t('Apple Intelligence'); return text.startsWith(name) ? text : `${name} · ${text}`; }
+      return `Gemini Nano · ${deviceText(st, t, pct)}`;
+    };
     const renderDevice = () => {
-      $('ai-device-state').textContent = device ? deviceText(device, t, pct) : '';
-      $('ai-device-download').hidden = device?.state !== 'download' && device?.reason !== 'activation';
+      $('ai-device-state').textContent = device ? deviceLine(device) : '';
+      $('ai-device-download').hidden = device?.provider === APPLE || (device?.state !== 'download' && device?.reason !== 'activation');
       const bar = $('ai-device-progress');
       bar.hidden = !(device?.state === 'downloading' && typeof device.progress === 'number');
       if (!bar.hidden) bar.value = device.progress;
     };
-    const renderApple = () => { $('ai-apple-state').textContent = apple ? appleText(apple, t) : ''; };
     const renderCalls = () => {
       const list = rows(calls);
       $('ai-calls').replaceChildren(...list.map((r) => {
@@ -140,20 +146,16 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const render = () => {
       $('ai-on').checked = s.on;
       $('ai-connection').hidden = !s.on;
-      const dev = $('ai-use-device'), end = $('ai-use-endpoint'), app = $('ai-use-apple');
-      const offered = providers.includes(DEVICE), endpoint = providers.includes('openai'), onMac = providers.includes(APPLE);
-      dev.disabled = !offered;
+      const dev = $('ai-use-device'), end = $('ai-use-endpoint');
+      const here = offered(), endpoint = providers.includes('openai');
+      dev.disabled = !here;
       end.disabled = !endpoint;
-      app.disabled = !onMac;
-      $('ai-choice-device').hidden = !offered;
+      $('ai-choice-device').hidden = !here;
       $('ai-choice-endpoint').hidden = !endpoint;
-      $('ai-choice-apple').hidden = !onMac;
       $('ai-device-off').hidden = true;
       dev.checked = s.use === DEVICE;
       end.checked = s.use === ENDPOINT;
-      app.checked = s.use === APPLE;
-      $('ai-device').hidden = !(offered && s.use === DEVICE);
-      $('ai-apple').hidden = !(onMac && s.use === APPLE);
+      $('ai-device').hidden = !(here && s.use === DEVICE);
       $('ai-endpoint').hidden = !endpoint || s.use !== ENDPOINT;
       const host = s.use === ENDPOINT ? hostOf(conns[ENDPOINT]?.base) : '';
       $('ai-where').hidden = !host;
@@ -166,7 +168,6 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       $('ai-activity').hidden = !s.on && !rows(calls).length;
       renderModel();
       renderDevice();
-      renderApple();
       renderCalls();
     };
 
@@ -191,8 +192,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       providers = r.ok && Array.isArray(r.providers) ? r.providers.filter((id) => S.PROVIDERS.includes(id)) : [];
       fill();
       render();
-      if (s.on && s.use === DEVICE && providers.includes(DEVICE)) await deviceStatus();
-      if (s.on && s.use === APPLE && providers.includes(APPLE)) await appleStatus();
+      if (s.on && s.use === DEVICE && offered()) await deviceStatus();
     };
     const models = async () => {
       const r = await send({ op: 'models', id: ENDPOINT });
@@ -239,36 +239,26 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     $('ai-model').addEventListener('input', renderModel);
     $('ai-model').addEventListener('focus', () => { if (!catalog && conns[ENDPOINT]) models(); });
 
-    // On this device: the provider's status, a download the student starts, and its progress as the worker reports it.
+    // On this device: its status and the model the worker resolved it to, a download the student starts (the browser's
+    // model only; Apple Intelligence downloads in System Settings), and its progress as the worker reports it.
     const deviceResult = (r) => {
-      device = r.ok ? { state: r.state, ...(typeof r.reason === 'string' && { reason: r.reason }) } : { state: 'unavailable', reason: r.error };
+      device = r.ok ? { state: r.state, ...(typeof r.reason === 'string' && { reason: r.reason }), provider: r.provider === APPLE ? APPLE : DEVICE }
+        : { state: 'unavailable', reason: r.error, provider: device?.provider || DEVICE };
       renderDevice();
     };
     const deviceStatus = async () => {
-      if (!providers.includes(DEVICE)) return;
-      if (!conns[DEVICE]) {
+      if (!offered()) return;
+      if (!conns[DEVICE] && providers.includes(DEVICE)) {
         const r = await send({ op: 'set', id: DEVICE, cfg: { provider: DEVICE } });
         if (!r.ok) return deviceResult(r);
         conns[DEVICE] = { provider: DEVICE };
       }
-      deviceResult(await send({ op: 'test', provider: DEVICE }));
-    };
-    // Apple Intelligence: its connection, kept the first time it is chosen, and its state (nothing to download from here).
-    const appleStatus = async () => {
-      if (!providers.includes(APPLE)) return;
-      if (!conns[APPLE]) {
-        const r = await send({ op: 'set', id: APPLE, cfg: { provider: APPLE, model: 'on-device' } });
-        if (!r.ok) { apple = { state: 'unavailable', reason: r.error }; return renderApple(); }
-        conns[APPLE] = { provider: APPLE, model: 'on-device' };
-      }
-      const r = await send({ op: 'test', id: APPLE });
-      apple = r.ok ? { state: r.state, ...(typeof r.reason === 'string' && { reason: r.reason }) } : { state: 'unavailable', reason: r.error };
-      renderApple();
+      deviceResult(await send({ op: 'test', id: DEVICE }));
     };
     $('ai-device-download').addEventListener('click', (e) => {
-      if (!e?.isTrusted || preparing || !providers.includes(DEVICE) || (device?.state !== 'download' && device?.reason !== 'activation')) return;
+      if (!e?.isTrusted || preparing || !providers.includes(DEVICE) || device?.provider === APPLE || (device?.state !== 'download' && device?.reason !== 'activation')) return;
       preparing = true;
-      device = { state: 'downloading' };
+      device = { state: 'downloading', provider: DEVICE };
       renderDevice();
       send({ op: 'prepare', provider: DEVICE }).then(async (r) => {
         if (r.ok) deviceResult(r); else await deviceStatus();
@@ -278,7 +268,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.event !== 'progress' || m.provider !== DEVICE || !providers.includes(DEVICE)) return;
       const n = progress(m);
       if (n === null) return;
-      device = { state: 'downloading', progress: n };
+      device = { state: 'downloading', progress: n, provider: DEVICE };
       renderDevice();
       if (n >= 1 && !preparing) deviceStatus();
     });
@@ -287,14 +277,12 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     $('ai-on').addEventListener('change', () => { const on = $('ai-on').checked; return write(() => ({ on })).then((saved) => {
       if (!saved) return;
       if (s.on && s.use === DEVICE) return deviceStatus();
-      if (s.on && s.use === APPLE) return appleStatus();
     }); });
-    for (const [id, use] of [['ai-use-device', DEVICE], ['ai-use-apple', APPLE], ['ai-use-endpoint', ENDPOINT]]) {
+    for (const [id, use] of [['ai-use-device', DEVICE], ['ai-use-endpoint', ENDPOINT]]) {
       $(id).addEventListener('change', () => {
-        if (!$(id).checked || !providers.includes(PROVIDER[use])) return;
+        if (!$(id).checked || !(use === DEVICE ? offered() : providers.includes('openai'))) return;
         write(() => ({ use }));
         if (use === DEVICE) deviceStatus();
-        if (use === APPLE) appleStatus();
       });
     }
     $('ai-calls-clear').addEventListener('click', (e) => {

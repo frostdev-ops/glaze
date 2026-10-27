@@ -1470,7 +1470,6 @@
           <h3 id="ai-connection-head">Connection</h3>
           <div class="seg" role="radiogroup" aria-labelledby="ai-connection-head">
             <label id="ai-choice-device" hidden><input type="radio" name="ai-use" value="device" id="ai-use-device" data-local>On this device</label>
-            <label id="ai-choice-apple" hidden><input type="radio" name="ai-use" value="apple" id="ai-use-apple" data-local>Apple Intelligence</label>
             <label id="ai-choice-endpoint" hidden><input type="radio" name="ai-use" value="endpoint" id="ai-use-endpoint" data-local>Endpoint</label>
           </div>
           <p class="desc" id="ai-device-off" hidden>Not available in this browser</p>
@@ -1478,9 +1477,6 @@
             <p class="desc" id="ai-device-state" role="status" aria-live="polite"></p>
             <progress id="ai-device-progress" max="1" value="0" aria-labelledby="ai-device-state" hidden></progress>
             <div class="row"><button type="button" id="ai-device-download" hidden>Download</button></div>
-          </div>
-          <div class="ai-apple" id="ai-apple" hidden>
-            <p class="desc" id="ai-apple-state" role="status" aria-live="polite"></p>
           </div>
           <div class="ai-endpoint" id="ai-endpoint" hidden>
             <label class="field wide"><span>Address</span><input id="ai-base" type="url" maxlength="500" dir="ltr" translate="no" placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false" data-local></label>

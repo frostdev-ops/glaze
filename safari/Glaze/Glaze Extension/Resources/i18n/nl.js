@@ -3241,6 +3241,7 @@
   "Downloading the model…": "Model downloaden…",
   "Downloading the model: {pct}": "Model downloaden: {pct}",
   "{provider} is unavailable. Choose another model in Settings → AI.": "{provider} is niet beschikbaar. Kies een ander model in Instellingen → AI.",
+  "Apple Intelligence is off. Turn it on in System Settings.": "Apple Intelligence staat uit. Zet het aan in Systeeminstellingen.",
   "Glaze couldn’t confirm this page may use AI. Reload the page to try again.": "Glaze kon niet bevestigen dat deze pagina AI mag gebruiken. Laad de pagina opnieuw en probeer het nog eens.",
   "AI is only available on confirmed assignments, never on tests.": "AI is alleen beschikbaar bij bevestigde opdrachten, nooit bij toetsen.",
   "AI isn’t available right now.": "AI is nu niet beschikbaar.",
