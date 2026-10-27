@@ -2,6 +2,19 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const content = require('./helpers/writer-content.cjs');
 
+test('mounting Writer while the native editor has typing focus does not animate', async () => {
+  const c = content(), b = c.native(), animations = [];
+  c.doc.documentElement.setAttribute('data-gz-motion', 'subtle');
+  c.ctx.matchMedia = () => ({ matches: false });
+  c.doc.activeElement = b.editor;
+  c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  const frames = c.doc.querySelectorAll('iframe.gz-writer');
+  for (const frame of frames) frame.animate = () => animations.push(frame);
+  for (const port of c.ports) port.onmessage({ data: { type: 'ready' } });
+  assert.ok(!animations.includes(frames[0]), 'the active typing surface appears immediately');
+  assert.ok(animations.includes(frames[1]), 'an idle editor still follows the Look motion level');
+});
+
 test('Writer keeps the full draft and frame when native sync and browser insertion both fail', async () => {
   const c = content({ helper: 'fail' }); await c.start();
   const b = c.native(), frame = b.root.previousElementSibling;
