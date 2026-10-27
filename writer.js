@@ -176,7 +176,9 @@
   const tb = $('tb'), href = $('href'), menu = $('menu'), more = $('more');
   const writing = () => !!document.activeElement?.closest?.('.ProseMirror');
   const unlink = () => { tb.classList.remove('linking'); href.hidden = true; };
+  let selected = null;
   const onSelection = (s) => {
+    selected = s;
     if (tb.classList.contains('linking')) return;
     if (s.empty || !s.coords || !writing()) { hide(tb); return; }
     for (const b of tb.querySelectorAll('[data-run]')) b.classList.toggle('on', !!(b.dataset.run === 'bulletList' ? s.active.list === 'bullet' : s.active[b.dataset.run]));
@@ -209,11 +211,15 @@
   });
   href.addEventListener('blur', () => { unlink(); hide(tb); });
   const shut = (back) => { hide(menu); more.setAttribute('aria-expanded', 'false'); if (back) more.focus(); };
-  more.addEventListener('click', () => {
-    if (!menu.hidden) { shut(); return; }
+  const placeMenu = () => {
     const r = more.getBoundingClientRect();
     menu.style.right = `${Math.max(3, innerWidth - r.right)}px`;
     menu.style.bottom = `${innerHeight - r.top + 6}px`;
+  };
+  addEventListener('resize', () => { if (selected) onSelection(selected); if (!menu.hidden) placeMenu(); });
+  more.addEventListener('click', () => {
+    if (!menu.hidden) { shut(); return; }
+    placeMenu();
     more.setAttribute('aria-expanded', 'true');
     show(menu);
     menu.querySelector('[role="menuitem"]').focus();
