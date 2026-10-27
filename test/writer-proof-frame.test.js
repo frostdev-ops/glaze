@@ -83,3 +83,18 @@ test('decide cannot apply a verdict after the surrounding sentence changes', asy
   resolve('apply'); await flush();
   assert.equal(f.view.state.doc.textContent, 'Their going home was surprising. ');
 });
+
+test('the autocorrect Undo stays available while it has keyboard focus', async () => {
+  const f = frame({ html: '<p></p>' }); await flush();
+  const plugin = f.view.state.plugins.find((p) => p.spec.key === P.key);
+  for (const ch of 'teh ') {
+    const { from, to } = f.view.state.selection;
+    if (!plugin.props.handleTextInput(f.view, from, to, ch)) f.view.dispatch(f.view.state.tr.insertText(ch));
+  }
+  const pop = f.doc.body.querySelector('.gp-fix'), button = pop.querySelector('button');
+  assert.equal(pop.hidden, false);
+  button.focus(); pop.dispatchEvent({ type: 'focusin' }); await f.run(4000);
+  assert.equal(pop.hidden, false, 'a focused action must not disappear on its timer');
+  pop.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault() {} });
+  assert.equal(pop.hidden, true);
+});
