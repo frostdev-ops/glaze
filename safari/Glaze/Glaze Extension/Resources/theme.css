@@ -506,6 +506,15 @@ html[data-gz-enhance-titleScroll] bb-assignment-attempt-authoring-panel [class*=
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
 }
+/* A document's Contents, closed: Ultra's open button is a bare icon at the column's edge, drawn for a white page. It is a
+   pill on the Look's surface, as Glaze's icon buttons are. */
+#site-wrap button[class*="makeStylesexpandTocButton-"] {
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4); color: var(--gz-accent) !important; box-shadow: var(--gz-rest-shadow) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
+}
+#site-wrap button[class*="makeStylesexpandTocButton-"]:hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 18%, var(--gz-surface-paint, var(--gz-surface))) !important; }
+html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] { backdrop-filter: none; }
 /* Previous / Next above an item: Ultra sits them on a hard-coded #262626 bar the sweep leaves alone
    (it only recolors light fills). */
 #site-wrap div:has(> .js-content-navigator-previous, > .js-content-navigator-next) { background: transparent !important; gap: 0.5rem; }
