@@ -26,8 +26,12 @@ const until = async (fn, label, ms = 8000) => {
 const STUB = `(() => {
   const ai = window.__ai = { settings: { on: true, use: 'main', features: { completion: true, writing: true } }, connects: 0, runs: [], ends: [], cancels: [], next: {}, changed: [],
     status: { completion: { allowed: true, ready: true, provider: 'device', caps: { text: true } }, writing: { allowed: true, ready: true, provider: 'device', caps: { text: true, json: true } } } };
-  window.GZ_WRITER_ISSUES = { sets: [], set(source, issues) { this.sets.push({ source, issues }); }, clear() {}, list: () => [], on() {} };
-  window.GZ_WRITER_PROOF = { decide: null };
+  // The real issues store (lib/writer-issues.js), with every set() recorded as it lands.
+  let issues;
+  Object.defineProperty(window, 'GZ_WRITER_ISSUES', { configurable: true, get: () => issues, set: (v) => {
+    issues = v;
+    if (v && !v.sets) { v.sets = []; const set = v.set; v.set = function (source, list, range) { this.sets.push({ source, issues: list }); return set.call(this, source, list, range); }; }
+  } });
   const inflight = new Map();
   const connect = () => {
     ai.connects++;
