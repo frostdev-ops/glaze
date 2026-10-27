@@ -11,6 +11,17 @@ test('cancelling an empty post releases Writer so the next native activation rem
   assert.notEqual(b.root.style.display, 'none');
 });
 
+test('Ultra collapsing its empty post releases Writer even without a captured Cancel event', async () => {
+  const c = content(); await c.start();
+  const b = c.native(), frame = b.root.previousElementSibling;
+  const controls = b.editor.closest('form').querySelector('.form-buttons');
+  controls.className += ' panel-editor-controls ng-hide';
+  controls.setAttribute('aria-hidden', 'true');
+  c.ctx.GZ_WRITER.pass();
+  assert.ok(!frame.isConnected);
+  assert.notEqual(b.root.style.display, 'none');
+});
+
 test('a focused native caret is passed to Writer before hiding its editor', async () => {
   const c = content(), b = c.native();
   b.editor.innerHTML = '<p>A</p>';
