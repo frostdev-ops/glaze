@@ -226,6 +226,11 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   document.addEventListener('click', (e) => {
     const b = e.target?.closest?.('button');
     if (!b) return;
+    // Ultra collapses an empty new-post editor on Cancel without removing its node. Release the empty frame too,
+    // so its next click can activate the native composer again.
+    if (b.getAttribute('ng-click') === 'messageControl.onCancelClick()') {
+      for (const box of boxes.values()) if (box.kind === 'post' && !box.text && sameBox(box) && box.editor.closest('form')?.contains(b)) drop(box);
+    }
     for (const box of boxes.values()) if (SENDS.has(box.kind) && sameBox(box) && U().sendOf(box.editor, box.kind) === b && U().enabled(b)) {
       if (!sync(box, box.latest)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
       remember(box);
