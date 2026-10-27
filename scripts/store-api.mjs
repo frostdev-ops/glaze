@@ -326,11 +326,23 @@ export async function syncAppleListing(env, app, platform, version, listings, { 
         note(locale, label, same ? 'same' : 'change');
         if (!same) changed[key] = fields[key];
       }
+      // A language Apple added on its own has no support URL, which review requires: the primary language's goes in.
+      for (const [key, value] of Object.entries(pick(primary, ['supportUrl', 'marketingUrl']))) if (!target.attributes?.[key]) changed[key] = value;
       if (write && Object.keys(changed).length) await apple(env, `/appStoreVersionLocalizations/${target.id}`, 'PATCH', document('appStoreVersionLocalizations', changed, {}, target.id));
     } else {
       for (const [key, label] of VERSION_FIELDS) if (key in fields) note(locale, label, 'create');
       added.push(locale);
-      if (write) target = (await apple(env, '/appStoreVersionLocalizations', 'POST', document('appStoreVersionLocalizations', { locale, ...fields, ...pick(primary, ['supportUrl', 'marketingUrl']) }, { appStoreVersion: resource('appStoreVersions', version.id) }))).data;
+      if (write) {
+        try {
+          target = (await apple(env, '/appStoreVersionLocalizations', 'POST', document('appStoreVersionLocalizations', { locale, ...fields, ...pick(primary, ['supportUrl', 'marketingUrl']) }, { appStoreVersion: resource('appStoreVersions', version.id) }))).data;
+        } catch (error) {
+          // Adding a language to the app info gives an editable version that language too; fill in Apple's copy instead.
+          if (error.status !== 409 || !error.message.includes('already exists')) throw error;
+          target = find((await apple(env, `/appStoreVersions/${version.id}/appStoreVersionLocalizations?limit=200`)).data, locale);
+          if (!target) throw error;
+          await apple(env, `/appStoreVersionLocalizations/${target.id}`, 'PATCH', document('appStoreVersionLocalizations', { ...fields, ...pick(primary, ['supportUrl', 'marketingUrl']) }, {}, target.id));
+        }
+      }
     }
     // What's New goes on its own: Apple refuses the field for a platform's first release.
     if (first) note(locale, "What's New", 'skip', 'first release');

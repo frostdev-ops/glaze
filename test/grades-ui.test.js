@@ -765,6 +765,8 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     state.asked.push([o?.method, o?.redirect, url.replace(UO, '')]);
     if (failAsk(url)) return Promise.resolve({ ok: false, status: 503 });
     const body = Object.entries(answers).find(([k]) => url.includes(k))?.[1];
+    // A function answers as it likes (a file, say): (url, options) → the response.
+    if (typeof body === 'function') return Promise.resolve(body(url, o));
     return Promise.resolve(body ? { ok: true, text: async () => JSON.stringify(body) } : { ok: false, status: 404 });
   };
   // Promise or callback, as Chrome answers either.
@@ -1162,7 +1164,7 @@ test('Ultra syllabus import: on the outline under Ultra\'s details, from a docum
   const sel = p.doc.getElementById('gz-syl-doc');
   // Documents only, available ones only, a syllabus first; a page's text is its blocks'.
   assert.deepEqual(sel.children.map((o) => o.textContent), ['Course Syllabus', 'Reading: cells']);
-  assert.deepEqual(p.state.asked.map(([m, r, u]) => [m, r, u]), [['GET', 'error', '/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,availability.available']]);
+  assert.deepEqual(p.state.asked.map(([m, r, u]) => [m, r, u]), [['GET', 'error', '/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,contentHandler.isBbPage,availability.available']]);
   sel.value = '0';
   byText(dlg, 'Read this document').fire('click');
   await settle(12);
@@ -1175,6 +1177,323 @@ test('Ultra syllabus import: on the outline under Ultra\'s details, from a docum
   assert.ok(kept, 'kept under this site, user and course');
   assert.deepEqual(kept.scale, [['A', 93], ['B', 83], ['C', 73], ['D', 63], ['F', 0]]);
   assert.match(dlg.textContent, /Blackboard's own weights are the ones that count/);
+});
+
+// Ultra documents as bb.wpunj.edu answered (2026-10-26), with synthetic names and text: a document is a folder with
+// contentHandler.isBbPage, its text in document children ("blocks") titled like it, "ultraDocumentBody" or anything; a
+// block's body can be only a file's anchor (data-bbfile, HTML-escaped JSON, on /bbcswebdav/ of the site), or text and files.
+const bbfile = (rid, name, mimeType, more = {}) => {
+  const j = JSON.stringify({ linkName: name, displayName: name, mimeType, alternativeText: name, render: 'inline', resourceUrl: `/bbcswebdav/xid-${rid}_1`, viewerUrl: `/ultra/viewer/${rid}`, ...more });
+  return `<div><div><a href="${UO}/bbcswebdav/pid-9${rid}-dt-content-rid-${rid}_1/xid-${rid}_1" data-bbfile="${j.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></a></div></div>`;
+};
+const item = (id, parentId, title, handler, more = {}) => ({ id, parentId, title, contentHandler: { id: `resource/x-bb-${handler}`, ...(handler === 'folder' && { isBbPage: !!more.page }) }, availability: { available: 'Yes' }, ...(more.body != null && { body: more.body }) });
+const PAGES = { results: [
+  item('_800_1', '_700_1', 'Week 1', 'folder'),
+  item('_801_1', '_700_1', 'Welcome', 'folder', { page: true }),
+  item('_802_1', '_801_1', 'Welcome', 'document', { body: '<p>Welcome to the course.</p>' }),
+  item('_803_1', '_801_1', 'ultraDocumentBody', 'document', { body: '<p>Read the course outline first.</p>' }),
+  item('_804_1', '_700_1', 'Course Syllabus', 'folder', { page: true }),
+  item('_805_1', '_804_1', 'ultraDocumentBody', 'document', { body: `<p>Office hours: Thursday 10:00-11:30</p>${bbfile(501, 'Grade chart.jpg', 'image/jpeg')}<p>Final exam week</p>${bbfile(502, 'Missing.pdf', 'application/pdf')}${bbfile(503, 'Syllabus 1234.pdf', 'application/pdf')}` }),
+  item('_806_1', '_700_1', 'Math Syllabus', 'folder', { page: true }),
+  item('_807_1', '_806_1', 'Math Syllabus', 'document', { body: bbfile(504, 'Math Syllabus Fall.pdf', 'application/pdf') }),
+] };
+// A file Ultra's /bbcswebdav/ address answers (after its redirect to the file store), its fetches noted in got.
+const served = (got, size, type) => (url, o) => {
+  got.push({ url: url.replace(UO, ''), credentials: o?.credentials, redirect: o?.redirect, signal: o?.signal });
+  return new Response(new Uint8Array(size), { headers: { 'content-length': String(size), 'content-type': type } });
+};
+// The outline with PAGES, the import dialog open; GZ_IMPORT stands in for features/import.js.
+const docsPage = async (GZ_IMPORT, files = {}, setup = () => {}) => {
+  const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': PAGES, ...files } });
+  p.ctx.GZ_IMPORT = GZ_IMPORT;
+  p.ctx.File = File;
+  setup(p);
+  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  p.ctx.GZ_SYL_UI.sync(true);
+  await settle(12);
+  byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
+  await settle(12);
+  const dlg = p.doc.getElementById('gz-syl-dlg');
+  const pick = async (title) => {
+    const sel = p.doc.getElementById('gz-syl-doc');
+    sel.value = String(sel.children.findIndex((o) => o.textContent === title));
+    byText(dlg, 'Read this document').fire('click');
+    await settle(20);
+  };
+  return { ...p, dlg, pick, status: () => find(dlg, (e) => /\bgz-syl-status\b/.test(e.className)).textContent, readText: () => find(dlg, (e) => e.tagName === 'PRE')?.textContent || '' };
+};
+const SYL_TEXT = 'Instructor: Dr. Test Person\nEmail: test.person@example.edu\nGrading scale: A 93, B 83, C 73, D 63, F 0';
+
+test('Ultra syllabus import: a document is a page (a folder Ultra marks isBbPage) listed under its own title, its blocks read together in order', async () => {
+  const p = await docsPage({ read: async () => ({ text: '', ocr: null }), note: () => '', doubt: () => false });
+  const sel = p.doc.getElementById('gz-syl-doc');
+  assert.deepEqual(sel.children.map((o) => o.textContent), ['Course Syllabus', 'Math Syllabus', 'Welcome'], 'pages, not their blocks ("ultraDocumentBody"), syllabus-like first');
+  const asked = p.state.asked.map(([, , u]) => u);
+  assert.deepEqual(asked, ['/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,contentHandler.isBbPage,availability.available'], 'no file is fetched while listing');
+  assert.doesNotMatch(asked[0], /contentDetail|contentHandler(,|&|$)/, 'never contentDetail or the whole contentHandler (LTI secrets)');
+  await p.pick('Welcome');
+  assert.match(p.dlg.textContent, /Check what Glaze found/);
+  assert.match(p.readText(), /Welcome to the course\.[\s\S]*Read the course outline first\./, 'both blocks, in order');
+});
+
+test("Ultra syllabus import: a page whose only block is a file's link reads the file, fetched with the session, into the review", async () => {
+  const got = [], reads = [];
+  const GZ_IMPORT = { read: async (file, opts) => { reads.push({ file, opts }); return { text: SYL_TEXT, ocr: null }; }, note: () => '', doubt: () => false };
+  const p = await docsPage(GZ_IMPORT, { '/bbcswebdav/pid-9504-': served(got, 2048, 'application/pdf') });
+  assert.equal(got.length, 0, 'not fetched before the click');
+  await p.pick('Math Syllabus');
+  assert.deepEqual(got.map(({ url, credentials, redirect }) => ({ url, credentials, redirect })), [{ url: '/bbcswebdav/pid-9504-dt-content-rid-504_1/xid-504_1', credentials: 'same-origin', redirect: undefined }], 'same-origin credentials, the redirect to the file store followed');
+  assert.equal(reads.length, 1);
+  assert.equal(reads[0].file.name, 'Math Syllabus Fall.pdf');
+  assert.equal(reads[0].file.type, 'application/pdf');
+  assert.equal(reads[0].opts.signal, got[0].signal, 'one AbortController for the fetch and the read');
+  assert.match(p.dlg.textContent, /Check what Glaze found/);
+  assert.match(p.dlg.textContent, /Dr\. Test Person/);
+  assert.match(p.readText(), /Grading scale: A 93/);
+});
+
+test("Ultra syllabus import: a block's text and its files are read in the block's order; a file that fails is left out, and pictures' OCR is noted", async () => {
+  const got = [], reads = [];
+  const out = { 'Grade chart.jpg': { text: 'Homework 40%\nExams 60%', ocr: { pages: 1, conf: 70, unsure: ['Homework 40%'] } }, 'Syllabus 1234.pdf': { text: SYL_TEXT, ocr: null } };
+  const GZ_IMPORT = { read: async (file) => { reads.push(file.name); return out[file.name]; }, note: (o) => `OCR ${o.pages} ${o.conf} ${o.unsure.join('|')} ${o.blank}`, doubt: (o, line) => o.unsure.some((u) => line.includes(u)) };
+  const p = await docsPage(GZ_IMPORT, {
+    '/bbcswebdav/pid-9501-': served(got, 1000, 'image/jpeg'),
+    '/bbcswebdav/pid-9502-': (url) => { got.push({ url: url.replace(UO, '') }); return { ok: false, status: 404 }; },
+    '/bbcswebdav/pid-9503-': served(got, 3000, 'application/pdf'),
+  });
+  await p.pick('Course Syllabus');
+  assert.deepEqual(got.map((g) => g.url.split('/')[2]), ['pid-9501-dt-content-rid-501_1', 'pid-9502-dt-content-rid-502_1', 'pid-9503-dt-content-rid-503_1'], 'in document order');
+  assert.deepEqual(reads, ['Grade chart.jpg', 'Syllabus 1234.pdf'], 'the file that failed to fetch is skipped');
+  const text = p.readText();
+  const at = ['Office hours: Thursday', 'Homework 40%', 'Final exam week', 'Instructor: Dr. Test Person'].map((s) => text.indexOf(s));
+  assert.ok(at.every((i, n) => i >= 0 && (n === 0 || i > at[n - 1])), `in order: ${JSON.stringify(text)}`);
+  assert.match(p.dlg.textContent, /Dr\. Test Person/);
+  assert.match(p.dlg.textContent, /OCR 1 70 Homework 40% 0/, "the picture's OCR, for the review's note");
+});
+
+test("Ultra syllabus import: a document with nothing readable says so; a file's read stops with Stop, and when the dialog closes", async () => {
+  const held = [];
+  const GZ_IMPORT = { read: (file, opts) => new Promise((resolve, reject) => { held.push({ opts, resolve }); opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('cancelled'), { cancelled: true }))); }), note: () => '', doubt: () => false };
+  let fail = true;
+  const got = [];
+  const p = await docsPage(GZ_IMPORT, { '/bbcswebdav/pid-9504-': (url, o) => (fail ? { ok: false, status: 403 } : served(got, 2048, 'application/pdf')(url, o)) });
+  await p.pick('Math Syllabus');
+  assert.equal(p.status(), "Glaze couldn't read that file.");
+  assert.doesNotMatch(p.dlg.textContent, /Check what Glaze found/);
+  fail = false;
+  await p.pick('Math Syllabus');
+  assert.equal(held.length, 1);
+  assert.equal(p.status(), 'Reading…');
+  const stop = byText(p.dlg, 'Stop reading');
+  assert.equal(stop.hidden, false);
+  stop.fire('click');
+  await settle(12);
+  assert.equal(held[0].opts.signal.aborted, true);
+  assert.equal(p.status(), 'Stopped.');
+  assert.equal(stop.hidden, true);
+  await p.pick('Math Syllabus');
+  assert.equal(held.length, 2);
+  p.dlg.close();
+  await settle(12);
+  assert.equal(held[1].opts.signal.aborted, true, 'closing the dialog calls the read off');
+  held[1].resolve({ text: SYL_TEXT, ocr: null });
+  await settle(12);
+  assert.doesNotMatch(p.dlg.textContent, /Check what Glaze found/);
+});
+
+// Hold a code load across a close, another click, or a course change.
+const holdSylNeed = (p, wanted) => {
+  const need = p.ctx.GZ_CTX.need, held = [];
+  p.ctx.GZ_CTX.need = (file, ready) => file === wanted ? new Promise((resolve) => held.push(() => resolve(need(file, ready)))) : need(file, ready);
+  return held;
+};
+
+test('Ultra syllabus import: closing while the importer loads never starts the file reader', async () => {
+  const reads = [], got = [];
+  let held;
+  const p = await docsPage({ read: async (file) => { reads.push(file.name); return { text: SYL_TEXT }; } },
+    { '/bbcswebdav/pid-9504-': served(got, 2048, 'application/pdf') }, (p) => { held = holdSylNeed(p, 'features/import.js'); });
+  await p.pick('Math Syllabus');
+  assert.equal(held.length, 1);
+  p.dlg.close();
+  held.shift()();
+  await settle(12);
+  assert.equal(got[0].signal.aborted, true);
+  assert.deepEqual(reads, [], 'a closed dialog must not start a reader after its code arrives');
+});
+
+test('Ultra syllabus import: leaving the course aborts its read and prevents the next download', async () => {
+  const got = [], reads = [];
+  const p = await docsPage({ read: (file, opts) => new Promise((resolve) => reads.push({ opts, resolve })) }, {
+    '/bbcswebdav/': served(got, 2048, 'application/pdf'),
+  });
+  await p.pick('Course Syllabus');
+  assert.equal(reads.length, 1);
+  p.loc.pathname = '/ultra/courses/_102_1/outline';
+  p.ctx.GZ_SYL_UI.sync(true);
+  await settle(12);
+  const aborted = reads[0].opts.signal.aborted;
+  reads[0].resolve({ text: SYL_TEXT });
+  await settle(12);
+  assert.equal(aborted, true, 'navigation must abort the active course read');
+  assert.equal(got.length, 1, 'no more files from the course that was left');
+  assert.doesNotMatch(p.dlg.textContent, /Check what Glaze found/);
+});
+
+test('Ultra syllabus import: an old course picker cannot start a read after navigation', async () => {
+  const got = [];
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }) }, { '/bbcswebdav/': served(got, 2048, 'application/pdf') });
+  p.loc.pathname = '/ultra/courses/_102_1/outline';
+  p.ctx.GZ_SYL_UI.sync(true);
+  await settle(12);
+  await p.pick('Math Syllabus');
+  assert.equal(got.length, 0, 'the old course needs a new dialog before reading');
+});
+
+test('Ultra syllabus import: a replaced read cannot report progress or fetch another file', async () => {
+  const got = [], reads = [];
+  const p = await docsPage({ read: (file, opts) => new Promise((resolve) => reads.push({ opts, resolve })), note: () => '', doubt: () => false }, {
+    '/bbcswebdav/': served(got, 2048, 'application/pdf'),
+  });
+  await p.pick('Course Syllabus');
+  await p.pick('Math Syllabus');
+  assert.equal(reads[0].opts.signal.aborted, true);
+  reads[1].opts.progress('Current progress');
+  reads[0].opts.progress('Old progress');
+  const status = p.status();
+  reads[0].resolve({ text: 'Old text' });
+  await settle(12);
+  const downloads = got.length;
+  reads[1].resolve({ text: SYL_TEXT });
+  await settle(12);
+  assert.equal(status, 'Current progress', 'only the current read can update progress');
+  assert.equal(downloads, 2, 'a replaced read cannot fetch its remaining files');
+  assert.equal(p.readText(), SYL_TEXT);
+});
+
+test('Ultra syllabus import: the document is chosen at the click, before the text reader loads', async () => {
+  const got = [];
+  let held;
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }), note: () => '', doubt: () => false },
+    { '/bbcswebdav/': served(got, 2048, 'application/pdf') }, (p) => { held = holdSylNeed(p, 'lib/doctext.js'); });
+  await p.pick('Math Syllabus');
+  p.doc.getElementById('gz-syl-doc').value = '2'; // Welcome, with no new read click.
+  held.shift()();
+  await settle(12);
+  assert.equal(got.length, 1, 'the clicked document is read even if the selection changes while loading');
+  assert.equal(p.readText(), SYL_TEXT);
+});
+
+// Small bounds exercise the exact byte-limit behavior without allocating large files.
+const smallSylLimit = (p) => {
+  vm.runInContext(read('lib/doctext.js'), p.ctx);
+  p.ctx.GZ_DOCTEXT.READ.pdf = 8;
+};
+const streamedSylFile = (length) => {
+  const state = { pulls: 0, cancelled: false };
+  const body = new ReadableStream({
+    pull(controller) { state.pulls++; controller.enqueue(new Uint8Array(5)); if (state.pulls === 20) controller.close(); },
+    cancel() { state.cancelled = true; },
+  }, { highWaterMark: 0 });
+  return { state, response: new Response(body, { headers: { 'content-type': 'application/pdf', ...(length == null ? {} : { 'content-length': String(length) }) } }) };
+};
+
+test('Ultra syllabus import: a known oversized file is rejected before fetching it', async () => {
+  const got = [];
+  const pages = structuredClone(PAGES);
+  pages.results.find((c) => c.id === '_807_1').body = bbfile(504, 'Too big.pdf', 'application/pdf', { fileSize: 9 });
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }) }, {
+    '/contents?': pages, '/bbcswebdav/': served(got, 9, 'application/pdf'),
+  }, smallSylLimit);
+  await p.pick('Math Syllabus');
+  assert.equal(got.length, 0, 'the metadata already puts the file over the byte limit');
+  assert.equal(p.status(), 'That file is too large.');
+});
+
+test('Ultra syllabus import: an oversized Content-Length cancels the unread response body', async () => {
+  const { state, response } = streamedSylFile(100);
+  const p = await docsPage({ read: async () => { assert.fail('oversized files must not be read'); } }, { '/bbcswebdav/': () => response }, smallSylLimit);
+  await p.pick('Math Syllabus');
+  assert.equal(state.pulls, 0, 'the size header is checked before reading bytes');
+  assert.equal(state.cancelled, true, 'rejecting headers must also end the download');
+  assert.equal(p.status(), 'That file is too large.');
+});
+
+for (const length of [null, 1]) test(`Ultra syllabus import: a ${length == null ? 'missing' : 'false'} size header cannot cause an unbounded download`, async () => {
+  const { state, response } = streamedSylFile(length);
+  let reads = 0;
+  const p = await docsPage({ read: async () => { reads++; return { text: SYL_TEXT }; } }, { '/bbcswebdav/': () => response }, smallSylLimit);
+  await p.pick('Math Syllabus');
+  assert.equal(state.pulls, 2, 'stop as soon as the received bytes exceed the limit');
+  assert.equal(state.cancelled, true, 'cancel the rest of the stream');
+  assert.equal(reads, 0);
+  assert.equal(p.status(), 'That file is too large.');
+});
+
+test('Ultra syllabus import: a file exactly at the download limit retains its bytes, name and type', async () => {
+  const files = [];
+  const p = await docsPage({ read: async (file) => { files.push(file); return { text: SYL_TEXT }; }, note: () => '', doubt: () => false }, {
+    '/bbcswebdav/': () => new Response('12345678', { headers: { 'content-type': 'application/pdf', 'content-length': '8' } }),
+  }, smallSylLimit);
+  await p.pick('Math Syllabus');
+  assert.equal(files.length, 1);
+  assert.equal(files[0].name, 'Math Syllabus Fall.pdf');
+  assert.equal(files[0].type, 'application/pdf');
+  assert.equal(await files[0].text(), '12345678');
+  assert.equal(p.readText(), SYL_TEXT);
+});
+
+for (const [name, anchor] of [
+  ['single-quoted attributes', `<a data-bbfile='{"linkName":"Quoted.pdf"}' href='${UO}/bbcswebdav/xid-504_1'></a>`],
+  ['a quoted greater-than sign', `<a title="Read > download" data-bbfile="{&quot;linkName&quot;:&quot;Quoted.pdf&quot;}" href="${UO}/bbcswebdav/xid-504_1"></a>`],
+]) test(`Ultra syllabus import: file anchors with ${name} are read in place`, async () => {
+  const got = [], pages = structuredClone(PAGES);
+  pages.results.find((c) => c.id === '_807_1').body = `<p>Before the file</p>${anchor}<p>After the file</p>`;
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }), note: () => '', doubt: () => false }, {
+    '/contents?': pages, '/bbcswebdav/': served(got, 8, 'application/pdf'),
+  });
+  await p.pick('Math Syllabus');
+  assert.equal(got.length, 1, 'valid HTML quoting must not hide a file link');
+  assert.equal(p.readText(), `Before the file\n\n${SYL_TEXT}\n\nAfter the file`);
+});
+
+test('Ultra syllabus import: only real file anchors on this origin and path are fetched, and only after a trusted click', async () => {
+  const got = [], pages = structuredClone(PAGES);
+  const data = '{&quot;linkName&quot;:&quot;Linked.pdf&quot;}';
+  const urls = ['https://other.example/bbcswebdav/x', `${UO}/learn/api/private`, '/bbcswebdav/../learn/api/private', '//other.example/bbcswebdav/x', 'javascript:alert(1)'];
+  pages.results.find((c) => c.id === '_807_1').body = urls.map((u) => `<a data-bbfile="${data}" href="${u}"></a>`).join('')
+    + `<a title=' data-bbfile="${data}" href="/bbcswebdav/fake"' href="https://other.example/file"></a>`
+    + `<div title='<a data-bbfile="${data}" href="/bbcswebdav/in-title">'></div>`
+    + `<!-- <a data-bbfile="${data}" href="/bbcswebdav/in-comment"></a> -->`
+    + `<script>const example = '<a data-bbfile="${data}" href="/bbcswebdav/in-script"></a>';</script>`
+    + bbfile(504, 'Real.pdf', 'application/pdf');
+  const p = await docsPage({ read: async () => ({ text: SYL_TEXT }), note: () => '', doubt: () => false }, {
+    '/contents?': pages, '/bbcswebdav/': served(got, 8, 'application/pdf'),
+  });
+  p.doc.getElementById('gz-syl-doc').value = '1';
+  byText(p.dlg, 'Read this document').fire('click', false);
+  await settle(12);
+  assert.equal(got.length, 0, 'a page script cannot start a download');
+  await p.pick('Math Syllabus');
+  assert.deepEqual(got.map((f) => f.url), ['/bbcswebdav/pid-9504-dt-content-rid-504_1/xid-504_1']);
+  assert.equal(p.readText(), SYL_TEXT);
+});
+
+test('Ultra syllabus import: multiple OCR results retain weighted confidence, unsure lines and blank pages', async () => {
+  const notes = [];
+  const p = await docsPage({
+    read: async (file) => file.name.endsWith('.jpg')
+      ? { text: 'Chart text', ocr: { pages: 1, conf: 70, unsure: ['Chart text'] } }
+      : { text: SYL_TEXT, ocr: { pages: 3, conf: 90, unsure: ['Instructor: Dr. Test Person'], blank: 1 } },
+    note: (ocr) => { notes.push(JSON.parse(JSON.stringify(ocr))); return 'OCR note'; },
+    doubt: (ocr, line) => !!line && ocr.unsure.some((u) => line.includes(u)),
+  }, {
+    '/bbcswebdav/pid-9501-': served([], 8, 'image/jpeg'),
+    '/bbcswebdav/pid-9503-': served([], 8, 'application/pdf'),
+  });
+  await p.pick('Course Syllabus');
+  assert.deepEqual(notes, [{ pages: 4, conf: 85, unsure: ['Chart text', 'Instructor: Dr. Test Person'], blank: 1 }]);
+  assert.match(p.dlg.textContent, /Check this/);
 });
 
 // Codex B4 #3: Ultra moves from course to course in one document; what's saved belongs to the course on the page.
@@ -1359,4 +1678,117 @@ test('review: category endpoint preserves teacher names and localizes system met
   const names = p.box().all((e) => e.tagName === 'LEGEND').map((e) => e.children[0].textContent);
   assert.match(names[2], /^DISCUSSION\.NAME/);
   assert.match(names[0], /^Aufgabe/);
+});
+
+// Week-based dates ("Week 2 – Friday: Essay 1 due") count from week 1: the syllabus's own start, else the course's own
+// (Ultra: its availability when that is a date range), else the term's, which the review marks "Check this". The review's
+// "Week 1 starts" moves every such row, except one whose day the student set by hand; a save keeps concrete days.
+const WEEKS = { results: [
+  item('_810_1', '_700_1', 'Course Syllabus', 'folder', { page: true }),
+  item('_811_1', '_810_1', 'ultraDocumentBody', 'document', { body: '<p>Instructor: Dr. Test Person</p><p>Week 2 – Friday: Essay 1 due</p><p>Week 4 – Monday: Quiz 2 due</p><p>Midterm exam: October 14, 2026</p>' }),
+  item('_812_1', '_700_1', 'Welcome', 'folder', { page: true }),
+  item('_813_1', '_812_1', 'Welcome', 'document', { body: '<p>Instructor: Dr. Test Person</p><p>Midterm exam: October 14, 2026</p>' }),
+] };
+const COURSE_V3 = '/learn/api/public/v3/courses/_101_1?fields=availability';
+// course(c): the membership's course as the test wants it (its durationType, say).
+const weeksPage = async ({ course = () => {}, answers = {} } = {}) => {
+  const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': WEEKS, ...answers } });
+  const mem = ufix('memberships').results;
+  for (const m of mem) course(m.course);
+  p.ctx.GZ_CTX.myCourses = () => Promise.resolve(mem);
+  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  p.ctx.GZ_SYL_UI.sync(true);
+  await settle(12);
+  byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
+  await settle(12);
+  const dlg = p.doc.getElementById('gz-syl-dlg');
+  const pick = async (title) => {
+    const sel = p.doc.getElementById('gz-syl-doc');
+    sel.value = String(sel.children.findIndex((o) => o.textContent === title));
+    byText(dlg, 'Read this document').fire('click');
+    await settle(20);
+  };
+  const week1 = () => {
+    const label = find(dlg, (e) => e.tagName === 'LABEL' && e.textContent === 'Week 1 starts');
+    return label && { label, input: find(dlg, (e) => e.id === label.htmlFor), box: label.parentNode.parentNode };
+  };
+  const rows = () => dlg.querySelectorAll('.gz-syl-date').map((r) => ({ row: r, title: r.querySelector('.gz-syl-label').value, day: r.querySelector('input[type="date"]') }));
+  const days = () => Object.fromEntries(rows().map((r) => [r.title, r.day.value]));
+  const v3 = () => p.state.asked.filter(([, , u]) => u.includes('/public/v3/'));
+  return { ...p, dlg, pick, week1, rows, days, v3 };
+};
+
+test("Ultra syllabus import: week-based dates count from the term, marked Check this; Week 1 starts moves them, a row set by hand stays, and a save keeps days", async () => {
+  // bb.wpunj.edu's courses are CONTINUOUS (the course list says so): no date of their own, nothing more to ask.
+  const p = await weeksPage();
+  await p.pick('Course Syllabus');
+  assert.match(p.dlg.textContent, /Check what Glaze found/);
+  assert.deepEqual(p.v3(), [], "a course the course list says is continuous isn't asked about");
+  const w = p.week1();
+  assert.ok(w, 'a Week 1 starts field');
+  assert.equal(w.input.type, 'date');
+  assert.equal(w.input.value, '2026-08-31', "the term's start");
+  assert.ok(w.input.id && w.label.htmlFor === w.input.id, 'labelled');
+  assert.equal(find(w.box, (e) => /\bgz-syl-check\b/.test(e.className))?.textContent, 'Check this');
+  const set = w.box.parentNode;
+  assert.equal(set.tagName, 'FIELDSET');
+  assert.equal(set.children[0].textContent, 'Important dates', 'with the dates');
+  assert.ok(set.children.indexOf(w.box) < set.children.indexOf(set.querySelector('.gz-syl-rows')), 'before the rows it moves');
+  assert.deepEqual(p.days(), { 'Essay 1 due': '2026-09-11', 'Quiz 2 due': '2026-09-21', 'Midterm exam': '2026-10-14' });
+  // The student sets the quiz's day, then week 1.
+  const quiz = p.rows().find((r) => r.title === 'Quiz 2 due').day;
+  quiz.value = '2026-09-25';
+  quiz.fire('input');
+  w.input.value = '2026-11-02';
+  w.input.fire('input');
+  assert.deepEqual(p.days(), { 'Essay 1 due': '2026-11-13', 'Quiz 2 due': '2026-09-25', 'Midterm exam': '2026-10-14' }, 'week rows move, a row set by hand and a dated row stay');
+  // A course starting on a Wednesday: "Week 2 – Friday" is still a Friday.
+  w.input.value = '2026-11-04';
+  w.input.fire('input');
+  assert.equal(p.days()['Essay 1 due'], '2026-11-13', 'a named weekday stays that weekday');
+  w.input.value = '';
+  w.input.fire('input');
+  assert.equal(p.days()['Essay 1 due'], '2026-11-13', 'an emptied Week 1 moves nothing');
+  byText(p.dlg, 'Save').fire('click');
+  await settle(20);
+  const kept = p.store.data[`syllabus:${UO}/_900_1/_101_1`];
+  // (The stand-in's select has no value, so every kind is kept as 'other' here.)
+  assert.deepEqual(kept.dates.map(({ id, kind, ...d }) => d), [
+    { title: 'Essay 1 due', day: '2026-11-13' },
+    { title: 'Quiz 2 due', day: '2026-09-25' },
+    { title: 'Midterm exam', day: '2026-10-14' },
+  ], 'concrete days, nothing about weeks');
+});
+
+test("Ultra syllabus import: a course with a date range of its own gives week 1, asked once and only when week-based dates need it", async () => {
+  const p = await weeksPage({ course: (c) => { c.durationType = 'DATE_RANGE'; }, answers: { [COURSE_V3]: { availability: { available: 'Yes', duration: { type: 'DateRange', start: '2026-11-02T12:00:00.000Z', end: '2026-12-20T12:00:00.000Z' } } } } });
+  await p.pick('Welcome');
+  assert.match(p.dlg.textContent, /Check what Glaze found/);
+  assert.equal(p.week1(), undefined, 'no week-based dates: no Week 1 field');
+  assert.deepEqual(p.v3(), [], 'and nothing asked');
+  byText(p.dlg, 'Back').fire('click');
+  await settle(12);
+  await p.pick('Course Syllabus');
+  assert.deepEqual(p.v3().map(([m, r, u]) => [m, r, u]), [['GET', 'error', COURSE_V3]]);
+  const w = p.week1();
+  assert.equal(w.input.value, '2026-11-02', "the course's own start");
+  assert.equal(find(w.box, (e) => /\bgz-syl-conf\b/.test(e.className)), undefined, 'no Check this, no Not found');
+  assert.deepEqual(p.days(), { 'Essay 1 due': '2026-11-13', 'Quiz 2 due': '2026-11-23', 'Midterm exam': '2026-10-14' });
+  byText(p.dlg, 'Back').fire('click');
+  await settle(12);
+  await p.pick('Course Syllabus');
+  assert.equal(p.v3().length, 1, 'asked once for the course');
+  assert.equal(p.week1().input.value, '2026-11-02');
+});
+
+test("Ultra syllabus import: a continuous course (Ultra's answer) leaves week 1 to the term", async () => {
+  const p = await weeksPage({ course: (c) => { delete c.durationType; }, answers: { [COURSE_V3]: { availability: { available: 'Yes', duration: { type: 'Continuous' } } } } });
+  const seen = [];
+  const extract = p.ctx.GZ_SYLLABUS.extract;
+  p.ctx.GZ_SYLLABUS.extract = (text, opts) => { seen.push(opts.week1); return extract(text, opts); };
+  await p.pick('Course Syllabus');
+  assert.equal(p.v3().length, 1, 'the course list said nothing: asked');
+  assert.ok(seen.length && seen.every((x) => x === undefined), 'no course start');
+  assert.equal(p.week1().input.value, '2026-08-31');
+  assert.equal(find(p.week1().box, (e) => /\bgz-syl-check\b/.test(e.className))?.textContent, 'Check this');
 });

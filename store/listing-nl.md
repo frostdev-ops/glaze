@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.3 (Dutch)
+# Chrome Web Store listing — Glaze 3.4.6 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -58,7 +58,7 @@ Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk va
 
 ## Release notes
 
-NIEUW IN 3.4.3
+NIEUW IN 3.4.6
 
 • Uiterlijk › Aanwijzer heeft een schakelaar “Eigen aanwijzer”: uit geeft je op elke pagina de systeemaanwijzer, aan brengt je keuze terug.
 • “Back-up maken…” en “Herstellen…” in Instellingen › Privacy en gegevens bewaren alles in één bestand en zetten het terug: instellingen, stijlen, taken, notities, lesroosters en meer.

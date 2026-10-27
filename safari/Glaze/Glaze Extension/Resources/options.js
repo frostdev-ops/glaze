@@ -79,7 +79,7 @@ if (embedded) {
     e.preventDefault(); leave();
   });
   const make = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
-  for (const [panel, name] of [['sharing', 'Sharing'], ['mods', 'Mods'], ['backup', 'Privacy and data']]) {
+  for (const [panel, name] of [['sharing', 'Sharing'], ['mods', 'Mods'], ['ai', 'AI'], ['backup', 'Privacy and data']]) {
     const box = document.querySelector(`[data-editor-panel="${panel}"]`);
     if (!box) continue;
     const go = make('button', { type: 'button', className: 'primary', textContent: t('Open in a new tab') });
@@ -1778,6 +1778,9 @@ GZ_UI.load().then((s) => {
   navbarEditor = GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
+  // AI (lib/editor-ai.js): its switch, the connection, the features allowed to use it and the record of calls.
+  GZ_AIEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
+    pct: (x) => GZ_I18N.pct(Math.round(x * 100), GZ_I18N.ui()) });
   followSection(editor.route(), editor.part());
 
   // Opening the editor wakes the mod blocklist check, which asks only if one is due (lib/blocklist.js).

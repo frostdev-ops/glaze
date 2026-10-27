@@ -5,8 +5,11 @@
 # (lib/ocr.js drives the core itself, and the wrapper's defaults point at a CDN). One core: SIMD, LSTM only,
 # which every browser Glaze supports runs and which is all the fast models use. The models are kept gzipped
 # (lib/ocr.js unpacks them), which halves what the installed extension takes on disk. Every download is checked
-# against the SHA-256 pinned here. Run it to upgrade (new versions, new hashes); the output is checked in, so the
-# extension itself still has no build step. Usage: scripts/vendor-tesseract.sh
+# against the SHA-256 pinned here. The core's loader is published minified only, and the Chrome Web Store can take
+# minified code for obfuscation (2026-10-26), so esbuild (pinned and integrity-checked as in scripts/vendor-three.sh)
+# re-prints it with line breaks and indentation: the same code, still under Emscripten's short names, checked against
+# out_sha256. Run it to upgrade (new versions, new hashes); the output is checked in, so the extension itself still has
+# no build step. Usage: scripts/vendor-tesseract.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,6 +24,17 @@ fra:ced037562e8c80c13122dece28dd477d399af80911a28791a66a63ac1e3445ca
 nld:ced0e5e046a84c908a6aa7accbef9a232c4a5d9a8276691b81c6ee64d02963f6
 por:c4932b937207a9514b7514d518b931a99938c02a28a5a5a553f8599ed58b7deb
 LICENSE:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+# The checked-in loader: the core's, re-printed by esbuild under one comment line.
+out_sha256=6d754a6825fc544e1f0572cb2ebc1b1b9ff92ca2f0fe1f15c6b4570066c643b3
+esbuild_version=0.28.2
+integrity=$(cat <<'EOF'
+esbuild@0.28.2 sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==
+@esbuild/darwin-arm64@0.28.2 sha512-n4KqkOQrraxHJcgjM1RvwbigfQKIKJVpM7xp+KsxiyUSrRdIXnt73VhrPAx0fV44hgfmIVKjxMN9J1t5jySVkw==
+@esbuild/darwin-x64@0.28.2 sha512-uq6suIWYP37qzGddBKPw5QEQPi6HiLGsO7UmkpfyaYNQ3D+rN6w6WfwH+nuqcGXWvawGwxOEroO4YGnFh95azw==
+@esbuild/linux-arm64@0.28.2 sha512-pW4AC0P3it8c7do9MVM4p51FzHzdM/TZrerurgRcHJ2WTa1VQ1CIq18xncfpBJw4ojkiZZrKW2yIBWBP92j6Ug==
+@esbuild/linux-x64@0.28.2 sha512-4xTZr1FUmSoQW4XIWmit3tzQrUTZM+N3P0XV8xROKYF50XfI7xeO90+1bZvNwxIufQ9hDQVRJH5YhgPVF8A/HQ==
+EOF
+)
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -30,7 +44,16 @@ tar -xzf "$tmp/core.tgz" -C "$tmp"
 
 rm -rf lib/tesseract
 mkdir -p lib/tesseract
-cp "$tmp/package/tesseract-core-simd-lstm.js" "$tmp/package/tesseract-core-simd-lstm.wasm" lib/tesseract/
+# --ignore-scripts: esbuild's install script (an optimisation only) never runs; npm-integrity.js checks it before it does.
+npm install --prefix "$tmp/esbuild" --silent --no-save --no-package-lock --ignore-scripts --no-audit --no-fund \
+  --registry https://registry.npmjs.org/ "esbuild@$esbuild_version"
+printf '%s\n' "$integrity" | node scripts/npm-integrity.js "$tmp/esbuild/node_modules/.package-lock.json" - esbuild
+# A plain script (lib/ocr.js loads it with importScripts), re-printed as it is: no bundling, no format change, no lowering.
+{ echo "// tesseract.js-core $core loader (Apache-2.0, lib/tesseract/tesseract-core.LICENSE), as published but re-printed with line breaks. Built by scripts/vendor-tesseract.sh."
+  "$tmp/esbuild/node_modules/.bin/esbuild" --loader=js --log-level=warning < "$tmp/package/tesseract-core-simd-lstm.js"; } > lib/tesseract/tesseract-core-simd-lstm.js
+echo "$out_sha256  lib/tesseract/tesseract-core-simd-lstm.js" | shasum -a 256 -c - >/dev/null || {
+  echo "vendor-tesseract: the loader is $(shasum -a 256 lib/tesseract/tesseract-core-simd-lstm.js | cut -d' ' -f1), not the recorded out_sha256; record it if you upgraded on purpose." >&2; exit 1; }
+cp "$tmp/package/tesseract-core-simd-lstm.wasm" lib/tesseract/
 cp "$tmp/package/LICENSE" lib/tesseract/tesseract-core.LICENSE
 chmod 644 lib/tesseract/*
 for entry in $models; do

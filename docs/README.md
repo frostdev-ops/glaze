@@ -3,6 +3,7 @@
 - [Install](install.md): Chrome, Firefox, Safari on Mac, iPhone and iPad
 - [Features](features.md): everything Glaze does, site by site
 - [Privacy summary](privacy.md): what stays on your device and what goes where ([full policy](../PRIVACY.md))
+- [AI harness](ai-harness.md): providers, tasks, tools and the worker's message API for Glaze's optional AI
 - [Development](development.md): how it works, building, tests, the Chrome Web Store, Safari and App Store builds, Mac updates
 - [Mods API](mods-api.md) and [widgets made of blocks](mods-widgets.md), with [example mods](../examples/mods)
 - [Run your own relay](../server/README.md) for share sessions

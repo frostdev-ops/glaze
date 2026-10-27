@@ -505,9 +505,9 @@ test('the Firefox dry run reads only, and reports notes, summaries and descripti
   const { syncFirefoxListing } = await load();
   stubFetch(amoApi({
     [`GET ${AMO}addon/glaze%40frostdev.io/`]: { summary: byLocale('amoLocale', (l) => l.firefox.summary), description: { 'en-US': 'Old text' } },
-    [`GET ${AMO}addon/glaze%40frostdev.io/versions/3.4.3/`]: () => reply({ detail: 'not found' }, 404),
+    [`GET ${AMO}addon/glaze%40frostdev.io/versions/3.4.6/`]: () => reply({ detail: 'not found' }, 404),
   }));
-  const changes = await syncFirefoxListing(env, listings, { write: false, version: '3.4.3' });
+  const changes = await syncFirefoxListing(env, listings, { write: false, version: '3.4.6' });
   assert.ok(calls.every((c) => c.method === 'GET'), calls.map((c) => c.method).join());
   const of = (locale, field) => changes.find((c) => c.locale === locale && c.field === field)?.action;
   assert.equal(of('en-US', 'summary'), 'same');
@@ -608,6 +608,46 @@ test('without an editable app info, existing version languages can still be brou
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a language Apple adds to the version itself, when its app info gets that language, is updated rather than created twice', async () => {
+  const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    // App Store Connect gives an editable version the app info's new language on its own; creating it again answers 409.
+    const auto = { id: 'loc-de-auto', attributes: { locale: 'de-DE' } };
+    let added = false;
+    stubFetch(route({
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
+      'GET /appInfos/info-1/appInfoLocalizations?limit=200': { data: [enInfo()] },
+      'POST /appInfoLocalizations': (call) => { added = true; return created('ail')(call); },
+      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': () => reply({ data: [enVersionLocale({ whatsNew: listings.en.apple.whatsNew }), ...added ? [auto] : []] }),
+      'POST /appStoreVersionLocalizations': () => reply({ errors: [{ status: '409', code: 'ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE', detail: 'Entity with locale: de-DE already exists. Try updating.' }] }, 409),
+      'PATCH /appStoreVersionLocalizations/*': {},
+      'PATCH /appInfoLocalizations/*': {},
+    }));
+    await syncAppleListing(e, 'app-1', 'MAC_OS', { id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION' } }, { en: listings.en, de: listings.de });
+    const patches = calls.filter((c) => c.method === 'PATCH' && c.url.endsWith('/appStoreVersionLocalizations/loc-de-auto')).map((c) => bodyOf(c).data.attributes);
+    assert.ok(patches.length, 'the version\'s own German copy is filled in');
+    const fields = Object.assign({}, ...patches);
+    assert.equal(fields.description, listings.de.apple.description);
+    assert.equal(fields.whatsNew, listings.de.apple.whatsNew);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a version language without a support URL gets the primary language\'s, which review requires', async () => {
+  const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
+  try {
+    stubFetch(route({
+      'GET /apps/app-1/appInfos': { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
+      'GET /appInfos/info-1/appInfoLocalizations?limit=200': { data: [enInfo(), { id: 'ail-de', attributes: { locale: 'de-DE', name: listings.de.apple.name, subtitle: listings.de.apple.subtitle } }] },
+      'GET /appStoreVersions/ver-1/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale({ whatsNew: listings.en.apple.whatsNew }), { id: 'loc-de', attributes: { locale: 'de-DE', supportUrl: null } }] },
+      'PATCH /appStoreVersionLocalizations/*': {},
+    }));
+    await syncAppleListing(e, 'app-1', 'MAC_OS', { id: 'ver-1', attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION' } }, { en: listings.en, de: listings.de });
+    const fields = Object.assign({}, ...calls.filter((c) => c.method === 'PATCH' && c.url.endsWith('/loc-de')).map((c) => bodyOf(c).data.attributes));
+    assert.equal(fields.supportUrl, 'https://example.test/support');
+    assert.equal(fields.marketingUrl, 'https://example.test/glaze');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('a version in review is never edited', async () => {
   const { syncAppleListing } = await load(), { dir, env: e } = appleEnv();
   try {
@@ -625,13 +665,13 @@ test('with no live version yet (a first release still in review), the Apple dry 
   const { previewAppleListing } = await load(), { dir, env: e } = appleEnv();
   try {
     stubFetch(appleApi({
-      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.4.3': { data: [] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.4.6': { data: [] },
       'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&limit=20': { data: [{ id: 'ver-first', attributes: { appVersionState: 'WAITING_FOR_REVIEW', versionString: '3.3.5' } }] },
       'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'WAITING_FOR_REVIEW' } }] },
       'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [enInfo()] },
       'GET /appStoreVersions/ver-first/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
     }));
-    const changes = await previewAppleListing(e, 'IOS', '3.4.3', listings);
+    const changes = await previewAppleListing(e, 'IOS', '3.4.6', listings);
     assert.ok(calls.every((c) => c.method === 'GET'));
     const english = changes.filter((c) => c.locale === 'en-US');
     assert.deepEqual(english.filter((c) => c.action !== 'same').map((c) => `${c.field} ${c.action}`), ['promotional text change', "What's New change"], 'English is compared, not created');
@@ -644,12 +684,12 @@ test('a language created where no English exists yet is not told to borrow its o
   const { previewAppleListing } = await load(), { dir, env: e } = appleEnv();
   try {
     stubFetch(appleApi({
-      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.4.3': { data: [] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&filter[versionString]=3.4.6': { data: [] },
       'GET /apps/app-1/appStoreVersions?filter[platform]=IOS&limit=20': { data: [] },
       'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] },
       'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [enInfo()] },
     }));
-    const changes = await previewAppleListing(e, 'IOS', '3.4.3', listings);
+    const changes = await previewAppleListing(e, 'IOS', '3.4.6', listings);
     assert.ok(!changes.some((c) => c.field === 'screenshots' && c.locale === 'en-US'));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -658,14 +698,14 @@ test('the Apple dry run compares with the live version when this one does not ex
   const { previewAppleListing } = await load(), { dir, env: e } = appleEnv();
   try {
     const table = (versions) => appleApi({
-      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.4.3': { data: [] },
+      'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&filter[versionString]=3.4.6': { data: [] },
       'GET /apps/app-1/appStoreVersions?filter[platform]=MAC_OS&limit=20': { data: versions },
       'GET /apps/app-1/appInfos': { data: [{ id: 'info-live', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] },
       'GET /appInfos/info-live/appInfoLocalizations?limit=200': { data: [enInfo()] },
       'GET /appStoreVersions/ver-live/appStoreVersionLocalizations?limit=200': { data: [enVersionLocale()] },
     });
     stubFetch(table([{ id: 'ver-live', attributes: { appVersionState: 'READY_FOR_DISTRIBUTION', versionString: '3.3.8' } }]));
-    const changes = await previewAppleListing(e, 'MAC_OS', '3.4.3', listings);
+    const changes = await previewAppleListing(e, 'MAC_OS', '3.4.6', listings);
     assert.ok(calls.every((c) => c.method === 'GET'), 'nothing is written');
     const of = (locale, field) => changes.find((c) => c.locale === locale && c.field === field);
     assert.equal(of('en-US', 'name').action, 'same');
@@ -676,7 +716,7 @@ test('the Apple dry run compares with the live version when this one does not ex
     assert.ok(changes.every((c) => c.store === 'Apple MAC_OS'));
     // A platform's first release has no What's New.
     stubFetch(table([]));
-    const first = await previewAppleListing(e, 'MAC_OS', '3.4.3', listings);
+    const first = await previewAppleListing(e, 'MAC_OS', '3.4.6', listings);
     assert.deepEqual(first.find((c) => c.locale === 'de-DE' && c.field === "What's New"), { store: 'Apple MAC_OS', locale: 'de-DE', field: "What's New", action: 'skip', detail: 'first release' });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -13,23 +13,6 @@ Everything a release builds goes in `release/<version>/` (gitignored), one folde
 
 `release/appcast.xml` is the one file outside a version folder: the signed Mac update feed, holding every version.
 
-## Firefox maintenance
-
-`dev/firefox` is the permanent Firefox compatibility branch. Keep its dedicated worktree, merge `origin/main`
-into it as main changes, and push normally after validation. Do not rebase, force-push or delete this branch.
-Keep the manifest version from main; unpublished release branches are not inputs unless explicitly requested.
-Shared fixes may be ported to main separately, but merging main must retain Firefox's local-only PDF imports,
-event-page background, unavailable Google sign-in adapter and minimum versions (desktop 140, Android 142).
-
-The GitHub test workflow runs the existing suite, packages Firefox, and runs pinned `web-ext@10.8.0` lint with
-warnings treated as failures on this branch and pull requests into it. Its Firefox artifact includes the upload
-ZIP and a reviewer source ZIP from the same commit. Lint does not replace Firefox desktop/Android runtime QA.
-
-For a Firefox release, first merge the corresponding published main commit into `dev/firefox`, validate, and build
-the upload and source ZIPs there. Use these artifacts for Firefox Add-ons and any Firefox GitHub asset; a Firefox ZIP
-built from main alone is not the compatibility candidate. Do not replace already published 3.0.2 packages or tags.
-Never submit or publish as part of routine branch synchronization.
-
 ## Complete automated release
 
 1. Bump `manifest.json`, add the `CHANGELOG.md` entry, refresh the checked-in Safari resources, and commit the release source.
@@ -64,10 +47,10 @@ It never moves a published tag or replaces a published asset with different byte
    - Chrome Web Store: `sh scripts/publish-chrome.sh release/<v>/chrome-web-store/glaze-v<v>.zip`, or upload it in the dashboard.
      Given no zip, the script packages a fresh checkout of the committed `HEAD` and refuses a dirty working tree.
    - Firefox Add-ons: upload `release/<v>/firefox/glaze-v<v>-firefox.zip` at addons.mozilla.org. When it asks for source
-     code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js has fixed local imports and a compatibility
-     shim, three.js is a custom build, and lottie-web's player is the official light canvas build with one comment line on top. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh` and `scripts/vendor-lottie.sh`. The required tools and pinned versions are in README.md.
+     code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js is the readable legacy build with a compatibility
+     shim and core-js's old-IE fallback cut, three.js is a custom build, and lottie-web's player is the official light canvas build with one comment line on top. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh` and `scripts/vendor-lottie.sh`.
      `vendor-three.sh` installs exact versions with install scripts off, checks every installed package against a pinned
-     SHA-512 integrity before running anything, and compares the result with the recorded hash of `lib/three.min.js`.
+     SHA-512 integrity before running anything, and compares the result with the recorded hash of `lib/three.js`.
    - App Store: `sh scripts/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh scripts/appstore-ios.sh`.
 
 ### CI

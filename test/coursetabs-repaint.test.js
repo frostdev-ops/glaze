@@ -92,6 +92,27 @@ test('Chrome and Firefox do not pay for the Safari repaint workaround', async ()
   }
 });
 
+test('frame messages and visibility changes survive an extension reload', async () => {
+  for (const protocol of ['chrome-extension:', 'moz-extension:', 'safari-web-extension:']) {
+    const { p, g, el, writes } = await ready((c) => { c.chrome.runtime.getURL = (f) => `${protocol}//glaze/${f}`; });
+    delete g.chrome.runtime.id;
+    let calls = 0;
+    g.chrome.runtime.getURL = () => { calls++; throw new Error('Extension context invalidated.'); };
+    assert.doesNotThrow(() => move(p, el), `${protocol}: a live frame can still report a route change`);
+    p.doc.visibilityState = 'hidden';
+    assert.doesNotThrow(() => p.fire({ type: 'visibilitychange' }));
+    p.doc.visibilityState = 'visible';
+    assert.doesNotThrow(() => p.fire({ type: 'visibilitychange' }));
+    rest(p);
+    assert.equal(calls, 0, `${protocol}: repaint callbacks no longer consult the extension runtime`);
+    assert.equal(g.api.showing(), A, 'the existing frame stays open');
+    assert.equal(frameOf(p, A), el, 'the frame and its native work are preserved');
+    if (protocol !== 'safari-web-extension:') assert.equal(writes.length, 0, protocol);
+    assert.equal(el.style.transform || '', '', 'a pending Safari transform is restored');
+    assert.equal(p.observers.size, 0, 'no repaint observer is left running');
+  }
+});
+
 test('a background tab never starts a layer change and hiding or disabling restores a held transform', async () => {
   for (const action of ['hidden', 'off']) {
     const { p, g, el } = await ready();

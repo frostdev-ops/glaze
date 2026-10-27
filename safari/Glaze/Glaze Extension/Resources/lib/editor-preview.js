@@ -56,6 +56,13 @@
   if (site === 'ultra') {
     // features/lookx.js shows the pointer worn (the student's, or the Look's), so hovering the preview uses it.
     for (const file of ['content-ultra.js', 'content.js', 'lib/stream.js', 'features/stream.js', 'features/coursetabs.js', 'features/cards.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-widgets.js', 'features/navbar.js', 'lib/lookx.js', 'features/lookx.js', 'features/rules.js', 'lib/motionx.js', 'features/motionx.js']) await load(file);
+    // The core's theme sanitizer omits the separate card store. After its listener, keep the editor's card
+    // preferences and repaint even when the motion attribute (the card painter's other trigger) is unchanged.
+    addEventListener('message', (e) => {
+      if (e.origin !== location.origin || e.source !== parent || !e.data?.gzPreview) return;
+      GZ_CTX.settings().card = GZ_CARDS.settings(e.data.gzPreview.card);
+      GZ_CARD_UI.paint();
+    });
     // The mock supplies the phone drawer shell; the actual rail code still owns labels, shrink and hover expansion.
     const menu = document.querySelector('#preview-menu'), drawer = document.querySelector('.MuiDrawer-root');
     const close = () => { html.removeAttribute('data-preview-nav-open'); drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); menu.setAttribute('aria-expanded', 'false'); menu.focus(); };

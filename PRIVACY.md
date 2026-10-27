@@ -416,6 +416,12 @@ not those unknown legacy copies or unrelated stickers.
   record, keeping only when it was deleted (so a late save from another tab can't bring it back); the GPA scale and
   tasks stay until you change them there. Only the first 200,000 characters of a syllabus are read, and the review says
   so when there were more.
+- **AI connections** (Settings → AI, off by default), in the extension worker's own IndexedDB (`glaze-ai`), on this
+  device only: the connection you set up (a model on this device, or an OpenAI-compatible endpoint's address, model and
+  key). The key is never in `chrome.storage`, never synced, never in a Back up file or a shared Look, and never given to
+  a page; Settings shows it masked. `chrome.storage.local` keeps whether AI is on, which connection is in use, which
+  features may use it, and a list of recent AI calls with metadata only (feature, connection, time, size, outcome; no
+  text, address or key). Clear empties that list.
 - **Course tabs** (Canvas and Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
   signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
   pinned, when it was last used, its own-course URL including query parameters, and scroll position. Any previously
@@ -527,7 +533,10 @@ you import) are bundled. It makes requests in these cases:
   your user id and the course's term. When you open Import a syllabus, it asks your own Blackboard site's public
   content API for the course's items with their titles and text, to list its documents; the answer stays in memory
   while the dialog is open. Glaze expects that reading a document there marks nothing as opened, since it only lists the
-  course's items and opens none, but that hasn't been measured. Files you pick are read on this device.
+  course's items and opens none, but that hasn't been measured. When you choose Read this document, Glaze also reads the
+  files the document links (PDFs, Word, PowerPoint, pictures) from your own Blackboard site, which hands them over from
+  its file store, with your existing session; nothing is fetched while the list is open. Files you pick are read on this
+  device.
 - **Command palette** (an Extra, on by default). When you open it, Glaze asks your own Blackboard site
   for your list of courses and, inside a course, that course's items, using Blackboard's own addresses
   with your existing session. The answers are kept in memory only.
@@ -671,7 +680,16 @@ you import) are bundled. It makes requests in these cases:
   for your profile (your user id) and course list (the course's term start, for dates written without a year), the
   same read-only requests Better To Do makes. It reads the Syllabus page from the page already open, with no request
   of its own, and reads files you pick on this device. Nothing about the syllabus is sent anywhere: there is no server
-  to parse it and no consent box to tick, because nothing leaves your computer. It never writes to Canvas.
+  to parse it and no consent box to tick, because nothing leaves your computer. It never writes to Canvas. The one
+  exception is AI reading below, which you turn on yourself.
+- **AI reading** (Settings → AI, off by default; Canvas and Blackboard). Only when AI is on, a connection is set up and
+  you allow a feature (Syllabus import first), that feature can ask the AI to read for it. With a model on this device
+  (Chrome's built-in model, or Apple Intelligence through Glaze's Safari app) nothing leaves your computer. With an
+  endpoint, the syllabus text (and its pictures, when the model reads pictures) goes to the address you entered, and
+  only after the import dialog has shown that address; Glaze asks the browser for permission to reach that one address
+  when you save or test it. The key is sent only to that address, over https (or to your own computer). Glaze never
+  chooses an endpoint, runs no server for AI, and never uses AI on quiz or test pages. AI answers are only
+  suggestions in the review, marked Check this; nothing is kept until you save.
 - **PDFs and photos you import** (class schedule, syllabus, transcript): none. A PDF or picture you pick or paste is read
   on your device by Glaze's reader, a page of the extension that the import opens in a hidden frame for that one file:
   pdf.js reads a PDF's text, and the OCR engine reads a picture or a scanned page, both from the extension's own files.
@@ -728,6 +746,13 @@ you import) are bundled. It makes requests in these cases:
   after its delay, asks the same read-only request on Canvas and Blackboard and marks nothing; on Moodle it asks nothing.
   If the announcement can't be read, the site's own page opens instead.
   These, the nickname and color edits, the read mark and the ticks above are the only changes Glaze makes to any site.
+- **Announcement read controls on Blackboard Ultra.** Checking or unchecking a native announcement control keeps your
+  scroll position while Blackboard refreshes its list. **Mark all as read** first reads that course's paged announcement
+  list (`GET /learn/api/v1/courses/<course>/announcements`) through the shared queue with your existing session, refusing
+  redirects and pagination outside that course. It keeps unread IDs in memory for the operation and activates Blackboard's
+  own read controls one at a time, including announcements on later pages. Already-read items are skipped. User input,
+  leaving the list or switching Glaze off stops further marks; an update already sent by Blackboard may still finish.
+  Nothing is stored or sent to another site.
 - **Rubrics** (Canvas and Blackboard Ultra, Automatic by default). On a recognized assignment page, Glaze first uses the shared account lookup
   (Canvas `GET /api/v1/users/self/profile`; Ultra `GET /learn/api/v1/users/me`) to identify your account.
   It then reads the rubric and your own published rubric scores and feedback from your own site with your existing session, through paced,

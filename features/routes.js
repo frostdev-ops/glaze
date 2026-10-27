@@ -11,13 +11,14 @@ var GZ_ROUTES = globalThis.GZ_ROUTES || (() => {
   const table = [];
   const live = new Set();
   const add = (test, file, name) => { table.push({ test, file, name }); };
-  add((url, site) => site === 'ultra' ? /^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/overview\/?$/.test(url.pathname)
+  add((url, site) => site === 'ultra' ? /^\/ultra\/courses\/_\d+_\d+\/(?:assessment\/_\d+_\d+\/(?:overview|attempt(?:\/create)?)|discussion\/_\d+_\d+)\/?$/.test(url.pathname)
     : site === 'canvas' && /^\/courses\/\d+\/assignments\/\d+\/?$/.test(url.pathname), 'features/rubric.js', 'GZ_RUBRIC_UI');
   // The site's own announcement lists, opening in Glaze's pop-up: Ultra's Activity Stream and a course's Announcements;
   // Canvas's Dashboard, a course's home and Announcements; Moodle's course page and its forums (the news forum's list).
   const LISTS = { ultra: /^\/ultra\/(?:stream|courses\/_\d+_\d+\/announcements)(?:\/|$)/, canvas: /^\/(?:courses\/\d+(?:\/(?:announcements|activity_stream))?\/?)?$/, moodle: /\/(?:course|mod\/forum)\/view\.php$/ };
   add((l, site) => LISTS[site]?.test(l.pathname) || (site === 'canvas' && /^\/courses\/\d+\/discussion_topics\/?$/.test(l.pathname) && /[?&]only_announcements=(?:1|true)\b/.test(l.search || '')),
     'features/announce.js', 'GZ_ANNOUNCE');
+  add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/announcements\/?$/.test(l.pathname), 'features/announce-read.js', 'GZ_ANNOUNCE_READ');
   const sync = () => {
     for (const e of table) {
       let yes = false;

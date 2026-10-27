@@ -5,7 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 test('Restore sanitizes legacy HTML at the native editing boundary', { skip: !process.env.DRAFT_BROWSER }, async (t) => {
-  const lock = '/private/tmp/claude-501/glaze-heavy.lock';
+  // The browser checks' own lock (scripts/check-env.js): $GLAZE_LOCK, or glaze-heavy.lock in the OS temp directory.
+  const lock = process.env.GLAZE_LOCK || path.join(require('node:os').tmpdir(), 'glaze-heavy.lock');
   let held = false, browser;
   try {
     for (let i = 0; !held; i++) {

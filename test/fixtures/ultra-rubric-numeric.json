@@ -1,0 +1,316 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shapes for a graded assignment with a NUMERIC rubric, synthetic values.",
+ "grade": {
+  "id": "_510_1",
+  "courseId": "_101_1",
+  "userId": "_42_1",
+  "columnId": "_300_1",
+  "lastAttemptId": "_400_1",
+  "column": {
+   "id": "_300_1",
+   "contentId": "_8120_1",
+   "possible": 20
+  },
+  "lastAttempt": {
+   "id": "_400_1",
+   "status": "COMPLETED"
+  },
+  "submissionStatus": {
+   "status": "GRADED"
+  }
+ },
+ "column": {
+  "id": "_300_1",
+  "courseId": "_101_1",
+  "contentId": "_8120_1",
+  "possible": 20,
+  "rubricAssociations": [
+   {
+    "id": "_500_1",
+    "entityId": "_300_1",
+    "rubricId": "_600_1",
+    "percentOfGrade": 100,
+    "displayBefore": true,
+    "displayAfter": false,
+    "displayGraded": true,
+    "isWithEvaluations": true,
+    "rubricDefinition": {
+     "id": "_600_1",
+     "title": "Synthetic points rubric",
+     "description": "<p>Synthetic guidance.</p>",
+     "rubricType": "NUMERIC",
+     "courseId": "_101_1",
+     "readOnly": true,
+     "associated": true,
+     "permissions": {
+      "edit": false,
+      "delete": false
+     },
+     "columnHeaders": [
+      {
+       "id": "_610_1",
+       "header": "Level A",
+       "localizedHeader": {
+        "rawValue": "Level A"
+       },
+       "position": 0
+      },
+      {
+       "id": "_611_1",
+       "header": "Level B",
+       "localizedHeader": {
+        "rawValue": "Level B"
+       },
+       "position": 1
+      },
+      {
+       "id": "_612_1",
+       "header": "Level C",
+       "localizedHeader": {
+        "rawValue": "Level C"
+       },
+       "position": 2
+      },
+      {
+       "id": "_613_1",
+       "header": "Level D",
+       "localizedHeader": {
+        "rawValue": "Level D"
+       },
+       "position": 3
+      },
+      {
+       "id": "_614_1",
+       "header": "Level E",
+       "localizedHeader": {
+        "rawValue": "Level E"
+       },
+       "position": 4
+      }
+     ],
+     "rows": [
+      {
+       "id": "_620_1",
+       "header": "Criterion one",
+       "localizedHeader": {
+        "rawValue": "Criterion one"
+       },
+       "position": 0,
+       "percentage": 50,
+       "rowPoints": 10,
+       "cells": [
+        {
+         "normalizedPoints": 10,
+         "description": "<p>One A</p>",
+         "percentage": 100,
+         "rubricColumnId": "_610_1",
+         "weightedPercent": 0.5,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 10,
+         "rubricRowId": "_620_1",
+         "id": "_630_1",
+         "position": 0
+        },
+        {
+         "normalizedPoints": 8,
+         "description": "<p>One B</p>",
+         "percentage": 80,
+         "rubricColumnId": "_611_1",
+         "weightedPercent": 0.4,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 8,
+         "rubricRowId": "_620_1",
+         "id": "_631_1",
+         "position": 1
+        },
+        {
+         "normalizedPoints": 6,
+         "description": "<p>One C</p>",
+         "percentage": 60,
+         "rubricColumnId": "_612_1",
+         "weightedPercent": 0.3,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 6,
+         "rubricRowId": "_620_1",
+         "id": "_632_1",
+         "position": 2
+        },
+        {
+         "normalizedPoints": 4,
+         "description": "<p>One D</p>",
+         "percentage": 40,
+         "rubricColumnId": "_613_1",
+         "weightedPercent": 0.2,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 4,
+         "rubricRowId": "_620_1",
+         "id": "_633_1",
+         "position": 3
+        },
+        {
+         "normalizedPoints": 0,
+         "description": "<p>One E</p>",
+         "percentage": 0,
+         "rubricColumnId": "_614_1",
+         "weightedPercent": 0.0,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 0,
+         "rubricRowId": "_620_1",
+         "id": "_634_1",
+         "position": 4
+        }
+       ]
+      },
+      {
+       "id": "_621_1",
+       "header": "Criterion two",
+       "localizedHeader": {
+        "rawValue": "Criterion two"
+       },
+       "position": 1,
+       "percentage": 50,
+       "rowPoints": 10,
+       "cells": [
+        {
+         "normalizedPoints": 10,
+         "description": "<p>Two A</p>",
+         "percentage": 100,
+         "rubricColumnId": "_610_1",
+         "weightedPercent": 0.5,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 10,
+         "rubricRowId": "_621_1",
+         "id": "_635_1",
+         "position": 0
+        },
+        {
+         "normalizedPoints": 8,
+         "description": "<p>Two B</p>",
+         "percentage": 80,
+         "rubricColumnId": "_611_1",
+         "weightedPercent": 0.4,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 8,
+         "rubricRowId": "_621_1",
+         "id": "_636_1",
+         "position": 1
+        },
+        {
+         "normalizedPoints": 6,
+         "description": "<p>Two C</p>",
+         "percentage": 60,
+         "rubricColumnId": "_612_1",
+         "weightedPercent": 0.3,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 6,
+         "rubricRowId": "_621_1",
+         "id": "_637_1",
+         "position": 2
+        },
+        {
+         "normalizedPoints": 4,
+         "description": "<p>Two D</p>",
+         "percentage": 40,
+         "rubricColumnId": "_613_1",
+         "weightedPercent": 0.2,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 4,
+         "rubricRowId": "_621_1",
+         "id": "_638_1",
+         "position": 3
+        },
+        {
+         "normalizedPoints": 0,
+         "description": "<p>Two E</p>",
+         "percentage": 0,
+         "rubricColumnId": "_614_1",
+         "weightedPercent": 0.0,
+         "startPointRange": 0,
+         "endPointRange": 0,
+         "percentageMin": 0,
+         "percentageMax": 0,
+         "numericPoints": 0,
+         "rubricRowId": "_621_1",
+         "id": "_639_1",
+         "position": 4
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "attempt": {
+  "id": "_400_1",
+  "courseId": "_101_1",
+  "columnId": "_300_1",
+  "userId": "_42_1",
+  "status": "COMPLETED",
+  "rubricEvaluation": {
+   "id": "_700_1",
+   "attemptId": "_400_1",
+   "rubricAssociationId": "_500_1",
+   "userId": null,
+   "submitted": true,
+   "published": false,
+   "completed": true,
+   "editable": false,
+   "maxScore": 20,
+   "totalScore": 18,
+   "cells": [
+    {
+     "id": "_710_1",
+     "rubricRowId": "_620_1",
+     "rubricCellId": "_631_1",
+     "selectedPercent": 8,
+     "feedback": {
+      "rawText": "",
+      "displayText": "",
+      "webLocation": null,
+      "fileLocation": null
+     }
+    },
+    {
+     "id": "_711_1",
+     "rubricRowId": "_621_1",
+     "rubricCellId": "_635_1",
+     "selectedPercent": 10,
+     "feedback": {
+      "rawText": "",
+      "displayText": "",
+      "webLocation": null,
+      "fileLocation": null
+     }
+    }
+   ]
+  }
+ }
+}

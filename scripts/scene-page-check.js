@@ -36,7 +36,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const u = new URL(r.request().url());
       if (u.protocol === 'chrome-extension:') {
         if (failModule && u.pathname === '/lib/scene.js') { failModule = false; failedModules++; return r.abort(); }
-        if (failDependency && u.pathname === '/lib/three.min.js') { failDependency = false; failedDependencies++; return r.abort(); }
+        if (failDependency && u.pathname === '/lib/three.js') { failDependency = false; failedDependencies++; return r.abort(); }
         return r.continue();
       }
       if (u.origin !== origin) { blocked.push(u.href); return r.abort(); }

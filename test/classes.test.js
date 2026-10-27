@@ -68,6 +68,19 @@ test('meetings: what is not a meeting', () => {
   ]) assert.deepEqual(m(line), [], line);
 });
 
+test('meetings: counted labels do not consume explicit clocks or another table cell', () => {
+  for (const line of ['Monday lesson 9:00–10:00', 'Monday\tLessons\t9:00–10:00']) {
+    assert.deepEqual(m(line), [['1', '09:00', '10:00']], line);
+  }
+  assert.deepEqual(m('MWF\tUnits\t9:00–9:50 AM'), [['135', '09:00', '09:50']]);
+  assert.deepEqual(m('Tuesday\tModule\t14:00–15:00'), [['2', '14:00', '15:00']]);
+  assert.deepEqual(m('Thursday lesson 0630–1500'), [['4', '06:30', '15:00']]);
+  for (const line of ['Monday weeks 4–14', 'Monday chapters 3–5', 'Monday pages 3–5']) assert.deepEqual(m(line), [], line);
+  assert.deepEqual(m('Monday 9–10 AM (weeks 4–14)'), [['1', '09:00', '10:00']]);
+  const imported = C.fromText('BIO 120 Biology\nMonday\tLessons\t9:00–10:00', { lang: 'en', now: NOW });
+  assert.deepEqual(imported.entries[0].periods.map((p) => [p.days, p.start, p.end]), [[[1], 540, 600]]);
+});
+
 // ---- whole documents ----------------------------------------------------------------------------------------------
 const summary = (r) => r.entries.map((e) => [e.code, e.name, e.periods.map((p) => [p.days.join(''), C.hhmm(p.start), C.hhmm(p.end), p.loc, p.from, p.to])]);
 
@@ -654,4 +667,12 @@ test('the export hook keeps its UIDs between exports', () => {
   const evs = C.icsEvents(STORE, { site: 'canvas.test', from: '2026-10-12', to: '2026-10-18', tz: 'America/New_York' });
   assert.equal(new Set(evs.map((e) => e.uid)).size, 3);
   assert.deepEqual(C.icsEvents(STORE, { site: 'x', from: '2026-10-12', to: '2026-10-18' }).map((e) => e.uid), C.icsEvents(STORE, { site: 'x', from: '2026-10-12', to: '2026-10-18' }).map((e) => e.uid), 'stable');
+});
+
+test('review: Dutch uur marks a 24-hour clock even below twelve', () => {
+  assert.deepEqual(m('ma 6–8 uur', { lang: 'nl' }), [['1', '06:00', '08:00']]);
+  assert.deepEqual(m('ma 1–3 uur', { lang: 'nl' }), [['1', '01:00', '03:00']]);
+  assert.deepEqual(m('wo 0645–1845', { lang: 'nl' }), [['3', '06:45', '18:45']]);
+  assert.deepEqual(m('Do 14:15–15:45, SR 1.07', { lang: 'de' }), [['4', '14:15', '15:45']]);
+  assert.deepEqual(m('quartas-feiras 14h às 16h', { lang: 'pt' }), [['3', '14:00', '16:00']]);
 });

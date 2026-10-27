@@ -54,7 +54,19 @@ Runs the tests for the colour, settings and page-text logic. Use Node 26, matchi
 
 The browser checks in `scripts/*-check.js` need Playwright (`NODE_PATH=/path/to/node_modules`, and `npx playwright install chromium` once). They launch Playwright's own Chromium; set `CHROME` to use another executable. `mods-api-check.js`, `mods-sandbox-check.js` and `widgets-builder-check.js` also use macOS's `sandbox-exec` and run only there. The three heaviest checks (`background-shell-check.js`, `background-pages-check.js` and `docreview-check.js`) take a lock directory so only one runs at a time: `glaze-heavy.lock` in the OS temp directory, or `GLAZE_LOCK` if set (`scripts/check-env.js` resolves both).
 
+`scripts/settings-wiring-check.js [report.json]` exercises every generic settings control through its input/change handlers,
+real sync storage, sanitization and reopened controls. It validates all offered choices and slider endpoints, respects the
+storage write quota, and checks Blackboard's card preview after edits and reset. `WIRING_CASE=cards` runs that regression
+alone. The check uses a disposable profile and blocks external requests. Gradescope's permission grant and custom editors
+remain covered by their dedicated tests; this sweep complements the layout checks and feature runtime tests, and does not
+establish signed-in LMS or native Safari behavior.
+
 CI's browser gate (`.github/workflows/browser.yml`) runs on every push and pull request and before a release zip is built: `scripts/ci-browser-checks.js` runs the settings, popup, sites and pointer checks in the Playwright, Chromium and FFmpeg pinned in `ci/`, and keeps their logs and screenshots as the `browser-evidence` artifact when one fails. Release tags run it through packaging only. The runner verifies binaries again before any check, rejects `CHROME`, `EXT` and `IA_CASE` overrides, allows six minutes for settings and two for each other check within an eleven-minute total budget, and awaits detached browser cleanup before releasing the lock. Firefox and Safari are checked separately before a release. Firefox: `FIREFOX=<Firefox.app> nice node scripts/firefox-check.mjs` runs the package in native Firefox. Safari: `bash scripts/sync-safari-resources.sh --check` proves packaged-resource parity only, that both targets bundle the package's files; native runtime needs the built app run in Safari on Mac and iOS.
+
+`NODE_PATH=/path/to/node_modules node scripts/announce-read-check.js /path/to/evidence` checks Ultra announcement read
+controls against synthetic native markup. It covers scroll/focus recovery after first-page resets, bulk reading across
+pages, failed updates, cancellation, and narrow/RTL layouts. It takes the shared browser lock, writes screenshots and
+results, and closes its browser. This does not establish signed-in LMS or native Safari behavior.
 
 For motion, run `NODE_PATH=/path/to/node_modules node scripts/motion-check.js [receipt.json]`. It traces every animation on the Ultra, Canvas and Moodle previews at Expressive and fails if an entrance, a card's hover lift or a loading pulse runs on the main thread instead of the compositor (a finished entrance that animates `transform` does that to the hover for the life of the page: entrances use `translate` and `scale`). It also checks that a Glaze dialog stays up while it fades out on closing. Paint-only effects are listed in the receipt but allowed.
 The check explicitly exercises positioned panel/tooltip and Look entrances and Moodle's loading pulse, requires their trace records, and retains failures even if a later sample recovers. It also checks final placement and instant dialogs with motion Off or transitions disabled. This Chromium check does not establish native Firefox or Safari behavior.

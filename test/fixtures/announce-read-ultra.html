@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Announcement read controls</title>
+<style>
+:root { --gz-ink:#dcecf8; --gz-ground:#102436; --gz-surface:#102436; --gz-line:#456177; --gz-accent:#39cafa; --gz-accent-soft:#235273; font:16px system-ui; color:var(--gz-ink); background:#081b2a; }
+body { margin:0; } .panel-wrap { height:100vh; overflow:auto; } section { padding:16px; }
+announcement-list { display:block; } .guidance-wrapper { display:flex; align-items:center; margin-bottom:16px; } .guidance-wrapper > span { flex:1 1 0%; }
+table { width:100%; border-spacing:0; } td { height:96px; border-bottom:1px solid #456177; padding:12px; } a { color:#39cafa; } button { font:inherit; color:inherit; background:#16334b; border:1px solid #456177; padding:8px; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+.loader { height:30px; } .announcement-checkbox-status { display:inline-block; margin-inline-end:16px; }
+</style></head><body><div id="site-wrap"><div class="panel-wrap"><section class="announcement-list"><announcement-list><div class="course-announcement-layer"><div class="guidance-wrapper "><span>25 Total</span><div class="header-actions-menu__item active no-select"><div class="active no-select"><button type="button" id="search-button" aria-label="Search announcements">⌕</button></div></div></div><table><tbody></tbody></table><div class="loader"></div></div></announcement-list></section></div></div>
+<script>
+// Synthetic records in the observed 2026-10-26 native checkbox/row markup. A native mark refreshes from the first page.
+window.records = Array.from({length:25}, (_,i)=>({id:`_${7001+i}_1`,courseId:'_101_1',isDraft:false,readStatus:{isRead:![1,13,22].includes(i)}}));
+window.marks=[]; window.failId=''; window.delay=100; window.loaded=10; window.autoPage=true;
+const sc=document.querySelector('.panel-wrap'), body=document.querySelector('tbody');
+window.render=()=>{
+ body.replaceChildren(...records.slice(0,loaded).map((item,i)=>{
+  const tr=document.createElement('tr');tr.className='announcement-item-row'+(item.readStatus.isRead?' is-read':'');
+  tr.innerHTML=`<td><div class="announcement-checkbox-status"><button type="button" role="checkbox" aria-checked="${item.readStatus.isRead}" aria-label="Mark as ${item.readStatus.isRead?'unread':'read'} Announcement ${i+1}" data-analytics-id="course.announcements.listPanel.listItem.status.checkbox">${item.readStatus.isRead?'✓':'○'}</button></div><a id="list-item-title-${item.id}" class="list-item-title" href="#">Announcement ${i+1}</a></td><td>Oct ${25-i}</td>`;
+  tr.querySelector('button').onclick=()=>{marks.push(item.id);setTimeout(()=>{if(item.id===failId)return;item.readStatus.isRead=!item.readStatus.isRead;loaded=10;render();sc.scrollTop=0;},delay);};return tr;
+ }));
+ document.querySelector('.loader').hidden=loaded>=records.length;
+};
+let loading=false;
+sc.addEventListener('scroll',()=>{if(autoPage&&!loading&&loaded<records.length&&sc.scrollTop+sc.clientHeight>=sc.scrollHeight-35){loading=true;setTimeout(()=>{loaded=Math.min(records.length,loaded+10);render();loading=false;},80);}});
+render();
+</script></body></html>

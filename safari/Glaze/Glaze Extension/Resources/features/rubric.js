@@ -1,4 +1,4 @@
-// Assignment rubrics, read with the student's session. The site's controls stay in place and work until a complete
+// Assignment and discussion rubrics, read with the student's session. The site's controls stay in place and work until a complete
 // rubric is ready; the same read-only table goes inline or into Glaze's shared pop-up. Loaded by features/routes.js.
 var GZ_RUBRIC_UI = globalThis.GZ_RUBRIC_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -7,7 +7,7 @@ var GZ_RUBRIC_UI = globalThis.GZ_RUBRIC_UI || (() => {
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null)); return e; };
   const CSS = `:host { display:block; min-width:0; max-width:100%; color:var(--gz-ink,#1d2733); font:1rem/1.5 var(--gz-font,system-ui,sans-serif); }
 * { box-sizing:border-box; } section { min-width:0; } h2 { margin:0 0 .75em; font:600 1.05em/1.3 var(--gz-font-head,var(--gz-font,system-ui)); color:inherit; }
-.scroll { max-width:100%; overflow:auto; overscroll-behavior:contain; border:1px solid var(--gz-line,#c8d0db); border-radius:var(--gz-radius-sm,8px); background:var(--gz-surface,#fff); }
+.scroll { max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; border:1px solid var(--gz-line,#c8d0db); border-radius:var(--gz-radius-sm,8px); background:var(--gz-surface,#fff); }
 table { width:100%; border-collapse:collapse; table-layout:fixed; color:inherit; } caption { padding:.75em; font-weight:600; text-align:start; overflow-wrap:anywhere; }
 th,td { padding:.75em; border-block-start:1px solid var(--gz-line,#c8d0db); border-inline-end:1px solid var(--gz-line,#c8d0db); text-align:start; vertical-align:top; overflow-wrap:anywhere; }
 tr > :last-child { border-inline-end:0; } thead th { background:var(--gz-surface-2,#edf1f5); font-weight:600; } tbody th { font-weight:500; }
@@ -39,7 +39,14 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
   };
   const host = (route) => {
     if (ctx.site === 'ultra') {
-      if (route.view !== 'overview') return null;
+      if (route.view !== 'overview') {
+        // A discussion's Details panel and the attempt page View instructions opens have no room beside the link: Glaze's
+        // pop-up opens from it in place of Ultra's Rubric Details panel.
+        const links = [...document.querySelectorAll(route.view === 'discussion'
+          ? 'a.rubric-title[analytics-id="components.directives.discussionSettings.gradedWithRubric.li"]'
+          : 'a[data-analytics-id="assignment.attempt.authoring.rubric.view.link"]')].filter((e) => shown(e) || active?.link === e);
+        return links.length === 1 ? { box: links[0].parentElement, row: links[0], link: links[0], inline: false } : null;
+      }
       const links = [...document.querySelectorAll('.assessment-details-section li.js-rubric-overview a.graded-with-rubric-button[analytics-id="course.content.assessment.overview.gradedWithRubric"]')].filter((e) => shown(e) || active?.link === e);
       if (links.length !== 1) return null;
       const link = links[0];
@@ -181,8 +188,9 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
       catch (e) { if (!live()) throw e; return null; }
       if (attempt.id !== attemptId || attempt.courseId !== route.courseId || attempt.userId !== uid) return null;
     }
-    const evaluation = attempt?.rubricEvaluation;
-    const graded = evaluation?.published === true && evaluation.rubricAssociationId === association.id && evaluation.attemptId === attemptId && evaluation.userId === uid;
+    // The student's grade row releases selections; column settings and display grades cannot release a new attempt.
+    const evaluation = attempt?.status === 'COMPLETED' ? attempt.rubricEvaluation : null;
+    const graded = row.status === 'GRADED' || row.submissionStatus?.status === 'GRADED';
     const unopened = !attemptId && !row.lastAttempt && !row.status && (!row.submissionStatus || typeof row.submissionStatus === 'object' && !row.submissionStatus.status);
     const state = graded ? 'graded'
       : unopened || attempt?.status === 'IN_PROGRESS' || ['UNOPENED', 'NOT_SUBMITTED'].includes(row.submissionStatus?.status) ? 'before'

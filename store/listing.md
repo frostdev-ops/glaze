@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.3
+# Chrome Web Store listing — Glaze 3.4.6
 
 ## Name
 
@@ -66,7 +66,7 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 ## Release notes
 
-NEW IN 3.4.3
+NEW IN 3.4.6
 
 • Look › Pointer has a Custom pointer switch: off gives you the system pointer on every page, on brings your choice back.
 • Back up… and Restore… in Settings › Privacy and data save and bring back everything in one file: settings, Looks, tasks, notes, schedules and more.
@@ -111,7 +111,7 @@ Registers Glaze's packaged content scripts on the sites the user allowed, so lat
 
 ### Web-accessible resources
 
-The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, features/apps.css, features/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. lib/scene.js and the bundled lib/three.min.js draw animated backgrounds, and lib/scene-media.js with the bundled Lottie player (lib/lottie/) plays a video or animation behind the page. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
+The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, features/apps.css, features/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. lib/scene.js and the bundled lib/three.js draw animated backgrounds, and lib/scene-media.js with the bundled Lottie player (lib/lottie/) plays a video or animation behind the page. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
 
 ## Remote code (1,000 character maximum)
 

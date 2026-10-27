@@ -44,6 +44,7 @@ const SITES = {
     { at: 'GZ_MODBUNDLE.offer(g, { fetch:', kind: 'via', to: 'lib/modbundle.js' },
     { at: "fetch: (u, i) => fetch(u, control ?", kind: 'via', to: 'lib/modbroker.js' },
     { at: 'fetch: (url, init) => fetch(url, init), now:', kind: 'via', to: 'lib/blocklist.js' },
+    { at: 'reach: reachable, fetch: (u, i) => fetch(u, i), task:', kind: 'via', to: 'lib/ai/broker.js' },
     { at: 'const channelEnv = () => ({', kind: 'asked', flow: 'a mod channel\'s relay: share.frostdev.io, or one the editor asked for (lib/editor-mods.js Read code)', guard: /reachable\(u\)/, near: 0 },
     { at: 'fetch: (url, init) => fetch(url, init),', kind: 'via', to: 'lib/gcal.js', exact: true },
     { at: 'fetch(chrome.runtime.getURL(`icons/icon', kind: 'extension' },
@@ -58,6 +59,11 @@ const SITES = {
   ],
   'lib/modbundle.js': [{ at: 'fetch(`${GALLERY}${g.id}', kind: 'required', host: 'https://frostdev.io', literal: "'https://frostdev.io/glaze/mods/api/mods/'" }],
   'lib/modbroker.js': [{ at: 'env.fetch(u.href', kind: 'asked', flow: 'a mod\'s network:<host>: its install or its switch asked for the host (lib/editor-mods.js)', guard: /if \(!await env\.reach\(u\.href\)\)/ }],
+  // AI: the connection's endpoint, whose host Settings asks for from a click. The broker refuses while the browser doesn't
+  // hold it, and the provider and the catalog reach it only through the broker's fetch pinned to that host and generation.
+  'lib/ai/broker.js': [{ at: 'env.fetch(url, init)', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'lib/ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
+  'lib/ai/providers/openai.js': [{ at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'lib/ai/broker.js', guard: /fetch: pinned\(env, use\)/ }],
+  'lib/ai/models.js': [{ at: 'fetch(shared ? OPENROUTER', kind: 'asked', flow: 'the connection\'s catalog, through the broker\'s pinned fetch (OpenRouter\'s public catalog is on the connection\'s own host)', in: 'lib/ai/broker.js', guard: /use\.p\.catalog\(use\.cfg, \{ fetch: pinned\(env, use\)/ }],
   'lib/blocklist.js': [{ at: 'env.fetch(ENDPOINT', kind: 'required', host: 'https://frostdev.io', literal: "'https://frostdev.io/glaze/mods/api/blocklist'" }],
   'lib/modchannel.js': [{ at: 'const client = (st, fetch) =>', kind: 'via', to: 'lib/background.js' }],
   'lib/sessions.js': [
@@ -87,6 +93,7 @@ const SITES = {
   'content-canvas.js': [{ at: 'fetch(`${location.origin}/courses/${cid}/grades`', kind: 'page' }],
   // An announcement from the page's own site, and Canvas's read mark, through the site's queue (lib/lmsq.js).
   'features/announce.js': [{ at: 'const q = (url, init) => GZ_LMSQ.fetch(url', kind: 'page' }, { at: 'f: (u, i) => GZ_LMSQ.fetch(u, i, prio)', kind: 'page' }, { at: 'GZ_LMSQ.fetch(m.url,', kind: 'page' }],
+  'features/announce-read.js': [{ at: 'GZ_LMSQ.fetch(url,', kind: 'page' }],
   'features/popup.js': [{ at: 'GZ_LMSQ.fetch(src,', kind: 'page' }],
   // Rubric definitions and the current student's evaluation, read-only through the page's own LMS queue.
   'features/rubric.js': [{ at: 'const res = await GZ_LMSQ.fetch(url,', kind: 'page' }, { at: 'f: (...args) => GZ_LMSQ.fetch(...args, 0, live)', kind: 'page' }],
@@ -105,6 +112,8 @@ const SITES = {
   'features/notes.js': [{ at: 'await fetch(url,', kind: 'page' }],
   'features/reminders.js': [{ at: 'await fetch(url,', kind: 'page' }],
   'features/search.js': [{ at: 'fetch(`${location.origin}/api/v1${path}`', kind: 'page' }],
+  // A file an Ultra document links (/bbcswebdav/ on the page's site), read on the student's click for the syllabus import.
+  'features/syllabus.js': [{ at: 'await fetch(f.url,', kind: 'page' }],
   'features/todo.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: 'fetch(`${location.origin}/api/v1/planner/overrides', kind: 'page' }],
 };
 const KINDS = ['required', 'extension', 'asked', 'page', 'via', 'open'];

@@ -236,21 +236,28 @@ test('Canvas incomplete scored criteria and ratings stay native', () => {
   }
 });
 
-test('Ultra each own-attempt state requires exactly its visibility flag', () => {
+test('Ultra shows the definition in every own-attempt state, as its own rubric link does; selections need graded and displayGraded', () => {
+  // Real Ultra keeps "This item is graded with a rubric" on a submitted, ungraded item whose association says displayAfter:
+  // false, and its link opens the rubric; the page's link, not the flag, decides whether the definition shows.
   for (const [state, flag] of [['before', 'displayBefore'], ['after', 'displayAfter'], ['graded', 'displayGraded']]) {
-    const a = association(); a[flag] = false;
-    assert.equal(lib().parse.ultra(ultra(), a, evaluation(), { ...uc, state }), null);
-    a[flag] = true;
-    const m = lib().parse.ultra(ultra(), a, evaluation(), { ...uc, state });
-    assert.ok(m); assert.equal(!!m.result, state === 'graded');
-    delete a[flag]; assert.equal(lib().parse.ultra(ultra(), a, evaluation(), { ...uc, state }), null);
+    for (const value of [false, true, undefined]) {
+      const a = association(); if (value === undefined) delete a[flag]; else a[flag] = value;
+      const m = lib().parse.ultra(ultra(), a, evaluation(), { ...uc, state });
+      assert.ok(m, `${state} with ${flag} ${value} shows the definition`);
+      assert.equal(!!m.result, state === 'graded' && value === true, `${state} with ${flag} ${value}: selections only once graded and displayGraded`);
+    }
   }
   assert.equal(lib().parse.ultra(ultra(), association(), evaluation(), { ...uc, state: 'COMPLETED' }), null);
 });
 
-test('Ultra evaluation requires publication and current own IDs, never completed alone', () => {
+test('Ultra evaluation requires the current association, attempt and user, and ignores its published flag', () => {
+  for (const mutate of [(e) => { e.published = false; }, (e) => { delete e.published; }, (e) => { e.userId = null; }, (e) => { delete e.userId; }]) {
+    const e = evaluation(); mutate(e); assert.ok(lib().parse.ultra(ultra(), association(), e, uc).result, 'the graded state, not the flag, gates selections');
+  }
+  const real = require('./fixtures/ultra-rubric-graded.json'), a = real.column.rubricAssociations[0];
+  const m = lib().parse.ultra(a.rubricDefinition, a, real.attempt.rubricEvaluation, { ...uc, columnId: '_300_1', contentId: '_8120_1', userId: '_42_1', attemptId: '_400_1', pointsPossible: 100 });
+  assert.deepEqual(Object.values(m.result.criteria).map((c) => [c.cell, c.score]), [['_630_1', 100], ['_634_1', 70]]);
   for (const mutate of [
-    (e) => { e.published = false; e.completed = true; }, (e) => { delete e.published; },
     (e) => { e.rubricAssociationId = '_99_1'; }, (e) => { e.attemptId = '_99_1'; }, (e) => { e.userId = '_99_1'; },
     (e) => { e.cells[0].rubricRowId = '_99_1'; }, (e) => { e.cells[0].rubricCellId = '_99_1'; },
     (e) => { e.cells.push(copy(e.cells[0])); }
@@ -378,10 +385,12 @@ test('Mode resolves only the rubric settings with default sanitation', () => {
   for (const s of [undefined, {}, { rubric: { show: 'junk', inline: 'false' } }]) assert.equal(lib().mode(s), 'auto-inline');
 });
 
-test('Routes accept only complete assignment and Ultra overview or attempt paths', () => {
+test('Routes accept only complete assignment and Ultra overview, attempt or discussion paths', () => {
   assert.deepEqual(lib().route('canvas', '/courses/101/assignments/7/'), { courseId: '101', assignmentId: '7', view: 'assignment' });
   assert.deepEqual(lib().route('ultra', '/ultra/courses/_101_1/assessment/_7_1/overview'), { courseId: '_101_1', contentId: '_7_1', view: 'overview' });
   for (const suffix of ['attempt', 'attempt/', 'attempt/create']) assert.equal(lib().route('ultra', `/ultra/courses/_101_1/assessment/_7_1/${suffix}`).view, 'attempt');
+  assert.deepEqual(lib().route('ultra', '/ultra/courses/_101_1/discussion/_7_1'), { courseId: '_101_1', contentId: '_7_1', view: 'discussion' });
+  for (const p of ['/ultra/courses/_101_1/discussion/_7_1/rubric-view', '/ultra/courses/_101_1/discussion/7', '/ultra/courses/_101_1/discussions']) assert.equal(lib().route('ultra', p), null, p);
   for (const [site, p] of [['canvas', '/courses/101/assignments/7/submissions/21'], ['canvas', '/courses/101/assignments/7?courseId=102'], ['canvas', '/courses/101/assignments/%37'], ['ultra', '/ultra/courses/_101_1/assessment/_7_1/overview/student-submission-view'], ['ultra', '/ultra/courses/_101_1/grades/student-submission-view'], ['ultra', '/ultra/courses/_101_1/assessment/_7_1/attempt/_3_1'], ['other', '/courses/101/assignments/7']]) assert.equal(lib().route(site, p), null);
 });
 

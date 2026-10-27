@@ -693,10 +693,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const dropNext = (cid) => { const g = next.get(cid); if (!g) return; clearTimeout(g.cool); clearTimeout(g.tick); g.clean?.(); g.el.remove(); next.delete(cid); turning(); if (g.reveal && waiting === cid) wait(''); };
   // Safari can leave a changed frame off screen until this page composites again. Wait for its DOM to settle, then
   // change its layer now and a second later. The watch ends within 8 s; nothing runs at rest or on other browsers.
+  // The browser stays the same, but a reload can invalidate the runtime before a later frame or visibility event.
+  const safari = (() => { try { return !!globalThis.chrome?.runtime?.getURL('').startsWith('safari-web-extension:'); } catch { return false; } })();
   let nudgeStop = null;
   const nudge = (f, moved = false) => {
     if (!f) { nudgeStop?.(); nudgeStop = null; return; }
-    if (!globalThis.chrome?.runtime?.getURL('').startsWith('safari-web-extension:')) return;
+    if (!safari) return;
     const path = pathOf(f);
     if (moved && (!path || f.painted === path)) return; // scroll reports use 'moved' too
     nudge();

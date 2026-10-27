@@ -6,7 +6,10 @@
 // kept only when the student saves: in storage.local per Canvas site, user and course, through the worker
 // ('glaze:syllabus'). On save the scale can become the course's in the GPA (sync gpaCourses), the dates can become the
 // student's own To Do tasks ('glaze:todo'); the professor, class times and dates show on the course home, the weights
-// beside the what-if calculator (features/grades.js). Nothing is sent anywhere.
+// beside the what-if calculator (features/grades.js). Nothing is sent anywhere, unless the student has turned on AI for
+// syllabus import (Settings → AI): then, after Glaze's own reading, the text (and a picture read, to a model that takes
+// pictures) goes to their connection ('glaze:ai' port, lib/ai/tasks/syllabus-read.js), and what it reads is put beside
+// Glaze's (lib/syllabus-ai.js), each value of it to check. The dialog says where an endpoint's text goes.
 // On Blackboard Ultra (content-ultra.js syncSyl), which has no syllabus tool: on a course's outline, in its right-hand
 // column, with a document of the course's own (its text from the public content API, lib/ultra.js) in place of Canvas's
 // Syllabus page; kept per Ultra site, user and course, the scale for the course's GPA (ultra:<origin>/<id>).
@@ -22,6 +25,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   let dlg = null, opener = null;
   let opened = null; // the course (who) the open dialog is for
   let reading = null; // the AbortController of a PDF or picture being read: another step or closing the dialog calls it off
+  let asking = null; // the AbortController of AI's reading after it: Stop ends it alone, and the review shows Glaze's own
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false && k !== '')); return e; };
   const attr = (el, a) => { for (const [k, v] of Object.entries(a)) el.setAttribute(k, v); return el; };
@@ -54,11 +58,15 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     // Ultra: you are the course list's user; the course's term (its start dates the syllabus's) is lib/ultra.js's reading.
     if (ultra) await need('lib/ultra.js', () => globalThis.GZ_ULTRA);
     const mem = ultra && await X.myCourses();
-    const [p, list] = ultra ? [{ id: mem.find((m) => m?.courseId === cid)?.userId }, Object.entries(GZ_ULTRA.courses(mem)).map(([id, c]) => ({ ...c, id }))]
+    const m = ultra && mem.find((x) => x?.courseId === cid);
+    const [p, list] = ultra ? [{ id: m?.userId }, Object.entries(GZ_ULTRA.courses(mem)).map(([id, c]) => ({ ...c, id }))]
       : await Promise.all([X.profile(), X.canvasCourses()]);
     if (!cid || !(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(String(p?.id))) throw new Error('no course or profile');
     const course = list.find((c) => String(c.id) === cid) || null;
-    const w = { uid: String(p.id), cid, key: L.key(location.origin, String(p.id), cid), course };
+    // The course's own dates (own: { known, start }), for week 1: Canvas's when they override the term; Ultra's kind from
+    // the course list, a date range's start asked when needed (ownStart).
+    const own = ultra ? GZ_ULTRA.ownDates(m?.course) : { known: true, start: course?.restrict_enrollments_to_course_dates ? Date.parse(course.start_at || '') : undefined };
+    const w = { uid: String(p.id), cid, key: L.key(location.origin, String(p.id), cid), course, own };
     const kept = L.tidy(await get('local', w.key));
     if (cid !== cidHere()) throw new Error('another course now');
     [who, rec] = [w, kept];
@@ -110,7 +118,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     place(box);
     if (f) box.querySelector(`[data-f="${f}"]`)?.focus();
   };
-  const button = (text, f, run, cls = '') => { const b = make('button', { type: 'button', className: `gz-syl-btn ${cls}`.trim(), textContent: text }); b.dataset.f = f; b.addEventListener('click', run); return b; };
+  const button = (text, f, run, cls = '') => { const b = make('button', { type: 'button', className: `gz-syl-btn ${cls}`.trim(), textContent: text }); b.dataset.f = f; b.addEventListener('click', (e) => { if (e.isTrusted) run(e); }); return b; };
   const bar = () => {
     const box = make('section', { id: 'gz-syl', className: `gz-syl-bar${ultra ? ' outline-action-block' : ''}` },
       make('p', { textContent: ultra ? t('Glaze can read a syllabus into this course, your GPA and To Do. It stays on this device.') : t('Glaze can read this syllabus into your course home, GPA and To Do. It stays on this device.') }),
@@ -146,15 +154,158 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   // ---- reading ----------------------------------------------------------------------------------------------------
   const fromPage = () => open(null, true);
-  // ocr: what came from a picture (features/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
-  const extract = (text, ocr) => {
+  // An instant → UTC midnight of its day here (lib/syllabus.js week1), or undefined.
+  const dayOf = (ms) => { if (!Number.isFinite(ms)) return undefined; const d = new Date(ms); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
+  const options = (week1) => {
     const c = opened.course;
     const startAt = Date.parse(c?.term?.start_at || c?.start_at || '');
     // No start for a course with no term dates: the reader then places a year-less date by today, not as if today began the term.
-    const r = L.extract(text, { start: Number.isFinite(startAt) ? startAt : undefined, md: monthFirst(), hint: locale() });
+    return { start: Number.isFinite(startAt) ? startAt : undefined, md: monthFirst(), hint: locale(), week1 };
+  };
+  // ocr: what came from a picture (features/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
+  // week1: the course's own first day, for dates by course week.
+  const extract = (text, ocr, week1 = dayOf(opened.own.start)) => {
+    const o = options(week1);
+    const r = { ...L.extract(text, o), opts: o };
     if (!ocr) return r;
     const d = (f) => (GZ_IMPORT.doubt(ocr, f.src) ? { ...f, conf: 'check' } : f);
-    return { ...r, ocr, prof: Object.fromEntries(Object.entries(r.prof).map(([k, f]) => [k, d(f)])), hours: r.hours.map(d), meetings: r.meetings.map(d), dates: r.dates.map(d), scale: d(r.scale), weights: d(r.weights) };
+    return { ...r, ocr, prof: Object.fromEntries(Object.entries(r.prof).map(([k, f]) => [k, d(f)])), hours: r.hours.map(d), meetings: r.meetings.map(d), dates: r.dates.map(d), scale: d(r.scale), weights: d(r.weights), week1: r.week1.src ? d(r.week1) : r.week1 };
+  };
+  // Ultra: a course the course list doesn't say has no dates of its own, asked once (one GET of its public availability,
+  // never contentDetail). → its date range's start (ms), or undefined; a failed ask is asked again next time.
+  const ownStart = (w) => (w.own.known ? Promise.resolve(w.own.start)
+    : (w.asking ||= GZ_ULTRA.read({ origin: location.origin }).get(`/learn/api/public/v3/courses/${w.cid}?fields=availability`)
+      .then((j) => { w.own = { known: true, start: GZ_ULTRA.ownDates(j).start }; return w.own.start; }, () => { w.asking = null; return undefined; })));
+  // p's answer, or undefined after 5 s; Stop or closing the dialog (signal) ends the wait as a cancelled read.
+  const until = (p, signal) => new Promise((res, rej) => {
+    const stop = () => rej(Object.assign(new Error('stopped'), { cancelled: true }));
+    if (signal.aborted) { stop(); return; }
+    signal.addEventListener('abort', stop, { once: true });
+    setTimeout(() => res(undefined), 5000);
+    p.then(res);
+  });
+  // A text read, for review. On Ultra the course's own start is asked only when the text has dates by course week that
+  // would otherwise count from the term, or from nothing at all.
+  const reviewed = async (text, ocr, signal) => {
+    const w = opened, r = extract(text, ocr);
+    if (w.own.known || r.week1.from === 'text') return r;
+    const weekly = r.week1.value || (!Number.isFinite(options().start) && L.extract(text, options(dayOf(Date.now()))).week1.from === 'course');
+    if (!weekly) return r;
+    const start = dayOf(await until(ownStart(w), signal));
+    return Number.isFinite(start) ? extract(text, ocr, start) : r;
+  };
+
+
+  // ---- AI (docs/ai-harness.md) ------------------------------------------------------------------------------------
+  // Asked only when storage.local ai says AI is on, a connection is chosen and syllabus import may use it; otherwise no
+  // port is opened and the dialog is as without AI. One port a dialog, closed with it (which cancels a run).
+  let port = null, asked = 0, portVersion = 0;
+  const waits = new Map(); // message id → its answer's handler
+  const aiOn = async () => { const s = await get('local', 'ai'); return !!s && s.on === true && typeof s.use === 'string' && !!s.use && s.features?.syllabus === true; };
+  const hangUp = () => {
+    portVersion++;
+    const p = port;
+    port = null;
+    for (const w of waits.values()) w({ type: 'error', error: 'connection-lost' });
+    waits.clear();
+    try { p?.disconnect(); } catch { /* gone */ }
+  };
+  // → the answer that ends message m (its id: .id): a status, an end or an error. Events before it go to each(event).
+  const ask = (m, each) => {
+    const id = ++asked;
+    return Object.assign(new Promise((resolve) => {
+      waits.set(id, (a) => { if (['status', 'end', 'error'].includes(a?.type)) { waits.delete(id); resolve(a); } else each?.(a); });
+      try {
+        if (!port) {
+          const p = port = chrome.runtime.connect({ name: 'glaze:ai' });
+          p.onMessage.addListener((a) => waits.get(a?.id)?.(a));
+          p.onDisconnect.addListener(() => { if (port === p) hangUp(); });
+        }
+        port.postMessage({ id, ...m });
+      } catch { waits.delete(id); resolve({ type: 'error', error: 'failed' }); }
+    }), { id });
+  };
+  // Where the text would go now: null (AI won't read), '' (this computer), or the endpoint's host.
+  const aiWhere = async (signal) => {
+    const box = dlg, version = portVersion;
+    const live = () => dlg === box && box?.open && version === portVersion && !signal?.aborted;
+    if (!await aiOn() || !live()) return null;
+    const st = await ask({ op: 'status', feature: 'syllabus' });
+    return live() && st.allowed && st.ready ? { to: typeof st.to === 'string' ? st.to : '', caps: st.caps || {} } : null;
+  };
+  // The host and the consent snapshot stay out of the page's DOM. The student sees the disclosure in a closed root;
+  // only a later click, after a paint, can authorize that destination ('' means this computer).
+  const destinations = new WeakMap();
+  const privacy = (desc) => {
+    destinations.set(desc, '');
+    const box = dlg;
+    aiWhere().then((w) => {
+      if (!w?.to || dlg !== box || !box.open || desc.isConnected === false || !desc.attachShadow) return;
+      const root = desc.attachShadow({ mode: 'closed' });
+      desc.textContent = '';
+      desc.setAttribute('role', 'status');
+      root.textContent = t('Glaze reads it and sends the text to {host}. Nothing is kept until you check it and save.', { host: w.to });
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (dlg === box && box.open && desc.isConnected !== false) destinations.set(desc, w.to); }));
+    }, () => {});
+  };
+  // Pictures for a model that takes them: PNG, JPEG, WebP or GIF files, each at most 6 MB, 12 MB in all, eight at most.
+  const MIME = [['image/png', [0x89, 0x50, 0x4e, 0x47]], ['image/jpeg', [0xff, 0xd8, 0xff]], ['image/gif', [0x47, 0x49, 0x46, 0x38]], ['image/webp', [0x52, 0x49, 0x46, 0x46]]];
+  const pictures = async (files) => {
+    const out = [];
+    let size = 0;
+    for (const f of files.slice(0, 8)) {
+      let b;
+      try {
+        if (!(f.size <= 6 << 20)) continue;
+        const h = new Uint8Array(await f.slice(0, 12).arrayBuffer());
+        const mime = MIME.find(([, m]) => m.every((x, i) => h[i] === x))?.[0];
+        if (!mime || (mime === 'image/webp' && String.fromCharCode(...h.subarray(8, 12)) !== 'WEBP')) continue;
+        b = { mime, bytes: new Uint8Array(await f.arrayBuffer()) };
+      } catch { continue; }
+      const { mime, bytes } = b;
+      let s = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      const data = btoa(s);
+      if ((size += data.length) > 12 << 20) break;
+      out.push({ type: 'image', mime, data });
+    }
+    return out;
+  };
+  // Glaze's reading r, with AI's beside it when AI may read and still sends where the dialog said (shown). read: the read's
+  // controller (a newer read or closing the dialog ends AI too); files: pictures read. → the result to review; when AI
+  // didn't finish, Glaze's own with aiSaid, a few words on why.
+  const withAI = async (r, text, { read, say, stop, shown = '', files = [] }) => {
+    if (text.length > L.MAX) return { ...r, aiSaid: t('That syllabus is too long for AI. This is what Glaze read.') };
+    const w = await aiWhere(read.signal).catch(() => null);
+    if (!w || w.to !== shown || read.signal.aborted) return r;
+    const ctl = asking = new AbortController();
+    const off = () => ctl.abort();
+    read.signal.addEventListener('abort', off, { once: true });
+    say.textContent = t('Reading with AI…');
+    if (stop) stop.hidden = false;
+    let id = 0;
+    // Stop: the broker is told, and the answer that may still come is no longer waited for.
+    const cancelled = new Promise((resolve) => ctl.signal.addEventListener('abort', () => {
+      if (id) { waits.delete(id); try { port?.postMessage({ id, op: 'cancel' }); } catch { /* gone */ } }
+      resolve({ type: 'error', error: 'cancelled' });
+    }, { once: true }));
+    try {
+      const names = [opened.course?.name, opened.course?.course_code].filter((n) => typeof n === 'string' && n.trim()).map((n) => n.trim().slice(0, 200));
+      const input = { text, images: w.caps.images === true ? await pictures(files) : [], names: [...new Set(names)] };
+      if (ctl.signal.aborted) throw new Error('stopped');
+      const run = ask({ op: 'run', feature: 'syllabus', task: 'syllabus.read', input, to: shown });
+      id = run.id;
+      const end = await Promise.race([run, cancelled]);
+      if (end.type !== 'end' || !end.output) throw Object.assign(new Error('ai'), { code: end.error });
+      await need('lib/syllabus-ai.js', () => globalThis.GZ_SYLLABUS_AI);
+      if (ctl.signal.aborted) throw new Error('stopped');
+      return GZ_SYLLABUS_AI.merge(r, GZ_SYLLABUS_AI.interpret(end.output, r.opts, r, text));
+    } catch (e) {
+      return { ...r, aiSaid: ctl.signal.aborted ? t('Stopped.') : e?.code === 'size' ? t('That syllabus is too long for AI. This is what Glaze read.') : t("AI couldn't read it. This is what Glaze read.") };
+    } finally {
+      read.signal.removeEventListener('abort', off);
+      if (asking === ctl) asking = null;
+    }
   };
 
   // ---- the dialog -------------------------------------------------------------------------------------------------
@@ -166,18 +317,21 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     if (!allowed(cid)) return;
     try { await ready(); } catch { return; }
     if (usePage) await docIn().catch(() => {});
+    // Canvas's own page straight to its review, unless AI reads it too: then the first step shows it being read, with Stop.
+    const aiPage = usePage && await aiOn().catch(() => false);
     if (!allowed(cid)) return;
     opener = document.activeElement;
+    reading?.abort(); asking?.abort(); hangUp();
     opened = who;
     dlg?.close();
     const box = (dlg = attr(make('dialog', { id: 'gz-syl-dlg' }), { 'aria-labelledby': 'gz-syl-title' }));
     // Its own close only: one closed as the next opens (close fires later) leaves the new one, its read and focus alone.
-    box.addEventListener('close', () => { box.remove(); if (dlg !== box) return; reading?.abort(); dlg = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
+    box.addEventListener('close', () => { box.remove(); if (dlg !== box) return; reading?.abort(); asking?.abort(); hangUp(); dlg = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
     dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
     document.body.append(dlg);
     if (saved) review(fromSaved(saved), '');
-    else if (usePage && globalThis.GZ_DOCTEXT) { const text = pageText(); review(extract(text), text); }
-    else source();
+    else if (usePage && globalThis.GZ_DOCTEXT && !aiPage) { const text = pageText(); review(extract(text), text); }
+    else source(aiPage && globalThis.GZ_DOCTEXT);
     dlg.showModal();
   };
   const frame = (title, ...kids) => {
@@ -188,14 +342,19 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   };
   const status = () => attr(make('p', { className: 'gz-syl-status' }), { role: 'status' });
 
-  const source = () => {
+  // pageNow: read Canvas's Syllabus page at once (the course page's own button, with AI on).
+  const source = (pageNow) => {
     const say = status();
     const file = make('input', { type: 'file', id: 'gz-syl-file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.docx,.pptx,.html,.htm,.txt,.md,application/pdf,image/*' });
     const paste = make('textarea', { id: 'gz-syl-paste', rows: 8 });
-    const stop = button(t('Stop reading'), 'stop', () => reading?.abort());
+    // Stop ends AI's reading alone while it reads (Glaze's own reading is then reviewed), else the file's.
+    const stop = button(t('Stop reading'), 'stop', () => { if (asking) asking.abort(); else reading?.abort(); hangUp(); });
+    const desc = make('p', { className: 'gz-syl-desc', textContent: t('Glaze reads it on this device. Nothing is sent anywhere, and nothing is kept until you check it and save.') });
+    privacy(desc);
     stop.hidden = true;
     // pasted: a screenshot pasted into the text box, read instead of what's typed there.
     const go = async (pasted) => {
+      const shown = destinations.get(desc);
       const f = pasted instanceof File ? pasted : file.files[0];
       // Only the newest read is wanted: one still under way is called off, and says nothing more.
       reading?.abort();
@@ -210,7 +369,9 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
         }
         if (ctl.signal.aborted) return;
         if (!text.trim()) { say.textContent = t('Choose a file or paste the text first.'); return; }
-        review(extract(text, ocr), text);
+        const r = await withAI(await reviewed(text, ocr, ctl.signal), text, { read: ctl, say, stop, shown, files: f ? [f] : [] });
+        if (ctl.signal.aborted) return;
+        review(r, text);
       } catch (e) { if (reading === ctl) say.textContent = e?.cancelled ? t('Stopped.') : e?.mine ? e.message : t("Glaze couldn't read that file."); }
       finally { if (reading === ctl) { reading = null; stop.hidden = true; } }
     };
@@ -218,10 +379,22 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       const img = e.isTrusted && [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));
       if (img && !reading) { e.preventDefault(); go(img); }
     });
-    frame(t('Import a syllabus'),
-      make('p', { className: 'gz-syl-desc', textContent: t('Glaze reads it on this device. Nothing is sent anywhere, and nothing is kept until you check it and save.') }),
-      page()?.textContent.trim() && button(t("Read this course's Syllabus page"), 'page', async () => { await docIn().catch(() => {}); if (globalThis.GZ_DOCTEXT) { const text = pageText(); review(extract(text), text); } }),
-      ultra && docPicker(say),
+    // Canvas's Syllabus page, as it's shown; with AI, read after Glaze's own reading like a file.
+    const fromHere = async () => {
+      const shown = destinations.get(desc);
+      await docIn().catch(() => {});
+      if (!globalThis.GZ_DOCTEXT) return;
+      const text = pageText();
+      reading?.abort();
+      const ctl = reading = new AbortController();
+      try {
+        const r = await withAI(extract(text), text, { read: ctl, say, stop, shown });
+        if (!ctl.signal.aborted) review(r, text);
+      } finally { if (reading === ctl) { reading = null; stop.hidden = true; } }
+    };
+    frame(t('Import a syllabus'), desc,
+      page()?.textContent.trim() && button(t("Read this course's Syllabus page"), 'page', fromHere),
+      ultra && docPicker(say, stop, desc),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-file', textContent: t('A file') }), file,
         make('small', { textContent: t('A PDF, a picture or screenshot, Word, PowerPoint, a web page or text.') })),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-paste', textContent: t('Or paste the text, or a screenshot') }), paste),
@@ -229,31 +402,113 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       make('div', { className: 'gz-syl-actions' }, button(t('Read it'), 'go', (e) => { if (e.isTrusted) go(); }, 'gz-syl-main'), stop, button(t('Cancel'), 'cancel', () => dlg.close())),
       say);
     first(file);
+    if (pageNow) fromHere();
   };
-  // Ultra: a document of the course's, read from the public content API (its text and its blocks'; a list of metadata and text, which
-  // [I] marks nothing as opened: not measured), listed once the dialog asks, syllabus-like titles first. Shown only when the
-  // course has one.
+  // Ultra: a document of the course's, read from the public content API (a list of metadata and text, which [I] marks
+  // nothing as opened: not measured), listed once the dialog asks, syllabus-like titles first. Shown only when the course
+  // has one. A document is a page: a folder Ultra marks isBbPage (as Ultra writes them), or a document with documents in
+  // it; its text sits in its blocks (its children), titled like it, "ultraDocumentBody" or anything, so it's listed by its
+  // own title, the blocks read as part of it, in order. A block can be only a file's link (data-bbfile on /bbcswebdav/,
+  // lib/page.js files()): on the student's click, never while listing, each such file is fetched with the session (Ultra
+  // sends it on to its file store) and read by features/import.js, in its place among the blocks' text, with the read's
+  // progress, Stop, and its end when the dialog closes, as a chosen file is. A file that can't be fetched or read is left
+  // out; with nothing read at all, the reason (the last file's own, or that it couldn't be read). Only the student's own
+  // click reads, as Read it.
   const SYL = /syllab|course (outline|info)|programa|lehrplan|plan de cours|studiewijzer/i;
-  const docPicker = (say) => {
+  const docPicker = (say, stop, desc) => {
     const box = make('div', { className: 'gz-syl-f', hidden: true });
     const cid = opened.cid, mine = dlg;
+    // Never contentDetail or the whole contentHandler: an LTI link keeps its tool's secret there (lib/ultra.js).
     need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, live: () => dlg === mine && allowed(cid) })
-      .all(`/learn/api/public/v1/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,availability.available`)).then((all) => {
+      .all(`/learn/api/public/v1/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,contentHandler.isBbPage,availability.available`)).then((all) => {
       const avail = all.filter((c) => c?.availability?.available === 'Yes'); // not items held back from you (B0)
       const html = (d) => [d.body, ...avail.filter((c) => c.parentId === d.id).map((c) => c.body)].filter((b) => typeof b === 'string').join('\n');
       const isDoc = (c) => c?.contentHandler?.id === 'resource/x-bb-document';
-      const pages = new Set(avail.filter(isDoc).map((c) => c.id));
-      // A document's blocks are documents too: they're read as part of it, not listed.
-      const docs = avail.filter((c) => isDoc(c) && !pages.has(c.parentId) && html(c).trim()).sort((a, b) => SYL.test(b.title) - SYL.test(a.title));
+      const pages = new Set(avail.filter((c) => isDoc(c) || c?.contentHandler?.isBbPage === true).map((c) => c.id));
+      const docs = avail.filter((c) => pages.has(c.id) && !pages.has(c.parentId) && html(c).trim()).sort((a, b) => SYL.test(b.title) - SYL.test(a.title));
       if (!docs.length || !box.isConnected) return;
       const sel = make('select', { id: 'gz-syl-doc' }, ...docs.slice(0, 200).map((d, i) => make('option', { value: String(i), textContent: String(d.title || '').slice(0, 200) })));
+      const live = () => dlg === mine && mine.open && box.isConnected && allowed(cid);
       const read = async () => {
-        await docIn().catch(() => {});
-        const text = globalThis.GZ_DOCTEXT?.html(html(docs[+sel.value])) || '';
-        if (!text.trim()) { say.textContent = t("Glaze couldn't read that file."); return; }
-        review(extract(text), text);
+        const shown = destinations.get(desc);
+        const chosen = docs[+sel.value];
+        if (!live() || !chosen) return;
+        // One read at a time, as go()'s: a newer one, Stop, another step or closing the dialog calls this one off.
+        reading?.abort();
+        say.textContent = t('Reading…');
+        const ctl = reading = new AbortController(), signal = ctl.signal;
+        const check = () => { if (!live() || reading !== ctl) ctl.abort(); signal.throwIfAborted(); };
+        stop.hidden = false;
+        try {
+          await docIn();
+          check();
+          const D = globalThis.GZ_DOCTEXT;
+          const texts = [], ocrs = [], files = [];
+          const tooLarge = () => Object.assign(new Error(t('That file is too large.')), { mine: true });
+          let why = null;
+          // Tokenize real tags, not anchor-like text inside attributes, comments or scripts.
+          const source = html(chosen);
+          let at = 0;
+          for (const tk of D.tokens(source, new Set(['script', 'style', 'template', 'noscript', 'textarea', 'title']))) {
+            check();
+            if (tk.name?.toLowerCase() !== 'a' || tk.close) continue;
+            const f = GZ_PAGE.files({ body: source.slice(tk.at, tk.end) }, location.origin)[0];
+            if (!f) continue;
+            texts.push(source.slice(at, tk.at));
+            at = tk.end;
+            try {
+              // Bound the download by the largest file the importer reads, even without a trustworthy size header.
+              // The importer checks the detected kind's own limit afterwards (a renamed file can still be a PDF).
+              if (!D.kind(f.name)) continue;
+              if (+f.size > D.READ.pdf) throw tooLarge();
+              const r = await fetch(f.url, { credentials: 'same-origin', signal });
+              const body = r.body?.getReader();
+              let file;
+              try {
+                check();
+                if (!r.ok) continue;
+                if (+r.headers.get('content-length') > D.READ.pdf) throw tooLarge();
+                if (!body) continue;
+                const chunks = [];
+                let size = 0;
+                for (;;) {
+                  const { done, value } = await body.read();
+                  check();
+                  if (done) break;
+                  if ((size += value.byteLength) > D.READ.pdf) throw tooLarge();
+                  chunks.push(value);
+                }
+                file = new File(chunks, f.name, { type: r.headers.get('content-type') || '' });
+                chunks.length = 0;
+                if (file.size > D.READ.pdf) throw tooLarge();
+              } finally { if (body) { body.cancel().catch(() => {}); body.releaseLock(); } }
+              await need('features/import.js', () => globalThis.GZ_IMPORT);
+              check();
+              const got = await GZ_IMPORT.read(file, { signal, progress: (w) => { if (live() && reading === ctl && !signal.aborted) say.textContent = w; } });
+              check();
+              texts.push({ text: got.text || '' });
+              if (got.ocr) ocrs.push(got.ocr);
+              files.push(file);
+            } catch (e) { if (signal.aborted) throw e; why = e; }
+          }
+          check();
+          texts.push(source.slice(at));
+          // Runs of HTML become text together, so a split never cuts a line in two.
+          const parts = [];
+          for (const x of texts) if (typeof x === 'string' && typeof parts.at(-1) === 'string') parts[parts.length - 1] += x; else parts.push(x);
+          const text = parts.map((x) => (typeof x === 'string' ? D.html(x) : x.text).trim()).filter(Boolean).join('\n\n');
+          if (!text) { say.textContent = why?.mine ? why.message : t("Glaze couldn't read that file."); return; }
+          // The pictures' OCR as one (features/import.js note and doubt): pages, blank pages and unsure lines added up,
+          // confidence by page.
+          const n = ocrs.reduce((k, o) => k + o.pages, 0);
+          const ocr = ocrs.length ? { pages: n, conf: Math.round(ocrs.reduce((k, o) => k + o.conf * o.pages, 0) / n), unsure: ocrs.flatMap((o) => o.unsure), blank: ocrs.reduce((k, o) => k + (o.blank || 0), 0) } : null;
+          const r = await withAI(await reviewed(text, ocr, signal), text, { read: ctl, say, stop, shown, files });
+          check();
+          review(r, text);
+        } catch (e) { if (reading === ctl) say.textContent = signal.aborted ? t('Stopped.') : t("Glaze couldn't read that file."); }
+        finally { if (reading === ctl) { reading = null; stop.hidden = true; } }
       };
-      box.append(make('label', { htmlFor: 'gz-syl-doc', textContent: t('A document in this course') }), sel, button(t('Read this document'), 'doc', read));
+      box.append(make('label', { htmlFor: 'gz-syl-doc', textContent: t('A document in this course') }), sel, button(t('Read this document'), 'doc', (e) => { if (e.isTrusted) read(); }));
       box.hidden = false;
     }, () => {});
     return box;
@@ -270,9 +525,10 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const id = () => `gz-syl-${++uid}`;
   // A field: its label, the value to correct, a "Check this" / "Not found" mark and the line it came from.
   const mark = (conf, empty, saved) => (saved ? '' : conf === 'check' ? t('Check this') : empty ? t('Not found') : '');
-  const note = (input, conf, src, saved) => {
+  // ai: the value is AI's (lib/syllabus-ai.js), marked as one.
+  const note = (input, conf, src, saved, ai) => {
     const m = mark(conf, !src, saved);
-    const tag = m && make('span', { id: id(), className: `gz-syl-conf${conf === 'check' ? ' gz-syl-check' : ''}`, textContent: m });
+    const tag = m && make('span', { id: id(), className: `gz-syl-conf${conf === 'check' ? ' gz-syl-check' : ''}${ai && !saved ? ' gz-syl-ai' : ''}`, textContent: m });
     const from = src && make('small', { id: id(), className: 'gz-syl-src', textContent: t('From: “{text}”', { text: src }) });
     const by = [tag?.id, from?.id].filter(Boolean).join(' ');
     if (by) input.setAttribute('aria-describedby', by);
@@ -280,7 +536,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   };
   const field = (label, input, f, saved) => {
     input.id = id();
-    const [tag, from] = note(input, f.conf, f.src, saved);
+    const [tag, from] = note(input, f.conf, f.src, saved, f.ai);
     return make('div', { className: 'gz-syl-f' }, make('div', { className: 'gz-syl-lab' }, make('label', { htmlFor: input.id, textContent: label }), tag), input, from);
   };
   const text = (value, more = {}) => make('input', { type: 'text', value: value || '', ...more });
@@ -296,7 +552,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const to = attr(make('input', { type: 'time', value: m.end || '', className: 'gz-syl-end' }), { 'aria-label': t('Ends') });
     const loc = attr(text(m.location, { maxLength: 80, className: 'gz-syl-loc', placeholder: t('Where') }), { 'aria-label': t('Where') });
     const row = attr(make('div', { className: 'gz-syl-row' }), { role: 'group', 'aria-label': name });
-    const [tag, src] = note(label, m.conf, m.src, saved || !m.src);
+    const [tag, src] = note(label, m.conf, m.src, saved || !m.src, m.ai);
     row.append(label, days, from, '–', to, loc, x(name, () => { row.remove(); list.querySelector('input')?.focus(); }), tag, src);
     return row;
   };
@@ -310,16 +566,22 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     // The row's own id, from the first review of it: its To Do task follows the row through edits.
     row.dataset.id = d.id || L.newId([...list.children].map((r) => r.dataset.id).concat((kept?.dates || []).map((x) => x.id)));
     const add = todo && make('label', { className: 'gz-syl-todo' }, make('input', { type: 'checkbox', className: 'gz-syl-task' }), ` ${t('Add to To Do')}`);
-    const [tag, src] = note(title, d.conf, d.src, saved || !d.src);
+    // A date by course week moves with Week 1 starts until the student sets its day.
+    if (Number.isInteger(d.week) && Number.isInteger(d.wd)) {
+      Object.assign(row.dataset, { week: String(d.week), wd: String(d.wd), ...(d.dow && { dow: d.dow }) });
+      for (const type of ['input', 'change']) day.addEventListener(type, () => { row.dataset.own = '1'; });
+    }
+    const [tag, src] = note(title, d.conf, d.src, saved || !d.src, d.ai);
     row.append(title, day, kind, add || '', x(name, () => { row.remove(); list.querySelector('input')?.focus(); }), tag, src);
     return row;
   };
-  const rows = (legend, items, make1, blank) => {
+  // lead: a field above the rows (the dates' Week 1 starts).
+  const rows = (legend, items, make1, blank, lead) => {
     const list = make('div', { className: 'gz-syl-rows' });
     items.forEach((m, i) => list.append(make1(list, m, i + 1)));
     const add = button(t('Add'), '', () => { const r = make1(list, blank, list.children.length + 1); list.append(r); r.querySelector('input')?.focus(); });
     attr(add, { 'aria-label': `${t('Add')}: ${legend}` });
-    return make('fieldset', { className: 'gz-syl-set' }, make('legend', { textContent: legend }), list, add);
+    return make('fieldset', { className: 'gz-syl-set' }, make('legend', { textContent: legend }), lead, list, add);
   };
 
   const review = (r, read) => {
@@ -337,7 +599,19 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const blank = { label: '', days: [], start: '', end: '', location: '' };
     const hours = rows(t('Office hours'), r.hours, (l, m, n) => timeRow(l, m, n, saved), blank);
     const meets = rows(t('Class times'), r.meetings, (l, m, n) => timeRow(l, m, n, saved), blank);
-    const dates = rows(t('Important dates'), L.ids(r.dates, kept?.dates), (l, d, n) => dateRow(l, d, n, saved, todo, kept), { title: '', day: '', kind: 'exam' });
+    // The day dates by course week count from (lib/syllabus.js week1): the syllabus's (with its line), the course's own, or
+    // the term's ("Check this"). Changing it moves each of those rows whose day the student hasn't set.
+    const wk = r.week1?.value ? make('input', { type: 'date', value: r.week1.value }) : null;
+    const wkSrc = r.week1?.from === 'text' ? r.week1.src : '';
+    const week1 = wk && field(t('Week 1 starts'), wk, { conf: r.week1.conf, src: wkSrc, ai: r.week1.ai }, saved || (r.week1.conf !== 'check' && !wkSrc));
+    const dates = rows(t('Important dates'), L.ids(r.dates, kept?.dates), (l, d, n) => dateRow(l, d, n, saved, todo, kept), { title: '', day: '', kind: 'exam' }, week1);
+    const move = () => {
+      for (const row of dates.querySelectorAll('.gz-syl-date')) {
+        const day = !row.dataset.own && row.dataset.week && L.weekDay(wk.value, +row.dataset.week, +row.dataset.wd, row.dataset.dow);
+        if (day) row.querySelector('input[type="date"]').value = day;
+      }
+    };
+    for (const type of ['input', 'change']) wk?.addEventListener(type, move);
     const scale = text(r.scale.value ? r.scale.value.map(([l, v]) => `${l} ${v}`).join(', ') : '', { maxLength: 300, placeholder: 'A 93, A- 90, B+ 87, …' });
     // Used for the GPA without asking only when it's sure: a guess, or ranges that overlap or leave gaps, wait for a tick.
     const issues = r.scale.issues || [];
@@ -404,6 +678,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       read && make('details', { className: 'gz-syl-read' }, make('summary', { textContent: t('The text Glaze read') }), make('pre', { textContent: read.slice(0, 20000) })),
       make('div', { className: 'gz-syl-actions' }, button(t('Save'), 'save', save, 'gz-syl-main'), back, button(t('Cancel'), 'cancel', () => dlg.close())),
       say);
+    if (r.aiSaid) say.textContent = r.aiSaid;
     first(name);
   };
 
@@ -428,6 +703,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // ---- switches ---------------------------------------------------------------------------------------------------
   const sync = (want) => {
     on = !!want;
+    if (opened && !allowed(opened.cid)) reading?.abort();
     // Off this page's part, the dialog stays (Ctrl+K opens it on any course page); with Glaze or the switch off, it goes.
     if (!on) { draw(); if (!X.on() || X.settings().enabled === false || !X.settings().enhance.syllabus) dlg?.close(); return; }
     ready().then(() => draw(), () => {});

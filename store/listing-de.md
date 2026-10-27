@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.3 (German)
+# Chrome Web Store listing — Glaze 3.4.6 (German)
 
 ## Short summary (132 character maximum)
 
@@ -58,7 +58,7 @@ Canvas ist eine Marke von Instructure, Inc. Blackboard ist eine Marke von Anthol
 
 ## Release notes
 
-NEU IN 3.4.3
+NEU IN 3.4.6
 
 • Aussehen › Mauszeiger hat einen Schalter „Eigener Mauszeiger“: Aus gibt dir auf jeder Seite den Systemzeiger, An holt deine Auswahl zurück.
 • „Sichern…“ und „Wiederherstellen…“ unter Einstellungen › Datenschutz und Daten speichern alles in einer Datei und holen es zurück: Einstellungen, Designs, Aufgaben, Notizen, Stundenpläne und mehr.
