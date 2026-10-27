@@ -286,8 +286,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const KIND = { spelling: ['Spelling', 'var(--gz-err)'], grammar: ['Grammar', 'var(--gz-warn)'], style: ['Style', 'var(--gz-warn)'], format: ['Format', 'var(--fmt)'], citation: ['Citation', 'var(--fmt)'] };
     const allIssues = () => {
       const theirs = ISSUES() ? ISSUES().list() : [];
-      const mine = ISSUES() ? [] : formatIssues;
-      return [...theirs.map((i) => (i.source === 'format' ? formatIssues.find((x) => x.id === i.id) || i : i)), ...mine].sort((a, b) => a.from - b.from);
+      // The underline store accepts single-paragraph ranges and strips fix metadata; cards keep the format originals.
+      return [...theirs.filter((i) => i.source !== 'format'), ...formatIssues].sort((a, b) => a.from - b.from);
     };
     const cards = () => {
       const list = allIssues();
