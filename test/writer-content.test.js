@@ -20,3 +20,26 @@ test('a forged page-world success cannot release Writer when the native editor d
   assert.ok(frame.isConnected, 'forged gz-writer:done is not proof of native content');
   assert.equal(c.clicks.length, 0);
 });
+
+test('one Writer send stays single while Ultra enables its button asynchronously', async () => {
+  const c = content(); await c.start();
+  const b = c.native();
+  c.emit({ type: 'change', html: '<p>Send once</p>', text: 'Send once', words: 2 });
+  c.emit({ type: 'send' }); c.emit({ type: 'send' });
+  b.send.removeAttribute('disabled');
+  c.tick(60);
+  assert.equal(c.clicks.length, 1, 'two pending shortcuts must not click twice');
+  c.emit({ type: 'send' });
+  assert.equal(c.clicks.length, 1, 'the same draft is already sending');
+});
+
+test('a reused native button cannot turn Writer\'s shortcut into an attempt Submit', async () => {
+  const c = content(); await c.start();
+  const b = c.native();
+  c.emit({ type: 'change', html: '<p>Draft</p>', text: 'Draft', words: 1 });
+  b.send.removeAttribute('disabled');
+  b.send.textContent = 'Submit';
+  c.location.pathname = '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1';
+  c.emit({ type: 'send' }); c.tick(60);
+  assert.equal(c.clicks.length, 0, 'kind and button must be resolved for the current route');
+});
