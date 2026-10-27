@@ -1,6 +1,6 @@
 # Privacy summary
 
-_Last updated: 2026-10-22_
+_Last updated: 2026-10-27_
 
 A plain-language summary. The full policy is [PRIVACY.md](../PRIVACY.md).
 
@@ -17,6 +17,18 @@ storage key listing cannot reset unknown legacy media until it is discovered; cu
 while stickers and other local data stay.
 
 Backups (**Back up…**, and older settings files and notes ZIPs) include share keys and creator delete tokens for all sessions, even paused ones. Keep these backups private: the keys grant access to shared content. Single-note exports do not contain session keys. See [sharing and backups](../PRIVACY.md#optional-encrypted-share-sessions).
+
+[Glaze Writer](../PRIVACY.md#what-glaze-stores) (Blackboard Ultra) keeps your papers, their versions and your format
+presets, your personal dictionary and the sources you save on this device; **Back up…** includes them. Discussion,
+message and test boxes keep their drafts through Back up what you type when it is on, as Blackboard's own editor does. Spelling and
+grammar are checked on your device. Writer reads the prompt, thread and rubric from your own Blackboard site, read-only,
+and sends nothing to Blackboard itself: your words reach it only when you press Blackboard's own Post, Reply, Send or
+Submit (the submit sheet attaches your paper's .docx through Blackboard's upload and clicks its Submit). A citation
+lookup goes out only when you click Look up: a DOI to `doi.org` (or Crossref and DataCite), an ISBN to
+`openlibrary.org`, a web address to that page's own host once you allow it. AI runs only for what you turn on in
+Settings → AI, through the connection you chose: Sentence completion sends the text around the caret, the course, prompt
+or assignment, and in a discussion your classmates' posts with their names; Writing feedback sends your draft with the
+assignment's instructions and rubric. Nothing goes to AI from a test.
 
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
 you set in a course's menu. These follow Chrome sync (or Firefox Sync) when it's on; Safari keeps them on this device only.
