@@ -398,8 +398,6 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       }
       return html;
     };
-    // The schema reads a 0 first-line indent as none (the format's): a hair over zero rounds to an explicit 0 there.
-    const ZERO = '0.004in';
     // A paragraph's alignment, spacing and indents as the paper schema reads them; what equals the format's own is left
     // out, so the paper keeps following its format. A block quote's own indent is the blockquote's.
     const paraStyle = (pp, { heading, quote, entry, level }) => {
@@ -425,7 +423,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (left && left > 0.05) css.push(`margin-left:${Math.round(left * 100) / 100}in`);
       const def = heading || quote ? null : align === 'center' || align === 'right' ? 0 : f.first;
       const eff = first ?? 0;
-      if (!heading && !quote && !(entry && first == null) && eff !== def) css.push(`text-indent:${eff ? `${Math.round(eff * 100) / 100}in` : ZERO}`);
+      if (!heading && !quote && !(entry && first == null) && eff !== def) css.push(`text-indent:${`${Math.round(eff * 100) / 100}in`}`);
       return { style: css.join(';'), before };
     };
     const BREAK = '\u0000BREAK\u0000';

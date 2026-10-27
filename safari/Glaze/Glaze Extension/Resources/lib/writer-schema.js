@@ -35,7 +35,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     const n = m ? (m[2] ? +m[1] / 100 : +m[1]) : NaN;
     return n >= 0.5 && n <= 4 ? Math.round(n * 100) / 100 : null;
   };
-  const firstOf = (dom) => { const n = inches(css(dom, 'text-indent')); return n ? Math.round(clamp(n, -2, 2) * 100) / 100 : null; };
+  const firstOf = (dom) => { const n = inches(css(dom, 'text-indent')); return n != null ? Math.round(clamp(n, -2, 2) * 100) / 100 : null; };
   const fontOf = (v) => {
     for (const f of String(v || '').split(',')) {
       const name = f.replace(/["']/g, '').trim().toLowerCase();
@@ -2623,7 +2623,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       const kind = LIST_KIND[c.getAttribute('data-list')] ?? ordered, level = clamp(depth + indentOf(c), 0, MAX_INDENT), align = alignOf(c);
       const start = out.length;
       let run = [];
-      const flush = () => { if (run.some(meaningful)) for (const seg of textblock(el('li', {}, run), o)) out.push({ ordered: kind, li: blockClass(seg, level, align) }); run = []; };
+      const flush = () => { if (run.some(meaningful)) for (const seg of textblock(el('li', o.paper ? { ...c.attrs } : {}, run), o)) out.push({ ordered: kind, li: blockClass(seg, level, align) }); run = []; };
       for (const n of c.childNodes) {
         if (isInline(n) && !hasBlock(n)) { run.push(n); continue; }
         flush();
@@ -2631,7 +2631,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
         else for (const b of blocks(el('div', {}, [n]), o)) take(b, kind, level, out, o);
       }
       flush();
-      if (out.length === start) out.push({ ordered: kind, li: blockClass(el('li'), level, align) });
+      if (out.length === start) out.push({ ordered: kind, li: blockClass(el('li', o.paper ? { ...c.attrs } : {}), level, align) });
     }
     return out;
   };
