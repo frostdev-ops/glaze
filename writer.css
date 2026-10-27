@@ -32,11 +32,43 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .ProseMirror p { margin: 0 0 10px; }
 .ProseMirror h3, .ProseMirror h4 { margin: 4px 0 10px; line-height: 1.35; font-weight: 600; }
 .ProseMirror h3 { font-size: 1.2em; } .ProseMirror h4 { font-size: 1.05em; }
-.ProseMirror ul, .ProseMirror ol { margin: 0 0 10px; padding-left: 24px; }
-.ProseMirror li > p { margin: 0 0 4px; }
 .ProseMirror a { color: var(--gz-accent-hi); text-underline-offset: 2px; }
 .ProseMirror pre { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; background: var(--gz-surface-2); font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-.ProseMirror[data-empty]::before { content: attr(data-placeholder); position: absolute; color: var(--gz-ink-faint); pointer-events: none; }
+.gz-writer.gz-blank::before { content: attr(data-placeholder); position: absolute; color: var(--gz-ink-faint); pointer-events: none; }
+/* Quill 1.x's flat lists, indents and alignment (quill.core.css), on the class names the editor core writes, so a post
+   looks here as it will in Ultra. */
+.ProseMirror ol, .ProseMirror ul { margin: 0 0 10px; padding-left: 1.5em; }
+.ProseMirror li { list-style-type: none; padding-left: 1.5em; margin: 0 0 4px; }
+.ProseMirror li::before { display: inline-block; white-space: nowrap; width: 1.2em; margin-left: -1.5em; margin-right: .3em; text-align: right; }
+.ProseMirror ul > li::before { content: "\2022"; }
+.ProseMirror ol > li { counter-increment: list-0; counter-reset: list-1 list-2 list-3 list-4 list-5 list-6 list-7 list-8; }
+.ProseMirror ol > li::before { content: counter(list-0, decimal) ". "; }
+.ProseMirror ol { counter-reset: list-0 list-1 list-2 list-3 list-4 list-5 list-6 list-7 list-8; }
+.ProseMirror ol > li.ql-indent-1 { counter-increment: list-1; counter-reset: list-2 list-3 list-4 list-5 list-6 list-7 list-8; }
+.ProseMirror ol > li.ql-indent-1::before { content: counter(list-1, lower-alpha) ". "; }
+.ProseMirror ol > li.ql-indent-2 { counter-increment: list-2; counter-reset: list-3 list-4 list-5 list-6 list-7 list-8; }
+.ProseMirror ol > li.ql-indent-2::before { content: counter(list-2, lower-roman) ". "; }
+.ProseMirror ol > li.ql-indent-3 { counter-increment: list-3; counter-reset: list-4 list-5 list-6 list-7 list-8; }
+.ProseMirror ol > li.ql-indent-3::before { content: counter(list-3, decimal) ". "; }
+.ProseMirror ol > li.ql-indent-4 { counter-increment: list-4; counter-reset: list-5 list-6 list-7 list-8; }
+.ProseMirror ol > li.ql-indent-4::before { content: counter(list-4, lower-alpha) ". "; }
+.ProseMirror ol > li.ql-indent-5 { counter-increment: list-5; counter-reset: list-6 list-7 list-8; }
+.ProseMirror ol > li.ql-indent-5::before { content: counter(list-5, lower-roman) ". "; }
+.ProseMirror ol > li.ql-indent-6 { counter-increment: list-6; counter-reset: list-7 list-8; }
+.ProseMirror ol > li.ql-indent-6::before { content: counter(list-6, decimal) ". "; }
+.ProseMirror ol > li.ql-indent-7 { counter-increment: list-7; counter-reset: list-8; }
+.ProseMirror ol > li.ql-indent-7::before { content: counter(list-7, lower-alpha) ". "; }
+.ProseMirror ol > li.ql-indent-8 { counter-increment: list-8; counter-reset: none; }
+.ProseMirror ol > li.ql-indent-8::before { content: counter(list-8, lower-roman) ". "; }
+.ProseMirror .ql-indent-1 { padding-left: 3em; } .ProseMirror li.ql-indent-1 { padding-left: 4.5em; }
+.ProseMirror .ql-indent-2 { padding-left: 6em; } .ProseMirror li.ql-indent-2 { padding-left: 7.5em; }
+.ProseMirror .ql-indent-3 { padding-left: 9em; } .ProseMirror li.ql-indent-3 { padding-left: 10.5em; }
+.ProseMirror .ql-indent-4 { padding-left: 12em; } .ProseMirror li.ql-indent-4 { padding-left: 13.5em; }
+.ProseMirror .ql-indent-5 { padding-left: 15em; } .ProseMirror li.ql-indent-5 { padding-left: 16.5em; }
+.ProseMirror .ql-indent-6 { padding-left: 18em; } .ProseMirror li.ql-indent-6 { padding-left: 19.5em; }
+.ProseMirror .ql-indent-7 { padding-left: 21em; } .ProseMirror li.ql-indent-7 { padding-left: 22.5em; }
+.ProseMirror .ql-indent-8 { padding-left: 24em; } .ProseMirror li.ql-indent-8 { padding-left: 25.5em; }
+.ProseMirror .ql-align-center { text-align: center; } .ProseMirror .ql-align-right { text-align: right; } .ProseMirror .ql-align-justify { text-align: justify; }
 ::selection { background: color-mix(in srgb, var(--gz-accent) 32%, transparent); }
 
 /* The bar under it */
