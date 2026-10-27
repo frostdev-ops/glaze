@@ -61,6 +61,8 @@ test('a collapsed discussion composer stays native until Ultra activates its edi
   assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['reply'], 'focus can draw a toolbar before the click activates Ultra');
   controls.className = 'form-buttons panel-editor-controls';
   controls.removeAttribute('aria-hidden');
+  assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['reply'], 'an empty native post collapses again when focus leaves it');
+  post.editor.textContent = 'A';
   assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['post', 'reply'], 'the activated editor can mount Writer');
 });
 
