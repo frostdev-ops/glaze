@@ -15,10 +15,14 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const sentence = (before) => {
     const s = before.split('\n').pop();
     let at = 0;
-    for (const m of s.matchAll(/[.!?…]+["'”’)\]]*\s+/gu)) at = m.index + m[0].length;
+    for (const m of s.matchAll(/[.!?…。！？]+["'”’)\]]*\s*/gu)) at = m.index + m[0].length;
     return s.slice(at);
   };
-  const fits = (before, after = '') => typeof before === 'string' && TAIL.test(before) && !/^[^\S\n]*[^\s]/.test(after)
+  const inQuote = (s) => {
+    const q = s.replace(/(?<=[\p{L}\p{N}])['’](?=[\p{L}\p{N}])/gu, '');
+    return [/["“”]/g, /['‘’]/g, /[«»]/g].some((re) => (q.match(re) || []).length % 2 === 1);
+  };
+  const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && TAIL.test(before) && !/^[^\S\n]*[^\s]/.test(after)
     && sentence(before).split(/\s+/).filter((w) => WORD.test(w)).length >= 3;
   // The next word of the gray text, with the space before it: what ⌥→ takes.
   const nextWord = (ghost) => /^\s*\S+/.exec(ghost)?.[0] || '';
@@ -41,7 +45,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const KEYS = mac ? '⌘⇧K' : 'Ctrl+Shift+K';
 
   // ---- the port ------------------------------------------------------------------------------------------------------
-  let port = null, asked = 0;
+  let port = null, asked = 0, generation = 0;
   const waits = new Map(); // message id → its answer's handler
   const hangUp = () => {
     const p = port;
@@ -66,25 +70,44 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     }), { id });
   };
   const cancel = (id) => { const w = waits.get(id); if (!w) return; w({ type: 'error', error: 'cancelled' }); try { port?.postMessage({ id, op: 'cancel' }); } catch { /* gone */ } };
-  const run = (feature, task, input) => ask({ op: 'run', feature, task, input });
+  const run = (feature, task, input) => {
+    if (!ok(feature)) return Object.assign(Promise.resolve({ type: 'error', error: 'off' }), { id: 0 });
+    const gen = generation, r = ask({ op: 'run', feature, task, input });
+    return Object.assign(r.then((a) => gen === generation && ok(feature) ? a : { type: 'error', error: 'changed' }), { id: r.id });
+  };
 
   // ---- what may run --------------------------------------------------------------------------------------------------
   // status per feature: the broker's answer, or null when Settings → AI says no (then nothing is asked).
   const status = { completion: null, writing: null };
-  const ok = (f) => status[f]?.allowed === true && status[f]?.ready === true;
-  const quiet = () => F.kind() === 'test' || !F.editor();
+  const ok = (f) => !quiet() && status[f]?.allowed === true && status[f]?.ready === true;
+  const quiet = () => F.kind() === 'test' || F.context()?.kind === 'test' || !F.editor();
   let checked = 0;
+  const invalidate = () => {
+    generation++;
+    status.completion = status.writing = null;
+    stopFlight();
+    hangUp();
+    if (view()) clear(view());
+    fb.done?.();
+    Object.assign(fb, { state: 'idle', criteria: [], place: null, done: null });
+    reviewing = false;
+    render();
+  };
   const refresh = async () => {
+    invalidate(); // close admission before either asynchronous read can yield
+    const gen = generation;
     checked = Date.now();
     let s = null;
     try { s = (await chrome.storage.local.get('ai'))?.ai; } catch { /* no storage */ }
-    const want = (f) => !quiet() && s?.on === true && typeof s.use === 'string' && !!s.use && s.features?.[f] === true;
-    if (!want('completion') && !want('writing')) hangUp();
+    if (gen !== generation || quiet()) return;
+    const want = (f) => s?.on === true && typeof s.use === 'string' && !!s.use && s.features?.[f] === true;
+    const next = { completion: null, writing: null };
     for (const f of ['completion', 'writing']) {
       const st = want(f) ? await ask({ op: 'status', feature: f }) : null;
-      status[f] = st?.type === 'status' ? st : null;
+      if (gen !== generation || quiet()) return;
+      next[f] = st?.type === 'status' ? st : null;
     }
-    if (!ok('completion')) { stopFlight(); if (view()) clear(view()); }
+    Object.assign(status, next);
     render();
   };
   try { chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.ai) refresh(); }); } catch { /* no storage */ }
@@ -225,10 +248,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!v || !ok('writing') || reviewing) return;
     const doc = v.state.doc, text = S.text(doc).text;
     if (!text.trim()) return;
-    const tr = track();
+    const tr = track(), gen = generation;
     reviewing = true;
     render();
     const end = await run('writing', 'writer.review', { text, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context() });
+    if (gen !== generation) { tr.done(); return; }
     reviewing = false;
     render();
     try {
@@ -251,10 +275,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const doc = v.state.doc, text = S.text(doc).text;
     if (!text.trim()) return;
     fb.done?.();
-    const tr = track();
+    const tr = track(), gen = generation;
     Object.assign(fb, { state: 'running', criteria: [], place: null, done: tr.done });
     paint();
     const end = await run('writing', 'writer.feedback', { text, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context() });
+    if (gen !== generation) { tr.done(); return; }
     if (end.type !== 'end' || !Array.isArray(end.output?.criteria)) { tr.done(); Object.assign(fb, { state: 'error', done: null }); paint(); return; }
     Object.assign(fb, { state: 'done', criteria: end.output.criteria, place: placer(doc, tr.m) });
     paint();
@@ -270,6 +295,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   };
   const draw = (box) => {
     box.textContent = '';
+    box.setAttribute('aria-busy', String(fb.state === 'running'));
     if (!ok('writing')) { box.append(el('p', 'gz-fb-note', t('Writing feedback is off in Settings → AI.'))); return; }
     if (!assignment()) { box.append(el('p', 'gz-fb-note', t('No instructions or rubric to check against.'))); return; }
     const go = el('button', 'gz-fb-run', fb.state === 'running' ? t('Reading your draft…') : fb.state === 'done' ? t('Check again') : t('Get feedback'));
@@ -295,10 +321,14 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       box.append(card);
     }
   };
-  const paint = () => { for (const box of views) draw(box); };
+  const paint = () => { for (const box of views) { const focused = box.contains(document.activeElement); draw(box); if (focused) box.focus({ preventScroll: true }); } };
   // The Feedback panel, in any container (the paper's side panel tab; compose's popover over the chip). → { destroy }.
   const feedbackView = (container) => {
     const box = el('div', 'gz-fb');
+    box.tabIndex = -1;
+    box.setAttribute('role', 'region');
+    box.setAttribute('aria-label', t('Feedback'));
+    box.setAttribute('aria-live', 'polite');
     container.append(box);
     views.add(box);
     draw(box);
@@ -315,10 +345,13 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const menu = el('div', 'pop menu gz-ai-menu');
   menu.setAttribute('role', 'menu');
   menu.hidden = true;
-  const item = (cls, fn) => { const b = el('button', cls); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.addEventListener('click', () => { shut(); fn(); }); menu.append(b); return b; };
+  const item = (cls, fn) => { const b = el('button', cls); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.addEventListener('click', () => { shut(); chip.focus(); fn(); }); menu.append(b); return b; };
   const checkItem = item('gz-ai-check', review), fbItem = item('gz-ai-fb', () => openFeedback());
   const pop = el('div', 'pop gz-ai-pop');
   pop.hidden = true;
+  pop.tabIndex = -1;
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', t('Feedback'));
   let moreItem = null, fbView = null;
   const label = (b, text, keys) => { b.textContent = text; if (keys) b.append(el('span', 'gz-keys', keys)); };
   // Shown by a fade and scale (writer.css .pop), hidden at once.
@@ -326,6 +359,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const shut = () => {
     for (const p of [menu, pop]) { p.hidden = true; p.removeAttribute('data-open'); }
     chip.setAttribute('aria-expanded', 'false');
+    chip.setAttribute('aria-haspopup', 'menu');
     fbView?.destroy();
     fbView = null;
   };
@@ -357,8 +391,10 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     shut();
     fbView = feedbackView(pop);
     chip.setAttribute('aria-expanded', 'true');
+    chip.setAttribute('aria-haspopup', 'dialog');
     open(pop);
     place(pop);
+    pop.focus({ preventScroll: true });
     if (fb.state === 'idle') feedback();
   };
   chip.addEventListener('click', () => {
@@ -372,16 +408,17 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   });
   menu.addEventListener('keydown', (e) => {
     const items = [...menu.querySelectorAll('[role="menuitem"]:not([hidden])')], i = items.indexOf(document.activeElement);
-    if (e.key === 'Escape') { e.preventDefault(); shut(); chip.focus(); } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
+    if (e.key === 'Tab') { shut(); chip.focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); shut(); chip.focus(); } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
   });
   pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); shut(); chip.focus(); } });
   document.addEventListener('pointerdown', (e) => { if ((!menu.hidden || !pop.hidden) && !menu.contains(e.target) && !pop.contains(e.target) && !chip.contains(e.target)) shut(); }, true);
+  document.addEventListener('focusin', (e) => { if ((!menu.hidden || !pop.hidden) && !menu.contains(e.target) && !pop.contains(e.target) && e.target !== chip) shut(); });
   addEventListener('resize', () => { if (!menu.hidden) place(menu); if (!pop.hidden) place(pop); });
 
   // ---- the autocorrect's calls -------------------------------------------------------------------------------------
-  // GZ_WRITER_PROOF.decide({ text, from, to, suggestions, context }) → 'apply' | 'suggest' | null, in at most 5 s: the
-  // sentence around the flagged words (at most 1,000 characters) and the candidates. apply only when the model takes the
-  // first candidate; another candidate, or no answer, leaves it a suggestion.
+  // → { verdict: 'apply'|'suggest'|'keep', choice: index }, or null without an answer, in at most 5 s.
+  // The index names the caller's candidate, even when the task deduplicates candidates; keep has choice -1.
   const decide = async ({ text, from, to, suggestions, context } = {}) => {
     if (!ok('writing') || typeof text !== 'string' || !Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to <= from || to > text.length
       || !Array.isArray(suggestions) || !suggestions.length) return null;
@@ -390,13 +427,17 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const tail = /[.!?…]["'”’)\]]*(?=\s|$)|\n/u.exec(text.slice(to));
     if (tail) b = to + tail.index + (tail[0] === '\n' ? 0 : tail[0].length);
     a = Math.max(a, to - 900); b = Math.min(b, Math.max(to, a + 1000));
-    const r = run('writing', 'writer.decide', { sentence: text.slice(a, b), from: from - a, to: to - a, suggestions: suggestions.slice(0, 5).map(String),
+    const candidates = suggestions.slice(0, 5).map(String);
+    const r = run('writing', 'writer.decide', { sentence: text.slice(a, b), from: from - a, to: to - a, suggestions: candidates,
       context: context && typeof context === 'object' ? context : F.context() });
     const late = setTimeout(() => cancel(r.id), 5000);
     const end = await r;
     clearTimeout(late);
     if (end.type !== 'end' || !end.output) return null;
-    return end.output.verdict === 'keep' ? null : end.output.verdict === 'apply' && end.output.choice === suggestions[0] ? 'apply' : 'suggest';
+    const { verdict, choice } = end.output;
+    if (verdict === 'keep') return { verdict, choice: -1 };
+    const index = candidates.indexOf(choice);
+    return ['apply', 'suggest'].includes(verdict) && index >= 0 ? { verdict, choice: index } : null;
   };
   const hook = () => { try { if (globalThis.GZ_WRITER_PROOF && GZ_WRITER_PROOF.decide !== decide) GZ_WRITER_PROOF.decide = decide; } catch { /* not settable */ } };
 
@@ -415,7 +456,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     hook();
     refresh();
   });
-  F.on('context', () => { if (!quiet()) render(); });
+  F.on('context', refresh);
   return Object.assign(api, { feedbackView, feedback, review, decide, requirements, cite, allowed: ok, refresh });
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_AI;

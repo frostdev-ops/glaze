@@ -45,19 +45,31 @@ var GZ_AI_TASK_WRITER_CITE = globalThis.GZ_AI_TASK_WRITER_CITE || (() => {
     if (S.validate(out, OUTPUT).length) return null;
     const X = typeof GZ_AI_TEXT !== 'undefined' ? GZ_AI_TEXT : require('../text.js');
     const src = X.source(inp.text, { min: 1 });
-    const v = (s) => (typeof s === 'string' && s.trim() && src.has(s.trim()) ? s.trim() : null);
+    const page = X.norm(inp.text);
+    const v = (s) => {
+      if (typeof s !== 'string' || !s.trim() || !src.has(s.trim())) return null;
+      const value = X.norm(s), escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'u').test(page) ? s.trim() : null;
+    };
     const title = typeof out.title === 'string' && out.title.trim().length >= 3 ? v(out.title) : null;
     if (!title) return null;
     const author = out.authors.map((a) => (v(a.family) ? { family: v(a.family), ...(v(a.given) && { given: v(a.given) }) } : v(a.literal) ? { literal: v(a.literal) } : null)).filter(Boolean);
-    // A date only from its quote: the year's digits in it, the month as a number or a name, the day's digits.
+    // Month/day roles must be explicit: a day's digits cannot also prove a month.
     const d = out.date, q = v(d.quote), ql = q ? q.toLowerCase() : '';
-    const has = (x) => new RegExp(`(?<!\\d)0?${x}(?!\\d)`).test(ql);
     let parts = null;
-    if (q && d.year && has(d.year)) {
+    if (q && d.year && new RegExp(`(?<!\\d)${d.year}(?!\\d)`).test(ql)) {
       parts = [d.year];
-      if (d.month && (has(d.month) || ql.includes(MONTHS[d.month - 1]) || ql.includes(MONTHS[d.month - 1].slice(0, 3)))) {
+      const names = MONTHS.flatMap((name, i) => [name, name.slice(0, 3)].map((name) => ({ name, month: i + 1 })));
+      const named = names.find(({ name }) => new RegExp(`\\b${name}\\b`).test(ql));
+      const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(ql);
+      const month = named?.month || (iso && Number(iso[1]) === d.year ? Number(iso[2]) : null);
+      if (d.month && d.month === month) {
         parts.push(d.month);
-        if (d.day && has(d.day)) parts.push(d.day);
+        const dayMatch = named && (new RegExp(`\\b${named.name}\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?=[,\\s]|$)`).exec(ql)
+          || new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${named.name}\\b`).exec(ql));
+        const day = dayMatch ? Number(dayMatch[1]) : iso ? Number(iso[3]) : null;
+        const days = new Date(Date.UTC(d.year, d.month, 0)).getUTCDate();
+        if (d.day && d.day === day && d.day <= days) parts.push(d.day);
       }
     }
     const doi = v(out.doi), isbn = v(out.isbn);
@@ -72,7 +84,7 @@ var GZ_AI_TASK_WRITER_CITE = globalThis.GZ_AI_TASK_WRITER_CITE || (() => {
     };
   };
 
-  const task = T.add(T.define({ id: 'writer.cite', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 } }));
+  const task = T.add(T.define({ id: 'writer.cite', version: 2, input, build, output: OUTPUT, check, limits: { ms: 60000 } }));
   return { task, LIMIT, TYPES, OUTPUT, SYSTEM };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_WRITER_CITE; else GZ_AI_TASK_WRITER_CITE;

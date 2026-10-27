@@ -20,7 +20,9 @@ var GZ_WRITER_TOOLS = globalThis.GZ_WRITER_TOOLS || (() => {
     let cur = '';
     for (const line of String(text).split('\n')) {
       if (cur && cur.length + line.length + 1 > LIMIT.page) { out.push(cur); cur = ''; }
-      cur += (cur ? '\n' : '') + line;
+      let rest = line;
+      while (rest.length > LIMIT.page) { out.push(rest.slice(0, LIMIT.page)); rest = rest.slice(LIMIT.page); }
+      cur += (cur ? '\n' : '') + rest;
     }
     out.push(cur);
     return out;
