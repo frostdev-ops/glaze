@@ -35,6 +35,14 @@ const GZ_I18N = (() => {
     'Plays effects for {n} events.': { one: 'Plays effects for {n} event.', other: 'Plays effects for {n} events.' },
     '{n} checks open': { one: '{n} check open', other: '{n} checks open' },
     '{n} pages': { one: '{n} page', other: '{n} pages' },
+    '{n} words': { one: '{n} word', other: '{n} words' },
+    'At least {n} words': { one: 'At least {n} word', other: 'At least {n} words' },
+    'At most {n} words': { one: 'At most {n} word', other: 'At most {n} words' },
+    'Reply to {n} classmates': { one: 'Reply to {n} classmate', other: 'Reply to {n} classmates' },
+    'Cite {n} sources': { one: 'Cite {n} source', other: 'Cite {n} sources' },
+    '{n} issues': { one: '{n} issue', other: '{n} issues' },
+    'AI found {n} issues.': { one: 'AI found {n} issue.', other: 'AI found {n} issues.' },
+    'Quotes of {n} words or more go in a block quote': { one: 'Quotes of {n} word or more go in a block quote', other: 'Quotes of {n} words or more go in a block quote' },
     '{n} tokens': { one: '{n} token', other: '{n} tokens' },
   };
 
