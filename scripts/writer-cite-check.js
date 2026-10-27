@@ -23,6 +23,7 @@ const until = async (fn, label, ms = 10000) => {
   const start = Date.now(); let last;
   while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(60); }
   if (debugFrame) console.error(await debugFrame.evaluate(() => ({ pop: document.querySelector('.gz-cite')?.outerHTML.slice(0, 5000), focus: document.activeElement?.outerHTML.slice(0, 200), trace: window.__citeTrace })));
+  if (debugFrame) console.error(await debugFrame.page().evaluate(() => ({ trace: window.__hostTrace, scroll: scrollY, height: innerHeight, frame: document.querySelector('iframe.gz-writer')?.getBoundingClientRect().toJSON() })));
   throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
 };
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
@@ -85,6 +86,13 @@ const HARNESS = `(() => {
     const p = await context.newPage();
     p.on('pageerror', (e) => errors.push(`page: ${e.message}`));
     await p.goto(`${site}/ultra/courses/_101_1/discussion/_9_1`);
+    await p.evaluate(() => {
+      window.__hostTrace = [];
+      for (const type of ['pointerdown', 'pointerup', 'click', 'scroll']) addEventListener(type, (e) => {
+        __hostTrace.push({ type, target: e.target?.outerHTML?.slice(0, 160), x: e.clientX, y: e.clientY, scroll: scrollY });
+        if (__hostTrace.length > 12) __hostTrace.shift();
+      }, true);
+    });
     const el = await until(async () => { const h = await p.$('iframe.gz-writer[data-gz-writer-frame="post"]'); return h && await h.evaluate((f) => !f.style.opacity && f.offsetHeight > 100) && h; }, 'post frame shown');
     const fr = await until(() => el.contentFrame(), 'frame document'); debugFrame = fr;
     await until(() => fr.evaluate(() => !!document.querySelector('.ProseMirror') && !!globalThis.GZ_WRITER_CITE?.open), 'editor and citations in the frame');
@@ -101,7 +109,14 @@ const HARNESS = `(() => {
     const saved = {};
     const POST = '.ql-editor[data-placeholder="Type a post"]';
     // The frame has grown to hold the open popover (it asks for that height as the popover changes).
-    const settled = () => until(async () => { const need = await fr.evaluate(() => { const p = document.querySelector('.gz-cite'); return p.hidden ? 0 : p.offsetTop + p.offsetHeight + 6; }); return (await el.evaluate((f) => f.getBoundingClientRect().height)) >= need; }, 'frame holds the popover');
+    const settled = async () => {
+      await until(async () => {
+        const size = await fr.evaluate(() => { const p = document.querySelector('.gz-cite'), base = Math.ceil(document.getElementById('gw').getBoundingClientRect().height) + 6; return { need: p.hidden ? base : Math.max(base, p.offsetTop + p.offsetHeight + 6), height: innerHeight }; });
+        return size.height === size.need && Math.abs((await el.evaluate((f) => f.getBoundingClientRect().height)) - size.need) < 1;
+      }, 'host and frame acknowledge the popover height');
+      await fr.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    };
     const clickCite = async (selector) => { await settled(); await fr.click(selector); };
     const menuItem = async (label) => {
       await until(async () => { if (await fr.evaluate(() => document.getElementById('menu').hidden)) await fr.click('#more'); return fr.evaluate(() => !document.getElementById('menu').hidden); }, 'menu open');
@@ -123,7 +138,7 @@ const HARNESS = `(() => {
     // ---- the toolbar's Cite and its popover (mockup B's toolbar) ----
     await fr.click('.ProseMirror');
     await p.keyboard.type('Sethe calls the past rememory, a word that refuses the past tense. ', { delay: 2 });
-    await fr.evaluate(() => { const t = document.querySelector('.ProseMirror p').firstChild, r = document.createRange(); r.setStart(t, 21); r.setEnd(t, 29); getSelection().removeAllRanges(); getSelection().addRange(r); });
+    await fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, 22, 30))); v.focus(); });
     await until(() => fr.evaluate(() => !document.getElementById('tb').hidden), 'selection toolbar');
     check(await fr.evaluate(() => { const b = document.querySelector('#tb .gzc-cite'); return b?.textContent === 'Cite' && b.classList.contains('on') && b.previousElementSibling?.classList.contains('sepv'); }), 'the selection toolbar ends with Cite after a separator, as the mockup draws it');
     saved.toolbar = await shot(el, 'cite-toolbar.png');
