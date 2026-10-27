@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Writer practice</title>
+<!-- The practice home (scripts/writer-practice.js): the two scenarios and a reset for each. Not Ultra's; outside /ultra, so
+Glaze doesn't run here. -->
+<style>
+body { margin:0; font:15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background:#060d18; color:#e8f2fa; }
+main { max-width:720px; margin:56px auto; padding:0 24px; display:grid; gap:16px; }
+h1 { font-size:22px; margin:0 0 8px; }
+.card { display:flex; align-items:center; gap:16px; padding:18px 20px; border:1px solid #16283f; border-radius:14px; background:#0d1b2e; }
+.card a { flex:1; color:#6fdcff; font-weight:600; text-decoration:none; } .card a:hover { text-decoration:underline; }
+.card small { display:block; color:#8fa8c0; font-weight:400; }
+button { font:inherit; padding:7px 14px; border-radius:999px; border:1px solid #24405f; background:none; color:inherit; cursor:pointer; }
+button:disabled { opacity:.5; cursor:default; }
+p { color:#8fa8c0; margin:4px 0 0; word-break:break-all; }
+</style></head>
+<body><main>
+<h1>Writer practice</h1>
+<div class="card"><a href="/ultra/courses/_101_1/discussion/_9_1">Discussion<small>Week 6: Memory and Place · post and reply</small></a><button type="button" data-reset="discussion">Reset</button></div>
+<div class="card"><a href="/ultra/courses/_101_1/assessment/_7_1/attempt/create">Assignment<small>Essay 2: Memory in Beloved · submit a paper</small></a><button type="button" data-reset="assignment">Reset</button></div>
+<p>Received: <span id="received"></span></p>
+</main>
+<script>
+fetch('/practice/api/where').then((r) => r.json()).then((w) => { document.getElementById('received').textContent = w.received; });
+for (const b of document.querySelectorAll('[data-reset]')) b.addEventListener('click', async () => {
+  b.disabled = true;
+  await fetch('/practice/api/reset', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ scenario: b.dataset.reset }) });
+  b.textContent = 'Reset ✓';
+  setTimeout(() => { b.textContent = 'Reset'; b.disabled = false; }, 1200);
+});
+</script>
+</body></html>
