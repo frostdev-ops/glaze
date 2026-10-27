@@ -73,6 +73,8 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(10000);
     const grades = book(), list = json('ultra-writer-thread-discussions.json'), page1 = json('ultra-writer-thread.json'), page2 = json('ultra-writer-thread-2.json'), replies = json('ultra-writer-thread-replies.json');
+    // Reply targets are explicit; a post target alone must not become a reply requirement.
+    list.results.find((d) => d.id === '_1101_1').topic.body += '<p>Each reply must be at least 250 words and cite two sources.</p>';
     const memberships = json('ultra-memberships.json');
     await context.route('**/*', async (r) => {
       const req = r.request(), u = new URL(req.url());
