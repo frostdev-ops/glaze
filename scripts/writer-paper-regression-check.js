@@ -61,6 +61,19 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
       assert.ok(await a.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(); return (await Promise.all((await P.versions('review-tabs')).map((v) => P.version('review-tabs', v.id)))).some((v) => JSON.stringify(v.doc).includes('Typed in A.')); }));
       await a.close(); await b.close();
     });
+    await run('note-edit', async () => {
+      const p = await page('review-note-edit');
+      await p.click('.gp-tbtn:has-text("Footnote")'); await p.fill('.gp-note textarea', 'Keep this note when I click away.');
+      await p.click('.gp-top h1'); await pause(100);
+      assert.ok(await p.evaluate(() => JSON.stringify(GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON()).includes('Keep this note when I click away.')), 'clicking outside a footnote must commit its text');
+      await p.close();
+    });
+    await run('image', async () => {
+      const p = await page('review-image');
+      await p.evaluate(() => { const canvas = document.createElement('canvas'); canvas.width = 1; canvas.height = 3000; const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA; const doc = S.paper.nodes.doc.create(null, S.paper.nodes.paragraph.create(null, S.paper.nodes.image.create({ src: canvas.toDataURL(), width: 300 }))); v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, doc.content)); });
+      await pause(500);
+      assert.ok(await p.evaluate(() => { const image = document.querySelector('.gp-flow img'), scale = document.querySelector('.gp-zoom').getBoundingClientRect().width / 816; return image.getBoundingClientRect().height / scale <= GZ_WRITER_STYLES.geometry(GZ_WRITER_PAPER.current().format()).body; }), 'tall pictures must fit inside the page body'); await p.close();
+    });
     await run('keyboard', async () => {
       const p = await page('review-keyboard');
       await p.focus('#gp-tab-checks'); await p.keyboard.press('ArrowRight');
