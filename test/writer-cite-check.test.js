@@ -143,3 +143,8 @@ test('typed references preserve citation fixes and reject absent authors, surnam
   assert.deepEqual(msgs(C.check(`A claim (Morrisonson 42).${list}`, [], 'mla9')), ['Morrisonson is cited but has no entry']);
   assert.deepEqual(msgs(C.check('A claim (Morrison, 1992).\nReferences\nMorrison, T. (1987). Beloved. Knopf.', [], 'apa7')), ['Morrison is cited but has no entry']);
 });
+
+test('paper format checks can own citation shape while cite checks still find missing entries', () => {
+  const issues = C.check('A claim (Morrison, 42), then another (Baldwin xix).', [MORRISON], 'mla9', { shape: false });
+  assert.deepEqual(msgs(issues), ['Baldwin is cited but has no entry']);
+});
