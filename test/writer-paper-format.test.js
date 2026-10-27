@@ -24,8 +24,8 @@ test('a new MLA paper: the heading block filled from Ultra (instructor left to t
 test('new APA and Chicago papers open on a title page', () => {
   const apa = node(F.template(ST.FORMATS.apa7, v));
   const texts = apa.content.content.map((n) => n.textContent);
-  assert.deepEqual(texts.slice(0, 11), ['', '', '', 'Essay 2', '', 'Alex Rivera', 'ENGL 2110: American Literature II', '', '27 October 2026', '', 'Essay 2']);
-  assert.equal(apa.child(9).type.name, 'page_break');
+  assert.deepEqual(texts.slice(0, 12), ['', '', '', 'Essay 2', '', 'Alex Rivera', '', 'ENGL 2110: American Literature II', '', '27 October 2026', '', 'Essay 2']);
+  assert.equal(apa.child(10).type.name, 'page_break');
   assert.ok(apa.child(3).firstChild.marks.some((m) => m.type.name === 'bold'), 'APA\'s title is bold');
   assert.equal(apa.lastChild.textContent, 'References');
   const chi = node(F.template(ST.FORMATS.chicago17, v));
@@ -38,7 +38,7 @@ test('switching formats carries the opening\'s lines over and renames the list; 
   const mla = FX.papers.mla9();
   const apa = node(F.restyle(mla, ST.FORMATS.mla9, ST.FORMATS.apa7, {}));
   const o = F.read(apa, ST.FORMATS.apa7);
-  assert.deepEqual(o.lines, { title: FX.context.title, name: FX.context.name, course: FX.context.course, instructor: FX.context.instructor, date: '26 October 2026' });
+  assert.deepEqual(o.lines, { title: FX.context.title, name: FX.context.name, affiliation: '', course: FX.context.course, instructor: FX.context.instructor, date: '26 October 2026' });
   assert.ok(apa.textContent.includes('Professor Okafor') && apa.textContent.includes('ENGL 2110'));
   assert.equal(apa.child(ST.listAt(apa).title).textContent, 'References');
   const body = (d, f) => d.content.content.slice(F.read(d, f).end).map((n) => n.textContent).join('\n');

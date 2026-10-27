@@ -19,7 +19,7 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     const lines = [v.name, v.course, v.instructor, v.date].map((x) => p(s(x), C));
     // APA: the title three lines down, a blank line, the student's lines, and the title again over the text. Chicago
     // (Turabian's class paper): the title a third of the way down, the student's lines two thirds down.
-    if (f.cite === 'apa') return [...blanks(3), title, p('', C), ...lines, { type: 'page_break' }, JSON.parse(JSON.stringify(title))];
+    if (f.cite === 'apa') { lines.splice(1, 0, p(s(v.affiliation), C)); if (v.dueDate) lines[4] = p(s(v.dueDate), C); return [...blanks(3), title, p('', C), ...lines, { type: 'page_break' }, JSON.parse(JSON.stringify(title))]; }
     return [...blanks(6), title, ...blanks(7), ...lines, { type: 'page_break' }];
   };
   const closing = (f) => [{ type: 'page_break' }, p(f.list.title, C, f.list.bold ? BOLD : undefined)];
@@ -47,8 +47,10 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     // line with text above them.
     if (brk < 5) return null;
     const lines = {}, at = {};
-    ['name', 'course', 'instructor', 'date'].forEach((k, j) => { at[k] = brk - 4 + j; lines[k] = text(all[at[k]]).trim(); });
     const ti = all.slice(0, brk - 4).findIndex((n) => text(n).trim());
+    const start = ti + 1 + (ti >= 0 && !text(all[ti + 1]).trim() ? 1 : 0);
+    const keys = f.cite === 'apa' && ti >= 0 && brk - start >= 5 ? ['name', 'affiliation', 'course', 'instructor', 'date'] : ['name', 'course', 'instructor', 'date'];
+    keys.forEach((k, j) => { at[k] = brk - keys.length + j; lines[k] = text(all[at[k]]).trim(); });
     if (ti >= 0) { at.title = ti; lines.title = text(all[ti]).trim(); }
     let end = brk + 1;
     if (f.cite === 'apa' && type(all[end]) === 'paragraph' && attrs(all[end]).align === 'center' && text(all[end]).trim() === (lines.title || '')) end++;
