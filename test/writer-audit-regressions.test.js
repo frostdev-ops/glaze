@@ -48,11 +48,13 @@ test('the Ultra command palette offers Papers and opens it only for a trusted ch
 });
 
 test('the paper Outline uses document translations while appearance Outline keeps its meaning', () => {
-  const key = read('writer-paper.js').match(/\['outline', '([^']+)'\]/)?.[1];
+  const source = read('writer-paper.js');
+  const key = source.match(/\['outline', '([^']+)'\]/)?.[1];
+  const translate = (lang) => vm.runInNewContext(`(${source.match(/\bt = (\(k, v\) => [\s\S]+?), store = PA.open\(\)/)[1]})`, { host: { t: (k, v) => I.t(k, v, lang) } });
   assert.ok(key);
-  assert.equal(I.t(key, {}, 'en'), 'Outline');
-  assert.equal(I.t(key, {}, 'de'), 'Gliederung');
-  assert.equal(I.t(key, {}, 'fr'), 'Plan');
+  assert.equal(translate('en')(key), 'Outline');
+  assert.equal(translate('de')(key), 'Gliederung');
+  assert.equal(translate('fr')(key), 'Plan');
   assert.equal(I.t('Outline', {}, 'de'), 'Umrandung');
 });
 
