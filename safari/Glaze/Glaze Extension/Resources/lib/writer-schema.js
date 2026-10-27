@@ -163,7 +163,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
 
   // Tags once, without a backtracking tag regex: a quoted > is data, an unfinished tag is text (Rimeward's scanner).
   function* tags(input) {
-    const head = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b/y;
+    const head = /<\/?([a-zA-Z][a-zA-Z0-9:-]*)(?=[\s/>]|$)/y;
     let cursor = 0;
     while (cursor < input.length) {
       const start = input.indexOf('<', cursor);
@@ -264,6 +264,16 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       if (skip) { if (name === skip) depth += t.closing ? -1 : VOID.has(name) ? 0 : 1; if (depth === 0) skip = null; continue; }
       if (!name) continue;
       const a = attrsOf(t.raw);
+      // Inspect source blots before dropping or unwrapping unknown tags, including empty embeds.
+      const blot = `${name} ${a.class || ''}`;
+      if (/attachment|formula|latex|lti|embedded-?app|gz-footnote/i.test(blot) || a['data-bbtype'] || a['data-bbfile']) o.lost.add('attachment');
+      if (/\b(?:ql-)?math\b/i.test(blot)) o.lost.add('math');
+      if (/inlineimage|video-studio|\b(?:ql-)?(?:image|video|audio)\b/i.test(blot) && !(o.paper && name === 'img')) o.lost.add('media');
+      if (!o.paper && /\b(?:ql-)?table-(?:cell|head|row|body|container)\b/i.test(blot)) o.lost.add('table');
+      if (!o.paper && (/color|background|font-family|font-size|line-height|text-indent|margin-left|direction/i.test(a.style || '')
+        || /ql-(font|size|color|bg|customcolor|lineheight|direction|customClass)/i.test(a.class || '')
+        || /\bql-indent-(?![1-8]\b)\d+\b/.test(a.class || '') || a.dir?.toLowerCase() === 'rtl' || name === 'font'
+        || (name === 'a' && a.href != null && !href(a.href)))) o.lost.add('format');
       if (name in DROP || (name === 'span' && /mso-list\s*:\s*ignore/i.test(a.style || ''))) {
         if (DROP[name]) o.lost.add(DROP[name]);
         if (!t.closing && !VOID.has(name) && !/\/\s*$/.test(t.raw)) { skip = name; depth = 1; }
@@ -276,9 +286,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
         if (i > 0) closeTo(i);
         continue;
       }
-      if (/attachment|formula|latex|lti/i.test(a.class || '') || a['data-bbtype'] || a['data-bbfile']) o.lost.add('attachment');
       if (!o.paper && (kind === 'img' || kind === 'table')) o.lost.add(kind === 'img' ? 'media' : 'table');
-      if (!o.paper && (/color|background|font-family|font-size/i.test(a.style || '') || /ql-(font|size|color|bg)/.test(a.class || '') || name === 'font')) o.lost.add('format');
       // The implied closes a browser makes: a block ends an open paragraph or heading; an item ends the item before it.
       if (BLOCK.has(kind) || kind === 'div') { const i = find(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'], ['LI', 'TD', 'TH', 'BLOCKQUOTE', 'DIV']); if (i > 0) closeTo(i); }
       if (kind === 'li') { const i = find(['li'], ['UL', 'OL']); if (i > 0) closeTo(i); }
