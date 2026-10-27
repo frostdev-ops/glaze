@@ -231,6 +231,10 @@ const rss = (profile) => {
     await essay.fr.click('.ProseMirror');
     await tp.keyboard.type('i think teh answer is two.', { delay: 12 });
     check((await text(essay.fr)) === 'I think the answer is two.', 'a test\'s box still gets local autocorrect (i → I, teh → the)');
+    await tp.keyboard.press(`${MOD}+a`);
+    await tp.keyboard.type('unfortunatly ', { delay: 12 });
+    check((await text(essay.fr)) === 'unfortunately ', 'a long curated typo is corrected');
+    check(await essay.fr.evaluate(() => { const p = document.querySelector('.gp-fix'); return p.scrollWidth <= p.clientWidth && p.getBoundingClientRect().right <= innerWidth; }), 'a long autocorrect and its Undo fit inside the pop');
     await tp.close();
 
     check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);
