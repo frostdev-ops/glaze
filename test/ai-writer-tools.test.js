@@ -66,6 +66,14 @@ test('confirm tools: summaries in Glaze\'s words from the document; only a sourc
   assert.deepEqual(b.done, [['cite', 'baldwin', '12'], ['fix', 'ai-0-4', 'seems']]);
 });
 
+test('a model on this computer is asked only after a space, where the word is known to be whole', () => {
+  // Live with Apple Intelligence, 2026-10-27: asked mid-word ("…how to subm", "…she ow") it joined or garbled the word.
+  assert.equal(AI.asks('Three things I learned are how to subm', { local: true }), false);
+  assert.equal(AI.asks('Three things I learned are how to ', { local: true }), true);
+  assert.equal(AI.asks('Three things I learned are how to subm', { local: false }), true, 'a large model may finish the word');
+  assert.equal(AI.asks('Three things I learned are how to subm', undefined), true);
+});
+
 test('the gray text shows where the task would run, Tab-word takes one word, typing consumes it, and the pause adapts', () => {
   const cases = [['When Sethe returns, the memory is not hers; it', ''], ['Two words', ''], ['Three words here ', ''], ['Three words here  ', ''], ['Done here. ', ''], ['He said “hello.\n\nThree things I learned are how to', ''], ['The students’ posts were long, so I learned how to', ''], ['Baldwin calls it ‘the price of the', ''], ['Three words here', ' more'],
     ['Three words here', '\nNext'], ['End here. Then two', ''], ['It isn’t', ''], ['Some words and a hyphen-', ''], ['Numbers like 42 and 7', '']];
