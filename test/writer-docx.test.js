@@ -125,3 +125,20 @@ test('import refuses hostile files before inflating them', async () => {
   await assert.rejects(X.importDocx(zipOf([['word/document.xml', '<w:document/>']])), /not a Word document/);
   assert.throws(() => X.xml('x'.repeat(5e6 + 1)), /too large/);
 });
+
+test('import refuses truncated XML and duplicate archive members', async () => {
+  const good = '<w:document><w:body><w:p><w:r><w:t>safe</w:t></w:r></w:p></w:body></w:document>';
+  await assert.rejects(X.importDocx(zipOf([['word/document.xml', '<w:document><w:body><w:p><w:r><w:t>truncated']])), /malformed XML/);
+  await assert.rejects(X.importDocx(zipOf([['word/document.xml', good], ['word/document.xml', good]])), /duplicate/);
+  assert.throws(() => X.xml('<a><b></a>'), /malformed XML/);
+});
+
+test('import refuses nested footnote references before expanding their graph', async () => {
+  const main = '<w:document><w:body><w:p><w:r><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>';
+  const notes = '<w:footnotes><w:footnote w:id="1"><w:p><w:r><w:footnoteReference w:id="1"/><w:footnoteReference w:id="1"/></w:r></w:p></w:footnote></w:footnotes>';
+  // Nesting the same footnote is invalid OOXML and used to expand exponentially. The operation budget
+  // makes the old failure bounded in this test instead of exhausting the test runner.
+  const original = X.LIMIT.depth; X.LIMIT.depth = 6;
+  try { await assert.rejects(X.importDocx(zipOf([['word/document.xml', main], ['word/footnotes.xml', notes]])), /nested footnote/); }
+  finally { X.LIMIT.depth = original; }
+});
