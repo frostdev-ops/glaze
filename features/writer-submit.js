@@ -97,23 +97,31 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     for (const type of ['dragenter', 'dragover', 'drop']) zone.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
     return true;
   };
-  const attach = async (box, file) => {
+  const attach = async (box, file, bytes) => {
     const area = L().areaOf(box.editor), panel = L().panelOf(box.editor);
     if (!area || !panel) return 'page';
-    if (attached.get(box) === file.name && L().listed(panel, file.name, visible)) return null;
-    const before = L().listed(panel, file.name, visible);
+    const old = attached.get(box), data = new Uint8Array(bytes);
+    if (old) {
+      if (old.name !== file.name || old.bytes.length !== data.length || !old.bytes.every((b, i) => b === data[i])) return 'review';
+      // An uncertain upload can finish late. Reuse only the same bytes and the one fresh listing it produced.
+      const rows = L().listings(area, file.name, visible);
+      return rows.length === 1 && !old.before.has(rows[0]) ? null : 'review';
+    }
+    if (L().listed(area, file.name, visible) || document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'review';
     const input = L().uploadInput(area) || await until(() => L().uploadInput(area), 1500);
-    if (input) { if (!give(input, file)) return 'upload'; }
-    else { const zone = L().dropZone(area); if (!zone) return 'upload'; drop(zone, file); }
-    let named = false;
+    const zone = !input && L().dropZone(area);
+    if (!input && !zone) return 'upload';
+    const before = new Set(L().listings(area, file.name, visible));
+    attached.set(box, { name: file.name, bytes: data.slice(), before }); // before dispatch: an exception can still leave an upload running
+    if (input) { if (!give(input, file)) return 'review'; }
+    else drop(zone, file);
     const shown = await until(() => {
-      const save = !named && L().propertiesSave(document);
-      if (save && L().enabled(save)) { named = true; save.click(); }
-      return L().listed(panel, file.name, visible) > before;
+      // The probed dialog belongs to the editor's own upload, not this React area. Never save an unrelated modal.
+      if (document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'dialog';
+      const rows = L().listings(area, file.name, visible);
+      return rows.length === 1 && !before.has(rows[0]) && 'listed';
     }, 30000, 150);
-    if (!shown) return 'attach';
-    attached.set(box, file.name);
-    return null;
+    return shown === 'listed' ? null : shown === 'dialog' ? 'review' : 'attach';
   };
   const write = (box, d) => {
     if (!d) return null;
@@ -143,7 +151,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!here()) return fail('page');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
       const file = new File([bytes], name, { type: L().MIME, lastModified: Date.now() });
-      const a = await attach(box, file);
+      const a = await attach(box, file, bytes);
       if (a) return fail(a);
       s = L().advance(s, { step: 'attach' });
       if (!here()) return fail('page');
@@ -156,7 +164,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       say(box, { type: 'submit:step', run: m.run, step: 'submit' });
       const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000);
       if (!b) return fail('submit');
-      if (!here() || !L().may(s, 'submit') || L().listed(L().panelOf(box.editor), name, visible) <= 0) return fail('page');
+      if (!here() || !L().may(s, 'submit') || L().listed(L().areaOf(box.editor), name, visible) !== 1) return fail('page');
       if (!await permit('commit') || !here() || !L().enabled(b) || b !== L().footer(box.editor).submit) return fail('page');
       submitted.add(box);
       pass(b);

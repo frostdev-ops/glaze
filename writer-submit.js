@@ -18,10 +18,11 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     save: 'The paper could not be saved. Nothing was submitted.',
     docx: 'The .docx could not be made. Nothing was submitted.',
     upload: 'Ultra’s file upload isn’t on this page. Nothing was submitted.',
-    attach: 'Ultra didn’t list the file as attached. Nothing was submitted.',
+    attach: 'Ultra didn’t list the file as attached. Nothing was submitted. Use Blackboard editor to review or remove the upload.',
     text: 'The text didn’t go into Ultra’s text box. Nothing was submitted.',
     submit: 'Ultra’s Submit didn’t turn on. Nothing was submitted.',
     page: 'The attempt page changed. Nothing was submitted.',
+    review: 'Ultra may already have the file. Use Blackboard editor to review or remove it before submitting.',
     claimed: 'This attempt is already being submitted or needs review. Use Blackboard editor to continue.',
   };
   const h = (tag, props = {}, ...kids) => {
