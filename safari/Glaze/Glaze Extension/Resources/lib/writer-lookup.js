@@ -27,7 +27,7 @@ var GZ_WRITER_LOOKUP = globalThis.GZ_WRITER_LOOKUP || (() => {
     if (!/^https?:$/.test(u.protocol) || u.username || u.password || u.port) return '';
     u.protocol = 'https:';
     u.hash = '';
-    return PUBLIC.test(u.hostname) && !/\.(local|internal|localhost|test|example|invalid|lan|home|corp)$/.test(u.hostname) ? u.href : '';
+    return PUBLIC.test(u.hostname) && !/\.(local|localdomain|home\.arpa|internal|localhost|test|example|invalid|lan|home|corp)$/.test(u.hostname) ? u.href : '';
   };
   // → { kind: 'doi'|'isbn'|'url', value } or null.
   const classify = (input) => {
