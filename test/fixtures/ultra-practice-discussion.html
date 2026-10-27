@@ -43,7 +43,7 @@ content-page-header .crumb { color:var(--gz-ink-faint, #5c7189); } content-page-
 <div class="card discussion-prompt"><b>Prompt</b>How does Morrison use the river and the clearing as places of memory? Respond in at least 250 words, cite two sources, and reply to two classmates.</div>
 
 <form name="editorForm" class="text-editor-form">
-  <bb-rich-text-editor name="responseEditor" heading-start="h3" editor-aria-label="Post text editor" ng-model="messageControl.messageBody.rawText" analytics-id="components.directives.discussion.message.onEditorClick">
+  <bb-rich-text-editor name="responseEditor" heading-start="h3" editor-aria-label="Post text editor" ng-model="messageControl.messageBody.rawText" ng-change="messageControl.onMessageChange()" on-change="messageControl.onBbRichTextEditorChange" analytics-id="components.directives.discussion.message.onEditorClick">
     <div class="bb-editor-root bb-editor-heading-h3" role="presentation">
       <div class="editor-content-container keyboard-tooltip-container"><div class="bb-editor-container ql-container" role="presentation"><div class="ql-editor ql-blank bb-editor" id="bb-editor-textbox" contenteditable="true" data-gramm="false" data-placeholder="Type a post" role="textbox" aria-multiline="true"><p><br></p></div></div></div>
       <div class="status-bar">Word count: 0</div>

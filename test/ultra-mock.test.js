@@ -9,14 +9,53 @@ const M = require('../scripts/ultra-mock.js');
 const call = async (mock, { method = 'GET', url, body, headers = {}, nav = false }) => {
   let got;
   const req = {
-    url: () => `${M.SITE}${url}`, method: () => method, headers: () => headers, isNavigationRequest: () => nav,
+    url: () => new URL(url, M.SITE).href, method: () => method, headers: () => headers, isNavigationRequest: () => nav,
     postData: () => (body === undefined || Buffer.isBuffer(body) ? null : JSON.stringify(body)), postDataBuffer: () => (Buffer.isBuffer(body) ? body : null),
   };
-  await mock.handle({ request: () => req, fulfill: async (r) => { got = r; } });
+  await mock.handle({ request: () => req, fulfill: async (r) => { got = r; }, abort: async () => { got = { aborted: true }; }, continue: async () => { got = { continued: true }; } });
   const text = Buffer.isBuffer(got.body) ? got.body.toString() : String(got.body ?? '');
   return { ...got, text, json: () => JSON.parse(text) };
 };
 const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-mock-'));
+
+test('an interrupted first Quill download releases the fetch without writing a cache file', async (t) => {
+  const out = scratch(), controller = new AbortController();
+  t.mock.method(globalThis, 'fetch', (url, { signal } = {}) => new Promise((resolve, reject) => {
+    if (!signal) { reject(Error('missing cancellation signal')); return; }
+    signal.addEventListener('abort', () => reject(Error('synthetic download interrupted')), { once: true });
+  }));
+  try {
+    const download = M.quill(out, controller.signal);
+    controller.abort();
+    await assert.rejects(download, /synthetic download interrupted/);
+    assert.deepEqual(fs.readdirSync(out), []);
+  } finally { fs.rmSync(out, { recursive: true, force: true }); }
+});
+
+test('practice blocks every non-mock origin, including literal IPs and mock lookalikes', async () => {
+  const out = scratch();
+  try {
+    const mock = M.create({ quill: Buffer.alloc(0), out });
+    for (const url of ['https://example.com/', 'http://127.0.0.1/', 'https://bb.school.test.evil.test/', 'http://bb.school.test/', 'https://bb.school.test:444/']) {
+      assert.equal((await call(mock, { url, nav: true })).aborted, true, url);
+      assert.equal((await call(mock, { url, method: 'POST', body: {} })).aborted, true, url);
+    }
+    assert.equal((await call(mock, { url: 'chrome-extension://abcdefghijklmnop/popup.html' })).continued, true);
+    assert.equal(mock.received.length, 0);
+  } finally { fs.rmSync(out, { recursive: true, force: true }); }
+});
+
+test('two same-kind receives in the same millisecond cannot overwrite each other', async () => {
+  const out = scratch(), iso = Date.prototype.toISOString;
+  try {
+    Date.prototype.toISOString = () => '2026-10-27T00:00:00.000Z';
+    const mock = M.create({ quill: Buffer.alloc(0), out });
+    for (const html of ['<p>First synthetic sample</p>', '<p>Second synthetic sample</p>']) await call(mock, { method: 'POST', url: M.BOARD, body: { body: { rawText: html } } });
+    assert.notEqual(mock.received[0].dir, mock.received[1].dir);
+    assert.equal(fs.readFileSync(path.join(mock.received[0].dir, 'message.html'), 'utf8'), '<p>First synthetic sample</p>\n');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(mock.received[0].dir, 'practice.json'), 'utf8')).synthetic, true);
+  } finally { Date.prototype.toISOString = iso; fs.rmSync(out, { recursive: true, force: true }); }
+});
 
 test('the practice Ultra answers what Glaze reads, from the writer fixtures', async () => {
   const out = scratch();

@@ -3,6 +3,7 @@
 glaze-plans/writer/probe/skeleton-assignment-attempt.html records it: the React authoring panel, the read-only instructions
 Quill, the submission Quill and its wrappers (no local-files button), the separate file area, and the footer's Save and Close
 and Submit by data-analytics-id, disabled while empty. Mui/makeStyles class suffixes are snapshot values; wrappers trimmed.
+Non-empty enablement, upload completion/listing/removal and confirmation/receipt behavior are unprobed stand-ins.
 The practice copy (scripts/writer-practice.js) of test/fixtures/ultra-writer-attempt.html: a fresh attempt (its box empty),
 and the page laid out as Ultra's panel is, scrolling itself, with its footer kept in view, so Glaze's own chrome fits around it. -->
 <style>
@@ -63,7 +64,7 @@ bb-assignment-attempt-authoring-panel > div { flex:1 0 auto; display:flex; flex-
     <div class="makeStylesdetails-0-2-202"><div class="makeStylessidePanelContentMarginFix-0-2-214"><h2>Details &amp; Information</h2><a data-analytics-id="assignment.attempt.authoring.rubric.view.link" href="/ultra/courses/_101_1/assessment/_7_1/attempt/create/rubric-view">View rubric</a></div></div>
   </div></div></div>
   <div class="makeStylesfooterWrapper-0-2-233"><footer class="makeStylesfooterRoot-0-2-305" role="contentinfo"><div class="makeStyleswrapper-0-2-306"><div class="makeStylesstatus-0-2-308"></div><div class="makeStylesfooterButtons-0-2-307">
-    <button type="button" tabindex="-1" data-analytics-id="course.content.assessment.footer.buttons.saveAndClose">Save and Close</button><button type="button" tabindex="-1" data-analytics-id="assignment.attempt.authoring.footer.submit">Submit</button>
+    <button type="button" class="Mui-disabled" disabled aria-disabled="true" tabindex="-1" data-analytics-id="course.content.assessment.footer.buttons.saveAndClose">Save and Close</button><button type="button" class="Mui-disabled" disabled aria-disabled="true" tabindex="-1" data-analytics-id="assignment.attempt.authoring.footer.submit">Submit</button>
   </div></div></footer></div>
 </div></div></div></bb-assignment-attempt-authoring-panel>
 </div></section>

@@ -5,7 +5,8 @@
 // new post collapsed until its click, Post and Save Draft enabled only through Ultra's model, a reply opened by Reply, the
 // attempt's file area and footer. Posting, uploading and submitting are the mock's own POSTs: each is kept, shown back on
 // the page and written to the received folder. Never probed live, so approximated: those requests' paths and bodies, the
-// upload, Ultra's submit confirmation and its receipt. Synthetic data only.
+// upload, non-empty attempt enablement, Ultra's submit confirmation and its receipt. Synthetic data only.
+// Quill 1.3.7 is a stand-in for Ultra's 1.x fork; Angular/React callbacks are modelled here, not loaded from Blackboard.
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const DT = require('../lib/doctext.js');
 
@@ -24,9 +25,9 @@ const json = (f) => JSON.parse(fixture(f));
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 // Quill 1.3.7, pinned, kept in `dir` after the first fetch.
-const quill = async (dir) => {
+const quill = async (dir, signal) => {
   const f = path.join(dir, 'quill-1.3.7.min.js');
-  const b = fs.existsSync(f) ? fs.readFileSync(f) : Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
+  const b = fs.existsSync(f) ? fs.readFileSync(f) : Buffer.from(await (await fetch(QUILL.url, { signal })).arrayBuffer());
   if (sha(b) !== QUILL.sha256) throw Error(`Quill 1.3.7 hash mismatch: ${sha(b)}`);
   if (!fs.existsSync(f)) { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(f, b); }
   return b;
@@ -76,8 +77,8 @@ const create = ({ quill: quillJs, out, onReset = async () => {}, onReceived = ()
   };
   reset();
   const keep = (kind, files) => {
-    const dir = path.join(out, `${stamp()}-${kind}`);
-    fs.mkdirSync(dir, { recursive: true });
+    const dir = fs.mkdtempSync(path.join(out, `${stamp()}-${kind}-`));
+    fs.writeFileSync(path.join(dir, 'practice.json'), `${JSON.stringify({ synthetic: true, kind })}\n`);
     for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), body);
     const r = { kind, dir, at: Date.now() };
     received.push(r);
@@ -147,13 +148,16 @@ const create = ({ quill: quillJs, out, onReset = async () => {}, onReceived = ()
     return { results: [] };
   };
 
-  // Every request to the school's host.
+  // Installed on **/*, never just SITE: no page, popup, frame or fetch may fall through to a real origin.
   const handle = async (route) => {
     const req = route.request(), u = new URL(req.url()), method = req.method();
+    if (u.protocol === 'chrome-extension:') return route.continue();
+    if (u.origin !== SITE) return route.abort();
     const reply = (body, type = 'application/json') => route.fulfill({ status: 200, contentType: type, headers: { 'cache-control': 'no-store' }, body: typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body) });
     try {
       if (method === 'GET' && u.pathname === '/gz-practice/quill.js') return reply(quillJs, 'text/javascript');
       if (method === 'GET' && u.pathname === '/gz-practice/world.js') return reply(`(${world})();`, 'text/javascript');
+      if (method === 'GET' && u.pathname === '/favicon.ico') return route.fulfill({ status: 204, body: '' });
       if (method === 'GET' && u.pathname === '/practice/api/where') return reply({ received: out });
       if (method === 'GET' && u.pathname === '/practice/api/thread') return reply(thread());
       if (method === 'GET' && u.pathname === '/practice/api/log') return reply({ received: out, items: state.log.map(({ scenario, ...l }) => l) });
@@ -183,6 +187,8 @@ function world() {
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const make = (s) => { const t = document.createElement('template'); t.innerHTML = s.trim(); return t.content.firstElementChild; };
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const banner = make('<aside style="position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2147483647;pointer-events:none;padding:3px 12px;border-radius:6px;background:#633b00;color:#fff;font:600 12px system-ui">Writer practice · Synthetic data</aside>');
+  document.body.append(banner);
   const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
   const blank = (q) => !q.getText().trim();
   const words = (q) => (q.getText().match(/\S+/g) || []).length;
@@ -242,7 +248,8 @@ function world() {
       // Focus draws the toolbar; the click (ng-click onEditorClick) activates; an empty editor that loses focus collapses.
       q.root.addEventListener('focus', () => toolbar(true));
       $('bb-rich-text-editor', form).addEventListener('click', () => { if (!m.active) activate(true); });
-      q.root.addEventListener('blur', () => setTimeout(() => { if (!active && blank(q) && !q.hasFocus()) { activate(false); toolbar(false); } }, 120));
+      // No grace period for Writer to sync text after taking focus from an empty Post (live audit rounds 4–5).
+      q.root.addEventListener('blur', () => { if (!active && blank(q)) { activate(false); toolbar(false); } });
       const clear = () => { q.setContents([], 'api'); };
       save.addEventListener('click', async () => {
         if (save.disabled) return;
@@ -276,7 +283,7 @@ function world() {
     };
     // A reply box, as skeleton-discussion-reply.html records it: opened by Reply under the post, active from the start.
     const REPLY = `<div class="row collapse reply-input-wrapper"><bb-message message-mode="new" editor-aria-label="Reply text editor" enable-draft="true"><div bb-load-bundle="components/directives/discussion"><div class="reply-form comments" message-id="" tabindex="-1"><div class="text-editor-container">
-      <form class="text-editor-form ng-pristine ng-valid" name="editorForm"><bb-rich-text-editor name="responseEditor" heading-start="h3" editor-aria-label="Reply text editor" ng-model="messageControl.messageBody.rawText" analytics-id="components.directives.discussion.message.onEditorClick">
+      <form class="text-editor-form ng-pristine ng-valid" name="editorForm"><bb-rich-text-editor name="responseEditor" heading-start="h3" editor-aria-label="Reply text editor" ng-model="messageControl.messageBody.rawText" ng-change="messageControl.onMessageChange()" on-change="messageControl.onBbRichTextEditorChange" analytics-id="components.directives.discussion.message.onEditorClick">
         <div class="bb-editor-root bb-editor-heading-h3" role="presentation"><div class="editor-content-container keyboard-tooltip-container"><div class="bb-editor-container ql-container" role="presentation"><div class="ql-editor ql-blank bb-editor" id="bb-editor-textbox" contenteditable="true" data-gramm="false" data-placeholder="Type a reply" role="textbox" aria-multiline="true" aria-required="false"><p><br></p></div></div></div><div class="status-bar">Word count: 0</div></div>
       </bb-rich-text-editor><div class="panel-editor-controls" ng-show="isEditorActive"><div class="form-buttons"><button type="button" class="button--text draft-button" ng-click="messageControl.onSaveClick(true)" disabled>Save Draft</button><button type="button" class="button--text" ng-click="messageControl.onCancelClick()">Cancel</button><button type="button" class="button js-primary-button js-text-editor-save" ng-click="messageControl.onSaveClick()" disabled>Reply</button></div></div></form>
     </div></div></div></bb-message></div>`;
@@ -310,7 +317,7 @@ function world() {
     const area = $('[class*="makeStylessubmission-"]'), preview = $('[class*="makeStylespreview-"]', area), input = $('input[type=file]', preview);
     const SUBMIT = '[data-analytics-id="assignment.attempt.authoring.footer.submit"]', SAVE = '[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]';
     const footer = { submit: $(SUBMIT), save: $(SAVE) };
-    window.__clicks = [];
+    window.__clicks = []; window.__confirmations = 0;
     const style = document.createElement('style');
     style.textContent = `.Mui-disabled { pointer-events: none; }
       .practice-files { display:grid; gap:6px; margin-top:10px; } .practice-files > div { display:flex; gap:10px; align-items:center; padding:8px 12px; border:1px solid var(--gz-line, #16283f); border-radius:10px; }
@@ -356,12 +363,14 @@ function world() {
     const q = quill(box, cfg.draft?.html || '');
     const status = $('.status-bar', area);
     const files = [];
+    let uploading = 0;
     const shown = $('.practice-files') || make('<div class="practice-files"></div>');
     (preview.isConnected ? preview : area).after(shown);
     const state = () => {
       status.textContent = `Word count: ${words(q)}`;
-      const on = !blank(q) || files.length > 0;
-      for (const b of [footer.save, footer.submit]) { b.disabled = !on; b.classList.toggle('Mui-disabled', !on); b.tabIndex = on ? 0 : -1; }
+      // Non-empty/attachment-only states weren't probed live. Conservatively wait for every upload to finish.
+      const on = !uploading && (!blank(q) || files.length > 0);
+      for (const b of [footer.save, footer.submit]) { b.disabled = !on; b.classList.toggle('Mui-disabled', !on); b.setAttribute('aria-disabled', String(!on)); b.tabIndex = on ? 0 : -1; }
     };
     // Ultra lists a file once it's uploaded: its name in its own element, which Writer waits for before it submits.
     const row = (f) => {
@@ -375,15 +384,19 @@ function world() {
     };
     for (const f of cfg.draft?.files || []) row(f);
     const take = async (list) => {
-      for (const f of list) {
-        const r = await fetch(cfg.upload, { method: 'POST', headers: { 'content-type': f.type || 'application/octet-stream', 'x-file-name': encodeURIComponent(f.name) }, body: await f.arrayBuffer() }).then((x) => x.json());
-        setTimeout(() => { row(r); log(); }, 400);
-      }
+      uploading++; state();
+      try {
+        for (const f of list) {
+          const r = await fetch(cfg.upload, { method: 'POST', headers: { 'content-type': f.type || 'application/octet-stream', 'x-file-name': encodeURIComponent(f.name) }, body: await f.arrayBuffer() }).then((x) => { if (!x.ok) throw Error('Practice upload failed'); return x.json(); });
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          row(r); await log();
+        }
+      } finally { uploading--; state(); }
     };
     q.on('text-change', state);
     tools($('.bb-editor-root', area), q);
     state();
-    panel.addEventListener('change', (e) => { if (e.target.matches('input[type=file]')) { take([...e.target.files]); e.target.value = ''; } });
+    panel.addEventListener('change', (e) => { if (e.target === input) { take([...input.files]); input.value = ''; } });
     panel.addEventListener('dragover', (e) => e.preventDefault());
     panel.addEventListener('drop', (e) => { if (e.target.closest('[class*="makeStylesinputContainer-"]')) { e.preventDefault(); take([...e.dataTransfer.files]); } });
     $$('[class*="makeStylesbuttonContainer-"] button', preview).forEach((b) => b.addEventListener('click', () => { if (/Upload/.test(b.textContent)) input.click(); else toast('Cloud storage isn’t part of the practice'); }));
@@ -393,14 +406,15 @@ function world() {
       const d = make(`<div class="practice-confirm" role="dialog" aria-modal="true" aria-labelledby="practice-confirm-title"><div><h2 id="practice-confirm-title">Submit assignment?</h2><p>You can’t change your submission after you submit it.</p><div class="row"><button type="button">Cancel</button><button type="button" class="primary">Submit</button></div></div></div>`);
       const [no, yes] = $$('button', d);
       no.addEventListener('click', () => d.remove());
-      yes.addEventListener('click', async () => { yes.disabled = true; const r = await post(cfg.attempt, body(false)); d.remove(); receipt(r); });
+      yes.addEventListener('click', async () => { if (yes.disabled) return; yes.disabled = true; window.__confirmations++; const r = await post(cfg.attempt, body(false)); d.remove(); receipt(r); });
       document.body.append(d);
       yes.focus();
     };
     panel.addEventListener('click', async (e) => {
       const b = e.target.closest('footer button');
-      if (!b || b.disabled) return;
+      if (!b) return;
       window.__clicks.push(b.getAttribute('data-analytics-id'));
+      if (b.disabled) return;
       if (b === footer.submit) confirm();
       else if (b === footer.save) receipt(await post(cfg.attempt, body(true)));
     });
