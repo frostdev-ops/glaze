@@ -496,6 +496,15 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"] { padding: 1
 bb-assignment-attempt-authoring-panel .MuiAccordion-root :is(.MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root, .bb-editor-container, .ql-editor, .ql-container, .editor-content-container, .bb-editor-root) { background: transparent !important; }
 bb-assignment-attempt-authoring-panel .MuiAccordionSummary-root { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-right: 0 !important; }
+/* The Submission heading is a pill its text's width, as the other section headings, even in a column that stretches. */
+bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2 { inline-size: fit-content; align-self: flex-start; }
+/* Glaze Writer's frame (features/writer.js) paints the Look's ground and surfaces itself; the page gives it the Look's
+   corners and, behind a paper over a background, the blur of the glass cards beside it. A compose box's frame holds 3px for
+   its focus ring. Focus fills the window, square. */
+#site-wrap iframe.gz-writer { border-radius: calc(var(--gz-radius) + 3px); }
+#site-wrap iframe.gz-writer[data-gz-writer-frame="assignment"] { border-radius: var(--gz-radius); outline: 1px solid var(--gz-border-line, var(--gz-line)); outline-offset: -1px; box-shadow: var(--gz-rest-shadow); }
+html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap iframe.gz-writer[data-gz-writer-frame="assignment"] { backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.2); }
+#site-wrap iframe.gz-writer[style*="position: fixed"] { border-radius: 0; outline: 0; box-shadow: none; }
 /* It scrolls as one page, as a document does: the title goes up with the instructions instead of staying over them (Ultra
    scrolls only the content under it). Ultra's body, already a scroller, takes the scroll; Save and Submit stay at its
    bottom, on glass over what passes under them. Off with the enhance.titleScroll setting. */

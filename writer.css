@@ -12,7 +12,18 @@
   --gz-radius: 12px; --gz-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --pop-mix: #1b2d45; --shadow: 0 12px 32px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.35);
   --t: 150ms; color-scheme: dark;
+  /* The Look's surfaces as the page hands them in (features/writer.js look): the ground is the page's, transparent over a
+     background; a paper's panels are the glass of the cards beside it, which the page blurs behind the frame (theme.css); a
+     compose box is the surface of Ultra's editor boxes; cards sit a step down in either. */
+  --ground: var(--gz-ground, var(--gz-surface-2));
+  --panel: color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  --fill: color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 100%), transparent);
+  --card: color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) 40%, transparent);
+  --edge: var(--gz-border-line, var(--gz-line));
+  --top-faint: var(--gz-ink-faint);
 }
+/* Over a background, a paper's quiet title-bar text sits on the picture: muted, so it still reads. */
+:root[data-glass] { --top-faint: var(--gz-ink-muted); }
 :root:not([data-dark]) { --pop-mix: #ffffff; --shadow: 0 12px 32px rgba(15,23,42,.16), 0 2px 6px rgba(15,23,42,.10); color-scheme: light; }
 :root[data-motion="off"] { --t: 0s; }
 @media (prefers-reduced-motion: reduce) { :root { --t: 0s; } }
@@ -24,7 +35,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .slot:empty, [hidden] { display: none !important; }
 
 /* The box */
-.gw { position: relative; background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); }
+.gw { position: relative; background: var(--fill); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); }
 .gw::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 18%, transparent); opacity: 0; pointer-events: none; transition: opacity var(--t) ease-out; }
 .gw:focus-within::after { opacity: 1; }
 .gw-body { position: relative; font-size: 15px; line-height: 1.65; }
@@ -72,7 +83,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 ::selection { background: color-mix(in srgb, var(--gz-accent) 32%, transparent); }
 
 /* The bar under it */
-.gw-bar { display: flex; align-items: center; gap: 18px; padding: 8px 12px 8px 16px; border-top: 1px solid var(--gz-line); color: var(--gz-ink-muted); font-size: 13px; min-height: 45px; }
+.gw-bar { display: flex; align-items: center; gap: 18px; padding: 8px 12px 8px 16px; border-top: 1px solid var(--edge); color: var(--gz-ink-muted); font-size: 13px; min-height: 45px; }
 .gw-bar .grow { flex: 1; }
 .slot { display: inline-flex; align-items: center; gap: 8px; }
 .more { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--gz-ink-muted); }

@@ -22,11 +22,14 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const PAPER_HEIGHT = 'max(640px, calc(100vh - 120px))';
   const on = () => X.on() && X.site === 'ultra' && X.settings().enabled !== false && !!X.settings().enhance?.writer;
 
-  // The Look as the frame wears it: the palette, radius and font on <html>, light or dark, and the motion level.
-  const TOKENS = [...GZ_COLORS.map(([k]) => k), '--gz-radius', '--gz-font'];
+  // The Look as the frame wears it: the palette, radius and font on <html>, light or dark, and the motion level; and its
+  // surfaces (features/surfaces.css), resolved: the page's ground (transparent over a background), the glass mix and edges.
+  // Glass only over a background: on a solid one the panels stay opaque, as the mockups draw them. An unset opacity is opaque.
+  const TOKENS = [...GZ_COLORS.map(([k]) => k), '--gz-radius', '--gz-font', '--gz-ground', '--gz-surface-paint', '--gz-surface-paint-2', '--gz-surface-opacity', '--gz-glass-mix', '--gz-border-line', '--gz-border-strong'];
   const look = () => {
-    const cs = getComputedStyle(html);
-    return { tokens: Object.fromEntries(TOKENS.map((k) => [k, cs.getPropertyValue(k).trim()]).filter(([, v]) => v)), dark: html.hasAttribute('data-gz-dark-theme'), motion: html.getAttribute('data-gz-motion') || 'off' };
+    const cs = getComputedStyle(html), bg = html.getAttribute('data-gz-bg'), glass = !!bg && bg !== 'solid';
+    const value = (k) => (k === '--gz-glass-mix' && !glass ? '100%' : cs.getPropertyValue(k).trim() || (k === '--gz-surface-opacity' ? '100%' : ''));
+    return { tokens: Object.fromEntries(TOKENS.map((k) => [k, value(k)]).filter(([, v]) => v)), dark: html.hasAttribute('data-gz-dark-theme'), glass, motion: html.getAttribute('data-gz-motion') || 'off' };
   };
   let worn = '';
   new MutationObserver(() => {
@@ -35,7 +38,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (key === worn) return;
     worn = key;
     for (const box of boxes.values()) { box.port?.postMessage({ type: 'look', look: l }); if (box.frame) box.frame.style.colorScheme = l.dark ? 'dark' : 'light'; }
-  }).observe(html, { attributes: true, attributeFilter: ['style', 'data-gz-dark-theme', 'data-gz-motion'] });
+  }).observe(html, { attributes: true, attributeFilter: ['style', 'data-gz-dark-theme', 'data-gz-motion', 'data-gz-bg'] });
 
   // lib/writer-main.js, in the page's world: its answer comes back inside the dispatch, or not at all. Every answer for
   // the id is kept, since the page can add its own: what counts is the one the native editor bears out.

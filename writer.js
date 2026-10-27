@@ -2,7 +2,7 @@
 // opens in the box's place. An extension page, so the editor has the workers and WebAssembly the LMS page's CSP keeps from
 // a content script (proofing needs both), its own fonts and styles. It opens only with a one-use pass from the worker
 // (lib/background.js 'glaze:writer') and then talks to the page over that job's MessageChannel only:
-//   page → frame: init { mode, kind, html, placeholder, look { tokens, dark, motion }, context, locale }, look { look },
+//   page → frame: init { mode, kind, html, placeholder, look { tokens, dark, glass, motion }, context, locale }, look { look },
 //                 context { context }, focus, html { html } (Ultra changed its own editor: a post went, a draft came back);
 //   frame → page: ready, height { px }, change { html, text, words, delta } (delta: compose's Quill ops, what the page
 //                 writes into Ultra's editor), send (Mod-Enter), native (back to Blackboard's editor; with a reason, the
@@ -24,6 +24,7 @@
   const look = (l = {}) => {
     for (const [k, v] of Object.entries(l.tokens || {})) if (TOKEN.test(k) && typeof v === 'string' && v.length < 400 && !/url\(|[;{}<>]/i.test(v)) root.style.setProperty(k, v);
     root.toggleAttribute('data-dark', !!l.dark);
+    root.toggleAttribute('data-glass', !!l.glass);
     root.dataset.motion = ['off', 'subtle', 'expressive'].includes(l.motion) ? l.motion : 'subtle';
   };
   const LABELS = { bold: 'Bold', italic: 'Italic', underline: 'Underline', link: 'Link', bulletList: 'List', quote: 'Quote' };

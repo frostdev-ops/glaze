@@ -35,7 +35,7 @@
 .gz-fb-run:disabled { cursor: default; }
 .gz-spin { width: 12px; height: 12px; flex: none; border-radius: 50%; border: 2px solid var(--gz-line-strong); border-top-color: var(--gz-accent); animation: gz-spin 800ms linear infinite; }
 .gz-fb-note { margin: 0; color: var(--gz-ink-muted); line-height: 1.5; }
-.gz-fb-item, .gz-fb-error, .gz-fb-skel { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: color-mix(in srgb, var(--gz-surface-2) 40%, var(--gz-surface)); }
+.gz-fb-item, .gz-fb-error, .gz-fb-skel { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: var(--card); }
 .gz-fb-item { animation: gz-fb-in var(--t) ease-out both; }
 .gz-fb-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .gz-fb-chip { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 2px 8px 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; }

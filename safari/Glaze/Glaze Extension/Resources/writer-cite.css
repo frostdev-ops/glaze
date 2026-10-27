@@ -46,9 +46,9 @@
 .gzc-view { padding: 12px; display: grid; gap: 10px; }
 .gzc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .gzc-head h4 { margin: 0; font-size: 12px; color: var(--gz-ink-faint); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
-.gzc-adder { display: grid; gap: 8px; border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; background: color-mix(in srgb, var(--gz-surface-2) 40%, var(--gz-surface)); }
+.gzc-adder { display: grid; gap: 8px; border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; background: var(--card); }
 .gzc-cards { display: grid; gap: 10px; }
-.gzc-card { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: color-mix(in srgb, var(--gz-surface-2) 40%, var(--gz-surface)); }
+.gzc-card { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: var(--card); }
 .gzc-entry { font-size: 13px; line-height: 1.5; color: var(--gz-ink); padding-left: 1.5em; text-indent: -1.5em; overflow-wrap: anywhere; }
 .gzc-card .row { display: flex; gap: 8px; }
 

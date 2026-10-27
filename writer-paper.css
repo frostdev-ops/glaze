@@ -24,21 +24,23 @@
 @font-face { font-family: "Courier New"; src: url("lib/fonts/cousine-700-italic.woff2") format("woff2"); font-weight: 700; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 :root { --fmt: #60a5fa; }
+/* Focus covers the page: the mockup's ground and opaque panels, whatever is behind. */
+:root:has(.gp-tbtn[aria-pressed="true"]) { --ground: var(--gz-surface-2); --panel: var(--gz-surface-paint, var(--gz-surface)); --top-faint: var(--gz-ink-faint); }
 .gp, .gp-hidden { display: none; }
-:root[data-mode="paper"] body { padding: 0; overflow: hidden; background: var(--gz-surface-2); }
+:root[data-mode="paper"] body { padding: 0; overflow: hidden; background: var(--ground); }
 :root[data-mode="paper"] #gw, :root[data-mode="paper"] #tb { display: none !important; }
 :root[data-mode="paper"] .gp, .gp.gp-standalone { display: flex; }
-.gp { flex-direction: column; height: 100vh; background: var(--gz-surface-2); color: var(--gz-ink); font: 14px/1.5 var(--gz-font); }
+.gp { flex-direction: column; height: 100vh; background: var(--ground); color: var(--gz-ink); font: 14px/1.5 var(--gz-font); }
 
 /* Title bar */
-.gp-top { height: 60px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 1px solid var(--gz-line); min-width: 0; }
+.gp-top { height: 60px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 1px solid var(--edge); min-width: 0; }
 .gp-top h1 { font-size: 17px; margin: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.gp-top .gp-due, .gp-top .gp-state { color: var(--gz-ink-faint); font-size: 13px; white-space: nowrap; }
+.gp-top .gp-due, .gp-top .gp-state { color: var(--top-faint); font-size: 13px; white-space: nowrap; }
 .gp-top a { color: var(--gz-ink-muted); text-decoration: none; font-size: 13px; }
 .grow { flex: 1; }
 
 /* Toolbar */
-.gp-tool { height: 50px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px; border-bottom: 1px solid var(--gz-line); background: var(--gz-surface); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.gp-tool { height: 50px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px; border-bottom: 1px solid var(--edge); background: var(--panel); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .gp-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 12px; border-radius: 999px; background: var(--gz-accent-soft); color: var(--gz-accent-hi); font-weight: 600; font-size: 13px; white-space: nowrap; }
 .gp-box { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px solid var(--gz-line-strong); border-radius: 8px; font-size: 13px; color: var(--gz-ink); white-space: nowrap; }
 .gp-tb { display: flex; align-items: center; gap: 2px; }
@@ -104,13 +106,13 @@
 .gp-flow .gp-cur { outline: 2px solid color-mix(in srgb, #2563eb 35%, transparent); outline-offset: 1px; border-radius: 2px; background: rgba(37,99,235,.08); }
 
 /* Status bar */
-.gp-status { height: 34px; flex: none; display: flex; align-items: center; gap: 18px; padding: 0 16px; color: var(--gz-ink-muted); font-size: 12px; background: var(--gz-surface); border-top: 1px solid var(--gz-line); white-space: nowrap; }
+.gp-status { height: 34px; flex: none; display: flex; align-items: center; gap: 18px; padding: 0 16px; color: var(--gz-ink-muted); font-size: 12px; background: var(--panel); border-top: 1px solid var(--edge); white-space: nowrap; }
 .gp-status button { font-size: 12px; color: var(--gz-ink-muted); }
 .gp-status button:hover { color: var(--gz-ink); }
 
 /* Side panel */
-.gp-side { background: var(--gz-surface); border-left: 1px solid var(--gz-line); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.gp-tabs { display: flex; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid var(--gz-line); flex: none; }
+.gp-side { background: var(--panel); border-left: 1px solid var(--edge); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.gp-tabs { display: flex; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid var(--edge); flex: none; }
 .gp-tab { padding: 8px 10px 10px; font-size: 13px; color: var(--gz-ink-muted); border-bottom: 2px solid transparent; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
 .gp-tab[aria-selected="true"] { color: var(--gz-ink); border-bottom-color: var(--gz-accent); font-weight: 600; }
 /* The Look's rounded focus ring, inside the tab, clear of its underline. */
@@ -138,7 +140,7 @@
 .gp-empty-ico { width: 28px; height: 28px; opacity: .7; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .gp-issues { padding: 12px; display: grid; gap: 10px; }
 .gp-issues:empty { display: none; }
-.gp-issue { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: color-mix(in srgb, var(--gz-surface-2) 40%, var(--gz-surface)); text-align: start; cursor: pointer; }
+.gp-issue { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: var(--card); text-align: start; cursor: pointer; }
 .gp-issue.gp-on { border-color: color-mix(in srgb, var(--fmt) 60%, transparent); }
 .gp-issue .gp-lbl { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--gz-ink-muted); }
 .gp-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
@@ -187,7 +189,7 @@
 /* Keep the page wide enough to write on; checks retain their own scroller below it. */
 @media screen and (max-width: 800px) {
   .gp-work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(140px, 35%); }
-  .gp-side { border-left: 0; border-top: 1px solid var(--gz-line); }
+  .gp-side { border-left: 0; border-top: 1px solid var(--edge); }
   .gp-tabs { overflow-x: auto; }
   .gp-status { gap: 12px; padding-inline: 12px; overflow-x: auto; overflow-y: hidden; }
   .gp-status > * { flex-shrink: 0; }
