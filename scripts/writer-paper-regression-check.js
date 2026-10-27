@@ -87,7 +87,7 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
     });
     await run('notes', async () => {
       const p = await page('review-notes');
-      await p.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA; const d = S.paper.nodes.doc.create(null, S.paper.nodes.paragraph.create(null, [S.paper.text('Reference'), S.paper.nodes.footnote_ref.create({ content: 'Long footnote text. '.repeat(300) })])); v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, d.content)); });
+      await p.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA; const d = S.paper.nodes.doc.create(null, S.paper.nodes.paragraph.create(null, [S.paper.text('Reference'), S.paper.nodes.footnote_ref.create({ content: 'Long footnote text. '.repeat(1000) })])); v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, d.content)); });
       await pause(500);
       assert.ok(await p.evaluate(() => [...document.querySelectorAll('.gp-sheet .gp-notes')].every((n) => n.getBoundingClientRect().top >= n.parentElement.getBoundingClientRect().top + 90 * (GZ_WRITER_PAPER.current().pages() ? document.querySelector('.gp-zoom').getBoundingClientRect().width / 816 : 1))), 'long footnotes must not overflow the page top'); await p.close();
     });
