@@ -13,6 +13,16 @@ const C = S.compose, P = S.paper;
 const out = (html, schema = C) => S.serialize(schema, S.parse(schema, html));
 const sorted = (h) => h.replace(/class="([^"]*)"/g, (_, c) => `class="${c.split(' ').sort().join(' ')}"`);
 
+test('paper HTML round trips preserve explicit zero first-line indents', () => {
+  for (const tag of ['p', 'h2', 'li']) {
+    const node = P.nodes[tag === 'p' ? 'paragraph' : tag === 'li' ? 'list_item' : 'heading'].create({ first: 0 }, P.text('No indent'));
+    const doc = P.nodes.doc.create(null, tag === 'li' ? P.nodes.bullet_list.create(null, node) : node);
+    const back = S.parse(P, S.serialize(P, doc));
+    assert.equal((tag === 'li' ? back.firstChild.firstChild : back.firstChild).attrs.first, 0, tag);
+  }
+  assert.equal(S.parse(P, '<p>Default indent</p>').firstChild.attrs.first, null);
+});
+
 // _note (2026-10-27): each input, then what real quill@1.3.7 (npm, sha512-hG/DVzh/TiknWtE6QmWAF/pxoZKYxfe3J/d/+ShUWkDvvkZQVTPeVmUJVu1uE6DDooC4fWTiCLh84ul89oNz5g==)
 // rendered in headless Chromium from setContents(delta(parse(input))): byte for byte serialize(parse(input)). The same
 // Quill's setContents(clipboard.convert(that HTML)) gave it back too, up to the order of a block's two classes (Quill

@@ -52,3 +52,11 @@ test('the rubric is read only for the student\'s own row and a single associatio
   const two = await C.build(base({ get: async () => ({ ...column, rubricAssociations: [...column.rubricAssociations, ...column.rubricAssociations] }) }));
   assert.equal(two.assignment.rubric, null);
 });
+test('the production worker allows the assignment context builder', () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+  const src = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const list = vm.runInNewContext(src.match(/const LOADABLE = (new Set\([^;]+\));/)[1]);
+  assert.ok(list.has('lib/writer-context-assignment.js'));
+  const check = fs.readFileSync(path.join(__dirname, '../scripts/writer-paper-check.js'), 'utf8');
+  assert.doesNotMatch(check, /fs\.writeFileSync\(bg,/);
+});
