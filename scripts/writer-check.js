@@ -107,6 +107,9 @@ const HARNESS = `(() => {
       const el = await until(async () => { const h = await p.$(`iframe.gz-writer[data-gz-writer-frame="${kind}"]`); return h && await h.evaluate((f) => !f.style.opacity && f.offsetHeight > 100) && h; }, `${kind} frame shown`);
       const fr = await until(() => el.contentFrame(), `${kind} frame document`);
       await until(() => fr.evaluate(() => !!document.querySelector('.ProseMirror')), `${kind} editor in its frame`);
+      await until(async () => (await fr.evaluate(() => innerHeight)) === Math.round(await el.evaluate((f) => f.getBoundingClientRect().height)), `${kind} frame viewport resized`);
+      await fr.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
       return { el, fr };
     };
     const quillText = (p, sel) => p.evaluate((s) => __quill(s).getText().replace(/\n$/, ''), sel);
@@ -123,9 +126,13 @@ const HARNESS = `(() => {
     check(await p.evaluate(() => !document.querySelector('.gz-draft')), 'draft backup offers nothing beside a Writer box');
     check(await p.evaluate(() => document.querySelectorAll('.form-buttons button')[2].disabled && document.querySelectorAll('.form-buttons button')[5].disabled), 'Post and Reply start disabled (empty boxes)');
     await reply.fr.click('.ProseMirror');
+    await until(() => reply.fr.evaluate(() => document.hasFocus() && !!document.activeElement?.closest('.ProseMirror')), 'reply focused before typing');
     const typed = 'I agree that the river works as a kind of archive, but Morrison is less interested in nostalgia than in what the town chooses to forget.';
     await p.keyboard.type(typed, { delay: 2 });
-    await until(async () => (await quillText(p, REPLY)) === typed, 'reply text in the native Quill');
+    await until(async () => (await quillText(p, REPLY)) === typed, 'reply text in the native Quill').catch(async (e) => {
+      console.error('reply state', await reply.fr.evaluate(() => ({ text: GZ_WRITER_FRAME.editor().text(), active: document.activeElement?.outerHTML.slice(0, 250), focus: document.hasFocus() })), 'native', await quillText(p, REPLY), 'host focus', await p.evaluate(() => document.activeElement?.outerHTML.slice(0, 250)));
+      throw e;
+    });
     check(true, 'typing in the frame updates the native Quill (getText equals)');
     check(await p.evaluate(() => document.activeElement?.matches('iframe.gz-writer[data-gz-writer-frame="reply"]')) && await reply.fr.evaluate(() => !!document.activeElement?.closest('.ProseMirror')), 'focus stays in the frame while Quill syncs');
     check(await p.evaluate(() => !document.querySelectorAll('.form-buttons button')[5].disabled && document.querySelectorAll('.form-buttons button')[2].disabled), 'Reply enables with content; Post stays disabled');
@@ -144,7 +151,7 @@ const HARNESS = `(() => {
     await p.evaluate((s) => __quill(s).setContents([], 'user'), REPLY); await pause(150);
     check(await reply.fr.evaluate((t) => document.querySelector('.ProseMirror').textContent === t, typed), 'an unsolicited native clear preserves Writer text');
     // The selection toolbar and ⋯ (mockup B).
-    await reply.fr.evaluate(() => { const v = document.querySelector('.ProseMirror'), t = v.firstChild.firstChild, r = document.createRange(); r.setStart(t, 2); r.setEnd(t, 40); getSelection().removeAllRanges(); getSelection().addRange(r); });
+    await reply.fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, 3, 41))); v.focus(); });
     await until(() => reply.fr.evaluate(() => !document.getElementById('tb').hidden), 'selection toolbar');
     check(true, 'a selection shows the toolbar');
     await reply.fr.click('#tb [data-run="bold"]');
