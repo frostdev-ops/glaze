@@ -388,3 +388,14 @@ test('every curated typo corrects as typed and undoes independently', () => {
     e.back(); assert.equal(e.text(), `we wrote ${was} `, was);
   }
 });
+
+test('typing over the whole document retains provenance inside the new paragraph', () => {
+  const e = editor('<p>replace all this</p>');
+  e.view.dispatch(e.view.state.tr.setSelection(new GZ_PM.state.AllSelection(e.view.state.doc)));
+  const { from, to } = e.view.state.selection;
+  e.proof.props.handleTextInput(e.view, from, to, 'u');
+  e.view.dispatch(e.view.state.tr.insertText('u'));
+  e.type('nfortunatly ');
+  assert.equal(e.text(), 'unfortunately ');
+  e.back(); assert.equal(e.text(), 'unfortunatly ');
+});
