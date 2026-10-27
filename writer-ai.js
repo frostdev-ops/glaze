@@ -335,7 +335,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     Object.assign(fb, { state: 'done', criteria: end.output.criteria, place: placer(doc, tr.m) });
     paint();
   };
-  const STATUS = { met: ['Met', 'var(--gz-ok)'], partly: ['Partly met', 'var(--gz-warn)'], missing: ['Missing', 'var(--gz-err)'] };
+  const STATUS = { met: ['Met', 'var(--gz-ok)', '{n} met'], partly: ['Partly', 'var(--gz-warn)', '{n} partly'], missing: ['Missing', 'var(--gz-err)', '{n} missing'] };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
   const show = (q) => {
     const at = fb.place?.(q.start, q.end, q.quote), v = view();
@@ -379,38 +379,78 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       return;
     }
     if (!assignment()) { box.append(el('p', 'gz-fb-note', t('No instructions or rubric to check against.'))); return; }
-    const go = el('button', 'gz-fb-run', fb.state === 'running' ? t('Reading your draft…') : fb.state === 'done' ? t('Check again') : t('Get feedback'));
-    go.type = 'button';
-    go.disabled = fb.state === 'running';
-    go.addEventListener('click', feedback);
-    box.append(go);
-    if (fb.state === 'error') box.append(el('p', 'gz-fb-note', t("AI couldn't give feedback.")));
-    if (fb.state === 'done' && !fb.criteria.length) box.append(el('p', 'gz-fb-note', t('No criteria to check.')));
-    for (const c of fb.state === 'done' ? fb.criteria : []) {
-      const card = el('div', 'gz-fb-item'), lbl = el('div', 'gz-fb-lbl'), dot = el('span', 'gz-dot');
-      const [word, colour] = STATUS[c.status] || STATUS.partly;
+    const run = (text, primary) => {
+      const b = el('button', primary ? 'gz-fb-run' : 'gz-fb-run gz-fb-ghost');
+      b.type = 'button';
+      if (fb.state === 'running') { b.disabled = true; b.append(el('span', 'gz-spin')); }
+      b.append(text);
+      b.addEventListener('click', feedback);
+      return b;
+    };
+    if (fb.state === 'error') {
+      const card = el('div', 'gz-fb-error'), top = el('div', 'gz-fb-top'), dot = el('span', 'gz-dot');
+      dot.style.background = 'var(--gz-err)';
+      top.append(dot, el('span', 'gz-fb-msg', t("AI couldn't give feedback.")));
+      card.append(top, run(t('Try again'), true));
+      box.append(card);
+      return;
+    }
+    // The head: what came back (or how many criteria it reads), and the run button.
+    const head = el('div', 'gz-fb-head'), sum = el('div', 'gz-fb-sum');
+    head.append(sum);
+    box.append(head);
+    if (fb.state === 'idle') { sum.textContent = t('Not run yet'); head.append(run(t('Get feedback'), true)); return; }
+    if (fb.state === 'running') {
+      const a = F.context()?.assignment, n = a?.rubric?.criteria?.length || a?.criteria?.length;
+      if (n) sum.textContent = t('Criteria: {n}', { n });
+      head.append(run(t('Reading your draft…'), false));
+      for (const lines of [3, 3, 2]) { const k = el('div', 'gz-fb-skel'); k.setAttribute('aria-hidden', 'true'); for (let i = 0; i < lines; i++) k.append(el('i')); box.append(k); }
+      return;
+    }
+    for (const [status, [, colour, count]] of Object.entries(STATUS)) {
+      const n = fb.criteria.filter((c) => c.status === status).length;
+      if (!n) continue;
+      const part = el('span'), dot = el('span', 'gz-dot');
       dot.style.background = colour;
-      lbl.append(dot, el('b', '', c.label), el('span', 'gz-fb-status', t(word)));
-      card.append(lbl);
+      part.append(dot, t(count, { n }));
+      sum.append(part);
+    }
+    head.append(run(t('Check again'), false));
+    if (!fb.criteria.length) box.append(el('p', 'gz-fb-note', t('No criteria to check.')));
+    const pageAt = panels.get(box)?.pageAt;
+    fb.criteria.forEach((c, i) => {
+      const card = el('div', 'gz-fb-item'), top = el('div', 'gz-fb-top');
+      const [word] = STATUS[c.status] || STATUS.partly;
+      card.style.animationDelay = `${Math.min(i, 5) * 30}ms`;
+      top.append(el('span', `gz-fb-chip ${STATUS[c.status] ? c.status : 'partly'}`, t(word)));
+      const l = c.level;
+      if (l?.label) top.append(el('span', 'gz-fb-level', l.value != null && l.points != null ? `${l.label} · ${l.value}/${l.points}` : l.label));
+      card.append(top, el('div', 'gz-fb-crit', c.label));
       if (c.comment) card.append(el('p', 'gz-fb-comment', c.comment));
       for (const q of c.quotes) {
-        const b = el('button', 'gz-fb-quote', q.quote);
+        const b = el('button', 'gz-fb-quote');
         b.type = 'button';
+        b.append(el('q', 'gz-fb-qtext', q.quote));
+        const at = pageAt && fb.place?.(q.start, q.end, q.quote), page = at && pageAt(at.from);
+        if (page) b.append(el('small', 'gz-fb-page', t('p. {n}', { n: page })));
         b.addEventListener('click', () => { if (!show(q)) b.classList.add('gz-gone'); });
         card.append(b);
       }
       box.append(card);
-    }
+    });
   };
   const paint = () => { for (const box of views) { const focused = box.contains(document.activeElement); draw(box); if (focused) box.focus({ preventScroll: true }); } };
-  // The Feedback panel, in any container (the paper's side panel tab; compose's popover over the chip). → { destroy }.
-  const feedbackView = (container) => {
+  // The Feedback panel, in any container (the paper's side panel tab, with opts.pageAt(pos) for its passages' pages;
+  // compose's popover over the chip). → { el, destroy }.
+  const panels = new WeakMap(); // a panel → its opts
+  const feedbackView = (container, opts = {}) => {
     const box = el('div', 'gz-fb');
     box.tabIndex = -1;
     box.setAttribute('role', 'region');
     box.setAttribute('aria-label', t('Feedback'));
     box.setAttribute('aria-live', 'polite');
     container.append(box);
+    panels.set(box, opts || {});
     views.add(box);
     draw(box);
     return { el: box, destroy: () => { views.delete(box); box.remove(); } };

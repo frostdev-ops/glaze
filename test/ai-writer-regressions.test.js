@@ -39,7 +39,7 @@ test('feedback cannot return rewritten passages with different quote delimiters 
   const inp = FB.task.input({ text: 'Memory is a debt.', context: { kind: 'assignment', assignment: { instructions: 'Discuss memory.' } } });
   for (const comment of ["Try 'Memory shackles every generation to the violence of the past.'", 'Rewrite: Memory shackles every generation to the violence of the past.',
     'Memory shackles every generation to the violence of the past.', 'Try "Debt wins".', 'Your draft needs a thesis. For example, memory imprisons the town.']) {
-    const out = FB.task.check({ criteria: [{ criterion: 'Discuss memory', status: 'partly', comment, quotes: [] }] }, inp);
+    const out = FB.task.check({ criteria: [{ criterion: 'Discuss memory', status: 'partly', comment, quotes: [], level: null }] }, inp);
     assert.equal(out.criteria[0].comment, '', comment);
   }
 });

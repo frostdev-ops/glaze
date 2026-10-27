@@ -167,10 +167,10 @@ const ASSIGN = { kind: 'assignment', assignment: { title: 'Essay 2', instruction
 test('writer.feedback: per rubric criterion, comments only, quotes anchored in the draft, in the rubric\'s order', async () => {
   const draft = 'Morrison treats memory as a debt every character inherits. The river is where it comes due.';
   const { output, req } = await go(FB.task, { text: draft, context: ASSIGN }, { json: { criteria: [
-    { criterion: '[_11_1]', status: 'missing', comment: 'No source is cited yet.', quotes: [{ quote: 'The river is where it comes due.', before: '', after: '' }] },
-    { criterion: '_10_1', status: 'met', comment: 'Your claim is clear.', quotes: [{ quote: 'memory as a debt every character inherits', before: 'Morrison treats', after: '' }, { quote: 'a sentence not in the draft at all', before: '', after: '' }] },
-    { criterion: '_99_1', status: 'met', comment: 'Not a criterion.', quotes: [] },
-    { criterion: '_10_1', status: 'partly', comment: 'Twice.', quotes: [] },
+    { criterion: '[_11_1]', status: 'missing', comment: 'No source is cited yet.', quotes: [{ quote: 'The river is where it comes due.', before: '', after: '' }], level: null },
+    { criterion: '_10_1', status: 'met', comment: 'Your claim is clear.', quotes: [{ quote: 'memory as a debt every character inherits', before: 'Morrison treats', after: '' }, { quote: 'a sentence not in the draft at all', before: '', after: '' }], level: null },
+    { criterion: '_99_1', status: 'met', comment: 'Not a criterion.', quotes: [], level: null },
+    { criterion: '_10_1', status: 'partly', comment: 'Twice.', quotes: [], level: null },
   ] } });
   assert.deepEqual(output.criteria, [
     { id: '_10_1', label: 'Thesis', status: 'met', comment: 'Your claim is clear.', quotes: [{ start: 16, end: 57, quote: 'memory as a debt every character inherits' }], level: null },
@@ -194,17 +194,16 @@ test('writer.feedback: the rubric level the draft reaches, only one its criterio
   ] } });
   assert.deepEqual(output.criteria.map((c) => c.level), [{ label: 'Proficient', value: 8, points: 10 }, null, { label: 'Exemplary', value: null, points: null }],
     'a level the criterion has, by its name; one it hasn\'t is none');
-  const plain = await go(FB.task, { text: draft, context: ASSIGN }, { json: { criteria: [{ criterion: '_10_1', status: 'met', comment: 'Your claim is clear.', quotes: [] }] } });
-  assert.equal(plain.output.criteria[0].level, null, 'a reply without levels still counts');
+
 });
 
 test('writer.feedback: without a rubric, a requirement must be in the instructions; a comment offering wording loses it', async () => {
   const ctx = { kind: 'assignment', assignment: { title: 'Essay 2', instructions: 'Write 1,000 words on memory in Beloved. Use at least two sources.' } };
   const { output } = await go(FB.task, { text: 'Memory is a debt.', context: ctx }, { json: { criteria: [
-    { criterion: 'Use at least two sources', status: 'missing', comment: 'Try "Morrison shows that memory is an inheritance no one chooses."', quotes: [] },
-    { criterion: 'Write a strong conclusion', status: 'partly', comment: 'Invented.', quotes: [] },
+    { criterion: 'Use at least two sources', status: 'missing', comment: 'Try "Morrison shows that memory is an inheritance no one chooses."', quotes: [], level: null },
+    { criterion: 'Write a strong conclusion', status: 'partly', comment: 'Invented.', quotes: [], level: null },
   ] } });
-  assert.deepEqual(output.criteria, [{ id: 'Use at least two sources', label: 'Use at least two sources', status: 'missing', comment: '', quotes: [] }]);
+  assert.deepEqual(output.criteria, [{ id: 'Use at least two sources', label: 'Use at least two sources', status: 'missing', comment: '', quotes: [], level: null }]);
   assert.equal(FB.task.input({ text: 'x', context: { kind: 'reply' } }), null, 'nothing to check against');
   assert.equal(FB.task.input({ text: 'x', context: { ...ASSIGN, kind: 'test' } }), null);
 });
@@ -226,7 +225,7 @@ test('writer.feedback: a comment says what the draft does, specifically; one off
     ['It cites "the price of the ticket," which is not in the draft.', false],
     ['One. Two. Three. Four sentences is too many.', false],
   ];
-  const { output } = await go(FB.task, { text: draft, context: ASSIGN }, { json: { criteria: comments.map(([comment], i) => ({ criterion: i % 2 ? '_11_1' : '_10_1', status: 'partly', comment, quotes: [] })) } });
+  const { output } = await go(FB.task, { text: draft, context: ASSIGN }, { json: { criteria: comments.map(([comment], i) => ({ criterion: i % 2 ? '_11_1' : '_10_1', status: 'partly', comment, quotes: [], level: null })) } });
   assert.equal(output.criteria.length, 2);
   assert.equal(output.criteria[0].comment, comments[0][0], 'a specific comment survives');
   for (const [c, ok] of comments) assert.equal(FB.assesses(c, [draft, ASSIGN.assignment.instructions, '[_10_1] Thesis: A clear, arguable thesis.'].map((x) => require('../lib/ai/text.js').source(x))) === c.trim(), ok, c);

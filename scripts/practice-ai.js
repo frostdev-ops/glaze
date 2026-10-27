@@ -45,11 +45,13 @@ const answer = (body) => {
   if (/^You tell a student how their draft stands/.test(system)) {
     // Per rubric row by its id; without rows, per requirement, its words copied from the instructions.
     const draft = data.draft || '', ids = [...(data.rubric || '').matchAll(/^\[([\w-]{1,40})\]/gm)].map((m) => m[1]);
+    // A criterion's level names, the indented lines under its row; met takes the first, partly the second, missing none.
+    const levels = (id) => { const row = (data.rubric || '').split(/^\[/m).find((r) => r.startsWith(`${id}]`)) || ''; return [...row.matchAll(/^ {2}([^:\n]{1,40}):/gm)].map((m) => m[1]); };
     const asks = ids.length ? ids : (data['assignment instructions'] || '').split(/[,.;:]\s+|\n/).map((x) => x.trim()).filter((x) => x.length >= 8).slice(0, 4);
     return JSON.stringify({ criteria: asks.map((criterion, i) => {
       const q = passage(draft, i);
       return { criterion, status: ['met', 'partly', 'missing'][i % 3], comment: ['Your draft meets this in its middle paragraphs.', 'Your draft touches this, but its evidence stays thin.', 'Your draft does not address this criterion yet.'][i % 3],
-        quotes: i % 3 === 2 || !q ? [] : [q] };
+        quotes: i % 3 === 2 || !q ? [] : [q], level: (ids.length && i % 3 < 2 && levels(criterion)[i % 3]) || null };
     }) });
   }
   if (/^You read the instructions a student was given/.test(system)) {

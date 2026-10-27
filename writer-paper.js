@@ -49,6 +49,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const ed = host.editor, view = ed.view, t = (k, v) => { const text = host.t(k, v); return k === 'Document outline' && text === k ? 'Outline' : text; }, store = PA.open();
     const ISSUES = () => globalThis.GZ_WRITER_ISSUES || null;
     let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = 'fit', scale = PX100, layout = null, page = 1, focus = false;
+    let laidOut = () => {}, rows = []; // the Outline's pages once it exists; its rows
     const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
 
     // ---- the chrome
@@ -180,7 +181,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         },
       },
     });
-    ed.addPlugins([PG.styler(() => format), PG.plugin({ format: () => format, notes: noteHeights, gap: GAP, onLayout: (l) => { layout = l; draw(); } }), watch, fallback]);
+    ed.addPlugins([PG.styler(() => format), PG.plugin({ format: () => format, notes: noteHeights, gap: GAP, onLayout: (l) => { layout = l; draw(); laidOut(); } }), watch, fallback]);
 
     // ---- pages
     const surname = () => F.surname(view.state.doc, format);
@@ -227,12 +228,18 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
 
     // ---- status, toolbar state, outline
     const SPACING = { 1: 'Single', 1.15: '1.15', 1.5: '1.5', 2: 'Double' };
+    // The page a position is on, from where it is drawn (0 before the pages are laid out).
+    const pageAt = (pos) => {
+      if (!layout) return 0;
+      try {
+        const top = view.dom.getBoundingClientRect().top, y = (view.coordsAtPos(pos).top - top) / scale;
+        return Math.min(layout.pages.length, Math.max(1, Math.floor(y / (ST.geometry(format).height + GAP)) + 1));
+      } catch { return 0; }
+    };
     const selected = () => {
       if (!layout) return;
-      try {
-        const top = view.dom.getBoundingClientRect().top, y = (view.coordsAtPos(view.state.selection.head).top - top) / scale;
-        page = Math.min(layout.pages.length, Math.max(1, Math.floor(y / (ST.geometry(format).height + GAP)) + 1));
-      } catch { /* not laid out */ }
+      page = pageAt(view.state.selection.head) || page;
+      outlineMark();
       pageL.textContent = t('Page {n} of {m}', { n: page, m: layout.pages.length });
       const a = ed.active();
       for (const b of marks) b.setAttribute('aria-pressed', String(!!a[b.dataset.run]));
@@ -246,17 +253,27 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       fontL.textContent = `${format.font} ${format.size} · ${t(SPACING[format.line] || String(format.line))}`;
       pill.replaceChildren(format.label, icon('caret', 'gp-ico gp-caret'));
     };
-    // The title, headings and list of sources (F.outline); a paper with none of them says so.
+    // The title, headings and list of sources (F.outline), each with its page, the caret's section marked; a paper with none
+    // of them says so.
+    function outlineMark() {
+      const at = view.state.selection.head;
+      let cur = null;
+      for (const r of rows) if (r.pos <= at) cur = r;
+      for (const r of rows) { r.el.classList.toggle('cur', r === cur); if (r === cur) r.el.setAttribute('aria-current', 'true'); else r.el.removeAttribute('aria-current'); }
+    }
     const outlineDraw = () => {
       const items = F.outline(view.state.doc, format);
-      if (!items.length) { outline.replaceChildren(h('p', { class: 'gp-empty' }, t('No title or headings yet.'))); return; }
-      outline.replaceChildren(...items.map(({ kind, level, text, pos }) => {
-        const b = btn({ onclick: () => go(pos + 1, pos + 1) }, text);
-        b.dataset.kind = kind;
-        b.style.paddingInlineStart = `${8 + Math.max(0, level - 1) * 14}px`;
-        return b;
-      }));
+      if (!items.length) { rows = []; outline.replaceChildren(h('div', { class: 'gp-empty' }, icon('bullets', 'gp-empty-ico'), t('No title or headings yet.'))); return; }
+      rows = items.map(({ kind, level, text, pos }) => {
+        const n = pageAt(pos + 1), el = btn({ class: `gp-ol-row${level > 1 ? ' gp-ol-sub' : ''}`, onclick: () => go(pos + 1, pos + 1) }, h('span', {}, text), h('small', {}, n ? nf(n) : ''));
+        el.dataset.kind = kind;
+        if (level > 1) el.style.setProperty('--ol-level', String(level - 1));
+        return { pos, kind, el };
+      });
+      outline.replaceChildren(...rows.flatMap((r) => (r.kind === 'list' && r !== rows[0] ? [h('div', { class: 'gp-ol-sep', role: 'separator' }), r.el] : [r.el])));
+      outlineMark();
     };
+    laidOut = () => { if (!panes.outline.hidden) outlineDraw(); };
     const go = (from, to) => {
       const tr = view.state.tr.setSelection(PM.state.TextSelection.create(view.state.doc, from, to)).scrollIntoView();
       view.dispatch(tr);
@@ -485,7 +502,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (C?.button) { const b = C.button({ editor: ed, paper: api }); if (b) { b.classList.add('gp-tbtn'); cite.replaceWith(b); } }
       else if (C) cite.disabled = false;
       if (C?.sourcesView) C.sourcesView(panes.sources, { editor: ed, paper: api, badge: (n) => { badges.sources.textContent = n ? nf(n) : ''; } });
-      if (globalThis.GZ_WRITER_AI?.feedbackView) GZ_WRITER_AI.feedbackView(panes.feedback, { editor: ed, paper: api });
+      if (globalThis.GZ_WRITER_AI?.feedbackView) GZ_WRITER_AI.feedbackView(panes.feedback, { pageAt });
       submit.disabled = typeof GZ_WRITER_PAPER.submit !== 'function';
     };
     submit.addEventListener('click', () => { if (typeof GZ_WRITER_PAPER.submit === 'function') GZ_WRITER_PAPER.submit(api); });

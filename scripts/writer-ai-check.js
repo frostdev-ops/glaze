@@ -50,6 +50,7 @@ const STUB = `(() => {
         const c = Object.assign(new AbortController(), { task: m.task });
         inflight.set(m.id, c);
         ai.runs.push({ id: m.id, task: m.task, input: m.input });
+        if (ai.hold) await new Promise((r) => { ai.release = r; }); // held, so a check can see the run in flight
         const reply = ai.next[m.task] || { text: '' };
         try {
           const out = await GZ_AI_TASKS.run(task, m.input, { provider: 'mock', cfg: { replies: [reply] }, signal: c.signal, emit: (e) => post({ ...e, id: m.id }) });
@@ -348,14 +349,14 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       const assignment = { title: 'Essay 2', instructions: 'Write about memory in Beloved, using two sources.', rubric: { title: 'Rubric', levels: [], criteria: [{ id: '_10_1', label: 'Thesis', cells: [] }, { id: '_11_1', label: 'Evidence', cells: [] }] } };
       const q = await frame({ kind: 'journal', ctx: { kind: 'journal', assignment } });
       await next(q, 'writer.feedback', { json: { criteria: [
-        { criterion: '_10_1', status: 'partly', comment: 'Your claim is there, but it comes late.', quotes: [{ quote: 'Morrison is definately less interested in nostalgia', before: 'I think', after: 'than' }] },
-        { criterion: '_11_1', status: 'missing', comment: 'No source is cited yet.', quotes: [] },
+        { criterion: '_10_1', status: 'partly', comment: 'Your claim is there, but it comes late.', quotes: [{ quote: 'Morrison is definately less interested in nostalgia', before: 'I think', after: 'than' }], level: null },
+        { criterion: '_11_1', status: 'missing', comment: 'No source is cited yet.', quotes: [], level: null },
       ] } });
       await until(() => q.$('.gz-ai-chip[data-ready]'), 'chip');
       await q.click('.gz-ai-chip');
       await q.click('.gz-ai-fb');
       await until(() => q.evaluate(() => document.querySelectorAll('.gz-ai-pop .gz-fb-item').length === 2), 'feedback shown');
-      assert.deepEqual(await q.evaluate(() => [...document.querySelectorAll('.gz-fb-item')].map((c) => c.querySelector('.gz-fb-lbl').textContent)), ['ThesisPartly met', 'EvidenceMissing']);
+      assert.deepEqual(await q.evaluate(() => [...document.querySelectorAll('.gz-fb-item')].map((c) => [c.querySelector('.gz-fb-crit').textContent, c.querySelector('.gz-fb-chip').textContent])), [['Thesis', 'Partly'], ['Evidence', 'Missing']]);
       await pause(250);
       await q.screenshot({ path: path.join(shots, 'compose-feedback.png') });
       await check('Feedback is a named dialog, receives focus, and Escape returns to the chip', async () => {
@@ -377,6 +378,84 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       assert.equal(tab, 2);
       await q.close();
     });
+    // The paper's Feedback and Outline tabs as mockups E draw them: every state, Frost and Paper, wide and narrow.
+    const looks = { dark: { dark: true, motion: 'subtle' }, light: { dark: false, motion: 'subtle', tokens: Object.fromEntries(Object.entries(require('../defaults.js').GZ_PRESETS.find((x) => x[0] === 'Paper')[1]).filter(([k]) => k.startsWith('--gz-'))) } };
+    const built = path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-feedback');
+    fs.mkdirSync(built, { recursive: true });
+    const level = (id, label, points, a, b) => ({ id, label, points, cells: [{ level: '_1_1', detail: 'Exemplary work.', value: a }, { level: '_2_1', detail: 'Developing work.', value: b }] });
+    const RUBRIC = { title: 'Essay rubric', levels: [{ id: '_1_1', label: 'Proficient' }, { id: '_2_1', label: 'Developing' }],
+      criteria: [level('_10_1', 'Thesis and argument', 10, 9, 6), level('_11_1', 'Use of evidence', 10, 9, 6), level('_12_1', 'Works Cited', 5, 5, 2), level('_13_1', 'MLA format', 5, 5, 3)] };
+    const FX = require('../test/fixtures/writer-paper-fixtures.js');
+    for (const [name, look] of Object.entries(looks)) for (const [wide, size] of [['wide', { width: 1440, height: 900 }], ['narrow', { width: 760, height: 1000 }]]) {
+      await check(`Feedback and Outline as mockups E (${name}, ${wide}): head row, states, cards, levels, pages, Outline, focus ring`, async () => {
+        const q = await frame({ mode: 'paper', kind: 'assignment', html: `<p>${LAST}</p>`, ctx: { kind: 'assignment', assignment: { title: 'Essay 2', instructions: 'Write 1,200 words on memory in Beloved.', rubric: RUBRIC } } });
+        try {
+          await q.setViewportSize(size);
+          await q.evaluate((look) => __page.port.postMessage({ type: 'look', look }), look);
+          await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()), 'paper mounted');
+          const doc = FX.papers.mla9();
+          const body = doc.content.findIndex((n, i) => i > 4 && n.type === 'paragraph');
+          doc.content.splice(body + 1, 0, { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'The clearing as ledger' }] },
+            { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Baby Suggs\'s sermon' }] });
+          await q.evaluate((doc) => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON(doc).content)); }, doc);
+          await until(() => q.evaluate(() => GZ_WRITER_PAPER.current().pages() > 1), 'pages laid out');
+          const side = async (file) => { await pause(260); await (await q.$('.gp-side')).screenshot({ path: path.join(built, `${file}-${name}-${wide}.png`) }); };
+          await q.click('#gp-tab-feedback');
+          // Not run: the button in the head row, inside the pane's padding.
+          const gap = await q.evaluate(() => { const p = document.querySelector('#gp-feedback').getBoundingClientRect(), b = document.querySelector('#gp-feedback .gz-fb-head .gz-fb-run').getBoundingClientRect(); return [b.left - p.left, b.top - p.top]; });
+          assert.ok(gap[0] >= 12 && gap[1] >= 12, `Get feedback sits inside the pane's padding (${gap})`);
+          assert.equal(await q.$eval('#gp-feedback .gz-fb-sum', (e) => e.textContent), 'Not run yet');
+          await side('feedback-not-run');
+          // Reading: the run held in flight.
+          await q.evaluate(() => { __ai.hold = true; });
+          await next(q, 'writer.feedback', { json: { criteria: [
+            { criterion: '_10_1', status: 'met', comment: 'Your thesis names the river and the clearing as two kinds of memory and holds to it.', quotes: [{ quote: 'Toni Morrison\'s Beloved treats memory less as a record', before: 'Inheritance in Beloved', after: 'than' }], level: 'Proficient' },
+            { criterion: '_11_1', status: 'partly', comment: 'Two of your three claims rest on the same passage; the clearing section has no quotation of its own.', quotes: [], level: 'Developing' },
+            { criterion: '_12_1', status: 'missing', comment: 'You cite Morrison and Baldwin, but Works Cited has no entries yet.', quotes: [], level: null },
+            { criterion: '_13_1', status: 'met', comment: 'Your heading, header and spacing follow MLA.', quotes: [], level: 'Proficient' }] } });
+          await q.click('#gp-feedback .gz-fb-run');
+          await until(() => q.evaluate(() => document.querySelectorAll('#gp-feedback .gz-fb-skel').length === 3), 'skeletons while reading');
+          assert.match(await q.$eval('#gp-feedback .gz-fb-run', (e) => e.textContent), /Reading your draft…/);
+          assert.equal(await q.$eval('#gp-feedback .gz-fb-sum', (e) => e.textContent), 'Criteria: 4');
+          await side('feedback-reading');
+          await q.evaluate(() => { __ai.hold = false; __ai.release(); });
+          await until(() => q.evaluate(() => document.querySelectorAll('#gp-feedback .gz-fb-item').length === 4), 'results');
+          const cards = await q.evaluate(() => [...document.querySelectorAll('#gp-feedback .gz-fb-item')].map((c) => [c.querySelector('.gz-fb-chip').textContent, c.querySelector('.gz-fb-level')?.textContent || '']));
+          assert.deepEqual(cards, [['Met', 'Proficient · 9/10'], ['Partly', 'Developing · 6/10'], ['Missing', ''], ['Met', 'Proficient · 5/5']]);
+          assert.equal(await q.$eval('#gp-feedback .gz-fb-sum', (e) => e.textContent), '2 met1 partly1 missing');
+          assert.match(await q.$eval('#gp-feedback .gz-fb-page', (e) => e.textContent), /^p\. \d+$/, 'a passage says its page');
+          await side('feedback-results');
+          // Motion off: the cards don't animate.
+          await q.evaluate(() => __page.port.postMessage({ type: 'look', look: { dark: true, motion: 'off' } }));
+          await until(() => q.evaluate(() => document.documentElement.dataset.motion === 'off'), 'motion off');
+          assert.equal(await q.$eval('#gp-feedback .gz-fb-item', (e) => getComputedStyle(e).animationName), 'none');
+          await q.evaluate((look) => __page.port.postMessage({ type: 'look', look }), look);
+          // An error: a reply that isn't the answer's shape.
+          await next(q, 'writer.feedback', { text: 'not an answer' });
+          await q.click('#gp-feedback .gz-fb-run');
+          await until(() => q.$('#gp-feedback .gz-fb-error'), 'error card');
+          assert.equal(await q.$eval('#gp-feedback .gz-fb-error .gz-fb-run', (e) => e.textContent), 'Try again');
+          await side('feedback-error');
+          // The tab's focus ring: the Look's rounded ring inside the tab, clear of its underline.
+          await q.focus('#gp-tab-sources');
+          await q.keyboard.press('ArrowRight');
+          await until(() => q.evaluate(() => document.activeElement?.id === 'gp-tab-feedback'), 'keyboard focus on Feedback');
+          const ring = await q.$eval('#gp-tab-feedback', (e) => { const a = getComputedStyle(e, '::after'), r = e.getBoundingClientRect(); return { outline: getComputedStyle(e).outlineStyle, shadow: a.boxShadow, radius: a.borderTopLeftRadius, bottom: parseFloat(a.bottom) }; });
+          assert.ok(ring.outline === 'none' && /2px/.test(ring.shadow) && ring.radius === '8px' && ring.bottom >= 6, `a rounded ring clear of the underline (${JSON.stringify(ring)})`);
+          await (await q.$('.gp-tabs')).screenshot({ path: path.join(built, `tab-focus-${name}-${wide}.png`) });
+          // The Outline: title, headings with their pages, Works Cited; the caret's section marked.
+          await q.click('#gp-tab-outline');
+          await q.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let at = null; v.state.doc.descendants((n, pos) => { if (at === null && n.type.name === 'heading' && n.attrs.level === 2) at = pos + 2; }); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at))); });
+          const rows = await until(() => q.evaluate(() => { const r = [...document.querySelectorAll('.gp-ol-row')]; return r.length && r.every((x) => x.querySelector('small').textContent) && r.map((x) => [x.dataset.kind, x.querySelector('span').textContent, x.classList.contains('cur')]); }), 'outline with pages');
+          assert.deepEqual(rows.map((r) => r[0]), ['title', 'heading', 'heading', 'list']);
+          assert.deepEqual(rows.filter((r) => r[2]).map((r) => r[1]), ['Baby Suggs\'s sermon'], 'the caret\'s section is marked');
+          await side('outline');
+          await q.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Just a start.' }] }] }).content)); });
+          await until(() => q.evaluate(() => /No title or headings yet\./.test(document.querySelector('.gp-outline').textContent)), 'outline empty state', 4000);
+          await side('outline-empty');
+        } finally { await q.evaluate(() => { __ai.hold = false; __ai.release?.(); }).catch(() => {}); await q.close(); }
+      });
+    }
     await check('no page errors', async () => assert.deepEqual(errors, []));
   } finally { await browser.close(); }
   console.log(`${checks - failures}/${checks} passed${failures ? '' : ` · screenshots in ${shots}`}`);

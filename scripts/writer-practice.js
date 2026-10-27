@@ -182,8 +182,8 @@ const run = async ({ context, mock, shots, errors, ai }) => {
     await kb.press('Tab');
     check(!await inEditor(), `${where}: Escape then Tab leaves the paper`);
     await fr.click('#gp-tab-outline');
-    const outline = await fr.evaluate(() => [...document.querySelectorAll('.gp-outline button')].map((b) => [b.dataset.kind, b.textContent]));
-    check(outline.length >= 2 && outline[0][0] === 'title' && outline.at(-1).join() === 'list,Works Cited', `${where}: the Outline lists the title and Works Cited (${outline.map((x) => x[1]).join(' | ')})`);
+    const outline = await fr.evaluate(() => [...document.querySelectorAll('.gp-outline .gp-ol-row')].map((b) => [b.dataset.kind, b.querySelector('span').textContent, b.querySelector('small').textContent]));
+    check(outline.length >= 2 && outline[0][0] === 'title' && outline.at(-1).slice(0, 2).join() === 'list,Works Cited' && outline.every((x) => /^\d+$/.test(x[2])), `${where}: the Outline lists the title and Works Cited, each with its page (${outline.map((x) => `${x[1]} ${x[2]}`).join(' | ')})`);
     await fr.evaluate((doc) => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON(doc).content)); }, before);
     await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved'), `${where}: paper saved as it was`, 20000);
   };

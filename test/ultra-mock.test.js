@@ -147,13 +147,16 @@ test('the practice rubric reaches Feedback as parsed criteria and level cells, n
     });
     const original = require('./fixtures/ultra-rubric-numeric.json').column.rubricAssociations[0].rubricDefinition;
     const rubric = require('../lib/ai/tasks/writer-context.js').rubric(context.assignment.rubric);
-    assert.deepEqual(rubric.ids, original.rows.map((r) => ({ id: r.id, label: r.header })));
+    assert.deepEqual(rubric.ids.map(({ id, label }) => ({ id, label })), original.rows.map((r) => ({ id: r.id, label: r.header })));
+    assert.ok(rubric.ids.every((c) => c.levels.length && c.levels[0].label === 'Level A'), 'each criterion keeps its named levels');
     assert.match(rubric.text, /Level A: One A/);
     const T = require('../lib/ai/task.js'); require('../lib/ai/tasks/writer-feedback.js');
     const task = T.get('writer.feedback');
     const input = task.input({ text: 'A synthetic draft about memory.', context });
     const request = task.build(input, { text: require('../lib/ai/text.js') });
     const answer = JSON.parse(require('../scripts/practice-ai.js').answer({ messages: request.messages }));
-    assert.deepEqual(task.check(answer, input).criteria.map((c) => [c.id, c.label]), rubric.ids.map((c) => [c.id, c.label]));
+    const checked = task.check(answer, input).criteria;
+    assert.deepEqual(checked.map((c) => [c.id, c.label]), rubric.ids.map((c) => [c.id, c.label]));
+    assert.ok(checked.some((c) => c.level?.label), 'the stand-in names a level the rubric has');
   } finally { fs.rmSync(out, { recursive: true, force: true }); }
 });

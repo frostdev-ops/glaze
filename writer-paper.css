@@ -113,10 +113,29 @@
 .gp-tabs { display: flex; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid var(--gz-line); flex: none; }
 .gp-tab { padding: 8px 10px 10px; font-size: 13px; color: var(--gz-ink-muted); border-bottom: 2px solid transparent; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
 .gp-tab[aria-selected="true"] { color: var(--gz-ink); border-bottom-color: var(--gz-accent); font-weight: 600; }
+/* The Look's rounded focus ring, inside the tab, clear of its underline. */
+.gp .gp-tab { position: relative; }
+.gp .gp-tab:focus-visible { outline: none; }
+.gp .gp-tab:focus-visible::after { content: ""; position: absolute; inset: 3px 0 6px; border-radius: 8px; box-shadow: 0 0 0 2px var(--gz-accent); pointer-events: none; }
 .gp-badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--gz-line-strong); color: var(--gz-ink); font-size: 11px; display: inline-grid; place-items: center; font-weight: 600; }
 .gp-badge:empty { display: none; }
 .gp-tab[aria-selected="true"] .gp-badge { background: var(--gz-accent); color: var(--gz-accent-ink); }
 .gp-pane { flex: 1; min-height: 0; overflow: auto; }
+/* The Outline (mockups E): the title and the list of sources in ink, headings by level with a guide line, each with its
+   page; the caret's section marked with the accent; an empty paper says so. */
+.gp-outline { padding: 14px; display: grid; gap: 1px; align-content: start; }
+.gp-ol-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 32px; padding: 0 8px; border-radius: 7px; font-size: 13px; text-align: start; color: var(--gz-ink-muted); }
+.gp-ol-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-ol-row small { font-size: 11px; color: var(--gz-ink-faint); }
+.gp-ol-row:hover { background: var(--gz-line); color: var(--gz-ink); }
+.gp-ol-row:is([data-kind="title"], [data-kind="list"]) { color: var(--gz-ink); font-weight: 600; }
+.gp-ol-sub { padding-inline-start: calc(8px + var(--ol-level, 1) * 16px); }
+.gp-ol-sub::before { content: ""; position: absolute; inset-inline-start: calc(13px + (var(--ol-level, 1) - 1) * 16px); top: 0; bottom: 0; width: 1px; background: var(--gz-line-strong); }
+.gp-ol-row.cur { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
+.gp-ol-row.cur::after { content: ""; position: absolute; inset-inline-start: 0; top: 7px; bottom: 7px; width: 2px; border-radius: 2px; background: var(--gz-accent); }
+.gp-ol-sep { height: 1px; margin: 6px 4px; background: var(--gz-line); }
+.gp-empty { display: grid; justify-items: center; gap: 10px; padding: 64px 16px; font-size: 13px; text-align: center; color: var(--gz-ink-faint); }
+.gp-empty-ico { width: 28px; height: 28px; opacity: .7; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .gp-issues { padding: 12px; display: grid; gap: 10px; }
 .gp-issues:empty { display: none; }
 .gp-issue { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: color-mix(in srgb, var(--gz-surface-2) 40%, var(--gz-surface)); text-align: start; cursor: pointer; }
@@ -133,11 +152,6 @@
 .gp-list div { display: flex; justify-content: space-between; color: var(--gz-ink-muted); }
 .gp-list .gp-ok { color: var(--gz-ok); } .gp-list .gp-no { color: var(--fmt); }
 .gp-list h4 { margin: 0 0 2px; font-size: 12px; color: var(--gz-ink-faint); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
-.gp-outline { padding: 12px; display: grid; gap: 2px; }
-.gp-outline button { text-align: start; padding: 6px 8px; border-radius: 7px; font-size: 13px; color: var(--gz-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gp-outline button:hover { background: var(--gz-line); color: var(--gz-ink); }
-.gp-outline button[data-kind="title"], .gp-outline button[data-kind="list"] { color: var(--gz-ink); font-weight: 600; }
-.gp-outline .gp-empty { margin: 0; padding: 6px 8px; font-size: 13px; color: var(--gz-ink-faint); }
 
 /* Menus and popovers (writer.css .pop's look and motion) */
 .gp-menu { position: fixed; z-index: 5; min-width: 180px; max-width: calc(100vw - 8px); max-height: calc(100vh - 16px); overflow: auto; padding: 6px; transform-origin: top left; }
