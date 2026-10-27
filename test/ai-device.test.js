@@ -608,3 +608,38 @@ test('release during a warm create destroys its late base exactly once', async (
   await settle(); D.release(); await finish(); await job; await settle();
   assert.equal(s.log.destroyed, s.log.sessions, 'a released base must have one owner for destruction');
 });
+
+
+test('an older clone failure cannot evict the replacement warm session', async () => {
+  const s = install(stub({ clone: true })), create = s.LM.create;
+  let rejectClone, bases = 0;
+  s.LM.create = async (o) => {
+    const session = await create(o);
+    if (!o.cloned && ++bases === 1) session.clone = () => new Promise((_, reject) => { rejectClone = reject; });
+    return session;
+  };
+  const old = P.run('device', req(), {}).catch((e) => e);
+  await settle(); D.release();
+  await P.run('device', req(), {});
+  rejectClone(new Error('old clone failed')); await old; await settle();
+  await P.run('device', req(), {});
+  assert.equal(bases, 2, 'a stale failure must not discard the new base');
+});
+
+test('throwing clone cleans its base; concurrent clones never prompt the shared base', async () => {
+  const s = install(stub({ clone: true })), create = s.LM.create;
+  let failClone = true;
+  s.LM.create = async (o) => {
+    const session = await create(o);
+    if (!o.cloned && failClone) session.clone = () => { throw new Error('clone failed'); };
+    return session;
+  };
+  await assert.rejects(P.run('device', req(), {})); await settle();
+  assert.equal(s.log.destroyed, s.log.sessions);
+  failClone = false;
+  await Promise.all([P.run('device', req(), {}), P.run('device', req({ messages: [{ role: 'system', content: 'Answer as {"text": ...}.' }, { role: 'user', content: 'another document' }] }), {})]);
+  assert.equal(s.log.create.filter((c) => c.cloned).length, 2);
+  assert.equal(s.log.bases().length, 2, 'one failed base, one shared clean base');
+  assert.deepEqual(s.log.prompts.map((p) => p.input[0].content[0].value).sort(), ['another document', 'hello']);
+  D.release(); await settle(); assert.equal(s.log.destroyed, s.log.sessions);
+});
