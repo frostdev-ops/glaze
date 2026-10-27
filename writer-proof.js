@@ -16,20 +16,33 @@
 
   // ---- the shared worker ------------------------------------------------------------------------------------------
   // A worker that can't load (it errs before it answers) is given up for this box: no retry loop, the text stays.
-  let broken = false;
+  let broken = false, sharedFailed = false, worker = null, reconnectTimer = 0, stopped = false;
+  const release = () => { if (port) { port.onmessage = null; port.close?.(); } worker?.terminate?.(); port = worker = null; };
+  const replay = () => { if (connect()) for (const p of pending.values()) port.postMessage(p.msg); };
   const post = (m) => { if (connect()) port.postMessage(m); };
   const connect = () => {
-    if (port || broken) return port;
-    const fail = (e) => { console.error('Glaze Writer: proofing is off here', e?.message || e); broken = true; port = null; pending.clear(); };
+    if (port || broken || stopped) return port;
+    const fail = (e) => {
+      const fallback = P.mode === 'shared' && !sharedFailed;
+      release();
+      if (fallback) { sharedFailed = true; replay(); return; }
+      console.error('Glaze Writer: proofing is off here', e?.message || e);
+      broken = true; pending.clear();
+      for (const resolve of stats.values()) resolve(null);
+      stats.clear();
+    };
     try {
-      if (typeof SharedWorker === 'function') {
-        const w = new SharedWorker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' });
-        w.addEventListener('error', fail);
-        port = w.port;
-        port.start();
-        P.mode = 'shared';
-      } else {
-        port = new Worker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' });
+      if (!sharedFailed && typeof SharedWorker === 'function') {
+        try {
+          worker = new SharedWorker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' });
+          worker.addEventListener('error', fail);
+          port = worker.port;
+          port.start();
+          P.mode = 'shared';
+        } catch { sharedFailed = true; }
+      }
+      if (!port) {
+        worker = port = new Worker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' });
         port.addEventListener('error', fail);
         P.mode = 'worker';
       }
@@ -37,13 +50,22 @@
     port.onmessage = ({ data }) => onWorker(data);
     port.postMessage({ op: 'words', words: context });
     if (dict.size) port.postMessage({ op: 'dict', words: [...dict] });
-    for (const p of pending.values()) port.postMessage(p.msg);
     return port;
   };
-  addEventListener('pagehide', () => { port?.postMessage({ op: 'bye' }); port = null; });
+  addEventListener('pagehide', () => {
+    stopped = true; clearTimeout(reconnectTimer); clearTimeout(blockTimer); clearTimeout(docTimer);
+    clearTimeout(hoverTimer); clearTimeout(leaveTimer); clearTimeout(fixTimer);
+    port?.postMessage({ op: 'bye' }); release(); pending.clear();
+    for (const resolve of stats.values()) resolve(null);
+    stats.clear();
+  });
   const onWorker = (m) => {
     if (!m) return;
-    if (m.op === 'closing') { port = null; if (pending.size) connect(); return; }
+    if (m.op === 'closing') {
+      release();
+      if (pending.size) { clearTimeout(reconnectTimer); reconnectTimer = setTimeout(replay, 25); }
+      return;
+    }
     if (m.op === 'stats') { stats.get(m.id)?.(m); stats.delete(m.id); return; }
     if (m.op !== 'lint') return;
     const p = pending.get(m.id);
@@ -119,7 +141,8 @@
     };
     if (p.kind === 'block') {
       const from = P.mapPos(maps, p.pos, 1), to = P.mapPos(maps, p.pos + p.size, -1);
-      if (to <= from) return;
+      const node = doc.nodeAt(from);
+      if (to <= from || !node?.isTextblock || P.blockText(node) !== p.text) return;
       I.set('harper', lints.map((l) => place(l, (o) => p.pos + 1 + o)).filter(Boolean), { from, to });
       fixes(from, to);
       return;
