@@ -56,5 +56,5 @@ test('the stand-in\'s Feedback, gray text and autocorrect call pass Writer\'s ow
   const gray = complete.check(NET.answer({ messages: complete.build(ci, { text: X }).messages }), ci);
   assert.ok(typeof gray === 'string' && /\.$/.test(gray), `a finish to the sentence: ${gray}`);
   const decide = T.get('writer.decide'), di = decide.input({ sentence: 'They put there coats down.', from: 7, to: 12, suggestions: ['their', "they're"], context: {} });
-  assert.deepEqual(decide.check(JSON.parse(NET.answer({ messages: decide.build(di, { text: X }).messages })), di), { verdict: 'suggest', choice: 0 });
+  assert.deepEqual(decide.check(JSON.parse(NET.answer({ messages: decide.build(di, { text: X }).messages })), di), { verdict: 'suggest', choice: 'their' });
 });

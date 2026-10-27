@@ -6,16 +6,18 @@ const Module = require('node:module');
 const { options, browserArgs, observe, main } = require('../scripts/writer-practice.js');
 
 test('practice validates --ext and flags before opening a browser or resetting a profile', () => {
-  assert.deepEqual(options(['--ext', '.', '--fresh', '--smoke']), { root: path.resolve('.'), fresh: true, smoke: true, help: false });
-  for (const args of [['--ext'], ['--ext', '--fresh'], ['--frseh'], ['unexpected']]) assert.throws(() => options(args), /Invalid argument/);
+  assert.deepEqual(options(['--ext', '.', '--fresh', '--smoke']), { root: path.resolve('.'), fresh: true, smoke: true, help: false, ai: '' });
+  assert.equal(options(['--ai', 'mock']).ai, 'mock');
+  for (const args of [['--ext'], ['--ext', '--fresh'], ['--frseh'], ['unexpected'], ['--ai'], ['--ai', 'openai']]) assert.throws(() => options(args), /Invalid argument/);
   assert.equal(options(['--help']).help, true);
 });
 
-test('headed practice and smoke deny DNS, literal IPs and proxy loopback bypasses alike', () => {
+test('headed practice and smoke deny DNS, literal IPs and proxy loopback bypasses alike, all but through the AI proxy', () => {
   for (const smoke of [true, false]) {
     const args = browserArgs('/synthetic-extension', smoke);
-    assert.ok(args.includes('--host-resolver-rules=MAP * ~NOTFOUND'));
+    assert.ok(args.includes('--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'));
     assert.ok(args.includes('--proxy-server=http://127.0.0.1:0'));
+    assert.ok(browserArgs('/synthetic-extension', smoke, 4321).includes('--proxy-server=http://127.0.0.1:4321'));
     assert.ok(args.includes('--proxy-bypass-list=<-loopback>'));
     assert.ok(args.includes('--disable-quic'));
   }

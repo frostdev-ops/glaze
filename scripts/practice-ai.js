@@ -25,13 +25,13 @@ const least = (s) => {
   return '';
 };
 const words = (s) => s.split(/\s+/).filter(Boolean);
-// A passage of the draft as Writer's tasks ask for one: a sentence's start, with the words around it.
+// A passage of the draft as Writer's tasks ask for one: the start of its nth sentence found only once, with the words
+// around it.
 const passage = (draft, n) => {
-  const starts = [...draft.matchAll(/(?<=[.!?]\s+)[A-Z][^.!?\n]{40,}/g)];
-  const m = starts[n % Math.max(1, starts.length)];
-  if (!m) return null;
-  const quote = m[0].slice(0, 80).replace(/\s+\S*$/, '');
-  return { quote, before: words(draft.slice(0, m.index)).slice(-3).join(' '), after: words(draft.slice(m.index + quote.length)).slice(0, 3).join(' ') };
+  const once = [...draft.matchAll(/(?<=[.!?]\s+)[A-Z][^.!?\n]{40,}/g)].map((m) => ({ at: m.index, quote: m[0].slice(0, 80).replace(/\s+\S*$/, '') }))
+    .filter((m) => draft.indexOf(m.quote) === draft.lastIndexOf(m.quote));
+  const m = once[n % Math.max(1, once.length)];
+  return m ? { quote: m.quote, before: words(draft.slice(0, m.at)).slice(-3).join(' '), after: words(draft.slice(m.at + m.quote.length)).slice(0, 3).join(' ') } : null;
 };
 // Writer's task → a synthetic answer, told apart by its instructions' first line.
 const answer = (body) => {
@@ -43,8 +43,10 @@ const answer = (body) => {
     return `${word.replace(/[^\p{L}\p{N}'’-]/gu, '')} and what the town remembers.`;
   }
   if (/^You tell a student how their draft stands/.test(system)) {
+    // Per rubric row by its id; without rows, per requirement, its words copied from the instructions.
     const draft = data.draft || '', ids = [...(data.rubric || '').matchAll(/^\[([\w-]{1,40})\]/gm)].map((m) => m[1]);
-    return JSON.stringify({ criteria: ids.map((criterion, i) => {
+    const asks = ids.length ? ids : (data['assignment instructions'] || '').split(/[,.;:]\s+|\n/).map((x) => x.trim()).filter((x) => x.length >= 8).slice(0, 4);
+    return JSON.stringify({ criteria: asks.map((criterion, i) => {
       const q = passage(draft, i);
       return { criterion, status: ['met', 'partly', 'missing'][i % 3], comment: ['Your draft meets this in its middle paragraphs.', 'Your draft touches this, but its evidence stays thin.', 'Your draft does not address this criterion yet.'][i % 3],
         quotes: i % 3 === 2 || !q ? [] : [q] };
@@ -88,6 +90,7 @@ const model = (req, res, path) => {
 // ---- the proxy ------------------------------------------------------------------------------------------------------------
 const proxy = async ({ allowed, model: serve = false, connect = (port, host) => net.connect(port, host) }) => {
   let me = 0;
+  const tunnels = new Set(); // CONNECT sockets leave the server's own count: closed by close()
   const ask = (target) => Promise.resolve().then(() => allowed(target)).catch(() => false);
   const server = http.createServer((req, res) => {
     let u;
@@ -107,6 +110,8 @@ const proxy = async ({ allowed, model: serve = false, connect = (port, host) => 
     });
   });
   server.on('connect', (req, socket, head) => {
+    tunnels.add(socket);
+    socket.on('close', () => tunnels.delete(socket));
     socket.on('error', () => {});
     const m = /^(\[[^\]]+\]|[^:]+):(\d+)$/.exec(req.url || '');
     if (!m) { socket.destroy(); return; }
@@ -114,6 +119,8 @@ const proxy = async ({ allowed, model: serve = false, connect = (port, host) => 
     ask({ protocol: 'https:', host, port }).then((ok) => {
       if (!ok) { socket.destroy(); return; }
       const up = connect(port, host);
+      tunnels.add(up);
+      up.on('close', () => tunnels.delete(up));
       up.on('connect', () => { socket.write('HTTP/1.1 200 Connection Established\r\n\r\n'); if (head?.length) up.write(head); up.pipe(socket); socket.pipe(up); });
       up.on('error', () => socket.destroy());
       socket.on('close', () => up.destroy());
@@ -121,7 +128,7 @@ const proxy = async ({ allowed, model: serve = false, connect = (port, host) => 
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   me = server.address().port;
-  return { port: me, close: () => new Promise((resolve) => { server.closeAllConnections?.(); server.close(() => resolve()); }) };
+  return { port: me, close: () => new Promise((resolve) => { server.close(() => resolve()); server.closeAllConnections?.(); for (const s of tunnels) s.destroy(); }) };
 };
 
 module.exports = { proxy, answer, blocks, least };

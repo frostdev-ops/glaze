@@ -1,32 +1,37 @@
 // Practise with Glaze Writer on a synthetic Blackboard Ultra (scripts/ultra-mock.js): a Chromium window with this checkout's
 // extension, or --ext's, on a discussion to post and reply in and an assignment to submit, so each goes through Writer as
 // it would on a real course; what the mock Blackboard receives is shown on the page and kept in <practice>/received.
-//   NODE_PATH=/Users/jame/Projects/gemino/node_modules node scripts/writer-practice.js [--ext <checkout>] [--fresh]
-// The profile (Settings, Looks, AI, papers) stays in <practice>/profile between runs; --fresh starts it over.
+//   NODE_PATH=/Users/jame/Projects/gemino/node_modules node scripts/writer-practice.js [--ext <checkout>] [--fresh] [--ai mock]
+// The profile (Settings, Looks, AI, papers) stays in <practice>/profile between runs; --fresh starts it over. The window is
+// offline but for the AI connection set up in its Settings → AI (scripts/practice-ai.js); --ai mock sets up a stand-in model
+// on this computer instead, so every AI feature answers with synthetic words for free.
 // <practice> is GLAZE_PRACTICE, else ~/Projects/glaze-plans/writer/practice.
 // --smoke: headless and scripted, with a profile of its own: a reply, a post, and a submission through Writer's sheet,
-// checked. Run it under the shared heavy-check lock; screenshots go to <practice>/shots.
+// checked, with Feedback from the stand-in model. Run it under the shared heavy-check lock; screenshots go to <practice>/shots.
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto'), fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), M = require('./ultra-mock.js');
+const env = require('./check-env.js'), M = require('./ultra-mock.js'), NET = require('./practice-ai.js');
 const DT = require('../lib/doctext.js');
 
-const usage = 'NODE_PATH=/Users/jame/Projects/gemino/node_modules node scripts/writer-practice.js [--ext <checkout>] [--fresh] [--smoke]';
+const usage = 'NODE_PATH=/Users/jame/Projects/gemino/node_modules node scripts/writer-practice.js [--ext <checkout>] [--fresh] [--ai mock] [--smoke]';
 const options = (args) => {
-  const opt = { smoke: false, fresh: false, help: false, root: path.join(__dirname, '..') };
+  const opt = { smoke: false, fresh: false, help: false, ai: '', root: path.join(__dirname, '..') };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--smoke') opt.smoke = true;
     else if (args[i] === '--fresh') opt.fresh = true;
     else if (args[i] === '--help') opt.help = true;
+    else if (args[i] === '--ai' && args[i + 1] === 'mock') { opt.ai = 'mock'; i++; }
     else if (args[i] === '--ext' && args[i + 1] && !args[i + 1].startsWith('--')) opt.root = path.resolve(args[++i]);
     else throw Error(`Invalid argument: ${args[i]}\n${usage}`);
   }
   return opt;
 };
-// DNS denial covers browser background work; a dead proxy also denies literal IPs, localhost and service-worker traffic
-// that Playwright cannot route. Extension resources stay local; mock requests are fulfilled before network access.
-const browserArgs = (ext, smoke) => [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`,
-  '--host-resolver-rules=MAP * ~NOTFOUND', '--proxy-server=http://127.0.0.1:0', '--proxy-bypass-list=<-loopback>',
+// Every request goes to the proxy (a dead one at port 0, else scripts/practice-ai.js, which lets through only the AI
+// connection): literal IPs, localhost and the service-worker traffic Playwright cannot route included. DNS denial covers the
+// rest of the browser's own work, all but the proxy's address. Extension resources stay local; mock requests are fulfilled
+// before network access.
+const browserArgs = (ext, smoke, proxy = 0) => [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`,
+  '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', `--proxy-server=http://127.0.0.1:${proxy}`, '--proxy-bypass-list=<-loopback>',
   '--disable-background-networking', '--disable-quic', ...(smoke ? [] : ['--window-size=1440,1000'])];
 const observe = (context, errors) => {
   context.on('weberror', (e) => errors.push(`page: ${e.error().message}`));
@@ -44,7 +49,7 @@ const text = (html) => squash(String(html).replace(/<[^>]*>/g, ' ').replace(/&nb
 
 // The extension with the school's host in its manifest, as scripts/check-env.js stages it (the student's grant, on a real
 // site), but at a fixed path: Chrome derives an unpacked extension's id from it, and the profile keeps Glaze's data by id.
-const stage = (src, to) => {
+const stage = (src, to, hosts = []) => {
   fs.rmSync(to, { recursive: true, force: true });
   const link = (a, b) => {
     fs.mkdirSync(b, { recursive: true });
@@ -57,9 +62,68 @@ const stage = (src, to) => {
   link(fs.realpathSync(src), to);
   fs.rmSync(path.join(to, 'manifest.json'));
   const m = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json'), 'utf8'));
-  m.host_permissions = [...new Set([...(m.host_permissions || []), `${M.SITE}/*`])];
+  m.host_permissions = [...new Set([...(m.host_permissions || []), `${M.SITE}/*`, ...hosts])];
   fs.writeFileSync(path.join(to, 'manifest.json'), JSON.stringify(m, null, 2));
   return fs.realpathSync(to);
+};
+
+// ---- AI in the practice window ----------------------------------------------------------------------------------------
+// What the proxy lets through: an address one of Glaze's AI connections names (the worker's own store, glaze-ai/vault,
+// lib/ai/broker.js) and Glaze holds the grant for. Read in the worker, the one place that may ask (a key never leaves it):
+// again for an address not on the last list once it is 300 ms old (one just saved in Settings), else every 2 s (the
+// browser's own background requests come to the proxy too).
+const connections = async (context, id) => {
+  const w = context?.serviceWorkers().find((x) => x.url().startsWith(`chrome-extension://${id}/`));
+  if (!w) return [];
+  return w.evaluate(async () => {
+    if (!(await indexedDB.databases()).some((d) => d.name === 'glaze-ai')) return [];
+    const db = await new Promise((resolve, reject) => { const r = indexedDB.open('glaze-ai'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+    try {
+      if (!db.objectStoreNames.contains('vault')) return [];
+      const all = await new Promise((resolve, reject) => { const r = db.transaction('vault').objectStore('vault').get('connections'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+      const out = [];
+      for (const c of Object.values(all && typeof all === 'object' ? all : {})) {
+        let u;
+        try { u = new URL(c?.base); } catch { continue; }
+        if (await chrome.permissions.contains({ origins: [`${u.protocol}//${u.hostname}/*`] })) out.push({ protocol: u.protocol, host: u.hostname, port: Number(u.port || (u.protocol === 'https:' ? 443 : 80)) });
+      }
+      return out;
+    } finally { db.close(); }
+  }).catch(() => []);
+};
+const reachable = (context, id) => {
+  let kept = null;
+  const told = new Set();
+  return async ({ protocol, host, port }) => {
+    const has = async () => (await kept.list).some((c) => c.protocol === protocol && c.host === host && c.port === port);
+    if (kept && Date.now() - kept.at < 2000 && await has()) return true;
+    if (!kept || Date.now() - kept.at > 300) kept = { at: Date.now(), list: connections(context(), id()) };
+    const ok = await has(), at = `${protocol}//${host}:${port}`;
+    if (ok && !told.has(at)) { told.add(at); console.log(`[practice] Glaze's AI connection reaches ${at}`); }
+    return ok;
+  };
+};
+// --ai mock: Settings → AI with the stand-in model chosen and every feature on, as a student sets it up (its own connection,
+// so one the owner made stays). Without it, a stand-in left from an earlier run is unchosen.
+const MOCK = 'practice-mock';
+const setUpAI = async (context, id, port) => {
+  const on = await inExtension(context, id, async (mock) => (await chrome.storage.local.get('ai')).ai?.use === mock, MOCK);
+  if (!port && !on) return;
+  const p = await context.newPage();
+  try {
+    await p.goto(`chrome-extension://${id}/options.html`);
+    await p.evaluate(async ({ id, port }) => {
+      const ai = (await chrome.storage.local.get('ai')).ai || {};
+      if (!port) {
+        await chrome.runtime.sendMessage({ type: 'glaze:ai-config', op: 'remove', id });
+        await chrome.storage.local.set({ ai: { ...ai, use: null } });
+        return;
+      }
+      const r = await chrome.runtime.sendMessage({ type: 'glaze:ai-config', op: 'set', id, cfg: { provider: 'openai', base: `http://127.0.0.1:${port}/v1`, model: 'practice-mock' } });
+      if (!r?.ok) throw Error(`the stand-in model wasn't kept: ${r?.error}`);
+      await chrome.storage.local.set({ ai: { on: true, use: id, features: { syllabus: true, completion: true, writing: true } } });
+    }, { id: MOCK, port });
+  } finally { await p.close(); }
 };
 
 // Run fn(arg) with the extension's APIs: in its worker, or, while that sleeps, in one of its pages.
@@ -80,7 +144,7 @@ const paper = async (p) => {
 };
 
 // ---- the scripted run: what the owner does by hand, checked
-const run = async ({ context, mock, shots, errors }) => {
+const run = async ({ context, mock, shots, errors, ai }) => {
   const FX = require('../test/fixtures/writer-paper-fixtures.js');
   const checks = [], saved = {};
   const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
@@ -200,13 +264,25 @@ const run = async ({ context, mock, shots, errors }) => {
   await p.click('.practice-log summary');
   await shot(p, 'practice-discussion.png', true);
 
-  // ---- the assignment: a paper, Writer's sheet, Ultra's Submit once, Ultra's confirmation, what Blackboard received
+  // ---- the assignment: a paper, Feedback from the stand-in model, Writer's sheet, Ultra's Submit once, Ultra's
+  // confirmation, what Blackboard received. AI is set up first, as a student who turned it on comes to the attempt.
+  await ai();
   let fr = await paper(p);
   const doc = FX.papers.mla9();
   doc.content[4].content[0].text = `SYNTHETIC PRACTICE PAPER: ${doc.content[4].content[0].text}`;
   await fr.evaluate(async (doc) => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON(doc).content)); }, doc);
   await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved'), 'paper saved', 20000);
   await shot(p, 'practice-paper.png');
+  // The frame asks about AI before the worker has the attempt's kind; it asks again once the page has told it.
+  await fr.click('#gp-tab-feedback');
+  const fb = '#gp-feedback .gz-fb';
+  const ready = await until(() => fr.evaluate((fb) => document.querySelector(`${fb} .gz-fb-run`)?.textContent === 'Get feedback', fb), 'Feedback ready', 10000).catch(() => false);
+  check(ready, `with AI set up, Feedback offers to run on the assignment (it said: ${squash(await fr.$eval(fb, (e) => e.textContent).catch(() => ''))})`);
+  await fr.click(`${fb} .gz-fb-run`);
+  const cards = await until(() => fr.evaluate((fb) => { const c = document.querySelectorAll(`${fb} .gz-fb-item`); return c.length && [...c].map((x) => x.querySelector('b')?.textContent || ''); }, fb), 'Feedback from the stand-in model', 20000);
+  check(cards.length >= 2 && await fr.evaluate((fb) => document.querySelectorAll(`${fb} .gz-fb-quote`).length > 0, fb), `Feedback came back per requirement, with passages of the draft (${cards.join(' | ')})`);
+  await shot(p, 'practice-feedback.png');
+  await fr.click('#gp-tab-checks');
   const docText = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.text());
   const at = await p.$eval('[data-analytics-id="assignment.attempt.authoring.footer.submit"]', (b) => { b.scrollIntoView({ block: 'center' }); const x = b.getBoundingClientRect(); return { x: x.left + x.width / 2, y: x.top + x.height / 2 }; });
   await p.mouse.click(at.x, at.y);
@@ -270,20 +346,23 @@ const rerun = async ({ context, paper: text0, errors }) => {
 const idOf = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 
 // Chromium with the staged extension on the profile, the mock on the school's host, and Glaze ready for Ultra there.
-const launch = async ({ profile, ext, mock, clear, smoke, errors, own, signal }) => {
+const launch = async ({ profile, ext, mock, clear, smoke, errors, own, signal, proxy }) => {
   if (smoke) await require('./wait-for-browser.js')(signal);
   if (interrupted) throw Error('Practice interrupted');
   const context = await require('playwright').chromium.launchPersistentContext(profile, {
     ...require('./check-env.js').chromeLaunch(), headless: smoke, viewport: smoke ? { width: 1440, height: 900 } : null,
-    args: browserArgs(ext, smoke),
+    args: browserArgs(ext, smoke, proxy),
   });
   own(context);
   if (interrupted) { await context.close(); throw Error('Practice interrupted'); }
   observe(context, errors);
   env.noFirstRun(context); context.setDefaultTimeout(15000);
-  await context.route('**/*', mock.handle);
-  await context.routeWebSocket('**/*', (ws) => ws.close());
   const id = idOf(ext);
+  // Pages end at the mock. The extension's worker goes on to the proxy for anything but the school's host: the proxy lets
+  // only its AI connection by.
+  const out = (req) => !!req.serviceWorker()?.url().startsWith(`chrome-extension://${id}/`) && new URL(req.url()).origin !== M.SITE;
+  await context.route('**/*', (route) => (out(route.request()) ? route.continue() : mock.handle(route)));
+  await context.routeWebSocket('**/*', (ws) => ws.close());
   // The mock starts every run with nothing submitted, so Writer's fences from an earlier run go too (the papers stay).
   await inExtension(context, id, async ({ site, clear }) => {
     if (clear) { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); }
@@ -299,13 +378,13 @@ const launch = async ({ profile, ext, mock, clear, smoke, errors, own, signal })
 
 const main = async (args = process.argv.slice(2)) => {
   interrupted = false;
-  const { smoke, fresh, help, root } = options(args);
+  const { smoke, fresh, help, root, ai } = options(args);
   if (help) { console.log(usage); return; }
   if (!fs.existsSync(path.join(root, 'manifest.json'))) throw Error(`No extension manifest in ${root}`);
   const practice = path.resolve(process.env.GLAZE_PRACTICE || path.join(os.homedir(), 'Projects/glaze-plans/writer/practice'));
   if (practice === root || practice.startsWith(`${root}${path.sep}`)) throw Error('GLAZE_PRACTICE must be outside the extension checkout');
   const lock = env.lockPath(), sessionLock = path.join(practice, 'running');
-  let context, tmp, held = false, sessionHeld = false;
+  let context, tmp, net, held = false, sessionHeld = false;
   const contexts = new Set(), errors = [], controller = new AbortController();
   const own = (c) => { contexts.add(c); c.once('close', () => contexts.delete(c)); };
   const stop = (signal) => { interrupted = true; controller.abort(); process.exitCode = signal === 'SIGINT' ? 130 : 143; for (const c of contexts) c.close().catch(() => {}); };
@@ -325,7 +404,9 @@ const main = async (args = process.argv.slice(2)) => {
     }
     const base = smoke ? tmp : practice, profile = path.join(base, 'profile');
     if (fresh && !smoke) fs.rmSync(profile, { recursive: true, force: true });
-    const ext = stage(root, path.join(base, 'extension'));
+    // The stand-in model is on this computer: Glaze holds that host as a student grants it (the smoke checks Feedback with it).
+    const model = smoke || ai === 'mock';
+    const ext = stage(root, path.join(base, 'extension'), model ? ['http://127.0.0.1/*'] : []);
     const out = smoke ? path.join(practice, 'smoke', 'received') : path.join(practice, 'received');
     if (smoke) fs.rmSync(path.dirname(out), { recursive: true, force: true });
     fs.mkdirSync(out, { recursive: true });
@@ -337,7 +418,9 @@ const main = async (args = process.argv.slice(2)) => {
       // Writer keeps a submitted attempt's fence; starting the assignment over lifts it (the paper stays).
       onReset: (scenario) => (scenario === 'discussion' ? null : inExtension(context, id, async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); })),
     });
-    ({ context, id } = await launch({ profile, ext, mock, clear: smoke, smoke, errors, own, signal: controller.signal }));
+    net = await NET.proxy({ allowed: reachable(() => context, () => id), model });
+    ({ context, id } = await launch({ profile, ext, mock, clear: smoke, smoke, errors, own, signal: controller.signal, proxy: net.port }));
+    if (!smoke) await setUpAI(context, id, model ? net.port : 0);
 
     if (smoke) {
       const shots = path.join(practice, 'shots');
@@ -345,11 +428,11 @@ const main = async (args = process.argv.slice(2)) => {
         for (const [i, pg] of (context?.pages() || []).entries()) await pg.screenshot({ path: path.join(shots, `practice-failure-${i}.png`) }).catch(() => {});
         throw e;
       };
-      const r = await run({ context, mock, shots, errors }).catch(fail);
+      const r = await run({ context, mock, shots, errors, ai: () => setUpAI(context, id, net.port) }).catch(fail);
       // The next run on the same profile: Glaze comes back up, the paper is kept, and nothing is left submitted.
       await context.close();
       mock.reset();
-      ({ context } = await launch({ profile, ext, mock, clear: false, smoke, errors, own, signal: controller.signal }));
+      ({ context } = await launch({ profile, ext, mock, clear: false, smoke, errors, own, signal: controller.signal, proxy: net.port }));
       const again = await rerun({ context, paper: r.paper, errors }).catch(fail);
       console.log(JSON.stringify({ checks: r.checks.length + again.length, shots: r.saved, received: out }, null, 2));
       return;
@@ -360,6 +443,7 @@ const main = async (args = process.argv.slice(2)) => {
     await new Promise((r) => context.on('close', r));
   } finally {
     await Promise.allSettled([...contexts].map((c) => c.close()));
+    await net?.close();
     if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
     if (held) fs.rmSync(lock, { recursive: true, force: true });
     if (sessionHeld) fs.rmSync(sessionLock, { recursive: true, force: true });
