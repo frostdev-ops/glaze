@@ -188,12 +188,13 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   };
   // An editor gone (compose closed, the page changed) before its copy could be made: the copy is made from what was read
   // as it was written, under the same rules.
-  const keep = (s) => {
+  const keep = (s, replace = false) => {
     if (!ctx.settings().enhance.drafts || !ctx.on()) return;
     if (!account) { accountWaiting.set(ultra ? s : s.ed, s); loadAccount(); return; }
     if (ultra) {
       const key = keyOf(s);
-      if (!key || !GZ_DRAFTS.worth(s.text) || (typed.get(key)?.at || 0) > s.at) return;
+      if (!key || (typed.get(key)?.at || 0) > s.at) return;
+      if (!GZ_DRAFTS.worth(s.text)) { if (replace && typed.get(key)?.ed === s.ed) { typed.delete(key); store(key, s.ed); } return; }
       typed.set(key, { ed: s.ed, html: s.html, text: s.text, at: s.at, id: ownId(key), gone: 0 });
       store(key, s.ed);
       return;

@@ -48,8 +48,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     clearTimeout(box.backup);
     if (!box.snapshot) return;
     const s = box.snapshot;
-    if (globalThis.GZ_DRAFT_UI?.keep) GZ_DRAFT_UI.keep(s);
-    else drafts().then(() => GZ_DRAFT_UI.keep(s), () => {});
+    if (globalThis.GZ_DRAFT_UI?.keep) GZ_DRAFT_UI.keep(s, true);
+    else drafts().then(() => GZ_DRAFT_UI.keep(s, true), () => {});
   };
   const sameBox = (box) => box.path === location.pathname && box.editor.isConnected && box.root === U().rootOf(box.editor) &&
     box.container === box.editor.closest('.ql-container') && box.editor.id === box.editorId &&
