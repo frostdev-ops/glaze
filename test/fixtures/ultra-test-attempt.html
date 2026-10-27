@@ -96,6 +96,7 @@ footer.panel-footer-in-content { position: absolute; bottom: 0; z-index: 2; disp
 /* Course tools and items */
 .bb-offcanvas-panel.full { position: absolute; inset: 0; inset-inline-start: 36px; z-index: 1011; background: #fff; }
 .bb-offcanvas-panel.full > .bb-offcanvas-panel-wrap { position: absolute; inset: 0; }
+.bb-offcanvas-panel.full .side-panel-content { position: relative; height: 100%; box-sizing: border-box; padding: 30px; }
 .bb-offcanvas-panel.full .panel-wrap { position: absolute; inset: 0; z-index: 0; overflow: auto; padding: 30px; }
 .bb-offcanvas-panel.full .panel-header.simple-header { position: relative; display: flex; align-items: center; justify-content: space-between; height: 107px; margin: -30px -30px 0; padding: 0 30px; background: #fff; border-bottom: 1px solid #cdcdcd; }
 .bb-offcanvas-panel.full .panel-sub-title { display: block; font-size: 14px; } .bb-offcanvas-panel.full h1.panel-title { margin: 0; font-size: 32px; }
@@ -158,8 +159,9 @@ course-student-grades { display: block; margin-top: 1px; } course-student-grades
         <div class="row"><span class="settings-label">Description</span><span>An invented practice quiz.</span></div></div></div>
     ${footer('panel-footer-in-content')}</section></div>${footer('panel-footer-fixed')}</div></bb-assessment-attempt>`;
 
-  const full = (cls, sub, title, inner) => `<div class="first bb-offcanvas-panel bb-offcanvas-right full with-banner active"><div class="bb-offcanvas-panel-wrap"><div class="panel-wrap ${cls}">
-    <header class="panel-header simple-header" data-bb-offcanvas-fixed-prepend=""><div class="panel-titles-container"><span class="panel-sub-title">${sub}</span><div class="black-header-contents"><h1 class="panel-title">${title}</h1></div></div><div class="header-actions-menu"><button class="anchor-button" id="search-button" type="button" aria-label="Search">⌕</button></div></header>${inner}</div>
+  // The roster's header sits deep in the panel: side-panel-content > div > div > div > page-roster > panel-wrap (probe 16).
+  const full = (cls, sub, title, inner) => `<div class="first bb-offcanvas-panel bb-offcanvas-right full with-banner active"><div class="bb-offcanvas-panel-wrap"><div class="side-panel-content"><div><div><div><div class="page-roster course-roster-layer"><div class="panel-wrap ${cls}">
+    <header class="panel-header simple-header" data-bb-offcanvas-fixed-prepend=""><div class="panel-titles-container"><span class="panel-sub-title">${sub}</span><div class="black-header-contents"><h1 class="panel-title">${title}</h1></div></div><div class="header-actions-menu"><button class="anchor-button" id="search-button" type="button" aria-label="Search">⌕</button></div></header>${inner}</div></div></div></div></div></div>
     <div class="bb-close-offset"><button class="bb-close" data-close="bb-offcanvas" aria-label="Close">×</button></div></div></div>`;
 
   // A journal or a file: Ultra's learning-module item shell, its narrow black bar (with Details) and the title band.
@@ -170,7 +172,7 @@ course-student-grades { display: block; margin-top: 1px; } course-student-grades
     [/\/assessment\/_\d+_\d+\/attempt\//, attempt],
     [/\/journal\//, () => item('View Journal', 'Practice Journal', '<div class="journal-topic"><h2>Journal Topic</h2><p>Invented prompt.</p></div>')],
     [/\/file\//, () => item('File', 'Course Takeaway', '<div class="file-viewer"><iframe title="Invented file" src="/bbcswebdav/pid-1-dt-content-rid-1_1/xid-1_1?render=inline"></iframe></div>')],
-    [/\/outline\/roster/, () => full('tabular-user-list', 'SAMPLE-101 • Sample Course', 'Roster', '<div class="page-roster course-roster-layer"><p>Invented member list.</p></div>')],
+    [/\/outline\/roster/, () => full('tabular-user-list', 'SAMPLE-101 • Sample Course', 'Roster', '<p>Invented member list.</p>')],
     [/\/assessment\/_\d+_\d+\/overview/, () => `<div class="item-panel"><content-body><div class="base-body"><div class="content-root"><div class="rubric-details-panel"><div class="panel-section-header"><div class="panel-section-header-icon react-container"><svg width="30" height="30"></svg></div><h2 class="panel-section-header-text">Rubric Details</h2><button class="bb-close" type="button" aria-label="Close rubric">×</button></div><div class="rubric-criteria"><p>Invented criterion</p></div></div></div></div></content-body></div>`],
     [/\/grades/, () => `<div class="item-panel"><bb-course-grades-student><div class="base-grades course-grades-instructor"><div class="grades-list"><bb-ui-student-tabs><div class="makeStylesstudentTabs-fx"><div class="MuiTabs-root"><div class="MuiTabs-scroller MuiTabs-fixed"><div class="MuiTabs-list MuiTabs-flexContainer" role="tablist"><button class="MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary Mui-selected js-student-tab-grades" type="button" role="tab" aria-selected="true" id="student-tab-grades">Grades</button></div><span class="MuiTabs-indicator"></span></div></div></div></bb-ui-student-tabs>
       <course-student-grades class="react-container"><div><table class="MuiTable-root"><thead class="MuiTableHead-root"><tr class="MuiTableRow-root MuiTableRow-head"><th class="MuiTableCell-root MuiTableCell-head">Item Name</th><th class="MuiTableCell-root MuiTableCell-head">Grade</th></tr></thead><tbody><tr class="MuiTableRow-root"><td class="MuiTableCell-root">Practice Quiz</td><td class="MuiTableCell-root">Not graded</td></tr></tbody></table></div></course-student-grades></div></div></bb-course-grades-student></div>`],
