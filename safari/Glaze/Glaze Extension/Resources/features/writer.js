@@ -317,6 +317,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (!on()) { dropAll(); return; }
     for (const box of [...boxes.values()]) {
       if (!sameBox(box)) drop(box);
+      else if (box.kind === 'post' && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced) reopen(box); else drop(box); }
     }
     if (!U()) { X.need('lib/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
