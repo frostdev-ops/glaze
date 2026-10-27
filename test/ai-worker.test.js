@@ -198,7 +198,7 @@ const live2 = (w) => {
     const id = target.frameIds?.[0] ?? (target.documentIds?.[0] === 'top-doc' ? 0 : Number(String(target.documentIds?.[0]).replace('doc-', '')));
     if (id === 3) throw new Error('an extension frame is never scripted');
     const f = id === 0 ? { href: w.page, ancestors: [] } : w.frames[id];
-    return f ? [{ result: { href: f.href, origin: new URL(f.href).origin, ancestors: f.ancestors } }] : [];
+    return f ? [{ frameId: id, documentId: id === 0 ? (w.topDocument || 'top-doc') : `doc-${id}`, result: { href: f.href, origin: new URL(f.href).origin, ancestors: f.ancestors } }] : [];
   };
   return w;
 };
@@ -345,4 +345,42 @@ test('on an assignment attempt the writer frame runs a completion; a cancel pass
   await w.settle();
   assert.equal(port.posted.at(-1).output, ' runs to the sea.');
   assert.deepEqual(sent, ['https://api.example.com/v1/models', 'https://api.example.com/v1/chat/completions']);
+});
+
+
+test('attempt reports cannot authorize a stale route or a replaced top document', async () => {
+  const w = writerOn(); w.page = ATTEMPT;
+  await seat(w);
+  assert.deepEqual(await report(w, 'assignment', top(OTHER)), { ok: false }, 'a stale route report');
+  assert.equal(await ask(w, frame(ATTEMPT)), 'attempt');
+  w.topDocument = 'new-top-doc';
+  assert.deepEqual(await report(w, 'assignment', top(ATTEMPT)), { ok: false }, 'a replaced document at the same URL');
+  assert.equal(await ask(w, frame(ATTEMPT)), 'attempt');
+});
+
+test('same-URL reloads and navigation before session hydration discard attempt authority', async () => {
+  const w = writerOn(); w.page = ATTEMPT;
+  await seat(w); await report(w, 'assignment');
+  for (const f of w.updated) f(5, { status: 'loading' });
+  assert.notEqual(await ask(w, frame(ATTEMPT)), 'allowed', 'reload requires a fresh report');
+  const store = structuredClone(w.store);
+  store.session.aiAttempts = { 5: { page: ATTEMPT, kind: 'assignment', documentId: 'top-doc' } };
+  const again = live2(worker({ globals: fakeIDB(), store })); again.page = ATTEMPT;
+  for (const f of again.updated) f(5, { url: COURSE });
+  await seat(again);
+  assert.equal(await ask(again, frame(ATTEMPT)), 'attempt', 'hydration must not resurrect a report cleared by navigation');
+});
+
+test('navigation while an attempt report awaits admission invalidates the report', async () => {
+  const w = writerOn(); w.page = ATTEMPT;
+  await seat(w);
+  const get = w.context.chrome.storage.sync.get;
+  let release;
+  w.context.chrome.storage.sync.get = (key) => key === 'enabled' ? new Promise((r) => { release = () => r({ enabled: true }); }) : get(key);
+  const pending = report(w, 'assignment');
+  await w.settle();
+  for (const f of w.updated) f(5, { url: COURSE });
+  release();
+  assert.deepEqual(await pending, { ok: false });
+  assert.equal(await ask(w, frame(ATTEMPT)), 'attempt');
 });
