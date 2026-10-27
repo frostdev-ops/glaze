@@ -135,10 +135,6 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (it === '-') { el.append(h('div', { class: 'gp-hr', role: 'separator' })); continue; }
         el.append(btn({ role: it.checked == null ? 'menuitem' : 'menuitemradio', 'aria-checked': it.checked == null ? null : String(!!it.checked), onclick: () => { close(); it.run(); } }, it.label, it.hint ? h('small', { text: it.hint }) : null));
       }
-      el.addEventListener('keydown', (e) => {
-        const all = [...el.querySelectorAll('[role^="menuitem"]')], i = all.indexOf(document.activeElement);
-        if (e.key === 'Escape') { e.preventDefault(); close(true); } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); all[(i + (e.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus(); }
-      });
       popup(opener, el, o);
     };
     document.addEventListener('pointerdown', (e) => { if (open && !open.el.contains(e.target) && !open.opener?.contains(e.target)) close(); }, true);
