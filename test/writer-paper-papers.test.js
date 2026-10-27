@@ -89,3 +89,24 @@ test('a student\'s presets: saved per student, invalid ones dropped', async () =
   assert.deepEqual(await P.presets(scope), []);
   await assert.rejects(P.savePreset(null, {}), /no student/);
 });
+
+test('two editors retain a stale tab\'s overwritten draft and concurrent index rows', async () => {
+  const s = store(), a = PA.open(s), b = PA.open(s), k = PA.keyOf(K);
+  await a.save(k, { doc: doc('Original.') });
+  await a.get(k); await b.get(k);
+  await a.save(k, { doc: doc('From tab A.') });
+  await b.save(k, { doc: doc('From tab B.') });
+  const versions = await b.versions(k);
+  assert.ok((await Promise.all(versions.map((v) => b.version(k, v.id)))).some((v) => v.doc.content[0].content[0].text === 'From tab A.'), 'the overwritten tab must be recoverable');
+  await Promise.all([a.save('other-a', { doc: doc('a') }), b.save('other-b', { doc: doc('b') })]);
+  assert.equal((await a.list()).length, 3, 'neither index row is lost');
+});
+
+test('versions restore the matching format and count encoded bytes', async () => {
+  const P = PA.open(store()), k = PA.keyOf(K);
+  await P.save(k, { doc: doc('é'.repeat(100)), format: 'mla9' });
+  await P.save(k, { doc: doc('New.'), format: 'apa7' }, { reason: 'format' });
+  const v = (await P.versions(k)).find((x) => x.reason === 'format');
+  assert.equal(v.bytes, new TextEncoder().encode(JSON.stringify(doc('é'.repeat(100)))).length);
+  assert.equal((await P.restore(k, v.id)).paper.format, 'mla9');
+});
