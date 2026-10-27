@@ -104,3 +104,34 @@ test("sidebar.css lays the test's questions and its details column out as the at
   const sticky = css.slice(0, css.indexOf('position: sticky !important; grid-column: 2'));
   assert.match(sticky.slice(sticky.lastIndexOf('}')), /html\[data-gz-sb-native-root\]\[data-gz-sb-assessment="test"\]\[data-gz-sidebar\] #site-wrap \.assessment-attempt-panel \.panel-content-flex > \[data-gz-sidebar-host="native"\]/);
 });
+
+
+test('leaving the test restores its details and scroll listener while the old view remains mounted', async () => {
+  const { p, details, panel, radio } = testAttempt();
+  p.c.getComputedStyle = ((original) => (e) => ({ ...original(e), overflowY: e === panel ? 'auto' : 'visible' }))(p.c.getComputedStyle);
+  const before = natives(p);
+  await p.pass();
+  assert.ok(p.host() === details);
+  assert.equal(panel.listeners.filter((e) => e.type === 'scroll').length, 1);
+  p.c.location.pathname = '/ultra/courses/_101_1/announcements';
+  await p.pass();
+  assert.ok(p.host() !== details);
+  assert.equal(details.hasAttribute('data-gz-sidebar-host'), false);
+  assert.equal(details.querySelector('.gz-sb-head'), null);
+  assert.equal(panel.listeners.filter((e) => e.type === 'scroll').length, 0);
+  assert.equal(p.doc.root.dataset.gzSbAssessment, undefined);
+  assert.ok(radio.isConnected);
+  unmoved(p, before, 'leave test route');
+});
+
+test('Glaze headings cannot keep a changed test details panel eligible', async () => {
+  const { p, details } = testAttempt();
+  const nativeHeading = details.querySelector('h2');
+  await p.pass();
+  assert.ok(p.host() === details);
+  nativeHeading.remove();
+  await p.pass();
+  assert.ok(p.host() !== details, 'without the native details heading this is no longer the verified host');
+  assert.equal(details.hasAttribute('data-gz-sidebar-host'), false);
+  assert.equal(details.querySelector('.gz-sb-head'), null);
+});

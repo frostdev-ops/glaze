@@ -548,8 +548,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!has(panel, 'panel-wrap') || !has(shell, 'test-attempt') || sections.length !== 1 || rows.length !== 1) return null;
     const columns = [...rows[0].children].filter((e) => e !== backdrop), el = columns[1];
     const footers = [...shell.children].filter((x) => x.tagName === 'BB-ASSESSMENT-ATTEMPT-FOOTER').flatMap((f) => kids(f, 'FOOTER', 'submit-footer'));
+    const native = [...(el?.children || [])].filter((e) => !part(e)), title = native[0]?.querySelector('h2');
     if (columns.length !== 2 || columns[0].tagName !== 'DIV' || !has(columns[0], 'panel-content-full') || !columns[0].querySelector('bb-attempt-canvas')
-      || el.tagName !== 'DIV' || !has(el, 'panel-content-info') || !has(el, 'assessment-summary') || !el.querySelector('h2')?.textContent.trim()
+      || el.tagName !== 'DIV' || !has(el, 'panel-content-info') || !has(el, 'assessment-summary') || !has(native[0], 'row') || !has(native[0], 'collapse') || !title?.textContent.trim()
       || footers.length !== 1 || !footers[0].querySelector('.js-send-draft-button')
       || !el.isConnected || el.closest('[hidden], [aria-hidden="true"]') || !readOnlyPanel(el)) return null;
     return el;
