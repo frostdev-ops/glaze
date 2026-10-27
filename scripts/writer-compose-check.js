@@ -3,7 +3,7 @@
 // the context the frame gets, the target ring and sources pill, the Quote pop over a classmate's post (mouse and
 // keyboard), Markdown and Ctrl/Cmd+Enter beside the ring, and a message's plain word count. Real Quill 1.3.7 (pinned) in
 // the page, as scripts/writer-check.js runs it. GETs only; no account or outside network from the browser.
-// NODE_PATH=<playwright> nice -n 10 lockf -k /private/tmp/claude-501/glaze-heavy.lock node scripts/writer-compose-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node scripts/writer-compose-check.js [evidence directory], under the heavy-check lock (CLAUDE.md)
 // WRITER_SHOTS names where the screenshots go (default /tmp/gz-writer-compose-shots).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -16,7 +16,7 @@ const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', 
 const json = (f) => JSON.parse(fixture(f));
 const PAGES = { '/ultra/courses/_101_1/discussion/_9_1': 'ultra-writer-discussion.html', '/ultra/courses/_101_1/discussion/_11_1': 'ultra-writer-discussion.html', '/ultra/messages/create': 'ultra-writer-messages.html' };
 const FORUM = '/learn/api/v1/courses/_101_1/discussionboards/default/forums/';
-const out = process.argv[2], shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-compose-shots', lock = env.lockPath();
+const out = process.argv[2], shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-compose-shots', lock = require('./check-env.js').lockPath();
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 const checks = [], requests = [], errors = []; let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -68,9 +68,9 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     if (got !== QUILL.sha256) throw Error(`Quill 1.3.7 hash mismatch: ${got}`);
     check(true, `real Quill 1.3.7 fetched and pinned (sha256 ${got.slice(0, 12)}…)`);
 
-    ext = env.staged(root, [`${site}/*`]);
+    ext = require('./check-env.js').staged(root, [`${site}/*`]);
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(10000);
     const grades = book(), list = json('ultra-writer-thread-discussions.json'), page1 = json('ultra-writer-thread.json'), page2 = json('ultra-writer-thread-2.json'), replies = json('ultra-writer-thread-replies.json');
     const memberships = json('ultra-memberships.json');

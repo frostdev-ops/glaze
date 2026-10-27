@@ -98,6 +98,8 @@ const SITES = {
   // Rubric definitions and the current student's evaluation, read-only through the page's own LMS queue.
   'features/rubric.js': [{ at: 'const res = await GZ_LMSQ.fetch(url,', kind: 'page' }, { at: 'f: (...args) => GZ_LMSQ.fetch(...args, 0, live)', kind: 'page' }],
   'features/calexport.js': [{ at: 'await fetch(url,', kind: 'page' }],
+  // Glaze Writer's discussion context: the prompt, thread and replies, read-only behind visible work in the site's queue.
+  'lib/writer-context-discussion.js': [{ at: 'GZ_LMSQ.fetch(u, o, 1, live)', kind: 'page' }],
   'features/cardtasks.js': [{ at: 'await fetch(url,', kind: 'page' }],
   'features/classes.js': [{ at: 'await fetch(u.href,', kind: 'page' }],
   'features/coursemenu.js': [{ at: 'fetch(`${location.origin}/api/v1/users/self/', kind: 'page' }],

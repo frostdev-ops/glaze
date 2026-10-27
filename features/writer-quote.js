@@ -4,7 +4,7 @@
 // box opened last), as compose's quote. It only listens to the selection, never changes it before the click. It sits
 // right after the post's text, so Tab from the selection reaches it and Tab again goes on to the post's own controls;
 // scrolling, leaving the window, Escape or a new selection take it away.
-// Classic script, through GZ_CTX; a second injection keeps the first. module.exports (place, clean) for node.
+// Classic script, through GZ_CTX; a second injection keeps the first. Without GZ_CTX (node), module.exports has place, clean.
 var GZ_WRITER_QUOTE = globalThis.GZ_WRITER_QUOTE || (() => {
   const MAX = 2000;
   // The selection's text as quoted lines: whitespace folded, blank lines dropped, cut at MAX.
@@ -19,9 +19,8 @@ var GZ_WRITER_QUOTE = globalThis.GZ_WRITER_QUOTE || (() => {
     const y = below ? Math.min(vh - 4 - h - gap, line.bottom + gap) : first.top - gap;
     return { x: Math.round(x), y: Math.round(y), below };
   };
-  const pure = { clean, place };
   const X = globalThis.GZ_CTX;
-  if (!X || typeof document === 'undefined') return pure;
+  if (!X || typeof document === 'undefined') { if (typeof module !== 'undefined') module.exports = { clean, place }; return null; }
 
   const boxes = []; // reply boxes, in the order they opened
   const live = (box) => box.kind === 'reply' && box.ready && !!box.port && !!box.frame?.isConnected;
@@ -147,7 +146,7 @@ svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width:
     for (let i = boxes.length - 1; i >= 0; i--) if (boxes[i].frame && !boxes[i].frame.isConnected) boxes.splice(i, 1);
     listen();
   };
-  return { ...pure, arm };
+  return { clean, place, arm };
 })();
-if (typeof module !== 'undefined') module.exports = GZ_WRITER_QUOTE;
+if (typeof module !== 'undefined' && GZ_WRITER_QUOTE) module.exports = GZ_WRITER_QUOTE;
 GZ_WRITER_QUOTE;
