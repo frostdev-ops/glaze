@@ -41,6 +41,16 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
       });
       assert.deepEqual(result, { fresh: '<p>fresh</p>', prior: '<p>a</p>', redo: '<p>fresh</p>' });
     });
+    await check('plain paste preserves spaces, blank lines and UTF-16 text', async () => {
+      const input = '  😀  x\n\nשלום  ';
+      const result = await page.evaluate((input) => {
+        const data = new DataTransfer(); data.setData('text/plain', input);
+        ed.view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+        return { text: ed.text(), html: ed.html() };
+      }, input);
+      assert.equal(result.text, input);
+      assert.equal(result.html, '<p>&nbsp;&nbsp;😀&nbsp;&nbsp;x</p><p><br></p><p>שלום&nbsp;&nbsp;</p>');
+    });
     assert.deepEqual(errors, [], 'no page errors');
     await page.evaluate(() => ed.destroy());
   } finally { await browser.close(); }
