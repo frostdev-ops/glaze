@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const S = require('../lib/writer-sources.js'), C = require('../lib/writer-cite.js');
-const W = require('../lib/writer-schema.js'), PM = require('../lib/pm.js');
+const W = require('../lib/writer-schema.js'), PM = globalThis.GZ_PM;
 const source = (title) => ({ id: title.toLowerCase(), type: 'book', title });
 const context = (item) => ({ school: 'https://school.edu', user: { id: 'u' }, course: { id: 'c' }, item });
 const frame = (extra = {}, html = '<p>Body</p>') => {
