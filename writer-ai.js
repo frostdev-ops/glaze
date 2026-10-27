@@ -156,6 +156,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const { Mapping } = GZ_PM.transform;
   const S = GZ_WRITER_SCHEMA;
   const view = () => F.editor()?.view || null;
+  // text() uses a newline for both a paragraph boundary and a hard break. A hard break cannot end a quotation's guard:
+  // read the caret's actual textblock, with its inline breaks as spaces.
+  const quoted = ($head) => inQuote($head.parent.textBetween(0, $head.parentOffset, '', ' ').replace(/\n/g, ' '));
   const KEY = new PluginKey('gz-writer-ai');
   // Mappings since a run began, so its offsets land where the words are now (review issues, feedback passages).
   const trackers = new Set();
@@ -260,7 +263,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const v = view();
     if (!v || !ok('completion') || v.composing || !v.hasFocus() || KEY.getState(v.state)) return;
     const st = v.state, { selection } = st;
-    if (!selection.empty || selection.$head.parent.type.spec.code) return;
+    if (!selection.empty || !selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code || quoted(selection.$head)) return;
     const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
     const before = tx.text.slice(Math.max(0, off - 8000), off), after = tx.text.slice(off, off + 2000);
     if (!fits(before, after)) return;
@@ -285,6 +288,8 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!v.hasFocus()) return 'no focus';
     const st = v.state, { selection } = st;
     if (!selection.empty) return 'a selection';
+    if (!selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code) return 'not at this caret';
+    if (quoted(selection.$head)) return 'in a quotation';
     const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
     if (!fits(tx.text.slice(Math.max(0, off - 8000), off), tx.text.slice(off, off + 2000))) return 'not at this caret';
     return KEY.getState(st) ? 'showing' : flight ? 'asking' : timer ? 'waiting for the pause' : 'ready: type a letter or a space';

@@ -475,6 +475,23 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
         } finally { await q.evaluate(() => { __ai.hold = false; __ai.release?.(); }).catch(() => {}); await q.close(); }
       });
     }
+    await check('a paper hard break keeps the open quotation guard in its paragraph; a new paragraph releases it', async () => {
+      const q = await frame({ mode: 'paper', kind: 'assignment', ctx: { kind: 'assignment', assignment: { instructions: 'Discuss memory.' } } });
+      try {
+        await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()?.key() && GZ_WRITER_AI.allowed('completion')), 'paper ready');
+        await next(q, 'writer.complete', { text: 'to use the board.' });
+        const write = async (html) => {
+          await q.evaluate((html) => { const ed = GZ_WRITER_FRAME.editor(); ed.setHTML(html); const v = ed.view; v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.atEnd(v.state.doc))); v.focus(); }, html);
+          await q.keyboard.type(' to');
+        };
+        await write('<p>Baldwin writes “the price<br>Three things I learned are how</p>');
+        await pause(1200);
+        assert.equal(await runs(q), 0, 'a hard break is still inside the open quotation');
+        assert.equal(await ghost(q), null);
+        await write('<p>Baldwin writes “the price</p><p>Three things I learned are how</p>');
+        await until(async () => (await ghost(q)) === ' use the board.', 'a new paragraph is outside the earlier quotation');
+      } finally { await q.close(); }
+    });
     await check('no page errors', async () => assert.deepEqual(errors, []));
   } finally { await browser.close(); }
   console.log(`${checks - failures}/${checks} passed${failures ? '' : ` · screenshots in ${shots}`}`);
