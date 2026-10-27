@@ -117,7 +117,7 @@ test('writer.complete takes a small model\'s reply that repeats the student\'s l
 });
 
 test('writer.complete sends an on-device model only the caret\'s end of the text and a brief context', async () => {
-  const long = `${'The river keeps what the town would rather forget, and the clearing keeps the rest. '.repeat(60)}Three things I learned are how to`;
+  const long = `${'The river keeps what the town would rather forget, and the clearing keeps the rest. '.repeat(60)}Three things I learned are how to `;
   const ctx = { kind: 'assignment', course: { id: '_1_1', name: 'ENGL 2110' }, assignment: { title: 'Essay 2', instructions: `Write about memory. ${'Detail. '.repeat(400)}`, rubric: 'Thesis: 10 points' }, style: 'mla9' };
   const run = async (caps) => {
     const cfg = { replies: [{ text: 'how to use the board.' }], seen: [], caps };
@@ -227,7 +227,7 @@ test('writer.complete mid-word asks a model on this computer for its last word i
   const a = await local('I think it should load when the writer open', 'opens a new assignment.');
   assert.equal(a.output, 's a new assignment.');
   assert.match(a.req.system, /last word written in full/);
-  assert.match(a.req.data, /\[its last word, maybe cut off[^\n]*\n<<<DATA-[0-9a-f]+\nopen\n/);
+  assert.match(a.req.data, /\[its last word maybe cut off[^\n]*\n<<<DATA-[0-9a-f]+\nopen\n/);
   assert.equal((await local('when stopping mid-word the tab comp', 'completion seems to work fine.')).output, 'letion seems to work fine.');
   assert.equal((await local('I think it should load when the writer open', 'open the application for speed.')).output, ' the application for speed.', 'the word was whole');
   assert.equal((await local('In this assignment I learned how to subm', 'it to the Word document')).output, null, 'without the word first the join is unknown');

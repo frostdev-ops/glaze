@@ -42,14 +42,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const consume = (ghost, typed) => (typed && fold(ghost).startsWith(fold(typed)) ? ghost.slice(typed.length) || null : null);
   // The pause before it asks: about 500 ms, shorter as the student takes the gray text, longer as they pass it by.
   const PAUSE = { min: 250, max: 1000 };
-  // A model on this computer (caps.local) is asked only after a space: mid-word it can't tell finishing the word from
-  // starting the next, and joins or garbles it (Apple Intelligence, 2026-10-27).
-  const asks = (before, caps) => !caps?.local || / $/.test(before);
   const pause = (score) => Math.round(Math.min(PAUSE.max, Math.max(PAUSE.min, 900 - 800 * score)));
   const learn = (score, took) => score * 0.8 + (took ? 0.2 : 0);
   // The connection's name on the chip.
   const providerName = (st, t) => (st?.provider === 'device' ? 'Gemini Nano' : st?.provider === 'apple' ? t('Apple Intelligence') : st?.to || t('Endpoint'));
-  const api = { fits, asks, sentence, nextWord, consume, pause, learn, providerName };
+  const api = { fits, sentence, nextWord, consume, pause, learn, providerName };
 
   const F = globalThis.GZ_WRITER_FRAME;
   if (!F || typeof document === 'undefined') return api;
@@ -271,7 +268,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!selection.empty || !selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code || quoted(selection.$head)) return;
     const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
     const before = tx.text.slice(Math.max(0, off - 8000), off), after = tx.text.slice(off, off + 2000);
-    if (!fits(before, after) || !asks(before, status.completion?.caps)) return;
+    if (!fits(before, after)) return;
     const r = run('completion', 'writer.complete', { before, after, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context() });
     flight = r.id;
     const end = await r;
@@ -297,7 +294,6 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (quoted(selection.$head)) return 'in a quotation';
     const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
     if (!fits(tx.text.slice(Math.max(0, off - 8000), off), tx.text.slice(off, off + 2000))) return 'not at this caret';
-    if (!asks(tx.text.slice(Math.max(0, off - 8000), off), status.completion?.caps)) return 'after a space only, on this device';
     return KEY.getState(st) ? 'showing' : flight ? 'asking' : timer ? 'waiting for the pause' : 'ready: type a letter or a space';
   };
 
