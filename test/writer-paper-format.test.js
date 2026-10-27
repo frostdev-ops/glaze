@@ -120,3 +120,11 @@ test('APA title pages include affiliation and the assignment due date when known
   assert.equal(F.read(d, f).lines.name, v.name);
   assert.equal(F.read(d, f).lines.affiliation, values.affiliation);
 });
+
+test('Chicago blocks a quotation at five lines, even below one hundred words', () => {
+  const f = ST.FORMATS.chicago17;
+  const d = node(F.template(f, v, [{ type: 'paragraph', content: [{ type: 'text', text: `She writes "${'quoted word '.repeat(20)}" here.` }] }]));
+  const issue = F.check(d, f, ctx, { lines: () => 5 }).issues.find((i) => i.rule === 'block-quote');
+  assert.ok(issue);
+  assert.match(issue.message, /five lines/);
+});
