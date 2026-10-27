@@ -714,6 +714,11 @@ svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 
 .MuiSkeleton-root { background-color: color-mix(in srgb, var(--gz-ink) 8%, transparent) !important; }
 .MuiSkeleton-wave::after { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gz-accent) 14%, transparent), transparent) !important; }
 #site-wrap .PrivateSwitchBase-root > span, #site-wrap .MuiRadio-root > span, #site-wrap .MuiCheckbox-root > span { background: transparent !important; }
+/* Ultra's own radio is a ring whose ::before is the dot, white on every radio: an unchecked one hid it in the ring's white
+   fill, cleared above. The dot shows only once checked, dark on an accent fill. */
+#site-wrap .MuiRadio-root > span[class*="makeStylesroot-"][aria-hidden="true"]::before { background: transparent !important; }
+#site-wrap .MuiRadio-root:has(> input:checked) > span[class*="makeStylesroot-"][aria-hidden="true"] { background: var(--gz-accent) !important; border-color: var(--gz-accent) !important; }
+#site-wrap .MuiRadio-root:has(> input:checked) > span[class*="makeStylesroot-"][aria-hidden="true"]::before { background: var(--gz-accent-ink) !important; }
 #site-wrap .MuiRadio-root, #site-wrap .MuiCheckbox-root, #site-wrap .MuiRadio-root svg, #site-wrap .MuiCheckbox-root svg { color: var(--gz-ink-muted) !important; }
 #site-wrap .MuiRadio-root.Mui-checked, #site-wrap .MuiCheckbox-root.Mui-checked, #site-wrap .Mui-checked svg { color: var(--gz-accent) !important; }
 #site-wrap label.MuiFormControlLabel-root, #site-wrap label.MuiFormControlLabel-root .MuiFormControlLabel-label, #site-wrap label.MuiFormControlLabel-root .MuiFormControlLabel-label * { color: var(--gz-ink) !important; }
