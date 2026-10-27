@@ -42,8 +42,9 @@ function staged(src, hosts, tmp = os.tmpdir()) {
   return to;
 }
 
-// A storage write finishes before the worker's list-change handler has registered the script.
-const ultraReady = (page) => page.waitForFunction(async () => {
+// A storage write finishes before the worker's list-change handler has registered the script. Polled from Node:
+// waitForFunction resolves at once on an async predicate (its promise is truthy), so pages loaded before Glaze ran.
+const ultraRegistered = async () => {
   const first = chrome.runtime.getManifest().content_scripts.find((s) => s.js.includes('content-ultra.js'));
   const scripts = await chrome.scripting.getRegisteredContentScripts();
   const patterns = [...first.matches, ...scripts.filter((s) => s.js?.includes('content-ultra.js')).flatMap((s) => s.matches)];
@@ -55,7 +56,13 @@ const ultraReady = (page) => page.waitForFunction(async () => {
       return m && m[1] === u.protocol && (m[2] === '*' || m[2] === u.hostname || m[2].startsWith('*.') && (u.hostname === m[2].slice(2) || u.hostname.endsWith(m[2].slice(1))));
     });
   });
-}, null, { timeout: 10000 });
+};
+const ultraReady = async (page, timeout = 10000) => {
+  for (const end = Date.now() + timeout; ; await new Promise((r) => setTimeout(r, 100))) {
+    if (await page.evaluate(ultraRegistered)) return;
+    if (Date.now() > end) throw new Error('ultraReady: content-ultra.js is not registered for the test site');
+  }
+};
 
 // Glaze opens its first screen (features/welcome.html) in a tab of its own when it is installed on Chrome. A check that
 // counts on its own tabs alone closes it, now or when it opens.

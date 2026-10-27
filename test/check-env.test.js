@@ -117,7 +117,7 @@ test('school-host readiness waits for Ultra registration, with static entries an
   const { ultraReady } = require('../scripts/check-env.js');
   assert.equal(typeof ultraReady, 'function', 'a stored approval must not race the first navigation');
   let predicate;
-  await ultraReady({ waitForFunction: async (fn) => { predicate = fn; } });
+  await ultraReady({ evaluate: async (fn) => { predicate = fn; return true; } });
   const vm = require('node:vm');
   let matches = ['https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*'], registered = [];
   const context = vm.createContext({ URL, chrome: {
@@ -161,4 +161,13 @@ test('a check that wants only its own tabs closes Glaze\'s first screen, open al
   land();
   await new Promise(setImmediate);
   assert.deepEqual([...open, late, mine].map((p) => p.closed), [true, true, true, false]);
+});
+
+test('ultraReady polls the page until Glaze has registered its Ultra script, and says so when it never does', async () => {
+  const { ultraReady } = require('../scripts/check-env.js');
+  const answers = [false, false, true];
+  const page = { evaluate: async (f) => { assert.equal(typeof f, 'function'); return answers.shift(); } };
+  await ultraReady(page);
+  assert.deepEqual(answers, []);
+  await assert.rejects(ultraReady({ evaluate: async () => false }, 250), /not registered/);
 });
