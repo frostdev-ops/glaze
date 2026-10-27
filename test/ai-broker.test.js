@@ -694,3 +694,39 @@ test('streamed text with split Unicode or mixed credential escapes never exposes
     } finally { p.close(); }
   }
 });
+
+
+test('cross-port supersede suppresses late output; unknown cancels and old cleanup leave the new slot alone', async () => {
+  const settings = require('../lib/ai/settings.js'), pending = [], opened = [];
+  P.add({ id: 'review-late', config: (c) => c, caps: () => ({ text: true, json: true, stream: true }), status: async () => ({ state: 'ready' }),
+    run: (req, cfg, opts) => new Promise((resolve) => pending.push({ ...opts, resolve })) });
+  settings.PROVIDERS.push('review-late');
+  const e = writer(); e.vaultData.set('connections', { main: { provider: 'review-late', model: 'probe', generation: 'one' } });
+  const first = open(e), second = open(e); opened.push(first, second);
+  try {
+    first.say(complete(1)); await flush();
+    second.say(complete(2)); await flush();
+    assert.equal(pending.length, 2);
+    assert.equal(pending[0].signal.aborted, true);
+    first.say({ id: 2, op: 'cancel' }); // This id exists only on the other port.
+    first.say({ id: 999, op: 'cancel' }); await flush();
+    assert.equal(pending[1].signal.aborted, false);
+    pending[0].onDelta('OLD'); pending[0].onThinking?.('OLD');
+    pending[0].resolve({ text: 'OLD', finish: 'stop' }); await flush();
+    pending[1].onDelta('new'); pending[1].resolve({ text: 'new', finish: 'stop' }); await flush();
+    assert.equal(JSON.stringify(first.posted).includes('OLD'), false);
+    assert.deepEqual(first.posted.filter((m) => ['end', 'error'].includes(m.type)), [{ id: 1, type: 'error', error: 'cancelled' }]);
+    assert.equal(second.posted.at(-1).output, 'new');
+    first.say(run(undefined, { id: 3, feature: 'writing' })); await flush(); first.close();
+    const third = open(e); opened.push(third);
+    third.say(run(undefined, { id: 4, feature: 'writing' })); await flush();
+    assert.equal(pending.length, 4, 'a closed port frees a non-supersede feature slot');
+    assert.equal(pending[3].signal.aborted, false);
+    pending[3].resolve({ text: '{"text":"done"}', finish: 'stop' }); await flush();
+    assert.equal(third.posted.at(-1).type, 'end');
+  } finally {
+    for (const p of opened) p.close();
+    for (const p of pending) p.resolve({ text: '{"text":"late"}', finish: 'stop' });
+    await flush(); settings.PROVIDERS.pop();
+  }
+});

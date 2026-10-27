@@ -110,3 +110,47 @@ print(Native.warmCount())
     assert.equal(run.stdout.trim(), '0', 'release must invalidate a spare started before it');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+
+test('native spares stay bounded and never reuse a prompted transcript, including concurrent takes', { skip: process.platform !== 'darwin' }, () => {
+  const source = fs.readFileSync(nativeFile, 'utf8');
+  const cache = source.slice(source.indexOf('    private static let lock = NSLock()'), source.indexOf('    static func cancel('));
+  const dir = fs.mkdtempSync(path.join(root, '.native-cache-'));
+  try {
+    const file = path.join(dir, 'Cache.swift');
+    fs.writeFileSync(file, `import Foundation
+struct SystemLanguageModel {}
+struct Transcript { typealias Entry = String; let entries: [Entry] }
+final class LanguageModelSession: @unchecked Sendable {
+    let id = UUID(); var entries: [String]
+    init(model: SystemLanguageModel, transcript: Transcript) { entries = transcript.entries }
+    func prewarm() {}
+}
+final class Results: @unchecked Sendable {
+    let lock = NSLock(); var ids = Set<UUID>(); var clean = true
+    func use(_ s: LanguageModelSession, _ key: String) {
+        lock.withLock { clean = clean && s.entries == [key] && ids.insert(s.id).inserted }
+        s.entries.append("PRIVATE ANSWER")
+    }
+}
+private enum Native {
+${cache}
+    static func check() -> Bool {
+        let results = Results()
+        DispatchQueue.concurrentPerform(iterations: 64) { i in
+            let key = "instructions-" + String(i % 8)
+            results.use(warmSession(key, [key], model: SystemLanguageModel()), key)
+        }
+        let bounded = warmCount() <= maxWarm
+        _ = release()
+        return results.clean && results.ids.count == 64 && bounded && warmCount() == 0
+    }
+}
+print(Native.check())
+`);
+    const run = spawnSync('xcrun', ['swift', ...flags, file], { encoding: 'utf8', timeout: 30000 });
+    assert.equal(run.status, 0, run.stderr);
+    assert.doesNotMatch(run.stderr, /warning:|error:/);
+    assert.equal(run.stdout.trim(), 'true');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
