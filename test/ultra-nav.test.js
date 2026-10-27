@@ -131,7 +131,7 @@ test('the Ultra first-paint helper is idempotent and native MUI colors stay scop
   const source = fs.readFileSync(require.resolve('../lib/nav.js'), 'utf8');
   const first = vm.runInContext(source, ctx); assert.equal(vm.runInContext(source, ctx), first);
   const css = fs.readFileSync(require.resolve('../theme.css'), 'utf8');
-  assert.match(css, /nav\[class\*="makeStylesnavigation"\] a\.MuiListItemButton-root \{ color: var\(--gz-ink-muted\) !important/);
+  assert.match(css, /nav\[class\*="makeStylesnavigation-"\] a\.MuiListItemButton-root \{ color: var\(--gz-ink-muted\) !important/);
   assert.match(css, /gz-nav-pet-level \{ display: inline/);
 });
 
@@ -244,4 +244,15 @@ test('Glaze settings: last in the nav, a copy of its last item, hidden and moved
   assert.equal(root.children.length, 3, 'once, however often the pass runs');
   glazeItem(false);
   assert.equal(root.children.length, 2, 'Glaze off: gone');
+});
+
+test("Ultra's own navigation is named by its class, never a document's Contents drawer", () => {
+  // A document's Contents drawer is nav.makeStylesnavigationContainer-* (js-content-navigation-drawer). The bare substring
+  // [class*="makeStylesnavigation"] matched it as Ultra's navigation, and the rules folding that away under Glaze's bar hid
+  // the drawer: 0px wide, its links hidden (the owner, 2026-10-27). Ultra's navigation is makeStylesnavigation-<n>.
+  const { execFileSync } = require('node:child_process');
+  const files = execFileSync('git', ['ls-files', '*.css', '*.js', '*.html'], { cwd: require('node:path').join(__dirname, '..'), encoding: 'utf8' })
+    .split('\n').filter((f) => f && !/^(safari|reports|prototypes|test)\//.test(f));
+  const loose = files.flatMap((f) => (fs.readFileSync(require.resolve(`../${f}`), 'utf8').match(/\[class\*=\\?["']makeStylesnavigation\\?["']\]/g) || []).map(() => f));
+  assert.deepEqual([...new Set(loose)], []);
 });
