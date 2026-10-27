@@ -53,6 +53,7 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
     });
     await check('clipboard metadata cannot restore attributes outside the allowlist', async () => {
       const result = await page.evaluate(() => {
+        ed.destroy(); window.ed = GZ_WRITER_EDITOR.create({ mount: document.getElementById('ed'), mode: 'paper' });
         const html = `<p data-pm-slice='0 0 ["paragraph",{"line":"1;background:red"}]'>safe</p>`;
         const slice = GZ_PM.view.__parseFromClipboard(ed.view, '', html, false, ed.view.state.selection.$from);
         return JSON.stringify(slice.toJSON());
