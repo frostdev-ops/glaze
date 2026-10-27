@@ -14,15 +14,18 @@
 var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const L = () => globalThis.GZ_WRITER_SUBMIT_LIB;
   const armed = new Map(); // box → whether it's still features/writer.js's
-  const attached = new WeakMap(); // box → the file name this page already attached for it
-  let passing = null, running = false, down = null;
+  const submitted = new WeakSet();
+  const runs = new WeakMap(), tokens = new WeakMap();
+  const attached = new WeakMap(); // box → exact bytes and the row produced by this upload
+  const written = new WeakSet();
+  let passing = null, running = false, active = null, down = null;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-  const until = async (fn, ms, every = 100) => { const end = Date.now() + ms; for (;;) { const v = fn(); if (v) return v; if (Date.now() >= end) return null; await pause(every); } };
+  const until = async (fn, ms, every = 100, valid = () => true) => { const end = Date.now() + ms; for (;;) { if (!valid()) return null; const v = fn(); if (v) return v; if (Date.now() >= end) return null; await pause(every); } };
   const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
   const say = (box, m) => { try { box.port?.postMessage(m); } catch { /* the frame went */ } };
   const assignment = (box) => box.kind === 'assignment' && box.mode === 'paper' && !document.querySelector('bb-attempt-canvas') &&
     globalThis.GZ_WRITER_ULTRA?.kindOf(box.editor, { path: location.pathname }) === 'assignment';
-  const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected) armed.delete(box); return armed; };
+  const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected || !assignment(box)) armed.delete(box); return armed; };
   const visible = (e) => e.getClientRects().length > 0;
 
   // ---- Ultra's footer buttons, caught before Ultra
@@ -31,17 +34,20 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     e.preventDefault();
     e.stopImmediatePropagation();
     if (L().actionOf(b) === 'submit') { if (!running) { box.frame?.focus(); say(box, { type: 'submit:open' }); } return; }
-    // Save and Close: the paper first, then Ultra's own, if Ultra lets it run.
-    const go = e.type === 'click';
-    box.saving = (box.saving || 0) + 1;
-    const n = box.saving;
-    box.saved = (ok) => {
-      if (box.saving !== n) return;
-      box.saving = 0; box.saved = null;
-      if (go && ok && b.isConnected && L().enabled(b) && armed.has(box)) pass(b);
+    // Save and Close: one matching save acknowledgement, never a late reply or an earlier timer.
+    if (running || box.saved || submitted.has(box)) return;
+    const go = e.type === 'click', request = crypto.randomUUID();
+    box.saveRequest = request;
+    const saved = (ok) => {
+      if (box.saved !== saved) return;
+      clearTimeout(timer);
+      box.saved = null; box.saveRequest = null;
+      const b = L().footer(box.editor).save;
+      if (go && ok && live().has(box) && b?.isConnected && L().enabled(b)) pass(b);
     };
-    say(box, { type: 'submit:save' });
-    setTimeout(() => box.saved?.(false), 4000);
+    box.saved = saved;
+    const timer = setTimeout(() => saved(false), 4000);
+    say(box, { type: 'submit:save', request });
   };
   const pass = (b) => { passing = b; try { b.click(); } finally { passing = null; } };
   document.addEventListener('click', (e) => {
@@ -95,71 +101,95 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     for (const type of ['dragenter', 'dragover', 'drop']) zone.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
     return true;
   };
-  const attach = async (box, file) => {
+  const attach = async (box, file, bytes, here) => {
     const area = L().areaOf(box.editor), panel = L().panelOf(box.editor);
     if (!area || !panel) return 'page';
-    if (attached.get(box) === file.name && L().listed(panel, file.name, visible)) return null;
-    const before = L().listed(panel, file.name, visible);
-    const input = L().uploadInput(area) || await until(() => L().uploadInput(area), 1500);
-    if (input) { if (!give(input, file)) return 'upload'; }
-    else { const zone = L().dropZone(area); if (!zone) return 'upload'; drop(zone, file); }
-    let named = false;
+    const old = attached.get(box), data = new Uint8Array(bytes);
+    if (old) {
+      if (old.name !== file.name || old.bytes.length !== data.length || !old.bytes.every((b, i) => b === data[i])) return 'review';
+      // Reuse only the same bytes and the very row the completed upload produced.
+      const rows = L().listings(area, file.name, visible);
+      return rows.length === 1 && rows[0] === old.row ? null : 'review';
+    }
+    if (L().listed(area, file.name, visible) || document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'review';
+    const input = L().uploadInput(area) || await until(() => L().uploadInput(area), 1500, 100, here);
+    if (!here()) return 'page';
+    const zone = !input && L().dropZone(area);
+    if (!input && !zone) return 'upload';
+    const before = new Set(L().listings(area, file.name, visible));
+    attached.set(box, { name: file.name, bytes: data.slice(), before }); // before dispatch: an exception can still leave an upload running
+    if (input) { if (!give(input, file)) return 'review'; }
+    else drop(zone, file);
     const shown = await until(() => {
-      const save = !named && L().propertiesSave(document);
-      if (save && L().enabled(save)) { named = true; save.click(); }
-      return L().listed(panel, file.name, visible) > before;
-    }, 30000, 150);
-    if (!shown) return 'attach';
-    attached.set(box, file.name);
-    return null;
+      // The probed dialog belongs to the editor's own upload, not this React area. Never save an unrelated modal.
+      if (document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'dialog';
+      const rows = L().listings(area, file.name, visible);
+      return rows.length === 1 && !before.has(rows[0]) && 'listed';
+    }, 30000, 150, here);
+    if (shown === 'listed') attached.get(box).row = L().listings(area, file.name, visible)[0];
+    return !here() ? 'page' : shown === 'listed' ? null : shown === 'dialog' ? 'review' : 'attach';
   };
-  const write = (box, d) => {
-    if (!d) return null;
-    const said = main('set', { id: box.id, delta: d });
-    // Quill draws a paragraph per line (an empty one as <p><br></p>): the box must read back line for line.
+  const sameText = (box, d) => {
     const want = d.map((o) => o.insert).join('').split('\n').slice(0, -1).map(squash).join('\n');
     const have = [...box.editor.children].map((p) => squash(p.textContent)).join('\n');
-    return said.some((r) => r?.ok) && have === want ? null : 'text';
+    return have === want;
+  };
+  const write = (box, d) => {
+    const said = main('set', { id: box.id, delta: d });
+    return said.some((r) => r?.ok) && sameText(box, d) ? null : 'text';
   };
   const go = async (box, m, ok) => {
     const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error }); return false; };
-    if (running) return fail('busy');
+    if (running || box.saved || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= (runs.get(box) || 0)) return fail('busy');
+    runs.set(box, m.run);
     const name = m.name, bytes = m.bytes;
     if (!L().safeName(name) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
+    const transaction = active = { box, run: m.run, cancelled: false };
+    const token = tokens.get(box) || crypto.randomUUID();
+    tokens.set(box, token);
+    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user: box.context?.paper?.user }))?.ok === true;
     try {
       const d = L().delta({ note: m.note, text: m.text || '' });
+      if (!d && written.has(box)) return fail('review');
       let s = L().advance(L().advance(L().start({ text: !!d }), { step: 'save' }), { step: 'docx' });
-      const here = () => ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
+      const here = () => !transaction.cancelled && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
+      if (!here()) return fail('page');
+      if (!await permit('claim')) return fail('claimed');
       if (!here()) return fail('page');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
       const file = new File([bytes], name, { type: L().MIME, lastModified: Date.now() });
-      const a = await attach(box, file);
+      const a = await attach(box, file, bytes, here);
       if (a) return fail(a);
       s = L().advance(s, { step: 'attach' });
       if (!here()) return fail('page');
       if (d) {
         say(box, { type: 'submit:step', run: m.run, step: 'text' });
+        written.add(box);
         const w = write(box, d);
         if (w) return fail(w);
         s = L().advance(s, { step: 'text' });
       }
       say(box, { type: 'submit:step', run: m.run, step: 'submit' });
-      const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000);
+      const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000, 100, here);
       if (!b) return fail('submit');
-      if (!here() || !L().may(s, 'submit') || L().listed(L().panelOf(box.editor), name, visible) <= 0) return fail('page');
+      if (!here() || !L().may(s, 'submit') || L().listed(L().areaOf(box.editor), name, visible) !== 1) return fail('page');
+      if (d && !sameText(box, d)) return fail('text');
+      if (!await permit('commit') || !here() || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected || L().listed(L().areaOf(box.editor), name, visible) !== 1 || (d && !sameText(box, d))) return fail('page');
+      submitted.add(box);
       pass(b);
       say(box, { type: 'submit:done', run: m.run, ok: true });
       return true;
-    } catch (e) { console.error(e); return fail('page'); } finally { running = false; }
+    } catch (e) { console.error(e); return fail('page'); } finally { running = false; if (active === transaction) active = null; }
   };
 
   // features/writer.js hands over each submit:* message from a box's frame.
   const hear = (box, m, X, ok) => {
     if (!assignment(box)) return;
     if (m.type === 'submit:arm') armed.set(box, ok);
-    else if (m.type === 'submit:saved') box.saved?.(m.ok === true);
+    else if (m.type === 'submit:cancel' && active?.box === box && active.run === m.run) active.cancelled = true;
+    else if (m.type === 'submit:saved') m.request === box.saveRequest && box.saved?.(m.ok === true);
     else if (m.type === 'submit:go' && armed.has(box)) go(box, m, ok);
   };
   return { hear };

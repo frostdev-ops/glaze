@@ -40,17 +40,16 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   };
   // Where the file area takes a dropped file, when its input isn't drawn.
   const dropZone = (area) => area?.querySelector('[class*="makeStylesinputContainer-"]') || area?.querySelector('[class*="makeStylespreview-"]') || null;
-  // A Mui file-properties dialog (the shape the editor's own upload showed): its Save names the file, it sends nothing.
-  const propertiesSave = (doc) => doc?.querySelector?.('[role="dialog"][aria-labelledby="file-properties-dialog-title"] button[data-analytics-id="editor.modelEditAttachment.dialogFooter.save.button"]') || null;
-  // How many places in the area show the file by name: leaf elements outside the editors, inputs and live regions. A
-  // listing counts once it shows (visible(el), the page's own test).
+  // Only full names prove a listing. A visually shortened label can carry the full name in its title.
   const TAGS = 'a, span, p, li, div, button, h3, h4, h5, td, label, strong';
-  const listed = (area, name, visible = () => true) => {
-    if (!area || !name) return 0;
+  const listings = (area, name, visible = () => true) => {
+    if (!area || !name) return [];
     const stem = String(name).replace(/\.docx$/i, '');
+    const match = (s) => s === name || s === stem;
     return [...area.querySelectorAll(TAGS)].filter((e) => !e.firstElementChild && !e.closest('.ql-container') && !e.closest('[aria-live]') && !e.closest('[role="status"]') &&
-      String(e.textContent || '').includes(stem) && visible(e)).length;
+      [e.textContent, e.getAttribute('title')].some((s) => match(String(s || '').trim())) && visible(e));
   };
+  const listed = (area, name, visible) => listings(area, name, visible).length;
 
   // ---- what goes into Ultra's text box: the note, then the paper's text, as plain paragraphs Quill keeps
   const lines = (s) => {
@@ -82,7 +81,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   };
   const may = (s, name) => step(s) === name;
 
-  return { MIME, shortTitle, fileName, safeName, kb, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, propertiesSave, listed, lines, delta, STEPS, start, step, advance, may };
+  return { MIME, shortTitle, fileName, safeName, kb, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SUBMIT_LIB;
 GZ_WRITER_SUBMIT_LIB;
