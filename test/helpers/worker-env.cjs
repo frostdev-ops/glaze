@@ -1,5 +1,5 @@
 // The real lib/background.js in a vm, as test/sidebar-broker.test.js runs it, with in-memory storage and what the tests of
-// frame trust and starter flags also need: the worker's ports, tab events, session storage, and a count of the reads of
+// frame trust and starter flags also need: the worker's ports, tab events (removed, updated), session storage, and a count of the reads of
 // all of sync. Pass a previous run's `store` to restart the worker over the same storage, and `globals` for more of the
 // worker's own (indexedDB). chrome.permissions answers as
 // the browser would for the manifest's hosts plus `grants` (a Set the test may change); `revoked` takes required hosts
@@ -32,7 +32,7 @@ module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, 
     onAdded: { addListener: (f) => perms.added.push(f) }, onRemoved: { addListener: (f) => perms.gone.push(f) },
   };
   const registered = new Map();
-  const changed = [], startup = [], listeners = [], installed = [], connects = [], removed = [];
+  const changed = [], startup = [], listeners = [], installed = [], connects = [], removed = [], updated = [];
   const reads = { sync: 0, syncAll: 0, local: 0 };
   const area = (s, name) => ({
     get: async (k) => {
@@ -54,7 +54,7 @@ module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, 
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => manifest,
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener: (f) => startup.push(f) },
         onConnect: { addListener: (f) => connects.push(f) } },
-      tabs: { onRemoved: { addListener: (f) => removed.push(f) }, query: async () => [] },
+      tabs: { onRemoved: { addListener: (f) => removed.push(f) }, onUpdated: { addListener: (f) => updated.push(f) }, query: async () => [] },
       storage: { ...(session && { session: sessionArea || area(store.session, 'session') }), local: area(store.local, 'local'), sync: area(store.sync, 'sync'), onChanged: { addListener: (f) => changed.push(f) } },
       permissions,
       scripting: { getRegisteredContentScripts: async () => [...registered.values()], registerContentScripts: async (l) => { for (const x of l) registered.set(x.id, x); },
@@ -77,5 +77,5 @@ module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, 
     for (const f of connects) f(port);
     return { port, say: (m) => { for (const f of on.message) f(m); }, close: () => { for (const f of on.disconnect) f(port); } };
   };
-  return { store, send, installed, startup, changed, removed, reads, settle, connect, context, perms, grants, registered, manifest };
+  return { store, send, installed, startup, changed, removed, updated, reads, settle, connect, context, perms, grants, registered, manifest };
 };
