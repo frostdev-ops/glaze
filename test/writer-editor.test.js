@@ -26,10 +26,10 @@ const run = (st, name, arg) => {
   const ok = cmd(arg)(st, (tr) => { next = st.apply(tr); });
   return { ok, st: next };
 };
-const press = (st, key, keys) => {
+const press = (st, key, keys, away) => {
   let next = st;
   const dispatch = (tr) => { next = st.apply(tr); };
-  const own = E.bindings(st.schema, keys)[key];
+  const own = E.bindings(st.schema, keys, away)[key];
   const ok = (own && own(st, dispatch)) || (baseKeymap[key] ? baseKeymap[key](st, dispatch) : false);
   return { ok: !!ok, st: next };
 };
@@ -269,10 +269,23 @@ test('Enter, Backspace and Tab behave as in Quill and Word around lists and inde
   assert.equal(html(press(items, 'Tab').st), '<ul><li>a</li><li class="ql-indent-1">b</li></ul>');
   assert.equal(html(press(press(items, 'Tab').st, 'Shift-Tab').st), '<ul><li>a</li><li>b</li></ul>');
   assert.equal(press(items, 'Shift-Tab').ok, true, 'Tab stays in a list even at the edge');
-  assert.equal(press(caret(make('<p>a</p>'), 'a'), 'Tab').ok, false, 'outside a list Tab moves focus');
+  assert.equal(html(press(caret(make('<p>ab</p>'), 'a'), 'Tab').st), '<p>a\tb</p>', 'outside a list Tab writes a tab, as Quill does');
+  assert.equal(html(press(caret(make('<p>ab</p>', 'paper'), 'a'), 'Tab').st), '<p>a\tb</p>', 'and as Word does');
+  assert.equal(press(caret(make('<p>a</p>'), 'a'), 'Shift-Tab').ok, true, 'Shift-Tab stays in the document too');
+  assert.equal(press(caret(make('<p>a</p>'), 'a'), 'Tab', undefined, { now: true }).ok, false, 'after Escape, Tab leaves the editor');
+  assert.equal(press(items, 'Shift-Tab', undefined, { now: true }).ok, false, 'and Shift-Tab, even in a list');
   assert.equal(html(press(caret(make('<p>ab</p>'), 'a'), 'Shift-Enter').st), '<p>a</p><p>b</p>', 'compose has no line break');
   assert.equal(html(press(caret(make('<p>ab</p>', 'paper'), 'a'), 'Shift-Enter').st), '<p>a<br>b</p>');
   assert.equal(html(press(select(make('<p>ab</p>'), 'b'), 'Mod-b').st), '<p>a<strong>b</strong></p>');
+});
+
+test('a tab survives the round trips: Quill\'s HTML, its delta, and the paper\'s .docx', () => {
+  const st = press(caret(make('<p>ab</p>'), 'a'), 'Tab').st;
+  assert.equal(S.serialize(st.schema, S.parse(st.schema, html(st))), '<p>a\tb</p>', 'parsed back from the HTML Quill keeps');
+  assert.deepEqual(S.delta(st.doc).ops.map((o) => o.insert).join(''), 'a\tb\n', 'the delta written into Ultra\'s Quill');
+  const X = require('../lib/writer-docx.js');
+  const paper = press(caret(make('<p>ab</p>', 'paper'), 'a'), 'Tab').st;
+  assert.match(X.exportDocx(paper.doc, { format: 'mla9', date: new Date(2026, 9, 27) }).parts['word/document.xml'], /<w:t xml:space="preserve">a<\/w:t><w:tab\/><w:t xml:space="preserve">b<\/w:t>/, 'a tab is a Word tab');
 });
 
 test('opts.keys and opts.plugins come first, so the frame, proofing and ghost text win their keys', () => {
