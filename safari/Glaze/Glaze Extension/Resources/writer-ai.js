@@ -22,7 +22,14 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // A ’ before a letter or digit (don’t, ’90s) is an apostrophe, and so is one closing nothing (students’).
   const inQuote = (s) => {
     const p = s.slice(s.lastIndexOf('\n') + 1), n = (re) => (p.match(re) || []).length;
-    return n(/"/g) % 2 === 1 || n(/“/g) > n(/”/g) || n(/«/g) > n(/»/g) || n(/‘/g) > n(/’(?![\p{L}\p{N}])/gu);
+    // A straight single quote opens before a letter, closes after a word, and is otherwise an apostrophe.
+    let single = false;
+    for (const m of p.matchAll(/'/g)) {
+      const left = WORD.test(p[m.index - 1] || ''), right = WORD.test(p[m.index + 1] || '');
+      if (!left && /\p{L}/u.test(p[m.index + 1] || '')) single = true;
+      else if (single && !right) single = false;
+    }
+    return single || n(/"/g) % 2 === 1 || n(/“/g) > n(/”/g) || n(/«/g) > n(/»/g) || n(/‘/g) > n(/’(?![\p{L}\p{N}])/gu);
   };
   const word = (before) => (/[^ ] $/.test(before) ? before.slice(0, -1) : before);
   const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && TAIL.test(word(before)) && !/^[^\S\n]*[^\s]/.test(after)
