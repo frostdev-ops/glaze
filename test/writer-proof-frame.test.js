@@ -14,8 +14,9 @@ const frame = (options = {}) => {
   const proof = { ...P };
   const view = { dom: new El('div', doc), composing: false, hasFocus: () => true, focus() {}, coordsAtPos: () => ({ left: 10, top: 10, bottom: 25 }),
     dispatch(tr) { const prev = this.state; this.state = this.state.apply(tr); for (const p of hooks) p.spec.view?.().update?.(this, prev); } };
-  const issues = I.bind(view);
-  const api = { t: (k) => k, kind: () => 'reply', context: () => options.context || {}, slot: () => null,
+  const issues = { ...I.bind(view), look: I.look };
+  const context = options.context || {};
+  const api = { t: (k) => k, kind: () => 'reply', context: () => context, slot: () => null,
     plugin: (p) => hooks.push(p), on: (k, f) => { events[k] = f; } };
   const makePort = () => { const p = { sent: [], postMessage(m) { this.sent.push(m); }, start() {}, close() { this.closed = true; }, terminate() { this.terminated = true; }, addEventListener() {} }; ports.push(p); return p; };
   const ctx = vm.createContext({ GZ_WRITER_FRAME: api, GZ_WRITER_PROOF: proof, GZ_WRITER_ISSUES: issues, GZ_PM,
@@ -24,7 +25,8 @@ const frame = (options = {}) => {
     addEventListener: (k, fn) => { life[k] = fn; },
     SharedWorker: options.noShared ? undefined : class { constructor() { if (options.throwShared) throw Error('SharedWorker disabled'); this.port = makePort(); } addEventListener() {} },
     Worker: class { constructor() { return makePort(); } },
-    chrome: { storage: { local: { get: async () => ({}), set: async () => {} }, onChanged: { addListener() {} } } } });
+    navigator: { locks: options.locks },
+    chrome: { storage: { local: options.store || { get: async () => ({}), set: async () => {} }, onChanged: { addListener() {} } } } });
   vm.runInContext(fs.readFileSync(require.resolve('../writer-proof.js'), 'utf8'), ctx);
   view.state = E.state({ html: options.html || '<p>teh</p>', plugins: [I.plugin(), ...hooks] });
   events.ready({ view });
@@ -97,4 +99,22 @@ test('the autocorrect Undo stays available while it has keyboard focus', async (
   assert.equal(pop.hidden, false, 'a focused action must not disappear on its timer');
   pop.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault() {} });
   assert.equal(pop.hidden, true);
+});
+
+
+test('simultaneous dictionary additions in two frames are both persisted', async () => {
+  let stored = [], chain = Promise.resolve();
+  const locks = { request: (_name, fn) => { const p = chain.then(fn); chain = p.catch(() => {}); return p; } };
+  const store = { get: async () => ({ writerWords: stored.slice() }), set: async (v) => { stored = v.writerWords; } };
+  const a = frame({ html: '<p>Sethe</p>', locks, store }), b = frame({ html: '<p>Glazeville</p>', locks, store });
+  await flush();
+  const add = async (f, word) => {
+    f.issues.set('harper', [{ from: 1, to: word.length + 1, kind: 'spelling' }]);
+    const span = new El('span', f.doc); span.className = 'gz-iss'; span.dataset.issue = f.issues.list()[0].id;
+    f.view.dom.dispatchEvent({ type: 'mouseover', target: span }); await f.run(200);
+    return f.doc.body.querySelectorAll('button').find((e) => e.textContent === 'Add to dictionary');
+  };
+  const [x, y] = await Promise.all([add(a, 'Sethe'), add(b, 'Glazeville')]);
+  x.dispatchEvent({ type: 'click' }); y.dispatchEvent({ type: 'click' }); await flush();
+  assert.deepEqual(stored.slice().sort(), ['Glazeville', 'Sethe']);
 });
