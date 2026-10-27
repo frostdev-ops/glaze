@@ -190,6 +190,7 @@
         "lib/scene-media.js",
         "lib/lottie/lottie_light_canvas.js",
         "reader.html",
+        "writer.html",
         "fonts/*.woff2"
       ],
       "matches": [

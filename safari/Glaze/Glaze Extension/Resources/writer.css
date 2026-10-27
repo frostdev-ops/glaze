@@ -1,0 +1,64 @@
+/* Glaze Writer's editor frame (writer.html): compose mode as glaze-plans/writer/mockups (A, B) draws it, in the Look's
+   tokens, which the page hands in (writer.js look). Motion: transform and opacity only, 120–180 ms ease-out, none while
+   typing, none at motion level off or with reduced motion. */
+@font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+
+:root {
+  --gz-accent: #17c8f4; --gz-accent-hi: #6fdcff; --gz-accent-soft: #082f49; --gz-accent-ink: #04121f;
+  --gz-surface: #0d1b2e; --gz-surface-2: #060d18; --gz-ink: #e8f2fa; --gz-ink-muted: #8fa8c0; --gz-ink-faint: #5c7189;
+  --gz-line: #16283f; --gz-line-strong: #24405f; --gz-ok: #34d399; --gz-warn: #fbbf24; --gz-err: #f87171;
+  --gz-radius: 12px; --gz-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pop-mix: #1b2d45; --shadow: 0 12px 32px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.35);
+  --t: 150ms; color-scheme: dark;
+}
+:root:not([data-dark]) { --pop-mix: #ffffff; --shadow: 0 12px 32px rgba(15,23,42,.16), 0 2px 6px rgba(15,23,42,.10); color-scheme: light; }
+:root[data-motion="off"] { --t: 0s; }
+@media (prefers-reduced-motion: reduce) { :root { --t: 0s; } }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: transparent; }
+body { padding: 3px; font: 14px/1.5 var(--gz-font); color: var(--gz-ink); overflow: hidden; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.slot:empty, [hidden] { display: none !important; }
+
+/* The box */
+.gw { position: relative; background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); }
+.gw::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 18%, transparent); opacity: 0; pointer-events: none; transition: opacity var(--t) ease-out; }
+.gw:focus-within::after { opacity: 1; }
+.gw-body { position: relative; font-size: 15px; line-height: 1.65; }
+.ProseMirror { min-height: 190px; padding: 18px 20px 8px; outline: none; caret-color: var(--gz-accent); }
+.ProseMirror p { margin: 0 0 10px; }
+.ProseMirror h3, .ProseMirror h4 { margin: 4px 0 10px; line-height: 1.35; font-weight: 600; }
+.ProseMirror h3 { font-size: 1.2em; } .ProseMirror h4 { font-size: 1.05em; }
+.ProseMirror ul, .ProseMirror ol { margin: 0 0 10px; padding-left: 24px; }
+.ProseMirror li > p { margin: 0 0 4px; }
+.ProseMirror a { color: var(--gz-accent-hi); text-underline-offset: 2px; }
+.ProseMirror pre { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; background: var(--gz-surface-2); font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.ProseMirror[data-empty]::before { content: attr(data-placeholder); position: absolute; color: var(--gz-ink-faint); pointer-events: none; }
+::selection { background: color-mix(in srgb, var(--gz-accent) 32%, transparent); }
+
+/* The bar under it */
+.gw-bar { display: flex; align-items: center; gap: 18px; padding: 8px 12px 8px 16px; border-top: 1px solid var(--gz-line); color: var(--gz-ink-muted); font-size: 13px; min-height: 45px; }
+.gw-bar .grow { flex: 1; }
+.slot { display: inline-flex; align-items: center; gap: 8px; }
+.more { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--gz-ink-muted); }
+.more:hover, .more[aria-expanded="true"] { background: var(--gz-line); color: var(--gz-ink); }
+.more:focus-visible, .tb button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+
+/* Popovers: the selection toolbar and the menu. They scale from 0.98 and fade in; they go at once. */
+.pop { position: absolute; z-index: 2; background: color-mix(in srgb, var(--gz-surface) 70%, var(--pop-mix)); border: 1px solid var(--gz-line-strong); border-radius: 12px; box-shadow: var(--shadow); padding: 12px; font-size: 13px; line-height: 1.4;
+  opacity: 0; transform: scale(.98); transform-origin: top left; transition: opacity var(--t) ease-out, transform var(--t) ease-out; }
+.pop[data-open] { opacity: 1; transform: none; }
+.tb { display: flex; align-items: center; gap: 2px; padding: 4px; }
+.tb button { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; color: var(--gz-ink); font-weight: 700; font-size: 14px; }
+.tb button:hover { background: var(--gz-line); }
+.tb button.on { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
+.tb .sepv { width: 1px; height: 18px; background: var(--gz-line-strong); margin: 0 4px; }
+.tb .href { width: 240px; height: 30px; padding: 0 8px; border: 1px solid var(--gz-line-strong); border-radius: 7px; background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; outline: none; }
+.tb .href:focus { border-color: var(--gz-accent); }
+.tb.linking > :not(.href) { display: none; }
+.menu { min-width: 220px; padding: 6px; transform-origin: bottom right; }
+.menu button { display: flex; width: 100%; justify-content: space-between; gap: 16px; padding: 7px 10px; border-radius: 7px; font-size: 13px; text-align: start; color: var(--gz-ink); }
+.menu button:hover, .menu button:focus { background: var(--gz-accent-soft); outline: none; }
