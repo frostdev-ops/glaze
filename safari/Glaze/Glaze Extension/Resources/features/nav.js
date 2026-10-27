@@ -32,7 +32,7 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
     overlay?.sync(on && !rail.placed());
     if (X.site === 'ultra' && on && n.labelOverflow === 'shrink' && (!n.collapsed || overlay?.open()) && (n.labels !== 'icons' || overlay?.open())) {
       fitObserver ||= new ResizeObserver(() => { if (!fitFrame) fitFrame = requestAnimationFrame(fitLabels); });
-      for (const a of document.querySelectorAll(':is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a[href], .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) :is(footer, [class*="makeStylesfooter"]) a[href]')) {
+      for (const a of document.querySelectorAll(':is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a[href], .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation-"])) :is(footer, [class*="makeStylesfooter"]) a[href]')) {
         const label = a.querySelector('.MuiTypography-root') || a.querySelector('.MuiListItemText-root, span:not(:has(svg))') || a;
         if (label && !fitted.has(a)) { fitted.set(a, label); fitObserver.observe(a); }
       }
@@ -42,14 +42,14 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
     const b = X.site === 'ultra' ? null : document.getElementById('primaryNavToggle');
     for (const el of labels) if (!on || (!n.collapsed && n.labels !== 'icons') || !el.isConnected) { el.classList.remove('gz-nav-label'); labels.delete(el); }
     if (X.site === 'ultra' && on && (n.collapsed || n.labels === 'icons')) {
-      for (const a of document.querySelectorAll(':is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) a')) {
+      for (const a of document.querySelectorAll(':is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a')) {
         for (const el of a.querySelectorAll('.MuiListItemText-root, .MuiTypography-root, span:not(:has(svg))')) {
           if (!el.querySelector('svg') && !el.closest('.MuiBadge-root') && el.textContent.trim() && !labels.has(el)) { el.classList.add('gz-nav-label'); labels.add(el); }
         }
       }
     }
     if (on && (n.collapsed || n.labels === 'icons')) {
-      for (const a of document.querySelectorAll(X.site === 'ultra' ? ':is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) a' : '#header .ic-app-header__menu-list-link')) if (!titled.has(a) && !a.hasAttribute('title')) {
+      for (const a of document.querySelectorAll(X.site === 'ultra' ? ':is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a' : '#header .ic-app-header__menu-list-link')) if (!titled.has(a) && !a.hasAttribute('title')) {
         const text = a.getAttribute('aria-label') || a.textContent.trim();
         if (text) { titled.set(a, text); a.title = text; }
       }
@@ -166,7 +166,7 @@ function GZ_ULTRA_OVERLAY(X, repaint) {
     button.remove(); button = null; paper = null;
   };
   const sync = (on) => {
-    const next = on && X.nav().collapsed && document.querySelector('nav[class*="makeStylesnavigation"], nav#base_tools, nav:has(> #base_tools)')?.closest('.MuiDrawer-paper');
+    const next = on && X.nav().collapsed && document.querySelector('nav[class*="makeStylesnavigation-"], nav#base_tools, nav:has(> #base_tools)')?.closest('.MuiDrawer-paper');
     if (next !== paper) {
       cleanup(); if (!next) return; paper = next;
       button = document.createElement('button'); button.type = 'button'; button.className = 'gz-nav-expand';
@@ -187,7 +187,7 @@ function GZ_ULTRA_OVERLAY(X, repaint) {
 // Canvas's global nav and Moodle's primary navigation are changed the same way, in place, for a worn Look's layout.
 function GZ_ULTRA_RAIL(X) {
   const N = GZ_NAV, L = globalThis.GZ_NAV_LAYOUT, isPreview = /-extension:$/.test(location.protocol), html = document.documentElement;
-  const roots = { ultra: 'nav[class*="makeStylesnavigation"], nav#base_tools, nav:has(> #base_tools)', canvas: '#header .ic-app-header__main-navigation > ul.ic-app-header__menu-list', moodle: '.primary-navigation ul.more-nav' }[X.site];
+  const roots = { ultra: 'nav[class*="makeStylesnavigation-"], nav#base_tools, nav:has(> #base_tools)', canvas: '#header .ic-app-header__main-navigation > ul.ic-app-header__menu-list', moodle: '.primary-navigation ul.more-nav' }[X.site];
   const nativeOf = (a) => X.site === 'canvas' ? L.canvas(a.id) : X.site === 'moodle' ? L.moodle(a.getAttribute('href')) : N.native(a.getAttribute('href'));
   // Ultra's list items hold their link anywhere inside; Moodle's More menu holds overflowed links that aren't items.
   const items = X.site === 'ultra' ? 'a:not(.gz-nav-link, .gz-nav-widget)' : ':scope > li > a:not(.gz-nav-link, .gz-nav-widget)';
@@ -474,7 +474,7 @@ function GZ_ULTRA_RAIL(X) {
       let a = custom.get(l.id)?.a;
       if (!a) {
         const pill = X.site === 'moodle' && list.querySelector('a.mds-nav-pill');
-        const skin = { ultra: [`MuiButtonBase-root MuiListItemButton-root gz-nav-link${root.matches('[class*="makeStylesnavigation"]') ? '' : ' base-navigation-button-content'}`, 'span', 'MuiListItemText-root'], canvas: ['ic-app-header__menu-list-link gz-nav-link', 'div', 'menu-item__text'], moodle: [`${pill ? 'mds-nav-pill' : 'nav-link'} gz-nav-link`, 'span', pill ? 'mds-nav-pill__label' : ''] }[X.site];
+        const skin = { ultra: [`MuiButtonBase-root MuiListItemButton-root gz-nav-link${root.matches('[class*="makeStylesnavigation-"]') ? '' : ' base-navigation-button-content'}`, 'span', 'MuiListItemText-root'], canvas: ['ic-app-header__menu-list-link gz-nav-link', 'div', 'menu-item__text'], moodle: [`${pill ? 'mds-nav-pill' : 'nav-link'} gz-nav-link`, 'span', pill ? 'mds-nav-pill__label' : ''] }[X.site];
         a = make('a', { className: skin[0] }, icon(l.i), make(skin[1], { className: skin[2] }));
         if (X.site === 'moodle') a.setAttribute('role', 'menuitem');
         const parent = [...captured.values()][0]?.mark.parentNode || list; custom.set(l.id, { a, unit: unit(a, l.id), parent });

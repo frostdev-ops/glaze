@@ -33,7 +33,7 @@ var GZ_PARTS = globalThis.GZ_PARTS || (() => {
     ['ultra.recent-courses', 'bb-recent-courses-view', 'Recent courses', { st: BOX }],
     ['ultra.grades-tile', '.base-grades-course-tile', 'Grades course tile', { st: BOX }],
     // The rail holds Glaze settings, which can't be hidden; its items are x.nav's (hidden, order), not rules'.
-    ['ultra.nav', 'nav#base_tools, nav[class*="makeStylesnavigation"]', 'Navigation', { st: BOX, hide: false }],
+    ['ultra.nav', 'nav#base_tools, nav[class*="makeStylesnavigation-"]', 'Navigation', { st: BOX, hide: false }],
     ['ultra.nav.logo', '.MuiDrawer-paper header.themed-logo-background-primary-fill', 'Navigation logo', { st: BOX }],
     ['ultra.nav.footer', '[class*="makeStylesfooter"]', 'Navigation footer links', { st: BOX }],
     ['ultra.course-header', 'course-page-header > header', 'Course header', { st: BOX }],
