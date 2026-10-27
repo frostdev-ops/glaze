@@ -42,7 +42,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const KEYS = mac ? '⌘⇧K' : 'Ctrl+Shift+K';
 
   // ---- the port ------------------------------------------------------------------------------------------------------
-  let port = null, asked = 0;
+  let port = null, asked = 0, generation = 0;
   const waits = new Map(); // message id → its answer's handler
   const hangUp = () => {
     const p = port;
@@ -67,25 +67,44 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     }), { id });
   };
   const cancel = (id) => { const w = waits.get(id); if (!w) return; w({ type: 'error', error: 'cancelled' }); try { port?.postMessage({ id, op: 'cancel' }); } catch { /* gone */ } };
-  const run = (feature, task, input) => ask({ op: 'run', feature, task, input });
+  const run = (feature, task, input) => {
+    if (!ok(feature)) return Object.assign(Promise.resolve({ type: 'error', error: 'off' }), { id: 0 });
+    const gen = generation, r = ask({ op: 'run', feature, task, input });
+    return Object.assign(r.then((a) => gen === generation && ok(feature) ? a : { type: 'error', error: 'changed' }), { id: r.id });
+  };
 
   // ---- what may run --------------------------------------------------------------------------------------------------
   // status per feature: the broker's answer, or null when Settings → AI says no (then nothing is asked).
   const status = { completion: null, writing: null };
-  const ok = (f) => status[f]?.allowed === true && status[f]?.ready === true;
-  const quiet = () => F.kind() === 'test' || !F.editor();
+  const ok = (f) => !quiet() && status[f]?.allowed === true && status[f]?.ready === true;
+  const quiet = () => F.kind() === 'test' || F.context()?.kind === 'test' || !F.editor();
   let checked = 0;
+  const invalidate = () => {
+    generation++;
+    status.completion = status.writing = null;
+    stopFlight();
+    hangUp();
+    if (view()) clear(view());
+    fb.done?.();
+    Object.assign(fb, { state: 'idle', criteria: [], place: null, done: null });
+    reviewing = false;
+    render();
+  };
   const refresh = async () => {
+    invalidate(); // close admission before either asynchronous read can yield
+    const gen = generation;
     checked = Date.now();
     let s = null;
     try { s = (await chrome.storage.local.get('ai'))?.ai; } catch { /* no storage */ }
-    const want = (f) => !quiet() && s?.on === true && typeof s.use === 'string' && !!s.use && s.features?.[f] === true;
-    if (!want('completion') && !want('writing')) hangUp();
+    if (gen !== generation || quiet()) return;
+    const want = (f) => s?.on === true && typeof s.use === 'string' && !!s.use && s.features?.[f] === true;
+    const next = { completion: null, writing: null };
     for (const f of ['completion', 'writing']) {
       const st = want(f) ? await ask({ op: 'status', feature: f }) : null;
-      status[f] = st?.type === 'status' ? st : null;
+      if (gen !== generation || quiet()) return;
+      next[f] = st?.type === 'status' ? st : null;
     }
-    if (!ok('completion')) { stopFlight(); if (view()) clear(view()); }
+    Object.assign(status, next);
     render();
   };
   try { chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.ai) refresh(); }); } catch { /* no storage */ }
@@ -226,10 +245,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!v || !ok('writing') || reviewing) return;
     const doc = v.state.doc, text = S.text(doc).text;
     if (!text.trim()) return;
-    const tr = track();
+    const tr = track(), gen = generation;
     reviewing = true;
     render();
     const end = await run('writing', 'writer.review', { text, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context() });
+    if (gen !== generation) { tr.done(); return; }
     reviewing = false;
     render();
     try {
@@ -252,10 +272,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const doc = v.state.doc, text = S.text(doc).text;
     if (!text.trim()) return;
     fb.done?.();
-    const tr = track();
+    const tr = track(), gen = generation;
     Object.assign(fb, { state: 'running', criteria: [], place: null, done: tr.done });
     paint();
     const end = await run('writing', 'writer.feedback', { text, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context() });
+    if (gen !== generation) { tr.done(); return; }
     if (end.type !== 'end' || !Array.isArray(end.output?.criteria)) { tr.done(); Object.assign(fb, { state: 'error', done: null }); paint(); return; }
     Object.assign(fb, { state: 'done', criteria: end.output.criteria, place: placer(doc, tr.m) });
     paint();
@@ -380,9 +401,8 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   addEventListener('resize', () => { if (!menu.hidden) place(menu); if (!pop.hidden) place(pop); });
 
   // ---- the autocorrect's calls -------------------------------------------------------------------------------------
-  // GZ_WRITER_PROOF.decide({ text, from, to, suggestions, context }) → 'apply' | 'suggest' | null, in at most 5 s: the
-  // sentence around the flagged words (at most 1,000 characters) and the candidates. apply only when the model takes the
-  // first candidate; another candidate, or no answer, leaves it a suggestion.
+  // → { verdict: 'apply'|'suggest'|'keep', choice: index }, or null without an answer, in at most 5 s.
+  // The index names the caller's candidate, even when the task deduplicates candidates; keep has choice -1.
   const decide = async ({ text, from, to, suggestions, context } = {}) => {
     if (!ok('writing') || typeof text !== 'string' || !Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to <= from || to > text.length
       || !Array.isArray(suggestions) || !suggestions.length) return null;
@@ -391,13 +411,17 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const tail = /[.!?…]["'”’)\]]*(?=\s|$)|\n/u.exec(text.slice(to));
     if (tail) b = to + tail.index + (tail[0] === '\n' ? 0 : tail[0].length);
     a = Math.max(a, to - 900); b = Math.min(b, Math.max(to, a + 1000));
-    const r = run('writing', 'writer.decide', { sentence: text.slice(a, b), from: from - a, to: to - a, suggestions: suggestions.slice(0, 5).map(String),
+    const candidates = suggestions.slice(0, 5).map(String);
+    const r = run('writing', 'writer.decide', { sentence: text.slice(a, b), from: from - a, to: to - a, suggestions: candidates,
       context: context && typeof context === 'object' ? context : F.context() });
     const late = setTimeout(() => cancel(r.id), 5000);
     const end = await r;
     clearTimeout(late);
     if (end.type !== 'end' || !end.output) return null;
-    return end.output.verdict === 'keep' ? null : end.output.verdict === 'apply' && end.output.choice === suggestions[0] ? 'apply' : 'suggest';
+    const { verdict, choice } = end.output;
+    if (verdict === 'keep') return { verdict, choice: -1 };
+    const index = candidates.indexOf(choice);
+    return ['apply', 'suggest'].includes(verdict) && index >= 0 ? { verdict, choice: index } : null;
   };
   const hook = () => { try { if (globalThis.GZ_WRITER_PROOF && GZ_WRITER_PROOF.decide !== decide) GZ_WRITER_PROOF.decide = decide; } catch { /* not settable */ } };
 
@@ -416,7 +440,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     hook();
     refresh();
   });
-  F.on('context', () => { if (!quiet()) render(); });
+  F.on('context', refresh);
   return Object.assign(api, { feedbackView, feedback, review, decide, requirements, cite, allowed: ok, refresh });
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_AI;
