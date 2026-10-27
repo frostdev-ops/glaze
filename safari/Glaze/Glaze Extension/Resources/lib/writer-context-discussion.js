@@ -31,6 +31,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     const columns = new Set(arr(rows).filter((r) => r?.column?.contentId === content).map((r) => r.column.id || r.columnId).filter(Boolean));
     const graded = list.filter((d) => columns.has(d.gradebookColumnId));
     if (graded.length === 1) return graded[0];
+    if (discussions?.complete === false) return null;
     const named = new Set(arr(titles).map(fold).filter(Boolean));
     const titled = list.filter((d) => named.has(fold(d.title)));
     return titled.length === 1 ? titled[0] : null;
@@ -44,7 +45,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
   const DRAFT = /draft|delet/i;
   const at = (m) => Date.parse(m?.postDate || m?.createdDate || '') || 0;
   // Messages (top-level and replies, in any order, repeats allowed) → the thread: the newest LIMIT.posts that fit in
-  // LIMIT.chars, the posts named in keep first (the one a reply answers), shown as Ultra nests them: each post, then its
+  // LIMIT.chars, the posts named in keep first (the one a reply answers), still within the budget, shown as Ultra nests them: each post, then its
   // replies, oldest first. → [{ id, parentId, author, text, mine, at }].
   const threadOf = (messages, { me = '', keep = [], text, posts = LIMIT.posts, chars = LIMIT.chars } = {}) => {
     const byId = new Map();
@@ -61,7 +62,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     const kept = new Set();
     let used = 0;
     for (const x of [...[...want].map((id) => byId.get(id)), ...order]) {
-      if (kept.has(x.id) || kept.size >= posts || (used + x.text.length > chars && !want.has(x.id))) continue;
+      if (kept.has(x.id) || kept.size >= posts || used + x.text.length > chars) continue;
       kept.add(x.id);
       used += x.text.length;
     }
@@ -99,7 +100,10 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
   // ---- the reads -------------------------------------------------------------------------------------------------------
   // r: lib/ultra.js read()'s { get, all, list }. Each returns raw answers; failures are the caller's.
   const FIELDS = 'id,title,available,topic.body,topic.status,gradebookColumnId';
-  const discussions = async (r, cid) => (await r.list(`/learn/api/public/v1/courses/${cid}/discussions`, FIELDS)).items.filter((d) => d?.available !== false);
+  const discussions = async (r, cid) => {
+    const result = await r.list(`/learn/api/public/v1/courses/${cid}/discussions`, FIELDS);
+    return Object.defineProperty(result.items.filter((d) => d?.available !== false), 'complete', { value: result.complete !== false });
+  };
   const forumPath = (cid, forum) => `/learn/api/v1/courses/${cid}/discussionboards/default/forums/${forum}/messages`;
   // The forum's top-level messages, then the replies of the post a reply answers and of the newest posts that have any,
   // while the request budget lasts and the text read stays within twice the thread's budget.
