@@ -9,7 +9,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   const { ReplaceAroundStep } = GZ_PM.transform;
   const { Slice, Fragment } = GZ_PM.model;
   const { toggleMark, baseKeymap, chainCommands, splitBlockAs, newlineInCode, createParagraphNear, liftEmptyBlock } = GZ_PM.commands;
-  const { history, undo, redo } = GZ_PM.history;
+  const { history, undo, redo, closeHistory } = GZ_PM.history;
   const { keymap } = GZ_PM.keymap;
   const { inputRules, InputRule, smartQuotes, emDash, undoInputRule } = GZ_PM.inputrules;
 
@@ -367,7 +367,14 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       view, schema,
       html: () => S.serialize(schema, view.state.doc),
       // The whole document in one undoable step; onChange reports it with docChanged false.
-      setHTML: (html) => { quiet = true; try { view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, S.parse(schema, html).content)); } finally { quiet = false; } },
+      setHTML: (html) => {
+        const doc = S.parse(schema, html);
+        quiet = true;
+        try {
+          view.dispatch(closeHistory(view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content)));
+          view.dispatch(closeHistory(view.state.tr));
+        } finally { quiet = false; }
+      },
       text: () => S.text(view.state.doc).text,
       words: () => words(S.text(view.state.doc).text),
       focus: () => view.focus(),
