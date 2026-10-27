@@ -33,6 +33,8 @@ module.exports = ({ listed = true, enabled = true, worker } = {}) => {
     chrome: { runtime: { sendMessage: worker || (async () => ({ ok: true })) } },
   });
   // Stand-in Event has no target setter. The real DOM supplies it during dispatch.
+  const setText = (text) => { editor.replaceChildren(...text.replace(/\n$/, '').split('\n').map((line) => { const p = new El('p', doc); p.textContent = line; return p; })); };
+  doc.addEventListener('gz-writer:set', (e) => { const m = JSON.parse(e.detail); setText(m.delta.map((o) => o.insert).join('')); doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: true }) })); });
   const input = L.uploadInput(L.areaOf(editor));
   input.dispatchEvent = (e) => { for (const l of input.listeners.filter((x) => x.type === e.type)) l.f({ type: e.type, target: input }); return true; };
   vm.runInContext(fs.readFileSync(process.env.WRITER_SUBMIT_SOURCE || path.join(__dirname, '../../features/writer-submit.js'), 'utf8'), ctx);
@@ -42,5 +44,5 @@ module.exports = ({ listed = true, enabled = true, worker } = {}) => {
   const flush = async () => { for (let i = 0; i < 15; i++) await new Promise(setImmediate); };
   const tick = async (ms = 1000) => { clock += ms; for (const [n, t] of [...timers]) { timers.delete(n); t.fn(); } await flush(); };
   const go = async (extra = {}) => { hear({ type: 'submit:go', run: 1, name: 'Rivera_Essay2.docx', bytes: new Uint8Array([1, 2, 3]).buffer, note: '', text: null, until: clock + 80000, ...extra }); await flush(); };
-  return { doc, ctx, box, sent, uploads, clicks, fire, hear, go, flush, tick, addRow, button, setEnabled, timers, own: (v) => { owned = v; }, now: () => clock };
+  return { doc, ctx, box, sent, uploads, clicks, fire, hear, go, flush, tick, addRow, button, setEnabled, setText, input, timers, own: (v) => { owned = v; }, now: () => clock };
 };

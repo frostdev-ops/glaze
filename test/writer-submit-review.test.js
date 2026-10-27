@@ -71,3 +71,31 @@ test('review: unrelated properties dialogs are never saved', async () => {
   await p.go();
   assert.equal(p.clicks.includes(save), false, 'a dialog from another attachment is not this run');
 });
+
+test('review: hand-back while the React input mounts stops every later upload', async () => {
+  const p = page(); const area = p.input.parentElement;
+  p.input.remove(); await p.go();
+  p.own(false); area.append(p.input); await p.tick(2000);
+  assert.equal(p.uploads.length, 0, 'ownership must be rechecked after waiting for the input');
+  assert.equal(p.clicks.length, 0);
+});
+
+test('review: changed native text while Submit enables never sends a partial note', async () => {
+  const p = page({ enabled: false });
+  await p.go({ note: 'The whole note.' });
+  p.setText('The whole'); p.setEnabled(true); await p.tick();
+  assert.equal(p.clicks.length, 0, 'verify the native text again immediately before Submit');
+});
+
+test('review: Save and Close replies are correlated, including timers and double clicks', async () => {
+  const p = page(); const L = require('../lib/writer-submit.js'), b = L.footer(p.box.editor).save;
+  b.disabled = false; b.removeAttribute('disabled'); b.className = '';
+  p.fire(b, 'click'); p.fire(b, 'click');
+  const saves = p.sent.filter((m) => m.type === 'submit:save');
+  assert.equal(saves.length, 1, 'coalesce a second Save and Close while saving');
+  p.hear({ type: 'submit:saved', request: 'stale', ok: true });
+  assert.equal(p.clicks.length, 0, 'an earlier save reply must not release this close');
+  p.hear({ type: 'submit:saved', request: saves[0].request, ok: true });
+  assert.equal(p.clicks.length, 1);
+  assert.equal(p.uploads.length, 0);
+});
