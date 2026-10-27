@@ -216,6 +216,19 @@ test('delta() writes the Quill 1.x ops setContents takes', () => {
   assert.deepEqual(S.delta(S.parse(C, '')), [{ insert: '\n' }]);
 });
 
+test('adjacent compose code blocks serialize as the one pre Quill renders from their delta', () => {
+  const input = '<pre>a\n</pre><pre>\nb\n\n</pre>';
+  const doc = S.parse(C, input), expected = '<pre class="ql-syntax" spellcheck="false">a\n\nb\n\n</pre>';
+  assert.equal(S.serialize(C, doc), expected);
+  assert.equal(out(expected), expected);
+  assert.deepEqual(S.delta(doc), [
+    { insert: 'a' }, { insert: '\n\n', attributes: { 'code-block': true } },
+    { insert: 'b' }, { insert: '\n\n', attributes: { 'code-block': true } },
+  ]);
+  assert.equal(out('<pre>a</pre><pre>b</pre>'), '<pre class="ql-syntax" spellcheck="false">a\nb\n</pre>');
+  assert.equal(out('<pre>a</pre><pre></pre><pre>b</pre>'), '<pre class="ql-syntax" spellcheck="false">a\n</pre><p><br></p><pre class="ql-syntax" spellcheck="false">b\n</pre>');
+});
+
 test('links: only what Quill keeps, and a bare domain when asked', () => {
   for (const ok of ['https://a.b', 'http://a.b/c?d#e', 'HTTPS://X.Y', 'mailto:a@b.c', 'tel:+1 (555) 123-4567']) assert.equal(S.href(ok), ok);
   for (const bad of ['javascript:x', 'data:text/html,x', '/rel', '//a.b', 'https://', 'ftp://a.b', 'https://a b', `https://a.b/${'x'.repeat(2048)}`, '', null]) assert.equal(S.href(bad), null, String(bad).slice(0, 30));
