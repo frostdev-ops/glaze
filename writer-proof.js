@@ -220,9 +220,15 @@
     dict.add(w);
     post({ op: 'dict', words: [w] });
     drop([w]);
-    const list = (await words()).filter((x) => x.toLowerCase() !== w.toLowerCase());
-    list.push(w);
-    try { await store()?.set({ [DICT]: list.slice(-MAX_DICT) }); } catch (e) { console.error(e); }
+    const save = async () => {
+      const list = (await words()).filter((x) => x.toLowerCase() !== w.toLowerCase());
+      list.push(w);
+      await store()?.set({ [DICT]: list.slice(-MAX_DICT) });
+    };
+    try {
+      const locks = globalThis.navigator?.locks;
+      if (locks) await locks.request('glaze-writer-words', save); else await save();
+    } catch (e) { console.error(e); }
   };
   const drop = (list) => {
     if (view) view.dispatch(view.state.tr.setMeta(P.key, { words: [...context, ...dict] }).setMeta('addToHistory', false));
