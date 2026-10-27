@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const source = fs.readFileSync(require.resolve('../writer-ai.js'), 'utf8');
 const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 const plain = (v) => JSON.parse(JSON.stringify(v));
-function frame({ answer = () => ({ allowed: true, ready: true }), settings: start } = {}) {
+function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, clock } = {}) {
   class Element {
     constructor() { this.style = {}; this.attrs = {}; this.children = []; this.hidden = false; this.listeners = {}; }
     get textContent() { return (this.text || '') + this.children.map((c) => (c && typeof c === 'object' ? c.textContent : String(c))).join(' '); }
@@ -37,6 +37,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
       } };
     }, getURL: (p) => `chrome-extension://x/${p}`, onMessage: { addListener: (f) => { hooks.runtime = f; } } },
     tabs: { create: async (o) => { opened.push(o.url); } } } };
+  if (clock) sandbox.Date = class extends Date { static now() { return clock.t; } };
   const reply = (m) => receives.forEach((f) => f(m));
   vm.createContext(sandbox); vm.runInContext(source, sandbox);
   const ai = sandbox.GZ_WRITER_AI;
@@ -93,24 +94,25 @@ test('a frame refused before the worker knew the attempt was an assignment asks 
   const f = frame({ answer: (m) => (m.feature === 'writing' && !known ? { on: true, allowed: false, why: 'attempt' } : { on: true, allowed: true, ready: true }) });
   await f.start();
   assert.equal(f.ai.allowed('writing'), false);
-  assert.match(f.pane().textContent, /Checking…/, 'nothing alarming while the attempt is being checked');
+  assert.match(f.pane().textContent, /Checking whether AI can run here…/, 'nothing alarming while the attempt is being checked');
   known = true;
   assert.equal(typeof f.hooks['page:ai'], 'function', 'the frame listens for the page\'s word');
   f.hooks['page:ai'](); await flush();
   assert.equal(f.ai.allowed('writing'), true);
-  assert.doesNotMatch(f.pane().textContent, /Checking…|Settings/);
+  assert.doesNotMatch(f.pane().textContent, /Checking|Settings/);
 });
 
 test('Feedback says why AI can\'t give it, with Settings → AI one click away where the student can change it', async () => {
   const on = { on: true, use: 'main', features: { completion: true, writing: true } };
   const cases = [
-    [{ ...on, on: false }, undefined, /^Writing feedback is off in Settings → AI\./, true],
-    [{ ...on, features: { completion: true, writing: false } }, undefined, /^Writing feedback is off in Settings → AI\./, true],
-    [{ ...on, use: null }, undefined, /^Choose a model in Settings → AI\./, true],
-    [on, { allowed: true, ready: false, why: 'permission', to: 'openrouter.ai' }, /^Allow Glaze to reach openrouter\.ai in Settings → AI\./, true],
-    [on, { allowed: true, ready: false, why: 'download', provider: 'device' }, /^Download the model in Settings → AI\./, true],
-    [on, { allowed: true, ready: false, why: 'downloading', provider: 'device' }, /^Downloading…/, false],
-    [on, { allowed: true, ready: false, why: 'unavailable', provider: 'device' }, /^AI isn’t available right now\./, false],
+    [{ ...on, on: false }, undefined, /^AI is off\. Turn it on in Settings → AI\./, true],
+    [{ ...on, features: { completion: true, writing: false } }, undefined, /^Writing feedback is off\. Turn it on in Settings → AI\./, true],
+    [{ ...on, use: null }, undefined, /^No AI model is chosen\. Choose one in Settings → AI\./, true],
+    [on, { allowed: true, ready: false, why: 'permission', to: 'openrouter.ai' }, /^Glaze needs permission to reach openrouter\.ai\. Allow it in Settings → AI\./, true],
+    [on, { allowed: true, ready: false, why: 'download', provider: 'device' }, /^The on-device model isn’t downloaded\. Download it in Settings → AI\./, true],
+    [on, { allowed: true, ready: false, why: 'downloading', provider: 'device' }, /^Downloading the model…/, false],
+    [on, { allowed: true, ready: false, why: 'unavailable', provider: 'device' }, /^Gemini Nano can’t run on this computer\. Choose another model in Settings → AI\./, true],
+    [on, { type: 'error', error: 'failed' }, /^Glaze couldn’t confirm this page may use AI\. Reload the page to try again\./, false],
   ];
   for (const [settings, st, text, button] of cases) {
     const f = frame({ settings, answer: () => ({ on: settings.on, ...st }) }); await f.start();
@@ -121,13 +123,23 @@ test('Feedback says why AI can\'t give it, with Settings → AI one click away w
   }
 });
 
+test('an attempt Glaze can\'t confirm as an assignment says so after its wait: AI runs on assignments, never on tests', async () => {
+  const clock = { t: 1000 };
+  const f = frame({ clock, answer: () => ({ on: true, allowed: false, why: 'attempt' }) }); await f.start();
+  assert.match(f.pane().textContent, /^Checking whether AI can run here…/);
+  clock.t += 10001;
+  const pane = f.pane();
+  assert.match(pane.textContent, /^AI runs on assignments only, never on tests, and Glaze couldn’t confirm this is an assignment\./);
+  assert.equal(pane.children.some((c) => c.className === 'gz-fb-run'), false, 'nothing in Settings changes it');
+});
+
 test('a download in progress shows its share and checks again once it is in', async () => {
   let done = false;
   const f = frame({ answer: () => (done ? { allowed: true, ready: true, provider: 'device' } : { allowed: true, ready: false, why: 'downloading', provider: 'device' }) });
   await f.start();
   const pane = f.pane();
   f.hooks.runtime({ type: 'glaze:ai-config', event: 'progress', provider: 'device', loaded: 0.42 });
-  assert.match(pane.textContent, /Downloading 42%/);
+  assert.match(pane.textContent, /Downloading the model: 42%/);
   done = true;
   f.hooks.runtime({ type: 'glaze:ai-config', event: 'progress', provider: 'device', loaded: 1 }); await flush();
   assert.equal(f.ai.allowed('writing'), true);
@@ -150,9 +162,12 @@ test('a later attempt nudge rechecks both ready features and closes admission on
 
 test('Feedback availability copy is translated in all five catalogues', () => {
   const I = require('../lib/i18n.js');
-  const keys = ['Checking…', 'Writing feedback is off in Settings → AI.', 'Choose a model in Settings → AI.',
-    'Allow Glaze to reach {host} in Settings → AI.', 'Download the model in Settings → AI.', 'Downloading…',
-    'Downloading {pct}', 'AI isn’t available on this attempt.', 'AI isn’t available right now.', 'Settings'];
+  const keys = ['Checking whether AI can run here…', 'AI is off. Turn it on in Settings → AI.',
+    'Writing feedback is off. Turn it on in Settings → AI.', 'No AI model is chosen. Choose one in Settings → AI.',
+    'Glaze needs permission to reach {host}. Allow it in Settings → AI.', 'The on-device model isn’t downloaded. Download it in Settings → AI.',
+    'Downloading the model…', 'Downloading the model: {pct}', '{provider} can’t run on this computer. Choose another model in Settings → AI.',
+    'Glaze couldn’t confirm this page may use AI. Reload the page to try again.',
+    'AI runs on assignments only, never on tests, and Glaze couldn’t confirm this is an assignment.', 'AI isn’t available right now.', 'Settings'];
   for (const locale of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
     require(`../i18n/${locale}.js`);
     const catalogue = globalThis.GZ_LANGS[locale];
