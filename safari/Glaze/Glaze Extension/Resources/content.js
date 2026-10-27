@@ -806,7 +806,7 @@
   });
 
   // ---- your place in a course (Extras) --------------------------------------------------------
-  // Ultra: a course outline's open folders and how far down it you were; Canvas: how far down a course's Modules list,
+  // Canvas: how far down a course's Modules list,
   // and the item opened last. Put back when you return: features/place.js, loaded where there is a place to keep or put
   // back. Anything you do first (wheel, touch, a key, a click) ends putting it back, so that is watched from the start.
   const ROWS = '.content-list-item[data-content-id]';
@@ -814,10 +814,10 @@
   let acted = 0; // when you last did anything on this page (Canvas: before the list is even there, it ends the restore too)
   let placeAsked = 0; // when the outline or list was first there to put back: anything done after it, while place.js loads, ends that
   const keepPlace = () => {
+    if (ultra) return;
     if (globalThis.GZ_PLACE) return GZ_PLACE.sync();
     if (!settings.enhance.place || !solo || !observer) return;
-    if (ultra ? courseId() && /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/.test(location.pathname) && document.querySelector(ROWS)
-      : canvasCourseKey() && (new URLSearchParams(location.search).get('module_item_id') || (/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container')))) {
+    if (canvasCourseKey() && (new URLSearchParams(location.search).get('module_item_id') || (/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container')))) {
       placeAsked ||= Date.now();
       need('features/place.js', () => globalThis.GZ_PLACE).then(() => GZ_PLACE.sync(), () => {});
     }
@@ -1399,6 +1399,7 @@
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
     if (!s.enhance.keys) globalThis.GZ_KEYS?.off();
+    if (!s.enhance.place) globalThis.GZ_PLACE?.stop(true);
     syncFooter();
     // The light/dark tags only apply to a dark theme: re-sweep when that flips.
     if (dark !== darkTheme) {
@@ -1475,6 +1476,7 @@
     });
   };
   const disable = () => {
+    globalThis.GZ_PLACE?.stop(true);
     hideTip();
     globalThis.GZ_PEEK?.hide();
     if (!ultra) globalThis.GZ_DOWNLOAD?.stop();

@@ -682,7 +682,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     dropNext(cid);
     const f = frames.get(cid);
     if (!f) return;
-    if (ctx.site === 'canvas') f.unwatch?.();
+    f.unwatch?.();
     if (drawerFrom === f) drawerOff();
     if (showing === cid) nudge();
     f.el.remove();
@@ -1164,17 +1164,17 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // A frame is shown once rendered course content has settled. A stalled initial about:blank can be retried once;
   // slow native pages keep loading, with their form state intact, rather than becoming falsely ready.
   const watch = (cid, f) => {
-    if (ctx.site === 'canvas') f.unwatch?.();
+    f.unwatch?.();
     const turn = f.watch = {};
     let t0 = performance.now();
     let changed = t0, mo = null, doc = null, timer = 0;
     const scrolled = () => { changed = performance.now(); };
     const clean = () => {
       mo?.disconnect();
-      if (ctx.site === 'canvas') { clearTimeout(timer); doc?.removeEventListener('scroll', scrolled, true); }
+      clearTimeout(timer); doc?.removeEventListener?.('scroll', scrolled, true);
       mo = null; doc = null;
     };
-    if (ctx.site === 'canvas') f.unwatch = clean;
+    f.unwatch = clean;
     f.slow = false;
     const step = () => {
       if (frames.get(cid) !== f || f.watch !== turn) return clean();
@@ -1188,7 +1188,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         mo.observe(d.body, { subtree: true, childList: true });
         d.addEventListener('scroll', scrolled, { capture: true, passive: true });
       }
-      const built = doc && (ctx.site !== 'canvas' || doc === d && doc !== f.stale) && (cid === PAGE ? !/^\/courses\/\d+/.test(doc.location.pathname) : L.owns(doc.location.pathname, cid)) && (ctx.site === 'canvas' ? canvasContent(doc) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
+      const built = doc && doc === d && doc !== f.stale && (cid === PAGE ? !/^\/courses\/\d+/.test(doc.location.pathname) : L.owns(doc.location.pathname, cid)) && (ctx.site === 'canvas' ? canvasContent(doc) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
         && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]');
       if (built && now - changed > 300) {
         clean();
@@ -1448,6 +1448,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const u = canvasURL(url), c = u && (u.match(/^\/courses\/(\d+)/)?.[1] || PAGE);
       if (c === from && pageable(split(u)[0])) { if (op === 'warm') turnTo(from, u, true); else if (from === showing) { if (from === PAGE) openPage(u); else openAt(from, u); } }
     }
+    else if (op === 'open' && ctx.site !== 'canvas' && from === showing && typeof url === 'string' && url.length < 1300) {
+      let u; try { u = new URL(url, location.origin); } catch { return; }
+      const cid = L.courseOf(u.pathname, u.search);
+      if (u.origin === location.origin && cid) openAt(cid, u.pathname + u.search + u.hash);
+    }
     else if (op === 'open' && ctx.site === 'canvas' && from === showing && typeof url === 'string' && url.length < 1300) {
       const u = canvasURL(url), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
       if (c && c !== from) openAt(c, u);
@@ -1491,7 +1496,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   if (framed && !preview) {
     // Track before load: slow native resources must not leave usable editors unprotected.
     // shortcut: native work without edit/submit events is unknown; use an LMS save-state API when available.
-    for (const event of ['input', 'change', 'submit']) document.addEventListener(event, (e) => { if (on && e.isTrusted) toTop('edited'); }, true);
+    for (const event of ['input', 'change', 'submit']) document.addEventListener(event, (e) => { if (on && e.isTrusted && !e.target?.closest?.('#gz-cmd')) toTop('edited'); }, true);
     addEventListener('message', (e) => {
       if (e.origin !== location.origin || e.source !== window.top) return;
       if (e.data?.gzCtab === 'visible' && typeof e.data.on === 'boolean') {
@@ -1532,7 +1537,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   let restored = false;
   const scrollBack = (top) => {
-    if (/\/outline\/?$/.test(location.pathname) && ctx.settings().enhance.place) return;
+    if (ctx.site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/.test(location.pathname)) return;
     const t0 = Date.now();
     let steady = 0;
     html.setAttribute('data-gz-placing', '');
@@ -1996,9 +2001,22 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     },
     // An address of this site: in a course's frame when a frame is on screen and it is a course page (on Canvas any
     // course's, through its own frame; on Ultra the shown course's), else on this page, as a click on it here would go.
-    open: (href) => {
+    open: (href, options) => {
       let u; try { u = new URL(String(href), location.origin); } catch { return false; }
       if (!on || u.origin !== location.origin) return false;
+      // Palette selections are explicit destinations. A native load avoids tearing down a large outline through
+      // a history-only route that can report success while the old content is still on screen.
+      if (ctx.site === 'ultra' && options?.native) {
+        const cid = L.courseOf(u.pathname, u.search);
+        if (cid) {
+          const url = u.pathname + u.search + u.hash;
+          if (framed) { if (url.length >= 1300) return false; toTop('open', { url }); return true; }
+          // Use the frame owner's normal load lifecycle and unsaved-work guard for the visible course too.
+          if (showing === cid) { openAt(cid, url); return true; }
+          if (showing || cid !== ctx.courseId()) { openAt(cid, url); return true; }
+          return false; // the caller performs native navigation in this document, with its normal unload guards
+        }
+      }
       const page = L.safe(u.pathname, u.search) || (ctx.site === 'canvas' ? L.outside(u.pathname, u.search) : null), url = page && page + (ctx.site === 'canvas' ? u.hash : ''), cid = url && (ctx.site === 'canvas' ? u.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] : showing);
       if (framed) {
         const mine = cid ? cid === framed : framed === PAGE;

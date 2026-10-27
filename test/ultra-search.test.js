@@ -25,7 +25,7 @@ test('public search lists project only safe fields; bodies become text, unavaila
   assert.ok(rows.filter((r) => r.kind !== 'Announcement').every((r) => !('aid' in r)));
   assert.equal(rows[4].url, '/ultra/courses/_101_1/engagement');
   assert.deepEqual(U.searchItems(U.SEARCH_KINDS[0], fixture.contents, { id: '../bad' }, D.html), []);
-  for (const k of U.SEARCH_KINDS) assert.doesNotMatch(k.fields, /contentDetail|contentHandler(?:,|$)|isRead|secret|key|url|links/);
+  for (const k of U.SEARCH_KINDS) assert.doesNotMatch(k.fields, /contentDetail|contentHandler(?:,|$)|isRead|secret|key|url/);
 });
 
 test('Ultra shares the Canvas scheduler, course priority, title ranking, deduplication and 24-result cap', async () => {

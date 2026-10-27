@@ -34,7 +34,7 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
   const get = (path, signal) => fetch(`${location.origin}/api/v1${path}`, { credentials: 'same-origin', headers: { accept: 'application/json+canvas-string-ids' }, signal })
     .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))).then((s) => JSON.parse(s.replace(/^while\(1\);/, '')));
 
-  const go = (url) => globalThis.GZ_CTABS?.bar?.open(url) || location.assign(url);
+  const go = (url) => { globalThis.GZ_PLACE?.stop(); return globalThis.GZ_CTABS?.bar?.open(url, { native: true }) || location.assign(ultra ? new URL(url, location.origin).href : url); };
   // An announcement opens in Glaze's pop-up (features/announce.js) where the settings say so, for the student's own Enter or
   // click; with Ctrl, Cmd, Shift or Alt, or the pop-up unavailable, its page opens as before.
   const announce = (r, e) => {
@@ -126,7 +126,10 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
         const n = await S.search({
           term, courses, cache: ultra ? null : kept, signal: c.signal, get: (p) => get(p, c.signal), ...adapter,
           onBatch: (rs) => {
-            cmd.found.push(...rs.map((r) => ({ label: r.title, hint: r.course, group: r.kind, run: r.aid ? (e) => announce(r, e) : () => go(r.url) })));
+            cmd.found.push(...rs.map((r) => ({ label: r.title, hint: r.course, group: r.kind, run: r.aid ? (e) => announce(r, e) : () => {
+              if (ultra && r.kind === 'Discussion' && /^_\d+_\d+$/.test(r.cid)) try { sessionStorage.setItem('gz-discussion-jump', JSON.stringify({ cid: r.cid, title: r.title, at: Date.now() })); } catch { /* the native list is still available */ }
+              return go(r.url);
+            } })));
             show(true);
           },
         });

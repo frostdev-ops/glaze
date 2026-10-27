@@ -93,7 +93,7 @@ const GZ_SPEC = {
     notes: [false, 'bool'], widgets: [true, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'],
     // sidebar: the page's sidebar, widgets docked under it (lib/sidebar.js).
     sidebar: [true, 'bool'],
-    // place: reopen course content at its saved folders and scroll. coursemenu: each course card's button for its color,
+    // place: remember Canvas Modules position. Ultra retains live course pages. coursemenu: each course card's button for its color,
     // tint and look. tabs: Ultra's course tabs (lib/coursetabs.js).
     place: [true, 'bool'], coursemenu: [true, 'bool'], tabs: [true, 'bool'],
     // docPages: previews in a dark palette, plain, dimmed or inverted (the floating button too); toggles: the floating

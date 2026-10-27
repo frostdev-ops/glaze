@@ -325,7 +325,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     let c = contents.get(cid);
     if (!c || Date.now() - c.at > 300000) {
       c = { at: Date.now(), items: c?.items };
-      c.p = reader().then((r) => r.list(`/learn/api/public/v1/courses/${cid}/contents`, 'id,parentId,title,availability.available,links,contentHandler.isBbPage', true))
+      c.p = reader().then((r) => r.list(`/learn/api/public/v1/courses/${cid}/contents`, 'id,parentId,title,availability.available,links,contentHandler.id,contentHandler.isBbPage', true))
         .then((j) => { c.items = covered(j.items.filter((i) => i.availability?.available !== 'No'), j.complete); renderNew(); return c.items; }, () => c.items || []);
       contents.set(cid, c);
     }

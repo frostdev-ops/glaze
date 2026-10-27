@@ -6,6 +6,12 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Blackboard: returning to Content leaves folder expansion and outline scrolling to Blackboard, avoiding replay work on large courses. Live course-tab switches retain their actual pages.
+- Palette and course search use Blackboard’s canonical content links and native navigation for explicit course destinations. Discussion body results follow the native discussion link when its title is unambiguous.
+- Turning Remember your place off cancels pending restoration; searching in a course tab no longer marks the native course page as edited.
+
 ## [3.4.6] — 2026-10-26
 
 ### Added

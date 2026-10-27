@@ -261,25 +261,14 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       };
       await target.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
       await target.click('.b8b-folder');
-      await opts.evaluate(async () => {
-        const until = performance.now() + 4000;
-        while (performance.now() < until) {
-          if ((await chrome.storage.local.get('coursePlace')).coursePlace?._101_1?.open?.includes('_8130_1')) return true;
-          await new Promise((r) => setTimeout(r, 25));
-        }
-        throw new Error('the native folder expansion was not saved');
-      });
+      ok(await target.locator('.b8b-folder').getAttribute('aria-expanded') === 'true', 'the native folder still expands when selected');
+      // A pre-update folder record must not trigger reconstruction when the routed outline returns.
+      await opts.evaluate(() => chrome.storage.local.set({ coursePlace: { _101_1: { open: ['_8130_1'], top: 640, at: Date.now() } } }));
       await native('a.b8b-document');
       const doc = '/ultra/courses/_101_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
       phase = 'B8b:NATIVE:history'; await target.evaluate(() => history.back()); await target.waitForFunction(() => location.pathname.endsWith('/outline')); await settled('_101_1');
       ok(await target.evaluate(() => location.pathname.endsWith('/outline')), 'Back from a routed document restores the native outline');
-      try { await target.waitForSelector('.b8b-folder[aria-expanded="true"]', { timeout: 5000 }); }
-      catch (error) {
-        const receipt = { native: await target.evaluate(() => ({ page: location.href, folder: document.querySelector('.b8b-folder')?.outerHTML, pagePlace: sessionStorage.getItem('gz-place:_101_1') })),
-          settings: await isolated(() => ({ enabled: GZ_CTX.on(), place: GZ_CTX.settings().enhance.place, loaded: typeof GZ_PLACE, acted: GZ_CTX.acted(), asked: GZ_CTX.placeAsked() })), local: await opts.evaluate(() => chrome.storage.local.get('coursePlace')) };
-        fs.writeFileSync(path.join(out, 'B8b-folder-failure.json'), JSON.stringify(receipt, null, 2)); throw error;
-      }
-      ok(true, 'the existing Your place path restores the open folder after the routed document');
+      ok(await target.locator('.b8b-folder').getAttribute('aria-expanded') === 'false', 'Back leaves the native outline collapsed instead of replaying saved folders');
       await target.evaluate(() => history.forward()); await target.waitForFunction(() => location.pathname.includes('/document/')); await settled('_101_1');
       ok(await target.evaluate(() => location.pathname + location.search) === doc && (await strip())?.at === 'routed', 'Forward restores the routed document with its strip and query');
       for (const at of ['above', 'between', 'below']) {

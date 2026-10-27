@@ -214,12 +214,12 @@ not those unknown legacy copies or unrelated stickers.
 - **Canvas badge records**, in `chrome.storage.local`, on this device only: the site's address, signed-in
   user's id and course id, with module-item ids, which ones you've seen, unread-grade counts and fetch
   times. These let badges share a five-minute cache between pages and keep accounts separate.
-- **Where you were in each course** (the "Remember your place" Extra, on by default), in
-  `chrome.storage.local`, on this device only: for up to 30 courses, which folders of its content you
-  left open and how far down you had scrolled, so coming back opens and scrolls them again. A copy of
-  the same is kept in that browser tab's session storage on your Blackboard site, so a reload finds it
-  even right after Glaze updates; the browser clears it when the tab closes. On Canvas this keeps your
-  scroll position in Modules and the last module-item id you opened; Canvas keeps modules open or closed itself.
+- **Canvas Modules position** (the "Remember your place" Extra, on by default), in
+  `chrome.storage.local`, on this device only: for up to 30 courses, your scroll position and last
+  module-item id. A tab-local session copy is cleared when the tab closes. Canvas owns module
+  expansion. Older Blackboard folder records may remain stored but are no longer read or replayed;
+  live course tabs retain their native page state until their frames are closed or evicted.
+- **Pending discussion navigation**, in tab session storage: one course id, selected discussion title and timestamp, consumed on the destination list and ignored after 15 seconds. This resolves Blackboard’s different discussion and content ids through its native links.
 - **What-if** (Canvas and Blackboard), in `chrome.storage.local`, on this device only, per site and signed-in user id:
   for up to 100 courses, the course id with the assignment ids and scores you typed (and the real grade each
   was typed against), the ids of work you left out, your pretend assignments (the name you gave, points and

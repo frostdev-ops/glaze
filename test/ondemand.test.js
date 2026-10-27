@@ -394,7 +394,7 @@ test('the document buttons load on a course document or a file preview, with the
 test('your place loads on a course\'s Modules or an item opened from it (Canvas), or a course outline (Ultra)', () => {
   for (const [why, ultra, pathname, search, rows, loads] of [['Modules', false, '/courses/5/modules', '', true, 1], ['course home without modules', false, '/courses/5', '', false, 0],
     ['an item from Modules', false, '/courses/5/assignments/9', '?module_item_id=3', false, 1], ['another course page', false, '/courses/5/assignments/9', '', true, 0],
-    ['an outline', true, '/ultra/courses/_1_1/outline', '', true, 1], ['an outline still empty', true, '/ultra/courses/_1_1/outline', '', false, 0]]) {
+    ['an outline', true, '/ultra/courses/_1_1/outline', '', true, 0], ['an outline still empty', true, '/ultra/courses/_1_1/outline', '', false, 0]]) {
     const h = hooks('  // ---- your place in a course (Extras)', '  // ---- what-if calculator (Extras)', {
       ultra, URLSearchParams, courseId: () => '_1_1', canvasCourseKey: () => 'canvas:x/5', location: { pathname, search }, api: 'keepPlace' });
     h.ctx.settings.enhance.place = true;
@@ -429,19 +429,19 @@ const ultraPlace = async (touch) => {
   vm.runInContext(`${block('  // ---- your place in a course (Extras)', '  // ---- what-if calculator (Extras)')}
     globalThis.api = { keepPlace, tapped: () => tapped, acted: () => acted, placeAsked: () => typeof placeAsked === 'undefined' ? 0 : placeAsked };`, ctx);
   ctx.api.keepPlace();
-  assert.deepEqual(loads.map((l) => l.file), ['features/place.js']);
+  assert.deepEqual(loads.map((l) => l.file), []);
   if (touch) for (const f of listeners.wheel) f({ isTrusted: true });
   ctx.GZ_CTX = { site: 'ultra', settings: () => ctx.settings, on: () => true, local: (fn) => fn(ctx.chrome.storage.local), courseId: ctx.courseId, canvasCourseKey: ctx.canvasCourseKey,
     toggleOf: () => toggle, ROWS: '.content-list-item[data-content-id]', holding: () => false, tapped: ctx.api.tapped, acted: ctx.api.acted, placeAsked: ctx.api.placeAsked, solo: true };
   vm.runInContext(fs.readFileSync(require.resolve('../features/place.js'), 'utf8'), ctx);
-  loads[0].p.resolve();
+  ctx.GZ_PLACE.sync();
   await settle();
   for (let i = 0; i < 5 && t.due.length; i++) t.due.shift().f(); // a few of the restore's 200 ms steps
   return clicks;
 };
 
-test('Ultra: a place is put back when the outline loads, but not if you did something while place.js was on its way', async () => {
-  assert.equal(await ultraPlace(false), 1, 'nothing done: its folder unfolds again');
+test('Ultra leaves saved folder expansion to the native outline, including legacy lazy injections', async () => {
+  assert.equal(await ultraPlace(false), 0, 'legacy saved folders are not replayed');
   assert.equal(await ultraPlace(true), 0, 'a wheel while the file loaded: left as you have it');
 });
 

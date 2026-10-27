@@ -24,9 +24,10 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const ULTRA_EXTRAS = { ...EXTRAS, hideFolders: 'Hide folders', pet: 'Pet habitat', dashboard: 'Glaze Dashboard', tabs: 'Course tabs', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
+    globalThis.GZ_PLACE?.stop();
     let u;
     try { u = new URL(url, location.origin); } catch { return; }
-    if (u.protocol === 'https:' || u.protocol === 'http:') globalThis.GZ_CTABS?.bar?.open(u.href) || location.assign(u.href); // this site's pages through the course tabs when they run
+    if (u.protocol === 'https:' || u.protocol === 'http:') globalThis.GZ_CTABS?.bar?.open(u.href, { native: true }) || location.assign(u.href); // this site's pages through the course tabs when they run
   };
   // Ultra's Institution page is Glaze's Dashboard while its switch is on (features/dashboard.js).
   const dash = () => (ctx.settings().enhance.dashboard ? [['/ultra/institution-page', 'Dashboard']] : []);
@@ -35,7 +36,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const store = (patch, look) => () => { try { if (look) chrome.runtime.sendMessage({ type: 'glaze:look', parts: null, look: look.name, patch: { version: 2, ...patch } }).catch(() => {}); else chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
     const title = new Map(all.map((c) => [c.id, c.title]));
-    return all.filter((c) => c.links?.[0]?.href).map((c) => ({ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(c.links[0].href.replace(/^https?:\/\/[^/]+/, '')) }));
+    return all.flatMap((c) => { const url = globalThis.GZ_ULTRA?.contentLink(c, cid, location.origin); return url ? [{ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(url) }] : []; });
   });
   // The due items, "in 2 days · Thu 11:59 PM · ENG1001", each opening its item: on Canvas at its own address, on Ultra
   // at the address the content API gives it (as "In this course" does), or its course when it has none.
@@ -43,7 +44,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     const now = new Date();
     const lang = GZ_I18N.locale(locale());
     return due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' }), nickOf(d.cid) || d.course || ctx.courseList()[d.cid]?.name].filter(Boolean).join(' · '), group: 'Due this week',
-      run: d.url ? go(d.url) : () => (d.content ? courseItems(d.cid).p : Promise.resolve([])).then((all) => go(all.find((c) => c.id === d.content)?.links?.[0]?.href.replace(/^https?:\/\/[^/]+/, '') || `/ultra/courses/${d.cid}/outline`)()) }));
+      run: d.url ? go(d.url) : () => (d.content ? courseItems(d.cid).p : Promise.resolve([])).then((all) => go(globalThis.GZ_ULTRA?.contentLink(all.find((c) => c.id === d.content), d.cid, location.origin) || `/ultra/courses/${d.cid}/outline`)()) }));
   };
   // Glaze's own switches, the same on both sites but for the extras.
   const glazeCmds = () => {
@@ -216,6 +217,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   // Canvas and Ultra share content search; Moodle has no adapter.
   const searchHere = () => !moodle && ctx.settings().enhance.search;
   const openCmd = () => {
+    globalThis.GZ_PLACE?.stop();
     const box = document.createElement('div');
     box.id = 'gz-cmd';
     const panel = document.createElement('div');

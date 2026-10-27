@@ -133,7 +133,7 @@ test('panel and course links navigate when the course-tab controller declines th
 
 test('inactive course tabs explicitly decline navigation', () => {
   const src = fs.readFileSync(require.resolve('../features/coursetabs.js'), 'utf8');
-  const open = vm.runInNewContext('({' + src.slice(src.lastIndexOf('    open: (href) => {'), src.indexOf('\n  };', src.lastIndexOf('    open: (href) => {'))) + '\n}).open;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
+  const open = vm.runInNewContext('({' + src.slice(src.lastIndexOf('    open: (href, options) => {'), src.indexOf('\n  };', src.lastIndexOf('    open: (href, options) => {'))) + '\n}).open;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     URL, location, on: false, framed: false,
   });
   assert.equal(open('/profile'), false);

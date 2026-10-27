@@ -54,9 +54,26 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     return { found, skipped, failed };
   };
 
-  // Search reads public lists only. Project before caching: no handler objects, launch URLs, read state or LTI data.
+  // The outline id of a course link is not necessarily its destination id. Only the API's same-site UI
+  // alternate is authoritative; API self links and foreign launch URLs must not become palette destinations.
+  const contentLink = (item, cid, origin = 'https://ultra.invalid') => {
+    if (!ID.test(cid)) return null;
+    const link = arr(item?.links).find((l) => l?.rel === 'alternate');
+    if (link) {
+      try {
+        const u = new URL(link.href, origin), q = ['courseId', 'course_id'].flatMap((k) => u.searchParams.getAll(k));
+        const own = u.pathname.startsWith(`/ultra/courses/${cid}/`);
+        if (u.origin === origin && q.every((id) => id === cid) && (own || u.pathname === '/ultra/redirect' && q.length)) return u.pathname + u.search + u.hash;
+      } catch { /* malformed or foreign UI link */ }
+      return null;
+    }
+    if (!ID.test(cid) || !ID.test(item?.id) || item?.contentHandler?.id === 'resource/x-bb-courselink') return null;
+    return `/ultra/redirect?redirectType=nautilus&courseId=${cid}&contentId=${item.id}`;
+  };
+
+  // Search reads public lists only. Cache text and validated UI destinations, never handler objects or LTI data.
   const SEARCH_KINDS = [
-    { kind: 'Document', list: 'contents', fields: 'id,parentId,title,availability,body,contentHandler.id', also: '&recursive=true' },
+    { kind: 'Document', list: 'contents', fields: 'id,parentId,title,availability,body,contentHandler.id,links', also: '&recursive=true' },
     { kind: 'Announcement', list: 'announcements', fields: 'id,title,body,availability' },
     { kind: 'Discussion', list: 'discussions', fields: 'id,title,available,topic.body,topic.status' },
   ];
@@ -85,7 +102,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       return until;
     };
   };
-  const searchItems = (k, items, course, text, now = Date.now()) => {
+  const searchItems = (k, items, course, text, now = Date.now(), origin) => {
     if (!ID.test(course?.id)) return [];
     const visible = visibleIn(items, now);
     const labels = { document: 'Document', folder: 'Folder', lesson: 'Module', 'asmt-test-link': 'Test', file: 'File' };
@@ -107,15 +124,17 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
         if (x.availability?.available === 'No' || ms(d?.start) > now || end !== null && end < now) return null;
         until = end ?? Infinity;
       }
+      const url = k.list === 'contents' ? contentLink(x, course.id, origin) : `/ultra/courses/${course.id}/${k.list === 'discussions' ? 'engagement' : 'announcements'}`;
+      if (!url) return null;
       return {
         key: `${course.id}/${k.list}:${x.id}`, title: str(x.title).trim(), kind, course: course.name, until,
         // B0 confirms nautilus redirects. The other destinations are native course tool lists, corroborated by GZ_TABS.
-        url: k.list === 'contents' ? `/ultra/redirect?redirectType=nautilus&courseId=${course.id}&contentId=${x.id}`
-          : `/ultra/courses/${course.id}/${k.list === 'discussions' ? 'engagement' : 'announcements'}`,
+        url,
         // shortcut: first 100,000 HTML characters / 20,000 text characters per item; measure before indexing larger documents.
         text: text(str(k.list === 'discussions' ? x.topic?.body : x.body, 100000)).slice(0, 20000),
         // An announcement's course and id, for Glaze's pop-up (features/announce.js).
         ...(k.list === 'announcements' && { cid: course.id, aid: x.id }),
+        ...(k.list === 'discussions' && { cid: course.id }),
       };
     }).filter(Boolean);
   };
@@ -382,7 +401,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
         const cid = course?.id;
         if (!ID.test(cid) || !SEARCH_KINDS.includes(k)) return [];
         const result = await list(`/learn/api/public/v1/courses/${cid}/${k.list}`, k.fields, !!k.also);
-        return Object.defineProperty(searchItems(k, result.items, course, text), 'complete', { value: result.complete });
+        return Object.defineProperty(searchItems(k, result.items, course, text, Date.now(), origin), 'complete', { value: result.complete });
       },
       me: () => get('/learn/api/v1/users/me').then((m) => (ID.test(m?.id) ? m.id : Promise.reject(new Error('no user')))),
       memberships: (uid) => all(`/learn/api/v1/users/${uid}/memberships?expand=course&limit=200`),
@@ -497,7 +516,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     },
   };
 
-  return { SEARCH_KINDS, searchItems, PEEK_FIELDS, peekItem, FILES_FIELDS, attachments, files, courses, ownDates, list, current, standing, due, work, grade, trend, slices, read, planner, excepts, page, STALE };
+  return { contentLink, SEARCH_KINDS, searchItems, PEEK_FIELDS, peekItem, FILES_FIELDS, attachments, files, courses, ownDates, list, current, standing, due, work, grade, trend, slices, read, planner, excepts, page, STALE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_ULTRA; else GZ_ULTRA;
