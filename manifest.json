@@ -191,9 +191,9 @@
     {
       "resources": [
         "lib/scene.js",
-        "lib/three.min.js",
+        "lib/three.js",
         "lib/scene-media.js",
-        "lib/lottie/lottie_light_canvas.min.js",
+        "lib/lottie/lottie_light_canvas.js",
         "reader.html",
         "fonts/*.woff2"
       ],

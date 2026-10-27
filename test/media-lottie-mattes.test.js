@@ -6,14 +6,14 @@ const path = require('node:path');
 const M = require('../lib/media.js');
 
 // Exercise the shipped canvas layer constructor with tiny stand-in canvases: no decoder or pixel buffers are created.
-const player = fs.readFileSync(path.join(__dirname, '../lib/lottie/lottie_light_canvas.min.js'), 'utf8');
-const start = player.indexOf('createContainerElements:function(){if(this.data.tt>=1)');
-const end = player.indexOf(',createContent:function()', start);
+const player = fs.readFileSync(path.join(__dirname, '../lib/lottie/lottie_light_canvas.js'), 'utf8');
+const start = player.indexOf('createContainerElements: function createContainerElements() {\n      // If the layer is masked');
+const end = player.indexOf(',\n    createContent: function createContent()', start);
 assert.ok(start > 0 && end > start);
 const allocations = [];
-const makeLayer = vm.runInNewContext(`(${player.slice(start + 'createContainerElements:'.length, end)})`, {
-  Rs: { createCanvas: (w, h) => { const canvas = { width: w, height: h }; allocations.push(canvas); return canvas; }, loadLumaCanvas() {} },
-  zs: function () {}, document: {},
+const makeLayer = vm.runInNewContext(`(${player.slice(start + 'createContainerElements: '.length, end)})`, {
+  assetLoader: { createCanvas: (w, h) => { const canvas = { width: w, height: h }; allocations.push(canvas); return canvas; }, loadLumaCanvas() {} },
+  CVEffects: function () {}, document: {},
 });
 
 test('the shipped Lottie player allocates two viewport canvases for every matte layer', () => {

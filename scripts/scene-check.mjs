@@ -1,7 +1,7 @@
 // Headless checks for lib/scene.js and lib/glsl.js in a real browser: built-in scenes unchanged, the three example shaders,
 // a heavy shader stepping down, a refused shader never reaching GL, motion off, context loss, layers.
 //   nice -n 10 node scripts/scene-check.mjs [--out=dir] [--angle=metal|swiftshader|default] [--base=<git ref>] [--run=a,b,c] [--vp=WxH]
-// --base is the revision whose lib/scene.js and lib/three.min.js the built-in scenes are compared with (default: the
+// --base is the revision whose lib/scene.js and three.js build the built-in scenes are compared with (default: the
 // revision this branch was cut from, read as merge-base with `mods`). One headless browser at a time across agents: it waits
 // while another is running, and kills its own and deletes its profile whatever happens. Exit code 1 if any check fails.
 import http from 'node:http';
@@ -34,7 +34,11 @@ const BIN = find();
 const ref = opt.base || git('merge-base', 'HEAD', 'mods').trim();
 const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-scene-base-'));
 fs.mkdirSync(path.join(baseDir, 'lib'));
-for (const f of ['scene.js', 'three.min.js']) fs.writeFileSync(path.join(baseDir, 'lib', f), git('show', `${ref}:lib/${f}`));
+// three.js was lib/three.min.js before 3.4.6: take whichever the base has, under the name its scene.js imports.
+for (const f of ['scene.js', 'three.js', 'three.min.js']) {
+  let src; try { src = execFileSync('git', ['show', `${ref}:lib/${f}`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { continue; }
+  fs.writeFileSync(path.join(baseDir, 'lib', f), src);
+}
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.glsl': 'text/plain' };
 const server = http.createServer((req, res) => {

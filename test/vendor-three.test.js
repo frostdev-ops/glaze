@@ -58,13 +58,13 @@ test('the integrity check runs on the installed tree before esbuild does', () =>
   assert.match(code, /npm-integrity\.js "\$tmp\/node_modules\/\.package-lock\.json"/);
 });
 
-test('the build is compared with the recorded hash of lib/three.min.js, which is the checked-in file', () => {
+test('the build is compared with the recorded hash of lib/three.js, which is the checked-in file', () => {
   const recorded = variable('file_sha256');
   assert.match(recorded, /^[0-9a-f]{64}$/);
-  assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'lib/three.min.js'))).digest('hex'), recorded,
-    'rebuild with scripts/vendor-three.sh and record the new hash, rather than editing lib/three.min.js by hand');
+  assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'lib/three.js'))).digest('hex'), recorded,
+    'rebuild with scripts/vendor-three.sh and record the new hash, rather than editing lib/three.js by hand');
   assert.match(code, /file_sha256/);
-  assert.match(read('lib/three.min.js').split('\n')[0], new RegExp(`^// three\\.js ${variable('three_version').replace(/\./g, '\\.')} `));
+  assert.match(read('lib/three.js').split('\n')[0], new RegExp(`^// three\\.js ${variable('three_version').replace(/\./g, '\\.')} `));
 });
 
 // ---- the checker ----

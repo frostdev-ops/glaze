@@ -429,15 +429,20 @@ test('check refuses what is not a media file, and the limits for a sticker are t
 });
 
 // ---- the vendored player ------------------------------------------------------------------------------------------------
-test('the Lottie player in lib/lottie/ is the pinned official light canvas build, unmodified under its one comment line, with its licence', () => {
+test('the Lottie player in lib/lottie/ is the pinned official readable light canvas build, with one comment line, one cut and its licence', () => {
   const crypto = require('node:crypto');
   const script = fs.readFileSync(path.join(__dirname, '../scripts/vendor-lottie.sh'), 'utf8');
-  const version = /^version=(\S+)$/m.exec(script)[1], pinned = /^file_sha256=([0-9a-f]{64})$/m.exec(script)[1];
-  const file = fs.readFileSync(path.join(__dirname, '../lib/lottie/lottie_light_canvas.min.js'), 'utf8');
-  const [header, ...rest] = file.split('\n');
-  assert.equal(header, `// lottie-web ${version} light canvas build (MIT, lib/lottie/LICENSE), as published, after this line. Fetched by scripts/vendor-lottie.sh.`);
-  assert.equal(crypto.createHash('sha256').update(rest.join('\n')).digest('hex'), pinned, 'the file is the build the script pins');
+  const version = /^version=(\S+)$/m.exec(script)[1], out = /^out_sha256=([0-9a-f]{64})$/m.exec(script)[1];
+  const file = fs.readFileSync(path.join(__dirname, '../lib/lottie/lottie_light_canvas.js'), 'utf8');
+  assert.equal(file.split('\n')[0], `// lottie-web ${version} light canvas build (MIT, lib/lottie/LICENSE), as published after this line but for one cut. Fetched by scripts/vendor-lottie.sh.`);
+  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), out, 'the file is what the script builds from the pinned release');
+  assert.match(/^file_sha256=([0-9a-f]{64})$/m.exec(script)[1], /^[0-9a-f]{64}$/);
   assert.match(/^tarball_sha256=([0-9a-f]{64})$/m.exec(script)[1], /^[0-9a-f]{64}$/);
+  // Readable, not minified: the Chrome Web Store can take minified code for obfuscation.
+  assert.ok(file.split('\n').every((l) => l.length < 600), 'no minified lines');
+  // The one cut: lottie's optional Web Worker, built from a function's own text, is gone.
+  assert.match(file, /scripts\/vendor-lottie\.sh cut the Web Worker/);
+  assert.doesNotMatch(file, /new Worker\(|fn\.toString\(\)/);
   assert.match(fs.readFileSync(path.join(__dirname, '../lib/lottie/LICENSE'), 'utf8'), /^\s*The MIT License \(MIT\)/);
   // The light build has no expressions: nothing in it turns text into code, and it fetches or imports nothing of its own accord.
   assert.doesNotMatch(file, /\beval\s*\(|new\s+Function\s*\(|\bFunction\s*\(\s*["'`]|importScripts|\bimport\s*\(/);
@@ -448,7 +453,7 @@ test('the Lottie player in lib/lottie/ is the pinned official light canvas build
 test('the page may load the player and the media module, and the first script loads neither', () => {
   const manifest = require('../manifest.json');
   const web = manifest.web_accessible_resources.flatMap((e) => e.resources);
-  for (const f of ['lib/scene-media.js', 'lib/lottie/lottie_light_canvas.min.js']) {
+  for (const f of ['lib/scene-media.js', 'lib/lottie/lottie_light_canvas.js']) {
     assert.ok(web.includes(f), `${f} is web-accessible`);
     assert.ok(fs.existsSync(path.join(__dirname, '..', f)), `${f} exists`);
     assert.ok(!manifest.content_scripts.some((c) => c.js.includes(f)), `${f} is not in a content script's list`);

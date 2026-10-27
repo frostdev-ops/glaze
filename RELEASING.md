@@ -50,7 +50,7 @@ It never moves a published tag or replaces a published asset with different byte
      code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js is the readable legacy build with a compatibility
      shim and core-js's old-IE fallback cut, three.js is a custom build, and lottie-web's player is the official light canvas build with one comment line on top. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh` and `scripts/vendor-lottie.sh`.
      `vendor-three.sh` installs exact versions with install scripts off, checks every installed package against a pinned
-     SHA-512 integrity before running anything, and compares the result with the recorded hash of `lib/three.min.js`.
+     SHA-512 integrity before running anything, and compares the result with the recorded hash of `lib/three.js`.
    - App Store: `sh scripts/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh scripts/appstore-ios.sh`.
 
 ### CI

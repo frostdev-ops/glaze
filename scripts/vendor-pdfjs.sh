@@ -7,7 +7,9 @@
 # Safari 17.4), so a one-line fallback goes on top of both modules. The readable modules, not the minified ones: the
 # Chrome Web Store rejects minified pdf.js as obfuscated (2026-10-26). For the same review, core-js's Object.create
 # fallback for old Internet Explorer (an ActiveX document, or an iframe at a script URL) is cut; every browser Glaze
-# supports has Object.create, so it never ran. The tarball is checked against the SHA-256 pinned here. Run it to
+# supports has Object.create, so it never ran. So is core-js's last way to find the global object, a function made from
+# text (globalThis always answers first), and scripts/vendor-pdfjs-brotli.js has the worker read Brotli's dictionary from
+# google/brotli's dictionary.bin (pinned here, MIT) instead of the XORed string pdf.js packs it in. The tarball is checked against the SHA-256 pinned here. Run it to
 # upgrade pdf.js (new version, new hash); the output is checked in, so the extension itself still has no build step.
 # Usage: scripts/vendor-pdfjs.sh
 set -euo pipefail
@@ -15,6 +17,10 @@ cd "$(dirname "$0")/.."
 
 version=6.4.299
 sha256=86269b40170eb41740ea05ad2102d71d33de4f122b34eb2f478be0ea7779c415
+# google/brotli at v1.2.0: c/common/dictionary.bin (the RFC 7932 dictionary) and the licence it is under.
+brotli=028fb5a23661f123017c060daa546b55cf4bde29
+brotli_dictionary_sha256=20e42eb1b511c21806d4d227d07e5dd06877d8ce7b3a817f378f313653f35c70
+brotli_license_sha256=3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -37,7 +43,7 @@ for (const file of process.argv.slice(2)) {
   let src = fs.readFileSync(file, 'utf8');
   const cut = (pattern, replacement = '') => {
     const hits = src.match(pattern)?.length ?? 0;
-    if (hits !== 1) throw new Error(`${file}: core-js's object-create.js changed (${hits} matches of ${pattern}); update this cut`);
+    if (hits !== 1) throw new Error(`${file}: core-js changed (${hits} matches of ${pattern}); update this cut`);
     src = src.replace(pattern, replacement);
   };
   cut(/^\/\* global ActiveXObject -- old IE, WSH \*\/\n/gm);
@@ -46,10 +52,19 @@ for (const file of process.argv.slice(2)) {
   cut(/^var scriptTag = function \(content\) \{\n[\s\S]*?\n  return NullProtoObject\(\);\n\};\n/gm,
     '// Only without Object.create. scripts/vendor-pdfjs.sh replaced core-js\'s old Internet Explorer fallback here.\n' +
     'var NullProtoObject = function () { return { __proto__: null }; };\n');
+  cut(/^  \/\/ eslint-disable-next-line no-new-func -- fallback\n  \(function \(\) \{ return this; \}\)\(\) \|\| Function\('return this'\)\(\);\n/gm,
+    '  // scripts/vendor-pdfjs.sh cut core-js\'s function-from-text fallback here: every browser Glaze supports has globalThis.\n' +
+    '  (function () { return this; })();\n');
   if (/ActiveXObject|javascript:|['"]java['"]\s*\+/i.test(src)) throw new Error(`${file}: old-IE code is left`);
+  if (/\beval\s*\(|(^|[^\w$.])Function\s*\(\s*['"`]/.test(src)) throw new Error(`${file}: code made from text is left`);
   fs.writeFileSync(file, src);
 }
 EOF
+curl -fsSL -o lib/pdfjs/brotli-dictionary.bin "https://raw.githubusercontent.com/google/brotli/$brotli/c/common/dictionary.bin"
+curl -fsSL -o lib/pdfjs/LICENSE_BROTLI "https://raw.githubusercontent.com/google/brotli/$brotli/LICENSE"
+echo "$brotli_dictionary_sha256  lib/pdfjs/brotli-dictionary.bin" | shasum -a 256 -c - >/dev/null
+echo "$brotli_license_sha256  lib/pdfjs/LICENSE_BROTLI" | shasum -a 256 -c - >/dev/null
+node scripts/vendor-pdfjs-brotli.js lib/pdfjs/pdf.worker.mjs lib/pdfjs/brotli-dictionary.bin
 cp "$src/LICENSE" lib/pdfjs/LICENSE
 for f in jbig2.wasm openjpeg.wasm LICENSE_JBIG2 LICENSE_PDFJS_JBIG2 LICENSE_OPENJPEG LICENSE_PDFJS_OPENJPEG; do cp "$src/wasm/$f" lib/pdfjs/; done
 

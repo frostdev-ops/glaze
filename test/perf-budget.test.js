@@ -262,7 +262,7 @@ test('the detector that Safari runs on every other https page stays under 2 KB',
 // first content script, loaded on demand or in the extension's pages. Not the vendored three.js or OCR engine, nor the tools,
 // tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
 const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server']);
-const VENDORED = new Set(['lib/three.min.js', 'lib/tesseract/tesseract-core-simd-lstm.js', 'lib/lottie/lottie_light_canvas.min.js']); // pdf.js is .mjs, not scanned
+const VENDORED = new Set(['lib/three.js', 'lib/tesseract/tesseract-core-simd-lstm.js', 'lib/lottie/lottie_light_canvas.js']); // pdf.js is .mjs, not scanned
 // Only what git tracks: releases are packaged from a fresh checkout, so an untracked folder (another project's build) isn't Glaze.
 const shipped = (top) => execFileSync('git', ['ls-files', '-z', '--', '*.js'], { cwd: top, encoding: 'utf8' }).split('\0').filter((f) => {
   const parts = f.split('/');
@@ -408,7 +408,7 @@ test('the scans read only the files git tracks: an untracked folder in the check
 });
 
 test('the scans see the code they are meant to', () => {
-  assert.ok(CODE.includes('content.js') && CODE.includes('content-ultra.js') && CODE.includes('content-canvas.js') && CODE.includes('lib/background.js') && CODE.includes('i18n/de.js') && !CODE.includes('lib/three.min.js'));
+  assert.ok(CODE.includes('content.js') && CODE.includes('content-ultra.js') && CODE.includes('content-canvas.js') && CODE.includes('lib/background.js') && CODE.includes('i18n/de.js') && !CODE.includes('lib/three.js'));
   assert.ok(!CODE.some((f) => f.startsWith('scripts/') || f.startsWith('test/') || f.startsWith('safari/')));
   // The forms a change might use, each caught.
   const forms = ['setInterval(f, 10)', 'setInterval (f, 10)', 'setInterval/* x */(f, 10)', 'window.setInterval(f, 10)', "window['setInterval'](f, 10)",
