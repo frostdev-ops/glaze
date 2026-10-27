@@ -105,7 +105,7 @@ var GZ_WRITER_TARGET = globalThis.GZ_WRITER_TARGET || (() => {
     if (/\b(?:each of (?:your|the) \d+ (?:posts|parts)|exclud(?:ing|e)|except|or \d+ pages?)\b/.test(sentence) || /\b(?:the|this|assigned|provided) (?:article|passage|excerpt|chapter|text) (?:contains?|has|is)\b/.test(sentence)) return true;
     if (/\b(?:read|review|summarize|analyse|analyze)\b.*\b\d+[ -]words? (?:article|passage|excerpt|chapter|text|example)\b/.test(sentence)) return true;
     // sources/replies have only a minimum field; an upper bound must never masquerade as that minimum.
-    return counts && /\b(?:no more than|at most|up to|maximum|max|fewer than|less than|under|or fewer|or less)\b/.test(sentence);
+    return counts && /\b(?:(?:no|not) more than|at most|up to|maximum|max|fewer than|less than|under|or fewer|or less|not exceed|not to exceed|limited to)\b/.test(sentence);
   };
 
   // Each rule: a regex with (?<a>N) and maybe (?<b>N), and what it says. Built once per language.
@@ -220,8 +220,16 @@ var GZ_WRITER_TARGET = globalThis.GZ_WRITER_TARGET || (() => {
         continue;
       }
       if (!(a > 0)) continue;
-      if ((type === 'min' || type === 'max') && g.cue && C.flip.test(g.cue.trim()) && C.penalty.test(s.slice(x.end, sentenceOf(s, x.start)[1]))) type = type === 'min' ? 'max' : 'min';
-      scope[type].push(a);
+      let value = a;
+      const cue = g.cue?.trim() || '', penalty = C.penalty.test(s.slice(x.end, sentenceOf(s, x.start)[1]));
+      if (/^(?:exceeding|exceeds?)$/.test(cue)) {
+        type = penalty ? 'max' : 'min';
+        if (!penalty) value++;
+      } else if (C.flip.test(cue)) {
+        if (penalty) type = type === 'min' ? 'max' : 'min';
+        else value += type === 'min' ? 1 : -1;
+      }
+      if (value > 0) scope[type].push(value);
     }
     const side = (k) => {
       const min = settle(k.min) ?? (k.min.length ? null : settle(k.target)), max = settle(k.max);
@@ -234,7 +242,7 @@ var GZ_WRITER_TARGET = globalThis.GZ_WRITER_TARGET || (() => {
     const got = { general: [], reply: [] };
     for (const x of scan(s, rules)) {
       if (uncertain(s, x, true)) continue;
-      const v = number(x.m.groups.a, C);
+      const v = number(x.m.groups.a, C) + (/\b(?:more than|over|in excess of) \d+\b/.test(x.m[0]) ? 1 : 0);
       if (!(v > 0) || v > 50) continue;
       (scoped && ofReplies(s, x, C) ? got.reply : got.general).push(v);
     }
