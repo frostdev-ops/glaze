@@ -45,7 +45,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // ---- a box's life: asked for, opened, written in, given back -------------------------------------------------------
   let seq = 0;
   const mount = async (b) => {
-    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, display: null };
+    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, path: location.pathname, display: null };
     boxes.set(b.editor, box);
     b.root.setAttribute('data-gz-writer', b.kind);
     b.container.setAttribute('data-gz-writer-id', box.id);
@@ -112,6 +112,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     return (d.content || d).textContent === ed.textContent;
   };
   const sync = (box, h) => {
+    if (h !== box.latest) box.sending = false;
     box.latest = h;
     const r = main('set', { id: box.id, html: h });
     const ok = r?.ok && r.html === box.editor.innerHTML && sameText(box.editor, h);
@@ -122,15 +123,16 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // Ctrl/Cmd+Enter: Post, Reply or Send, once, when Ultra allows it (its Angular may enable the button a moment after
   // the edit that fills the box).
   const send = (box, again = true) => {
-    if (!SENDS.has(box.kind) || !sync(box, box.latest)) return;
-    const b = box.send?.isConnected ? box.send : U().sendOf(box.editor, box.kind);
-    if (U().enabled(b)) b.click();
-    else if (again) setTimeout(() => { if (boxes.get(box.editor) === box) send(box, false); }, 60);
+    if (box.sending || box.retry || box.path !== location.pathname || !SENDS.has(box.kind) || U().kindOf(box.editor, { path: location.pathname }) !== box.kind || !sync(box, box.latest)) return;
+    const b = U().sendOf(box.editor, box.kind);
+    if (b?.isConnected && U().enabled(b)) { box.sending = true; b.click(); }
+    else if (again) box.retry = setTimeout(() => { box.retry = null; if (boxes.get(box.editor) === box) send(box, false); }, 60);
   };
   // The frame out and Ultra's editor back, as it was.
   const drop = (box) => {
     boxes.delete(box.editor);
     clearTimeout(box.wait);
+    clearTimeout(box.retry);
     box.observer?.disconnect();
     box.port?.close();
     box.frame?.remove();
