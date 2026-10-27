@@ -101,6 +101,24 @@ const restore = async (dev, file, ticked, account) => {
 };
 const reasonOf = (p) => p.then(() => 'read', (e) => e.why);
 
+test('Papers, their JSON documents, versions and presets survive a backup restore', async () => {
+  const PA = require('../lib/writer-papers.js'), key = 'bb.school.test|_900_1|_101_1|_7_1';
+  const doc = { type: 'doc', content: [{ type: 'paragraph', attrs: { first: 0 }, content: [{ type: 'text', text: 'Paper before backup.' }] }] };
+  const a = device(), P = PA.open(a.local);
+  await P.save(key, { doc, format: 'mla9', title: 'Kept paper' });
+  await P.savePreset('bb.school.test|_900_1', { id: 'custom:one', label: 'One', base: 'mla9' });
+  const b = device(), file = await backUp(a), result = await restore(b, file, ['papers']);
+  assert.ok(result.plan.cats.papers, 'the backup must include papers');
+  assert.deepEqual(result.out.failed, []);
+  const Q = PA.open(b.local);
+  assert.equal((await Q.get(key)).title, 'Kept paper');
+  assert.equal((await Q.get(key)).doc.content[0].attrs.first, 0);
+  assert.ok((await Q.versions(key)).length);
+  assert.equal((await Q.list())[0].title, 'Kept paper');
+  assert.equal((await Q.presets('bb.school.test|_900_1'))[0].label, 'One');
+  a.stop(); b.stop();
+});
+
 test('a backup of every category comes back whole on a new device', async () => {
   const a = await seeded(), b = device();
   try {
