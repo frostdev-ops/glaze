@@ -42,7 +42,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const and = (list, word = 'and', serial = true) => (list.length < 2 ? list[0] || '' : list.length === 2 ? `${list[0]}${serial && list[0].includes(',') ? ',' : ''} ${word} ${list[1]}` : `${list.slice(0, -1).join(', ')}, ${word} ${list.at(-1)}`);
   const N = {
     // MLA: Family, Given / Family, Given, and Given Family / Family, Given, et al.
-    mla: (ns) => (ns.length >= 3 ? `${inv(ns[0])}${ns[0].literal || !ns[0].given ? '' : ','} et al.` : ns.length === 2 ? `${inv(ns[0])}, and ${fwd(ns[1])}` : inv(ns[0])),
+    mla: (ns) => (ns.length >= 3 ? `${inv(ns[0])}, et al.` : ns.length === 2 ? `${inv(ns[0])}, and ${fwd(ns[1])}` : inv(ns[0])),
     mlaFwd: (ns) => (ns.length >= 3 ? `${fwd(ns[0])} et al.` : ns.map(fwd).join(' and ')),
     // APA: up to 20, & before the last (with a comma, two included); 21 or more: 19, an ellipsis, the last.
     apa: (ns) => (ns.length === 1 ? apaInv(ns[0]) : ns.length > 20 ? `${ns.slice(0, 19).map(apaInv).join(', ')}, . . . ${apaInv(ns.at(-1))}` : `${ns.slice(0, -1).map(apaInv).join(', ')}, & ${apaInv(ns.at(-1))}`),
@@ -97,6 +97,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   // ---- who leads ----------------------------------------------------------------------------------------------------
   // An edited book's editors lead; a translated work with no author leads with its title (MLA's Beowulf).
   const who = (s) => (s.author?.length ? { names: s.author, role: '' } : s.editor?.length && !s.translator?.length && ['book', 'report'].includes(s.type) ? { names: s.editor, role: 'editor' } : null);
+  const groupPublisher = (s) => s.author?.length === 1 && s.author[0].literal && sameText(s.author[0].literal, s.publisher);
   const quoted = (s) => !['book', 'report'].includes(s.type);
   const sameText = (a, b) => !!a && !!b && S().fold(a) === S().fold(b);
   const groupIs = (s, v) => s.author?.length === 1 && !!s.author[0].literal && sameText(s.author[0].literal, v);
@@ -117,7 +118,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const mla = (s) => {
     const lead = who(s);
     // An organization that wrote and published the work leads with its title and is named once, as publisher.
-    const groupPub = s.author?.length === 1 && s.author[0].literal && sameText(s.author[0].literal, s.publisher);
+    const groupPub = groupPublisher(s);
     const author = lead && !groupPub ? dot(esc(`${N.mla(lead.names)}${lead.role ? `, ${lead.role}${lead.names.length > 1 ? 's' : ''}` : ''}`)) : '';
     const title = quoted(s) ? quote(s.title, '.') : dot(it(rich(s.title)));
     const contrib = [];
@@ -145,7 +146,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     return join([author, title, head ? dot(quoted(s) ? head : cap(head)) : ''], ' ') + tail + accessed;
   };
   const mlaIn = (s, page, narrative) => {
-    const lead = who(s);
+    const lead = groupPublisher(s) ? null : who(s);
     const name = lead ? esc(N.cite(lead.names)) : quoted(s) ? `“${rich(shortTitle(s))}”` : it(rich(shortTitle(s)));
     const p = page ? esc(String(page).replace(/\s*[-–—]+\s*/g, '-')) : '';
     return narrative ? (p ? `(${p})` : '') : `(${join([name, p], ' ')})`;
@@ -160,9 +161,9 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     const italicTitle = !['chapter', 'article-journal', 'article-magazine', 'article-newspaper'].includes(s.type);
     const pubOk = (p) => p && !groupIs(s, p) && !(lead && lead.names.length === 1 && lead.names[0].literal && sameText(lead.names[0].literal, p));
     let titleEl, rest = [];
-    const link_ = !s.issued && s.accessed && s.URL && (s.type === 'webpage' || s.type === 'motion_picture') ? `Retrieved ${D.long(s.accessed)}, from ${esc(s.URL)}` : link(s);
+    const link_ = s.retrieval && s.accessed && s.URL && !s.DOI ? `Retrieved ${D.long(s.accessed)}, from ${esc(s.URL)}` : link(s);
     if (s.type === 'book' || s.type === 'report') {
-      const bits = join([edition(esc(s.edition)), s.type === 'report' && s.number ? `${esc(s.genre || 'Report')} No. ${esc(s.number)}` : '']);
+      const bits = join([edition(esc(s.edition)), s.volume ? `Vol. ${esc(s.volume)}` : '', s.type === 'report' && s.number ? `${esc(s.genre || 'Report')} No. ${esc(s.number)}` : '']);
       titleEl = `${it(t)}${bits ? ` (${bits})` : ''}`;
       titleEl = bits ? `${titleEl}.` : endsQ(t) ? titleEl : `${titleEl}.`;
       rest = [pubOk(s.publisher) ? dot(esc(s.publisher)) : ''];
@@ -186,9 +187,11 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     const parts = author ? [author, date, titleEl, ...rest] : [titleEl, date, ...rest];
     return join([...parts, link_], ' ');
   };
+  // Anonymous works use title case in text; standalone works keep their entry's italics.
+  const apaTitle = (s) => rich(shortTitle(s)).replace(/(<\/?i>)|([\p{L}][\p{L}'’]*)/gu, (m, tag, w, at) => tag || (at === 0 || w.length >= 4 || !SMALL.test(w) ? w[0].toUpperCase() + w.slice(1) : w));
   const apaName = (s, word) => {
     const lead = who(s) || (s.type === 'motion_picture' && s.publisher ? { names: [{ literal: s.publisher }] } : null);
-    return lead ? esc(N.cite(lead.names, word)) : quoted(s) ? `“${rich(shortTitle(s))}”` : it(rich(shortTitle(s)));
+    return lead ? esc(N.cite(lead.names, word)) : ['chapter', 'article-journal', 'article-magazine', 'article-newspaper'].includes(s.type) ? `“${apaTitle(s)}”` : it(apaTitle(s));
   };
   const apaPage = (page) => (page ? (/^(p{1,2}|para|chap|ch)\./i.test(String(page)) ? esc(page) : apaPages(String(page).replace(/\s*[-–—]+\s*/g, '–'))) : '');
   const apaIn = (s, page) => `(${join([apaName(s, '&'), D.apa(s.issued), apaPage(page)])})`;
@@ -269,13 +272,13 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   };
 
   // Each style's order: by who leads (or the title, without A, An or The), then the year (n.d. first, as APA has it),
-  // then the title; letter by letter, accents and case aside.
+  // then the title; MLA and Chicago instead order one author's works by title.
   const fold = (v) => S().fold(v).replace(/\s+/g, '');
   const article = (t) => plain(t).replace(/^[“"‘']*(a|an|the)\s+/i, '');
   const sortKey = (s, k) => {
-    const lead = who(s);
+    const lead = k === 'mla9' && groupPublisher(s) ? null : who(s);
     const first = lead ? lead.names.map((n) => `${fold(fam(n))} ${fold(n.given || '')}`).join(' ') : k === 'chicago17' && s.type === 'webpage' && s.publisher ? fold(s.publisher) : fold(article(s.title));
-    return [first, String(yearOf(s) || 0).padStart(4, '0'), fold(article(s.title))];
+    return k === 'apa7' ? [first, String(yearOf(s) || 0).padStart(4, '0'), fold(article(s.title))] : [first, fold(article(s.title))];
   };
   const cmp = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; } return 0; };
   const list = (sources, st) => {
@@ -301,17 +304,17 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   // The forms a source answers to in the text: its lead's family names, its group name, its short title.
   const keysOf = (s) => {
     const lead = who(s), out = [];
-    if (lead) out.push(S().fold(fam(lead.names[0])));
+    if (lead) out.push(S().fold(fam(lead.names[0])), S().fold(N.cite(lead.names)), S().fold(N.cite(lead.names, '&')));
     if (!lead && s.type === 'motion_picture' && s.publisher) out.push(S().fold(s.publisher));
-    if (!lead || s.type === 'webpage') out.push(S().fold(shortTitle(s)), S().fold(s.title));
+    if (!lead || groupPublisher(s) || s.type === 'webpage') out.push(S().fold(shortTitle(s)), S().fold(s.title));
     return [...new Set(out.filter(Boolean))];
   };
   const matchIds = (nameText, sources) => {
     const n = S().fold(nameText.replace(/\bet al\.?/, '').replace(/[“”"‘’']/g, ''));
     if (!n) return [];
-    return sources.filter((s) => keysOf(s).some((k) => n === k || n.startsWith(`${k} `) || k.startsWith(`${n} `) || (k.length > 8 && n.startsWith(k.slice(0, 8))))).map((s) => s.id);
+    return sources.filter((s) => keysOf(s).some((k) => n === k)).map((s) => s.id);
   };
-  const looksNamed = (t) => /^[“"‘]?[\p{Lu}]/u.test(t) && !/^(see|e\.g|i\.e|cf|qtd|fig|table|chapter|ch|vol|para|line|lines)\b/i.test(t);
+  const looksNamed = (t) => /^[“"‘]?[\p{Lu}]/u.test(t) && !/^(see|e\.g|i\.e|cf|qtd|figure|fig|table|chapter|ch|vol|para|line|lines|version|in|on|during|since|before|after|born)\b/i.test(t);
   // → [{ from, to, text, name, sep, page, year, ids, kind: 'paren'|'narrative'|'note', fix? }] over a string's offsets.
   const findIn = (text, sources, k) => {
     const out = [];
@@ -323,10 +326,11 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       for (const raw of parts) {
         const part = raw.replace(/^(see also|see|e\.g\.,?|cf\.|qtd\. in)\s+/i, '');
         let a;
+        if (k === 'chicago17' && part.split(',').length >= 3) { const name = noteName(part); if (looksNamed(name)) { out.push({ from, to, text: m[0], name, page: '', kind: 'note', ids: matchIds(name, sources) }); continue; } }
         if (k === 'apa7' && (a = PART.apa.exec(part)) && looksNamed(a[1])) { out.push({ from, to, text: m[0], name: a[1], year: a[2], page: a[3] || '', kind: 'paren', ids: matchIds(a[1], sources) }); continue; }
-        if ((a = PART.year.exec(part))) { out.push({ from, to, text: m[0], name: '', year: a[1], page: a[2] || '', kind: 'narrative', ids: [] }); continue; }
+        if ((a = PART.year.exec(part))) { if (k !== 'apa7') continue; out.push({ from, to, text: m[0], name: '', year: a[1], page: a[2] || '', kind: 'narrative', ids: [] }); continue; }
         if ((a = PART.page.exec(part))) { out.push({ from, to, text: m[0], name: '', page: a[1], kind: 'narrative', ids: [] }); continue; }
-        if ((a = PART.named.exec(part)) && looksNamed(a[1])) { out.push({ from, to, text: m[0], name: a[1], sep: a[2], page: a[3], kind: 'paren', ids: matchIds(a[1], sources) }); continue; }
+        if ((a = PART.named.exec(part)) && looksNamed(a[1])) { out.push({ from, to, text: m[0], name: a[1], part, sep: a[2], page: a[3], kind: 'paren', ids: matchIds(a[1], sources) }); continue; }
         if (looksNamed(part) && part.length <= 80) { const ids = matchIds(part.replace(/,.*$/, ''), sources); if (ids.length) out.push({ from, to, text: m[0], name: part.replace(/,.*$/, ''), page: '', kind: 'paren', ids, bare: true }); }
       }
     }
@@ -374,7 +378,8 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       entry.at = [T.posAt(entry.from), T.posAt(entry.to)];
       if (c) Object.assign(c, entry); else found.push(entry);
     }
-    return found;
+    const typed = typedList(T), start = typed ? T.posAt(typed.entries[0]?.from ?? T.text.length) : Infinity;
+    return found.filter((c) => c.at[0] < start).map((c) => ({ ...c, ids: k === 'apa7' && c.year ? c.ids.filter((id) => { const s = all.find((s) => s.id === id); return String(yearOf(s) || 'n.d.') === c.year.replace(/(\d)[a-z]$/, '$1'); }) : c.ids }));
   };
 
   // The reference list typed into the document: its title on a line of its own, its entries the lines after it.
@@ -407,8 +412,9 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
         if (fixed !== c.text) issues.push({ ...ISSUE(from, to, t('MLA citation'), { title: t('MLA citation') }), suggestions: [fixed], sure: true });
       }
       if (k === 'apa7' && c.kind === 'paren' && !c.year && c.ids.length) {
-        const s = all.find((x) => x.id === c.ids[0]);
-        const fixed = s ? `(${join([c.name, D.apa(s.issued), c.page ? (/^p/i.test(c.page) ? c.page : apaPages(c.page)) : ''])})` : '';
+        const s = c.ids.length === 1 ? all.find((x) => x.id === c.ids[0]) : null;
+        const replacement = s ? join([c.name, D.apa(s.issued), c.page ? (/^p/i.test(c.page) ? c.page : apaPages(c.page)) : '']) : '';
+        const fixed = replacement && c.part ? c.text.replace(c.part, replacement) : '';
         issues.push({ ...ISSUE(from, to, t('Add the year'), { title: t('APA citation') }), suggestions: fixed ? [fixed] : [] });
       }
     }

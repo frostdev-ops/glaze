@@ -14,7 +14,7 @@
   const countIn = C.count;
   const { TextSelection } = GZ_PM.state, { Fragment } = GZ_PM.model;
   const STYLE = { mla: 'mla9', mla9: 'mla9', apa: 'apa7', apa7: 'apa7', chicago: 'chicago17', chicago17: 'chicago17' };
-  let sources = [], key = null, style = 'mla9', saved = null;
+  let sources = [], key = null, style = 'mla9', saved = null, loading = null, referenceBlock = null;
   const subs = new Set();
   const changed = () => { for (const fn of subs) try { fn({ sources: sources.slice(), style }); } catch (e) { console.error(e); } recheck(); };
 
@@ -32,16 +32,48 @@
   const show = (pop) => { if (!pop.hidden) return; pop.hidden = false; pop.getBoundingClientRect(); pop.setAttribute('data-open', ''); };
   const hide = (pop) => { pop.hidden = true; pop.removeAttribute('data-open'); };
 
+  const undoBox = el('div', { class: 'gzc-undo', role: 'status', hidden: true });
+  const undoBtn = el('button', { type: 'button', text: t('Undo') });
+  undoBox.append(el('span', { text: t('Source removed') }), undoBtn);
+  document.body.append(undoBox);
+  let undoAction = null, undoTimer = 0;
+  const clearUndo = () => { clearTimeout(undoTimer); undoAction = null; undoBox.hidden = true; };
+  undoBtn.addEventListener('click', () => { const action = undoAction; clearUndo(); action?.(); });
+  const removeSource = (id, after) => {
+    const src = sources.find((s) => s.id === id), where = key;
+    if (!src) return;
+    clearUndo();
+    setSources(S.remove(sources, id));
+    after();
+    undoAction = () => { if (key === where) { setSources(S.add(sources, src).sources); after(); } };
+    undoBox.hidden = false;
+    undoTimer = setTimeout(clearUndo, 8000);
+  };
+
   // ---- the style and the sources --------------------------------------------------------------------------------------
   const use = (s) => { const v = STYLE[String(s || '').toLowerCase()]; if (v && v !== style) { style = v; changed(); } return style; };
-  const persist = () => (key ? S.save(key, sources) : Promise.resolve(true));
+  const persist = () => {
+    if (loading?.pending) { loading.edits = sources.slice(); return Promise.resolve(true); }
+    return key ? S.save(key, sources) : Promise.resolve(true);
+  };
   const setSources = (list) => { sources = S.dedupe(list); persist(); changed(); };
   const loadFor = async (context) => {
     if (context?.style) use(context.style);
     const k = S.keyOf(context);
     if (k === key) return;
+    clearUndo();
     key = k;
-    sources = k ? await S.load(k) : sources;
+    sources = [];
+    referenceBlock = null;
+    const load = loading = { key: k, pending: !!k, edits: null };
+    changed();
+    if (!k) return;
+    const stored = await S.load(k);
+    load.pending = false;
+    const merged = load.edits ? S.dedupe([...load.edits, ...stored]) : stored;
+    if (load.edits) S.save(k, merged);
+    if (loading !== load) return;
+    sources = merged;
     changed();
   };
   F.on('ready', (_, init) => loadFor(init?.context || F.context()));
@@ -98,11 +130,12 @@
     const l = C.list(sources, style);
     const para = (html) => schema.nodes.paragraph.create(null, runs(html).map((r) => schema.text(r.text, r.i && italic ? [italic.create()] : [])));
     let start = view.state.doc.content.size;
-    view.state.doc.forEach((n, pos) => { if (n.isTextblock && Object.values(C.TITLES).some((x) => n.textContent.trim() === x || n.textContent.trim() === t(x))) start = pos; });
+    if (referenceBlock && start >= referenceBlock.size && view.state.doc.content.cut(start - referenceBlock.size).eq(referenceBlock)) start -= referenceBlock.size;
     // The list's title is the style's own (Works Cited), whatever language Glaze speaks.
     const frag = Fragment.from([para(l.title), ...l.entries.map((e) => para(e.html))]);
     const tr = view.state.tr.replaceWith(start, view.state.doc.content.size, frag);
     view.dispatch(tr.scrollIntoView());
+    referenceBlock = frag;
     return true;
   };
 
@@ -150,7 +183,7 @@
     const fallback = c.kind === 'doi' ? { type: 'article-journal', DOI: c.value } : c.kind === 'isbn' ? { type: 'book', ISBN: c.value } : { type: 'webpage', URL: c.value, accessed: S.today() };
     if (!await asked) { say(t('Glaze isn’t allowed to reach {host}.', { host: new URL(c.value).hostname }), true); return fallback; }
     const r = await ask({ type: 'glaze:writer-lookup', kind: c.kind, value: c.value });
-    if (!r?.ok || typeof r.text !== 'string') { say(r?.error === 'host' ? t('Glaze isn’t allowed to reach {host}.', { host: new URL(c.value).hostname }) : t('Nothing found. Fill it in below.'), true); return fallback; }
+    if (!r?.ok || typeof r.text !== 'string') { say(r?.error === 'redirect' ? t('This page redirects. Use its final address or add it manually.') : c.kind === 'url' && r?.error === 'host' ? t('Glaze isn’t allowed to reach {host}.', { host: new URL(c.value).hostname }) : t('Nothing found. Fill it in below.'), true); return fallback; }
     let src = null;
     try {
       if (c.kind === 'doi') src = LK.fromCSL(r.text);
@@ -176,15 +209,17 @@
     'article-journal': [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Journal'], ['volume', 'Volume'], ['issue', 'Issue'], ['page', 'Pages'], ['issued', 'Date'], ['DOI', 'DOI'], ['URL', 'URL']],
     'article-magazine': [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Magazine'], ['issued', 'Date'], ['page', 'Pages'], ['URL', 'URL']],
     'article-newspaper': [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Newspaper'], ['issued', 'Date'], ['page', 'Pages'], ['URL', 'URL']],
-    webpage: [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Website'], ['publisher', 'Publisher'], ['issued', 'Date'], ['URL', 'URL'], ['accessed', 'Accessed']],
+    webpage: [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Website'], ['publisher', 'Publisher'], ['issued', 'Date'], ['URL', 'URL'], ['accessed', 'Accessed'], ['retrieval', 'Changes over time']],
     motion_picture: [['author', 'Authors'], ['title', 'Title'], ['container-title', 'Platform'], ['publisher', 'Uploaded by'], ['issued', 'Date'], ['URL', 'URL']],
     report: [['author', 'Authors'], ['title', 'Title'], ['publisher', 'Publisher'], ['number', 'Report number'], ['issued', 'Date'], ['URL', 'URL']],
   };
   const LIST = new Set(['author', 'editor']), DATES = new Set(['issued', 'accessed']);
-  const showField = (src, k) => (LIST.has(k) ? (src[k] || []).map(S.showName).join('\n') : DATES.has(k) ? S.showDate(src[k]) : k === 'title' || k === 'container-title' ? String(src[k] || '').replace(/<\/?i>/g, '') : String(src[k] ?? ''));
+  const showField = (src, k) => (k === 'retrieval' ? src[k] === true : LIST.has(k) ? (src[k] || []).map(S.showName).join('\n') : DATES.has(k) ? S.showDate(src[k]) : k === 'title' || k === 'container-title' ? String(src[k] || '').replace(/<\/?i>/g, '') : String(src[k] ?? ''));
   // host ← a form for src; done(source) on submit, cancel() on Cancel, drop(id) on Remove (an existing source).
+  let formSerial = 0;
   const form = (host, src, { submit, done, cancel, drop }) => {
     let kind = src.type === 'book' && src.editor?.length && !src.author?.length ? 'edited' : FIELDS[src.type] ? src.type : 'book';
+    const formId = ++formSerial;
     const values = {};
     for (const fs of Object.values(FIELDS)) for (const [k] of fs) if (!(k in values)) values[k] = showField(src, k);
     const f = el('form', { class: 'gzc-form', novalidate: true });
@@ -192,11 +227,11 @@
     const grid = el('div', { class: 'gzc-grid' });
     const draw = () => {
       grid.replaceChildren(...FIELDS[kind].map(([k, label]) => {
-        const id = `gzc-${k}`;
-        const input = LIST.has(k) ? el('textarea', { id, rows: 2, spellcheck: 'false', placeholder: t('Last, First') }) : el('input', { id, type: 'text', spellcheck: k === 'title' || k === 'container-title' ? 'true' : 'false' });
-        input.value = values[k] || '';
+        const id = `gzc-${formId}-${k}`;
+        const input = LIST.has(k) ? el('textarea', { id, rows: 2, spellcheck: 'false', placeholder: t('Last, First') }) : el('input', { id, type: k === 'retrieval' ? 'checkbox' : 'text', spellcheck: k === 'title' || k === 'container-title' ? 'true' : 'false' });
+        if (k === 'retrieval') input.checked = values[k] === true; else input.value = values[k] || '';
         input.dataset.field = k;
-        input.addEventListener('input', () => { values[k] = input.value; });
+        input.addEventListener('input', () => { values[k] = k === 'retrieval' ? input.checked : input.value; });
         return el('label', { class: `gzc-field${k === 'title' || LIST.has(k) || k === 'container-title' || k === 'URL' ? ' wide' : ''}`, for: id }, el('span', { text: t(label) }), input);
       }));
     };
@@ -212,7 +247,7 @@
     f.addEventListener('submit', (e) => {
       e.preventDefault();
       const raw = { id: src.id, type: kind === 'edited' ? 'book' : kind };
-      for (const [k] of FIELDS[kind]) { const v = (values[k] || '').trim(); if (v) raw[k] = LIST.has(k) ? S.names(v) : DATES.has(k) ? S.date(v) || undefined : v; }
+      for (const [k] of FIELDS[kind]) { if (k === 'retrieval') { raw[k] = values[k] === true; continue; } const v = (values[k] || '').trim(); if (v) raw[k] = LIST.has(k) ? S.names(v) : DATES.has(k) ? S.date(v) || undefined : v; }
       // A title left as it was keeps its italics (the field shows it plain).
       for (const k of ['title', 'container-title']) if (src[k] && raw[k] === showField(src, k)) raw[k] = src[k];
       // What the lookup found but the form doesn't show stays (title-short, archive, …).
@@ -247,7 +282,7 @@
       busy = true;
       go.setAttribute('aria-disabled', 'true');
       // The page's host is asked for inside this submit (the click or Enter), before lookup awaits anything.
-      lookup(input.value, say).then((s) => { if (s) found(s); }).finally(() => { busy = false; go.removeAttribute('aria-disabled'); });
+      lookup(input.value, say).then((s) => { if (s && row.isConnected) found(s); }).catch(() => say(t('Nothing found. Fill it in below.'), true)).finally(() => { busy = false; go.removeAttribute('aria-disabled'); });
     });
     return { row, status, input, say };
   };
@@ -255,7 +290,7 @@
   // ---- the popover ----------------------------------------------------------------------------------------------------------
   const pop = el('div', { class: 'pop gz-cite', role: 'dialog', 'aria-label': t('Cite'), hidden: true });
   document.body.append(pop);
-  let anchor = null, gwPx = 0;
+  let anchor = null, returnTo = null, gwPx = 0;
   // In compose mode the frame is only as tall as the box: while the popover is open the frame asks for its height too.
   const fit = () => {
     if (F.mode() !== 'compose') return;
@@ -282,7 +317,7 @@
     hide(pop);
     pop.replaceChildren();
     fit();
-    if (back) F.editor()?.focus();
+    if (back) { if (returnTo?.isConnected && returnTo.getClientRects().length && !returnTo.closest('[hidden]')) returnTo.focus(); else F.editor()?.focus(); }
   };
   const sourceRow = (s, page) => {
     const pick = el('button', { type: 'button', class: 'gzc-src', 'data-id': s.id });
@@ -294,6 +329,11 @@
     return el('div', { class: 'gzc-item' }, pick, edit);
   };
   const icon = (d) => { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'ico'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); svg.append(p); return svg; };
+  const dialogClose = () => {
+    const b = el('button', { type: 'button', class: 'gzc-close', 'aria-label': t('Close') }, icon('M6 6l12 12M18 6L6 18'));
+    b.addEventListener('click', () => close(true));
+    return b;
+  };
   // Find: look up, saved sources, page, Add manually.
   const drawFind = () => {
     const find = finder((s) => drawForm(s, true, find.status.textContent));
@@ -302,7 +342,7 @@
     const list = el('div', { class: 'gzc-list' }, ...ordered.map((s) => sourceRow(s, page)));
     const manual = el('button', { type: 'button', class: 'sbtn ghost2', 'data-do': 'manual', text: t('Add manually') });
     manual.addEventListener('click', () => drawForm({ type: 'book' }, true));
-    pop.replaceChildren(...[find.row, find.status, ordered.length ? list : null, el('div', { class: 'gzc-foot' }, page, el('span', { class: 'grow' }), manual)].filter(Boolean));
+    pop.replaceChildren(...[dialogClose(), find.row, find.status, ordered.length ? list : null, el('div', { class: 'gzc-foot' }, page, el('span', { class: 'grow' }), manual)].filter(Boolean));
     if (!pop.hidden) { fit(); find.input.focus(); }
   };
   // The form: a found or new source (Cite saves it and puts it in), or a saved one to edit (Save, Remove).
@@ -310,12 +350,12 @@
     const status = el('div', { class: 'gzc-status bad', role: 'status', hidden: !note, text: note || '' });
     const host = el('div');
     const page = cite ? el('input', { class: 'gzc-page', type: 'text', spellcheck: 'false', placeholder: t('Page'), 'aria-label': t('Page') }) : null;
-    pop.replaceChildren(status, host);
+    pop.replaceChildren(dialogClose(), status, host);
     const f = form(host, src, {
       submit: cite ? t('Cite') : t('Save'),
       done: (s) => { const k = keep(s); if (cite && k) { insert(k, page?.value.trim()); close(); } else drawFind(); },
       cancel: () => drawFind(),
-      drop: !cite && sources.some((x) => x.id === src.id) ? (id) => { setSources(S.remove(sources, id)); drawFind(); } : null,
+      drop: !cite && sources.some((x) => x.id === src.id) ? (id) => removeSource(id, drawFind) : null,
     });
     if (page) f.querySelector('.gzc-acts').prepend(page);
     if (!pop.hidden) fit();
@@ -324,6 +364,7 @@
     const v = F.editor()?.view;
     saved = v ? { from: v.state.selection.from, to: v.state.selection.to } : null;
     anchor = a;
+    returnTo = a || document.activeElement;
     at = null;
     if (prefill || asForm) drawForm(S.normalize({ type: 'book', ...prefill }) || { type: 'book', ...(prefill || {}) }, true); else drawFind();
     show(pop);
@@ -332,7 +373,7 @@
     pop.querySelector('.gzc-in, [data-field="title"]')?.focus();
   };
   pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); } });
-  document.addEventListener('pointerdown', (e) => { if (!pop.hidden && !pop.contains(e.target) && !(anchor && anchor.contains?.(e.target))) close(); }, true);
+  document.addEventListener('pointerdown', (e) => { if (!pop.hidden && !pop.contains(e.target) && !undoBox.contains(e.target) && !(anchor && anchor.contains?.(e.target))) close(); }, true);
   addEventListener('resize', () => { if (!pop.hidden) place(); });
 
   // The selection toolbar's Cite (compose; the paper toolbar calls open() itself).
@@ -358,12 +399,12 @@
     const adder = el('div', { class: 'gzc-adder', hidden: true });
     const cards = el('div', { class: 'gzc-cards' });
     root.append(el('div', { class: 'gzc-head' }, title, addBtn), adder, cards);
-    const closeAdder = () => { adder.hidden = true; adder.replaceChildren(); addBtn.hidden = false; };
+    const closeAdder = () => { adder.hidden = true; adder.replaceChildren(); addBtn.hidden = false; addBtn.focus(); };
     const editIn = (host, src, after) => form(host, src, {
       submit: t('Save'),
       done: (s) => { keep(s); after(); },
       cancel: after,
-      drop: sources.some((x) => x.id === src.id) ? (id) => { setSources(S.remove(sources, id)); after(); } : null,
+      drop: sources.some((x) => x.id === src.id) ? (id) => removeSource(id, after) : null,
     });
     const openAdder = (prefill) => {
       adder.hidden = false;
@@ -388,13 +429,14 @@
         const cite = el('button', { type: 'button', class: 'sbtn', text: t('Cite') });
         cite.addEventListener('click', () => insert(s, ''));
         const edit = el('button', { type: 'button', class: 'sbtn ghost2', text: t('Edit') });
-        edit.addEventListener('click', () => { const host = el('div'); card.replaceChildren(host); editIn(host, s, refresh); });
+        edit.addEventListener('click', () => { const host = el('div'); card.replaceChildren(host); editIn(host, s, () => { refresh(); (root.querySelector(`[data-id="${s.id}"] .ghost2`) || addBtn).focus(); }); });
         card.append(entry, el('div', { class: 'row' }, cite, edit));
         return card;
       }));
     };
     const sub = () => refresh();
     subs.add(sub);
+    root.addEventListener('keydown', (e) => { if (e.key === 'Escape') { const cancel = e.target.closest('.gzc-form')?.querySelector('[data-do="cancel"]'); if (cancel) { e.preventDefault(); e.stopPropagation(); cancel.click(); } } });
     refresh();
     container.replaceChildren(root);
     return { refresh, add: openAdder, destroy: () => { subs.delete(sub); root.remove(); } };

@@ -96,7 +96,13 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
 
   // ---- identifiers --------------------------------------------------------------------------------------------------
   const DOI = /\b(10\.\d{4,9}\/[^\s"<>]+)/;
-  const doi = (v) => { const m = DOI.exec(clean(v, 300)); return m ? m[1].replace(/[.,;)\]]+$/, '') : ''; };
+  const doi = (v) => {
+    const m = DOI.exec(clean(v, 300));
+    if (!m) return '';
+    let s = m[1].replace(/[.,;]+$/, '');
+    for (const [open, close] of [['(', ')'], ['[', ']']]) while (s.endsWith(close) && s.split(close).length > s.split(open).length) s = s.slice(0, -1);
+    return s;
+  };
   // ISBN-10 or -13 with its check digit → the ISBN-13, or ''.
   const isbn = (v) => {
     const s = clean(v, 40).replace(/^isbn(?:-1[03])?:?\s*/i, '').replace(/[\s-]/g, '').toUpperCase();
@@ -125,6 +131,7 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
     for (const k of TEXT) { const v = k === 'title' || k === 'container-title' || k === 'title-short' ? rich(raw[k]) : clean(raw[k]); if (v) s[k] = v; }
     for (const k of NAMES) { const v = names(raw[k]); if (v.length) s[k] = v; }
     for (const k of ['issued', 'accessed']) { const v = date(raw[k]); if (v) s[k] = v; }
+    if (raw.retrieval === true) s.retrieval = true;
     const d = doi(raw.DOI), i = isbn(Array.isArray(raw.ISBN) ? raw.ISBN[0] : raw.ISBN), u = url(raw.URL);
     if (d) s.DOI = d;
     if (i) s.ISBN = i;
