@@ -14,7 +14,7 @@
   const countIn = C.count;
   const { TextSelection } = GZ_PM.state, { Fragment } = GZ_PM.model;
   const STYLE = { mla: 'mla9', mla9: 'mla9', apa: 'apa7', apa7: 'apa7', chicago: 'chicago17', chicago17: 'chicago17' };
-  let sources = [], key = null, style = 'mla9', saved = null;
+  let sources = [], key = null, style = 'mla9', saved = null, loading = null, referenceBlock = null;
   const subs = new Set();
   const changed = () => { for (const fn of subs) try { fn({ sources: sources.slice(), style }); } catch (e) { console.error(e); } recheck(); };
 
@@ -34,14 +34,27 @@
 
   // ---- the style and the sources --------------------------------------------------------------------------------------
   const use = (s) => { const v = STYLE[String(s || '').toLowerCase()]; if (v && v !== style) { style = v; changed(); } return style; };
-  const persist = () => (key ? S.save(key, sources) : Promise.resolve(true));
+  const persist = () => {
+    if (loading?.pending) { loading.edits = sources.slice(); return Promise.resolve(true); }
+    return key ? S.save(key, sources) : Promise.resolve(true);
+  };
   const setSources = (list) => { sources = S.dedupe(list); persist(); changed(); };
   const loadFor = async (context) => {
     if (context?.style) use(context.style);
     const k = S.keyOf(context);
     if (k === key) return;
     key = k;
-    sources = k ? await S.load(k) : sources;
+    sources = [];
+    referenceBlock = null;
+    const load = loading = { key: k, pending: !!k, edits: null };
+    changed();
+    if (!k) return;
+    const stored = await S.load(k);
+    load.pending = false;
+    const merged = load.edits ? S.dedupe([...load.edits, ...stored]) : stored;
+    if (load.edits) S.save(k, merged);
+    if (loading !== load) return;
+    sources = merged;
     changed();
   };
   F.on('ready', (_, init) => loadFor(init?.context || F.context()));
@@ -98,11 +111,12 @@
     const l = C.list(sources, style);
     const para = (html) => schema.nodes.paragraph.create(null, runs(html).map((r) => schema.text(r.text, r.i && italic ? [italic.create()] : [])));
     let start = view.state.doc.content.size;
-    view.state.doc.forEach((n, pos) => { if (n.isTextblock && Object.values(C.TITLES).some((x) => n.textContent.trim() === x || n.textContent.trim() === t(x))) start = pos; });
+    if (referenceBlock && start >= referenceBlock.size && view.state.doc.content.cut(start - referenceBlock.size).eq(referenceBlock)) start -= referenceBlock.size;
     // The list's title is the style's own (Works Cited), whatever language Glaze speaks.
     const frag = Fragment.from([para(l.title), ...l.entries.map((e) => para(e.html))]);
     const tr = view.state.tr.replaceWith(start, view.state.doc.content.size, frag);
     view.dispatch(tr.scrollIntoView());
+    referenceBlock = frag;
     return true;
   };
 
