@@ -245,7 +245,7 @@ const HARNESS = `(() => {
     await worker.evaluate(() => chrome.runtime.onMessage.addListener((m) => { if (m?.type === 'glaze:attempt-kind') (globalThis.__kinds ||= []).push(m.kind); }));
     p = await open('/ultra/courses/_101_1/assessment/_7_1/attempt/create');
     const paper = await box(p, 'assignment');
-    check(await paper.fr.evaluate(() => document.documentElement.dataset.mode === 'compose' && document.documentElement.dataset.kind === 'assignment' && document.querySelector('.ProseMirror').textContent === "Toni Morrison's Beloved treats memory less as a record than as a debt."), 'assignment attempt mounts (compose until paper mode) with the saved text imported');
+    check(await paper.fr.evaluate(() => document.documentElement.dataset.mode === 'paper' && document.documentElement.dataset.kind === 'assignment' && document.querySelector('.ProseMirror').textContent.includes("Toni Morrison's Beloved treats memory less as a record than as a debt.")), 'assignment attempt mounts in paper mode with the saved text in its body (scripts/writer-paper-check.js checks the paper)');
     check(await p.evaluate(() => getComputedStyle(document.querySelector('[class*="makeStylespreview-"]')).display !== 'none'), 'its file area stays Ultra\'s, in view');
     check(await p.evaluate(() => !document.querySelector('[data-analytics-id="assignment.attempt.authoring.footer.submit"]').disabled), 'Submit enabled with the imported text');
     await paper.fr.click('.ProseMirror'); await p.keyboard.press(`${MOD}+Enter`); await pause(400);

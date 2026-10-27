@@ -55,13 +55,13 @@ test('messages compose is a message, sent by its Send', () => {
   assert.deepEqual(box.context, {});
 });
 
-test('an assignment attempt: compose for now in Ultra\'s authoring panel, its Submit, its instructions as the prompt', () => {
+test('an assignment attempt: a paper in Ultra\'s authoring panel, its Submit, its instructions as the prompt', () => {
   const body = page('ultra-writer-attempt.html');
   const at = (attempt) => U.boxes(body, { path: ATTEMPT, attempt });
   const [box, ...rest] = at('');
   assert.equal(rest.length, 0, 'the read-only instructions are not a box');
-  // Compose until paper mode lands with the .docx submit: what Ultra's text box gets is exactly what was written.
-  assert.deepEqual([box.kind, box.mode, box.send.textContent, box.send.getAttribute('data-analytics-id')], ['assignment', 'compose', 'Submit', 'assignment.attempt.authoring.footer.submit']);
+  // Paper mode: the paper stays in Writer's storage and goes to Ultra as a .docx at submit.
+  assert.deepEqual([box.kind, box.mode, box.send.textContent, box.send.getAttribute('data-analytics-id')], ['assignment', 'paper', 'Submit', 'assignment.attempt.authoring.footer.submit']);
   assert.ok(box.root.className.includes('bb-editor-root') && !box.root.querySelector('input[type="file"]'), 'its file area stays Ultra\'s, outside the box');
   assert.deepEqual(box.context, { prompt: 'Essay 2\nWrite 1,200 words on memory in Beloved, in MLA format, citing at least three sources.' });
   assert.deepEqual(at('test').map((b) => [b.kind, b.mode]), [['test', 'compose']], 'a gradebook that says test keeps the AI off');
