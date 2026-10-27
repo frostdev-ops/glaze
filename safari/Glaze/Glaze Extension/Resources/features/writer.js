@@ -65,7 +65,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     b.container.setAttribute('data-gz-writer-id', box.id);
     // A one-use pass for the frame, which also puts lib/writer-main.js in this page (lib/background.js 'glaze:writer').
     const pass = crypto.randomUUID();
-    const ok = await Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'job', pass })).then((r) => r?.ok === true, () => false);
+    const ok = await Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'job', pass })).then((r) => r?.ok === true, () => false);
     if (boxes.get(b.editor) !== box) return;
     if (!ok || !sameBox(box) || !on()) { failed.set(b.editor, Date.now()); drop(box); return; }
     open(box, pass);
@@ -109,7 +109,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.frame = null;
     box.ready = false;
     const pass = crypto.randomUUID();
-    const ok = await Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'job', pass })).then((r) => r?.ok === true, () => false);
+    const ok = await Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'job', pass })).then((r) => r?.ok === true, () => false);
     if (boxes.get(box.editor) !== box) return;
     box.reopening = false;
     box.recovered = true;
@@ -256,7 +256,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const key = `${location.pathname}|${kind}`;
     if (window.top === window && told !== key) {
       told = key;
-      Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:attempt-kind', kind: kind || 'unknown' })).catch(() => {});
+      Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:attempt-kind', kind: kind || 'unknown' })).catch(() => {});
     }
     return kind;
   };

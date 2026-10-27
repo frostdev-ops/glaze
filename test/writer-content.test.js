@@ -88,7 +88,7 @@ test('an attempt report is revoked when its assignment classification becomes un
   c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
   c.ctx.GZ_CTX.bookFor = () => ({ results: [{ column: { contentId: '_7_1', assessmentSubtype: 'Assignment' } }] });
   await c.start();
-  c.ctx.GZ_CTX.bookFor = () => ({ results: [] }); c.ctx.GZ_WRITER.pass();
+  c.ctx.GZ_CTX.bookFor = () => ({ results: [] }); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
   assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment', 'unknown']);
 });
 
