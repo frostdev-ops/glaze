@@ -63,6 +63,10 @@ var GZ_WRITER_ISSUES = globalThis.GZ_WRITER_ISSUES || (() => {
             const from = tr.mapping.map(i.from, 1), to = tr.mapping.map(i.to, -1);
             const near = hit.some(([s, e]) => s <= to + 1 && e >= from - 1);
             let ok = to > from;
+            if (ok && i.kind !== 'spelling') {
+              const $from = state.doc.resolve(from);
+              if (hit.some(([s, e]) => s <= $from.end() && e >= $from.start())) ok = false;
+            }
             if (ok && near) {
               ok = textOf(state.doc, from, to) === i.text;
               // A word that grew (typing on at its end) is a new word.
