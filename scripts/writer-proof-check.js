@@ -143,6 +143,7 @@ const rss = (profile) => {
     await reply.fr.hover('.ProseMirror .gz-iss-sp >> nth=0');
     await until(() => reply.fr.evaluate(() => !document.querySelector('.gp-card').hidden), 'hover card');
     check(await reply.fr.evaluate(() => { const c = document.querySelector('.gp-card'), chips = [...c.querySelectorAll('.chip')]; return /Spelling/.test(c.querySelector('.lbl').textContent) && c.querySelector('.lbl .dot.gp-sp') && chips[0]?.textContent === 'nostalgia' && !chips[0].classList.contains('alt') && chips[1]?.classList.contains('alt') && /Ignore/.test(c.querySelector('.acts').textContent) && /Add to dictionary/.test(c.querySelector('.acts').textContent); }), 'hovering shows the card: Spelling, "nostalgia" first, then the others, Ignore, Add to dictionary');
+    check(await reply.fr.evaluate(() => { const ids = new Set(GZ_WRITER_ISSUES.list().map((i) => i.id)), spans = [...document.querySelectorAll('.ProseMirror .gz-iss')]; return spans.every((s) => ids.has(s.dataset.issue)) && spans.filter((s) => s.textContent === 'nostalgea').length === 1 && !spans.some((s) => s.querySelector('.gz-iss')); }), 'each underline is one live issue, drawn once');
     saved.card = await shot(reply.el, 'proof-card.png');
     await reply.fr.click('.gp-card .chip >> nth=0');
     check((await text(reply.fr)).startsWith('Morrison is less interested in nostalgia than'), 'a chip puts its suggestion in');
@@ -181,8 +182,10 @@ const rss = (profile) => {
     for (const site of [SITES[1], SITES[0], SITES[2], SITES[3], SITES[4]]) {
       const q = await open(discussion(site));
       const b = await box(q, 'reply');
-      await b.fr.click('.ProseMirror');
+      await q.bringToFront();
+      await until(async () => { await b.fr.click('.ProseMirror'); return b.fr.evaluate(() => !!document.activeElement?.closest('.ProseMirror')); }, 'focus in the new box');
       await q.keyboard.type('Sethe and Paul D argue about the rivver.', { delay: 4 });
+      await until(async () => (await text(b.fr)) === 'Sethe and Paul D argue about the rivver.', 'typed in the new box');
       pages.push(q); frames.push(b);
     }
     try { for (const b of frames.slice(1)) await settle(b.fr, 'rivver', 'gz-iss', 30000); } catch (e) {
@@ -197,6 +200,7 @@ const rss = (profile) => {
     // The AI stream's decide hook rules on a fix that isn't sure ("Their going": Grammar), here with an object verdict.
     const other = frames[1];
     await other.fr.evaluate(() => { window.__asked = []; GZ_WRITER_PROOF.decide = async (a) => { __asked.push(a); return { verdict: 'apply', choice: 0 }; }; });
+    await pages[1].bringToFront();
     await other.fr.click('.ProseMirror');
     await pages[1].keyboard.press('End');
     await pages[1].keyboard.type(' Their going to the river tomorrow.', { delay: 12 });
@@ -210,6 +214,7 @@ const rss = (profile) => {
     await frames[0].fr.evaluate(() => { const w = new SharedWorker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' }); w.port.start(); w.port.postMessage({ op: 'idle', ms: 2000 }); });
     await pause(4000);
     memory.idle = rss(profile);
+    await p.bringToFront();
     await reply.fr.click('.ProseMirror');
     await p.keyboard.press('End');
     await p.keyboard.type(' Then Beloved arives.', { delay: 12 });
