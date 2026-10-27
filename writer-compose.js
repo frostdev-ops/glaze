@@ -92,8 +92,13 @@ var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   mark.textContent = '❝';
   cited.className = 'gz-num';
 
-  // The cite stream's count replaces the stand-in when it is there: GZ_WRITER_CITE.count({ doc, text }) → sources cited.
-  const count = (ed, text) => (typeof globalThis.GZ_WRITER_CITE?.count === 'function' ? Number(GZ_WRITER_CITE.count({ doc: ed.view.state.doc, text })) || 0 : citations(text));
+  // Sources cited: the saved sources the citations name (GZ_WRITER_CITE.count(doc) → { cited, total }), or, when more,
+  // the distinct works the text cites (a citation typed without saving its source counts too).
+  const count = (ed, text) => {
+    let saved = 0;
+    try { if (typeof globalThis.GZ_WRITER_CITE?.count === 'function') saved = Number(GZ_WRITER_CITE.count(ed.view.state.doc)?.cited) || 0; } catch (e) { console.error(e); }
+    return Math.max(saved, citations(text));
+  };
   let queued = false;
   const later = () => { if (!queued) { queued = true; Promise.resolve().then(draw); } };
   const draw = () => {

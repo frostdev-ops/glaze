@@ -198,7 +198,7 @@ const HARNESS = `(() => {
     await fr.evaluate(() => GZ_WRITER_CITE.setSources([...GZ_WRITER_CITE.sources(), { type: 'book', title: 'The River Keeps: A novel', author: [{ family: 'Rivera', given: 'Alex' }], publisher: 'Plume', issued: { 'date-parts': [[1988]] } }]));
     await fr.click('#more');
     await until(() => fr.evaluate(() => !document.getElementById('menu').hidden), 'menu');
-    check(await fr.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].map((b) => b.textContent).join('|') === 'Blackboard editor|Sources|Add references'), '⋯ lists Blackboard editor, then Sources and Add references');
+    check(await fr.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].map((b) => b.textContent).filter((x) => !x.startsWith('Check with AI')).join('|') === 'Blackboard editor|Sources|Add references'), '⋯ lists Blackboard editor, then Sources and Add references');
     saved.menu = await shot(el, 'cite-menu.png');
     await menuItem('Add references');
     const list = await until(async () => { const t = await quillText(); return t.includes('Works Cited') && t; }, 'reference list in Ultra\'s Quill');

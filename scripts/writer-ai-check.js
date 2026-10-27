@@ -216,7 +216,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
         { quote: 'not in the draft', before: '', after: '', kind: 'style', message: 'Dropped.', suggestions: [] },
       ] } });
       await p.keyboard.press(`${MOD}+Shift+K`);
-      const set = await until(() => p.evaluate(() => GZ_WRITER_ISSUES.sets.at(-1)), 'issues set');
+      const set = await until(() => p.evaluate(() => GZ_WRITER_ISSUES.sets.filter((x) => x.source === 'ai').at(-1)), 'issues set');
       assert.equal(set.source, 'ai');
       const words = await p.evaluate((s) => s.issues.map((i) => GZ_WRITER_FRAME.editor().view.state.doc.textBetween(i.from, i.to)), set);
       assert.deepEqual(words, ['definately', 'seem']);
@@ -232,7 +232,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       await p.keyboard.press('Escape');
       await p.click('#more');
       const items = await p.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].filter((b) => !b.hidden).map((b) => b.textContent));
-      assert.deepEqual(items, ['Blackboard editor', `Check with AI${MAC ? '⌘⇧K' : 'Ctrl+Shift+K'}`]);
+      assert.deepEqual(items.slice(0, 2), ['Blackboard editor', `Check with AI${MAC ? '⌘⇧K' : 'Ctrl+Shift+K'}`], 'Blackboard editor first, then Check with AI (other parts add theirs after)');
       await p.keyboard.press('Escape');
     });
     await check('Tab leaves the chip menu and closes it without losing focus', async () => {
