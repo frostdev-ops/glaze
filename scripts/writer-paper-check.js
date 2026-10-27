@@ -55,11 +55,6 @@ const HARNESS = `(() => {
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
 
     ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    // The worker loads only listed files into a page; the assignment context builder joins that list at merge (the
-    // orchestrator owns lib/background.js). Here, in the staged copy only, it is listed.
-    const bg = path.join(ext, 'lib/background.js'), src = fs.readFileSync(bg, 'utf8');
-    fs.rmSync(bg);
-    fs.writeFileSync(bg, src.includes("'lib/writer-context-assignment.js'") ? src : src.replace("'features/writer.js']);", "'features/writer.js', 'lib/writer-context-assignment.js']);"));
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: process.env.PAPER_DEBUG ? 2600 : 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
