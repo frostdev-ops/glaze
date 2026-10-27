@@ -47,14 +47,14 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
 });
 
 const backup = {
-  '': ['NEW IN 3.4.5', 'Look › Pointer', 'Custom pointer', 'Back up…', 'Restore…', 'Draft backup', 'Restoring Notes', 'Stop reading', 'narrow windows', 'signed-in account'],
-  de: ['NEU IN 3.4.5', 'Aussehen › Mauszeiger', '„Eigener Mauszeiger“', '„Sichern…“', '„Wiederherstellen…“', 'Entwurfssicherung', 'Wiederherstellen von Notizen', '„Lesen abbrechen“', 'schmale Fenster', 'angemeldet'],
-  es: ['NOVEDADES DE 3.4.5', 'Aspecto › Puntero', '«Puntero personalizado»', '«Hacer una copia…»', '«Restaurar…»', 'copia de borradores', 'restaurar las Notas', '«Dejar de leer»', 'ventanas estrechas', 'sesión iniciada'],
-  fr: ['NOUVEAUTÉS DE LA VERSION 3.4.5', 'Apparence › Pointeur', '« Pointeur personnalisé »', '« Sauvegarder… »', '« Restaurer… »', 'sauvegarde de brouillon', 'Restaurer les Notes', '« Arrêter la lecture »', 'fenêtres étroites', 'compte connecté'],
-  nl: ['NIEUW IN 3.4.5', 'Uiterlijk › Aanwijzer', '“Eigen aanwijzer”', '“Back-up maken…”', '“Herstellen…”', 'Back-up van concepten', 'herstellen van Notities', '“Stoppen met lezen”', 'smalle vensters', 'ingelogd'],
-  'pt-BR': ['NOVO NA 3.4.5', 'Aparência › Ponteiro', '“Ponteiro personalizado”', '“Fazer backup…”', '“Restaurar…”', 'backup de rascunhos', 'Restaurar as Notas', '“Parar a leitura”', 'janelas estreitas', 'conta conectada'],
+  '': ['NEW IN 3.4.6', 'Look › Pointer', 'Custom pointer', 'Back up…', 'Restore…', 'Draft backup', 'Restoring Notes', 'Stop reading', 'narrow windows', 'signed-in account'],
+  de: ['NEU IN 3.4.6', 'Aussehen › Mauszeiger', '„Eigener Mauszeiger“', '„Sichern…“', '„Wiederherstellen…“', 'Entwurfssicherung', 'Wiederherstellen von Notizen', '„Lesen abbrechen“', 'schmale Fenster', 'angemeldet'],
+  es: ['NOVEDADES DE 3.4.6', 'Aspecto › Puntero', '«Puntero personalizado»', '«Hacer una copia…»', '«Restaurar…»', 'copia de borradores', 'restaurar las Notas', '«Dejar de leer»', 'ventanas estrechas', 'sesión iniciada'],
+  fr: ['NOUVEAUTÉS DE LA VERSION 3.4.6', 'Apparence › Pointeur', '« Pointeur personnalisé »', '« Sauvegarder… »', '« Restaurer… »', 'sauvegarde de brouillon', 'Restaurer les Notes', '« Arrêter la lecture »', 'fenêtres étroites', 'compte connecté'],
+  nl: ['NIEUW IN 3.4.6', 'Uiterlijk › Aanwijzer', '“Eigen aanwijzer”', '“Back-up maken…”', '“Herstellen…”', 'Back-up van concepten', 'herstellen van Notities', '“Stoppen met lezen”', 'smalle vensters', 'ingelogd'],
+  'pt-BR': ['NOVO NA 3.4.6', 'Aparência › Ponteiro', '“Ponteiro personalizado”', '“Fazer backup…”', '“Restaurar…”', 'backup de rascunhos', 'Restaurar as Notas', '“Parar a leitura”', 'janelas estreitas', 'conta conectada'],
 };
-for (const [lang, expected] of Object.entries(backup)) test(`3.4.5 release notes ${lang || 'en'} name the pointer switch, one-file Back up and Restore, drafts, Notes, the schedule, narrow settings and mods' account`, () => {
+for (const [lang, expected] of Object.entries(backup)) test(`3.4.6 release notes ${lang || 'en'} name the pointer switch, one-file Back up and Restore, drafts, Notes, the schedule, narrow settings and mods' account`, () => {
   const text = listing(lang), block = part(text, 'Release notes');
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
@@ -81,9 +81,9 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
   for (const term of expected) assert.ok(text.includes(term), term);
 });
 
-test('3.4.5 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '3.4.5');
-  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.4.5');
+test('3.4.6 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '3.4.6');
+  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.4.6');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('scripts/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
@@ -95,9 +95,9 @@ test('3.4.5 versions agree and the exact pure notes transform fits Apple', () =>
   });
   const result = notes(root);
   assert.ok(result.length <= 4000, `${result.length} characters`);
-  assert.match(result, /^Changed\n/);
+  assert.match(result, /^Added\n/);
   assert.ok(result.length <= 3000, `AMO: ${result.length} characters`);
-  assert.ok(!result.includes('## [3.4.4]'));
+  assert.ok(!result.includes('## [3.4.5]'));
 });
 
 test('review: Step 4 copy discloses redirected Download all files in every language\'s description', () => {

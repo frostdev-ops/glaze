@@ -6,11 +6,17 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.4.6] — 2026-10-26
+
 ### Added
 
 - Settings → AI, off by default: a model on this device (Chrome's built-in model, or Apple Intelligence in Safari) or an OpenAI-compatible endpoint you choose, which features may use it, and a local list of recent calls. Syllabus import can use it to fill what Glaze's own reading missed; every AI value is marked Check this and nothing is kept until you save.
 - Blackboard: **Mark all as read** on a course's Announcements marks every unread announcement read, through Blackboard's own read circles.
 - Syllabus import: deadlines by course week become dates, with a Week 1 starts date that moves them; weekly rules become one date a week; exam windows and "week of" items land on their last day; several items on a line become one task each; points-only grading becomes percents; TA office hours come with their role.
+
+### Changed
+
+- Animated backgrounds (three.js), Lottie animations and the photo reader's OCR engine ship as readable code, and the PDF reader keeps its Brotli dictionary in a data file, as the Chrome Web Store requires.
 
 ### Fixed
 
@@ -20,7 +26,6 @@ All notable changes to Glaze are documented here. The format follows
 - Imported pictures keep a table's rows and a chart's labels with their values.
 - Syllabus import reads schedule rows whose exam or due word sits in another column, "released … due …" windows, weekly rules limited to weeks or dates (skipping the days they except), and a TA's or coordinator's hours as office hours.
 - Syllabus import with AI fills an office from a line that labels it or gives the professor's e-mail.
-
 - Blackboard: a discussion's rubric link, and the one on the page View instructions opens, show Glaze's rubric pop-up instead of Blackboard's own rubric panel.
 - Settings: Blackboard's preview repaints its course cards as you change them.
 
