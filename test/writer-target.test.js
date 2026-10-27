@@ -237,3 +237,10 @@ test('examples, optional or negated instructions and input lengths never become 
     ['Use a minimum of 3 scholarly sources and 2 replies.', { sources: 3, replies: 2 }],
   ]);
 });
+
+test('a reply subject scopes its coordinated word and source requirements', () => {
+  cases([
+    ['Each reply must be at least 250 words and cite two sources.', { reply: { minWords: 250, sources: 2 } }],
+    ['Your replies must be at least 100 words and cite one source.', { reply: { minWords: 100, sources: 1 } }],
+  ]);
+});
