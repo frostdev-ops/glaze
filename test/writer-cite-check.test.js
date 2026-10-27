@@ -120,3 +120,10 @@ test('review: Chicago compose checks recognize their own shortened notes', () =>
   assert.deepEqual(C.check(text, [SMITH], 'chicago17'), []);
   assert.deepEqual(C.count(text, [SMITH], 'chicago17'), { cited: 1, total: 1 });
 });
+
+test('review: MLA title-led organization reports match the title used by the formatter', () => {
+  const s = { id: 'report', type: 'report', title: 'Annual Findings', author: [{ literal: 'Research Council' }], publisher: 'Research Council' };
+  const node = doc(`<p>A result ${C.format(s, 'mla9').inText('4')}.</p>`);
+  assert.deepEqual(C.check(node, [s], 'mla9'), []);
+  assert.deepEqual(C.count(node, [s], 'mla9'), { cited: 1, total: 1 });
+});
