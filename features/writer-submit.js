@@ -16,7 +16,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const armed = new Map(); // box → whether it's still features/writer.js's
   const submitted = new WeakSet();
   const runs = new WeakMap(), tokens = new WeakMap();
-  const attached = new WeakMap(); // box → the file name this page already attached for it
+  const attached = new WeakMap(); // box → exact bytes and the row produced by this upload
+  const written = new WeakSet();
   let passing = null, running = false, active = null, down = null;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   const until = async (fn, ms, every = 100, valid = () => true) => { const end = Date.now() + ms; for (;;) { if (!valid()) return null; const v = fn(); if (v) return v; if (Date.now() >= end) return null; await pause(every); } };
@@ -106,9 +107,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const old = attached.get(box), data = new Uint8Array(bytes);
     if (old) {
       if (old.name !== file.name || old.bytes.length !== data.length || !old.bytes.every((b, i) => b === data[i])) return 'review';
-      // An uncertain upload can finish late. Reuse only the same bytes and the one fresh listing it produced.
+      // Reuse only the same bytes and the very row the completed upload produced.
       const rows = L().listings(area, file.name, visible);
-      return rows.length === 1 && !old.before.has(rows[0]) ? null : 'review';
+      return rows.length === 1 && rows[0] === old.row ? null : 'review';
     }
     if (L().listed(area, file.name, visible) || document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'review';
     const input = L().uploadInput(area) || await until(() => L().uploadInput(area), 1500, 100, here);
@@ -125,6 +126,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const rows = L().listings(area, file.name, visible);
       return rows.length === 1 && !before.has(rows[0]) && 'listed';
     }, 30000, 150, here);
+    if (shown === 'listed') attached.get(box).row = L().listings(area, file.name, visible)[0];
     return !here() ? 'page' : shown === 'listed' ? null : shown === 'dialog' ? 'review' : 'attach';
   };
   const sameText = (box, d) => {
@@ -150,6 +152,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user: box.context?.paper?.user }))?.ok === true;
     try {
       const d = L().delta({ note: m.note, text: m.text || '' });
+      if (!d && written.has(box)) return fail('review');
       let s = L().advance(L().advance(L().start({ text: !!d }), { step: 'save' }), { step: 'docx' });
       const here = () => !transaction.cancelled && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
       if (!here()) return fail('page');
@@ -163,6 +166,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!here()) return fail('page');
       if (d) {
         say(box, { type: 'submit:step', run: m.run, step: 'text' });
+        written.add(box);
         const w = write(box, d);
         if (w) return fail(w);
         s = L().advance(s, { step: 'text' });
