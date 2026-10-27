@@ -170,12 +170,14 @@ const HARNESS = `(() => {
     await reply.fr.click('#more');
     await until(() => reply.fr.evaluate(() => !document.getElementById('menu').hidden), 'menu');
     saved.menu = await shot(reply.el, 'writer-menu.png');
+    check(await reply.fr.evaluate(() => document.activeElement?.dataset.do === 'native'), '⋯ opens its menu with "Blackboard editor" focused');
     await reply.el.evaluate((f) => { f.style.width = '180px'; });
-    await reply.fr.click('#more'); await reply.fr.click('#more');
-    check(await reply.fr.evaluate(() => { const r = document.getElementById('menu').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; }), 'Blackboard editor menu stays inside a narrow editor');
+    await pause(150);
+    if (await reply.fr.evaluate(() => menu.hidden)) await reply.fr.click('#more');
+    check(await reply.fr.evaluate(() => { const r = document.getElementById('menu').getBoundingClientRect(); return !document.getElementById('menu').hidden && r.left >= 0 && r.right <= innerWidth; }), 'Blackboard editor menu stays inside a narrow editor');
     saved.narrow = await shot(reply.el, 'writer-narrow-menu.png');
     await reply.el.evaluate((f, w) => { f.style.width = w; }, originalWidth);
-    check(await reply.fr.evaluate(() => document.activeElement?.dataset.do === 'native'), '⋯ opens its menu with "Blackboard editor" focused');
+    await reply.fr.focus('[data-do="native"]');
     await p.keyboard.press('Enter');
     await until(() => p.evaluate(() => !document.querySelector('iframe[data-gz-writer-frame="reply"]')), 'reply frame gone');
     check(await p.evaluate((s) => { const r = document.querySelector(s).closest('bb-rich-text-editor'); return getComputedStyle(r).display !== 'none' && !r.hasAttribute('data-gz-writer') && document.querySelector(s).textContent === 'Back to Blackboard.'; }, REPLY), '"Blackboard editor" restores the native editor with the text');
