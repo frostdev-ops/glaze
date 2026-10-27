@@ -25,9 +25,8 @@ var GZ_ROUTES = globalThis.GZ_ROUTES || (() => {
   // attempt, a journal, a discussion.
   add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/(?:outline\/)?(?:assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)|journal\/_\d+_\d+|discussion\/_\d+_\d+)\/?$/.test(l.pathname),
     'features/editor-menu.js', 'GZ_EDITOR_MENU');
-  // A test attempt's progress band, folded into a pill once the questions scroll under it.
-  add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/(?:outline\/)?assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)\/?$/.test(l.pathname),
-    'features/test-progress.js', 'GZ_TEST_PROGRESS');
+  // A course's top bar and a test attempt's progress band, folded into pills once the page scrolls under them.
+  add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\//.test(l.pathname), 'features/sticky-fold.js', 'GZ_STICKY_FOLD');
   const sync = () => {
     for (const e of table) {
       let yes = false;
