@@ -1,0 +1,57 @@
+// Glaze Writer's Papers (papers.html): every paper on this device, newest first, each opened in the same paper chrome the
+// assignment's frame has (writer-paper.js), exported as a .docx, or brought back to an earlier version from its status
+// bar. ?paper=<key> opens one. Reads and writes only Writer's own storage (lib/writer-papers.js).
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return navigator.language || 'en'; } })();
+  const t = (k, v) => GZ_I18N.t(k, v, locale);
+  const h = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((x) => x != null)); return e; };
+  const catalogue = () => new Promise((ok) => {
+    const file = GZ_I18N.file(locale);
+    if (!file || globalThis.GZ_LANGS?.[file.slice(5, -3)]) { ok(); return; }
+    const s = h('script', { src: file, onload: ok, onerror: ok });
+    document.head.append(s);
+  });
+
+  const list = async () => {
+    await GZ_WRITER_PAPER.need(['lib/writer-styles.js', 'lib/writer-format.js', 'lib/writer-papers.js']);
+    const store = GZ_WRITER_PAPERS.open(), rows = await store.list();
+    document.title = t('Papers');
+    $('heading').textContent = t('Papers');
+    const when = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const nf = new Intl.NumberFormat(locale);
+    $('rows').replaceChildren(...rows.sort((a, b) => b.updated - a.updated).map((r) => {
+      const f = GZ_WRITER_STYLES.get(r.format);
+      const open = h('a', { className: 'gp-sbtn', href: `papers.html?paper=${encodeURIComponent(r.key)}`, textContent: t('Open') });
+      const exp = h('button', { type: 'button', className: 'gp-sbtn gp-ghost', textContent: t('Export .docx') });
+      exp.addEventListener('click', () => exportPaper(store, r.key));
+      return h('article', { className: 'gp-paper' },
+        h('div', { className: 'gp-paper-main' }, h('h2', { textContent: r.title || t('Paper') }), h('p', { textContent: [r.course, f.label, t('{n} words', { n: nf.format(r.words || 0) }), when.format(r.updated)].filter(Boolean).join(' · ') })),
+        r.submitted ? h('span', { className: 'gp-badge', textContent: t('Submitted') }) : null,
+        h('div', { className: 'gp-row' }, open, exp));
+    }));
+    $('list').hidden = false;
+  };
+  const exportPaper = async (store, key) => {
+    await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js']);
+    const p = await store.get(key);
+    if (!p?.doc) return;
+    const f = GZ_WRITER_STYLES.get(p.format), surname = GZ_WRITER_FORMAT.surname(p.doc, f);
+    const out = GZ_WRITER_DOCX.exportDocx(p.doc, { format: f, surname, title: p.title });
+    const url = URL.createObjectURL(new Blob([out.bytes], { type: out.type }));
+    const a = h('a', { href: url, download: GZ_ZIP.safeName(`${[surname, p.title || t('Paper')].filter(Boolean).join(' ').replace(/\s+/g, '_')}.docx`) });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  };
+  const edit = async (key) => {
+    document.documentElement.dataset.mode = 'paper';
+    const mountEl = h('div');
+    document.body.append(mountEl);
+    const editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '' });
+    await GZ_WRITER_PAPER.mount({ editor, t, standalone: true, key, context: () => ({}) });
+  };
+  catalogue().then(() => {
+    const key = new URLSearchParams(location.search).get('paper');
+    (key ? edit(key) : list()).catch((e) => console.error(e));
+  });
+})();

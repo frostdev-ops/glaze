@@ -1,0 +1,108 @@
+// Glaze Writer's papers: one per assignment, on this device, keyed by school, student, course and assignment, with its
+// versions and the student's own format presets. In chrome.storage.local (the manifest's unlimitedStorage lifts its
+// quota), which the editor frame (an extension page inside the LMS) and papers.html (a tab of its own) both see as the
+// same store, where a framed page's IndexedDB can be partitioned by the site around it. A version is taken on submit,
+// before an import or a restore, before a big edit, and every 10 minutes of writing; versions are capped by count and
+// size, keeping the last submitted one.
+// Classic script; module.exports for node.
+var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
+  const INDEX = 'writerPapers', PAPER = 'writerPaper:', VERSIONS = 'writerVersions:', PRESETS = 'writerPresets:';
+  const CAP = { versions: 40, bytes: 4e6, every: 10 * 60e3, words: 100, share: 0.15, presets: 20 };
+  const ID = /^_\d+_\d+$/, HOST = /^[a-z0-9.-]{1,253}(:\d{1,5})?$/i;
+  // A paper's key, or null unless every part is real: the school's host, and Ultra's ids for the student, course and
+  // assignment.
+  const keyOf = (k = {}) => (HOST.test(k.school || '') && ID.test(k.user || '') && ID.test(k.course || '') && ID.test(k.content || '') ? `${k.school.toLowerCase()}|${k.user}|${k.course}|${k.content}` : null);
+  const scopeOf = (k = {}) => (HOST.test(k.school || '') && ID.test(k.user || '') ? `${k.school.toLowerCase()}|${k.user}` : null);
+  // A document's text size from its JSON: characters and words.
+  const measure = (doc) => {
+    let text = '';
+    const walk = (n) => { if (typeof n?.text === 'string') text += n.text; else if (Array.isArray(n?.content)) { for (const c of n.content) walk(c); text += ' '; } };
+    walk(doc);
+    return { chars: text.replace(/\s+/g, ' ').trim().length, words: text.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length };
+  };
+  const bytes = (v) => JSON.stringify(v).length;
+
+  // store: chrome.storage.local's get/set/remove (promises); now: the clock (tests pin it).
+  const open = (store = globalThis.chrome?.storage?.local, now = () => Date.now()) => {
+    const get = async (k) => (await store.get(k))[k];
+    // Writes to one key run one after another, so an autosave never lands under a newer one from this page.
+    const queues = new Map();
+    const serial = (k, fn) => { const p = (queues.get(k) || Promise.resolve()).then(fn, fn); queues.set(k, p.catch(() => {})); return p; };
+
+    const versionsOf = async (k) => (Array.isArray(await get(VERSIONS + k)) ? await get(VERSIONS + k) : []);
+    // Newest first, within the caps; the newest submitted version always stays.
+    const cap = (list) => {
+      const keep = [...list].sort((a, b) => b.at - a.at);
+      const submitted = keep.find((v) => v.reason === 'submit');
+      let total = keep.reduce((n, v) => n + v.bytes, 0);
+      for (let i = keep.length - 1; i >= 0 && (keep.length > CAP.versions || total > CAP.bytes); i--) {
+        if (keep[i] === submitted || i === 0) continue;
+        total -= keep[i].bytes;
+        keep.splice(i, 1);
+      }
+      return keep;
+    };
+    const snapshot = (doc, reason, at) => {
+      const m = measure(doc);
+      return { id: `${at.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at, reason, words: m.words, bytes: bytes(doc), doc };
+    };
+    const addVersion = async (k, v) => { const list = cap([v, ...(await versionsOf(k))]); await store.set({ [VERSIONS + k]: list }); return v; };
+    const index = async (paper) => {
+      const list = (await get(INDEX)) || [];
+      const row = { key: paper.key, title: paper.title || '', course: paper.courseName || '', url: paper.url || '', words: paper.words || 0, format: paper.format, updated: paper.updated, submitted: paper.submitted || null };
+      await store.set({ [INDEX]: [row, ...list.filter((r) => r.key !== paper.key)].slice(0, 2000) });
+    };
+
+    // Saves the paper under k, merging patch into what's stored. reason: 'auto' (the default: autosave), 'submit',
+    // 'import' or 'restore' (the doc before it is kept), 'format'. → { paper, version }.
+    const save = (k, patch = {}, { reason = 'auto' } = {}) => serial(k, async () => {
+      if (typeof k !== 'string' || !k) throw new Error('no paper key');
+      const prev = (await get(PAPER + k)) || null, t = now();
+      const paper = { ...(prev || { key: k, created: t }), ...patch, key: k, updated: t };
+      if (patch.doc) paper.words = patch.words ?? measure(patch.doc).words;
+      let version = null;
+      const last = paper.lastVersion || 0;
+      if (reason === 'submit') { version = await addVersion(k, snapshot(paper.doc, 'submit', t)); paper.submitted = t; }
+      else if ((reason === 'import' || reason === 'restore' || reason === 'format') && prev?.doc) version = await addVersion(k, snapshot(prev.doc, reason, t));
+      else if (prev?.doc && patch.doc) {
+        const a = measure(prev.doc), b = measure(patch.doc);
+        const big = Math.abs(a.words - b.words) >= CAP.words || Math.abs(a.chars - b.chars) >= CAP.share * Math.max(a.chars, b.chars, 500);
+        if (big) version = await addVersion(k, snapshot(prev.doc, 'edit', t));
+        else if (t - last >= CAP.every && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) version = await addVersion(k, snapshot(patch.doc, 'auto', t));
+      }
+      if (!prev && patch.doc) version = await addVersion(k, snapshot(patch.doc, 'start', t));
+      if (version) paper.lastVersion = t;
+      await store.set({ [PAPER + k]: paper });
+      await index(paper);
+      return { paper, version };
+    });
+    const versions = async (k) => (await versionsOf(k)).map(({ doc, ...v }) => v);
+    const version = async (k, id) => (await versionsOf(k)).find((v) => v.id === id) || null;
+    // The version back as the paper, with what it replaces kept as a version.
+    const restore = async (k, id) => {
+      const v = await version(k, id);
+      if (!v) return null;
+      return save(k, { doc: v.doc, words: v.words }, { reason: 'restore' });
+    };
+    const list = async () => ((await get(INDEX)) || []).filter((r) => r && typeof r.key === 'string');
+    const remove = (k) => serial(k, async () => {
+      await store.remove([PAPER + k, VERSIONS + k]);
+      await store.set({ [INDEX]: ((await get(INDEX)) || []).filter((r) => r.key !== k) });
+    });
+
+    // A student's presets (lib/writer-styles.js custom), kept valid.
+    const presets = async (scope) => ((scope && (await get(PRESETS + scope))) || []).filter((x) => globalThis.GZ_WRITER_STYLES?.custom ? GZ_WRITER_STYLES.custom(x) : true);
+    const savePreset = async (scope, preset) => {
+      if (!scope) throw new Error('no student');
+      const now2 = (await presets(scope)).filter((x) => x.id !== preset.id);
+      await store.set({ [PRESETS + scope]: [...now2, preset].slice(-CAP.presets) });
+    };
+    const removePreset = async (scope, id) => { if (scope) await store.set({ [PRESETS + scope]: (await presets(scope)).filter((x) => x.id !== id) }); };
+
+    return { get: (k) => get(PAPER + k).then((p) => p || null), save, versions, version, restore, list, remove, presets, savePreset, removePreset };
+  };
+
+  return { open, keyOf, scopeOf, measure, CAP, KEYS: { INDEX, PAPER, VERSIONS, PRESETS } };
+})();
+
+if (typeof module !== 'undefined') module.exports = GZ_WRITER_PAPERS; else GZ_WRITER_PAPERS;

@@ -17,6 +17,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const declined = new WeakSet(); // editors given back to Blackboard's editor: Ultra's from then on, on this page
   const failed = new WeakMap(); // editor → when its frame last failed to open; tried again a minute later
   const SENDS = new Set(['post', 'reply', 'message']);
+  // A paper (an assignment's attempt) is a page of its own: as tall as the window allows, whatever its text; it stays in
+  // Writer's storage and never goes into Ultra's editor (the submit step attaches it as a .docx).
+  const PAPER_HEIGHT = 'max(640px, calc(100vh - 120px))';
   const on = () => X.on() && X.site === 'ultra' && X.settings().enabled !== false && !!X.settings().enhance?.writer;
 
   // The Look as the frame wears it: the palette, radius and font on <html>, light or dark, and the motion level.
@@ -79,7 +82,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     f.setAttribute('data-gz-writer-frame', box.kind);
     // Out of sight until it says it's ready, then in the box's place at the box's height: the frame's 3px each side
     // holds its focus ring.
-    f.style.cssText = `display:block;border:0;width:calc(100% + 6px);margin:-3px;height:${Math.max(120, Math.round(box.root.getBoundingClientRect().height)) + 6}px;background:transparent;color-scheme:${html.hasAttribute('data-gz-dark-theme') ? 'dark' : 'light'};position:absolute;opacity:0;pointer-events:none`;
+    f.style.cssText = `display:block;border:0;width:calc(100% + 6px);margin:-3px;height:${box.mode === 'paper' ? PAPER_HEIGHT : `${Math.max(120, Math.round(box.root.getBoundingClientRect().height)) + 6}px`};background:transparent;color-scheme:${html.hasAttribute('data-gz-dark-theme') ? 'dark' : 'light'};position:absolute;opacity:0;pointer-events:none`;
     const ch = new MessageChannel();
     box.frame = f;
     box.ready = false;
@@ -155,6 +158,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     for (const k of ['position', 'opacity', 'pointer-events']) f.style.removeProperty(k);
     if (l.motion !== 'off' && !matchMedia('(prefers-reduced-motion: reduce)').matches) f.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
     if (typing) { f.focus(); box.port.postMessage({ type: 'focus' }); }
+    if (box.mode === 'paper') { X.need('lib/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.send(X, box, () => boxes.get(ed) === box)).catch(() => {}); return; }
     // Ultra changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text, not
     // its markup, says so: Quill tidies markup after each sync.
     box.observer = new MutationObserver(() => {
@@ -176,6 +180,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   };
   const hear = (box, m) => {
     if (m.type === 'ready' && !box.ready) swap(box);
+    else if (box.mode === 'paper') { if (m.type === 'focus-mode') focusMode(box, m.on === true); else if (m.type === 'native') { drop(box); declined.add(box.editor); } }
     else if (m.type === 'height' && Number.isFinite(m.px)) box.frame.style.height = `${Math.max(40, Math.min(20000, Math.round(m.px)))}px`;
     else if (m.type === 'change' && typeof m.html === 'string' && typeof m.text === 'string') {
       box.snapshot = { ...box.destination, html: m.html, text: m.text, at: Date.now() };
@@ -225,9 +230,28 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       box.sending = true;
     }
   }, true);
+  // Focus: the paper's frame fills the window over a dimmed page, until the frame says otherwise or the dim is clicked.
+  const focusMode = (box, on) => {
+    const f = box.frame;
+    if (!f || !!box.focused === on) return;
+    if (on) {
+      box.focused = { style: f.style.cssText };
+      const dim = box.focused.dim = document.createElement('div');
+      dim.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(2,6,12,.66)';
+      dim.addEventListener('click', () => { box.port?.postMessage({ type: 'focus-mode', on: false }); focusMode(box, false); });
+      document.body.append(dim);
+      f.style.cssText += ';position:fixed;inset:0;width:100vw;height:100vh;margin:0;z-index:2147483647';
+      f.focus();
+    } else {
+      f.style.cssText = box.focused.style;
+      box.focused.dim.remove();
+      box.focused = null;
+    }
+  };
   // The frame out and Ultra's editor back, as it was.
   const drop = (box) => {
     if (boxes.get(box.editor) !== box) return;
+    if (box.focused) focusMode(box, false);
     remember(box);
     boxes.delete(box.editor);
     globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.unwatch(box);

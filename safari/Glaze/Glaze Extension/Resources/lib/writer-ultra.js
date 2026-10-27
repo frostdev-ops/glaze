@@ -34,9 +34,9 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     if (ed.closest('.reply-input-wrapper')) return ed.closest('.comment-and-reply') ? 'reply' : 'unknown';
     return !ed.closest('.comment-and-reply') && ed.closest('bb-rich-text-editor[analytics-id="components.directives.discussion.message.onEditorClick"]') ? 'post' : 'unknown';
   };
-  // Every box writes compose for now, which Ultra's Quill keeps exactly. Paper mode (MODE.assignment = 'paper') comes with
-  // the .docx submit, since a paper's page breaks, notes and quotes have no place in Ultra's text box.
-  const MODE = {};
+  // An assignment's attempt is a paper (paper mode: pages, formats, a .docx at submit); every other box writes compose,
+  // which Ultra's Quill keeps exactly.
+  const MODE = { assignment: 'paper' };
   // A quick look before a frame opens: a box with Ultra's embeds or extra formats stays native. It passes everything
   // compose itself writes (Quill's indent and alignment classes, its code blocks and cursor), so a box Writer has synced
   // stays Writer's; the frame's own check (lib/writer-schema.js loses) has the last word.
