@@ -9,7 +9,8 @@
 # fallback for old Internet Explorer (an ActiveX document, or an iframe at a script URL) is cut; every browser Glaze
 # supports has Object.create, so it never ran. So is core-js's last way to find the global object, a function made from
 # text (globalThis always answers first), and scripts/vendor-pdfjs-brotli.js has the worker read Brotli's dictionary from
-# google/brotli's dictionary.bin (pinned here, MIT) instead of the XORed string pdf.js packs it in. The tarball is checked against the SHA-256 pinned here. Run it to
+# google/brotli's dictionary.bin (pinned here, MIT) instead of the XORed string pdf.js packs it in. pdf.js's few calls of
+# the old escape and unescape functions are written out as the same decoding. The tarball is checked against the SHA-256 pinned here. Run it to
 # upgrade pdf.js (new version, new hash); the output is checked in, so the extension itself still has no build step.
 # Usage: scripts/vendor-pdfjs.sh
 set -euo pipefail
@@ -55,6 +56,18 @@ for (const file of process.argv.slice(2)) {
   cut(/^  \/\/ eslint-disable-next-line no-new-func -- fallback\n  \(function \(\) \{ return this; \}\)\(\) \|\| Function\('return this'\)\(\);\n/gm,
     '  // scripts/vendor-pdfjs.sh cut core-js\'s function-from-text fallback here: every browser Glaze supports has globalThis.\n' +
     '  (function () { return this; })();\n');
+  // pdf.js's four calls of the old escape functions, written out exactly (test/vendor-pdfjs.test.js compares them with
+  // the originals): text to and from UTF-8, and a Content-Disposition file name's %XX and %uXXXX.
+  cut(/^  return decodeURIComponent\(escape\(str\)\);\n/gm,
+    '  return decodeURIComponent(str.replace(/[^A-Za-z0-9]/g, (c) => (c.charCodeAt(0) < 256 ? "%" + c.charCodeAt(0).toString(16).padStart(2, "0") : "%u")));\n');
+  cut(/^  return unescape\(encodeURIComponent\(str\)\);\n/gm,
+    '  return encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));\n');
+  if (file.endsWith('/pdf.mjs')) {
+    const percent = '.replace(/%u([0-9A-Fa-f]{4})|%([0-9A-Fa-f]{2})/g, (_, u, x) => String.fromCharCode(parseInt(u ?? x, 16)))';
+    cut(/^    filename = unescape\(filename\);\n/gm, `    filename = filename${percent};\n`);
+    cut(/^        part = unescape\(part\);\n/gm, `        part = part${percent};\n`);
+  }
+  if (/\b(?:un)?escape\s*\(/.test(src)) throw new Error(`${file}: an escape function is left`);
   if (/ActiveXObject|javascript:|['"]java['"]\s*\+/i.test(src)) throw new Error(`${file}: old-IE code is left`);
   if (/\beval\s*\(|(^|[^\w$.])Function\s*\(\s*['"`]/.test(src)) throw new Error(`${file}: code made from text is left`);
   fs.writeFileSync(file, src);

@@ -75,3 +75,33 @@ test("the worker's Brotli decoder reads the pinned dictionary file, keeps no pac
   assert.throws(() => decoder(null)(new Int8Array(4)), /Brotli dictionary unavailable/);
   assert.match(script, /\nnode scripts\/vendor-pdfjs-brotli\.js lib\/pdfjs\/pdf\.worker\.mjs lib\/pdfjs\/brotli-dictionary\.bin\n/);
 });
+
+// pdf.js used the old escape and unescape functions for UTF-8 and file names; scripts/vendor-pdfjs.sh writes them out.
+// Each replacement gives what the original gave, and throws where it threw, on text built to hit every edge.
+test("pdf.js's escape and unescape calls are written out and decode exactly as before", () => {
+  const vm = require('node:vm');
+  const pick = (src, name) => src.slice(src.indexOf(`function ${name}(str) {`), src.indexOf('\n}\n', src.indexOf(`function ${name}(str) {`)) + 2);
+  const sample = (n) => {
+    const pool = ['a', 'Z', '0', ' ', '%', '%4', '%41', '%u00e9', '%u12', '@', '*', '/', '+', '.', '\x00', '\x7f', '\x80', '\xc3', '\xa9', '\xe2', '\x82', '\xac',
+      '\xf0', '\x9f', '\x98', '\x80', '\xff', 'é', '€', '😀', '\ud800', '\udc00', 'ẞ'];
+    return Array.from({ length: n }, (_, i) => pool[(i * 7 + n * 13) % pool.length]).join('');
+  };
+  const outcome = (f, s) => { try { return ['ok', f(s)]; } catch (e) { return ['throws', e.constructor.name]; } };
+  for (const f of modules) {
+    const src = read(`lib/pdfjs/${f}`);
+    assert.doesNotMatch(src, /\b(?:un)?escape\s*\(/, `lib/pdfjs/${f} still calls escape or unescape`);
+    const ctx = vm.createContext({});
+    vm.runInContext(pick(src, 'stringToUTF8String') + pick(src, 'utf8StringToString'), ctx);
+    for (let n = 0; n < 400; n++) {
+      const s = sample(n % 40), bytes = s.replace(/[^\x00-\xff]/g, 'x');
+      assert.deepEqual(outcome(ctx.stringToUTF8String, s), outcome((x) => decodeURIComponent(escape(x)), s), `stringToUTF8String ${JSON.stringify(s)}`);
+      assert.deepEqual(outcome(ctx.stringToUTF8String, bytes), outcome((x) => decodeURIComponent(escape(x)), bytes), `stringToUTF8String ${JSON.stringify(bytes)}`);
+      assert.deepEqual(outcome(ctx.utf8StringToString, s), outcome((x) => unescape(encodeURIComponent(x)), s), `utf8StringToString ${JSON.stringify(s)}`);
+    }
+  }
+  const network = read('lib/pdfjs/pdf.mjs');
+  const percent = network.match(/\n    filename = filename(\.replace\(.*\));\n/)[1];
+  assert.ok(network.includes(`\n        part = part${percent};\n`));
+  const decode = vm.runInNewContext(`(s) => s${percent}`);
+  for (let n = 0; n < 400; n++) { const s = sample(n % 40); assert.equal(decode(s), unescape(s), JSON.stringify(s)); }
+});
