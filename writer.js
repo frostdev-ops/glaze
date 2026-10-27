@@ -213,15 +213,15 @@
   const shut = (back) => { hide(menu); more.setAttribute('aria-expanded', 'false'); if (back) more.focus(); };
   const placeMenu = () => {
     const r = more.getBoundingClientRect();
-    menu.style.right = `${Math.max(3, innerWidth - r.right)}px`;
+    menu.style.right = `${Math.max(3, Math.min(innerWidth - r.right, innerWidth - menu.offsetWidth - 3))}px`;
     menu.style.bottom = `${innerHeight - r.top + 6}px`;
   };
   addEventListener('resize', () => { if (selected) onSelection(selected); if (!menu.hidden) placeMenu(); });
   more.addEventListener('click', () => {
     if (!menu.hidden) { shut(); return; }
-    placeMenu();
     more.setAttribute('aria-expanded', 'true');
     show(menu);
+    placeMenu();
     menu.querySelector('[role="menuitem"]').focus();
   });
   menu.addEventListener('keydown', (e) => {

@@ -338,6 +338,7 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
+  ['lib/writer-ultra.js', "querySelectorAll('*')", 1], // Only the recognized Quill body at takeover or after a foreign edit; mounted boxes are skipped on observer passes.
   ['features/rubric.js', 'getComputedStyle(a.box)', 1], // One recognized rubric section's padding and font per layout pass; no descendant sweep.
   ['features/writer.js', 'getComputedStyle(html)', 1], // The root's Look tokens, when a Writer box opens or <html>'s Look attributes change.
   ['lib/editor.js', 'getComputedStyle(doc.documentElement)', 1], // One root direction read per category keypress, never on scroll or an LMS page.
