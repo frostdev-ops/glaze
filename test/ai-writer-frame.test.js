@@ -41,7 +41,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
   const reply = (m) => receives.forEach((f) => f(m));
   vm.createContext(sandbox); vm.runInContext(source, sandbox);
   const ai = sandbox.GZ_WRITER_AI;
-  const pane = () => { const host = new Element(); return sandbox.GZ_WRITER_AI.feedbackView(host).el; };
+  const pane = (opts) => { const host = new Element(); return sandbox.GZ_WRITER_AI.feedbackView(host, opts).el; };
   return { ai, sent, pendingStatus, pendingRun, reply, hooks, opened, pane, proof: sandbox.GZ_WRITER_PROOF,
     start: async () => { hooks.ready(); await flush(); },
     off: () => { settings.on = false; hooks.storage({ ai: { newValue: structuredClone(settings) } }, 'local'); },
@@ -131,6 +131,38 @@ test('an attempt Glaze can\'t confirm as an assignment says so after its wait: A
   const pane = f.pane();
   assert.match(pane.textContent, /^AI is only available on confirmed assignments, never on tests\./);
   assert.equal(pane.children.some((c) => c.className === 'gz-fb-run'), false, 'nothing in Settings changes it');
+});
+
+test('Feedback as the mockup draws it: a head row with the run button in every state, skeletons while it reads, cards with status, level and page, an error card', async () => {
+  const f = frame(); await f.start();
+  f.context({ kind: 'assignment', assignment: { instructions: 'Write three things you learned.' } }); await flush();
+  const all = (n, c, out = []) => { if (n && typeof n === 'object') { if (String(n.className || '').split(' ').includes(c)) out.push(n); for (const x of n.children) all(x, c, out); } return out; };
+  const one = (n, c) => all(n, c)[0];
+  let p = f.pane();
+  const head = one(p, 'gz-fb-head');
+  assert.ok(head && one(head, 'gz-fb-run'), 'the run button sits in the head row, not alone in the pane\'s corner');
+  assert.equal(one(head, 'gz-fb-sum').textContent.trim(), 'Not run yet');
+  assert.equal(one(head, 'gz-fb-run').textContent, 'Get feedback');
+  f.ai.feedback(); await flush();
+  p = f.pane();
+  assert.match(one(p, 'gz-fb-run').textContent, /Reading your draft…/);
+  assert.equal(all(p, 'gz-fb-skel').length, 3, 'three skeleton cards while it reads');
+  f.reply({ id: f.pendingRun.at(-1).id, type: 'end', output: { criteria: [
+    { id: 'a', label: 'Thesis', status: 'met', comment: 'Clear.', quotes: [{ start: 0, end: 11, quote: 'draft words' }], level: { label: 'Proficient', value: 9, points: 10 } },
+    { id: 'b', label: 'Evidence', status: 'partly', comment: 'Thin.', quotes: [], level: { label: 'Developing', value: null, points: null } },
+    { id: 'c', label: 'Works Cited', status: 'missing', comment: 'None yet.', quotes: [], level: null }] } });
+  await flush();
+  p = f.pane({ pageAt: () => 2 });
+  assert.equal(one(p, 'gz-fb-sum').textContent.replace(/\s+/g, ' ').trim(), '1 met 1 partly 1 missing');
+  assert.equal(one(p, 'gz-fb-run').textContent, 'Check again');
+  assert.deepEqual(all(p, 'gz-fb-item').map((c) => [one(c, 'gz-fb-chip').className, one(c, 'gz-fb-chip').textContent, one(c, 'gz-fb-crit').textContent, one(c, 'gz-fb-level')?.textContent || '']),
+    [['gz-fb-chip met', 'Met', 'Thesis', 'Proficient · 9/10'], ['gz-fb-chip partly', 'Partly', 'Evidence', 'Developing'], ['gz-fb-chip missing', 'Missing', 'Works Cited', '']]);
+  assert.equal(one(one(p, 'gz-fb-quote'), 'gz-fb-page').textContent, 'p. 2', 'a passage says its page in the paper');
+  f.ai.feedback(); await flush();
+  f.reply({ id: f.pendingRun.at(-1).id, type: 'error', error: 'failed' }); await flush();
+  p = f.pane();
+  const err = one(p, 'gz-fb-error');
+  assert.ok(err && /AI couldn't give feedback\./.test(err.textContent) && one(err, 'gz-fb-run').textContent === 'Try again', 'an error is a card with Try again');
 });
 
 test('a download in progress shows its share and checks again once it is in', async () => {

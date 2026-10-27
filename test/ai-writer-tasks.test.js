@@ -173,12 +173,29 @@ test('writer.feedback: per rubric criterion, comments only, quotes anchored in t
     { criterion: '_10_1', status: 'partly', comment: 'Twice.', quotes: [] },
   ] } });
   assert.deepEqual(output.criteria, [
-    { id: '_10_1', label: 'Thesis', status: 'met', comment: 'Your claim is clear.', quotes: [{ start: 16, end: 57, quote: 'memory as a debt every character inherits' }] },
-    { id: '_11_1', label: 'Evidence', status: 'missing', comment: 'No source is cited yet.', quotes: [] },
+    { id: '_10_1', label: 'Thesis', status: 'met', comment: 'Your claim is clear.', quotes: [{ start: 16, end: 57, quote: 'memory as a debt every character inherits' }], level: null },
+    { id: '_11_1', label: 'Evidence', status: 'missing', comment: 'No source is cited yet.', quotes: [], level: null },
   ]);
   const { system, data } = parts(req);
   assert.match(system, /never write, rewrite or suggest sentences/);
   assert.ok(fenced(data, '[_10_1] Thesis (10 points)') && fenced(data, 'States a clear claim.'), 'the rubric as plain text, fenced');
+});
+
+test('writer.feedback: the rubric level the draft reaches, only one its criterion has, with that level\'s points', async () => {
+  const rubric = { title: 'Essay rubric', levels: [{ id: '_1_1', label: 'Exemplary' }, { id: '_2_1', label: 'Proficient' }], criteria: [
+    { id: '_10_1', label: 'Thesis', points: 10, cells: [{ level: '_1_1', detail: 'Clear.', value: 10 }, { level: '_2_1', detail: 'Mostly clear.', value: 8 }] },
+    { id: '_11_1', label: 'Evidence', points: 5, cells: [{ level: '_1_1', detail: 'Two sources.', value: 5 }] },
+    { id: '_12_1', label: 'Style', cells: [{ level: '_1_1', detail: 'Plain.' }] }] };
+  const draft = 'Morrison treats memory as a debt every character inherits. The river is where it comes due.';
+  const { output } = await go(FB.task, { text: draft, context: { kind: 'assignment', assignment: { title: 'Essay 2', instructions: 'Write on memory.', rubric } } }, { json: { criteria: [
+    { criterion: '_10_1', status: 'met', comment: 'Your claim is clear.', quotes: [], level: ' proficient ' },
+    { criterion: '_11_1', status: 'partly', comment: 'One source so far.', quotes: [], level: 'Developing' },
+    { criterion: '_12_1', status: 'met', comment: 'Your sentences are plain.', quotes: [], level: 'Exemplary' },
+  ] } });
+  assert.deepEqual(output.criteria.map((c) => c.level), [{ label: 'Proficient', value: 8, points: 10 }, null, { label: 'Exemplary', value: null, points: null }],
+    'a level the criterion has, by its name; one it hasn\'t is none');
+  const plain = await go(FB.task, { text: draft, context: ASSIGN }, { json: { criteria: [{ criterion: '_10_1', status: 'met', comment: 'Your claim is clear.', quotes: [] }] } });
+  assert.equal(plain.output.criteria[0].level, null, 'a reply without levels still counts');
 });
 
 test('writer.feedback: without a rubric, a requirement must be in the instructions; a comment offering wording loses it', async () => {
