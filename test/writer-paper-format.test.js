@@ -94,3 +94,20 @@ test('a preset away from its format\'s margins, font or header is flagged with a
   assert.deepEqual(r.issues.map((i) => i.rule).sort(), ['header-kind', 'margins', 'preset-font', 'preset-line']);
   assert.ok(r.issues.every((i) => i.fix?.op === 'format' && i.fix.id === 'mla9'));
 });
+
+test('APA permits Arial 11 and Calibri 11; Chicago permits Arial 11 and Calibri 12', () => {
+  // APA 7, section 2.19: https://apastyle.apa.org/style-grammar-guidelines/paper-format/font
+  // Chicago/Turabian (17th-compatible), Main Text tip sheet: https://www.chicagomanualofstyle.org/turabian/Student-Tip-Sheets.html
+  for (const [id, font, size] of [['apa7', 'Arial', 11], ['apa7', 'Calibri', 11], ['chicago17', 'Arial', 11], ['chicago17', 'Calibri', 12]]) {
+    const f = ST.custom({ id: 'custom:font', label: 'Legible', base: id, font, size });
+    assert.ok(!F.check(node(FX.papers[id]()), f, ctx).issues.some((i) => i.rule === 'preset-font'), `${id} ${font} ${size}`);
+  }
+});
+
+test('a bold Chicago title and a paper without borrowed material are legitimate', () => {
+  const f = ST.FORMATS.chicago17, json = FX.papers.chicago17();
+  json.content[6].content.forEach((n) => { n.marks = [{ type: 'bold' }]; });
+  assert.ok(!F.check(node(json), f, ctx).issues.some((i) => i.rule === 'title-bold'), 'the official title-page sample uses bold');
+  const own = node(F.template(f, v, [{ type: 'paragraph', content: [{ type: 'text', text: 'My own observation. '.repeat(30) }] }]));
+  assert.ok(!F.check(own, f, ctx).issues.some((i) => i.rule === 'notes-none'), 'length alone proves no need for a citation');
+});
