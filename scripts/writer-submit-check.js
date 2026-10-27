@@ -143,7 +143,8 @@ const HARNESS = `(() => {
       p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`${tag} console: ${m.text()}`); });
     };
     const settle = async (fr) => { await pause(150); await fr.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); await pause(100); };
-    const openAttempt = async (mode = '') => {
+    const openAttempt = async (mode = '', keepPermit = false) => {
+      if (!keepPermit) await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
       const p = await context.newPage();
       watch(p, `page${mode ? `?${mode}` : ''}`);
       await p.goto(`${site}${ATTEMPT}${mode ? `?mode=${mode}` : ''}`);
@@ -292,6 +293,39 @@ const HARNESS = `(() => {
     const drop = await p.evaluate(() => ({ uploads: __uploads.map((u) => [u.name, u.via]), clicks: __clicks, text: __text(), picker: __picker }));
     check(drop.uploads.length === 1 && drop.uploads[0].join() === 'Rivera_Essay2.docx,drop' && drop.picker === 0, 'without its input, the file is dropped on Ultra\'s drop zone (no picker)');
     check(drop.clicks.length === 1 && drop.text === '\n', 'a double click submits once; nothing chosen, nothing written into Ultra\'s box');
+    await p.close();
+
+    // ---- a second tab shares the attempt fence, even after the first native footer is remounted
+    ({ p, el, fr } = await openAttempt('empty'));
+    const second = await openAttempt('empty', true);
+    await fr.click('.gp-submit'); await sheetOpen(fr);
+    await second.fr.click('.gp-submit'); await sheetOpen(second.fr);
+    await Promise.all([fr.click('.gs-primary'), second.fr.click('.gs-primary')]);
+    await until(async () => (await p.evaluate(() => __clicks.length)) + (await second.p.evaluate(() => __clicks.length)) === 1, 'one tab submits');
+    await until(async () => (await fr.evaluate(() => !!document.querySelector('.gs-err')?.textContent)) || (await second.fr.evaluate(() => !!document.querySelector('.gs-err')?.textContent)), 'other tab refused');
+    check((await p.evaluate(() => __uploads.length)) + (await second.p.evaluate(() => __uploads.length)) === 1, 'two tabs: exactly one upload and one native Submit for the attempt');
+    await p.close(); await second.p.close();
+
+    // ---- Cancel remains usable during upload and revokes all later submission work
+    ({ p, el, fr } = await openAttempt('empty'));
+    await fr.click('.gp-submit'); await sheetOpen(fr); await fr.click('.gs-primary');
+    await until(() => p.evaluate(() => __uploads.length === 1), 'upload started');
+    check(await fr.evaluate(() => !document.querySelector('.gs-foot .gs-btn').disabled && document.activeElement?.closest('.gs-layer')), 'busy: focus stays in the sheet and Cancel remains available');
+    await fr.click('.gs-foot .gs-btn:not(.gs-primary)');
+    await pause(700);
+    check(await p.evaluate(() => !__clicks.length && __uploads.length === 1) && await fr.evaluate(() => !document.querySelector('.gs-layer')), 'Cancel during upload closes the sheet and never submits (the upload is left for Blackboard review)');
+    await p.close();
+
+    // ---- a same-named file needs native review; hand-back immediately releases capture interception
+    ({ p, el, fr } = await openAttempt());
+    await p.evaluate(() => { const n = document.createElement('span'); n.textContent = 'Rivera_Essay2.docx'; document.querySelector('[class*="makeStylessubmission-"]').append(n); });
+    await fr.click('.gp-submit'); await sheetOpen(fr); await fr.click('.gs-primary');
+    await until(() => fr.evaluate(() => !!document.querySelector('.gs-err').textContent), 'existing attachment refused');
+    check(await p.evaluate(() => !__uploads.length && !__clicks.length), 'a pre-existing same-named file never triggers another upload or Submit');
+    await fr.click('.gs-native');
+    await until(() => p.evaluate(() => !document.querySelector('iframe.gz-writer')), 'Blackboard editor restored');
+    await p.click(SUBMIT);
+    check(await p.evaluate(() => __clicks.join() === 'assignment.attempt.authoring.footer.submit'), 'Blackboard editor hand-back releases native Submit interception');
     await p.close();
 
     // ---- failures stop before Submit
