@@ -60,22 +60,24 @@ private enum Native {
     // Warm sessions by their instructions, each with when it was made.
     static let maxWarm = 4, warmFor: TimeInterval = 300
     nonisolated(unsafe) private static var warm: [String: (session: LanguageModelSession, at: Date)] = [:]
+    nonisolated(unsafe) private static var warmRevision: UInt = 0
 
     static func release() -> [String: Any] {
-        lock.withLock { warm.removeAll() }
+        lock.withLock { warmRevision &+= 1; warm.removeAll() }
         return ["ok": true]
     }
 
     /// The warm session for these instructions, or a new one; either way the next is made and prewarmed.
     private static func warmSession(_ instructions: String?, _ entries: [Transcript.Entry], model: SystemLanguageModel) -> LanguageModelSession {
         let key = instructions ?? ""
-        let kept: LanguageModelSession? = lock.withLock {
+        let (kept, revision): (LanguageModelSession?, UInt) = lock.withLock {
             warm = warm.filter { $0.value.at.addingTimeInterval(warmFor) > Date() }
-            return warm.removeValue(forKey: key)?.session
+            return (warm.removeValue(forKey: key)?.session, warmRevision)
         }
         let next = LanguageModelSession(model: model, transcript: Transcript(entries: entries))
         next.prewarm()
         lock.withLock {
+            guard warmRevision == revision else { return }
             warm[key] = (next, Date())
             while warm.count > maxWarm, let oldest = warm.min(by: { $0.value.at < $1.value.at })?.key { warm[oldest] = nil }
         }
