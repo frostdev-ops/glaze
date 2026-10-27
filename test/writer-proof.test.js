@@ -363,3 +363,11 @@ test('issues reject spans that split a surrogate pair', () => {
   assert.ok(e.issues.apply(e.issues.list()[0]));
   assert.equal(e.text(), '🙂 wrong');
 });
+
+test('contextual issues expire when their sentence changes outside the marked word', () => {
+  const e = editor('<p>Their going home.</p><p>Another issue.</p>');
+  e.issues.set('harper', [{ from: 1, to: 6, kind: 'grammar', suggestions: ["They’re"] }, { ...e.at('Another'), kind: 'grammar' }]);
+  e.view.dispatch(e.view.state.tr.insertText('going home was surprising.', 7, 18));
+  assert.deepEqual(e.issues.list().map((i) => i.text), ['Another']);
+  assert.equal(I.key.getState(e.view.state).deco.find().length, 1);
+});
