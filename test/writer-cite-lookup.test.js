@@ -55,7 +55,7 @@ const response = (body, { status = 200, type = 'application/json', url } = {}) =
 
 test('the worker\'s fetch: writer.html only; doi.org and Open Library without a grant, a page only with its host held', async () => {
   const calls = [];
-  const fetch = async (url, init) => { calls.push([url, init]); return response(fixture('writer-cite-doi.json'), { url: 'https://api.crossref.org/v1/works/10.5555%2Fgz.2026.001/transform', type: 'application/vnd.citationstyles.csl+json' }); };
+  const fetch = async (url, init) => { calls.push([url, init]); return response(fixture('writer-cite-doi.json'), { url, type: 'application/vnd.citationstyles.csl+json' }); };
   for (const s of [null, { ...sender, id: 'other' }, { ...sender, url: 'chrome-extension://gz/options.html' }, { ...sender, url: 'https://bb.school.edu/writer.html' }])
     assert.deepEqual(await L.serve({ kind: 'doi', value: '10.5555/gz.2026.001' }, s, env({ fetch })), { ok: false, error: 'sender' });
   const r = await L.serve({ kind: 'doi', value: '10.5555/gz.2026.001' }, sender, env({ fetch }));
@@ -63,7 +63,7 @@ test('the worker\'s fetch: writer.html only; doi.org and Open Library without a 
   assert.equal(r.text, fixture('writer-cite-doi.json'));
   const [url, init] = calls.at(-1);
   assert.equal(url, 'https://doi.org/10.5555/gz.2026.001');
-  assert.deepEqual({ ...init, signal: !!init.signal }, { method: 'GET', credentials: 'omit', redirect: 'follow', cache: 'no-store', referrerPolicy: 'no-referrer', headers: { Accept: 'application/vnd.citationstyles.csl+json' }, signal: true });
+  assert.deepEqual({ ...init, signal: !!init.signal }, { method: 'GET', credentials: 'omit', redirect: 'manual', cache: 'no-store', referrerPolicy: 'no-referrer', headers: { Accept: 'application/vnd.citationstyles.csl+json' }, signal: true });
   // A page: refused while its host isn't held, and nothing is fetched.
   const before = calls.length;
   assert.deepEqual(await L.serve({ kind: 'url', value: 'https://news.example.com/a' }, sender, env({ fetch })), { ok: false, error: 'host' });

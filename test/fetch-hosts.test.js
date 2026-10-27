@@ -68,7 +68,7 @@ const SITES = {
   // Glaze Writer's citation lookups, on the student's click: a web page only once its https host is held (the Cite popover
   // asks for exactly it in the click); doi.org (and the agency it redirects to, api.crossref.org) and openlibrary.org answer
   // every origin with CORS, so a DOI or an ISBN asks for no host.
-  'lib/writer-lookup.js': [{ at: 'res = await env.fetch(r.url, {', kind: 'asked', flow: 'a web page\'s host, asked for from the Cite popover\'s click (writer-cite.js); doi.org, api.crossref.org and openlibrary.org answer every origin',
+  'lib/writer-lookup.js': [{ at: 'res = await bounded(env.fetch(url, {', kind: 'asked', flow: 'a web page\'s host, asked for from the Cite popover\'s click (writer-cite.js); doi.org, api.crossref.org, data.crosscite.org and openlibrary.org answer every origin',
     guard: /if \(!r\.open && !await env\.reach\(r\.url\)\) return \{ ok: false, error: 'host' \}/ }],
   'lib/blocklist.js': [{ at: 'env.fetch(ENDPOINT', kind: 'required', host: 'https://frostdev.io', literal: "'https://frostdev.io/glaze/mods/api/blocklist'" }],
   'lib/modchannel.js': [{ at: 'const client = (st, fetch) =>', kind: 'via', to: 'lib/background.js' }],
