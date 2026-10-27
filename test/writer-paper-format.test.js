@@ -111,3 +111,12 @@ test('a bold Chicago title and a paper without borrowed material are legitimate'
   const own = node(F.template(f, v, [{ type: 'paragraph', content: [{ type: 'text', text: 'My own observation. '.repeat(30) }] }]));
   assert.ok(!F.check(own, f, ctx).issues.some((i) => i.rule === 'notes-none'), 'length alone proves no need for a citation');
 });
+
+test('APA title pages include affiliation and the assignment due date when known', () => {
+  const f = ST.FORMATS.apa7, values = { ...v, affiliation: 'Department of English, Example University', dueDate: 'November 3, 2026' };
+  const d = node(F.template(f, values));
+  assert.ok(d.textContent.includes(values.affiliation));
+  assert.ok(d.textContent.includes(values.dueDate));
+  assert.equal(F.read(d, f).lines.name, v.name);
+  assert.equal(F.read(d, f).lines.affiliation, values.affiliation);
+});
