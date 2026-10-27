@@ -326,11 +326,16 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   const MODS = ['Shift', 'Alt', 'Control', 'Meta'];
   const leave = (away) => new Plugin({
     view(v) {
-      const key = (e) => { away.now = away.armed && e.key === 'Tab'; away.armed = e.key === 'Escape' || (away.armed && MODS.includes(e.key)); };
       const off = () => { away.armed = away.now = false; };
+      const key = (e) => {
+        if (v.composing || e.isComposing || e.keyCode === 229) { off(); return; }
+        away.now = away.armed && e.key === 'Tab';
+        away.armed = e.key === 'Escape' || (away.armed && MODS.includes(e.key));
+      };
       v.dom.addEventListener('keydown', key, true);
       v.dom.addEventListener('blur', off);
-      return { destroy: () => { v.dom.removeEventListener('keydown', key, true); v.dom.removeEventListener('blur', off); } };
+      v.dom.addEventListener('compositionstart', off);
+      return { destroy: () => { v.dom.removeEventListener('keydown', key, true); v.dom.removeEventListener('blur', off); v.dom.removeEventListener('compositionstart', off); } };
     },
   });
   const plugins = (schema, o = {}, away = { now: false, armed: false }) => [

@@ -71,6 +71,24 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
       assert.equal(result, 'keep');
       assert.deepEqual(errors, []);
     });
+    await check('Tab stays after IME Escape, while Escape then Tab or Shift-Tab leaves', async () => {
+      await page.evaluate(() => {
+        document.getElementById('ed').insertAdjacentHTML('beforebegin', '<button id="before">Before</button>');
+        document.getElementById('ed').insertAdjacentHTML('afterend', '<button id="after">After</button>');
+        ed.setHTML('<p>words</p>'); ed.focus();
+        const dom = ed.view.dom;
+        dom.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+        dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, isComposing: true, bubbles: true }));
+        dom.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+      });
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => ed.view.hasFocus() && ed.text().includes('\t')), true, 'the IME Escape does not release Tab');
+      await page.keyboard.press('Escape'); await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'after');
+      await page.evaluate(() => ed.focus());
+      await page.keyboard.press('Escape'); await page.keyboard.press('Shift+Tab');
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'before');
+    });
     assert.deepEqual(errors, [], 'no page errors');
     await page.evaluate(() => ed.destroy());
   } finally { await browser.close(); }

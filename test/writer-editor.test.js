@@ -288,6 +288,31 @@ test('a tab survives the round trips: Quill\'s HTML, its delta, and the paper\'s
   assert.match(X.exportDocx(paper.doc, { format: 'mla9', date: new Date(2026, 9, 27) }).parts['word/document.xml'], /<w:t xml:space="preserve">a<\/w:t><w:tab\/><w:t xml:space="preserve">b<\/w:t>/, 'a tab is a Word tab');
 });
 
+test('Escape used by an IME does not arm Tab to leave the editor', () => {
+  const st = make('<p>words</p>'), handlers = new Map();
+  const dom = { addEventListener: (name, fn) => handlers.set(name, fn), removeEventListener: (name) => handlers.delete(name) };
+  const v = { dom, composing: false };
+  const leave = st.plugins.find((p) => p.spec.view).spec.view(v);
+  const key = (key, extra = {}) => handlers.get('keydown')({ key, ...extra });
+  const tabHandled = () => st.plugins.some((p) => p.props.handleKeyDown?.({ state: st, dispatch() {} }, { key: 'Tab', keyCode: 9 }));
+  try {
+    v.composing = true;
+    key('Escape');
+    v.composing = false;
+    key('Tab');
+    assert.equal(tabHandled(), true, 'Escape cancelled composition; Tab still writes a tab');
+    key('Escape', { isComposing: true });
+    key('Tab');
+    assert.equal(tabHandled(), true, 'the event composition flag is respected too');
+    key('Escape');
+    handlers.get('compositionstart')?.();
+    key('Tab');
+    assert.equal(tabHandled(), true, 'starting composition disarms a previous Escape');
+    key('Escape'); key('Shift'); key('Tab');
+    assert.equal(tabHandled(), false, 'an ordinary Escape still releases the next Tab');
+  } finally { leave.destroy(); }
+});
+
 test('opts.keys and opts.plugins come first, so the frame, proofing and ghost text win their keys', () => {
   let sent = 0;
   const keys = { 'Mod-Enter': () => { sent++; }, Tab: () => false };
