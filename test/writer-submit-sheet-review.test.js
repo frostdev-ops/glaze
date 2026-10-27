@@ -39,3 +39,12 @@ test('review: a busy sheet retains keyboard focus and Cancel revokes its run', a
   assert.equal(s.messages.some((m) => m.type === 'submit:cancel'), true);
   assert.equal(s.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), false);
 });
+
+test('review: the submit sheet uses singular English for one check and one page', () => {
+  const path = require('node:path');
+  const I = process.env.WRITER_I18N_SOURCE ? require('node:vm').runInNewContext(require('node:fs').readFileSync(path.resolve(process.env.WRITER_I18N_SOURCE), 'utf8') + '\nGZ_I18N', { Intl }) : require('../lib/i18n.js');
+  assert.equal(I.t('{n} checks open', { n: 1 }, 'en'), '1 check open');
+  assert.equal(I.t('{n} pages', { n: 1 }, 'en'), '1 page');
+  assert.equal(I.t('{n} checks open', { n: 2 }, 'en'), '2 checks open');
+  assert.equal(I.t('{n} pages', { n: 2 }, 'en'), '2 pages');
+});
