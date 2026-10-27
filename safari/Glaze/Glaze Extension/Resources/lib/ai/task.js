@@ -111,7 +111,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     if (pending) return { pending, steps, meta };
     const merged = inputs.length > 1 ? task.merge(outputs, input) : outputs[0];
     if (inputs.length > 1 && (text ? typeof merged !== 'string' : S().validate(merged, task.output).length)) throw Object.assign(F.modelFailure({ category: 'invalid-response' }), { detail: 'merge' });
-    const output = task.check(merged, input, { truncated });
+    const output = task.check(merged, input, { truncated, caps: can });
     if (output === null || output === undefined) throw Q.error('check');
     return { output, ...(steps.length && { steps }), meta };
   };
