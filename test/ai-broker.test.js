@@ -676,3 +676,21 @@ test('the sender check may refuse one message with a code and keep the port; it 
   assert.deepEqual(asked, [{ op: 'status', feature: 'completion' }, { op: 'run', feature: 'completion' }, { op: 'cancel' }, { op: 'run', feature: 'syllabus' }]);
   assert.equal(e.calls.filter((c) => c.url.endsWith('/completions')).length, 1);
 });
+
+
+test('streamed text with split Unicode or mixed credential escapes never exposes the credential prefix', async () => {
+  const encoded = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
+  for (const secret of [encoded, KEY.slice(0, 4) + encoded.slice(24)]) {
+    B._reset();
+    const s = sse(), p = open(writer({ fetch: async (url) => url.endsWith('/models') ? models() : s.response }));
+    try {
+      p.say(complete(1)); await flush();
+      s.push('safe '); await flush();
+      assert.equal(deltas(p).join(''), 'safe ', 'ordinary text still arrives live');
+      for (const c of secret) s.push(c);
+      s.end(); await flush();
+      assert.equal(p.posted.at(-1).error, 'invalid-response');
+      assert.equal(deltas(p).join(''), 'safe ', 'no escaped or literal part of the key reaches the page');
+    } finally { p.close(); }
+  }
+});
