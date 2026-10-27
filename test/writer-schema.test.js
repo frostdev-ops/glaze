@@ -286,6 +286,16 @@ test('loses refuses unsupported Ultra formats and empty embedded blots before ta
   assert.deepEqual(S.loses(C, '<p dir="ltr" style="font-weight:700;text-align:center">safe</p>'), []);
 });
 
+test('loses refuses checklist state and CSS formats the sanitizer cannot preserve', () => {
+  for (const html of [
+    '<ul data-checked="true"><li>done</li></ul>',
+    '<li data-list="checked">done</li>',
+    '<p><span style="c\\6flor:red">red</span></p>',
+    '<p><small>small</small><mark>highlight</mark></p>',
+    '<p style="letter-spacing:2px">spaced</p>',
+  ]) assert.ok(S.loses(C, html).includes('format'), html);
+});
+
 test('both files are classic scripts that load after lib/pm.js in a page, once', () => {
   for (const f of ['lib/writer-schema.js', 'lib/writer-editor.js']) {
     const src = fs.readFileSync(path.join(root, f), 'utf8');
