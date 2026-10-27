@@ -108,6 +108,15 @@ test('an attempt\'s kind comes from its gradebook column, and is unknown without
   assert.equal(U.attemptKind([{ column: { contentId: '_7_1' } }], '_7_1'), '', 'a column without a subtype names nothing');
 });
 
+test('an attempt page is an assignment by Ultra\'s authoring panel, since live gradebook columns name no subtype', () => {
+  const live = JSON.parse(raw('ultra-grades.json')).results; // the live shape: no column.assessmentSubtype
+  assert.equal(U.pageKind(page('ultra-writer-attempt.html'), live, '_701_1'), 'assignment');
+  assert.equal(U.pageKind(page('ultra-writer-test.html'), live, '_701_1'), 'test');
+  assert.equal(U.pageKind(page('ultra-writer-discussion.html'), live, '_701_1'), '', 'neither panel nor canvas: unknown');
+  assert.equal(U.pageKind(page('ultra-writer-attempt.html'), [{ column: { contentId: '_7_1', assessmentSubtype: 'Test' } }], '_7_1'), 'test', 'a gradebook Test still wins');
+  assert.equal(U.pageKind(page('ultra-writer-attempt.html'), undefined, '_7_1'), 'assignment', 'no gradebook yet');
+});
+
 test('conflicting gradebook rows can never turn a test into an assignment', () => {
   const col = (assessmentSubtype) => ({ column: { contentId: '_7_1', assessmentSubtype } });
   assert.equal(U.attemptKind([col('Assignment'), col('Test')], '_7_1'), 'test');
