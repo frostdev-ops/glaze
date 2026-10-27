@@ -15,7 +15,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const L = () => globalThis.GZ_WRITER_SUBMIT_LIB;
   const armed = new Map(); // box → whether it's still features/writer.js's
   const submitted = new WeakSet();
-  const runs = new WeakMap(), tokens = new WeakMap();
+  const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
   const attached = new WeakMap(); // box → exact bytes and the row produced by this upload
   const written = new WeakSet();
   let passing = null, running = false, active = null, down = null;
@@ -140,7 +140,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   };
   const go = async (box, m, ok) => {
     const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error }); return false; };
-    if (running || box.saved || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= (runs.get(box) || 0)) return fail('busy');
+    if (running || box.saved || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= Math.max(runs.get(box) || 0, cancelled.get(box) || 0)) return fail('busy');
     runs.set(box, m.run);
     const name = m.name, bytes = m.bytes, key = m.key;
     if (!key || key !== L().paperKey(box.context?.paper) || !L().safeName(name) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
@@ -187,9 +187,13 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
 
   // features/writer.js hands over each submit:* message from a box's frame.
   const hear = (box, m, X, ok) => {
+    if (m.type === 'submit:cancel' && Number.isSafeInteger(m.run) && m.run > 0) {
+      cancelled.set(box, Math.max(cancelled.get(box) || 0, m.run));
+      if (active?.box === box && active.run <= m.run) active.cancelled = true;
+      return;
+    }
     if (!assignment(box)) return;
     if (m.type === 'submit:arm') armed.set(box, ok);
-    else if (m.type === 'submit:cancel' && active?.box === box && active.run === m.run) active.cancelled = true;
     else if (m.type === 'submit:saved') m.request === box.saveRequest && box.saved?.(m.ok === true);
     else if (m.type === 'submit:go' && armed.has(box)) go(box, m, ok);
   };
