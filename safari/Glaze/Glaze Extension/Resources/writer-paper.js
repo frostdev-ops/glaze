@@ -97,6 +97,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const sheet = typeof CSSStyleSheet === 'function' && 'replaceSync' in CSSStyleSheet.prototype ? new CSSStyleSheet() : null;
     if (sheet) document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     const restyleCSS = () => {
+      globalThis.GZ_WRITER_CITE?.use?.(format.cite);
       const css = ST.css(format);
       if (sheet) { sheet.replaceSync(css); return; }
       const own = [...document.styleSheets].find((s) => /writer-paper\.css$/.test(s.href || ''));
