@@ -226,7 +226,8 @@ const SYLLABUS_DOCS = 48 + 61;
 // Glaze Writer (a named raise under the owner's 2026-10-19 approval): defaults.js's enhance.writer (24 bytes) and content.js's
 // hook that loads features/writer.js on the draft backup's cue, an Ultra editor on the page or written in (409), on every
 // site. The adapter, the frame, its page-world helper and the editor load on demand. Measured against a1399a5d.
-const WRITER = 24 + 409;
+// Submit-sheet English plurals add 134 bytes to lib/i18n.js, measured against ed70e640.
+const WRITER = 24 + 409 + 134;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
