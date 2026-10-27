@@ -1075,3 +1075,15 @@ for (const site of ['ultra', 'canvas']) test(`${site}: a journal the worker neve
   assert.deepEqual(all(store), [FIRST]);
   assert.equal(b.shown().length, 1);
 });
+
+test('Ultra: Writer snapshots survive a detached editor and remain available to native recovery', async () => {
+  const p = await page(); await p.open();
+  const snapshot = { ...p.ctx.api.draftAt(p.ed), html: `<p>${FIRST}</p>`, text: FIRST };
+  p.ed.parentNode.setAttribute('data-gz-writer', 'reply');
+  p.ed.remove();
+  p.ctx.GZ_DRAFT_UI.keep(snapshot); await p.advance(0);
+  const next = await page({ store: p.store }); await next.open();
+  assert.equal(await next.ctx.GZ_DRAFT_UI.ready(next.ed), false, 'recovery takes precedence over Writer takeover');
+  next.press(next.shown()[0], 'Restore'); await next.advance(1500);
+  assert.equal(next.text(), FIRST);
+});

@@ -5,8 +5,8 @@ const vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 const U = require('../../lib/writer-ultra.js');
-module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false } = {}) => {
-  const doc = { activeElement: null, listeners: [] }, timers = new Map(), observers = [], ports = [], messages = [], clicks = [];
+module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recovery = false } = {}) => {
+  const doc = { activeElement: null, listeners: [] }, timers = new Map(), observers = [], ports = [], messages = [], clicks = [], kept = [];
   doc.root = new El('html', doc); doc.documentElement = doc.root;
   doc.body = parse(fs.readFileSync(path.join(__dirname, `../fixtures/ultra-writer-${fixture}.html`), 'utf8'), doc);
   for (const el of doc.root.all()) el.style.getPropertyPriority = () => '';
@@ -19,7 +19,8 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false } = {}
   const ctx = vm.createContext({
     document: doc, location, crypto, CustomEvent, console, Element: El,
     GZ_COLORS: [], GZ_WRITER_ULTRA: U,
-    GZ_CTX: { on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true } }), t: (k) => k, locale: () => 'en', bookFor: () => ({ results: [{ column: { contentId: '_8_1', assessmentSubtype: 'Assignment' } }] }) },
+    GZ_CTX: { on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true } }), t: (k) => k, locale: () => 'en', need: async () => ctx.GZ_DRAFT_UI, draftAt: (ed) => ({ ed, id: ed.id, near: U.contextOf(ed, U.kindOf(ed, { path: location.pathname })).post?.id || '', path: location.pathname, html: ed.innerHTML, text: ed.textContent, at: Date.now() }), bookFor: () => ({ results: [{ column: { contentId: '_8_1', assessmentSubtype: 'Assignment' } }] }) },
+    GZ_DRAFT_UI: { ready: async () => !recovery, keep: (s) => kept.push({ ...s }), write() {} },
     chrome: { runtime: { getURL: (s) => `chrome-extension://x/${s}`, sendMessage: async (m) => { messages.push(m); return { ok: true }; } }, storage: { onChanged: { addListener() {} } } },
     getComputedStyle: () => ({ getPropertyValue: () => '' }), matchMedia: () => ({ matches: true }),
     getSelection: () => ({ selectAllChildren() {} }),
@@ -40,5 +41,5 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false } = {}
   const emit = (m, index = 0) => ports[index].onmessage({ data: m });
   const mutate = (ed) => { for (const o of observers) if (o.target === ed) o.fn([]); };
   const tick = (ms) => { for (const [id, t] of [...timers]) if (t.ms === ms) { timers.delete(id); t.f(); } };
-  return { ctx, doc, location, ports, messages, clicks, observers, timers, start, native, emit, mutate, tick, helper: (v) => { mode = v; } };
+  return { ctx, doc, location, ports, messages, clicks, kept, observers, timers, start, native, emit, mutate, tick, helper: (v) => { mode = v; } };
 };
