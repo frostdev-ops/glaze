@@ -299,6 +299,17 @@ const HARNESS = `(() => {
     check(await fr.evaluate(() => !GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('The Clearing as Ledger')), 'and the import undoes in one step');
     await fr.evaluate(() => { document.querySelector('.gp-pill').click(); });
     check(await fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role^="menuitem"]')].map((b) => b.textContent).join('|').startsWith('MLA 9|APA 7|Chicago 17|New preset')), 'format pill offers MLA 9, APA 7, Chicago 17 and a new preset');
+    await p.keyboard.press('ArrowDown');
+    check(await fr.evaluate(() => document.activeElement?.textContent === 'APA 7'), 'one Down Arrow moves from MLA to the next format');
+    await p.keyboard.press('ArrowUp');
+    check(await fr.evaluate(() => document.activeElement?.textContent === 'MLA 9'), 'one Up Arrow returns to the previous format');
+    await p.keyboard.press('End');
+    check(await fr.evaluate(() => document.activeElement?.textContent.startsWith('New preset')), 'End reaches the last format action');
+    await p.keyboard.press('Home');
+    check(await fr.evaluate(() => document.activeElement?.textContent === 'MLA 9'), 'Home reaches the first format');
+    await p.keyboard.press('Escape');
+    check(await fr.evaluate(() => document.activeElement?.matches('.gp-pill') && !document.querySelector('.gp-menu')), 'format Escape restores its opener');
+    await fr.evaluate(() => document.querySelector('.gp-pill').click());
     saved.menu = await shot(p, 'paper-format-menu.png');
     await fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role^="menuitem"]')].find((b) => b.textContent.startsWith('New preset')).click());
     await fr.evaluate(() => { const f = document.querySelector('.gp-form'); f.querySelector('input').value = 'Arial 11'; const s = f.querySelectorAll('select'); s[1].value = 'Arial'; s[2].value = '11'; [...f.querySelectorAll('button')].find((b) => b.textContent === 'Save').click(); });
