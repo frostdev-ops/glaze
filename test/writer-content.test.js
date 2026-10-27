@@ -121,3 +121,11 @@ test('if a lost frame cannot get a new pass, its draft stays in a plain recovery
   b.root.previousElementSibling.dispatchEvent({ type: 'load' }); await new Promise(setImmediate);
   assert.equal(c.doc.querySelector('textarea[data-gz-writer-recovery]')?.value, 'Keep me');
 });
+
+test('an invalidated extension throwing before a new frame pass still exposes the buffered text', async () => {
+  const c = content({ helper: 'fail' }); await c.start(); const b = c.native();
+  c.emit({ type: 'change', html: '<p>Keep me</p>', text: 'Keep me', words: 2 });
+  c.ctx.chrome.runtime.sendMessage = () => { throw Error('Extension context invalidated.'); };
+  b.root.previousElementSibling.dispatchEvent({ type: 'load' }); await new Promise(setImmediate);
+  assert.equal(c.doc.querySelector('textarea[data-gz-writer-recovery]')?.value, 'Keep me');
+});
