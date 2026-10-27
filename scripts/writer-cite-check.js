@@ -101,7 +101,8 @@ const HARNESS = `(() => {
     const saved = {};
     const POST = '.ql-editor[data-placeholder="Type a post"]';
     // The frame has grown to hold the open popover (it asks for that height as the popover changes).
-    const settled = () => until(async () => { const need = await fr.evaluate(() => { const p = document.querySelector('.gz-cite'); return p.hidden ? 0 : Math.ceil(p.getBoundingClientRect().bottom); }); return (await el.evaluate((f) => f.getBoundingClientRect().height)) >= need; }, 'frame holds the popover');
+    const settled = () => until(async () => { const need = await fr.evaluate(() => { const p = document.querySelector('.gz-cite'); return p.hidden ? 0 : p.offsetTop + p.offsetHeight + 6; }); return (await el.evaluate((f) => f.getBoundingClientRect().height)) >= need; }, 'frame holds the popover');
+    const clickCite = async (selector) => { await settled(); await fr.click(selector); };
     const menuItem = async (label) => {
       await until(async () => { if (await fr.evaluate(() => document.getElementById('menu').hidden)) await fr.click('#more'); return fr.evaluate(() => !document.getElementById('menu').hidden); }, 'menu open');
       await fr.click(`#menu >> text=${label}`);
@@ -188,7 +189,7 @@ const HARNESS = `(() => {
     await fr.click('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite [data-field="URL"]')), 'opaque page redirect fallback');
     check(await fr.evaluate(() => document.querySelector('.gz-cite .gzc-status').textContent === 'This page redirects. Use its final address or add it manually.') && !requests.some((r) => r.url === 'https://www.example.com/final'), 'an opaque page redirect opens the manual form without touching its unheld destination');
-    await fr.click('.gz-cite [data-do="cancel"]');
+    await clickCite('.gz-cite [data-do="cancel"]');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'redirect Cancel restores the lookup row');
 
     // ---- an ISBN, and a failed lookup ----
@@ -198,11 +199,11 @@ const HARNESS = `(() => {
     await until(() => fr.evaluate(() => document.querySelector('.gzc-form [data-field="title"]')?.value === 'The River Keeps: A novel'), 'ISBN lookup fills the form');
     check(await fr.evaluate(() => document.querySelector('[data-field="publisher"]').value === 'Plume' && document.querySelector('[data-field="issued"]').value === '1988'), 'Open Library\'s answer becomes a book');
     await settled();
-    await fr.click('.gzc-form [data-do="cancel"]');
+    await clickCite('.gzc-form [data-do="cancel"]');
     check(await fr.evaluate(() => document.querySelectorAll('.gzc-list .gzc-src').length === 2), 'Cancel goes back to the saved sources (two)');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'ISBN Cancel restores the lookup row');
     await fr.fill('.gzc-in', '10.5555/missing');
-    await fr.click('.gzc-row .sbtn');
+    await clickCite('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gzc-form [data-field="DOI"]')?.value === '10.5555/missing'), 'a missing DOI opens the form with it');
     check(await fr.evaluate(() => /Nothing found/.test(document.querySelector('.gz-cite .gzc-status').textContent)), 'a DOI nobody knows says so and leaves the fields to the student');
     await settled();
@@ -280,13 +281,13 @@ const HARNESS = `(() => {
     await fr.click('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite [data-field="URL"]')), 'no-permissions manual URL form');
     check(await fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-status').textContent && document.querySelector('.gz-cite [data-field="URL"]').value === 'https://news.example.com/2019/03/22/forgetting.html'), 'without permissions, URL lookup opens the manual form with a one-line reason');
-    await fr.click('.gz-cite [data-do="cancel"]');
+    await clickCite('.gz-cite [data-do="cancel"]');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'Cancel restores the lookup row');
     await fr.fill('.gzc-in', '10.5555/gz.2026.001');
     await fr.click('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gz-cite [data-field="title"]')?.value === 'Rememory and the River in Beloved'), 'DOI without permissions API');
     check(true, 'DOI lookup still works without the permissions API');
-    await fr.click('.gz-cite [data-do="cancel"]');
+    await clickCite('.gz-cite [data-do="cancel"]');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'Cancel restores the lookup row');
     await fr.fill('.gzc-in', '9780306406157');
     await fr.click('.gzc-row .sbtn');
