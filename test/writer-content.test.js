@@ -102,3 +102,22 @@ test('unchanged Writer boxes do not rescan their document bodies on every page o
   for (let n = 0; n < 20; n++) c.ctx.GZ_WRITER.pass();
   assert.equal(walks, 0, 'unchanged editor subtrees are already classified');
 });
+
+test('a reloaded Writer frame reopens with its buffered HTML even when native sync is unavailable', async () => {
+  const c = content({ helper: 'fail' }); await c.start(); const b = c.native();
+  c.emit({ type: 'change', html: '<p>Short draft</p>', text: 'Short draft', words: 2 });
+  const frame = b.root.previousElementSibling;
+  frame.dispatchEvent({ type: 'load' }); await new Promise(setImmediate);
+  assert.equal(c.ports[0].closed, true, 'retire the channel to the lost frame');
+  const p = c.ports.at(-1); p.onmessage({ data: { type: 'ready' } });
+  assert.equal(p.sent.find((m) => m.type === 'init')?.html, '<p>Short draft</p>', 'recovery uses the buffered Writer document');
+  assert.equal(b.root.style.display, 'none');
+});
+
+test('if a lost frame cannot get a new pass, its draft stays in a plain recovery editor', async () => {
+  const c = content({ helper: 'fail' }); await c.start(); const b = c.native();
+  c.emit({ type: 'change', html: '<p>Keep me</p>', text: 'Keep me', words: 2 });
+  c.ctx.chrome.runtime.sendMessage = async () => ({ ok: false });
+  b.root.previousElementSibling.dispatchEvent({ type: 'load' }); await new Promise(setImmediate);
+  assert.equal(c.doc.querySelector('textarea[data-gz-writer-recovery]')?.value, 'Keep me');
+});
