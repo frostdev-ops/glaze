@@ -6111,10 +6111,10 @@ class Util {
   }
 }
 function stringToUTF8String(str) {
-  return decodeURIComponent(escape(str));
+  return decodeURIComponent(str.replace(/[^A-Za-z0-9]/g, (c) => (c.charCodeAt(0) < 256 ? "%" + c.charCodeAt(0).toString(16).padStart(2, "0") : "%u")));
 }
 function utf8StringToString(str) {
-  return unescape(encodeURIComponent(str));
+  return encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
 function isArrayEqual(arr1, arr2) {
   if (arr1.length !== arr2.length) {

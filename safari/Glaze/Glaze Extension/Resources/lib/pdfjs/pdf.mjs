@@ -6686,10 +6686,10 @@ class Util {
   }
 }
 function stringToUTF8String(str) {
-  return decodeURIComponent(escape(str));
+  return decodeURIComponent(str.replace(/[^A-Za-z0-9]/g, (c) => (c.charCodeAt(0) < 256 ? "%" + c.charCodeAt(0).toString(16).padStart(2, "0") : "%u")));
 }
 function utf8StringToString(str) {
-  return unescape(encodeURIComponent(str));
+  return encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
 function isArrayEqual(arr1, arr2) {
   if (arr1.length !== arr2.length) {
@@ -19593,7 +19593,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
   if (tmp) {
     tmp = tmp[1];
     let filename = rfc2616unquote(tmp);
-    filename = unescape(filename);
+    filename = filename.replace(/%u([0-9A-Fa-f]{4})|%([0-9A-Fa-f]{2})/g, (_, u, x) => String.fromCharCode(parseInt(u ?? x, 16)));
     filename = rfc5987decode(filename);
     filename = rfc2047decode(filename);
     return fixupEncoding(filename);
@@ -19661,7 +19661,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
       let [quot, part] = matches[n];
       part = rfc2616unquote(part);
       if (quot) {
-        part = unescape(part);
+        part = part.replace(/%u([0-9A-Fa-f]{4})|%([0-9A-Fa-f]{2})/g, (_, u, x) => String.fromCharCode(parseInt(u ?? x, 16)));
         if (n === 0) {
           part = rfc5987decode(part);
         }
