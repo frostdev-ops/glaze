@@ -1,0 +1,53 @@
+/* Glaze Writer's citations (writer-cite.js): the selection toolbar's Cite, its popover, and the paper side panel's Sources
+   view, in the mockups' tokens (glaze-plans/writer/mockups: B's toolbar, C's side panel cards and buttons). The popover is
+   writer.css's .pop: it scales from 0.98 and fades in, and goes at once. */
+.tb .gzc-cite { width: auto; padding: 0 8px; font-size: 13px; }
+
+.gz-cite { width: min(400px, calc(100vw - 6px)); padding: 10px; display: grid; gap: 8px; z-index: 3; }
+.gz-cite .ico, .gzc-view .ico { width: 14px; height: 14px; }
+.gzc-row { display: flex; gap: 6px; margin: 0; }
+.gzc-in, .gzc-page, .gzc-form input, .gzc-form textarea, .gzc-type {
+  height: 30px; min-width: 0; padding: 0 8px; border: 1px solid var(--gz-line-strong); border-radius: 7px; background: var(--gz-surface-2);
+  color: var(--gz-ink); font: inherit; font-size: 13px; outline: none; }
+.gzc-in { flex: 1; }
+.gzc-page { width: 72px; flex: none; }
+.gzc-form textarea { height: auto; min-height: 30px; padding: 5px 8px; resize: vertical; line-height: 1.4; }
+.gzc-in:focus, .gzc-page:focus, .gzc-form input:focus, .gzc-form textarea:focus, .gzc-type:focus { border-color: var(--gz-accent); }
+.gzc-in::placeholder, .gzc-page::placeholder, .gzc-form textarea::placeholder { color: var(--gz-ink-faint); }
+.gzc-status { font-size: 12px; color: var(--gz-ink-muted); }
+.gzc-status.bad { color: var(--gz-warn); }
+
+:is(.gz-cite, .gzc-view) .sbtn { padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; background: var(--gz-accent); color: var(--gz-accent-ink); white-space: nowrap; }
+:is(.gz-cite, .gzc-view) .sbtn.ghost2 { background: transparent; color: var(--gz-ink-muted); border: 1px solid var(--gz-line-strong); font-weight: 500; }
+:is(.gz-cite, .gzc-view) .sbtn.ghost2:hover { color: var(--gz-ink); }
+:is(.gz-cite, .gzc-view) .sbtn[aria-disabled="true"] { opacity: .6; cursor: progress; }
+:is(.gz-cite, .gzc-view) .sbtn:focus-visible, .gzc-src:focus-visible, .gzc-edit:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+
+.gzc-list { display: grid; gap: 2px; max-height: 196px; overflow: auto; margin: 0 -4px; padding: 0 4px; border-top: 1px solid var(--gz-line); padding-top: 6px; }
+.gzc-item { display: flex; align-items: flex-start; gap: 2px; border-radius: 8px; }
+.gzc-item:hover { background: var(--gz-line); }
+.gzc-src { flex: 1; min-width: 0; display: block; text-align: start; padding: 6px 8px; border-radius: 8px; font-size: 12.5px; line-height: 1.45; color: var(--gz-ink); }
+.gzc-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gzc-edit { flex: none; width: 26px; height: 26px; margin-top: 3px; border-radius: 7px; display: grid; place-items: center; color: var(--gz-ink-faint); opacity: 0; }
+.gzc-item:hover .gzc-edit, .gzc-edit:focus-visible { opacity: 1; }
+.gzc-edit:hover { color: var(--gz-ink); background: var(--gz-line-strong); }
+.gzc-foot { display: flex; align-items: center; gap: 8px; }
+.gzc-foot .grow, .gzc-acts .grow { flex: 1; }
+
+.gzc-form { display: grid; gap: 8px; margin: 0; }
+.gzc-type { justify-self: start; padding-right: 4px; }
+.gzc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; max-height: 280px; overflow: auto; padding: 1px; }
+.gzc-field { display: grid; gap: 3px; font-size: 12px; color: var(--gz-ink-muted); }
+.gzc-field.wide { grid-column: 1 / -1; }
+.gzc-acts { display: flex; align-items: center; gap: 8px; }
+.gzc-acts .gzc-page { margin-right: auto; }
+
+/* The paper side panel's Sources tab: the Checks tab's cards (mockup C .issue). */
+.gzc-view { padding: 12px; display: grid; gap: 10px; }
+.gzc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gzc-head h4 { margin: 0; font-size: 12px; color: var(--gz-ink-faint); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.gzc-adder { display: grid; gap: 8px; border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; background: color-mix(in srgb, var(--gz-surface-2) 40%, var(--gz-surface)); }
+.gzc-cards { display: grid; gap: 10px; }
+.gzc-card { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: color-mix(in srgb, var(--gz-surface-2) 40%, var(--gz-surface)); }
+.gzc-entry { font-size: 13px; line-height: 1.5; color: var(--gz-ink); padding-left: 1.5em; text-indent: -1.5em; overflow-wrap: anywhere; }
+.gzc-card .row { display: flex; gap: 8px; }
