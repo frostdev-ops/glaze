@@ -311,7 +311,7 @@ const run = async ({ context, mock, shots, errors, ai }) => {
   await keysIn(fr, 'the attempt');
   await fr.click('#gp-tab-feedback');
   await fr.click(`${fb} .gz-fb-run`);
-  const cards = await until(() => fr.evaluate((fb) => { const c = document.querySelectorAll(`${fb} .gz-fb-item`); return c.length && [...c].map((x) => x.querySelector('b')?.textContent || ''); }, fb), 'Feedback from the stand-in model', 20000);
+  const cards = await until(() => fr.evaluate((fb) => { const c = document.querySelectorAll(`${fb} .gz-fb-item`); return c.length && [...c].map((x) => x.querySelector('.gz-fb-crit')?.textContent || ''); }, fb), 'Feedback from the stand-in model', 20000);
   check(cards.join('|') === 'Criterion one|Criterion two' && await fr.evaluate((fb) => document.querySelectorAll(`${fb} .gz-fb-quote`).length > 0, fb), `Feedback came back for both rubric criteria, with passages of the draft (${cards.join(' | ')})`);
   await shot(p, 'practice-feedback.png');
   await fr.click('#gp-tab-checks');
