@@ -113,6 +113,7 @@ test('Feedback says why AI can\'t give it, with Settings → AI one click away w
     [on, { allowed: true, ready: false, why: 'download', provider: 'device' }, /^The on-device model isn’t downloaded\. Download it in Settings → AI\./, true],
     [on, { allowed: true, ready: false, why: 'downloading', provider: 'device' }, /^Downloading the model…/, false],
     [on, { allowed: true, ready: false, why: 'unavailable', provider: 'device' }, /^Gemini Nano is unavailable\. Choose another model in Settings → AI\./, true],
+    [on, { allowed: true, ready: false, why: 'unavailable', provider: 'apple', reason: 'off' }, /^Apple Intelligence is off\. Turn it on in System Settings\./, false],
     [on, { type: 'error', error: 'failed' }, /^Glaze couldn’t confirm this page may use AI\. Reload the page to try again\./, false],
   ];
   for (const [settings, st, text, button] of cases) {
@@ -232,7 +233,7 @@ test('Feedback availability copy is translated in all five catalogues', () => {
   const keys = ['Checking whether AI can run here…', 'AI is off. Turn it on in Settings → AI.',
     'Writing feedback is off. Turn it on in Settings → AI.', 'No AI model is chosen. Choose one in Settings → AI.',
     'Glaze needs permission to reach {host}. Allow it in Settings → AI.', 'The on-device model isn’t downloaded. Download it in Settings → AI.',
-    'Downloading the model…', 'Downloading the model: {pct}', '{provider} is unavailable. Choose another model in Settings → AI.',
+    'Downloading the model…', 'Downloading the model: {pct}', '{provider} is unavailable. Choose another model in Settings → AI.', 'Apple Intelligence is off. Turn it on in System Settings.',
     'Glaze couldn’t confirm this page may use AI. Reload the page to try again.',
     'AI is only available on confirmed assignments, never on tests.', 'AI isn’t available right now.', 'Settings'];
   for (const locale of ['de', 'es', 'fr', 'nl', 'pt-BR']) {

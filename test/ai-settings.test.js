@@ -312,7 +312,7 @@ test('on this device: its status from the worker, a download the student starts,
   await p.change('ai-use-device', true);
   assert.equal(p.data.ai.use, 'device');
   assert.ok(shown(p.$('ai-device')) && p.$('ai-endpoint').hidden);
-  assert.equal(p.$('ai-device-state').textContent, 'Needs a download');
+  assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Needs a download');
   assert.ok(shown(p.$('ai-device-download')));
   assert.equal(p.$('ai-where').hidden, true, 'nothing leaves this device');
   state = 'downloading';
@@ -320,21 +320,21 @@ test('on this device: its status from the worker, a download the student starts,
   assert.deepEqual(p.sent.find((m) => m.op === 'prepare'), { type: 'glaze:ai-config', op: 'prepare', provider: 'device' });
   assert.equal(p.$('ai-device-download').hidden, true);
   await p.progress({ loaded: 0.42 });
-  assert.equal(p.$('ai-device-state').textContent, 'Downloading 42%');
+  assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Downloading 42%');
   assert.ok(shown(p.$('ai-device-progress')));
   assert.equal(p.$('ai-device-progress').value, 0.42);
   await p.progress({ loaded: 0.9 }, { id: 'someone-else' });
   assert.equal(p.$('ai-device-progress').value, 0.42, 'only Glaze\'s own messages');
   await p.progress({ loaded: 50, total: 100 });
-  assert.equal(p.$('ai-device-state').textContent, 'Downloading 50%');
+  assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Downloading 50%');
   state = 'ready';
   await p.progress({ progress: 1 });
-  assert.equal(p.$('ai-device-state').textContent, 'Ready');
+  assert.equal(p.$('ai-device-state').textContent, 'Gemini Nano · Ready');
   assert.equal(p.$('ai-device-progress').hidden, true);
   // Not on this browser or this computer: said, with nothing to press.
   state = 'unavailable';
   const q = await open({ device, ai: { on: true, use: 'device' } });
-  assert.equal(q.$('ai-device-state').textContent, 'Not available in this browser');
+  assert.equal(q.$('ai-device-state').textContent, 'Gemini Nano · Not available in this browser');
   assert.equal(q.$('ai-device-download').hidden, true);
   // A first choice makes the device's connection, then asks the provider's status.
   state = 'ready';
@@ -342,9 +342,9 @@ test('on this device: its status from the worker, a download the student starts,
   await r.change('ai-on', true);
   await r.change('ai-use-device', true);
   assert.deepEqual(r.sent.filter((m) => m.id === 'device' || m.provider === 'device').map((m) => m.op), ['set', 'test']);
-  assert.deepEqual(r.sent.find((m) => m.op === 'test'), { type: 'glaze:ai-config', op: 'test', provider: 'device' });
+  assert.deepEqual(r.sent.find((m) => m.op === 'test'), { type: 'glaze:ai-config', op: 'test', id: 'device' });
   assert.deepEqual(r.sent.find((m) => m.op === 'set'), { type: 'glaze:ai-config', op: 'set', id: 'device', cfg: { provider: 'device' } });
-  assert.equal(r.$('ai-device-state').textContent, 'Ready');
+  assert.equal(r.$('ai-device-state').textContent, 'Gemini Nano · Ready');
 });
 
 test('the connection choices include only providers registered by this browser', async () => {
@@ -360,33 +360,51 @@ test('the connection choices include only providers registered by this browser',
   assert.equal(q.$('ai-use-endpoint').disabled, true);
 });
 
-test('on Safari, Apple Intelligence is a choice: its connection kept the first time, then its state; elsewhere it isn\'t offered', async () => {
-  const asked = [];
-  let state = { ok: true, state: 'unavailable', reason: 'off' };
-  const apple = async (m) => { asked.push(structuredClone(m)); return m.op === 'set' ? { ok: true } : state; };
-  const p = await open({ ai: { on: true, use: 'endpoint' }, providers: ['openai', 'device', 'apple'], apple });
-  assert.equal(p.$('ai-choice-apple').hidden, false);
-  assert.equal(p.$('ai-use-apple').disabled, false);
-  assert.equal(p.$('ai-apple').hidden, true);
-  await p.change('ai-use-apple', true);
-  assert.equal(p.data.ai.use, 'apple');
-  assert.deepEqual(asked.map((m) => [m.op, m.cfg]), [['set', { provider: 'apple', model: 'on-device' }], ['test', undefined]]);
-  assert.equal(p.$('ai-apple').hidden, false);
-  assert.equal(p.$('ai-endpoint').hidden, true);
-  assert.equal(p.$('ai-apple-state').textContent, 'Apple Intelligence is off');
-  state = { ok: true, state: 'ready' };
-  await p.change('ai-on', false); await p.change('ai-on', true);
-  assert.equal(p.$('ai-apple-state').textContent, 'Ready');
-  assert.deepEqual(asked.map((m) => m.op), ['set', 'test', 'test'], 'kept once');
+test('On this device is one choice: Apple Intelligence on a Mac that has it, Gemini Nano elsewhere, named on its status line', async () => {
+  const markup = read('options.html');
+  assert.doesNotMatch(markup, /ai-use-apple|ai-choice-apple|id="ai-apple/, 'no separate Apple choice');
+  const said = { state: 'ready', provider: 'apple' };
+  const device = async (m) => (m.op === 'set' ? { ok: true } : m.op === 'test' ? { ok: true, ...said } : { ok: false, error: 'op' });
+  const mac = await open({ ai: { on: true, use: 'endpoint' }, providers: ['openai', 'device', 'apple'], device });
+  assert.equal(mac.$('ai-choice-device').hidden, false);
+  await mac.change('ai-use-device', true);
+  assert.equal(mac.data.ai.use, 'device');
+  assert.deepEqual(mac.sent.filter((m) => m.op === 'test').map((m) => m.id), ['device'], 'the worker says which model it is');
+  assert.equal(mac.$('ai-device-state').textContent, 'Apple Intelligence · Ready');
+  assert.equal(mac.$('ai-device-download').hidden, true, 'nothing to download from here');
+  Object.assign(said, { state: 'unavailable', reason: 'off' });
+  await mac.change('ai-on', false); await mac.change('ai-on', true);
+  assert.equal(mac.$('ai-device-state').textContent, 'Apple Intelligence is off');
+  Object.assign(said, { state: 'downloading', reason: 'not-ready' });
+  await mac.change('ai-on', false); await mac.change('ai-on', true);
+  assert.equal(mac.$('ai-device-state').textContent, 'Apple Intelligence · Downloading…');
+  // Safari without the browser's model: still offered, and its connection isn't one Settings has to make.
+  const only = await open({ ai: { on: true }, providers: ['openai', 'apple'], device });
+  assert.equal(only.$('ai-choice-device').hidden, false);
+  await only.change('ai-use-device', true);
+  assert.deepEqual(only.sent.filter((m) => m.id === 'device').map((m) => m.op), ['test']);
+  assert.equal(only.$('ai-device-state').textContent, 'Apple Intelligence · Downloading…');
+  // Chrome: the browser's model, its download, as before.
+  Object.assign(said, { state: 'download', reason: undefined, provider: 'device' });
+  const chrome = await open({ ai: { on: true }, providers: ['openai', 'device'], device });
+  await chrome.change('ai-use-device', true);
+  assert.equal(chrome.$('ai-device-state').textContent, 'Gemini Nano · Needs a download');
+  assert.equal(chrome.$('ai-device-download').hidden, false);
   const E = require('../lib/editor-ai.js'), t = (k, v) => I.t(k, v, 'en');
   assert.equal(E.appleText({ state: 'unavailable', reason: 'os' }, t), 'Not available on this device');
-  assert.equal(E.appleText({ state: 'downloading', reason: 'not-ready' }, t), 'Downloading…');
   assert.equal(E.appleText({ state: 'unavailable', reason: 'native' }, t), 'Not available: Not ready');
   assert.equal(E.providerName('apple', t), 'Apple Intelligence');
-  const q = await open({ ai: { on: true, use: 'apple' }, providers: ['openai', 'device'] });
-  assert.equal(q.$('ai-choice-apple').hidden, true);
-  assert.equal(q.$('ai-use-apple').disabled, true);
-  assert.equal(q.$('ai-apple').hidden, true);
+});
+
+test('a saved Apple Intelligence choice is On this device now, with nothing lost', async () => {
+  assert.equal(AS.clean({ on: true, use: 'apple' }).use, 'device');
+  assert.equal(AS.clean({ use: 'mac' }).use, 'mac', 'any other connection stays as it is');
+  const device = async (m) => (m.op === 'test' ? { ok: true, state: 'ready', provider: 'apple' } : { ok: true });
+  const p = await open({ ai: { on: true, use: 'apple', features: { completion: true } }, providers: ['openai', 'device', 'apple'], device });
+  assert.equal(p.$('ai-use-device').checked, true);
+  assert.equal(p.$('ai-device').hidden, false);
+  assert.equal(p.$('ai-device-state').textContent, 'Apple Intelligence · Ready');
+  assert.equal(p.$(`ai-feature-list`).children.length > 0, true);
 });
 
 test('the shipped device provider drives progress and completion through the real broker', async () => {

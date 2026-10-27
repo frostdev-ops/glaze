@@ -249,3 +249,50 @@ test('a changed connection asks the native side to drop its warm sessions', asyn
   await new Promise(setImmediate);
   assert.equal(sent.length, 2);
 });
+
+// "On this device" (connection id 'device') is one choice: Apple Intelligence where Safari offers it and this Mac can run
+// it, else the browser's own model. A stand-in for that model (lib/ai/providers/device.js isn't loaded here).
+let browserModel = { state: 'unavailable', reason: 'browser' };
+P.add({ id: 'device', config: () => ({}), caps: () => ({ text: true, json: true, stream: true, local: true }), status: async () => browserModel,
+  run: async () => ({ text: 'from the browser', model: 'gemini-nano', finish: 'stop' }) });
+const here = (stored = {}) => ({ enabled: async () => true, settings: async () => ({ on: true, use: 'device', features: { syllabus: true } }),
+  vault: { get: async () => structuredClone(stored), set: async () => true } });
+
+test('On this device runs on Apple Intelligence when this Mac has it, with no connection of its own to choose', async () => {
+  browserModel = { state: 'unavailable', reason: 'browser' };
+  native = async () => ({ ok: true, state: 'ready' });
+  const st = await B.status({ feature: 'syllabus' }, here());
+  assert.equal(st.provider, 'apple');
+  assert.equal(st.ready, true);
+  assert.equal(st.caps.local, true);
+  native = async () => ({ ok: true, state: 'downloading', reason: 'not-ready' });
+  const dl = await B.status({ feature: 'syllabus' }, here({ device: { provider: 'device' } }));
+  assert.deepEqual([dl.provider, dl.ready, dl.why], ['apple', false, 'downloading'], 'still Apple while its model downloads');
+  assert.deepEqual(await B.config({ op: 'test', id: 'device' }, here()), { ok: true, state: 'downloading', reason: 'not-ready', provider: 'apple' });
+});
+
+test('On this device says Apple Intelligence is off when neither model can run, and uses the browser\'s model when only it can', async () => {
+  native = async () => ({ ok: true, state: 'unavailable', reason: 'off' });
+  browserModel = { state: 'unavailable', reason: 'browser' };
+  const off = await B.status({ feature: 'syllabus' }, here());
+  assert.deepEqual([off.provider, off.ready, off.why, off.reason], ['apple', false, 'unavailable', 'off'], 'the reason the student can fix');
+  browserModel = { state: 'ready' };
+  for (const reason of ['off', 'os', 'device']) {
+    native = async () => ({ ok: true, state: 'unavailable', reason });
+    const st = await B.status({ feature: 'syllabus' }, here());
+    assert.deepEqual([st.provider, st.ready], ['device', true], reason);
+  }
+  native = async () => ({ ok: true, state: 'ready' });
+  assert.equal((await B.status({ feature: 'syllabus' }, here())).provider, 'apple', 'Apple first whenever it can run');
+});
+
+test('On this device is the browser\'s model outside Safari, and Apple is never asked', () => {
+  const out = execFileSync(process.execPath, ['-e', `
+    globalThis.chrome = { runtime: { getURL: () => 'chrome-extension://abc/' } };
+    const P = require('./lib/ai/providers.js'); require('./lib/ai/providers/apple.js');
+    P.add({ id: 'device', config: () => ({}), caps: () => ({ text: true, local: true }), status: async () => ({ state: 'ready' }), run: async () => ({ text: '', finish: 'stop' }) });
+    const B = require('./lib/ai/broker.js');
+    const env = { enabled: async () => true, settings: async () => ({ on: true, use: 'device', features: { syllabus: true } }), vault: { get: async () => ({}) } };
+    B.status({ feature: 'syllabus' }, env).then((st) => process.stdout.write(JSON.stringify([st.provider, st.ready])));`], { cwd: path.join(__dirname, '..') }).toString();
+  assert.deepEqual(JSON.parse(out), ['device', true]);
+});
