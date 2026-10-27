@@ -379,3 +379,12 @@ test('a cancelled input cannot mark a later programmatic replacement as typed', 
   e.type(' ');
   assert.equal(e.text(), 'teh ');
 });
+
+
+test('every curated typo corrects as typed and undoes independently', () => {
+  for (const [was, now] of Object.entries(P.TYPOS)) {
+    const e = editor(); e.type(`we wrote ${was} `);
+    assert.equal(e.text(), `we wrote ${now} `, was);
+    e.back(); assert.equal(e.text(), `we wrote ${was} `, was);
+  }
+});

@@ -18,7 +18,7 @@ const port = () => {
   const p = { got: [], waits: [], onmessage: null };
   p.postMessage = (m) => { p.got.push(m); for (const w of p.waits.splice(0)) w(); };
   p.send = (m) => p.onmessage({ data: m });
-  p.next = async (pred) => { for (;;) { const hit = p.got.find(pred); if (hit) { p.got.splice(p.got.indexOf(hit), 1); return hit; } await new Promise((r) => p.waits.push(r)); } };
+  p.next = async (pred) => { for (;;) { const hit = p.got.find(pred); if (hit) { p.got.splice(p.got.indexOf(hit), 1); return hit; } await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(Error('worker reply timed out')), 15000); p.waits.push(() => { clearTimeout(timer); resolve(); }); }); } };
   return p;
 };
 let ids = 0;
@@ -87,6 +87,18 @@ test('a newer lint of the same paragraph replaces a queued one, and frames are s
   for (let id = base + 1; id <= ids; id++) await (id <= base + 4 ? a : b).next((m) => m.id === id);
   ua(); ub();
   assert.deepEqual(order, [`a-stale:${base + 2}`, `a:${base + 1}`, `b:${base + 5}`, `a:${base + 3}`, `a:${base + 4}`]);
+});
+
+test('a 10,000-word paper has valid whole-document spans and measured warm lint cost', async (t) => {
+  const { a } = await start;
+  const seed = fixtures[0].text.split(/\s+/), text = Array.from({ length: 10000 }, (_, i) => seed[i % seed.length]).join(' ');
+  const ms = [];
+  for (let n = 0; n < 5; n++) {
+    const r = await lint(a, text, 'paper'); assert.ok(!r.error, r.error); ms.push(r.ms);
+    for (const l of r.lints) assert.equal(text.slice(l.start, l.end), l.problem);
+  }
+  ms.sort((a, b) => a - b);
+  t.diagnostic(`10000 words, ${text.length} UTF-16 units: median ${ms[2].toFixed(1)} ms, max ${ms[4].toFixed(1)} ms`);
 });
 
 test('one Harper for every frame, and it closes when idle, telling them', async () => {
