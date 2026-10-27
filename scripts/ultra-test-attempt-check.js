@@ -59,7 +59,7 @@ const HELPERS = `
       const base = G.GZ_DEFAULTS;
       const L = G.GZ_LOOKS.find((l) => l.name === look);
       const settings = { ...base, ...G.GZ_LOOK_APPLY(base, L), navbar: { ...base.navbar, on: true, place: 'top', style: 'float' },
-        bg: { ...base.bg, ...(L && G.GZ_LOOK_APPLY(base, L).bg), kind: bg, scene: 'topography' }, motion: { ...base.motion, level: 'off' } };
+        bg: { ...base.bg, ...(L && G.GZ_LOOK_APPLY(base, L).bg), kind: bg, scene: 'topography' }, motion: { ...base.motion, level: 'off' }, enhance: { ...base.enhance, reading: true } };
       await opts.evaluate(async ({ settings, site, uid }) => {
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.session.clear();
         await chrome.storage.sync.set(settings);
@@ -111,6 +111,19 @@ const HELPERS = `
         check(top.progress.painted && top.progress.radius > 4, `${tag}: progress bar has a rounded surface`, top.progress);
         check(top.dock.painted && top.dock.radius > 4, `${tag}: footer dock painted and rounded`, top.dock);
         if (w >= 1024 || bg === 'scene') await shot(`${slug(tag)}-top`);
+
+        // With the reading width on, a question's prompt and answers keep to the start of their card, in line.
+        const lines = await ev(() => { const x = (s) => { const r = document.createRange(); r.selectNodeContents(document.querySelector(s)); return r.getBoundingClientRect().x; };
+          const card = document.querySelectorAll('.assessment-attempt-panel .assessment-question')[1].getBoundingClientRect().x;
+          return { t: x('.js-true-false-answer-true .ql-editor p'), f: x('.js-true-false-answer-false .ql-editor p'), prompt: x('.js-question-type-eitherOr .js-true-false-group-label .ql-editor p') - card }; });
+        check(Math.abs(lines.t - lines.f) <= 1 && lines.prompt <= 64, `${tag}: answers in line, prompt at the card's start`, lines);
+        // A radio shows its dot only once checked, on the accent; unchecked it is a bare ring.
+        const radio = await ev(() => { const g = window.__gz, input = document.querySelector('.js-true-false-answer-true input'), other = document.querySelector('.js-true-false-answer-false input');
+          input.click();
+          const look = (i) => { const ring = i.nextElementSibling; return { ring: g.rgba(getComputedStyle(ring).backgroundColor), dot: g.rgba(getComputedStyle(ring, '::before').backgroundColor) }; };
+          const on = look(input), off = look(other); input.checked = false;
+          return { on, off, contrast: on.ring && on.dot && +g.contrast(on.dot, on.ring).toFixed(2) }; });
+        check(radio.off.ring.a === 0 && radio.off.dot.a === 0 && radio.on.ring.a > 0.9 && radio.on.dot.a > 0.9 && radio.contrast >= 3, `${tag}: only a checked radio shows its dot`, radio);
 
         // Every part of an answer row hits its row; keyboard focus and a chosen answer show on the row.
         const rowHits = await ev(() => { const g = window.__gz; return [...document.querySelectorAll('.assessment-attempt-panel label.MuiFormControlLabel-root')].map((l) => {

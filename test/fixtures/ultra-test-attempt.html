@@ -52,16 +52,20 @@ panel-header-exit-button { position: absolute; inset-inline-start: 5px; }
 .point-value { padding: 4px 16px; border: 1px solid #8c8c8c; border-radius: 16px; }
 .bb-editor-root, .bb-editor-container, .ql-editor { background: #fff; }
 .bb-editor-container.is-read-only { border-radius: 16px; }
-.question-content .bb-editor-wrapper .ql-editor { padding: 24px 128px; }
+.bb-editor-root .ql-editor { padding: 0.625rem 0.9375rem; }
+.bb-editor-container.is-read-only { padding-left: 20px; } .bb-editor-container.is-read-only .ql-editor { padding: 0.625rem 0; }
 .MuiFormGroup-root { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .MuiFormControlLabel-root { display: flex; align-items: center; min-height: 65px; margin: 0 12px; border: 2px solid #cdcdcd; border-radius: 2px; cursor: pointer; }
 .PrivateSwitchBase-root { position: relative; display: inline-flex; padding: 9px; }
 .PrivateSwitchBase-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
 .gz-fx-box { display: block; width: 18px; height: 18px; border: 2px solid #8c8c8c; }
-.MuiRadio-root .gz-fx-box { border-radius: 50%; }
+.MuiRadio-root > [class*="makeStylesroot-"] { display: inline-flex; box-sizing: border-box; width: 1rem; height: 1rem; border: 2px solid #767676; border-radius: 0.5rem; background-color: #fff; }
+.MuiRadio-root > [class*="makeStylesroot-"]::before { content: ""; display: block; box-sizing: border-box; width: 0.375rem; border-radius: 0.1875rem; background-color: #fff; }
+.MuiRadio-root:has(> input:checked) > [class*="makeStylesroot-"] { border-color: #007d2c; background-color: #007d2c; }
+.MuiRadio-root:has(> input:checked) > [class*="makeStylesroot-"]::before { border: 3px solid transparent; }
 .MuiFormControlLabel-label { display: flex; align-items: center; flex: 1; min-height: 61px; }
 .makeStyleslabelContainerBefore-fx::before { content: attr(data-letter); width: 2rem; color: #8c8c8c; }
-[class*="makeStylesanswerOptionText-"] { flex: 1; align-self: stretch; } [class*="makeStylesanswerOptionText-"] .ql-editor { padding: 20px 80px; }
+[class*="makeStylesanswerOptionText-"] { flex: 1; align-self: stretch; }
 .question-helper { margin: 8px 12px 0; text-align: end; font-size: 13px; }
 .freeform-response-divider { margin: 24px 0; border-top: 1px dashed #8c8c8c; }
 .additional-content-label { display: block; margin-bottom: 12px; font-size: 20px; }
@@ -112,7 +116,9 @@ course-student-grades { display: block; margin-top: 1px; } course-student-grades
 (() => {
   const body = document.querySelector('.routed-page-body');
   const p = location.pathname;
-  const box = (type) => `<span class="MuiButtonBase-root ${type === 'radio' ? 'MuiRadio-root' : 'MuiCheckbox-root'} PrivateSwitchBase-root makeStylescheckboxIconButtonLabel-fx"><input type="${type}" class="PrivateSwitchBase-input"><span class="gz-fx-box" aria-hidden="true"></span></span>`;
+  const box = (type) => type === 'radio'
+    ? '<span class="MuiButtonBase-root MuiRadio-root MuiRadio-colorSecondary PrivateSwitchBase-root makeStylescheckboxIconButtonLabel-fx"><input type="radio" name="tf" class="PrivateSwitchBase-input"><span class="makeStylesroot-fx" aria-hidden="true"></span></span>'
+    : '<span class="MuiButtonBase-root MuiCheckbox-root PrivateSwitchBase-root makeStylescheckboxIconButtonLabel-fx"><input type="checkbox" class="PrivateSwitchBase-input"><span class="gz-fx-box" aria-hidden="true"></span></span>';
   const readOnly = (text, h = 'h4') => `<div class="bb-editor-root bb-editor-heading-${h}" role="presentation"><div class="editor-content-container keyboard-tooltip-container no-toolbar"><div role="presentation" class="bb-editor-container ql-container ql-disabled is-read-only"><div class="ql-editor bb-editor" data-gramm="false"><p>${text}</p></div></div></div></div>`;
   const prompt = (text) => `<div class="bb-editor-wrapper read-only">${readOnly(text, 'h3')}</div>`;
   const option = (cls, type, text, letter) => `<label class="MuiFormControlLabel-root MuiFormControlLabel-labelPlacementEnd makeStylescommonCheckboxSection-fx makeStylesanswerOption-fx makeStylesanswerOptionwithHover-fx ${cls}">${box(type)}<span class="MuiTypography-root MuiTypography-body1 MuiFormControlLabel-label makeStyleslabelContainer-fx${letter ? ' makeStyleslabelContainerBefore-fx' : ''}"${letter ? ` data-letter="${letter}."` : ''}><div class="makeStylesanswerOptionText-fx">${readOnly(text)}</div></span></label>`;
