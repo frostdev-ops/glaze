@@ -231,6 +231,7 @@ test('writer.complete mid-word asks a model on this computer for its last word i
   assert.equal((await local('when stopping mid-word the tab comp', 'completion seems to work fine.')).output, 'letion seems to work fine.');
   assert.equal((await local('I think it should load when the writer open', 'open the application for speed.')).output, ' the application for speed.', 'the word was whole');
   assert.equal((await local('In this assignment I learned how to subm', 'it to the Word document')).output, null, 'without the word first the join is unknown');
+  assert.equal((await local('when stopping mid-word the tab comp', 'comp, loses, track')).output, null, 'punctuation after the word: a guess');
   const after = await local('Three things I learned in this course are how to ', 'manage data.');
   assert.equal(after.output, 'manage data.', 'after a space: the next words, as before');
   assert.match(after.req.system, /only the next words/);
