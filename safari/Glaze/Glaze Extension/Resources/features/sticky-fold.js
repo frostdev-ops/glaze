@@ -1,7 +1,7 @@
 // Ultra's sticky bands over what is read under them: a test attempt's progress band (the bar, "N of M questions
 // remaining") and a course's top bar (its header and tools). In its place each stays as it is; once it has left its place
-// it is marked data-gz-stuck and theme.css folds it into a small pill, without moving anything under it. A page feature
-// (features/routes.js).
+// it is marked data-gz-stuck and theme.css folds it into a small pill, without moving anything under it. Off with the
+// enhance.fold setting. A page feature (features/routes.js).
 var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
   const ctx = globalThis.GZ_CTX;
   if (!ctx) return null;
@@ -11,6 +11,7 @@ var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
   // [selector, keeps its height]
   const BANDS = [['.assessment-attempt-panel .assessment-progress-header', false], ['div.bb-course-navigation', true]];
   let listening = false, frame = 0, place = new WeakMap();
+  const wanted = () => ctx.on() && ctx.settings().enhance?.fold !== false;
   // How far into its parent's content the band sits in its place: read once with its sticking turned off.
   const offset = (band) => {
     band.style.setProperty('position', 'static', 'important');
@@ -29,7 +30,7 @@ var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
   };
   const check = () => {
     frame = 0;
-    if (!listening || !ctx.on()) return;
+    if (!listening || !wanted()) return;
     for (const [sel, keep] of BANDS) for (const band of document.querySelectorAll(sel)) {
       const parent = band.parentElement;
       if (!parent) continue;
@@ -46,7 +47,7 @@ var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
     for (const [sel] of BANDS) for (const band of document.querySelectorAll(sel)) fold(band, false);
   };
   const sync = () => {
-    if (!ctx.on()) return off();
+    if (!wanted()) return off();
     if (!listening) { document.addEventListener('scroll', later, { capture: true, passive: true }); globalThis.addEventListener('resize', resized); }
     listening = true;
     later();
