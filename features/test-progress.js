@@ -17,9 +17,10 @@ var GZ_TEST_PROGRESS = globalThis.GZ_TEST_PROGRESS || (() => {
   const fold = (band, stuck) => {
     if (stuck === band.hasAttribute('data-gz-stuck')) return;
     if (!stuck) { band.removeAttribute('data-gz-stuck'); band.style.removeProperty('--gz-progress-fold'); return; }
-    const whole = band.offsetHeight;
+    // Fractional heights: offsetHeight rounds, and a rounded fold moved the questions under it by part of a pixel.
+    const whole = band.getBoundingClientRect().height;
     band.setAttribute('data-gz-stuck', '');
-    band.style.setProperty('--gz-progress-fold', `${Math.max(0, whole - band.offsetHeight)}px`);
+    band.style.setProperty('--gz-progress-fold', `${Math.max(0, whole - band.getBoundingClientRect().height)}px`);
   };
   const check = () => {
     frame = 0;

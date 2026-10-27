@@ -27,17 +27,16 @@ const load = () => {
   const parent = el('div', 'panel-content-full panel-content-separator', header, el('ol', 'question-list'));
   doc.body.append(el('div', 'panel-wrap assessment-attempt-panel', el('section', 'panel-content', parent)));
   const state = { scroll: 0 };
-  // The parent's top moves with the scroll; the band sits 8px into it, sticks at y 60, and is 170px tall (40 folded).
+  // The parent's top moves with the scroll; the band sits 8px into it, sticks at y 60, and is 170.6px tall (40.2 folded).
   doc.boxOf = (e) => {
     const top = 100 - state.scroll;
     if (e === parent) return { left: 0, top, width: 900, height: 1500 };
     if (e === header) {
       const natural = top + 8;
-      return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 60), width: 900, height: header.hasAttribute('data-gz-stuck') ? 40 : 170 };
+      return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 60), width: 900, height: header.hasAttribute('data-gz-stuck') ? 40.2 : 170.6 };
     }
     return null;
   };
-  Object.defineProperty(header, 'offsetHeight', { get: () => doc.boxOf(header).height });
   const frames = new Map();
   let frameId = 0;
   const flush = () => { const pending = [...frames.values()]; frames.clear(); for (const f of pending) f(); };
@@ -59,10 +58,10 @@ test('in its place the band stays whole; scrolled under, it folds and gives the 
   assert.equal(header.hasAttribute('data-gz-stuck'), false, 'still above the line');
   scrollTo(400);
   assert.equal(header.hasAttribute('data-gz-stuck'), true, 'questions under it');
-  assert.equal(header.style.getPropertyValue('--gz-progress-fold'), '130px');
+  assert.equal(parseFloat(header.style.getPropertyValue('--gz-progress-fold')).toFixed(3), '130.400', 'the fold to the fraction');
   assert.equal(header.style.position, undefined, 'its own position is Ultra\'s again after the measure');
   scrollTo(800);
-  assert.equal(header.style.getPropertyValue('--gz-progress-fold'), '130px', 'measured once per fold');
+  assert.equal(parseFloat(header.style.getPropertyValue('--gz-progress-fold')).toFixed(3), '130.400', 'measured once per fold');
   scrollTo(0);
   assert.equal(header.hasAttribute('data-gz-stuck'), false, 'back in its place');
   assert.equal(header.style.getPropertyValue('--gz-progress-fold'), '');
