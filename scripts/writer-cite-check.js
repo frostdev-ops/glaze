@@ -15,7 +15,8 @@ const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
 const shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-cite-shots';
 const NEWS = 'https://news.example.com/2019/03/22/forgetting.html';
-const checks = [], requests = [], errors = [];
+const checks = [], requests = [], errors = [], failures = [];
+const review = (v, label) => { checks.push(label); if (!v) { failures.push(label); console.log(`FAIL ${label}`); } else console.log(`ok ${label}`); };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 10000) => {
   const start = Date.now(); let last;
@@ -54,6 +55,7 @@ const HARNESS = `(() => {
     // The lookups' answers, as doi.org (after its redirect), Open Library and a news site give them.
     const ANSWERS = {
       'https://doi.org/10.5555/gz.2026.001': { contentType: 'application/vnd.citationstyles.csl+json', body: fixture('writer-cite-doi.json') },
+      'https://doi.org/10.5555/slow': { contentType: 'application/vnd.citationstyles.csl+json', body: fixture('writer-cite-doi.json') },
       'https://doi.org/10.5555/missing': { status: 404, contentType: 'text/html', body: 'not found' },
       'https://openlibrary.org/api/books?bibkeys=ISBN:9780306406157&format=json&jscmd=data': { contentType: 'application/json', body: fixture('writer-cite-openlibrary.json') },
       [NEWS]: { contentType: 'text/html; charset=utf-8', body: fixture('writer-cite-page.html') },
@@ -62,7 +64,7 @@ const HARNESS = `(() => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
       requests.push({ method: req.method(), url: u.href, cookie: !!(await req.allHeaders()).cookie, referer: (await req.allHeaders()).referer || '', accept: (await req.allHeaders()).accept || '' });
-      if (ANSWERS[u.href] && req.method() === 'GET') return r.fulfill(ANSWERS[u.href]);
+      if (ANSWERS[u.href] && req.method() === 'GET') { if (u.href.endsWith('/slow')) await pause(500); return r.fulfill(ANSWERS[u.href]); }
       if (req.method() !== 'GET' || u.origin !== site) return r.abort();
       if (u.pathname === '/gz-check/quill.js') return r.fulfill({ contentType: 'text/javascript', body: quill });
       if (u.pathname === '/gz-check/harness.js') return r.fulfill({ contentType: 'text/javascript', body: HARNESS });
@@ -205,6 +207,49 @@ const HARNESS = `(() => {
     await fr.fill('.gzc-view [data-field="page"]', '113-131');
     await fr.click('.gzc-view .gzc-form [data-do="remove"]');
     check(await fr.evaluate(() => document.querySelectorAll('.gzc-card').length === 2 && GZ_WRITER_CITE.sources().length === 2), 'Edit, then Remove, takes the source out');
+    review(await fr.evaluate(() => !!document.querySelector('.gzc-undo button')), 'review: removing a source offers a short Undo');
+    if (await fr.evaluate(() => !!document.querySelector('.gzc-undo button'))) {
+      await fr.click('.gzc-undo button');
+      check(await fr.evaluate(() => GZ_WRITER_CITE.sources().length === 3), 'Undo restores the removed source');
+    }
+    await fr.click('.gzc-card:first-child .sbtn.ghost2');
+    await fr.click('.gzc-card:first-child [data-do="cancel"]');
+    review(await fr.evaluate(() => document.activeElement?.closest('.gzc-card')?.dataset.id === document.querySelector('.gzc-card')?.dataset.id), 'review: cancelling a source edit restores keyboard focus');
+    await fr.click('.gzc-card:first-child .sbtn.ghost2');
+    await fr.evaluate(() => GZ_WRITER_CITE.add({ title: 'Another source' }));
+    review(await fr.evaluate(() => { const ids = [...document.querySelectorAll('.gzc-form [id]')].map((n) => n.id); return new Set(ids).size === ids.length; }), 'review: simultaneous citation forms have unique label targets');
+    review(await fr.evaluate(() => !!document.querySelector('.gz-cite [aria-label="Close"]')), 'review: the dialog has a keyboard and screen-reader Close control');
+    await fr.press('.gz-cite [data-field="title"]', 'Escape');
+    await fr.click('.gzc-card:first-child [data-do="cancel"]');
+    await fr.evaluate(() => GZ_WRITER_CITE.open({ anchor: document.getElementById('more') }));
+    await fr.press('.gzc-in', 'Escape');
+    review(await fr.evaluate(() => document.activeElement?.id === 'more'), 'review: Escape returns focus to the dialog invoker');
+    await fr.evaluate(() => GZ_WRITER_CITE.open());
+    await fr.fill('.gzc-in', '10.5555/slow');
+    await fr.click('.gzc-row .sbtn');
+    await fr.press('.gzc-in', 'Escape');
+    await fr.evaluate(() => GZ_WRITER_CITE.add({ title: 'My manual title' }));
+    await pause(750);
+    review(await fr.evaluate(() => document.querySelector('.gz-cite [data-field="title"]')?.value === 'My manual title'), 'review: a closed lookup cannot overwrite a newer form');
+    await fr.press('.gz-cite [data-field="title"]', 'Escape');
+    // Firefox's framed extension page may lack permissions. Page lookup must fall back; public DOI/ISBN still work.
+    await fr.evaluate(() => { window.__permissions = chrome.permissions; chrome.permissions = undefined; GZ_WRITER_CITE.open(); });
+    await fr.fill('.gzc-in', NEWS);
+    await fr.click('.gzc-row .sbtn');
+    await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite [data-field="URL"]')), 'no-permissions manual URL form');
+    check(await fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-status').textContent && document.querySelector('.gz-cite [data-field="URL"]').value === 'https://news.example.com/2019/03/22/forgetting.html'), 'without permissions, URL lookup opens the manual form with a one-line reason');
+    await fr.click('.gz-cite [data-do="cancel"]');
+    await fr.fill('.gzc-in', '10.5555/gz.2026.001');
+    await fr.click('.gzc-row .sbtn');
+    await until(() => fr.evaluate(() => document.querySelector('.gz-cite [data-field="title"]')?.value === 'Rememory and the River in Beloved'), 'DOI without permissions API');
+    check(true, 'DOI lookup still works without the permissions API');
+    await fr.click('.gz-cite [data-do="cancel"]');
+    await fr.fill('.gzc-in', '9780306406157');
+    await fr.click('.gzc-row .sbtn');
+    await until(() => fr.evaluate(() => document.querySelector('.gz-cite [data-field="title"]')?.value === 'The River Keeps: A novel'), 'ISBN without permissions API');
+    check(true, 'ISBN lookup still works without the permissions API');
+    await fr.evaluate(() => { chrome.permissions = window.__permissions; });
+    await fr.press('.gz-cite [data-field="title"]', 'Escape');
     await fr.click('.gzc-view .gzc-head .sbtn');
     check(await fr.evaluate(() => document.activeElement?.classList.contains('gzc-in') && !document.querySelector('.gzc-adder').hidden), 'Add source opens the lookup in the panel');
     saved.add = await shot(el, 'cite-sources-add.png');
@@ -213,7 +258,8 @@ const HARNESS = `(() => {
 
     check(!requests.some((r) => !r.url.startsWith(site) && !ANSWERS[r.url] && !r.url.startsWith(QUILL.url)), 'no request left for anywhere but the synthetic site and the three mocked lookup answers');
     check(!errors.length, `no page or frame errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
-    console.log(JSON.stringify({ checks: checks.length, shots: saved }, null, 2));
+    console.log(JSON.stringify({ checks: checks.length, failures: failures.length, shots: saved }, null, 2));
+    assert.deepEqual(failures, [], 'citation review regressions');
   } finally {
     await context?.close();
     if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
