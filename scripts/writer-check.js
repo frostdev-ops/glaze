@@ -158,6 +158,14 @@ const HARNESS = `(() => {
     await reply.el.evaluate((f, w) => { f.style.width = w; }, originalWidth);
     await reply.fr.click('.ProseMirror');
     await p.keyboard.press('End');
+    // Synthetic delayed enablement: a sync write restarts the native render, so redundant writes would lose this send.
+    await p.evaluate((s) => {
+      const q = __quill(s), b = document.querySelector(s).closest('form').querySelector('.js-text-editor-save');
+      let timer;
+      const later = () => { clearTimeout(timer); b.disabled = true; timer = setTimeout(() => { b.disabled = !q.getText().trim(); }, 120); };
+      q.on('text-change', later); later();
+    }, REPLY);
+    await p.keyboard.press(`${MOD}+Enter`);
     await p.keyboard.press(`${MOD}+Enter`);
     await pause(400);
     check((await clicks(p)).filter((c) => c === 'Reply').length === 1, 'Ctrl/Cmd+Enter clicks the native Reply once');

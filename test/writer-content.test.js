@@ -184,3 +184,16 @@ test('editing cancels a pending send rather than posting the newer draft', async
   b.send.removeAttribute('disabled'); c.tick(60);
   assert.equal(c.clicks.length, 0, 'new text requires a new send gesture');
 });
+
+test('a pending send expires and is cancelled when its box closes', async () => {
+  const c = content(); await c.start(); const b = c.native(1);
+  let now = 10000;
+  c.ctx.Date = class extends Date { static now() { return now; } };
+  c.emit({ type: 'change', html: '<p>Wait briefly</p>', text: 'Wait briefly', words: 2 }, 1);
+  c.emit({ type: 'send' }, 1);
+  now += 1001; b.send.removeAttribute('disabled'); c.tick(60);
+  assert.equal(c.clicks.length, 0, 'a stale shortcut cannot send later');
+  b.send.setAttribute('disabled', ''); c.emit({ type: 'send' }, 1);
+  c.emit({ type: 'native' }, 1);
+  assert.equal([...c.timers.values()].filter((t) => t.ms === 60).length, 0);
+});

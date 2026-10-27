@@ -196,7 +196,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // h: what the frame shows; d: its Quill ops, or null when it came from Ultra's editor (which then already holds it).
   const sync = (box, h, d = h === box.latest ? box.delta : null) => {
     if (!sameBox(box)) { box.latest = h; box.delta = d; box.unsynced = true; return false; }
-    if (h !== box.latest) box.sending = false;
+    if (h !== box.latest) { box.sending = false; clearTimeout(box.retry); box.retry = null; }
+    if (!box.unsynced && h === box.latest && box.nativeHTML === box.editor.innerHTML && sameText(box.editor, h)) return true;
     box.latest = h;
     box.delta = d;
     const said = d ? main('set', { id: box.id, delta: d }) : [{ ok: box.editor.innerHTML === h, html: box.editor.innerHTML }];
@@ -207,11 +208,11 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   };
   // Ctrl/Cmd+Enter: Post, Reply or Send, once, when Ultra allows it (its Angular may enable the button a moment after
   // the edit that fills the box).
-  const send = (box, again = true) => {
-    if (box.sending || box.retry || box.path !== location.pathname || !SENDS.has(box.kind) || U().kindOf(box.editor, { path: location.pathname }) !== box.kind || !sync(box, box.latest)) return;
+  const send = (box, until = Date.now() + 1000) => {
+    if (Date.now() >= until || box.sending || box.retry || box.path !== location.pathname || !SENDS.has(box.kind) || U().kindOf(box.editor, { path: location.pathname }) !== box.kind || !sync(box, box.latest)) return;
     const b = U().sendOf(box.editor, box.kind);
     if (b?.isConnected && U().enabled(b)) { remember(box); globalThis.GZ_DRAFT_UI?.sent?.(box.editor); box.sending = true; b.click(); }
-    else if (again) box.retry = setTimeout(() => { box.retry = null; if (boxes.get(box.editor) === box) send(box, false); }, 60);
+    else if (box.text) box.retry = setTimeout(() => { box.retry = null; if (boxes.get(box.editor) === box) send(box, until); }, 60);
   };
   // A normal native Post/Reply/Send has the same flush and clear lifecycle as the shortcut.
   document.addEventListener('click', (e) => {
