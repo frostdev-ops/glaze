@@ -162,3 +162,25 @@ test('a page answering after the real write, with a wrong claim, can\'t make a c
   assert.ok(!frame.isConnected, 'the box goes back: the native editor holds the words');
   assert.equal(b.editor.textContent, 'Written for real');
 });
+
+test('send waits beyond one enable tick without rewriting the same native document', async () => {
+  const c = content(); await c.start(); const b = c.native(1);
+  c.emit({ type: 'change', html: '<p>Reply after rendering</p>', text: 'Reply after rendering', words: 3 }, 1);
+  const written = c.sets.length;
+  c.emit({ type: 'send' }, 1); c.tick(60);
+  b.send.removeAttribute('disabled');
+  c.tick(60);
+  assert.equal(c.clicks.length, 1, 'an asynchronous native enable must not lose the shortcut');
+  assert.equal(c.sets.length, written, 'polling must not reset native enablement by rewriting Quill');
+  c.emit({ type: 'send' }, 1);
+  assert.equal(c.clicks.length, 1);
+});
+
+test('editing cancels a pending send rather than posting the newer draft', async () => {
+  const c = content(); await c.start(); const b = c.native(1);
+  c.emit({ type: 'change', html: '<p>First draft</p>', text: 'First draft', words: 2 }, 1);
+  c.emit({ type: 'send' }, 1);
+  c.emit({ type: 'change', html: '<p>Still editing</p>', text: 'Still editing', words: 2 }, 1);
+  b.send.removeAttribute('disabled'); c.tick(60);
+  assert.equal(c.clicks.length, 0, 'new text requires a new send gesture');
+});
