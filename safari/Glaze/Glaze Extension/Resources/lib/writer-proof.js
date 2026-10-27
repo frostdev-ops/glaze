@@ -188,7 +188,26 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   // later (since()). Only text typed in this box is ever fixed, never what was loaded or pasted.
   const key = new PluginKey('gzProof');
   const LOG = 400, BOUNDARY = /^[ .,;:!?]$/;
-  const mapRanges = (ranges, mapping) => ranges.map(([a, b]) => [mapping.map(a, -1), mapping.map(b, 1)]).filter(([a, b]) => b > a);
+  // Only unchanged characters retain provenance. Inserts (including paste/undo) split a typed range; replacements
+  // remove their old coverage. A later handleTextInput explicitly adds the characters actually typed.
+  const mapRanges = (ranges, mapping) => {
+    for (const map of mapping.maps) {
+      const cuts = [];
+      map.forEach((a, b) => cuts.push([a, b]));
+      const out = [];
+      for (const [a, b] of ranges) {
+        let at = a;
+        for (const [s, e] of cuts) {
+          if (e < at || s > b) continue;
+          if (s > at) out.push([map.map(at, 1), map.map(Math.min(s, b), -1)]);
+          at = Math.max(at, e);
+        }
+        if (at < b) out.push([map.map(at, 1), map.map(b, -1)]);
+      }
+      ranges = out.filter(([a, b]) => b > a);
+    }
+    return ranges;
+  };
   const addRange = (ranges, a, b) => {
     const out = [];
     for (const r of ranges) { if (r[1] < a || r[0] > b) out.push(r); else { a = Math.min(a, r[0]); b = Math.max(b, r[1]); } }
