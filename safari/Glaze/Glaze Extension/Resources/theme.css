@@ -487,7 +487,8 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
   .base-header, .course-groups-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"],
   .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"]) {
+  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"],
+  .routed-page bb-panel-header > .panel-header.persistent-white-header) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
   backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
@@ -495,7 +496,9 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
   box-shadow: var(--gz-rest-shadow) !important;
 }
 #site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
-  .bb-offcanvas-panel.full .panel-header.simple-header) :is(.panel-title, .editable-title-container) { background: transparent !important; }
+  .bb-offcanvas-panel.full .panel-header.simple-header, .routed-page bb-panel-header > .panel-header.persistent-white-header) :is(.panel-title, .editable-title-container, .panel-titles-container, .panel-title-texteditor) { background: transparent !important; }
+/* The legacy item pages' band (a test attempt, a journal, a file) sits in the content column, a gap under the strip. */
+#site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header { margin: var(--gz-float-gap, 12px) 0 0 !important; padding: 1rem 1.5rem !important; min-height: 0 !important; }
 /* A full panel over the page (an announcement opened from a course): its header is a floating glass panel like the course
    header, inset from the window's top and end; the header's own box keeps Ultra's place (it pulls into the panel's
    padding), so the glass is drawn inside it. The panel's own edge draws no line. */
@@ -649,7 +652,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
    a Grades card's title band, the calendar's bars. Ground there showed as a dark patch on the surface (light on Paper).
    A header card of its own keeps its paint. */
 #site-wrap :is(.base-header, .course-groups-header, [class*="makeStylespanelHeaderContainerRoot-"], .calendar-wrapper, .tabular-list, table, course-student-grades,
-  .element-card, .base-grades-course-tile, article, .MuiCard-root, .MuiPaper-root:not(.MuiDrawer-paper))
+  .element-card, .base-grades-course-tile, article, .MuiCard-root, .MuiPaper-root:not(.MuiDrawer-paper), .assessment-question, .assessment-progress-header, .assessment-attempt-panel > .black-panel-header)
   :is(div:is([class*="-header"], [class*="header-"]), .guidance-wrapper):not(.base-header, .base-header-tools, .course-groups-header, .panel-header, [class*="makeStylespanelHeaderContainerRoot-"]) { background: transparent !important; }
 
 /* Attendance peek panel. */
@@ -927,7 +930,9 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
 /* Item pages' wells and lists (an assignment's due date, attempts and details; a test's results, which have no well; a
    profile's lists; a group set with nothing in it): panels on Glaze's surface with the Look's corners. Ultra painted the
    wells in the page's own colour, square, so they read as empty outlines. */
-#site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state) {
+#site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state,
+  .assessment-attempt-panel :is(.assessment-question, .assessment-progress-header), .rubric-details-panel > .panel-section-header,
+  .course-announcement-layer .no-result-message, .is-empty-page > .is-empty-wrapper) {
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
 }
@@ -935,13 +940,15 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
    a GPU layer each. Same fill. */
 html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header, content-page-header > header,
   .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"],
-  #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header,
+  #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header, #site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
   #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before,
   .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
   bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]), #site-wrap .outline-action-block,
   #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),
-  #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state)) { backdrop-filter: none; }
+  #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state,
+  .assessment-attempt-panel :is(.assessment-question, .assessment-progress-header), .rubric-details-panel > .panel-section-header,
+  .course-announcement-layer .no-result-message, .is-empty-page > .is-empty-wrapper)) { backdrop-filter: none; }
 #site-wrap :is(.assessment-details-section > ul.section-content, .assessment-results-section > .section-content) { padding: 0.75rem 1rem !important; }
 #site-wrap .base-profile section ul { overflow: hidden; } /* its rows paint their own fill: kept inside the corners */
 /* Item type at a glance: the type icon carries its name as aria-label. */
@@ -1004,7 +1011,9 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 #site-wrap .discussion-board .reply-control { padding-inline: 0.5rem; }
 #site-wrap .discussion-board .discussion-sorting-wrapper { margin-block: 1rem; }
 #site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
-  .activity-stream .activity-group-title, .base-profile .profile-content h2),
+  .activity-stream .activity-group-title, .base-profile .profile-content h2,
+  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2),
+  bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
 #site-wrap .discussion-board :is(.discussion-full-panel-detail-header,
   discussion-refresh-button button, discussion-follow-button button, bb-discussion-sorting-options button, discussion-reply-button button) {
   background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
@@ -1014,7 +1023,9 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 }
 /* Section-heading pills retain the native heading text and scale with the active Look. */
 #site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
-  .activity-stream .activity-group-title, .base-profile .profile-content h2),
+  .activity-stream .activity-group-title, .base-profile .profile-content h2,
+  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2),
+  bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
 #site-wrap .discussion-board .discussion-full-panel-detail-header { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button { min-width: 2.25rem; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button:is(:hover, :focus-visible, [aria-pressed="true"]) {
@@ -1038,20 +1049,20 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 
 /* ---- rich text editor (submissions, replies, messages): toolbar, text and word count as one
    card, with the accent ring while you type ---- */
-#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-root {
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-root {
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius) !important;
   transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease);
 }
-#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-root:focus-within { border-color: var(--gz-accent) !important; box-shadow: 0 0 0 3px var(--gz-accent-soft) !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-toolbar {
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-root:focus-within { border-color: var(--gz-accent) !important; box-shadow: 0 0 0 3px var(--gz-accent-soft) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-toolbar:not(.bb-editor-toolbar-submenu) {
   border: 0 !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 55%), var(--gz-surface-paint-2, var(--gz-surface-2))) !important;
 }
-#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-toolbar :is(button, .ql-picker) { border-color: transparent !important; border-radius: var(--gz-radius-sm) !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) :is(.editor-content-container, .bb-editor-container) { border: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .ql-editor.ql-blank::before { color: var(--gz-ink-muted) !important; font-style: normal !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .status-bar { padding: 0.3rem 0.9rem 0.45rem !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; text-align: right; font-size: 12px; color: var(--gz-ink-muted) !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .status-bar * { font-style: normal !important; color: inherit !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-toolbar :is(button, .ql-picker) { border-color: transparent !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) :is(.editor-content-container, .bb-editor-container) { border: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .ql-editor.ql-blank::before { color: var(--gz-ink-muted) !important; font-style: normal !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .status-bar { padding: 0.3rem 0.9rem 0.45rem !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; text-align: right; font-size: 12px; color: var(--gz-ink-muted) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .status-bar * { font-style: normal !important; color: inherit !important; }
 
 /* ---- assessment pages (an assignment or test attempt, its submission view): Ultra lays out an
    "authoring" column and a "details" column. ---- */
@@ -1074,6 +1085,84 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 #site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"] svg { color: var(--gz-accent) !important; }
 /* The Exit button in the item header: Ultra paints it #404040. */
 #site-wrap header[class*="makeStylesheader-"] .MuiButtonBase-root[class*="makeStylescontained-"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border-radius: var(--gz-radius-sm) !important; }
+/* ---- the legacy test attempt (Ultra's Angular .assessment-attempt-panel). Ultra draws it as white boxes on a white page;
+   with the white taken away it was loose pieces on the background. Each part owns one surface: the title band and the
+   section pills (above), a card per question and the sticky progress bar (the wells, above), a painted row per answer,
+   one editor card, and the footer's dock. ---- */
+#site-wrap .assessment-attempt-panel .assessment-question { margin-block: 0 1rem; padding: 1rem 1.25rem !important; }
+#site-wrap .assessment-attempt-panel .question-header { margin-block-end: 0.75rem; }
+#site-wrap .assessment-attempt-panel .additional-content-label { margin-block-end: 0.75rem; }
+/* Inside a card nothing paints its own square: the prompt's and each answer's Quill layers are see-through. */
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper, .bb-editor-root, .editor-content-container, .bb-editor-container, .ql-container, .ql-editor, .MuiFormControlLabel-label) { background: transparent !important; border: 0 !important; }
+/* An answer: the whole row is the control, its letter and its text, one rounded fill with one edge. The edge marks where
+   the pointer is, the chosen answer and the keyboard's place; the box's own edge is ink, not a faint line. */
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root {
+  box-sizing: border-box; margin-inline: 0 !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-ink) 5%, var(--gz-surface-paint, var(--gz-surface))) !important;
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important;
+  transition: background var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease);
+}
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root:hover { border-color: var(--gz-accent) !important; }
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root:has(input:checked) {
+  border-color: var(--gz-accent) !important; background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 16%, var(--gz-surface-paint, var(--gz-surface))) !important;
+}
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root:has(input:disabled) { opacity: 0.6; cursor: not-allowed; }
+#site-wrap .assessment-attempt-panel .assessment-question :is(.MuiRadio-root, .MuiCheckbox-root) > span[aria-hidden="true"] { border-color: var(--gz-ink-muted) !important; }
+#site-wrap .assessment-attempt-panel .assessment-question .MuiDivider-root { border-color: var(--gz-border-line, var(--gz-line)) !important; }
+/* The progress bar stays at the top of the scroller as a whole band (Ultra parks it 30px above the edge, which cut off
+   its top and left the rest see-through over the questions). */
+#site-wrap .assessment-attempt-panel .assessment-progress-header { top: 0 !important; z-index: 3; margin-block-end: 1rem; padding: 0.75rem 1rem !important; }
+/* Below Ultra's 64em the panel opens with its own bar (Exit, the item's type, its details): a band like the title's, in
+   Ultra's place (the content below is placed a bar's height down). */
+#site-wrap .assessment-attempt-panel > .black-panel-header {
+  position: relative; margin-inline: var(--gz-float-start, 12px) var(--gz-float-end, 12px) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; box-shadow: var(--gz-rest-shadow) !important;
+}
+/* The details' grading box: Ultra's black tile, as a rounded tile of the surface. */
+#site-wrap .assessment-summary .no-submission-card {
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) !important; overflow: hidden;
+}
+#site-wrap .assessment-summary .no-submission-card * { background: transparent !important; }
+/* The Additional content editor: the card (the rules above) paints once; its layers are see-through inside it. */
+#site-wrap .freeform-response bb-rich-text-editor .bb-editor-root { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
+#site-wrap .freeform-response bb-rich-text-editor :is(.editor-content-container, .bb-editor-container, .ql-container, .ql-editor, .status-bar) { background: transparent !important; }
+#site-wrap .freeform-response bb-rich-text-editor .ql-editor { min-height: 6rem; }
+/* The editor's menus are menus: rounded, edged, over the page. */
+#site-wrap .bb-editor-toolbar.bb-editor-toolbar-submenu {
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important; box-shadow: var(--gz-shadow) !important; padding: 0.25rem !important;
+}
+/* Colour swatches are the colour their name says. Ultra fills Purple with its brand colour (the palette above makes that the
+   accent) and Black and Grey with text colours (made ink, then repainted by the sweep); these are Ultra's own fallbacks. */
+#site-wrap .bb-editor-toolbar-submenu .picker-color { box-shadow: 0 0 0 1px var(--gz-border-strong, var(--gz-line-strong)); }
+#site-wrap .bb-editor-toolbar-submenu .picker-color.color-black { background-color: #000 !important; }
+#site-wrap .bb-editor-toolbar-submenu .picker-color.color-grey { background-color: #666 !important; }
+#site-wrap .bb-editor-toolbar-submenu .picker-color.color-purple { background-color: #a234b5 !important; }
+/* The footer under the scroller is a floating dock, inset as the bars above it are; its box keeps Ultra's place. */
+#site-wrap .assessment-attempt footer.submit-footer.panel-footer-fixed { isolation: isolate; background: transparent !important; border: 0 !important; box-shadow: none !important; }
+#site-wrap .assessment-attempt footer.submit-footer.panel-footer-fixed::before {
+  content: ""; position: absolute; z-index: -1; inset: 6px var(--gz-float-end, 12px) var(--gz-float-gap, 12px) var(--gz-float-start, 12px); pointer-events: none;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
+html[data-gz-bg="solid"] #site-wrap .assessment-attempt footer.submit-footer.panel-footer-fixed::before { backdrop-filter: none; }
+/* A rubric's title row: the well (above) is its one surface; Ultra's title and icon paint nothing over it. */
+#site-wrap .rubric-details-panel > .panel-section-header { margin-block-end: 0.75rem; }
+#site-wrap .rubric-details-panel > .panel-section-header > * { background: transparent !important; }
+/* The Grades tab above a course's grade table: a pill like the section headings, not a bare word on the background. */
+#site-wrap bb-ui-student-tabs .MuiTabs-root {
+  width: fit-content; max-width: 100%; margin-block-end: 0.75rem; padding-inline: 0.5rem; box-sizing: border-box;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: 999px !important;
+}
+#site-wrap bb-ui-student-tabs .MuiTab-root { min-height: 0; border-radius: 999px !important; }
+#site-wrap bb-ui-student-tabs .MuiTab-root.Mui-selected { background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; }
+#site-wrap bb-ui-student-tabs .MuiTabs-indicator { display: none; }
+/* A file's inline preview is a panel while Blackboard renders it, not a hole onto the background. */
+#site-wrap iframe[src*="/bbcswebdav/"] { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border-radius: var(--gz-radius-sm); }
+
 
 /* ---- empty states: centred, quieter ---- */
 #site-wrap :is(.js-empty-state, [class*="empty-state"]) { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-muted) !important; border-color: color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important; }
@@ -1462,6 +1551,11 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
 @media screen {
   html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) [class*="headerRoot"]:has(bb-close, .bb-close) #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
   html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap > .bb-close-offset > .bb-close { inset-inline-start: 6px !important; }
+  /* The button sits over the header's start there: its title begins past it. */
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap > .panel-wrap > .panel-header.simple-header { padding-inline-start: 56px !important; }
+  /* A legacy test attempt places its content a black bar's height from the panel's top; with the strip first in the panel
+     that put the title band under the bar. In flow, it follows the bar wherever the strip leaves it. */
+  .assessment-attempt-panel > #gz-ctabs ~ section.panel-content { position: relative !important; top: 0 !important; }
   /* Span the native scroller's 30px padding; keep the close button's room inside the glass. */
   .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) .panel-wrap > #gz-ctabs { margin-inline: -30px !important; width: calc(100% + 60px) !important; }
   html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) #gz-ctabs { padding-inline-start: calc(48px + var(--gz-float-start, 12px)); }

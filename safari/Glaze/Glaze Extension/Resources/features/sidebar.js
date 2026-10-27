@@ -111,8 +111,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       native() {
         // A details layer covers the outline; it does not replace its column or the live widgets in it.
         const f = /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname) ? 'outline' : ADAPTERS.ultra.family();
-        const attempt = f === 'assessment' && nativeAttempt();
-        if (attempt) return { el: attempt, page: attempt, kind: 'attempt' };
+        const attempt = f === 'assessment' && nativeAttempt(), older = f === 'assessment' && !attempt && nativeTestAttempt();
+        if (attempt || older) return { el: attempt || older, page: attempt || older, kind: attempt ? 'attempt' : 'test' };
         const el = f === 'courses' ? document.querySelector('div.todo-panel') : f === 'outline' ? document.querySelector('aside.outline-actions')
           : f === 'assessment' ? nativeAssessment()
           : f === 'discussion' ? ADAPTERS.ultra.discussion() : null;
@@ -535,6 +535,25 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       || !el.isConnected || el.closest('[hidden], [aria-hidden="true"]') || !readOnlyPanel(el)) return null;
     return el;
   };
+  // Ultra's older (Angular) test attempt: the questions and its read-only Details & Information side by side in the panel
+  // that scrolls them, Save and Submit in a footer below that panel. Its details column, as the attempt's, is the host.
+  const nativeTestAttempt = () => {
+    if (!ultra || cfg().absorb === false || html().hasAttribute('data-gz-focus')
+      || !/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)\/?$/.test(location.pathname)) return null;
+    const panels = [...document.querySelectorAll('div.assessment-attempt-panel')];
+    if (panels.length !== 1) return null;
+    const panel = panels[0], shell = panel.parentElement;
+    const kids = (e, tag, name) => [...(e?.children || [])].filter((x) => x.tagName === tag && has(x, name));
+    const sections = kids(panel, 'SECTION', 'panel-content'), rows = kids(sections[0], 'DIV', 'panel-content-flex');
+    if (!has(panel, 'panel-wrap') || !has(shell, 'test-attempt') || sections.length !== 1 || rows.length !== 1) return null;
+    const columns = [...rows[0].children].filter((e) => e !== backdrop), el = columns[1];
+    const footers = [...shell.children].filter((x) => x.tagName === 'BB-ASSESSMENT-ATTEMPT-FOOTER').flatMap((f) => kids(f, 'FOOTER', 'submit-footer'));
+    if (columns.length !== 2 || columns[0].tagName !== 'DIV' || !has(columns[0], 'panel-content-full') || !columns[0].querySelector('bb-attempt-canvas')
+      || el.tagName !== 'DIV' || !has(el, 'panel-content-info') || !has(el, 'assessment-summary') || !el.querySelector('h2')?.textContent.trim()
+      || footers.length !== 1 || !footers[0].querySelector('.js-send-draft-button')
+      || !el.isConnected || el.closest('[hidden], [aria-hidden="true"]') || !readOnlyPanel(el)) return null;
+    return el;
+  };
   const absorbable = () => {
     if (!ultra || cfg().absorb === false) { absorbBlocked = new WeakMap(); return []; }
     const review = rubricView();
@@ -710,7 +729,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const nativeScrollRoot = () => {
     if (!ultra || host?.own) return null;
     return family === 'discussion' ? host?.el.closest('#full-discussions[bb-intersection-observer-root]')
-      : family === 'assessment' ? host.kind === 'attempt' ? host.el.parentElement : host?.el.closest('.assessment-overview-grid') : null;
+      : family === 'assessment' ? ['attempt', 'test'].includes(host.kind) ? host.el.parentElement : host?.el.closest('.assessment-overview-grid') : null;
   };
   let nativeScroller = null;
   const watchNativeScroll = (root) => {
@@ -900,12 +919,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setVar('--gz-sb-foot', `${r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0}px`);
   };
   // A bar the site fixes along the window's bottom holds its actions at its end, where the edge buttons are: Ultra's Save
-  // and Submit (content.js tags them) and its help button, Canvas's Previous and Next; the site's CSS stands them on Glaze's
-  // bar. The button showing stands above the highest one under it (--gz-sb-bar). A layer the window's height is no bar.
+  // and Submit (content.js tags them; an older test's footer Ultra places absolutely, untagged) and its help button,
+  // Canvas's Previous and Next; the site's CSS stands them on Glaze's bar. The button showing stands above the highest one
+  // under it (--gz-sb-bar). A layer the window's height is no bar.
   const bars = () => {
     const b = [launch, edge].find((x) => !x.hidden)?.getBoundingClientRect();
     let up = 0;
-    if (b?.width) for (const e of document.querySelectorAll('[data-gz-fixed-bottom], .pagehelp-directive, #module_sequence_footer')) {
+    if (b?.width) for (const e of document.querySelectorAll('[data-gz-fixed-bottom], .pagehelp-directive, #module_sequence_footer, footer.submit-footer.panel-footer-fixed')) {
       const r = e.getBoundingClientRect();
       if (r.height && r.height < innerHeight / 2 && r.left < b.right && r.right > b.left && !host.el.contains(e)) up = Math.max(up, Math.round(innerHeight - r.top));
     }
