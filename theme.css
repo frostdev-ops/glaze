@@ -1114,6 +1114,22 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 /* The progress bar stays at the top of the scroller as a whole band (Ultra parks it 30px above the edge, which cut off
    its top and left the rest see-through over the questions). */
 #site-wrap .assessment-attempt-panel .assessment-progress-header { top: 0 !important; z-index: 3; margin-block-end: 1rem; padding: 0.75rem 1rem !important; }
+/* Once the questions scroll under it, it folds into a pill at the column's end: a short bar and the count
+   (features/test-progress.js marks it and gives the folded height back below it, so nothing moves). */
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] {
+  display: flex !important; align-items: center; gap: 0.75rem; inline-size: fit-content; max-inline-size: 100%; margin-inline-start: auto;
+  margin-block-end: calc(1rem + var(--gz-progress-fold, 0px)); padding: 0.375rem 0.875rem !important; border-radius: 999px !important;
+}
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > * { margin: 0 !important; padding: 0 !important; border: 0 !important; }
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-first-row { flex: none; inline-size: 4.5rem; }
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-first-row p:empty,
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-third-row { display: none; }
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-second-row,
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-second-row * { font-size: 0.75rem; line-height: 1.4; white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-gz-motion="off"]) #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] { animation: gz-progress-fold 160ms ease-out; }
+}
+@keyframes gz-progress-fold { from { opacity: 0; transform: translateY(-4px) scale(0.97); } }
 /* Below Ultra's 64em the panel opens with its own bar (Exit, the item's type, its details): a band like the title's, in
    Ultra's place (the content below is placed a bar's height down). */
 #site-wrap .assessment-attempt-panel > .black-panel-header {

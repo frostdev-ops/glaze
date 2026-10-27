@@ -132,10 +132,24 @@ const HELPERS = `
           check(chosen.checked && chosen.edge !== chosen.other, `${tag}: a chosen answer's row is marked`, chosen);
         }
 
-        // The questions scroll under the progress bar, never across its words.
-        const under = await ev(() => { const p = document.querySelector('.assessment-attempt-panel'); p.scrollTop = 600;
-          return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => res(window.__gz.hit(document.querySelector('#assessment-question-counts-description')))))); });
-        check(under, `${tag}: progress count stays readable over scrolled questions`);
+        // In its place the progress band is whole; once the questions scroll under it, it folds into a small pill at the
+        // column's end, its count still readable, and nothing under it moves. Back in its place it is whole again.
+        const fold = await ev(async () => { const g = window.__gz, p = document.querySelector('.assessment-attempt-panel'), band = document.querySelector('.assessment-progress-header');
+          const q = document.querySelectorAll('.assessment-attempt-panel .assessment-question')[2], at = () => q.getBoundingClientRect().top + p.scrollTop;
+          const wait = () => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(res, 50))));
+          p.scrollTop = 0; p.dispatchEvent(new Event('scroll')); await wait();
+          const rest = { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight, q: at() };
+          p.scrollTop = 600; await wait();
+          const col = g.rect(band.parentElement), r = g.rect(band);
+          const folded = { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight, w: r.r - r.x, col: col.r - col.x, endGap: Math.abs(col.r - r.r), q: at(), radius: g.radius(band),
+            readable: g.hit(document.querySelector('#assessment-question-counts-description')) };
+          p.scrollTop = 0; await wait();
+          return { rest, folded, back: { stuck: band.hasAttribute('data-gz-stuck'), h: band.offsetHeight } }; });
+        check(!fold.rest.stuck && fold.folded.stuck && fold.folded.h <= 44 && fold.folded.w <= fold.folded.col / 2 && fold.folded.endGap <= 24 && fold.folded.radius > 14 && fold.folded.readable,
+          `${tag}: scrolled under, the progress band folds into a small readable pill at the column's end`, fold);
+        check(Math.abs(fold.folded.q - fold.rest.q) <= 0.5, `${tag}: folding moves nothing under the progress band`, [fold.rest.q, fold.folded.q]);
+        check(!fold.back.stuck && Math.abs(fold.back.h - fold.rest.h) <= 0.5, `${tag}: back in its place the progress band is whole`, fold);
+        await ev(async () => { document.querySelector('.assessment-attempt-panel').scrollTop = 600; await new Promise((res) => setTimeout(res, 120)); });
         if (w >= 1024 || bg === 'scene') await shot(`${slug(tag)}-scrolled`);
 
         // The editor card and its colour menu.
