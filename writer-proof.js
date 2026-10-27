@@ -59,6 +59,11 @@
     for (const resolve of stats.values()) resolve(null);
     stats.clear();
   });
+  addEventListener('pageshow', (e) => {
+    if (!e.persisted) return;
+    stopped = false;
+    if (started) { connect(); lintDoc(); } else { starting = false; if (view?.hasFocus()) start(); }
+  });
   const onWorker = (m) => {
     if (!m) return;
     if (m.op === 'closing') {
@@ -202,9 +207,11 @@
   // full lint that starts it.
   let starting = false;
   const start = async () => {
-    if (starting) return;
+    if (starting || stopped) return;
     starting = true;
-    dict = new Set([...dict, ...await words()]);
+    const saved = await words();
+    if (stopped) { starting = false; return; }
+    dict = new Set([...dict, ...saved]);
     drop([...dict]);
     started = true;
     connect();
