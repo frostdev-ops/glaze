@@ -278,3 +278,21 @@ test('issues: a word that grows drops its spelling issue; apply and ignore', () 
   assert.equal(all().length, 1, 'only for its source');
   assert.equal(f.issues.apply({ id: 'nope' }), false);
 });
+
+test('typing provenance excludes pasted and replaced text inside or beside typed ranges', () => {
+  for (const how of ['end', 'middle', 'replace']) {
+    const e = editor();
+    e.type(how === 'replace' ? 'xxx' : 'te');
+    if (how === 'end') e.view.dispatch(e.view.state.tr.insertText('h').setMeta('uiEvent', 'paste'));
+    if (how === 'middle') e.view.dispatch(e.view.state.tr.insertText('h', 2).setMeta('uiEvent', 'paste'));
+    if (how === 'replace') e.view.dispatch(e.view.state.tr.insertText('teh', 1, 4).setMeta('uiEvent', 'paste'));
+    e.end(); e.type(' ');
+    assert.equal(e.text(), how === 'middle' ? 'the ' : 'teh ', `${how}: pasted characters never become autocorrect eligible`);
+    const typed = P.key.getState(e.view.state).typed;
+    assert.equal(P.within(typed, 1, 4), false, how);
+  }
+  const e = editor(); e.type('te');
+  e.view.dispatch(e.view.state.tr.insertText('h').setMeta('uiEvent', 'paste'));
+  e.end(); e.type(' and');
+  assert.equal(P.autofix(e.view, { from: 1, to: 4, suggestions: ['the'], rule: 'Typo' }), null);
+});
