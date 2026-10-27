@@ -128,6 +128,23 @@ test('a test-shaped attempt reports test even if its gradebook cache says assign
   assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['test']);
 });
 
+test('a course-tab attempt reports its own kind from the child document', async () => {
+  const c = content({ fixture: 'attempt' });
+  c.ctx.top = {};
+  await c.start();
+  assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment']);
+});
+
+test('an attempt report follows query navigation as well as its path', async () => {
+  const c = content({ fixture: 'attempt' });
+  c.location.search = '?courseId=_101_1';
+  await c.start();
+  c.location.search = '?courseId=_101_1&view=attempt';
+  c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  const reports = c.messages.filter((m) => m.type === 'glaze:attempt-kind');
+  assert.deepEqual(reports.map((m) => m.page), [c.location.origin + c.location.pathname + '?courseId=_101_1', c.location.origin + c.location.pathname + c.location.search]);
+});
+
 test('an attempt is an assignment by Ultra\'s authoring panel, and the report is revoked once its gradebook says Test', async () => {
   const c = content({ fixture: 'attempt' });
   c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
@@ -150,6 +167,74 @@ test('once the worker has the attempt\'s kind, each Writer frame on the page is 
   held.forEach((f) => f()); for (let i = 0; i < 4; i++) await new Promise(setImmediate);
   assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment']);
   assert.ok(c.ports.every((p) => p.sent.some((m) => m.type === 'ai')), 'every frame re-checks its AI status');
+});
+
+test('a late test canvas revokes an assignment and its disappearance cannot grant AI again', async () => {
+  const c = content({ fixture: 'attempt' });
+  c.ctx.GZ_CTX.bookFor = () => undefined;
+  await c.start();
+  const canvas = c.doc.createElement('bb-attempt-canvas');
+  c.doc.body.append(canvas); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  canvas.remove(); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment', 'test']);
+  // Ultra can change /attempt/create to a persisted attempt on the same assessment.
+  c.location.pathname = c.location.pathname.replace('_31_1', '_32_1');
+  c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  assert.equal(c.messages.filter((m) => m.type === 'glaze:attempt-kind').at(-1).kind, 'test');
+});
+
+test('an assignment panel retained while navigating to another assessment cannot grant its AI access', async () => {
+  const c = content({ fixture: 'attempt' });
+  c.ctx.GZ_CTX.bookFor = () => undefined;
+  await c.start();
+  c.location.pathname = '/ultra/courses/_101_1/assessment/_99_1/attempt/create';
+  c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  assert.equal(c.messages.filter((m) => m.type === 'glaze:attempt-kind').at(-1).kind, 'unknown');
+  assert.equal(c.doc.querySelectorAll('iframe.gz-writer').length, 0, 'the stale submission editor stays native');
+  c.doc.querySelector('bb-assignment-attempt-authoring-panel').remove();
+  require('./fixture-dom.js').parse(require('node:fs').readFileSync(require.resolve('./fixtures/ultra-writer-attempt.html'), 'utf8'), c.doc);
+  c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  assert.equal(c.messages.filter((m) => m.type === 'glaze:attempt-kind').at(-1).kind, 'assignment', 'a freshly rendered assignment remains eligible');
+});
+
+test('a refused or failed kind report is retried on the next pass without a DOM change', async () => {
+  for (const reject of [false, true]) {
+    const c = content({ fixture: 'attempt' }), send = c.ctx.chrome.runtime.sendMessage;
+    let reports = 0;
+    c.ctx.chrome.runtime.sendMessage = (m) => {
+      if (m.type === 'glaze:attempt-kind' && ++reports === 1) return reject ? Promise.reject(Error('worker asleep')) : Promise.resolve({ ok: false });
+      return send(m);
+    };
+    await c.start();
+    c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+    assert.equal(reports, 2, `rejected: ${reject}`);
+    assert.ok(c.ports.every((p) => p.sent.some((m) => m.type === 'ai')), 'the successful retry wakes both feature checks');
+  }
+});
+
+test('a kind sampled on one route is never sent from a later route in a microtask', async () => {
+  const c = content({ fixture: 'attempt' }), sent = [];
+  c.ctx.chrome.runtime.sendMessage = async (m) => { if (m.type === 'glaze:attempt-kind') sent.push([c.location.pathname, m.kind]); return { ok: true }; };
+  const original = c.location.pathname;
+  c.ctx.GZ_WRITER.pass();
+  c.location.pathname = '/ultra/courses/_101_1/assessment/_99_1/attempt/create';
+  await new Promise(setImmediate);
+  assert.ok(sent.every(([path]) => path === original), 'runtime sender must be the page whose kind was sampled');
+});
+
+test('an old same-key acknowledgement cannot wake AI after a later report was refused', async () => {
+  const c = content({ fixture: 'attempt' }), pending = [];
+  c.ctx.chrome.runtime.sendMessage = (m) => m.type === 'glaze:attempt-kind' ? new Promise((resolve) => pending.push(resolve)) : Promise.resolve({ ok: true });
+  await c.start();
+  const panel = c.doc.querySelector('bb-assignment-attempt-authoring-panel');
+  panel.remove(); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  c.doc.body.append(panel); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  assert.equal(pending.length, 3);
+  for (const p of c.ports) p.sent.length = 0;
+  pending[2]({ ok: false }); await new Promise(setImmediate);
+  pending[0]({ ok: true }); await new Promise(setImmediate);
+  assert.equal(c.ports.some((p) => p.sent.some((m) => m.type === 'ai')), false, 'only the current report can wake the frame');
+  pending[1]({ ok: true }); await new Promise(setImmediate);
 });
 
 test('unchanged Writer boxes do not rescan their document bodies on every page observer pass', async () => {

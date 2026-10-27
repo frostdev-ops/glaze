@@ -124,6 +124,28 @@ test('conflicting gradebook rows can never turn a test into an assignment', () =
   assert.equal(U.attemptKind([col('Assignment'), col(undefined)], '_7_1'), '', 'incomplete conflicting evidence fails closed');
 });
 
+test('an assignment-like panel without the observed isAssignment guard grants neither a paper nor AI', () => {
+  for (const guard of [null, 'assessmentAttempt', 'assessmentAttempt.contentData.courseContent.isTest()']) {
+    const body = page('ultra-writer-attempt.html'), panel = body.querySelector('bb-assignment-attempt-authoring-panel');
+    if (guard === null) panel.removeAttribute('ng-if'); else panel.setAttribute('ng-if', guard);
+    assert.equal(U.pageKind(body, undefined, '_7_1'), '', String(guard));
+    assert.deepEqual(U.boxes(body, { path: ATTEMPT }), [], 'an unverified panel stays native');
+  }
+});
+
+test('a test canvas elsewhere on the attempt wins over an assignment-like editor', () => {
+  const body = page('ultra-writer-attempt.html');
+  body.append(new El('bb-attempt-canvas', body.doc));
+  assert.equal(U.pageKind(body, undefined, '_7_1'), 'test');
+  assert.deepEqual(U.boxes(body, { path: ATTEMPT }).map((b) => [b.kind, b.mode]), [['test', 'compose']]);
+});
+
+test('an unrendered assignment panel is unknown until its submission editor exists', () => {
+  const body = page('ultra-writer-attempt.html');
+  body.querySelector('#bb-editorassignment-attempt-authoring-submission').remove();
+  assert.equal(U.pageKind(body, undefined, '_7_1'), '', 'a template shell does not establish that isAssignment() was rendered');
+});
+
 test('native attachments and formatting outside the frame schema are never taken over and discarded', () => {
   for (const make of [
     (doc) => new El('img', doc),

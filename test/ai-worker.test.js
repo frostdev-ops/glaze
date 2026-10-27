@@ -195,10 +195,11 @@ const live2 = (w) => {
   w.frames = {};
   w.context.chrome.tabs.get = async (id) => ({ id, url: w.page });
   w.context.chrome.scripting.executeScript = async ({ target }) => {
-    const id = target.frameIds?.[0] ?? (target.documentIds?.[0] === 'top-doc' ? 0 : Number(String(target.documentIds?.[0]).replace('doc-', '')));
+    const documentId = target.documentIds?.[0];
+    const id = target.frameIds?.[0] ?? (documentId === (w.topDocument || 'top-doc') ? 0 : Number(Object.keys(w.frames).find((id) => (w.frames[id].documentId || `doc-${id}`) === documentId)));
     if (id === 3) throw new Error('an extension frame is never scripted');
     const f = id === 0 ? { href: w.page, ancestors: [] } : w.frames[id];
-    return f ? [{ frameId: id, documentId: id === 0 ? (w.topDocument || 'top-doc') : `doc-${id}`, result: { href: f.href, origin: new URL(f.href).origin, ancestors: f.ancestors } }] : [];
+    return f ? [{ frameId: id, documentId: id === 0 ? (w.topDocument || 'top-doc') : (f.documentId || `doc-${id}`), result: { href: f.href, origin: new URL(f.href).origin, ancestors: f.ancestors } }] : [];
   };
   return w;
 };
@@ -424,10 +425,118 @@ test('a delayed assignment report cannot overwrite a newer unknown classificatio
   assert.equal(await ask(w, frame(ATTEMPT), 'writing'), 'attempt');
 });
 
+test('a pending test or unknown report closes completion and writing before asynchronous validation', async () => {
+  for (const kind of ['test', 'unknown']) {
+    const w = writerOn(); w.page = ATTEMPT;
+    await seat(w); await report(w, 'assignment');
+    const get = w.context.chrome.storage.sync.get;
+    let release;
+    w.context.chrome.storage.sync.get = (key) => {
+      if (key !== 'enabled') return get(key);
+      w.context.chrome.storage.sync.get = get;
+      return new Promise((r) => { release = () => r({ enabled: true }); });
+    };
+    const pending = report(w, kind);
+    await w.settle();
+    try {
+      assert.equal(await ask(w, frame(ATTEMPT)), 'attempt', `${kind}: completion during validation`);
+      assert.equal(await ask(w, frame(ATTEMPT), 'writing'), 'attempt', `${kind}: writing during validation`);
+    } finally { release(); await pending; }
+  }
+});
+
 test('a classification report waking the worker preserves the Writer seat in session storage', async () => {
   const w = writerOn(); w.page = ATTEMPT;
   await seat(w); await report(w, 'assignment');
   const again = live2(worker({ globals: fakeIDB(), store: structuredClone(w.store) })); again.page = ATTEMPT;
   assert.deepEqual(await report(again, 'assignment'), { ok: true });
   assert.equal(await ask(again, frame(ATTEMPT)), 'allowed', 'a report is not a navigation and must hydrate the claimed seat');
+});
+
+// A course tab is an LMS frame with its own attempt page; the tab around it can show another course's outline.
+const courseAttempt = async (w, { id = 4, href = ATTEMPT, ancestors = [COURSE], documentId = `doc-${id}`, writerId = 3 } = {}) => {
+  w.page = COURSE;
+  w.frames[id] = { href, ancestors, documentId };
+  const host = { ...top(href), frameId: id, documentId, tab: { id: 5, url: COURSE } };
+  const writer = frame(COURSE, { frameId: writerId, documentId: `writer-${writerId}` });
+  await seat(w, writer, host);
+  return { host, writer };
+};
+
+for (const kind of ['assignment', 'test', 'unknown']) test(`a course-tab framed ${kind} has its own attempt gate for completion and writing`, async () => {
+  const w = writerOn(), { host, writer } = await courseAttempt(w);
+  assert.deepEqual(await report(w, kind, host), { ok: true });
+  for (const feature of ['completion', 'writing']) assert.equal(await ask(w, writer, feature), kind === 'assignment' ? 'allowed' : 'attempt', feature);
+  assert.equal(await ask(w, writer, 'syllabus'), 'hung up');
+});
+
+test('a course-tab sender with an initial about:blank snapshot is judged by its pinned live attempt page', async () => {
+  const w = writerOn(), { host, writer } = await courseAttempt(w);
+  assert.deepEqual(await w.send({ type: 'glaze:attempt-kind', kind: 'assignment', page: ATTEMPT }, { ...host, url: 'about:blank' }), { ok: true });
+  assert.equal(await ask(w, writer), 'allowed');
+  assert.deepEqual(await w.send({ type: 'glaze:attempt-kind', kind: 'assignment', page: OTHER }, { ...host, url: 'about:blank' }), { ok: false }, 'a claimed page cannot replace the live document check');
+  assert.equal(await ask(w, writer, 'writing'), 'attempt');
+});
+
+test('a framed assignment works at any depth, but a quiet, foreign or non-LMS ancestor refuses it', async () => {
+  const w = writerOn(), { host, writer } = await courseAttempt(w, { ancestors: [`${ULTRA}/ultra/courses/_102_1/outline`, COURSE] });
+  assert.deepEqual(await report(w, 'assignment', host), { ok: true });
+  assert.equal(await ask(w, writer), 'allowed');
+  for (const parent of [OTHER, `${ULTRA}/ultra/courses/_101_1/assessment/_7_1/overview`, 'https://other.example/ultra/courses/_1_1/outline', `${ULTRA}/not-an-lms`]) {
+    w.frames[4].ancestors = [parent, COURSE];
+    assert.deepEqual(await report(w, 'assignment', host), { ok: false }, parent);
+    for (const feature of ['completion', 'writing']) assert.notEqual(await ask(w, writer, feature), 'allowed', parent);
+  }
+});
+
+test('a replaced or navigated course-tab document cannot retain assignment authority, including across worker restart', async () => {
+  const w = writerOn(), { host, writer } = await courseAttempt(w);
+  assert.deepEqual(await report(w, 'assignment', host), { ok: true });
+  const again = live2(worker({ globals: fakeIDB(), store: structuredClone(w.store) }));
+  again.page = COURSE; again.frames = structuredClone(w.frames);
+  assert.equal(await ask(again, writer), 'allowed', 'the seat and its document-scoped kind survive a worker restart');
+  again.frames[4].href = OTHER;
+  assert.equal(await ask(again, writer), 'attempt', 'same document, a different attempt page');
+  again.frames[4].href = ATTEMPT;
+  assert.equal(await ask(again, writer), 'attempt', 'returning needs fresh evidence after the page mismatch');
+  again.frames[4].documentId = 'replacement-doc';
+  assert.deepEqual(await report(again, 'assignment', host), { ok: false }, 'the old document is gone');
+  assert.equal(await ask(again, writer), 'hung up', 'a reused frame id cannot inherit the old seat');
+  const replacement = { ...host, documentId: 'replacement-doc' };
+  await seat(again, writer, replacement);
+  assert.equal(await ask(again, writer), 'attempt', 'the new document has not reported');
+  assert.deepEqual(await report(again, 'assignment', replacement), { ok: true });
+  assert.equal(await ask(again, writer, 'writing'), 'allowed');
+});
+
+test('an attempt seat without a host document id cannot inherit a report through its frame id', async () => {
+  const w = writerOn(), { host, writer } = await courseAttempt(w);
+  await report(w, 'assignment', host);
+  await seat(w, writer, { ...host, documentId: undefined });
+  for (const feature of ['completion', 'writing']) assert.equal(await ask(w, writer, feature), 'attempt', feature);
+});
+
+test('course-tab reports and revocations are ordered per document and cannot affect a sibling attempt', async () => {
+  const w = writerOn(), one = await courseAttempt(w), two = await courseAttempt(w, { id: 7, href: OTHER, writerId: 6 });
+  assert.deepEqual(await report(w, 'assignment', one.host), { ok: true });
+  assert.deepEqual(await report(w, 'assignment', two.host), { ok: true });
+  const get = w.context.chrome.storage.sync.get;
+  let release;
+  w.context.chrome.storage.sync.get = (key) => {
+    if (key !== 'enabled') return get(key);
+    w.context.chrome.storage.sync.get = get;
+    return new Promise((r) => { release = () => r({ enabled: true }); });
+  };
+  const old = report(w, 'assignment', one.host);
+  await w.settle();
+  try {
+    assert.deepEqual(await report(w, 'unknown', one.host), { ok: true });
+    assert.deepEqual(await report(w, 'assignment', two.host), { ok: true });
+    for (const feature of ['completion', 'writing']) {
+      assert.equal(await ask(w, one.writer, feature), 'attempt');
+      assert.equal(await ask(w, two.writer, feature), 'allowed');
+    }
+  } finally { release(); }
+  assert.deepEqual(await old, { ok: false }, 'a late assignment cannot undo the newer refusal on that document');
+  assert.equal(await ask(w, one.writer), 'attempt');
 });

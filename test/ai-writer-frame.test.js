@@ -111,7 +111,7 @@ test('Feedback says why AI can\'t give it, with Settings → AI one click away w
     [on, { allowed: true, ready: false, why: 'permission', to: 'openrouter.ai' }, /^Glaze needs permission to reach openrouter\.ai\. Allow it in Settings → AI\./, true],
     [on, { allowed: true, ready: false, why: 'download', provider: 'device' }, /^The on-device model isn’t downloaded\. Download it in Settings → AI\./, true],
     [on, { allowed: true, ready: false, why: 'downloading', provider: 'device' }, /^Downloading the model…/, false],
-    [on, { allowed: true, ready: false, why: 'unavailable', provider: 'device' }, /^Gemini Nano can’t run on this computer\. Choose another model in Settings → AI\./, true],
+    [on, { allowed: true, ready: false, why: 'unavailable', provider: 'device' }, /^Gemini Nano is unavailable\. Choose another model in Settings → AI\./, true],
     [on, { type: 'error', error: 'failed' }, /^Glaze couldn’t confirm this page may use AI\. Reload the page to try again\./, false],
   ];
   for (const [settings, st, text, button] of cases) {
@@ -129,7 +129,7 @@ test('an attempt Glaze can\'t confirm as an assignment says so after its wait: A
   assert.match(f.pane().textContent, /^Checking whether AI can run here…/);
   clock.t += 10001;
   const pane = f.pane();
-  assert.match(pane.textContent, /^AI runs on assignments only, never on tests, and Glaze couldn’t confirm this is an assignment\./);
+  assert.match(pane.textContent, /^AI is only available on confirmed assignments, never on tests\./);
   assert.equal(pane.children.some((c) => c.className === 'gz-fb-run'), false, 'nothing in Settings changes it');
 });
 
@@ -160,14 +160,29 @@ test('a later attempt nudge rechecks both ready features and closes admission on
   assert.equal(f.ai.allowed('writing'), false);
 });
 
+test('Feedback on a known test gives the assignments-only reason instead of checking forever', async () => {
+  const f = frame(); await f.start();
+  f.context({ kind: 'test' }); await flush();
+  assert.match(f.pane().textContent, /^AI is only available on confirmed assignments, never on tests\./);
+  assert.equal(f.ai.allowed('completion'), false);
+  assert.equal(f.ai.allowed('writing'), false);
+});
+
+test('an unavailable on-device provider does not claim this computer can never run it', async () => {
+  for (const [provider, name] of [['device', 'Gemini Nano'], ['apple', 'Apple Intelligence']]) {
+    const f = frame({ answer: () => ({ allowed: true, ready: false, why: 'unavailable', provider }) }); await f.start();
+    assert.ok(f.pane().textContent.startsWith(`${name} is unavailable. Choose another model in Settings → AI.`));
+  }
+});
+
 test('Feedback availability copy is translated in all five catalogues', () => {
   const I = require('../lib/i18n.js');
   const keys = ['Checking whether AI can run here…', 'AI is off. Turn it on in Settings → AI.',
     'Writing feedback is off. Turn it on in Settings → AI.', 'No AI model is chosen. Choose one in Settings → AI.',
     'Glaze needs permission to reach {host}. Allow it in Settings → AI.', 'The on-device model isn’t downloaded. Download it in Settings → AI.',
-    'Downloading the model…', 'Downloading the model: {pct}', '{provider} can’t run on this computer. Choose another model in Settings → AI.',
+    'Downloading the model…', 'Downloading the model: {pct}', '{provider} is unavailable. Choose another model in Settings → AI.',
     'Glaze couldn’t confirm this page may use AI. Reload the page to try again.',
-    'AI runs on assignments only, never on tests, and Glaze couldn’t confirm this is an assignment.', 'AI isn’t available right now.', 'Settings'];
+    'AI is only available on confirmed assignments, never on tests.', 'AI isn’t available right now.', 'Settings'];
   for (const locale of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
     require(`../i18n/${locale}.js`);
     const catalogue = globalThis.GZ_LANGS[locale];

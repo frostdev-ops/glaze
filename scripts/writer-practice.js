@@ -135,7 +135,7 @@ const inExtension = async (context, id, fn, arg) => {
 
 // The assignment's paper frame on the attempt page, loaded and paged, from the practice home or the attempt itself.
 const paper = async (p) => {
-  if (!p.url().endsWith(M.ROUTES.attempt)) { await p.goto(`${M.SITE}/practice`); await p.click(`a[href="${M.ROUTES.attempt}"]`); }
+  if (new URL(p.url()).pathname !== M.ROUTES.attempt) { await p.goto(`${M.SITE}/practice`); await p.click(`a[href="${M.ROUTES.attempt}"]`); }
   const el = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.evaluate((f) => !f.style.opacity && f.offsetHeight > 500) && x; }, 'paper frame shown');
   const fr = await until(() => el.contentFrame(), 'paper frame document');
   await until(() => fr.evaluate(() => !!globalThis.GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0), 'paper loaded and paged');
@@ -323,6 +323,18 @@ const run = async ({ context, mock, shots, errors, ai }) => {
   await fr.click('.gp-submit');
   await until(() => fr.evaluate(() => !!document.querySelector('.gs-layer[data-open]') && !document.querySelector('.gs-err')?.textContent), 'the sheet opens again, with no refusal');
   await p.keyboard.press('Escape');
+  // The owner's course-tab shape: the top page stays on another course's outline; the attempt and Writer are two
+  // frames deep. The real worker must admit both Writer features for the attempt document, then run Feedback there.
+  const outline = '/ultra/courses/_51980_1/outline';
+  await context.route(`${M.SITE}${outline}`, (r) => r.fulfill({ contentType: 'text/html', body: `<!doctype html><title>Course tab</title><iframe name="gz-ctab:_101_1" data-gz-through src="${M.ROUTES.attempt}?courseId=_101_1" style="border:0;width:100%;height:1100px"></iframe>` }));
+  await p.goto(`${M.SITE}${outline}`);
+  const course = await until(() => p.frames().find((f) => new URL(f.url()).pathname === M.ROUTES.attempt), 'course-tab attempt');
+  const framed = await paper(course);
+  check(await until(() => framed.evaluate(() => GZ_WRITER_AI.allowed('completion') && GZ_WRITER_AI.allowed('writing')), 'course-tab AI ready'), 'a course-tab assignment admits both completion and writing through the real worker');
+  await framed.click('#gp-tab-feedback');
+  await framed.click(`${fb} .gz-fb-run`);
+  const framedCards = await until(() => framed.evaluate((fb) => document.querySelectorAll(`${fb} .gz-fb-item`).length, fb), 'course-tab Feedback');
+  check(framedCards === 2 && new URL(p.url()).pathname === outline && await p.locator('iframe[data-gz-through]').count() === 1, 'Feedback runs inside the course tab while the top page stays on another course outline');
   check(errors.length === 0, `no page, frame or console errors (${errors.join('; ')})`);
   return { checks, saved, paper: docText };
 };

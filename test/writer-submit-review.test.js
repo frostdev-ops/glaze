@@ -23,7 +23,7 @@ test('review: worker serializes a durable attempt claim across tabs and worker r
   const sender = (id) => ({ id: 'glaze', url, frameId: 0, documentId: `doc-${id}`, tab: { id, url } });
   const m = { type: 'glaze:writerSubmit', op: 'claim', token: 'a'.repeat(36), user: '_900_1' };
   w.context.chrome.tabs.get = async (id) => sender(id).tab;
-  w.context.chrome.scripting.executeScript = async ({ target }) => [{ documentId: `doc-${target.tabId}`, result: { href: url, origin: 'https://school.blackboard.com', ancestors: [] } }];
+  w.context.chrome.scripting.executeScript = async ({ target }) => [{ frameId: 0, documentId: `doc-${target.tabId}`, result: { href: url, origin: 'https://school.blackboard.com', ancestors: [] } }];
   assert.equal((await w.send({ type: 'glaze:attempt-kind', kind: 'assignment' }, sender(1))).ok, true);
   await w.send({ type: 'glaze:attempt-kind', kind: 'assignment' }, sender(2));
   const both = await Promise.all([w.send(m, sender(1)), w.send({ ...m, token: 'b'.repeat(36) }, sender(2))]);

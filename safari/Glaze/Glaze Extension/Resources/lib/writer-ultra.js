@@ -15,26 +15,27 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     const cols = (Array.isArray(rows) ? rows : []).filter((r) => r?.column?.contentId === content).map((r) => r.column);
     return cols.some((c) => c.assessmentSubtype === 'Test') ? 'test' : cols.length && cols.every((c) => c.assessmentSubtype === 'Assignment') ? 'assignment' : '';
   };
+  const ASSIGNMENT = 'bb-assignment-attempt-authoring-panel[ng-if="assessmentAttempt.contentData.courseContent.isAssignment()"]';
+  const SUBMISSION = 'bb-editorassignment-attempt-authoring-submission';
   // The attempt page's kind: a test where Ultra draws its attempt canvas or the gradebook says Test, an assignment where it
-  // draws its React authoring panel (ng-if isAssignment()), else ''. Live gradebook columns carry no assessmentSubtype
+  // draws its guarded React panel and submission editor (a template shell alone proves nothing), else ''. Live columns carry no assessmentSubtype
   // (owner's Ultra, 2026-10-27), so the page decides.
   const pageKind = (doc, rows, content) => {
     if (doc?.querySelector?.('bb-attempt-canvas') || attemptKind(rows, content) === 'test') return 'test';
-    return doc?.querySelector?.('bb-assignment-attempt-authoring-panel') ? 'assignment' : '';
+    return doc?.querySelector?.(ASSIGNMENT)?.querySelector(`#${SUBMISSION}${EDITOR}`) ? 'assignment' : '';
   };
 
   // Kinds: 'post' | 'reply' | 'message' | 'assignment' | 'test', else 'unknown' (left to Ultra). An attempt is an assignment
   // where Ultra draws its React authoring panel (it renders only for assignments) and a test in its attempt canvas, where
-  // the AI stays off; attempt: the attempt's kind from the gradebook (attemptKind), which can only make it a test.
+  // the AI stays off; attempt: the page's kind, including a test seen earlier while Ultra was rendering this assessment.
   // Journals and submission comments ('journal', 'comment') weren't seen on the owner's Ultra, and editing a post is
   // Ultra's: all 'unknown' for now.
   const KINDS = ['post', 'reply', 'message', 'journal', 'assignment', 'test', 'comment', 'unknown'];
-  const SUBMISSION = 'bb-editorassignment-attempt-authoring-submission';
   const kindOf = (ed, { path = '', attempt = '' } = {}) => {
     if (ed?.closest?.(EDITOR) !== ed) return 'unknown';
     if (attemptAt(path)) {
       if (ed.closest('bb-attempt-canvas')) return 'test';
-      return ed.id === SUBMISSION && ed.closest('bb-assignment-attempt-authoring-panel') ? (attempt === 'test' ? 'test' : 'assignment') : 'unknown';
+      return ed.id === SUBMISSION && ed.closest(ASSIGNMENT) ? (attempt === 'test' || pageKind(top(ed)) === 'test' ? 'test' : 'assignment') : 'unknown';
     }
     if (ed.id === 'message-reply' && ed.closest('.message-reply-panel')) return 'message';
     if (!/\/discussion\//.test(path) || !ed.closest('form.text-editor-form')) return 'unknown';

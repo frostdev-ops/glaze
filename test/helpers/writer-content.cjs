@@ -19,7 +19,7 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recov
   const ctx = vm.createContext({
     document: doc, location, crypto, CustomEvent, console, Element: El,
     GZ_COLORS: [], GZ_WRITER_ULTRA: U,
-    GZ_CTX: { on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true } }), t: (k) => k, locale: () => 'en', need: async () => ctx.GZ_DRAFT_UI, draftAt: (ed) => ({ ed, id: ed.id, near: U.contextOf(ed, U.kindOf(ed, { path: location.pathname })).post?.id || '', path: location.pathname, html: ed.innerHTML, text: ed.textContent, at: Date.now() }), bookFor: () => ({ results: [{ column: { contentId: '_8_1', assessmentSubtype: 'Assignment' } }] }) },
+    GZ_CTX: { on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true } }), t: (k) => k, locale: () => 'en', need: async () => ctx.GZ_DRAFT_UI, draftAt: (ed) => ({ ed, id: ed.id, near: U.contextOf(ed, U.kindOf(ed, { path: location.pathname })).post?.id || '', path: location.pathname, html: ed.innerHTML, text: ed.textContent, at: Date.now() }), bookFor: () => ({ results: [{ column: { contentId: '_8_1' } }] }) },
     GZ_DRAFT_UI: { ready: async () => !recovery, keep: (s) => kept.push({ ...s }), write() {} },
     chrome: { runtime: { getURL: (s) => `chrome-extension://x/${s}`, sendMessage: async (m) => { messages.push(m); return { ok: true }; } }, storage: { onChanged: { addListener() {} } } },
     getComputedStyle: () => ({ getPropertyValue: () => '' }), matchMedia: () => ({ matches: true }),

@@ -296,21 +296,42 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (area === 'sync' && (c.enabled?.newValue === false || c.enhance?.newValue?.writer === false)) dropAll();
   });
 
-  // An attempt's kind, from the page Ultra draws and its gradebook (lib/writer-ultra.js pageKind). Once known, the top
-  // frame tells the worker, which lets the AI work on an assignment's attempt and keeps it off a test's (lib/background.js
+  // An attempt's kind, from the page Ultra draws and its gradebook (lib/writer-ultra.js pageKind). This document,
+  // including a course tab's frame, tells the worker, which keeps AI off tests (lib/background.js
   // 'glaze:attempt-kind'). Once the worker has it, each frame on the page is told ('ai'): one that asked before asks again.
-  let told = '';
+  let told = null;
+  // A canvas can disappear while Ultra redraws. Once seen as a test, this assessment stays one for this document,
+  // including /attempt/create becoming a persisted attempt. A different assignment remains eligible.
+  const tests = new Set();
+  const submissions = new WeakMap(); // a rendered submission editor belongs to the assessment where it was seen
   const attempt = () => {
     const a = U().attemptAt(location.pathname);
-    if (!a) { told = ''; return ''; }
+    if (!a) { told = null; return ''; }
     let rows;
     try { rows = X.bookFor(a.course)?.results; } catch { /* no gradebook yet */ }
-    const kind = U().pageKind(document, rows, a.content);
-    const key = `${location.pathname}|${kind}`;
-    if (window.top === window && told !== key) {
-      told = key;
-      Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:attempt-kind', kind: kind || 'unknown' }))
-        .then((r) => { if (r?.ok && told === key) for (const b of boxes.values()) b.port?.postMessage({ type: 'ai' }); }).catch(() => {});
+    const assessment = `${a.course}|${a.content}`;
+    let kind = U().pageKind(document, rows, a.content);
+    if (kind === 'assignment') {
+      const editor = document.querySelector('#bb-editorassignment-attempt-authoring-submission');
+      if (submissions.has(editor) && submissions.get(editor) !== assessment) kind = '';
+      else submissions.set(editor, assessment);
+    }
+    if (kind === 'test') tests.add(assessment);
+    if (tests.has(assessment)) kind = 'test';
+    const page = location.origin + location.pathname + (location.search || '');
+    const key = `${page}|${kind}`;
+    if (told?.key !== key) {
+      const report = told = { key };
+      // Send from the route just sampled, before yielding. Only this report's acknowledgement can wake a frame;
+      // a refusal or a disconnected worker leaves the next observer pass free to try again.
+      (async () => {
+        try {
+          const r = await chrome.runtime.sendMessage({ type: 'glaze:attempt-kind', kind: kind || 'unknown', page });
+          if (told !== report) return;
+          if (!r?.ok) { told = null; return; }
+          for (const b of boxes.values()) b.port?.postMessage({ type: 'ai' });
+        } catch { if (told === report) told = null; }
+      })();
     }
     return kind;
   };
@@ -324,6 +345,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     }
     if (!U()) { X.need('lib/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
     const at = { path: location.pathname, attempt: attempt() };
+    if (U().attemptAt(at.path) && !at.attempt) return;
     for (const b of U().boxes(document, at, (ed) => boxes.has(ed) || declined.has(ed) || Date.now() - (failed.get(ed) || 0) < 60000)) {
       mount(b);
     }

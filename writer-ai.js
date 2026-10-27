@@ -90,6 +90,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // so, else after 10 s) | 'unavailable'.
   const why = () => {
     if (ok('writing')) return '';
+    if (F.kind() === 'test' || F.context()?.kind === 'test') return 'attempt';
     if (quiet() || checking || !said) return 'checking';
     if (said.on !== true) return 'ai-off';
     if (said.features?.writing !== true) return 'off';
@@ -347,9 +348,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
         permission: () => (host ? t('Glaze needs permission to reach {host}. Allow it in Settings → AI.', { host }) : t('AI isn’t available right now.')),
         download: () => t('The on-device model isn’t downloaded. Download it in Settings → AI.'),
         downloading: () => (loaded === null ? t('Downloading the model…') : t('Downloading the model: {pct}', { pct: `${Math.round(loaded * 100)}%` })),
-        device: () => t('{provider} can’t run on this computer. Choose another model in Settings → AI.', { provider: providerName(status.writing, t) }),
+        device: () => t('{provider} is unavailable. Choose another model in Settings → AI.', { provider: providerName(status.writing, t) }),
         unverified: () => t('Glaze couldn’t confirm this page may use AI. Reload the page to try again.'),
-        attempt: () => t('AI runs on assignments only, never on tests, and Glaze couldn’t confirm this is an assignment.'),
+        attempt: () => t('AI is only available on confirmed assignments, never on tests.'),
       }[no];
       box.append(el('p', 'gz-fb-note', say ? say() : t('AI isn’t available right now.')));
       if (['ai-off', 'off', 'setup', 'permission', 'download', 'device'].includes(no)) {
