@@ -125,6 +125,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       const chip = await until(() => p.$('.slot[data-slot="ai"] .gz-ai-chip'), 'chip');
       assert.equal(await chip.textContent(), 'Gemini Nano');
       assert.equal(await chip.evaluate((c) => c.hasAttribute('data-ready')), true);
+      assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].map((b) => b.firstChild.textContent)), ['Blackboard editor', 'Check with AI', 'Sources', 'Add references']);
     });
     await check('the gray text shows after the pause, only from writer.complete\'s checked output, with the Tab keycap', async () => {
       await next(p, 'writer.complete', GHOST);

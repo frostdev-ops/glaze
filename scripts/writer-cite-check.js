@@ -148,7 +148,7 @@ const HARNESS = `(() => {
 
     // ---- a DOI ----
     await fr.fill('.gzc-in', 'https://doi.org/10.5555/gz.2026.001');
-    await fr.click('.gzc-row .sbtn');
+    await clickCite('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gzc-form [data-field="title"]')?.value === 'Rememory and the River in Beloved'), 'DOI lookup fills the form');
     check(await fr.evaluate(() => document.querySelector('.gzc-type').value === 'article-journal' && document.querySelector('[data-field="author"]').value === 'Okafor, Ana\nPark, Lee' && document.querySelector('[data-field="container-title"]').value === 'Journal of Synthetic Studies'), 'doi.org\'s CSL-JSON becomes a journal article, authors one a line');
     check(requests.some((r) => r.url === 'https://doi.org/10.5555/gz.2026.001' && r.accept === 'application/vnd.citationstyles.csl+json' && !r.cookie && !r.referer), 'the worker asks doi.org for CSL-JSON, with no cookie or referrer');
@@ -157,7 +157,7 @@ const HARNESS = `(() => {
     saved.form = await shot(el, 'cite-form.png');
     await fr.fill('.gzc-acts .gzc-page', '115');
     await settled();
-    await fr.click('.gzc-acts .sbtn[type="submit"]');
+    await clickCite('.gzc-acts .sbtn[type="submit"]');
     await until(async () => (await edText()).includes('rememory (Okafor and Park 115), a word'), 'the citation at the selection\'s end');
     await until(async () => (await quillText()).includes('rememory (Okafor and Park 115), a word'), 'the citation in Ultra\'s Quill');
     check(true, 'Cite puts "(Okafor and Park 115)" after the selection, and Ultra\'s Quill has it');
@@ -168,13 +168,13 @@ const HARNESS = `(() => {
     await fr.evaluate(() => GZ_WRITER_CITE.open());
     await fr.fill('.gzc-in', NEWS);
     await fr.evaluate(() => { document.querySelector('.gzc-row .sbtn').addEventListener('click', () => { window.__clickActive = navigator.userActivation.isActive; }, { once: true }); });
-    await fr.click('.gzc-row .sbtn');
+    await clickCite('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gzc-form [data-field="title"]')?.value === 'Can We Get Better at Forgetting?'), 'page lookup fills the form');
     check(await fr.evaluate(() => JSON.stringify(__asks) === JSON.stringify([[['https://news.example.com/*'], true]])), 'a page\'s lookup asks for exactly https://news.example.com/*, inside the click');
     check(await fr.evaluate(() => document.querySelector('.gzc-type').value === 'article-newspaper' && document.querySelector('[data-field="author"]').value === 'Carey, Benedict' && document.querySelector('[data-field="container-title"]').value === 'The Daily Synthetic'), 'JSON-LD NewsArticle, og: and <title> become a news article');
     check(await fr.evaluate(() => window.__ran === undefined) && !requests.some((r) => r.url.includes('tracker.example.com')), 'the fetched page ran no script and loaded nothing (DOMParser, text only)');
     await settled();
-    await fr.click('.gzc-acts .sbtn[type="submit"]');
+    await clickCite('.gzc-acts .sbtn[type="submit"]');
     await until(async () => (await edText()).includes('Forgetting is active (Carey)'), 'page citation inserted');
     check(true, 'a page with no page number cites as "(Carey)"');
 
@@ -186,7 +186,7 @@ const HARNESS = `(() => {
     }, new URL(NEWS).origin), 'the actual feature-grant handler never enrolls or registers the citation host as an LMS');
     await fr.evaluate(() => GZ_WRITER_CITE.open());
     await fr.fill('.gzc-in', 'https://news.example.com/redirect');
-    await fr.click('.gzc-row .sbtn');
+    await clickCite('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite [data-field="URL"]')), 'opaque page redirect fallback');
     check(await fr.evaluate(() => document.querySelector('.gz-cite .gzc-status').textContent === 'This page redirects. Use its final address or add it manually.') && !requests.some((r) => r.url === 'https://www.example.com/final'), 'an opaque page redirect opens the manual form without touching its unheld destination');
     await clickCite('.gz-cite [data-do="cancel"]');
@@ -207,7 +207,7 @@ const HARNESS = `(() => {
     await until(() => fr.evaluate(() => document.querySelector('.gzc-form [data-field="DOI"]')?.value === '10.5555/missing'), 'a missing DOI opens the form with it');
     check(await fr.evaluate(() => /Nothing found/.test(document.querySelector('.gz-cite .gzc-status').textContent)), 'a DOI nobody knows says so and leaves the fields to the student');
     await settled();
-    await fr.click('.gzc-form [data-do="cancel"]');
+    await clickCite('.gzc-form [data-do="cancel"]');
     saved.list = await shot(el, 'cite-sources-list.png');
     await fr.press('.gzc-in', 'Escape');
     check(await fr.evaluate(() => document.querySelector('.gz-cite').hidden), 'Escape closes the popover');
@@ -269,7 +269,7 @@ const HARNESS = `(() => {
     review(await fr.evaluate(() => document.activeElement?.id === 'more'), 'review: Escape returns focus to the dialog invoker');
     await fr.evaluate(() => GZ_WRITER_CITE.open());
     await fr.fill('.gzc-in', '10.5555/slow');
-    await fr.click('.gzc-row .sbtn');
+    await clickCite('.gzc-row .sbtn');
     await fr.press('.gzc-in', 'Escape');
     await fr.evaluate(() => GZ_WRITER_CITE.add({ title: 'My manual title' }));
     await pause(750);
@@ -278,19 +278,19 @@ const HARNESS = `(() => {
     // Firefox's framed extension page may lack permissions. Page lookup must fall back; public DOI/ISBN still work.
     await fr.evaluate(() => { window.__permissions = chrome.permissions; chrome.permissions = undefined; GZ_WRITER_CITE.open(); });
     await fr.fill('.gzc-in', NEWS);
-    await fr.click('.gzc-row .sbtn');
+    await clickCite('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite [data-field="URL"]')), 'no-permissions manual URL form');
     check(await fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-status').textContent && document.querySelector('.gz-cite [data-field="URL"]').value === 'https://news.example.com/2019/03/22/forgetting.html'), 'without permissions, URL lookup opens the manual form with a one-line reason');
     await clickCite('.gz-cite [data-do="cancel"]');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'Cancel restores the lookup row');
     await fr.fill('.gzc-in', '10.5555/gz.2026.001');
-    await fr.click('.gzc-row .sbtn');
+    await clickCite('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gz-cite [data-field="title"]')?.value === 'Rememory and the River in Beloved'), 'DOI without permissions API');
     check(true, 'DOI lookup still works without the permissions API');
     await clickCite('.gz-cite [data-do="cancel"]');
     await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'Cancel restores the lookup row');
     await fr.fill('.gzc-in', '9780306406157');
-    await fr.click('.gzc-row .sbtn');
+    await clickCite('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gz-cite [data-field="title"]')?.value === 'The River Keeps: A novel'), 'ISBN without permissions API');
     check(true, 'ISBN lookup still works without the permissions API');
     await fr.evaluate(() => { chrome.permissions = window.__permissions; });

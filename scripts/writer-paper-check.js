@@ -224,6 +224,12 @@ const HARNESS = `(() => {
     await fr.click('.gp-issue[data-rule="heading-order"] .gp-sbtn');
     await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.child(0).textContent === 'Alex Rivera'), 'heading order fixed');
     check(true, 'Fix restores heading order through the shared issues integration');
+    await load(fr, FX.seeded.mla9().find(([r]) => r === 'title-bold')[1], 'mla9');
+    await until(() => fr.evaluate(() => GZ_WRITER_ISSUES.list().some((i) => i.source === 'format' && i.rule === 'title-bold')), 'title format underline');
+    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, i = GZ_WRITER_ISSUES.list().find((i) => i.rule === 'title-bold'); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, i.from))); v.focus(); });
+    await p.keyboard.press('Alt+Enter');
+    await fr.click('.gp-card button:has-text("Ignore")');
+    check(await fr.evaluate(() => !document.querySelector('.gp-issue[data-rule="title-bold"]')), 'ignoring a format underline also removes its paper card');
     for (const fid of ['mla9', 'apa7', 'chicago17']) {
       await load(fr, FX.papers[fid](), fid);
       check(await fr.evaluate(() => GZ_WRITER_CITE.style() === ({ mla: 'mla9', apa: 'apa7', chicago: 'chicago17' })[GZ_WRITER_PAPER.current().format().cite]), `${fid}: citations follow the paper's format`);
