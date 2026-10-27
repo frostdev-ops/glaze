@@ -1,0 +1,346 @@
+// Glaze Writer's submit step in the real unpacked extension, on the synthetic assignment attempt (test/fixtures/
+// ultra-writer-attempt.html, the probed shape) running the real Quill 1.3.7, with a stand-in for Ultra's React around it:
+// its file area takes files at its root (input's change, or a drop), records them and lists each after a moment; its
+// footer's Save and Close and Submit stay disabled (Mui-style) while there's no text and no file, and record clicks; a
+// Submit click shows a stand-in confirmation. ?mode= changes it: empty (no text in Ultra's box), noinput (the file area
+// without its input), gone (no file area), never (files never listed), stuck (Submit never enables).
+// Checked: the sheet's look (screenshots beside the mockup), focus trap, Escape and Cancel changing nothing, Ultra's
+// Submit (disabled or not) and Save and Close caught, the .docx landing in the input with its name, type and bytes (read
+// back with lib/doctext.js), the note and text in Quill, Submit clicked exactly once and only after the file is listed,
+// each failure stopping before Submit, a test untouched, and the keyboard flow. GETs only, synthetic.
+// NODE_PATH=<playwright> nice -n 10 node scripts/writer-submit-check.js [evidence directory]
+// SUBMIT_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-submit).
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const FX = require('../test/fixtures/writer-paper-fixtures.js');
+const DT = require('../lib/doctext.js');
+const site = 'https://bb.school.test';
+const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create', TEST = '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1';
+const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const SUBMIT = '[data-analytics-id="assignment.attempt.authoring.footer.submit"]', SAVE = '[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]';
+const out = process.argv[2] || path.join(os.tmpdir(), 'gz-submit-check');
+const shots = process.env.SUBMIT_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-submit');
+const checks = [], requests = [], errors = [];
+let passed = false;
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (fn, label, ms = 15000) => {
+  const start = Date.now(); let last;
+  while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(80); }
+  throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
+};
+const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
+const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+
+// The page's world: a real Quill on each writable box (as scripts/writer-paper-check.js), and on an assignment attempt
+// the stand-in for Ultra's React file area and footer.
+const HARNESS = `(() => {
+  const mode = new URLSearchParams(location.search).get('mode') || '';
+  const log = window.__log = []; window.__uploads = []; window.__clicks = []; window.__picker = 0;
+  let q = null;
+  for (const c of document.querySelectorAll('.ql-container:not(.is-read-only)')) {
+    const old = c.querySelector('.ql-editor'), html = old.innerHTML, id = old.id;
+    c.innerHTML = '';
+    q = new Quill(c, {});
+    if (id) q.root.id = id;
+    q.root.setAttribute('role', 'textbox');
+    if (!mode.includes('empty') && /[^\\s]/.test(html.replace(/<[^>]*>/g, ''))) q.setContents(q.clipboard.convert(html), 'silent');
+    window.__native = () => q.root.innerHTML;
+    window.__text = () => q.getText();
+  }
+  for (const i of document.querySelectorAll('input[type=file]')) i.addEventListener('click', () => { window.__picker++; });
+  document.addEventListener('click', (e) => { const b = e.target.closest('.footer button'); if (b) window.__clicks.push(b.getAttribute('analytics-id')); });
+  const panel = document.querySelector('bb-assignment-attempt-authoring-panel');
+  if (!panel) return;
+  const style = document.createElement('style');
+  style.textContent = '.Mui-disabled { pointer-events: none; }';
+  document.head.append(style);
+  const root = panel.firstElementChild, area = document.querySelector('[class*="makeStylessubmission-"]'), preview = area.querySelector('[class*="makeStylespreview-"]');
+  if (mode.includes('gone')) preview.remove();
+  if (mode.includes('noinput')) preview.querySelector('input').remove();
+  const files = [];
+  const footer = { save: document.querySelector('${SAVE}'), submit: document.querySelector('${SUBMIT}') };
+  const state = () => {
+    const on = !mode.includes('stuck') && (q.getText().trim().length > 0 || files.length > 0);
+    for (const b of [footer.save, footer.submit]) { b.disabled = !on; b.classList.toggle('Mui-disabled', !on); b.tabIndex = on ? 0 : -1; }
+  };
+  q.on('text-change', state);
+  state();
+  const take = async (list, via) => {
+    for (const f of list) { window.__uploads.push({ name: f.name, type: f.type, size: f.size, via, bytes: Array.from(new Uint8Array(await f.arrayBuffer())) }); log.push('upload'); }
+    if (mode.includes('never')) return;
+    setTimeout(() => {
+      for (const f of list) {
+        files.push(f);
+        const row = document.createElement('div'), name = document.createElement('span');
+        row.className = 'makeStylesfileRow-0-2-401'; name.className = 'makeStylesfileName-0-2-402'; name.textContent = f.name;
+        row.append(name);
+        (preview.isConnected ? preview : area).after(row);
+      }
+      log.push('row');
+      state();
+    }, 400);
+  };
+  root.addEventListener('change', (e) => { if (e.target.matches('input[type=file]')) take([...e.target.files], 'input'); });
+  root.addEventListener('dragover', (e) => e.preventDefault());
+  root.addEventListener('drop', (e) => { if (e.target.closest('[class*="makeStylesinputContainer-"]')) { e.preventDefault(); take([...e.dataTransfer.files], 'drop'); } });
+  root.addEventListener('click', (e) => {
+    const b = e.target.closest('footer button');
+    if (!b) return;
+    window.__clicks.push(b.getAttribute('data-analytics-id'));
+    log.push('click:' + b.getAttribute('data-analytics-id'));
+    if (b === footer.submit) { const d = document.createElement('div'); d.setAttribute('role', 'dialog'); d.id = 'ultra-confirm'; d.textContent = 'Submit this attempt?'; document.body.append(d); }
+  });
+})();`;
+
+(async () => {
+  let context, held = false, tmp, ext;
+  const lock = require('./check-env.js').lockPath();
+  try {
+    for (let i = 0; ; i++) {
+      try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-submit-check\n`); break; }
+      catch (e) { if (e.code !== 'EEXIST' || i >= 240) throw e; if (i % 12 === 0) console.error('[writer-submit-check] waiting for heavy lock'); await pause(5000); }
+    }
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-submit-'));
+    fs.mkdirSync(out, { recursive: true });
+    const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
+    if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
+
+    ext = require('./check-env.js').staged(root, [`${site}/*`]);
+    await require('./wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    env.noFirstRun(context); context.setDefaultTimeout(15000);
+    const grades = JSON.parse(fixture('ultra-writer-gradebook.json'));
+    const members = JSON.parse(fixture('ultra-memberships.json'));
+    members.results = members.results.map((m) => (m.courseId === '_101_1' ? { ...m, course: { ...m.course, name: FX.context.course, displayName: FX.context.course } } : m));
+    await context.route('**/*', async (r) => {
+      const req = r.request(), u = new URL(req.url());
+      if (u.protocol === 'chrome-extension:') return r.continue();
+      requests.push({ method: req.method(), origin: u.origin, path: u.pathname });
+      if (req.method() !== 'GET' || u.origin !== site) return r.abort();
+      if (u.pathname === '/gz-check/quill.js') return r.fulfill({ contentType: 'text/javascript', body: quill });
+      if (u.pathname === '/gz-check/harness.js') return r.fulfill({ contentType: 'text/javascript', body: HARNESS });
+      const page = { [ATTEMPT]: 'ultra-writer-attempt.html', [TEST]: 'ultra-writer-test.html' }[u.pathname];
+      if (req.isNavigationRequest() && page) return r.fulfill({ contentType: 'text/html', body: fixture(page).replace('<head>', '<head><base href="/ultra/">').replace('</body>', '<script src="/gz-check/quill.js"></script><script src="/gz-check/harness.js"></script></body>') });
+      if (req.isNavigationRequest()) return r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Blank</title>' });
+      let data = { results: [] };
+      if (u.pathname.endsWith('/users/me')) data = { id: '_900_1', userName: 'synthetic', givenName: 'Alex', familyName: 'Rivera' };
+      else if (/\/users\/_900_1\/memberships$/.test(u.pathname)) data = members;
+      else if (u.pathname.includes('/gradebook/grades')) data = grades;
+      return r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
+    });
+    const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
+    const G = require(path.join(root, 'defaults.js'));
+    const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
+    await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
+    const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
+    const watch = (p, tag) => {
+      p.on('pageerror', (e) => errors.push(`${tag}: ${e.message}`));
+      p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`${tag} console: ${m.text()}`); });
+    };
+    const settle = async (fr) => { await pause(150); await fr.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); await pause(100); };
+    const openAttempt = async (mode = '') => {
+      const p = await context.newPage();
+      watch(p, `page${mode ? `?${mode}` : ''}`);
+      await p.goto(`${site}${ATTEMPT}${mode ? `?mode=${mode}` : ''}`);
+      const el = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.evaluate((f) => !f.style.opacity && f.offsetHeight > 500) && x; }, 'paper frame shown');
+      const fr = await until(() => el.contentFrame(), 'frame document');
+      await until(() => fr.evaluate(() => !!globalThis.GZ_WRITER_PAPER?.current()?.key() && !document.querySelector('.gp-submit').disabled), 'paper loaded and Submit… on');
+      await until(() => fr.evaluate(() => document.querySelectorAll('.gp-sheet').length > 0 && document.querySelector('.gp-flow').style.visibility === ''), 'pages drawn');
+      return { p, el, fr };
+    };
+    const sheetOpen = (fr) => until(() => fr.evaluate(() => !!document.querySelector('.gs-layer[data-open]')), 'sheet open');
+    const sheetText = (fr) => fr.evaluate(() => {
+      const L = document.querySelector('.gs-layer'), q = (s) => L?.querySelector(s);
+      return L && { title: q('h2').textContent, label: q('.gs-field label').textContent, name: q('.gs-name').textContent, size: q('.gs-file small').textContent, toggle: q('.gs-toggle span').textContent, sw: q('.gs-sw').getAttribute('aria-checked'),
+        open: q('.gs-open')?.textContent || '', err: q('.gs-err').textContent, buttons: [...L.querySelectorAll('.gs-foot button')].map((b) => b.textContent), thumbs: L.querySelectorAll('.gs-thumb').length,
+        thumbText: [...L.querySelectorAll('.gs-thumb')].map((x) => squash(x.querySelector('.ProseMirror')?.textContent).length), offsets: [...L.querySelectorAll('.gs-thumb .gp-flow')].map((x) => parseFloat(x.style.top)), headers: [...L.querySelectorAll('.gs-thumb .gp-hdr')].map((x) => x.textContent) };
+      function squash(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+    });
+    const versions = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); const k = Object.keys(all).find((x) => x.startsWith('writerVersions:')); return (all[k] || []).map((v) => v.reason); });
+    const shot = async (target, name) => { fs.mkdirSync(shots, { recursive: true }); await pause(250); const f = path.join(shots, name); await target.screenshot({ path: f }); return f; };
+    const saved = {};
+    const center = async (p, sel) => { const b = await p.$eval(sel, (x) => { x.scrollIntoView({ block: 'center' }); const r = x.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }); return b; };
+
+    // ---- the sheet's look, over the 6-page MLA fixture
+    let { p, el, fr } = await openAttempt();
+    await fr.evaluate(async (json) => {
+      const v = GZ_WRITER_PAPER.current().editor.view;
+      v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON(json).content));
+    }, FX.papers.mla9());
+    await settle(fr);
+    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let at = 0; v.state.doc.descendants((n, pos) => { if (!at && n.isText && n.text.includes('(Morrison 35)')) at = pos + n.text.indexOf('(Morrison 35)'); }); v.dispatch(v.state.tr.insertText('(Morrison, 42)', at, at + '(Morrison 35)'.length)); });
+    await until(() => fr.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved' && (globalThis.GZ_WRITER_ISSUES?.list().length || 0) > 0), 'saved, with a check open');
+    await settle(fr);
+    const before = { versions: (await versions()).length, native: await p.evaluate(() => __text()) };
+    await fr.click('.gp-tbtn[aria-label="Focus"]');
+    await until(() => el.evaluate((f) => getComputedStyle(f).position === 'fixed'), 'focus fills the window');
+    await settle(fr);
+    await fr.click('.gp-submit');
+    await sheetOpen(fr);
+    await until(() => fr.evaluate(() => / KB$/.test(document.querySelector('.gs-file small').textContent)), 'file size shown');
+    const look = await sheetText(fr);
+    console.log(JSON.stringify(look));
+    const pages = await fr.evaluate(() => GZ_WRITER_PAPER.current().pages());
+    check(look.title === 'Submit Essay 2' && look.label === 'Note to Professor Okafor' && look.toggle === 'Also paste the text in the text box' && look.sw === 'false', 'sheet: "Submit Essay 2", the note to the instructor the heading names, the paste switch off');
+    check(look.name === 'Rivera_Essay2.docx' && new RegExp(`^${pages} pages · \\d+ KB$`).test(look.size), `file chip: Rivera_Essay2.docx · ${look.size}`);
+    check(look.thumbs === 2 && look.headers.join('|') === 'Rivera 1|Rivera 2' && look.thumbText.every((n) => n > 1000) && look.offsets[0] === 0 && look.offsets[1] < -1000, 'the first two pages drawn from the paged view (each its own header, the text flow shifted to its page), not placeholders');
+    check(/^\d+ checks? open/.test(look.open) && /Review$/.test(look.open), `open checks banner: "${look.open}"`);
+    check(look.buttons.join('|') === 'Cancel|Submit' && look.err === '', 'Cancel and Submit, no error');
+    check(await fr.evaluate(() => { const s = getComputedStyle(document.querySelector('.gs-sheet')); return s.transitionDuration.split(',').every((d) => d.trim() === '0.16s') && /opacity/.test(s.transitionProperty) && /transform/.test(s.transitionProperty); }), 'the sheet rises and fades in over 160 ms (transform and opacity only)');
+    saved.sheet = await shot(p, 'submit.png');
+    // Focus stays in the sheet: Tab and Shift+Tab wrap.
+    const inside = async () => fr.evaluate(() => !!document.activeElement?.closest('.gs-layer'));
+    check(await fr.evaluate(() => document.activeElement?.id === 'gs-note'), 'the note has focus when the sheet opens');
+    let trapped = true;
+    for (let i = 0; i < 9; i++) { await p.keyboard.press('Tab'); trapped &&= await inside(); }
+    for (let i = 0; i < 9; i++) { await p.keyboard.press('Shift+Tab'); trapped &&= await inside(); }
+    check(trapped, 'Tab and Shift+Tab stay in the sheet');
+    check(await fr.evaluate(() => document.querySelector('.gp').inert), 'the paper behind is inert while the sheet is open');
+    // Review jumps to Checks.
+    await fr.click('.gs-review');
+    check(await fr.evaluate(() => !document.querySelector('.gs-layer') && document.getElementById('gp-tab-checks').getAttribute('aria-selected') === 'true' && !!document.activeElement?.closest('#gp-checks, #gp-tab-checks')), 'Review closes the sheet and goes to the Checks tab');
+    // Cancel and Escape change nothing.
+    await fr.evaluate(() => { window.__was = document.activeElement; });
+    await fr.click('.gp-submit');
+    await sheetOpen(fr);
+    await p.keyboard.type('A note never sent.', { delay: 2 });
+    await fr.click('.gs-sw');
+    check(await fr.evaluate(() => document.querySelector('.gs-sw').getAttribute('aria-checked') === 'true'), 'the switch turns on');
+    await fr.click('.gs-foot .gs-btn:not(.gs-primary)');
+    check(await fr.evaluate(() => !document.querySelector('.gs-layer') && document.activeElement === window.__was && window.__was !== document.body), 'Cancel closes it, focus back where it was');
+    await fr.click('.gp-submit');
+    await sheetOpen(fr);
+    check(await fr.evaluate(() => document.querySelector('#gs-note').value === '' && document.querySelector('.gs-sw').getAttribute('aria-checked') === 'false'), 'a new sheet starts blank');
+    await p.keyboard.press('Escape');
+    check(await fr.evaluate(() => !document.querySelector('.gs-layer') && document.querySelector('.gp-tbtn[aria-label="Focus"]').getAttribute('aria-pressed') === 'true'), 'Escape closes the sheet only (Focus stays)');
+    await pause(300);
+    check(await p.evaluate(() => __uploads.length === 0 && __clicks.length === 0 && __picker === 0) && (await versions()).length === before.versions && await p.evaluate(() => __text()) === before.native, 'Cancel and Escape change nothing: no file, no click, no text in Ultra\'s box, no version');
+    await fr.click('.gp-tbtn[aria-label="Focus"]');
+    await until(() => el.evaluate((f) => getComputedStyle(f).position !== 'fixed'), 'focus off');
+    await settle(fr);
+    await fr.click('.gp-submit');
+    await sheetOpen(fr);
+    saved.panel = await shot(p, 'submit-panel.png');
+    await p.keyboard.press('Escape');
+    await p.emulateMedia({ reducedMotion: 'reduce' });
+    await fr.click('.gp-submit');
+    await sheetOpen(fr);
+    check(await fr.evaluate(() => getComputedStyle(document.querySelector('.gs-sheet')).transitionDuration.split(',').every((d) => d.trim() === '0s')), 'with reduced motion the sheet appears without motion');
+    await p.keyboard.press('Escape');
+    await p.emulateMedia({ reducedMotion: null });
+
+    // ---- Ultra's own buttons, enabled (its box holds the fixture's text): caught before Ultra
+    await p.click(SUBMIT);
+    await sheetOpen(fr);
+    check(await p.evaluate(() => !__clicks.length), 'Ultra\'s Submit (enabled) opens the sheet and Ultra never hears the click');
+    await p.keyboard.press('Escape');
+    const savedAt = await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); const k = Object.keys(all).find((x) => x.startsWith('writerPaper:')); return all[k]?.updated || 0; });
+    await p.click(SAVE);
+    await until(() => p.evaluate(() => __clicks.includes('course.content.assessment.footer.buttons.saveAndClose')), 'Save and Close goes on');
+    const savedAfter = await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); const k = Object.keys(all).find((x) => x.startsWith('writerPaper:')); return all[k]?.updated || 0; });
+    check(savedAfter > savedAt && await p.evaluate(() => __clicks.join() === 'course.content.assessment.footer.buttons.saveAndClose' && !__uploads.length), 'Save and Close saves the paper first, then Ultra\'s own goes on, once, attaching nothing');
+    await p.close();
+
+    // ---- the whole flow, by keyboard, from Ultra's disabled Submit (its box empty)
+    ({ p, el, fr } = await openAttempt('empty'));
+    check(await p.evaluate((s) => document.querySelector(s).disabled, SUBMIT), 'Ultra\'s Submit is disabled while its box is empty');
+    const at = await center(p, SUBMIT);
+    await p.mouse.click(at.x, at.y);
+    await sheetOpen(fr);
+    check(true, 'a press on Ultra\'s disabled Submit opens the sheet');
+    const docText = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.text());
+    await p.keyboard.type('Thank you for the extension.', { delay: 2 });
+    await p.keyboard.press('Tab');
+    check(await fr.evaluate(() => document.activeElement?.id === 'gs-paste'), 'Tab moves to the switch');
+    await p.keyboard.press('Space');
+    check(await fr.evaluate(() => document.querySelector('.gs-sw').getAttribute('aria-checked') === 'true'), 'Space turns it on');
+    for (let i = 0; i < 4 && !await fr.evaluate(() => document.activeElement?.classList.contains('gs-primary')); i++) await p.keyboard.press('Tab');
+    check(await fr.evaluate(() => document.activeElement?.classList.contains('gs-primary')), 'Tab reaches Submit');
+    const versionsBefore = (await versions()).length;
+    await p.keyboard.press('Enter');
+    await until(() => p.evaluate(() => __clicks.length > 0), 'Ultra\'s Submit clicked', 30000);
+    await pause(800);
+    const run = await p.evaluate(() => ({ uploads: __uploads, log: __log, clicks: __clicks, picker: __picker, text: __text(), confirm: !!document.getElementById('ultra-confirm') }));
+    check(run.uploads.length === 1 && run.uploads[0].name === 'Rivera_Essay2.docx' && run.uploads[0].type === MIME && run.uploads[0].via === 'input' && run.picker === 0, 'the .docx lands in the file area\'s input (Rivera_Essay2.docx, the Word type), no file picker opened');
+    const bytes = Buffer.from(run.uploads[0].bytes);
+    fs.writeFileSync(path.join(out, 'Rivera_Essay2.docx'), bytes);
+    const read = squash(await DT.docx(new Uint8Array(bytes)));
+    const paras = docText.split('\n').map(squash).filter((x) => x.length > 20);
+    const missing = paras.filter((x) => !read.includes(x));
+    if (missing.length) console.log('missing from the .docx:', JSON.stringify(missing));
+    check(paras.length >= 15 && !missing.length && bytes.length === run.uploads[0].size, `its bytes read back (lib/doctext.js) as the paper: all ${paras.length} paragraphs`);
+    check(run.text.startsWith('Thank you for the extension.\n\nAlex Rivera\n') && squash(run.text).includes(paras.at(-1)), 'the note, then the paper\'s text, land in Ultra\'s Quill');
+    check(run.clicks.join() === 'assignment.attempt.authoring.footer.submit', 'Ultra\'s Submit clicked exactly once');
+    check(run.log.indexOf('row') > run.log.indexOf('upload') && run.log.indexOf('click:assignment.attempt.authoring.footer.submit') > run.log.indexOf('row'), `and only after Ultra listed the file (${run.log.join(' → ')})`);
+    const reasons = await versions();
+    check(reasons.length === versionsBefore + 1 && reasons[0] === 'submit', 'a version was saved as Submitted');
+    check(run.confirm && await fr.evaluate(() => !document.querySelector('.gs-layer')), 'the sheet closes; Ultra\'s confirmation is Ultra\'s');
+    await p.close();
+
+    // ---- a drop when the input isn't drawn, and a double click submits once
+    ({ p, el, fr } = await openAttempt('empty,noinput'));
+    await fr.click('.gp-submit');
+    await sheetOpen(fr);
+    await fr.dblclick('.gs-primary');
+    await until(() => p.evaluate(() => __clicks.length > 0), 'submitted after a drop', 30000);
+    await pause(1500);
+    const drop = await p.evaluate(() => ({ uploads: __uploads.map((u) => [u.name, u.via]), clicks: __clicks, text: __text(), picker: __picker }));
+    check(drop.uploads.length === 1 && drop.uploads[0].join() === 'Rivera_Essay2.docx,drop' && drop.picker === 0, 'without its input, the file is dropped on Ultra\'s drop zone (no picker)');
+    check(drop.clicks.length === 1 && drop.text === '\n', 'a double click submits once; nothing chosen, nothing written into Ultra\'s box');
+    await p.close();
+
+    // ---- failures stop before Submit
+    const fail = async (mode, re, ms, label) => {
+      const o = await openAttempt(mode);
+      await o.fr.click('.gp-submit');
+      await sheetOpen(o.fr);
+      await o.fr.click('.gs-primary');
+      await until(() => o.fr.evaluate(() => document.querySelector('.gs-err').textContent), `${mode} error`, ms);
+      const s = await sheetText(o.fr);
+      const r = await o.p.evaluate(() => ({ clicks: __clicks.filter((c) => /submit/.test(c)), uploads: __uploads.length, picker: __picker }));
+      check(re.test(s.err) && r.clicks.length === 0 && r.picker === 0 && await o.fr.evaluate(() => !document.querySelector('.gs-primary').disabled), `${label}: "${s.err}"; Submit never clicked`);
+      return { ...o, r };
+    };
+    ({ p } = await fail('empty,gone', /file upload isn’t on this page/, 8000, 'no file area'));
+    await p.close();
+    let f = await fail('empty,never', /didn’t list the file/, 45000, 'the file never listed');
+    saved.error = await shot(f.p, 'submit-error.png');
+    await f.p.close();
+    f = await fail('stuck', /Submit didn’t turn on/, 30000, 'Ultra\'s Submit never enabled');
+    check(f.r.uploads === 1, 'after attaching once');
+    await f.fr.click('.gs-primary');
+    await until(() => f.fr.evaluate(() => !document.querySelector('.gs-primary').disabled && document.querySelector('.gs-err').textContent), 'second try ends', 30000);
+    check(await f.p.evaluate(() => __uploads.length === 1 && !__clicks.some((c) => /submit/.test(c))), 'a second, explicit try doesn\'t attach a second copy, and still never submits');
+    await f.p.close();
+
+    // ---- a test: no sheet, nothing caught
+    p = await context.newPage();
+    watch(p, 'test');
+    await p.goto(`${site}${TEST}`);
+    const tel = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="test"]'); return x && await x.evaluate((ff) => !ff.style.opacity) && x; }, 'test box mounted');
+    const tfr = await until(() => tel.contentFrame(), 'test frame');
+    await until(() => tfr.evaluate(() => !!globalThis.GZ_WRITER_FRAME?.editor()), 'test editor');
+    check(await tfr.evaluate(() => document.documentElement.dataset.mode === 'compose' && GZ_WRITER_PAPER.submit === null && !document.querySelector('.gp-submit')), 'a test\'s box is compose: no Submit…, no sheet hook');
+    await p.click('.footer:not([hidden]) button[analytics-id="course.content.assessment.footer.buttons.submit"]');
+    await pause(500);
+    check(await p.evaluate(() => __clicks.join() === 'course.content.assessment.footer.buttons.submit') && await tfr.evaluate(() => !document.querySelector('.gs-layer')), 'a test\'s own Submit goes straight to Ultra, untouched');
+    await p.close();
+
+    check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);
+    check(requests.every((r) => r.method === 'GET' && r.origin === site), 'every LMS request is a synthetic GET');
+    passed = true;
+    console.log(JSON.stringify({ checks: checks.length, shots: saved }, null, 2));
+  } finally {
+    await context?.close();
+    if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+    if (ext) fs.rmSync(ext, { recursive: true, force: true });
+    if (held) fs.rmSync(lock, { recursive: true, force: true });
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed, checks, requests, errors }, null, 2) + '\n');
+  }
+})().catch((e) => { console.error(e); fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, 'failure.txt'), `${e.stack}\n`); process.exitCode = 1; });

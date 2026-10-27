@@ -1,0 +1,53 @@
+/* Glaze Writer's submit sheet (writer-submit.js), as glaze-plans/writer/mockups D draws it, in the Look's tokens. It
+   rises 8px and fades in over 160ms (none at motion level off or with reduced motion) and goes at once. */
+:root { --gs-t: 160ms; }
+:root[data-motion="off"] { --gs-t: 0s; }
+@media (prefers-reduced-motion: reduce) { :root { --gs-t: 0s; } }
+.gs-layer { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; overflow: auto; font: 14px/1.5 var(--gz-font); color: var(--gz-ink); }
+.gs-dim { position: fixed; inset: 0; background: rgba(2,6,12,.66); backdrop-filter: blur(2px); opacity: 0; transition: opacity var(--gs-t) ease-out; }
+.gs-sheet { position: relative; width: min(860px, 100%); background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: 16px; box-shadow: var(--shadow); display: grid; grid-template-columns: 340px minmax(0, 1fr); overflow: hidden;
+  opacity: 0; transform: translateY(8px); transition: opacity var(--gs-t) ease-out, transform var(--gs-t) ease-out; }
+.gs-layer[data-open] .gs-dim, .gs-layer[data-open] .gs-sheet { opacity: 1; transform: none; }
+
+.gs-prev { background: var(--gz-surface-2); padding: 26px; display: grid; gap: 14px; justify-items: center; align-content: start; border-right: 1px solid var(--gz-line); min-width: 0; }
+.gs-thumbs { display: flex; gap: 10px; }
+.gs-thumbs:empty { display: none; }
+.gs-thumb { width: 130px; flex: none; background: #fff; border-radius: 3px; box-shadow: 0 4px 14px rgba(0,0,0,.5); position: relative; overflow: hidden; }
+:root:not([data-dark]) .gs-thumb { box-shadow: 0 4px 14px rgba(15,23,42,.18), 0 1px 3px rgba(15,23,42,.12); }
+.gs-thumb .gp-sheet { position: absolute; left: 0; top: 0; transform-origin: 0 0; box-shadow: none; }
+.gs-thumb .gs-clip { position: absolute; left: 0; overflow: hidden; }
+.gs-thumb .gp-flow { pointer-events: none; }
+.gs-file { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--gz-line-strong); border-radius: 10px; width: 100%; font-size: 13px; min-width: 0; }
+.gs-file > div { min-width: 0; }
+.gs-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-doc { width: 28px; height: 34px; border-radius: 4px; background: #2563eb; color: #fff; font: 700 7.5px/34px var(--gz-font); text-align: center; flex: none; }
+.gs-file small { display: block; color: var(--gz-ink-faint); font-size: 12px; }
+
+.gs-form { padding: 26px 28px; display: grid; gap: 18px; align-content: start; min-width: 0; }
+.gs-form h2 { margin: 0; font-size: 19px; line-height: 1.5; overflow-wrap: anywhere; }
+.gs-field label { display: block; font-size: 13px; color: var(--gz-ink-muted); margin-bottom: 6px; }
+.gs-field textarea { display: block; width: 100%; height: 110px; resize: none; padding: 10px 12px; border: 1px solid var(--gz-line-strong); border-radius: 10px; background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; outline: none; }
+.gs-field textarea:focus-visible { border-color: color-mix(in srgb, var(--gz-accent) 60%, var(--gz-line-strong)); }
+.gs-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; cursor: pointer; }
+.gs-sw { width: 38px; height: 22px; flex: none; border-radius: 11px; background: var(--gz-line-strong); position: relative; }
+.gs-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--gz-ink-muted); transition: transform var(--gs-t) ease-out; }
+.gs-sw[aria-checked="true"] { background: var(--gz-accent); }
+.gs-sw[aria-checked="true"]::after { background: #fff; transform: translateX(16px); }
+.gs-open { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--fmt, #60a5fa) 12%, transparent); color: #bfdbfe; font-size: 13px; }
+:root:not([data-dark]) .gs-open { color: #1e40af; }
+.gs-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--fmt, #60a5fa); }
+.gs-grow { flex: 1; }
+.gs-review { color: var(--gz-accent-hi); font-weight: 600; }
+:root:not([data-dark]) .gs-review { color: var(--gz-accent); }
+.gs-err { color: var(--gz-err); font-size: 13px; }
+.gs-err:empty { display: none; }
+.gs-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+.gs-btn { padding: 8px 18px; border-radius: 999px; border: 1px solid var(--gz-line-strong); font-weight: 600; }
+.gs-btn.gs-primary { background: var(--gz-accent); color: var(--gz-accent-ink); border-color: transparent; }
+.gs-layer button:disabled, .gs-layer textarea:disabled { cursor: default; opacity: .55; }
+.gs-layer button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+
+@media (max-width: 719px) {
+  .gs-sheet { grid-template-columns: minmax(0, 1fr); }
+  .gs-prev { border-right: 0; border-bottom: 1px solid var(--gz-line); padding: 18px; }
+}
