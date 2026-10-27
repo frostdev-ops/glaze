@@ -157,7 +157,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
     box.root.style.setProperty('display', 'none', 'important');
     for (const k of ['position', 'opacity', 'pointer-events']) f.style.removeProperty(k);
-    if (l.motion !== 'off' && !matchMedia('(prefers-reduced-motion: reduce)').matches) f.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
+    if (!typing && l.motion !== 'off' && !matchMedia('(prefers-reduced-motion: reduce)').matches) f.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
     if (typing) { f.focus(); box.port.postMessage({ type: 'focus' }); }
     if (box.mode === 'paper') { X.need('lib/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.send(X, box, () => boxes.get(ed) === box)).catch(() => {}); return; }
     // Ultra changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text, not
