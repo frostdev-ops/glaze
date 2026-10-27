@@ -55,6 +55,12 @@ test('a collapsed discussion composer stays native until Ultra activates its edi
   assert.equal(U.kindOf(post.editor, { path: DISCUSSION }), 'post', 'its destination is still a discussion post');
   assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['reply'], 'native activation stays reachable');
   post.root.querySelector('.bb-editor-root').append(toolbar);
+  const controls = post.editor.closest('form').querySelector('.form-buttons');
+  controls.className += ' panel-editor-controls ng-hide';
+  controls.setAttribute('aria-hidden', 'true');
+  assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['reply'], 'focus can draw a toolbar before the click activates Ultra');
+  controls.className = 'form-buttons panel-editor-controls';
+  controls.removeAttribute('aria-hidden');
   assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['post', 'reply'], 'the activated editor can mount Writer');
 });
 
