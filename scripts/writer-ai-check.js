@@ -307,11 +307,15 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
         await q.keyboard.press('Escape');
         assert.equal(await ghost(q), null, 'Escape dismisses the ghost first');
         assert.equal(await q.getAttribute('.gp-tbtn[aria-label="Focus"]', 'aria-pressed'), 'true', 'Focus stays on');
-        await q.evaluate(() => {
+        await q.evaluate((text) => {
           const v = GZ_WRITER_FRAME.editor().view;
-          GZ_WRITER_ISSUES.set('ai', [{ from: 1, to: 5, kind: 'style', message: 'Review this wording.', suggestions: ['Then'] }]);
-          v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, 2))); v.focus();
-        });
+          let from = null;
+          v.state.doc.descendants((node, pos) => { if (from === null && node.isTextblock && node.textContent.startsWith(text)) from = pos + 1; });
+          if (from === null) throw new Error('paper body missing before proof check');
+          GZ_WRITER_ISSUES.set('ai', [{ from, to: from + 4, kind: 'style', message: 'Review this wording.', suggestions: ['Then'] }]);
+          if (!GZ_WRITER_ISSUES.list().some((i) => i.source === 'ai' && i.from === from)) throw new Error('proof issue was not seeded');
+          v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, from + 1))); v.focus();
+        }, LAST);
         await q.keyboard.press('Alt+Enter');
         await until(() => q.evaluate(() => !document.querySelector('.gp-card').hidden), 'proof card');
         await q.keyboard.press('Escape');
