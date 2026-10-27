@@ -534,8 +534,13 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   // written as the empty line Quill makes of it.
   const serialize = (schema, node) => {
     if (node.type !== node.type.schema.topNodeType) return block(node);
-    let out = '';
-    node.forEach((c) => { out += block(c); });
+    let out = '', code = '', codeNode = null;
+    const flush = () => { if (codeNode) out += spec(codeNode.type.spec.toDOM(codeNode), () => escText(code)); code = ''; codeNode = null; };
+    node.forEach((c) => {
+      if (!schema.nodes.page_break && c.type.spec.code && c.textContent) { codeNode = c; code += `${c.textContent}\n`; }
+      else { flush(); out += block(c); }
+    });
+    flush();
     return out;
   };
   // Inline HTML (marks only), as a footnote keeps it.
