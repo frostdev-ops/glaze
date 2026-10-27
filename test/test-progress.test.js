@@ -86,8 +86,17 @@ test('one set of listeners however often the page syncs; none, and no fold, once
 });
 
 test('routed on test attempts only, and loadable', () => {
-  assert.match(read('features/routes.js'), /'features\/test-progress\.js', 'GZ_TEST_PROGRESS'/);
-  assert.match(read('lib/background.js'), /'features\/test-progress\.js'/);
+  const need = [];
+  const c = { location: { pathname: '' }, GZ_CTX: { site: 'ultra', need: (f) => { need.push(f); return new Promise(() => {}); } }, sessionStorage: { getItem: () => null } };
+  c.globalThis = c;
+  vm.createContext(c);
+  const routes = vm.runInContext(read('features/routes.js'), c);
+  const asks = (p) => { need.length = 0; c.location.pathname = p; routes.sync(); return need.includes('features/test-progress.js'); };
+  for (const p of ['/ultra/courses/_101_1/assessment/_7_1/attempt/_8_1', '/ultra/courses/_101_1/assessment/_7_1/attempt/create',
+    '/ultra/courses/_101_1/outline/assessment/_7_1/attempt/_8_1']) assert.ok(asks(p), p);
+  for (const p of ['/ultra/courses/_101_1/journal/_9_1', '/ultra/courses/_101_1/assessment/_7_1/overview', '/ultra/courses/_101_1/outline']) assert.ok(!asks(p), p);
+  const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
+  assert.ok(list.includes('features/test-progress.js'));
 });
 
 test('folded, the band is a small pill at the column\'s end, its filters row hidden', () => {
