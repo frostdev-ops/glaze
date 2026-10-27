@@ -9,9 +9,7 @@ const G = require(path.join(ext, 'defaults.js'));
 const site = 'https://bb.school.test', uid = '_42_1';
 const out = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sidebar-test-')));
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_8123_1/attempt/_8124_1';
-// Ultra's pages carry <base href="/ultra/">, which content.js reads as Ultra's; a closed toolbar menu is not drawn.
-const html = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-test-attempt.html'), 'utf8').replace('<head>', '<head><base href="/ultra/">')
-  .replace('</style>', '.bb-editor-toolbar-submenu[hidden] { display: none; }\n</style>');
+const html = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-test-attempt.html'), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
 const check = (v, label, actual) => { fails += !v; console.log(`${v ? 'ok  ' : 'FAIL'} ${label}${actual === undefined ? '' : ' ' + JSON.stringify(actual)}`); };
