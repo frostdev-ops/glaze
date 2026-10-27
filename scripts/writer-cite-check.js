@@ -22,7 +22,7 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 10000) => {
   const start = Date.now(); let last;
   while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(60); }
-  if (debugFrame) console.error(await debugFrame.evaluate(() => ({ pop: document.querySelector('.gz-cite')?.outerHTML.slice(0, 5000), focus: document.activeElement?.outerHTML.slice(0, 200) })));
+  if (debugFrame) console.error(await debugFrame.evaluate(() => ({ pop: document.querySelector('.gz-cite')?.outerHTML.slice(0, 5000), focus: document.activeElement?.outerHTML.slice(0, 200), trace: window.__citeTrace })));
   throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
 };
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
@@ -88,6 +88,14 @@ const HARNESS = `(() => {
     const el = await until(async () => { const h = await p.$('iframe.gz-writer[data-gz-writer-frame="post"]'); return h && await h.evaluate((f) => !f.style.opacity && f.offsetHeight > 100) && h; }, 'post frame shown');
     const fr = await until(() => el.contentFrame(), 'frame document'); debugFrame = fr;
     await until(() => fr.evaluate(() => !!document.querySelector('.ProseMirror') && !!globalThis.GZ_WRITER_CITE?.open), 'editor and citations in the frame');
+    await fr.evaluate(() => {
+      window.__citeTrace = [];
+      for (const type of ['pointerdown', 'pointerup', 'click', 'submit', 'focusin', 'resize', 'scroll']) addEventListener(type, (e) => {
+        const pop = document.querySelector('.gz-cite'), r = pop.getBoundingClientRect();
+        __citeTrace.push({ type, target: e.target?.outerHTML?.slice(0, 180), x: e.clientX, y: e.clientY, top: r.top, bottom: r.bottom, height: innerHeight, scroll: scrollY, hidden: pop.hidden });
+        if (__citeTrace.length > 35) __citeTrace.shift();
+      }, true);
+    });
     fr.page().on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text()}`); });
     const shot = async (target, name) => { fs.mkdirSync(shots, { recursive: true }); await pause(250); const f = path.join(shots, name); await target.screenshot({ path: f }); return f; };
     const saved = {};
@@ -122,6 +130,20 @@ const HARNESS = `(() => {
     await until(() => fr.evaluate(() => !document.querySelector('.gz-cite').hidden && document.activeElement?.classList.contains('gzc-in')), 'popover with the lookup field focused');
     check(await fr.evaluate(() => { const r = document.querySelector('.gz-cite').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight + 1; }), 'the popover fits the frame (the frame grows for it in compose mode)');
     saved.popover = await shot(el, 'cite-popover.png');
+
+    // The host acknowledges frame heights asynchronously. Focusing a taller form must not scroll the frame meanwhile.
+    const jump = await fr.evaluate(async () => {
+      const F = GZ_WRITER_FRAME, say = F.say, heights = [];
+      F.say = (m) => m.type === 'height' ? heights.push(m) : say(m);
+      try {
+        GZ_WRITER_CITE.add({ type: 'article-journal', title: 'A source to review' });
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        return scrollY;
+      } finally { F.say = say; if (heights.length) say(heights.at(-1)); }
+    });
+    check(jump === 0, `a taller citation form keeps the frame still before its height is acknowledged (scrollY ${jump})`);
+    await fr.press('.gz-cite [data-field="title"]', 'Escape');
+    await fr.evaluate(() => GZ_WRITER_CITE.open());
 
     // ---- a DOI ----
     await fr.fill('.gzc-in', 'https://doi.org/10.5555/gz.2026.001');
@@ -178,6 +200,7 @@ const HARNESS = `(() => {
     await settled();
     await fr.click('.gzc-form [data-do="cancel"]');
     check(await fr.evaluate(() => document.querySelectorAll('.gzc-list .gzc-src').length === 2), 'Cancel goes back to the saved sources (two)');
+    await until(() => fr.evaluate(() => !!document.querySelector('.gz-cite .gzc-in')), 'ISBN Cancel restores the lookup row');
     await fr.fill('.gzc-in', '10.5555/missing');
     await fr.click('.gzc-row .sbtn');
     await until(() => fr.evaluate(() => document.querySelector('.gzc-form [data-field="DOI"]')?.value === '10.5555/missing'), 'a missing DOI opens the form with it');

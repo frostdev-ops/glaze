@@ -218,9 +218,17 @@ const HARNESS = `(() => {
     check(cost.measured <= 20, `typing re-measures only the edited block (${cost.measured} measurements for 20 keystrokes)`);
 
     // ---- format checks on the page
+    await load(fr, FX.seeded.mla9().find(([r]) => r === 'heading-order')[1], 'mla9');
+    await pause(400);
+    check(await fr.evaluate(() => !!document.querySelector('.gp-issue[data-rule="heading-order"] .gp-sbtn')), 'a heading-order issue spanning paragraphs keeps its Checks card and Fix');
+    await fr.click('.gp-issue[data-rule="heading-order"] .gp-sbtn');
+    await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.child(0).textContent === 'Alex Rivera'), 'heading order fixed');
+    check(true, 'Fix restores heading order through the shared issues integration');
     for (const fid of ['mla9', 'apa7', 'chicago17']) {
       await load(fr, FX.papers[fid](), fid);
       await pause(400);
+      const issues = await fr.evaluate(() => GZ_WRITER_ISSUES.list().map(({ source, message, rule }) => ({ source, message, rule })));
+      console.log(`${fid} clean issues`, JSON.stringify(issues));
       const clean = await fr.evaluate(() => document.querySelectorAll('.gp-issue').length);
       check(clean === 0, `${fid}: a clean paper has no format issues in Checks`);
       for (const [rule, json] of FX.seeded[fid]()) {
