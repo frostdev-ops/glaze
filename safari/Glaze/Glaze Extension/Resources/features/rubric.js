@@ -173,7 +173,9 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
     await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA); if (!live()) throw Error('stale');
     const reader = GZ_ULTRA.read({ origin: location.origin, signal, live, f: (...args) => GZ_LMSQ.fetch(...args, 0, live), maxPages: 3, maxRequests: 6 });
     const rows = await reader.grades(route.courseId, uid);
-    const matches = rows.filter((g) => g?.column?.contentId === route.contentId && g.courseId === route.courseId && g.userId === uid);
+    // The query is the student's rows alone; Ultra's row for an item never opened carries no userId. Another user's id
+    // still rules a row out.
+    const matches = rows.filter((g) => g?.column?.contentId === route.contentId && g.courseId === route.courseId && (g.userId == null || g.userId === uid));
     if (matches.length !== 1) return null;
     const row = matches[0], columnId = row.columnId;
     if (!/^_\d+_\d+$/.test(columnId)) return null;
