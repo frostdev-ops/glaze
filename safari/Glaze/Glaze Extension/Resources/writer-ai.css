@@ -1,0 +1,36 @@
+/* Glaze Writer's AI in its frame (writer-ai.js): the gray text and its Tab keycap, the AI chip and its menu, and the
+   Feedback panel, as glaze-plans/writer/mockups (A: compose, B: More, C: the paper's side panel) draw them. Motion: the
+   gray text fades in when it first shows (opacity only, never while typing into it); popovers are writer.css's. */
+.gz-ghost { color: var(--gz-ink-faint); pointer-events: none; user-select: none; -webkit-user-select: none; }
+.gz-ghost.gz-in { animation: gz-ghost-in var(--t) ease-out; }
+@keyframes gz-ghost-in { from { opacity: 0; } }
+.gz-k { display: inline-block; margin-left: .35em; font: 600 10px/1 var(--gz-font); padding: 3px 5px; border: 1px solid var(--gz-line-strong); border-bottom-width: 2px; border-radius: 4px; color: var(--gz-ink-muted); vertical-align: 2px; font-style: normal; text-decoration: none; }
+.gz-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* The chip in the bar */
+.gz-ai-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--gz-line-strong); border-radius: 999px; font-size: 12px; line-height: 1.5; color: var(--gz-ink-muted); white-space: nowrap; max-width: 220px; }
+.gz-ai-chip:hover, .gz-ai-chip[aria-expanded="true"] { background: var(--gz-line); color: var(--gz-ink); }
+.gz-ai-chip:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+.gz-ai-name { overflow: hidden; text-overflow: ellipsis; }
+.gz-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; background: var(--gz-ink-faint); }
+.gz-ai-chip[data-ready] .gz-dot { background: var(--gz-ok); }
+.gz-ai-chip[data-busy] .gz-dot { background: var(--gz-accent); }
+.menu .gz-keys { color: var(--gz-ink-faint); }
+.gz-ai-menu, .gz-ai-pop { transform-origin: bottom left; }
+.gz-ai-menu { overflow: auto; }
+
+/* Feedback: compose's popover over the chip, or the paper's side panel tab */
+.gz-ai-pop { width: min(360px, calc(100vw - 6px)); overflow: auto; padding: 12px; }
+.gz-fb { display: grid; gap: 10px; font-size: 13px; line-height: 1.4; color: var(--gz-ink); }
+.gz-fb-run { justify-self: start; padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; background: var(--gz-accent); color: var(--gz-accent-ink); }
+.gz-fb-run:disabled { background: transparent; color: var(--gz-ink-muted); border: 1px solid var(--gz-line-strong); font-weight: 500; cursor: default; }
+.gz-fb-note { margin: 0; color: var(--gz-ink-muted); }
+.gz-fb-item { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: color-mix(in srgb, var(--gz-surface-2) 40%, var(--gz-surface)); }
+.gz-fb-lbl { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--gz-ink-muted); }
+.gz-fb-lbl b { color: var(--gz-ink); font-weight: 600; }
+.gz-fb-status { margin-left: auto; }
+.gz-fb-comment { margin: 0; font-size: 14px; }
+.gz-fb-quote { text-align: start; border-left: 3px solid var(--gz-accent); padding: 2px 0 2px 10px; color: var(--gz-ink-muted); font-size: 13px; }
+.gz-fb-quote:hover { color: var(--gz-ink); }
+.gz-fb-quote:focus-visible, .gz-fb-run:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+.gz-fb-quote.gz-gone { opacity: .5; text-decoration: line-through; cursor: default; }

@@ -1980,7 +1980,7 @@ const loadInto = (m, sender, files, reply) => {
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
 // Settings' top frame reads and writes them ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
 // worker's importScripts calls name (scripts/package-firefox.sh). A task (lib/ai/tasks/<id>.js) goes in this list too.
-const aiFiles = () => importScripts('ai/schema.js', 'ai/request.js', 'ai/stream.js', 'ai/failure.js', 'ai/endpoint.js', 'ai/text.js', 'ai/models.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/providers/device.js', 'ai/providers/apple.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/tasks/syllabus-read.js', 'ai/settings.js', 'ai/broker.js');
+const aiFiles = () => importScripts('ai/schema.js', 'ai/request.js', 'ai/stream.js', 'ai/failure.js', 'ai/endpoint.js', 'ai/text.js', 'ai/models.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/providers/device.js', 'ai/providers/apple.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/tasks/syllabus-read.js', 'ai/tasks/writer-context.js', 'ai/tasks/writer-complete.js', 'ai/tasks/writer-review.js', 'ai/tasks/writer-feedback.js', 'ai/tasks/writer-requirements.js', 'ai/tasks/writer-cite.js', 'ai/tasks/writer-decide.js', 'ai/settings.js', 'ai/broker.js');
 globalThis.addEventListener?.('install', aiFiles);
 const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
 let aiVault = null, aiRevision = 0;
