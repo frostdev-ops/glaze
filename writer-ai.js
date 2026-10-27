@@ -168,10 +168,10 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const trackers = new Set();
   const track = () => { const m = new Mapping(); trackers.add(m); return { m, done: () => trackers.delete(m) }; };
   let score = 0.5, timer = 0, flight = 0, shown = 0;
-  // The gray text's model, readied as the box opens, on focus a minute later, and every WARM.keep while focused, so the first
+  // The gray text's model, readied as the box opens, on focus a minute later, and every 90 s while focused, so the first
   // pause is as quick as the next (the owner, 2026-10-27; lib/ai/broker.js op warm: nothing is asked of the model). After a
   // space and mid-word it reads different instructions (lib/ai/tasks/writer-complete.js), so both are readied.
-  const WARM = { again: 60000, keep: 90000 };
+  const WARM = { again: 60000 };
   let warmedAt = 0, keeping = 0;
   const warmUp = (now = false) => {
     if (!ok('completion') || (!now && Date.now() - warmedAt < WARM.again)) return;
@@ -255,7 +255,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       handleDOMEvents: {
         compositionstart: (v) => { stopFlight(); clear(v); return false; },
         blur: (v) => { stopFlight(); clear(v); clearInterval(keeping); keeping = 0; return false; },
-        focus: () => { warmUp(); clearInterval(keeping); keeping = setInterval(() => warmUp(true), WARM.keep); return false; },
+        focus: () => { warmUp(); clearInterval(keeping); keeping = setInterval(() => warmUp(true), 90000); return false; },
       },
     },
     // A change to the text starts the pause again; any change at all ends the run in flight.
