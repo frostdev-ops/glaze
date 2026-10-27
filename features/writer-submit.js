@@ -17,7 +17,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const submitted = new WeakSet();
   const runs = new WeakMap(), tokens = new WeakMap();
   const attached = new WeakMap(); // box → the file name this page already attached for it
-  let passing = null, running = false, down = null;
+  let passing = null, running = false, active = null, down = null;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   const until = async (fn, ms, every = 100, valid = () => true) => { const end = Date.now() + ms; for (;;) { if (!valid()) return null; const v = fn(); if (v) return v; if (Date.now() >= end) return null; await pause(every); } };
   const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
@@ -144,13 +144,14 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (!L().safeName(name) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
+    const transaction = active = { box, run: m.run, cancelled: false };
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
     const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user: box.context?.paper?.user }))?.ok === true;
     try {
       const d = L().delta({ note: m.note, text: m.text || '' });
       let s = L().advance(L().advance(L().start({ text: !!d }), { step: 'save' }), { step: 'docx' });
-      const here = () => ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
+      const here = () => !transaction.cancelled && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
       if (!here()) return fail('page');
       if (!await permit('claim')) return fail('claimed');
       if (!here()) return fail('page');
@@ -176,13 +177,14 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       pass(b);
       say(box, { type: 'submit:done', run: m.run, ok: true });
       return true;
-    } catch (e) { console.error(e); return fail('page'); } finally { running = false; }
+    } catch (e) { console.error(e); return fail('page'); } finally { running = false; if (active === transaction) active = null; }
   };
 
   // features/writer.js hands over each submit:* message from a box's frame.
   const hear = (box, m, X, ok) => {
     if (!assignment(box)) return;
     if (m.type === 'submit:arm') armed.set(box, ok);
+    else if (m.type === 'submit:cancel' && active?.box === box && active.run === m.run) active.cancelled = true;
     else if (m.type === 'submit:saved') m.request === box.saveRequest && box.saved?.(m.ok === true);
     else if (m.type === 'submit:go' && armed.has(box)) go(box, m, ok);
   };
