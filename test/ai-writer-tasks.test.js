@@ -182,6 +182,17 @@ test('writer.complete keeps open straight single quotes in the caret paragraph c
   }
 });
 
+test('writer.complete after a space keeps a capital word that goes on the sentence: Apple Intelligence\'s replies', () => {
+  // Apple Intelligence (FoundationModels) on the owner's Mac, 2026-10-27, with the task's exact prompt.
+  const before = 'In this assignment I learned what I should do with assignments, how to submit them and ';
+  const inp = C.task.input({ before });
+  assert.equal(C.finish('what I should do with assignments, how to submit them and I learned three things.', inp), 'I learned three things.');
+  assert.equal(C.finish('and I learned three things.', inp), 'I learned three things.');
+  assert.equal(C.finish('and Morrison returns to the river.', C.task.input({ before: 'The novel ends with the clearing and ' })), 'Morrison returns to the river.', 'a name');
+  assert.equal(C.finish('and Then it ended.', C.task.input({ before: 'The novel ends with the clearing and ' })), null, 'an opener still starts a new sentence');
+  assert.equal(C.finish('andThe end.', C.task.input({ before: 'The novel ends with the clearing and' })), null, 'a capital glued to the word, with no space');
+});
+
 test('writer.complete runs only where the gray text may show, and never on a test', () => {
   const ok = (before, after = '', extra = {}) => C.task.input({ before, after, ...extra }) !== null;
   assert.equal(ok(BEFORE), true);
