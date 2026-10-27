@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require.resolve('../features/writer-quote.js'), 'utf8');
-const harness = () => {
+const harness = ({ postInForm = false } = {}) => {
   const listeners = new Map(), frames = new Map(); let seq = 0, enabled = true;
   const add = (name, fn) => { const f = listeners.get(name) || new Set(); f.add(fn); listeners.set(name, f); };
   const remove = (name, fn) => listeners.get(name)?.delete(fn);
-  const body = { closest: (s) => s.startsWith('[message-id]') ? { getAttribute: () => '_201_1' } : s === '.comment-and-reply' ? { contains: () => false } : null };
+  const body = { closest: (s) => s.startsWith('[message-id]') ? { getAttribute: () => '_201_1' } : s === '.comment-and-reply' ? { contains: () => false } : postInForm && s.includes('form.text-editor-form') ? {} : null };
   const node = { nodeType: 1, closest: () => body };
   const sandbox = {
     GZ_CTX: { on: () => true, settings: () => ({ enabled: true, enhance: { writer: enabled } }) },
@@ -27,6 +27,13 @@ const harness = () => {
 
 test('a selection never quotes into an unrelated open reply', () => {
   const h = harness(); h.api.arm(h.box()); assert.doesNotThrow(h.select);
+});
+
+test('a read-only post inside Ultra\'s form can be quoted into its own reply', () => {
+  const h = harness({ postInForm: true }), box = h.box();
+  box.context.post.id = '_201_1';
+  h.api.arm(box);
+  assert.throws(h.select, /Quote offered to a different reply/, 'selection reaches the Quote UI construction');
 });
 
 test('the final reply disarms all quote listeners and queued selection work', () => {
