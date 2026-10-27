@@ -275,6 +275,16 @@ test('writer.feedback: the rubric level the draft reaches, only one its criterio
 
 });
 
+test('writer.feedback refuses a level name shared by different cells of its criterion', async () => {
+  const rubric = { levels: [{ id: 'a', label: 'Proficient' }, { id: 'b', label: 'proficient' }], criteria: [
+    { id: 'thesis', label: 'Thesis', points: 10, cells: [{ level: 'a', detail: 'Clear.', value: 9 }, { level: 'b', detail: 'Mostly clear.', value: 7 }] },
+  ] };
+  const { output } = await go(FB.task, { text: 'Memory is a debt.', context: { assignment: { rubric } } }, { json: { criteria: [
+    { criterion: 'thesis', status: 'met', comment: 'Your claim is clear.', quotes: [], level: 'Proficient' },
+  ] } });
+  assert.equal(output.criteria[0].level, null, 'the reply cannot identify which cell or points it means');
+});
+
 test('writer.feedback: without a rubric, a requirement must be in the instructions; a comment offering wording loses it', async () => {
   const ctx = { kind: 'assignment', assignment: { title: 'Essay 2', instructions: 'Write 1,000 words on memory in Beloved. Use at least two sources.' } };
   const { output } = await go(FB.task, { text: 'Memory is a debt.', context: ctx }, { json: { criteria: [
