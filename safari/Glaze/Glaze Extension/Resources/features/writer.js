@@ -198,13 +198,14 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   let told = '';
   const attempt = () => {
     const a = U().attemptAt(location.pathname);
-    if (!a) return '';
+    if (!a) { told = ''; return ''; }
     let kind = '';
     try { kind = U().attemptKind(X.bookFor(a.course)?.results, a.content); } catch { /* no gradebook yet */ }
+    if (document.querySelector('bb-attempt-canvas')) kind = 'test';
     const key = `${location.pathname}|${kind}`;
-    if (kind && window.top === window && told !== key) {
+    if (window.top === window && told !== key) {
       told = key;
-      Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:attempt-kind', kind })).catch(() => {});
+      Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:attempt-kind', kind: kind || 'unknown' })).catch(() => {});
     }
     return kind;
   };
