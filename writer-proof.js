@@ -177,16 +177,19 @@
       const k = `${i.rule}\u0000${i.text}\u0000${i.from}`;
       if (i.source !== 'harper' || i.sure || !P.ASK.has(i.rule) || !i.suggestions.length || asked.has(k) || i.from < from || i.to > to + 64) continue;
       if (!P.within(P.key.getState(view.state).typed, i.from, i.to) || !P.finished(view.state, i.from, i.to)) continue;
+      if (view.composing) continue;
+      if (asked.size >= 500) asked.delete(asked.values().next().value);
       asked.add(k);
       rule(i);
     }
   };
   const rule = async (i) => {
+    const version = ver(), contextAtAsk = F.context();
     const $from = view.state.doc.resolve(i.from), start = $from.start();
     let said = null;
-    try { said = await P.decide({ text: P.blockText($from.parent), from: i.from - start, to: i.to - start, suggestions: i.suggestions.slice(), context: F.context() }); } catch (e) { console.error(e); }
+    try { said = await P.decide({ text: P.blockText($from.parent), from: i.from - start, to: i.to - start, suggestions: i.suggestions.slice(), context: contextAtAsk }); } catch (e) { console.error(e); }
     const v = P.verdict(said, i.suggestions.length), now = view && I.list().find((x) => x.id === i.id);
-    if (!v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
+    if (stopped || view.composing || ver() !== version || F.context() !== contextAtAsk || !v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
     if (v.verdict === 'apply') { const made = P.autofix(view, now, now.suggestions[v.choice]); if (made) showFix(made); return; }
     // 'suggest': the choice first on the card.
     const list = now.suggestions.slice(), [pick] = list.splice(v.choice, 1), bare = (x) => ({ ...x, id: x.id.replace(/^harper:/, '') });
