@@ -76,6 +76,14 @@ test('export: the opening\'s explicit no-indent lines keep it; centred lines get
   assert.match(body, /<w:pPr><w:ind w:firstLine="0"\/><w:jc w:val="center"\/><\/w:pPr><w:r><w:t xml:space="preserve">What the River Keeps/);
 });
 
+test('export: footnote hyperlinks have relationships in the footnotes part', () => {
+  const d = S.paper.nodes.doc.create(null, S.paper.nodes.paragraph.create(null, S.paper.nodes.footnote_ref.create({ content: '<a href="https://example.com/note">source</a>' })));
+  const out = X.exportDocx(d, { date });
+  const id = /<w:hyperlink r:id="([^"]+)"/.exec(out.parts['word/footnotes.xml'])[1];
+  assert.ok(out.parts['word/_rels/footnotes.xml.rels']?.includes(`Id="${id}"`));
+  assert.match(out.parts['word/_rels/footnotes.xml.rels'], /Target="https:\/\/example.com\/note" TargetMode="External"/);
+});
+
 test('doctext reads each export back to the paper\'s text, after its running header', async () => {
   for (const [id, o, header] of [['mla9', mla(), 'Rivera 1\n\n'], ['chicago17', chicago(), '1\n\n']]) {
     const text = await D.docx(o.bytes), want = S.text(S.paper.nodeFromJSON(FX.papers[id]())).text.split('\n').filter((l) => l.trim()).join('\n');
