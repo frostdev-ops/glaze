@@ -127,6 +127,7 @@
     if (quiet || c.docChanged === false) return;
     const delta = root.dataset.mode === 'compose' && ed?.view ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null;
     say({ type: 'change', html: c.html, text: c.text, words: c.words, delta });
+    emit('change', c);
   };
   const ON = {
     init: (m) => {
@@ -141,14 +142,15 @@
       let lost;
       try { lost = GZ_WRITER_SCHEMA.loses(root.dataset.mode === 'paper' ? GZ_WRITER_SCHEMA.paper : GZ_WRITER_SCHEMA.compose, html); } catch { lost = ['error']; }
       if (lost.length) { refused = true; say({ type: 'native', reason: lost.join(' ') }); return; }
-      ed = GZ_WRITER_EDITOR.create({ mount: $('body'), mode: root.dataset.mode, html, placeholder: typeof m.placeholder === 'string' ? m.placeholder : '', onChange, onSelection,
+      ed = GZ_WRITER_EDITOR.create({ mount: $('body'), mode: root.dataset.mode, html, placeholder: typeof m.placeholder === 'string' ? m.placeholder : '', onChange, onSelection, plugins: plugins.splice(0),
         keys: { 'Mod-Enter': () => { say({ type: 'send' }); return true; } } });
       words = ed.words();
       lang(m.locale);
       height();
+      emit('ready', ed, m);
     },
-    look: (m) => look(m.look),
-    context: (m) => { context = m.context && typeof m.context === 'object' ? m.context : {}; },
+    look: (m) => { look(m.look); emit('look', m.look); },
+    context: (m) => { context = m.context && typeof m.context === 'object' ? m.context : {}; emit('context', context); },
     focus: () => ed?.focus(),
     html: (m) => {
       if (!ed || typeof m.html !== 'string') return;
@@ -158,8 +160,26 @@
       count();
     },
   };
-  // What later parts of the frame (proofing, targets, AI) build on.
-  globalThis.GZ_WRITER_FRAME = { editor: () => ed, context: () => context, say };
+  // What later parts of the frame (proofing, targets, AI) build on: each is its own script after this one in writer.html.
+  // on(event, fn): 'ready' (editor, init), 'change' (onChange's report), 'context' (context), 'look' (look); handle(type, fn)
+  // takes a page → frame message type this file doesn't; plugin(p) adds a ProseMirror plugin (before the editor exists, it
+  // goes in at create); slot(name) is a bottom-bar or toolbar slot; item(label, fn) adds a ⋯ menu entry.
+  const hooks = { ready: [], change: [], context: [], look: [] }, plugins = [];
+  const emit = (ev, ...a) => { for (const fn of hooks[ev]) try { fn(...a); } catch (e) { console.error(e); } };
+  globalThis.GZ_WRITER_FRAME = {
+    editor: () => ed, context: () => context, say, t, mode: () => root.dataset.mode, kind: () => root.dataset.kind,
+    on: (ev, fn) => { if (hooks[ev] && typeof fn === 'function') hooks[ev].push(fn); },
+    handle: (type, fn) => { if (typeof type === 'string' && !Object.hasOwn(ON, type) && typeof fn === 'function') ON[type] = fn; },
+    plugin: (p) => { if (ed) ed.addPlugins([p]); else plugins.push(p); },
+    slot: (name) => document.querySelector(`.slot[data-slot="${CSS.escape(name)}"]`),
+    item: (text, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'menuitem'); b.textContent = text;
+      b.addEventListener('click', () => { shut(); fn(); });
+      menu.querySelector('[data-do="native"]').before(b);
+      return b;
+    },
+  };
 
   // One box per frame, and only with the one-use pass the page's Glaze got from the worker for this tab before it opened
   // the frame: a site that frames this page itself can't get one, since web pages can't message the worker.
