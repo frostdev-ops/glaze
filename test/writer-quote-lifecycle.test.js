@@ -13,7 +13,7 @@ const harness = ({ postInForm = false } = {}) => {
     GZ_CTX: { on: () => true, settings: () => ({ enabled: true, enhance: { writer: enabled } }) },
     location: { pathname: '/ultra/courses/_101_1/discussion/_9_1' },
     document: { addEventListener: add, removeEventListener: remove,
-      createElement: () => { throw Error('Quote offered to a different reply'); } },
+      createElement: () => { throw Error('Quote UI constructed'); } },
     addEventListener: add, removeEventListener: remove,
     requestAnimationFrame: (fn) => { frames.set(++seq, fn); return seq; }, cancelAnimationFrame: (id) => frames.delete(id),
     getSelection: () => ({ anchorNode: node, focusNode: node, rangeCount: 1, isCollapsed: false, toString: () => 'A classmate post', getRangeAt: () => ({}) }),
@@ -33,7 +33,7 @@ test('a read-only post inside Ultra\'s form can be quoted into its own reply', (
   const h = harness({ postInForm: true }), box = h.box();
   box.context.post.id = '_201_1';
   h.api.arm(box);
-  assert.throws(h.select, /Quote offered to a different reply/, 'selection reaches the Quote UI construction');
+  assert.throws(h.select, /Quote UI constructed/, 'selection reaches the Quote UI construction');
 });
 
 test('the final reply disarms all quote listeners and queued selection work', () => {

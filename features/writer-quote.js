@@ -30,7 +30,7 @@ var GZ_WRITER_QUOTE = globalThis.GZ_WRITER_QUOTE || (() => {
   // The read-only post body a node is in, and the post's message id, or null (an editor, Glaze's own, no id).
   const postOf = (n) => {
     const body = elOf(n)?.closest?.(BODY);
-    if (!body || body.closest('.reply-input-wrapper, [data-gz-writer], form.text-editor-form')) return null;
+    if (!body || body.closest('.reply-input-wrapper, [data-gz-writer]')) return null;
     const post = body.closest('[message-id]:not([message-id=""])');
     return post ? { body, id: post.getAttribute('message-id') } : null;
   };
