@@ -84,6 +84,14 @@ test('export: footnote hyperlinks have relationships in the footnotes part', () 
   assert.match(out.parts['word/_rels/footnotes.xml.rels'], /Target="https:\/\/example.com\/note" TargetMode="External"/);
 });
 
+test('export: pictures keep their intrinsic aspect ratio', () => {
+  const src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const d = S.parse(S.paper, `<p><img src="${src}" width="320"></p>`);
+  const part = X.exportDocx(d, { date }).parts['word/document.xml'];
+  const [, w, h] = /<wp:extent cx="(\d+)" cy="(\d+)"/.exec(part);
+  assert.equal(w, h, 'a square PNG must remain square in Word');
+});
+
 test('doctext reads each export back to the paper\'s text, after its running header', async () => {
   for (const [id, o, header] of [['mla9', mla(), 'Rivera 1\n\n'], ['chicago17', chicago(), '1\n\n']]) {
     const text = await D.docx(o.bytes), want = S.text(S.paper.nodeFromJSON(FX.papers[id]())).text.split('\n').filter((l) => l.trim()).join('\n');
