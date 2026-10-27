@@ -75,7 +75,7 @@ Throw errors with a `status` or a `category`; `providers.run` turns them into a 
 ```js
 { id: 'syllabus.read', version: 1, caps: { images?, tools? },
   input(raw) → input | null, build(input, { caps, text, fence }) → request (no schema),
-  output: JSON Schema (object root) | 'text', check(output, input, { truncated }) → output | null,
+  output: JSON Schema (object root) | 'text', check(output, input, { truncated, caps }) → output | null,
   tools?: ['name'], limits?: { steps, ms, tokens, maxTokens }, stream?: false,
   rate?: { perMinute?: 1..120, supersede?: true },
   split?(input, { budget, text }) → [input], merge([output], input) → output }
