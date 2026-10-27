@@ -50,9 +50,12 @@ test('section headings are pills', () => {
     'Question N': chain(...QUESTION('eitherOr'), 'form', 'div.question-header.has-question-title.is-read-only', 'h3.question-label'),
     'Additional content': chain(...CANVAS, 'div.freeform-response', 'span.additional-content-label'),
     'Details & Information': chain(...FLEX, 'div.panel-content-info.assessment-summary', 'div.row.collapse', 'div.small-10.columns', 'h2'),
+    'Grading': chain(...FLEX, 'div.panel-content-info.assessment-summary', 'div.row', 'span.settings-label'),
     'Submission (assignment attempt)': chain(...ROUTED, 'bb-assignment-attempt-authoring-panel.react-container', 'div.makeStylescontainer-0-2-24', 'div.makeStylesauthoring-0-2-26', 'div.makeStylessubmission-0-2-28', 'h2.MuiTypography-root.MuiTypography-h2'),
   };
   assert.deepEqual(surfaced(pills), []);
+  // A date's or the attempts' label inside the features list is a field label, not a section.
+  assert.equal(radius(chain(...FLEX, 'div.panel-content-info.assessment-summary', 'ul.row.assessment-features', 'li', 'div.js-date-box', 'span.settings-label'))[0], '(none)');
   const square = Object.entries(pills).map(([n, el]) => [n, radius(el)[0]]).filter(([, r]) => r !== '999px');
   assert.deepEqual(square, []);
 });

@@ -1012,7 +1012,7 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 #site-wrap .discussion-board .discussion-sorting-wrapper { margin-block: 1rem; }
 #site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
   .activity-stream .activity-group-title, .base-profile .profile-content h2,
-  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2),
+  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2, .assessment-summary div.row > .settings-label),
   bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
 #site-wrap .discussion-board :is(.discussion-full-panel-detail-header,
   discussion-refresh-button button, discussion-follow-button button, bb-discussion-sorting-options button, discussion-reply-button button) {
@@ -1024,9 +1024,11 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 /* Section-heading pills retain the native heading text and scale with the active Look. */
 #site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
   .activity-stream .activity-group-title, .base-profile .profile-content h2,
-  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2),
+  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2, .assessment-summary div.row > .settings-label),
   bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
 #site-wrap .discussion-board .discussion-full-panel-detail-header { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
+/* A test's Grading and Description labels head their own rows: the pill on its own line above the value. */
+#site-wrap .assessment-attempt-panel .assessment-summary div.row > .settings-label { display: flex; inline-size: fit-content; margin-block: 0.75rem 0.5rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button { min-width: 2.25rem; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button:is(:hover, :focus-visible, [aria-pressed="true"]) {
   background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border-color: var(--gz-accent) !important;
