@@ -159,3 +159,14 @@ test('reads are bounded: a failed replies read leaves the rest, and the request 
   assert.equal(asked.length, 1 + C.LIMIT.replies);
   await assert.rejects(C.messages(fake(new Set([base])).r, '_101_1', '_1101_1'), /HTTP 500/, 'no top-level list: the caller leaves the thread empty');
 });
+
+test('an incomplete discussion list cannot establish a unique forum title', async () => {
+  const list = await C.discussions({ list: async () => ({ items: LIST.results, complete: false }) }, '_101_1');
+  assert.equal(C.discussionOf(list, { content: '_12_1', titles: ['Week 7: Ghosts'] }), null);
+});
+
+test('kept reply ancestors still obey the total thread text budget', () => {
+  const long = Array.from({ length: 20 }, (_, i) => ({ ...ALL[0], id: `_${900 + i}_1`, parentId: i ? `_${899 + i}_1` : null, body: { rawText: 'x'.repeat(4000) } }));
+  const thread = C.threadOf(long, { text, keep: ['_919_1'] });
+  assert.ok(thread.reduce((n, x) => n + x.text.length, 0) <= C.LIMIT.chars);
+});
