@@ -95,13 +95,44 @@ test('writer.complete never starts a new sentence or paragraph, never repeats, n
   assert.equal(said('it arrives (Morrison 42).'), null, 'a citation');
   assert.equal(said('it arrives, as Smith et al. argue.'), null);
   assert.equal(said(`it ${Array.from({ length: 26 }, (_, i) => `w${i}`).join(' ')}.`), null, 'more than 25 words');
-  assert.equal(said('arrives uninvited.'), null, 'neither the caret\'s word nor a space first: where it joins is unknown');
+  assert.equal(said('arrives uninvited.'), ' arrives uninvited.', 'a plain lower-case continuation of a whole word');
+  assert.equal(said('its arrival.'), null, 'a variant of the caret\'s word: where it joins is unknown');
   assert.equal(said('it'), null, 'nothing after the word');
   assert.equal(said('it arrives uninvited and stays'), ' arrives uninvited and stays', 'a finish without a full stop');
   assert.equal(said('it arrives uninvited and sta', { truncated: true }), ' arrives uninvited and', 'cut short: the last word may be cut too');
   assert.equal(said('it arrives, I think, unasked.'), ' arrives, I think, unasked.', 'I is not an opener');
   const open = C.task.input({ before: 'Baldwin calls history "the price of the' });
   assert.equal(open, null, 'completion cannot invent the rest of an unfinished quotation');
+});
+
+test('writer.complete takes a small model\'s reply that repeats the student\'s last words, or the whole sentence', async () => {
+  const before = 'Three things I learned in this course are how to';
+  assert.equal((await go(C.task, { before }, { text: 'how to use the discussion board.' })).output, ' use the discussion board.');
+  assert.equal((await go(C.task, { before }, { text: 'Three things I learned in this course are how to use the discussion board.' })).output, ' use the discussion board.');
+  assert.equal((await go(C.task, { before }, { text: 'use the discussion board.' })).output, ' use the discussion board.', 'or just goes on');
+  assert.equal((await go(C.task, { before: `${before} ` }, { text: 'how to use the discussion board.' })).output, 'use the discussion board.', 'after a space');
+  const inp = C.task.input({ before });
+  assert.equal(C.finish('how to', inp), null, 'only the student\'s words again');
+  assert.equal(C.finish('learned in this course are how to.', inp), null, 'nothing new after the repeat');
+});
+
+test('writer.complete sends an on-device model only the caret\'s end of the text and a brief context', async () => {
+  const long = `${'The river keeps what the town would rather forget, and the clearing keeps the rest. '.repeat(60)}Three things I learned are how to`;
+  const ctx = { kind: 'assignment', course: { id: '_1_1', name: 'ENGL 2110' }, assignment: { title: 'Essay 2', instructions: `Write about memory. ${'Detail. '.repeat(400)}`, rubric: 'Thesis: 10 points' }, style: 'mla9' };
+  const run = async (caps) => {
+    const cfg = { replies: ['use the board.'], seen: [], caps };
+    await T.run(C.task, { before: long, mode: 'paper', kind: 'assignment', context: ctx }, { provider: 'mock', cfg, emit() {} });
+    return parts(cfg.seen[0]).data;
+  };
+  const full = await run(undefined), small = await run({ local: true }), narrow = await run({ context: { window: 6144, inputLimit: 5530 } });
+  for (const data of [small, narrow]) {
+    assert.ok(data.length < 2600, `brief: ${data.length} characters`);
+    assert.match(data, /Three things I learned are how to/);
+    assert.match(data, /Essay 2/);
+    assert.doesNotMatch(data, /Thesis: 10 points/, 'no rubric for the gray text on a small model');
+  }
+  assert.ok(full.length > 4000, 'a large model keeps the whole context');
+  assert.match(full, /Thesis: 10 points/);
 });
 
 test('writer.complete runs only where the gray text may show, and never on a test', () => {
