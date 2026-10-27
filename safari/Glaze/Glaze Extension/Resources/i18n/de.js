@@ -1,6 +1,7 @@
 // German for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).de = {
+  "Papers": "Arbeiten",
   "Mark all as read": "Alle als gelesen markieren",
   "Marking…": "Wird markiert…",
   "All announcements marked as read": "Alle Ankündigungen als gelesen markiert",

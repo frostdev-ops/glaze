@@ -12,7 +12,7 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-paper-regression-'));
     ext = env.staged(root, []);
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(ctx);
     const worker = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
     const id = new URL(worker.url()).host;

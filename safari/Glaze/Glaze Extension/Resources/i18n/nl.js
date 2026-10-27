@@ -1,6 +1,7 @@
 // Dutch for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).nl = {
+  "Papers": "Werkstukken",
   "Mark all as read": "Alles als gelezen markeren",
   "Marking…": "Bezig met markeren…",
   "All announcements marked as read": "Alle aankondigingen gemarkeerd als gelezen",
