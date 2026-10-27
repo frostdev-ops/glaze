@@ -286,6 +286,26 @@ test('On this device says Apple Intelligence is off when neither model can run, 
   assert.equal((await B.status({ feature: 'syllabus' }, here())).provider, 'apple', 'Apple first whenever it can run');
 });
 
+test('a run on On this device that Apple Intelligence answers comes back, not as changed', async () => {
+  // Live on Safari, 2026-10-27: every gray-text run on the merged choice ended 'changed' (aiCalls), its answers dropped.
+  browserModel = { state: 'unavailable', reason: 'browser' };
+  native = async (m) => (m.type === 'ai.status' ? { ok: true, state: 'ready', context: 8192 } : ok('{"text":"hello"}'));
+  const vault = new Map();
+  const env = { who: '4', allowed: Promise.resolve(true), enabled: async () => true,
+    settings: async () => ({ on: true, use: 'device', features: { syllabus: true } }),
+    vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
+    reach: async () => true, fetch: async () => { throw new Error('nothing is fetched'); },
+    task: async () => T.define({ id: 'example.echo2', version: 1, input: (raw) => raw, build: (input, { text }) => text.request({ system: 'Repeat.', data: [{ label: 'text', text: input.text }] }),
+      output: S.obj({ text: S.str('The text.') }, ['text']), check: (o) => o }) };
+  const posted = [], on = [];
+  B.connect({ postMessage: (m) => posted.push(m), disconnect() {}, onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener() {} } }, env);
+  on.forEach((f) => f({ id: 1, op: 'run', feature: 'syllabus', task: 'example.echo2', input: { text: 'hello' } }));
+  for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+  const end = posted.find((m) => m.id === 1 && m.type === 'end');
+  assert.ok(end, JSON.stringify(posted.find((m) => m.id === 1 && m.type === 'error')));
+  assert.equal(end.meta.provider, 'apple');
+});
+
 test('On this device is the browser\'s model outside Safari, and Apple is never asked', () => {
   const out = execFileSync(process.execPath, ['-e', `
     globalThis.chrome = { runtime: { getURL: () => 'chrome-extension://abc/' } };
