@@ -156,6 +156,37 @@ const run = async ({ context, mock, shots, errors, ai }) => {
     return { el, fr };
   };
   const latest = (kind, after) => until(() => mock.received.slice(after).find((r) => r.kind === kind), `Blackboard received the ${kind}`, 20000);
+  // The keys in a paper, as a student types: gray text where they pause after a space, Tab takes it, Tab then writes a
+  // tab, Escape then Tab leaves; and the Outline lists the paper. The paper is put back as it was.
+  const keysIn = async (fr, where) => {
+    const before = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON());
+    const para = () => fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; return v.state.selection.$head.parent.textContent; });
+    const inEditor = () => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.hasFocus());
+    await fr.evaluate(() => {
+      const v = GZ_WRITER_PAPER.current().editor.view, d = v.state.doc;
+      let pos = 0;
+      for (let i = 0; i < 6; i++) pos += d.child(i).nodeSize;
+      v.focus();
+      v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(d, pos - 1)));
+    });
+    const kb = fr.page().keyboard;
+    await kb.press('Enter');
+    await kb.type('The river keeps what the town ', { delay: 30 });
+    const ghost = await until(() => fr.evaluate(() => document.querySelector('.gz-ghost')?.firstChild?.textContent || ''), `${where}: gray text after a space`, 8000).catch(() => '');
+    check(ghost === 'and what the town remembers.', `${where}: gray text shows where the student pauses after a space (${JSON.stringify(ghost)})`);
+    await kb.press('Tab');
+    check(await para() === 'The river keeps what the town and what the town remembers.' && !await fr.evaluate(() => !!document.querySelector('.gz-ghost')) && await inEditor(), `${where}: Tab takes the gray text and stays in the paper`);
+    await kb.press('Tab');
+    check((await para()).endsWith('remembers.\t') && await inEditor(), `${where}: with no gray text, Tab writes a tab`);
+    await kb.press('Escape');
+    await kb.press('Tab');
+    check(!await inEditor(), `${where}: Escape then Tab leaves the paper`);
+    await fr.click('#gp-tab-outline');
+    const outline = await fr.evaluate(() => [...document.querySelectorAll('.gp-outline button')].map((b) => [b.dataset.kind, b.textContent]));
+    check(outline.length >= 2 && outline[0][0] === 'title' && outline.at(-1).join() === 'list,Works Cited', `${where}: the Outline lists the title and Works Cited (${outline.map((x) => x[1]).join(' | ')})`);
+    await fr.evaluate((doc) => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON(doc).content)); }, before);
+    await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved'), `${where}: paper saved as it was`, 20000);
+  };
   const REPLY = 'Keeping score fits the clearing as well, since Baby Suggs asks the town to remember what it lost.';
   const POST = 'The river carries what the town will not say aloud, and the clearing is where that memory can finally be spoken.';
 
@@ -277,6 +308,8 @@ const run = async ({ context, mock, shots, errors, ai }) => {
   const fb = '#gp-feedback .gz-fb';
   const ready = await until(() => fr.evaluate((fb) => document.querySelector(`${fb} .gz-fb-run`)?.textContent === 'Get feedback', fb), 'Feedback ready', 10000).catch(() => false);
   check(ready, `with AI set up, Feedback offers to run on the assignment (it said: ${squash(await fr.$eval(fb, (e) => e.textContent).catch(() => ''))})`);
+  await keysIn(fr, 'the attempt');
+  await fr.click('#gp-tab-feedback');
   await fr.click(`${fb} .gz-fb-run`);
   const cards = await until(() => fr.evaluate((fb) => { const c = document.querySelectorAll(`${fb} .gz-fb-item`); return c.length && [...c].map((x) => x.querySelector('b')?.textContent || ''); }, fb), 'Feedback from the stand-in model', 20000);
   check(cards.join('|') === 'Criterion one|Criterion two' && await fr.evaluate((fb) => document.querySelectorAll(`${fb} .gz-fb-quote`).length > 0, fb), `Feedback came back for both rubric criteria, with passages of the draft (${cards.join(' | ')})`);
@@ -331,6 +364,7 @@ const run = async ({ context, mock, shots, errors, ai }) => {
   const course = await until(() => p.frames().find((f) => new URL(f.url()).pathname === M.ROUTES.attempt), 'course-tab attempt');
   const framed = await paper(course);
   check(await until(() => framed.evaluate(() => GZ_WRITER_AI.allowed('completion') && GZ_WRITER_AI.allowed('writing')), 'course-tab AI ready'), 'a course-tab assignment admits both completion and writing through the real worker');
+  await keysIn(framed, 'a course tab');
   await framed.click('#gp-tab-feedback');
   await framed.click(`${fb} .gz-fb-run`);
   const framedCards = await until(() => framed.evaluate((fb) => document.querySelectorAll(`${fb} .gz-fb-item`).length, fb), 'course-tab Feedback');
