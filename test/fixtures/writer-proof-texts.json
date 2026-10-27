@@ -1,0 +1,19 @@
+{
+  "_note": "Synthetic student writing for Glaze Writer's proofing (2026-10-27): what Harper 3.0.0 flags in each, and which of those autocorrect may apply (sure). Clean texts must give nothing.",
+  "texts": [
+    { "text": "I agree that the river works as a kind of archive, but Morrison is less interested in nostalgia than in what the town chooses to forget.", "expect": [] },
+    { "text": "Baldwin calls this the price of the ticket, and the clearing seems to collect that price.", "expect": [] },
+    { "text": "Morrison is definately less interested in nostalgia than in what teh town chooses to forget.", "expect": [
+      { "problem": "definately", "kind": "spelling", "rule": "Spelling", "sure": false, "first": "definitely" },
+      { "problem": "teh", "kind": "spelling", "rule": "Typo", "sure": true, "first": "the" } ] },
+    { "text": "this is is a test and i think it works.", "expect": [
+      { "problem": "this", "kind": "grammar", "rule": "Capitalization", "sure": true, "first": "This" },
+      { "problem": "is is", "kind": "grammar", "rule": "Repetition", "sure": true, "first": "is" },
+      { "problem": "i", "kind": "grammar", "rule": "Capitalization", "sure": true, "first": "I" } ] },
+    { "text": "Their going to the river tomorrow.", "expect": [
+      { "problem": "Their", "kind": "grammar", "rule": "Grammar", "sure": false, "first": "They're" } ] },
+    { "text": "When Sethe returns to the clearing, the memory is not something she owns.", "expect": [
+      { "problem": "Sethe", "kind": "spelling", "rule": "Spelling", "sure": false, "first": "Seth" } ] },
+    { "text": "Visit www.example.com or email teh@school.edu for the readme.", "expect": [] }
+  ]
+}
