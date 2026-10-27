@@ -244,3 +244,18 @@ test('a reply subject scopes its coordinated word and source requirements', () =
     ['Your replies must be at least 100 words and cite one source.', { reply: { minWords: 100, sources: 1 } }],
   ]);
 });
+
+test('alternatives, per-part counts and optional counts stay unknown', () => {
+  cases([
+    ['No need to write at least 250 words.', {}],
+    ['You can cite 2 sources.', {}],
+    ['Part 1. Write 200 words. Part 2. Write 200 words.', {}],
+    ['1. Write 200 words.\n2. Write 200 words.', {}],
+    ['At least 300 words in each of your two posts.', {}],
+    ['The article contains a minimum of 300 words.', {}],
+    ['Write at least 250 words excluding quotes and references.', {}],
+    ['Write 250-300 words or 2 pages.', {}],
+    ['Your response may not exceed 300 words.', { maxWords: 300 }],
+    ['1. Write at least 250 words.\n2. Cite 2 sources.', { minWords: 250, sources: 2 }],
+  ]);
+});
