@@ -21,8 +21,10 @@ const load = () => {
     addEventListener: (type, f, o) => listeners.push({ type, f, capture: o === true || !!o?.capture }),
     removeEventListener: (type, f) => { const i = listeners.findIndex((l) => l.type === type && l.f === f); if (i >= 0) listeners.splice(i, 1); },
   });
-  const frames = [];
-  const c = { document: doc, requestAnimationFrame: (f) => { frames.push(f); return frames.length; }, GZ_CTX: { site: 'ultra', on: () => c.glazeOn }, glazeOn: true };
+  const frames = new Map();
+  let frameId = 0;
+  const flush = () => { const pending = [...frames.values()]; frames.clear(); for (const f of pending) f(); };
+  const c = { document: doc, requestAnimationFrame: (f) => { frames.set(++frameId, f); return frameId; }, cancelAnimationFrame: (id) => frames.delete(id), GZ_CTX: { site: 'ultra', on: () => c.glazeOn }, glazeOn: true };
   c.globalThis = c;
   vm.createContext(c);
   const ui = vm.runInContext(read('features/editor-menu.js'), c);
@@ -37,13 +39,13 @@ const load = () => {
   menu.hidden = true;
   doc.body.append(el('div', 'bb-editor-toolbar no-select', el('div', 'bb-editor-toolbar-button-container bb-editor-toolbar-dropdown-container', button, menu)));
   // A click as the DOM delivers it: the document's listeners, then (bubbling) Ultra's own on the button, which opens it.
-  const click = (target) => {
+  const click = (target, flush = true) => {
     for (const l of listeners.filter((x) => x.type === 'click')) l.f({ type: 'click', target });
     const open = button.getAttribute('aria-expanded') !== 'true';
     button.setAttribute('aria-expanded', String(open)); menu.hidden = !open;
-    for (const f of frames.splice(0)) f();
+    if (flush) { const pending = [...frames.values()]; frames.clear(); for (const f of pending) f(); }
   };
-  return { c, ui, button, icon, menu, scrolled, listeners, click };
+  return { c, ui, button, icon, menu, scrolled, listeners, click, flush };
 };
 
 test('an opened toolbar menu is scrolled into view, nearest edge only; a closing click scrolls nothing', () => {
@@ -80,4 +82,16 @@ test('the menu feature loads on Ultra pages with an editor, and the worker may l
   for (const p of ['/ultra/courses/_101_1/outline', '/ultra/stream', '/ultra/courses/_101_1/assessment/_7_1/overview']) assert.ok(!asks(p), p);
   const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
   assert.ok(list.includes('features/editor-menu.js'));
+});
+
+
+test('queued menu work stops when the route or Glaze is left', () => {
+  for (const stop of [({ ui }) => ui.off(), ({ c }) => { c.glazeOn = false; }]) {
+    const fixture = load();
+    fixture.ui.sync();
+    fixture.click(fixture.icon, false);
+    stop(fixture);
+    fixture.flush();
+    assert.equal(fixture.scrolled.length, 0, 'no scrolling after teardown or disable');
+  }
 });
