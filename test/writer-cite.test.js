@@ -269,9 +269,9 @@ test('APA: an anonymous standalone webpage has an italicized title in text', () 
   assert.equal(f.inText(), '(<i>Guide to Research</i>, 2020)');
 });
 
-test('APA: print newspaper page ranges take pp., journal page ranges do not', () => {
+test('APA 7: print newspaper page ranges omit p. and pp.', () => {
   const s = { type: 'article-newspaper', author: [p('Lee', 'Alex')], title: 'A new finding', 'container-title': 'Daily News', page: '2-4', issued: d(2020, 4, 2) };
-  assert.equal(C.format(s, 'apa7').entry, 'Lee, A. (2020, April 2). A new finding. <i>Daily News</i>, pp. 2–4.');
+  assert.equal(C.format(s, 'apa7').entry, 'Lee, A. (2020, April 2). A new finding. <i>Daily News</i>, 2–4.');
 });
 
 test('APA: no date alone does not require a retrieval date or override the DOI', () => {
