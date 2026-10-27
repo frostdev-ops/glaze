@@ -83,12 +83,16 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
   // count: the runs a tallied row stands for (ms then their total). Never prompts, answers, addresses or keys. A failed
   // write never blocks a call.
   const KEYS = ['id', 'task', 'feature', 'provider', 'state', 'category', 'status', 'startedAt', 'ms', 'usage', 'steps', 'parts', 'count'];
-  const record = async (area, key, row, was) => {
-    try {
-      const clean = Object.fromEntries(KEYS.filter((k) => row[k] !== undefined).map((k) => [k, row[k]]));
-      const rows = (await area.get(key))[key];
-      await area.set({ [key]: [...(Array.isArray(rows) ? rows.filter((r) => r?.id !== row.id && (was === undefined || r?.id !== was)).slice(-(LIMIT.calls - 1)) : []), clean] });
-    } catch { /* Diagnostic metadata must never block a model call. */ }
+  // All ports share storage, even when their area wrappers differ. Preserve invocation order, including tally renames.
+  let writes = Promise.resolve();
+  const record = (area, key, row, was) => {
+    const clean = Object.fromEntries(KEYS.filter((k) => row[k] !== undefined).map((k) => [k, row[k]]));
+    return (writes = writes.then(async () => {
+      try {
+        const rows = (await area.get(key))[key];
+        await area.set({ [key]: [...(Array.isArray(rows) ? rows.filter((r) => r?.id !== clean.id && (was === undefined || r?.id !== was)).slice(-(LIMIT.calls - 1)) : []), clean] });
+      } catch { /* Diagnostic metadata must never block a model call. */ }
+    }));
   };
   return { CATEGORIES, LIMIT, modelFailure, transient, bounded, anySignal, deadline, wait, record, reference };
 })();
