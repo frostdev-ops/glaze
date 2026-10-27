@@ -196,7 +196,7 @@ var GZ_WRITER_TARGET = globalThis.GZ_WRITER_TARGET || (() => {
     // "Respond to two classmates, each in 100 words or more."
     if (C.each.test(clause) && C.cue.test(s.slice(...sentenceOf(s, x.start)))) return true;
     const first = head.split(/[,;]/)[0];
-    return !!head && C.opener.test(first) && C.cue.test(first) && !C.own.test(first);
+    return !!head && (C.opener.test(first) || /^\s*(?:each|every|your) (?:reply|response|comment|replies|responses)\b/.test(first)) && C.cue.test(first) && !C.own.test(first);
   };
 
   const number = (v, C) => (v == null ? null : C.one.test(v) ? 1 : Number(v));
