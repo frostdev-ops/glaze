@@ -45,6 +45,18 @@ const type = (st, text) => {
 };
 const blank = (mode) => make('', mode);
 
+test('native text selection survives takeover before the next typed character', () => {
+  const end = make('<p>A</p>', 'compose', { selection: { index: 1, length: 0 } });
+  assert.equal(html(type(end, ' body')), '<p>A body</p>');
+  const range = make('<p>one</p><p>two three</p>', 'compose', { selection: { index: 4, length: 3 } });
+  assert.equal(html(type(range, 'new')), '<p>one</p><p>new three</p>');
+  const clamped = make('<p>A</p>', 'compose', { selection: { index: 999, length: 999 } });
+  assert.equal(html(type(clamped, 'B')), '<p>AB</p>');
+  for (const selection of [{ index: -1, length: 0 }, { index: NaN, length: 1 }, { index: 1, length: 'x' }]) {
+    assert.equal(make('<p>A</p>', 'compose', { selection }).selection.from, 1, 'invalid selection uses the normal start');
+  }
+});
+
 test('marks toggle on a selection, and superscript and subscript exclude each other', () => {
   let st = select(make('<p>one two</p>'), 'two');
   for (const [name, tag] of [['bold', 'strong'], ['italic', 'em'], ['underline', 'u'], ['strike', 's'], ['sup', 'sup'], ['sub', 'sub']]) {

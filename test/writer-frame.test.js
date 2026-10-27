@@ -123,6 +123,13 @@ test('page world: ops outside what compose writes are refused before Quill sees 
   assert.equal(p.calls.length, 0);
 });
 
+test('page world: get reads native selection without focusing or changing Quill', () => {
+  const p = pageWorld(); p.run();
+  p.boxes['gzw-1'].__quill.getSelection = () => ({ index: 2, length: 3 });
+  assert.deepEqual(p.ask('get', JSON.stringify({ id: 'gzw-1' }))[0].selection, { index: 2, length: 3 });
+  assert.equal(p.calls.length, 0);
+});
+
 test('page world: an unknown box, a bad id or a bad message answers not ok, or not at all', () => {
   const p = pageWorld();
   p.run();
@@ -177,6 +184,12 @@ const frame = ({ claim = true } = {}) => {
 };
 const INIT = { type: 'init', mode: 'compose', kind: 'reply', html: '<p>Hi there</p>', placeholder: 'Type a reply', context: { post: { id: '_201_1' } }, locale: 'en',
   look: { tokens: { '--gz-accent': '#17c8f4', '--gz-font': '"Glaze Inter", sans-serif', '--gz-bad': 'url(https://x.test/a)', '--other': 'red', '--gz-ink': 'red;}body{' }, dark: true, motion: 'off' } };
+
+test('frame: native selection reaches the editor initialization', async () => {
+  const f = frame(), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, { ...INIT, selection: { index: 2, length: 3 } });
+  assert.deepEqual(JSON.parse(JSON.stringify(f.made[0].opts.selection)), { index: 2, length: 3 });
+});
 
 test('frame: nothing without the pass; with it, ready and its height on the job\'s channel only', async () => {
   const no = frame({ claim: false });

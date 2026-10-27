@@ -2,6 +2,18 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const content = require('./helpers/writer-content.cjs');
 
+test('a focused native caret is passed to Writer before hiding its editor', async () => {
+  const c = content(), b = c.native();
+  b.editor.innerHTML = '<p>A</p>';
+  c.doc.activeElement = b.editor;
+  c.doc.addEventListener('gz-writer:get', (e) => {
+    const m = JSON.parse(e.detail);
+    c.doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: true, html: b.editor.innerHTML, selection: { index: 1, length: 0 } }) }));
+  });
+  await c.start();
+  assert.deepEqual(JSON.parse(JSON.stringify(c.ports[0].sent.find((m) => m.type === 'init').selection)), { index: 1, length: 0 });
+});
+
 test('mounting Writer while the native editor has typing focus does not animate', async () => {
   const c = content(), b = c.native(), animations = [];
   c.doc.documentElement.setAttribute('data-gz-motion', 'subtle');
