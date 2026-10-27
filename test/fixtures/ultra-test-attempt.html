@@ -11,6 +11,7 @@
   Served for every https://bb.school.test/ultra/** path (scripts/ultra-test-attempt-check.js); the path picks the page:
     /ultra/courses/_101_1/assessment/_8123_1/attempt/_8124_1   test attempt
     /ultra/courses/_101_1/assessment/_8129_1/attempt/create    assignment attempt
+    /ultra/courses/_101_1/document/_8130_1                     document with its Contents (?toc=closed: closed)
     /ultra/courses/_101_1/journal/_8125_1                      journal
     /ultra/courses/_101_1/file/_8126_1                         file
     /ultra/courses/_101_1/outline/roster                       roster
@@ -129,6 +130,19 @@ course-student-grades { display: block; margin-top: 1px; } course-student-grades
 .makeStylesfooterWrapper-fx { flex: 0 0 auto; } .makeStylesfooterRoot-fx { display: flex; justify-content: flex-end; gap: 12px; height: 71px; padding: 16px 30px; }
 .gz-fx-instructions { min-height: 900px; } #bb-editorassignment-attempt-authoring-submission { min-height: 240px; border: 1px solid #cdcdcd; padding: 10px 15px; }
 .gz-fx-upload { min-height: 200px; margin-top: 16px; border: 1px dashed #cdcdcd; }
+/* A document with its Contents (2026-10-27, probe of a live one): a docked drawer beside the content; closed, an open
+   button at the start of the title header. */
+.makeStylesrootLearningModulePanel-fx { position: absolute; inset: 0; display: flex; }
+.makeStylesdrawer-fx { width: 320px; height: 100%; overflow-y: auto; }
+.makeStylesheaderContainer-fx { display: flex; align-items: center; justify-content: space-between; padding: 16px; }
+.makeStylesheaderContainer-fx h2 { margin: 0; font-size: 20px; }
+.gz-fx-contents a { display: block; padding: 8px 16px; color: inherit; }
+.makeStylescontentItemContainer-fx { flex: 1; min-width: 0; display: flex; overflow: hidden; }
+.makeStylescontentBody-fx { flex: 1; overflow-y: auto; }
+.makeStylescontentHeaderLarge-fx { display: flex; align-items: center; } .makeStylescontentHeaderLarge-fx h1 { margin: 0; padding: 30px; font-size: 32px; font-weight: 300; }
+button.MuiIconButton-root { padding: 0; border: 0; border-radius: 2px; background: transparent; color: inherit; }
+button[class*="makeStylesexpandTocButton-"] { flex: none; width: 38px; height: 77px; border-bottom: 1px solid #cdcdcd; }
+button[class*="makeStylescollapseButton-"] { width: 38px; height: 38px; }
 </style></head><body class="default">
 <div id="site-wrap" class="off-canvas-wrap"><div class="inner-wrap"><section class="routed-page route-view-container bb-offcanvas-container"><content-page-header class="react-container"><header class="makeStylesheader-fx"><button type="button" aria-label="Close">×</button><a href="/ultra/courses/_101_1/outline">Sample Course</a> › <span class="gz-fx-crumb">Item</span></header></content-page-header><div class="routed-page-body js-skip-link-target"></div></section></div></div>
 <script>
@@ -199,7 +213,18 @@ course-student-grades { display: block; margin-top: 1px; } course-student-grades
     <div class="makeStylesfooterWrapper-fx"><footer class="makeStylesfooterRoot-fx"><button type="button" class="gz-fx-save">Save and Close</button><button type="button" class="gz-fx-submit">Submit</button></footer></div>
     </div></div></div></bb-assignment-attempt-authoring-panel>`;
 
+  // A document with its Contents: a docked drawer (its nav's class shares a prefix with Ultra's own navigation's) and, closed,
+  // an open button in the title header. The two buttons swap, as Ultra's do.
+  const arrow = (d) => `<svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeSmall makeStylesdirectionalIcon-fx makeStylesstrokeIcon-fx" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
+  const drawer = () => `<div class="MuiDrawer-root MuiDrawer-anchorLeft MuiDrawer-docked"><div class="MuiPaper-root MuiPaper-elevation MuiPaper-elevation0 MuiDrawer-paper MuiDrawer-paperAnchorLeft MuiDrawer-paperAnchorDockedLeft makeStylesdrawer-fx makeStylesexpanded-fx">
+    <nav class="makeStylesnavigationContainer-0-2-324 makeStylessidePanelContentMarginFix-fx js-content-navigation-drawer" aria-label="Course navigation"><div class="makeStylesheaderContainer-fx"><h2>Contents</h2><button type="button" class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeMedium makeStylescollapseButton-0-2-326" aria-label="Close Table of Contents" aria-expanded="true">${arrow('M20 12H6m6-6-6 6 6 6M4 5v14')}</button></div>
+    <div class="gz-fx-contents">${['Understanding the Interface', 'Viewing Course Information', 'Understanding the Content Area'].map((t, i) => `<a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/courses/_101_1/document/_813${i}_1">${t}</a>`).join('')}</div></nav></div></div>`;
+  const opener = () => `<button type="button" class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeMedium makeStylesexpandTocButton-0-2-678" aria-label="Open Table of Contents" aria-expanded="false">${arrow('M4 12h14m-6-6 6 6-6 6M20 5v14')}</button>`;
+  const contents = (open) => `<div class="makeStylesrootLearningModulePanel-fx">${open ? drawer() : ''}<div class="makeStylescontentItemContainer-fx js-skip-link-target"><div class="makeStylescontentBody-fx">
+    <div class="makeStylescontentHeaderLarge-fx">${open ? '' : opener()}<h1>Understanding the Content Area</h1></div><p style="padding:0 30px">Invented page text.</p></div></div></div>`;
+
   const pages = [
+    [/\/document\/_8130_1/, () => contents(!/[?&]toc=closed\b/.test(location.search))],
     [/\/assessment\/_8129_1\/attempt\//, assignment],
     [/\/assessment\/_\d+_\d+\/attempt\//, attempt],
     [/\/journal\//, () => item('View Journal', 'Practice Journal', '<div class="journal-topic"><h2>Journal Topic</h2><p>Invented prompt.</p></div>')],
@@ -213,6 +238,10 @@ course-student-grades { display: block; margin-top: 1px; } course-student-grades
   ];
   body.innerHTML = (pages.find(([re]) => re.test(p))?.[1] || (() => '<p>Page not found</p>'))();
 
+  document.addEventListener('click', (e) => {
+    const toc = e.target.closest?.('button[class*="makeStylescollapseButton-"], button[class*="makeStylesexpandTocButton-"]');
+    if (toc) body.innerHTML = contents(toc.getAttribute('aria-expanded') !== 'true');
+  });
   // Ultra's toolbar dropdowns: the button's aria-expanded and the submenu open together.
   document.addEventListener('click', (e) => {
     const b = e.target.closest?.('.bb-editor-toolbar-dropdown');

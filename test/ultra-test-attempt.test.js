@@ -151,3 +151,11 @@ test('an assignment attempt scrolls as one page: its title goes up with it, Save
     assert.match(rule, /\.routed-page\.bb-offcanvas-container:not\(:has\(content-page-header > header\)\)/, rule);
   }
 });
+
+test("a document's closed Contents opens from a button you can see, on the Look's surface", () => {
+  // Ultra draws it as a bare icon for a white page; over the scene only its arrow showed (the owner, 2026-10-27).
+  const opener = chain(...ROUTED, 'div.makeStylesrootLearningModulePanel-0-2-271', 'div.makeStylescontentItemContainer-0-2-273.js-skip-link-target',
+    'div.makeStylescontentBody-0-2-276', 'div.makeStylescontentHeaderLarge-0-2-274', 'button.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-sizeMedium.makeStylesexpandTocButton-0-2-678');
+  assert.match(bg(opener)[0], SURFACE);
+  assert.match(winner(theme, opener, 'border')[0], /var\(--gz-border-line/);
+});
