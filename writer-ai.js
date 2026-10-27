@@ -360,6 +360,8 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   };
   const draw = (box) => {
     box.textContent = '';
+    const panel = panels.get(box);
+    if (panel) panel.pages = [];
     box.setAttribute('aria-busy', String(fb.state === 'running'));
     const no = why();
     if (no) {
@@ -424,7 +426,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     }
     head.append(run(t('Check again'), false));
     if (!fb.criteria.length) box.append(el('p', 'gz-fb-note', t('No criteria to check.')));
-    const pageAt = panels.get(box)?.pageAt;
+    const pageAt = panel?.pageAt;
     fb.criteria.forEach((c, i) => {
       const card = el('div', 'gz-fb-item'), top = el('div', 'gz-fb-top');
       const [word] = STATUS[c.status] || STATUS.partly;
@@ -438,8 +440,18 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
         const b = el('button', 'gz-fb-quote');
         b.type = 'button';
         b.append(el('q', 'gz-fb-qtext', q.quote));
-        const at = pageAt && fb.place?.(q.start, q.end, q.quote), page = at && pageAt(at.from);
-        if (page) b.append(el('small', 'gz-fb-page', t('p. {n}', { n: page })));
+        if (pageAt) {
+          const label = el('small', 'gz-fb-page');
+          const update = () => {
+            const at = fb.place?.(q.start, q.end, q.quote), page = at && pageAt(at.from);
+            const text = page ? t('p. {n}', { n: page }) : '';
+            if (label.hidden !== !page) label.hidden = !page;
+            if (label.textContent !== text) label.textContent = text;
+          };
+          panel.pages.push(update);
+          update();
+          b.append(label);
+        }
         b.addEventListener('click', () => { if (!show(q)) b.classList.add('gz-gone'); });
         card.append(b);
       }
@@ -448,8 +460,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   };
   const paint = () => { for (const box of views) { const focused = box.contains(document.activeElement); draw(box); if (focused) box.focus({ preventScroll: true }); } };
   // The Feedback panel, in any container (the paper's side panel tab, with opts.pageAt(pos) for its passages' pages;
-  // compose's popover over the chip). → { el, destroy }.
-  const panels = new WeakMap(); // a panel → its opts
+  // compose's popover over the chip). updatePages() follows pagination without replacing the focused passage button.
+  // → { el, updatePages, destroy }.
+  const panels = new WeakMap(); // a panel → its page mapper and page labels
   const feedbackView = (container, opts = {}) => {
     const box = el('div', 'gz-fb');
     box.tabIndex = -1;
@@ -457,10 +470,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     box.setAttribute('aria-label', t('Feedback'));
     box.setAttribute('aria-live', 'polite');
     container.append(box);
-    panels.set(box, opts || {});
+    const panel = { ...opts, pages: [] };
+    panels.set(box, panel);
     views.add(box);
     draw(box);
-    return { el: box, destroy: () => { views.delete(box); box.remove(); } };
+    return { el: box, updatePages: () => { for (const update of panel.pages) update(); }, destroy: () => { panel.pages = []; panels.delete(box); views.delete(box); box.remove(); } };
   };
 
   // ---- the chip, its menu and the ⋯ entry --------------------------------------------------------------------------

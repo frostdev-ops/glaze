@@ -380,7 +380,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
     });
     // The paper's Feedback and Outline tabs as mockups E draw them: every state, Frost and Paper, wide and narrow.
     const looks = { dark: { dark: true, motion: 'subtle' }, light: { dark: false, motion: 'subtle', tokens: Object.fromEntries(Object.entries(require('../defaults.js').GZ_PRESETS.find((x) => x[0] === 'Paper')[1]).filter(([k]) => k.startsWith('--gz-'))) } };
-    const built = path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-feedback');
+    const built = path.join(shots, 'feedback-outline');
     fs.mkdirSync(built, { recursive: true });
     const level = (id, label, points, a, b) => ({ id, label, points, cells: [{ level: '_1_1', detail: 'Exemplary work.', value: a }, { level: '_2_1', detail: 'Developing work.', value: b }] });
     const RUBRIC = { title: 'Essay rubric', levels: [{ id: '_1_1', label: 'Proficient' }, { id: '_2_1', label: 'Developing' }],
@@ -417,6 +417,9 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
           await until(() => q.evaluate(() => document.querySelectorAll('#gp-feedback .gz-fb-skel').length === 3), 'skeletons while reading');
           assert.match(await q.$eval('#gp-feedback .gz-fb-run', (e) => e.textContent), /Reading your draft…/);
           assert.equal(await q.$eval('#gp-feedback .gz-fb-sum', (e) => e.textContent), 'Criteria: 4');
+          await q.emulateMedia({ reducedMotion: 'reduce' });
+          assert.equal(await q.$$eval('#gp-feedback .gz-spin, #gp-feedback .gz-fb-skel i', (es) => es.every((e) => getComputedStyle(e).animationName === 'none')), true, 'reduced motion stills the spinner and skeletons');
+          await q.emulateMedia({ reducedMotion: 'no-preference' });
           await side('feedback-reading');
           await q.evaluate(() => { __ai.hold = false; __ai.release(); });
           await until(() => q.evaluate(() => document.querySelectorAll('#gp-feedback .gz-fb-item').length === 4), 'results');
@@ -425,6 +428,22 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
           assert.equal(await q.$eval('#gp-feedback .gz-fb-sum', (e) => e.textContent), '2 met1 partly1 missing');
           assert.match(await q.$eval('#gp-feedback .gz-fb-page', (e) => e.textContent), /^p\. \d+$/, 'a passage says its page');
           await side('feedback-results');
+          await q.emulateMedia({ reducedMotion: 'reduce' });
+          assert.equal(await q.$eval('#gp-feedback .gz-fb-item', (e) => getComputedStyle(e).animationName), 'none', 'reduced motion stills the cards');
+          await q.emulateMedia({ reducedMotion: 'no-preference' });
+          // Editing above a quoted passage moves its page; the displayed number must follow its mapped position.
+          const priorPage = await q.$eval('#gp-feedback .gz-fb-page', (e) => e.textContent);
+          const priorPages = await q.evaluate(() => GZ_WRITER_PAPER.current().pages());
+          await q.evaluate(() => {
+            const v = GZ_WRITER_PAPER.current().editor.view, n = v.state.schema.nodes;
+            const prefix = GZ_PM.model.Fragment.fromArray(Array.from({ length: 50 }, () => n.paragraph.create(null, v.state.schema.text('A paragraph added above the quoted passage.'))));
+            window.__feedbackPrefix = prefix.size;
+            v.dispatch(v.state.tr.insert(0, prefix));
+          });
+          await until(() => q.evaluate((n) => GZ_WRITER_PAPER.current().pages() > n, priorPages), 'repagination above the passage');
+          await until(async () => (await q.$eval('#gp-feedback .gz-fb-page', (e) => e.textContent)) !== priorPage, 'the passage page follows edits', 2000);
+          await q.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.delete(0, __feedbackPrefix)); });
+          await until(() => q.evaluate((n) => GZ_WRITER_PAPER.current().pages() === n, priorPages), 'original pagination restored');
           // Motion off: the cards don't animate.
           await q.evaluate(() => __page.port.postMessage({ type: 'look', look: { dark: true, motion: 'off' } }));
           await until(() => q.evaluate(() => document.documentElement.dataset.motion === 'off'), 'motion off');

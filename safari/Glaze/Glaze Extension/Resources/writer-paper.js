@@ -49,7 +49,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const ed = host.editor, view = ed.view, t = (k, v) => { const text = host.t(k, v); return k === 'Document outline' && text === k ? 'Outline' : text; }, store = PA.open();
     const ISSUES = () => globalThis.GZ_WRITER_ISSUES || null;
     let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = 'fit', scale = PX100, layout = null, page = 1, focus = false;
-    let laidOut = () => {}, rows = []; // the Outline's pages once it exists; its rows
+    let laidOut = () => {}, rows = [], feedbackPanel = null; // the Outline's pages once it exists; its rows; Feedback's pages
     const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
 
     // ---- the chrome
@@ -273,7 +273,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       outline.replaceChildren(...rows.flatMap((r) => (r.kind === 'list' && r !== rows[0] ? [h('div', { class: 'gp-ol-sep', role: 'separator' }), r.el] : [r.el])));
       outlineMark();
     };
-    laidOut = () => { if (!panes.outline.hidden) outlineDraw(); };
+    laidOut = () => { if (!panes.outline.hidden) outlineDraw(); feedbackPanel?.updatePages(); };
     const go = (from, to) => {
       const tr = view.state.tr.setSelection(PM.state.TextSelection.create(view.state.doc, from, to)).scrollIntoView();
       view.dispatch(tr);
@@ -502,7 +502,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (C?.button) { const b = C.button({ editor: ed, paper: api }); if (b) { b.classList.add('gp-tbtn'); cite.replaceWith(b); } }
       else if (C) cite.disabled = false;
       if (C?.sourcesView) C.sourcesView(panes.sources, { editor: ed, paper: api, badge: (n) => { badges.sources.textContent = n ? nf(n) : ''; } });
-      if (globalThis.GZ_WRITER_AI?.feedbackView) GZ_WRITER_AI.feedbackView(panes.feedback, { pageAt });
+      if (globalThis.GZ_WRITER_AI?.feedbackView) feedbackPanel = GZ_WRITER_AI.feedbackView(panes.feedback, { pageAt });
       submit.disabled = typeof GZ_WRITER_PAPER.submit !== 'function';
     };
     submit.addEventListener('click', () => { if (typeof GZ_WRITER_PAPER.submit === 'function') GZ_WRITER_PAPER.submit(api); });

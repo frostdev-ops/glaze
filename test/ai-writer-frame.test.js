@@ -41,8 +41,9 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
   const reply = (m) => receives.forEach((f) => f(m));
   vm.createContext(sandbox); vm.runInContext(source, sandbox);
   const ai = sandbox.GZ_WRITER_AI;
-  const pane = (opts) => { const host = new Element(); return sandbox.GZ_WRITER_AI.feedbackView(host, opts).el; };
-  return { ai, sent, pendingStatus, pendingRun, reply, hooks, opened, pane, proof: sandbox.GZ_WRITER_PROOF,
+  const panel = (opts) => { const host = new Element(); return sandbox.GZ_WRITER_AI.feedbackView(host, opts); };
+  const pane = (opts) => panel(opts).el;
+  return { ai, sent, pendingStatus, pendingRun, reply, hooks, opened, pane, panel, proof: sandbox.GZ_WRITER_PROOF,
     start: async () => { hooks.ready(); await flush(); },
     off: () => { settings.on = false; hooks.storage({ ai: { newValue: structuredClone(settings) } }, 'local'); },
     context: (c) => { ctx = c; hooks.context(c); }, hold: () => { holdStatus = true; } };
@@ -163,6 +164,25 @@ test('Feedback as the mockup draws it: a head row with the run button in every s
   p = f.pane();
   const err = one(p, 'gz-fb-error');
   assert.ok(err && /AI couldn't give feedback\./.test(err.textContent) && one(err, 'gz-fb-run').textContent === 'Try again', 'an error is a card with Try again');
+});
+
+test('Feedback updates passage pages after layout without replacing its focused controls', async () => {
+  const f = frame(); await f.start();
+  f.context({ assignment: { instructions: 'Discuss memory.' } }); await flush();
+  f.ai.feedback(); await flush();
+  f.reply({ id: f.pendingRun.at(-1).id, type: 'end', output: { criteria: [
+    { id: 'a', label: 'Memory', status: 'met', comment: '', quotes: [{ start: 0, end: 11, quote: 'draft words' }], level: null },
+  ] } }); await flush();
+  let number = 1;
+  const panel = f.panel({ pageAt: () => number });
+  const find = (n, cls) => n && typeof n === 'object' && (n.className === cls ? n : n.children.map((c) => find(c, cls)).find(Boolean));
+  const passage = find(panel.el, 'gz-fb-quote'), page = find(passage, 'gz-fb-page');
+  assert.equal(page.textContent, 'p. 1');
+  number = 3; panel.updatePages?.();
+  assert.equal(page.textContent, 'p. 3');
+  assert.equal(find(panel.el, 'gz-fb-quote'), passage, 'the existing passage button keeps focus');
+  number = 0; panel.updatePages();
+  assert.equal(page.hidden, true, 'a passage without a current page shows no stale number');
 });
 
 test('a download in progress shows its share and checks again once it is in', async () => {
