@@ -38,7 +38,7 @@ const quill = async (dir, signal) => {
 // it), the assignment's rubric column, the discussions list, the thread and its replies.
 const seed = () => {
   const grades = json('ultra-writer-gradebook.json'), row = grades.results[0];
-  grades.results.push({ ...row, columnId: '_820_1', id: '_9820_1', column: { ...row.column, id: '_820_1', contentId: '_9_1', columnName: 'Week 6: Memory and Place', scoreProviderHandle: 'resource/x-bb-forumlink', assessmentSubtype: undefined } });
+  grades.results.push({ ...row, columnId: '_820_1', id: '_9820_1', column: { ...row.column, id: '_820_1', contentId: '_9_1', columnName: 'Week 6: Memory and Place', scoreProviderHandle: 'resource/x-bb-forumlink' } });
   const members = json('ultra-memberships.json');
   members.results = members.results.map((m) => (m.courseId === COURSE ? { ...m, course: { ...m.course, name: 'ENGL 2110: American Literature II', displayName: 'ENGL 2110: American Literature II' } } : m));
   const rubric = json('ultra-rubric-numeric.json').column;

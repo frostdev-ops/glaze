@@ -128,13 +128,13 @@ test('a test-shaped attempt reports test even if its gradebook cache says assign
   assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['test']);
 });
 
-test('an attempt report is revoked when its assignment classification becomes unknown', async () => {
+test('an attempt is an assignment by Ultra\'s authoring panel, and the report is revoked once its gradebook says Test', async () => {
   const c = content({ fixture: 'attempt' });
   c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
-  c.ctx.GZ_CTX.bookFor = () => ({ results: [{ column: { contentId: '_7_1', assessmentSubtype: 'Assignment' } }] });
+  c.ctx.GZ_CTX.bookFor = () => ({ results: [{ column: { contentId: '_7_1' } }] }); // the live shape: no subtype
   await c.start();
-  c.ctx.GZ_CTX.bookFor = () => ({ results: [] }); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
-  assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment', 'unknown']);
+  c.ctx.GZ_CTX.bookFor = () => ({ results: [{ column: { contentId: '_7_1', assessmentSubtype: 'Test' } }] }); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment', 'test']);
 });
 
 test('once the worker has the attempt\'s kind, each Writer frame on the page is told to ask about AI again', async () => {

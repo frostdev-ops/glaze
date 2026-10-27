@@ -15,6 +15,13 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     const cols = (Array.isArray(rows) ? rows : []).filter((r) => r?.column?.contentId === content).map((r) => r.column);
     return cols.some((c) => c.assessmentSubtype === 'Test') ? 'test' : cols.length && cols.every((c) => c.assessmentSubtype === 'Assignment') ? 'assignment' : '';
   };
+  // The attempt page's kind: a test where Ultra draws its attempt canvas or the gradebook says Test, an assignment where it
+  // draws its React authoring panel (ng-if isAssignment()), else ''. Live gradebook columns carry no assessmentSubtype
+  // (owner's Ultra, 2026-10-27), so the page decides.
+  const pageKind = (doc, rows, content) => {
+    if (doc?.querySelector?.('bb-attempt-canvas') || attemptKind(rows, content) === 'test') return 'test';
+    return doc?.querySelector?.('bb-assignment-attempt-authoring-panel') ? 'assignment' : '';
+  };
 
   // Kinds: 'post' | 'reply' | 'message' | 'assignment' | 'test', else 'unknown' (left to Ultra). An attempt is an assignment
   // where Ultra draws its React authoring panel (it renders only for assignments) and a test in its attempt canvas, where
@@ -99,7 +106,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     return kind === 'unknown' || !container || !canEdit(editor) ? null : { editor, container, root: rootOf(editor), kind, mode: MODE[kind] || 'compose', send: sendOf(editor, kind), context: contextOf(editor, kind) };
   }).filter(Boolean);
 
-  return { EDITOR, KINDS, boxes, kindOf, rootOf, sendOf, enabled, contextOf, replyTo, canEdit, attemptAt, attemptKind };
+  return { EDITOR, KINDS, boxes, kindOf, rootOf, sendOf, enabled, contextOf, replyTo, canEdit, attemptAt, attemptKind, pageKind };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_ULTRA;
 GZ_WRITER_ULTRA;

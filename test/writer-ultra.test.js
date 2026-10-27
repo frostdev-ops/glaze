@@ -100,10 +100,11 @@ test('a test attempt: its Additional content box is a test in compose mode, sent
 });
 
 test('an attempt\'s kind comes from its gradebook column, and is unknown without one', () => {
-  const rows = JSON.parse(raw('ultra-writer-gradebook.json')).results;
+  const rows = [{ column: { contentId: '_7_1', assessmentSubtype: 'Assignment' } }, { column: { contentId: '_8_1', assessmentSubtype: 'Test' } }];
   assert.equal(U.attemptKind(rows, '_7_1'), 'assignment');
   assert.equal(U.attemptKind(rows, '_8_1'), 'test');
   assert.equal(U.attemptKind(rows, '_9_1'), '');
+  assert.equal(U.attemptKind(JSON.parse(raw('ultra-writer-gradebook.json')).results, '_7_1'), '', 'the live shape names no subtype');
   assert.equal(U.attemptKind(undefined, '_7_1'), '');
   assert.equal(U.attemptKind([{ column: { contentId: '_7_1' } }], '_7_1'), '', 'a column without a subtype names nothing');
 });

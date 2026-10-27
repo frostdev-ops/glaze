@@ -65,7 +65,7 @@ test('the practice Ultra answers what Glaze reads, from the writer fixtures', as
     const members = (await call(mock, { url: `/learn/api/v1/users/${M.ME.id}/memberships` })).json();
     assert.equal(members.results.find((m) => m.courseId === '_101_1').course.name, 'ENGL 2110: American Literature II');
     const grades = (await call(mock, { url: '/learn/api/v1/courses/_101_1/gradebook/grades' })).json().results;
-    assert.deepEqual(grades.map((r) => [r.column.contentId, r.column.assessmentSubtype ?? null]), [['_7_1', 'Assignment'], ['_8_1', 'Test'], ['_9_1', null]]);
+    assert.deepEqual(grades.map((r) => [r.column.contentId, r.column.assessmentSubtype ?? null]), [['_7_1', null], ['_8_1', null], ['_9_1', null]]);
     const first = (await call(mock, { url: `${M.BOARD}?limit=2&offset=0` })).json();
     assert.equal(first.results.length, 2);
     assert.match(first.paging.nextPage, /offset=2$/);

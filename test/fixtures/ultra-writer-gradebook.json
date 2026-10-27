@@ -1,5 +1,5 @@
 {
-  "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. Shape from the owner's Ultra, 2026-10-27: gradebook/grades?expand=column rows as test/fixtures/ultra-grades.json has them, plus column.assessmentSubtype ('Assignment', 'Test'), the field lib/ultra.js reads for tests. That field wasn't seen live yet.",
+  "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. Shape from the owner's Ultra, 2026-10-27: gradebook/grades?expand=column rows as test/fixtures/ultra-grades.json has them. Live columns carry no assessmentSubtype: the attempt page decides (lib/writer-ultra.js pageKind).",
   "paging": {
     "limit": 200,
     "offset": 0
@@ -81,8 +81,7 @@
         "isFormative": false,
         "gradebookCategoryId": "_201_1",
         "position": 1,
-        "groupContent": false,
-        "assessmentSubtype": "Assignment"
+        "groupContent": false
       },
       "columnUrl": "https://lms.example.edu/learn/api/v1/courses/_101_1/gradebook/columns/_601_1",
       "status": "GRADED",
@@ -172,8 +171,7 @@
         "isFormative": false,
         "gradebookCategoryId": "_201_1",
         "position": 1,
-        "groupContent": false,
-        "assessmentSubtype": "Test"
+        "groupContent": false
       },
       "columnUrl": "https://lms.example.edu/learn/api/v1/courses/_101_1/gradebook/columns/_601_1",
       "status": "GRADED",

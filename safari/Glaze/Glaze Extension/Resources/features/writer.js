@@ -296,16 +296,16 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (area === 'sync' && (c.enabled?.newValue === false || c.enhance?.newValue?.writer === false)) dropAll();
   });
 
-  // An attempt's kind, from the course's gradebook ('' until it answers). Once known, the top frame tells the worker, which
-  // lets the AI work on an assignment's attempt and keeps it off a test's (lib/background.js 'glaze:attempt-kind'). Once the
-  // worker has it, each frame on the page is told ('ai'): one that asked before then asks again.
+  // An attempt's kind, from the page Ultra draws and its gradebook (lib/writer-ultra.js pageKind). Once known, the top
+  // frame tells the worker, which lets the AI work on an assignment's attempt and keeps it off a test's (lib/background.js
+  // 'glaze:attempt-kind'). Once the worker has it, each frame on the page is told ('ai'): one that asked before asks again.
   let told = '';
   const attempt = () => {
     const a = U().attemptAt(location.pathname);
     if (!a) { told = ''; return ''; }
-    let kind = '';
-    try { kind = U().attemptKind(X.bookFor(a.course)?.results, a.content); } catch { /* no gradebook yet */ }
-    if (document.querySelector('bb-attempt-canvas')) kind = 'test';
+    let rows;
+    try { rows = X.bookFor(a.course)?.results; } catch { /* no gradebook yet */ }
+    const kind = U().pageKind(document, rows, a.content);
     const key = `${location.pathname}|${kind}`;
     if (window.top === window && told !== key) {
       told = key;
