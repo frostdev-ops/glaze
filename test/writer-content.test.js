@@ -91,3 +91,14 @@ test('an attempt report is revoked when its assignment classification becomes un
   c.ctx.GZ_CTX.bookFor = () => ({ results: [] }); c.ctx.GZ_WRITER.pass();
   assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment', 'unknown']);
 });
+
+test('unchanged Writer boxes do not rescan their document bodies on every page observer pass', async () => {
+  const c = content(); await c.start();
+  let walks = 0;
+  for (const b of [c.native(), c.native(1)]) {
+    const all = b.editor.querySelectorAll.bind(b.editor);
+    b.editor.querySelectorAll = (s) => { if (s === '*') walks++; return all(s); };
+  }
+  for (let n = 0; n < 20; n++) c.ctx.GZ_WRITER.pass();
+  assert.equal(walks, 0, 'unchanged editor subtrees are already classified');
+});
