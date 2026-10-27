@@ -1,7 +1,8 @@
 // Glaze Writer wears the Look in the real unpacked extension, on the synthetic assignment attempt (test/fixtures/
 // ultra-writer-attempt.html): on a solid Look the paper chrome is the mockup's (ground, surface, opaque); on a Look with a
 // background the ground is the page's (the wallpaper shows) and the bars and side panel are the page's glass. The
-// Submission heading stays a pill its text's width. Screenshots of each Look at 1440px.
+// Submission heading stays a pill its text's width. The paper's caret is drawn the text's height. Screenshots of each Look at
+// 1440px.
 // GETs only, synthetic; no account or outside network from the browser.
 // NODE_PATH=<playwright> nice -n 10 node scripts/writer-look-check.js [screenshot directory]
 const { chromium } = require('playwright');
@@ -108,6 +109,42 @@ const LOOKS = [
       await p.screenshot({ path: path.join(shots, `look-${L.name}-focus.png`) });
       await fr.click('.gp-tbtn[aria-pressed]');
       await until(() => el.evaluate((f) => getComputedStyle(f).position !== 'fixed'), `${L.name}: Focus ends`);
+      if (L.name === 'solid') {
+        // The caret: Safari draws the browser's from the line above's text to this line's, a whole line on double spacing,
+        // so the paper hides it and draws its own the text's height, at ProseMirror's cursor.
+        await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let end = 0; v.state.doc.descendants((n, pos) => { if (n.isTextblock && n.textContent.length > 20 && !end) end = pos + n.nodeSize - 1; }); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, end))); v.focus(); });
+        await p.keyboard.type(' The river keeps what the town will not say, and the clearing keeps what the river cannot carry away from it', { delay: 2 });
+        const at = async () => { await pause(120); return fr.evaluate(() => {
+          const v = GZ_WRITER_PAPER.current().editor.view, c = document.querySelector('.gp-cursor'), k = v.coordsAtPos(v.state.selection.head, 1), r = c.getBoundingClientRect();
+          const block = v.domAtPos(v.state.selection.head).node, el = block.nodeType === 1 ? block : block.parentElement, para = el.closest('p'), first = para.getClientRects()[0];
+          return { shown: !c.hidden && getComputedStyle(c).display !== 'none', top: r.top, left: r.left + r.width / 2, height: r.height, want: { top: k.top, left: k.left, height: k.bottom - k.top }, line: parseFloat(getComputedStyle(para).lineHeight) * (v.dom.getBoundingClientRect().height / v.dom.offsetHeight), laterLine: k.top > first.top + 4, native: getComputedStyle(v.dom).caretColor, blinking: c.getAnimations().some((x) => x.playState === 'running') };
+        }); };
+        let c = await at();
+        console.log('caret', JSON.stringify(c));
+        check(c.native === 'rgba(0, 0, 0, 0)', 'the browser\'s caret is hidden on the paper');
+        check(c.shown && c.laterLine && Math.abs(c.top - c.want.top) < 1 && Math.abs(c.left - c.want.left) < 1.5 && Math.abs(c.height - c.want.height) < 1, 'the drawn caret is at the cursor, on a later line of a paragraph');
+        check(c.height < c.line * 0.65, `the drawn caret is the text's height, not the double-spaced line's (${c.height.toFixed(1)} of ${c.line.toFixed(1)}px)`);
+        check(c.blinking, 'the drawn caret blinks');
+        await fr.evaluate(() => GZ_WRITER_PAPER.current().zoom(1.5));
+        c = await at();
+        check(c.shown && Math.abs(c.top - c.want.top) < 1 && Math.abs(c.left - c.want.left) < 1.5 && Math.abs(c.height - c.want.height) < 1, 'the drawn caret follows the zoom');
+        await fr.evaluate(() => GZ_WRITER_PAPER.current().zoom('fit'));
+        await p.keyboard.press('Shift+ArrowLeft');
+        check(!(await at()).shown, 'no drawn caret over a selected range');
+        await p.keyboard.press('ArrowRight');
+        check((await at()).shown, 'the drawn caret is back once the range collapses');
+        await fr.evaluate(() => document.querySelector('.ProseMirror').dispatchEvent(new CompositionEvent('compositionstart', { data: '' })));
+        c = await at();
+        check(!c.shown && await fr.evaluate(() => getComputedStyle(document.querySelector('.ProseMirror')).caretColor) === 'rgb(17, 17, 17)', 'while an input method composes, the browser\'s caret is back and the drawn one hidden');
+        await fr.evaluate(() => document.querySelector('.ProseMirror').dispatchEvent(new CompositionEvent('compositionend', { data: '' })));
+        check((await at()).shown, 'the drawn caret is back after composing');
+        await fr.click('.gp-tab#gp-tab-outline');
+        check(!(await at()).shown, 'no drawn caret once the paper loses focus');
+        await fr.click('.gp-tab#gp-tab-checks');
+        await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.focus());
+        check((await at()).shown, 'the drawn caret is back with focus');
+        await p.screenshot({ path: path.join(shots, 'caret.png'), caret: 'initial' });
+      }
       await p.close();
 
       // A discussion's compose box: the Look's glass panel, its corners and blur.

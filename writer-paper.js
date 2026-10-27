@@ -94,6 +94,32 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     flow.style.visibility = 'hidden';
     flow.append(view.dom);
 
+    // The caret, drawn: Safari's runs from the text above to this line's (a whole line tall on double spacing), so the paper
+    // hides it and draws one the text's height where ProseMirror puts the cursor. While an input method composes, the
+    // browser's own is back (.gp-flow[data-composing]).
+    const caret = h('div', { class: 'gp-cursor', 'aria-hidden': 'true', hidden: true });
+    size.append(caret);
+    let caretFrame = 0;
+    const placeCaret = () => {
+      caretFrame = 0;
+      const sel = view.state.selection;
+      let r = null;
+      if (sel instanceof PM.state.TextSelection && sel.empty && view.hasFocus() && document.hasFocus() && !view.composing && !flow.hasAttribute('data-composing')) {
+        try { r = view.coordsAtPos(sel.head, 1); } catch { r = null; }
+      }
+      if (!r || !(r.bottom > r.top)) { caret.hidden = true; return; }
+      const box = size.getBoundingClientRect();
+      caret.style.transform = `translate(${r.left - box.left}px, ${r.top - box.top}px)`;
+      caret.style.height = `${r.bottom - r.top}px`;
+      caret.hidden = false;
+      for (const a of caret.getAnimations?.() || []) a.currentTime = 0; // solid while it moves, as the system's
+    };
+    const caretSoon = () => { caretFrame ||= requestAnimationFrame(placeCaret); };
+    for (const [target, type] of [[view.dom, 'focus'], [view.dom, 'blur'], [window, 'focus'], [window, 'blur']]) target.addEventListener(type, caretSoon);
+    view.dom.addEventListener('compositionstart', () => { flow.setAttribute('data-composing', ''); placeCaret(); });
+    view.dom.addEventListener('compositionend', () => { flow.removeAttribute('data-composing'); caretSoon(); });
+    document.fonts?.addEventListener?.('loadingdone', caretSoon);
+
     // The format's page CSS, in an adopted sheet (the frame's CSP allows no <style>).
     const sheet = typeof CSSStyleSheet === 'function' && 'replaceSync' in CSSStyleSheet.prototype ? new CSSStyleSheet() : null;
     if (sheet) document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
@@ -170,7 +196,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       props: { decorations: (s) => issuesKey.getState(s) },
     });
     const watch = new PM.state.Plugin({
-      view: () => ({ update: (v, prev) => { if (v.state.doc !== prev.doc) changed(); else if (!v.state.selection.eq(prev.selection)) selected(); } }),
+      view: () => ({ update: (v, prev) => { if (v.state.doc !== prev.doc) changed(); else if (!v.state.selection.eq(prev.selection)) selected(); caretSoon(); } }),
       props: {
         handleClickOn: (_v, pos, node) => { if (node.type.name === 'footnote_ref') { editNote(pos); return true; } return false; },
         handleKeyDown: (_v, e) => {
@@ -213,6 +239,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       });
       flow.style.visibility = '';
       selected();
+      caretSoon();
     };
     const fit = () => {
       const w = canvas.clientWidth - 48;
