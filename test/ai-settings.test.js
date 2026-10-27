@@ -148,6 +148,15 @@ test('the switch and the connection are kept in storage.local ai, cleaned; the f
   assert.equal(p.$('ai-connection').hidden, true);
 });
 
+test('features turned on in quick succession are all kept: no switch is written over by one still saving', async () => {
+  const p = await open({ ai: { on: true, use: 'endpoint' } });
+  const boxes = p.$('ai-feature-list').children.map((r) => r.children[0]);
+  for (const b of boxes) { b.checked = true; for (const f of b.on.change) f({ isTrusted: true }); }
+  await settle();
+  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: true, writing: true });
+  assert.deepEqual(boxes.map((b) => b.checked), [true, true, true]);
+});
+
 test('features are one row each, from lib/ai/settings.js FEATURES', async () => {
   const p = await open({ ai: { on: true, features: { syllabus: true } }, features: ['syllabus', 'notes'] });
   const rows = p.$('ai-feature-list').children;

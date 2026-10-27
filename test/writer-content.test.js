@@ -137,6 +137,21 @@ test('an attempt report is revoked when its assignment classification becomes un
   assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment', 'unknown']);
 });
 
+test('once the worker has the attempt\'s kind, each Writer frame on the page is told to ask about AI again', async () => {
+  const c = content({ fixture: 'attempt' });
+  c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
+  c.ctx.GZ_CTX.bookFor = () => ({ results: [{ column: { contentId: '_7_1', assessmentSubtype: 'Assignment' } }] });
+  // The worker answers once the frame is up and has asked already (it records the kind after several awaits).
+  const send = c.ctx.chrome.runtime.sendMessage, held = [];
+  c.ctx.chrome.runtime.sendMessage = (m) => (m?.type === 'glaze:attempt-kind' ? new Promise((r) => held.push(() => r(send(m)))) : send(m));
+  await c.start(); await new Promise(setImmediate);
+  assert.ok(c.ports.length, 'the paper frame is up');
+  assert.equal(c.ports.some((p) => p.sent.some((m) => m.type === 'ai')), false, 'nothing before the worker has the kind');
+  held.forEach((f) => f()); for (let i = 0; i < 4; i++) await new Promise(setImmediate);
+  assert.deepEqual(c.messages.filter((m) => m.type === 'glaze:attempt-kind').map((m) => m.kind), ['assignment']);
+  assert.ok(c.ports.every((p) => p.sent.some((m) => m.type === 'ai')), 'every frame re-checks its AI status');
+});
+
 test('unchanged Writer boxes do not rescan their document bodies on every page observer pass', async () => {
   const c = content(); await c.start();
   let walks = 0;
