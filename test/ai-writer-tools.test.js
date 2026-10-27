@@ -67,7 +67,7 @@ test('confirm tools: summaries in Glaze\'s words from the document; only a sourc
 });
 
 test('the gray text shows where the task would run, Tab-word takes one word, typing consumes it, and the pause adapts', () => {
-  const cases = [['When Sethe returns, the memory is not hers; it', ''], ['Two words', ''], ['Three words here ', ''], ['Three words here', ' more'],
+  const cases = [['When Sethe returns, the memory is not hers; it', ''], ['Two words', ''], ['Three words here ', ''], ['Three words here  ', ''], ['Done here. ', ''], ['Three words here', ' more'],
     ['Three words here', '\nNext'], ['End here. Then two', ''], ['It isn’t', ''], ['Some words and a hyphen-', ''], ['Numbers like 42 and 7', '']];
   for (const [before, after] of cases) assert.equal(AI.fits(before, after), C.fits(before, after), `${before}|${after}`);
   assert.equal(AI.nextWord(' arrives uninvited and'), ' arrives');

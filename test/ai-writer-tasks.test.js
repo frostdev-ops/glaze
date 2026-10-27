@@ -71,6 +71,15 @@ test('writer.complete finishes a cut-off word with no space, and a whole word af
   assert.equal((await go(C.task, { before: BEFORE }, { text: '"it arrives uninvited."' })).output, ' arrives uninvited.', 'quotes around the whole reply come off');
 });
 
+test('writer.complete after a space: the reply\'s first word is the one before the space, and the gray text starts at the caret', async () => {
+  const before = 'The river keeps what the town ';
+  assert.equal((await go(C.task, { before }, { text: 'town would rather forget.' })).output, 'would rather forget.');
+  assert.equal((await go(C.task, { before }, { text: ' would rather forget.' })).output, 'would rather forget.', 'a reply that skips the word');
+  const inp = C.task.input({ before });
+  assert.equal(C.finish('towns forget.', inp), null, 'the word before the space changed: where it joins is unknown');
+  assert.equal(C.finish('town', inp), null, 'nothing after the word');
+});
+
 test('writer.complete never starts a new sentence or paragraph, never repeats, never quotes or cites, never runs long', async () => {
   const inp = C.task.input({ before: BEFORE, after: '\nThe clearing is different.' });
   const said = (reply, o) => C.finish(reply, inp, o);
@@ -99,7 +108,10 @@ test('writer.complete runs only where the gray text may show, and never on a tes
   assert.equal(ok(BEFORE), true);
   assert.equal(ok('Two words'), false, 'fewer than three words in the sentence');
   assert.equal(ok('A whole sentence ends here. Then two'), false, 'the sentence is the last one');
-  assert.equal(ok('Three words here '), false, 'the caret after a space');
+  assert.equal(ok('Three words here '), true, 'the caret after a space: where people pause');
+  assert.equal(ok('Three words here  '), false, 'after two spaces');
+  assert.equal(ok('Three words here. '), false, 'after a full stop and a space: a new sentence');
+  assert.equal(ok('Three words here \t'), false, 'after a tab');
   assert.equal(ok('Three words here.'), false, 'after a full stop');
   assert.equal(ok('Three words here', ' and more'), false, 'words after the caret in its line');
   assert.equal(ok('Three words here', '  \nNext line'), true, 'only white space, then another block');
