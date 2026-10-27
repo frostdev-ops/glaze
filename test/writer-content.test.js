@@ -2,6 +2,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const content = require('./helpers/writer-content.cjs');
 
+test('cancelling an empty post releases Writer so the next native activation remains reachable', async () => {
+  const c = content(); await c.start();
+  const b = c.native(), frame = b.root.previousElementSibling;
+  const cancel = b.editor.closest('form').querySelector('button[ng-click="messageControl.onCancelClick()"]');
+  c.doc.dispatchEvent({ type: 'click', target: cancel });
+  assert.ok(!frame.isConnected, 'empty Cancel leaves no stale Writer frame over the collapsed native composer');
+  assert.notEqual(b.root.style.display, 'none');
+});
+
 test('a focused native caret is passed to Writer before hiding its editor', async () => {
   const c = content(), b = c.native();
   b.editor.innerHTML = '<p>A</p>';
