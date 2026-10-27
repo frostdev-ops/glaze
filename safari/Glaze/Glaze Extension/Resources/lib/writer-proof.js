@@ -250,8 +250,9 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
             fixes = left;
             // The change a keystroke made (as typed, or as an input rule rewrote it); never a paste or a drop.
             if (expect !== null && !tr.getMeta('uiEvent')) {
-              const a = tr.mapping.map(expect.from, -1), b = a + expect.text.length;
-              if (b > a && b <= next.doc.content.size && expect.text.length <= 64 && next.doc.textBetween(a, b, '\n', ' ') === expect.text && next.selection.from === b) typed = addRange(typed, a, b);
+              const b = next.selection.from, a = b - expect.text.length;
+              const left = tr.mapping.map(expect.from, -1), right = tr.mapping.map(expect.to, 1);
+              if (a >= left && b <= right && b > a && b <= next.doc.content.size && expect.text.length <= 64 && next.doc.textBetween(a, b, '\n', ' ') === expect.text && next.selection.from === b) typed = addRange(typed, a, b);
             }
             expect = null;
           }
@@ -272,7 +273,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
         },
         handleTextInput(view, from, to, text) {
           if (view.composing) { expect = null; return false; }
-          expect = { from, text };
+          expect = { from, to, text };
           if (!BOUNDARY.test(text) || from !== to) return false;
           const st = key.getState(view.state), $from = view.state.doc.resolve(from);
           if (!$from.parent.isTextblock || $from.parent.type.spec.code) return false;
