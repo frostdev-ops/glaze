@@ -61,6 +61,43 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
       assert.ok(await a.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(); return (await Promise.all((await P.versions('review-tabs')).map((v) => P.version('review-tabs', v.id)))).some((v) => JSON.stringify(v.doc).includes('Typed in A.')); }));
       await a.close(); await b.close();
     });
+    await run('keyboard', async () => {
+      const p = await page('review-keyboard');
+      await p.focus('#gp-tab-checks'); await p.keyboard.press('ArrowRight');
+      assert.equal(await p.evaluate(() => document.activeElement.id), 'gp-tab-sources', 'tabs need arrow navigation');
+      await p.focus('[data-run=bold]'); await p.keyboard.press('ArrowRight');
+      assert.equal(await p.evaluate(() => document.activeElement.dataset.run), 'italic', 'toolbar needs arrow navigation');
+      await p.close();
+    });
+    await run('print', async () => {
+      const p = await page('review-print'); await pause(300);
+      const pages = await p.evaluate(() => GZ_WRITER_PAPER.current().pages());
+      const file = path.join(root, '.review-evidence', 'print.pdf'); fs.mkdirSync(path.dirname(file), { recursive: true });
+      await p.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
+      const info = require('node:child_process').execFileSync('pdfinfo', [file], { encoding: 'utf8' });
+      assert.equal(+/Pages:\s+(\d+)/.exec(info)[1], pages, 'print must contain every paper page');
+      const text = require('node:child_process').execFileSync('pdftotext', [file, '-'], { encoding: 'utf8' });
+      assert.ok(!text.includes('Checks'), 'paper chrome must not print'); await p.close();
+    });
+    await run('table', async () => {
+      const p = await page('review-table');
+      await p.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA; const d = S.parse(S.paper, '<table>' + '<tr><td><p>Row</p></td><td><p>Value</p></td></tr>'.repeat(70) + '</table><p>After table.</p>'); v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, d.content)); });
+      await pause(500);
+      assert.ok(await p.evaluate(() => GZ_WRITER_PAPER.current().pages() >= 3), 'a tall table must paginate between rows'); await p.close();
+    });
+    await run('notes', async () => {
+      const p = await page('review-notes');
+      await p.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA; const d = S.paper.nodes.doc.create(null, S.paper.nodes.paragraph.create(null, [S.paper.text('Reference'), S.paper.nodes.footnote_ref.create({ content: 'Long footnote text. '.repeat(300) })])); v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, d.content)); });
+      await pause(500);
+      assert.ok(await p.evaluate(() => [...document.querySelectorAll('.gp-sheet .gp-notes')].every((n) => n.getBoundingClientRect().top >= n.parentElement.getBoundingClientRect().top + 90 * (GZ_WRITER_PAPER.current().pages() ? document.querySelector('.gp-zoom').getBoundingClientRect().width / 816 : 1))), 'long footnotes must not overflow the page top'); await p.close();
+    });
+    await run('thirty', async () => {
+      const p = await page('review-thirty');
+      await p.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA; const d = S.parse(S.paper, ('<p>' + 'Typing in a long paper stays responsive. '.repeat(35) + '</p>').repeat(130)); v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, d.content)); });
+      await pause(500);
+      const result = await p.evaluate(async () => { const api = GZ_WRITER_PAPER.current(), v = api.editor.view, before = v.dom.gzMeasured, times = []; for (let i = 0; i < 20; i++) { const start = performance.now(); v.dispatch(v.state.tr.insertText('x', 20 + i)); await new Promise((r) => setTimeout(r, 0)); times.push(performance.now() - start); } return { pages: api.pages(), measured: v.dom.gzMeasured - before, median: times.sort((a,b) => a-b)[10] }; });
+      console.log(JSON.stringify(result)); assert.ok(result.pages >= 30 && result.measured <= 20); await p.close();
+    });
     console.log(`${passed} paper regressions passed`);
   } finally { await ctx?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); if (ext) fs.rmSync(ext, { recursive: true, force: true }); }
 })().catch((e) => { console.error(e); process.exitCode = 1; });
