@@ -1093,3 +1093,12 @@ test('Ultra: a reply\'s observed message-id scopes Writer recovery to the post b
   Object.defineProperty(p.ed.parentNode, 'attributes', { value: [{ name: 'message-id', value: '_201_1' }] });
   assert.equal(p.ctx.api.draftAt(p.ed).near, '_201_1');
 });
+
+test('Ultra: intentionally clearing Writer removes only its own saved draft', async () => {
+  const p = await page(); await p.open();
+  const snapshot = { ...p.ctx.api.draftAt(p.ed), html: `<p>${FIRST}</p>`, text: FIRST };
+  p.ctx.GZ_DRAFT_UI.keep(snapshot, true); await p.advance(0);
+  p.ctx.GZ_DRAFT_UI.keep({ ...snapshot, html: '<p><br></p>', text: '', at: snapshot.at + 1 }, true); await p.advance(0);
+  const next = await page({ store: p.store }); await next.open();
+  assert.equal(next.shown().length, 0, 'a cleared Writer draft must not return after reload');
+});
