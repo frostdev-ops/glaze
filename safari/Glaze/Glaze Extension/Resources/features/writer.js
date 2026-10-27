@@ -43,17 +43,31 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 
   // ---- a box's life: asked for, opened, written in, given back -------------------------------------------------------
+  const drafts = () => X.need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => X.need('features/drafts.js', () => globalThis.GZ_DRAFT_UI));
+  const remember = (box) => {
+    clearTimeout(box.backup);
+    if (!box.snapshot) return;
+    const s = box.snapshot;
+    if (globalThis.GZ_DRAFT_UI?.keep) GZ_DRAFT_UI.keep(s);
+    else drafts().then(() => GZ_DRAFT_UI.keep(s), () => {});
+  };
+  const sameBox = (box) => box.path === location.pathname && box.editor.isConnected && box.root === U().rootOf(box.editor) &&
+    box.container === box.editor.closest('.ql-container') && box.editor.id === box.editorId &&
+    U().kindOf(box.editor, { path: location.pathname, attempt: box.kind === 'test' ? 'test' : '' }) === box.kind &&
+    (box.kind !== 'reply' || U().replyTo(box.editor) === (box.context.post?.id || ''));
   let seq = 0;
   const mount = async (b) => {
-    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, path: location.pathname, display: null };
+    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, path: location.pathname, editorId: b.editor.id, destination: X.draftAt(b.editor), display: null };
     boxes.set(b.editor, box);
+    try { await drafts(); if (!await GZ_DRAFT_UI.ready(b.editor)) { declined.add(b.editor); drop(box); return; } } catch { drop(box); return; }
+    if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
     b.root.setAttribute('data-gz-writer', b.kind);
     b.container.setAttribute('data-gz-writer-id', box.id);
     // A one-use pass for the frame, which also puts lib/writer-main.js in this page (lib/background.js 'glaze:writer').
     const pass = crypto.randomUUID();
     const ok = await Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'job', pass })).then((r) => r?.ok === true, () => false);
     if (boxes.get(b.editor) !== box) return;
-    if (!ok || !b.editor.isConnected || !on()) { failed.set(b.editor, Date.now()); drop(box); return; }
+    if (!ok || !sameBox(box) || !on()) { failed.set(b.editor, Date.now()); drop(box); return; }
     open(box, pass);
   };
   const open = (box, pass) => {
@@ -81,6 +95,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const ed = box.editor, f = box.frame, typing = box.root.contains(document.activeElement);
     const l = look();
     worn = JSON.stringify(l);
+    box.latest = ed.innerHTML;
     box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, html: ed.innerHTML, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
     box.display = [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
     box.root.style.setProperty('display', 'none', 'important');
@@ -90,18 +105,27 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     // Ultra changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text, not
     // its markup, says so: Quill tidies markup after each sync.
     box.observer = new MutationObserver(() => {
-      if (box.unsynced) return;
+      if (!sameBox(box) || box.unsynced) return;
       const now = squash(ed.textContent);
       if (now === box.text) return;
+      if (box.snapshot && !box.sending) { box.unsynced = true; return; }
+      remember(box);
       box.text = now;
+      box.latest = ed.innerHTML;
+      box.sending = false;
       box.port.postMessage({ type: 'html', html: ed.innerHTML });
     });
     box.observer.observe(ed, { childList: true, subtree: true, characterData: true });
   };
   const hear = (box, m) => {
-    if (m.type === 'ready') swap(box);
+    if (m.type === 'ready' && !box.display) swap(box);
     else if (m.type === 'height' && Number.isFinite(m.px)) box.frame.style.height = `${Math.max(40, Math.min(20000, Math.round(m.px)))}px`;
-    else if (m.type === 'change' && typeof m.html === 'string') sync(box, m.html);
+    else if (m.type === 'change' && typeof m.html === 'string' && typeof m.text === 'string') {
+      box.snapshot = { ...box.destination, html: m.html, text: m.text, at: Date.now() };
+      clearTimeout(box.backup);
+      box.backup = setTimeout(() => remember(box), 1000);
+      sync(box, m.html);
+    }
     else if (m.type === 'send') send(box);
     else if (m.type === 'native') giveBack(box, true);
   };
@@ -112,6 +136,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     return (d.content || d).textContent === ed.textContent;
   };
   const sync = (box, h) => {
+    if (!sameBox(box)) { box.latest = h; box.unsynced = true; return false; }
     if (h !== box.latest) box.sending = false;
     box.latest = h;
     const r = main('set', { id: box.id, html: h });
@@ -125,11 +150,24 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const send = (box, again = true) => {
     if (box.sending || box.retry || box.path !== location.pathname || !SENDS.has(box.kind) || U().kindOf(box.editor, { path: location.pathname }) !== box.kind || !sync(box, box.latest)) return;
     const b = U().sendOf(box.editor, box.kind);
-    if (b?.isConnected && U().enabled(b)) { box.sending = true; b.click(); }
+    if (b?.isConnected && U().enabled(b)) { remember(box); globalThis.GZ_DRAFT_UI?.sent?.(box.editor); box.sending = true; b.click(); }
     else if (again) box.retry = setTimeout(() => { box.retry = null; if (boxes.get(box.editor) === box) send(box, false); }, 60);
   };
+  // A normal native Post/Reply/Send has the same flush and clear lifecycle as the shortcut.
+  document.addEventListener('click', (e) => {
+    const b = e.target?.closest?.('button');
+    if (!b) return;
+    for (const box of boxes.values()) if (SENDS.has(box.kind) && sameBox(box) && U().sendOf(box.editor, box.kind) === b && U().enabled(b)) {
+      if (!sync(box, box.latest)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+      remember(box);
+      globalThis.GZ_DRAFT_UI?.sent?.(box.editor);
+      box.sending = true;
+    }
+  }, true);
   // The frame out and Ultra's editor back, as it was.
   const drop = (box) => {
+    if (boxes.get(box.editor) !== box) return;
+    remember(box);
     boxes.delete(box.editor);
     clearTimeout(box.wait);
     clearTimeout(box.retry);
@@ -149,7 +187,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (focus) box.editor.focus();
     globalThis.GZ_DRAFT_UI?.write({ type: 'input', target: box.editor }); // drafts keep what it holds from now
   };
-  const dropAll = () => { for (const box of [...boxes.values()]) drop(box); };
+  const dropAll = () => { for (const box of [...boxes.values()]) { if (box.unsynced && sameBox(box) && box.frame?.isConnected && !sync(box, box.latest)) { remember(box); continue; } drop(box); } };
+  addEventListener('pagehide', () => { for (const box of boxes.values()) remember(box); });
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'sync' && (c.enabled?.newValue === false || c.enhance?.newValue?.writer === false)) dropAll();
   });
@@ -172,7 +211,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // content.js's pass: boxes gone or unframed go, new ones open.
   const pass = () => {
     if (!on()) { dropAll(); return; }
-    for (const box of [...boxes.values()]) if (!box.editor.isConnected || (box.frame && !box.frame.isConnected)) drop(box);
+    for (const box of [...boxes.values()]) if (!sameBox(box) || (box.frame && !box.frame.isConnected)) drop(box);
     if (!U()) { X.need('lib/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
     const at = { path: location.pathname, attempt: attempt() };
     for (const b of U().boxes(document, at)) {
