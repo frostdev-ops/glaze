@@ -106,8 +106,6 @@ const GZ_SPEC = {
     remind: [false, 'bool'], remindExam: [false, 'bool'], remindPlan: [false, 'bool'], remindClass: [false, 'bool'], streak: [false, 'bool'],
     // Syllabus import on a course's home and Syllabus page (features/syllabus.js).
     syllabus: [false, 'bool'],
-    // Ultra: fold, a course's bar and a test's progress fold to a pill once scrolled (features/sticky-fold.js); titleScroll,
-    // an assignment attempt scrolls as one page, its title with it (theme.css).
     fold: [true, 'bool'], titleScroll: [true, 'bool'],
   },
   docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },

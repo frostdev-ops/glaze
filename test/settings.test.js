@@ -100,7 +100,7 @@ test('declutter tabs keep only known slugs, once each', () => {
 
 test('score bars, countdowns, folder previews, course progress, card grades, draft backup, download all, remembering your place, the course menu, the document buttons, the document viewer\'s palette, search in your courses, Better To Do, the Ultra Dashboard, the widgets (with none added), the sidebar, hiding folders and course tabs are on by default; the rest are off', () => {
   const on = Object.entries(G.GZ_DEFAULTS.enhance).filter(([, v]) => v === true).map(([k]) => k);
-  assert.deepEqual(on.sort(), ['calc', 'coursemenu', 'dashboard', 'docTheme', 'download', 'drafts', 'hideFolders', 'inline', 'newcontent', 'newgrades', 'overall', 'palette', 'place', 'previews', 'progress', 'scores', 'search', 'sidebar', 'tabs', 'todo', 'toggles', 'widgets']);
+  assert.deepEqual(on.sort(), ['calc', 'coursemenu', 'dashboard', 'docTheme', 'download', 'drafts', 'fold', 'hideFolders', 'inline', 'newcontent', 'newgrades', 'overall', 'palette', 'place', 'previews', 'progress', 'scores', 'search', 'sidebar', 'tabs', 'titleScroll', 'todo', 'toggles', 'widgets']);
   assert.equal(G.GZ_DEFAULTS.enhance.docPages, 'plain');
   assert.equal(G.GZ_SANITIZE({ enhance: { scores: false } }).enhance.scores, false, 'an explicit off is kept');
 });
