@@ -255,3 +255,30 @@ test('page breaks import to Word\'s page count: a page break before at a page\'s
   const after = await imp(pack(`<w:p>${r('Ends with a break')}<w:r><w:br w:type="page"/></w:r></w:p>` + p('Next', '<w:pageBreakBefore/>')));
   assert.equal(shape(after.node), '"Ends with a break" BREAK "Next"');
 });
+
+// ---- pictures
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const pics = (doc) => nodes(doc, 'image').map((n) => `${n.attrs.display}/${n.attrs.align}/${JSON.stringify(n.attrs.caption)}`);
+test('a captioned block picture comes back a captioned block picture, its caption no paragraph of its own', async () => {
+  const body = `<p>${'Body sentence. '.repeat(200)}</p>`;
+  const doc = S.parse(S.paper, `${body}<p><img src="${PNG}" alt="Chart" width="200" data-display="block" data-align="right" data-caption="Figure 1. Sales &amp; costs &lt;2026&gt;"></p>${body}`);
+  const back = await imp(X.exportDocx(doc).bytes);
+  assert.deepEqual(pics(back.node), ['block/right/"Figure 1. Sales & costs <2026>"']);
+  assert.equal(back.node.childCount, 3);
+  assert.ok(!back.node.content.content.some((n) => n.attrs.keepNext), 'the keep with next export gives it is the caption\'s');
+  const again = X.exportDocx(back.node).parts['word/document.xml'];
+  assert.equal((again.match(/<w:keepNext\/>/g) || []).length, 1);
+  assert.equal((again.match(/w:val="Caption"/g) || []).length, 1);
+  const lone = await imp(pack(p('Figure 2. A caption with no picture', '<w:pStyle w:val="Caption"/>')));
+  assert.equal(lone.node.textContent, 'Figure 2. A caption with no picture');
+  assert.doesNotMatch(lone.html, /data-w-/);
+});
+
+test('the page draws a caption as Word\'s Caption style does: no space above, two points smaller, 8 pt at least', () => {
+  const css = require('fs').readFileSync(require('path').join(__dirname, '../writer-objects.css'), 'utf8');
+  const rule = /\.gzo-img\[data-caption\]::after \{([^}]*)\}/.exec(css)[1];
+  assert.match(rule, /padding-top: 0;/);
+  assert.match(rule, /font-size: max\(8pt, calc\(1em - 2pt\)\);/);
+  const styles = X.exportDocx(S.parse(S.paper, `<p><img src="${PNG}" data-display="block" data-caption="C"></p>`), { format: 'mla9' }).parts['word/styles.xml'];
+  assert.match(/w:styleId="Caption".*?<\/w:style>/.exec(styles)[0], /w:before="0" w:after="0" w:line="240" w:lineRule="auto".*<w:sz w:val="20"\/>/);
+});
