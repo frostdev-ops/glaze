@@ -226,7 +226,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const noteBody = (content, n) => {
       const d = S.parse(S.paper, `<div>${content}</div>`), p = h('p', {}, h('sup', { text: String(n) }), ' ');
       let first = true;
-      d.descendants((x) => { if (x.isTextblock) { if (!first) p.append(h('br'), h('br')); first = false; p.append(PM.model.DOMSerializer.fromSchema(S.paper).serializeFragment(x.content)); return false; } return true; });
+      d.descendants((x) => {
+        if (!x.isTextblock) return true;
+        const part = first ? p : h('span', { class: 'gp-note-paragraph' });
+        if (!first) { part.style.display = 'block'; part.style.marginTop = `${format.notes.after}pt`; p.append(part); }
+        part.append(PM.model.DOMSerializer.fromSchema(S.paper).serializeFragment(x.content));
+        if (!x.content.size || x.lastChild?.type.name === 'hard_break') part.append(h('br'));
+        first = false;
+        return false;
+      });
       return p;
     };
     const noteHeights = (contents) => contents.map((c, i) => {
