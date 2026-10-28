@@ -134,7 +134,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   const admitted = new Map(); // controller → the connection admitted for a run or confirmation
   // A connection changed or removed: its runs end ('changed'), its kept catalog goes, and so do the providers' warm sessions.
   const revoke = (id, env) => {
-    for (const [control, use] of admitted) if (use.id === id) control.abort(R().error('changed'));
+    for (const [control, use] of admitted) if (use.id === id || Object.hasOwn(use.kept || {}, id)) control.abort(R().error('changed'));
     if (env) unlist(env, id);
     for (const name of P().list()) { try { P().get(name).release?.(); } catch { /* its own */ } }
   };
