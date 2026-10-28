@@ -243,7 +243,9 @@ const rss = (profile) => {
     const last = () => sb.fr.evaluate(() => GZ_WRITER_FRAME.editor().view.state.doc.lastChild.textContent);
     const line = async (typed) => { await sb.fr.click('.ProseMirror'); await sp.keyboard.press(`${MOD}+End`); if (await last()) await sp.keyboard.press('Enter'); await sp.keyboard.type(typed, { delay: 12 }); await pause(250); return last(); };
     const SAMPLE = 'so teh book, i think the the end  now "q" -- x ';
-    check(await line(SAMPLE) === SAMPLE, 'all autocorrect off before the frame loads: typos, i, doubles, double spaces, quotes and dashes stay as typed');
+    const offLine = await line(SAMPLE);
+    assert.equal(offLine, SAMPLE, 'all autocorrect off before the frame loads: typos, i, doubles, double spaces, quotes and dashes stay as typed');
+    check(true, 'all autocorrect off before the frame loads: typos, i, doubles, double spaces, quotes and dashes stay as typed');
     await sp.keyboard.type('nostalgea. ', { delay: 12 });
     await pause(2500);
     check(await sb.fr.evaluate(() => GZ_WRITER_ISSUES.list().length === 0 && !document.querySelector('.ProseMirror .gz-iss') && typeof GZ_WRITER_PROOF.mode === 'undefined'), 'proofing off before the frame loads: no Harper, nothing underlined');
