@@ -128,3 +128,16 @@ test('export writes every pPr and rPr child in the order Word\'s schema gives th
   for (const k of ['pPr/pStyle', 'pPr/keepNext', 'pPr/keepLines', 'pPr/pageBreakBefore', 'pPr/widowControl', 'pPr/numPr', 'pPr/pBdr', 'pPr/tabs', 'pPr/bidi', 'pPr/spacing', 'pPr/ind', 'pPr/jc',
     'rPr/rStyle', 'rPr/rFonts', 'rPr/b', 'rPr/bCs', 'rPr/i', 'rPr/iCs', 'rPr/caps', 'rPr/smallCaps', 'rPr/strike', 'rPr/color', 'rPr/sz', 'rPr/szCs', 'rPr/highlight', 'rPr/u', 'rPr/vertAlign', 'rPr/rtl']) assert.ok(seen.has(k), `the check saw ${k}`);
 });
+
+// ---- page and section breaks
+const shape = (d) => d.content.content.map((n) => (n.type.name === 'page_break' ? 'BREAK' : n.type.name === 'table' ? `table(${n.textContent})` : JSON.stringify(n.textContent))).join(' ');
+const breaksIn = (x) => (x.match(/<w:pageBreakBefore\/>|<w:br w:type="page"\/>/g) || []).length;
+test('export writes each page break, two in a row and one before a table among them, where Word keeps it', async () => {
+  const doc = S.parse(S.paper, '<p>Title page</p><hr class="gz-page-break"><hr class="gz-page-break"><p>Body</p><hr class="gz-page-break"><table><tr><td><p>Cell</p></td></tr></table><p>End</p><hr class="gz-page-break"><hr class="gz-page-break">');
+  const x = X.exportDocx(doc).parts['word/document.xml'];
+  assert.equal(breaksIn(x), 5);
+  assert.doesNotMatch(x, /<w:tc>(?:(?!<\/w:tc>).)*pageBreakBefore/, 'no break inside a cell, where Word ignores it');
+  assert.equal(shape((await imp(X.exportDocx(doc).bytes)).node), '"Title page" BREAK BREAK "Body" BREAK table(Cell) "End" BREAK BREAK ""');
+  const one = S.parse(S.paper, '<p>Title page</p><hr class="gz-page-break"><p>Body</p>');
+  assert.match(X.exportDocx(one).parts['word/document.xml'], /<w:p><w:pPr><w:pageBreakBefore\/>[^]*?Body/, 'one break is still the next paragraph\'s page break before');
+});
