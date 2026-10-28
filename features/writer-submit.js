@@ -7,7 +7,8 @@
 //   1. attach: a File on the file area's own input (DataTransfer, then bubbling input and change, which React hears at
 //      its root), or dropped on its drop zone when the input isn't drawn; never a click on a file input (the OS picker);
 //   2. wait, bounded, until Ultra lists the file in the panel;
-//   3. the note and/or the paper's text into Ultra's Quill through lib/writer-main.js (gz-writer:set), checked;
+//   3. Ultra's Quill through lib/writer-main.js (gz-writer:set), checked: what it held if the student kept it (the sheet
+//      showed it: submit:held), then the note and the paper's text; else just those, or emptied;
 //   4. once Ultra's Submit is enabled, one click on it. Ultra's confirmation is Ultra's.
 // Any failure stops before Submit and tells the sheet why; nothing is retried by itself. A test is never touched.
 // The worker's permit for the assignment (lib/background.js) is claimed before 1, released by a run that attached nothing,
@@ -25,7 +26,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const submitted = new WeakSet();
   const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
   const attached = new WeakMap(); // box → exact bytes and the row produced by this upload
-  const written = new WeakSet();
+  const written = new WeakSet(); // boxes a run has written into
   const imports = new WeakMap();
   let passing = null, running = false, active = null, down = null, giving = false, X = null;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -145,6 +146,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const have = [...box.editor.children].map((p) => squash(p.textContent)).join('\n');
     return have === want;
   };
+  // What Ultra's own text box holds, line by line (a list's items each on its own), as the sheet shows it.
+  const heldOf = (box) => L().lines([...box.editor.children].flatMap((c) => (/^(OL|UL)$/.test(c.tagName) ? [...c.children] : [c]).map((x) => x.textContent)).join('\n')).join('\n');
+  const flat = (t) => L().lines(t).map(squash).join('\n');
   const write = (box, d) => {
     const said = main('set', { id: box.id, delta: d });
     return said.some((r) => r?.ok) && sameText(box, d) ? null : 'text';
@@ -155,7 +159,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     runs.set(box, m.run);
     const name = m.name, bytes = m.bytes, key = m.key, asis = m.asis === true;
     if (!key || key !== L().paperKey(box.context?.paper) || !(asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name)) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
-      (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
+      (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || (m.held != null && (typeof m.held !== 'string' || m.held.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
     const user = box.context.paper.user, end = Math.min(m.until, Date.now() + 80e3);
     const transaction = active = { box, run: m.run, cancelled: false, frame: box.frame, port: box.port };
@@ -165,8 +169,12 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user, ...(op === 'commit' && version && { version }) }))?.ok === true;
     let claimed = false;
     try {
-      const d = L().delta({ note: m.note, text: m.text || '' });
-      if (!d && written.has(box)) return fail('review');
+      // Ultra's text box goes as the sheet says: kept as it showed it (Keep), the note and text after it; else replaced by
+      // them, or emptied. A run's own earlier write the sheet didn't show needs review.
+      const held = heldOf(box), shown = flat(m.held ?? '') === flat(held), keep = m.keep === true && !!held, extra = L().delta({ note: m.note, text: m.text || '' });
+      if (keep && !shown) return fail('page');
+      if (!extra && !keep && written.has(box) && !shown) return fail('review');
+      const d = keep && !extra ? null : L().delta({ kept: keep ? held : '', note: m.note, text: m.text || '' }) || (held ? [{ insert: '\n' }] : null);
       let s = L().start({ text: !!d, asis });
       if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'docx' });
       const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < end;
@@ -191,7 +199,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000, 100, here);
       if (!b) return fail('submit');
       if (!here() || !L().may(s, 'submit') || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected || L().listed(L().areaOf(box.editor), name, visible) !== 1) return fail('page');
-      if (d && !sameText(box, d)) return fail('text');
+      if (d ? !sameText(box, d) : flat(heldOf(box)) !== flat(held)) return fail('text');
       // The worker records the dispatch in the click's own turn: nothing can fail between them, and a page Ultra's
       // navigation tears down after the click has already sent it.
       claimed = false;
@@ -255,6 +263,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (m.type === 'submit:arm') armed.set(box, ok);
     else if (m.type === 'submit:saved') m.request === box.saveRequest && box.saved?.(m.ok === true);
     else if (m.type === 'submit:go' && armed.has(box)) go(box, m, ok);
+    else if (m.type === 'submit:held' && armed.has(box)) say(box, { type: 'submit:held', text: heldOf(box).slice(0, 1e6) });
     else if (m.type === 'submit:review' && armed.has(box)) review(box);
   };
   return { hear };

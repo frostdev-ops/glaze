@@ -7,9 +7,12 @@
 // submitted). Every failure stops before that click, says why here, and the paper stays.
 // Submit as is (a file the student brought, writer-import.js): the file large in place of the pages, the note, Cancel and
 // Submit; the file's own bytes go to the page unchanged, and the paper is neither saved nor built.
-// frame → page: submit:arm (this paper owns the attempt), submit:go { run, name, bytes, note, text, until, asis, mime, version },
-//   submit:saved { ok }; page → frame: submit:open, submit:save (Ultra's Save and Close), submit:step { run, step },
-//   submit:done { run, ok, error }. A test's box is compose, never a paper: it gets none of this.
+// Text already in Ultra's text box (the page says, at open and after a failure) is shown with Keep, off: off, the note and
+// text replace it, or it's emptied; on, it goes as shown, the note and text after it.
+// frame → page: submit:arm (this paper owns the attempt), submit:held, submit:go { run, name, bytes, note, text, held, keep,
+//   until, asis, mime, version }, submit:saved { ok }, submit:review; page → frame: submit:open, submit:held { text },
+//   submit:save (Ultra's Save and Close), submit:step { run, step }, submit:done { run, ok, error }. A test's box is
+//   compose, never a paper: it gets none of this.
 // "Also paste the text" starts as it was at the last Submit while Settings → Writer → Submitting's remember is on
 // (writer.submit: rememberText, text; lib/writer-settings.js), else off. Cancel and Escape keep nothing.
 // Classic script after writer-paper.js.
@@ -106,9 +109,12 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const kind = L().tag(name).toLowerCase();
 
     const note = h('textarea', { id: 'gs-note', maxlength: '4000', rows: '4' });
-    const kept = globalThis.GZ_WRITER_SETTINGS?.now()?.submit, remember = kept?.rememberText !== false;
-    const sw = h('button', { type: 'button', class: 'gs-sw', role: 'switch', 'aria-checked': String(remember && kept?.text === true), id: 'gs-paste' });
+    const prefs = globalThis.GZ_WRITER_SETTINGS?.now()?.submit, remember = prefs?.rememberText !== false;
+    const sw = h('button', { type: 'button', class: 'gs-sw', role: 'switch', 'aria-checked': String(remember && prefs?.text === true), id: 'gs-paste' });
     const size = h('small', { text: file ? t('{n} KB', { n: nf(L().kb(file.size)) }) : t('{n} pages', { n: pages }) });
+    const keep = h('button', { type: 'button', class: 'gs-sw', role: 'switch', 'aria-checked': 'false', id: 'gs-keep' });
+    const shown = h('textarea', { id: 'gs-held', rows: '3', readonly: true, 'aria-labelledby': 'gs-keep-label' });
+    const kept = [h('label', { class: 'gs-toggle', for: 'gs-keep' }, h('span', { id: 'gs-keep-label', text: t('Keep the text already in the text box') }), keep), h('div', { class: 'gs-field' }, shown)];
     const err = h('div', { class: 'gs-err', role: 'alert' });
     const native = h('button', { type: 'button', class: 'gs-native gs-review', text: t('Blackboard editor'), hidden: true });
     const cancel = h('button', { type: 'button', class: 'gs-btn', text: t('Cancel') });
@@ -146,6 +152,19 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     else build().then((out) => { if (sheet === mine) size.textContent = `${t('{n} pages', { n: pages })} · ${t('{n} KB', { n: nf(L().kb(out.bytes.length)) })}`; }, () => {});
 
     sw.addEventListener('click', () => { if (!mine.busy) sw.setAttribute('aria-checked', String(sw.getAttribute('aria-checked') !== 'true')); });
+    keep.addEventListener('click', () => { if (!mine.busy) keep.setAttribute('aria-checked', String(keep.getAttribute('aria-checked') !== 'true')); });
+    // What Ultra's text box holds, as the page says: shown before the checks, or gone when it's empty.
+    let held = '';
+    mine.held = (text) => {
+      if (mine.busy || typeof text !== 'string' || text === held) return;
+      held = text;
+      shown.value = text;
+      keep.setAttribute('aria-checked', 'false');
+      if (!text) for (const x of kept) x.remove();
+      else if (!kept[0].isConnected) { const at = layer.querySelector('.gs-open') || err; for (const x of kept) at.before(x); }
+    };
+    const ask = () => frame.say({ type: 'submit:held' });
+    ask();
     const cancelIt = () => {
       mine.cancelled = true;
       if (mine.busy) {
@@ -153,6 +172,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         if (waiting?.run === mine.run) waiting.done({ ok: false, error: 'page' });
         lock(false); submit.disabled = true; native.hidden = false;
         err.textContent = t(SAYS.cancel);
+        ask();
         return;
       }
       close();
@@ -181,7 +201,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     });
     const lock = (on) => {
       mine.busy = on;
-      for (const x of [note, sw, submit, review]) if (x) x.disabled = on;
+      for (const x of [note, sw, keep, submit, review]) if (x) x.disabled = on;
       layer.querySelector('.gs-sheet').setAttribute('aria-busy', String(on));
       submit.textContent = on ? t('Submitting…') : t('Submit');
       if (on) cancel.focus();
@@ -196,7 +216,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       if (!e.isTrusted || mine.busy || mine.cancelled) return;
       lock(true);
       err.textContent = ''; native.hidden = true;
-      const run = mine.run = ++runs, paste = !file && sw.getAttribute('aria-checked') === 'true';
+      const run = mine.run = ++runs, paste = !file && sw.getAttribute('aria-checked') === 'true', ultra = { held, keep: !!held && keep.getAttribute('aria-checked') === 'true' };
       const text = paste ? api.editor.text() : null;
       if (remember && !file) globalThis.GZ_WRITER_SETTINGS?.patch((w) => ({ ...w, submit: { ...w.submit, text: paste } })).catch((e) => console.error(e));
       let s = L().start({ text: !!L().delta({ note: note.value, text: text || '' }), asis: !!file });
@@ -207,7 +227,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           let bytes;
           try { bytes = await file.arrayBuffer(); } catch (e) { console.error(e); throw 'page'; }
           if (mine.cancelled || sheet !== mine || P()?.current() !== api || api.key() !== snapshot.key || !L().fileBytes(file, bytes)) throw 'page';
-          const r = await send(run, { key: snapshot.key, name, bytes, note: note.value, text: null, asis: true, mime: file.type || '' });
+          const r = await send(run, { key: snapshot.key, name, bytes, note: note.value, text: null, ...ultra, asis: true, mime: file.type || '' });
           if (mine.cancelled || sheet !== mine) return;
           if (!r.ok) throw r.error || 'page';
           mine.back = null;
@@ -216,15 +236,15 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           return;
         }
         if (mine.cancelled || sheet !== mine || !same()) throw 'page';
-        const kept = await api.version('sending');
-        if (!kept) throw 'save';
+        const sending = await api.version('sending');
+        if (!sending) throw 'save';
         if (mine.cancelled || sheet !== mine || !same()) throw 'page';
         s = L().advance(s, { step: 'save' });
         let out;
         try { out = built && built.doc === snapshot.doc && built.format === snapshot.format && built.key === snapshot.key ? built.out : await build(); } catch (e) { console.error(e); throw 'docx'; }
         s = L().advance(s, { step: 'docx' });
         if (mine.cancelled || !same() || !L().may(s, 'attach') || sheet !== mine) throw 'page';
-        const r = await send(run, { key: snapshot.key, name, bytes: out.bytes.slice().buffer, note: note.value, text, version: kept.version?.id ?? null });
+        const r = await send(run, { key: snapshot.key, name, bytes: out.bytes.slice().buffer, note: note.value, text, ...ultra, version: sending.version?.id ?? null });
         if (mine.cancelled || sheet !== mine) return;
         if (!r.ok) throw r.error || 'page';
         mine.back = null;
@@ -237,6 +257,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         lock(false);
         native.hidden = false;
         err.textContent = t(SAYS[code] || SAYS.page);
+        ask();
       }
     });
   };
@@ -245,6 +266,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   const paper = async () => { for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100)); return P()?.current() || null; };
   frame.handle('submit:open', async () => { const api = P()?.current() || await paper(); if (api) open(api); });
   frame.handle('submit:step', (m) => { if (waiting && m.run === waiting.run) waiting.step(m.step); });
+  frame.handle('submit:held', (m) => { sheet?.held?.(m.text); });
   frame.handle('submit:done', (m) => { if (waiting && m.run === waiting.run) waiting.done({ ok: m.ok === true, error: typeof m.error === 'string' ? m.error : 'page' }); });
   // Ultra's Save and Close: the paper saved first (it attaches nothing), then the page lets Ultra's own go on.
   frame.handle('submit:save', async (m) => {
