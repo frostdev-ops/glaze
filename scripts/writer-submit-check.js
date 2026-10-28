@@ -7,7 +7,7 @@
 // Checked: the sheet's look (screenshots beside the mockup), focus trap, Escape and Cancel changing nothing, Ultra's
 // Submit (disabled or not) and Save and Close caught, the .docx landing in the input with its name, type and bytes (read
 // back with lib/doctext.js), the note and text in Quill, Submit clicked exactly once and only after the file is listed,
-// each failure stopping before Submit, a test untouched, and the keyboard flow. Bringing a file (writer-import.js): a .docx
+// each failure stopping before Submit, a test untouched, the keyboard flow, and Settings → Writer's remembered paste switch. Bringing a file (writer-import.js): a .docx
 // dropped on the paper asks, Open in Writer replaces the paper (a version first, Undo in the toast); one chosen in Ultra's
 // own file area reaches the frame before Ultra and Submit as is attaches its very bytes (hashes compared) with the note; a PDF
 // goes straight to the sheet; ⋯ → Import…; with Open uploads in Writer off, Ultra's area takes the file itself. GETs only,
@@ -287,6 +287,46 @@ const HARNESS = `(() => {
     check(reasons.length === versionsBefore + 1 && reasons[0] === 'submit', 'a version was saved as Submitted');
     check(run.confirm && await fr.evaluate(() => !document.querySelector('.gs-layer')), 'the sheet closes; Ultra\'s confirmation is Ultra\'s');
     await p.close();
+
+    // ---- Settings → Writer → Submitting: the paste switch remembered, set before the frame loads and switched live
+    const W0 = G.GZ_SANITIZE({}).writer, setW = (w) => worker.evaluate((w) => chrome.storage.sync.set({ writer: w }), G.GZ_SANITIZE({ writer: w }).writer);
+    const keptW = async () => (await worker.evaluate(() => chrome.storage.sync.get('writer'))).writer?.submit;
+    check((await keptW())?.text === true, 'remembered by default: the switch turned on above is kept (writer.submit.text)');
+    const cancelSheet = async (fr) => { await fr.click('.gs-foot button:has-text("Cancel")'); await until(() => fr.evaluate(() => !document.querySelector('.gs-layer')), 'sheet closed'); };
+    await setW({ ...W0, submit: { rememberText: true, text: true } });
+    ({ p, el, fr } = await openAttempt('gone'));
+    await fr.click('.gp-submit'); await sheetOpen(fr);
+    check((await sheetText(fr)).sw === 'true', 'remember on, left on, before the frame loads: the sheet opens with the switch on');
+    await fr.click('#gs-paste'); await cancelSheet(fr); await pause(400);
+    check((await keptW()).text === true, 'turned off and cancelled: nothing kept');
+    await fr.click('.gp-submit'); await sheetOpen(fr);
+    check((await sheetText(fr)).sw === 'true', 'so the next sheet starts on again');
+    // A Submit that fails (no file area on this page) still keeps the choice it was pressed with.
+    await fr.click('#gs-paste');
+    await fr.click('.gs-primary');
+    await until(async () => (await keptW()).text === false, 'kept off at Submit');
+    await until(() => fr.evaluate(() => document.querySelector('.gs-err')?.textContent !== ''), 'the failure said');
+    check(true, 'Submit keeps the switch as pressed (off)');
+    await cancelSheet(fr);
+    await fr.click('.gp-submit'); await sheetOpen(fr);
+    check((await sheetText(fr)).sw === 'false', 'and the next sheet starts off');
+    await cancelSheet(fr);
+    await setW({ ...W0, submit: { rememberText: false, text: false } });
+    await pause(300);
+    await fr.click('.gp-submit'); await sheetOpen(fr);
+    await fr.click('#gs-paste');
+    await fr.click('.gs-primary');
+    await until(() => fr.evaluate(() => document.querySelector('.gs-err')?.textContent !== ''), 'the failure said');
+    await pause(400);
+    check((await keptW()).text === false, 'remember switched off live: a Submit with the switch on keeps nothing');
+    await cancelSheet(fr);
+    await setW({ ...W0, submit: { rememberText: true, text: true } });
+    await pause(300);
+    await fr.click('.gp-submit'); await sheetOpen(fr);
+    check((await sheetText(fr)).sw === 'true', 'remember switched on live: the switch starts where it was left');
+    await cancelSheet(fr);
+    await p.close();
+    await setW(W0);
 
     // ---- a drop when the input isn't drawn, and a double click submits once
     ({ p, el, fr } = await openAttempt('empty,noinput'));

@@ -23,8 +23,18 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   const bytes = (v) => new TextEncoder().encode(JSON.stringify(v)).length;
   const queues = new WeakMap();
 
-  // store: chrome.storage.local's get/set/remove (promises); now: the clock (tests pin it).
-  const open = (store, now = () => Date.now()) => {
+  // How many versions a paper keeps: Settings → Writer → Versions kept (storage.sync writer.versions, cleaned by
+  // defaults.js) where the worker runs this, else CAP.versions.
+  const keptVersions = async () => {
+    try {
+      const sync = globalThis.chrome?.storage?.sync;
+      if (!sync || typeof GZ_SANITIZE !== 'function') return CAP.versions;
+      return GZ_SANITIZE({ writer: (await sync.get('writer'))?.writer }).writer.versions;
+    } catch { return CAP.versions; }
+  };
+  // store: chrome.storage.local's get/set/remove (promises); now: the clock (tests pin it); o.versions: the count kept
+  // (a function, tests pin it).
+  const open = (store, now = () => Date.now(), o = {}) => {
     if (!store && globalThis.chrome?.runtime?.sendMessage) {
       const local = open(chrome.storage.local, now), seen = new Map();
       const send = async (op, args) => {
@@ -46,11 +56,12 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
 
     const versionsOf = async (k) => (Array.isArray(await get(VERSIONS + k)) ? await get(VERSIONS + k) : []);
     // Newest first, within the caps; the newest submitted version always stays.
-    const cap = (list) => {
+    const cap = async (list) => {
+      const most = await (o.versions || keptVersions)();
       const keep = [...list].sort((a, b) => b.at - a.at);
       const submitted = keep.find((v) => v.reason === 'submit');
       let total = keep.reduce((n, v) => n + v.bytes, 0);
-      for (let i = keep.length - 1; i >= 0 && (keep.length > CAP.versions || total > CAP.bytes); i--) {
+      for (let i = keep.length - 1; i >= 0 && (keep.length > most || total > CAP.bytes); i--) {
         if (keep[i] === submitted || i === 0) continue;
         total -= keep[i].bytes;
         keep.splice(i, 1);
@@ -61,7 +72,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       const doc = paper.doc, m = measure(doc);
       return { format: paper.format, id: `${at.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at, reason, words: m.words, bytes: bytes(doc), doc };
     };
-    const addVersion = async (k, v) => { const list = cap([v, ...(await versionsOf(k))]); await store.set({ [VERSIONS + k]: list }); return v; };
+    const addVersion = async (k, v) => { const list = await cap([v, ...(await versionsOf(k))]); await store.set({ [VERSIONS + k]: list }); return v; };
     const index = async (paper) => {
       const list = (await get(INDEX)) || [];
       const row = { key: paper.key, title: paper.title || '', course: paper.courseName || '', url: paper.url || '', words: paper.words || 0, format: paper.format, updated: paper.updated, submitted: paper.submitted || null };
@@ -127,7 +138,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
           else if (JSON.stringify(prev.doc) !== JSON.stringify(value.doc)) await addVersion(k, snapshot(value, 'restore', now()));
         } else if (name.startsWith(VERSIONS)) {
           const k = name.slice(VERSIONS.length), here = await versionsOf(k), ids = new Set(here.map((v) => v.id));
-          await store.set({ [name]: cap([...here, ...value.filter((v) => !ids.has(v.id))]) });
+          await store.set({ [name]: await cap([...here, ...value.filter((v) => !ids.has(v.id))]) });
         } else if (name.startsWith(PRESETS)) {
           const here = await get(name) || [], ids = new Set(here.map((v) => v.id));
           await store.set({ [name]: [...here, ...value.filter((v) => !ids.has(v.id))].slice(0, CAP.presets) });

@@ -1,7 +1,8 @@
 // Glaze Writer's compose mode in the real unpacked extension, on the synthetic Ultra discussion (test/fixtures/ultra-writer-
 // discussion.html, from the probe's skeletons) with the thread API answered from test/fixtures/ultra-writer-thread*.json:
 // the context the frame gets, the target ring and sources pill, the Quote pop over a classmate's post (mouse and
-// keyboard), Markdown and Ctrl/Cmd+Enter beside the ring, and a message's plain word count. Real Quill 1.3.7 (pinned) in
+// keyboard), Markdown and Ctrl/Cmd+Enter beside the ring, a message's plain word count, and Settings → Writer's Markdown,
+// word target and Quote switches off and on. Real Quill 1.3.7 (pinned) in
 // the page, as scripts/writer-check.js runs it. GETs only; no account or outside network from the browser.
 // NODE_PATH=<playwright> nice -n 10 node scripts/writer-compose-check.js [evidence directory], under the heavy-check lock (CLAUDE.md)
 // WRITER_SHOTS names where the screenshots go (default /tmp/gz-writer-compose-shots).
@@ -235,6 +236,47 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     b = await until(async () => { const v = await bar(brief.fr); return v.state === 'over' && v; }, 'ring over');
     check(b.target === "27 / 20" && b.stroke === b.warn && b.warn !== b.ok, `past the maximum it turns amber (${b.target})`);
     saved.over = await shot(brief.el, 'compose-ring-over.png');
+    await p.close();
+
+    // ---- Settings → Writer → Discussions: Markdown, the word target and Quote, off before the frame loads, on live ----
+    const W0 = G.GZ_SANITIZE({}).writer, setW = (w) => worker.evaluate((w) => chrome.storage.sync.set({ writer: w }), G.GZ_SANITIZE({ writer: w }).writer);
+    // A reply typed above is backed up (enhance.drafts); its offer would hold the box: those copies go first.
+    await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('draft:'))); });
+    await setW({ ...W0, compose: { markdown: false, target: false, quote: false } });
+    p = await open('/ultra/courses/_101_1/discussion/_9_1');
+    const sr = await box(p, 'reply');
+    await until(() => sr.fr.evaluate(() => GZ_WRITER_FRAME.context().requirements?.minWords === 250), 'context with its target');
+    b = await until(async () => { const v = await bar(sr.fr); return v.target === '0 words' && v; }, 'plain count with the target off');
+    check(!b.ring && !/250/.test(b.title), 'word target off before the frame loads: the plain count, no ring, though the prompt asks for 250');
+    await sr.fr.click('.ProseMirror');
+    await p.keyboard.type('- item **bold** ', { delay: 5 });
+    await pause(300);
+    check(await sr.fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; return v.state.doc.textContent === '- item **bold** ' && !v.dom.querySelector('ul, strong'); }), 'Markdown shortcuts off: "- " and **…** stay as typed');
+    const selectPost = async () => {
+      await p.evaluate(() => { document.activeElement.blur?.(); getSelection().removeAllRanges(); });
+      const at = await p.evaluate((q) => {
+        const t = document.querySelector('[message-id="_201_1"] .ql-editor p').firstChild, i = t.data.indexOf(q), r = document.createRange();
+        r.setStart(t, i); r.setEnd(t, i + q.length);
+        const rects = [...r.getClientRects()];
+        return { from: { x: rects[0].left + 1, y: rects[0].top + rects[0].height / 2 }, to: { x: rects.at(-1).right - 1, y: rects.at(-1).top + rects.at(-1).height / 2 } };
+      }, quoted);
+      await p.mouse.move(at.from.x, at.from.y); await p.mouse.down(); await p.mouse.move(at.to.x, at.to.y, { steps: 8 }); await p.mouse.up();
+    };
+    await selectPost();
+    await pause(800);
+    check(await p.evaluate((q) => getSelection().toString() === q && !document.querySelector('.gz-writer-quote')?.isConnected, quoted), 'Quote while replying off: a selection in a post shows no Quote pop');
+    await setW(W0);
+    b = await until(async () => { const v = await bar(sr.fr); return v.ring && /\/ 250$/.test(v.target) && v; }, 'ring back live');
+    check(/At least 250 words/.test(b.title), `word target switched on live: the ring toward 250 (${b.target})`);
+    await sr.fr.click('.ProseMirror');
+    await sr.fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; v.dispatch(v.state.tr.setSelection(GZ_PM.state.Selection.atEnd(v.state.doc))); });
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('- listed ', { delay: 5 });
+    await until(() => sr.fr.evaluate(() => !!GZ_WRITER_FRAME.editor().view.dom.querySelector('ul li')), 'list from Markdown');
+    check(true, 'Markdown shortcuts switched on live: "- " starts a list');
+    await selectPost();
+    await until(() => p.evaluate(() => !!document.querySelector('.gz-writer-quote')?.isConnected), 'Quote pop back');
+    check(true, 'Quote while replying switched on live: the pop shows again');
     await p.close();
 
     // ---- a message: course and student only, plain word count ----

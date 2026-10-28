@@ -2,7 +2,7 @@
 // the real Quill 1.3.7 under them, as scripts/writer-check.js runs them: the one Harper SharedWorker shared by frames in
 // tabs on five schools, lazy until a box is focused, closing when idle and back on the next lint; autocorrect and its
 // undo, the underlines, the hover card by mouse and keyboard, Add to dictionary reaching another school's box, the count,
-// and a test's box still proofed. Memory (the browser's processes' RSS) with Harper in 1 and 5 tabs. GETs only.
+// a test's box still proofed, and Settings → Writer's proofing, dialect and autocorrect classes off and on. Memory (the browser's processes' RSS) with Harper in 1 and 5 tabs. GETs only.
 // NODE_PATH=<playwright> nice -n 10 node scripts/writer-proof-check.js [evidence directory]
 // PROOF_SHOTS names where the screenshots go (default /tmp/gz-writer-proof-shots).
 const { chromium } = require('playwright');
@@ -230,6 +230,53 @@ const rss = (profile) => {
     check(back.worker !== all[0].worker && back.loads === 1, 'after idle the worker closed; the next lint started a new one and the underlines came back');
     check(await reply.fr.evaluate(() => GZ_WRITER_FRAME.editor().text().includes('her rememory Then Beloved') && ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'rememory')), 'the new worker got the dictionary back: rememory stays unflagged');
     saved.compose = await shot(reply.el, 'proof-compose.png');
+
+    // ---- Settings → Writer: proofing, dialect and each autocorrect class, off and on ----
+    // Set before the frame loads (all off), then each switched live through storage.onChanged.
+    const W0 = G.GZ_SANITIZE({}).writer, setW = (w) => worker.evaluate((w) => chrome.storage.sync.set({ writer: w }), G.GZ_SANITIZE({ writer: w }).writer);
+    const OFF = { ...W0, proofing: false, autocorrect: { typos: false, capitalI: false, doubles: false, smart: false } };
+    // A reply typed above is backed up (enhance.drafts); its offer would hold the box: those copies go first.
+    await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('draft:'))); });
+    await setW(OFF);
+    const sp = await open(discussion(SITES[0])), sb = await box(sp, 'reply');
+    await sp.bringToFront();
+    const last = () => sb.fr.evaluate(() => GZ_WRITER_FRAME.editor().view.state.doc.lastChild.textContent);
+    const line = async (typed) => { await sb.fr.click('.ProseMirror'); await sp.keyboard.press(`${MOD}+End`); if (await last()) await sp.keyboard.press('Enter'); await sp.keyboard.type(typed, { delay: 12 }); await pause(250); return last(); };
+    const SAMPLE = 'so teh book, i think the the end  now "q" -- x ';
+    check(await line(SAMPLE) === SAMPLE, 'all autocorrect off before the frame loads: typos, i, doubles, double spaces, quotes and dashes stay as typed');
+    await sp.keyboard.type('nostalgea. ', { delay: 12 });
+    await pause(2500);
+    check(await sb.fr.evaluate(() => GZ_WRITER_ISSUES.list().length === 0 && !document.querySelector('.ProseMirror .gz-iss') && typeof GZ_WRITER_PROOF.mode === 'undefined'), 'proofing off before the frame loads: no Harper, nothing underlined');
+    await setW({ ...OFF, proofing: true });
+    await settle(sb.fr, 'nostalgea', 'gz-iss', 20000);
+    check(true, 'proofing switched on live: the document is read and underlined');
+    await setW(OFF);
+    await until(() => sb.fr.evaluate(() => GZ_WRITER_ISSUES.list().length === 0 && !document.querySelector('.ProseMirror .gz-iss')), 'underlines gone');
+    check(true, 'proofing switched off live: the underlines go');
+    for (const [cls, typed, off, on] of [
+      ['typos', 'so teh ', 'so teh ', 'so the '],
+      ['capitalI', 'so i ', 'so i ', 'so I '],
+      ['doubles', 'so the the end  ', 'so the the end  ', 'so the end '],
+      ['smart', 'so "q" -- it\'s ', 'so "q" -- it\'s ', 'so “q” — it’s '],
+    ]) {
+      await setW({ ...OFF, autocorrect: { ...OFF.autocorrect, [cls]: false } });
+      await pause(200);
+      check(await line(typed) === off, `${cls} off: ${JSON.stringify(off)}`);
+      await setW({ ...OFF, autocorrect: { ...OFF.autocorrect, [cls]: true } });
+      await pause(200);
+      const got = await line(typed);
+      check(got === on, `${cls} switched on live: ${JSON.stringify(got)}`);
+    }
+    // The dialect reaches the one Harper worker; British spelling stops being flagged in British English.
+    await setW({ ...W0, dialect: 'en-US' });
+    await line('The colour faded. ');
+    await settle(sb.fr, 'colour', 'gz-iss', 20000);
+    await setW({ ...W0, dialect: 'en-GB' });
+    await until(async () => (await stats(sb.fr)).dialect === 'en-GB', 'worker in British English', 10000);
+    await until(() => sb.fr.evaluate(() => ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'colour')), 'colour unflagged in British English', 20000);
+    check(true, 'dialect switched live to British English: the worker says so and "colour" is no longer flagged');
+    await setW(W0);
+    await sp.close();
 
     // ---- a test's box is proofed too ----
     const tp = await open(`${SITES[0]}/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1`);
