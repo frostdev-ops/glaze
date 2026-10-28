@@ -304,11 +304,14 @@ test('frame: a box holding what Writer can\'t keep is refused before the editor 
   }
 });
 
-test('frame: paper mode sends no ops, so a paper is never squeezed into Ultra\'s text box', async () => {
+test('frame: paper mode sends the page nothing as it changes, so a paper is never squeezed into Ultra\'s text box nor copied out per keystroke', async () => {
   const f = frame();
   const p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
   f.to(p, { ...INIT, mode: 'paper', kind: 'assignment' });
   p.sent.length = 0;
-  f.made[0].opts.onChange({ html: '<p>A paper</p>', text: 'A paper', words: 2, docChanged: true });
-  assert.equal(p.sent.at(-1).delta, null);
+  let heard = 0;
+  f.ctx.GZ_WRITER_FRAME.on('change', () => heard++);
+  f.made[0].opts.onChange({ get html() { throw new Error('a paper\'s HTML is not built per keystroke'); }, text: 'A paper', words: 2, docChanged: true });
+  assert.deepEqual(p.sent.filter((m) => m.type === 'change'), []);
+  assert.equal(heard, 1, 'the frame\'s own parts still hear it');
 });
