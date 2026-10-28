@@ -581,7 +581,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const recoveryScope = host.key || ctx.recovery || 'paper', keySlot = `gz-paper-key:${recoveryScope}`;
     // The tab's copy of a paper's unsaved edits, by the paper's key: the next frame on any page of it finds them.
     const slotOf = (k) => `gz-paper-pending:${k}`;
-    const pendingOf = (k) => { try { const p = JSON.parse(sessionStorage.getItem(slotOf(k))); return p?.key === k && p.record?.doc ? p.record : null; } catch { return null; } };
+    // → the copy's record, with base: the revision it was typed on (its save keeps a newer one as a version).
+    const pendingOf = (k) => { try { const p = JSON.parse(sessionStorage.getItem(slotOf(k))); return p?.key === k && p.record?.doc ? { ...p.record, base: p.base } : null; } catch { return null; } };
     let recoveryKey;
     try { recoveryKey = sessionStorage.getItem(keySlot); } catch { /* storage can be unavailable */ }
     recoveryKey ||= `recovery:${crypto.randomUUID()}`;
@@ -621,17 +622,18 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       return fill();
     };
     const emergency = () => {
-      try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(slotOf(key), JSON.stringify({ key, record: r })); sessionSafe = true; }
+      try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(slotOf(key), JSON.stringify({ key, record: r, base: paper?.revision ?? 0 })); sessionSafe = true; }
       catch { sessionSafe = false; }
     };
-    const save = async (reason = 'auto') => {
+    // base: the revision what's saved was typed on, when it isn't the one this editor last read (a recovered copy).
+    const save = async (reason = 'auto', base) => {
       clearTimeout(saveTimer);
       if (!key) { setState('Not saved'); return null; }
       const at = edits, k = key;
       emergency();
       setState('Saving…');
       try {
-        const rec = record(), r = await store.save(key, rec, { reason }); paper = r.paper;
+        const rec = record(), r = await store.save(key, rec, Number.isSafeInteger(base) ? { reason, base } : { reason }); paper = r.paper;
         keepPictures(rec.doc);
         failing = 0;
         if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(slotOf(k)); } catch {} }
@@ -1252,7 +1254,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       keepPictures(paper?.doc);
       recovered = key === recoveryKey && !!paper?.doc;
       const copy = pendingOf(key), pending = copy && await complete(copy, key, paper);
-      if (pending) paper = { ...paper, ...pending };
+      if (pending) { const { base: _, ...rec } = pending; paper = { ...paper, ...rec }; }
       keep = paper?.keep === true;
       if (paper?.doc) {
         format = ST.get(paper.format);
@@ -1265,7 +1267,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (key !== recoveryKey) await save('auto');
       }
       initializing = false;
-      if (pending) { dirty = true; await save(); }
+      if (pending) { dirty = true; await save('auto', pending.base); }
       const scope = PA.scopeOf(ctx.paper || paper || {});
       presets = scope ? await store.presets(scope) : [];
       restyleCSS();
@@ -1294,7 +1296,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (!written && edits === at) {
           key = target;
           keepPictures(existing?.doc);
-          paper = pending ? { ...existing, ...pending } : existing;
+          if (pending) { const { base: _, ...rec } = pending; paper = { ...existing, ...rec }; } else paper = existing;
           keep = paper?.keep === true;
           format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
           initializing = true;
@@ -1303,13 +1305,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           const scope = PA.scopeOf(ctx.paper || {});
           presets = scope ? await store.presets(scope) : [];
           restyleCSS(); counts(); PG.relayout(view); runChecks(); outlineDraw();
-          if (pending || !existing?.doc) { dirty = true; if (!await save()) return; }
+          if (pending || !existing?.doc) { dirty = true; if (!await save('auto', pending?.base)) return; }
           if (!dirty) setState('Saved');
           return;
         }
         if (!await save()) return;
         const kept = pendingOf(target), filled = kept && await complete(kept, target, await store.get(target));
-        if (filled) await store.save(target, filled);
+        if (filled) { const { base, ...rec } = filled; await store.save(target, rec, Number.isSafeInteger(base) ? { base } : {}); }
         key = target;
         if (await save('import')) { await store.remove(recoveryKey); try { sessionStorage.removeItem(slotOf(recoveryKey)); } catch {} }
       })().catch((e) => { console.error(e); setState('Not saved'); });
