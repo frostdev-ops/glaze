@@ -26,6 +26,15 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
     if (!notes.has(content)) { if (notes.size > 500) notes.clear(); notes.set(content, S().text(S().parse(S().paper, `<div>${content}</div>`)).text); }
     return notes.get(content);
   };
+  // Search uses model separators; a DOM Range counts only text nodes, since <br> has no textContent.
+  const noteRange = (content, start, end) => {
+    const doc = S().parse(S().paper, `<div>${content}</div>`), map = S().text(doc);
+    return [start, end].map((offset) => {
+      const at = map.posAt(offset); let count = 0;
+      doc.descendants((n, pos) => { if (n.isText) count += Math.max(0, Math.min(n.nodeSize, at - pos)); });
+      return count;
+    });
+  };
   // → [{ from, to, note? { start, end } }] in document order; a note's match spans its mark (to = from + 1), start and end
   // in the note's text. Inline atoms and line breaks stand for one character no query has, so nothing matches across them.
   const search = (doc, query, opts = {}) => {
@@ -121,7 +130,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
     view: () => ({ update: (v, before) => { api.onUpdate?.(v, before); } }),
   });
 
-  const api = { pattern, search, near, replace, plugin, key, onUpdate: null };
+  const api = { pattern, search, near, replace, noteRange, plugin, key, onUpdate: null };
   const F = globalThis.GZ_WRITER_FRAME;
   if (!F || typeof document === 'undefined') return api;
 
@@ -304,12 +313,13 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
     requestAnimationFrame(() => {
       const p = [...document.querySelectorAll('.gp-sheet .gp-notes p')].find((x) => x.firstChild?.textContent === String(n));
       if (!p) return;
+      const node = v.state.doc.nodeAt(h.from), [start, end] = noteRange(node?.attrs.content || '', h.note.start, h.note.end);
       const at = String(n).length + 1, walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT), r = document.createRange();
       let seen = 0, started = false;
       for (let x = walk.nextNode(); x; x = walk.nextNode()) {
         const len = x.data.length;
-        if (!started && seen + len > at + h.note.start) { r.setStart(x, at + h.note.start - seen); started = true; }
-        if (started && seen + len >= at + h.note.end) { r.setEnd(x, at + h.note.end - seen); CSS.highlights.set('ge-note', new Highlight(r)); return; }
+        if (!started && seen + len > at + start) { r.setStart(x, at + start - seen); started = true; }
+        if (started && seen + len >= at + end) { r.setEnd(x, at + end - seen); CSS.highlights.set('ge-note', new Highlight(r)); return; }
         seen += len;
       }
     });
