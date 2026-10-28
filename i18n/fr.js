@@ -3361,6 +3361,7 @@
   "Note to {name}": "Note pour {name}",
   "Note to your instructor": "Note pour votre enseignant",
   "Also paste the text in the text box": "Coller aussi le texte dans la zone de texte",
+  "Keep the text already in the text box": "Garder le texte déjà présent dans la zone de texte",
   "{n} checks open": {"one": "{n} vérification en attente", "other": "{n} vérifications en attente"},
   "Submitting…": "Remise…",
   "Attaching…": "Ajout de la pièce jointe…",

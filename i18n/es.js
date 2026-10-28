@@ -3361,6 +3361,7 @@
   "Note to {name}": "Nota para {name}",
   "Note to your instructor": "Nota para tu profesor",
   "Also paste the text in the text box": "Pegar también el texto en el cuadro de texto",
+  "Keep the text already in the text box": "Conservar el texto que ya está en el cuadro de texto",
   "{n} checks open": {"one": "{n} revisión pendiente", "other": "{n} revisiones pendientes"},
   "Submitting…": "Entregando…",
   "Attaching…": "Adjuntando…",

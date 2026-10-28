@@ -3361,6 +3361,7 @@
   "Note to {name}": "Notitie voor {name}",
   "Note to your instructor": "Notitie voor je docent",
   "Also paste the text in the text box": "Plak de tekst ook in het tekstvak",
+  "Keep the text already in the text box": "Houd de tekst die al in het tekstvak staat",
   "{n} checks open": {"one": "{n} controle open", "other": "{n} controles open"},
   "Submitting…": "Inleveren…",
   "Attaching…": "Bijvoegen…",

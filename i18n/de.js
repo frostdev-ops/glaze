@@ -3361,6 +3361,7 @@
   "Note to {name}": "Notiz an {name}",
   "Note to your instructor": "Notiz an deine Lehrkraft",
   "Also paste the text in the text box": "Text auch ins Textfeld einfügen",
+  "Keep the text already in the text box": "Text behalten, der schon im Textfeld steht",
   "{n} checks open": {"one": "{n} Prüfung offen", "other": "{n} Prüfungen offen"},
   "Submitting…": "Wird abgegeben…",
   "Attaching…": "Wird angehängt…",
