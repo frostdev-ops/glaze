@@ -23,6 +23,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
   const attached = new WeakMap(); // box → exact bytes and the row produced by this upload
   const written = new WeakSet();
+  const imports = new WeakMap();
   let passing = null, running = false, active = null, down = null, giving = false, X = null;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   const until = async (fn, ms, every = 100, valid = () => true) => { const end = Date.now() + ms; for (;;) { if (!valid()) return null; const v = fn(); if (v) return v; if (Date.now() >= end) return null; await pause(every); } };
@@ -30,7 +31,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const say = (box, m) => { try { box.port?.postMessage(m); } catch { /* the frame went */ } };
   const assignment = (box) => box.kind === 'assignment' && box.mode === 'paper' && !document.querySelector('bb-attempt-canvas') &&
     globalThis.GZ_WRITER_ULTRA?.kindOf(box.editor, { path: location.pathname }) === 'assignment';
-  const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected || !assignment(box)) armed.delete(box); return armed; };
+  const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected || !box.ready || !box.frame?.isConnected || !box.port || !assignment(box)) armed.delete(box); return armed; };
   const visible = (e) => e.getClientRects().length > 0;
 
   // ---- Ultra's footer buttons, caught before Ultra
@@ -153,7 +154,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
     const user = box.context.paper.user;
-    const transaction = active = { box, run: m.run, cancelled: false };
+    const transaction = active = { box, run: m.run, cancelled: false, frame: box.frame, port: box.port };
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
     const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user }))?.ok === true;
@@ -162,7 +163,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!d && written.has(box)) return fail('review');
       let s = L().start({ text: !!d, asis });
       if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'docx' });
-      const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
+      const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
       if (!here()) return fail('page');
       if (!await permit('claim')) return fail('claimed');
       if (!here()) return fail('page');
@@ -198,11 +199,11 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const drop = e.type === 'drop', t = e.target;
     for (const box of live().keys()) {
       const area = L().areaOf(box.editor);
-      const hit = drop ? (area?.querySelector('[class*="makeStylespreview-"]') || L().dropZone(area))?.contains(t) :
-        t?.tagName === 'INPUT' && t.getAttribute('type') === 'file' && area?.contains(t) && !t.closest('.ql-container') && t.id !== 'browseForFiles';
+      const zone = L().dropZone(area);
+      const hit = zone?.contains(t) && (drop || t === L().uploadInput(area));
       if (!hit) continue;
       const files = drop ? e.dataTransfer?.files : t.files;
-      if (files?.length !== 1 || files[0].size > 50e6) return;
+      if (files?.length !== 1 || L().fileError(files[0])) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.type === 'input') return;
@@ -210,7 +211,12 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       // Ultra's zone, which never hears the drop, lets go of its highlight.
       if (drop) { giving = true; try { t.dispatchEvent(new DragEvent('dragleave', { bubbles: true })); } finally { giving = false; } }
       else t.value = '';
-      f.arrayBuffer().then((bytes) => { if (!live().has(box)) return; box.frame?.focus(); say(box, { type: 'import:file', name: f.name, mime: f.type, bytes }); }, () => {});
+      const request = { frame: box.frame, port: box.port };
+      imports.set(box, request);
+      f.arrayBuffer().then((bytes) => {
+        if (!L().fileBytes(f, bytes) || imports.get(box) !== request || !live().has(box) || box.frame !== request.frame || box.port !== request.port || !X?.settings?.().enhance?.writerUploads) return;
+        box.frame.focus(); say(box, { type: 'import:file', name: f.name, mime: f.type, bytes });
+      }, () => {});
       return;
     }
   };

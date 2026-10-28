@@ -1184,6 +1184,7 @@
   "Grading scale": "Escala de calificaciones",
   "From your syllabus": "De tu programa",
   "Delete what Glaze kept from this syllabus? Your GPA scale and To Do tasks stay.": "¿Borrar lo que Glaze guardó de este programa? Tu escala del promedio y tus tareas de Better To Do se quedan.",
+  "That file could not be read.": "No se pudo leer ese archivo.",
   "That file is too large.": "Ese archivo es demasiado grande.",
   "Choose a file or paste the text first.": "Elige un archivo o pega el texto primero.",
   "Import a syllabus": "Importar un programa",
