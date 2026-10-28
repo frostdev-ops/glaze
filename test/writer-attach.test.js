@@ -79,6 +79,10 @@ test('read: a document as its text, a picture as itself, within the bounds; pict
   const sizes = [];
   await C.read(Array.from({ length: 6 }, (_, i) => ({ url: `${DOCX_URL}${i}`, name: `p${i}.txt`, image: false })), { get: async (u, max) => { sizes.push(max); return new Uint8Array(Math.min(15 << 20, max)).fill(65); }, text, D });
   assert.deepEqual(sizes, [C.ATTACH.file, C.ATTACH.file, 10 << 20], 'the total bounds them all');
+  // Pictures together stay within what the worker keeps and the broker's message takes (8 MB of base64).
+  const big = await C.read(Array.from({ length: 4 }, (_, i) => ({ url: `${PNG_URL}${i}`, name: `p${i}.png`, image: true })), { get: async (u, max) => png(800, 600, max - 33), text, D });
+  assert.equal(big.length, 2);
+  assert.ok(big.reduce((n, p) => n + p.image.data.length, 0) <= W.LIMIT.album);
   const long = await C.read([{ url: DOCX_URL, name: 'long.txt', image: false }], { get: async () => new Uint8Array(50000).fill(65), text, D });
   assert.equal(long[0].text.length, C.ATTACH.text);
 });
