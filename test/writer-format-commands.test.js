@@ -29,7 +29,7 @@ const press = (st, key) => {
   const ok = !!fn && fn(st, (tr) => { next = st.apply(tr); });
   return { ok, st: next };
 };
-const marksAt = (st, needle) => st.doc.nodeAt(find(st, needle).from).marks.map((m) => [m.type.name, m.attrs]);
+const marksAt = (st, needle) => st.doc.nodeAt(find(st, needle).from).marks.map((m) => [m.type.name, { ...m.attrs }]);
 
 test('small caps and all caps are paper marks that round-trip through Writer\'s HTML; compose has neither', () => {
   assert.ok(S.paper.marks.small_caps && S.paper.marks.all_caps);
@@ -60,7 +60,7 @@ test('font family and size are run marks; null takes the mark\'s part away and l
   assert.equal(run(st, 'size', 7).ok, false);
   // An empty selection: what typing carries next.
   const typed = run(caret(make('<p>one</p>'), 'one'), 'size', 18).st;
-  assert.deepEqual(typed.storedMarks.map((m) => [m.type.name, m.attrs]), [['text_style', { font: null, size: 18 }]]);
+  assert.deepEqual(typed.storedMarks.map((m) => [m.type.name, { ...m.attrs }]), [['text_style', { font: null, size: 18 }]]);
   // A selection across runs keeps each run's other part.
   st = run(select(make('<p><span style="font-family:Arial">aa</span>bb</p>'), 'aabb'), 'size', 10).st;
   assert.deepEqual(marksAt(st, 'aa'), [['text_style', { font: 'Arial', size: 10 }]]);
@@ -119,7 +119,7 @@ test('paragraph settings land on every selected textblock; a null clears one bac
   st = run(st, 'paragraph', { before: null, after: null, exact: null, left: null, right: null, first: null, keepNext: null, keepLines: null, widow: null, align: null }).st;
   const a = st.doc.child(1).attrs;
   assert.deepEqual([a.before, a.after, a.exact, a.left, a.indent, a.right, a.first, a.keepNext, a.keepLines, a.widow, a.align, a.line], [null, null, null, null, 0, null, null, null, null, null, null, null]);
-  assert.equal(run(make('<p>x</p>', 'compose'), 'paragraph', { before: 6 }).ok === undefined, false, 'compose has no paragraph command');
+  assert.equal(E.commands(S.compose).paragraph, undefined, 'compose has no paragraph command');
 });
 
 test('page break before puts a page break ahead of the paragraph, and takes it away', () => {
