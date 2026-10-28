@@ -1779,7 +1779,7 @@ GZ_UI.load().then((s) => {
   navbarEditor = GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
-  // AI (lib/editor-ai.js): its switch, the connection, the features allowed to use it and the record of calls.
+  // AI (lib/editor-ai.js): its switch, the providers, the overall model and each feature's own, and the record of calls.
   GZ_AIEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
     pct: (x) => GZ_I18N.pct(Math.round(x * 100), GZ_I18N.ui()) });
   followSection(editor.route(), editor.part());

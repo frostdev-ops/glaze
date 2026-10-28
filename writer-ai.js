@@ -44,9 +44,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const PAUSE = { min: 250, max: 1000 };
   const pause = (score) => Math.round(Math.min(PAUSE.max, Math.max(PAUSE.min, 900 - 800 * score)));
   const learn = (score, took) => score * 0.8 + (took ? 0.2 : 0);
+  // The pause Advanced's tuning set for the gray text (Settings → AI, lib/ai/settings.js TUNE), else the adaptive one.
+  const wait = (s, score) => { const p = s?.mode === 'advanced' ? s.tune?.completion?.pause : undefined; return Number.isSafeInteger(p) && p >= 100 && p <= 2000 ? p : pause(score); };
   // The connection's name on the chip.
   const providerName = (st, t) => (st?.provider === 'device' ? 'Gemini Nano' : st?.provider === 'apple' ? t('Apple Intelligence') : st?.to || t('Endpoint'));
-  const api = { fits, sentence, nextWord, consume, pause, learn, providerName };
+  const api = { fits, sentence, nextWord, consume, pause, wait, learn, providerName };
 
   const F = globalThis.GZ_WRITER_FRAME;
   if (!F || typeof document === 'undefined') return api;
@@ -106,7 +108,6 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (quiet() || checking || !said) return 'checking';
     if (said.on !== true) return 'ai-off';
     if (said.features?.writing !== true) return 'off';
-    if (typeof said.use !== 'string' || !said.use) return 'setup';
     const st = status.writing;
     if (!st) return 'unverified';
     if (!st.allowed) return st.why === 'attempt' ? (Date.now() - attemptSince < 10000 ? 'checking' : 'attempt') : st.why ? 'unavailable' : 'off';
@@ -146,7 +147,8 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     let s = null;
     try { s = (await chrome.storage.local.get('ai'))?.ai; } catch { /* no storage */ }
     if (gen !== generation || quiet()) return;
-    const want = (f) => s?.on === true && typeof s.use === 'string' && !!s.use && s.features?.[f] === true;
+    // Whether a model is chosen for the feature is the worker's to say (status why 'setup'): an older store names it apart.
+    const want = (f) => s?.on === true && s.features?.[f] === true;
     for (const f of ['completion', 'writing']) {
       const st = want(f) ? await ask({ op: 'status', feature: f }, ASK.status) : null;
       if (gen !== generation || quiet()) return;
@@ -275,7 +277,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       update(v, prev) {
         if (v.state.doc === prev.doc && v.state.selection.eq(prev.selection)) return;
         stopFlight();
-        if (v.state.doc !== prev.doc && !KEY.getState(v.state) && ok('completion')) timer = setTimeout(complete, pause(score));
+        if (v.state.doc !== prev.doc && !KEY.getState(v.state) && ok('completion')) timer = setTimeout(complete, wait(said, score));
       },
       destroy: () => { stopFlight(); clearInterval(keeping); keeping = 0; },
     }),
@@ -422,7 +424,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       const say = {
         checking: () => t('Checking whether AI can run here…'),
         'ai-off': () => t('AI is off. Turn it on in Settings → AI.'),
-        off: () => t('Writing feedback is off. Turn it on in Settings → AI.'),
+        off: () => t('Feedback is off. Turn it on in Settings → AI.'),
         setup: () => t('No AI model is chosen. Choose one in Settings → AI.'),
         permission: () => (host ? t('Glaze needs permission to reach {host}. Allow it in Settings → AI.', { host }) : t('AI isn’t available right now.')),
         download: () => t('The on-device model isn’t downloaded. Download it in Settings → AI.'),

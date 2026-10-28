@@ -417,11 +417,13 @@ not those unknown legacy copies or unrelated stickers.
   tasks stay until you change them there. Only the first 200,000 characters of a syllabus are read, and the review says
   so when there were more.
 - **AI connections** (Settings → AI, off by default), in the extension worker's own IndexedDB (`glaze-ai`), on this
-  device only: the connection you set up (a model on this device, or an OpenAI-compatible endpoint's address, model and
-  key). The key is never in `chrome.storage`, never synced, never in a Back up file or a shared Look, and never given to
-  a page; Settings shows it masked. `chrome.storage.local` keeps whether AI is on, which connection is in use, which
-  features may use it, and a list of recent AI calls with metadata only (feature, connection, time, size, outcome; no
-  text, address or key). Clear empties that list.
+  device only: each provider you connect (its key) and, in Advanced, each OpenAI-compatible endpoint you add (its name,
+  address and key). A key is never in `chrome.storage`, never synced, never in a Back up file or a shared Look, and never
+  given to a page; Settings shows it masked. `chrome.storage.local` keeps whether AI is on, Simple or Advanced, the
+  overall model and any feature's own (a provider's name, a model's id and the effort you set), Advanced's tuning, which
+  features may use AI, and a list of recent AI calls with metadata only (feature, provider, model, time, size, outcome;
+  no text, address or key). Clear empties that list. A connection kept by an earlier version is moved into this shape the
+  first time Settings opens, its key with it.
 - **Glaze Writer** (Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, never synced:
   each assignment's paper (its text, title, due date, format and address), keyed by school, student, course and
   assignment, with up to 40 versions (4 MB in all, the last submitted one always kept) and your own format presets; your
@@ -694,10 +696,11 @@ you import) are bundled. It makes requests in these cases:
 - **AI reading** (Settings → AI, off by default; Canvas and Blackboard). Only when AI is on, a connection is set up and
   you allow a feature (Syllabus import first), that feature can ask the AI to read for it. With a model on this device
   (Chrome's built-in model, or Apple Intelligence through Glaze's Safari app) nothing leaves your computer. With an
-  endpoint, the syllabus text (and its pictures, when the model reads pictures) goes to the address you entered, and
-  only after the import dialog has shown that address; Glaze asks the browser for permission to reach that one address
-  when you save or test it. The key is sent only to that address, over https (or to your own computer). Glaze never
-  chooses an endpoint, runs no server for AI, and never uses AI on quiz or test pages. AI answers are only
+  provider or an endpoint, the syllabus text (and its pictures, when the model reads pictures) goes to the provider you
+  chose for it, or the address you entered, and only after the import dialog has shown that host; Glaze asks the browser
+  for permission to reach that one host when you click Connect (or save or test an endpoint). The key is sent only there,
+  over https (or to your own computer). Glaze never chooses a provider, runs no server for AI, and never uses AI on quiz
+  or test pages. AI answers are only
   suggestions in the review, marked Check this; nothing is kept until you save.
 - **Glaze Writer** (Blackboard Ultra, on by default). For a box's prompt, targets, thread and rubric it asks your own
   Blackboard site, read-only, signed in as you, for your profile (`users/me`) and course list, the course's discussion
@@ -712,11 +715,11 @@ you import) are bundled. It makes requests in these cases:
     `api.crossref.org` and `data.crosscite.org`), an ISBN to `openlibrary.org`, and a web address to that page's own
     host, after the browser asks you for access to that one host. The answer is read as untrusted text; only the
     source's fields are kept, and only if you save it.
-  - **AI**, only for the features you turned on in Settings → AI, through the connection you chose (see AI reading
-    above; a model on this device sends nothing anywhere). **Sentence completion** sends, as you pause, up to 4,000
+  - **AI**, only for the features you turned on in Settings → AI, to the model you chose for each (see AI reading
+    above; a model on this device sends nothing anywhere). **Tab completion** sends, as you pause, up to 4,000
     characters before the caret and 1,000 after, the course name, citation style, the discussion's prompt or the
     assignment's title, instructions and rubric, and, in a discussion, the thread: your classmates' posts with their
-    names (24,000 characters at most) and the post you are answering. **Writing feedback** sends your draft with the
+    names (24,000 characters at most) and the post you are answering. **Feedback** sends your draft with the
     course name, style, prompt and assignment (no thread) for Check with AI; the draft with the assignment's
     instructions and rubric for Feedback, with the text of the documents the assignment attaches (24,000 characters
     at most) and its pictures (4 at most, only to a model that takes pictures); the prompt, to read its word, source and reply targets; the sentence around a
@@ -978,7 +981,17 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   - `https://www.gradescope.com` when you turn on "Gradescope in To Do", for Glaze's Gradescope script there and its
     background worker's reads of Gradescope course pages;
   - the site of a picture, video or animation you add to a Look, or a site you let a mod reach, when you add it;
-  - a custom share relay, when you test it or create, join or resume a session there.
+  - a custom share relay, when you test it or create, join or resume a session there;
+  - the AI provider you connect in Settings → AI, when you click Connect, and only that one:
+    - `https://api.openai.com` for OpenAI;
+    - `https://api.anthropic.com` for Anthropic;
+    - `https://generativelanguage.googleapis.com` for Google Gemini;
+    - `https://openrouter.ai` for OpenRouter;
+    - `https://api.x.ai` for xAI;
+    - `https://api.mistral.ai` for Mistral;
+    - `https://api.groq.com` for Groq;
+    - `https://api.deepseek.com` for DeepSeek;
+  - an AI endpoint you add in Settings → AI's Advanced, when you save or test it.
   **All sites** asks for every https site at once. Access you remove in the browser's extension settings stops Glaze
   there. Installs from before 3.4.0 keep the all-site access granted then.
 - In Safari, Glaze asks for all sites (`<all_urls>`) as before, and Safari asks you which sites it may use in its own
