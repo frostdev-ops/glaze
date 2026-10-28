@@ -121,7 +121,10 @@ test('the settings model is off by default, local, and lets a feature ask only w
   assert.equal(A.allowed(s, 'grades'), false);
 });
 
-test('what the student set goes on every request over the task\'s own, and a longer timeout lengthens the run', async () => {
+test('what the student set goes on every request over the task\'s own, and a longer timeout lengthens the run', async (t) => {
+  // The loop subtracts elapsed wall time from the provider budget. Pin Date for the exact override assertion;
+  // native timers still verify that the 120ms response survives the task's original 50ms deadline.
+  t.mock.timers.enable({ apis: ['Date'], now: 1000 });
   const task = T.define({ ...dates, limits: { ms: 50 } });
   const over = { effort: 'low', temperature: 0.4, maxTokens: 900, timeoutMs: 2000 };
   const cfg = { replies: [{ ...answer([]), wait: 120 }], seen: [] };
