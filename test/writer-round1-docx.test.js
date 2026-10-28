@@ -39,3 +39,16 @@ test('horizontal rules round-trip in the body, quotes and table cells', async ()
   assert.equal(d.lastChild.firstChild.firstChild.child(1).type.name, 'horizontal_rule');
   assert.equal(d.textContent, 'BeforeQuoteCellAfter');
 });
+
+test('picture captions export at the effective paper size for imports and presets', () => {
+  const ST = require('../lib/writer-styles.js');
+  const image = S.paper.node('image', { src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', display: 'block', caption: 'Caption' });
+  for (const [format, setup] of [
+    ['mla9', ST.pageSetup(ST.FORMATS.mla9, { size: 16 })],
+    [ST.custom({ id: 'custom:large', label: 'Large', base: 'apa7', size: 16 }), null],
+  ]) {
+    const d = S.paper.node('doc', { setup }, [S.paper.node('paragraph', null, image)]);
+    const styles = X.exportDocx(d, { format }).parts['word/styles.xml'];
+    assert.match(styles, /w:styleId="Caption">[\s\S]*?<w:sz w:val="28"/);
+  }
+});
