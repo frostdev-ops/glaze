@@ -10,6 +10,8 @@
 //   3. the note and/or the paper's text into Ultra's Quill through lib/writer-main.js (gz-writer:set), checked;
 //   4. once Ultra's Submit is enabled, one click on it. Ultra's confirmation is Ultra's.
 // Any failure stops before Submit and tells the sheet why; nothing is retried by itself. A test is never touched.
+// The worker's permit for the assignment (lib/background.js) is claimed before 1, released by a run that attached nothing,
+// and the dispatch recorded in the click's own turn; the sheet's Blackboard editor clears an uncertain upload's (review).
 // A file the student submits as is (writer-import.js) takes the same steps from 1, its own name, type and bytes unchanged.
 // Ultra's own file area (enhance.writerUploads, on by default): one file dropped on it or chosen through its input goes to
 // the paper's frame instead, before Ultra hears it (in the capture phase), which asks what to do with it; Ultra
@@ -186,10 +188,12 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       say(box, { type: 'submit:step', run: m.run, step: 'submit' });
       const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000, 100, here);
       if (!b) return fail('submit');
-      if (!here() || !L().may(s, 'submit') || L().listed(L().areaOf(box.editor), name, visible) !== 1) return fail('page');
+      if (!here() || !L().may(s, 'submit') || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected || L().listed(L().areaOf(box.editor), name, visible) !== 1) return fail('page');
       if (d && !sameText(box, d)) return fail('text');
-      if (!await permit('commit') || !here() || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected || L().listed(L().areaOf(box.editor), name, visible) !== 1 || (d && !sameText(box, d))) return fail('page');
+      // The worker records the dispatch in the click's own turn: nothing can fail between them, and a page Ultra's
+      // navigation tears down after the click has already sent it.
       claimed = false;
+      permit('commit').catch(() => {});
       submitted.add(box);
       pass(b);
       say(box, { type: 'submit:done', run: m.run, ok: true });
