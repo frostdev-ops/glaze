@@ -307,3 +307,18 @@ test('recovery never swaps distinct pictures with the same length and trailing b
   const sources = []; next.view.state.doc.descendants((n) => { if (n.type.name === 'image') sources.push(n.attrs.src); });
   assert.deepEqual(sources, [a, b]);
 });
+
+test('legacy image references are not resolved to a different picture in a newer draft', async () => {
+  const local = memory(), ss = session();
+  const a = `data:image/png;base64,AAAA${'A'.repeat(100)}AAAAAElFTkSuQmCC`;
+  const b = `data:image/png;base64,BBBB${'A'.repeat(100)}AAAAAElFTkSuQmCC`;
+  const imageDoc = (src) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Caption.' }, { type: 'image', attrs: { src, alt: 'Figure' } }] }] });
+  const first = await seed(local, { doc: imageDoc(a) });
+  await PA.open(local).save(KEY, { doc: imageDoc(b) }, { reason: 'import' });
+  const pending = imageDoc(`gz-saved:${a.length}:${a.slice(-64)}`);
+  pending.content[0].content.push({ type: 'text', text: ' Unsaved.' });
+  ss.setItem(`gz-paper-pending:${KEY}`, JSON.stringify({ key: KEY, base: first.paper.revision, record: { doc: pending, format: 'mla9' } }));
+  const f = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  assert.equal(pictureOf(f.view), null, 'an ambiguous legacy reference gets a placeholder, never the wrong picture');
+  assert.ok(f.shown().endsWith(' Unsaved.'));
+});
