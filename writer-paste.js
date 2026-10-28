@@ -215,19 +215,39 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     if (css.length || data) ctx.rich = true;
     return { attrs: `${css.length ? ` style="${css.join(';')}"` : ''}${data ? ` data-gz="${esc(data)}"` : ''}`, brk };
   };
-  // Word's list paragraphs: ordered when the marker is a number or letter, the level from mso-list.
-  const wordList = (e) => {
-    const m = /level(\d)/i.exec(own(e, { rules: new Map() })['mso-list'] || e.style['mso-list'] || '');
+  // Word's list paragraphs: the list and level from mso-list; ordered when the marker is a number or letter, and then
+  // the marker's number and style (a level's first marker decides between roman and letters).
+  const ROMAN = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
+  const roman = (s) => [...s].reduce((sum, ch, i) => sum + (ROMAN[ch] < (ROMAN[s[i + 1]] || 0) ? -ROMAN[ch] : ROMAN[ch]), 0);
+  const counted = (v, known) => {
+    const low = v.toLowerCase(), up = v !== low;
+    if (/^\d+$/.test(v)) return { num: +v, style: 'decimal' };
+    if (/^[ivxlcdm]+$/.test(low) && (known ? /roman/.test(known) : low.length > 1 || low === 'i')) return { num: roman(low), style: up ? 'upper-roman' : 'lower-roman' };
+    return /^([a-z])\1*$/.test(low) ? { num: (low.length - 1) * 26 + low.charCodeAt(0) - 96, style: up ? 'upper-alpha' : 'lower-alpha' } : { num: null, style: null }; // a … z, aa … zz
+  };
+  const wordList = (e, ctx) => {
+    const spec = own(e, { rules: new Map() })['mso-list'] || e.style['mso-list'] || '', m = /level(\d)/i.exec(spec);
     if (!m) return null;
     let mark = '';
     const walk = (x) => { for (const k of x.kids || []) { if (k.name && isMarker(k)) { const grab = (y) => (y.text != null ? y.text : (y.kids || []).map(grab).join('')); mark = grab(k); return true; } if (k.name && walk(k)) return true; } return false; };
     walk(e);
-    return { level: Math.min(8, Math.max(0, +m[1] - 1)), ordered: /^\s*(\(?[0-9]+|[a-z]{1,3}|[ivxlc]+)[.)]/i.test(mark.replace(/ /g, ' ')) };
+    const level = Math.min(8, Math.max(0, +m[1] - 1)), n = /^\s*\(?([0-9]+|[a-z]{1,3}|[ivxlc]+)[.)]/i.exec(mark.replace(/ /g, ' '));
+    if (!n) return { level, ordered: false };
+    const key = `${(/\b(l\d+)\b/i.exec(spec) || [])[1]}|${level}`, c = counted(n[1], ctx.lists.get(key));
+    if (c.style) ctx.lists.set(key, ctx.lists.get(key) || c.style);
+    return { level, ordered: true, num: c.num >= 1 && c.num <= 32767 ? c.num : null, style: c.style };
   };
   const ITEM_TAG = (ordered) => (ordered ? 'ol' : 'ul');
+  // A numbered list's levels' styles as data-styles, the paper's defaults left out.
+  const LEVELS = ['decimal', 'lower-alpha', 'lower-roman'];
+  const stylesAttr = (styles) => {
+    const all = Array.from(styles, (s, i) => s || LEVELS[i % 3]);
+    while (all.length && all.at(-1) === LEVELS[(all.length - 1) % 3]) all.pop();
+    return all.length ? ` data-styles="${all.join(',')}"` : '';
+  };
   const blocks = (kids, c, ctx) => {
     let out = '', run = [], list = null;
-    const endList = () => { if (list !== null) { out += `</${ITEM_TAG(list)}>`; list = null; } };
+    const endList = () => { if (list) { const tag = ITEM_TAG(list.ordered); out += `<${tag}${list.ordered ? stylesAttr(list.styles) : ''}>${list.html}</${tag}>`; list = null; } };
     const flush = () => {
       if (!run.length) return;
       const html = run.map((k) => inline(k, c, ctx)).join('');
@@ -238,27 +258,41 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
       endList();
       out += `<p>${html}</p>`;
     };
-    const item = (ordered, level, attrs, html) => {
-      if (list !== ordered) { endList(); list = ordered; out += `<${ITEM_TAG(ordered)}>`; }
-      out += `<li${level ? ` class="ql-indent-${level}"` : ''}${attrs}>${html}</li>`;
+    // An item goes on in the open list when it is of its kind and, numbered, of its level's style. num, the number the
+    // source shows (an <ol>'s first item, Word's marker), goes on the item as data-start where the paper's count differs.
+    const item = (ordered, level, attrs, html, num = null, style = null) => {
+      if (list && (list.ordered !== ordered || (style && list.styles[level] && list.styles[level] !== style))) endList();
+      if (!list) list = { ordered, styles: [], count: [], html: '' };
+      let start = '';
+      if (ordered) {
+        if (style && !list.styles[level]) list.styles[level] = style;
+        const next = (list.count[level] || 0) + 1, n = num ?? next;
+        if (n !== next) start = ` data-start="${n}"`;
+        list.count[level] = n;
+        list.count.length = level + 1;
+      }
+      list.html += `<li${level ? ` class="ql-indent-${level}"` : ''}${start}${attrs}>${html}</li>`;
     };
-    // An HTML list's items, flat: each item's level its aria-level (Docs) or its depth.
+    // An HTML list's items, flat: each item's level its aria-level (Docs) or its depth; an <ol> numbered from its start.
     const htmlList = (e, depth, cc) => {
+      const ordered = e.name === 'ol';
+      let num = ordered ? (/^\d{1,5}$/.test(e.a?.start || '') && +e.a.start >= 1 && +e.a.start <= 32767 ? +e.a.start : 1) : null;
+      const put = (level, attrs, html) => { item(ordered, level, attrs, html, num); num = null; };
       for (const k of e.kids) {
         if (!k.name) continue;
         if (k.name === 'ul' || k.name === 'ol') { htmlList(k, depth + 1, cascade(k, cc, ctx, true)); continue; }
         if (k.name !== 'li') continue;
         const lc = cascade(k, cc, ctx, true), level = Math.min(8, /^\d+$/.test(k.a['aria-level'] || '') ? +k.a['aria-level'] - 1 : depth);
-        const ordered = e.name === 'ol', parts = [];
+        const parts = [];
         let runs = [];
         const push = () => { if (runs.length) { parts.push({ html: runs.map((x) => inline(x, lc, ctx)).join(''), e: k }); runs = []; } };
         for (const x of k.kids) {
-          if (x.name === 'ul' || x.name === 'ol') { push(); for (const p of parts.splice(0)) item(ordered, level, paraOf(p.e, ctx, true).attrs, p.html); htmlList(x, level + 1, lc); continue; }
+          if (x.name === 'ul' || x.name === 'ol') { push(); for (const p of parts.splice(0)) put(level, paraOf(p.e, ctx, true).attrs, p.html); htmlList(x, level + 1, lc); continue; }
           if (x.name && (BLOCK.has(x.name) || hasBlock(x))) { push(); parts.push({ html: x.kids ? x.kids.map((y) => inline(y, cascade(x, lc, ctx, true), ctx)).join('') : '', e: x }); continue; }
           runs.push(x);
         }
         push();
-        for (const p of parts) if (p.html.replace(/<[^>]*>/g, '').trim() || /<img|<br>/.test(p.html)) item(ordered, level, paraOf(p.e === k ? k : p.e, ctx, true).attrs, p.html);
+        for (const p of parts) if (p.html.replace(/<[^>]*>/g, '').trim() || /<img|<br>/.test(p.html)) put(level, paraOf(p.e === k ? k : p.e, ctx, true).attrs, p.html);
       }
     };
     for (const k of kids) {
@@ -267,9 +301,9 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
       const name = k.name;
       if (name === 'p' || HEADING.test(name) || name === 'figcaption' || name === 'dt' || name === 'caption') {
         if (hasBlock(k)) { endList(); out += blocks(k.kids, cascade(k, c, ctx, true), ctx); continue; }
-        const cc = cascade(k, c, ctx, true), wl = ctx.source === 'word' && name === 'p' ? wordList(k) : null;
+        const cc = cascade(k, c, ctx, true), wl = ctx.source === 'word' && name === 'p' ? wordList(k, ctx) : null;
         const html = k.kids.map((x) => inline(x, cc, ctx)).join('');
-        if (wl) { item(wl.ordered, wl.level, paraOf(k, ctx, true).attrs, html); continue; }
+        if (wl) { item(wl.ordered, wl.level, paraOf(k, ctx, true).attrs, html, wl.num, wl.style); continue; }
         endList();
         const tag = HEADING.test(name) ? name : 'p', { attrs, brk } = paraOf(k, ctx);
         if (brk) out += '<hr class="gz-page-break">';
@@ -310,7 +344,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     if (/data-pm-slice/.test(html)) return { html, source: 'writer', rich: false };
     const source = /docs-internal-guid-/.test(html) ? 'docs' : /urn:schemas-microsoft-com:office:word|content=Word\.Document|class="?Mso|mso-[a-z-]+\s*:/i.test(html) ? 'word' : 'web';
     const { root, css } = tree(html);
-    const ctx = { source, match: !!o.match, base: o.base || null, rules: source === 'word' ? rules(css) : new Map(), rich: false };
+    const ctx = { source, match: !!o.match, base: o.base || null, rules: source === 'word' ? rules(css) : new Map(), lists: new Map(), rich: false };
     const start = { deco: new Set(), vert: null, bg: null, mso: null, link: false };
     const out = blocks(root.kids, start, ctx);
     return { html: out, source, rich: ctx.rich && !ctx.match };
