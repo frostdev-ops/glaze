@@ -46,3 +46,26 @@ test('zero-byte and truncated Word files are refused', async () => {
   const bytes = fixtures.unicode().bytes;
   for (const cut of [1, 30, Math.floor(bytes.length / 2), bytes.length - 22]) await assert.rejects(X.importDocx(bytes.slice(0, cut)));
 });
+
+test('explicit Word paragraph and run direction survive HTML and Word round trips', async () => {
+  const { pack, p, r } = require('./fixtures/writer-hostile.js');
+  const bytes = pack(p('فقرة', '<w:bidi/>') + `<w:p>${r('A ')}<w:r><w:rPr><w:rtl/></w:rPr><w:t>123 مرحبا</w:t></w:r><w:r><w:rPr><w:rtl w:val="0"/></w:rPr><w:t> B</w:t></w:r></w:p>`);
+  const doc = S.paper.nodeFromJSON((await X.importDocx(bytes)).doc);
+  assert.equal(doc.firstChild.attrs.dir, 'rtl');
+  assert.deepEqual(doc.lastChild.content.content.slice(1).map((n) => n.marks.find((m) => m.type.name === 'direction')?.attrs.dir), ['rtl', 'ltr']);
+  const html = S.serialize(S.paper, doc);
+  assert.match(html, /dir="rtl"/);
+  assert.ok(S.parse(S.paper, html).type.create(doc.attrs, S.parse(S.paper, html).content).eq(doc));
+  const exported = X.exportDocx(doc);
+  assert.match(exported.parts['word/document.xml'], /<w:bidi\/>/);
+  assert.match(exported.parts['word/document.xml'], /<w:rtl\/>/);
+  const back = S.paper.nodeFromJSON((await X.importDocx(exported.bytes)).doc);
+  assert.equal(back.firstChild.attrs.dir, 'rtl');
+  assert.deepEqual(back.lastChild.toJSON(), doc.lastChild.toJSON());
+  assert.deepEqual(S.loses(S.compose, '<p dir="rtl">فقرة</p>'), ['format']);
+});
+
+test('an unsupported stored picture fails export instead of silently replacing it with text', () => {
+  const image = S.paper.node('image', { src: 'data:image/webp;base64,UklGRg==', alt: 'Diagram' });
+  assert.throws(() => X.exportDocx(S.paper.node('doc', null, [S.paper.node('paragraph', null, image)])), /picture|image/i);
+});
