@@ -223,15 +223,15 @@ test('a Google Docs export: Arial 12 on the runs over Docs\' Arial 11 defaults, 
   assert.deepEqual(ST.headerParts(ST.look(ST.FORMATS.mla9, s), 2, ''), [], 'and not MLA\'s page number either');
   const [title, subtitle] = tops;
   assert.deepEqual(pick(title, 'line', 'after', 'before', 'keepNext', 'keepLines'), { line: 1.15, after: 3, before: null, keepNext: true, keepLines: true }, 'Title: a lineRule with no line keeps the defaults\' 276');
-  assert.deepEqual(marks(title), ['text_style:{"font":null,"size":26}']);
+  assert.deepEqual(marks(title), ['direction', 'text_style:{"font":null,"size":26}']);
   assert.deepEqual(pick(subtitle, 'line', 'after'), { line: 1.15, after: 16 });
-  assert.deepEqual(marks(subtitle), ['color:{"color":"666666"}', 'text_style:{"font":null,"size":15}']);
+  assert.deepEqual(marks(subtitle), ['color:{"color":"666666"}', 'direction', 'text_style:{"font":null,"size":15}']);
   for (const n of tops.slice(2, 6)) assert.deepEqual(pick(n, 'line', 'after', 'before', 'first'), { line: null, after: null, before: null, first: 0 }, 'heading block: double is MLA\'s own, nothing after');
   assert.deepEqual(pick(tops[6], 'align', 'line', 'after', 'first'), { align: 'center', line: null, after: null, first: null }, 'the centred title');
   assert.deepEqual(tops.slice(7, 10).map((n) => [n.attrs.first, n.textContent.startsWith('\t')]), Array(3).fill([0, true]), 'opened with a tab, no indent of their own');
   const heads = tops.filter((n) => n.type.name === 'heading');
   assert.deepEqual(heads.map((n) => [n.attrs.level, n.attrs.before, n.attrs.after, n.attrs.line, n.attrs.keepNext]),
-    [[1, 20, 6, 1.15, true], [2, 18, 6, 1.15, true], [3, 16, 4, 1.15, true], [4, 14, 4, 1.15, true], [4, 12, 4, 1.15, true], [4, 12, 4, 1.15, true]], 'Heading 1-6, 5 and 6 at the paper\'s fourth level with their own spacing');
+    [[1, 20, 6, 1.15, true], [2, 18, 6, 1.15, true], [3, 16, 4, 1.15, true], [4, 14, 4, 1.15, true], [5, 12, 4, 1.15, true], [6, 12, 4, 1.15, true]], 'Heading 1-6 retain their depth and spacing');
   assert.deepEqual(heads.map((n) => marks(n).filter((m) => m.startsWith('text_style') || m.startsWith('color'))),
     [['text_style:{"font":null,"size":20}'], ['text_style:{"font":null,"size":16}'], ['color:{"color":"434343"}', 'text_style:{"font":null,"size":14}'], ['color:{"color":"666666"}'], ['color:{"color":"666666"}', 'text_style:{"font":null,"size":11}'], ['color:{"color":"666666"}', 'text_style:{"font":null,"size":11}']]);
   const types = tops.map((n) => n.type.name), at = types.indexOf('page_break');
