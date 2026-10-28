@@ -160,3 +160,23 @@ test('the practice rubric reaches Feedback as parsed criteria and level cells, n
     assert.ok(checked.some((c) => c.level?.label), 'the stand-in names a level the rubric has');
   } finally { fs.rmSync(out, { recursive: true, force: true }); }
 });
+
+test('the practice assignment attaches a Word prompt and a picture, which Feedback reads and the stand-in names', async () => {
+  const out = scratch();
+  try {
+    const mock = M.create({ quill: Buffer.alloc(0), out });
+    const get = async (url) => (await call(mock, { url })).json();
+    const C = require('../lib/writer-context-assignment.js'), D = require('../lib/doctext.js');
+    const context = await C.build({ school: new URL(M.SITE).host, path: M.ROUTES.attempt, origin: M.SITE, uid: async () => M.ME.id, me: async () => M.ME, courses: async () => [], rows: async () => [], get, instructions: async () => '' });
+    assert.deepEqual(context.assignment.files.map((f) => [f.name, f.image, new URL(f.url).origin]), [['Essay 2 prompt.docx', false, M.SITE], ['explore3.png', true, M.SITE]]);
+    const files = await C.read(context.assignment.files, { D, get: async (url) => { const r = await call(mock, { url }); return r.status === 200 ? new Uint8Array(r.body) : null; }, text: ({ bytes }) => D.docx(bytes) });
+    assert.deepEqual(files.map((f) => [f.name, f.text ?? f.image.mime]), [['Essay 2 prompt.docx', M.PROMPT], ['explore3.png', 'image/png']]);
+    const T = require('../lib/ai/task.js'); require('../lib/ai/tasks/writer-feedback.js');
+    const task = T.get('writer.feedback');
+    const input = task.input({ text: 'A synthetic draft about memory.', context: { ...context, assignment: { ...context.assignment, files } } });
+    const request = task.build(input, { text: require('../lib/ai/text.js') });
+    const answer = JSON.parse(require('../scripts/practice-ai.js').answer({ messages: request.messages }));
+    assert.match(answer.criteria[0].comment, /read against the attached Essay 2 prompt\.docx, with no picture shown\.$/);
+    assert.ok(task.check(answer, input).criteria[0].comment, 'a comment Feedback keeps');
+  } finally { fs.rmSync(out, { recursive: true, force: true }); }
+});
