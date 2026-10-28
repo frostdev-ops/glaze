@@ -110,15 +110,28 @@ test('a task that streams lets the deltas through; one that doesn\'t, doesn\'t',
   assert.deepEqual(words, ['{"items"', ':[]}']);
 });
 
-test('the settings model is off by default, local, and lets a feature ask only when AI is on, a provider chosen and it is allowed', () => {
-  assert.deepEqual(A.clean(undefined), { on: false, use: null, features: { syllabus: false, completion: false, writing: false } });
-  assert.deepEqual(A.clean({ on: 'yes', use: 'Bad Name', features: { syllabus: 1, other: true } }), { on: false, use: null, features: { syllabus: false, completion: false, writing: false } });
-  const s = A.clean({ on: true, use: 'my-ollama', features: { syllabus: true } });
-  assert.equal(s.use, 'my-ollama');
+test('the settings model is off by default, local, and lets a feature ask only when AI is on, a model chosen and it is allowed', () => {
+  assert.deepEqual(A.clean(undefined), { on: false, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(A.clean({ on: 'yes', use: 'Bad Name', features: { syllabus: 1, other: true } }).model, { use: null, model: '' });
+  const s = A.clean({ on: true, model: { use: 'my-ollama', model: 'llama3.2' }, features: { syllabus: true } });
+  assert.equal(s.model.use, 'my-ollama');
   assert.equal(A.allowed(s, 'syllabus'), true);
   assert.equal(A.allowed({ ...s, on: false }, 'syllabus'), false);
-  assert.equal(A.allowed({ ...s, use: null }, 'syllabus'), false);
+  assert.equal(A.allowed({ ...s, model: { use: 'my-ollama', model: '' } }, 'syllabus'), false);
   assert.equal(A.allowed(s, 'grades'), false);
+});
+
+test('what the student set goes on every request over the task\'s own, and a longer timeout lengthens the run', async () => {
+  const task = T.define({ ...dates, limits: { ms: 50 } });
+  const over = { effort: 'low', temperature: 0.4, maxTokens: 900, timeoutMs: 2000 };
+  const cfg = { replies: [{ ...answer([]), wait: 120 }], seen: [] };
+  await T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg, over });
+  const [req] = cfg.seen;
+  assert.deepEqual({ effort: req.effort, temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: req.timeoutMs }, over);
+  const kept = { replies: [answer([])], seen: [] };
+  await T.run(T.define({ ...dates, build: (input, { text }) => text.request({ system: 'x', data: [{ label: 'd', text: input.text }], maxTokens: 400, temperature: 0, effort: 'none' }) }), { text: SYLLABUS }, { provider: 'mock', cfg: kept, over: { maxTokens: 64 } });
+  assert.deepEqual([kept.seen[0].effort, kept.seen[0].temperature, kept.seen[0].maxTokens], ['none', 0, 64], 'the task\'s own where the student set nothing');
+  assert.equal(T.prepare(T.define(dates), { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [] }, over: { temperature: 1 } }).temperature, 1, 'a warm-up readies the session the run will use');
 });
 
 // example.finish: plain text, streamed, the rest of the sentence at the caret.
