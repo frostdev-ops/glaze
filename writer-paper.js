@@ -1150,8 +1150,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     });
     const restore = async (id) => {
       if (!await save()) return;
-      const r = await store.restore(key, id);
-      if (r) { paper = r.paper; keep = paper.keep === true; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored')); }
+      let r = null;
+      try { r = await store.restore(key, id); } catch (e) { console.error(e); }
+      if (!r) { toast(t('Not saved. Try again in a moment.')); return; }
+      paper = r.paper; keep = paper.keep === true; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored'));
     };
     const open2 = (page2) => { try { window.open(chrome.runtime.getURL(page2), '_blank', 'noopener'); } catch { /* no extension context */ } };
     const docx = async () => { await need(DOCX); return GZ_WRITER_DOCX.exportDocx(view.state.doc, { format, surname: surname(), title: ctx.assignment?.title || paper?.title || '' }); };
