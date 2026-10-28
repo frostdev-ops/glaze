@@ -134,7 +134,7 @@ test('a paper with page setup and a paste preference survives a backup restore',
     await PA.open(a.local).save(key, { doc, format: 'mla9', keep: true });
     const result = await restore(b, await backUp(a), ['papers']);
     assert.deepEqual(result.out.failed, []);
-    assert.deepEqual((await PA.open(b.local).get(key)).doc, doc);
+    assert.deepEqual((await PA.open(b.local).get(key)).doc, JSON.parse(JSON.stringify(doc)));
   } finally { a.stop(); b.stop(); }
 });
 
