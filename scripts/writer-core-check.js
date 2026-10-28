@@ -130,6 +130,23 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
       });
       assert.ok(Math.abs(result) < 1, `the decimal field wrapped by ${result}px`);
     });
+    await check('a long aligned tab field still wraps inside the paper', async () => {
+      const result = await page.evaluate(async () => {
+        ed.destroy();
+        document.getElementById('ed').parentElement.className = 'gp-flow';
+        window.ed = GZ_WRITER_EDITOR.create({ mount: document.getElementById('ed'), mode: 'paper', html: '<p data-gz="tabs:3.25c">Term\t' + 'A longer field has several words. '.repeat(30) + '</p>' });
+        const format = { ...GZ_WRITER_STYLES.FORMATS.mla9, first: 0, line: 1 };
+        const sheet = new CSSStyleSheet(); sheet.replaceSync(GZ_WRITER_STYLES.css(format)); document.adoptedStyleSheets = [sheet];
+        ed.addPlugins([GZ_WRITER_PAGINATE.plugin({ format: () => format, notes: () => [], gap: 26.4 })]);
+        await new Promise((r) => setTimeout(r, 50));
+        const v = ed.view, end = v.coordsAtPos(v.state.doc.content.size - 1), box = v.dom.getBoundingClientRect();
+        const out = { wrapped: end.top > v.coordsAtPos(1).top + 10, overflow: end.left - box.right };
+        ed.destroy(); document.adoptedStyleSheets = [];
+        return out;
+      });
+      assert.equal(result.wrapped, true);
+      assert.ok(result.overflow < 1, `the field extends ${result.overflow}px beyond the paper`);
+    });
     await check('oversized or deeply nested paste is refused without a page error', async () => {
       const result = await page.evaluate(() => {
         ed.run('insertText', 'keep');
