@@ -405,6 +405,9 @@ const HARNESS = `(() => {
     check(await fr.evaluate(() => document.querySelector('.gp').inert), 'the paper behind is inert while the card is open');
     check(await fr.evaluate(() => { const c = getComputedStyle(document.querySelector('.gi-card')); return c.transitionDuration.split(',').every((d) => d.trim() === '0.16s') && /transform/.test(c.transitionProperty); }), 'the card rises and fades in over 160 ms');
     saved.choiceDocx = await ishot(p, 'import-choice-docx-dark.png');
+    let cardTrapped = true;
+    for (const key of ['Tab', 'Tab', 'Tab', 'Shift+Tab', 'Shift+Tab', 'Shift+Tab']) { await p.keyboard.press(key); cardTrapped &&= await fr.evaluate(() => !!document.activeElement?.closest('.gi-card')); }
+    check(cardTrapped, 'the import card traps Tab and Shift+Tab');
     const plain = await paperText(fr), countBefore = (await versions()).length;
     await p.keyboard.press('Escape');
     check(await fr.evaluate(() => !document.querySelector('.gi-layer') && !document.querySelector('.gp').inert) && await paperText(fr) === plain && (await versions()).length === countBefore, 'Escape closes the card and changes nothing');
@@ -433,9 +436,11 @@ const HARNESS = `(() => {
     await until(async () => (await checksPane()) !== issuesBefore, 'Checks redrawn for the file');
     check(true, `Checks refresh for the opened file (${await fr.evaluate(() => document.querySelectorAll('#gp-checks .gp-issue').length)} open)`);
     saved.opened = await ishot(p, 'import-opened-dark.png');
+    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.insertText('Import review later edits', v.state.doc.content.size - 1)); });
     await fr.click('.gp-toast-do');
     await until(async () => (await paperText(fr)) === draft, 'undone');
     check((await versions())[0] === 'restore' && await p.evaluate(() => !__uploads.length && !__clicks.length), 'Undo restores the paper as it was; nothing went to Ultra');
+    check(await worker.evaluate(async () => Object.entries(await chrome.storage.local.get(null)).some(([k, v]) => k.startsWith('writerVersions:') && JSON.stringify(v).includes('Import review later edits'))), 'Undo after further edits keeps those edits in a restorable version');
     // ⋯ → Import…: the same card for a .docx chosen there.
     await fr.click('.gp-status button:last-child');
     await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].some((b) => b.textContent === 'Import…')), 'Import… in the menu');

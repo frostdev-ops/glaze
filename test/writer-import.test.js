@@ -345,3 +345,26 @@ for (const action of ['replace', 'close']) test(`review: a pending page handoff 
   pending[0](); await first; await f.flush();
   assert.deepEqual(f.opened.map((x) => x.name), action === 'replace' ? ['second.pdf'] : []);
 });
+
+test('review: two mounted attempts route only their own upload files', async () => {
+  const u = ultra(), sent = [], panel = new El('bb-assignment-attempt-authoring-panel', u.doc), area = new El('div', u.doc);
+  area.className = 'makeStylessubmission-2'; panel.append(area); u.doc.body.append(panel);
+  const editor = new El('div', u.doc), frame = new El('iframe', u.doc), zone = new El('div', u.doc), input = new El('input', u.doc);
+  zone.className = 'makeStylesinputContainer-2'; input.setAttribute('type', 'file'); zone.append(input); area.append(editor, frame, zone);
+  const second = { ...u.box, editor, frame, port: { postMessage: (m) => sent.push(m) } };
+  u.ctx.GZ_WRITER_SUBMIT.hear(second, { type: 'submit:arm' }, { settings: () => ({ enhance: { writerUploads: true } }) }, () => true);
+  const first = deferredFile(), next = deferredFile('second.pdf');
+  u.drop([first.file]); u.fire(zone, 'drop', { dataTransfer: { files: [next.file] } });
+  next.finish(); first.finish(); await u.flush();
+  assert.deepEqual(u.sent.filter((m) => m.type === 'import:file').map((m) => m.name), ['first.pdf']);
+  assert.deepEqual(sent.filter((m) => m.type === 'import:file').map((m) => m.name), ['second.pdf']);
+});
+test('review: replacing an open card keeps one modal and its keyboard loop', async () => {
+  const f = frame(); await f.I.bring(f.api, docx('first.docx')); await f.I.bring(f.api, docx('second.docx'));
+  assert.equal(f.doc.querySelectorAll('.gi-card').length, 1);
+  assert.equal(f.doc.querySelector('.gi-file b').textContent, 'second.docx');
+  for (let i = 0; i < 8; i++) { f.key('Tab'); assert.ok(f.doc.activeElement.closest('.gi-card')); }
+  f.doc.fire(f.doc.querySelector('.gi-layer'), 'keydown', { key: 'Tab', shiftKey: true });
+  assert.ok(f.doc.activeElement.closest('.gi-card'));
+  f.key('Escape'); assert.equal(f.doc.querySelector('main').inert, undefined);
+});
