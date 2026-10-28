@@ -142,6 +142,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.reopening = false;
     box.recovered = true;
     if (ok && sameBox(box)) { open(box, pass); return; }
+    // A paper lives in Writer's storage, out of reach now: Ultra's editor comes back as it was, and a reload brings Writer.
+    if (box.mode === 'paper') { drop(box); return; }
     // Even an invalidated extension keeps the student's plain text available to copy or hand back. Never insert it as HTML.
     const wrap = document.createElement('div'), field = document.createElement('textarea'), back = document.createElement('button');
     field.setAttribute('data-gz-writer-recovery', '');
