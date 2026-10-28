@@ -246,14 +246,17 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
         const x = (s0.left - left) / scale + shift, cur = applied.get(q) ?? Math.max(0, (e0.left - s0.left) / scale);
         const next = text.indexOf('\t', i + 1), seg = text.slice(i + 1, next < 0 ? text.length : next);
         const stop = stops.find(([pos]) => pos > x + 0.5) || [Math.floor(Math.max(x, last) / unit + 1) * unit, 'l'];
-        let w = 0;
+        let w = 0, fieldEnd = null;
         if (stop[1] !== 'l' && seg) {
           const upto = stop[1] === 'd' && seg.includes('.') ? seg.indexOf('.') : seg.length, c1 = at(q + 1, 1), c2 = at(q + 1 + upto, -1);
           if (c1 && c2 && Math.abs(c2.top - c1.top) < 3) w = (c2.left - c1.left) / scale;
+          const end = start + (next < 0 ? text.length : next), tail = at(end, -1);
+          // Short fields align as a unit. A field spanning lines (or wider than the body after an edit) must still wrap.
+          if (c1 && tail && Math.abs(tail.top - c1.top) < 3 && tail.left - c1.left <= view.dom.getBoundingClientRect().width) fieldEnd = end;
         }
         const width = Math.max(0, (stop[1] === 'c' ? stop[0] - w / 2 : stop[1] === 'l' ? stop[0] : stop[0] - w) - x);
         shift += width - cur;
-        out.push({ pos: q, w: Math.round(width * 10) / 10, leader: stop[2] || '', end: stop[1] === 'l' ? null : start + (next < 0 ? text.length : next), edge: next < 0, node: b.node });
+        out.push({ pos: q, w: Math.round(width * 10) / 10, leader: stop[2] || '', end: fieldEnd, edge: next < 0, node: b.node });
       }
     }
     return out;
