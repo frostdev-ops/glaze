@@ -282,3 +282,21 @@ test('the page draws a caption as Word\'s Caption style does: no space above, tw
   const styles = X.exportDocx(S.parse(S.paper, `<p><img src="${PNG}" data-display="block" data-caption="C"></p>`), { format: 'mla9' }).parts['word/styles.xml'];
   assert.match(/w:styleId="Caption".*?<\/w:style>/.exec(styles)[0], /w:before="0" w:after="0" w:line="240" w:lineRule="auto".*<w:sz w:val="20"\/>/);
 });
+
+// ---- headers and footers
+const withHeader = async (inner) => {
+  const parts = { ...X.exportDocx(S.parse(S.paper, '<p>Body</p>'), { format: 'mla9', surname: 'Rivera' }).parts };
+  parts['word/header1.xml'] = parts['word/header1.xml'].replace(/(<w:hdr[^>]*>)[\s\S]*(<\/w:hdr>)/, `$1${inner}$2`);
+  return imp(zipParts(parts), { format: 'mla9' });
+};
+const runsOf = (paras) => (paras || []).map((x) => x.runs.map((k) => (k.field ? `{${k.field}}` : k.text)).join(''));
+test('a header\'s table keeps its text, cells in order and tab-separated, with a warning; wrapped paragraphs come in', async () => {
+  const page = '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>2</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>';
+  const got = await withHeader(`<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="4000"/><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr/>${p('RUNNING HEAD')}</w:tc><w:tc><w:tcPr/><w:p><w:pPr><w:jc w:val="right"/></w:pPr>${page}</w:p></w:tc></w:tr></w:tbl><w:p/>`);
+  assert.deepEqual(runsOf(got.setup.headers.default), ['RUNNING HEAD\t{PAGE}', '']);
+  assert.ok(got.warnings.includes('Some pictures, objects or equations were left out.'), got.warnings.join());
+  const again = await imp(X.exportDocx(got.node, { format: 'mla9' }).bytes, { format: 'mla9' });
+  assert.deepEqual(runsOf(again.setup.headers.default), ['RUNNING HEAD\t{PAGE}', ''], 'and export writes it');
+  const wrapped = await withHeader(`<w:customXml w:element="h">${p('In custom XML')}</w:customXml><w:ins w:id="9" w:author="a">${p('Inserted')}</w:ins><w:moveTo w:id="8" w:author="a">${p('Moved here')}</w:moveTo><w:del w:id="7" w:author="a">${p('Deleted')}</w:del><w:moveFrom w:id="6" w:author="a">${p('Moved away')}</w:moveFrom>`);
+  assert.deepEqual(runsOf(wrapped.setup.headers.default), ['In custom XML', 'Inserted', 'Moved here']);
+});
