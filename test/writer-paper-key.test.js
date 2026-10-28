@@ -1,0 +1,113 @@
+// A paper frame's key (lib/writer-papers.js keyOf) can come after the frame opens: writer-paper.js's saving and loading
+// blocks, run over the real schema, styles, format and papers store (an in-memory storage.local and sessionStorage), with
+// the page's context arriving after load(), as lib/writer-context-assignment.js send() hands it over.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const S = require('../lib/writer-schema.js');
+const E = require('../lib/writer-editor.js');
+const ST = require('../lib/writer-styles.js');
+const F = require('../lib/writer-format.js');
+const PA = require('../lib/writer-papers.js');
+
+const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || path.join(__dirname, '../writer-paper.js'), 'utf8');
+const cut = (a, b) => { const i = source.indexOf(a), j = source.indexOf(b, i); assert.ok(i >= 0 && j > i, a); return source.slice(i, j); };
+const BLOCKS = `${cut('    // ---- saving', '    const setFormat = async')}\n${cut('    // ---- what the page says', '    const api = {')}`;
+
+const memory = () => {
+  const data = {};
+  return { data, get: async (k) => ({ [k]: structuredClone(data[k]) }), set: async (o) => { Object.assign(data, structuredClone(o)); }, remove: async (ks) => { for (const k of [].concat(ks)) delete data[k]; } };
+};
+const session = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
+const PARTS = { school: 'bb.school.test', user: '_900_1', course: '_101_1', content: '_7_1' }, KEY = PA.keyOf(PARTS);
+const RECOVERY = 'https://bb.school.test/ultra/courses/_101_1/assessment/_7_1/attempt/create';
+const docOf = (...texts) => ({ type: 'doc', content: texts.map((text) => ({ type: 'paragraph', content: [{ type: 'text', text }] })) });
+const textOf = (json) => S.paper.nodeFromJSON(json).textContent;
+let clock = 1e12;
+
+// One frame: its blocks in a sandbox, a view over a real paper state, and the page's context handed over by context(c).
+const frame = async ({ local, ss, context = { recovery: RECOVERY } }) => {
+  let onContext = null;
+  const view = { state: E.state({ mode: 'paper' }), updateState(s) { this.state = s; }, dispatch(tr) { this.state = this.state.apply(tr); } };
+  const sandbox = vm.createContext({
+    console, crypto, JSON, Date, Number, Object, Promise, Map, Set, Error, RangeError, structuredClone,
+    setTimeout: () => 0, clearTimeout: () => {}, addEventListener: () => {}, document: { addEventListener: () => {}, documentElement: { lang: 'en' } },
+    sessionStorage: ss, Intl,
+    S, ST, F, PA, PM: S.PM || globalThis.GZ_PM, view, ed: { words: () => E.words(S.text(view.state.doc).text) },
+    store: PA.open(local, () => (clock += 1000), { versions: async () => 40 }),
+    host: { context: () => context, onContext: (fn) => { onContext = fn; } }, ctx: context, prefs: {},
+    format: ST.FORMATS.mla9, paper: null, keep: false, presets: [], zoom: 'fit', formatIssues: [], picked: null,
+    t: (k) => k, state: { textContent: '' }, title: {}, due: {},
+    restyleCSS() {}, counts() {}, setZoom() {}, PG: { relayout() {} }, runChecks() {}, runChecksSoon() {}, outlineDraw() {},
+  });
+  vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, key: () => key, keep: () => keep, edits: () => edits };`, sandbox);
+  const $ = sandbox.__;
+  await $.load();
+  const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
+  return {
+    $, view, sandbox,
+    shown: () => view.state.doc.textContent,
+    type: (text) => { view.dispatch(view.state.tr.insertText(text, view.state.doc.content.size - 1)); $.changed(); },
+    context: async (c) => { onContext({ recovery: RECOVERY, assignment: { title: 'Essay 2' }, ...c }); await settle(); },
+  };
+};
+const stored = async (local) => {
+  const store = PA.open(local, () => (clock += 1000), { versions: async () => 40 });
+  const paper = await store.get(KEY);
+  return { paper, versions: (await store.versions(KEY)).map((v) => v.reason), index: (await store.list()).map((r) => r.key) };
+};
+const seed = async (local, patch) => PA.open(local, () => (clock += 1000), { versions: async () => 40 }).save(KEY, { doc: docOf('Two thousand words of my essay.'), format: 'mla9', ...patch });
+
+test('a paper whose key comes after the frame opens opens as saved: its import choice kept, no version added', async () => {
+  const local = memory(), ss = session();
+  await seed(local, { keep: true });
+  const f = await frame({ local, ss });
+  await f.context({ paper: PARTS });
+  assert.equal(f.$.key(), KEY);
+  assert.equal(f.shown(), 'Two thousand words of my essay.');
+  assert.equal(f.$.keep(), true, 'the paper keeps the document\'s own formatting');
+  const s = await stored(local);
+  assert.equal(s.paper.keep, true);
+  assert.deepEqual(s.versions, ['start'], 'opening a paper is not an import');
+  assert.deepEqual(s.index, [KEY], 'the stand-in is gone');
+});
+
+test('a frame lost before its key came cannot replace the saved paper in the next frame', async () => {
+  const local = memory(), ss = session();
+  await seed(local);
+  await frame({ local, ss }); // gone before the page's context arrived
+  const next = await frame({ local, ss });
+  await next.context({ paper: PARTS });
+  assert.equal(next.shown(), 'Two thousand words of my essay.');
+  const s = await stored(local);
+  assert.equal(textOf(s.paper.doc), 'Two thousand words of my essay.');
+  assert.deepEqual(s.versions, ['start']);
+  assert.deepEqual(s.index, [KEY]);
+});
+
+test('the tab\'s unsaved copy comes back when the next frame learns its key late', async () => {
+  const local = memory(), ss = session();
+  await seed(local);
+  const first = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  assert.equal(first.$.key(), KEY);
+  first.type(' The last paragraph I typed.'); // the frame goes before its autosave
+  const next = await frame({ local, ss });
+  await next.context({ paper: PARTS });
+  assert.equal(next.shown(), 'Two thousand words of my essay. The last paragraph I typed.');
+  assert.equal(textOf((await stored(local)).paper.doc), 'Two thousand words of my essay. The last paragraph I typed.');
+});
+
+test('what the student typed before the key came stays theirs, and the saved paper is kept as a version', async () => {
+  const local = memory(), ss = session();
+  await seed(local);
+  const f = await frame({ local, ss });
+  f.type('Started early.');
+  await f.context({ paper: PARTS });
+  assert.ok(f.shown().endsWith('Started early.'));
+  const store = PA.open(local, () => (clock += 1000), { versions: async () => 40 });
+  const all = await Promise.all((await store.versions(KEY)).map((v) => store.version(KEY, v.id)));
+  assert.ok(all.some((v) => textOf(v.doc) === 'Two thousand words of my essay.'), 'the saved paper is in its history');
+  assert.deepEqual((await stored(local)).index, [KEY]);
+});
