@@ -73,7 +73,7 @@ test('export: a block picture sets its paragraph\'s alignment; a caption follows
 });
 
 test('export: a horizontal line is an empty paragraph with a bottom border, where it stands', () => {
-  const x = exported(doc('<p>One</p><hr><blockquote><p>Q</p></blockquote><hr><p>Two</p>'))['word/document.xml'];
+  const x = exported(doc('<p>One</p><hr class="gz-rule"><blockquote><p>Q</p></blockquote><hr class="gz-rule"><p>Two</p>'))['word/document.xml'];
   const body = x.slice(x.indexOf('<w:body>') + 8, x.indexOf('<w:sectPr'));
   const paras = body.match(/<w:p>.*?<\/w:p>/g);
   assert.equal(paras.length, 5);

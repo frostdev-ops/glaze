@@ -99,8 +99,8 @@ test('compose lists, pictures and tables are untouched: Quill keeps none of the 
 test('a horizontal line is its own block in paper, and a page break stays a page break', () => {
   assert.ok(P.nodes.horizontal_rule, 'paper has a horizontal line');
   assert.equal(C.nodes.horizontal_rule, undefined);
-  const doc = S.parse(P, '<p>a</p><hr><p>b</p><hr class="gz-page-break">');
-  assert.deepEqual(doc.content.content.map((n) => n.type.name), ['paragraph', 'horizontal_rule', 'paragraph', 'page_break']);
+  const doc = S.parse(P, '<p>a</p><hr class="gz-rule"><p>b</p><hr class="gz-page-break"><hr>');
+  assert.deepEqual(doc.content.content.map((n) => n.type.name), ['paragraph', 'horizontal_rule', 'paragraph', 'page_break'], 'a plain <hr> is still dropped, as before');
   assert.equal(S.serialize(P, doc), '<p>a</p><hr class="gz-rule"><p>b</p><hr class="gz-page-break">');
   assert.deepEqual(S.loses(C, '<p>a</p><hr><p>b</p>'), [], 'compose drops a rule as Quill does');
 });
