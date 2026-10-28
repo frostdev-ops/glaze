@@ -123,6 +123,8 @@
 .gp-gap-line { display: inline-block; width: 100%; vertical-align: top; line-height: 0; font-size: 0; text-indent: 0; }
 /* Format issues, where no proofing draws them */
 .gp-flow .gp-u-format { text-decoration: underline dashed #2563eb; text-underline-offset: 4px; text-decoration-thickness: 1.5px; }
+/* Format findings underline only while their card is picked or hovered (the gp-u-format above), not from the shared store */
+.gp-flow .gz-iss[data-issue^="format:"] { text-decoration: none; }
 .gp-flow .gp-cur { outline: 2px solid color-mix(in srgb, #2563eb 35%, transparent); outline-offset: 1px; border-radius: 2px; background: rgba(37,99,235,.08); }
 
 /* Status bar */

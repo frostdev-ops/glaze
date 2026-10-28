@@ -9,15 +9,16 @@
 // if this script started it. Files go in a temporary folder inside Word's container, so the sandboxed app needs no prompt.
 // Browser: headless, GETs only, synthetic; no account or outside network from the browser.
 // NODE_PATH=<playwright> nice -n 10 lockf -k <lock> node scripts/writer-import-fidelity.js [--export] [--word-only]
-//   [--dump] [--out <dir>] [file.docx …]   (default corpus: test/fixtures/writer-docx-import.js; default out:
-//   ~/Projects/glaze-plans/writer/parity). --dump prints each block's box as the browser drew it (pt from its page's top).
+//   [--dump] [--typing] [--out <dir>] [file.docx …]   (default corpus: test/fixtures/writer-docx-import.js; default out:
+//   ~/Projects/glaze-plans/writer/parity). --dump prints each block's box as the browser drew it (pt from its page's top);
+//   --typing types 150 characters into the middle of each paper and prints each keystroke's time to the next paint.
 const { execFileSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 
 const args = process.argv.slice(2), flag = (k) => { const i = args.indexOf(k); if (i < 0) return false; args.splice(i, 1); return true; };
 const option = (k) => { const i = args.indexOf(k); if (i < 0) return null; const v = args[i + 1]; args.splice(i, 2); return v; };
-const roundTrip = flag('--export'), wordOnly = flag('--word-only'), dump = flag('--dump');
+const roundTrip = flag('--export'), wordOnly = flag('--word-only'), dump = flag('--dump'), typing = flag('--typing');
 const out = path.resolve(option('--out') || path.join(os.homedir(), 'Projects/glaze-plans/writer/parity'));
 const root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
 const WORD = '/Applications/Microsoft Word.app';
@@ -242,6 +243,23 @@ const writerPages = async (items) => {
         document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
         document.activeElement?.blur();
       });
+      if (typing) {
+        // The caret at the end of the longest paragraph around the middle; each keystroke timed from beforeinput to the
+        // frame after it painted (pagination runs in a microtask before that paint).
+        await fr.evaluate(() => {
+          const v = GZ_WRITER_PAPER.current().editor.view, all = [];
+          v.state.doc.descendants((n, pos) => { if (n.type.name === 'paragraph' && n.textContent.length > 300) all.push(pos + n.nodeSize - 1); return !n.isTextblock; });
+          const at = all[Math.floor(all.length / 2)] ?? v.state.doc.content.size - 1;
+          v.focus(); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at)));
+          window.__keys = [];
+          v.dom.addEventListener('beforeinput', () => { const t0 = performance.now(); requestAnimationFrame(() => setTimeout(() => __keys.push(performance.now() - t0), 0)); });
+        });
+        await p.keyboard.type(' the quick brown fox jumps over the lazy dog while a student writes the essay'.repeat(2).slice(0, 150), { delay: 40 });
+        await settle();
+        const ms = (await fr.evaluate(() => window.__keys)).sort((x, y) => x - y), q = (f) => ms[Math.min(ms.length - 1, Math.floor(ms.length * f))];
+        it.typing = { keys: ms.length, median: Math.round(q(0.5) * 10) / 10, p95: Math.round(q(0.95) * 10) / 10, max: Math.round(ms.at(-1) * 10) / 10 };
+        console.log(`${it.id} typing: ${JSON.stringify(it.typing)} (pages ${await fr.evaluate(() => GZ_WRITER_PAPER.current().pages())})`);
+      }
       await p.mouse.move(1, 1);
       it.shots = [];
       const sheets = await fr.$$('.gp-sheet');

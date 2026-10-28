@@ -7,7 +7,7 @@
 // Classic script after writer.js; the paper libraries load only when a paper opens.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-papers.js'];
-  const DOCX = ['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects.js', 'lib/writer-objects-docx.js'];
+  const DOCX = ['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js'];
   const GAP = 26.4; // between pages, in page px (22px at 100%)
   const PX100 = 80 / 96; // 100% shows an inch as 80px, as the mockup does
   const loaded = new Map();
@@ -15,9 +15,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     if (!loaded.has(src)) loaded.set(src, new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => { loaded.delete(src); no(new Error(`${src} did not load`)); }; document.head.append(s); }));
     return loaded.get(src);
   };
-  // Files another part of Writer adds (lib/writer-objects*.js): where one isn't there, the paper does without it.
-  const OPTIONAL = new Set(['lib/writer-objects.js', 'lib/writer-objects-docx.js']);
-  const need = (files) => files.reduce((p, f) => p.then(() => script(f).catch((e) => { if (!OPTIONAL.has(f)) throw e; })), Promise.resolve());
+  const need = (files) => files.reduce((p, f) => p.then(() => script(f)), Promise.resolve());
 
   // ---- small DOM helpers
   const SVG = 'http://www.w3.org/2000/svg';
@@ -380,10 +378,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     let groups = [], hovered = null;
     const groupOf = (rule) => groups.find((g) => g.rule === rule) || null;
     const shown = () => groupOf(hovered) || groupOf(picked);
+    // Drawn by the paper's own decorations: the shared issue store holds every finding (the submit sheet counts them) and
+    // its format underlines are hidden (writer-paper.css), as setting it again would redraw the cards under the pointer.
     const underline = () => {
       const on = shown()?.issues || [];
-      if (ISSUES()) ISSUES().set('format', on);
-      else view.dispatch(view.state.tr.setMeta(issuesKey, PM.view.DecorationSet.create(view.state.doc, on.filter((i) => i.to > i.from).map((i) => PM.view.Decoration.inline(i.from, i.to, { class: 'gp-u-format gp-cur' })))).setMeta('addToHistory', false));
+      view.dispatch(view.state.tr.setMeta(issuesKey, PM.view.DecorationSet.create(view.state.doc, on.filter((i) => i.to > i.from).map((i) => PM.view.Decoration.inline(i.from, i.to, { class: 'gp-u-format gp-cur' })))).setMeta('addToHistory', false));
     };
     const runChecks = () => {
       const r = F.check(view.state.doc, format, { name: ctx.user?.name || '', course: ctx.course?.name || '' }, { lines, keep });
@@ -394,15 +393,23 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       for (const row of r.rows) ROWS.set(row.id, row.label);
       const list = r.rows.map((row) => ({ ...row, count: formatIssues.filter((i) => i.row === row.id).length }));
       checklist.replaceChildren(h('h4', { text: format.label }), ...list.map((row) => h('div', {}, t(row.label), h('span', { class: row.count ? 'gp-no' : 'gp-ok', text: row.count ? nf(row.count) : '✓' }))));
+      if (ISSUES()) ISSUES().set('format', formatIssues);
       underline();
       cards();
     };
     const KIND = { spelling: ['Spelling', 'var(--gz-err)'], grammar: ['Grammar', 'var(--gz-warn)'], style: ['Style', 'var(--gz-warn)'], format: ['Format', 'var(--fmt)'], citation: ['Citation', 'var(--fmt)'] };
     // What a group's card says: what is wrong, counted where the rule has words for it.
     const COUNTED = { spacing: () => (format.line === 2 ? '{n} paragraphs aren\'t double-spaced' : '{n} paragraphs have other line spacing') };
+    // A finding still open: inside the document as it is now, and still in the shared store (which drops one whose text
+    // changed, or that the underline's own card ignored); the store doesn't take a range across paragraphs, so those stay.
+    const live = () => {
+      const I = ISSUES(), doc = view.state.doc, ids = new Set(I ? I.list().map((i) => i.id) : []);
+      return (i) => i.to <= doc.content.size && (!I || (() => { const st = I.clean?.(doc, 'format', i); return !st || ids.has(st.id); })());
+    };
     const allIssues = () => {
-      const theirs = ISSUES() ? ISSUES().list().filter((i) => i.source !== 'format') : [];
-      return [...theirs.map((i) => ({ one: i, at: i.from })), ...groups.map((g) => ({ group: g, at: g.issues[0].from }))].sort((a, b) => a.at - b.at);
+      const theirs = ISSUES() ? ISSUES().list().filter((i) => i.source !== 'format') : [], open = live();
+      const mine = groups.map((g) => ({ ...g, issues: g.issues.filter(open) })).filter((g) => g.issues.length);
+      return [...theirs.map((i) => ({ one: i, at: i.from })), ...mine.map((g) => ({ group: g, at: g.issues[0].from }))].sort((a, b) => a.at - b.at);
     };
     const cards = () => {
       const list = allIssues();
