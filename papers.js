@@ -23,12 +23,13 @@
     $('rows').replaceChildren(...rows.sort((a, b) => b.updated - a.updated).map((r) => {
       const f = GZ_WRITER_STYLES.get(r.format);
       const open = h('a', { className: 'gp-sbtn', href: `papers.html?paper=${encodeURIComponent(r.key)}`, textContent: t('Open') });
-      const exp = h('button', { type: 'button', className: 'gp-sbtn gp-ghost', textContent: t('Export .docx') });
-      exp.addEventListener('click', () => exportPaper(store, r.key));
+      const exp = h('button', { type: 'button', className: 'gp-sbtn gp-ghost', textContent: t('Export .docx') }), said = h('span', { className: 'gp-state' });
+      said.setAttribute('role', 'status');
+      exp.addEventListener('click', () => { said.textContent = ''; exportPaper(store, r.key).catch(() => { said.textContent = t('The .docx could not be made.'); }); });
       return h('article', { className: 'gp-paper' },
         h('div', { className: 'gp-paper-main' }, h('h2', { textContent: r.title || t('Paper') }), h('p', { textContent: [r.course, f.label, t('{n} words', { n: nf.format(r.words || 0) }), when.format(r.updated)].filter(Boolean).join(' · ') })),
         r.submitted ? h('span', { className: 'gp-badge', textContent: t('Submitted') }) : null,
-        h('div', { className: 'gp-row' }, open, exp));
+        h('div', { className: 'gp-row' }, said, open, exp));
     }));
     $('list').hidden = false;
   };
