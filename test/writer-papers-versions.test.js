@@ -64,3 +64,18 @@ test('the paper applies the restored version format choice before checking its d
   await vm.runInContext(`${source.slice(from, to)} restore('v')`, ctx);
   assert.equal(checked, true);
 });
+
+test('the Versions menu offers every retained version when more than forty are kept', async () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-paper.js'), 'utf8');
+  const from = source.indexOf("    versionsB.addEventListener('click'"), to = source.indexOf('    const restore = ', from);
+  let click, menu;
+  const h = (tag, props, ...kids) => ({ tag, props, kids, addEventListener() {} });
+  const list = Array.from({ length: 100 }, (_, i) => ({ id: String(i), at: 1000 + i, words: i }));
+  const ctx = { versionsB: { addEventListener: (_event, fn) => { click = fn; } }, open: null, key: K, store: { versions: async () => list },
+    document: { documentElement: { lang: 'en' } }, Intl, h, btn: (props, ...kids) => h('button', props, ...kids),
+    t: (k) => k, nf: String, REASONS: {}, host: { standalone: true }, popup: (_anchor, el) => { menu = el; } };
+  vm.runInNewContext(source.slice(from, to), ctx);
+  await click();
+  assert.equal(menu.kids.filter((n) => n?.props?.class === 'gp-mi').length, 100);
+});
