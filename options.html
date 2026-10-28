@@ -240,8 +240,12 @@
   .ai-pick.none { color: var(--gz-ink-faint); }
   .ai-pick.open { border-color: var(--gz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 22%, transparent); }
   .ai-pick:disabled { opacity: .45; cursor: default; }
-  .ai-picker { position: absolute; z-index: 5; inset-block-start: calc(100% + 6px); inset-inline-start: 0; inline-size: min(560px, 80vw); display: grid; grid-template-columns: 170px minmax(0, 1fr); border-radius: var(--gz-radius, 12px); overflow: hidden;
+  .ai-picker { position: absolute; z-index: 5; inset-block-start: calc(100% + 6px); inset-inline-start: 0; inline-size: min(560px, calc(100vw - 16px)); display: grid; grid-template-columns: 170px minmax(0, 1fr); border-radius: var(--gz-radius, 12px); overflow: hidden;
     background: var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); box-shadow: 0 16px 40px rgb(0 0 0 / .3), 0 2px 6px rgb(0 0 0 / .2); transform-origin: top left; animation: ai-pop .18s var(--gz-ease); }
+  /* In the top layer (lib/editor-ai.js float): over every section, placed under its button, never widening the page. */
+  .ai-picker[popover] { position: fixed; inset: auto; margin: 0; padding: 0; color: inherit; max-block-size: calc(100vh - 16px); }
+  .ai-picker[popover]:not(:popover-open) { display: none; }
+  .ai-picker.up { transform-origin: bottom left; }
   @keyframes ai-pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
   .ai-picker .side { background: var(--gz-surface-fill-2, var(--gz-surface-2)); border-inline-end: 1px solid var(--gz-border-line, var(--gz-line)); padding: .4rem; display: grid; align-content: start; gap: .1rem; }
   .ai-picker .side button { display: flex; align-items: center; gap: .55rem; border: 0; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); background: none; padding: .4rem .5rem; color: var(--gz-ink-muted); font-size: calc(13px * var(--gz-scale, 1)); text-align: start; }

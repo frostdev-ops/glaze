@@ -337,12 +337,6 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         const same = button(`same${!selOf(row) ? ' on' : ''}`, t('Same as default'), () => { close(true); choose(row, null); });
         side.append(same);
       }
-      for (const id of ids) {
-        const b = button(id === on ? 'on' : '', '', () => { on = id; query = ''; render(); focusSearch(); });
-        b.setAttribute('aria-pressed', String(id === on));
-        b.append(mark(id), el('span', '', label(id)));
-        side.append(b);
-      }
       const search = el('input');
       Object.assign(search, { type: 'search', id: 'ai-pick-search', value: query, placeholder: t('Search models'), autocomplete: 'off', spellcheck: false });
       search.setAttribute('aria-label', t('Search models'));
@@ -350,37 +344,82 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       const list = el('ul');
       list.id = 'ai-pick-list';
       list.setAttribute('role', 'listbox');
-      list.setAttribute('aria-label', on ? label(on) : t('Model'));
-      if (on && on !== DEVICE && !catalogs[on]) models(on);
-      const cat = on === DEVICE ? { models: [{ id: '', name: deviceName(), efforts: [] }] } : on && catalogs[on]?.models ? catalogs[on] : null;
-      const q = query.trim().toLowerCase(), cur = selOf(row);
-      const shownModels = (cat?.models || []).filter((m) => !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)).slice(0, 300);
-      for (const m of shownModels) {
-        const chosen = cur?.use === on && (on === DEVICE || cur.model === m.id);
-        const li = el('li', chosen ? 'on' : '', '');
-        li.setAttribute('role', 'option');
-        li.setAttribute('aria-selected', String(chosen));
-        li.id = `ai-opt-${shownModels.indexOf(m)}`;
-        const name = el('span', 'grow', m.name);
-        li.append(name);
-        if (m.name !== m.id && on !== DEVICE) { const id = el('small', 'mono', m.id); id.setAttribute('dir', 'ltr'); li.append(id); }
-        li.addEventListener('click', () => take(row, on, m));
-        list.append(li);
+      // The list is filled in place as the student types, moves or switches provider: the section is not drawn again, so
+      // the search box keeps its focus and caret. A catalog arriving (models) still redraws the section.
+      let shownModels = [];
+      const fill = () => {
+        list.replaceChildren();
+        list.setAttribute('aria-label', on ? label(on) : t('Model'));
+        const cat = on === DEVICE ? { models: [{ id: '', name: deviceName(), efforts: [] }] } : on && catalogs[on]?.models ? catalogs[on] : null;
+        const q = query.trim().toLowerCase(), cur = selOf(row);
+        shownModels = (cat?.models || []).filter((m) => !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)).slice(0, 300);
+        for (const m of shownModels) {
+          const chosen = cur?.use === on && (on === DEVICE || cur.model === m.id);
+          const li = el('li', chosen ? 'on' : '', '');
+          li.setAttribute('role', 'option');
+          li.setAttribute('aria-selected', String(chosen));
+          li.id = `ai-opt-${shownModels.indexOf(m)}`;
+          const name = el('span', 'grow', m.name);
+          li.append(name);
+          if (m.name !== m.id && on !== DEVICE) { const id = el('small', 'mono', m.id); id.setAttribute('dir', 'ltr'); li.append(id); }
+          li.addEventListener('click', () => take(row, on, m));
+          list.append(li);
+        }
+        if (cat && !shownModels.length) list.append(el('li', 'none', t('No models')));
+        const ai = shownModels.findIndex((m) => m.id === active);
+        if (ai >= 0) { search.setAttribute('aria-activedescendant', `ai-opt-${ai}`); list.children[ai]?.classList.toggle('active', true); } else search.removeAttribute('aria-activedescendant');
+      };
+      for (const id of ids) {
+        const b = button(id === on ? 'on' : '', '', () => {
+          on = id; query = ''; active = null; search.value = '';
+          for (const x of side.children) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }
+          if (on !== DEVICE && !catalogs[on]) models(on);
+          fill(); search.focus?.();
+        });
+        b.setAttribute('aria-pressed', String(id === on));
+        b.append(mark(id), el('span', '', label(id)));
+        side.append(b);
       }
-      if (cat && !shownModels.length) list.append(el('li', 'none', t('No models')));
-      search.addEventListener('input', () => { query = search.value; render(); focusSearch(); });
+      if (on && on !== DEVICE && !catalogs[on]) models(on);
+      fill();
+      search.addEventListener('input', () => { query = search.value; active = null; fill(); });
       search.addEventListener('keydown', (e) => {
         const opts = shownModels;
         const at = Math.max(-1, opts.findIndex((m) => m.id === active));
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); active = opts[Math.min(opts.length - 1, Math.max(0, at + (e.key === 'ArrowDown' ? 1 : -1)))]?.id ?? null; render(); focusSearch(); }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); active = opts[Math.min(opts.length - 1, Math.max(0, at + (e.key === 'ArrowDown' ? 1 : -1)))]?.id ?? null; fill(); }
         else if (e.key === 'Enter') { const m = opts[Math.max(0, at)]; if (m) { e.preventDefault(); take(row, on, m); } }
       });
-      const ai = shownModels.findIndex((m) => m.id === active);
-      if (ai >= 0) { search.setAttribute('aria-activedescendant', `ai-opt-${ai}`); list.children[ai]?.classList.toggle('active', true); }
       main.append(search, list);
       pop.append(side, main);
       pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(true); } });
       return pop;
+    };
+    // The picker floats in the top layer (the Popover API, as Settings' info popovers), under its button and kept on
+    // screen, so no section clips it and it widens nothing; it follows the page as it scrolls. Without the API (tests)
+    // it stays in its row.
+    let floating = null;
+    const float = (pop, pick) => {
+      floating?.abort();
+      if (typeof pop.showPopover !== 'function') return;
+      const ctl = floating = new AbortController();
+      const put = () => {
+        if (!pop.isConnected) { ctl.abort(); return; }
+        const r = pick.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, gap = 6, pad = 8;
+        const below = r.bottom + gap + h <= innerHeight - pad || r.top - gap - h < pad;
+        pop.style.left = `${Math.max(pad, Math.min(r.left, innerWidth - w - pad))}px`;
+        pop.style.top = `${below ? r.bottom + gap : r.top - gap - h}px`;
+        pop.classList.toggle('up', !below);
+      };
+      requestAnimationFrame(() => {
+        if (!pop.isConnected || ctl.signal.aborted) return;
+        // The attribute goes on as it shows: a popover not yet open is display none, and the search couldn't take focus.
+        pop.setAttribute('popover', 'manual');
+        try { pop.showPopover(); } catch { pop.removeAttribute('popover'); return; }
+        put();
+        if (!pop.contains(document.activeElement)) pop.querySelector('input')?.focus();
+        addEventListener('scroll', put, { capture: true, passive: true, signal: ctl.signal });
+        addEventListener('resize', put, { passive: true, signal: ctl.signal });
+      });
     };
     let active = null;
     const focusSearch = () => $('ai-pick-search')?.focus?.();
@@ -390,7 +429,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       close(true);
       choose(row, sel);
     };
-    const close = (back) => { const row = picking; picking = null; active = null; query = ''; render(); if (back && row) $(`ai-pick-${row}`)?.focus?.(); };
+    const close = (back) => { const row = picking; picking = null; active = null; query = ''; floating?.abort(); render(); if (back && row) $(`ai-pick-${row}`)?.focus?.(); };
     // Draw the value in effect without saving it: completion's task asks none, otherwise the catalog's default.
     // Where no catalog states a default, give Default its own stop rather than guessing a level.
     // Clicking an explicit choice again returns to that default.
@@ -483,7 +522,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         pick.classList.toggle('open', picking === row);
         pick.append(chev());
         wrapPick.append(pick);
-        if (picking === row) wrapPick.append(picker(row));
+        if (picking === row) { const pop = picker(row); wrapPick.append(pop); float(pop, pick); }
         const levels = sel?.use ? efforts(sel) : [];
         if (sel?.use && sel.use !== DEVICE && !catalogs[sel.use]) models(sel.use);
         line.append(name, wrapPick, levels.length ? slider(row, sel, levels) : el('span', 'ai-effort-none'));
@@ -520,7 +559,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       const lists = Object.fromEntries(Object.entries(catalogs).map(([id, x]) => [id, x.models ? x.models.length : 'loading']));
       once('providers', [s.mode, open, providers, conns, device, marks], renderProviders);
       once('drawer', [s.mode, open, said, conns[open], open === DEVICE ? device : null, lists[open], marks.find(([id]) => id === open)], renderDrawer);
-      once('features', [s, conns, providers, device, picking, on, query, active, marks, lists], renderFeatures);
+      once('features', [s, conns, providers, device, picking, marks, lists], renderFeatures);
       renderCalls();
     };
     // A part is drawn again only when what it shows changed: a key being typed, or a search, keeps its words and the focus
