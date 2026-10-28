@@ -176,3 +176,48 @@ test('D1: the sheet\'s Blackboard editor says the student is reviewing before it
   const said = s.messages.map((m) => m.type);
   assert.ok(said.includes('submit:review') && said.indexOf('submit:review') < said.indexOf('native'), said.join());
 });
+
+test('D2: an attempt submitted at /attempt/create leaves the next attempt at /attempt/create free', async () => {
+  const u = ultra();
+  const p = await u.visit('doc-1');
+  await p.go();
+  assert.deepEqual(done(p), ['ok']);
+  const q = await u.visit('doc-2');
+  await q.go();
+  assert.deepEqual(done(q), ['ok'], 'an assignment that allows several attempts takes the next one');
+  assert.equal(q.clicks.length, 1);
+});
+
+test('D2: the page that submitted, and one already open on the assignment then, stay fenced', async () => {
+  const u = ultra();
+  const other = await u.visit('doc-9', {}, { tab: 2 });
+  const p = await u.visit('doc-1', {}, { tab: 1 });
+  await p.go();
+  assert.deepEqual(done(p), ['ok']);
+  const again = await u.visit('doc-1', {}, { tab: 1 });
+  await again.go();
+  assert.deepEqual(done(again), ['claimed'], 'a re-render of the page Ultra is submitting');
+  u.at.tab = 2; u.at.doc = 'doc-9';
+  await other.go();
+  assert.deepEqual(done(other), ['claimed'], 'a tab that was showing the assignment when it was sent');
+});
+
+test('D3: an attempt Ultra numbers while the run is under way (/attempt/create → /attempt/_31_1) still records its Submit', async () => {
+  const u = ultra(), m = { type: 'glaze:writerSubmit', token: 'a'.repeat(36), user: '_900_1' };
+  await u.visit('doc-1');
+  assert.equal((await u.w.send({ ...m, op: 'claim' }, u.sender())).ok, true);
+  u.at.url = 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/_31_1';
+  assert.equal((await u.w.send({ ...m, op: 'commit' }, u.sender())).ok, true, 'the same run, under the attempt\'s new address');
+  await u.visit('doc-2');
+  assert.equal((await u.w.send({ ...m, token: 'b'.repeat(36), op: 'claim' }, u.sender())).ok, false, 'that numbered attempt was sent');
+  await u.visit('doc-3', {}, { url: 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/create' });
+  assert.equal((await u.w.send({ ...m, token: 'c'.repeat(36), op: 'claim' }, u.sender())).ok, true, 'a new attempt is free');
+});
+
+test('D3: a claim at /attempt/create fences the same assignment at /attempt/_N_1 while it runs', async () => {
+  const u = ultra(), m = { type: 'glaze:writerSubmit', token: 'a'.repeat(36), user: '_900_1' };
+  await u.visit('doc-1');
+  assert.equal((await u.w.send({ ...m, op: 'claim' }, u.sender())).ok, true);
+  await u.visit('doc-2', {}, { tab: 2, url: 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/_31_1' });
+  assert.equal((await u.w.send({ ...m, token: 'b'.repeat(36), op: 'claim' }, u.sender())).ok, false);
+});
