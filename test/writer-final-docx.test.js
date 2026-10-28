@@ -191,3 +191,19 @@ test('a page break inside a list item is a page break; the list goes on numberin
   assert.deepEqual(lists(mid.node), ['ordered_list(upper-roman) One', 'ordered_list(upper-roman,continued) Two'], 'the text after the break is the item\'s, unnumbered');
   assert.equal(nodes(mid.node, 'hard_break').length, 0);
 });
+
+// ---- tables
+const tblX = (rows, pr = '') => `<w:tbl><w:tblPr>${pr}</w:tblPr><w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>${rows}</w:tbl>`;
+const tcX = (s, v = '') => `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/>${v ? `<w:vAlign w:val="${v}"/>` : ''}</w:tcPr>${p(s)}</w:tc>`;
+const grid = (doc) => nodes(doc, 'table').map((t) => t.content.content.map((row) => row.content.content.map((c) => `${c.type.name === 'table_header' ? 'th' : 'td'}:${c.textContent}${c.attrs.valign ? `/${c.attrs.valign}` : ''}`).join(' ')));
+test('table rows and cells inside content controls and custom XML come in, with their alignment and header rows', async () => {
+  const sdt = (x) => `<w:sdt><w:sdtPr/><w:sdtContent>${x}</w:sdtContent></w:sdt>`, cx = (x) => `<w:customXml w:element="x">${x}</w:customXml>`;
+  const head = '<w:trPr><w:tblHeader/></w:trPr>';
+  const got = await imp(pack(tblX(sdt(`<w:tr>${head}${tcX('H1')}${tcX('H2')}${tcX('H3')}</w:tr>`) + `<w:tr>${tcX('A1', 'center')}${sdt(tcX('B1', 'bottom'))}${cx(tcX('C1', 'center'))}</w:tr>` + cx(`<w:tr>${tcX('A2')}${tcX('B2')}${tcX('C2', 'bottom')}</w:tr>`)) + p('After')));
+  assert.equal(got.node.textContent, 'H1H2H3A1B1C1A2B2C2After');
+  assert.deepEqual(grid(got.node), [['th:H1 th:H2 th:H3', 'td:A1/middle td:B1/bottom td:C1/middle', 'td:A2 td:B2 td:C2/bottom']]);
+  const nil = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((k) => `<w:${k} w:val="nil"/>`).join('');
+  const two = await imp(pack(tblX(sdt(`<w:tr>${tcX('x', 'center')}</w:tr>`), `<w:tblBorders>${nil}</w:tblBorders>`) + p('Between') + tblX(`<w:tr>${tcX('y', 'bottom')}</w:tr>`, '<w:tblBorders><w:top w:val="single" w:sz="4"/></w:tblBorders>')));
+  assert.deepEqual(nodes(two.node, 'table').map((t) => t.attrs.borders), [false, true]);
+  assert.deepEqual(grid(two.node), [['td:x/middle'], ['td:y/bottom']]);
+});
