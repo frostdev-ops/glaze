@@ -8,7 +8,7 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
 const env = require('./check-env.js');
-const lock = env.lockPath();
+const lock = require('./check-env.js').lockPath();
 const shots = process.argv[2] ? path.resolve(process.argv[2]) : '';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 8000) => {
@@ -50,7 +50,7 @@ async function pass(scheme) {
     const ext = env.staged(root, [], scratch);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 2600 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
+      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 2600 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking',
         '--proxy-server=http://127.0.0.1:0', '--proxy-bypass-list=<-loopback>', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
