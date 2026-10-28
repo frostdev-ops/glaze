@@ -158,7 +158,8 @@ test('round trip: Writer\'s .docx of an imported paper imports to the same paper
     const bytes = X.exportDocx(doc, { format: 'mla9', surname: 'Rivera', date: new Date('2026-10-27T12:00:00Z') }).bytes;
     const r = await X.importDocx(bytes, { format: 'mla9' });
     const back = S.paper.nodeFromJSON(r.doc);
-    assert.deepEqual(back.attrs.setup, doc.attrs.setup, `${id}: the page, header and footer`);
+    // A base font that isn't a paper font (Aptos) is null, the format's; Writer's .docx names the format's.
+    assert.deepEqual(back.attrs.setup, { ...doc.attrs.setup, font: doc.attrs.setup.font ?? ST.FORMATS.mla9.font }, `${id}: the page, header and footer`);
     const blocks = (x) => { const out = []; x.descendants((n) => { if (n.isBlock) out.push({ type: n.type.name, ...n.attrs, text: n.textContent, marks: marks(n) }); return !n.isTextblock; }); return out; };
     assert.deepEqual(blocks(back), blocks(doc), `${id}: every block's text, attributes and marks`);
   }
@@ -210,4 +211,46 @@ test('a paper that keeps the file\'s formatting hears nothing about what the fil
   assert.equal(applied.attrs.setup, null);
   applied.descendants((n) => { if (n.isTextblock) for (const k of ['line', 'exact', 'least', 'before', 'after']) assert.equal(n.attrs[k], null, k); return true; });
   assert.deepEqual(F.check(applied, ST.FORMATS.mla9, {}).issues.filter((i) => F.KEPT.has(i.rule) && i.rule !== 'font').map((i) => i.rule), [], 'nothing the format would flag is left but runs in other fonts');
+});
+
+test('a Google Docs export: Arial 12 on the runs over Docs\' Arial 11 defaults, header 0, no header parts, its styles\' 1.15 lines kept', async () => {
+  const { r, doc, tops } = await open('docs');
+  assert.deepEqual(r.warnings, []);
+  const s = doc.attrs.setup;
+  assert.deepEqual(ST.setup(s), s);
+  assert.deepEqual([s.page, s.margins, s.header, s.footer, s.font, s.size, s.tab, s.kern, s.title], [[8.5, 11], [1, 1, 1, 1], 0, 0.5, 'Arial', 12, 0.5, false, false], 'sz 24 on the runs is the base; header="0" kept');
+  assert.deepEqual([s.headers, s.footers], [{ default: null, first: null }, { default: null, first: null }], 'no header or footer parts: none drawn');
+  assert.deepEqual(ST.headerParts(ST.look(ST.FORMATS.mla9, s), 2, ''), [], 'and not MLA\'s page number either');
+  const [title, subtitle] = tops;
+  assert.deepEqual(pick(title, 'line', 'after', 'before', 'keepNext', 'keepLines'), { line: 1.15, after: 3, before: null, keepNext: true, keepLines: true }, 'Title: a lineRule with no line keeps the defaults\' 276');
+  assert.deepEqual(marks(title), ['text_style:{"font":null,"size":26}']);
+  assert.deepEqual(pick(subtitle, 'line', 'after'), { line: 1.15, after: 16 });
+  assert.deepEqual(marks(subtitle), ['color:{"color":"666666"}', 'text_style:{"font":null,"size":15}']);
+  for (const n of tops.slice(2, 6)) assert.deepEqual(pick(n, 'line', 'after', 'before', 'first'), { line: null, after: null, before: null, first: 0 }, 'heading block: double is MLA\'s own, nothing after');
+  assert.deepEqual(pick(tops[6], 'align', 'line', 'after', 'first'), { align: 'center', line: null, after: null, first: null }, 'the centred title');
+  assert.deepEqual(tops.slice(7, 10).map((n) => [n.attrs.first, n.textContent.startsWith('\t')]), Array(3).fill([0, true]), 'opened with a tab, no indent of their own');
+  const heads = tops.filter((n) => n.type.name === 'heading');
+  assert.deepEqual(heads.map((n) => [n.attrs.level, n.attrs.before, n.attrs.after, n.attrs.line, n.attrs.keepNext]),
+    [[1, 20, 6, 1.15, true], [2, 18, 6, 1.15, true], [3, 16, 4, 1.15, true], [4, 14, 4, 1.15, true], [4, 12, 4, 1.15, true], [4, 12, 4, 1.15, true]], 'Heading 1-6, 5 and 6 at the paper\'s fourth level with their own spacing');
+  assert.deepEqual(heads.map((n) => marks(n).filter((m) => m.startsWith('text_style') || m.startsWith('color'))),
+    [['text_style:{"font":null,"size":20}'], ['text_style:{"font":null,"size":16}'], ['color:{"color":"434343"}', 'text_style:{"font":null,"size":14}'], ['color:{"color":"666666"}'], ['color:{"color":"666666"}', 'text_style:{"font":null,"size":11}'], ['color:{"color":"666666"}', 'text_style:{"font":null,"size":11}']]);
+  const types = tops.map((n) => n.type.name), at = types.indexOf('page_break');
+  assert.equal(types.filter((t) => t === 'page_break').length, 1, 'pageBreakBefore w:val="0" on every paragraph is no break; the one set on is');
+  assert.equal(tops[at + 1].attrs.first, null, 'the paragraph after it keeps MLA\'s indent');
+  const bold = tops.filter((n) => marks(n).includes('bold'));
+  assert.equal(bold.length, 1, 'the bold run; a bold paragraph mark bolds no text');
+  assert.ok(bold[0].textContent.includes('the ledger of the market'));
+  assert.ok(!tops.filter((n) => n.type.name === 'paragraph').slice(2).some((n) => marks(n).some((m) => m.startsWith('text_style'))), 'body in the base, Arial 12');
+  assert.deepEqual(tops.slice(-2).map((n) => [n.content.size, n.attrs.line]), [[0, null], [0, null]], 'the two empty double-spaced paragraphs at the end');
+});
+
+test('a Word 365 paper from today\'s Normal.dotm: 1.16 lines and 8 pt after kept, Title and Heading 1 as Word writes them', async () => {
+  const { doc, tops } = await open('aptos-word');
+  const s = doc.attrs.setup;
+  assert.deepEqual([s.page, s.margins, s.header, s.size, s.kern, s.headers.default], [[8.5, 11], [1, 1, 1, 1], 0.5, 12, true, null]);
+  assert.deepEqual(pick(tops[0], 'line', 'after'), { line: 1, after: 4 });
+  const h = tops.find((n) => n.type.name === 'heading');
+  assert.deepEqual(pick(h, 'level', 'before', 'after', 'line', 'keepNext', 'keepLines'), { level: 1, before: 18, after: 4, line: 1.16, keepNext: true, keepLines: true });
+  assert.ok(marks(h).includes('color:{"color":"0F4761"}'));
+  for (const n of tops.filter((x) => x.type.name === 'paragraph').slice(1)) assert.deepEqual(pick(n, 'line', 'after', 'first'), { line: 1.16, after: 8, first: 0 });
 });
