@@ -72,6 +72,47 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
       assert.ok(await p.evaluate(() => JSON.stringify(GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON()).includes('Keep this note when I click away.')), 'clicking outside a footnote must commit its text');
       await p.close();
     });
+    await run('round4-notes', async () => {
+      const p = await page('review-round4-notes');
+      await p.evaluate(() => {
+        const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA;
+        const doc = S.paper.node('doc', null, S.paper.node('paragraph', null, [S.paper.text('Body'), S.paper.node('footnote_ref', { content: '<p>First paragraph.</p><p>Second line<br>Still second.</p>' })]));
+        v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, doc.content));
+      });
+      await p.click('.gp-flow sup.gz-footnote');
+      assert.equal(await p.inputValue('.gp-note textarea'), 'First paragraph.\n\nSecond line\nStill second.');
+      await p.fill('.gp-note textarea', 'Edited first.\n\nSecond line\nStill second.');
+      await p.click('.gp-top h1'); await pause(100);
+      const result = await p.evaluate(async () => {
+        const api = GZ_WRITER_PAPER.current(), out = await api.docx();
+        const back = await GZ_WRITER_DOCX.importDocx(out.bytes);
+        let note;
+        GZ_WRITER_SCHEMA.paper.nodeFromJSON(back.doc).descendants((n) => { if (n.type.name === 'footnote_ref') note = n.attrs.content; });
+        return { note, breaks: document.querySelectorAll('.gp-sheet .gp-notes br').length };
+      });
+      assert.equal(result.note, '<p>Edited first.</p><p>Second line<br>Still second.</p>');
+      assert.ok(result.breaks >= 3, 'paragraph and line breaks are drawn at the page foot');
+      await p.close();
+    });
+    await run('round4-header-export', async () => {
+      const p = await page('review-round4-export');
+      await p.evaluate(async () => {
+        const api = GZ_WRITER_PAPER.current(), v = api.editor.view;
+        const doc = GZ_WRITER_SCHEMA.paper.nodeFromJSON(GZ_WRITER_FORMAT.template(api.format(), { name: 'Alex Rivera', title: 'Essay 2: A Subtitle' }));
+        v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, doc.content));
+        await api.save();
+        await GZ_WRITER_PAPERS.open().save(api.key(), { title: 'Essay 2: A Subtitle' });
+      });
+      await p.reload(); await p.waitForFunction(() => !!GZ_WRITER_PAPER.current());
+      await p.evaluate(() => GZ_WRITER_PAPER.current().setup({ headers: { default: [{ runs: [{ text: 'Title\t1' }], tabs: [[6, 'r', 'dot']] }] } }));
+      await p.waitForSelector('.gp-hdr .gp-tabstop-dot');
+      const leader = await p.locator('.gp-hdr .gp-tabstop-dot').first().evaluate((e) => ({ width: e.getBoundingClientRect().width, background: getComputedStyle(e).backgroundImage, hidden: e.getAttribute('aria-hidden') }));
+      assert.ok(leader.width > 100 && leader.background.includes('radial-gradient') && leader.hidden === 'true');
+      await p.click('button:has-text("Versions")');
+      const [download] = await Promise.all([p.waitForEvent('download'), p.click('.gp-versions button:has-text("Export .docx")')]);
+      assert.equal(download.suggestedFilename(), 'Rivera_Essay2.docx');
+      await p.close();
+    });
     await run('image', async () => {
       const p = await page('review-image');
       await p.evaluate(() => { const canvas = document.createElement('canvas'); canvas.width = 1; canvas.height = 3000; const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA; const doc = S.paper.nodes.doc.create(null, S.paper.nodes.paragraph.create(null, S.paper.nodes.image.create({ src: canvas.toDataURL(), width: 300 }))); v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, doc.content)); });
