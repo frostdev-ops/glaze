@@ -70,5 +70,5 @@ test('the list page: found by its title in any format, its entries up to the end
   assert.equal(at.to - at.from, 4);
   assert.deepEqual(ST.listAt(FX.papers.apa7()), ST.listAt(S.paper.nodeFromJSON(FX.papers.apa7())), 'JSON and nodes alike');
   assert.equal(ST.listAt(S.parse(S.paper, '<p>Works Cited</p><p>x</p>')), null, 'only a centred title');
-  assert.deepEqual(ST.blockBox(ST.FORMATS.chicago17, {}, { entry: true }), { line: 18.4, after: 16 });
+  assert.deepEqual(ST.blockBox(ST.FORMATS.chicago17, {}, { entry: true }), { line: 18.4, after: 16, before: 0 });
 });

@@ -9,8 +9,8 @@ const paper = () => {
   const applied = [], saved = [], notices = [], api = {}, root = { inert: false, isConnected: true };
   const view = { props: { editable: () => true }, state: { doc: { label: 'draft' } }, setProps(p) { Object.assign(this.props, p); }, focus() {} };
   const ctx = vm.createContext({ console: { error() {} }, RangeError, ArrayBuffer, Uint8Array, DOCX: [], format: {}, key: 'original', paper: {}, root, view, current: api, api,
-    need: async () => {}, GZ_WRITER_DOCX: { importDocx: async () => ({ html: '<p>Imported</p>', warnings: [] }) },
-    S: { paper: {}, parse: () => ({ toJSON: () => ({ type: 'doc', text: 'imported' }) }) },
+    need: async () => {}, GZ_WRITER_DOCX: { importDocx: async () => ({ doc: { type: 'doc', text: 'imported' }, html: '<p>Imported</p>', warnings: [] }) },
+    S: { paper: { nodeFromJSON: (json) => ({ toJSON: () => json }) } },
     save: async () => true, record: () => ({}), t: (k) => k, restore: () => {}, toast: (text, act) => notices.push({ text, act }),
     store: { save: async (k) => { saved.push(k); return { paper: {}, version: { id: 'before' } }; } },
     setDoc: (json) => { applied.push(json); view.state.doc = json; },
