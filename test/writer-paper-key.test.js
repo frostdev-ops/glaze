@@ -253,3 +253,37 @@ test('storage telling a paper of its own save, before the save answers, never re
   for (let i = 0; i < 20; i++) await new Promise(setImmediate);
   assert.equal(f.view.state.doc, before, 'the same document: a submit sheet open on it carries on');
 });
+
+
+test('typing while another tab is being read keeps that tab’s draft as a conflict version', async () => {
+  const local = memory(), ss = session(), changed = [];
+  await seed(local);
+  const f = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS }, changed });
+  await seed(local, { doc: docOf('Other tab’s newer draft.') });
+  const get = local.get;
+  let release;
+  local.get = async (k) => {
+    const result = await get(k);
+    if (k === PA.KEYS.PAPER + KEY) { local.get = get; await new Promise((r) => { release = r; }); }
+    return result;
+  };
+  const adopting = changed[0]({ [PA.KEYS.PAPER + KEY]: { newValue: local.data[PA.KEYS.PAPER + KEY] } }, 'local');
+  for (let i = 0; i < 10 && !release; i++) await new Promise(setImmediate);
+  assert.ok(release);
+  f.type(' Unsaved while reading.');
+  release(); await adopting;
+  await f.$.save();
+  const store = PA.open(local);
+  const versions = await Promise.all((await store.versions(KEY)).map((v) => store.version(KEY, v.id)));
+  assert.ok(versions.some((v) => v.reason === 'conflict' && textOf(v.doc) === 'Other tab’s newer draft.'));
+});
+
+test('overlapping frame saves never mistake an earlier own save for another editor', async () => {
+  const local = memory(), ss = session(); await seed(local);
+  const f = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  f.type(' First.'); const a = f.$.save();
+  f.type(' Second.'); const b = f.$.save();
+  await Promise.all([a, b]);
+  assert.ok(!(await stored(local)).versions.includes('conflict'));
+  assert.ok(textOf((await stored(local)).paper.doc).endsWith(' First. Second.'));
+});

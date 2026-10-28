@@ -118,3 +118,14 @@ test('submitting a stale tab also keeps the newer draft from the other editor', 
   await b.save(k, { doc: doc('Submitted version.') }, { reason: 'submit' });
   assert.ok((await Promise.all((await b.versions(k)).map((v) => b.version(k, v.id)))).some((v) => v.doc.content[0].content[0].text === 'Other editor.'));
 });
+
+
+test('stale formatting changes retain the other editor’s format and import choice', async () => {
+  const s = store(), a = PA.open(s), b = PA.open(s), k = PA.keyOf(K);
+  await a.save(k, { doc: doc('Same words.'), format: 'mla9', keep: false });
+  await b.get(k);
+  await a.save(k, { format: 'apa7', keep: true });
+  await b.save(k, { doc: doc('Same words.'), format: 'chicago17', keep: false });
+  const versions = await Promise.all((await b.versions(k)).map((v) => b.version(k, v.id)));
+  assert.ok(versions.some((v) => v.reason === 'conflict' && v.format === 'apa7' && v.keep === true));
+});
