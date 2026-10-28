@@ -35,8 +35,8 @@ var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   const WHERE = "(?:\\d{4}[a-z]?|n\\.d\\.|\\d{1,5}(?:[-–]\\d{1,5})?|[ivxlcdm]{1,8}|(?:pp?|para|ch)\\. ?\\d{1,5}(?:[-–]\\d{1,5})?)";
   const ONE = new RegExp(`^(?:(?:see|cf\\.|e\\.g\\.,?) )?(${WHO})(?:,? ${WHERE}(?:[,:] ?${WHERE})*)?$`, 'u');
   const LOCATED = new RegExp(`,? ${WHERE}`, 'u');
-  // Parentheses that point inside a text, not to a source: "(Figure 2)", "(Chapter 3)".
-  const INSIDE = /^(?:fig(?:ure)?s?|tables?|chapters?|ch|parts?|pages?|weeks?|sections?|appendix|appendices|steps?|units?|modules?|questions?|exhibits?|lessons?|days?|vol(?:ume)?s?|acts?|scenes?|lines?|notes?|book|verse|slides?|problems?|exercises?|items?|level|grade|room|period|session|episode|season)\.?$/i;
+  // Parentheses that point inside a text, not to a source ("(Figure 2)", "(May 1945)"): lib/writer-cite.js's list.
+  const INSIDE = (typeof GZ_WRITER_CITE !== 'undefined' ? GZ_WRITER_CITE : require('./lib/writer-cite.js')).INSIDE;
   const NARRATIVE = new RegExp(`(${NAME}(?: et al\\.)?) \\((?:\\d{4}[a-z]?|n\\.d\\.)(?:, (?:pp?\\. ?)?\\d{1,5}(?:[-–]\\d{1,5})?)?\\)`, 'gu');
   const citations = (text) => {
     const s = String(text || '').slice(0, 200000), seen = new Set();
