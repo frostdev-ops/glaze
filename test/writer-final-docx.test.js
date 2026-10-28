@@ -335,3 +335,16 @@ test('a non-breaking hyphen is U+2011 in the paper and w:noBreakHyphen in Word',
   assert.match(x, /<w:t xml:space="preserve">well<\/w:t><w:noBreakHyphen\/><w:t xml:space="preserve">known<\/w:t>/);
   assert.equal((await imp(X.exportDocx(got.node).bytes)).node.textContent, 'well‑known');
 });
+
+// ---- notes
+test('endnotes come in as footnotes, every citation kept in order, with a warning', async () => {
+  const W2 = `${NSW} xmlns:r="${REL}"`;
+  const endnotes = `<w:endnotes ${W2}><w:endnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:endnote><w:endnote w:id="1"><w:p><w:r><w:rPr><w:rStyle w:val="EndnoteReference"/></w:rPr><w:endnoteRef/></w:r>${r(' End source, ')}<w:hyperlink r:id="rIdE">${r('online')}</w:hyperlink></w:p></w:endnote></w:endnotes>`;
+  const footnotes = `<w:footnotes ${W2}><w:footnote w:id="1"><w:p><w:r><w:footnoteRef/></w:r>${r(' Foot source.')}</w:p></w:footnote></w:footnotes>`;
+  const got = await imp(pack(`<w:p>${r('One')}<w:r><w:endnoteReference w:id="1"/></w:r>${r(' two')}<w:r><w:footnoteReference w:id="1"/></w:r></w:p>`, {
+    'word/endnotes.xml': endnotes, 'word/footnotes.xml': footnotes, 'word/_rels/endnotes.xml.rels': rels([['rIdE', 'hyperlink', 'https://end.example/', true]]),
+  }));
+  const notes = nodes(got.node, 'footnote_ref').map((n) => n.attrs.content.replace(/ rel="[^"]*"| target="[^"]*"/g, ''));
+  assert.deepEqual(notes, ['End source, <a href="https://end.example/">online</a>', 'Foot source.']);
+  assert.deepEqual(got.warnings, ['Endnotes became footnotes.']);
+});
