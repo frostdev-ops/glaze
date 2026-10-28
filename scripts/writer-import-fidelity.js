@@ -196,7 +196,7 @@ const writerPages = async (items) => {
       it.toast = await fr.evaluate(() => document.querySelector('.gp-toast span')?.textContent || '');
       Object.assign(it, await fr.evaluate(() => {
         const api = GZ_WRITER_PAPER.current(), v = api.editor.view, f = api.look ? api.look() : api.format(), geo = GZ_WRITER_STYLES.geometry(f);
-        const dom = v.dom.getBoundingClientRect(), scale = dom.height / v.dom.offsetHeight, stride = geo.height + 26.4;
+        const dom = v.dom.getBoundingClientRect(), scale = dom.width / parseFloat(getComputedStyle(v.dom).width), stride = geo.height + 26.4;
         const sheets = [...document.querySelectorAll('.gp-sheet')];
         const pages = sheets.map(() => []);
         // Each textblock's lines: positions grouped by their caret's top, in page px from the page's top.
@@ -221,8 +221,9 @@ const writerPages = async (items) => {
         };
       }));
       for (const l of it.writer.flatMap((pg) => pg.lines)) l.text = words(l.text);
+      if (dump) fs.writeFileSync(path.join(out, `${it.id}-lines.json`), JSON.stringify(it.writer, null, 2));
       if (dump) console.log(`${it.id} blocks:\n${await fr.evaluate(() => {
-        const api = GZ_WRITER_PAPER.current(), v = api.editor.view, L = api.look(), g = GZ_WRITER_STYLES.geometry(L), top = v.dom.getBoundingClientRect().top, scale = v.dom.getBoundingClientRect().height / v.dom.offsetHeight, out = [];
+        const api = GZ_WRITER_PAPER.current(), v = api.editor.view, L = api.look(), g = GZ_WRITER_STYLES.geometry(L), top = v.dom.getBoundingClientRect().top, scale = v.dom.getBoundingClientRect().width / parseFloat(getComputedStyle(v.dom).width), out = [];
         v.state.doc.descendants((n, pos) => {
           if (!n.isTextblock) return n.type.name !== 'table';
           const d = v.nodeDOM(pos), r = d.getBoundingClientRect(), cs = getComputedStyle(d), y = (r.top - top) / scale, page = Math.floor(y / (g.height + 26.4));
