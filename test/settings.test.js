@@ -20,7 +20,7 @@ test('1.0 data migrates: palette kept, motion level derived, preset recovered', 
   assert.equal(s.motion.level, 'off');
   assert.equal(s.preset, 'Midnight');
   assert.equal(s.footer, false);
-  assert.equal(G.GZ_SANITIZE({ motion: { enter: true, hover: false, transitions: false } }).motion.level, 'subtle');
+  assert.equal(G.GZ_SANITIZE({ motion: { enter: true, hover: false, transitions: false } }).motion.level, 'expressive');
 });
 
 test('edited 1.0 palette has no preset', () => {
@@ -47,7 +47,7 @@ test('hostile import is cleaned, not trusted', () => {
   assert.deepEqual(s.look, G.GZ_DEFAULTS.look);
   assert.equal(s.bg.kind, 'image');
   assert.equal(s.bg.image, '');
-  assert.equal(s.motion.level, 'subtle');
+  assert.equal(s.motion.level, 'expressive');
   assert.deepEqual(s.courses.colors, { '3': '#ffffff' });
   assert.deepEqual(s.presets.map((p) => p.name), ['Mine']);
   assert.equal(s.presets[0].colors['--gz-ink'], '#ffffff');
