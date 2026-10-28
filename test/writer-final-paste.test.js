@@ -166,3 +166,64 @@ test('B24: a footnote is never cut: a long note keeps its end, and no markup bec
   // The bound is the one every other reader of a note's HTML has: the clipboard's input limit, refused whole.
   assert.throws(() => S.inline('x'.repeat(S.MAX_INPUT)), (e) => e.code === 'WRITER_INPUT_LIMIT');
 });
+
+// ---- F6: writer.js's link field, in the stand-in DOM writer-frame.test.js runs it in
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { El } = require('./stand-in-dom.js');
+const { parse: parseDOM } = require('./fixture-dom.js');
+const linkField = async () => {
+  const root = path.join(__dirname, '..'), file = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  if (!Object.getOwnPropertyDescriptor(El.prototype, 'classList')) {
+    Object.defineProperty(El.prototype, 'classList', { get() {
+      const e = this, list = () => String(e.className).split(/\s+/).filter(Boolean);
+      return { contains: (c) => list().includes(c), add: (c) => { if (!list().includes(c)) e.className = [...list(), c].join(' '); }, remove: (c) => { e.className = list().filter((x) => x !== c).join(' '); },
+        toggle: (c, on) => { if (on ?? !list().includes(c)) { if (!list().includes(c)) e.className = [...list(), c].join(' '); } else e.className = list().filter((x) => x !== c).join(' '); } };
+    } });
+  }
+  const doc = { activeElement: null };
+  doc.root = new El('html', doc);
+  doc.head = new El('head', doc);
+  doc.body = parseDOM(file('writer.html'), doc);
+  doc.documentElement = doc.root;
+  doc.getElementById = (id) => doc.root.querySelector(`#${id}`);
+  doc.querySelector = (s) => doc.root.querySelector(s);
+  doc.addEventListener = () => {};
+  doc.createElement = (t) => new El(t, doc);
+  const listeners = [], links = [];
+  // The editor's link command: it links what the schema's href() keeps (loosely: "example.com" too), else refuses.
+  const editor = (opts) => ({ opts, view: { state: { doc: 'd' } }, html: () => opts.html, words: () => 1, setHTML() {}, focus() {}, active: () => ({}),
+    run: (name, url) => { const h = name === 'link' && S.href(url, true); if (h) links.push(h); return !!h; } });
+  const ctx = vm.createContext({
+    document: doc, innerWidth: 800, innerHeight: 300, console, ResizeObserver: class { observe() {} },
+    addEventListener: (type, f) => { if (type === 'message') listeners.push(f); },
+    chrome: { runtime: { sendMessage: async () => ({ ok: true }) } },
+    GZ_WRITER_EDITOR: { create: editor },
+    GZ_WRITER_SCHEMA: { compose: 'compose', paper: 'paper', delta: () => [{ insert: '\n' }], loses: () => [] },
+  });
+  ctx.globalThis = ctx;
+  vm.runInContext(file('lib/i18n.js'), ctx);
+  vm.runInContext(file('writer.js'), ctx);
+  const port = { sent: [], postMessage(m) { this.sent.push(m); }, close() {} };
+  for (const f of listeners) await f({ data: { type: 'glaze:writer', pass: 'p'.repeat(36) }, ports: [port] });
+  port.onmessage({ data: { type: 'init', mode: 'compose', kind: 'reply', html: '<p>Hi there</p>', locale: 'en', look: {} } });
+  const input = doc.getElementById('href');
+  const enter = (v) => { links.length = 0; input.hidden = false; input.value = v; input.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {} }); return { links: [...links], open: !input.hidden, invalid: input.getAttribute('aria-invalid') }; };
+  return { enter, input };
+};
+
+test('F6: the link field takes what the schema keeps, https:// only before an address without a scheme, and stays open on the rest', async () => {
+  const f = await linkField();
+  assert.deepEqual(f.enter('https://ok.example/a'), { links: ['https://ok.example/a'], open: false, invalid: null });
+  assert.deepEqual(f.enter('tel:+15551234567'), { links: ['tel:+15551234567'], open: false, invalid: null });
+  assert.deepEqual(f.enter('mailto:help@example.com'), { links: ['mailto:help@example.com'], open: false, invalid: null });
+  assert.deepEqual(f.enter('example.com'), { links: ['https://example.com'], open: false, invalid: null });
+  assert.deepEqual(f.enter('example.com:8080/x'), { links: ['https://example.com:8080/x'], open: false, invalid: null });
+  assert.deepEqual(f.enter('//example.com/a'), { links: ['https://example.com/a'], open: false, invalid: null });
+  for (const bad of ['mailto:help', 'ftp://files.example.com/a', 'https:example.com', 'javascript:alert(1)']) {
+    assert.deepEqual(f.enter(bad), { links: [], open: true, invalid: 'true' }, bad);
+  }
+  f.input.dispatchEvent({ type: 'input' });
+  assert.equal(f.input.getAttribute('aria-invalid'), null, 'typing again clears it');
+});
