@@ -96,14 +96,18 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
     const request = ++requests;
     await P().need(['lib/writer-submit.js']);
     if (request !== requests || P()?.current() !== api || SHEET()?.busy()) return;
+    const error = L().fileError(file);
+    if (error) { api.notify?.(error); return; }
     SHEET()?.close();
     if (L().route(file.name) === 'choose') choose(api, file);
     else { close(); SHEET()?.open(api, file); }
   };
 
-  frame.handle('import:file', (m) => {
+  frame.handle('import:file', async (m) => {
     const api = P()?.current();
-    if (!api || frame.mode() !== 'paper' || frame.kind() !== 'assignment' || typeof m.name !== 'string' || !(m.bytes instanceof ArrayBuffer) || m.bytes.byteLength > 50e6) return;
+    if (!api || frame.mode() !== 'paper' || frame.kind() !== 'assignment' || !(m.bytes instanceof ArrayBuffer) || !m.bytes.byteLength || m.bytes.byteLength > 50e6) return;
+    await P().need(['lib/writer-submit.js']);
+    if (P()?.current() !== api || L().fileError({ name: m.name, size: m.bytes.byteLength, type: m.mime ?? '' })) return;
     bring(api, new File([m.bytes], m.name, { type: typeof m.mime === 'string' ? m.mime : '' }));
   });
   return { bring, about, close, opened: () => !!card };

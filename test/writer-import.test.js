@@ -246,7 +246,7 @@ test('Settings → Writer has the uploads switch, on by default, beside Glaze Wr
   const html = read('options.html');
   const at = html.indexOf('data-key="enhance.writer"'), up = html.indexOf('data-key="enhance.writerUploads"');
   assert.ok(at > 0 && up > at && up - at < 1500, 'right after Glaze Writer');
-  for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) for (const k of ['Open uploads in Writer', 'Open in Writer', 'Submit as is', 'Saves current paper', 'Import…']) assert.notEqual(I.t(k, {}, lang), k, `${lang}: ${k}`);
+  for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) for (const k of ['Open uploads in Writer', 'Open in Writer', 'Submit as is', 'Saves current paper', 'Import…', 'That file could not be read.', 'That file is too large.']) assert.notEqual(I.t(k, {}, lang), k, `${lang}: ${k}`);
 });
 
 // Keep each deferred read tied to the input, box and frame that caught it.

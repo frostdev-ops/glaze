@@ -203,7 +203,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const hit = zone?.contains(t) && (drop || t === L().uploadInput(area));
       if (!hit) continue;
       const files = drop ? e.dataTransfer?.files : t.files;
-      if (files?.length !== 1 || files[0].size > 50e6) return;
+      if (files?.length !== 1 || L().fileError(files[0])) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.type === 'input') return;
@@ -214,7 +214,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const request = { frame: box.frame, port: box.port };
       imports.set(box, request);
       f.arrayBuffer().then((bytes) => {
-        if (imports.get(box) !== request || !live().has(box) || box.frame !== request.frame || box.port !== request.port || !X?.settings?.().enhance?.writerUploads) return;
+        if (!L().fileBytes(f, bytes) || imports.get(box) !== request || !live().has(box) || box.frame !== request.frame || box.port !== request.port || !X?.settings?.().enhance?.writerUploads) return;
         box.frame.focus(); say(box, { type: 'import:file', name: f.name, mime: f.type, bytes });
       }, () => {});
       return;

@@ -734,7 +734,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     setState('');
     const api = {
       editor: ed, key: () => key, format: () => format, paper: () => paper, context: () => ctx,
-      docx, save, version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom, importFile,
+      docx, save, notify: (message) => toast(t(message)), version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom, importFile,
       // Nothing written past the format's opening yet (an import then needs no word about the paper it replaces).
       blank: () => view.state.doc.textContent.trim() === S.paper.nodeFromJSON(F.template(format, values())).textContent.trim(),
       // The page ended Focus (a click on its dim).

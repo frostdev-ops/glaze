@@ -1184,6 +1184,7 @@
   "Grading scale": "Cijferschaal",
   "From your syllabus": "Uit je syllabus",
   "Delete what Glaze kept from this syllabus? Your GPA scale and To Do tasks stay.": "Verwijderen wat Glaze uit deze syllabus heeft bewaard? Je cijferschaal en Better To Do-taken blijven.",
+  "That file could not be read.": "Dat bestand kon niet worden gelezen.",
   "That file is too large.": "Dat bestand is te groot.",
   "Choose a file or paste the text first.": "Kies eerst een bestand of plak de tekst.",
   "Import a syllabus": "Een syllabus importeren",
