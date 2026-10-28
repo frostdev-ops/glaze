@@ -786,3 +786,9 @@ test('the current effort has a checked stop and a thumb before an override is sa
   assert.deepEqual(current('model'), ['High'], 'resetting returns to the effective default');
   assert.equal(p.data.ai.model.effort, undefined);
 });
+
+
+test('Activity names a preset OpenAI call as OpenAI rather than a custom endpoint', async () => {
+  const p = await open({ calls: [{ id: 'preset', startedAt: 1, feature: 'writing', provider: 'openai', model: 'gpt-5', state: 'completed' }] });
+  assert.equal(p.$('ai-calls').children[0].children[0].textContent, 'Feedback · OpenAI · gpt-5');
+});
