@@ -118,7 +118,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   // ---- the computed run style, as a browser would cascade it for the properties a paper keeps
-  const INHERIT = ['font-family', 'font-size', 'color', 'font-weight', 'font-style', 'font-variant', 'text-transform'];
+  const INHERIT = ['font-family', 'font-size', 'color', 'font-weight', 'font-style', 'font-variant', 'text-transform', 'white-space'];
   const UA = { b: { 'font-weight': '700' }, strong: { 'font-weight': '700' }, i: { 'font-style': 'italic' }, em: { 'font-style': 'italic' }, cite: { 'font-style': 'italic' }, var: { 'font-style': 'italic' }, dfn: { 'font-style': 'italic' },
     u: { 'text-decoration': 'underline' }, ins: { 'text-decoration': 'underline' }, s: { 'text-decoration': 'line-through' }, strike: { 'text-decoration': 'line-through' }, del: { 'text-decoration': 'line-through' },
     sup: { 'vertical-align': 'super' }, sub: { 'vertical-align': 'sub' }, mark: { 'background-color': 'yellow' } };
@@ -145,8 +145,9 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   };
   const NEAR_BLACK = (h) => { const [r, g, b] = rgb(h); return Math.max(r, g, b) <= 0x50 && Math.max(r, g, b) - Math.min(r, g, b) <= 0x18; };
   // A text leaf's marks as Writer's HTML: tags for bold to subscript, one text_style span (font and size), colour,
-  // highlight and caps as data attributes.
+  // highlight and caps as data attributes. Its tabs are spaces, as the page shows them, unless its white-space keeps them.
   const wrap = (text, c, ctx) => {
+    if (!/^(pre|break-spaces)/.test(String(c['white-space'] || '').trim().toLowerCase())) text = text.replace(/\t/g, ' ');
     const w = String(c['font-weight'] || '').toLowerCase(), bold = /^(bold|bolder)$/.test(w) || +w >= 600;
     const italic = /italic|oblique/.test(String(c['font-style'] || ''));
     const marks = [bold && 'strong', italic && 'em', !c.link && c.deco.has('u') && 'u', c.deco.has('s') && 's', c.vert].filter(Boolean);
