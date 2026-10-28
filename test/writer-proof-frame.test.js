@@ -162,3 +162,19 @@ test('a dialect change discards outstanding results from the old dialect', async
   assert.equal(f.issues.list().length, 0, 'American findings cannot land after British was selected');
   assert.notEqual(f.lint().id, old.id);
 });
+
+test('Alt+Enter reaches the visible autocorrect Undo with the keyboard', async () => {
+  const f = frame({ html: '<p></p>' }); await flush();
+  const plugin = f.view.state.plugins.find((p) => p.spec.key === P.key);
+  for (const ch of 'teh ') {
+    const { from, to } = f.view.state.selection;
+    if (!plugin.props.handleTextInput(f.view, from, to, ch)) f.view.dispatch(f.view.state.tr.insertText(ch));
+  }
+  const pop = f.doc.body.querySelector('.gp-fix'), undo = pop.querySelector('button');
+  assert.ok(!pop.hidden);
+  const event = { key: 'Enter', keyCode: 13, altKey: true, ctrlKey: false, shiftKey: false, metaKey: false, preventDefault() {} };
+  assert.ok(f.view.state.plugins.some((p) => p.props.handleKeyDown?.(f.view, event)));
+  assert.equal(f.doc.activeElement, undo);
+  await f.run(4000);
+  assert.ok(!pop.hidden);
+});
