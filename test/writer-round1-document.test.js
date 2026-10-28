@@ -43,3 +43,19 @@ test('the Paragraph dialog retains left when a format centres a heading', () => 
   E.commands(S.paper).paragraph(patch)(st, (tr) => { st = st.apply(tr); });
   assert.equal(st.doc.firstChild.attrs.align, 'left');
 });
+
+test('submit previews and picture widths use the paper page setup', () => {
+  const setup = ST.pageSetup(ST.FORMATS.mla9, { page: [11.69, 8.27], margins: [0.5, 0.5, 0.5, 0.5] });
+  const look = ST.look(ST.FORMATS.mla9, setup), api = { format: () => ST.FORMATS.mla9, look: () => look };
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-submit.js'), 'utf8');
+  const from = source.indexOf('  const previews = '), to = source.indexOf('  // The big file', from);
+  let measured;
+  const stop = new Error('measured');
+  const ctx = { document: { querySelectorAll: () => [{}], querySelector: () => ({}) }, P: () => ({ current: () => api }),
+    GZ_WRITER_STYLES: { geometry: (f) => { measured = f; throw stop; } } };
+  assert.throws(() => vm.runInNewContext(`${source.slice(from, to)} previews()`, ctx), (e) => e === stop);
+  assert.equal(measured, look, 'the preview clips and scales to the page the student sees');
+  const objects = fs.readFileSync(require('node:path').join(__dirname, '../writer-objects.js'), 'utf8');
+  const a = objects.indexOf('  const content = '), b = objects.indexOf('\n', a);
+  assert.equal(vm.runInNewContext(`${objects.slice(a, b)} content()`, { PAPER: () => api, GZ_WRITER_STYLES: ST }), ST.geometry(look).content);
+});
