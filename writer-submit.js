@@ -9,8 +9,8 @@
 // frame → page: submit:arm (this paper owns the attempt), submit:go { run, name, bytes, note, text, until, asis, mime },
 //   submit:saved { ok }; page → frame: submit:open, submit:save (Ultra's Save and Close), submit:step { run, step },
 //   submit:done { run, ok, error }. A test's box is compose, never a paper: it gets none of this.
-// "Also paste the text" starts where it was left while Settings → Writer → Submitting's remember is on (writer.submit:
-// rememberText, text; lib/writer-settings.js), else off.
+// "Also paste the text" starts as it was at the last Submit while Settings → Writer → Submitting's remember is on
+// (writer.submit: rememberText, text; lib/writer-settings.js), else off. Cancel and Escape keep nothing.
 // Classic script after writer-paper.js.
 var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   const frame = globalThis.GZ_WRITER_FRAME;
@@ -144,12 +144,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     if (file) globalThis.GZ_WRITER_IMPORT?.about(file).then((s) => { if (sheet === mine) size.textContent = s; }, () => {});
     else build().then((out) => { if (sheet === mine) size.textContent = `${t('{n} pages', { n: pages })} · ${t('{n} KB', { n: nf(L().kb(out.bytes.length)) })}`; }, () => {});
 
-    sw.addEventListener('click', () => {
-      if (mine.busy) return;
-      const on = sw.getAttribute('aria-checked') !== 'true';
-      sw.setAttribute('aria-checked', String(on));
-      if (remember) globalThis.GZ_WRITER_SETTINGS?.patch((w) => ({ ...w, submit: { ...w.submit, text: on } })).catch((e) => console.error(e));
-    });
+    sw.addEventListener('click', () => { if (!mine.busy) sw.setAttribute('aria-checked', String(sw.getAttribute('aria-checked') !== 'true')); });
     const cancelIt = () => {
       mine.cancelled = true;
       if (mine.busy) {
@@ -202,6 +197,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       err.textContent = ''; native.hidden = true;
       const run = mine.run = ++runs, paste = !file && sw.getAttribute('aria-checked') === 'true';
       const text = paste ? api.editor.text() : null;
+      if (remember && !file) globalThis.GZ_WRITER_SETTINGS?.patch((w) => ({ ...w, submit: { ...w.submit, text: paste } })).catch((e) => console.error(e));
       let s = L().start({ text: !!L().delta({ note: note.value, text: text || '' }), asis: !!file });
       try {
         if (file) {

@@ -240,6 +240,8 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
 
     // ---- Settings → Writer → Discussions: Markdown, the word target and Quote, off before the frame loads, on live ----
     const W0 = G.GZ_SANITIZE({}).writer, setW = (w) => worker.evaluate((w) => chrome.storage.sync.set({ writer: w }), G.GZ_SANITIZE({ writer: w }).writer);
+    // A reply typed above is backed up (enhance.drafts); its offer would hold the box: those copies go first.
+    await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('draft:'))); });
     await setW({ ...W0, compose: { markdown: false, target: false, quote: false } });
     p = await open('/ultra/courses/_101_1/discussion/_9_1');
     const sr = await box(p, 'reply');

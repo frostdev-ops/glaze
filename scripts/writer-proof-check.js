@@ -235,6 +235,8 @@ const rss = (profile) => {
     // Set before the frame loads (all off), then each switched live through storage.onChanged.
     const W0 = G.GZ_SANITIZE({}).writer, setW = (w) => worker.evaluate((w) => chrome.storage.sync.set({ writer: w }), G.GZ_SANITIZE({ writer: w }).writer);
     const OFF = { ...W0, proofing: false, autocorrect: { typos: false, capitalI: false, doubles: false, smart: false } };
+    // A reply typed above is backed up (enhance.drafts); its offer would hold the box: those copies go first.
+    await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('draft:'))); });
     await setW(OFF);
     const sp = await open(discussion(SITES[0])), sb = await box(sp, 'reply');
     await sp.bringToFront();
