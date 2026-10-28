@@ -113,6 +113,48 @@
 <w:iCs w:val="1"/>
 </w:rPr>
 </w:style>
+<w:style w:type="paragraph" w:styleId="Heading5">
+<w:name w:val="heading 5"/>
+<w:basedOn w:val="Normal"/>
+<w:next w:val="Normal"/>
+<w:uiPriority w:val="9"/>
+<w:qFormat/>
+<w:pPr>
+<w:keepNext/>
+<w:keepLines/>
+<w:spacing w:before="0" w:after="0" w:line="480" w:lineRule="auto"/>
+<w:ind w:firstLine="0"/>
+<w:jc w:val="left"/>
+<w:outlineLvl w:val="4"/>
+</w:pPr>
+<w:rPr>
+<w:b w:val="0"/>
+<w:bCs w:val="0"/>
+<w:i w:val="0"/>
+<w:iCs w:val="0"/>
+</w:rPr>
+</w:style>
+<w:style w:type="paragraph" w:styleId="Heading6">
+<w:name w:val="heading 6"/>
+<w:basedOn w:val="Normal"/>
+<w:next w:val="Normal"/>
+<w:uiPriority w:val="9"/>
+<w:qFormat/>
+<w:pPr>
+<w:keepNext/>
+<w:keepLines/>
+<w:spacing w:before="0" w:after="0" w:line="480" w:lineRule="auto"/>
+<w:ind w:firstLine="0"/>
+<w:jc w:val="left"/>
+<w:outlineLvl w:val="5"/>
+</w:pPr>
+<w:rPr>
+<w:b w:val="0"/>
+<w:bCs w:val="0"/>
+<w:i w:val="0"/>
+<w:iCs w:val="0"/>
+</w:rPr>
+</w:style>
 <w:style w:type="paragraph" w:styleId="BlockQuote">
 <w:name w:val="Block Quote"/>
 <w:basedOn w:val="Normal"/>
