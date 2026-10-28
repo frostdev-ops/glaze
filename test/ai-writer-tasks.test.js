@@ -521,7 +521,7 @@ test('the real worker refuses every writer task on a test attempt, and runs them
   const { fakeIDB } = require('./helpers/fake-idb.cjs');
   const ULTRA = 'https://school.blackboard.com', ATTEMPT = `${ULTRA}/ultra/courses/_101_1/assessment/_7_1/attempt/create?courseId=_101_1`;
   const w = worker({ globals: fakeIDB(), fetch: async (url) => new Response(JSON.stringify(url.endsWith('/models') ? { data: [{ id: 'gpt-x' }] } : { choices: [{ message: { content: '{"minWords":250,"maxWords":null,"sources":null,"replies":null}' }, finish_reason: 'stop' }] }), { headers: { 'content-type': 'application/json' } }),
-    store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, use: 'main', features: { completion: true, writing: true } } }, session: {} } });
+    store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, model: { use: 'main', model: 'gpt-x' }, features: { completion: true, writing: true } } }, session: {} } });
   w.grants.add('https://api.example.com/*');
   const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html', origin: 'chrome-extension://x', tab: { id: 9, url: 'chrome-extension://x/options.html' } };
   await w.send({ type: 'glaze:ai-config', op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x' } }, editor);

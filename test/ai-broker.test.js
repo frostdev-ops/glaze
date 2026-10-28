@@ -11,6 +11,7 @@ const T = require('../lib/ai/task.js');
 const TL = require('../lib/ai/tools.js');
 const S = require('../lib/ai/schema.js');
 const M = require('../lib/ai/models.js');
+const E = require('../lib/ai/endpoint.js');
 require('../lib/ai/providers/openai.js');
 
 const KEY = 'sk-live-ABCDEF0123456789';
@@ -72,7 +73,8 @@ test('a run: its events, then the end with the checked output; no address, model
   for (const secret of [KEY, 'api.example.com', 'gpt-x']) assert.ok(!page.includes(secret), secret);
   assert.deepEqual(e.calls.map((c) => c.url), ['https://api.example.com/v1/models', 'https://api.example.com/v1/chat/completions'], 'the catalog, then the request');
   const [row] = e.local.data.aiCalls;
-  assert.deepEqual(Object.keys(row).sort(), ['feature', 'id', 'ms', 'parts', 'provider', 'startedAt', 'state', 'steps', 'task', 'usage']);
+  assert.deepEqual(Object.keys(row).sort(), ['feature', 'id', 'model', 'ms', 'parts', 'provider', 'startedAt', 'state', 'steps', 'task', 'usage']);
+  assert.deepEqual([row.provider, row.model], ['main', 'gpt-x'], 'the connection and its model, for Activity');
   assert.equal(row.state, 'completed');
   assert.ok(!JSON.stringify(e.local.data).includes(KEY) && !JSON.stringify(e.local.data).includes('hello'));
 });
@@ -253,13 +255,13 @@ test('Settings keeps connections by name: the key comes back masked, follows the
   e.vaultData.clear();
   assert.deepEqual(await B.config({ op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY } }, e), { ok: true, origin: 'https://api.example.com/*' });
   const stored = e.vaultData.get('connections').main;
-  assert.deepEqual({ ...stored, generation: typeof stored.generation }, { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY, generation: 'string' });
+  assert.deepEqual({ ...stored, generation: typeof stored.generation }, { provider: 'openai', base: 'https://api.example.com/v1', key: KEY, generation: 'string' }, 'a model is the settings\', never the connection\'s');
   const got = await B.config({ op: 'get' }, e);
-  assert.deepEqual(got, { ok: true, providers: ['openai'], connections: { main: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: 'sk-l••••6789', origin: 'https://api.example.com/*' } } });
+  assert.deepEqual(got, { ok: true, providers: ['openai'], connections: { main: { provider: 'openai', base: 'https://api.example.com/v1', key: 'sk-l••••6789', origin: 'https://api.example.com/*' } } });
   assert.ok(!JSON.stringify(got).includes(KEY));
   const g1 = stored.generation;
-  await B.config({ op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://API.example.com/v1/', model: 'gpt-y' } }, e);
-  assert.deepEqual([e.vaultData.get('connections').main.key, e.vaultData.get('connections').main.generation], [KEY, g1], 'a new model on the same address keeps the key and the generation');
+  await B.config({ op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://API.example.com/v1/' } }, e);
+  assert.deepEqual([e.vaultData.get('connections').main.key, e.vaultData.get('connections').main.generation], [KEY, g1], 'the same address keeps the key and the generation');
   await B.config({ op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-y', key: 'sk-other-000000' } }, e);
   assert.notEqual(e.vaultData.get('connections').main.generation, g1, 'a new key is a new generation');
   await B.config({ op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://elsewhere.example.net/v1', model: 'gpt-y' } }, e);
@@ -635,7 +637,7 @@ test('a supersede task\'s runs make one call-record row a minute per tab and fea
   const rows = e.local.data.aiCalls;
   assert.equal(rows.length, 2, 'the completions\' one row, and the syllabus run\'s own');
   const [row] = rows;
-  assert.deepEqual({ ...row, id: typeof row.id }, { id: 'string', feature: 'completion', task: 'example.finish', provider: 'openai', state: 'completed', startedAt: 1000, count: 3, ms: 0, usage: { input: 12, output: 3 } });
+  assert.deepEqual({ ...row, id: typeof row.id }, { id: 'string', feature: 'completion', task: 'example.finish', provider: 'main', model: 'gpt-x', state: 'completed', startedAt: 1000, count: 3, ms: 0, usage: { input: 12, output: 3 } });
   fail.on = true; t = 30000; p.say(complete(5)); await flush();
   const after = e.local.data.aiCalls.filter((r) => r.feature === 'completion');
   assert.equal(after.length, 1, 'still one row');
@@ -698,7 +700,7 @@ test('a run refused before admission leaves an Activity row when its provider ca
   p.say({ ...run(undefined, { id: 2 }), feature: 'writing' });
   await flush();
   assert.deepEqual(p.posted.map((m) => [m.id, m.error]), [[1, 'permission'], [2, 'attempt']]);
-  assert.deepEqual(e.local.data.aiCalls.map((r) => [r.feature, r.task, r.provider, r.state]).sort(), [['completion', 'example.finish', 'openai', 'permission'], ['writing', 'example.echo', 'openai', 'attempt']]);
+  assert.deepEqual(e.local.data.aiCalls.map((r) => [r.feature, r.task, r.provider, r.state]).sort(), [['completion', 'example.finish', 'main', 'permission'], ['writing', 'example.echo', 'main', 'attempt']]);
   assert.equal(e.calls.length, 0, 'nothing asked of the model');
   const none = writer({ settings: async () => ({ on: true, use: 'gone', features: { completion: true } }) }), q = open(none);
   q.say(complete(1)); await flush();
@@ -757,4 +759,115 @@ test('cross-port supersede suppresses late output; unknown cancels and old clean
     for (const p of pending) p.resolve({ text: '{"text":"late"}', finish: 'stop' });
     await flush(); settings.PROVIDERS.pop();
   }
+});
+
+// ---- Settings → AI's overall model, a feature's own, effort and tuning --------------------------------------------------
+const OR = 'https://openrouter.ai/api/v1';
+const routed = require('./fixtures/openrouter-models.json');
+const OWNER = 'sk-or-v1-0000synthetic0000000000000000000000000000000000000000000000';
+// The text task as writer.complete asks: no reasoning ('none') unless the student says.
+const quiet = T.define({ ...finish, id: 'example.quiet', stream: false, build: (input, { text }) => text.request({ system: 'Finish it.', data: [{ label: 'before', text: input.text }], effort: 'none', temperature: 0.2, maxTokens: 64 }) });
+TASKS['example.quiet'] = quiet;
+const two = (settings, over = {}) => {
+  const calls = [];
+  const vault = new Map([['connections', { openrouter: { provider: 'openai', base: OR, key: OWNER, generation: 'g-or' }, fast: { provider: 'openai', base: 'https://fast.example.com/v1', key: KEY, generation: 'g-f' } }]]);
+  return env({ calls, vaultData: vault, settings: async () => settings,
+    vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
+    reach: async () => true,
+    fetch: async (url, init) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : null });
+      if (url === M.OPENROUTER) return json(routed);
+      if (url.endsWith('/models')) return models(['llama-fast']);
+      return json({ choices: [{ message: { content: ' to the sea.' }, finish_reason: 'stop' }] });
+    }, ...over });
+};
+const quietRun = (id, feature) => ({ id, op: 'run', feature, task: 'example.quiet', input: { text: 'The river runs' } });
+
+test('a feature runs on its own model, the others on the overall one, each to its own server with its own model', async () => {
+  M._reset();
+  const e = two({ on: true, model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: { completion: { use: 'fast', model: 'llama-fast' } }, features: { completion: true, writing: true } });
+  const p = open(e);
+  p.say(quietRun(1, 'completion')); await flush();
+  p.say(quietRun(2, 'writing')); await flush();
+  assert.deepEqual(p.posted.filter((m) => m.type === 'end').map((m) => [m.id, m.output]), [[1, ' to the sea.'], [2, ' to the sea.']]);
+  const asked = e.calls.filter((c) => c.url.endsWith('/chat/completions'));
+  assert.deepEqual(asked.map((c) => [new URL(c.url).host, c.body.model]), [['fast.example.com', 'llama-fast'], ['openrouter.ai', 'deepseek/deepseek-v4.1-flash-1017']]);
+  assert.deepEqual(e.local.data.aiCalls.map((r) => [r.feature, r.provider, r.model]), [['completion', 'fast', 'llama-fast'], ['writing', 'openrouter', 'deepseek/deepseek-v4.1-flash-1017']]);
+  // Status says each feature's own provider and host; no model chosen for a feature is setup.
+  p.say({ id: 3, op: 'status', feature: 'completion' }); await flush();
+  assert.equal(p.posted.at(-1).to, 'fast.example.com');
+  const none = open(two({ on: true, model: { use: 'openrouter', model: '' }, features: { writing: true } }));
+  none.say({ id: 1, op: 'status', feature: 'writing' }); await flush();
+  assert.deepEqual([none.posted[0].allowed, none.posted[0].ready, none.posted[0].why], [true, false, 'setup']);
+});
+
+test('the effort the student set goes when the model takes it; else the task\'s own', async () => {
+  const sent = async (effort, model = 'deepseek/deepseek-v4.1-flash-1017') => {
+    M._reset();
+    const e = two({ on: true, model: { use: 'openrouter', model, ...(effort && { effort }) }, features: { completion: true } }), p = open(e);
+    p.say(quietRun(1, 'completion')); await flush();
+    assert.equal(p.posted.at(-1).type, 'end', JSON.stringify(p.posted.at(-1)));
+    return e.calls.find((c) => c.url.endsWith('/chat/completions')).body.reasoning;
+  };
+  assert.deepEqual(await sent(undefined), { effort: 'none' }, 'writer.complete\'s own none');
+  assert.deepEqual(await sent('low'), { effort: 'low' }, 'the student\'s, which the model lists');
+  assert.deepEqual(await sent('medium'), { effort: 'none' }, 'a level this model doesn\'t list: the task\'s own');
+  assert.deepEqual(await sent('high', 'meta-llama/llama-3.3-70b-instruct'), { effort: 'none' }, 'a model with no effort control: the task\'s own');
+});
+
+test('a feature\'s tuning goes on its requests in Advanced only', async () => {
+  const tune = { completion: { temperature: 0.7, maxTokens: 32, timeoutMs: 4000, context: 2000 } };
+  const body = async (mode) => {
+    M._reset();
+    const e = two({ on: true, mode, model: { use: 'fast', model: 'llama-fast' }, tune, features: { completion: true } }), p = open(e);
+    p.say(quietRun(1, 'completion')); await flush();
+    return e.calls.find((c) => c.url.endsWith('/chat/completions')).body;
+  };
+  const adv = await body('advanced');
+  assert.deepEqual([adv.temperature, adv.max_tokens], [0.7, 32]);
+  const simple = await body('simple');
+  assert.deepEqual([simple.temperature, simple.max_tokens], [0.2, 64], 'the task\'s own');
+});
+
+test('the owner\'s older endpoint runs as OpenRouter at once, and Settings\' first message writes it back in the new shape, settings first', async () => {
+  M._reset();
+  const local = area();
+  local.data.ai = { on: true, use: 'endpoint', features: { syllabus: true, completion: true, writing: true } };
+  const vault = new Map([['connections', { endpoint: { provider: 'openai', base: OR, model: 'deepseek/deepseek-v4.1-flash-1017', key: OWNER, generation: 'g-1' }, device: { provider: 'device', generation: 'g-2' } }]]);
+  const order = [];
+  const calls = [];
+  const e = env({ local: { ...local, set: async (v) => { order.push(Object.keys(v)[0]); return local.set(v); } }, settings: async () => structuredClone(local.data.ai),
+    vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { order.push(k); vault.set(k, structuredClone(v)); return true; }, remove: async () => true },
+    reach: async (u) => u === 'https://openrouter.ai/', fetch: async (url, init) => { calls.push({ url, body: init.body && JSON.parse(init.body) }); return url === M.OPENROUTER ? json(routed) : json({ choices: [{ message: { content: ' to the sea.' }, finish_reason: 'stop' }] }); } });
+  const p = open(e);
+  p.say(quietRun(1, 'completion')); await flush();
+  assert.equal(p.posted.at(-1).type, 'end');
+  assert.deepEqual([calls.at(-1).url, calls.at(-1).body.model], [`${OR}/chat/completions`, 'deepseek/deepseek-v4.1-flash-1017']);
+  assert.equal(vault.get('connections').endpoint.model, 'deepseek/deepseek-v4.1-flash-1017', 'a run writes nothing back');
+  const got = await B.config({ op: 'get' }, e);
+  assert.deepEqual(order.filter((k) => ['ai', 'connections'].includes(k)), ['ai', 'connections']);
+  assert.deepEqual(local.data.ai, { on: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true } });
+  assert.deepEqual(vault.get('connections'), { openrouter: { provider: 'openai', base: OR, key: OWNER, generation: 'g-1' }, device: { provider: 'device', generation: 'g-2' } });
+  assert.ok(got.connections.openrouter && !got.connections.endpoint);
+  assert.equal(got.connections.openrouter.key, E.mask(OWNER));
+  // Settings written back but not read back: the connections keep the model.
+  const stuck = new Map([['connections', { endpoint: { provider: 'openai', base: OR, model: 'm/1', key: OWNER, generation: 'g' } }]]);
+  await B.config({ op: 'get' }, env({ settings: async () => ({ on: true, use: 'endpoint' }), vault: { get: async (k) => structuredClone(stuck.get(k)), set: async (k, v) => { stuck.set(k, v); return true; }, remove: async () => true } }));
+  assert.equal(stuck.get('connections').endpoint.model, 'm/1');
+});
+
+test('a provider is kept at its own address with only a key; an endpoint of the student\'s own takes a name; the catalog says each model\'s efforts', async () => {
+  M._reset();
+  const e = env();
+  e.vaultData.clear();
+  assert.deepEqual(await B.config({ op: 'set', id: 'openrouter', cfg: { provider: 'openai', base: 'https://evil.example.com/v1', key: OWNER } }, e), { ok: true, origin: 'https://openrouter.ai/*' });
+  assert.equal(e.vaultData.get('connections').openrouter.base, OR);
+  assert.equal((await B.config({ op: 'set', id: 'groq', cfg: { provider: 'device' } }, e)).error, 'setup');
+  assert.equal((await B.config({ op: 'set', id: 'openrouter', cfg: { provider: 'openai', name: 'Mine', key: OWNER } }, e)).error, 'setup', 'a provider has its own name');
+  assert.deepEqual(await B.config({ op: 'set', id: 'custom-1', cfg: { provider: 'openai', name: ' Ollama ', base: 'http://localhost:11434/v1' } }, e), { ok: true, origin: 'http://localhost/*' });
+  assert.equal((await B.config({ op: 'get' }, e)).connections['custom-1'].name, 'Ollama');
+  const t = env({ vault: e.vault, reach: async () => true, fetch: async () => json(routed) });
+  const list = await B.config({ op: 'models', id: 'openrouter' }, t);
+  assert.deepEqual(list.models.find((m) => m.id === 'openai/gpt-5.1').efforts, ['none', 'low', 'medium', 'high']);
+  assert.deepEqual(list.models.find((m) => m.id === 'meta-llama/llama-3.3-70b-instruct').efforts, []);
 });

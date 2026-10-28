@@ -15,7 +15,7 @@ const KEY = 'sk-proj-WORKERKEY0123456789';
 const lms = (p = '/courses/1', extra = {}) => ({ id: 'glaze', frameId: 0, url: `${CANVAS}${p}`, origin: CANVAS, tab: { id: 4, url: `${CANVAS}${p}` }, ...extra });
 const editor = (extra = {}) => ({ id: 'glaze', frameId: 0, url: `${EXT}/options.html`, origin: EXT, tab: { id: 9, url: `${EXT}/options.html` }, ...extra });
 const make = (fetch) => worker({ globals: fakeIDB(), fetch, grants: new Set(['https://api.example.com/*']),
-  store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, use: 'main', features: { syllabus: true } } }, session: {} } });
+  store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, model: { use: 'main', model: 'gpt-x' }, features: { syllabus: true } } }, session: {} } });
 const live = (w, sender) => {
   w.context.chrome.tabs.get = async () => sender.tab;
   w.context.chrome.scripting.executeScript = async () => [{ result: { href: sender.url, origin: sender.origin, ancestors: sender.frameId > 0 ? [sender.tab.url] : [] } }];
@@ -52,7 +52,7 @@ test('only Settings\' own top frame keeps connections, and the key never leaves 
   }
   assert.deepEqual(await w.send(set, editor()), { ok: true, origin: 'https://api.example.com/*' });
   const got = await w.send({ type: 'glaze:ai-config', op: 'get' }, editor());
-  assert.deepEqual(JSON.parse(JSON.stringify(got.connections.main)), { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: 'sk-p••••6789', origin: 'https://api.example.com/*' });
+  assert.deepEqual(JSON.parse(JSON.stringify(got.connections.main)), { provider: 'openai', base: 'https://api.example.com/v1', key: 'sk-p••••6789', origin: 'https://api.example.com/*' });
   const kept = JSON.stringify([w.store.local, w.store.sync, w.store.session, got]);
   assert.ok(!kept.includes(KEY), 'not in storage.local, sync or session, nor read back');
   // The page asks; the worker answers with what it may know: the host the text would go to (the import dialog says it),
@@ -186,7 +186,7 @@ const ATTEMPT = `${ULTRA}/ultra/courses/_101_1/assessment/_7_1/attempt/create?co
 const OTHER = `${ULTRA}/ultra/courses/_101_1/assessment/_8_1/attempt/create?courseId=_101_1`;
 const writerOn = (fetch) => {
   const w = worker({ globals: fakeIDB(), fetch,
-    store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, use: 'main', features: { syllabus: true, completion: true, writing: true } } }, session: {} } });
+    store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, model: { use: 'main', model: 'gpt-x' }, features: { syllabus: true, completion: true, writing: true } } }, session: {} } });
   return live2(w);
 };
 // The tab's page is w.page, read live; w.frames[frameId] = { href, ancestors } is what each LMS frame of the tab holds now

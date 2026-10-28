@@ -30,11 +30,12 @@ test('an older Settings\' use is the overall model\'s connection, whatever else 
   assert.deepEqual(A.clean({ use: 'endpoint', model: { use: 'groq', model: 'm' } }).model, { use: 'groq', model: 'm' }, 'a stored model wins');
 });
 
-test('a feature runs on its own model, else the overall one; a connection without a model is none, but on this device', () => {
+test('a feature runs on its own model, else the overall one; a connection without a model has none chosen, but on this device', () => {
   const s = A.clean({ model: { use: 'openai', model: 'gpt-5', effort: 'medium' }, models: { completion: { use: 'groq', model: 'llama' } } });
   assert.deepEqual(A.resolve(s, 'completion'), { use: 'groq', model: 'llama' });
   assert.deepEqual(A.resolve(s, 'writing'), { use: 'openai', model: 'gpt-5', effort: 'medium' });
-  assert.equal(A.resolve(A.clean({ model: { use: 'openai' } }), 'writing'), null);
+  assert.equal(A.chosen(A.resolve(A.clean({ model: { use: 'openai' } }), 'writing')), false);
+  assert.equal(A.chosen(A.resolve(A.clean({ model: { use: 'openai', model: 'gpt-5' } }), 'writing')), true);
   assert.deepEqual(A.resolve(A.clean({ model: { use: 'device' } }), 'writing'), { use: 'device', model: '' });
   assert.equal(A.resolve(A.clean(), 'writing'), null);
   assert.equal(A.allowed(A.clean({ on: true, features: { writing: true } }), 'writing'), false, 'no model chosen');
