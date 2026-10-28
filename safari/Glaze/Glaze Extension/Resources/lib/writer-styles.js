@@ -76,6 +76,74 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
     if ([font, size, line, first, margin, text].includes(null)) return null;
     return { ...base, id, label, base: base.id, font, size, line, first, margins: [margin, margin, margin, margin], header: { ...base.header, text }, list: { ...base.list, line: Math.min(line, base.list.line) } };
   };
+  // An imported Word file's own page and defaults (the paper document's setup attribute): page [width, height] and
+  // margins [top, right, bottom, left] (in), header and footer distances (in), the base font and size its text is in,
+  // the default tab stop (in), kerning, a different first page (title), and the header's and footer's paragraphs
+  // ({ default, first }: [{ align, line, after, before?, left?, right?, first?, exact?, least?, tabs?, runs: [{ text } |
+  // { field: 'PAGE' | 'NUMPAGES' }, with b, i, u, s, sup, sub, font, size, color] }]). It comes from storage, so anything
+  // out of range is refused (null) or dropped; what import stores has already been through here.
+  const len = (v, lo, hi) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(hi, Math.max(lo, v)) * 1000) / 1000 : null);
+  const two = (v, lo, hi) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(hi, Math.max(lo, v)) * 100) / 100 : null);
+  const ALIGNS = ['center', 'right', 'justify'], KINDS = ['l', 'c', 'r', 'd'], LEADERS = ['dot', 'hyphen', 'underscore', 'middleDot', 'heavy'];
+  const tabsOf = (raw) => {
+    if (!Array.isArray(raw)) return null;
+    const out = raw.slice(0, 64).filter((t) => Array.isArray(t) && two(t[0], 0, 22) != null && KINDS.includes(t[1])).map((t) => (LEADERS.includes(t[2]) ? [two(t[0], 0, 22), t[1], t[2]] : [two(t[0], 0, 22), t[1]]));
+    return out.length ? out : null;
+  };
+  const MARKS = ['b', 'i', 'u', 's', 'sup', 'sub'];
+  const runOf = (r) => {
+    if (!r || typeof r !== 'object') return null;
+    const out = {};
+    if (r.field === 'PAGE' || r.field === 'NUMPAGES') out.field = r.field;
+    else if (typeof r.text === 'string' && r.text) out.text = r.text.replace(/[\u0000-\u0008\u000b-\u001f]/g, '').slice(0, 2000);
+    else return null;
+    for (const k of MARKS) if (r[k] === true) out[k] = true;
+    if (FONTS.includes(r.font)) out.font = r.font;
+    if (two(r.size, 1, 200) != null) out.size = two(r.size, 1, 200);
+    if (/^[0-9A-F]{6}$/.test(r.color || '')) out.color = r.color;
+    return out;
+  };
+  const partOf = (raw) => {
+    if (!Array.isArray(raw)) return null;
+    return raw.slice(0, 20).filter((x) => x && typeof x === 'object').map((x) => {
+      const out = { align: ALIGNS.includes(x.align) ? x.align : null, line: two(x.line, 0.5, 4) ?? 1, after: two(x.after, 0, 1584) ?? 0 };
+      for (const k of ['before', 'left', 'right', 'first']) if (two(x[k], k === 'before' ? 0 : -22, 22) != null && (k !== 'before' || x[k])) out[k] = two(x[k], k === 'before' ? 0 : -22, 22);
+      for (const k of ['exact', 'least']) if (two(x[k], 0.5, 1584) != null) out[k] = two(x[k], 0.5, 1584);
+      const tabs = tabsOf(x.tabs); if (tabs) out.tabs = tabs;
+      out.runs = (Array.isArray(x.runs) ? x.runs.slice(0, 200) : []).map(runOf).filter(Boolean);
+      return out;
+    });
+  };
+  const setup = (raw) => {
+    if (!raw || typeof raw !== 'object') return null;
+    const page = Array.isArray(raw.page) && raw.page.length === 2 ? raw.page.map((v) => len(v, 2, 22)) : null;
+    const margins = Array.isArray(raw.margins) && raw.margins.length === 4 ? raw.margins.map((v) => len(v, 0, 10)) : null;
+    if (!page || page.includes(null) || !margins || margins.includes(null)) return null;
+    // An inch of text each way at least, or the page can't hold a line.
+    if (page[1] - margins[0] - margins[2] < 1 || page[0] - margins[1] - margins[3] < 1) return null;
+    return {
+      page, margins, header: len(raw.header, 0, 10) ?? 0.5, footer: len(raw.footer, 0, 10) ?? 0.5,
+      font: FONTS.includes(raw.font) ? raw.font : null, size: two(raw.size, 4, 96), tab: len(raw.tab, 0.05, 22) ?? 0.5, kern: raw.kern === true, title: raw.title === true,
+      headers: { default: partOf(raw.headers?.default), first: partOf(raw.headers?.first) }, footers: { default: partOf(raw.footers?.default), first: partOf(raw.footers?.first) },
+    };
+  };
+  // What the paper is laid out by: its format, with an imported file's own page, margins, base font, tab stop and header
+  // and footer over it (the format still says what the checks want). One object per setup, so callers can compare.
+  const looks = new WeakMap();
+  const look = (f, raw) => {
+    const s = raw && typeof raw === 'object' ? (looks.get(raw)?.s ?? setup(raw)) : null;
+    if (!s) return f;
+    const hit = looks.get(raw);
+    if (hit && hit.f === f) return hit.look;
+    const out = { ...f, setup: s, page: { width: s.page[0], height: s.page[1] }, margins: s.margins, font: s.font || f.font, size: s.size || f.size, tab: s.tab, kern: s.kern, header: { ...f.header, distance: s.header }, footer: s.footer };
+    looks.set(raw, { f, s, look: out });
+    return out;
+  };
+  // An imported header's or footer's paragraphs on page n of total, its fields filled in; null when the paper has no
+  // setup (the format's header then: headerText).
+  const fill = (parts, n, total) => (parts || []).map((x) => ({ ...x, runs: x.runs.map((r) => (r.field ? (({ field, ...rest }) => ({ text: String(field === 'PAGE' ? n : total), ...rest }))(r) : r)) }));
+  const headerParts = (f, n, total = '') => (f.setup ? fill(n === 1 && f.setup.title ? f.setup.headers.first : f.setup.headers.default, n, total) : null);
+  const footerParts = (f, n, total = '') => (f.setup ? fill(n === 1 && f.setup.title ? f.setup.footers.first : f.setup.footers.default, n, total) : null);
   // A paper's format, from what it stores (an id of the three, or a preset) or a format already made. Unknown → MLA.
   const get = (f) => {
     if (typeof f === 'string') return FORMATS[f] || FORMATS.mla9;
@@ -90,15 +158,18 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
   const pt2px = (pt) => (pt * PX) / 72;
   const r3 = (n) => Math.round(n * 1000) / 1000;
   // A line's height in px: Word's multiple of the font's single line at that size, which Word keeps in whole twips
-  // (Times New Roman 12: 275.98 → 276 twips, 13.8pt; double 27.6pt, as its PDFs show).
+  // (Times New Roman 12: 275.98 → 276 twips, 13.8pt; double 27.6pt, as its PDFs show). o.exact: exactly that many pt;
+  // o.least: at least that many, or the single line when it is taller.
   const lineHeight = (f, o = {}) => {
+    if (o.exact != null) return r3(pt2px(o.exact));
     const single = Math.round((o.size ?? f.size) * 20 * LINE[o.font || f.font]);
+    if (o.least != null) return r3(pt2px(Math.max(single / 20, o.least)));
     return r3(pt2px(Math.round(single * (o.line ?? f.line)) / 20));
   };
-  // Page geometry in px.
+  // Page geometry in px: the page's own size where the paper has one (an imported file's), else Letter.
   const geometry = (f) => {
-    const [top, right, bottom, left] = f.margins.map((m) => m * PX);
-    return { width: PAGE.width * PX, height: PAGE.height * PX, top, right, bottom, left, body: PAGE.height * PX - top - bottom, content: PAGE.width * PX - left - right, header: f.header.distance * PX };
+    const [top, right, bottom, left] = f.margins.map((m) => m * PX), page = f.page || PAGE;
+    return { width: page.width * PX, height: page.height * PX, top, right, bottom, left, body: page.height * PX - top - bottom, content: page.width * PX - left - right, header: f.header.distance * PX, ...(f.footer != null ? { footer: f.footer * PX } : {}) };
   };
   // A paragraph's first-line indent in inches: its own, else none for a centred or right-aligned line, else the format's.
   const firstOf = (f, attrs = {}) => (attrs.first != null ? attrs.first : attrs.align === 'center' || attrs.align === 'right' ? 0 : f.first);
@@ -131,10 +202,15 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
     }
     return null;
   };
-  // A block's line height and space after, in px: a list entry, a quoted paragraph, a heading or body.
+  // A block's line height and space before and after, in px: a list entry, a quoted paragraph, a heading or body, with
+  // what the paragraph sets itself over the format's.
+  // slack: how far a line's box may hang past the page's text area and still fit, as Word lets multiple spacing's extra
+  // space below the text do (exactly and at-least heights must fit whole).
   const blockBox = (f, attrs = {}, where = {}) => {
-    const set = where.entry ? f.list : where.quote ? f.quote : f;
-    return { line: lineHeight(f, { line: attrs.line ?? set.line }), after: r3(pt2px(set.after)) };
+    const set = where.entry ? f.list : where.quote ? f.quote : f, line = attrs.line ?? set.line;
+    const box = { line: lineHeight(f, { line, exact: attrs.exact, least: attrs.least }), after: r3(pt2px(attrs.after ?? set.after)), before: r3(pt2px(attrs.before ?? 0)) };
+    if (attrs.exact == null && attrs.least == null && line > 1) box.slack = r3(box.line - lineHeight(f, { line: 1 }));
+    return box;
   };
 
   // ---- the frame's page CSS (writer-paper.js puts it in an adopted sheet). Scoped to the paper's flow.
@@ -146,15 +222,17 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
       `.gp-hdr { top: ${g.header}px; right: ${g.right}px; left: ${g.left}px; font: ${f.size}pt/${lineHeight(f, { line: 1 })}px "${f.font}"; }`,
       `.gp-notes { left: ${g.left}px; width: ${g.content}px; font: ${f.notes.size}pt/${lineHeight(f, { size: f.notes.size, line: f.notes.line })}px "${f.font}"; }`,
       `.gp-notes p { padding-bottom: ${r3(pt2px(f.notes.after))}px; text-indent: ${f.notes.first}in; }`,
-      `${s} { font-family: "${f.font}", ${GENERIC[f.font]}; font-size: ${f.size}pt; line-height: ${lh}px; }`,
-      `${s} p, ${s} li, ${s} h1, ${s} h2, ${s} h3, ${s} h4, ${s} pre { margin: 0; padding: 0 0 ${r3(pt2px(f.after))}px; text-indent: ${f.first}in; line-height: ${lh}px; }`,
+      `${s} { font-family: "${f.font}", ${GENERIC[f.font]}; font-size: ${f.size}pt; line-height: ${lh}px; tab-size: ${r3((f.tab || 0.5) * PX)}px;${f.kern != null ? ` font-kerning: ${f.kern ? 'normal' : 'none'};` : ''} }`,
+      `.gp-ftr { bottom: ${g.footer ?? g.header}px; right: ${g.right}px; left: ${g.left}px; font: ${f.size}pt/${lineHeight(f, { line: 1 })}px "${f.font}"; }`,
+      // Space after (and an imported paragraph's before) as margins: between two paragraphs the larger counts, as in Word.
+      `${s} p, ${s} li, ${s} h1, ${s} h2, ${s} h3, ${s} h4, ${s} pre { margin: 0 0 ${r3(pt2px(f.after))}px; padding: 0; text-indent: ${f.first}in; line-height: ${lh}px; }`,
       `${s} .ql-align-center, ${s} .ql-align-right { text-indent: 0; }`,
       `${s} blockquote { margin: 0; padding: 0 0 0 ${q.indent}in; }`,
-      `${s} blockquote p { text-indent: 0; line-height: ${lineHeight(f, { line: q.line })}px; padding-bottom: ${r3(pt2px(q.after))}px; }`,
+      `${s} blockquote p { text-indent: 0; line-height: ${lineHeight(f, { line: q.line })}px; margin-bottom: ${r3(pt2px(q.after))}px; }`,
       `${s} pre { font-family: "Courier New"; text-indent: 0; white-space: pre-wrap; }`,
       `${s} li { text-indent: 0; padding-left: 0.5in; }`,
       `${s} img { max-height: ${g.body - lh}px; object-fit: contain; }`,
-      `${s} p.gp-entry { padding-left: ${f.list.hanging}in; text-indent: -${f.list.hanging}in; line-height: ${lineHeight(f, { line: f.list.line })}px; padding-bottom: ${r3(pt2px(f.list.after))}px; }`,
+      `${s} p.gp-entry { padding-left: ${f.list.hanging}in; text-indent: -${f.list.hanging}in; line-height: ${lineHeight(f, { line: f.list.line })}px; margin-bottom: ${r3(pt2px(f.list.after))}px; }`,
     ];
     f.headings.forEach((h, i) => out.push(`${s} h${i + 1} { font-size: inherit; font-weight: ${h.bold ? 700 : 400}; font-style: ${h.italic ? 'italic' : 'normal'}; text-align: ${h.align}; text-indent: ${h.first || 0}in; }`));
     for (let n = 1; n <= 8; n++) out.push(`${s} .ql-indent-${n} { padding-left: ${n * 0.5}in; }`, `${s} li.ql-indent-${n} { padding-left: ${n * 0.5 + 0.5}in; }`);
@@ -172,7 +250,7 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
   // styles.xml's body (no declaration): the defaults, Normal with the format's first-line indent, headings 1-4, block
   // quote, bibliography entry, footnote text and reference, header and hyperlink.
   const stylesXML = (f) => {
-    const runDefault = `<w:rPr>${fonts(f.font)}<w:sz w:val="${f.size * 2}"/><w:szCs w:val="${f.size * 2}"/><w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr>`;
+    const runDefault = `<w:rPr>${fonts(f.font)}${f.kern ? '<w:kern w:val="2"/>' : ''}<w:sz w:val="${Math.round(f.size * 2)}"/><w:szCs w:val="${Math.round(f.size * 2)}"/><w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr>`;
     const heads = f.headings.map((h, i) => style('paragraph', `Heading${i + 1}`, `heading ${i + 1}`,
       `<w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/>${spacing(f.line, 0)}<w:ind w:firstLine="${tw(h.first || 0)}"/><w:jc w:val="${JC[h.align]}"/><w:outlineLvl w:val="${i}"/></w:pPr><w:rPr><w:b w:val="${h.bold ? 1 : 0}"/><w:bCs w:val="${h.bold ? 1 : 0}"/><w:i w:val="${h.italic ? 1 : 0}"/><w:iCs w:val="${h.italic ? 1 : 0}"/></w:rPr>`)).join('');
     const q = f.quote, l = f.list, n = f.notes;
@@ -188,24 +266,25 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
       + style('character', 'Hyperlink', 'Hyperlink', '<w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr>')
       + '</w:styles>';
   };
-  // The section: Letter, the format's margins and header distance, the default header (and an empty first-page one where
-  // page 1 shows none). rels: { header, first } relationship ids.
+  // The section: the page (Letter, or an imported file's own), the margins and header and footer distances, the default
+  // header and footer (and first-page ones where page 1 differs). rels: { header, first, footer, footerFirst } ids.
   const sectPr = (f, rels = {}) => {
-    const [top, right, bottom, left] = f.margins.map(tw), titlePg = !f.header.first && f.header.text !== 'none';
-    return `<w:sectPr>${rels.header ? `<w:headerReference w:type="default" r:id="${rels.header}"/>` : ''}${titlePg && rels.first ? `<w:headerReference w:type="first" r:id="${rels.first}"/>` : ''}`
-      + `<w:pgSz w:w="${tw(PAGE.width)}" w:h="${tw(PAGE.height)}"/><w:pgMar w:top="${top}" w:right="${right}" w:bottom="${bottom}" w:left="${left}" w:header="${tw(f.header.distance)}" w:footer="720" w:gutter="0"/>`
+    const [top, right, bottom, left] = f.margins.map(tw), page = f.page || PAGE;
+    const titlePg = f.setup ? f.setup.title : !f.header.first && f.header.text !== 'none';
+    return `<w:sectPr>${rels.header ? `<w:headerReference w:type="default" r:id="${rels.header}"/>` : ''}${rels.footer ? `<w:footerReference w:type="default" r:id="${rels.footer}"/>` : ''}${titlePg && rels.first ? `<w:headerReference w:type="first" r:id="${rels.first}"/>` : ''}${titlePg && rels.footerFirst ? `<w:footerReference w:type="first" r:id="${rels.footerFirst}"/>` : ''}`
+      + `<w:pgSz w:w="${tw(page.width)}" w:h="${tw(page.height)}"/><w:pgMar w:top="${top}" w:right="${right}" w:bottom="${bottom}" w:left="${left}" w:header="${tw(f.header.distance)}" w:footer="${tw(f.footer ?? 0.5)}" w:gutter="0"/>`
       + `<w:cols w:space="720"/>${titlePg ? '<w:titlePg/>' : ''}</w:sectPr>`;
   };
   // settings.xml: Word 2013+ layout (compatibility mode 15, so Word opens it without the Compatibility Mode banner), and
   // the footnote separators when the paper has notes.
   const COMPAT = [['compatibilityMode', 15], ['overrideTableStyleFontSizeAndJustification', 1], ['enableOpenTypeFeatures', 1], ['doNotFlipMirrorIndents', 1], ['differentiateMultirowTableHeaders', 1]];
-  const settingsXML = (notes = false) => `<w:settings ${W}><w:zoom w:percent="100"/><w:defaultTabStop w:val="720"/><w:characterSpacingControl w:val="doNotCompress"/>`
+  const settingsXML = (notes = false, tab = 0.5) => `<w:settings ${W}><w:zoom w:percent="100"/><w:defaultTabStop w:val="${tw(tab)}"/><w:characterSpacingControl w:val="doNotCompress"/>`
     + `${notes ? '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>' : ''}`
     + `<w:compat>${COMPAT.map(([k, v]) => `<w:compatSetting w:name="${k}" w:uri="http://schemas.microsoft.com/office/word" w:val="${v}"/>`).join('')}</w:compat>`
     + '<w:themeFontLang w:val="en-US"/></w:settings>';
   const fontTableXML = () => `<w:fonts ${W}>${FONTS.map((n) => `<w:font w:name="${n}"><w:panose1 w:val="${TABLE[n][0]}"/><w:charset w:val="00"/><w:family w:val="${TABLE[n][1]}"/><w:pitch w:val="${TABLE[n][2]}"/></w:font>`).join('')}</w:fonts>`;
 
-  return { FORMATS, IDS, FONTS, FACES, LINE, PAGE, get, custom, preset, lineHeight, geometry, firstOf, headerText, dateText, listAt, blockBox, css, stylesXML, sectPr, settingsXML, fontTableXML, twips: tw };
+  return { FORMATS, IDS, FONTS, FACES, LINE, PAGE, get, custom, preset, setup, look, headerParts, footerParts, lineHeight, geometry, firstOf, headerText, dateText, listAt, blockBox, css, stylesXML, sectPr, settingsXML, fontTableXML, twips: tw, tabsOf };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_STYLES; else GZ_WRITER_STYLES;

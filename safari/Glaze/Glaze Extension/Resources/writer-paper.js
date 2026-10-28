@@ -48,6 +48,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PG = GZ_WRITER_PAGINATE, PA = GZ_WRITER_PAPERS, S = GZ_WRITER_SCHEMA, PM = GZ_PM;
     const ed = host.editor, view = ed.view, t = (k, v) => { const text = host.t(k, v); return k === 'Document outline' && text === k ? 'Outline' : text; }, store = PA.open();
     const ISSUES = () => globalThis.GZ_WRITER_ISSUES || null;
+    // What the pages are laid out by: the format, with an imported file's own page, base font and header over it.
+    const look = (doc = view.state.doc) => ST.look(format, doc.attrs.setup);
     let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = 'fit', scale = PX100, layout = null, page = 1, focus = false;
     let laidOut = () => {}, rows = [], feedbackPanel = null; // the Outline's pages once it exists; its rows; Feedback's pages
     const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
@@ -71,7 +73,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const sheets = h('div'), flow = h('div', { class: 'gp-flow' }), measureBox = h('div', { class: 'gp-notes gp-measure', 'aria-hidden': 'true' });
     const zoomEl = h('div', { class: 'gp-zoom' }, sheets, flow, measureBox), size = h('div', { class: 'gp-size' }, zoomEl);
     const canvas = h('div', { class: 'gp-canvas' }, size);
-    const pageL = h('span'), wordsL = h('span'), fontL = h('span'), versionsB = btn({ 'aria-haspopup': 'menu' }, t('Versions'));
+    const pageL = h('span'), wordsL = btn({}), fontL = h('span'), versionsB = btn({ 'aria-haspopup': 'menu' }, t('Versions'));
+    const toolGrow = h('span', { class: 'grow' });
+    // The status bar's word count opens the counts (writer-counts.js, where loaded).
+    wordsL.addEventListener('click', () => globalThis.GZ_WRITER_COUNTS?.open(wordsL));
     const status = h('div', { class: 'gp-status' }, pageL, wordsL, h('span', { class: 'grow' }), fontL, versionsB);
     const tabs = {}, panes = {}, badges = {};
     for (const [id, label] of [['checks', 'Checks'], ['sources', 'Sources'], ['feedback', 'Feedback'], ['outline', 'Document outline']]) {
@@ -89,7 +94,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       h('header', { class: 'gp-top' }, host.standalone ? h('a', { href: 'papers.html', text: t('Papers') }) : null, title, due, h('span', { class: 'grow' }), state),
       h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('Formatting') }, pill, block,
         h('div', { class: 'gp-tb' }, marks, h('span', { class: 'gp-sepv' }), alignB, bullets, numbers, h('span', { class: 'gp-sepv' })),
-        cite, note, brk, h('span', { class: 'grow' }), h('div', { class: 'gp-tb' }, undo, redo), zoomB, host.standalone ? null : focusB, host.standalone ? null : submit),
+        cite, note, brk, toolGrow, h('div', { class: 'gp-tb' }, undo, redo), zoomB, host.standalone ? null : focusB, host.standalone ? null : submit),
       h('div', { class: 'gp-work' }, h('div', { class: 'gp-col' }, canvas, status), side), file);
     (host.root || document.body).append(root);
     flow.style.visibility = 'hidden';
@@ -126,7 +131,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     if (sheet) document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     const restyleCSS = () => {
       globalThis.GZ_WRITER_CITE?.use?.(format.cite);
-      const css = ST.css(format);
+      const css = ST.css(look());
       if (sheet) { sheet.replaceSync(css); return; }
       const own = [...document.styleSheets].find((s) => /writer-paper\.css$/.test(s.href || ''));
       if (!own) return;
@@ -168,14 +173,20 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     document.addEventListener('pointerdown', (e) => { if (open && !open.el.contains(e.target) && !open.opener?.contains(e.target)) close(); }, true);
     let toastTimer = 0;
     // act: { label, run }, a button after the text (an import's Undo).
-    const toast = (text, act = null) => {
+    // choices: { ask, items: [{ label, run }], gone() } instead of plain text: a question with its answers (the first the
+    // default, which gone() keeps when the toast goes unanswered).
+    const toast = (text, act = null, choices = null) => {
       document.querySelector('.gp-toast')?.remove();
-      const el = h('div', { class: 'pop gp-toast', role: 'status' }, h('span', { text }), act ? btn({ class: 'gp-toast-do', onclick: () => { el.remove(); act.run(); } }, act.label) : null);
+      let answered = false;
+      const answer = (run) => () => { answered = true; el.remove(); run(); };
+      const el = h('div', { class: `pop gp-toast${choices ? ' gp-toast-ask' : ''}`, role: 'status' }, h('span', { text }), act ? btn({ class: 'gp-toast-do', onclick: () => { el.remove(); act.run(); } }, act.label) : null,
+        choices ? h('div', { class: 'gp-toast-choices' }, h('b', { text: choices.ask }), ...choices.items.map((c, i) => btn({ class: `gp-toast-choice${i ? '' : ' gp-default'}`, onclick: answer(c.run) }, c.label))) : null);
+      if (choices) setTimeout(() => { if (!answered) choices.gone?.(); }, 15000);
       document.body.append(el);
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => el.remove(), act ? 10000 : 6000);
+      toastTimer = setTimeout(() => el.remove(), choices ? 15000 : act ? 10000 : 6000);
     };
 
     // ---- the editor's extra plugins: page styling and pagination, change watching, note clicks, fallback underlines
@@ -191,14 +202,18 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       return noteCache.get(k);
     });
     const issuesKey = new PM.state.PluginKey('gz-paper-issues');
-    let formatIssues = [], ignored = new Set(), picked = null;
+    let formatIssues = [], ignored = new Set(), picked = null; // picked: the rule whose card is chosen
     const fallback = new PM.state.Plugin({
       key: issuesKey,
       state: { init: () => PM.view.DecorationSet.empty, apply: (tr, set) => (tr.getMeta(issuesKey) || set.map(tr.mapping, tr.doc)) },
       props: { decorations: (s) => issuesKey.getState(s) },
     });
     const watch = new PM.state.Plugin({
-      view: () => ({ update: (v, prev) => { if (v.state.doc !== prev.doc) changed(); else if (!v.state.selection.eq(prev.selection)) selected(); caretSoon(); } }),
+      view: () => ({ update: (v, prev) => {
+        if (v.state.doc.attrs.setup !== prev.doc.attrs.setup) { restyleCSS(); noteCache.clear(); PG.relayout(v); }
+        if (v.state.doc !== prev.doc) changed(); else if (!v.state.selection.eq(prev.selection)) selected();
+        caretSoon();
+      } }),
       props: {
         handleClickOn: (_v, pos, node) => { if (node.type.name === 'footnote_ref') { editNote(pos); return true; } return false; },
         handleKeyDown: (_v, e) => {
@@ -209,25 +224,62 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         },
       },
     });
-    ed.addPlugins([PG.styler(() => format), PG.plugin({ format: () => format, notes: noteHeights, gap: GAP, onLayout: (l) => { layout = l; draw(); laidOut(); } }), watch, fallback]);
+    ed.addPlugins([PG.styler(look), PG.plugin({ format: look, notes: noteHeights, gap: GAP, onLayout: (l) => { layout = l; draw(); laidOut(); } }), watch, fallback]);
 
     // ---- pages
     const surname = () => F.surname(view.state.doc, format);
+    // An imported header's or footer's paragraphs, their tab stops laid out as Word does (a left stop's text starts at it,
+    // a centre one's centres on it, a right one's ends at it).
+    const partEl = (parts, el, L) => {
+      el.replaceChildren(...parts.map((x) => {
+        const p = h('div', { class: 'gp-part' });
+        p.style.cssText = `text-align:${x.align || 'left'};line-height:${ST.lineHeight(L, { line: x.line, exact: x.exact, least: x.least })}px;margin:${x.before || 0}pt 0 ${x.after || 0}pt;padding:0 ${x.right || 0}in 0 ${x.left || 0}in;text-indent:${x.first || 0}in`;
+        let seg = h('span');
+        const segs = [seg];
+        for (const r of x.runs) {
+          for (const [i, piece] of r.text.split('	').entries()) {
+            if (i) { seg = h('span'); segs.push(seg); }
+            if (!piece) continue;
+            const run = h('span', { text: piece });
+            run.style.cssText = [r.b ? 'font-weight:700' : '', r.i ? 'font-style:italic' : '', r.u || r.s ? `text-decoration:${[r.u ? 'underline' : '', r.s ? 'line-through' : ''].join(' ')}` : '', r.sup ? 'vertical-align:super;font-size:.66em' : r.sub ? 'vertical-align:sub;font-size:.66em' : '', r.font ? `font-family:"${r.font}"` : '', r.size ? `font-size:${r.size}pt` : '', r.color ? `color:#${r.color}` : ''].filter(Boolean).join(';');
+            seg.append(run);
+          }
+        }
+        p.append(...segs);
+        p.gzTabs = segs.length > 1 ? (x.tabs || []) : null;
+        return p;
+      }));
+      for (const p of el.children) {
+        if (!p.gzTabs) continue;
+        const width = p.clientWidth, tab = (L.tab || 0.5) * 96, segs = [...p.children];
+        let x = segs[0].getBoundingClientRect().width / scale;
+        p.style.position = 'relative';
+        p.style.textAlign = 'left';
+        for (const seg of segs.slice(1)) {
+          const w = seg.getBoundingClientRect().width / scale, stop = p.gzTabs.map(([pos, kind]) => [pos * 96, kind]).find(([pos]) => pos > x + 0.5) || [Math.floor(x / tab + 1) * tab, 'l'];
+          const left = Math.max(x, stop[1] === 'c' ? stop[0] - w / 2 : stop[1] === 'r' || stop[1] === 'd' ? stop[0] - w : stop[0]);
+          seg.style.cssText = `position:absolute;left:${Math.min(left, width - w)}px`;
+          x = left + w;
+        }
+      }
+    };
     const draw = () => {
       if (!layout) return;
-      const geo = ST.geometry(format), stride = geo.height + GAP, n = layout.pages.length;
+      const L = look(), geo = ST.geometry(L), stride = geo.height + GAP, n = layout.pages.length;
       zoomEl.style.width = `${geo.width}px`;
       zoomEl.style.height = `${n * stride - GAP}px`;
       zoomEl.style.transform = `scale(${scale})`;
       size.style.width = `${geo.width * scale}px`;
       size.style.height = `${(n * stride - GAP) * scale}px`;
       while (sheets.children.length > n) sheets.lastChild.remove();
-      while (sheets.children.length < n) sheets.append(h('div', { class: 'gp-sheet' }, h('div', { class: 'gp-hdr' }), h('div', { class: 'gp-notes' })));
-      const name = surname(), sep = ST.lineHeight(format, { line: 1 });
+      while (sheets.children.length < n) sheets.append(h('div', { class: 'gp-sheet' }, h('div', { class: 'gp-hdr' }), h('div', { class: 'gp-ftr' }), h('div', { class: 'gp-notes' })));
+      const name = surname(), sep = ST.lineHeight(L, { line: 1 });
       layout.pages.forEach((pg, i) => {
-        const s = sheets.children[i];
+        const s = sheets.children[i], [hdr, ftr] = s.children;
         s.style.top = `${i * stride}px`;
-        s.firstChild.textContent = ST.headerText(format, i + 1, name);
+        const parts = ST.headerParts(L, i + 1, n), footer = parts && ST.footerParts(L, i + 1, n), k = parts && JSON.stringify([parts, footer, L.font, L.size, scale]);
+        if (!parts) { hdr.textContent = ST.headerText(format, i + 1, name); ftr.replaceChildren(); s.gzParts = null; }
+        else if (s.gzParts !== k) { s.gzParts = k; partEl(parts, hdr, L); partEl(footer, ftr, L); }
         const notesEl = s.lastChild;
         notesEl.style.bottom = `${geo.bottom}px`;
         const rule = h('div', { class: 'gp-sep' }, h('div', { class: 'gp-rule' }));
@@ -245,7 +297,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     const fit = () => {
       const w = canvas.clientWidth - 48;
-      return Math.max(0.3, Math.min(PX100, w / ST.geometry(format).width));
+      return Math.max(0.3, Math.min(PX100, w / ST.geometry(look()).width));
     };
     const setZoom = (z) => {
       zoom = z;
@@ -262,7 +314,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (!layout) return 0;
       try {
         const top = view.dom.getBoundingClientRect().top, y = (view.coordsAtPos(pos).top - top) / scale;
-        return Math.min(layout.pages.length, Math.max(1, Math.floor(y / (ST.geometry(format).height + GAP)) + 1));
+        return Math.min(layout.pages.length, Math.max(1, Math.floor(y / (ST.geometry(look()).height + GAP)) + 1));
       } catch { return 0; }
     };
     const selected = () => {
@@ -279,7 +331,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const blockName = (a) => (a.heading ? t('Heading {n}', { n: a.heading }) : a.quote ? t('Block quote') : a.align === 'center' ? t('Title') : t('Body'));
     const counts = () => {
       wordsL.textContent = t('{n} words', { n: nf(ed.words()) });
-      fontL.textContent = `${format.font} ${format.size} · ${t(SPACING[format.line] || String(format.line))}`;
+      fontL.textContent = `${look().font} ${look().size} · ${t(SPACING[format.line] || String(format.line))}`;
       pill.replaceChildren(format.label, icon('caret', 'gp-ico gp-caret'));
     };
     // The title, headings and list of sources (F.outline), each with its page, the caret's section marked; a paper with none
@@ -314,45 +366,73 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       try {
         const a = view.domAtPos(from), b = view.domAtPos(to), r = document.createRange();
         r.setStart(a.node, a.offset); r.setEnd(b.node, b.offset);
-        const lh = ST.lineHeight(format) * scale * 1.6, tops = new Set();
+        const lh = ST.lineHeight(look()) * scale * 1.6, tops = new Set();
         for (const x of r.getClientRects()) if (x.height && x.height < lh) tops.add(Math.round(x.top / 4));
         return tops.size || 1;
       } catch { return 1; }
     };
     const ROWS = new Map();
     const ignoreKey = (i) => `${i.rule}|${view.state.doc.textBetween(Math.max(0, i.from), Math.min(view.state.doc.content.size, i.to), ' ')}`;
+    // A rule's findings are one card (a count, one Fix for all, one Ignore); its underlines show only while its card is
+    // picked or under the pointer.
+    let groups = [], hovered = null;
+    const groupOf = (rule) => groups.find((g) => g.rule === rule) || null;
+    const shown = () => groupOf(hovered) || groupOf(picked);
+    // Drawn by the paper's own decorations: the shared issue store holds every finding (the submit sheet counts them) and
+    // its format underlines are hidden (writer-paper.css), as setting it again would redraw the cards under the pointer.
+    const underline = () => {
+      const on = shown()?.issues || [];
+      view.dispatch(view.state.tr.setMeta(issuesKey, PM.view.DecorationSet.create(view.state.doc, on.filter((i) => i.to > i.from).map((i) => PM.view.Decoration.inline(i.from, i.to, { class: 'gp-u-format gp-cur' })))).setMeta('addToHistory', false));
+    };
     const runChecks = () => {
-      const r = F.check(view.state.doc, format, { name: ctx.user?.name || '', course: ctx.course?.name || '' }, { lines });
+      const r = F.check(view.state.doc, format, { name: ctx.user?.name || '', course: ctx.course?.name || '' }, { lines, keep });
       formatIssues = r.issues.filter((i) => !ignored.has(ignoreKey(i)));
+      groups = [];
+      for (const i of formatIssues) { const g = groupOf(i.rule); if (g) g.issues.push(i); else groups.push({ rule: i.rule, issues: [i] }); }
+      if (picked && !groupOf(picked)) picked = null;
       for (const row of r.rows) ROWS.set(row.id, row.label);
       const list = r.rows.map((row) => ({ ...row, count: formatIssues.filter((i) => i.row === row.id).length }));
       checklist.replaceChildren(h('h4', { text: format.label }), ...list.map((row) => h('div', {}, t(row.label), h('span', { class: row.count ? 'gp-no' : 'gp-ok', text: row.count ? nf(row.count) : '✓' }))));
       if (ISSUES()) ISSUES().set('format', formatIssues);
-      else view.dispatch(view.state.tr.setMeta(issuesKey, PM.view.DecorationSet.create(view.state.doc, formatIssues.filter((i) => i.to > i.from).map((i) => PM.view.Decoration.inline(i.from, i.to, { class: i === picked ? 'gp-u-format gp-cur' : 'gp-u-format' })))).setMeta('addToHistory', false));
+      underline();
       cards();
     };
     const KIND = { spelling: ['Spelling', 'var(--gz-err)'], grammar: ['Grammar', 'var(--gz-warn)'], style: ['Style', 'var(--gz-warn)'], format: ['Format', 'var(--fmt)'], citation: ['Citation', 'var(--fmt)'] };
+    // What a group's card says: what is wrong, counted where the rule has words for it.
+    const COUNTED = { spacing: () => (format.line === 2 ? '{n} paragraphs aren\'t double-spaced' : '{n} paragraphs have other line spacing') };
+    // A finding still open: inside the document as it is now, and still in the shared store (which drops one whose text
+    // changed, or that the underline's own card ignored); the store doesn't take a range across paragraphs, so those stay.
+    const live = () => {
+      const I = ISSUES(), doc = view.state.doc, ids = new Set(I ? I.list().map((i) => i.id) : []);
+      return (i) => i.to <= doc.content.size && (!I || (() => { const st = I.clean?.(doc, 'format', i); return !st || ids.has(st.id); })());
+    };
     const allIssues = () => {
-      const I = ISSUES(), theirs = I ? I.list() : [], ids = new Set(theirs.map((i) => i.id));
-      // The underline store accepts single-paragraph ranges and strips fix metadata; cards keep the format originals.
-      const mine = formatIssues.filter((i) => { const stored = I?.clean?.(view.state.doc, 'format', i); return !stored || ids.has(stored.id); });
-      return [...theirs.filter((i) => i.source !== 'format'), ...mine].sort((a, b) => a.from - b.from);
+      const theirs = ISSUES() ? ISSUES().list().filter((i) => i.source !== 'format') : [], open = live();
+      const mine = groups.map((g) => ({ ...g, issues: g.issues.filter(open) })).filter((g) => g.issues.length);
+      return [...theirs.map((i) => ({ one: i, at: i.from })), ...mine.map((g) => ({ group: g, at: g.issues[0].from }))].sort((a, b) => a.at - b.at);
     };
     const cards = () => {
       const list = allIssues();
       badges.checks.textContent = list.length ? nf(list.length) : '';
-      issuesEl.replaceChildren(...list.slice(0, 200).map((i) => {
+      issuesEl.replaceChildren(...list.slice(0, 200).map(({ one, group }) => {
+        const i = one || group.issues[0], n = group ? group.issues.length : 1;
         const [kind, color] = KIND[i.kind] || KIND.format;
-        const own = i.source === 'format', msg = own ? t(i.key || i.message, localVars(i.vars)) : i.message;
-        const label = own ? (i.suggestions.length ? msg : t(ROWS.get(i.row) || kind)) : t(kind);
-        const what = i.suggestions.length ? [h('s', { text: view.state.doc.textBetween(i.from, i.to, ' ') }), ' → ', h('b', { text: i.suggestions[0] })] : [h('b', { text: own ? msg : i.message })];
-        const card = h('div', { class: `gp-issue${picked?.id === i.id ? ' gp-on' : ''}`, tabindex: '0', 'data-rule': own ? i.rule : null },
+        const own = i.source === 'format', msg = own ? (COUNTED[i.rule] ? t(COUNTED[i.rule](), { n }) : t(i.key || i.message, localVars(i.vars))) : i.message;
+        const label = own && n === 1 && i.suggestions.length ? msg : t(kind);
+        const what = n === 1 && i.suggestions.length ? [h('s', { text: view.state.doc.textBetween(i.from, i.to, ' ') }), ' → ', h('b', { text: i.suggestions[0] })] : [h('b', { text: msg }), n > 1 && !COUNTED[i.rule] ? h('span', { class: 'gp-count', text: nf(n) }) : null];
+        const can = group ? group.issues.every((x) => x.suggestions.length || x.fix) : i.suggestions.length || i.fix;
+        const card = h('div', { class: `gp-issue${group && picked === group.rule ? ' gp-on' : ''}`, tabindex: '0', 'data-rule': own ? i.rule : null },
           h('div', { class: 'gp-lbl' }, h('span', { class: 'gp-dot' }), label),
           h('div', { class: 'gp-fix' }, what),
-          h('div', { class: 'gp-row' }, i.suggestions.length || i.fix ? btn({ class: 'gp-sbtn', onclick: (e) => { e.stopPropagation(); fixIssue(i); } }, t('Fix')) : null, btn({ class: 'gp-sbtn gp-ghost', onclick: (e) => { e.stopPropagation(); ignoreIssue(i); } }, t('Ignore'))));
+          h('div', { class: 'gp-row' }, can ? btn({ class: 'gp-sbtn', onclick: (e) => { e.stopPropagation(); if (group) fixGroup(group); else fixIssue(i); } }, n > 1 ? t('Fix all') : t('Fix')) : null,
+            btn({ class: 'gp-sbtn gp-ghost', onclick: (e) => { e.stopPropagation(); if (group) ignoreGroup(group); else ignoreIssue(i); } }, t('Ignore'))));
         card.querySelector('.gp-dot').style.background = color;
         card.addEventListener('keydown', (e) => { if (e.target === card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); card.click(); } });
-        card.addEventListener('click', () => { picked = i; if (i.to > i.from || i.from > 0) go(Math.max(1, i.from), Math.max(1, i.to)); runChecksSoon(); });
+        if (group) {
+          card.addEventListener('pointerenter', () => { hovered = group.rule; underline(); });
+          card.addEventListener('pointerleave', () => { if (hovered === group.rule) { hovered = null; underline(); } });
+        }
+        card.addEventListener('click', () => { if (group) { picked = group.rule; underline(); for (const c of issuesEl.children) c.classList.toggle('gp-on', c === card); } if (i.to > i.from || i.from > 0) go(Math.max(1, i.from), Math.max(1, i.to)); });
         return card;
       }));
     };
@@ -360,8 +440,25 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const ignoreIssue = (i) => {
       if (i.source !== 'format') { ISSUES()?.ignore(i); cards(); return; }
       ignored.add(ignoreKey(i));
-      ISSUES()?.ignore(i);
       runChecks();
+    };
+    const ignoreGroup = (g) => { for (const i of g.issues) ignored.add(ignoreKey(i)); if (picked === g.rule) picked = null; if (hovered === g.rule) hovered = null; runChecks(); };
+    // A group's fixes in one transaction (undone at once): from the last to the first, so each position still holds.
+    // Rules whose fix rebuilds the paper (an opening, the format) have one finding, so their own fix runs.
+    const SIMPLE = new Set(['attr', 'clear', 'mark', 'unmark']);
+    const fixGroup = (g) => {
+      if (g.issues.length === 1 || !g.issues.every((i) => (i.fix ? SIMPLE.has(i.fix.op) : i.suggestions.length))) { fixIssue(g.issues[0]); return; }
+      const s = view.state, tr = s.tr;
+      for (const i of [...g.issues].sort((a, b) => b.from - a.from)) {
+        const x = i.fix;
+        if (!x) tr.insertText(i.suggestions[0], i.from, i.to);
+        else if (x.op === 'unmark') tr.removeMark(i.from, i.to, s.schema.marks[x.mark]);
+        else if (x.op === 'mark') tr.addMark(i.from, i.to, s.schema.marks[x.mark].create());
+        else for (const at of x.op === 'attr' ? [x.at] : x.at) { const node = tr.doc.nodeAt(at); if (node) tr.setNodeMarkup(at, null, { ...node.attrs, ...(x.op === 'attr' ? { [x.key]: x.value } : Object.fromEntries([x.key].flat().map((k) => [k, null]))) }); }
+      }
+      picked = hovered = null;
+      if (tr.docChanged) view.dispatch(tr.scrollIntoView());
+      view.focus();
     };
     // The format fixes: each one transaction, undoable at once.
     const fixIssue = (i) => {
@@ -382,6 +479,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       } else if (x.op === 'unmark') tr.removeMark(i.from, i.to, m[x.mark]);
       else if (x.op === 'mark') tr.addMark(i.from, i.to, m[x.mark].create());
       else if (x.op === 'attr') { const node = s.doc.nodeAt(x.at); if (node) tr.setNodeMarkup(x.at, null, { ...node.attrs, [x.key]: x.value }); }
+      else if (x.op === 'clear') for (const at of x.at) { const node = s.doc.nodeAt(at); if (node) tr.setNodeMarkup(at, null, { ...node.attrs, ...Object.fromEntries([x.key].flat().map((k) => [k, null])) }); }
+      else if (x.op === 'setup') { const own = ST.setup(s.doc.attrs.setup); if (own) tr.setDocAttribute('setup', x.key === 'font' ? { ...own, font: null, size: null } : { ...own, [x.key]: x.value }); }
       else if (x.op === 'format') { setFormat(ST.FORMATS[x.id]); return; }
       else if (x.op === 'list-add') tr.insert(s.doc.content.size, F.closing(format).map((j) => s.schema.nodeFromJSON(j)));
       else if (x.op === 'page-break') tr.insert(x.at, n.page_break.create());
@@ -421,7 +520,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     try { sessionStorage.setItem(keySlot, recoveryKey); } catch { /* the durable copy is still in Papers */ }
     const setState = (k) => { state.textContent = k ? t(k) : ''; };
     const record = () => ({
-      doc: view.state.doc.toJSON(), words: ed.words(), format: format.base ? ST.preset(format) : format.id,
+      doc: view.state.doc.toJSON(), words: ed.words(), format: format.base ? ST.preset(format) : format.id, keep,
       title: ctx.assignment?.title || paper?.title || '', due: ctx.assignment?.due || paper?.due || null, url: ctx.paper?.url || paper?.url || '',
       courseName: ctx.course?.name || paper?.courseName || '', ...(ctx.paper ? { school: ctx.paper.school, user: ctx.paper.user, course: ctx.paper.course, content: ctx.paper.content } : {}),
     });
@@ -463,7 +562,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const doc = S.paper.nodeFromJSON(json);
       formatIssues = []; picked = null;
       if (fresh) view.updateState(PM.state.EditorState.create({ doc, plugins: view.state.plugins }));
-      else view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content).scrollIntoView());
+      else view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content).setDocAttribute('setup', doc.attrs.setup).scrollIntoView());
     };
     const setFormat = async (f, { save: keep = true } = {}) => {
       if (!f) return;
@@ -529,6 +628,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     focusB.addEventListener('click', () => setFocus(!focus));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && focus && !open && !e.defaultPrevented) setFocus(false); });
     const hooks = () => {
+      globalThis.GZ_WRITER_OBJECTS?.toolbar?.({ editor: ed, paper: api, before: toolGrow, lists: numbers });
       const C = globalThis.GZ_WRITER_CITE;
       if (C?.button) { const b = C.button({ editor: ed, paper: api }); if (b) { b.classList.add('gp-tbtn'); cite.replaceWith(b); } }
       else if (C) cite.disabled = false;
@@ -559,7 +659,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     addEventListener('beforeprint', () => {
       printCopy?.remove();
       printCopy = h('div', { class: 'gp-print' });
-      const geo = ST.geometry(format), stride = geo.height + GAP;
+      const geo = ST.geometry(look()), stride = geo.height + GAP;
       [...sheets.children].forEach((sheet, i) => {
         const page = sheet.cloneNode(true), clip = h('div', { class: 'gp-print-body' }), copy = flow.cloneNode(true);
         clip.style.cssText = `position:absolute;top:${geo.top}px;left:0;width:${geo.width}px;height:${geo.body}px;overflow:hidden`;
@@ -607,6 +707,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           btn({ role: 'menuitem', onclick: () => { close(); restore(v.id); } }, t('Restore')))),
         list.length ? h('div', { class: 'gp-hr' }) : null,
         btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
+        ...(globalThis.GZ_WRITER_PRINT?.items() || []).map((it) => btn({ role: 'menuitem', onclick: () => { close(); it.run(); } }, it.label)),
         btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, host.standalone ? t('Import .docx…') : t('Import…')),
         host.standalone ? null : btn({ role: 'menuitem', onclick: () => { close(); open2('papers.html'); } }, t('All papers')));
       el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(true); } });
@@ -631,6 +732,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         setTimeout(() => URL.revokeObjectURL(url), 30000);
       } catch (e) { console.error(e); toast(t('The .docx could not be made.')); }
     };
+    // An imported file whose own formatting the format would flag: the paper keeps it (the default), so those checks go
+    // quiet for this paper, unless the student applies the format, once, from the import's toast.
+    let keep = false;
+    const ownFormatting = (doc) => (keep = F.check(doc, format, {}, {}).issues.some((i) => F.KEPT.has(i.rule) && i.fix?.op !== 'format'));
+    const formatChoices = () => ({
+      ask: t('Its formatting differs from {format}', { format: format.label }),
+      items: [{ label: t('Keep the document’s formatting'), run: () => {} }, { label: t('Apply {format}', { format: format.label }), run: () => { keep = false; setDoc(F.apply(view.state.doc)); runChecks(); } }],
+    });
     // The paper becomes the Word file's text, what it held kept as a version first; the toast's Undo brings that back.
     let importing = false;
     const importFile = async (f) => {
@@ -650,7 +759,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (!(bytes instanceof ArrayBuffer) || bytes.byteLength !== f.size) throw new Error('invalid file read');
         const r = await GZ_WRITER_DOCX.importDocx(new Uint8Array(bytes), { format });
         if (!here()) return;
-        const doc = S.parse(S.paper, r.html);
+        const doc = S.paper.nodeFromJSON(r.doc), own = ownFormatting(doc);
         if (key) {
           if (!await save()) throw new Error('paper could not be saved before import');
           if (!here()) return;
@@ -660,7 +769,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           before = saved.version;
         }
         setDoc(doc.toJSON());
-        toast(r.warnings.length ? r.warnings.map((w) => t(w)).join(' ') : f.name, before ? { label: t('Undo'), run: () => restore(before.id) } : null);
+        toast(r.warnings.length ? r.warnings.map((w) => t(w)).join(' ') : f.name, before ? { label: t('Undo'), run: () => restore(before.id) } : null, own ? formatChoices() : null);
       } catch (e) {
         console.error(e);
         const message = e instanceof RangeError && ['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.'].includes(e.message) ? e.message : 'That file could not be read as a Word document.';
@@ -680,6 +789,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       canvas.classList.remove('gp-drop');
       if (!f) return;
       e.preventDefault(); e.stopPropagation();
+      if (globalThis.GZ_WRITER_OBJECTS?.drop?.(f, e)) return;
       bring(f);
     }, true);
 
@@ -698,6 +808,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       let pending = null;
       try { const p = JSON.parse(sessionStorage.getItem(recoverySlot)); if (p?.key === key && p.record?.doc) pending = p.record; } catch {}
       if (pending) paper = { ...paper, ...pending };
+      keep = paper?.keep === true;
       if (paper?.doc) {
         format = ST.get(paper.format);
         setDoc(paper.doc, true);
@@ -745,13 +856,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     head();
     setState('');
     const api = {
-      editor: ed, key: () => key, format: () => format, paper: () => paper, context: () => ctx,
+      editor: ed, key: () => key, format: () => format, look, paper: () => paper, context: () => ctx,
       docx, save, notify: (message) => toast(t(message)), version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom, importFile, importing: () => importing,
       // Nothing written past the format's opening yet (an import then needs no word about the paper it replaces).
       blank: () => view.state.doc.textContent.trim() === S.paper.nodeFromJSON(F.template(format, values())).textContent.trim(),
       // The page ended Focus (a click on its dim).
       focused: (on) => { focus = on; focusB.setAttribute('aria-pressed', String(on)); },
       pages: () => layout?.pages.length || 0,
+      // The last page plan's blocks and breaks (lib/writer-paginate.js), for checks.
+      layout: () => layout && { breaks: layout.breaks, blocks: layout.blocks.map((b) => ({ kind: b.kind, pos: b.pos, lines: (b.lines || []).map((l) => Math.round(l.h * 100) / 100), slack: b.lines?.[0]?.slack || 0, before: b.before || 0, after: b.after || 0 })) },
     };
     await load();
     view.setProps({ editable: editable || (() => true) });

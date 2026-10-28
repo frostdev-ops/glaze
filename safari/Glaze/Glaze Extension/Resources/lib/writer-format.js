@@ -99,8 +99,12 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
   // 90 characters a line is Times New Roman 12 on 6.5 inches.
   const estimate = (s) => Math.ceil(s.length / 90);
 
+  // What an imported file sets itself and a paper that keeps the file's formatting doesn't hear about: line spacing,
+  // space between paragraphs, the page's margins and the base font (a preset's own margins and font still count).
+  const KEPT = new Set(['spacing', 'paragraph-space', 'paragraph-space-before', 'margins', 'preset-font', 'font']);
   // doc: a paper Node (positions are its positions). f: the format. ctx: { name, course } as Ultra gave them.
-  // o: { lines(from, to) → line count }. → { issues, rows: [{ id, label, count }] }.
+  // o: { lines(from, to) → line count, keep (the paper keeps an imported file's formatting) }. → { issues, rows: [{ id,
+  // label, count }] }.
   const fill = (k, v) => k.replace(/\{(\w+)\}/g, (m, n) => (v && n in v ? String(v[n]) : m));
   const check = (doc, f, ctx = {}, o = {}) => {
     const issues = [], cite = f.cite;
@@ -152,15 +156,19 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
       }
     }
 
-    // The header
-    if (f.header.text === 'name-page' && open && !surname(doc, f)) add('header', 'header-name', 0, 0, 'Add your name to the heading so the page header shows it');
+    // The header (an imported file's own header is its own text)
+    const setup = ST().setup(doc.attrs?.setup);
+    if (f.header.text === 'name-page' && open && !setup && !surname(doc, f)) add('header', 'header-name', 0, 0, 'Add your name to the heading so the page header shows it');
     if (def && f.header.text !== def.header.text) add('header', 'header-kind', 0, 0, cite === 'mla' ? 'MLA pages show your last name and the page number' : 'Pages show their number at the top right', { fix: { op: 'format', id: def.id } });
 
-    // Margins, font and spacing: the paper's preset, then what's set by hand on its text.
-    if (def && f.margins.some((m, i) => m !== def.margins[i])) add('margins', 'margins', 0, 0, 'Margins are 1 inch on every side', { fix: { op: 'format', id: def.id } });
+    // Margins, font and spacing: an imported file's own page and base font, the paper's preset, then what's set by hand on
+    // its text.
+    if (def && setup && setup.margins.some((m, i) => m !== def.margins[i])) add('margins', 'margins', 0, 0, 'Margins are 1 inch on every side', { fix: { op: 'setup', key: 'margins', value: def.margins } });
+    else if (def && f.margins.some((m, i) => m !== def.margins[i])) add('margins', 'margins', 0, 0, 'Margins are 1 inch on every side', { fix: { op: 'format', id: def.id } });
     const fontAllowed = (cite === 'apa' && ((['Arial', 'Calibri'].includes(f.font) && f.size === 11) || (f.font === 'Times New Roman' && f.size === 12)))
       || (cite === 'chicago' && ((f.font === 'Arial' && f.size === 11) || (['Times New Roman', 'Calibri'].includes(f.font) && f.size === 12)));
-    if (def && !fontAllowed && (f.font !== def.font || f.size !== def.size)) add('font', 'preset-font', 0, 0, '{format} uses {font} {size}', { vars: { format: def.label, font: def.font, size: def.size }, fix: { op: 'format', id: def.id } });
+    if (def && setup?.font && (setup.font !== f.font || setup.size !== f.size)) add('font', 'preset-font', 0, 0, '{format} uses {font} {size}', { vars: { format: def.label, font: f.font, size: f.size }, fix: { op: 'setup', key: 'font', value: null } });
+    else if (def && !fontAllowed && (f.font !== def.font || f.size !== def.size)) add('font', 'preset-font', 0, 0, '{format} uses {font} {size}', { vars: { format: def.label, font: def.font, size: def.size }, fix: { op: 'format', id: def.id } });
     if (def && f.line !== def.line) add('font', 'preset-line', 0, 0, 'The text is double-spaced', { fix: { op: 'format', id: def.id } });
     let run = null;
     const flush = () => { if (run) add('font', 'font', run.from, run.to, "The paper's text is all {font} {size}", { vars: { font: f.font, size: f.size }, fix: { op: 'unmark', mark: 'text_style' } }); run = null; };
@@ -174,11 +182,23 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     });
     flush();
     doc.descendants((n, pos, parent) => {
-      if (n.isTextblock && n.attrs.line != null && n.attrs.line !== (parent.type.name === 'blockquote' ? f.quote.line : f.line)) {
-        add('font', 'spacing', pos + 1, pos + n.nodeSize - 1, f.line === 2 ? 'The text is double-spaced' : 'Line spacing differs from the format', { fix: { op: 'attr', key: 'line', value: null, at: pos } });
+      if (n.isTextblock && ((n.attrs.line != null && n.attrs.line !== (parent.type.name === 'blockquote' ? f.quote.line : f.line)) || n.attrs.exact != null || n.attrs.least != null)) {
+        add('font', 'spacing', pos + 1, pos + n.nodeSize - 1, f.line === 2 ? 'The text is double-spaced' : 'Line spacing differs from the format', { fix: n.attrs.exact != null || n.attrs.least != null ? { op: 'clear', key: ['line', 'exact', 'least'], at: [pos] } : { op: 'attr', key: 'line', value: null, at: pos } });
       }
       return !n.isTextblock;
     });
+    // Space between paragraphs an imported file keeps (8 pt after, say): one card each for after and before, whose fix
+    // gives every such paragraph the format's.
+    const entries = new Set(list ? tops.slice(list.from, list.to).map((t) => t.pos) : []), away = { after: [], before: [] };
+    doc.descendants((n, pos, parent) => {
+      if (!n.isTextblock) return true;
+      const set = entries.has(pos) ? f.list : parent.type.name === 'blockquote' ? f.quote : f;
+      if (n.attrs.after != null && n.attrs.after !== set.after) away.after.push(pos);
+      if (n.attrs.before) away.before.push(pos);
+      return false;
+    });
+    if (away.after.length) add('font', 'paragraph-space', away.after[0] + 1, away.after[0] + 1, f.after === 0 ? 'Paragraphs have no space after them' : 'Space after paragraphs differs from the format', { fix: { op: 'clear', key: 'after', at: away.after } });
+    if (away.before.length) add('font', 'paragraph-space-before', away.before[0] + 1, away.before[0] + 1, 'Paragraphs have no space before them', { fix: { op: 'clear', key: 'before', at: away.before } });
 
     // Quotes long enough to be block quotes, and in-text citations' shape.
     const lines = o.lines || ((from, to) => estimate(doc.textBetween(from, to, ' ')));
@@ -237,6 +257,7 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     }
 
 
+    if (o.keep) for (let k = issues.length - 1; k >= 0; k--) if (KEPT.has(issues[k].rule) && issues[k].fix?.op !== 'format') issues.splice(k, 1);
     const rows = ROWS[cite].map(([id, label]) => ({ id, label, count: issues.filter((x) => x.row === id).length }));
     return { issues, rows };
   };
@@ -258,7 +279,16 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     return out.sort((a, b) => a.pos - b.pos);
   };
 
-  return { template, opening, closing, read, surname, restyle, check, outline, DATE };
+  // The paper to its format: an imported file's page, base font and paragraph spacing and line heights left to the format
+  // (indents and tabs are the text's own). JSON in, JSON out.
+  const apply = (doc) => {
+    const json = JSON.parse(JSON.stringify(doc.toJSON ? doc.toJSON() : doc));
+    const walk = (n) => { if (n.attrs) for (const k of ['line', 'exact', 'least', 'before', 'after']) if (k in n.attrs) n.attrs[k] = null; (n.content || []).forEach(walk); };
+    (json.content || []).forEach(walk);
+    return { ...json, attrs: { ...json.attrs, setup: null } };
+  };
+
+  return { template, opening, closing, read, surname, restyle, check, outline, apply, KEPT, DATE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_FORMAT; else GZ_WRITER_FORMAT;

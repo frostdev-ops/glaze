@@ -26,11 +26,12 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
   // Export
   // ================================================================================================================
   // doc: a paper-schema Node (or its JSON); o: { format, surname (MLA's header name), title, date (Date: the archive's
-  // and properties' time, so tests can pin it) }. → { bytes: Uint8Array, parts: { path: xml }, type }.
+  // and properties' time, so tests can pin it) }. An imported paper's setup gives the page, defaults, header and footer.
+  // → { bytes: Uint8Array, parts: { path: xml }, type }.
   const exportDocx = (doc, o = {}) => {
     const schema = S().paper;
     if (typeof doc?.forEach !== 'function') doc = schema.nodeFromJSON(doc);
-    const f = ST().get(o.format), date = o.date instanceof Date ? o.date : new Date();
+    const f = ST().look(ST().get(o.format), doc.attrs?.setup), date = o.date instanceof Date ? o.date : new Date();
     const rels = [], noteRels = [], overrides = [], parts = {}, media = [];
     const rel = (type, target, external = false, pool = rels) => {
       const hit = pool.find((r) => r.type === type && r.target === target && r.external === external);
@@ -51,8 +52,9 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (mk('bold')) s += '<w:b/><w:bCs/>';
       if (mk('italic')) s += '<w:i/><w:iCs/>';
       if (mk('strike')) s += '<w:strike/>';
+      if (m.color?.color) s += `<w:color w:val="${esc(m.color.color)}"/>`;
       if (style?.size) s += `<w:sz w:val="${Math.round(style.size * 2)}"/><w:szCs w:val="${Math.round(style.size * 2)}"/>`;
-      if (mk('highlight')) s += '<w:highlight w:val="yellow"/>';
+      if (m.highlight) s += `<w:highlight w:val="${esc(m.highlight.color || 'yellow')}"/>`;
       if (mk('underline')) s += '<w:u w:val="single"/>';
       if (mk('sup')) s += '<w:vertAlign w:val="superscript"/>';
       else if (mk('sub')) s += '<w:vertAlign w:val="subscript"/>';
@@ -109,17 +111,27 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
 
     // ---- paragraphs
     const tw = ST().twips;
-    // pPr in the schema's order: style, keep, page break, numbering, spacing, indent, alignment.
+    // pPr in the schema's order: style, keeps, page break, widow control, numbering, tabs, spacing, indent, alignment.
+    const TAB = { l: 'left', c: 'center', r: 'right', d: 'decimal' };
+    const tabsXML = (tabs) => (tabs?.length ? `<w:tabs>${tabs.map(([pos, kind, leader]) => `<w:tab w:val="${TAB[kind] || 'left'}"${leader ? ` w:leader="${esc(leader)}"` : ''} w:pos="${tw(pos)}"/>`).join('')}</w:tabs>` : '');
+    const spacingXML = (a) => {
+      const line = a.exact != null ? ` w:line="${Math.round(a.exact * 20)}" w:lineRule="exact"` : a.least != null ? ` w:line="${Math.round(a.least * 20)}" w:lineRule="atLeast"` : a.line != null ? ` w:line="${Math.round(a.line * 240)}" w:lineRule="auto"` : '';
+      const attrs = `${a.before != null ? ` w:before="${Math.round(a.before * 20)}"` : ''}${a.after != null ? ` w:after="${Math.round(a.after * 20)}"` : ''}${line}`;
+      return attrs ? `<w:spacing${attrs}/>` : '';
+    };
     const pPr = (node, o2 = {}) => {
       const a = node.attrs || {};
       let s = o2.style ? `<w:pStyle w:val="${o2.style}"/>` : '';
+      if (a.keepNext) s += '<w:keepNext/>';
+      if (a.keepLines) s += '<w:keepLines/>';
       if (pendingBreak) { s += '<w:pageBreakBefore/>'; pendingBreak = false; }
+      if (a.widow === false) s += '<w:widowControl w:val="0"/>';
       if (o2.num) s += `<w:numPr><w:ilvl w:val="${o2.num.level}"/><w:numId w:val="${o2.num.id}"/></w:numPr>`;
-      if (a.line != null) s += `<w:spacing w:line="${Math.round(a.line * 240)}" w:lineRule="auto"/>`;
+      s += tabsXML(a.tabs) + spacingXML(a);
       if (!o2.num) {
-        const base = o2.quote ? f.quote.indent : 0, left = base + (a.indent || 0) * 0.5;
+        const base = o2.quote ? f.quote.indent : 0, left = base + (a.left != null ? a.left : (a.indent || 0) * 0.5);
         const first = a.first != null ? a.first : (a.align === 'center' || a.align === 'right') && !o2.quote && !o2.heading ? 0 : null;
-        const attrs = [left !== base ? ` w:left="${tw(left)}"` : '', first != null ? (first < 0 ? ` w:hanging="${tw(-first)}"` : ` w:firstLine="${tw(first)}"`) : '', o2.cell && first == null ? ' w:firstLine="0"' : ''].join('');
+        const attrs = [left !== base || (a.left != null && o2.style === 'Bibliography') ? ` w:left="${tw(left)}"` : '', a.right != null ? ` w:right="${tw(a.right)}"` : '', first != null ? (first < 0 ? ` w:hanging="${tw(-first)}"` : ` w:firstLine="${tw(first)}"`) : '', o2.cell && first == null ? ' w:firstLine="0"' : ''].join('');
         if (attrs) s += `<w:ind${attrs}/>`;
       }
       if (a.align) s += `<w:jc w:val="${JC[a.align] || 'left'}"/>`;
@@ -182,7 +194,21 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
 
     // ---- the package
     const header = {}, title = String(o.title || '').slice(0, 500);
-    if (f.header.text !== 'none') {
+    // An imported paper's own header and footer: their paragraphs, runs and PAGE / NUMPAGES fields.
+    const fieldXML = (code, rp) => `<w:r>${rp}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${rp}<w:instrText xml:space="preserve"> ${code} </w:instrText></w:r><w:r>${rp}<w:fldChar w:fldCharType="separate"/></w:r><w:r>${rp}<w:t>1</w:t></w:r><w:r>${rp}<w:fldChar w:fldCharType="end"/></w:r>`;
+    const partRun = (r) => {
+      const m = { bold: r.b, italic: r.i, underline: r.u, strike: r.s, sup: r.sup, sub: r.sub, ...(r.font || r.size ? { text_style: { font: r.font || null, size: r.size || null } } : {}), ...(r.color ? { color: { color: r.color } } : {}) };
+      return r.field ? fieldXML(r.field, runProps(m)) : textRun(r.text, m);
+    };
+    const partXML = (kind, paras) => `<w:${kind} ${NS}>${(paras?.length ? paras : [{ runs: [] }]).map((x) => `<w:p><w:pPr><w:pStyle w:val="Header"/>${tabsXML(x.tabs)}${spacingXML({ before: x.before, after: x.after ?? 0, line: x.exact == null && x.least == null ? x.line ?? 1 : null, exact: x.exact, least: x.least })}<w:ind${x.left ? ` w:left="${tw(x.left)}"` : ''}${x.right ? ` w:right="${tw(x.right)}"` : ''}${x.first < 0 ? ` w:hanging="${tw(-x.first)}"` : ` w:firstLine="${tw(x.first || 0)}"`}/>${x.align ? `<w:jc w:val="${JC[x.align]}"/>` : ''}</w:pPr>${x.runs.map(partRun).join('')}</w:p>`).join('')}</w:${kind}>`;
+    if (f.setup) {
+      const s2 = f.setup, n = { header: 0, footer: 0 };
+      const add = (kind, paras, key) => { const name = `${kind}${++n[kind]}.xml`; part(`word/${name}`, kind, partXML(kind === 'header' ? 'hdr' : 'ftr', paras)); header[key] = rel(`${R}/${kind}`, name); };
+      if (s2.headers.default) add('header', s2.headers.default, 'header');
+      if (s2.footers.default) add('footer', s2.footers.default, 'footer');
+      if (s2.title && (s2.headers.first || s2.headers.default)) add('header', s2.headers.first, 'first');
+      if (s2.title && (s2.footers.first || s2.footers.default)) add('footer', s2.footers.first, 'footerFirst');
+    } else if (f.header.text !== 'none') {
       const name = f.header.text === 'name-page' && o.surname ? `${String(o.surname).slice(0, 100)} ` : '';
       const field = '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>';
       part('word/header1.xml', 'header', `<w:hdr ${NS}><w:p><w:pPr><w:pStyle w:val="Header"/><w:jc w:val="right"/></w:pPr>${name ? `<w:r><w:t xml:space="preserve">${esc(name)}</w:t></w:r>` : ''}${field}</w:p></w:hdr>`);
@@ -195,7 +221,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     part('word/document.xml', 'document.main', `<w:document ${NS}><w:body>${body}${ST().sectPr(f, header)}</w:body></w:document>`);
     part('word/styles.xml', 'styles', ST().stylesXML(f));
     rel(`${R}/styles`, 'styles.xml');
-    part('word/settings.xml', 'settings', ST().settingsXML(notes.length > 0));
+    part('word/settings.xml', 'settings', ST().settingsXML(notes.length > 0, f.tab || 0.5));
     rel(`${R}/settings`, 'settings.xml');
     part('word/fontTable.xml', 'fontTable', ST().fontTableXML());
     rel(`${R}/fontTable`, 'fontTable.xml');
@@ -218,6 +244,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     parts['_rels/.rels'] = `${DECL}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="${R}/extended-properties" Target="docProps/app.xml"/></Relationships>`;
     parts['[Content_Types].xml'] = `${DECL}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/>${overrides.map(([p, c]) => `<Override PartName="/${p}" ContentType="${c}"/>`).join('')}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
 
+    globalThis.GZ_WRITER_OBJECTS_DOCX?.exportParts(doc, parts, { format: f.id });
     const enc = new TextEncoder(), order = ['[Content_Types].xml', '_rels/.rels', 'docProps/core.xml', 'docProps/app.xml', 'word/document.xml', 'word/_rels/document.xml.rels'];
     const names = [...order, ...Object.keys(parts).filter((p) => !order.includes(p)).sort()];
     const files = [...names.map((name) => ({ name, data: enc.encode(parts[name]), date })), ...media.map((m) => ({ name: m.path, data: m.bytes, date }))];
@@ -260,8 +287,13 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
   const on = (n) => !!n && !['0', 'false', 'off', 'none'].includes(at(n, 'val'));
   const escH = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-  // bytes: the .docx; o: { format } (a paragraph's spacing and indent equal to the format's own are left to it).
-  // → { html, warnings: [key] } for the paper schema's parse.
+  // bytes: the .docx; o: { format }. The file as Word lays it out: each paragraph's and run's properties resolved from the
+  // document's defaults through its paragraph style's basedOn chain and its character style to its own, then kept where
+  // they differ from what the format gives a paragraph in that place, so the paper follows its format wherever the file
+  // does. The last section's page, margins, header and footer, the font and size most of the text is in, the default tab
+  // stop and kerning are the paper's setup (lib/writer-styles.js setup).
+  // → { doc (the paper's JSON, its setup on it), html (the paper schema's parse with { pre: true } reads it), setup,
+  // warnings: [key] }.
   const importDocx = async (bytes, o = {}) => {
     const buf = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     if (!buf.length || buf.length > LIMIT.file) throw new RangeError('Choose a Word file smaller than 15 MB.');
@@ -295,22 +327,109 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     const styles = new Map(all(stylesX, 'style').map((s) => [at(s, 'styleId'), s]));
     const defaults = all(stylesX, 'docDefaults')[0];
     const chain = (id, seen2 = new Set()) => { if (!id || seen2.has(id) || seen2.size > 12) return []; seen2.add(id); const s = styles.get(id); return s ? [...chain(val(s, 'basedOn'), seen2), s] : []; };
-    // A paragraph's or run's properties, outermost first: defaults, the default paragraph style, the paragraph's style chain,
-    // the run's style chain (less the ones `skip` names), its own.
-    const props = (node, kind, pStyle = '', skip = null) => {
-      const own = kid(node, kind), id = val(own, kind === 'pPr' ? 'pStyle' : 'rStyle');
-      const def = kid(kid(defaults, kind === 'pPr' ? 'pPrDefault' : 'rPrDefault'), kind);
-      const normal = !(kind === 'pPr' ? id : pStyle) ? [...styles.values()].find((s) => at(s, 'type') === 'paragraph' && at(s, 'default') === '1') : null;
-      const styled = (sid) => chain(sid).filter((s) => !skip?.test(String(val(s, 'name') || at(s, 'styleId')).toLowerCase())).map((s) => kid(s, kind));
-      return [def, ...(normal ? styled(at(normal, 'styleId')) : []), ...styled(pStyle), ...styled(id), own].filter(Boolean);
-    };
+    const normal = at([...styles.values()].find((s) => at(s, 'type') === 'paragraph' && ['1', 'true', 'on'].includes(at(s, 'default'))), 'styleId');
     const styleName = (id) => String(val(styles.get(id), 'name') || id || '').toLowerCase();
+    // A paragraph's or run's properties, outermost first, each with where it came from: the defaults, the paragraph style's
+    // chain (Normal when the paragraph names none), the run's character style chain, its own.
+    const levels = (node, kind, pStyle = normal) => {
+      const own = kid(node, kind), out = [];
+      const def = kid(kid(defaults, kind === 'pPr' ? 'pPrDefault' : 'rPrDefault'), kind);
+      if (def) out.push({ p: def, from: 'default' });
+      for (const s of chain(kind === 'pPr' ? val(own, 'pStyle') || normal : pStyle)) { const x = kid(s, kind); if (x) out.push({ p: x, from: 'paragraph' }); }
+      if (kind === 'rPr') for (const s of chain(val(own, 'rStyle'))) { const x = kid(s, 'rPr'); if (x) out.push({ p: x, from: 'run' }); }
+      if (own) out.push({ p: own, from: 'own' });
+      return out;
+    };
+
+    // Fonts: the theme's for asciiTheme, then each name as the paper font that sets it (itself, one with its metrics, else
+    // the nearest of its family from fontTable.xml, which is a warning).
+    const themeX = await part(target('theme') || 'word/theme/theme1.xml');
+    const face = (k) => at(kid(all(themeX, k)[0], 'latin'), 'typeface');
+    const theme = { major: face('majorFont'), minor: face('minorFont') };
+    const fontX = await part(target('fontTable') || 'word/fontTable.xml');
+    const families = new Map(all(fontX, 'font').map((n) => [at(n, 'name').toLowerCase(), val(n, 'family')]));
+    const NEAR = { times: 'Times New Roman', tinos: 'Times New Roman', 'liberation serif': 'Times New Roman', arimo: 'Arial', 'liberation sans': 'Arial', helvetica: 'Arial', carlito: 'Calibri', cousine: 'Courier New', 'liberation mono': 'Courier New', courier: 'Courier New' };
+    const FAMILY = { roman: 'Times New Roman', swiss: 'Arial', modern: 'Courier New' };
+    const known = new Map();
+    const paperFont = (name) => {
+      if (!known.has(name)) {
+        const lower = String(name).toLowerCase(), hit = ST().FONTS.find((x) => x.toLowerCase() === lower) || NEAR[lower];
+        if (!hit) warn('Fonts Word and Blackboard don\'t share were replaced.');
+        known.set(name, hit || FAMILY[families.get(lower)] || null);
+      }
+      return known.get(name);
+    };
+    // A run's properties. A heading's bold and italic are the format's, not its style's.
+    const runProps = (lv, heading = false) => {
+      const r = { font: 'Times New Roman', size: 10, b: false, i: false, u: false, s: false, vert: '', color: '', highlight: '', hidden: false };
+      for (const { p, from } of lv) {
+        const rf = kid(p, 'rFonts');
+        if (rf) { const th = at(rf, 'asciiTheme') || at(rf, 'hAnsiTheme'), name = th ? theme[/^major/.test(th) ? 'major' : 'minor'] : at(rf, 'ascii') || at(rf, 'hAnsi'); if (name) r.font = name; }
+        if (val(p, 'sz') !== '') r.size = fin(val(p, 'sz'), 20, 2, 3276) / 2;
+        if (!(heading && from !== 'own')) for (const k of ['b', 'i']) { const n = kid(p, k); if (n) r[k] = on(n); }
+        const u = kid(p, 'u'); if (u) r.u = !['none', '0', 'false'].includes(at(u, 'val'));
+        for (const k of ['strike', 'dstrike']) { const n = kid(p, k); if (n) r.s = on(n); }
+        const v = val(p, 'vertAlign'); if (v) r.vert = ['superscript', 'subscript'].includes(v) ? v : '';
+        const c = kid(p, 'color'); if (c) r.color = /^[0-9a-f]{6}$/i.test(at(c, 'val')) && !/^0{6}$/.test(at(c, 'val')) ? at(c, 'val').toUpperCase() : '';
+        const hl = kid(p, 'highlight'); if (hl) r.highlight = S().HIGHLIGHT[at(hl, 'val')] ? at(hl, 'val') : '';
+        const hid = kid(p, 'vanish'); if (hid) r.hidden = on(hid);
+      }
+      r.font = paperFont(r.font);
+      return r;
+    };
+    // A paragraph's properties in twips: spacing (Word's auto spacing is 14 pt), the line and its rule, indents (a later
+    // first-line indent replaces an earlier hanging one), alignment, tab stops (a later clear removes one), keep options,
+    // widow control (on unless turned off), contextual spacing and page break before.
+    const KIND = { left: 'l', start: 'l', num: 'l', center: 'c', right: 'r', end: 'r', decimal: 'd' };
+    const paraProps = (lv) => {
+      const r = { before: 0, after: 0, line: 240, rule: 'auto', left: 0, right: 0, first: 0, jc: '', tabs: new Map(), keepNext: false, keepLines: false, widow: true, contextual: false, breakBefore: false };
+      for (const { p } of lv) {
+        const sp = kid(p, 'spacing');
+        if (sp) {
+          for (const k of ['before', 'after']) { if (['1', 'true', 'on'].includes(at(sp, `${k}Autospacing`))) r[k] = 280; else if (at(sp, k) !== '') r[k] = fin(at(sp, k), 0, 0, 31680); }
+          if (at(sp, 'line') !== '') { r.line = fin(at(sp, 'line'), 240, 1, 31680); r.rule = ['exact', 'atLeast'].includes(at(sp, 'lineRule')) ? at(sp, 'lineRule') : 'auto'; }
+        }
+        const ind = kid(p, 'ind');
+        if (ind) {
+          const left = at(ind, 'left') || at(ind, 'start'), right = at(ind, 'right') || at(ind, 'end');
+          if (left !== '') r.left = fin(left, 0, -31680, 31680);
+          if (right !== '') r.right = fin(right, 0, -31680, 31680);
+          if (at(ind, 'hanging') !== '') r.first = -fin(at(ind, 'hanging'), 0, 0, 31680); else if (at(ind, 'firstLine') !== '') r.first = fin(at(ind, 'firstLine'), 0, 0, 31680);
+        }
+        const j = val(p, 'jc'); if (j) r.jc = { both: 'justify', distribute: 'justify', center: 'center', right: 'right', end: 'right' }[j] || '';
+        for (const t of els(kid(p, 'tabs')).filter((x) => x.local === 'tab')) {
+          const pos = fin(at(t, 'pos'), 0, 0, 31680), v = at(t, 'val');
+          if (v === 'clear') r.tabs.delete(pos); else if (KIND[v]) r.tabs.set(pos, [KIND[v], at(t, 'leader')]);
+        }
+        for (const [k, key] of [['keepNext', 'keepNext'], ['keepLines', 'keepLines'], ['widowControl', 'widow'], ['contextualSpacing', 'contextual'], ['pageBreakBefore', 'breakBefore']]) { const n = kid(p, k); if (n) r[key] = on(n); }
+      }
+      return r;
+    };
+    const r2 = (n) => Math.round(n * 100) / 100;
+    const tabsOf = (r) => ST().tabsOf([...r.tabs].sort((a, b) => a[0] - b[0]).map(([pos, [kind, leader]]) => [r2(pos / 1440), kind, leader]));
+
+    // The base: the font and size most of the body's text is in (an empty paragraph counts its mark once).
+    const tally = new Map();
+    for (const p of all(body, 'p')) {
+      const ps = val(kid(p, 'pPr'), 'pStyle') || normal;
+      let any = false;
+      for (const r of all(p, 'r')) {
+        const n = all(r, 't').reduce((k, t) => k + t.kids.reduce((m, x) => m + (x.text || '').length, 0), 0) + all(r, 'tab').length;
+        if (!n) continue;
+        any = true;
+        const rp = runProps(levels(r, 'rPr', ps));
+        if (!rp.hidden) { const key = `${rp.font || ''}|${rp.size}`; tally.set(key, (tally.get(key) || 0) + n); }
+      }
+      if (!any) { const rp = runProps(levels(kid(p, 'pPr') || { kids: [] }, 'rPr', ps)); const key = `${rp.font || ''}|${rp.size}`; tally.set(key, (tally.get(key) || 0) + 1); }
+    }
+    const top = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] || `${runProps(levels({ kids: [] }, 'rPr')).font || ''}|${runProps(levels({ kids: [] }, 'rPr')).size}`;
+    const base = { font: top.split('|')[0] || null, size: +top.split('|')[1] };
 
     // Lists
     const numX = await part(target('numbering') || 'word/numbering.xml');
     const nums = new Map(all(numX, 'num').map((n) => [at(n, 'numId'), n]));
     const abstracts = new Map(all(numX, 'abstractNum').map((n) => [at(n, 'abstractNumId'), n]));
-    const listOf = (p, pp) => {
+    const listOf = (pp) => {
       const numPr = pp.map((x) => kid(x, 'numPr')).filter(Boolean).at(-1), id = val(numPr, 'numId');
       if (!id || id === '0') return null;
       const level = fin(val(numPr, 'ilvl'), 0, 0, 8), abs = abstracts.get(val(nums.get(id), 'abstractNumId'));
@@ -335,30 +454,24 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       const ext2 = all(node, 'extent')[0], w = Math.round(fin(ext2?.a.cx, 3048000, 9525, 15240000) / 9525);
       return `<img src="data:image/${mime};base64,${base64(b)}" alt="${escH(at(all(node, 'docPr')[0], 'descr'))}" width="${w}">`;
     };
-    const runHTML = (rp, inner) => {
-      let style = '', h = inner;
-      for (const p of rp) {
-        const font = at(kid(p, 'rFonts'), 'ascii') || at(kid(p, 'rFonts'), 'hAnsi');
-        if (font) { if (ST().FONTS.includes(font)) style = style.replace(/font-family:[^;]*;?/, '') + `font-family:${font};`; else warn('Fonts Word and Blackboard don\'t share were replaced.'); }
-        const sz = val(p, 'sz');
-        if (sz) style = style.replace(/font-size:[^;]*;?/, '') + `font-size:${fin(sz, 24, 12, 192) / 2}pt;`;
-      }
-      const t = (k) => { let v; for (const p of rp) { const n = kid(p, k); if (n) v = on(n); } return v; };
-      const vert = rp.map((p) => val(p, 'vertAlign')).filter(Boolean).at(-1);
-      const u = rp.map((p) => kid(p, 'u')).filter(Boolean).at(-1);
-      if (style) {
-        const font = /font-family:([^;]*)/.exec(style)?.[1], size = /font-size:([^;]*)/.exec(style)?.[1];
-        const keep = [font && font !== f.font ? `font-family:${font}` : '', size && parseFloat(size) !== f.size ? `font-size:${size}` : ''].filter(Boolean).join(';');
-        if (keep) h = `<span style="${keep}">${h}</span>`;
-      }
-      if (vert === 'superscript') h = `<sup>${h}</sup>`; else if (vert === 'subscript') h = `<sub>${h}</sub>`;
-      if (u && !['none', '0', 'false'].includes(at(u, 'val'))) h = `<u>${h}</u>`;
-      if (t('strike')) h = `<s>${h}</s>`;
-      if (t('i')) h = `<em>${h}</em>`;
-      if (t('b')) h = `<strong>${h}</strong>`;
+    // A run's formatting as the paper schema's marks: its font and size where they differ from the base (in a footnote,
+    // from its paragraph style's: the format sets notes' size).
+    const runHTML = (r, inner, from = base) => {
+      if (!inner) return inner;
+      let h = inner;
+      const font = r.font && r.font !== from.font ? r.font : null, size = r.size !== from.size ? r.size : null;
+      if (font || size) h = `<span style="${[font ? `font-family:${font}` : '', size ? `font-size:${size}pt` : ''].filter(Boolean).join(';')}">${h}</span>`;
+      if (r.highlight) h = `<span data-gz-highlight="${r.highlight}">${h}</span>`;
+      if (r.color) h = `<span data-gz-color="${r.color}">${h}</span>`;
+      if (r.vert === 'superscript') h = `<sup>${h}</sup>`; else if (r.vert === 'subscript') h = `<sub>${h}</sub>`;
+      if (r.u) h = `<u>${h}</u>`;
+      if (r.s) h = `<s>${h}</s>`;
+      if (r.i) h = `<em>${h}</em>`;
+      if (r.b) h = `<strong>${h}</strong>`;
       return h;
     };
-    // A paragraph's inline content as HTML pieces; a page break inside it splits it ({ br: true } between pieces).
+    const BREAK = '\u0000BREAK\u0000';
+    // A paragraph's inline content as HTML; a page break inside it is BREAK.
     const inline = async (node, ctx, depth = 0) => {
       if (depth > LIMIT.depth) throw new RangeError('document nesting too deep');
       const name = node.local;
@@ -371,16 +484,18 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         return '';
       }
       if (name === 't') return ctx.skip ? '' : escH(node.kids.map((k) => k.text || '').join(''));
-      if (name === 'delText' || name === 'del') { warn('Tracked changes were accepted.'); return ''; }
-      if (name === 'tab') return '\t';
-      if (name === 'br' || name === 'cr') return at(node, 'type') === 'page' ? '\u0000BREAK\u0000' : '<br>';
+      if (name === 'delText' || name === 'del' || name === 'moveFrom') { warn('Tracked changes were accepted.'); return ''; }
+      if (name === 'tab' || name === 'ptab') return ctx.skip ? '' : '\t';
+      if (name === 'br' || name === 'cr') return at(node, 'type') === 'page' ? BREAK : at(node, 'type') === 'column' ? '' : '<br>';
+      if (name === 'noBreakHyphen') return '-';
+      if (name === 'softHyphen') return '­';
       if (name === 'drawing') return image(node, ctx.source);
       if (name === 'footnoteReference') {
         if (ctx.note) throw new Error('nested footnote references are not supported');
         const n = noteById.get(at(node, 'id'));
         if (!n) return '';
         const parts2 = [];
-        for (const p of all(n, 'p')) parts2.push((await Promise.all(els(p).filter((k) => k.local !== 'pPr').map((k) => inline(k, { ...ctx, field: '', skip: false, note: true }, depth + 1)))).join('').replace(/\u0000BREAK\u0000/g, ''));
+        for (const p of all(n, 'p')) parts2.push((await Promise.all(els(p).filter((k) => k.local !== 'pPr').map((k) => inline(k, { ...ctx, field: '', skip: false, note: true, paragraph: val(kid(p, 'pPr'), 'pStyle') || normal, heading: false }, depth + 1)))).join('').replace(/\u0000BREAK\u0000/g, ''));
         const html = parts2.join(' ').trim();
         noteBytes += html.length;
         if (noteBytes > LIMIT.html) throw new RangeError('The document is too large.');
@@ -388,7 +503,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       }
       if (name === 'footnoteRef') return '';
       if (name === 'pict' || name === 'object' || name === 'oMath' || name === 'oMathPara') { warn('Some pictures, objects or equations were left out.'); return ''; }
-      if (['rPr', 'pPr', 'bookmarkStart', 'bookmarkEnd', 'proofErr', 'lastRenderedPageBreak', 'commentRangeStart', 'commentRangeEnd', 'commentReference', 'endnoteReference'].includes(name)) {
+      if (['rPr', 'pPr', 'bookmarkStart', 'bookmarkEnd', 'proofErr', 'lastRenderedPageBreak', 'commentRangeStart', 'commentRangeEnd', 'commentReference', 'endnoteReference', 'sdtPr', 'sdtEndPr'].includes(name)) {
         if (name === 'commentReference') warn('Comments were left out.');
         if (name === 'endnoteReference') warn('Endnotes were left out.');
         return '';
@@ -397,8 +512,9 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (name === 'r') {
         if (ctx.note && kid(kid(node, 'rPr'), 'rStyle') && /footnote ?reference/.test(styleName(val(kid(node, 'rPr'), 'rStyle')))) return html;
         if (all(node, 'footnoteReference').length) return html;
-        // A heading's own bold and italic are the format's, not the run's.
-        html = runHTML(props(node, 'rPr', /heading/.test(styleName(ctx.paragraph)) ? '' : ctx.paragraph, /^(hyperlink|footnote ?reference)$/), html);
+        const rp = runProps(levels(node, 'rPr', ctx.paragraph), ctx.heading);
+        if (rp.hidden) return '';
+        html = runHTML(rp, html, ctx.note ? runProps(levels({ kids: [] }, 'rPr', ctx.paragraph)) : base);
       }
       if (name === 'hyperlink') {
         const id = node.a['r:id'] || at(node, 'id'), r = (await relsOf(ctx.source)).find((x) => x.id === id);
@@ -406,45 +522,48 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       }
       return html;
     };
-    // A paragraph's alignment, spacing and indents as the paper schema reads them; what equals the format's own is left
-    // out, so the paper keeps following its format. A block quote's own indent is the blockquote's.
-    const paraStyle = (pp, { heading, quote, entry, level }) => {
-      const css = [];
-      let align = '', line = null, left = null, first = null, before = false;
-      for (const p of pp) {
-        const j = val(p, 'jc'); if (j) align = j === 'both' ? 'justify' : ['center', 'right'].includes(j) ? j : '';
-        const sp = kid(p, 'spacing');
-        if (sp && at(sp, 'line')) { line = Math.round(Math.max(0.5, Math.min(4, fin(at(sp, 'line'), 240) / 240)) * 100) / 100; if (['exact', 'atLeast'].includes(at(sp, 'lineRule'))) warn('Exact line heights became line spacing.'); }
-        const ind = kid(p, 'ind');
-        if (ind) {
-          if (at(ind, 'left') || at(ind, 'start')) left = fin(at(ind, 'left') || at(ind, 'start')) / 1440;
-          if (at(ind, 'firstLine')) first = fin(at(ind, 'firstLine')) / 1440;
-          if (at(ind, 'hanging')) first = -fin(at(ind, 'hanging')) / 1440;
-        }
-        if (kid(p, 'pageBreakBefore')) before = on(kid(p, 'pageBreakBefore'));
-      }
-      if (quote) { left = (left || 0) - f.quote.indent; if (first === 0) first = null; }
-      if (entry && left === f.list.hanging && first === -f.list.hanging) { left = null; first = null; }
-      const want = quote ? f.quote.line : f.line;
-      if (align && !(heading && (f.headings[level - 1]?.align || 'left') === align)) css.push(`text-align:${align}`);
-      if (line != null && line !== want) css.push(`line-height:${line}`);
-      if (left && left > 0.05) css.push(`margin-left:${Math.round(left * 100) / 100}in`);
-      const def = heading || quote ? null : align === 'center' || align === 'right' ? 0 : f.first;
-      const eff = first ?? 0;
-      if (!heading && !quote && !(entry && first == null) && eff !== def) css.push(`text-indent:${`${Math.round(eff * 100) / 100}in`}`);
-      return { style: css.join(';'), before };
-    };
-    const BREAK = '\u0000BREAK\u0000';
+    // A paragraph as Word resolves it: { r (paraProps), style, heading (level), quote, list, html, text }. Contextual
+    // spacing drops its space before or after next to a paragraph of its own style (ctx.prev, ctx.next).
     const paragraph = async (p, ctx) => {
-      ctx.field = ''; ctx.skip = false; ctx.paragraph = val(kid(p, 'pPr'), 'pStyle');
-      const name = styleName(ctx.paragraph), m = /heading\s*([1-6])/.exec(name);
-      const tag = m ? `h${Math.min(4, +m[1])}` : 'p';
-      const pp = props(p, 'pPr'), quote = /quote|block text/.test(name), entry = name === 'bibliography';
-      const { style, before } = paraStyle(pp, { heading: !!m, quote, entry, level: m ? Math.min(4, +m[1]) : 0 });
-      const inner = (await Promise.all(els(p).filter((k) => k.local !== 'pPr').map((k) => inline(k, ctx)))).join('');
-      const open = `<${tag}${style ? ` style="${style}"` : ''}>`;
-      const pieces = inner.split(BREAK).map((s) => `${open}${s}</${tag}>`).join('<hr class="gz-page-break">');
-      return { html: pieces, before, list: listOf(p, pp), quote };
+      const style = val(kid(p, 'pPr'), 'pStyle') || normal, name = styleName(style), m = /heading\s*([1-6])/.exec(name);
+      Object.assign(ctx, { field: '', skip: false, paragraph: style, heading: !!m });
+      const lv = levels(p, 'pPr'), r = paraProps(lv);
+      if (r.contextual) { if (ctx.prev === style) r.before = 0; if (ctx.next === style) r.after = 0; }
+      const html = (await Promise.all(els(p).filter((k) => k.local !== 'pPr').map((k) => inline(k, ctx)))).join('');
+      return { kind: 'p', r, style, heading: m ? Math.min(4, +m[1]) : 0, quote: /quote|block text/.test(name), list: listOf(lv.map((x) => x.p)), html, text: TEXT().decode(html.replace(/<[^>]*>/g, '')) };
+    };
+    // A paragraph's attributes as the paper schema reads them: what Word gives it, less what the format gives a paragraph
+    // there (a list entry, a quoted paragraph, a heading, body). → [style, data-gz].
+    const attrsOf = (d, where = {}) => {
+      const { r } = d, css = [], gz = {};
+      const set = where.entry ? f.list : d.quote ? f.quote : f;
+      if (r.jc && !(d.heading && (f.headings[d.heading - 1]?.align || 'left') === r.jc)) css.push(`text-align:${r.jc}`);
+      if (r.rule === 'exact') gz.exact = r2(r.line / 20);
+      else if (r.rule === 'atLeast') gz.least = r2(r.line / 20);
+      else { const line = r2(Math.min(4, Math.max(0.5, r.line / 240))); if (line !== set.line) css.push(`line-height:${line}`); }
+      if (r.before) gz.before = r2(r.before / 20);
+      if (r2(r.after / 20) !== set.after) gz.after = r2(r.after / 20);
+      if (!d.list) {
+        const left = r.left / 1440 - (d.quote ? f.quote.indent : 0), first = r.first / 1440;
+        if (where.entry) { if (Math.abs(left - f.list.hanging) > 0.005) gz.left = r2(left); }
+        else if (Math.abs(left) > 0.005) { if (left > 0 && left <= 4 && Math.abs(left / 0.5 - Math.round(left / 0.5)) < 0.002) css.push(`margin-left:${Math.round(left / 0.5) * 0.5}in`); else gz.left = r2(left); }
+        const def = d.heading ? f.headings[d.heading - 1]?.first || 0 : d.quote ? 0 : where.entry ? -f.list.hanging : ST().firstOf(f, { align: r.jc });
+        if (Math.abs(first - def) > 0.005) css.push(`text-indent:${r2(first)}in`);
+      }
+      if (Math.abs(r.right / 1440) > 0.005) gz.right = r2(r.right / 1440);
+      if (r.tabs.size) gz.tabs = tabsOf(r);
+      if (r.keepNext) gz.keepNext = true;
+      if (r.keepLines) gz.keepLines = true;
+      if (!r.widow) gz.widow = false;
+      return [css.join(';'), S().dataGz(gz)];
+    };
+    const open = (tag, [style, gz]) => `<${tag}${style ? ` style="${style}"` : ''}${gz ? ` data-gz="${escH(gz)}"` : ''}>`;
+    const HR = '<hr class="gz-page-break">';
+    // One paragraph's HTML. A page break inside it splits it: the part after continues the paragraph (no first-line indent
+    // of its own), and an empty part beside a break is no line at all, as Word draws a paragraph that only holds one.
+    const paraHTML = (d, where, tag) => {
+      const pieces = d.html.split(BREAK), a = attrsOf(d, where), rest = pieces.length > 1 ? attrsOf({ ...d, r: { ...d.r, first: 0, before: 0 } }, where) : a;
+      return pieces.map((x, i) => (pieces.length > 1 && !x ? '' : `${open(tag, i ? rest : a)}${x}</${tag}>`)).join(HR);
     };
     const tableHTML = async (node, ctx, depth) => {
       const grid = [], merges = new Map();
@@ -455,7 +574,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
           const pr = kid(cell, 'tcPr'), span = fin(val(pr, 'gridSpan'), 1, 1, 100), merge = kid(pr, 'vMerge');
           if (col + span > 1000) throw new RangeError('A table is too wide.');
           if (merge && at(merge, 'val') !== 'restart' && merges.has(col)) { merges.get(col).rows++; col += span; continue; }
-          const c = { rows: 1, span, html: (await blocks(els(cell).filter((k) => k.local !== 'tcPr'), ctx, depth + 1)) || '<p></p>' };
+          const c = { rows: 1, span, html: render(await collect(els(cell).filter((k) => k.local !== 'tcPr'), ctx, depth + 1)) || '<p></p>' };
           if (merge && at(merge, 'val') === 'restart') merges.set(col, c); else merges.delete(col);
           cells.push(c);
           col += span;
@@ -464,37 +583,120 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       }
       return `<table>${grid.map((cells) => `<tr>${cells.map((c) => `<td${c.span > 1 ? ` colspan="${c.span}"` : ''}${c.rows > 1 ? ` rowspan="${Math.min(1000, c.rows)}"` : ''}>${c.html}</td>`).join('')}</tr>`).join('')}</table>`;
     };
-    const blocks = async (nodes, ctx, depth = 0) => {
+    // The blocks of a body, cell or content control, in order: paragraphs resolved, tables as HTML, page breaks before.
+    let size = 0;
+    const collect = async (nodes, ctx, depth = 0) => {
       if (depth > 40) throw new RangeError('document nesting too deep');
+      const out = [], styleOf = (n) => (n?.local === 'p' ? val(kid(n, 'pPr'), 'pStyle') || normal : null);
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node.local === 'p') {
+          const d = await paragraph(node, Object.assign(ctx, { prev: styleOf(nodes[i - 1]), next: styleOf(nodes[i + 1]) }));
+          if (d.r.breakBefore) out.push({ kind: 'break' });
+          out.push(d);
+          size += d.html.length;
+        } else if (node.local === 'tbl') { const html = await tableHTML(node, ctx, depth); size += html.length; out.push({ kind: 'html', html }); }
+        else if (node.local === 'sdt') { const c = kid(node, 'sdtContent'); if (c) out.push(...await collect(els(c), ctx, depth + 1)); }
+        if (size > LIMIT.html) throw new RangeError('The document is too large.');
+      }
+      return out;
+    };
+    // Blocks to HTML: lists and quoted paragraphs grouped, and at the top the list of sources found as writer-styles
+    // listAt finds it (its entries take the format's hanging indent and spacing, so theirs are compared with those).
+    const TITLES = new Set(Object.values(ST().FORMATS).map((x) => x.list.title.toLowerCase()));
+    const render = (items, top = false) => {
+      const plain = (d) => d?.kind === 'p' && !d.list && !d.quote && !d.heading;
+      let from = -1, to = -1;
+      if (top) {
+        for (let i = items.length - 1; i >= 0 && from < 0; i--) if (plain(items[i]) && items[i].r.jc === 'center' && TITLES.has(items[i].text.trim().toLowerCase()) && !items[i].html.includes(BREAK)) from = i + 1;
+        to = from;
+        while (from >= 0 && plain(items[to]) && !items[to].html.includes(BREAK)) to++;
+      }
       let out = '', list = null, quote = false;
       const close = () => { if (list) { out += list.ordered ? '</ol>' : '</ul>'; list = null; } };
       const unquote = () => { if (quote) { out += '</blockquote>'; quote = false; } };
-      for (const node of nodes) {
-        if (node.local === 'p') {
-          const p = await paragraph(node, ctx);
-          if (p.before) { close(); unquote(); out += '<hr class="gz-page-break">'; }
-          if (p.list) {
-            unquote();
-            if (!list || list.ordered !== p.list.ordered) { close(); list = { ordered: p.list.ordered }; out += p.list.ordered ? '<ol>' : '<ul>'; }
-            out += p.html.replace(/^<(p|h\d)([^>]*)>/, `<li${p.list.level ? ` class="ql-indent-${p.list.level}"` : ''}>`).replace(/<\/(p|h\d)>$/, '</li>').replace(/<\/(p|h\d)><hr class="gz-page-break"><(p|h\d)[^>]*>/g, '<br>');
-            continue;
-          }
-          close();
-          if (p.quote && !quote) { out += '<blockquote>'; quote = true; } else if (!p.quote) unquote();
-          out += p.html;
-        } else if (node.local === 'tbl') { close(); unquote(); ctx.cells = ctx.cells || []; out += await tableHTML(node, ctx, depth); }
-        else if (node.local === 'sdt') { close(); unquote(); const c = kid(node, 'sdtContent'); if (c) out += await blocks(els(c), ctx, depth + 1); }
-        else if (!['sectPr', 'bookmarkStart', 'bookmarkEnd', 'proofErr'].includes(node.local)) { close(); unquote(); }
-        if (out.length > LIMIT.html) throw new RangeError('The document is too large.');
-      }
+      items.forEach((d, i) => {
+        if (d.kind === 'break') { close(); unquote(); out += HR; return; }
+        if (d.kind === 'html') { close(); unquote(); out += d.html; return; }
+        const tag = d.heading ? `h${d.heading}` : 'p';
+        if (d.list) {
+          unquote();
+          if (!list || list.ordered !== d.list.ordered) { close(); list = { ordered: d.list.ordered }; out += d.list.ordered ? '<ol>' : '<ul>'; }
+          const [style, gz] = attrsOf(d);
+          out += `<li${d.list.level ? ` class="ql-indent-${d.list.level}"` : ''}${style ? ` style="${style}"` : ''}${gz ? ` data-gz="${escH(gz)}"` : ''}>${d.html.split(BREAK).join('<br>')}</li>`;
+          return;
+        }
+        close();
+        if (d.quote && !quote) { out += '<blockquote>'; quote = true; } else if (!d.quote) unquote();
+        out += paraHTML(d, { entry: i >= from && i < to }, tag);
+      });
       close(); unquote();
       return out;
     };
-    const ctx = { source: main, field: '', skip: false, paragraph: '' };
-    const html = await blocks(els(body), ctx);
+    const ctx = { source: main, field: '', skip: false, paragraph: normal, heading: false };
+    let html = render(await collect(els(body), ctx), true);
     if (html.length > LIMIT.html) throw new RangeError('The document is too large.');
     if (z.names.some((n) => /^word\/(charts|embeddings)\/|vbaProject/i.test(n))) warn('Some pictures, objects or equations were left out.');
-    return { html, warnings: [...warnings] };
+
+    // The page: the last section's size and margins (Word's defaults where it gives none), its header and footer.
+    const sect = els(body).filter((k) => k.local === 'sectPr').at(-1) || all(body, 'sectPr').at(-1);
+    const pg = kid(sect, 'pgSz'), mar = kid(sect, 'pgMar');
+    const inch = (v, d) => Math.abs(fin(v, d, -31680, 31680)) / 1440;
+    // A header's or footer's paragraphs: their alignment, spacing and stops, and their text runs and PAGE / NUMPAGES fields
+    // with the marks that differ from the base.
+    const hf = async (kind, type) => {
+      const ref = els(sect).find((k) => k.local === `${kind}Reference` && (at(k, 'type') || 'default') === type);
+      const r = ref && rels.find((x) => x.id === (ref.a['r:id'] || at(ref, 'id')) && !x.external);
+      const x = r && await part(r.target);
+      if (!x) return null;
+      const paras = [];
+      const walk = (n) => { for (const k of els(n)) { if (k.local === 'p') paras.push(k); else if (k.local === 'sdt') walk(kid(k, 'sdtContent')); } };
+      walk(els(x)[0]);
+      return paras.slice(0, 20).map((p) => {
+        const style = val(kid(p, 'pPr'), 'pStyle') || normal, pr = paraProps(levels(p, 'pPr'));
+        const out = { align: pr.jc || null, line: pr.rule === 'auto' ? r2(pr.line / 240) : 1, after: r2(pr.after / 20) };
+        if (pr.rule !== 'auto') out[pr.rule === 'exact' ? 'exact' : 'least'] = r2(pr.line / 20);
+        if (pr.before) out.before = r2(pr.before / 20);
+        for (const k of ['left', 'right', 'first']) if (pr[k]) out[k] = r2(pr[k] / 1440);
+        if (pr.tabs.size) out.tabs = tabsOf(pr);
+        const runs = [];
+        let field = '', skip = false;
+        const push = (run) => {
+          const last = runs.at(-1), same = (a, b) => ['b', 'i', 'u', 's', 'sup', 'sub', 'font', 'size', 'color'].every((k) => a[k] === b[k]);
+          if (run.text && last?.text && !last.field && same(last, run)) last.text += run.text; else runs.push(run);
+        };
+        const visit = (n) => {
+          for (const k of els(n)) {
+            if (k.local === 'r') {
+              const rp = runProps(levels(k, 'rPr', style));
+              if (rp.hidden) continue;
+              const marks = { ...(rp.b ? { b: true } : {}), ...(rp.i ? { i: true } : {}), ...(rp.u ? { u: true } : {}), ...(rp.s ? { s: true } : {}), ...(rp.vert === 'superscript' ? { sup: true } : rp.vert === 'subscript' ? { sub: true } : {}),
+                ...(rp.font && rp.font !== base.font ? { font: rp.font } : {}), ...(rp.size !== base.size ? { size: rp.size } : {}), ...(rp.color ? { color: rp.color } : {}) };
+              for (const c of els(k)) {
+                if (c.local === 'fldChar') { const t = at(c, 'fldCharType'); if (t === 'begin') field = ''; else if (t === 'separate') { const m = /^\s*(PAGE|NUMPAGES)\b/i.exec(field); if (m) { push({ field: m[1].toUpperCase(), ...marks }); skip = true; } } else if (t === 'end') { skip = false; field = ''; } }
+                else if (c.local === 'instrText') field += c.kids.map((t) => t.text || '').join('');
+                else if (!skip && c.local === 't') push({ text: c.kids.map((t) => t.text || '').join(''), ...marks });
+                else if (!skip && (c.local === 'tab' || c.local === 'ptab')) push({ text: '\t', ...marks });
+                else if (!skip && (c.local === 'br' || c.local === 'cr')) push({ text: '\n', ...marks });
+              }
+            } else if (k.local === 'fldSimple') { const m = /^\s*(PAGE|NUMPAGES)\b/i.exec(at(k, 'instr')); if (m) push({ field: m[1].toUpperCase() }); else visit(k); }
+            else if (['hyperlink', 'sdt', 'sdtContent', 'smartTag', 'ins', 'customXml'].includes(k.local)) visit(k);
+          }
+        };
+        visit(p);
+        out.runs = runs.filter((x) => x.field || x.text);
+        return out;
+      });
+    };
+    const settingsX = await part(target('settings') || 'word/settings.xml');
+    const setup = ST().setup({
+      page: [inch(at(pg, 'w'), 12240), inch(at(pg, 'h'), 15840)], margins: [['top', 1440], ['right', 1800], ['bottom', 1440], ['left', 1800]].map(([k, d]) => inch(at(mar, k), d)),
+      header: inch(at(mar, 'header'), 720), footer: inch(at(mar, 'footer'), 720), font: base.font, size: base.size,
+      tab: inch(val(all(settingsX, 'settings')[0], 'defaultTabStop'), 720), kern: !!kid(kid(kid(defaults, 'rPrDefault'), 'rPr'), 'kern'), title: on(kid(sect, 'titlePg')),
+      headers: { default: await hf('header', 'default'), first: await hf('header', 'first') }, footers: { default: await hf('footer', 'default'), first: await hf('footer', 'first') },
+    });
+    if (globalThis.GZ_WRITER_OBJECTS_DOCX) html = GZ_WRITER_OBJECTS_DOCX.importHTML(html, { body: doc, numbering: numX, styles: stylesX });
+    return { doc: { ...S().parse(S().paper, html, { pre: true }).toJSON(), attrs: { setup } }, html, setup, warnings: [...warnings] };
   };
 
   return { exportDocx, importDocx, xml, MIME, LIMIT };
