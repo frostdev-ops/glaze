@@ -16,10 +16,14 @@ const frame = (options = {}) => {
     dispatch(tr) { const prev = this.state; this.state = this.state.apply(tr); for (const p of hooks) p.spec.view?.().update?.(this, prev); } };
   const issues = { ...I.bind(view), look: I.look };
   const context = options.context || {};
+  const defaults = require('../defaults.js').GZ_DEFAULTS.writer;
+  let preferences = { ...defaults }, follow;
+  const settings = { now: () => preferences, clean: () => defaults, follow: (fn) => { follow = fn; } };
+  const configure = (patch) => { const was = preferences; preferences = { ...was, ...patch }; follow(preferences, was); };
   const api = { t: (k) => k, kind: () => 'reply', context: () => context, slot: () => null,
     plugin: (p) => hooks.push(p), on: (k, f) => { events[k] = f; } };
   const makePort = () => { const p = { sent: [], postMessage(m) { this.sent.push(m); }, start() {}, close() { this.closed = true; }, terminate() { this.terminated = true; }, addEventListener() {} }; ports.push(p); return p; };
-  const ctx = vm.createContext({ GZ_WRITER_FRAME: api, GZ_WRITER_PROOF: proof, GZ_WRITER_ISSUES: issues, GZ_PM,
+  const ctx = vm.createContext({ GZ_WRITER_FRAME: api, GZ_WRITER_SETTINGS: settings, GZ_WRITER_PROOF: proof, GZ_WRITER_ISSUES: issues, GZ_PM,
     document: doc, innerWidth: 800, innerHeight: 300, console,
     setTimeout: (fn, ms) => { timers.set(++tid, { fn, ms }); return tid; }, clearTimeout: (id) => timers.delete(id),
     addEventListener: (k, fn) => { life[k] = fn; },
@@ -33,7 +37,7 @@ const frame = (options = {}) => {
   const run = async (ms) => { for (const [id, t] of [...timers]) if (t.ms === ms) { timers.delete(id); t.fn(); } await flush(); };
   const reply = (p, m) => p.onmessage?.({ data: m });
   const lint = (p = ports.at(-1)) => p.sent.findLast((m) => m.op === 'lint');
-  return { proof, view, issues, ports, run, reply, lint, life, events, doc };
+  return { proof, view, issues, ports, run, reply, lint, life, events, doc, configure };
 };
 
 test('a first lint after idle reconnect is sent only once', async () => {
@@ -126,4 +130,35 @@ test('proofing reconnects when a cached page returns after pagehide', async () =
   f.view.dispatch(f.view.state.tr.insertText('x', 4)); await f.run(150);
   assert.equal(f.ports.length, 2);
   assert.ok(f.ports[1].sent.some((m) => m.op === 'lint'));
+});
+
+test('disabled proofing stays quiet through context updates and cached-page restoration', async () => {
+  const f = frame(); await flush();
+  f.configure({ proofing: false });
+  const before = f.ports.flatMap((p) => p.sent).filter((m) => m.op === 'lint').length;
+  f.events.context({ course: { name: 'New course' } }); await f.run(50);
+  assert.equal(f.ports.flatMap((p) => p.sent).filter((m) => m.op === 'lint').length, before);
+  f.life.pagehide(); f.life.pageshow({ persisted: true }); await flush();
+  assert.equal(f.ports.length, 1, 'restoration cannot restart disabled proofing');
+  f.configure({ proofing: true }); await flush();
+  assert.equal(f.ports.length, 2, 'turning it back on resumes proofing');
+});
+
+test('disabling proofing during its dictionary read prevents a late worker start', async () => {
+  let finish;
+  const f = frame({ store: { get: () => new Promise((r) => { finish = r; }) } });
+  f.configure({ proofing: false }); finish({ writerWords: [] }); await flush();
+  assert.equal(f.ports.length, 0);
+  f.configure({ proofing: true }); await flush();
+  finish({ writerWords: [] }); await flush();
+  assert.equal(f.ports.length, 1);
+});
+
+test('a dialect change discards outstanding results from the old dialect', async () => {
+  const f = frame({ html: '<p>colour</p>' }); await flush();
+  const old = f.lint();
+  f.configure({ dialect: 'en-GB' });
+  f.reply(f.ports[0], { op: 'lint', id: old.id, lints: [{ start: 0, end: 6, kind: 'Spelling', problem: 'colour', suggestions: [{ k: 0, t: 'color' }] }] });
+  assert.equal(f.issues.list().length, 0, 'American findings cannot land after British was selected');
+  assert.notEqual(f.lint().id, old.id);
 });
