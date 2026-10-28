@@ -3443,5 +3443,6 @@
   "Gray 50%": "Grau 50 %",
   "Gray 25%": "Grau 25 %",
   "Paper size": "Papierformat",
-  "A4": "A4"
+  "A4": "A4",
+  "Writer has no match for {font}; pages may differ from Word": "Writer hat keine Entsprechung für {font}; Seiten können von Word abweichen"
 };

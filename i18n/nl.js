@@ -3443,5 +3443,6 @@
   "Gray 50%": "Grijs 50%",
   "Gray 25%": "Grijs 25%",
   "Paper size": "Papierformaat",
-  "A4": "A4"
+  "A4": "A4",
+  "Writer has no match for {font}; pages may differ from Word": "Writer heeft geen vervanger voor {font}; pagina's kunnen afwijken van Word"
 };

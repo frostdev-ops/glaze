@@ -273,7 +273,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
             if (i) { seg = h('span'); segs.push(seg); }
             if (!piece) continue;
             const run = h('span', { text: piece });
-            run.style.cssText = [r.b ? 'font-weight:700' : '', r.i ? 'font-style:italic' : '', r.u || r.s ? `text-decoration:${[r.u ? 'underline' : '', r.s ? 'line-through' : ''].join(' ')}` : '', r.sup ? 'vertical-align:super;font-size:.66em' : r.sub ? 'vertical-align:sub;font-size:.66em' : '', r.font ? `font-family:"${r.font}"` : '', r.size ? `font-size:${r.size}pt` : '', r.color ? `color:#${r.color}` : ''].filter(Boolean).join(';');
+            run.style.cssText = [r.b ? 'font-weight:700' : '', r.i ? 'font-style:italic' : '', r.u || r.s ? `text-decoration:${[r.u ? 'underline' : '', r.s ? 'line-through' : ''].join(' ')}` : '', r.sup ? 'vertical-align:super;font-size:.66em' : r.sub ? 'vertical-align:sub;font-size:.66em' : '', r.font ? `font-family:${ST.stack(r.font)}` : '', r.size ? `font-size:${r.size}pt` : '', r.color ? `color:#${r.color}` : ''].filter(Boolean).join(';');
             seg.append(run);
           }
         }
@@ -428,6 +428,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const runChecks = () => {
       const r = F.check(view.state.doc, format, { name: ctx.user?.name || '', course: ctx.course?.name || '' }, { lines, keep });
       formatIssues = r.issues.filter((i) => !ignored.has(ignoreKey(i)));
+      const lost = missingFont();
+      if (lost) formatIssues.push({ id: 'format:font-missing:0:0', row: null, rule: 'font-missing', from: 0, to: 0, source: 'format', kind: 'format', key: 'Writer has no match for {font}; pages may differ from Word', message: `Writer has no match for ${lost}; pages may differ from Word`, vars: { font: lost }, suggestions: [], sure: false });
       groups = [];
       for (const i of formatIssues) { const g = groupOf(i.rule); if (g) g.issues.push(i); else groups.push({ rule: i.rule, issues: [i] }); }
       if (picked && !groupOf(picked)) picked = null;
@@ -483,7 +485,26 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       ignored.add(ignoreKey(i));
       runChecks();
     };
-    const ignoreGroup = (g) => { for (const i of g.issues) ignored.add(ignoreKey(i)); if (picked === g.rule) picked = null; if (hovered === g.rule) hovered = null; runChecks(); };
+    // An imported paper's well-known font (Aptos, say) that this computer doesn't have: its lines keep Word's spacing but
+    // the bundled twin's widths, so one card says so, until it's dismissed for this paper.
+    const fontHere = (name) => {
+      try {
+        const c = (fontHere.c ||= document.createElement('canvas').getContext('2d'));
+        const w = (f) => { c.font = `40px ${f}`; return c.measureText('mmmmmmmmmmlli WQ@#').width; };
+        return ['monospace', 'serif', 'sans-serif'].some((g) => w(`"${name}", ${g}`) !== w(g));
+      } catch { return true; }
+    };
+    const fontNote = (name) => `gz-font-note:${key || 'paper'}:${name}`;
+    const missingFont = () => {
+      const doc = view.state.doc, own = ST.setup(doc.attrs.setup);
+      let name = own?.font && ST.LOCAL[own.font] ? own.font : null;
+      if (!name && own) doc.descendants((n) => { const st = !name && n.isText && n.marks.find((m) => m.type.name === 'text_style' && ST.LOCAL[m.attrs.font]); if (st) name = st.attrs.font; return !name; });
+      if (!name || fontHere(name)) return null;
+      try { if (localStorage.getItem(fontNote(name))) return null; } catch { /* no storage: shown */ }
+      return name;
+    };
+    const ignoreGroup = (g) => {
+      if (g.rule === 'font-missing') try { localStorage.setItem(fontNote(g.issues[0].vars.font), '1'); } catch { /* this session only */ } for (const i of g.issues) ignored.add(ignoreKey(i)); if (picked === g.rule) picked = null; if (hovered === g.rule) hovered = null; runChecks(); };
     // A group's fixes in one transaction (undone at once): from the last to the first, so each position still holds.
     // Rules whose fix rebuilds the paper (an opening, the format) have one finding, so their own fix runs.
     const SIMPLE = new Set(['attr', 'clear', 'mark', 'unmark']);
@@ -839,7 +860,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         const marks = Object.fromEntries(PART_MARKS.filter((k) => r[k] != null).map((k) => [k, r[k]]));
         const el = r.field ? h('span', { class: 'gp-field', contenteditable: 'false', 'data-field': r.field, text: String(r.field === 'PAGE' ? n : total) }) : h('span', { text: r.text });
         el.dataset.marks = JSON.stringify(marks);
-        el.style.cssText = [marks.b ? 'font-weight:700' : '', marks.i ? 'font-style:italic' : '', marks.u ? 'text-decoration:underline' : '', marks.font ? `font-family:"${marks.font}"` : '', marks.size ? `font-size:${marks.size}pt` : '', marks.color ? `color:#${marks.color}` : ''].filter(Boolean).join(';');
+        el.style.cssText = [marks.b ? 'font-weight:700' : '', marks.i ? 'font-style:italic' : '', marks.u ? 'text-decoration:underline' : '', marks.font ? `font-family:${ST.stack(marks.font)}` : '', marks.size ? `font-size:${marks.size}pt` : '', marks.color ? `color:#${marks.color}` : ''].filter(Boolean).join(';');
         line.append(el);
       }
       if (!line.childNodes.length) line.append(h('br'));
@@ -885,7 +906,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const variant = n === 1 && base.title ? 'first' : 'default', group = base[`${kind}s`];
       const orig = group[variant] ?? (kind === 'header' && variant === 'default' && (!cur || cur.own) ? ST.formatHeader(format, surname()) : [{ align: null, line: 1, after: 0, runs: [] }]);
       const box = h('div', { class: `gp-hf gp-hf-${kind}`, contenteditable: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': t(kind === 'header' ? 'Header' : 'Footer'), spellcheck: 'false' }, partDOM(orig, n, total));
-      box.style.cssText = `left:${geo.left}px;right:${geo.right}px;${kind === 'header' ? `top:${geo.header}px` : `bottom:${geo.footer ?? geo.header}px`};font:${L.size}pt/${ST.lineHeight(L, { line: 1 })}px "${L.font}"`;
+      box.style.cssText = `left:${geo.left}px;right:${geo.right}px;${kind === 'header' ? `top:${geo.header}px` : `bottom:${geo.footer ?? geo.header}px`};font:${L.size}pt/${ST.lineHeight(L, { line: 1 })}px ${ST.stack(L.font)}`;
       sheet.append(box);
       sheet.classList.add(`gp-editing-${kind}`);
       root.classList.add('gp-hf-on');

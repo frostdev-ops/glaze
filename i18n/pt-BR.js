@@ -3443,5 +3443,6 @@
   "Gray 50%": "Cinza 50%",
   "Gray 25%": "Cinza 25%",
   "Paper size": "Tamanho do papel",
-  "A4": "A4"
+  "A4": "A4",
+  "Writer has no match for {font}; pages may differ from Word": "O Writer não tem correspondência para {font}; as páginas podem diferir do Word"
 };
