@@ -14,7 +14,7 @@ const W = require('../lib/ai/tasks/writer-context.js');
 const FB = require('../lib/ai/tasks/writer-feedback.js');
 const item = require('./fixtures/ultra-writer-attach-content.json');
 
-const ORIGIN = 'https://bb.school.test';
+const ORIGIN = 'https://bb.school.example.edu';
 const PNG_URL = `${ORIGIN}/bbcswebdav/pid-4968850-dt-asiobject-rid-14533104_1/xid-14533104_1`;
 const DOCX_URL = `${ORIGIN}/bbcswebdav/pid-4968850-dt-asiobject-rid-14533105_1/xid-14533105_1`;
 const PROMPT = 'Essay 2 prompt\nCompare two scenes where memory returns unbidden. Quote each scene at least once.';
@@ -41,7 +41,7 @@ const text = async ({ name, bytes }) => (/\.docx$/i.test(name) ? D.docx(bytes) :
 
 // ---- the page: which files, and reading them ------------------------------------------------------------------------
 const path = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
-const base = (o = {}) => ({ school: 'bb.school.test', path, url: `${ORIGIN}${path}`, origin: ORIGIN, uid: async () => '_900_1', me: async () => ({}), courses: async () => [], rows: async () => [],
+const base = (o = {}) => ({ school: 'bb.school.example.edu', path, url: `${ORIGIN}${path}`, origin: ORIGIN, uid: async () => '_900_1', me: async () => ({}), courses: async () => [], rows: async () => [],
   get: async (u) => { if (u === '/learn/api/v1/courses/_101_1/contents/_7_1') return item; throw new Error(`unexpected ${u}`); }, instructions: async () => '', ...o });
 
 test('the attached files come from Ultra\'s attachment links in the instructions, by their durable href, never other links', async () => {
@@ -50,7 +50,7 @@ test('the attached files come from Ultra\'s attachment links in the instructions
     'the href on the site\'s /bbcswebdav/, not the session\'s resourceUrl; isDecorative (true on the live picture) gates nothing');
   assert.match(c.assignment.instructions, /The full prompt is attached\./);
   const html = item.contentDetail['resource/x-bb-asmt-test-link'].test.assessment.instructions.rawText;
-  assert.deepEqual(C.attached([html.replaceAll('https://bb.school.test/bbcswebdav', 'https://other.test/bbcswebdav')], ORIGIN), [], 'another site\'s file is never read');
+  assert.deepEqual(C.attached([html.replaceAll('https://bb.school.example.edu/bbcswebdav', 'https://other.test/bbcswebdav')], ORIGIN), [], 'another site\'s file is never read');
   assert.deepEqual(C.attached([html.replaceAll('data-bbtype="attachment"', 'data-bbtype="link"')], ORIGIN), [], 'only data-bbtype="attachment"');
   assert.deepEqual(C.attached([html, html], ORIGIN).length, 2, 'each file once');
   const many = Array.from({ length: 9 }, (_, i) => html.replaceAll('14533105_1', `${i}_1`).replace(/<p><a href="[^"]*14533104[\s\S]*$/, '')).join('');
