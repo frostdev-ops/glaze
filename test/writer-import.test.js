@@ -290,3 +290,26 @@ for (const change of ['frame', 'port']) test(`review: an as-is upload stops befo
   u.addRow('original.pdf'); await u.tick();
   assert.equal(u.clicks.length, 0, 'the old frame no longer holds consent');
 });
+
+test('review: a slow earlier bring cannot replace the second file card', async () => {
+  const f = frame(), pending = [];
+  f.ctx.GZ_WRITER_PAPER.need = () => new Promise((r) => pending.push(r));
+  const first = f.I.bring(f.api, docx('first.docx')), second = f.I.bring(f.api, pdf('second.pdf'));
+  pending[1](); await second; pending[0](); await first;
+  assert.equal(f.card(), null);
+  assert.deepEqual(f.opened.map((x) => x.name), ['second.pdf']);
+});
+test('review: a bring awaiting libraries cannot dismiss a sheet that starts submitting', async () => {
+  const f = frame(); let finish, busy = false, closed = 0;
+  f.ctx.GZ_WRITER_PAPER.need = () => new Promise((r) => { finish = r; });
+  f.ctx.GZ_WRITER_SUBMIT_SHEET.busy = () => busy;
+  f.ctx.GZ_WRITER_SUBMIT_SHEET.close = () => { closed++; };
+  const bringing = f.I.bring(f.api, pdf()); busy = true; finish(); await bringing;
+  assert.equal(closed + f.opened.length, 0);
+});
+test('review: closing import cancels a pending bring without reopening a modal', async () => {
+  const f = frame(); let finish;
+  f.ctx.GZ_WRITER_PAPER.need = () => new Promise((r) => { finish = r; });
+  const bringing = f.I.bring(f.api, docx()); f.I.close(); finish(); await bringing;
+  assert.equal(f.card(), null);
+});

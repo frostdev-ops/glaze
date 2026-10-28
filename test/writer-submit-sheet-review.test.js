@@ -56,3 +56,23 @@ test('review: cancelling an upload exposes the retained-file review action', asy
   assert.match(s.doc.querySelector('.gs-err').textContent, /review or remove/);
   assert.equal(s.doc.querySelector('.gs-native').hidden, false);
 });
+
+test('review: as-is Cancel during a file read sends no file afterward', async () => {
+  const s = sheet(); let finish;
+  const f = { name: 'original.pdf', type: 'application/pdf', size: 3, arrayBuffer: () => new Promise((r) => { finish = r; }) };
+  await s.ctx.GZ_WRITER_SUBMIT_SHEET.open(s.api, f);
+  s.click('.gs-primary'); await s.flush(); s.click('.gs-foot .gs-btn');
+  finish(new Uint8Array([1, 2, 3]).buffer); await s.flush();
+  assert.equal(s.messages.some((m) => m.type === 'submit:go'), false);
+});
+test('review: a submit sheet does not mount over the import card', async () => {
+  const s = sheet(); let closed = 0;
+  s.ctx.GZ_WRITER_IMPORT = { close: () => { closed++; } };
+  await s.open(); assert.equal(closed, 1);
+});
+test('review: closing a sheet awaiting libraries prevents it from opening late', async () => {
+  const s = sheet(); let finish;
+  s.ctx.GZ_WRITER_PAPER.need = () => new Promise((r) => { finish = r; });
+  const opening = s.open(); s.ctx.GZ_WRITER_SUBMIT_SHEET.close(); finish(); await opening;
+  assert.equal(s.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), false);
+});
