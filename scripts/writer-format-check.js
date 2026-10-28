@@ -244,7 +244,7 @@ const HARNESS = `(() => {
     const para = await blockOf(fr, 'Critics');
     check(para.attrs.exact === 18 && para.attrs.before === 12 && para.attrs.first === -0.5 && para.attrs.keepNext === true && para.attrs.line === null && para.attrs.after === null && para.before === 'page_break',
       `Apply stores what differs (exactly 18 pt, 12 pt before, hanging 0.5″, keep with next) and a page break before (${JSON.stringify(para.attrs)})`);
-    const lh = await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let dom = null; v.state.doc.descendants((n, pos) => { if (!dom && n.isTextblock && n.textContent.startsWith('Critics')) dom = v.nodeDOM(pos); return !dom; }); return dom && getComputedStyle(dom).lineHeight; });
+    const lh = await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let dom = null; v.state.doc.descendants((n, pos) => { if (!dom && n.isTextblock && n.textContent.includes('Critics')) dom = v.nodeDOM(pos); return !dom; }); return dom && getComputedStyle(dom).lineHeight; });
     check(lh === '24px', `the exact line height is drawn (18 pt: ${lh})`);
     await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.run('undo'));
     await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.run('undo'));
@@ -359,7 +359,7 @@ const HARNESS = `(() => {
 
     // ---- the context menu
     await pick(fr, 'Critics');
-    const crit = await fr.evaluate(() => { const r = [...document.querySelectorAll('.gp-flow p')].find((x) => x.textContent.startsWith('Critics')).getBoundingClientRect(); return { x: r.left + 40, y: r.top + 8 }; });
+    const crit = await fr.evaluate(() => { const r = [...document.querySelectorAll('.gp-flow p')].find((x) => x.textContent.includes('Critics')).getBoundingClientRect(); return { x: r.left + 40, y: r.top + 8 }; });
     await p.mouse.click(frameBox.x + crit.x, frameBox.y + crit.y, { button: 'right' });
     const ctxItems = await fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role^=menuitem]')].map((b) => b.firstChild.textContent).join('|'));
     check(ctxItems === 'Paste|Paste without formatting|Paragraph…|Clear formatting' || ctxItems === 'Cut|Copy|Paste|Paste without formatting|Paragraph…|Clear formatting', `the page's context menu (${ctxItems})`);
