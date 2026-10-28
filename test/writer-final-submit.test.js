@@ -322,3 +322,72 @@ test('D5: the version actually submitted stays however many submits fail after i
   assert.equal(list.length, 10);
   assert.ok(list.some((v) => v.id === version.id && v.reason === 'submit'), 'the submitted version is kept');
 });
+
+// The fixture's attempt: Ultra's own text box already holds a line the student typed in Blackboard's editor.
+const NATIVE = 'Toni Morrison\'s Beloved treats memory less as a record than as a debt.';
+const boxText = (p) => [...p.box.editor.children].map((c) => c.textContent).join('\n');
+
+test('D4: the page tells the sheet what Ultra\'s text box holds', async () => {
+  const p = page();
+  p.hear({ type: 'submit:held' });
+  assert.deepEqual(p.sent.filter((m) => m.type === 'submit:held').map((m) => m.text), [NATIVE]);
+});
+
+for (const shown of [true, false]) {
+  test(`D4: with Keep off, what Ultra's text box held never goes with the paper (${shown ? 'shown on the sheet' : 'a sheet that did not say'})`, async () => {
+    const p = page();
+    await p.go({ note: '', text: null, ...(shown && { held: NATIVE, keep: false }) });
+    assert.deepEqual(done(p), ['ok']);
+    assert.equal(boxText(p), '', 'emptied before Ultra\'s Submit');
+    const q = page();
+    await q.go({ note: 'Hi Professor', text: null, ...(shown && { held: NATIVE, keep: false }) });
+    assert.equal(boxText(q), 'Hi Professor', 'the note in its place');
+  });
+}
+
+test('D4: with Keep on, Ultra\'s text box goes as the sheet showed it, the note after it', async () => {
+  const p = page();
+  const before = p.box.editor.innerHTML;
+  await p.go({ note: '', text: null, held: NATIVE, keep: true });
+  assert.deepEqual(done(p), ['ok']);
+  assert.equal(p.box.editor.innerHTML, before, 'left as it was, its own formatting too');
+  const q = page();
+  await q.go({ note: 'Hi Professor', text: null, held: NATIVE, keep: true });
+  assert.equal(boxText(q), `${NATIVE}\n\nHi Professor`);
+});
+
+test('D4: Keep on for text Ultra\'s box no longer holds stops before anything is attached', async () => {
+  const p = page();
+  p.setText('A different draft\n');
+  await p.go({ note: '', text: null, held: NATIVE, keep: true });
+  assert.deepEqual(done(p), ['page']);
+  assert.equal(p.uploads.length + p.clicks.length, 0);
+});
+
+test('D4: the sheet shows what Ultra\'s text box holds, with Keep off, and sends the student\'s choice', async () => {
+  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const s = sheet(); await s.open(); s.builds[0].resolve(); await s.flush();
+  assert.ok(s.messages.some((m) => m.type === 'submit:held'), 'the sheet asks the page');
+  s.handles['submit:held']({ text: NATIVE }); await s.flush();
+  const keep = s.doc.querySelector('#gs-keep');
+  assert.ok(keep, 'a Keep switch');
+  assert.equal(keep.getAttribute('aria-checked'), 'false');
+  assert.equal(s.doc.querySelector('#gs-held').value, NATIVE, 'the text itself, to read');
+  s.click('.gs-primary'); await s.flush();
+  let go = s.messages.filter((m) => m.type === 'submit:go').at(-1);
+  assert.equal(go.held, NATIVE);
+  assert.equal(go.keep, false);
+  s.handles['submit:done']({ run: go.run, ok: false, error: 'submit' }); await s.flush();
+  assert.equal(s.messages.filter((m) => m.type === 'submit:held').length, 2, 'asked again after a failure');
+  s.click('#gs-keep');
+  s.click('.gs-primary'); await s.flush();
+  go = s.messages.filter((m) => m.type === 'submit:go').at(-1);
+  assert.equal(go.keep, true);
+});
+
+test('D4: an empty text box shows no Keep switch', async () => {
+  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const s = sheet(); await s.open();
+  s.handles['submit:held']({ text: '' }); await s.flush();
+  assert.equal(s.doc.querySelector('#gs-keep'), null);
+});
