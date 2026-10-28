@@ -153,3 +153,21 @@ test('compose keeps what Quill holds from a Word paste: lists by their markers, 
   assert.ok(!doc.textContent.includes('·'));
   assert.deepEqual(Object.keys(marksOn(doc, 'bold words')), ['bold']);
 });
+
+test('rich paste keeps the alternative text of pictures it cannot embed', () => {
+  for (const src of ['https://example.com/chart.png', 'file:///private/chart.png', 'cid:chart']) {
+    const doc = read(P.normalize(`<p>Before <img src="${src}" alt="A &amp; B &lt;chart&gt;"> after</p>`).html);
+    assert.equal(doc.textContent, 'Before A & B <chart> after');
+    assert.equal(doc.firstChild.content.content.some((n) => n.type.name === 'image'), false);
+  }
+});
+
+test('pasted headings retain source emphasis and mixed bold text', () => {
+  const doc = read(P.normalize('<h1 style="font-weight:normal;font-style:italic">Plain <strong>bold</strong></h1>').html);
+  assert.equal(doc.firstChild.attrs.weight, 'normal');
+  assert.equal(doc.firstChild.attrs.slant, 'normal', 'source emphasis is carried by the runs');
+  assert.equal(marksOn(doc, 'Plain').italic, true);
+  assert.equal(marksOn(doc, 'Plain').bold, undefined);
+  assert.equal(marksOn(doc, 'bold').bold, true);
+  assert.equal(marksOn(doc, 'bold').italic, true);
+});
