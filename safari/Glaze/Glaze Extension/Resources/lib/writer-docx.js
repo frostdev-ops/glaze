@@ -724,7 +724,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       headers: { default: await hf('header', 'default'), first: await hf('header', 'first') }, footers: { default: await hf('footer', 'default'), first: await hf('footer', 'first') },
     });
     if (globalThis.GZ_WRITER_OBJECTS_DOCX) html = GZ_WRITER_OBJECTS_DOCX.importHTML(html, { body: doc, numbering: numX, styles: stylesX });
-    return { doc: { ...S().parse(S().paper, html, { pre: true }).toJSON(), attrs: { setup } }, html, setup, warnings: [...warnings] };
+    return { doc: { ...S().parse(S().paper, html, { pre: true, document: true }).toJSON(), attrs: { setup } }, html, setup, warnings: [...warnings] };
   };
 
   return { exportDocx, importDocx, xml, MIME, LIMIT };

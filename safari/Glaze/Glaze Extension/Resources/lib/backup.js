@@ -123,7 +123,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       const node = S.paper.nodeFromJSON(json); node.check();
       const { setup, paste } = node.attrs;
       if (setup != null && JSON.stringify(ST.setup(setup)) !== JSON.stringify(setup) || ![null, 'keep', 'match'].includes(paste)) throw fail('bad');
-      const parsed = S.parse(S.paper, S.serialize(S.paper, node));
+      const parsed = S.parse(S.paper, S.serialize(S.paper, node), { document: true });
       // HTML carries block/run attributes; page setup and the paste choice live only on the document.
       if (!parsed.type.create(node.attrs, parsed.content).eq(node)) throw fail('bad');
     };
