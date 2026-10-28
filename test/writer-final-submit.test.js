@@ -417,3 +417,16 @@ test('D2: a page opened after a Writer submit went out is free, however late the
   assert.equal((await committing).ok, true);
   assert.equal((await u.w.send({ ...m, token: 'e'.repeat(36), op: 'claim' }, u.sender())).ok, true, 'the new page is the next attempt');
 });
+
+test('a Submit pressed before the page has said which assignment this is waits for it, so the sheet and its .docx name it', async () => {
+  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const s = sheet();
+  let context = {};
+  s.api.context = () => context;
+  const opening = s.open(); await s.flush();
+  assert.ok(!s.doc.querySelector('.gs-layer'), 'no sheet yet: it would name no assignment');
+  context = { assignment: { title: 'Essay 2: Memory in Beloved' } };
+  for (const [n, f] of [...s.timers]) { s.timers.delete(n); f(); }
+  await opening; await s.flush();
+  assert.equal(s.doc.querySelector('.gs-layer h2')?.textContent, 'Submit Essay 2');
+});
