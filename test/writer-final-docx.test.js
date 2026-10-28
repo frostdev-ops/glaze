@@ -38,3 +38,15 @@ test('relationships are read once per part: many links import in time linear in 
   assert.equal(links(got.node).length, 4000);
   assert.ok(large / small < 14, `8 times the links took ${(large / small).toFixed(1)} times as long (${small.toFixed(0)} ms, ${large.toFixed(0)} ms)`);
 });
+
+// ---- the package
+const entries = async (bytes) => { const z = require('../lib/doctext.js').unzip(bytes); return Promise.all(z.names.map(async (name) => ({ name, data: await z.bytes(name) }))); };
+test('part names match relationship targets without regard to case, as the package format has it', async () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const out = X.exportDocx(S.parse(S.paper, `<p>Hello case<img src="data:image/png;base64,${png}" alt="Dot"></p>`));
+  const renamed = (await entries(out.bytes)).map((e) => ({ ...e, name: e.name === 'word/document.xml' ? 'word/Document.xml' : e.name === 'word/media/image1.png' ? 'word/media/IMAGE1.png' : e.name }));
+  const got = await imp(Buffer.concat(Z.zip(renamed)));
+  assert.equal(got.node.textContent, 'Hello case');
+  assert.equal(nodes(got.node, 'image').length, 1);
+  assert.deepEqual(got.warnings, []);
+});
