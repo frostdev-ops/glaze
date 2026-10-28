@@ -193,6 +193,11 @@ const HARNESS = `(() => {
     await reply.fr.click('.ProseMirror');
     await p.keyboard.type('Back to Blackboard.', { delay: 2 });
     await until(async () => (await quillText(p, REPLY)) === 'Back to Blackboard.', 'text before going back');
+    await reply.fr.evaluate(() => GZ_WRITER_FRAME.editor().setHTML('<p>Call <a href="tel:+15551234567">the office</a>.</p>'));
+    await until(() => p.evaluate((s) => __quill(s).root.querySelector('a')?.getAttribute('href') === 'tel:+15551234567', REPLY), 'telephone link synced to native Quill');
+    check(true, 'a compose telephone link reaches native Quill unchanged');
+    await reply.fr.evaluate(() => GZ_WRITER_FRAME.editor().setHTML('<p>Back to Blackboard.</p>'));
+    await until(async () => (await quillText(p, REPLY)) === 'Back to Blackboard.', 'text restored before hand-back');
     await reply.fr.click('#more');
     await until(() => reply.fr.evaluate(() => !document.getElementById('menu').hidden), 'menu');
     saved.menu = await shot(reply.el, 'writer-menu.png');
