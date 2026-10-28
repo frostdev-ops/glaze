@@ -327,3 +327,11 @@ test('mc:AlternateContent comes in once: its Choice when the importer reads what
     assert.deepEqual(got.warnings, [], name);
   }
 });
+
+test('a non-breaking hyphen is U+2011 in the paper and w:noBreakHyphen in Word', async () => {
+  const got = await imp(pack('<w:p><w:r><w:t>well</w:t><w:noBreakHyphen/><w:t>known</w:t></w:r></w:p>'));
+  assert.equal(got.node.textContent, 'well‑known');
+  const x = X.exportDocx(got.node).parts['word/document.xml'];
+  assert.match(x, /<w:t xml:space="preserve">well<\/w:t><w:noBreakHyphen\/><w:t xml:space="preserve">known<\/w:t>/);
+  assert.equal((await imp(X.exportDocx(got.node).bytes)).node.textContent, 'well‑known');
+});
