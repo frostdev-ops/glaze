@@ -578,8 +578,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // failing: autosaves refused in a row (storage full or unavailable): each tries again later, longer each time.
     let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false, failing = 0;
     const initialBody = view.state.doc.content.content.filter((n) => n.textContent.trim() || n.type.name !== 'paragraph').map((n) => n.toJSON());
-    const recoveryScope = host.key || ctx.recovery || 'paper';
-    const recoverySlot = `gz-paper-pending:${recoveryScope}`, keySlot = `gz-paper-key:${recoveryScope}`;
+    const recoveryScope = host.key || ctx.recovery || 'paper', keySlot = `gz-paper-key:${recoveryScope}`;
+    // The tab's copy of a paper's unsaved edits, by the paper's key: the next frame on any page of it finds them.
+    const slotOf = (k) => `gz-paper-pending:${k}`;
+    const pendingOf = (k) => { try { const p = JSON.parse(sessionStorage.getItem(slotOf(k))); return p?.key === k && p.record?.doc ? p.record : null; } catch { return null; } };
     let recoveryKey;
     try { recoveryKey = sessionStorage.getItem(keySlot); } catch { /* storage can be unavailable */ }
     recoveryKey ||= `recovery:${crypto.randomUUID()}`;
@@ -619,20 +621,20 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       return fill();
     };
     const emergency = () => {
-      try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(recoverySlot, JSON.stringify({ key, record: r })); sessionSafe = true; }
+      try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(slotOf(key), JSON.stringify({ key, record: r })); sessionSafe = true; }
       catch { sessionSafe = false; }
     };
     const save = async (reason = 'auto') => {
       clearTimeout(saveTimer);
       if (!key) { setState('Not saved'); return null; }
-      const at = edits;
+      const at = edits, k = key;
       emergency();
       setState('Saving…');
       try {
         const rec = record(), r = await store.save(key, rec, { reason }); paper = r.paper;
         keepPictures(rec.doc);
         failing = 0;
-        if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(recoverySlot); } catch {} }
+        if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(slotOf(k)); } catch {} }
         return r;
       } catch (e) {
         dirty = true; console.error(e); setState('Not saved');
@@ -1243,15 +1245,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const d = ctx.assignment?.due || paper?.due;
       due.textContent = d && Number.isFinite(Date.parse(d)) ? t('Due {when}', { when: new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(d)) }) : '';
     };
-    // held: this tab's unsaved copy of the paper whose key isn't known yet.
-    let loading = null, recovered = false, held = null;
+    let loading = null, recovered = false;
     const load = () => (loading ||= (async () => {
       key = host.key || PA.keyOf(ctx.paper || {}) || recoveryKey;
       paper = await store.get(key);
       keepPictures(paper?.doc);
       recovered = key === recoveryKey && !!paper?.doc;
-      let pending = null;
-      try { const p = JSON.parse(sessionStorage.getItem(recoverySlot)); if (p?.record?.doc) { if (p.key === key) pending = await complete(p.record, key, paper); else if (key === recoveryKey) held = p; } } catch {}
+      const copy = pendingOf(key), pending = copy && await complete(copy, key, paper);
       if (pending) paper = { ...paper, ...pending };
       keep = paper?.keep === true;
       if (paper?.doc) {
@@ -1289,7 +1289,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (key !== recoveryKey) return;
         const at = edits, written = at > 0 || recovered;
         const existing = written ? null : await store.get(target);
-        const pending = !written && held?.key === target ? await complete(held.record, target, existing) : null;
+        const copy = !written && pendingOf(target), pending = copy && await complete(copy, target, existing);
         if (key !== recoveryKey) return;
         if (!written && edits === at) {
           key = target;
@@ -1308,10 +1308,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           return;
         }
         if (!await save()) return;
-        const copy = held?.key === target && await complete(held.record, target, await store.get(target));
-        if (copy) await store.save(target, copy);
+        const kept = pendingOf(target), filled = kept && await complete(kept, target, await store.get(target));
+        if (filled) await store.save(target, filled);
         key = target;
-        if (await save('import')) await store.remove(recoveryKey);
+        if (await save('import')) { await store.remove(recoveryKey); try { sessionStorage.removeItem(slotOf(recoveryKey)); } catch {} }
       })().catch((e) => { console.error(e); setState('Not saved'); });
     });
     // Another editor (a second tab, the Papers page) saved this paper: while this one holds nothing unsaved, it shows that,
