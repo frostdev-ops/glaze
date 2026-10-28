@@ -53,7 +53,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   CLASS.H3 = CLASS.H4 = CLASS.LI = CLASS.P;
   const classes = (e) => { const c = (e.getAttribute('class') || '').split(/\s+/).filter(Boolean); return !c.length || (!!CLASS[e.tagName] && c.every((k) => CLASS[e.tagName].test(k))); };
   const canEdit = (ed) => [...ed.querySelectorAll('*')].every((e) => TAGS.has(e.tagName) && !e.getAttribute('style') && classes(e) &&
-    (e.tagName !== 'A' || /^(https?:|mailto:)/i.test(e.getAttribute('href') || '')) && !e.hasAttribute('dir') && !e.hasAttribute('start'));
+    (e.tagName !== 'A' || /^(https?:|mailto:|tel:\+?\d)/i.test(e.getAttribute('href') || '')) && !e.hasAttribute('dir') && !e.hasAttribute('start'));
 
 
   const top = (e) => { while (e.parentNode) e = e.parentNode; return e; };

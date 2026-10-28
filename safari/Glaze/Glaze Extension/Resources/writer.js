@@ -17,7 +17,7 @@
 
   // ---- the editor --------------------------------------------------------------------------------------------------
   // lib/writer-editor.js (GZ_WRITER_EDITOR) over lib/writer-schema.js: compose holds exactly what Ultra's Quill keeps.
-  const SAFE = /^(https?:|mailto:)/i;
+  const SAFE = /^(https?:|mailto:|tel:\+?\d)/i;
 
   // ---- look, words and size ----------------------------------------------------------------------------------------
   const TOKEN = /^--gz-[a-z0-9-]{1,40}$/;
