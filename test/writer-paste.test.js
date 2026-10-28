@@ -29,6 +29,12 @@ test('sources: Word, Docs, a web page, Writer\'s own', () => {
   assert.deepEqual(P.normalize(own), { html: own, source: 'writer', rich: false });
 });
 
+test('rich paste refuses excessive size, tokens and nesting before normalizing', () => {
+  for (const input of ['x'.repeat(S.MAX_INPUT + 1), '<b>x</b>'.repeat(31000), '<span>'.repeat(100) + 'keep all of this' + '</span>'.repeat(100)]) {
+    assert.throws(() => P.normalize(input), (e) => e.code === 'WRITER_INPUT_LIMIT');
+  }
+});
+
 test('Word: headings, marks, colour, highlight, caps, sizes, fonts, links; spacing, indents, keeps, breaks; lists; tables', () => {
   const r = P.normalize(FX.word.html, { base: { font: 'Times New Roman', size: 12 } });
   assert.equal(r.rich, true);
