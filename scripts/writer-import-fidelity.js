@@ -300,8 +300,9 @@ const compare = (word, mine) => {
   for (let p = 0; p < Math.max(word.length, mine.length); p++) {
     const w = W.find((l) => l.page === p), e = E.find((l) => l.page === p);
     const wl = word[p] || [], el = mine[p] || [];
-    // Where Writer starts this page, as a count of Word's lines from Word's start of it.
-    const drift = w && e ? lineAt(W, e.at) - lineAt(W, w.at) : null;
+    // Where Writer starts this page, as a count of Word's lines from Word's start of it; a page both leave empty (two page
+    // breaks in a row) starts where Word's does.
+    const drift = w && e ? lineAt(W, e.at) - lineAt(W, w.at) : !w && !e && p < word.length && p < mine.length ? 0 : null;
     pages.push({ page: p + 1, word: { first: wl[0]?.text || '', last: wl.at(-1)?.text || '', lines: wl.length, top: wl[0]?.top }, writer: { first: el[0]?.text || '', last: el.at(-1)?.text || '', lines: el.length, top: el[0]?.top }, drift });
   }
   // Lines broken where Word breaks them: same text at the same place.
