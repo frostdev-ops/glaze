@@ -152,3 +152,17 @@ test('B21: a page\'s tabs are spaces as the page shows them, unless its white-sp
   assert.equal(S.parse(S.compose, '<p>tab\there</p>').textContent, 'tab\there');
   assert.equal(S.parse(S.compose, '<p>\tTabbed\t\tcolumns</p>').textContent, 'Tabbed columns');
 });
+
+test('B24: a footnote is never cut: a long note keeps its end, and no markup becomes its text', () => {
+  const words = Array.from({ length: 2500 }, (_, i) => (i % 10 === 9 ? `<em>Title${i}</em>` : `word${i}`)).join(' ');
+  const plain = words.replace(/<[^>]+>/g, '');
+  const out = S.inline(words);
+  assert.equal(out.replace(/<[^>]+>/g, '').length, plain.length, 'every character of the note');
+  assert.ok(out.endsWith('<em>Title2499</em>'), out.slice(-60));
+  const pad = `${'x'.repeat(19990)}<a href="https://example.com/">link</a> end`;
+  const cut = S.inline(pad);
+  assert.ok(cut.endsWith('<a href="https://example.com/" rel="noopener noreferrer" target="_blank">link</a> end'), cut.slice(-80));
+  assert.doesNotMatch(cut, /&lt;/);
+  // The bound is the one every other reader of a note's HTML has: the clipboard's input limit, refused whole.
+  assert.throws(() => S.inline('x'.repeat(S.MAX_INPUT)), (e) => e.code === 'WRITER_INPUT_LIMIT');
+});
