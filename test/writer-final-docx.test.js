@@ -50,3 +50,31 @@ test('part names match relationship targets without regard to case, as the packa
   assert.equal(nodes(got.node, 'image').length, 1);
   assert.deepEqual(got.warnings, []);
 });
+
+// ---- links
+const marksOf = (doc) => { const out = []; doc.descendants((n) => { if (n.isText) out.push([n.text, n.marks.map((m) => m.type.name).sort().join(',')]); }); return out; };
+test('a link\'s Hyperlink character style is the link\'s look, not underline and colour marks of its own', async () => {
+  const back = await imp(X.exportDocx(S.parse(S.paper, '<p>Read <a href="https://example.org/a">this page</a> now.</p>')).bytes);
+  assert.deepEqual(marksOf(back.node), [['Read ', ''], ['this page', 'link'], [' now.', '']]);
+  const styled = `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>blue</w:t></w:r>`;
+  const plain = await imp(pack(`<w:p>${r('Not a link: ')}${styled}</w:p>`));
+  assert.deepEqual(marksOf(plain.node), [['Not a link: ', ''], ['blue', 'color,underline']], 'without a link the style still draws its text');
+});
+
+test('tel: links come back from the .docx as the schema accepts them', async () => {
+  for (const href of ['tel:+15551234567', 'mailto:a@b.co', 'https://example.com/x']) {
+    const back = await imp(X.exportDocx(S.parse(S.paper, `<p><a href="${href}">call</a></p>`)).bytes);
+    assert.deepEqual(links(back.node), [['call', href]], href);
+  }
+  const bad = await imp(pack(`<w:p><w:hyperlink r:id="J">${r('js')}</w:hyperlink></w:p>`, { 'word/_rels/document.xml.rels': rels([['J', 'hyperlink', 'javascript:alert(1)', true]]) }));
+  assert.deepEqual(links(bad.node), []);
+});
+
+test('a HYPERLINK field\'s result is a link; one to a bookmark is text', async () => {
+  const field = (code, result) => `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${code} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${result}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+  const styled = (s) => `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${s}</w:t></w:r>`;
+  const got = await imp(pack(`<w:p>${r('See ')}${field('HYPERLINK "https://example.org/x" \\o "tip"', styled('linked ') + styled('text'))}${r(' and ')}${field('HYPERLINK \\l "_Toc1"', r('a heading'))}${r('.')}</w:p>`));
+  assert.equal(got.node.textContent, 'See linked text and a heading.');
+  assert.deepEqual(links(got.node), [['linked text', 'https://example.org/x']]);
+  assert.deepEqual(marksOf(got.node).map(([, m]) => m), ['', 'link', '']);
+});
