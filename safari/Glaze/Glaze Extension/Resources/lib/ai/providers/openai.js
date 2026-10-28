@@ -1,7 +1,8 @@
 // Ported from Rimeward src/lib/agent/openrouter.ts (chatStream, readChatResponse, toWire, fromWire, callCompat), codex.ts
 // (the typed single fallback remembered per model) and provider.ts (the retry rule) (MIT). The AI harness's `openai`
-// provider (docs/ai-harness.md): any server that speaks Chat Completions (POST <base>/chat/completions): OpenAI, OpenRouter,
-// Groq, Ollama, LM Studio, vLLM. cfg: { base (lib/ai/endpoint.js: https, or http on this computer), model, key? (a Bearer
+// provider (docs/ai-harness.md): any server that speaks Chat Completions (POST <base>/chat/completions): OpenAI, Anthropic,
+// Gemini, OpenRouter, xAI, Mistral, Groq, DeepSeek, Ollama, LM Studio, vLLM. cfg: { base (lib/ai/endpoint.js: https, or
+// http on this computer), model (none: a connection not yet used, its key checked by status only), key? (a Bearer
 // token to that server only), images? (the student says the model takes pictures), context? (tokens it reads),
 // generation? (lib/ai/endpoint.js) }. Glaze keeps its own neutral messages; toWire and fromWire are this provider's
 // converters. A request asks for json_schema output; a server that refuses that parameter by name gets json_object (the
@@ -28,13 +29,13 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
     if (!isObj(raw) || Object.keys(raw).some((k) => !['base', 'model', 'key', 'images', 'context', 'generation'].includes(k))) return null;
     const base = E.clean(raw.base);
     if (!base) return null;
-    if (typeof raw.model !== 'string' || !raw.model || raw.model.length > LIMIT.model || raw.model.trim() !== raw.model || CTRL.test(raw.model)) return null;
+    if (raw.model !== undefined && (typeof raw.model !== 'string' || !raw.model || raw.model.length > LIMIT.model || raw.model.trim() !== raw.model || CTRL.test(raw.model))) return null;
     const key = typeof raw.key === 'string' ? raw.key.trim() : raw.key;
     if (key !== undefined && key !== '' && (typeof key !== 'string' || key.length > LIMIT.key || !/^[\x21-\x7e]+$/.test(key))) return null;
     if (raw.images !== undefined && typeof raw.images !== 'boolean') return null;
     if (raw.context !== undefined && !(Number.isSafeInteger(raw.context) && raw.context > 0 && raw.context <= LIMIT.context)) return null;
     if (raw.generation !== undefined && (typeof raw.generation !== 'string' || !/^[\w-]{1,64}$/.test(raw.generation))) return null;
-    return { base, model: raw.model, ...(key && { key }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.context && { context: raw.context }), ...(raw.generation && { generation: raw.generation }) };
+    return { base, ...(raw.model && { model: raw.model }), ...(key && { key }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.context && { context: raw.context }), ...(raw.generation && { generation: raw.generation }) };
   };
   // What it can do: text, JSON and streaming always; pictures only when the student says so (unknown is absent, never
   // false); tools unknown until a catalog says (lib/ai/models.js).
@@ -147,6 +148,9 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
   // not list 'minimal' (supported_efforts), so a refusal steps up a level at a time, to 'low'; a server or model that refuses
   // the parameter at all (its typed code, or words saying so) gets none. A level stepped up to only ever raises a request's own.
   const openrouter = (cfg) => /(^|\.)openrouter\.ai$/i.test(new URL(cfg.base).hostname);
+  // Anthropic's compatible endpoint: it answers a browser's request only with its direct-access header, and ignores
+  // response_format, so a schema goes in words from the start.
+  const anthropic = (cfg) => new URL(cfg.base).hostname === 'api.anthropic.com';
   const UP = { none: 'minimal', minimal: 'low' };
   const effort = (req, mode) => (R.EFFORTS.indexOf(mode.effort) > R.EFFORTS.indexOf(req.effort) ? mode.effort : req.effort);
   // A refusal of one parameter, by name: the server's typed error ({ error: { param } }), else (ponytail: servers without
@@ -185,13 +189,15 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
   // no redirect (a redirect would take the key elsewhere).
   const request = async (req, cfg, { signal, onDelta, onThinking, fetch = globalThis.fetch } = {}) => {
     const k = `${cfg.base}\n${cfg.model}`, kept = modes.get(k), stream = typeof onDelta === 'function';
-    let mode = kept && kept.until > Date.now() ? kept.mode : FIRST, retried = false;
+    if (!cfg.model) throw Object.assign(new Error('Pick a model for this connection.'), { code: 'setup' });
+    let mode = kept && kept.until > Date.now() ? kept.mode : anthropic(cfg) ? { ...FIRST, format: 'none' } : FIRST, retried = false;
     // The effort step can run once per UP level. Leave room for the final answer and the one 429 retry too.
     for (let i = 0; i < STEPS.length + Object.keys(UP).length + 1; i++) {
       let res;
       try {
         res = await fetch(`${cfg.base}/chat/completions`, { method: 'POST', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', cache: 'no-store', signal,
-          headers: { 'content-type': 'application/json', accept: stream ? 'text/event-stream' : 'application/json', ...(cfg.key && { authorization: `Bearer ${cfg.key}` }) },
+          headers: { 'content-type': 'application/json', accept: stream ? 'text/event-stream' : 'application/json', ...(cfg.key && { authorization: `Bearer ${cfg.key}` }),
+            ...(anthropic(cfg) && { 'anthropic-dangerous-direct-browser-access': 'true' }) },
           body: JSON.stringify(body(req, cfg, mode, stream)) });
       } catch (err) {
         // A cancel, or a refusal before anything was sent (the broker's pinned fetch: another host, a changed connection).
@@ -237,11 +243,22 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
     try { return await request(req, cfg, env); } catch (error) { throw E.safeError(error, cfg.key); }
   };
 
-  // Settings' Test: the connection's catalog (lib/ai/models.js), and whether it names the model. → { state, reason?,
-  // status?, reference?, source? }: a failure's category, HTTP status and reference, never the server's words.
+  // OpenRouter's catalog is public, so its key is checked on its own: GET <base>/key (the key's own record) answers 401 for
+  // a key it doesn't know.
+  const keyed = async (cfg, fetch, signal) => {
+    if (!openrouter(cfg) || !cfg.key) return;
+    const res = await fetch(`${cfg.base}/key`, { method: 'GET', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', cache: 'no-store', signal,
+      headers: { accept: 'application/json', authorization: `Bearer ${cfg.key}` } });
+    res.body?.cancel?.().catch(() => {});
+    if (!res.ok) throw Object.assign(new Error(`key ${res.status}`), { status: res.status });
+  };
+  // Settings' Test: the key (OpenRouter's), the connection's catalog (lib/ai/models.js), and whether it names the model
+  // (a connection with no model yet: ready once its catalog answers). → { state, reason?, status?, reference?, source? }:
+  // a failure's category, HTTP status and reference, never the server's words.
   const status = async (cfg, { fetch = globalThis.fetch, signal, cache } = {}) => {
     let catalog;
-    try { catalog = await M.list(cfg, { fetch, signal, cache }); } catch (e) { const f = F.modelFailure(e, { aborted: !!signal?.aborted }); return { state: 'unavailable', reason: f.category, ...(f.status && { status: f.status }), reference: f.reference }; }
+    try { await keyed(cfg, fetch, signal); catalog = await M.list(cfg, { fetch, signal, cache }); } catch (e) { const f = F.modelFailure(E.safeError(e, cfg.key), { aborted: !!signal?.aborted }); return { state: 'unavailable', reason: f.category, ...(f.status && { status: f.status }), reference: f.reference }; }
+    if (!cfg.model) return { state: 'ready', source: catalog.source };
     try { const s = M.select(cfg.model, catalog); return { state: 'ready', source: catalog.source, ...(s.unverified && { unverified: true }) }; } catch { return { state: 'unavailable', reason: 'model', source: catalog.source }; }
   };
 

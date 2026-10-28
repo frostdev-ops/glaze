@@ -1,5 +1,5 @@
 // The AI harness's broker (docs/ai-harness.md), in the worker: the one place a model is asked, and the only one that holds
-// the connections (an endpoint's address, model and key). A feature asks over a runtime port named 'glaze:ai'
+// the connections (a provider's key, an endpoint's address and key). A feature asks over a runtime port named 'glaze:ai'
 // (lib/background.js checks who opened it: Glaze's own pages, or Glaze in a frame of a site it runs on, never a quiz's page).
 //   page → { id, op: 'run', feature, task, input }  { id, op: 'cancel' }  { id, op: 'status', feature }
 //          { id, op: 'confirm', confirmId, approve }  { id, op: 'warm', feature, task, input }
@@ -11,20 +11,23 @@
 //          readies a session for its instructions (lib/ai/providers.js warm), admitted as a run is; nothing is asked of the
 //          model, counted or recorded.
 // A run is checked here before anything is sent: Glaze and AI on, the feature allowed (lib/ai/settings.js), the task known,
-// the chosen connection's settings clean, the model one its catalog lists (lib/ai/models.js select; unverified when no
-// list could be had), what the task needs within what the provider and catalog say, the browser holding the connection's
+// a model chosen for the feature (its own, else the overall one: lib/ai/settings.js resolve) on a connection whose settings
+// are clean, the model one its catalog lists (lib/ai/models.js select; unverified when no list could be had), what the task needs within what the provider and catalog say, the browser holding the connection's
 // host, the input within LIMIT, one run at a time for a tab's feature and LIMIT.perMinute of them (a task's rate may say
 // otherwise: its own perMinute, and supersede, where a new run of it cancels the one in flight). Every request goes out
 // through a fetch pinned to the connection's host and to the generation it was admitted on: a connection changed mid-run
 // sends nothing more ('changed'). A closed port cancels its runs and drops what waits for a confirm (keep the port open while
 // a run is in flight: its state dies with the worker). A page is told codes, never a provider's words, an address or a key.
-// Each run leaves one row in storage.local aiCalls (lib/ai/failure.js record: the last 40, metadata only), one refused before
-// admission too when its provider can be named; a supersede task's runs share one row a minute per tab and feature, with
+// A run takes the effort the student set for its model when the model takes it (lib/ai/models.js efforts), else its task's
+// own, and in Advanced the feature's tuning (lib/ai/settings.js tuning). Each run leaves one row in storage.local aiCalls
+// (lib/ai/failure.js record: the last 40, metadata only; provider: the connection's id, the on-device model's provider on
+// this device), one refused before admission too when its provider can be named; a supersede task's runs share one row a minute per tab and feature, with
 // their count. The sender check (env.allowed) may refuse one message with a code (the writer's 'attempt', or 'timeout' past
 // LIMIT.sender) instead of the whole port. A port's messages are taken in the order sent.
 // A connection's catalog is kept for LIMIT.listed per generation, and a changed connection drops it and the providers'
 // warm sessions (release).
-// Settings (options.html, its top frame) keeps the connections with 'glaze:ai-config' (config below).
+// Settings (options.html, its top frame) keeps the connections with 'glaze:ai-config' (config below). An older Settings'
+// store is read as lib/ai/settings.js migrate gives it, and written back so before Settings changes a connection (upgrade).
 // Classic script: the worker imports it on first use; module.exports for node.
 var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   const R = () => (typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('./request.js'));
@@ -64,19 +67,35 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     return { get: (k) => tx('readonly', (s) => s.get(k)), set: (k, v) => tx('readwrite', (s) => s.put(v, k)).then(() => true, () => false), remove: (k) => tx('readwrite', (s) => s.delete(k)).then(() => true, () => false) };
   };
   const CONNECTIONS = 'connections';
-  const connections = async (env) => { const v = await env.vault.get(CONNECTIONS); return isObj(v) ? v : {}; };
-  // A stored connection, usable: → { id, p, cfg, generation } or null.
+  const stored = async (env) => { const v = await env.vault.get(CONNECTIONS); return isObj(v) ? v : {}; };
+  // The connections, and the settings with them, as lib/ai/settings.js migrate reads an older Settings' store.
+  const connections = async (env) => A().migrate(undefined, await stored(env)).connections;
+  const view = async (env) => { const [raw, all] = await Promise.all([env.settings(), stored(env)]); const m = A().migrate(raw, all); return { s: m.settings, all: m.connections }; };
+  // A stored connection, usable: → { id, p, cfg, generation } or null. An endpoint's name is Settings' alone.
   const usable = (id, rec) => {
     const p = isObj(rec) && A().PROVIDERS.includes(rec.provider) ? P().get(rec.provider) : null;
-    const { provider: _, ...raw } = isObj(rec) ? rec : {};
+    const { provider: _, name: __, ...raw } = isObj(rec) ? rec : {};
     const cfg = p && p.config(raw);
     return cfg ? { id, p, cfg, generation: rec.generation } : null;
   };
-  const using = async (env, id) => {
-    if (typeof id !== 'string' || !E().ID.test(id)) return null;
-    const all = await connections(env);
-    return id === 'device' ? onDevice(all) : usable(id, all[id]);
+  // The connection a feature runs on with its model (lib/ai/settings.js resolve) and, in Advanced, the context its tuning
+  // gives: → { id, p, cfg, generation, sel, tune, kept? } or null.
+  const using = async (s, feature, all) => {
+    const sel = A().resolve(s, feature);
+    if (!sel || !E().ID.test(sel.use)) return null;
+    const conn = sel.use === 'device' ? await onDevice(all) : usable(sel.use, all[sel.use]);
+    if (conn?.p.id === 'openai' && !sel.model) return null;
+    const tune = A().tuning(s, feature);
+    const cfg = conn && conn.p.config({ ...conn.cfg, ...(conn.p.id === 'openai' && { model: sel.model }), ...(tune.context && { context: tune.context }) });
+    return cfg ? { ...conn, cfg, sel, tune } : null;
   };
+  // A row's provider: an endpoint's connection id ('openrouter', one the student added), or the provider of a model on this
+  // computer.
+  const shown = (use) => (use.p.id === 'openai' ? use.id : use.p.id);
+  // What the student set that a run's requests take (lib/ai/task.js over): the effort when the model takes it (takes:
+  // lib/ai/models.js efforts), and in Advanced the feature's temperature, output and timeout.
+  const over = (use, takes = []) => ({ ...(use.sel.effort && takes.includes(use.sel.effort) && { effort: use.sel.effort }),
+    ...Object.fromEntries(['temperature', 'maxTokens', 'timeoutMs'].filter((k) => use.tune[k] !== undefined).map((k) => [k, use.tune[k]])) });
   // "On this device" (Settings' 'device' connection) is one choice: Apple Intelligence where Safari offers it, unless this
   // Mac can't run it (off, too old a macOS, no Apple silicon) and the browser's own model can; else the browser's model.
   const onDevice = async (all) => {
@@ -91,8 +110,11 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   };
   // The provider a run would go to, named from the stored connection alone (nothing asked of it); '' when there is none.
   // On this device is Settings' one choice, whichever model it resolves to.
-  const named = async (env) => {
-    try { const s = A().clean(await env.settings()); return s.use === 'device' ? 'device' : usable(s.use, (await connections(env))[s.use])?.p.id || ''; } catch { return ''; }
+  const named = async (env, feature) => {
+    try {
+      const { s, all } = await view(env), sel = A().resolve(s, feature), use = sel && sel.use !== 'device' && usable(sel.use, all[sel.use]);
+      return sel?.use === 'device' ? 'device' : use ? shown(use) : '';
+    } catch { return ''; }
   };
   // Whether the browser holds the connection's host (a provider that goes nowhere holds none).
   const reaches = async (env, { p, cfg }) => !p.origin || !!await env.reach(p.origin(cfg).replace(/\*$/, ''));
@@ -153,7 +175,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     if (!t) tallies.set(key, t = { id: F().reference(), feature: row.feature, startedAt: row.startedAt, count: 0, ms: 0 });
     const was = t.id;
     t.count++; t.ms += row.ms;
-    Object.assign(t, { task: row.task, provider: row.provider, state: row.state, category: row.category, status: row.status, ...(failed && { id: row.id }) });
+    Object.assign(t, { task: row.task, provider: row.provider, model: row.model, state: row.state, category: row.category, status: row.status, ...(failed && { id: row.id }) });
     if (row.usage) t.usage = { input: (t.usage?.input || 0) + (row.usage.input || 0), output: (t.usage?.output || 0) + (row.usage.output || 0) };
     await F().record(env.local, CALLS, { ...t }, was !== t.id ? was : undefined);
   };
@@ -203,7 +225,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     // A run refused before admission leaves a row too, when its provider can be named: without one, Activity showed
     // nothing of a frame whose runs never started (Safari, 2026-10-27).
     const unrun = async (m, def, row) => {
-      row.provider ||= await named(env);
+      row.provider ||= await named(env, m.feature);
       if (!row.provider || !env.local) return;
       await (def?.id === m.task && def.rate?.supersede ? tally(env, `${env.who}|${m.feature}`, row, false) : F().record(env.local, CALLS, row));
     };
@@ -228,19 +250,19 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       mine.set(m.id, control);
       try {
         const { task, use } = await F().wait(() => admit(m), both.signal);
-        const req = task.warm === true && typeof use.p.warm === 'function' && T().prepare(task, m.input, { provider: use.p, cfg: use.cfg });
+        const req = task.warm === true && typeof use.p.warm === 'function' && T().prepare(task, m.input, { provider: use.p, cfg: use.cfg, over: over(use) });
         done(!!req && await P().warm(use.p, req, use.cfg, { signal: both.signal }));
       } catch { done(false); } finally { mine.delete(m.id); deadline.done(); both.done(); }
     };
     // Admission: → { s, task, use } or throws a code.
     const admit = async (m) => {
       if (!await env.enabled()) throw R().error('off');
-      const s = A().clean(await env.settings());
+      const { s, all } = await view(env);
       if (!s.on) throw R().error('off');
       if (s.features[m.feature] !== true) throw R().error('feature');
       const task = await env.task(m.task);
       if (!task) throw R().error('task');
-      const use = await using(env, s.use);
+      const use = await using(s, m.feature, all);
       if (!use) throw R().error('setup');
       // A task that tells the student where its text goes runs only to the host the feature showed (status's to).
       if (task.disclose && use.p.origin && m.to !== dest(use)) throw R().error('changed');
@@ -270,14 +292,16 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         try { accepted = await F().wait(() => admit(m), signal.signal); } finally { admission.done(); signal.done(); }
         const { task, use } = accepted;
         admitted.set(control, use);
-        row.provider = use.p.id;
+        row.provider = shown(use);
+        if (use.p.id === 'openai') row.model = use.cfg.model;
         const list = await catalog(env, use, control.signal, now());
         const chosen = M().select(use.cfg.model, list, { tools: !!task.tools, images: !!task.caps.images });
+        const takes = use.p.id === 'openai' ? M().efforts(use.cfg.base, use.cfg.model, list?.models.find((x) => x.id === use.cfg.model)) : [];
         const cfg = { ...use.cfg, ...(chosen.caps.context && !use.cfg.context && { context: chosen.caps.context }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }) };
         if (rate ? often(`${env.who}|${m.feature}|${m.task}`, now(), rate.perMinute || LIMIT.perMinute, '|rated') : often(key, now())) throw R().error('often');
         if (control.signal.aborted) throw Object.assign(R().error('cancelled'), { category: 'cancelled' });
         const remember = (id) => { const parked = confirms.get(id); if (parked) Object.assign(parked, { runId: m.id, feature: m.feature, task: m.task, to: m.to, use }); };
-        const out = await T().run(task, m.input, { provider: use.p, cfg, signal: control.signal, fetch: pinned(env, use), tools: env.tools, confirms,
+        const out = await T().run(task, m.input, { provider: use.p, cfg, signal: control.signal, fetch: pinned(env, use), tools: env.tools, confirms, over: over(use, takes),
           emit: (ev) => { if (control.signal.aborted || closed) return; if (ev.pending) remember(ev.pending.confirmId); post({ ...ev, id: m.id, ...(ev.id !== undefined && { event: ev.id }) }); } });
         await unchanged(env, use, control.signal);
         if (out.pending) remember(out.pending.confirmId);
@@ -289,7 +313,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         forget(m.id);
         Object.assign(row, { state: R().code(err), ...(err?.category && { category: err.category }), ...(err?.status && { status: err.status }), ...(err?.reference && { id: err.reference }) });
         fail(err);
-        if (!row.provider) row.provider = await named(env);
+        if (!row.provider) row.provider = await named(env, m.feature);
       } finally {
         if (inflight.get(key) === control) inflight.delete(key);
         mine.delete(m.id); admitted.delete(control);
@@ -330,10 +354,10 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   const dest = (use) => { if (!use.p.origin) return ''; try { return new URL(use.cfg.base).host; } catch { return new URL(use.p.origin(use.cfg).replace(/\*$/, '')).host; } };
   const status = async (m, env) => {
     if (typeof m.feature !== 'string' || !FEATURE.test(m.feature)) return { on: false, allowed: false, why: 'request' };
-    const s = A().clean(await env.settings());
+    const { s, all } = await view(env);
     const on = s.on && await env.enabled();
     if (!on || s.features[m.feature] !== true) return { on, allowed: false };
-    const use = await using(env, s.use);
+    const use = await using(s, m.feature, all);
     if (!use) return { on, allowed: true, ready: false, why: 'setup' };
     let ready = await reaches(env, use), why = ready ? undefined : 'permission', reason;
     if (ready && (typeof use.p.prepare === 'function' || use.p.id === 'apple')) {
@@ -346,13 +370,17 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   };
 
   // ---- Settings' connections (lib/background.js 'glaze:ai-config', from options.html's top frame only) ------------------
-  //   { op: 'get' } → { ok, connections: { [id]: { provider, …settings without the key, key: masked or '', origin } } }
-  //   { op: 'set', id, cfg: { provider, …settings } } → { ok, origin } | { ok: false, error: 'setup', note }. A cfg with no key
-  //     keeps the kept one, but only for the same address: a key never follows a changed address. A new address or key is a
-  //     new generation.
+  //   { op: 'get' } → { ok, connections: { [id]: { provider, name?, …settings without the key, key: masked or '', origin } },
+  //     providers }
+  //   { op: 'set', id, cfg: { provider, name?, …settings } } → { ok, origin } | { ok: false, error: 'setup', note }. A
+  //     preset's id (lib/ai/settings.js PRESETS) is always at its preset's address; any other an endpoint the student named.
+  //     A cfg with no key keeps the kept one, but only for the same address: a key never follows a changed address. A new
+  //     address or key is a new generation. A model is the settings' (lib/ai/settings.js), never a connection's.
   //   { op: 'remove', id } → { ok }
-  //   { op: 'test', id } → { ok, state, reason?, status?, reference?, source? }: the provider's status, once its host is held.
-  //   { op: 'models', id } → { ok, models, source, at } | { ok: false, error }: its catalog, for a model picker.
+  //   { op: 'test', id } → { ok, state, reason?, status?, reference?, source? }: the provider's status (its key checked), once
+  //     its host is held.
+  //   { op: 'models', id } → { ok, models: [{ id, name, efforts, … }], source, at } | { ok: false, error }: its catalog, for a
+  //     model picker, each model with the efforts it takes (lib/ai/models.js efforts; [] for none).
   //   { op: 'test', provider: 'device' } → { ok, state, reason? }: a provider with a model on this computer, before any
   //     connection uses it. { op: 'prepare', provider: 'device' } (from a click) → { ok, state, reason? } once its model is
   //     downloaded and loaded; meanwhile env.say({ type: 'glaze:ai-config', event: 'progress', provider, loaded: 0..1 }).
@@ -370,34 +398,54 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   };
   let turn = Promise.resolve();
   const queued = (f) => { const next = turn.then(f, f); turn = next.catch(() => {}); return next; };
+  // An older Settings' store written back as lib/ai/settings.js migrate reads it, the settings first and under Settings' own
+  // lock (lib/editor-ai.js write), the connections only once the settings read back hold every model: written alone they
+  // still find the model in the connections; the connections alone would lose it. → true once the store is in its shape.
+  const upgrade = async (env) => {
+    const save = async () => {
+      const m = A().migrate(await env.settings(), await stored(env));
+      if (!m.changed.settings && !m.changed.connections) return true;
+      if (m.changed.settings && !await env.local.set({ [A().KEY]: m.settings })) return false;
+      return m.changed.connections && !A().migrate(await env.settings(), await stored(env)).changed.settings ? m : !m.changed.connections;
+    };
+    const m = await (globalThis.navigator?.locks?.request ? navigator.locks.request('glaze:ai-settings', save) : save());
+    return typeof m === 'boolean' ? m : env.vault.set(CONNECTIONS, m.connections);
+  };
+  const NAME = /^[^\p{Cc}\p{Bidi_Control}]{1,40}$/u;
   const config = (m, env) => ((m?.op === 'prepare' || m?.op === 'test') && m.id === undefined ? local(m, env) : queued(async () => {
-    const all = await connections(env);
+    // What a write keeps: until the store is in its shape, an older connection as it is, its model too.
+    const done = await upgrade(env).catch(() => false), kept = await stored(env), all = A().migrate(undefined, kept).connections, base = done ? all : kept;
     if (m?.op === 'get') {
       const out = {};
       for (const [id, rec] of Object.entries(all)) {
         const use = usable(id, rec);
         if (!use) continue;
-        const { key, generation: _, ...shown } = use.cfg;
-        out[id] = { provider: use.p.id, ...shown, key: key ? E().mask(key) : '', ...(use.p.origin && { origin: use.p.origin(use.cfg) }) };
+        const { key, generation: _, ...settings } = use.cfg;
+        out[id] = { provider: use.p.id, ...(typeof rec.name === 'string' && { name: rec.name }), ...settings, key: key ? E().mask(key) : '', ...(use.p.origin && { origin: use.p.origin(use.cfg) }) };
       }
       return { ok: true, connections: out, providers: A().PROVIDERS.filter((id) => P().get(id)) };
     }
     if (typeof m?.id !== 'string' || !E().ID.test(m.id)) return { ok: false, error: 'setup', note: 'A connection name is 1 to 40 lowercase letters, digits or dashes.' };
     if (m.op === 'set') {
       if (!isObj(m.cfg) || !A().PROVIDERS.includes(m.cfg.provider) || !P().get(m.cfg.provider)) return { ok: false, error: 'setup', note: 'Choose a provider.' };
-      const { provider, ...raw } = m.cfg;
+      const { provider, name, ...cfg0 } = m.cfg, kind = A().kind(m.id);
+      const given = provider === 'openai' ? (({ model: _, ...rest }) => rest)(cfg0) : cfg0;
+      if (kind === 'preset' && provider !== 'openai') return { ok: false, error: 'setup', note: 'Choose a provider.' };
+      if (name !== undefined && (kind !== 'custom' || typeof name !== 'string' || !NAME.test(name.trim()))) return { ok: false, error: 'setup', note: 'Name the endpoint.' };
+      const raw = kind === 'preset' ? { ...given, base: A().PRESETS[m.id].base } : given;
       if (provider === 'openai') { try { E().parse(raw.base); } catch (e) { return { ok: false, error: 'setup', note: e.message }; } }
       const p = P().get(provider), before = usable(m.id, all[m.id]);
       const same = before && before.p === p && E().normalize(before.cfg.base) === E().normalize(raw.base);
       let cfg = p.config({ ...raw, ...(!Object.hasOwn(raw, 'key') && same && before.cfg.key && { key: before.cfg.key }) });
       if (!cfg) return { ok: false, error: 'setup', note: 'Check the address, the model and the key.' };
-      const { generation: _, ...settings } = cfg;
+      const { generation: __, ...settings } = cfg;
       const generation = same && before.cfg.key === settings.key && before.generation ? before.generation : E().generation();
-      if (!await env.vault.set(CONNECTIONS, { ...all, [m.id]: { provider, ...settings, generation } })) return { ok: false, error: 'write' };
+      const older = provider === 'openai' && typeof base[m.id]?.model === 'string' ? { model: base[m.id].model } : {};
+      if (!await env.vault.set(CONNECTIONS, { ...base, [m.id]: { provider, ...(name !== undefined && { name: name.trim() }), ...settings, ...older, generation } })) return { ok: false, error: 'write' };
       if (before?.generation !== generation) revoke(m.id, env);
       return { ok: true, ...(p.origin && { origin: p.origin(cfg) }) };
     }
-    if (m.op === 'remove') { const { [m.id]: _, ...rest } = all; const ok = await env.vault.set(CONNECTIONS, rest); if (ok) revoke(m.id, env); return { ok }; }
+    if (m.op === 'remove') { const { [m.id]: _, ...rest } = base; const ok = await env.vault.set(CONNECTIONS, rest); if (ok) revoke(m.id, env); return { ok }; }
     const use = m.id === 'device' ? await onDevice(all) : usable(m.id, all[m.id]);
     if (!use) return { ok: false, error: 'setup' };
     if (m.op === 'test') {
@@ -412,7 +460,10 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       if (!await reaches(env, use)) return { ok: false, error: 'permission' };
       if (!use.p.catalog) return { ok: false, error: 'setup' };
       const timer = F().deadline(LIMIT.catalog);
-      try { const c = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: timer.signal }), timer.signal); return { ok: true, models: c.models, source: c.source, at: c.at }; } catch (e) { return { ok: false, error: F().modelFailure(e).category }; } finally { timer.done(); }
+      try {
+        const c = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: timer.signal }), timer.signal);
+        return { ok: true, models: c.models.map((x) => ({ ...x, efforts: use.p.id === 'openai' ? M().efforts(use.cfg.base, x.id, x) : [] })), source: c.source, at: c.at };
+      } catch (e) { return { ok: false, error: F().modelFailure(e).category }; } finally { timer.done(); }
     }
     return { ok: false, error: 'op' };
   }));

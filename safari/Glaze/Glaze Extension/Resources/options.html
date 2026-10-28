@@ -167,14 +167,132 @@
   .courses .name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 0.78em; color: var(--gz-ink-faint); }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
   .sites li { grid-template-columns: minmax(0, 1fr) auto; }
-  /* Settings → AI (lib/editor-ai.js). */
-  .ai-device, .ai-endpoint { display: grid; gap: .6rem; margin-block-start: .75rem; }
-  #ai-connection > .seg { justify-self: start; inline-size: max-content; max-inline-size: 100%; flex-wrap: wrap; }
-  #ai-connection .seg label:has(input:disabled) { opacity: .5; cursor: not-allowed; }
-  #ai-device-progress { inline-size: min(100%, 18rem); accent-color: var(--gz-accent); }
-  #ai-said.err, #ai-failure { color: var(--gz-err); }
-  #ai-model-unverified { color: var(--gz-ink-faint); }
-  #ai-calls .name small { white-space: normal; overflow-wrap: anywhere; }
+  /* Settings → AI (lib/editor-ai.js): the providers' cards, one drawer under them, a row per feature with its model and effort. */
+  .section-heading > .ai-mode { margin-inline-start: auto; }
+  .section-heading > .ai-mode:not([hidden]) + [role="switch"] { margin-inline-start: 0; }
+  .ai-setup { display: grid; gap: .75rem; }
+  .ai-setup h3 { margin: 0; }
+  .ai-provs { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: .6rem; }
+  .ai-prov { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: .6rem; padding: .6rem .7rem; text-align: start; font-size: calc(13px * var(--gz-scale, 1));
+    border-radius: calc(var(--gz-radius, 12px) * 5 / 6); border: 1px solid var(--gz-border-line, var(--gz-line)); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
+    transition: border-color .2s var(--gz-ease), box-shadow .2s var(--gz-ease), transform .2s var(--gz-ease), background .2s var(--gz-ease); }
+  .ai-prov:hover { color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); transform: translateY(-1px); }
+  .ai-prov.sel { border-color: var(--gz-accent); box-shadow: 0 0 0 1px var(--gz-accent), 0 8px 24px color-mix(in srgb, var(--gz-accent) 16%, transparent); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-soft) 40%, var(--gz-surface-fill, var(--gz-surface))); }
+  .ai-prov b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ai-prov .st { inline-size: 8px; block-size: 8px; border-radius: 50%; overflow: hidden; color: transparent; font-size: 0; }
+  .ai-prov .st.ok { background: var(--gz-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-ok) 20%, transparent); }
+  .ai-prov .st.bad { background: var(--gz-err); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-err) 20%, transparent); }
+  .ai-prov .pct { font-size: calc(12px * var(--gz-scale, 1)); color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; }
+  .ai-prov .bar { grid-column: 1 / -1; block-size: 4px; border-radius: calc(var(--gz-radius, 12px) / 3); background: var(--gz-line); overflow: hidden; }
+  .ai-prov .bar i { display: block; block-size: 100%; background: var(--gz-accent); border-radius: calc(var(--gz-radius, 12px) / 3); transition: inline-size .4s var(--gz-ease); }
+  .ai-prov.add { border-style: dashed; color: var(--gz-ink-muted); }
+  .ai-mk { inline-size: 30px; block-size: 30px; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 12px; letter-spacing: -.02em; flex: none; background: #3b4252; }
+  .ai-mk.sm { inline-size: 22px; block-size: 22px; border-radius: calc(var(--gz-radius, 12px) / 2); font-size: 10px; }
+  .ai-mk[data-p="openai"] { background: #10a37f; } .ai-mk[data-p="anthropic"] { background: #c96442; } .ai-mk[data-p="gemini"] { background: #4285f4; }
+  .ai-mk[data-p="openrouter"] { background: #6467f2; } .ai-mk[data-p="xai"] { background: #2b2b2b; } .ai-mk[data-p="mistral"] { background: #fa520f; }
+  .ai-mk[data-p="groq"] { background: #f55036; } .ai-mk[data-p="deepseek"] { background: #4d6bfe; }
+  .ai-mk:is([data-p="device"], [data-p="custom"], .plus)::before { content: ""; inline-size: 55%; block-size: 55%; background: currentColor; mask: var(--ai-icon) center / contain no-repeat; }
+  .ai-mk[data-p="device"] { color: var(--gz-ink); background: color-mix(in srgb, var(--gz-ink-muted) 30%, transparent);
+    --ai-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='6' y='6' width='12' height='12' rx='2'/%3E%3Cpath d='M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4'/%3E%3C/svg%3E"); }
+  .ai-mk[data-p="custom"] { --ai-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='3' y='4' width='18' height='7' rx='2'/%3E%3Crect x='3' y='13' width='18' height='7' rx='2'/%3E%3Cpath d='M7 7.5h.01M7 16.5h.01'/%3E%3C/svg%3E"); }
+  .ai-mk.plus { color: var(--gz-ink-muted); background: none; border: 1px dashed var(--gz-border-strong, var(--gz-line-strong));
+    --ai-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); }
+  .ai-fold { display: grid; grid-template-rows: 1fr; animation: ai-fold .28s var(--gz-ease); }
+  .ai-fold > div { overflow: hidden; min-block-size: 0; }
+  @keyframes ai-fold { from { grid-template-rows: 0fr; opacity: 0; } }
+  .ai-drawer { padding: .9rem 1rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); display: grid; gap: .7rem; }
+  .ai-drawer .line { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto auto; gap: .6rem; align-items: center; }
+  .ai-drawer .line > b { font-weight: 600; }
+  .ai-drawer .note { color: var(--gz-ink-muted); font-size: calc(12px * var(--gz-scale, 1)); justify-self: end; }
+  .ai-drawer a { color: var(--gz-accent); font-size: calc(12px * var(--gz-scale, 1)); text-decoration: none; white-space: nowrap; }
+  .ai-drawer .key { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+  .ai-drawer .key .mono { color: var(--gz-ink-muted); }
+  .ai-drawer progress { inline-size: 100%; accent-color: var(--gz-accent); }
+  .ai-drawer .ep { display: grid; gap: .55rem; }
+  .ai-drawer .ep-f { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: .75rem; align-items: center; cursor: default; }
+  .ai-drawer .ep-f > span { color: var(--gz-ink-muted); }
+  .ai-drawer .ep-base { display: flex; gap: .5rem; align-items: center; min-width: 0; }
+  .ai-drawer .ep-base input { flex: 1; }
+  .ai-drawer .quick { display: flex; gap: .4rem; }
+  .ai-drawer .foot { display: flex; gap: .6rem; align-items: center; }
+  .ai-drawer .foot .grow { flex: 1; }
+  .ai-setup .mono, .ai-feats .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: calc(12.5px * var(--gz-scale, 1)); }
+  .ai-setup input.bad { border-color: var(--gz-err); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-err) 18%, transparent); }
+  .ai-drawer :is(.err-t, .ok-t) { margin: 0; font-size: calc(12px * var(--gz-scale, 1)); }
+  .ai-drawer .err-t { color: var(--gz-err); }
+  .ai-drawer .ok-t { color: var(--gz-ok); }
+  .ai-feats { display: grid; }
+  .ai-feats > .stack { gap: 0; }
+  .ai-fh, .ai-feat > .row { display: grid; grid-template-columns: 13rem minmax(0, 1fr) 17rem; gap: 1rem; align-items: center; flex-wrap: nowrap; }
+  .ai-fh { padding-block-end: .35rem; }
+  .ai-fh span { font-size: calc(11px * var(--gz-scale, 1)); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--gz-ink-faint); }
+  .ai-feat { padding-block: .8rem; border-block-start: 1px solid var(--gz-border-line, var(--gz-line)); }
+  .ai-feat .name { font-size: calc(14px * var(--gz-scale, 1)); gap: .6rem; }
+  .ai-feat.off :is(.ai-pick, .ai-effort, .ai-tune) { opacity: .45; }
+  .ai-feat .popwrap { position: relative; min-width: 0; }
+  .ai-pick { display: flex; align-items: center; gap: .55rem; inline-size: 100%; max-inline-size: 22rem; padding: .4rem .55rem .4rem .45rem; border-radius: calc(var(--gz-radius, 12px) * 3 / 4); font-size: calc(13px * var(--gz-scale, 1)); color: var(--gz-ink); text-align: start; }
+  .ai-pick:hover { color: var(--gz-ink); }
+  .ai-pick .m { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ai-pick .p { color: var(--gz-ink-faint); }
+  .ai-pick .dot { inline-size: 7px; block-size: 7px; border-radius: 50%; background: var(--gz-err); flex: none; }
+  .ai-pick .chev { inline-size: 8px; block-size: 8px; margin-inline: 3px 4px; border: solid var(--gz-ink-faint); border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); flex: none; }
+  .ai-pick:is(.same, .none) { border-style: dashed; color: var(--gz-ink-muted); }
+  .ai-pick.none { color: var(--gz-ink-faint); }
+  .ai-pick.open { border-color: var(--gz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 22%, transparent); }
+  .ai-pick:disabled { opacity: .45; cursor: default; }
+  .ai-picker { position: absolute; z-index: 5; inset-block-start: calc(100% + 6px); inset-inline-start: 0; inline-size: min(560px, 80vw); display: grid; grid-template-columns: 170px minmax(0, 1fr); border-radius: var(--gz-radius, 12px); overflow: hidden;
+    background: var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); box-shadow: 0 16px 40px rgb(0 0 0 / .3), 0 2px 6px rgb(0 0 0 / .2); transform-origin: top left; animation: ai-pop .18s var(--gz-ease); }
+  @keyframes ai-pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+  .ai-picker .side { background: var(--gz-surface-fill-2, var(--gz-surface-2)); border-inline-end: 1px solid var(--gz-border-line, var(--gz-line)); padding: .4rem; display: grid; align-content: start; gap: .1rem; }
+  .ai-picker .side button { display: flex; align-items: center; gap: .55rem; border: 0; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); background: none; padding: .4rem .5rem; color: var(--gz-ink-muted); font-size: calc(13px * var(--gz-scale, 1)); text-align: start; }
+  .ai-picker .side button.on { background: var(--gz-accent-soft); color: var(--gz-accent); font-weight: 600; }
+  .ai-picker .side .ai-mk { inline-size: 20px; block-size: 20px; border-radius: calc(var(--gz-radius, 12px) * 5 / 12); font-size: 9.5px; }
+  .ai-picker .main { padding: .5rem; display: grid; gap: .35rem; align-content: start; }
+  .ai-picker input[type="search"] { inline-size: 100%; font: inherit; color: var(--gz-ink); background: var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); padding: .4rem .6rem; }
+  .ai-picker ul { list-style: none; margin: 0; padding: 0; display: grid; max-block-size: 260px; overflow: auto; }
+  .ai-picker li { display: flex; align-items: baseline; gap: .5rem; padding: .42rem .55rem; border-radius: calc(var(--gz-radius, 12px) * 7 / 12); font-size: calc(13px * var(--gz-scale, 1)); cursor: pointer; }
+  .ai-picker li:is(:hover, .active) { background: color-mix(in srgb, var(--gz-accent-soft) 45%, transparent); }
+  .ai-picker li.on { background: var(--gz-accent-soft); font-weight: 600; }
+  .ai-picker li.on::after { content: ""; inline-size: 9px; block-size: 5px; margin-inline-start: auto; border: solid var(--gz-accent); border-width: 0 0 2px 2px; transform: rotate(-45deg) translateY(-2px); flex: none; }
+  .ai-picker li .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ai-picker li small { color: var(--gz-ink-faint); }
+  .ai-picker li.none { color: var(--gz-ink-faint); cursor: default; }
+  .ai-effort { --n: 4; --i: 0; position: relative; display: grid; gap: .3rem; padding-inline: 9px; }
+  .ai-effort .track { position: relative; block-size: 6px; border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-line-strong); }
+  .ai-effort .fill { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: calc(var(--i) / (var(--n) - 1) * 100%); border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-accent); transition: inline-size .22s var(--gz-ease); }
+  .ai-effort .tick { position: absolute; inset-block-start: 50%; inline-size: 4px; block-size: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: var(--gz-surface-fill, var(--gz-surface)); opacity: .7; }
+  .ai-effort .tick:nth-child(2) { inset-inline-start: 0; } .ai-effort .tick:nth-child(3) { inset-inline-start: calc(1 / (var(--n) - 1) * 100%); }
+  .ai-effort .tick:nth-child(4) { inset-inline-start: calc(2 / (var(--n) - 1) * 100%); } .ai-effort .tick:nth-child(5) { inset-inline-start: calc(3 / (var(--n) - 1) * 100%); }
+  .ai-effort .tick:nth-child(6) { inset-inline-start: calc(4 / (var(--n) - 1) * 100%); }
+  .ai-effort .thumb { position: absolute; inset-block-start: 50%; inset-inline-start: calc(var(--i) / (var(--n) - 1) * 100%); inline-size: 18px; block-size: 18px; margin-block-start: -9px; margin-inline-start: -9px; border-radius: 50%;
+    background: var(--gz-surface-fill, var(--gz-surface)); border: 2px solid var(--gz-accent); box-shadow: 0 1px 4px rgb(0 0 0 / .25); transition: inset-inline-start .22s var(--gz-ease); }
+  .ai-effort.unset :is(.fill, .thumb) { display: none; }
+  .ai-effort .stops { position: relative; block-size: 16px; }
+  .ai-effort .stops button { position: absolute; inset-inline-start: calc(var(--k) / (var(--n) - 1) * 100%); transform: translateX(-50%); border: 0; background: none; padding: 0; font-size: calc(11.5px * var(--gz-scale, 1)); color: var(--gz-ink-faint); white-space: nowrap; }
+  .ai-effort .stops button.on { color: var(--gz-ink); font-weight: 600; }
+  .ai-effort .stops button:first-child { transform: translateX(-9px); }
+  .ai-effort .stops button:last-child { transform: translateX(calc(-100% + 9px)); }
+  .ai-tune { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: 1rem; }
+  .ai-tune .g { grid-column: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem 1.5rem; padding: .8rem .9rem; margin-block-start: .7rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6);
+    background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); animation: ai-fold .3s var(--gz-ease); }
+  .ai-tune .field { grid-template-columns: 7.5rem minmax(0, 1fr) 4.2rem; gap: .6rem; font-size: calc(13px * var(--gz-scale, 1)); }
+  .ai-tune .g > button { grid-column: 2; justify-self: end; }
+  .ai-tune input[type="range"].unset { opacity: .45; }
+  .ai-calls { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
+  .ai-calls li { display: grid; font-size: calc(13px * var(--gz-scale, 1)); }
+  .ai-calls small { color: var(--gz-ink-faint); font-size: calc(11.5px * var(--gz-scale, 1)); overflow-wrap: anywhere; }
+  .ai-calls small.bad { color: var(--gz-err); }
+  #ai-activity .section-heading > #ai-calls-clear { margin-inline-start: auto; }
+  @media (max-width: 900px) { .ai-fh { display: none; } .ai-feat > .row, .ai-tune { grid-template-columns: minmax(0, 1fr); } .ai-tune .g { grid-column: 1; grid-template-columns: minmax(0, 1fr); } }
+  html[data-gz-motion="off"] :is(.ai-fold, .ai-picker, .ai-tune .g) { animation: none; }
+  html[data-gz-motion="off"] :is(.ai-prov, .ai-prov .bar i, .ai-effort .fill, .ai-effort .thumb) { transition: none; }
+  html[data-gz-motion="off"] .ai-prov:hover { transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .ai-fold, .ai-picker, .ai-tune .g { animation: none; }
+    .ai-prov, .ai-prov .bar i, .ai-effort .fill, .ai-effort .thumb { transition: none; }
+    .ai-prov:hover { transform: none; }
+  }
+  #ai-said { margin: 0; color: var(--gz-err); }
   .site-add { flex-wrap: nowrap; margin: .75rem 0 .25rem; }
   .site-add .field { flex: 1; min-width: 0; }
   .site-add button[aria-busy="true"] { opacity: .6; cursor: progress; }
@@ -1466,42 +1584,22 @@
 </section></div>
 <div id="panel-ai" role="tabpanel" aria-labelledby="tab-ai" data-editor-panel="ai" data-no-preview hidden>
 <section id="ai" data-editor-section="ai/setup" data-sites="Extension only" aria-labelledby="heading-ai-setup">
-<p class="section-path" data-editor-breadcrumb><a href="#ai/setup" data-editor-alias>AI</a></p><div class="section-heading"><h2 id="heading-ai-setup">AI</h2></div>
-<label class="check"><input type="checkbox" id="ai-on" data-local><span>Use AI</span></label>
-<div class="group" id="ai-connection" hidden>
-          <h3 id="ai-connection-head">Connection</h3>
-          <div class="seg" role="radiogroup" aria-labelledby="ai-connection-head">
-            <label id="ai-choice-device" hidden><input type="radio" name="ai-use" value="device" id="ai-use-device" data-local>On this device</label>
-            <label id="ai-choice-endpoint" hidden><input type="radio" name="ai-use" value="endpoint" id="ai-use-endpoint" data-local>Endpoint</label>
-          </div>
-          <p class="desc" id="ai-device-off" hidden>Not available in this browser</p>
-          <div class="ai-device" id="ai-device" hidden>
-            <p class="desc" id="ai-device-state" role="status" aria-live="polite"></p>
-            <progress id="ai-device-progress" max="1" value="0" aria-labelledby="ai-device-state" hidden></progress>
-            <div class="row"><button type="button" id="ai-device-download" hidden>Download</button></div>
-          </div>
-          <div class="ai-endpoint" id="ai-endpoint" hidden>
-            <label class="field wide"><span>Address</span><input id="ai-base" type="url" maxlength="500" dir="ltr" translate="no" placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false" data-local></label>
-            <label class="field wide"><span>Model</span><input id="ai-model" type="text" list="ai-models" maxlength="200" dir="ltr" translate="no" autocomplete="off" spellcheck="false" aria-describedby="ai-model-unverified" data-local></label>
-            <datalist id="ai-models"></datalist>
-            <p class="desc" id="ai-model-unverified" hidden>Unverified</p>
-            <label class="field wide"><span>Key</span><input id="ai-key" type="password" maxlength="512" dir="ltr" translate="no" autocomplete="off" spellcheck="false" data-local></label>
-            <div class="row"><button type="button" id="ai-save" class="primary">Save</button><button type="button" id="ai-test">Test</button></div>
-            <p class="desc" id="ai-said" role="status" aria-live="polite"></p>
-          </div>
-          <p class="desc" id="ai-where" hidden></p>
-          <p class="desc" id="ai-failure" hidden></p>
+<p class="section-path" data-editor-breadcrumb><a href="#ai/setup" data-editor-alias>AI</a></p><div class="section-heading"><h2 id="heading-ai-setup">AI</h2><div class="seg ai-mode" id="ai-mode" role="radiogroup" aria-labelledby="heading-ai-setup" hidden><label><input type="radio" name="ai-mode" value="simple" id="ai-mode-simple" data-local>Simple</label><label><input type="radio" name="ai-mode" value="advanced" id="ai-mode-advanced" data-local>Advanced</label></div><input type="checkbox" role="switch" id="ai-on" aria-label="Use AI" data-local></div>
+<p class="desc" id="ai-said" role="status" aria-live="polite" hidden></p>
+<div class="ai-setup" id="ai-connection" hidden>
+          <h3 id="ai-providers-head">Providers</h3>
+          <div class="ai-provs" id="ai-providers" role="group" aria-labelledby="ai-providers-head"></div>
+          <div class="ai-fold" id="ai-fold" hidden><div><div class="ai-drawer" id="ai-drawer" role="region"></div></div></div>
         </div>
 </section>
 <section id="ai-features" data-editor-section="ai/features" data-sites="Extension only" aria-labelledby="heading-ai-features" hidden>
 <p class="section-path" data-editor-breadcrumb><a href="#ai/features" data-editor-alias>Features</a></p><div class="section-heading"><h2 id="heading-ai-features">Features</h2></div>
-<div class="stack" id="ai-feature-list"></div>
+<div class="ai-feats"><div class="ai-fh" aria-hidden="true"><span></span><span>Model</span><span>Effort</span></div><div class="stack" id="ai-feature-list"></div></div>
 </section>
 <section id="ai-activity" data-editor-section="ai/activity" data-sites="Extension only" aria-labelledby="heading-ai-activity" hidden>
-<p class="section-path" data-editor-breadcrumb><a href="#ai/activity" data-editor-alias>Activity</a></p><div class="section-heading"><h2 id="heading-ai-activity">Activity</h2></div>
-<ul class="courses sites" id="ai-calls"></ul>
+<p class="section-path" data-editor-breadcrumb><a href="#ai/activity" data-editor-alias>Activity</a></p><div class="section-heading"><h2 id="heading-ai-activity">Activity</h2><button type="button" id="ai-calls-clear" disabled>Clear</button></div>
+<ul class="ai-calls" id="ai-calls"></ul>
 <p class="desc" id="ai-calls-empty">None yet</p>
-<div class="row"><button type="button" id="ai-calls-clear" disabled>Clear</button></div>
 </section>
 </div>
 <div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" data-no-preview hidden>

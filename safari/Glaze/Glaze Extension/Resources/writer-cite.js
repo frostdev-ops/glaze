@@ -157,7 +157,7 @@
   // harness has the writer.cite task; otherwise the fields stay the student's to fill.
   const aiRead = async (f, url) => {
     const st = (await Promise.resolve().then(() => chrome.storage.local.get('ai')).catch(() => null))?.ai;
-    if (!(st?.on === true && typeof st.use === 'string' && st.use && st.features?.writing === true)) return null;
+    if (!(st?.on === true && st.features?.writing === true)) return null;
     let port;
     try { port = chrome.runtime.connect({ name: 'glaze:ai' }); } catch { return null; }
     const answer = (id, m) => new Promise((res) => {
