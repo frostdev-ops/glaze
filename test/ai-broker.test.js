@@ -678,6 +678,34 @@ test('the sender check may refuse one message with a code and keep the port; it 
 });
 
 
+test('a sender check that never settles refuses only its message, as a timeout, and the port\'s later messages go on', async () => {
+  const was = B.LIMIT.sender;
+  B.LIMIT.sender = 20;
+  try {
+    let n = 0;
+    const e = writer({ allowed: () => (++n === 1 ? new Promise(() => {}) : true) }), p = open(e);
+    p.say({ id: 1, op: 'status', feature: 'completion' });
+    p.say({ id: 2, op: 'status', feature: 'writing' });
+    await new Promise((r) => setTimeout(r, 60)); await flush();
+    assert.equal(p.hungUp, false);
+    assert.deepEqual(p.posted.map((m) => [m.id, m.type, m.error ?? m.ready]), [[1, 'error', 'timeout'], [2, 'status', true]]);
+  } finally { B.LIMIT.sender = was; }
+});
+
+test('a run refused before admission leaves an Activity row when its provider can be named, and none when it can\'t', async () => {
+  const e = writer({ reach: async () => false, allowed: (what) => (what.feature === 'writing' ? 'attempt' : true) }), p = open(e);
+  p.say(complete(1));
+  p.say({ ...run(undefined, { id: 2 }), feature: 'writing' });
+  await flush();
+  assert.deepEqual(p.posted.map((m) => [m.id, m.error]), [[1, 'permission'], [2, 'attempt']]);
+  assert.deepEqual(e.local.data.aiCalls.map((r) => [r.feature, r.task, r.provider, r.state]).sort(), [['completion', 'example.finish', 'openai', 'permission'], ['writing', 'example.echo', 'openai', 'attempt']]);
+  assert.equal(e.calls.length, 0, 'nothing asked of the model');
+  const none = writer({ settings: async () => ({ on: true, use: 'gone', features: { completion: true } }) }), q = open(none);
+  q.say(complete(1)); await flush();
+  assert.equal(q.posted.at(-1).error, 'setup');
+  assert.equal(none.local.data.aiCalls, undefined, 'no connection to name: no row');
+});
+
 test('streamed text with split Unicode or mixed credential escapes never exposes the credential prefix', async () => {
   const encoded = [...KEY].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join('');
   for (const secret of [encoded, KEY.slice(0, 4) + encoded.slice(24)]) {

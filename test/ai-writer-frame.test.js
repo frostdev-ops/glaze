@@ -5,8 +5,10 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const source = fs.readFileSync(require.resolve('../writer-ai.js'), 'utf8');
 const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
+const until = async (f, ms = 2000) => { const t = Date.now(); while (!f() && Date.now() - t < ms) await new Promise((r) => setTimeout(r, 5)); return f(); };
 const plain = (v) => JSON.parse(JSON.stringify(v));
-function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, clock, mode = 'compose', format } = {}) {
+// pace: how many times faster than real time the frame's timers run.
+function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, clock, mode = 'compose', format, pace = 1 } = {}) {
   class Element {
     constructor() { this.style = {}; this.attrs = {}; this.children = []; this.hidden = false; this.listeners = {}; }
     get textContent() { return (this.text || '') + this.children.map((c) => (c && typeof c === 'object' ? c.textContent : String(c))).join(' '); }
@@ -24,7 +26,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
   const doc = { content: { size: 10 }, textBetween: () => 'draft words' };
   const ed = { view: { state: { doc }, dispatch() {} } };
   const sandbox = { navigator: { platform: 'MacIntel' }, document: { createElement: () => new Element(), body: new Element(), addEventListener() {} },
-    addEventListener() {}, requestAnimationFrame: (f) => f(), setTimeout, clearTimeout,
+    addEventListener() {}, requestAnimationFrame: (f) => f(), setTimeout: (f, ms, ...a) => setTimeout(f, ms / pace, ...a).unref(), clearTimeout,
     GZ_PM: { state: { Plugin: class { constructor(spec) { this.spec = spec; } }, PluginKey: class { getState() { return null; } } }, view: {}, transform: { Mapping: class { appendMapping() {} map(v) { return v; } } } },
     GZ_WRITER_SCHEMA: { text: () => ({ text: 'draft words', posAt: (v) => v }) }, GZ_WRITER_PROOF: {},
     GZ_WRITER_PAPER: format ? { current: () => ({ format: () => format }) } : undefined,
@@ -33,7 +35,8 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
     chrome: { storage: { local: { get: async () => ({ ai: structuredClone(settings) }) }, onChanged: { addListener(f) { hooks.storage = f; } } }, runtime: { connect() {
       return { onMessage: { addListener: (f) => receives.push(f) }, onDisconnect: { addListener() {} }, disconnect() {}, postMessage(m) {
         sent.push(m);
-        if (m.op === 'status') { if (holdStatus) pendingStatus.push(m); else queueMicrotask(() => reply({ id: m.id, type: 'status', ...answer(m) })); }
+        // An answer of null is never sent; one with its own type (an error) goes as that.
+        if (m.op === 'status') { const a = holdStatus ? null : answer(m); if (holdStatus) pendingStatus.push(m); else if (a) queueMicrotask(() => reply({ id: m.id, type: 'status', ...a })); }
         if (m.op === 'run') pendingRun.push(m);
       } };
     }, getURL: (p) => `chrome-extension://x/${p}`, onMessage: { addListener: (f) => { hooks.runtime = f; } } },
@@ -252,6 +255,43 @@ test('a later attempt nudge rechecks both ready features and closes admission on
   await flush();
   assert.equal(f.ai.allowed('completion'), false);
   assert.equal(f.ai.allowed('writing'), false);
+});
+
+test('a feature whose status ask got no status asks again in the same generation; the other keeps its answer', async () => {
+  // Safari, 2026-10-27: after a switch to the endpoint the gray text never ran while Feedback, asked a moment later, did.
+  let lost = 1;
+  const f = frame({ pace: 100, answer: (m) => (m.feature === 'completion' && lost-- > 0 ? { type: 'error', error: 'connection-lost' } : { allowed: true, ready: true }) });
+  await f.start();
+  assert.equal(f.ai.allowed('writing'), true);
+  assert.equal(f.ai.allowed('completion'), false);
+  assert.equal(await until(() => f.ai.allowed('completion')), true, 'asked again, and on');
+  const asks = (feature) => f.sent.filter((m) => m.op === 'status' && m.feature === feature).length;
+  assert.deepEqual([asks('completion'), asks('writing')], [2, 1]);
+  assert.ok(f.sent.some((m) => m.op === 'warm'), 'and warmed once it may run');
+});
+
+test('a status ask the worker never answers ends after its bound, the next feature is asked, and it asks again', async () => {
+  let silent = 1;
+  const f = frame({ pace: 1000, answer: (m) => (m.feature === 'completion' && silent-- > 0 ? null : { allowed: true, ready: true }) });
+  await f.start();
+  assert.equal(await until(() => f.ai.allowed('writing') && f.ai.allowed('completion')), true);
+});
+
+test('a refusal for the attempt\'s kind is asked again, a few times, for the gray text as for Feedback, with no word from the page', async () => {
+  let known = false;
+  const f = frame({ pace: 100, answer: (m) => (m.feature === 'completion' && !known ? { on: true, allowed: false, why: 'attempt' } : { on: true, allowed: true, ready: true }) });
+  await f.start();
+  assert.equal(f.ai.allowed('completion'), false);
+  assert.equal(f.ai.allowed('writing'), true);
+  known = true;
+  assert.equal(await until(() => f.ai.allowed('completion')), true);
+  const never = frame({ pace: 1000, answer: (m) => (m.feature === 'completion' ? { on: true, allowed: false, why: 'attempt' } : { on: true, allowed: true, ready: true }) });
+  await never.start();
+  const asks = () => never.sent.filter((m) => m.op === 'status' && m.feature === 'completion').length;
+  await until(() => asks() >= 6);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(asks(), 6, 'bounded: once, then five times more');
+  assert.equal(never.ai.allowed('completion'), false);
 });
 
 test('Feedback on a known test gives the assignments-only reason instead of checking forever', async () => {
