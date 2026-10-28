@@ -52,3 +52,20 @@ test('picture captions export at the effective paper size for imports and preset
     assert.match(styles, /w:styleId="Caption">[\s\S]*?<w:sz w:val="28"/);
   }
 });
+
+test('imported headings keep inherited and mixed run emphasis instead of taking the format emphasis', async () => {
+  const Z = require('../lib/zip.js');
+  const parts = X.exportDocx(S.parse(S.paper, '<h1>Plain <strong>bold</strong></h1>')).parts;
+  parts['word/styles.xml'] = parts['word/styles.xml'].replace(/(<w:style w:type="paragraph" w:styleId="Heading1">[\s\S]*?<w:rPr>)[\s\S]*?(<\/w:rPr>)/, '$1<w:b w:val="0"/><w:i/>$2');
+  const file = Buffer.concat(Z.zip(Object.entries(parts).map(([name, text]) => ({ name, data: new TextEncoder().encode(text) }))));
+  const d = S.paper.nodeFromJSON((await X.importDocx(file)).doc), heading = d.firstChild;
+  assert.equal(heading.firstChild.marks.some((m) => m.type.name === 'italic'), true);
+  assert.equal(heading.firstChild.marks.some((m) => m.type.name === 'bold'), false);
+  assert.equal(heading.lastChild.marks.some((m) => m.type.name === 'bold'), true);
+  assert.equal(heading.attrs.weight, 'normal');
+  assert.equal(heading.attrs.slant, 'normal');
+  const back = S.parse(S.paper, S.serialize(S.paper, d));
+  assert.ok(back.eq(d), 'HTML keeps the heading overrides');
+  const xml = X.exportDocx(d).parts['word/document.xml'];
+  assert.match(xml, /<w:b w:val="0"\/><w:bCs w:val="0"\/><w:i\/><w:iCs\/>/);
+});
