@@ -60,7 +60,9 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
       const a = await page('review-tabs'), b = await page('review-tabs');
       await type(a, 'Typed in A.'); await a.evaluate(() => GZ_WRITER_PAPER.current().save());
       await type(b, 'Typed in B.'); await b.evaluate(() => GZ_WRITER_PAPER.current().save());
-      assert.ok(await a.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(); return (await Promise.all((await P.versions('review-tabs')).map((v) => P.version('review-tabs', v.id)))).some((v) => JSON.stringify(v.doc).includes('Typed in A.')); }));
+      // B shows what A saved once it holds nothing unsaved; either way A's words stay, in the paper or its history.
+      const kept = await a.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(), now = JSON.stringify((await P.get('review-tabs')).doc); return { b: now.includes('Typed in B.'), a: now.includes('Typed in A.') || (await Promise.all((await P.versions('review-tabs')).map((v) => P.version('review-tabs', v.id)))).some((v) => JSON.stringify(v.doc).includes('Typed in A.')) }; });
+      assert.ok(kept.a && kept.b, `both tabs' words must stay (${JSON.stringify(kept)})`);
       await a.close(); await b.close();
     });
     await run('note-edit', async () => {

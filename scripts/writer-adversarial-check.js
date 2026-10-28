@@ -44,12 +44,13 @@ module.exports = async ({ p, el, fr, openAttempt, context, worker, id, check, un
   const edit = async (f, token) => f.evaluate(async (token) => { const api = GZ_WRITER_PAPER.current(), v = api.editor.view; v.dispatch(v.state.tr.insertText(token, v.state.doc.content.size - 1)); await api.save(); }, token);
   await edit(fr, ' draft-from-tab-A');
   await edit(other.fr, ' draft-from-tab-B');
+  // Tab B shows what A saved once it holds nothing unsaved; either way A's words stay, in the paper or its history.
   const conflict = await other.fr.evaluate(async () => {
-    const store = GZ_WRITER_PAPERS.open(), key = GZ_WRITER_PAPER.current().key();
+    const store = GZ_WRITER_PAPERS.open(), key = GZ_WRITER_PAPER.current().key(), now = JSON.stringify((await store.get(key)).doc);
     const versions = await Promise.all((await store.versions(key)).map((v) => store.version(key, v.id)));
-    return versions.some((v) => JSON.stringify(v.doc).includes('draft-from-tab-A'));
+    return now.includes('draft-from-tab-B') && (now.includes('draft-from-tab-A') || versions.some((v) => JSON.stringify(v.doc).includes('draft-from-tab-A')));
   });
-  check(conflict, 'two real tabs retain the overwritten draft in history');
+  check(conflict, 'two real tabs keep both drafts, in the paper or its history');
   await other.p.close();
   // Reload a frame before the 800ms autosave: the one-use channel and session recovery carry the edit.
   await edit(fr, ' baseline-for-reload');
