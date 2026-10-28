@@ -217,7 +217,7 @@ const importer = ({ key = 'k' } = {}) => {
   const toasts = [], restored = [], saved = [];
   const fn = vm.runInNewContext(`${source.slice(start, end)} importFile`, {
     RangeError, ArrayBuffer, Uint8Array, console, current: null, api: null, view: { state: { doc: {} }, props: {}, setProps() {}, focus() {} }, need: async () => {}, DOCX: [], format: {}, key, root: { isConnected: true },
-    GZ_WRITER_DOCX: { importDocx: async () => ({ doc: { type: 'doc' }, html: '<p>Essay</p>', warnings: [] }) }, S: { paper: { nodeFromJSON: (json) => ({ toJSON: () => json }) } },
+    GZ_WRITER_DOCX: { importDocx: async () => ({ doc: { type: 'doc' }, html: '<p>Essay</p>', warnings: [] }) }, S: { paper: { nodeFromJSON: (json) => ({ toJSON: () => json }) } }, ownFormatting: () => false,
     save: async () => true, record: () => ({}), setDoc: () => {}, paper: null,
     store: { save: async (k, p, o) => { saved.push(o.reason); return { paper: {}, version: { id: 'before-import' } }; } },
     t: (k) => I.t(k, {}, 'en'), toast: (text, act) => toasts.push({ text, act }), restore: (id) => restored.push(id),

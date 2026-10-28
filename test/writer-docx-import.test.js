@@ -200,3 +200,14 @@ test('format checks flag what an imported paper does differently and fix it to t
   assert.ok(p.issues.some((i) => i.rule === 'margins' && i.fix?.op === 'setup' && i.fix.key === 'margins'), 'the document\'s own margins');
   assert.ok(p.issues.some((i) => i.rule === 'preset-font' && i.fix?.op === 'setup' && i.fix.key === 'font'), 'its own base font');
 });
+
+test('a paper that keeps the file\'s formatting hears nothing about what the file sets; applying the format clears it', async () => {
+  const { doc } = await open('page');
+  const all = F.check(doc, ST.FORMATS.mla9, {}).issues.map((i) => i.rule), kept = F.check(doc, ST.FORMATS.mla9, {}, { keep: true }).issues.map((i) => i.rule);
+  for (const rule of ['spacing', 'paragraph-space', 'margins', 'preset-font']) assert.ok(all.includes(rule) && !kept.includes(rule), rule);
+  assert.ok(kept.includes('list-missing'), 'what the file doesn\'t set is still checked');
+  const applied = S.paper.nodeFromJSON(F.apply(doc));
+  assert.equal(applied.attrs.setup, null);
+  applied.descendants((n) => { if (n.isTextblock) for (const k of ['line', 'exact', 'least', 'before', 'after']) assert.equal(n.attrs[k], null, k); return true; });
+  assert.deepEqual(F.check(applied, ST.FORMATS.mla9, {}).issues.filter((i) => F.KEPT.has(i.rule) && i.rule !== 'font').map((i) => i.rule), [], 'nothing the format would flag is left but runs in other fonts');
+});
