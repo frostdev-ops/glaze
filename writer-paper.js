@@ -948,7 +948,17 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       bar.setAttribute('data-open', '');
       const away = (e) => { if (!box.contains(e.target) && !bar.contains(e.target)) finishPart(true); };
       document.addEventListener('pointerdown', away, true);
-      box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finishPart(false); } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finishPart(true); } });
+      const partKeys = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finishPart(false); }
+        else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finishPart(true); }
+        else if (e.key === 'Tab') {
+          const all = [box, ...bar.querySelectorAll('button, input, select')].filter((x) => !x.disabled), at = all.indexOf(document.activeElement);
+          e.preventDefault();
+          all[(at + (e.shiftKey ? all.length - 1 : 1)) % all.length]?.focus();
+        }
+      };
+      box.addEventListener('keydown', partKeys);
+      bar.addEventListener('keydown', partKeys);
       editing = { kind, variant, sheet, box, bar, orig, away, title: () => titleBox.checked };
       box.focus();
       const sel = getSelection(), end = document.createRange();
