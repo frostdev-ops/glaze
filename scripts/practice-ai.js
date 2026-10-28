@@ -48,9 +48,13 @@ const answer = (body) => {
     // A criterion's level names, the indented lines under its row; met takes the first, partly the second, missing none.
     const levels = (id) => { const row = (data.rubric || '').split(/^\[/m).find((r) => r.startsWith(`${id}]`)) || ''; return [...row.matchAll(/^ {2}([^:\n]{1,40}):/gm)].map((m) => m[1]); };
     const asks = ids.length ? ids : (data['assignment instructions'] || '').split(/[,.;:]\s+|\n/).map((x) => x.trim()).filter((x) => x.length >= 8).slice(0, 4);
+    // The first comment names an attached file it was given, and how its pictures came.
+    const files = Object.keys(data).filter((k) => k.startsWith('attached file: ')).map((k) => k.slice(15));
+    const pictures = (body.messages || []).flatMap((m) => (Array.isArray(m.content) ? m.content : [])).filter((c) => c.type === 'image_url').length;
+    const seen = files.length ? ` Your draft was read against the attached ${files[0]}${data['attached pictures'] ? `, with ${pictures ? `${pictures} picture` : 'no picture shown'}` : ''}.` : '';
     return JSON.stringify({ criteria: asks.map((criterion, i) => {
       const q = passage(draft, i);
-      return { criterion, status: ['met', 'partly', 'missing'][i % 3], comment: ['Your draft meets this in its middle paragraphs.', 'Your draft touches this, but its evidence stays thin.', 'Your draft does not address this criterion yet.'][i % 3],
+      return { criterion, status: ['met', 'partly', 'missing'][i % 3], comment: ['Your draft meets this in its middle paragraphs.', 'Your draft touches this, but its evidence stays thin.', 'Your draft does not address this criterion yet.'][i % 3] + (i ? '' : seen),
         quotes: i % 3 === 2 || !q ? [] : [q], level: (ids.length && i % 3 < 2 && levels(criterion)[i % 3]) || null };
     }) });
   }

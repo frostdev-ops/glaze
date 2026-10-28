@@ -313,6 +313,9 @@ const run = async ({ context, mock, shots, errors, ai }) => {
   await fr.click(`${fb} .gz-fb-run`);
   const cards = await until(() => fr.evaluate((fb) => { const c = document.querySelectorAll(`${fb} .gz-fb-item`); return c.length && [...c].map((x) => x.querySelector('.gz-fb-crit')?.textContent || ''); }, fb), 'Feedback from the stand-in model', 20000);
   check(cards.join('|') === 'Criterion one|Criterion two' && await fr.evaluate((fb) => document.querySelectorAll(`${fb} .gz-fb-quote`).length > 0, fb), `Feedback came back for both rubric criteria, with passages of the draft (${cards.join(' | ')})`);
+  // The attached Word prompt reached the stand-in as its text; its picture went by name, the stand-in not saying it takes pictures.
+  const said = await fr.$eval(`${fb} .gz-fb-comment`, (e) => e.textContent).catch(() => '');
+  check(said.includes('read against the attached Essay 2 prompt.docx, with no picture shown'), `Feedback read the assignment's attached files (${said})`);
   await shot(p, 'practice-feedback.png');
   await fr.click('#gp-tab-checks');
   const docText = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.text());

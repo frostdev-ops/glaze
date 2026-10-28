@@ -7,8 +7,8 @@
 // the page and written to the received folder. Never probed live, so approximated: those requests' paths and bodies, the
 // upload, non-empty attempt enablement, Ultra's submit confirmation and its receipt. Synthetic data only.
 // Quill 1.3.7 is a stand-in for Ultra's 1.x fork; Angular/React callbacks are modelled here, not loaded from Blackboard.
-const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
-const DT = require('../lib/doctext.js');
+const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto'), zlib = require('node:zlib');
+const DT = require('../lib/doctext.js'), ZIP = require('../lib/zip.js');
 
 const SITE = 'https://bb.school.test';
 const COURSE = '_101_1', FORUM = '_1101_1';
@@ -44,7 +44,23 @@ const seed = () => {
   const rubric = json('ultra-rubric-numeric.json').column;
   const column = { ...rubric, id: '_810_1', contentId: '_7_1', rubricAssociations: rubric.rubricAssociations.map((a) => ({ ...a, entityId: '_810_1' })) };
   const posts = [...json('ultra-writer-thread.json').results, ...json('ultra-writer-thread-2.json').results];
-  return { grades, members, column, discussions: json('ultra-writer-thread-discussions.json'), posts, replies: json('ultra-writer-thread-replies.json').results };
+  // The assignment's content item, its instructions attaching a Word prompt and a picture (Ultra's attachment links, as
+  // test/fixtures/ultra-writer-attach-content.json has them), and those two files on the site's /bbcswebdav/.
+  const item = JSON.parse(fixture('ultra-writer-attach-content.json').replaceAll('https://bb.school.example.edu', SITE));
+  const at = (name) => new URL(new RegExp(`href="([^"]+)"[^>]*&quot;fileName&quot;:&quot;${name}`).exec(item.contentDetail['resource/x-bb-asmt-test-link'].test.assessment.instructions.rawText)[1]).pathname;
+  const files = { [at('Essay 2 prompt.docx')]: { type: MIME, bytes: docx(PROMPT) }, [at('explore3.png')]: { type: 'image/png', bytes: png(64, 48) } };
+  return { grades, members, column, item, files, discussions: json('ultra-writer-thread-discussions.json'), posts, replies: json('ultra-writer-thread-replies.json').results };
+};
+// The attached prompt's words (writer-practice.js --smoke looks for them at the stand-in model), as a .docx of one paragraph
+// a line, and a plain picture.
+const PROMPT = 'Essay 2 prompt\nCompare two scenes where memory returns unbidden. Quote each scene at least once.';
+const docx = (text) => Buffer.concat(ZIP.zip([{ name: 'word/document.xml', data: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${text.split('\n').map((l) => `<w:p><w:r><w:t>${l}</w:t></w:r></w:p>`).join('')}</w:body></w:document>`) }]));
+const png = (w, h) => {
+  const chunk = (type, data) => { const t = Buffer.from(type), n = Buffer.alloc(4), c = Buffer.alloc(4); n.writeUInt32BE(data.length); c.writeUInt32BE(zlib.crc32(Buffer.concat([t, data]))); return Buffer.concat([n, t, data, c]); };
+  const head = Buffer.alloc(13); head.writeUInt32BE(w); head.writeUInt32BE(h, 4); head.set([8, 2, 0, 0, 0], 8);
+  const rows = Buffer.alloc((w * 3 + 1) * h, 0x6f);
+  for (let y = 0; y < h; y++) rows[y * (w * 3 + 1)] = 0;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', head), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
 };
 
 // A message as the thread API has it, for what the practice student posts: a fixture message's shape, their values.
@@ -141,6 +157,7 @@ const create = ({ quill: quillJs, out, onReset = async () => {}, onReceived = ()
     if (p === `/learn/api/v1/users/${ME.id}/memberships`) return db.members;
     if (p === `/learn/api/v1/courses/${COURSE}/gradebook/grades`) return db.grades;
     if (p === `/learn/api/v1/courses/${COURSE}/gradebook/columns/_810_1`) return db.column;
+    if (p === `/learn/api/v1/courses/${COURSE}/contents/_7_1`) return db.item;
     if (p === `/learn/api/public/v1/courses/${COURSE}/discussions`) return db.discussions;
     if (p === BOARD) return page(db.posts.filter((m) => m.lifecycle !== 'DRAFT'), u);
     const id = p.startsWith(`${BOARD}/`) && p.endsWith('/replies') ? p.slice(BOARD.length + 1, -'/replies'.length) : null;
@@ -167,6 +184,7 @@ const create = ({ quill: quillJs, out, onReset = async () => {}, onReceived = ()
         const f = state.uploads.get(file[1]);
         return f ? route.fulfill({ status: 200, contentType: f.type || 'application/octet-stream', headers: { 'content-disposition': `attachment; filename="${safe(f.name)}"` }, body: f.bytes }) : route.fulfill({ status: 404, body: '' });
       }
+      if (method === 'GET' && Object.hasOwn(db.files, u.pathname)) return route.fulfill({ status: 200, contentType: db.files[u.pathname].type, body: db.files[u.pathname].bytes });
       if (method === 'POST' && u.pathname === BOARD) return reply(post(JSON.parse(req.postData() || '{}')));
       if (method === 'POST' && u.pathname === UPLOAD) return reply(upload(decodeURIComponent(req.headers()['x-file-name'] || 'file'), req.headers()['content-type'] || '', req.postDataBuffer() || Buffer.alloc(0)));
       if (method === 'POST' && u.pathname === ATTEMPT) return reply(await attempt(JSON.parse(req.postData() || '{}')));
@@ -422,4 +440,4 @@ function world() {
   }
 }
 
-module.exports = { SITE, ROUTES, BOARD, UPLOAD, ATTEMPT, ME, MIME, QUILL, quill, create, world };
+module.exports = { SITE, ROUTES, BOARD, UPLOAD, ATTEMPT, ME, MIME, QUILL, PROMPT, quill, create, world };
