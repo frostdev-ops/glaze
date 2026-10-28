@@ -207,3 +207,33 @@ test('table rows and cells inside content controls and custom XML come in, with 
   assert.deepEqual(nodes(two.node, 'table').map((t) => t.attrs.borders), [false, true]);
   assert.deepEqual(grid(two.node), [['td:x/middle'], ['td:y/bottom']]);
 });
+
+test('a table\'s style (named, else the default table style) sets its cells\' paragraphs, runs and borders', async () => {
+  const styles = `<w:styles ${NSW}><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`
+    + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
+    + '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>'
+    + `<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:tblPr><w:tblBorders>${['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((k) => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="auto"/>`).join('')}</w:tblBorders></w:tblPr></w:style>`
+    + '<w:style w:type="table" w:styleId="Small"><w:name w:val="Small"/><w:basedOn w:val="TableGrid"/><w:rPr><w:sz w:val="18"/></w:rPr></w:style></w:styles>';
+  const tbl = (style, text) => `<w:tbl><w:tblPr>${style ? `<w:tblStyle w:val="${style}"/>` : ''}<w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="4675"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="4675" w:type="dxa"/></w:tcPr>${p(text)}</w:tc></w:tr></w:tbl>`;
+  const got = await imp(pack(p('Body paragraph text, the most of it. '.repeat(10)) + p('Single, none after', '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>') + tbl('TableGrid', 'Grid cell') + tbl('', 'Plain cell') + tbl('Small', 'Small cell'), { 'word/styles.xml': styles }));
+  const spacing = (n) => [n.attrs.line, n.attrs.after];
+  const [body, single] = got.node.content.content;
+  const [grid, plain, small] = nodes(got.node, 'table');
+  assert.deepEqual(spacing(nodes(grid, 'paragraph')[0]), spacing(single), 'Table Grid: single, none after');
+  assert.deepEqual(spacing(nodes(plain, 'paragraph')[0]), spacing(body), 'Normal Table: the document\'s own spacing');
+  assert.deepEqual(spacing(nodes(small, 'paragraph')[0]), spacing(single));
+  assert.deepEqual([grid, plain, small].map((t) => t.attrs.borders), [true, false, true], 'Normal Table draws no borders');
+  assert.deepEqual(nodes(small, 'text').map((t) => t.marks.find((m) => m.type.name === 'text_style')?.attrs.size), [9], 'the style\'s run size');
+  assert.deepEqual(nodes(grid, 'text').map((t) => t.marks.length), [0]);
+});
+
+test('export pads table cells as the page does: 4 px (60 twips) left and right, none above or below', () => {
+  const x = X.exportDocx(S.parse(S.paper, '<table><tr><td><p>Cell</p></td></tr></table>')).parts['word/document.xml'];
+  const pr = /<w:tblPr>(.*?)<\/w:tblPr>/.exec(x)[1];
+  assert.match(pr, /<w:tblCellMar><w:top w:w="0" w:type="dxa"\/><w:left w:w="60" w:type="dxa"\/><w:bottom w:w="0" w:type="dxa"\/><w:right w:w="60" w:type="dxa"\/><\/w:tblCellMar>/);
+  const order = ['tblStyle', 'tblpPr', 'tblOverlap', 'bidiVisual', 'tblStyleRowBandSize', 'tblStyleColBandSize', 'tblW', 'jc', 'tblCellSpacing', 'tblInd', 'tblBorders', 'shd', 'tblLayout', 'tblCellMar', 'tblLook'];
+  const kids = X.xml(`<w:tblPr ${NSW}>${pr}</w:tblPr>`).kids[0].kids.filter((k) => k.name).map((k) => k.local);
+  assert.deepEqual(kids, [...kids].sort((a, b) => order.indexOf(a) - order.indexOf(b)), kids.join(' '));
+  const css = require('fs').readFileSync(require('path').join(__dirname, '../writer-paper.css'), 'utf8');
+  assert.match(css, /\.gp-flow \.ProseMirror td, \.gp-flow \.ProseMirror th \{[^}]*padding: 0 4px;/, 'the page\'s padding this matches');
+});
