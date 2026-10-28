@@ -353,6 +353,17 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const f = globalThis.GZ_WRITER_PAPER?.current()?.format();
     return f ? { format: f.label, font: f.font, size: f.size, line: f.line, margin: f.margins.every((m) => m === f.margins[0]) ? f.margins[0] : null, header: f.header.text } : null;
   };
+  // The assignment's attached files, read by the page when Feedback first asks (lib/writer-context-assignment.js
+  // attachments): [{ name, text } | { name, image }], none after two minutes. Pictures aren't read for a model known not to
+  // take them.
+  let asks = 0;
+  const files = new Map(); // ask id → its answer's handler
+  F.handle?.('attachments', (m) => files.get(m.id)?.(Array.isArray(m.files) ? m.files : []));
+  const attachments = () => new Promise((resolve) => {
+    const id = ++asks, end = (v) => { clearTimeout(timer); files.delete(id); resolve(v); }, timer = setTimeout(() => end([]), 120000);
+    files.set(id, end);
+    try { F.say({ type: 'attachments', id, images: status.writing?.caps?.images !== false }); } catch { end([]); }
+  });
   const feedback = async () => {
     const v = view();
     if (!v || !ok('writing') || fb.state === 'running' || !assignment()) return;
@@ -362,8 +373,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const tr = track(), gen = generation;
     Object.assign(fb, { state: 'running', criteria: [], place: null, done: tr.done });
     paint();
-    const paper = F.mode() === 'paper';
-    const end = await run('writing', 'writer.feedback', { text, mode: paper ? 'paper' : 'compose', kind: F.kind(), context: F.context(), ...(paper ? { paper: layout() } : {}) });
+    const paper = F.mode() === 'paper', ctx = F.context(), named = ctx?.assignment?.files;
+    const read = Array.isArray(named) && named.length ? await attachments() : [];
+    if (gen !== generation) { tr.done(); return; }
+    const context = read.length ? { ...ctx, assignment: { ...ctx.assignment, files: read } } : ctx;
+    const end = await run('writing', 'writer.feedback', { text, mode: paper ? 'paper' : 'compose', kind: F.kind(), context, ...(paper ? { paper: layout() } : {}) });
     if (gen !== generation) { tr.done(); return; }
     if (end.type !== 'end' || !Array.isArray(end.output?.criteria)) { tr.done(); Object.assign(fb, { state: 'error', done: null }); paint(); return; }
     Object.assign(fb, { state: 'done', criteria: end.output.criteria, place: placer(doc, tr.m) });
