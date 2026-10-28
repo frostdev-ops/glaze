@@ -30,6 +30,7 @@ const LOOKS = [
   { name: 'wallpaper', preset: 'Frost', bg: WALL, look: { glass: 12 } },
   { name: 'wallpaper-45', preset: 'Frost', bg: WALL, look: { glass: 12, surfaceOpacity: 45 } },
   { name: 'light-wallpaper', preset: 'Paper', bg: WALL, look: { glass: 12 } },
+  { name: 'light-solid', preset: 'Paper', bg: { kind: 'solid' }, look: {} },
 ];
 
 (async () => {
@@ -92,6 +93,7 @@ const LOOKS = [
         check(['.gp-tool', '.gp-side', '.gp-status'].every((k) => a[k] > 0 && a[k] < 1), `${L.name}: the bars and side panel are the Look's glass`);
         check(/blur/.test(host.blur), `${L.name}: the frame blurs what is behind it`);
       }
+      check(a['.gp-canvas'] === 1, `${L.name}: the desk behind the pages is solid (${fills['.gp-canvas']})`);
       check(host.radius === 0 && host.outline === 'none' && host.clip === 'none', `${L.name}: the frame element is neither clipped nor outlined`);
       check(card.radius > 0 && card.edge === 'solid' && alpha(card.body) === 0, `${L.name}: the paper has the Look's corners and edge, transparent past them`);
       // The title bar's quiet text: the mockup's faint ink on a ground, muted over a picture.
@@ -106,7 +108,7 @@ const LOOKS = [
       await fr.click('.gp-tbtn[aria-pressed]');
       await until(() => el.evaluate((f) => getComputedStyle(f).position === 'fixed'), `${L.name}: Focus fills the window`);
       await pause(300);
-      const focus = await fr.evaluate(() => ['.gp', '.gp-tool', '.gp-side'].map((s) => getComputedStyle(document.querySelector(s)).backgroundColor));
+      const focus = await fr.evaluate(() => ['.gp', '.gp-tool', '.gp-side', '.gp-canvas'].map((s) => getComputedStyle(document.querySelector(s)).backgroundColor));
       const focusCard = await fr.evaluate(() => ({ radius: parseFloat(getComputedStyle(document.querySelector('.gp')).borderTopLeftRadius), edge: getComputedStyle(document.querySelector('.gp'), '::after').display }));
       check(focus.every((c) => alpha(c) === 1) && focusCard.radius === 0 && focusCard.edge === 'none', `${L.name}: Focus is opaque and square (${focus.join(', ')})`);
       check(await fr.evaluate(() => getComputedStyle(document.querySelector('.gp-top .gp-state')).color) === quiet.faint, `${L.name}: Focus keeps the mockup's faint status`);

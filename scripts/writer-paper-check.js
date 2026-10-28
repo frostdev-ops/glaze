@@ -360,7 +360,7 @@ const HARNESS = `(() => {
     await papers.click('.gp-paper a');
     await until(() => papers.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0), 'paper opened in papers.html');
     check(await papers.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('A sentence typed before the reload.') && !document.querySelector('.gp-submit')), 'papers.html opens the paper in the same chrome (no Submit)');
-    await papers.click('.gp-status button');
+    await papers.click('.gp-status button:last-child');
     await until(() => papers.evaluate(() => document.querySelectorAll('.gp-versions .gp-mi').length > 0), 'versions');
     check(true, 'Versions lists saved versions');
     saved.versions = await shot(papers, 'paper-versions.png');

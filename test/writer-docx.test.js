@@ -123,7 +123,8 @@ test('import reads Word\'s own shapes: styles, headings, hanging indents, tracke
   const bytes = zipOf([['[Content_Types].xml', '<Types/>'], ['_rels/.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`],
     ['word/document.xml', document], ['word/_rels/document.xml.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`], ['word/styles.xml', styles]]);
   const r = await X.importDocx(bytes, { format: 'mla9' });
-  assert.equal(r.html, '<h2>Part</h2><p style="margin-left:0.5in;text-indent:-0.5in"><em>Beloved</em> added</p><p style="text-indent:0in">before</p><hr class="gz-page-break"><p style="text-indent:0in">after</p><p style="text-indent:0in">font</p>');
+  // No defaults in the file: Word's own, single-spaced, so each line keeps its single spacing.
+  assert.equal(r.html, '<h2 style="line-height:1">Part</h2><p style="line-height:1;margin-left:0.5in;text-indent:-0.5in"><em>Beloved</em> added</p><p style="line-height:1;text-indent:0in">before</p><hr class="gz-page-break"><p style="line-height:1;text-indent:0in">after</p><p style="line-height:1;text-indent:0in">font</p>');
   assert.deepEqual(r.warnings.sort(), ['Fonts Word and Blackboard don\'t share were replaced.', 'Tracked changes were accepted.']);
   const d = S.parse(S.paper, r.html);
   assert.deepEqual([d.child(1).attrs.indent, d.child(1).attrs.first, d.child(2).attrs.first], [1, -0.5, 0], 'a 0 first-line indent stays an explicit 0');

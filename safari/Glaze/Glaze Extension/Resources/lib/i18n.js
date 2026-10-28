@@ -36,6 +36,8 @@ const GZ_I18N = (() => {
     '{n} checks open': { one: '{n} check open', other: '{n} checks open' },
     '{n} pages': { one: '{n} page', other: '{n} pages' },
     '{n} words': { one: '{n} word', other: '{n} words' },
+    "{n} paragraphs aren't double-spaced": { one: "{n} paragraph isn't double-spaced", other: "{n} paragraphs aren't double-spaced" },
+    "{n} paragraphs have other line spacing": { one: "{n} paragraph has other line spacing", other: "{n} paragraphs have other line spacing" },
     'At least {n} words': { one: 'At least {n} word', other: 'At least {n} words' },
     'At most {n} words': { one: 'At most {n} word', other: 'At most {n} words' },
     'Reply to {n} classmates': { one: 'Reply to {n} classmate', other: 'Reply to {n} classmates' },
