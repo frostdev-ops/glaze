@@ -155,6 +155,16 @@ test('an item split from a restarted one does not restart again', () => {
   assert.deepEqual([...Array(st.doc.firstChild.childCount).keys()].map((i) => st.doc.firstChild.child(i).attrs.start), [null, 1, null]);
 });
 
+test('editing and restarting preserves deliberately repeated restart numbers', () => {
+  let st = caret(make('<ol><li data-start="1">first</li><li data-start="1">second</li></ol>'), 'second');
+  st = st.apply(st.tr.insertText('!'));
+  assert.deepEqual(st.doc.firstChild.content.content.map((n) => n.attrs.start), [1, 1]);
+  st = run(st, 'restart').st;
+  assert.equal(st.doc.firstChild.child(1).attrs.start, null);
+  st = run(st, 'restart').st;
+  assert.equal(st.doc.firstChild.child(1).attrs.start, 1, 'an explicit restart must survive the append transaction');
+});
+
 // ---- links
 test('autolink() finds a typed address or email before the caret, without trailing punctuation', () => {
   assert.deepEqual(L.autolink('see www.example.com'), { start: 4, end: 19, href: 'https://www.example.com' });
