@@ -112,6 +112,11 @@
 .gp-flow .ProseMirror td, .gp-flow .ProseMirror th { border: 1px solid #111; vertical-align: top; padding: 0 4px; }
 .gp-flow .ProseMirror td p, .gp-flow .ProseMirror th p { text-indent: 0; }
 .gp-flow .ProseMirror img { max-width: 100%; }
+/* A tab sized to a Word tab stop (lib/writer-paginate.js sizeTabs), with its leader */
+.gp-flow .ProseMirror .gp-tabstop { display: inline-block; vertical-align: baseline; text-indent: 0; }
+.gp-flow .ProseMirror .gp-tabstop-dot { background: radial-gradient(circle, currentColor 0.7px, transparent 1px) 0 calc(100% - 0.28em) / 0.25em 0.25em repeat-x; }
+.gp-flow .ProseMirror .gp-tabstop-hyphen, .gp-flow .ProseMirror .gp-tabstop-middleDot { background: linear-gradient(currentColor, currentColor) 0 calc(100% - 0.45em) / 100% 1px no-repeat; }
+.gp-flow .ProseMirror .gp-tabstop-underscore, .gp-flow .ProseMirror .gp-tabstop-heavy { box-shadow: inset 0 -1px currentColor; }
 .gp-gap { display: block; pointer-events: none; }
 .gp-gap-line { display: inline-block; width: 100%; vertical-align: top; line-height: 0; font-size: 0; text-indent: 0; }
 /* Format issues, where no proofing draws them */

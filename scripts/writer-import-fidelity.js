@@ -21,7 +21,8 @@ const roundTrip = flag('--export'), wordOnly = flag('--word-only'), dump = flag(
 const out = path.resolve(option('--out') || path.join(os.homedir(), 'Projects/glaze-plans/writer/parity'));
 const root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
 const WORD = '/Applications/Microsoft Word.app';
-const words = (s) => String(s || '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[ \s]+/g, ' ').trim();
+// Text as both sides read: quotes plain, spaces single, and tab leaders (a PDF's dots) gone.
+const words = (s) => String(s || '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/([.·_-])\1{2,}/g, ' ').replace(/[\u00a0\s]+/g, ' ').trim();
 const flat = (s) => words(s).replace(/ /g, '');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -224,6 +225,8 @@ const writerPages = async (items) => {
           if (!n.isTextblock) return n.type.name !== 'table';
           const d = v.nodeDOM(pos), r = d.getBoundingClientRect(), cs = getComputedStyle(d), y = (r.top - top) / scale, page = Math.floor(y / (g.height + 26.4));
           const a = Object.entries(n.attrs).filter(([, x]) => x != null && x !== 0).map(([k, x]) => `${k}=${JSON.stringify(x)}`).join(' ');
+          const tabs = [...d.querySelectorAll('.gp-tabstop')].map((x) => { const q = x.getBoundingClientRect(); return `${((q.left - v.dom.getBoundingClientRect().left) / scale / 96).toFixed(2)}in+${(q.width / scale / 96).toFixed(2)}`; }).join(' ');
+          if (tabs) out.push(`   tabs ${tabs}`);
           const brs = [...d.querySelectorAll('br, img')].map((x) => { const q = x.getBoundingClientRect(); return `${x.nodeName}.${x.className}@${((q.top - r.top) / scale * 0.75).toFixed(1)}+${(q.height / scale * 0.75).toFixed(1)}`; }).join(' ');
           out.push(`${String(out.length).padStart(3)} p${page + 1}${brs ? ` [${brs}]` : ''} y=${((y - page * (g.height + 26.4)) * 0.75).toFixed(1)} h=${(r.height / scale * 0.75).toFixed(1)} lh=${cs.lineHeight} mt=${cs.marginTop} mb=${cs.marginBottom} ${n.type.name} ${a} "${n.textContent.slice(0, 24)}"`);
           return false;
@@ -239,6 +242,7 @@ const writerPages = async (items) => {
         document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
         document.activeElement?.blur();
       });
+      await p.mouse.move(1, 1);
       it.shots = [];
       const sheets = await fr.$$('.gp-sheet');
       for (const [k, sheet] of sheets.entries()) {
