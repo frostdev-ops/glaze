@@ -35,7 +35,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const say = (box, m) => { try { box.port?.postMessage(m); } catch { /* the frame went */ } };
   const assignment = (box) => box.kind === 'assignment' && box.mode === 'paper' && !document.querySelector('bb-attempt-canvas') &&
     globalThis.GZ_WRITER_ULTRA?.kindOf(box.editor, { path: location.pathname }) === 'assignment';
-  const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected || !box.ready || !box.frame?.isConnected || !box.port || !assignment(box)) armed.delete(box); return armed; };
+  // A box stays armed while its frame reopens (features/writer.js reopen: Ultra's Submit then waits; the new frame, once
+  // up, hears submit:open on its port), and goes when the frame does for good.
+  const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected || !(box.reopening || (box.frame?.isConnected && box.port)) || !assignment(box)) armed.delete(box); return armed; };
   const visible = (e) => e.getClientRects().length > 0;
 
   // ---- Ultra's footer buttons, caught before Ultra
