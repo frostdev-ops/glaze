@@ -425,8 +425,9 @@ not those unknown legacy copies or unrelated stickers.
   no text, address or key). Clear empties that list. A connection kept by an earlier version is moved into this shape the
   first time Settings opens, its key with it.
 - **Glaze Writer** (Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, never synced:
-  each assignment's paper (its text, title, due date, format and address), keyed by school, student, course and
-  assignment, with up to 40 versions (4 MB in all, the last submitted one always kept) and your own format presets; your
+  each assignment's paper (its text, title, course name, due date, format and address), keyed by school, student, course
+  and assignment (one Blackboard hasn't yet said whose it is waits under a key of its own), with the versions Settings →
+  Writer keeps (40 to start, 10 to 100; 4 MB in all, the last submitted one always kept) and your own format presets; your
   personal dictionary (up to 5,000 words, shared by every box); and the sources you save for each assignment or
   discussion (up to 300 each), keyed the same way. A paper's edits not yet saved wait in the writer frame's own
   `sessionStorage` until they are. What you type in a discussion, reply, message or test box goes to Back up what you
