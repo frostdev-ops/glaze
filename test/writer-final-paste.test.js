@@ -227,3 +227,73 @@ test('F6: the link field takes what the schema keeps, https:// only before an ad
   f.input.dispatchEvent({ type: 'input' });
   assert.equal(f.input.getAttribute('aria-invalid'), null, 'typing again clears it');
 });
+
+// ---- A6: every picture in a paper is one Word takes. writer-objects.js in a stand-in DOM, its plugins over a state.
+const X = require('../lib/writer-docx.js');
+globalThis.GZ_WRITER_OBJECTS_DOCX = require('../lib/writer-objects-docx.js');
+const WEBP = 'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA=='; // a 1×1 lossless WebP
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const objectsFrame = (html) => {
+  const doc = { activeElement: null };
+  doc.root = new El('html', doc);
+  doc.body = new El('body', doc);
+  doc.root.append(doc.body);
+  doc.documentElement = doc.root;
+  doc.querySelector = (s) => doc.root.querySelector(s);
+  doc.querySelectorAll = (s) => doc.root.querySelectorAll(s);
+  doc.addEventListener = () => {};
+  const drawn = [];
+  // A canvas draws whatever it was given as the 1×1 PNG above; the test checks what Writer asked of it.
+  doc.createElement = (t) => (t === 'canvas'
+    ? { getContext: () => ({ drawImage() {}, fillRect() {} }), toBlob: (ok, type) => { drawn.push(type); ok(new Blob([Buffer.from(PNG, 'base64')], { type: 'image/png' })); } }
+    : new El(t, doc));
+  doc.createElementNS = (_ns, t) => new El(t, doc);
+  const on = {}, plugins = [];
+  const ctx = vm.createContext({
+    document: doc, innerWidth: 800, innerHeight: 600, console, navigator: { platform: 'MacIntel' }, Blob, atob, setTimeout, Promise, Uint8Array,
+    addEventListener() {}, requestAnimationFrame: () => 1, MutationObserver: class { observe() {} disconnect() {} },
+    createImageBitmap: async (blob) => { if (blob.type !== 'image/webp') throw new Error('not the picture'); return { width: 1, height: 1, close() {} }; },
+    FileReader: class { readAsDataURL(b) { b.arrayBuffer().then((buf) => { this.result = `data:${b.type};base64,${Buffer.from(buf).toString('base64')}`; this.onload(); }); } },
+    GZ_PM, GZ_WRITER_OBJECTS_LIB: OBJ,
+    GZ_WRITER_FRAME: { t: (k) => k, mode: () => 'paper', on: (name, f) => { on[name] = f; }, plugin: (p) => plugins.push(p) },
+  });
+  ctx.globalThis = ctx;
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../writer-objects.js'), 'utf8'), ctx);
+  // A view as the editor's: the state with every plugin writer-objects.js adds, and their views told of each change.
+  const view = { dom: new El('div', doc), focus() {}, views: [], dispatch(tr) { const prev = this.state; this.state = this.state.apply(tr); for (const v of this.views) v.update?.(this, prev); } };
+  view.state = E.state({ mode: 'paper', html: '<p>x</p>' });
+  on.ready({ view, run: () => true });
+  view.state = E.state({ mode: 'paper', html, plugins });
+  view.views = plugins.filter((p) => p.spec.view).map((p) => p.spec.view(view));
+  return { view, drawn };
+};
+const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
+const sources = (doc) => { const out = []; doc.descendants((n) => { if (n.type.name === 'image') out.push(n.attrs.src.slice(0, 22)); }); return out; };
+
+test('A6: a pasted WebP picture is drawn again as PNG, in place and in the paste\'s undo step, so Word export takes it', async () => {
+  const f = objectsFrame('<p>Before</p>');
+  const slice = S.slice(S.paper, P.normalize(`<html><body><p>Chart <img src="data:image/webp;base64,${WEBP}" alt="chart"> here</p></body></html>`).html);
+  f.view.dispatch(f.view.state.tr.replaceSelection(slice).setMeta('paste', true));
+  await settle();
+  assert.deepEqual(sources(f.view.state.doc), ['data:image/png;base64,']);
+  assert.deepEqual(f.drawn, ['image/png'], 'drawn as PNG, as a picture from a file is');
+  let alt = null;
+  f.view.state.doc.descendants((n) => { if (n.type.name === 'image') alt = n.attrs.alt; });
+  assert.equal(alt, 'chart');
+  assert.ok(X.exportDocx(f.view.state.doc, { format: 'mla9' }).bytes.length > 0);
+  // One undo takes the paste away whole.
+  GZ_PM.history.undo(f.view.state, (tr) => f.view.dispatch(tr));
+  assert.equal(f.view.state.doc.textContent, 'Before');
+  assert.deepEqual(sources(f.view.state.doc), []);
+});
+
+test('A6: a paper that already holds a WebP picture gets it drawn again when it opens', async () => {
+  const f = objectsFrame(`<p>Old <img src="data:image/webp;base64,${WEBP}" alt="old"></p>`);
+  await settle();
+  assert.deepEqual(sources(f.view.state.doc), ['data:image/png;base64,']);
+  assert.ok(X.exportDocx(f.view.state.doc, { format: 'mla9' }).bytes.length > 0);
+  // Typing after it starts nothing new.
+  f.view.dispatch(f.view.state.tr.insertText('!'));
+  await settle();
+  assert.deepEqual(f.drawn, ['image/png']);
+});
