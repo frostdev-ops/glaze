@@ -204,8 +204,8 @@ const tableInfo = function () {
     if(run('reopen')) {
       const {page,cdp}=await open({width:390});await page.locator('#native-rubric').click();await until(()=>info(cdp,'gz-popup'),'first rubric pop-up');
       await page.keyboard.press('Escape');await page.keyboard.press('Enter');
-      check(await page.locator('#gz-popup').count()===2,'a keyboard activation can reopen the rubric during its closing animation');
-      await until(async()=>await page.locator('#gz-popup').count()===1,'the earlier pop-up finishes closing');
+      const reopened=await shadowCall(cdp,'gz-popup','dialog',function(){return this.open&&!this.inert&&this.matches(':modal');});
+      check(await page.locator('#gz-popup').count()===1&&reopened,'a keyboard activation reopens the rubric and removes its previous closing effect');
       await page.evaluate(()=>{history.pushState(null,'',location.origin+'/ultra/courses/_101_1/outline');dispatchEvent(new PopStateEvent('popstate'));});
       await until(async()=>!await page.locator('#gz-popup').count(),'leaving the route closes the reopened pop-up');check(true,'leaving an assessment closes its reopened rubric after the earlier closing animation finishes');await page.close();
     }

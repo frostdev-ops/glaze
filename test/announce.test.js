@@ -184,7 +184,7 @@ test('the genie funnels from the link: only transform, opacity and clip-path, th
   const g = P.genie(s, d);
   for (const f of g.frames) for (const k of Object.keys(f)) assert.ok(['offset', 'opacity', 'transform', 'clipPath'].includes(k), k);
   const pts = (f) => f.clipPath.match(/^polygon\((.*)\)$/)[1].split(', ').map((p) => p.split(' ').map(parseFloat));
-  assert.ok(g.frames.every((f) => pts(f).length === 6), 'the same points throughout, so the shape morphs');
+  assert.ok(g.frames.every((f) => pts(f).length === 42), 'the same smooth curve points throughout, so the shape morphs');
   const first = pts(g.frames[0]), last = pts(g.frames.at(-1));
   assert.ok(g.frames.every((f) => /^polygon\((?:-?[\d.]+% -?[\d.]+%(?:, )?)+\)$/.test(f.clipPath)), 'in shares of the box, so a growing dialog keeps the shape');
   // The link sits left of the dialog: the first edge still starts at the text's actual position and width.

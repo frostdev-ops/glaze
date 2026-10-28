@@ -505,6 +505,21 @@ test('safe pictures use the LMS queue and release their bytes when replaced or c
   assert.equal(img.src, undefined, 'a late response creates no image address');
 });
 
+test('closing keeps decoded pictures available to the visual sheet and releases them when the effect ends', async () => {
+  const p = page({ hold: true, motion: 'expressive', answer: () => ({ status: 200, blob: new Blob(['picture'], { type: 'image/png' }) }) });
+  let closed = 0;
+  const h = p.P.open({ title: 'T', source: p.link(), body: p.P.safe('<img src="/picture">'), onClose: () => closed++ });
+  await settle();
+  const src = h.dialog.querySelector('img').src;
+  h.close();
+  assert.equal(await (await fetch(src)).text(), 'picture', 'closing copies can still decode their image');
+  h.close(true);
+  await h.closed;
+  await assert.rejects(fetch(src));
+  assert.equal(closed, 1);
+  assert.equal(p.host('gz-popup'), null);
+});
+
 test('a focused preview follows its link on scroll and resize and disappears when the link leaves', async () => {
   const p = page({ announce: { delay: 10 } });
   const a = p.link(); p.A.preview(a, ref()); a.focus(); a.dispatchEvent({ type: 'focus' });

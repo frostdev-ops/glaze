@@ -24,7 +24,8 @@
 // It lives in a closed shadow root, so the school's styles and scripts can't reach in, and wears the Look's tokens (the
 // page's --gz-* custom properties), light and dark. Motion (lib/popup.js motion): the genie out of `source` on Expressive,
 // a scale and fade on Subtle, a fade or nothing as the "Pop-up animation" setting says, nothing with motion off or reduced.
-// Only transform, opacity and clip-path move.
+// Only transform, opacity and clip-path move. The expressive genie uses a temporary, inert sheet of projective strips;
+// the real dialog keeps its semantics and focus throughout, and the sheet is removed as soon as the transition ends.
 var GZ_POPUP = globalThis.GZ_POPUP || (() => {
   const ctx = globalThis.GZ_CTX;
   const t = (k, v) => ctx.t(k, v);
@@ -37,13 +38,21 @@ var GZ_POPUP = globalThis.GZ_POPUP || (() => {
 
   const CSS = `:host { all: initial; position: fixed; top: 0; left: 0; width: 0; height: 0; z-index: 2147483647; }
 .veil { position: fixed; inset: 0; background: rgb(0 0 0 / 0.35); }
-dialog { position: fixed; inset: 0; box-sizing: border-box; display: flex; flex-direction: column; width: min(42em, calc(100vw - 1rem)); height: fit-content;
+dialog, .genie-face { position: fixed; inset: 0; box-sizing: border-box; display: flex; flex-direction: column; width: min(42em, calc(100vw - 1rem)); height: fit-content;
   max-width: none; max-height: calc(100dvh - 1rem); margin: auto; padding: 0; overflow: hidden; font: 1em/1.5 var(--gz-font, system-ui, sans-serif); text-align: start;
   color: var(--gz-ink, #1d2733); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, #fff));
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong, #9aa7b4)); border-radius: var(--gz-radius, 12px); box-shadow: var(--gz-shadow, 0 18px 50px rgb(0 0 0 / 0.3)); }
 dialog.wide { width: min(64em, calc(100vw - 1rem)); }
 dialog:not([open]) { display: none; }
 dialog::backdrop { background: transparent; }
+dialog[data-genie] { background: transparent; border-color: transparent; box-shadow: none; overflow: visible; }
+dialog[data-genie] > header, dialog[data-genie] > .body, dialog[data-genie] > footer { opacity: 0; }
+.genie-stage { position: fixed; pointer-events: none; border-radius: var(--gz-radius, 12px); filter: drop-shadow(0 16px 26px rgb(0 0 0 / 0.25)); }
+.genie-sheet { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, #fff)); }
+.genie-strip { position: absolute; top: 0; left: 0; overflow: hidden; transform-origin: 0 0; will-change: transform; }
+.genie-face { position: absolute; inset: auto; left: 0; max-height: none; max-width: none; margin: 0; box-shadow: none; }
+.genie-glass { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.genie-light { position: absolute; inset: -50%; background: linear-gradient(115deg, transparent 38%, rgb(255 255 255 / 0.2) 48%, rgb(255 255 255 / 0.48) 50%, transparent 62%); }
 header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.15em 0.75em; padding: 0.9em 0.9em 0.7em 1.1em; border-bottom: 1px solid var(--gz-line, #d5dbe1); }
 h2 { margin: 0; font: 600 1.15em/1.3 var(--gz-font-head, var(--gz-font, system-ui, sans-serif)); color: inherit; overflow-wrap: anywhere; outline: none; }
 .meta { grid-column: 1; margin: 0; font-size: 0.85em; color: var(--gz-ink-muted, #5b6876); overflow-wrap: anywhere; }
@@ -94,11 +103,13 @@ h2:focus-visible { outline-offset: 4px; }`;
   };
   // The genie needs a source smaller than the pop-up, on screen (not the page itself, say): otherwise it scales in.
   const from = (s, d) => L.onScreen(s, innerWidth, innerHeight) && s.width * s.height < d.width * d.height;
-  const play = (el, frames, timing) => { try { return el.animate?.(frames, { ...timing, fill: 'none' }) || null; } catch { return null; } };
+  const play = (el, frames, timing) => { try { return el.animate?.(frames, { ...timing, fill: 'both' }) || null; } catch { return null; } };
 
   let cur = null;
+  const retiring = new Set();
   const open = (o) => {
     cur?.close(true);
+    for (const finish of retiring) finish();
     const was = focused();
     const sourceOf = () => (typeof o.source === 'function' ? o.source() : o.source) || null;
     const start = rectOf(sourceOf());
@@ -115,7 +126,75 @@ h2:focus-visible { outline-offset: 4px; }`;
     const box = make('dialog', { className: o.wide ? 'wide' : '' }, make('header', {}, title, meta, x), body, foot);
     if (o.label) box.setAttribute('aria-label', o.label); else box.setAttribute('aria-labelledby', 'gz-popup-title');
     root.append(veil, box);
-    let live = true, done, moving = null;
+    let live = true, done, moving = null, opening = false, ended = false, turn = 0, sheet = null;
+    let animations = [];
+    const stopMotion = () => {
+      turn++;
+      for (const a of animations) a.cancel();
+      animations = []; moving = null; opening = false;
+      sheet?.remove(); sheet = null;
+      box.removeAttribute('data-genie');
+    };
+    const animate = (el, frames, timing) => { const a = play(el, frames, timing); if (a) animations.push(a); return a; };
+    const backwards = (frames) => frames.map((f) => ({ ...f, ...(typeof f.offset === 'number' && { offset: 1 - f.offset }) })).reverse();
+    const bend = (source, r) => {
+      // Keep large rubrics bounded. Even the cheap silhouette follows the same curve and source geometry.
+      const n = Math.max(1, box.querySelectorAll('*').length);
+      return L.genie(source, r, Math.max(8, Math.min(20, Math.floor(8000 / n))));
+    };
+    const mesh = (g, r, timing, out) => {
+      const copy = box.cloneNode(true);
+      if (!copy.querySelector('.body') || box.querySelectorAll('*').length * g.bands.length > 8000) return false;
+      const stage = make('div', { className: 'genie-stage', inert: true });
+      stage.setAttribute('aria-hidden', 'true');
+      Object.assign(stage.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+      const canvas = make('div', { className: 'genie-sheet' });
+      const strips = [];
+      for (const band of g.bands) {
+        const strip = make('div', { className: 'genie-strip' });
+        Object.assign(strip.style, { width: `${r.width}px`, height: `${band.height}px` });
+        const face = make('div', { className: 'genie-face' }, ...[...copy.children].map((c) => c.cloneNode(true)));
+        Object.assign(face.style, { top: `${-band.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+        // No duplicate IDs or focus targets; only the original dialog is exposed to assistive technology.
+        for (const el of face.querySelectorAll('[id]')) el.removeAttribute('id');
+        strip.append(face); canvas.append(strip); strips.push({ strip, face, band });
+      }
+      const glass = make('div', { className: 'genie-glass' }), light = make('div', { className: 'genie-light' });
+      glass.append(light); canvas.append(glass); stage.append(canvas); box.append(stage);
+      sheet = stage; box.setAttribute('data-genie', '');
+      for (const { strip, face, band } of strips) {
+        const scroll = face.querySelector('.body');
+        if (scroll) scroll.scrollTop = body.scrollTop;
+        if (!animate(strip, out ? backwards(band.frames) : band.frames, timing)) { stopMotion(); return false; }
+      }
+      const shape = g.frames.map(({ offset, clipPath }) => ({ offset, clipPath }));
+      animate(canvas, out ? backwards(shape) : shape, timing);
+      const travel = g.frames.map(({ offset, transform, opacity }) => ({ offset, transform, opacity }));
+      animate(stage, out ? backwards(travel) : travel, timing);
+      const sweep = [{ offset: 0, opacity: 0, transform: 'translateX(-45%)' }, { offset: 0.3, opacity: 0.7, transform: 'translateX(-15%)' },
+        { offset: 0.7, opacity: 0.28, transform: 'translateX(25%)' }, { offset: 1, opacity: 0, transform: 'translateX(45%)' }];
+      animate(light, out ? backwards(sweep) : sweep, timing);
+      return true;
+    };
+    const watch = () => {
+      const at = ++turn;
+      moving?.finished.then(() => { if (at !== turn) return; if (live) stopMotion(); else end(); }, () => { if (at === turn) { if (live) stopMotion(); else end(); } });
+    };
+    const transition = (k, r, source, out) => {
+      stopMotion();
+      const g = k === 'genie' && from(source, r) ? bend(source, r) : null;
+      const use = g ? 'genie' : k === 'genie' ? (out ? 'shrink' : 'scale') : k, timing = L.timing(use, out);
+      const meshed = g && mesh(g, r, timing, out);
+      const frames = meshed ? [{ opacity: 1 }, { opacity: 1 }] : g ? g.frames : L.FRAMES[use];
+      if (g && !meshed) box.style.transformOrigin = g.origin;
+      moving = animate(box, out ? backwards(frames) : frames, timing);
+      animate(veil, out ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 1 }], timing);
+      // Every strip, highlight and backdrop shares one clock, including when the opening reverses mid-flight.
+      const time = document.timeline?.currentTime;
+      if (time != null) for (const a of animations) a.startTime = time;
+      opening = !out;
+      if (moving) watch(); else { stopMotion(); if (out) end(); }
+    };
     const closed = new Promise((r) => { done = r; });
     let images = null;
     const urls = new Set();
@@ -141,12 +220,26 @@ h2:focus-visible { outline-offset: 4px; }`;
       }
     };
     const say = (text) => { clearImages(); const p = make('p', { className: 'wait', textContent: text }); p.setAttribute('role', 'status'); body.setAttribute('aria-busy', 'true'); body.replaceChildren(p); };
-    const end = () => { moving?.cancel(); box.close(); host.remove(); done(); o.onClose?.(); };
+    const end = () => {
+      if (ended) return;
+      ended = true; retiring.delete(end);
+      stopMotion();
+      clearImages();
+      media?.removeEventListener?.('change', reduce);
+      globalThis.removeEventListener?.('resize', resize);
+      box.close(); host.remove(); done(); o.onClose?.();
+    };
+    const media = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)'); } catch { return null; } })();
+    const reduce = (e) => { if (e.matches) { if (live) stopMotion(); else end(); } };
+    const resize = () => { if (live) stopMotion(); else end(); };
+    media?.addEventListener?.('change', reduce);
+    globalThis.addEventListener?.('resize', resize);
     // Focus goes back first; the motion plays on a dialog no longer modal (inert, out of the tab order), then it goes.
     const close = (instant = false) => {
-      if (!live) return;
+      if (!live) { if (instant) end(); return; }
       live = false;
-      clearImages();
+      // Stop outstanding reads now, but keep existing image bytes until the closing sheet has finished using them.
+      images?.abort(); images = null;
       // Still current while focus goes back, so what that focus starts (a preview) knows a pop-up just closed.
       const release = () => { if (cur === h) cur = null; };
       const k = instant ? 'none' : kind();
@@ -155,19 +248,17 @@ h2:focus-visible { outline-offset: 4px; }`;
       if (box.open) box.close();
       const home = to?.isConnected ? to : was?.isConnected ? was : null;
       if (k === 'none') { home?.focus({ preventScroll: true }); release(); end(); return; }
+      retiring.add(end);
       box.inert = true;
       box.show();
       home?.focus({ preventScroll: true });
       release();
-      const genie = k === 'genie' && from(back, box0);
-      const g = genie ? L.genie(back, box0) : null;
-      const frames = g ? g.frames.map((f) => ({ ...f, offset: 1 - f.offset })).reverse().map((f, i, a) => (i === a.length - 1 ? { ...f, opacity: 0 } : f))
-        : (k === 'genie' ? L.FRAMES.shrink : L.FRAMES[k]).slice().reverse();
-      if (g) box.style.transformOrigin = g.origin;
-      const timing = L.timing(g ? 'genie' : k === 'genie' ? 'shrink' : k, true);
-      moving = play(box, frames, timing);
-      play(veil, [{ opacity: 1 }, { opacity: 0 }], timing);
-      if (moving) moving.finished.then(end, end); else end();
+      const sameSource = start && back && ['left', 'top', 'width', 'height'].every((key) => Math.abs(start[key] - back[key]) < 1);
+      if (opening && moving?.playState !== 'finished' && k === 'genie' && sameSource && animations.length && animations.every((a) => typeof a.reverse === 'function')) {
+        opening = false;
+        for (const a of animations) { a.reverse(); a.playbackRate = -L.timing('genie', false).duration / L.timing('genie', true).duration; }
+        watch();
+      } else transition(k, box0, back, true);
     };
     box.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
     box.addEventListener('keydown', (e) => {
@@ -198,11 +289,7 @@ h2:focus-visible { outline-offset: 4px; }`;
     cur = h;
     const k = kind(), to = box.getBoundingClientRect();
     if (k !== 'none') {
-      const g = k === 'genie' && from(start, to) ? L.genie(start, to) : null;
-      if (g) box.style.transformOrigin = g.origin;
-      const timing = L.timing(g ? 'genie' : k === 'genie' ? 'scale' : k, false);
-      moving = play(box, g ? g.frames : L.FRAMES[k === 'genie' ? 'scale' : k], timing);
-      play(veil, [{ opacity: 0 }, { opacity: 1 }], timing);
+      transition(k, to, start, false);
     }
     return h;
   };
