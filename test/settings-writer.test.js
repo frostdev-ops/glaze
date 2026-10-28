@@ -85,11 +85,11 @@ test('the frame reads writer once, follows each change, and patches one part wit
 // ---- the gate on the editor's input rules ---------------------------------------------------------------------------------
 const E = require('../lib/writer-editor.js'), S = require('../lib/writer-schema.js'), O = require('../lib/writer-objects.js');
 const W = require('../lib/writer-settings.js');
-const typer = (mode, off) => {
-  const gate = W.gate((cls) => off.includes(cls), { GZ_PM, GZ_WRITER_EDITOR: E });
+const typer = (mode, off, direct = false) => {
+  const gate = direct ? null : W.gate((cls) => off.includes(cls), { GZ_PM, GZ_WRITER_EDITOR: E });
   const extra = mode === 'paper' && O.plugins ? O.plugins(S.paper) : [];
   const view = { composing: false, state: null, dispatch(tr) { this.state = this.state.apply(tr); } };
-  view.state = E.state({ html: '', mode, plugins: [gate, ...extra] });
+  view.state = E.state({ html: '', mode, plugins: [...(gate ? [gate] : []), ...extra], rulesOff: (cls) => off.includes(cls) });
   const type = (text) => {
     for (const ch of text) {
       const { from, to } = view.state.selection;
@@ -106,6 +106,17 @@ test('gate: smart quotes and dashes off go in as typed; on, the editor curls the
   e = typer('compose', []);
   e.type('"Hi," she said -- it\'s late.');
   assert.equal(e.text(), '“Hi,” she said — it’s late.');
+});
+
+test('the editor filters its input rules directly and follows live changes', () => {
+  const off = ['smart', 'markdown'], e = typer('compose', off, true);
+  e.type('"plain" **plain** ');
+  assert.equal(e.text(), '"plain" **plain** ');
+  assert.doesNotMatch(e.html(), /<strong/);
+  off.length = 0;
+  e.type('"curled" **bold**');
+  assert.match(e.text(), /“curled”/);
+  assert.match(e.html(), /<strong>bold<\/strong>/);
 });
 
 test('gate: Markdown shortcuts off stay as typed; smart quotes still curl; on, they format', () => {
