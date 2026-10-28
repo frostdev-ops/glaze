@@ -36,8 +36,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const assignment = (box) => box.kind === 'assignment' && box.mode === 'paper' && !document.querySelector('bb-attempt-canvas') &&
     globalThis.GZ_WRITER_ULTRA?.kindOf(box.editor, { path: location.pathname }) === 'assignment';
   // A box stays armed while its frame reopens (features/writer.js reopen: Ultra's Submit then waits; the new frame, once
-  // up, hears submit:open on its port), and goes when the frame does for good.
+  // up, hears submit:open on its port), and goes when the frame does for good. Ultra's file area goes to a ready frame only.
   const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected || !(box.reopening || (box.frame?.isConnected && box.port)) || !assignment(box)) armed.delete(box); return armed; };
+  const mounted = () => [...live().keys()].filter((box) => box.ready && box.frame?.isConnected && box.port);
   const visible = (e) => e.getClientRects().length > 0;
 
   // ---- Ultra's footer buttons, caught before Ultra
@@ -228,7 +229,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const catcher = (e) => {
     if (giving || !armed.size || !X?.settings?.().enhance?.writerUploads) return;
     const drop = e.type === 'drop', t = e.target;
-    for (const box of live().keys()) {
+    for (const box of mounted()) {
       const area = L().areaOf(box.editor);
       const zone = L().dropZone(area);
       const hit = zone?.contains(t) && (drop || t === L().uploadInput(area));
@@ -245,7 +246,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const request = { frame: box.frame, port: box.port };
       imports.set(box, request);
       f.arrayBuffer().then((bytes) => {
-        if (!L().fileBytes(f, bytes) || imports.get(box) !== request || !live().has(box) || box.frame !== request.frame || box.port !== request.port || !X?.settings?.().enhance?.writerUploads) return;
+        if (!L().fileBytes(f, bytes) || imports.get(box) !== request || !mounted().includes(box) || box.frame !== request.frame || box.port !== request.port || !X?.settings?.().enhance?.writerUploads) return;
         box.frame.focus(); say(box, { type: 'import:file', name: f.name, mime: f.type, bytes });
       }, () => {});
       return;
