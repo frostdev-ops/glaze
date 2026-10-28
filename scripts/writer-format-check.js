@@ -320,7 +320,7 @@ const HARNESS = `(() => {
     await settle(fr);
     check(await fr.evaluate(() => [...document.querySelectorAll('.gp-sheet .gp-ftr')].every((f) => f.textContent === 'Draft')), 'the footer reads "Draft" on every page');
     const xml = await fr.evaluate(async () => { const o = await GZ_WRITER_PAPER.current().docx(); return Object.entries(o.parts).filter(([k]) => /word\/(header|footer)\d\.xml|document\.xml/.test(k)).map(([k, v]) => `${k}:${v}`).join('\n'); });
-    check(/header\d\.xml:.*Rivera .*NUMPAGES/.test(xml) && /footer\d\.xml:.*Draft/.test(xml) && /<w:pgSz w:w="16834" w:h="11909"/.test(xml), 'the .docx carries the page, the header\'s fields and the footer');
+    check(/header\d\.xml:[^\n]*\n?[^\n]*Rivera [\s\S]*?NUMPAGES/.test(xml) && /footer\d\.xml:[\s\S]*?Draft/.test(xml) && /<w:pgSz w:w="16834" w:h="11909"/.test(xml), 'the .docx carries the page, the header\'s fields and the footer');
     await fr.click('.gp-more'); await menuClick(fr, 'Page setup…');
     await fr.evaluate(() => [...document.querySelectorAll('.gp-page button')].find((b) => b.textContent === 'Reset to format').click());
     await settle(fr);
