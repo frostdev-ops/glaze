@@ -82,6 +82,19 @@ test('the frame reads writer once, follows each change, and patches one part wit
   } finally { r.restore(); }
 });
 
+test('a settings change during the initial read wins over its older snapshot', async () => {
+  const r = reader({ autocorrect: { smart: true } });
+  try {
+    let release;
+    r.sync.get = () => new Promise((resolve) => { release = resolve; });
+    const loading = r.W.load();
+    await r.sync.set({ writer: { autocorrect: { smart: false } } });
+    release({ writer: { autocorrect: { smart: true } } });
+    await loading;
+    assert.equal(r.W.now().autocorrect.smart, false);
+  } finally { r.restore(); }
+});
+
 // ---- the gate on the editor's input rules ---------------------------------------------------------------------------------
 const E = require('../lib/writer-editor.js'), S = require('../lib/writer-schema.js'), O = require('../lib/writer-objects.js');
 const typer = (mode, off) => {
