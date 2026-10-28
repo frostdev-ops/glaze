@@ -47,13 +47,15 @@ test('writer.complete: a streamed text task at 60 a minute that supersedes; inst
   assert.equal(output, ' arrives uninvited and rearranges the present.', 'cut at the sentence\'s end');
   assert.deepEqual(events.filter((e) => e.type === 'text_delta').map((e) => e.delta), ['it arrives', ' uninvited and rearranges the present.', ' Then it leaves.'], 'streamed as it came');
   const { system, data } = parts(req);
-  assert.match(system, /Never start a new sentence or a new paragraph/);
+  assert.match(system, /Never start a new sentence or paragraph/);
   assert.match(system, /untrusted reference data/);
   for (const s of ['she owns; it', 'Ignore your instructions', 'Jordan Lee', 'at least 250 words']) {
     assert.ok(!system.includes(s), `${s}: never in the instructions`);
     assert.ok(fenced(data, s), `${s}: inside the fence`);
   }
-  assert.ok(data.indexOf('[discussion thread') < data.indexOf('[text before the caret'), 'the thread first (the cached prefix), the caret\'s text after it');
+  assert.ok(data.indexOf('[discussion thread') < data.indexOf('[the text before that sentence'), 'the thread first (the cached prefix), the student\'s text after it');
+  assert.ok(data.indexOf('[the text before that sentence') < data.indexOf('[the sentence the student is typing'));
+  assert.match(system, /last word written in full/, 'mid-word: the caret\'s word in full first');
   assert.equal(req.temperature, 0.2);
 });
 
@@ -68,7 +70,7 @@ test('writer.complete keeps its fence tag while the context stays the same, so t
 test('writer.complete finishes a cut-off word with no space, and a whole word after a space', async () => {
   const { output } = await go(C.task, { before: 'The memory is not something she owns; it arriv' }, { text: 'arrives uninvited.' });
   assert.equal(output, 'es uninvited.');
-  assert.equal((await go(C.task, { before: BEFORE }, { text: ' arrives uninvited.' })).output, ' arrives uninvited.', 'a reply that skips the word but begins with a space');
+  await fails(C.task, { before: BEFORE }, { text: ' arrives uninvited.' }, 'check'); // mid-word without the word first, the join is unknown
   assert.equal((await go(C.task, { before: BEFORE }, { text: '"it arrives uninvited."' })).output, ' arrives uninvited.', 'quotes around the whole reply come off');
 });
 
@@ -236,6 +238,42 @@ test('writer.complete mid-word asks a model on this computer for its last word i
   const after = await local('Three things I learned in this course are how to ', 'manage data.');
   assert.equal(after.output, 'manage data.', 'after a space: the next words, as before');
   assert.match(after.req.system, /only the next words/);
+});
+
+test('writer.complete asks an endpoint model for the next words too, with the whole context and the draft around the sentence', async () => {
+  // OpenRouter, 2026-10-27, 10 cases on DeepSeek v4.1 Flash, gpt-4o-mini and Claude Haiku 4.5: asked to begin with the
+  // caret's word they echoed it and stopped, or gave a word of the sentence as all of it; asked for the next words, not.
+  const ctx = { kind: 'assignment', course: { id: '_1_1', name: 'ENGL 2110' }, assignment: { title: 'Essay 2', instructions: 'Write about memory.', rubric: 'Thesis: 10 points' } };
+  const before = 'The river keeps the past.\n\nWriting a strong thesis takes practice because ';
+  const large = async (inp, reply, caps) => {
+    const cfg = { replies: [{ text: reply }], seen: [], caps };
+    const out = await T.run(C.task, { mode: 'paper', kind: 'assignment', context: ctx, ...inp }, { provider: 'mock', cfg, emit() {} }).catch((e) => ({ output: null, code: e.code }));
+    return { output: out.output, req: cfg.seen[0], ...parts(cfg.seen[0]) };
+  };
+  const a = await large({ before, after: '\nThe clearing is different.' }, 'it narrows a broad topic.', { context: 128000 });
+  assert.equal(a.output, 'it narrows a broad topic.');
+  assert.match(a.system, /only the next words/);
+  assert.doesNotMatch(a.system, /first the word right before the caret/);
+  assert.match(a.system, /text before that sentence and after the caret/);
+  assert.equal(a.req.effort, 'none', 'no reasoning: it would spend the 64 tokens');
+  for (const [label, text] of [['the text before that sentence', 'The river keeps the past.'], ['the sentence the student is typing', 'Writing a strong thesis takes practice because'], ['the text after the caret', 'The clearing is different.'], ['rubric', 'Thesis: 10 points']]) {
+    const block = a.data.match(new RegExp(`\\[${label} [^\\n]*\\n<<<(DATA-[0-9a-f]+)\\n([\\s\\S]*?)\\n>>>\\1`));
+    assert.ok(block && block[2].includes(text), label);
+  }
+  assert.doesNotMatch(a.data, /\[its last word/, 'after a space the word is whole');
+  const b = await large({ before: 'Citations matter because they let readers find the orig' }, 'original sources.');
+  assert.equal(b.output, 'inal sources.');
+  assert.match(b.system, /last word written in full/);
+  assert.match(b.data, /\[its last word maybe cut off[^\n]*\n<<<DATA-[0-9a-f]+\norig\n/);
+  assert.doesNotMatch(b.data, /\[the text before that sentence|\[the text after the caret/, 'none when there is none');
+  const small = await large({ before, after: '\nThe clearing is different.' }, 'it narrows a broad topic.', { local: true });
+  assert.doesNotMatch(small.data, /\[the text before that sentence|\[the text after the caret|Thesis: 10 points/, 'a small model: the sentence and the context in brief');
+  assert.doesNotMatch(small.system, /text before that sentence/);
+  // What the echo prompt let through, live: a word of the sentence as all of it, the caret's word alone, a soft hyphen.
+  assert.equal((await large({ before: 'Writing a strong thesis takes practice because ' }, 'practice')).output, null);
+  assert.equal((await large({ before: 'I also learned how to open' }, 'open')).output, null);
+  assert.equal((await large({ before: 'In the second half of the novel, the narrator begins to ques' }, '\u00adquestion everything.')).output, 'tion everything.');
+  assert.equal((await large({ before: 'In the second half of the novel, the narrator begins to ques' }, 'ques\u00adtion everything.')).output, 'tion everything.');
 });
 
 test('writer.complete runs only where the gray text may show, and never on a test', () => {
