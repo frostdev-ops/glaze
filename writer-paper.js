@@ -575,7 +575,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
 
     // ---- saving
     const values = () => ({ name: ctx.user?.name || '', instructor: ctx.instructor || '', course: ctx.course?.name || '', date: ST.dateText(format), dueDate: Number.isFinite(Date.parse(ctx.assignment?.due || paper?.due)) ? ST.dateText(format, new Date(ctx.assignment?.due || paper.due)) : '', title: ctx.assignment?.title || '' });
-    let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false;
+    // failing: autosaves refused in a row (storage full or unavailable): each tries again later, longer each time.
+    let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false, failing = 0;
     const initialBody = view.state.doc.content.content.filter((n) => n.textContent.trim() || n.type.name !== 'paragraph').map((n) => n.toJSON());
     const recoveryScope = host.key || ctx.recovery || 'paper';
     const recoverySlot = `gz-paper-pending:${recoveryScope}`, keySlot = `gz-paper-key:${recoveryScope}`;
@@ -630,9 +631,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       try {
         const rec = record(), r = await store.save(key, rec, { reason }); paper = r.paper;
         keepPictures(rec.doc);
+        failing = 0;
         if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(recoverySlot); } catch {} }
         return r;
-      } catch (e) { dirty = true; console.error(e); setState('Not saved'); return null; }
+      } catch (e) {
+        dirty = true; console.error(e); setState('Not saved');
+        failing++;
+        if (reason === 'auto') saveTimer = setTimeout(save, Math.min(60e3, 1e3 * 2 ** failing));
+        return null;
+      }
     };
     const changed = () => {
       if (initializing) return;
@@ -646,7 +653,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       clearTimeout(outlineDraw.t);
       outlineDraw.t = setTimeout(outlineDraw, 400);
     };
-    addEventListener('beforeunload', (e) => { if (dirty && !sessionSafe) { e.preventDefault(); e.returnValue = ''; } });
+    // The tab's copy only outlives a reload: closing the tab after a refused save would lose the typing.
+    addEventListener('beforeunload', (e) => { if (dirty && (!sessionSafe || failing)) { e.preventDefault(); e.returnValue = ''; } });
     addEventListener('pagehide', () => { if (dirty) save(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) save(); });
 
