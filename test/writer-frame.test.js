@@ -123,6 +123,16 @@ test('page world: ops outside what compose writes are refused before Quill sees 
   assert.equal(p.calls.length, 0);
 });
 
+test('page world: telephone links accepted by compose sync to native Quill', () => {
+  const S = require('../lib/writer-schema.js');
+  const p = pageWorld(); p.run();
+  const doc = S.parse(S.compose, '<p>Call <a href="tel:+15551234567">the office</a>.</p>');
+  const delta = S.delta(doc);
+  assert.ok(delta.some((op) => op.attributes?.link === 'tel:+15551234567'));
+  assert.equal(p.ask('set', JSON.stringify({ id: 'gzw-1', delta }))[0].ok, true);
+  assert.equal(p.calls.length, 1, 'the entire draft must reach the native editor');
+});
+
 test('page world: get reads native selection without focusing or changing Quill', () => {
   const p = pageWorld(); p.run();
   p.boxes['gzw-1'].__quill.getSelection = () => ({ index: 2, length: 3 });
@@ -184,6 +194,17 @@ const frame = ({ claim = true } = {}) => {
 };
 const INIT = { type: 'init', mode: 'compose', kind: 'reply', html: '<p>Hi there</p>', placeholder: 'Type a reply', context: { post: { id: '_201_1' } }, locale: 'en',
   look: { tokens: { '--gz-accent': '#17c8f4', '--gz-font': '"Glaze Inter", sans-serif', '--gz-bad': 'url(https://x.test/a)', '--other': 'red', '--gz-ink': 'red;}body{' }, dark: true, motion: 'off' } };
+
+test('frame: the link field keeps a telephone address as entered', async () => {
+  const f = frame(), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, INIT);
+  const calls = [];
+  f.made[0].run = (...args) => calls.push(args);
+  const input = f.doc.getElementById('href');
+  input.value = 'tel:+15551234567';
+  input.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {} });
+  assert.deepEqual(calls, [['link', 'tel:+15551234567']]);
+});
 
 test('frame: native selection reaches the editor initialization', async () => {
   const f = frame(), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });

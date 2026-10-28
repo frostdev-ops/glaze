@@ -75,6 +75,14 @@ test('messages compose is a message, sent by its Send', () => {
   assert.deepEqual(box.context, {});
 });
 
+test('native compose keeps supported telephone links eligible for Writer', () => {
+  const body = page('ultra-writer-discussion.html'), ed = U.boxes(body, { path: DISCUSSION })[1].editor;
+  ed.innerHTML = '<p>Call <a href="tel:+15551234567">the office</a>.</p>';
+  assert.equal(U.canEdit(ed), true);
+  ed.innerHTML = '<p><a href="javascript:alert(1)">unsafe</a></p>';
+  assert.equal(U.canEdit(ed), false);
+});
+
 test('an assignment attempt: a paper in Ultra\'s authoring panel, its Submit, its instructions as the prompt', () => {
   const body = page('ultra-writer-attempt.html');
   const at = (attempt) => U.boxes(body, { path: ATTEMPT, attempt });
