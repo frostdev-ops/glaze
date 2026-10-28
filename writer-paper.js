@@ -1,7 +1,7 @@
 // Glaze Writer's paper mode: an assignment attempt's paper as a word processor, the whole chrome around the editor that
 // writer.js makes (glaze-plans/writer/mockups C): the title bar and save state, the toolbar (format, block style, marks,
-// alignment, lists, Cite, Footnote, Page break, undo and redo, zoom, Focus, Submit…), real Letter pages with the running
-// header and footnotes (lib/writer-paginate.js), the side panel (Checks, Sources, Feedback, Outline) and the status bar.
+// alignment, lists, Cite, Footnote, Page break, undo and redo, zoom, Focus, Submit…), real pages of the paper's size with
+// the running header and footnotes (lib/writer-paginate.js), the side panel (Checks, Sources, Feedback, Outline) and the status bar.
 // The paper lives in Writer's storage (lib/writer-papers.js), autosaved with versions; it never goes into Ultra's editor:
 // the submit step attaches it as a .docx (lib/writer-docx.js). The same chrome edits a paper in papers.html.
 // Classic script after writer.js; the paper libraries load only when a paper opens.
