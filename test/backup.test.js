@@ -125,6 +125,34 @@ test('Papers, their JSON documents, versions and presets survive a backup restor
   a.stop(); b.stop();
 });
 
+test('a paper with page setup and a paste preference survives a backup restore', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js'), ST = require('../lib/writer-styles.js');
+  const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();
+  try {
+    const node = SC.parse(SC.paper, '<p>Imported paper.</p>');
+    const doc = node.type.create({ setup: ST.pageSetup(ST.FORMATS.mla9, { page: ST.PAGES.a4 }), paste: 'match' }, node.content).toJSON();
+    await PA.open(a.local).save(key, { doc, format: 'mla9', keep: true });
+    const result = await restore(b, await backUp(a), ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    assert.deepEqual((await PA.open(b.local).get(key)).doc, doc);
+  } finally { a.stop(); b.stop(); }
+});
+
+test('backups accept the maximum selectable version count', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();
+  try {
+    let clock = NOW;
+    const P = PA.open(a.local, () => ++clock, { versions: () => 100 });
+    for (let i = 0; i < 100; i++) await P.save(key, { doc: SC.parse(SC.paper, `<p>Version ${i}.</p>`).toJSON() }, { reason: 'submit' });
+    const file = await backUp(a), plan = await B.read(file);
+    assert.equal(plan.cats.papers[`writerVersions:${key}`].length, 100);
+    const result = await restore(b, file, ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    assert.ok((await PA.open(b.local).versions(key)).length);
+  } finally { a.stop(); b.stop(); }
+});
+
 test('the writer\'s dictionary and saved sources join what is here, and a damaged one refuses the file', async () => {
   const a = await seeded(), file = await backUp(a);
   const b = device({ writerWords: ['Local', 'glazeword'], [SOURCES]: { sources: [source('Local source', 's-local-1')], at: NOW + 5 } });
