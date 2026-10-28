@@ -84,12 +84,10 @@ test('the frame reads writer once, follows each change, and patches one part wit
 
 // ---- the gate on the editor's input rules ---------------------------------------------------------------------------------
 const E = require('../lib/writer-editor.js'), S = require('../lib/writer-schema.js'), O = require('../lib/writer-objects.js');
-const W = require('../lib/writer-settings.js');
-const typer = (mode, off, direct = false) => {
-  const gate = direct ? null : W.gate((cls) => off.includes(cls), { GZ_PM, GZ_WRITER_EDITOR: E });
+const typer = (mode, off) => {
   const extra = mode === 'paper' && O.plugins ? O.plugins(S.paper) : [];
   const view = { composing: false, state: null, dispatch(tr) { this.state = this.state.apply(tr); } };
-  view.state = E.state({ html: '', mode, plugins: [...(gate ? [gate] : []), ...extra], rulesOff: (cls) => off.includes(cls) });
+  view.state = E.state({ html: '', mode, plugins: extra, rulesOff: (cls) => off.includes(cls) });
   const type = (text) => {
     for (const ch of text) {
       const { from, to } = view.state.selection;
@@ -109,7 +107,7 @@ test('gate: smart quotes and dashes off go in as typed; on, the editor curls the
 });
 
 test('the editor filters its input rules directly and follows live changes', () => {
-  const off = ['smart', 'markdown'], e = typer('compose', off, true);
+  const off = ['smart', 'markdown'], e = typer('compose', off);
   e.type('"plain" **plain** ');
   assert.equal(e.text(), '"plain" **plain** ');
   assert.doesNotMatch(e.html(), /<strong/);
