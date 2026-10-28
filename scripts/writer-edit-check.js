@@ -394,8 +394,8 @@ const head = (s) => words(s).split(' ').slice(0, 6).join(' ');
 
     // ---- the word count popover (the status bar's count, opened as the paper's hook would)
     await load(FX.papers.mla9(), 'mla9');
-    await fr.evaluate(() => GZ_WRITER_COUNTS.open(document.querySelector('.gp-status > span:nth-child(2)')));
-    const pop = () => fr.evaluate(() => { const x = document.querySelector('.ge-counts'); return { open: !!x && !x.hidden, rows: [...(x?.querySelectorAll('tr') || [])].map((r) => [...r.cells].map((c) => c.textContent)), bar: document.querySelector('.gp-status > span:nth-child(2)').textContent }; });
+    await fr.evaluate(() => GZ_WRITER_COUNTS.open(document.querySelector('.gp-status > :nth-child(2)')));
+    const pop = () => fr.evaluate(() => { const x = document.querySelector('.ge-counts'); return { open: !!x && !x.hidden, rows: [...(x?.querySelectorAll('tr') || [])].map((r) => [...r.cells].map((c) => c.textContent)), bar: document.querySelector('.gp-status > :nth-child(2)').textContent }; });
     let c = await pop();
     const row = (r, label) => r.rows.find((x) => x[0] === label);
     check(c.open && `${row(c, 'Words')?.[1]} words` === c.bar && row(c, 'Pages')?.[1] === '6' && /min$/.test(row(c, 'Reading time')?.[1] || ''), `the popover: ${c.rows.map((r) => r.join(' ')).join('; ')}`);
