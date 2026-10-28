@@ -187,3 +187,12 @@ test('the format\'s paragraph values and what the dialog stores: only what diffe
   assert.deepEqual(ST.paraAttrs(f, {}, { line: 'least', at: 14 }).least, 14);
   assert.equal(ST.paraAttrs(f, {}, { align: 'center', first: 0 }).first, null, 'a centred line has no first-line indent by default');
 });
+
+test('small caps and all caps export as Word\'s w:smallCaps and w:caps, in rPr\'s order', () => {
+  const X = require('../lib/writer-docx.js');
+  const st = run(run(select(make('<p>one two three</p>'), 'two'), 'smallCaps').st, 'bold').st;
+  const st2 = run(select(st, 'three'), 'allCaps').st;
+  const xml = X.exportDocx(st2.doc, { format: 'mla9', date: new Date('2026-10-28T12:00:00Z') }).parts['word/document.xml'];
+  assert.match(xml, /<w:rPr><w:b\/><w:bCs\/><w:smallCaps\/><\/w:rPr><w:t xml:space="preserve">two<\/w:t>/);
+  assert.match(xml, /<w:rPr><w:caps\/><\/w:rPr><w:t xml:space="preserve">three<\/w:t>/);
+});
