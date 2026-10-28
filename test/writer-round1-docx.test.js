@@ -75,8 +75,17 @@ test('a valid paper with two bounded pictures imports beyond the clipboard HTML 
   const image = () => S.paper.node('image', { src: `data:image/png;base64,${png.toString('base64')}`, width: 24 });
   const doc = S.paper.node('doc', null, [S.paper.node('paragraph', null, [image(), image()])]);
   assert.ok(S.serialize(S.paper, doc).length > S.MAX_INPUT);
+  assert.throws(() => S.parse(S.paper, S.serialize(S.paper, doc)), (e) => e.code === 'WRITER_INPUT_LIMIT', 'clipboard-sized reads stay bounded');
   const d = S.paper.nodeFromJSON((await X.importDocx(X.exportDocx(doc).bytes)).doc);
   const images = [];
   d.descendants((n) => { if (n.type.name === 'image') images.push(n.attrs.src); });
   assert.deepEqual(images, [image().attrs.src, image().attrs.src]);
+});
+
+test('whole-document parsing still caps the HTML and aggregate image bytes', () => {
+  assert.equal(S.MAX_DOCUMENT_INPUT, X.LIMIT.html);
+  assert.equal(S.MAX_IMAGE_BYTES, X.LIMIT.images);
+  assert.throws(() => S.parse(S.paper, 'x'.repeat(S.MAX_DOCUMENT_INPUT + 1), { document: true }), (e) => e.code === 'WRITER_INPUT_LIMIT');
+  const data = Buffer.alloc(S.MAX_IMAGE_BYTES + 1).toString('base64');
+  assert.throws(() => S.parse(S.paper, `<p><img src="data:image/png;base64,${data}"></p>`, { document: true }), (e) => e.code === 'WRITER_INPUT_LIMIT');
 });
