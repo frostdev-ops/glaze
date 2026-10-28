@@ -30,6 +30,10 @@ module.exports = async ({ p, fr, check, until }) => {
   await activate(fr.getByRole('button', { name: 'Footnote', exact: true })); await dismiss('.gp-note', 'Footnote');
   await menu('.gp-more', 'Header and footer'); await dismiss('.gp-hf', 'Header and footer');
   await activate(fr.getByRole('button', { name: 'Cite', exact: true })); await dismiss('.gz-cite', 'Cite');
+  await activate(fr.getByRole('button', { name: 'Cite', exact: true }));
+  for (let i = 0; i < 10 && !await fr.evaluate(() => document.activeElement?.dataset.do === 'manual'); i++) await p.keyboard.press('Tab');
+  check(await fr.evaluate(() => document.activeElement?.dataset.do === 'manual'), 'manual citation is reachable with Tab');
+  await p.keyboard.press('Enter'); await dismiss('.gz-cite .gzc-form', 'Manual citation');
   await menu('.gzo-insert', 'Special characters'); await dismiss('.gzo-chars', 'Special characters');
   await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.focus());
   await p.keyboard.press(`${mod}+k`); await dismiss('.gzo-linkedit', 'Link');
@@ -41,4 +45,6 @@ module.exports = async ({ p, fr, check, until }) => {
   });
   await dismiss('.gi-card', 'Import choice');
   await activate(fr.locator('.gp-submit')); await dismiss('.gs-sheet', 'Submit');
+  await menu('.gp-pill', 'MLA 9');
+  await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().format().id === 'mla9'), 'MLA restored');
 };
