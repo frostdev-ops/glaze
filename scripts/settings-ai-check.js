@@ -118,6 +118,15 @@ async function pass(scheme) {
       await page.locator('#ai-feature-list .ai-feat').first().locator('.ai-effort').waitFor();
       // Its catalog says Off, Low and High.
       assert.deepEqual(await page.locator('#ai-feature-list .ai-feat').first().locator('.ai-effort .stops button').allTextContents(), ['Off', 'Low', 'High']);
+      const effort = page.locator('#ai-feature-list .ai-feat').first().locator('.ai-effort');
+      assert.equal(await effort.getByRole('radio', { checked: true }).innerText(), 'High');
+      const thumb = effort.locator('.thumb');
+      assert.ok(await thumb.isVisible(), 'the effort in effect has a thumb before an override is saved');
+      const geometry = await effort.evaluate((e) => {
+        const thumb = e.querySelector('.thumb').getBoundingClientRect(), track = e.querySelector('.track').getBoundingClientRect();
+        return { center: thumb.x + thumb.width / 2, end: track.right, width: thumb.width };
+      });
+      assert.ok(geometry.width > 0 && Math.abs(geometry.center - geometry.end) < 1, 'High is drawn at the end of the track');
       await shoot('connected');
     });
 
@@ -160,7 +169,7 @@ async function pass(scheme) {
       assert.equal(await page.evaluate(() => document.activeElement?.id), 'ai-pick-writing', 'choosing gives focus back to its button');
       const row = page.locator('#ai-feature-list .ai-feat').nth(2);
       await row.locator('.ai-effort').waitFor();
-      assert.deepEqual(await row.locator('.ai-effort .stops button').allTextContents(), ['Minimal', 'Low', 'Medium', 'High']);
+      assert.deepEqual(await row.locator('.ai-effort .stops button').allTextContents(), ['Default', 'Minimal', 'Low', 'Medium', 'High']);
       await row.getByRole('radio', { name: 'Low' }).click();
       await pause(200);
       const s = (await stored()).ai;

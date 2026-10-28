@@ -389,26 +389,26 @@ test('the effort slider shows the levels a model takes, and hides for a model th
   const p = await open({ ai: { on: true, model: { use: 'openai', model: 'gpt-5' }, models: { completion: { use: 'openai', model: 'gpt-4.1' }, writing: { use: 'groq', model: 'llama-3.3-70b-versatile' } }, features: { completion: true, writing: true } },
     conns: { openai: kept('openai'), groq: kept('groq') }, server });
   const stops = p.stops('model');
-  assert.deepEqual(stops.map(text), ['Minimal', 'Low', 'Medium', 'High']);
-  assert.ok(p.walk(p.row('model')).some((x) => x.className === 'ai-effort unset'), 'the task\'s own until the student sets one');
-  assert.deepEqual(stops.map((b) => [b.attrs.role, b.attrs['aria-checked'], b.tabIndex]), [['radio', 'false', 0], ['radio', 'false', -1], ['radio', 'false', -1], ['radio', 'false', -1]]);
+  assert.deepEqual(stops.map(text), ['Default', 'Minimal', 'Low', 'Medium', 'High']);
+  assert.ok(p.walk(p.row('model')).some((x) => x.className === 'ai-effort'), 'the current default has a visible thumb');
+  assert.deepEqual(stops.map((b) => [b.attrs.role, b.attrs['aria-checked'], b.tabIndex]), [['radio', 'true', 0], ['radio', 'false', -1], ['radio', 'false', -1], ['radio', 'false', -1], ['radio', 'false', -1]]);
   assert.equal(p.walk(p.row('model')).find((x) => x.className.startsWith('ai-effort')).attrs.role, 'radiogroup');
   assert.equal(p.stops('completion'), null, 'gpt-4.1 takes no effort');
   assert.equal(p.stops('writing'), null, 'a catalog that didn\'t answer: not known, so hidden');
   assert.equal(p.stops('syllabus'), null, 'a feature on the overall model takes its effort, set on its row');
-  await p.click(stops[1]);
+  await p.click(stops[2]);
   assert.deepEqual(p.data.ai.model, { use: 'openai', model: 'gpt-5', effort: 'low' });
-  assert.equal(p.stops('model')[1].attrs['aria-checked'], 'true');
+  assert.equal(p.stops('model')[2].attrs['aria-checked'], 'true');
   assert.equal(p.doc.activeElement, p.$('ai-effort-model-low'));
-  await p.key(p.stops('model')[1], 'ArrowRight');
+  await p.key(p.stops('model')[2], 'ArrowRight');
   assert.equal(p.data.ai.model.effort, 'medium');
-  await p.click(p.stops('model')[2]);
+  await p.click(p.stops('model')[3]);
   assert.deepEqual(p.data.ai.model, { use: 'openai', model: 'gpt-5' }, 'the chosen level again gives the task its own');
   // Another model drops the effort, the same one keeps it.
   await p.click('ai-pick-model');
   await p.click(p.side().find((b) => text(b) === 'OpenAI'));
   await p.click(p.$('ai-pick-list').children.find((li) => text(li) === 'gpt-5-mini'));
-  await p.click(p.stops('model')[3]);
+  await p.click(p.stops('model')[4]);
   assert.deepEqual(p.data.ai.model, { use: 'openai', model: 'gpt-5-mini', effort: 'high' });
   await p.click('ai-pick-model');
   await p.click(p.$('ai-pick-list').children.find((li) => text(li) === 'gpt-5-mini'));
@@ -767,4 +767,22 @@ test('device progress preserves a key being typed in another provider drawer', a
   assert.equal(p.$('ai-key'), field, 'unrelated device progress must not replace the key field');
   assert.equal(field.value, 'gsk_partially-typed');
   assert.equal(p.doc.activeElement, field);
+});
+
+
+test('the current effort has a checked stop and a thumb before an override is saved', async () => {
+  const p = await open({ ai: { on: true, model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: { completion: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' } } },
+    conns: { openrouter: kept('openrouter') }, server: async () => json(require('./fixtures/openrouter-models.json')) });
+  const current = (row) => p.stops(row).filter((b) => b.attrs['aria-checked'] === 'true').map(text);
+  assert.deepEqual(current('model'), ['High'], 'the catalog states this model defaults to High');
+  assert.deepEqual(current('completion'), ['Off'], 'completion requests no reasoning unless overridden');
+  const slider = p.walk(p.row('model')).find((x) => x.attrs.role === 'radiogroup');
+  assert.equal(slider.classList.contains('unset'), false);
+  assert.equal(slider.style.props['--i'], '2');
+  assert.equal(p.data.ai.model.effort, undefined, 'showing the default never saves an override');
+  await p.click(p.stops('model')[1]);
+  assert.deepEqual(current('model'), ['Low']);
+  await p.click(p.stops('model')[1]);
+  assert.deepEqual(current('model'), ['High'], 'resetting returns to the effective default');
+  assert.equal(p.data.ai.model.effort, undefined);
 });

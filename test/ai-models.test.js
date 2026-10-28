@@ -133,3 +133,13 @@ test('a model\'s efforts by name where its provider\'s list says nothing; none f
   assert.deepEqual(e('http://localhost:11434/v1', 'gpt-5'), [], 'an endpoint of the student\'s own: unknown');
   assert.deepEqual(M.efforts('https://api.openai.com/v1', 'gpt-5', { efforts: [] }), [], 'a list that says none wins');
 });
+
+
+test('catalogs keep only a supported default effort, including disabled reasoning', async () => {
+  const out = await M.list({ base: 'https://openrouter.ai/api/v1' }, { fetch: async () => json(routed) });
+  assert.equal(out.models.find((m) => m.id === 'deepseek/deepseek-v4.1-flash-1017').defaultEffort, 'high');
+  assert.equal(out.models.find((m) => m.id === 'openai/gpt-5.1').defaultEffort, 'none', 'default_enabled false wins over the level for enabled thinking');
+  M._reset();
+  const bad = await M.list({ base: 'https://openrouter.ai/api/v1' }, { fetch: async () => json({ data: [{ id: 'test/model', supported_parameters: ['reasoning'], reasoning: { supported_efforts: ['low', 'high'], default_effort: 'made-up' } }] }) });
+  assert.equal(bad.models[0].defaultEffort, undefined, 'an unknown default is never invented');
+});
