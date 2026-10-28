@@ -28,7 +28,8 @@ const until = async (fn, label, ms = 15000) => {
   while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(80); }
   throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
 };
-const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
+let seenErrors = 0;
+const check = (v, label) => { if (errors.length > seenErrors) { console.log(`errors +${errors.length - seenErrors} before: ${label}`); seenErrors = errors.length; } assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 
 // The page's world: a real Quill on the writable box, Ultra's footer behaviour around it (as scripts/writer-check.js).
 const HARNESS = `(() => {
