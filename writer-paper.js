@@ -683,7 +683,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     pill.addEventListener('click', () => (open?.opener === pill ? close() : menu(pill, presetMenu())));
     const STYLES = [['Body', () => { lift(); ed.run('heading', 0); ed.run('align', 'left'); }], ['Title', () => { lift(); ed.run('heading', 0); ed.run('align', 'center'); }],
-      ...[1, 2, 3, 4].map((n) => [t('Heading {n}', { n }), () => { lift(); ed.run('heading', n); }]), ['Block quote', () => { ed.run('heading', 0); PM.commands.wrapIn(view.state.schema.nodes.blockquote)(view.state, view.dispatch); }]];
+      ...[1, 2, 3, 4, 5, 6].map((n) => [t('Heading {n}', { n }), () => { lift(); ed.run('heading', n); }]), ['Block quote', () => { ed.run('heading', 0); PM.commands.wrapIn(view.state.schema.nodes.blockquote)(view.state, view.dispatch); }]];
     const lift = () => { while (ed.active().quote && PM.commands.lift(view.state, view.dispatch)); };
     block.addEventListener('click', () => (open?.opener === block ? close() : menu(block, STYLES.map(([label, run]) => ({ label: t(label), checked: blockName(ed.active()) === t(label), run: () => { run(); view.focus(); } })))));
     for (const b of [...marks, bullets, numbers]) b.addEventListener('click', () => { ed.run(b.dataset.run); view.focus(); });

@@ -115,7 +115,8 @@ test('heading takes only the levels the schema has; 0 makes headings plain; a li
   assert.equal(html(st), '<ul><li>a</li></ul><h4 class="ql-align-right">b</h4><ul><li>c</li></ul>');
   const paper = caret(make('<p>T</p>', 'paper'), 'T');
   for (const level of [1, 2, 3, 4]) assert.equal(html(run(paper, 'heading', level).st), `<h${level}>T</h${level}>`);
-  assert.equal(run(paper, 'heading', 5).ok, false);
+  assert.equal(html(run(paper, 'heading', 5).st), '<h5>T</h5>');
+  assert.equal(run(paper, 'heading', 7).ok, false);
 });
 
 test('indent and outdent step 0 to 8 on paragraphs, headings and items; align sets every line', () => {
@@ -216,7 +217,7 @@ test('Markdown shortcuts make what the schema holds: marks, links, lists, quotes
   assert.equal(html(type(blank(), '## Small')), '<h4>Small</h4>');
   assert.equal(html(type(blank(), '### none')), '<p>### none</p>', 'compose has two levels');
   for (const n of [1, 2, 3, 4]) assert.equal(html(type(blank('paper'), `${'#'.repeat(n)} H`)), `<h${n}>H</h${n}>`);
-  assert.equal(html(type(blank('paper'), '##### H')), '<p>##### H</p>');
+  assert.equal(html(type(blank('paper'), '##### H')), '<h5>H</h5>');
   const below = make('<ol><li>a</li></ol><p><br></p>');
   assert.equal(html(type(below.apply(below.tr.setSelection(TextSelection.create(below.doc, below.doc.content.size - 1))), '1. b')), '<ol><li>a</li><li>b</li></ol>', 'joins the list above');
 });

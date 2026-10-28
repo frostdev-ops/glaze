@@ -165,14 +165,14 @@ test('pasted shapes become flat Quill lists, lines and marks', () => {
   assert.equal(out('<pre><code>x<br>  y</code>\n</pre>'), '<pre class="ql-syntax" spellcheck="false">x\n  y\n</pre>');
 });
 
-test('the paper schema keeps quotes, h1 to h4, page breaks, notes, tables, images, fonts and spacing', () => {
+test('the paper schema keeps quotes, h1 to h6, page breaks, notes, tables, images, fonts and spacing', () => {
   const paper = '<h1 class="ql-align-center">Title</h1><h4>Four</h4><h6>Six</h6>'
     + '<p class="ql-indent-1" style="line-height:2;text-indent:0.5in">Body<br>line two <sup class="gz-footnote" data-footnote="See &lt;em&gt;Ibid.&lt;/em&gt;"></sup></p>'
     + '<blockquote><p>Quoted</p></blockquote><hr class="gz-page-break"><hr>'
     + '<p><span style="font-family:Tinos;font-size:16px">metric</span> <span style="font-family:Comic Sans MS">no</span></p>'
     + '<table><tr><th>H</th><td colspan="2">C</td></tr></table><p><img src="data:image/png;base64,iVBORw0KGgo=" alt="dot" width="40"><img src="http://x/y.png"><img src="javascript:1"></p>';
   const html = out(paper, P);
-  assert.equal(html, '<h1 class="ql-align-center">Title</h1><h4>Four</h4><h4>Six</h4>'
+  assert.equal(html, '<h1 class="ql-align-center">Title</h1><h4>Four</h4><h6>Six</h6>'
     + '<p class="ql-indent-1" style="line-height:2;text-indent:0.5in">Body<br>line two <sup class="gz-footnote" data-footnote="See &lt;em&gt;Ibid.&lt;/em&gt;"></sup></p>'
     + '<blockquote><p>Quoted</p></blockquote><hr class="gz-page-break">'
     + '<p><span style="font-family:Times New Roman;font-size:12pt">metric</span> no</p>'
