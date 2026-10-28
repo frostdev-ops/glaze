@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const env = require('./check-env.js');
 const root = path.resolve(__dirname, '..'), selected = process.argv[2] || 'all';
+// The printed PDFs: in PAPER_EVIDENCE when named, else the run's temporary folder (never the source tree).
+const evidence = () => { const d = process.env.PAPER_EVIDENCE || tmp; fs.mkdirSync(d, { recursive: true }); return d; };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 let ctx, tmp, ext, passed = 0;
 const run = async (name, fn) => { if (selected !== 'all' && selected !== name) return; await fn(); console.log(`ok ${name}`); passed++; };
@@ -85,12 +87,22 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
     await run('print', async () => {
       const p = await page('review-print'); await pause(300);
       const pages = await p.evaluate(() => GZ_WRITER_PAPER.current().pages());
-      const file = path.join(root, '.review-evidence', 'print.pdf'); fs.mkdirSync(path.dirname(file), { recursive: true });
+      const file = path.join(evidence(), 'print.pdf');
       await p.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
       const info = require('node:child_process').execFileSync('pdfinfo', [file], { encoding: 'utf8' });
       assert.equal(+/Pages:\s+(\d+)/.exec(info)[1], pages, 'print must contain every paper page');
       const text = require('node:child_process').execFileSync('pdftotext', [file, '-'], { encoding: 'utf8' });
       assert.ok(!text.includes('Checks'), 'paper chrome must not print'); await p.close();
+    });
+    // A paper on A4, landscape, prints on A4 landscape pages: what its pages show, uncut.
+    await run('print-page', async () => {
+      const p = await page('review-print-page'); await pause(300);
+      await p.evaluate(() => GZ_WRITER_PAPER.current().setup({ page: [11.69, 8.27] })); await pause(600);
+      const file = path.join(evidence(), 'print-a4-landscape.pdf');
+      await p.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
+      const info = require('node:child_process').execFileSync('pdfinfo', [file], { encoding: 'utf8' });
+      const [w, h] = /Page size:\s+([\d.]+) x ([\d.]+)/.exec(info).slice(1).map(Number);
+      assert.ok(Math.abs(w - 841.7) < 2 && Math.abs(h - 595.4) < 2, `printed pages must be the paper's own (${w} x ${h} pt)`); await p.close();
     });
     await run('table', async () => {
       const p = await page('review-table');
