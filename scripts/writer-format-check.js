@@ -363,9 +363,10 @@ const HARNESS = `(() => {
     // ---- the context menu
     await pick(fr, 'Critics');
     await settle(fr);
-    const crit = await fr.evaluate(() => { const r = [...document.querySelectorAll('.gp-flow p')].find((x) => x.textContent.includes('Critics')).getBoundingClientRect(); return { x: r.left + 40, y: r.top + 8 }; });
+    const crit = await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, c = v.coordsAtPos(v.state.selection.from + 2); return { x: c.left + 2, y: (c.top + c.bottom) / 2 }; });
     await p.mouse.click(frameBox.x + crit.x, frameBox.y + crit.y, { button: 'right' });
     const ctxItems = await fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role^=menuitem]')].map((b) => b.firstChild.textContent).join('|'));
+    if (!ctxItems) console.log('context menu probe:', JSON.stringify(await fr.evaluate(({ x, y }) => { const e = document.elementFromPoint(x, y); return { at: e?.className || e?.nodeName, inView: !!e?.closest('.ProseMirror'), x, y, h: innerHeight, w: innerWidth }; }, crit)), JSON.stringify(await (await p.$('iframe.gz-writer')).boundingBox()), JSON.stringify(frameBox));
     check(ctxItems === 'Paste|Paste without formatting|Paragraph…|Clear formatting' || ctxItems === 'Cut|Copy|Paste|Paste without formatting|Paragraph…|Clear formatting', `the page's context menu (${ctxItems})`);
     await menuClick(fr, 'Paragraph…');
     check(await fr.evaluate(() => !!document.querySelector('.gp-para')), 'its Paragraph… opens the dialog');
