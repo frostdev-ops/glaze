@@ -142,7 +142,7 @@ const frame = ({ blank = true, busy = false } = {}) => {
     GZ_WRITER_FRAME: { t: (k, v) => I.t(k, v, 'en'), mode: () => 'paper', kind: () => 'assignment', handle: (k, f) => { handles[k] = f; } },
     GZ_WRITER_PAPER: { current: () => api, need: async () => { ctx.GZ_DOCTEXT ||= require('../lib/doctext.js'); } },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_SUBMIT_SHEET: sheet });
-  vm.runInContext(read('writer-import.js'), ctx);
+  vm.runInContext(process.env.WRITER_IMPORT_SOURCE ? fs.readFileSync(process.env.WRITER_IMPORT_SOURCE, 'utf8') : read('writer-import.js'), ctx);
   const flush = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
   const card = () => doc.querySelector('.gi-card');
   const tiles = () => doc.querySelectorAll('.gi-choice');
@@ -279,4 +279,14 @@ test('review: a paper without a mounted frame leaves the upload area to Ultra', 
 test('review: a different file input in the submission is outside the attempt upload area', () => {
   const u = ultra(), other = new El('input', u.doc); other.setAttribute('type', 'file'); other.files = [pdf()]; u.area.append(other);
   assert.equal(!!u.fire(other, 'change').stopped, false);
+});
+
+for (const change of ['frame', 'port']) test(`review: an as-is upload stops before Submit when its ${change} changes`, async () => {
+  const u = page({ listed: false });
+  await u.go({ asis: true, name: 'original.pdf', mime: 'application/pdf' });
+  assert.equal(u.uploads.length, 1);
+  if (change === 'frame') { u.box.frame.remove(); u.box.frame = new El('iframe', u.doc); u.doc.body.append(u.box.frame); }
+  else u.box.port = { postMessage: (m) => u.sent.push(m) };
+  u.addRow('original.pdf'); await u.tick();
+  assert.equal(u.clicks.length, 0, 'the old frame no longer holds consent');
 });
