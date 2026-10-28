@@ -15,7 +15,7 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
     const page = await browser.newPage(), errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.setContent('<!doctype html><meta charset="utf-8"><div id="ed"></div>');
-    for (const file of ['lib/pm.js', 'lib/writer-schema.js', 'lib/writer-editor.js', 'lib/writer-styles.js']) {
+    for (const file of ['lib/pm.js', 'lib/writer-schema.js', 'lib/writer-editor.js', 'lib/writer-styles.js', 'lib/writer-paginate.js']) {
       const content = process.env.WRITER_REVIEW_BASE && file !== 'lib/pm.js'
         ? execFileSync('git', ['show', `${process.env.WRITER_REVIEW_BASE}:${file}`], { cwd: root, encoding: 'utf8' })
         : fs.readFileSync(path.join(root, file), 'utf8');
@@ -69,6 +69,36 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
       }, input);
       assert.equal(result.text, input);
       assert.equal(result.html, '<p>&nbsp;&nbsp;😀&nbsp;&nbsp;x</p><p><br></p><p>שלום&nbsp;&nbsp;</p>');
+    });
+    await check('remeasurement places page gaps at natural line starts after a width change', async () => {
+      const result = await page.evaluate(async () => {
+        ed.destroy();
+        document.getElementById('ed').parentElement.className = 'gp-flow';
+        window.ed = GZ_WRITER_EDITOR.create({ mount: document.getElementById('ed'), mode: 'paper', html: '<p>' + 'The river carries words through the valley. '.repeat(180) + '</p>' });
+        let format = GZ_WRITER_STYLES.FORMATS.mla9;
+        const sheet = new CSSStyleSheet();
+        const style = () => sheet.replaceSync(GZ_WRITER_STYLES.css(format));
+        document.adoptedStyleSheets = [sheet]; style();
+        ed.addPlugins([GZ_WRITER_PAGINATE.plugin({ format: () => format, notes: () => [], gap: 26.4 })]);
+        await new Promise((r) => setTimeout(r, 30));
+        format = { ...format, margins: [1, 1.5, 1, 1.5] }; style();
+        GZ_WRITER_PAGINATE.relayout(ed.view);
+        await new Promise((r) => setTimeout(r, 30));
+        const key = GZ_WRITER_PAGINATE.key(), v = ed.view;
+        const gaps = key.getState(v.state).find().filter((d) => d.spec.key?.startsWith('gp:l:')).map((d) => d.from);
+        // Remove decorations synchronously to read the browser's natural wraps before the queued next plan.
+        v.dispatch(v.state.tr.setMeta(key, GZ_PM.view.DecorationSet.empty));
+        const starts = new Set(); let top = -Infinity;
+        for (let q = 1; q < v.state.doc.content.size - 1; q++) {
+          const y = v.coordsAtPos(q, 1).top;
+          if (y > top + 3) { starts.add(q); top = y; }
+        }
+        const bad = gaps.filter((q) => !starts.has(q));
+        ed.destroy(); document.adoptedStyleSheets = [];
+        return { count: gaps.length, bad };
+      });
+      assert.ok(result.count > 1);
+      assert.deepEqual(result.bad, []);
     });
     await check('clipboard metadata cannot restore attributes outside the allowlist', async () => {
       const result = await page.evaluate(() => {
