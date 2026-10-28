@@ -14,7 +14,7 @@ const marksOn = (doc, needle) => {
   let hit = null;
   doc.descendants((n) => { if (!hit && n.isText && n.text.includes(needle)) hit = n; return !hit; });
   assert.ok(hit, needle);
-  return Object.fromEntries(hit.marks.map((m) => [m.type.name, Object.keys(m.attrs).length ? m.attrs : true]));
+  return Object.fromEntries(hit.marks.map((m) => [m.type.name, Object.keys(m.attrs).length ? { ...m.attrs } : true]));
 };
 
 test('every fixture says what was seen and what was modelled', () => {
@@ -30,7 +30,7 @@ test('sources: Word, Docs, a web page, Writer\'s own', () => {
 });
 
 test('Word: headings, marks, colour, highlight, caps, sizes, fonts, links; spacing, indents, keeps, breaks; lists; tables', () => {
-  const r = P.normalize(FX.word.html);
+  const r = P.normalize(FX.word.html, { base: { font: 'Times New Roman', size: 12 } });
   assert.equal(r.rich, true);
   const doc = read(r.html);
   const h = block(doc, 'A Heading From Word');
