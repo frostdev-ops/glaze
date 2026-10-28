@@ -316,7 +316,8 @@ test('a run on On this device that Apple Intelligence answers comes back, not as
 test('changing either kept connection immediately cancels an Apple run on On this device', async () => {
   for (const id of ['apple', 'device']) for (const op of ['set', 'remove']) {
     B._reset(); sent.length = 0;
-    const vault = new Map([['connections', { device: { provider: 'device', generation: 'dev-1' }, apple: { provider: 'apple', model: 'on-device', generation: 'mac-1' } }]]);
+    const stored = { device: { provider: 'device', generation: 'dev-1' }, apple: { provider: 'apple', model: 'on-device', generation: 'mac-1' } };
+    const vault = new Map([['connections', op === 'set' ? {} : stored]]);
     native = async (m) => m.type === 'ai.run' ? new Promise(() => {}) : { ok: true, state: 'ready' };
     const task = T.define({ id: 'example.kept', version: 1, output: 'text', input: (raw) => raw, check: (o) => o,
       build: (_input, { text }) => text.request({ system: 'Answer.', data: [{ label: 'text', text: 'hello' }] }) });
