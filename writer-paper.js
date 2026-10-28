@@ -602,7 +602,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     });
     // The tab's copy of every edit (sessionStorage, read back by the next frame in this tab) holds each picture already
     // saved as a reference (its SHA-256 digest), so a keystroke never copies picture data; the next frame
-    // finds them in the saved paper or its versions, and sets aside a copy it can't complete.
+    // finds them in the saved paper or its versions, retaining unsaved text even when a picture was deleted.
     const SAVED = 'gz-saved:';
     let savedPictures = new Map(), pictureTurn = 0;
     const legacyRef = (src) => `${SAVED}${src.length}:${src.slice(-64)}`;
@@ -637,7 +637,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       };
       await add(from?.doc);
       const done = fill();
-      if (done || !k) return done;
+      let legacy = false;
+      pictures(rec.doc, (src) => { legacy ||= src.startsWith(SAVED) && !src.startsWith(`${SAVED}sha256:`); return src; });
+      if ((done && !legacy) || !k) return done;
       for (const v of await store.versions(k)) await add((await store.version(k, v.id))?.doc);
       const whole = fill();
       if (whole) return whole;
