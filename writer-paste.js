@@ -126,7 +126,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   const cascade = (e, up, ctx, block) => {
     const st = own(e, ctx), out = { deco: new Set(up.deco), vert: up.vert, bg: block ? null : up.bg, mso: block ? null : up.mso, link: up.link };
     for (const k of INHERIT) out[k] = up[k];
-    const ua = UA[e.name] || {};
+    const ua = UA[e.name] || (HEADING.test(e.name) ? { 'font-weight': 'bold' } : {});
     const decl = { ...ua, ...st };
     if (e.name === 'font') { if (e.a.face) decl['font-family'] = e.a.face; if (e.a.color) decl.color = e.a.color; }
     for (const k of INHERIT) if (decl[k] != null && decl[k] !== 'inherit') out[k] = decl[k];
