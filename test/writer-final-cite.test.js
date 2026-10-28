@@ -19,3 +19,15 @@ test('Chicago: an undated book, report or chapter reads n.d. in the bibliography
   // A dated one is as before.
   assert.equal(C.format({ type: 'book', author: [p('Smith', 'John')], title: 'B', publisher: 'Press', issued: d(2001) }, 'chicago17').entry, 'Smith, John. <i>B</i>. Press, 2001.');
 });
+
+test('APA: a book\'s translators and the editors of an authored book sit in the parentheses after its title (APA 7 10.2)', () => {
+  const piaget = { type: 'book', author: [p('Piaget', 'Jean')], translator: [p('Weaver', 'Helen')], title: 'The psychology of the child', edition: '2', issued: d(1969), publisher: 'Basic Books' };
+  assert.equal(C.format(piaget, 'apa7').entry, 'Piaget, J. (1969). <i>The psychology of the child</i> (H. Weaver, Trans.; 2nd ed.). Basic Books.');
+  const plath = { type: 'book', author: [p('Plath', 'Sylvia')], editor: [p('Kukil', 'Karen V.')], title: 'The unabridged journals of Sylvia Plath', issued: d(2000), publisher: 'Anchor Books' };
+  assert.equal(C.format(plath, 'apa7').entry, 'Plath, S. (2000). <i>The unabridged journals of Sylvia Plath</i> (K. V. Kukil, Ed.). Anchor Books.');
+  const both = { type: 'book', author: [p('Freud', 'Sigmund')], editor: [p('Strachey', 'James')], translator: [p('Strachey', 'James')], title: 'The ego and the id', issued: d(1961), publisher: 'Hogarth Press' };
+  assert.equal(C.format(both, 'apa7').entry, 'Freud, S. (1961). <i>The ego and the id</i> (J. Strachey, Ed. &amp; Trans.). Hogarth Press.');
+  // An edited book's editors lead and are not named twice.
+  const edited = { type: 'book', editor: [p('Lee', 'Ann'), p('Kim', 'Bo')], title: 'Essays', issued: d(2010), publisher: 'Press' };
+  assert.equal(C.format(edited, 'apa7').entry, 'Lee, A., &amp; Kim, B. (Eds.). (2010). <i>Essays</i>. Press.');
+});
