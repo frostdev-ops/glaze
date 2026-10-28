@@ -20,7 +20,7 @@ const memory = () => {
   const data = {};
   return { data, get: async (k) => ({ [k]: structuredClone(data[k]) }), set: async (o) => { Object.assign(data, structuredClone(o)); }, remove: async (ks) => { for (const k of [].concat(ks)) delete data[k]; } };
 };
-const session = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
+const session = () => { const m = new Map(); return { m, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
 const PARTS = { school: 'bb.school.test', user: '_900_1', course: '_101_1', content: '_7_1' }, KEY = PA.keyOf(PARTS);
 const RECOVERY = 'https://bb.school.test/ultra/courses/_101_1/assessment/_7_1/attempt/create';
 const docOf = (...texts) => ({ type: 'doc', content: texts.map((text) => ({ type: 'paragraph', content: [{ type: 'text', text }] })) });
@@ -110,4 +110,45 @@ test('what the student typed before the key came stays theirs, and the saved pap
   const all = await Promise.all((await store.versions(KEY)).map((v) => store.version(KEY, v.id)));
   assert.ok(all.some((v) => textOf(v.doc) === 'Two thousand words of my essay.'), 'the saved paper is in its history');
   assert.deepEqual((await stored(local)).index, [KEY]);
+});
+
+// A picture as the schema holds it: its bytes as data.
+const PICTURE = `data:image/png;base64,${'iVBORw0KGgo'.repeat(40000)}AAAAAElFTkSuQmCC`;
+const pictured = (text) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }, { type: 'image', attrs: { src: PICTURE, alt: 'Chart' } }] }] });
+const pictureOf = (view) => { let src = null; view.state.doc.descendants((n) => { if (n.type.name === 'image') src = n.attrs.src; }); return src; };
+const slotOf = (ss) => [...ss.m.entries()].find(([k]) => k.startsWith('gz-paper-pending:'))?.[1] || '';
+
+test('the tab\'s unsaved copy refers to the pictures already saved, and the next frame puts them back whole', async () => {
+  const local = memory(), ss = session();
+  await seed(local, { doc: pictured('Before the chart.') });
+  const first = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  first.type(' After it.');
+  const slot = slotOf(ss);
+  assert.ok(slot.includes('After it.'), 'the copy holds the edit');
+  assert.ok(slot.length < 20000, `a keystroke copies no picture data (${slot.length} characters)`);
+  const next = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  assert.ok(next.shown().endsWith('After it.'));
+  assert.equal(pictureOf(next.view), PICTURE);
+  assert.equal(pictureOf({ state: { doc: S.paper.nodeFromJSON((await stored(local)).paper.doc) } }), PICTURE);
+});
+
+test('a picture not saved yet is kept whole in the tab\'s copy', async () => {
+  const local = memory(), ss = session();
+  await seed(local);
+  const first = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  first.view.dispatch(first.view.state.tr.insert(first.view.state.doc.content.size - 1, S.paper.nodes.image.create({ src: PICTURE, alt: 'Chart' })));
+  first.sandbox.__.changed();
+  const next = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  assert.equal(pictureOf(next.view), PICTURE);
+});
+
+test('a copy whose saved pictures are nowhere on this device any more is set aside, not opened with holes', async () => {
+  const local = memory(), ss = session();
+  await seed(local, { doc: pictured('Before the chart.') });
+  const first = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  first.type(' After it.');
+  await PA.open(local, () => (clock += 1000)).remove(KEY);
+  await seed(local, { doc: docOf('Another tab removed the chart.') });
+  const next = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  assert.equal(next.shown(), 'Another tab removed the chart.');
 });
