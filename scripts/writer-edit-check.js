@@ -47,7 +47,7 @@ const head = (s) => words(s).split(' ').slice(0, 6).join(' ');
 
 (async () => {
   let context, held = false, tmp, ext;
-  const lock = env.lockPath();
+  const lock = require('./check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-edit-check\n`); break; }
@@ -58,9 +58,9 @@ const head = (s) => words(s).split(' ').slice(0, 6).join(' ');
     fs.mkdirSync(shots, { recursive: true });
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
-    ext = env.staged(root, [`${site}/*`]);
+    ext = require('./check-env.js').staged(root, [`${site}/*`]);
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, acceptDownloads: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, acceptDownloads: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json')), members = JSON.parse(fixture('ultra-memberships.json'));
     members.results = members.results.map((m) => (m.courseId === '_101_1' ? { ...m, course: { ...m.course, name: FX.context.course, displayName: FX.context.course } } : m));
