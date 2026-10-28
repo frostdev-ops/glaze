@@ -342,3 +342,17 @@ test('a pending send expires and is cancelled when its box closes', async () => 
   c.emit({ type: 'native' }, 1);
   assert.equal([...c.timers.values()].filter((t) => t.ms === 60).length, 0);
 });
+
+test('an assignment\'s paper frame opens with its key, so it loads the student\'s paper and never a stand-in', async () => {
+  const c = content({ fixture: 'attempt', pathname: '/ultra/courses/_101_1/assessment/_7_1/attempt/create' }); await c.start();
+  const init = c.ports[0]?.sent.find((m) => m.type === 'init');
+  assert.equal(init?.mode, 'paper');
+  assert.deepEqual({ ...init.context.paper }, { school: 'school.blackboard.com', user: '_900_1', course: '_101_1', content: '_7_1', url: 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/create' });
+});
+
+test('a paper frame still opens, under a stand-in key, when the student\'s id is unknown', async () => {
+  const c = content({ fixture: 'attempt', pathname: '/ultra/courses/_101_1/assessment/_7_1/attempt/create', account: async () => { throw new Error('401'); } }); await c.start();
+  const init = c.ports[0]?.sent.find((m) => m.type === 'init');
+  assert.equal(init?.mode, 'paper');
+  assert.equal(init.context.paper, undefined);
+});

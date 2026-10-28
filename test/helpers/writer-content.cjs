@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 const U = require('../../lib/writer-ultra.js');
-module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recovery = false } = {}) => {
+module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recovery = false, pathname = null, account = async () => '_900_1' } = {}) => {
   const doc = { activeElement: null, listeners: [] }, timers = new Map(), observers = [], ports = [], messages = [], clicks = [], kept = [];
   doc.root = new El('html', doc); doc.documentElement = doc.root;
   doc.body = parse(fs.readFileSync(path.join(__dirname, `../fixtures/ultra-writer-${fixture}.html`), 'utf8'), doc);
@@ -14,12 +14,12 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recov
   doc.createElement = (tag) => { const el = new El(tag, doc); el.style.getPropertyPriority = () => ''; return el; };
   doc.execCommand = (name, ui, html) => { if (insert) doc.activeElement.innerHTML = html; return insert; };
   doc.fire = (el, type) => { if (type === 'click') clicks.push(el); };
-  const location = { origin: 'https://school.blackboard.com', pathname: fixture === 'discussion' ? '/ultra/courses/_101_1/discussion/_9_1' : '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1' };
+  const location = { origin: 'https://school.blackboard.com', host: 'school.blackboard.com', pathname: pathname || (fixture === 'discussion' ? '/ultra/courses/_101_1/discussion/_9_1' : '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1') };
   let timer = 0, mode = helper;
   const ctx = vm.createContext({
     document: doc, location, crypto, CustomEvent, console, Element: El,
     GZ_COLORS: [], GZ_WRITER_ULTRA: U,
-    GZ_CTX: { on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true } }), t: (k) => k, locale: () => 'en', need: async () => ctx.GZ_DRAFT_UI, draftAt: (ed) => ({ ed, id: ed.id, near: U.contextOf(ed, U.kindOf(ed, { path: location.pathname })).post?.id || '', path: location.pathname, html: ed.innerHTML, text: ed.textContent, at: Date.now() }), bookFor: () => ({ results: [{ column: { contentId: '_8_1' } }] }) },
+    GZ_CTX: { account, on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true } }), t: (k) => k, locale: () => 'en', need: async () => ctx.GZ_DRAFT_UI, draftAt: (ed) => ({ ed, id: ed.id, near: U.contextOf(ed, U.kindOf(ed, { path: location.pathname })).post?.id || '', path: location.pathname, html: ed.innerHTML, text: ed.textContent, at: Date.now() }), bookFor: () => ({ results: [{ column: { contentId: '_8_1' } }] }) },
     GZ_DRAFT_UI: { ready: async () => !recovery, keep: (s) => kept.push({ ...s }), write() {} },
     chrome: { runtime: { getURL: (s) => `chrome-extension://x/${s}`, sendMessage: async (m) => { messages.push(m); return { ok: true }; } }, storage: { onChanged: { addListener() {} } } },
     getComputedStyle: () => ({ getPropertyValue: () => '' }), matchMedia: () => ({ matches: true }),
