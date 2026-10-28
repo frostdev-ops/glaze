@@ -170,4 +170,6 @@ test('pasted headings retain source emphasis and mixed bold text', () => {
   assert.equal(marksOn(doc, 'Plain').bold, undefined);
   assert.equal(marksOn(doc, 'bold').bold, true);
   assert.equal(marksOn(doc, 'bold').italic, true);
+  const bare = read(P.normalize('<h1>Default heading</h1>').html);
+  assert.equal(marksOn(bare, 'Default heading').bold, true, 'bare HTML headings retain browser bold emphasis');
 });
