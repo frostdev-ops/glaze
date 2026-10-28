@@ -77,7 +77,7 @@
 .gp-flow .ProseMirror .gzo-img[data-display="block"] { display: block; width: 100%; text-align: center; }
 .gp-flow .ProseMirror .gzo-img[data-display="block"][data-align="left"] { text-align: left; }
 .gp-flow .ProseMirror .gzo-img[data-display="block"][data-align="right"] { text-align: right; }
-.gp-flow .ProseMirror .gzo-img[data-caption]::after { content: attr(data-caption); display: block; padding-top: 4px; font-size: calc(1em - 2pt); line-height: 1.15; white-space: normal; }
+.gp-flow .ProseMirror .gzo-img[data-caption]::after { content: attr(data-caption); display: block; padding-top: 0; font-size: max(8pt, calc(1em - 2pt)); line-height: 1.15; white-space: normal; }
 .gp-flow .ProseMirror .gzo-box { display: inline-block; position: relative; max-width: 100%; vertical-align: bottom; }
 .gp-flow .ProseMirror .gzo-box img { display: block; max-width: 100%; height: auto; }
 .gp-flow .ProseMirror .gzo-img.ProseMirror-selectednode { outline: none; }
