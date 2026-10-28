@@ -38,7 +38,7 @@ test('an interrupted browser wait exits without waiting for an unrelated browser
   await assert.rejects(require('../scripts/wait-for-browser.js')(controller.signal), /synthetic interrupt/);
 });
 
-test('a failure after Chromium starts closes it and removes its staged extension, profile and lock', async (t) => {
+test('smoke output can stay in a hidden checkout folder, and a launch failure cleans its profile and lock', async (t) => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-practice-cleanup-'));
   const context = new EventEmitter();
   const load = Module._load, practice = process.env.GLAZE_PRACTICE;
@@ -58,7 +58,7 @@ test('a failure after Chromium starts closes it and removes its staged extension
     const ext = path.join(tmp, 'source');
     fs.mkdirSync(ext);
     fs.writeFileSync(path.join(ext, 'manifest.json'), '{"manifest_version":3,"name":"Synthetic practice","version":"0.0.0"}');
-    process.env.GLAZE_PRACTICE = path.join(tmp, 'practice');
+    process.env.GLAZE_PRACTICE = path.join(ext, '.glaze-practice');
     await assert.rejects(main(['--smoke', '--ext', ext]), /synthetic initialization failure/);
     assert.equal(closed, 1);
     assert.equal(fs.existsSync(path.dirname(profile)), false);
