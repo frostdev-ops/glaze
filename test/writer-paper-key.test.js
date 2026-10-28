@@ -241,3 +241,15 @@ test('a new paper the student already wrote in keeps what they wrote when the pa
   await f.context({ paper: PARTS, user: { name: 'Alex Rivera' }, assignment: { title: 'Essay 2' } });
   assert.ok(f.shown().includes('My first sentence.'));
 });
+
+test('storage telling a paper of its own save, before the save answers, never reloads the paper', async () => {
+  const local = memory(), ss = session(), changed = [];
+  await seed(local);
+  const f = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS }, changed });
+  const set = local.set;
+  local.set = async (o) => { await set(o); for (const fn of changed) fn(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { newValue: structuredClone(v) }])), 'local'); for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
+  const before = f.view.state.doc;
+  assert.ok(await f.$.save('sending'), 'a version saved with nothing typed');
+  for (let i = 0; i < 20; i++) await new Promise(setImmediate);
+  assert.equal(f.view.state.doc, before, 'the same document: a submit sheet open on it carries on');
+});
