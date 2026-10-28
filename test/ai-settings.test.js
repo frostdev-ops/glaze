@@ -744,3 +744,14 @@ test('saving a changed endpoint refreshes its picker catalog and drops its previ
   assert.deepEqual(p.options(), ['new-model'], 'the previous address must not supply the new address\'s models');
   assert.ok(p.fetched.some(([url]) => url === 'https://new.example/v1/models'));
 });
+
+
+test('Same as default returns keyboard focus to the feature model button', async () => {
+  const p = await open({ ai: { on: true, model: { use: 'openai', model: 'gpt-5' }, models: { writing: { use: 'openai', model: 'gpt-4.1' } } }, conns: { openai: kept('openai') } });
+  await p.click('ai-pick-writing');
+  const same = p.side()[0];
+  same.focus();
+  await p.click(same);
+  assert.deepEqual(p.data.ai.models, {});
+  assert.equal(p.doc.activeElement, p.$('ai-pick-writing'));
+});
