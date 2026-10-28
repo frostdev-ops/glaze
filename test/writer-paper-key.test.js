@@ -32,6 +32,7 @@ const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = []
   let onContext = null;
   const view = { state: E.state({ mode: 'paper' }), updateState(s) { this.state = s; }, dispatch(tr) { this.state = this.state.apply(tr); } };
   const sandbox = vm.createContext({
+    recoveryMessages: [], toast: (m) => sandbox.recoveryMessages.push(m),
     console, crypto, TextEncoder, Uint8Array, JSON, Date, Number, Object, Promise, Map, Set, Error, RangeError, structuredClone,
     setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
     addEventListener: (type, fn) => { windowEvents[type] = fn; }, document: { addEventListener: () => {}, documentElement: { lang: 'en' } },
@@ -143,7 +144,7 @@ test('a picture not saved yet is kept whole in the tab\'s copy', async () => {
   assert.equal(pictureOf(next.view), PICTURE);
 });
 
-test('a copy whose saved pictures are nowhere on this device any more is set aside, not opened with holes', async () => {
+test('recovery keeps unsaved text even when another tab deleted its saved pictures', async () => {
   const local = memory(), ss = session();
   await seed(local, { doc: pictured('Before the chart.') });
   const first = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
@@ -151,7 +152,12 @@ test('a copy whose saved pictures are nowhere on this device any more is set asi
   await PA.open(local, () => (clock += 1000)).remove(KEY);
   await seed(local, { doc: docOf('Another tab removed the chart.') });
   const next = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
-  assert.equal(next.shown(), 'Another tab removed the chart.');
+  assert.ok(next.shown().includes('Before the chart.') && next.shown().endsWith(' After it.'), 'unsaved text returns');
+  assert.equal(pictureOf(next.view), null, 'missing picture gets a text placeholder');
+  const store = PA.open(local);
+  const versions = await Promise.all((await store.versions(KEY)).map((v) => store.version(KEY, v.id)));
+  assert.ok(versions.some((v) => textOf(v.doc) === 'Another tab removed the chart.'));
+  assert.deepEqual(next.sandbox.recoveryMessages, ['Some pictures, objects or equations were left out.']);
 });
 
 // Two tabs on one paper: storage.local tells each what the other saved.
