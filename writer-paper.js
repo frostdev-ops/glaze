@@ -6,7 +6,7 @@
 // the submit step attaches it as a .docx (lib/writer-docx.js). The same chrome edits a paper in papers.html.
 // Classic script after writer.js; the paper libraries load only when a paper opens.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
-  const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-papers.js'];
+  const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-papers.js', 'lib/writer-submit.js'];
   const DOCX = ['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js'];
   const GAP = 26.4; // between pages, in page px (22px at 100%)
   const PX100 = 80 / 96; // 100% shows an inch as 80px, as the mockup does
@@ -292,9 +292,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         p.style.position = 'relative';
         p.style.textAlign = 'left';
         for (const seg of segs.slice(1)) {
-          const w = seg.getBoundingClientRect().width / scale, stop = p.gzTabs.map(([pos, kind]) => [pos * 96, kind]).find(([pos]) => pos > x + 0.5) || [Math.floor(x / tab + 1) * tab, 'l'];
+          const w = seg.getBoundingClientRect().width / scale, stop = p.gzTabs.map(([pos, kind, leader]) => [pos * 96, kind, leader]).find(([pos]) => pos > x + 0.5) || [Math.floor(x / tab + 1) * tab, 'l'];
           const left = Math.max(x, stop[1] === 'c' ? stop[0] - w / 2 : stop[1] === 'r' || stop[1] === 'd' ? stop[0] - w : stop[0]);
-          seg.style.cssText = `position:absolute;left:${Math.min(left, width - w)}px`;
+          const edge = Math.max(x, Math.min(left, width - w));
+          if (stop[2] && edge > x) {
+            const leader = h('span', { class: `gp-tabstop-${stop[2]}`, 'aria-hidden': 'true' });
+            leader.style.cssText = `position:absolute;left:${x}px;width:${edge - x}px;height:1em`;
+            p.append(leader);
+          }
+          seg.style.cssText = `position:absolute;left:${edge}px`;
           x = left + w;
         }
       }
@@ -1178,10 +1184,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     const open2 = (page2) => { try { window.open(chrome.runtime.getURL(page2), '_blank', 'noopener'); } catch { /* no extension context */ } };
     const docx = async () => { await need(DOCX); return GZ_WRITER_DOCX.exportDocx(view.state.doc, { format, surname: surname(), title: ctx.assignment?.title || paper?.title || '' }); };
-    const fileName = () => {
-      const base = [surname(), (ctx.assignment?.title || paper?.title || t('Paper'))].filter(Boolean).join(' ').replace(/\s+/g, '_');
-      return (globalThis.GZ_ZIP?.safeName || ((x) => x))(`${base}.docx`);
-    };
+    const fileName = () => GZ_WRITER_SUBMIT_LIB.fileName({ surname: surname(), title: ctx.assignment?.title || paper?.title || '', fallback: t('Paper') });
     const exportFile = async () => {
       try {
         const out = await docx(), url = URL.createObjectURL(new Blob([out.bytes], { type: out.type }));
