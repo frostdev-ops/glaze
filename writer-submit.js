@@ -239,7 +239,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     });
   };
 
-  frame.handle('submit:open', () => { open(); });
+  // The page catches Ultra's Submit from the frame's ready, a moment before the paper mounts: a press waits for the paper.
+  const paper = async () => { for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100)); return P()?.current() || null; };
+  frame.handle('submit:open', async () => { const api = P()?.current() || await paper(); if (api) open(api); });
   frame.handle('submit:step', (m) => { if (waiting && m.run === waiting.run) waiting.step(m.step); });
   frame.handle('submit:done', (m) => { if (waiting && m.run === waiting.run) waiting.done({ ok: m.ok === true, error: typeof m.error === 'string' ? m.error : 'page' }); });
   // Ultra's Save and Close: the paper saved first (it attaches nothing), then the page lets Ultra's own go on.

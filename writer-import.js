@@ -103,10 +103,13 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
     else { close(); SHEET()?.open(api, file); }
   };
 
+  // The page takes Ultra's file area from the frame's ready, a moment before the paper mounts: a file waits for the paper.
+  const paper = async () => { for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100)); return P()?.current() || null; };
   frame.handle('import:file', async (m) => {
-    const api = P()?.current();
-    if (!api || frame.mode() !== 'paper' || frame.kind() !== 'assignment' || !(m.bytes instanceof ArrayBuffer) || !m.bytes.byteLength || m.bytes.byteLength > 50e6) return;
+    if (frame.mode() !== 'paper' || frame.kind() !== 'assignment' || !(m.bytes instanceof ArrayBuffer) || !m.bytes.byteLength || m.bytes.byteLength > 50e6) return;
     const request = ++requests;
+    const api = P()?.current() || await paper();
+    if (!api || request !== requests) return;
     await P().need(['lib/writer-submit.js']);
     if (request !== requests || P()?.current() !== api || L().fileError({ name: m.name, size: m.bytes.byteLength, type: m.mime ?? '' })) return;
     bring(api, new File([m.bytes], m.name, { type: typeof m.mime === 'string' ? m.mime : '' }));
