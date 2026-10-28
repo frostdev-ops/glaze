@@ -80,11 +80,23 @@ test('a request refuses anything outside its limits or its shape, rather than cu
     ['maxTokens over', { ...user('x'), maxTokens: R.LIMIT.maxTokens + 1 }],
     ['temperature out of range', { ...user('x'), temperature: 3 }],
     ['a timeout too short', { ...user('x'), timeoutMs: 10 }],
+    ['an effort it does not know', { ...user('x'), effort: 'max' }],
+    ['an effort that is not a word', { ...user('x'), effort: 1 }],
     ['a schema outside the subset', { ...user('x'), schema: { type: 'object', format: 'x' } }],
     ['a schema that is not an object at its root', { ...user('x'), schema: { type: 'array' } }],
     ['a tool name a server refuses', { ...user('x'), tools: [{ name: 'courses.list', description: 'd', parameters: { type: 'object' } }] }],
     ['two tools of one name', { ...user('x'), tools: [{ name: 'a', description: 'd', parameters: { type: 'object' } }, { name: 'a', description: 'd', parameters: { type: 'object' } }] }],
   ]) assert.equal(R.clean(bad), null, why);
+});
+
+test('an effort is one of EFFORTS, kept as it is; the mock provider runs with it and the request it sees holds it', async () => {
+  for (const effort of R.EFFORTS) assert.equal(R.clean({ ...user('x'), effort }).effort, effort);
+  assert.deepEqual(R.EFFORTS, ['none', 'minimal', 'low', 'medium', 'high']);
+  const P = require('../lib/ai/providers.js');
+  require('../lib/ai/providers/mock.js');
+  const seen = [];
+  assert.equal((await P.run('mock', { ...user('x'), effort: 'none' }, { replies: [{ text: 'ok' }], seen })).text, 'ok');
+  assert.equal(seen[0].effort, 'none');
 });
 
 test('a conversation with tool calls keeps each answer after its call', () => {

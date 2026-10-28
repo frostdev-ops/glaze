@@ -100,6 +100,50 @@ test('max_tokens and temperature step down when a refusal names them', async () 
   assert.equal(prose.calls[1].body.response_format.type, 'json_object');
 });
 
+test('a reasoning effort goes as OpenRouter\'s reasoning object there and as reasoning_effort elsewhere; none asked, none sent', async () => {
+  const or = server(done('ok'), done('ok'));
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base: 'https://openrouter.ai/api/v1', model: `e-${n}` }), { fetch: or.fetch });
+  assert.deepEqual(or.calls[0].body.reasoning, { effort: 'none' });
+  assert.equal('reasoning_effort' in or.calls[0].body, false);
+  await P.run('openai', ask(), cfg({ base: 'https://openrouter.ai/api/v1', model: `f-${n}` }), { fetch: or.fetch });
+  assert.equal('reasoning' in or.calls[1].body || 'reasoning_effort' in or.calls[1].body, false);
+  const flat = server(done('ok'));
+  await P.run('openai', ask({ effort: 'low' }), cfg(), { fetch: flat.fetch });
+  assert.equal(flat.calls[0].body.reasoning_effort, 'low');
+  assert.equal('reasoning' in flat.calls[0].body, false);
+});
+
+test('an effort a model refuses steps up a level at a time (none, minimal, low), then goes; remembered, and never lowering a request\'s own', async () => {
+  const base = 'https://openrouter.ai/api/v1', model = `must-reason-${n}`;
+  const mandatory = () => json({ error: { code: 400, message: 'Reasoning is mandatory for this endpoint and cannot be disabled.' } }, 400);
+  const level = () => json({ error: { code: 400, message: 'Reasoning effort "minimal" is not supported by this model.' } }, 400);
+  const s = server(mandatory, level, done('ok'), done('ok'), done('ok'));
+  assert.equal((await P.run('openai', ask({ effort: 'none' }), cfg({ base, model }), { fetch: s.fetch })).text, 'ok');
+  assert.deepEqual(s.calls.map((c) => c.body.reasoning.effort), ['none', 'minimal', 'low']);
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base, model }), { fetch: s.fetch });
+  assert.equal(s.calls[3].body.reasoning.effort, 'low', 'remembered for that model');
+  await P.run('openai', ask({ effort: 'high' }), cfg({ base, model }), { fetch: s.fetch });
+  assert.equal(s.calls[4].body.reasoning.effort, 'high', 'a remembered level only raises');
+  // Every level refused: the parameter goes.
+  const all = server(mandatory, level, json({ error: { message: 'reasoning is not available here' } }, 400), done('ok'), done('ok'));
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base: 'https://all.example.com/v1' }), { fetch: all.fetch });
+  assert.deepEqual(all.calls.map((c) => c.body.reasoning_effort), ['none', 'minimal', 'low', undefined]);
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base: 'https://all.example.com/v1' }), { fetch: all.fetch });
+  assert.equal('reasoning_effort' in all.calls[4].body, false, 'remembered');
+});
+
+test('a server that does not know the effort parameter gets none at once; a 400 that names something else is not stepped', async () => {
+  const typed = server(rejection('reasoning_effort', "Unsupported parameter: 'reasoning_effort' is not supported with this model."), done('ok'));
+  assert.equal((await P.run('openai', ask({ effort: 'none' }), cfg(), { fetch: typed.fetch })).text, 'ok');
+  assert.deepEqual(typed.calls.map((c) => c.body.reasoning_effort), ['none', undefined]);
+  const prose = server(json({ error: { message: 'Unrecognized request argument supplied: reasoning_effort' } }, 400), done('ok'));
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base: 'https://prose.example.com/v1' }), { fetch: prose.fetch });
+  assert.deepEqual(prose.calls.map((c) => c.body.reasoning_effort), ['none', undefined]);
+  const other = server(json({ error: { message: 'messages: too long' } }, 400));
+  await assert.rejects(P.run('openai', ask({ effort: 'none' }), cfg(), { fetch: other.fetch }), (e) => e.code === 'request-rejected');
+  assert.equal(other.calls.length, 1);
+});
+
 test('a 429 is retried once after a pause; network loss, a 5xx and a cut stream never replay inference', async () => {
   const rate = server(json({ error: { message: 'slow down' } }, 429), done('ok'));
   const t = Date.now();

@@ -71,6 +71,13 @@ test('a run is one message with the cleaned request and the schema; the JSON ans
     messages: [{ role: 'system', content: [{ type: 'text', text: 'Answer.' }] }, { role: 'user', content: [{ type: 'text', text: 'Q' }] }] });
 });
 
+test('a reasoning effort stays in the worker: the native message has none', async () => {
+  native = async () => ok('Four');
+  assert.equal((await P.run('apple', ask({ effort: 'none', maxTokens: 64 }), { model: 'on-device' })).text, 'Four');
+  assert.equal('effort' in sent[0].m, false);
+  assert.equal(sent[0].m.maxTokens, 64);
+});
+
 test('an answer the native side cut at maxTokens is a refusal, never read, even when its JSON closes', async () => {
   // Guided generation closes the JSON when it reaches maximumResponseTokens (measured: 40 tokens of 30 asked-for rows came
   // back as valid JSON with 3), so the native side says finish: 'length'.

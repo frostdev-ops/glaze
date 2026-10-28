@@ -137,6 +137,12 @@ test('without params() no sampling settings are sent; a temperature over the max
   assert.ok(!('temperature' in s.log.create[0]), 'none asked, none sent');
 });
 
+test('a reasoning effort is not the Prompt API\'s: nothing of it reaches the session', async () => {
+  const s = install(stub());
+  assert.deepEqual((await P.run('device', req({ effort: 'none' }), {})).json, { text: 'ok' });
+  assert.equal(JSON.stringify([s.log.create, s.log.prompts, s.log.measured]).includes('effort'), false);
+});
+
 test('deltas stream to onDelta and make up the answer', async () => {
   const { log } = install(stub({ chunks: ['{"te', 'xt":"str', 'eamed"}'] }));
   const seen = [];
