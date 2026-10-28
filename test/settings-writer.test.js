@@ -211,3 +211,28 @@ test('papers by course, from the paper index; the dictionary as kept', () => {
   assert.deepEqual(WE.words(['a', 3, '', ' ', 'B']), ['a', 'B']);
   assert.deepEqual(WE.FORMATS, require('../lib/writer-styles.js').IDS.map((id) => [id, require('../lib/writer-styles.js').FORMATS[id].label]));
 });
+
+test('a word taken out of the personal dictionary is unknown again: the worker forgets it and builds Harper again', async () => {
+  const vm = require('node:vm');
+  const flush = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
+  let built = 0, disposed = 0;
+  const imported = [];
+  class LocalLinter {
+    constructor() { built++; }
+    async setup() {} async importWords(w) { imported.push([...w]); } async dispose() { disposed++; }
+    async lint(text) { return text.includes('rememory') ? [{ span: () => ({ start: 0, end: 8 }), lint_kind: () => 'Spelling', message: () => 'm', get_problem_text: () => 'rememory', suggestions: () => [] }] : []; }
+  }
+  const ctx = vm.createContext({ LocalLinter, Dialect: { American: 0 }, slimBinary: {}, crypto: { randomUUID: () => 'w' }, performance, onconnect: null, close() {}, setTimeout: () => 1, clearTimeout() {} });
+  vm.runInContext(read('lib/harper/shared.js').replace(/^import .*;\n/gm, ''), ctx);
+  const p = { got: [], postMessage(m) { this.got.push(m); }, close() {} };
+  ctx.onconnect({ ports: [p] });
+  const send = async (m) => { p.onmessage({ data: m }); await flush(); };
+  await send({ op: 'dict', words: ['rememory', 'Sethe'] });
+  await send({ op: 'lint', id: 1, text: 'rememory' });
+  assert.equal(p.got.find((m) => m.id === 1).lints.length, 0, 'known while in the dictionary');
+  await send({ op: 'undict', words: ['Rememory'] });
+  await send({ op: 'lint', id: 2, text: 'rememory' });
+  assert.equal(p.got.find((m) => m.id === 2).lints.length, 1, 'flagged once taken out');
+  assert.deepEqual([built, disposed], [2, 1], 'Harper built again without it');
+  assert.deepEqual(imported.at(-1), ['sethe']);
+});

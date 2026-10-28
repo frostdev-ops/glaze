@@ -257,6 +257,14 @@
   try {
     chrome.storage.onChanged.addListener((c, area) => {
       if (area !== 'local' || !c[DICT] || !Array.isArray(c[DICT].newValue)) return;
+      // Words removed in Settings → Writer → Personal dictionary are unknown again, here and in the worker.
+      const kept = new Set(c[DICT].newValue), gone = (Array.isArray(c[DICT].oldValue) ? c[DICT].oldValue : []).filter((w) => typeof w === 'string' && !kept.has(w) && dict.has(w));
+      if (gone.length) {
+        for (const w of gone) dict.delete(w);
+        if (port) port.postMessage({ op: 'undict', words: gone });
+        if (view) view.dispatch(view.state.tr.setMeta(P.key, { words: [...context, ...dict] }).setMeta('addToHistory', false));
+        if (started && proofOn()) { clearTimeout(docTimer); docTimer = setTimeout(lintDoc, 50); }
+      }
       const fresh = c[DICT].newValue.filter((w) => typeof w === 'string' && !dict.has(w));
       if (!fresh.length) return;
       for (const w of fresh) dict.add(w);
