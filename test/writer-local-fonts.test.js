@@ -38,3 +38,18 @@ test('the .docx names the paper\'s own font in its defaults and its font table',
   assert.match(o.parts['word/fontTable.xml'], /w:name="Cambria"/);
   assert.match(o.parts['word/document.xml'], /w:ascii="Cambria"/);
 });
+
+test('a Word 365 paper imports in Aptos, kept by name, with no warning about replaced fonts', async () => {
+  const FX = require('./fixtures/writer-docx-import.js');
+  const r = await X.importDocx(FX.bytes('aptos-word'), { format: 'mla9' });
+  assert.equal(r.setup.font, 'Aptos');
+  assert.ok(!r.warnings.includes('Fonts Word and Blackboard don\'t share were replaced.'), r.warnings.join(' '));
+});
+
+test('small caps and all caps come back from a .docx as marks', async () => {
+  const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'small', marks: [{ type: 'small_caps' }] }, { type: 'text', text: ' and ' }, { type: 'text', text: 'all', marks: [{ type: 'all_caps' }] }] }] };
+  const out = X.exportDocx(doc, { format: 'mla9', date: new Date('2026-10-28T12:00:00Z') });
+  const back = S.paper.nodeFromJSON((await X.importDocx(out.bytes, { format: 'mla9' })).doc), marks = {};
+  back.descendants((n) => { if (n.isText) marks[n.text.trim()] = n.marks.map((m) => m.type.name); return true; });
+  assert.deepEqual([marks.small, marks.all], [['small_caps'], ['all_caps']]);
+});
