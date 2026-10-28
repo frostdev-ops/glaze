@@ -1,6 +1,6 @@
 // Glaze Writer's one Harper for the whole browser: a module SharedWorker ('glaze-harper') every editor frame connects to
-// (writer-proof.js), so ten boxes in ten tabs on two schools still hold one linter (~150 MB warm). Where SharedWorker is
-// missing (Safari) a frame runs this same file as its own module Worker. Harper (lib/harper, Apache-2.0) loads on the first
+// (writer-proof.js), so ten boxes in ten tabs on two schools still hold one linter (~150 MB warm). Where a SharedWorker is
+// missing or won't start, a frame runs this same file as its own module Worker. Harper (lib/harper, Apache-2.0) loads on the first
 // lint and the worker closes after IDLE with nothing asked, giving its memory back; the frames' next lint starts a new one
 // (~300 ms) and the underlines already drawn stay. Lints are queued per frame and taken in turn, a newer lint of the same
 // paragraph replacing a queued one. Each frame has its own words (its box's context) and ignored lints; the student's

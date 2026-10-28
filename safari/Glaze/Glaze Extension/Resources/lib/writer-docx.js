@@ -1,5 +1,5 @@
 // Glaze Writer's .docx: a paper (the paper schema's document) out to a Word file, and a Word file in as HTML the paper
-// schema reads. Export writes Word 2013+ OOXML (compatibility mode 15), Letter pages, the format's styles, header and
+// schema reads. Export writes Word 2013+ OOXML (compatibility mode 15), the paper's pages, the format's styles, header and
 // sections from lib/writer-styles.js, real footnotes, and each list item and quoted paragraph as its own paragraph. Import
 // reads the archive with lib/doctext.js's bounded unzip and tokenizer (no DOMParser, so it runs anywhere), as untrusted
 // input: sizes, entries, elements and nesting are capped, no DTDs, no remote images. Ported from Rimeward's
@@ -16,7 +16,8 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
   const NS = `xmlns:w="${W}" xmlns:r="${R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"`;
   const DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
   const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  const esc = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/g, '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
+  // Text for XML: what XML forbids dropped, markup escaped (lib/writer-objects-docx.js writes with it too).
+  const esc = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
   const JC = { left: 'left', center: 'center', right: 'right', justify: 'both' };
   const LIMIT = { file: 15e6, entries: 2000, entry: 10e6, total: 35e6, part: 5e6, elements: 100000, depth: 80, images: 10e6, html: 16 * 1024 * 1024 };
   const b64 = (s) => (typeof atob === 'function' ? Uint8Array.from(atob(s), (c) => c.charCodeAt(0)) : new Uint8Array(Buffer.from(s, 'base64')));
@@ -42,7 +43,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     };
     const part = (path, kind, body) => { parts[path] = DECL + body; overrides.push([path, `application/vnd.openxmlformats-officedocument.wordprocessingml.${kind}+xml`]); };
     const notes = [], lists = [];
-    let images = 0, imageBytes = 0, pendingBreak = false;
+    let images = 0, imageBytes = 0, pendingBreak = 0;
 
     // ---- runs
     const runProps = (m, extra = '') => {
@@ -53,7 +54,6 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       else if (m.bold === false) s += '<w:b w:val="0"/><w:bCs w:val="0"/>';
       if (mk('italic')) s += '<w:i/><w:iCs/>';
       else if (m.italic === false) s += '<w:i w:val="0"/><w:iCs w:val="0"/>';
-      if (m.direction) s += m.direction.dir === 'rtl' ? '<w:rtl/>' : '<w:rtl w:val="0"/>';
       if (mk('all_caps')) s += '<w:caps/>';
       if (mk('small_caps')) s += '<w:smallCaps/>';
       if (mk('strike')) s += '<w:strike/>';
@@ -63,10 +63,11 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (mk('underline')) s += '<w:u w:val="single"/>';
       if (mk('sup')) s += '<w:vertAlign w:val="superscript"/>';
       else if (mk('sub')) s += '<w:vertAlign w:val="subscript"/>';
+      if (m.direction) s += m.direction.dir === 'rtl' ? '<w:rtl/>' : '<w:rtl w:val="0"/>';
       return s ? `<w:rPr>${s}</w:rPr>` : '';
     };
     const marksOf = (node) => Object.fromEntries(node.marks.map((m) => [m.type.name, m.attrs && Object.keys(m.attrs).length ? m.attrs : true]));
-    const textRun = (text, m, rStyle = '') => `<w:r>${runProps(m, rStyle ? `<w:rStyle w:val="${rStyle}"/>` : '')}${String(text).split(/(\t|\n)/).filter((x) => x !== '').map((x) => (x === '\t' ? '<w:tab/>' : x === '\n' ? '<w:br/>' : `<w:t xml:space="preserve">${esc(x)}</w:t>`)).join('')}</w:r>`;
+    const textRun = (text, m, rStyle = '') => `<w:r>${runProps(m, rStyle ? `<w:rStyle w:val="${rStyle}"/>` : '')}${String(text).split(/(\t|\n|\u2011)/).filter((x) => x !== '').map((x) => (x === '\t' ? '<w:tab/>' : x === '\n' ? '<w:br/>' : x === '\u2011' ? '<w:noBreakHyphen/>' : `<w:t xml:space="preserve">${esc(x)}</w:t>`)).join('')}</w:r>`;
     const image = (node) => {
       const m = /^data:image\/(png|jpeg|gif);base64,([a-z\d+/=]+)$/i.exec(node.attrs.src || '');
       if (!m) throw new Error('This picture cannot be exported to Word.');
@@ -116,7 +117,8 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
 
     // ---- paragraphs
     const tw = ST().twips;
-    // pPr in the schema's order: style, keeps, page break, widow control, numbering, tabs, spacing, indent, alignment.
+    // pPr in the schema's order: style, keeps, page break, widow control, numbering, tabs, direction, spacing, indent,
+    // alignment (rPr's too: CT_RPr's, direction after vertical alignment).
     const TAB = { l: 'left', c: 'center', r: 'right', d: 'decimal' };
     const tabsXML = (tabs) => (tabs?.length ? `<w:tabs>${tabs.map(([pos, kind, leader]) => `<w:tab w:val="${TAB[kind] || 'left'}"${leader ? ` w:leader="${esc(leader)}"` : ''} w:pos="${tw(pos)}"/>`).join('')}</w:tabs>` : '');
     const spacingXML = (a) => {
@@ -129,17 +131,18 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       let s = o2.style ? `<w:pStyle w:val="${o2.style}"/>` : '';
       if (a.keepNext) s += '<w:keepNext/>';
       if (a.keepLines) s += '<w:keepLines/>';
-      if (pendingBreak) { s += '<w:pageBreakBefore/>'; pendingBreak = false; }
+      if (pendingBreak) { s += '<w:pageBreakBefore/>'; pendingBreak = 0; }
       if (a.widow === false) s += '<w:widowControl w:val="0"/>';
       if (o2.num) s += `<w:numPr><w:ilvl w:val="${o2.num.level}"/><w:numId w:val="${o2.num.id}"/></w:numPr>`;
-      s += tabsXML(a.tabs) + spacingXML(a);
+      s += tabsXML(a.tabs);
+      if (a.dir) s += a.dir === 'rtl' ? '<w:bidi/>' : '<w:bidi w:val="0"/>';
+      s += spacingXML(a);
       if (!o2.num) {
         const base = o2.quote ? f.quote.indent : 0, left = base + (a.left != null ? a.left : (a.indent || 0) * 0.5);
         const first = a.first != null ? a.first : (a.align === 'center' || a.align === 'right') && !o2.quote && !o2.heading ? 0 : null;
         const attrs = [left !== base || (a.left != null && o2.style === 'Bibliography') ? ` w:left="${tw(left)}"` : '', a.right != null ? ` w:right="${tw(a.right)}"` : '', first != null ? (first < 0 ? ` w:hanging="${tw(-first)}"` : ` w:firstLine="${tw(first)}"`) : '', o2.cell && first == null ? ' w:firstLine="0"' : ''].join('');
         if (attrs) s += `<w:ind${attrs}/>`;
       }
-      if (a.dir) s += a.dir === 'rtl' ? '<w:bidi/>' : '<w:bidi w:val="0"/>';
       if (a.align) s += `<w:jc w:val="${JC[a.align] || 'left'}"/>`;
       return s ? `<w:pPr>${s}</w:pPr>` : '';
     };
@@ -174,13 +177,18 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         rows += `<w:tr>${cells}</w:tr>`;
       });
       const borders = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((k) => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="auto"/>`).join('');
-      return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>${borders}</w:tblBorders><w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid>${Array.from({ length: cols }, () => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${rows}</w:tbl>`;
+      // Cells padded as the page pads them (writer-paper.css: 0 4px, 60 twips).
+      return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>${borders}</w:tblBorders><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="60" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar><w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid>${Array.from({ length: cols }, () => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${rows}</w:tbl>`;
     };
+    // One page break is the next paragraph's page break before. Two or more in a row, or one before a table (whose cells
+    // Word gives no page break before), are each a paragraph holding a page break, as Word writes them.
+    const breaks = () => { const s = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'.repeat(pendingBreak); pendingBreak = 0; return s; };
     const blocks = (parent, o2 = {}, depth = 0) => {
       if (depth > 40) throw new RangeError('document nesting too deep');
       let out = '';
       parent.forEach((node, _, index) => {
         const name = node.type.name, entry = parent === doc && list0 && index >= list0.from && index < list0.to;
+        if (pendingBreak && name !== 'page_break' && (pendingBreak > 1 || name === 'table')) out += breaks();
         if (name === 'paragraph') out += para(node, { ...o2, style: o2.quote ? 'BlockQuote' : entry ? 'Bibliography' : '' });
         else if (name === 'heading') out += para(node, { ...o2, heading: true, style: `Heading${Math.min(6, Math.max(1, node.attrs.level))}` });
         else if (name === 'bullet_list' || name === 'ordered_list') out += list(node, o2);
@@ -191,7 +199,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
           const pr = pPr({ attrs: {} }, { style: o2.quote ? 'BlockQuote' : '' });
           const border = '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr><w:ind w:firstLine="0"/>';
           out += `<w:p>${pr ? pr.replace('</w:pPr>', `${border}</w:pPr>`) : `<w:pPr>${border}</w:pPr>`}</w:p>`;
-        } else if (name === 'page_break') pendingBreak = true;
+        } else if (name === 'page_break') pendingBreak++;
         else if (name === 'table') out += table(node, o2);
       });
       return out;
@@ -199,7 +207,8 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
 
     const list0 = ST().listAt(doc);
     let body = blocks(doc);
-    if (pendingBreak) body += `<w:p>${pPr({ attrs: {} })}</w:p>`;
+    if (pendingBreak > 1) body += `${breaks()}<w:p/>`;
+    else if (pendingBreak) body += `<w:p>${pPr({ attrs: {} })}</w:p>`;
     if (!body) body = '<w:p/>';
 
     // ---- the package
@@ -322,39 +331,51 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       seen.add(name.toLowerCase());
     }
     const f = ST().get(o.format), warnings = new Set(), warn = (k) => warnings.add(k);
-    const cache = new Map();
+    // Part names are case-insensitive (the paths above are unique that way).
+    const cache = new Map(), named = new Map(z.names.map((n) => [n.toLowerCase(), n])), entry = (path) => named.get(String(path).toLowerCase());
     const part = async (path) => {
-      if (!cache.has(path)) cache.set(path, z.names.includes(path) ? z.text(path).then((t) => (t == null ? null : xml(t))) : Promise.resolve(null));
+      if (!cache.has(path)) cache.set(path, entry(path) ? z.text(entry(path)).then((t) => (t == null ? null : xml(t))) : Promise.resolve(null));
       return cache.get(path);
     };
-    const relsOf = async (path) => {
-      const slash = path.lastIndexOf('/'), dir = path.slice(0, slash + 1), x = await part(`${dir}_rels/${path.slice(slash + 1)}.rels`);
-      return all(x, 'Relationship').map((r) => {
-        const external = r.a.TargetMode === 'External';
-        let target = r.a.Target || '';
-        if (!external) { const out = []; for (const p of (target.startsWith('/') ? target.slice(1) : dir + target).split('/')) { if (p === '..') out.pop(); else if (p && p !== '.') out.push(p); } target = out.join('/'); }
-        return { id: r.a.Id || '', type: r.a.Type || '', target, external };
-      });
+    // A part's relationships, read once: { list, id: Map (the first of each id) }.
+    const relCache = new Map();
+    const relsOf = (path) => {
+      if (!relCache.has(path)) relCache.set(path, (async () => {
+        const slash = path.lastIndexOf('/'), dir = path.slice(0, slash + 1), x = await part(`${dir}_rels/${path.slice(slash + 1)}.rels`);
+        const list = all(x, 'Relationship').map((r) => {
+          const external = r.a.TargetMode === 'External';
+          let target = r.a.Target || '';
+          if (!external) { const out = []; for (const p of (target.startsWith('/') ? target.slice(1) : dir + target).split('/')) { if (p === '..') out.pop(); else if (p && p !== '.') out.push(p); } target = out.join('/'); }
+          return { id: r.a.Id || '', type: r.a.Type || '', target, external };
+        });
+        const id = new Map();
+        for (const r of list) if (!id.has(r.id)) id.set(r.id, r);
+        return { list, id };
+      })());
+      return relCache.get(path);
     };
-    const main = (await relsOf('')).find((r) => r.type.endsWith('/officeDocument') && !r.external)?.target || 'word/document.xml';
+    const main = (await relsOf('')).list.find((r) => r.type.endsWith('/officeDocument') && !r.external)?.target || 'word/document.xml';
     const doc = await part(main), body = doc && all(doc, 'body')[0];
     if (!body) throw new Error('This file is not a Word document.');
-    const rels = await relsOf(main);
+    const rels = (await relsOf(main)).list;
     const target = (kind) => rels.find((r) => r.type.endsWith(`/${kind}`) && !r.external)?.target;
     const stylesX = await part(target('styles') || 'word/styles.xml');
     const styles = new Map(all(stylesX, 'style').map((s) => [at(s, 'styleId'), s]));
     const defaults = all(stylesX, 'docDefaults')[0];
     const chain = (id, seen2 = new Set()) => { if (!id || seen2.has(id) || seen2.size > 12) return []; seen2.add(id); const s = styles.get(id); return s ? [...chain(val(s, 'basedOn'), seen2), s] : []; };
-    const normal = at([...styles.values()].find((s) => at(s, 'type') === 'paragraph' && ['1', 'true', 'on'].includes(at(s, 'default'))), 'styleId');
+    const byDefault = (type) => at([...styles.values()].find((s) => at(s, 'type') === type && ['1', 'true', 'on'].includes(at(s, 'default'))), 'styleId');
+    const normal = byDefault('paragraph'), normalTable = byDefault('table');
     const styleName = (id) => String(val(styles.get(id), 'name') || id || '').toLowerCase();
-    // A paragraph's or run's properties, outermost first, each with where it came from: the defaults, the paragraph style's
-    // chain (Normal when the paragraph names none), the run's character style chain, its own.
-    const levels = (node, kind, pStyle = normal) => {
+    // A paragraph's or run's properties, outermost first, each with where it came from: the defaults, in a table its
+    // style's chain (o.table), the paragraph style's chain (Normal when the paragraph names none), the run's character
+    // style chain (none for a linked run's Hyperlink style, o.linked: the link draws itself), its own.
+    const levels = (node, kind, pStyle = normal, o = {}) => {
       const own = kid(node, kind), out = [];
       const def = kid(kid(defaults, kind === 'pPr' ? 'pPrDefault' : 'rPrDefault'), kind);
       if (def) out.push({ p: def, from: 'default' });
+      for (const s of chain(o.table)) { const x = kid(s, kind); if (x) out.push({ p: x, from: 'table' }); }
       for (const s of chain(kind === 'pPr' ? val(own, 'pStyle') || normal : pStyle)) { const x = kid(s, kind); if (x) out.push({ p: x, from: 'paragraph' }); }
-      if (kind === 'rPr') for (const s of chain(val(own, 'rStyle'))) { const x = kid(s, 'rPr'); if (x) out.push({ p: x, from: 'run' }); }
+      if (kind === 'rPr' && !(o.linked && /^(followed)?hyperlink$/.test(styleName(val(own, 'rStyle'))))) for (const s of chain(val(own, 'rStyle'))) { const x = kid(s, 'rPr'); if (x) out.push({ p: x, from: 'run' }); }
       if (own) out.push({ p: own, from: 'own' });
       return out;
     };
@@ -451,25 +472,31 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     const numX = await part(target('numbering') || 'word/numbering.xml');
     const nums = new Map(all(numX, 'num').map((n) => [at(n, 'numId'), n]));
     const abstracts = new Map(all(numX, 'abstractNum').map((n) => [at(n, 'abstractNumId'), n]));
+    // A level's definition: the instance's own override of it, else its abstract's (through a numbering style's link).
+    const absOf = (id, n = 0) => { const a = abstracts.get(val(nums.get(id), 'abstractNumId')), link = val(a, 'numStyleLink'); return link && n < 4 ? absOf(val(kid(kid(styles.get(link), 'pPr'), 'numPr'), 'numId'), n + 1) || a : a; };
+    const lvlOf = (id, level) => { const o = els(nums.get(id)).find((x) => x.local === 'lvlOverride' && fin(at(x, 'ilvl')) === level); return kid(o, 'lvl') || els(absOf(id)).find((l) => l.local === 'lvl' && fin(at(l, 'ilvl')) === level); };
     const listOf = (pp) => {
       const numPr = pp.map((x) => kid(x, 'numPr')).filter(Boolean).at(-1), id = val(numPr, 'numId');
       if (!id || id === '0') return null;
-      const level = fin(val(numPr, 'ilvl'), 0, 0, 8), abs = abstracts.get(val(nums.get(id), 'abstractNumId'));
-      const lvl = abs && els(abs).find((l) => l.local === 'lvl' && fin(at(l, 'ilvl')) === level);
-      return { id, definition: val(nums.get(id), 'abstractNumId'), level, ordered: val(lvl, 'numFmt') !== 'bullet' };
+      const level = fin(val(numPr, 'ilvl'), 0, 0, 8);
+      return { id, definition: val(nums.get(id), 'abstractNumId'), level, ordered: val(lvlOf(id, level), 'numFmt') !== 'bullet' };
     };
 
-    // Footnotes, as inline HTML for the paper schema's footnote_ref.
-    const notesX = await part(target('footnotes') || 'word/footnotes.xml');
-    const noteById = new Map(all(notesX, 'footnote').filter((n) => !at(n, 'type') || at(n, 'type') === 'normal').map((n) => [at(n, 'id'), n]));
+    // Footnotes, and endnotes as footnotes (the paper has only those; a warning), as inline HTML for the paper schema's
+    // footnote_ref, each against its own part's relationships.
+    const notes = {};
+    for (const kind of ['footnote', 'endnote']) {
+      const path = target(`${kind}s`) || `word/${kind}s.xml`, x = await part(path);
+      notes[kind] = { path, byId: new Map(all(x, kind).filter((n) => !at(n, 'type') || at(n, 'type') === 'normal').map((n) => [at(n, 'id'), n])) };
+    }
 
     let imageTotal = 0, noteBytes = 0;
     const image = async (node, source) => {
       const blip = all(node, 'blip')[0], rid = blip && (blip.a['r:embed'] || at(blip, 'embed'));
-      const r = (await relsOf(source)).find((x) => x.id === rid && !x.external);
+      const hit = (await relsOf(source)).id.get(rid), r = hit && !hit.external ? hit : null;
       const ext = r?.target.split('.').at(-1)?.toLowerCase(), mime = { png: 'png', jpg: 'jpeg', jpeg: 'jpeg', gif: 'gif' }[ext || ''];
       if (!r || !mime) { warn('Some pictures were left out.'); return ''; }
-      const b = await z.bytes(r.target);
+      const b = entry(r.target) && await z.bytes(entry(r.target));
       if (!b) { warn('Some pictures were left out.'); return ''; }
       imageTotal += b.length;
       if (imageTotal > LIMIT.images) throw new RangeError('The pictures in this file are larger than 10 MB.');
@@ -494,8 +521,23 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (r.b) h = `<strong>${h}</strong>`;
       return h;
     };
+    // w:sym: Symbol's characters (Adobe's Symbol encoding, 0x20-0x7E and 0xA0-0xFF; Word writes them at F020-F0FF) and the
+    // Wingdings bullets and checks Unicode has; another font's character is itself unless it is private use.
+    const SYMBOL = [' !∀#∃%&∋()∗+,−./0123456789:;<=>?≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_\u0000αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼', '€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…⏐⎯↵ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓◊〈®©™∑⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪\u0000〉∫⌠⎮⌡⎞⎟⎠⎤⎥⎦⎫⎬⎭\u0000'];
+    const WINGDINGS = { 0x6c: '●', 0x6e: '■', 0xa7: '▪', 0xd8: '➢', 0xfb: '✗', 0xfc: '✓', 0xfd: '☒', 0xfe: '☑' };
+    const symbol = (font, code) => {
+      const c = code >= 0xf000 && code <= 0xf0ff ? code - 0xf000 : code, f2 = font.toLowerCase();
+      if (f2 === 'symbol' && c <= 0xff) return (c >= 0x20 && c < 0x7f ? SYMBOL[0][c - 0x20] : c >= 0xa0 ? SYMBOL[1][c - 0xa0] : '').replace('\0', '');
+      if (f2 === 'wingdings' && c <= 0xff) return WINGDINGS[c] || '';
+      return code >= 0x20 && code <= 0x10ffff && !(code >= 0xe000 && code <= 0xf8ff) && !(code >= 0xd800 && code <= 0xdfff) && code !== 0xfffe && code !== 0xffff ? String.fromCodePoint(code) : '';
+    };
+    // mc:AlternateContent: the first Choice whose Requires are all markup this importer reads (Word's own 2010-and-later
+    // WordprocessingML and its drawings), else the Fallback.
+    const MC = new Set(['w14', 'w15', 'w16', 'w16se', 'w16cid', 'w16cex', 'w16sdtdh', 'w16du', 'wp14', 'wps', 'wpg', 'wpc', 'a14']);
+    const choice = (node) => els(node).find((c) => c.local === 'Choice' && at(c, 'Requires').trim().split(/\s+/).every((x) => MC.has(x))) || kid(node, 'Fallback');
     const BREAK = '\u0000BREAK\u0000';
-    // A paragraph's inline content as HTML; a page break inside it is BREAK.
+    // A paragraph's inline content as HTML; a page break inside it is BREAK. Fields and links set ctx as the runs come, in
+    // order (each run reads it before its first await): ctx.link inside a w:hyperlink, ctx.href in a HYPERLINK field's result.
     const inline = async (node, ctx, depth = 0) => {
       if (depth > LIMIT.depth) throw new RangeError('document nesting too deep');
       const name = node.local;
@@ -504,7 +546,8 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         const type = at(node, 'fldCharType');
         if (type === 'begin') { ctx.field = ''; ctx.skip = false; }
         if (type === 'separate' && /^\s*(PAGE|NUMPAGES)\b/i.test(ctx.field)) ctx.skip = true;
-        if (type === 'end') { ctx.field = ''; ctx.skip = false; }
+        if (type === 'separate') { const m = /^\s*HYPERLINK\s+(?:"([^"]+)"|([^\s"\\]\S*))/i.exec(ctx.field); if (m) ctx.href = S().href(m[1] || m[2]); }
+        if (type === 'end') { ctx.field = ''; ctx.skip = false; ctx.href = null; }
         return '';
       }
       if (name === 't') return ctx.skip ? '' : escH(node.kids.map((k) => k.text || '').join(''));
@@ -512,38 +555,45 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (name === 'delText' || name === 'del' || name === 'moveFrom') { warn('Tracked changes were accepted.'); return ''; }
       if (name === 'tab' || name === 'ptab') return ctx.skip ? '' : '\t';
       if (name === 'br' || name === 'cr') return at(node, 'type') === 'page' ? BREAK : at(node, 'type') === 'column' ? '' : '<br>';
-      if (name === 'noBreakHyphen') return '-';
+      if (name === 'AlternateContent') { const c = choice(node); return c ? (await Promise.all(els(c).map((k) => inline(k, ctx, depth + 1)))).join('') : ''; }
+      if (name === 'sym') { const ch = symbol(at(node, 'font'), parseInt(at(node, 'char'), 16)); if (!ch) warn('Some pictures, objects or equations were left out.'); return ctx.skip ? '' : escH(ch); }
+      if (name === 'noBreakHyphen') return '\u2011';
       if (name === 'softHyphen') return '­';
       if (name === 'drawing') return image(node, ctx.source);
-      if (name === 'footnoteReference') {
+      if (name === 'footnoteReference' || name === 'endnoteReference') {
         if (ctx.note) throw new Error('nested footnote references are not supported');
-        const n = noteById.get(at(node, 'id'));
+        const { path: notesPath, byId } = notes[name === 'footnoteReference' ? 'footnote' : 'endnote'], n = byId.get(at(node, 'id'));
         if (!n) return '';
+        if (name === 'endnoteReference') warn('Endnotes became footnotes.');
         const parts2 = [];
-        for (const p of all(n, 'p')) parts2.push((await Promise.all(els(p).filter((k) => k.local !== 'pPr').map((k) => inline(k, { ...ctx, field: '', skip: false, note: true, paragraph: val(kid(p, 'pPr'), 'pStyle') || normal, heading: false }, depth + 1)))).join('').replace(/\u0000BREAK\u0000/g, ''));
+        for (const p of all(n, 'p')) parts2.push((await Promise.all(els(p).filter((k) => k.local !== 'pPr').map((k) => inline(k, { ...ctx, source: notesPath, field: '', skip: false, href: null, link: 0, table: null, note: true, paragraph: val(kid(p, 'pPr'), 'pStyle') || normal, heading: false }, depth + 1)))).join('').replace(/\u0000BREAK\u0000/g, ''));
         const html = parts2.join(' ').trim();
         noteBytes += html.length;
         if (noteBytes > LIMIT.html) throw new RangeError('The document is too large.');
         return `<sup class="gz-footnote" data-footnote="${escH(html)}"></sup>`;
       }
-      if (name === 'footnoteRef') return '';
+      if (name === 'footnoteRef' || name === 'endnoteRef') return '';
       if (name === 'pict' || name === 'object' || name === 'oMath' || name === 'oMathPara') { warn('Some pictures, objects or equations were left out.'); return ''; }
-      if (['rPr', 'pPr', 'bookmarkStart', 'bookmarkEnd', 'proofErr', 'lastRenderedPageBreak', 'commentRangeStart', 'commentRangeEnd', 'commentReference', 'endnoteReference', 'sdtPr', 'sdtEndPr'].includes(name)) {
+      if (['rPr', 'pPr', 'bookmarkStart', 'bookmarkEnd', 'proofErr', 'lastRenderedPageBreak', 'commentRangeStart', 'commentRangeEnd', 'commentReference', 'sdtPr', 'sdtEndPr'].includes(name)) {
         if (name === 'commentReference') warn('Comments were left out.');
-        if (name === 'endnoteReference') warn('Endnotes were left out.');
         return '';
       }
-      let html = (await Promise.all(els(node).map((k) => inline(k, ctx, depth + 1)))).join('');
+      const href = ctx.link ? null : ctx.href, linked = !!(ctx.link || href);
+      if (name === 'hyperlink') ctx.link = (ctx.link || 0) + 1;
+      const kids = Promise.all(els(node).map((k) => inline(k, ctx, depth + 1)));
+      if (name === 'hyperlink') ctx.link--;
+      let html = (await kids).join('');
       if (name === 'r') {
-        if (ctx.note && kid(kid(node, 'rPr'), 'rStyle') && /footnote ?reference/.test(styleName(val(kid(node, 'rPr'), 'rStyle')))) return html;
-        if (all(node, 'footnoteReference').length) return html;
-        const rp = runProps(levels(node, 'rPr', ctx.paragraph));
+        if (ctx.note && kid(kid(node, 'rPr'), 'rStyle') && /(foot|end)note ?reference/.test(styleName(val(kid(node, 'rPr'), 'rStyle')))) return html;
+        if (all(node, 'footnoteReference').length || all(node, 'endnoteReference').length) return html;
+        const rp = runProps(levels(node, 'rPr', ctx.paragraph, { linked, table: ctx.table }));
         if (rp.hidden) return '';
         html = runHTML(rp, html, ctx.note ? runProps(levels({ kids: [] }, 'rPr', ctx.paragraph)) : base);
+        if (href && html) html = `<a href="${escH(href)}">${html}</a>`;
       }
       if (name === 'hyperlink') {
-        const id = node.a['r:id'] || at(node, 'id'), r = (await relsOf(ctx.source)).find((x) => x.id === id);
-        if (r?.external && /^(https?:\/\/|mailto:)/i.test(r.target)) html = `<a href="${escH(r.target)}">${html}</a>`;
+        const id = node.a['r:id'] || at(node, 'id'), r = (await relsOf(ctx.source)).id.get(id), h = r?.external ? S().href(r.target) : null;
+        if (h) html = `<a href="${escH(h)}">${html}</a>`;
       }
       return html;
     };
@@ -551,11 +601,11 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     // spacing drops its space before or after next to a paragraph of its own style (ctx.prev, ctx.next).
     const paragraph = async (p, ctx) => {
       const style = val(kid(p, 'pPr'), 'pStyle') || normal, name = styleName(style), m = /heading\s*([1-6])/.exec(name);
-      Object.assign(ctx, { field: '', skip: false, paragraph: style, heading: !!m });
-      const lv = levels(p, 'pPr'), r = paraProps(lv);
+      Object.assign(ctx, { field: '', skip: false, href: null, link: 0, paragraph: style, heading: !!m });
+      const lv = levels(p, 'pPr', normal, { table: ctx.table }), r = paraProps(lv);
       if (r.contextual) { if (ctx.prev === style) r.before = 0; if (ctx.next === style) r.after = 0; }
       const html = (await Promise.all(els(p).filter((k) => k.local !== 'pPr').map((k) => inline(k, ctx)))).join('');
-      return { kind: 'p', r, style, heading: m ? +m[1] : 0, quote: /quote|block text/.test(name), list: listOf(lv.map((x) => x.p)), html, text: TEXT().decode(html.replace(/<[^>]*>/g, '')) };
+      return { kind: 'p', r, style, heading: m ? +m[1] : 0, quote: /quote|block text/.test(name), caption: name === 'caption', list: listOf(lv.map((x) => x.p)), html, text: TEXT().decode(html.replace(/<[^>]*>/g, '')) };
     };
     // A paragraph's attributes as the paper schema reads them: what Word gives it, less what the format gives a paragraph
     // there (a list entry, a quoted paragraph, a heading, body). → [style, data-gz].
@@ -589,29 +639,52 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     const HR = '<hr class="gz-page-break">';
     // One paragraph's HTML. A page break inside it splits it: the part after continues the paragraph (no first-line indent
     // of its own), and an empty part beside a break is no line at all, as Word draws a paragraph that only holds one.
+    // A paragraph in Word's Caption style is marked data-w-style="caption", for lib/writer-objects-docx.js (the schema
+    // drops it).
     const paraHTML = (d, where, tag) => {
       const pieces = d.html.split(BREAK), a = attrsOf(d, where), rest = pieces.length > 1 ? attrsOf({ ...d, r: { ...d.r, first: 0, before: 0 } }, where) : a;
+      if (d.caption && pieces.length === 1) return `${open(tag, a).slice(0, -1)} data-w-style="caption">${d.html}</${tag}>`;
       return pieces.map((x, i) => (pieces.length > 1 && !x ? '' : `${open(tag, i ? rest : a)}${x}</${tag}>`)).join(HR);
     };
+    // A table's rows and a row's cells: its own, and those inside content controls and custom XML.
+    const inside = (node, local) => els(node).flatMap((k) => (k.local === local ? [k] : k.local === 'sdt' ? inside(kid(k, 'sdtContent'), local) : k.local === 'customXml' ? inside(k, local) : []));
+    // A table: its merged cells, its leading header rows (w:tblHeader), each cell's vertical alignment, its style (named,
+    // else the default table style) under its cells' paragraphs and runs, borders off when no side its style, it or a
+    // cell gives is drawn.
     const tableHTML = async (node, ctx, depth) => {
-      const grid = [], merges = new Map();
-      for (const row of els(node).filter((k) => k.local === 'tr')) {
+      const grid = [], merges = new Map(), rows = inside(node, 'tr'), style = val(kid(node, 'tblPr'), 'tblStyle') || normalTable, outer = ctx.table;
+      const sides = new Map();
+      for (const pr of [...chain(style).map((x) => kid(x, 'tblPr')), kid(node, 'tblPr')]) for (const x of els(kid(pr, 'tblBorders'))) sides.set(x.local, at(x, 'val'));
+      const drawn = (v) => v && !['nil', 'none'].includes(v);
+      let borders = [...sides.values()].some(drawn);
+      ctx.table = style;
+      let head = 0;
+      while (head < rows.length && kid(kid(rows[head], 'trPr'), 'tblHeader')) head++;
+      for (const row of rows) {
         const cells = [];
         let col = 0;
-        for (const cell of els(row).filter((k) => k.local === 'tc')) {
-          const pr = kid(cell, 'tcPr'), span = fin(val(pr, 'gridSpan'), 1, 1, 100), merge = kid(pr, 'vMerge');
+        for (const cell of inside(row, 'tc')) {
+          const pr = kid(cell, 'tcPr'), span = fin(val(pr, 'gridSpan'), 1, 1, 100), merge = kid(pr, 'vMerge'), v = val(pr, 'vAlign');
+          borders ||= els(kid(pr, 'tcBorders')).some((x) => drawn(at(x, 'val')));
           if (col + span > 1000) throw new RangeError('A table is too wide.');
           if (merge && at(merge, 'val') !== 'restart' && merges.has(col)) { merges.get(col).rows++; col += span; continue; }
-          const c = { rows: 1, span, html: render(await collect(els(cell).filter((k) => k.local !== 'tcPr'), ctx, depth + 1)) || '<p></p>' };
+          const c = { rows: 1, span, valign: v === 'center' ? 'middle' : v === 'bottom' ? 'bottom' : null, html: render(await collect(els(cell).filter((k) => k.local !== 'tcPr'), ctx, depth + 1)) || '<p></p>' };
           if (merge && at(merge, 'val') === 'restart') merges.set(col, c); else merges.delete(col);
           cells.push(c);
           col += span;
         }
         grid.push(cells);
       }
-      return `<table>${grid.map((cells) => `<tr>${cells.map((c) => `<td${c.span > 1 ? ` colspan="${c.span}"` : ''}${c.rows > 1 ? ` rowspan="${Math.min(1000, c.rows)}"` : ''}>${c.html}</td>`).join('')}</tr>`).join('')}</table>`;
+      ctx.table = outer;
+      return `<table${borders ? '' : ' data-borders="none"'}>${grid.map((cells, i) => `<tr>${cells.map((c) => { const tag = i < head ? 'th' : 'td'; return `<${tag}${c.span > 1 ? ` colspan="${c.span}"` : ''}${c.rows > 1 ? ` rowspan="${Math.min(1000, c.rows)}"` : ''}${c.valign ? ` data-valign="${c.valign}"` : ''}>${c.html}</${tag}>`; }).join('')}</tr>`).join('')}</table>`;
     };
-    // The blocks of a body, cell or content control, in order: paragraphs resolved, tables as HTML, page breaks before.
+    // A section's w:type says how it starts: after a paragraph that ends a section, a new page unless the next section is
+    // continuous (or a new column).
+    const sects = [...all(body, 'p').map((x) => kid(kid(x, 'pPr'), 'sectPr')).filter(Boolean), els(body).filter((k) => k.local === 'sectPr').at(-1)];
+    const newPage = new Map(sects.slice(0, -1).map((x, i) => [x, !['continuous', 'nextColumn'].includes(val(sects[i + 1], 'type'))]));
+    // The blocks of a body, cell or content control, in order: paragraphs resolved, tables as HTML, page breaks before
+    // (none at a page's top: after a break, or a paragraph or section ending in one, as Word draws it) and after a
+    // section's end.
     let size = 0;
     const collect = async (nodes, ctx, depth = 0) => {
       if (depth > 40) throw new RangeError('document nesting too deep');
@@ -620,13 +693,16 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         const node = nodes[i];
         if (node.local === 'p') {
           const d = await paragraph(node, Object.assign(ctx, { prev: styleOf(nodes[i - 1]), next: styleOf(nodes[i + 1]) }));
-          if (d.r.breakBefore) out.push({ kind: 'break' });
+          const last = out.at(-1);
+          if (d.r.breakBefore && last?.kind !== 'break' && !(last?.kind === 'p' && last.html.endsWith(BREAK))) out.push({ kind: 'break' });
           const border = kid(kid(kid(node, 'pPr'), 'pBdr'), 'bottom');
           if (!d.html && border && !['nil', 'none', '0'].includes(at(border, 'val'))) d.kind = 'rule';
           out.push(d);
+          if (newPage.get(kid(kid(node, 'pPr'), 'sectPr'))) out.push({ kind: 'break', section: true });
           size += d.html.length;
         } else if (node.local === 'tbl') { const html = await tableHTML(node, ctx, depth); size += html.length; out.push({ kind: 'html', html }); }
         else if (node.local === 'customXml') out.push(...await collect(els(node), ctx, depth + 1));
+        else if (node.local === 'AlternateContent') { const c = choice(node); if (c) out.push(...await collect(els(c), ctx, depth + 1)); }
         else if (node.local === 'sdt') { const c = kid(node, 'sdtContent'); if (c) out.push(...await collect(els(c), ctx, depth + 1)); }
         else if (node.local === 'ins' || node.local === 'moveTo') { warn('Tracked changes were accepted.'); out.push(...await collect(els(node), ctx, depth + 1)); }
         else if (node.local === 'del' || node.local === 'moveFrom') warn('Tracked changes were accepted.');
@@ -657,11 +733,22 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
           out += '<hr class="gz-rule">'; return;
         }
         const tag = d.heading ? `h${d.heading}` : 'p';
+        // A page break inside a list item ends the list there; the item's text after it goes on unnumbered at the item's
+        // indent, and the list after it continues (lib/writer-objects-docx.js).
         if (d.list) {
           unquote();
-          if (!list || list.ordered !== d.list.ordered || list.definition !== d.list.definition) { close(); list = { ordered: d.list.ordered, definition: d.list.definition }; out += d.list.ordered ? '<ol>' : '<ul>'; }
-          const [style, gz] = attrsOf(d);
-          out += `<li${d.list.level ? ` class="ql-indent-${d.list.level}"` : ''}${style ? ` style="${style}"` : ''}${gz ? ` data-gz="${escH(gz)}"` : ''}>${d.html.split(BREAK).join('<br>')}</li>`;
+          const pieces = d.html.split(BREAK);
+          let item = true;
+          pieces.forEach((x, k) => {
+            if (k) { close(); out += HR; }
+            if (!x && pieces.length > 1) return;
+            if (!item) { out += paraHTML({ ...d, html: x, list: null, r: { ...d.r, first: 0, before: 0, left: d.r.left || 720 * (d.list.level + 1) } }, {}, 'p'); return; }
+            item = false;
+            if (!list || list.ordered !== d.list.ordered || list.definition !== d.list.definition) { close(); list = { ordered: d.list.ordered, definition: d.list.definition }; out += d.list.ordered ? '<ol>' : '<ul>'; }
+            const [style, gz] = attrsOf(d);
+            // data-w-num: the item's w:numId, for lib/writer-objects-docx.js (the schema drops it).
+            out += `<li${d.list.level ? ` class="ql-indent-${d.list.level}"` : ''}${style ? ` style="${style}"` : ''}${gz ? ` data-gz="${escH(gz)}"` : ''} data-w-num="${escH(d.list.id)}">${x}</li>`;
+          });
           return;
         }
         close();
@@ -687,11 +774,23 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       const r = ref && rels.find((x) => x.id === (ref.a['r:id'] || at(ref, 'id')) && !x.external);
       const x = r && await part(r.target);
       if (!x) return null;
-      const paras = [];
-      const walk = (n) => { for (const k of els(n)) { if (k.local === 'p') paras.push(k); else if (k.local === 'sdt') walk(kid(k, 'sdtContent')); } };
+      // Its lines: its paragraphs, inside content controls, custom XML and insertions too, and a table's rows (the header
+      // holds no table: each row is a line of its cells' paragraphs, a tab between cells, which is a warning).
+      const lines = [];
+      const paras = (n, out = []) => { for (const k of els(n)) { if (k.local === 'p') out.push(k); else if (['sdt', 'sdtContent', 'customXml', 'ins', 'moveTo', 'tbl', 'tr', 'tc'].includes(k.local)) paras(k, out); } return out; };
+      const walk = (n) => {
+        for (const k of els(n)) {
+          if (k.local === 'p') lines.push([[k, '']]);
+          else if (k.local === 'tbl') {
+            warn('Some pictures, objects or equations were left out.');
+            for (const row of inside(k, 'tr')) lines.push(inside(row, 'tc').flatMap((tc, i) => paras(tc).map((q, j) => [q, j ? ' ' : i ? '\t' : ''])));
+          } else if (k.local === 'sdt') walk(kid(k, 'sdtContent'));
+          else if (['customXml', 'ins', 'moveTo'].includes(k.local)) walk(k);
+        }
+      };
       walk(els(x)[0]);
-      return paras.slice(0, 20).map((p) => {
-        const style = val(kid(p, 'pPr'), 'pStyle') || normal, pr = paraProps(levels(p, 'pPr'));
+      return lines.filter((line) => line.length).slice(0, 20).map((line) => {
+        const p = line[0][0], pr = paraProps(levels(p, 'pPr'));
         const out = { align: pr.jc || null, line: pr.rule === 'auto' ? r2(pr.line / 240) : 1, after: r2(pr.after / 20) };
         if (pr.rule !== 'auto') out[pr.rule === 'exact' ? 'exact' : 'least'] = r2(pr.line / 20);
         if (pr.before) out.before = r2(pr.before / 20);
@@ -703,7 +802,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
           const last = runs.at(-1), same = (a, b) => ['b', 'i', 'u', 's', 'sup', 'sub', 'font', 'size', 'color'].every((k) => a[k] === b[k]);
           if (run.text && last?.text && !last.field && same(last, run)) last.text += run.text; else runs.push(run);
         };
-        const visit = (n) => {
+        const visit = (n, style) => {
           for (const k of els(n)) {
             if (k.local === 'r') {
               const rp = runProps(levels(k, 'rPr', style));
@@ -717,11 +816,11 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
                 else if (!skip && (c.local === 'tab' || c.local === 'ptab')) push({ text: '\t', ...marks });
                 else if (!skip && (c.local === 'br' || c.local === 'cr')) push({ text: '\n', ...marks });
               }
-            } else if (k.local === 'fldSimple') { const m = /^\s*(PAGE|NUMPAGES)\b/i.exec(at(k, 'instr')); if (m) push({ field: m[1].toUpperCase() }); else visit(k); }
-            else if (['hyperlink', 'sdt', 'sdtContent', 'smartTag', 'ins', 'customXml'].includes(k.local)) visit(k);
+            } else if (k.local === 'fldSimple') { const m = /^\s*(PAGE|NUMPAGES)\b/i.exec(at(k, 'instr')); if (m) push({ field: m[1].toUpperCase() }); else visit(k, style); }
+            else if (['hyperlink', 'sdt', 'sdtContent', 'smartTag', 'ins', 'customXml'].includes(k.local)) visit(k, style);
           }
         };
-        visit(p);
+        for (const [q, sep] of line) { if (sep) push({ text: sep }); visit(q, val(kid(q, 'pPr'), 'pStyle') || normal); }
         out.runs = runs.filter((x) => x.field || x.text);
         return out;
       });
@@ -733,11 +832,11 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       tab: inch(val(all(settingsX, 'settings')[0], 'defaultTabStop'), 720), kern: !!kid(kid(kid(defaults, 'rPrDefault'), 'rPr'), 'kern'), title: on(kid(sect, 'titlePg')),
       headers: { default: await hf('header', 'default'), first: await hf('header', 'first') }, footers: { default: await hf('footer', 'default'), first: await hf('footer', 'first') },
     });
-    if (globalThis.GZ_WRITER_OBJECTS_DOCX) html = GZ_WRITER_OBJECTS_DOCX.importHTML(html, { body: doc, numbering: numX, styles: stylesX });
+    if (globalThis.GZ_WRITER_OBJECTS_DOCX) html = GZ_WRITER_OBJECTS_DOCX.importHTML(html, { numbering: numX, styles: stylesX });
     return { doc: { ...S().parse(S().paper, html, { pre: true, document: true }).toJSON(), attrs: { setup } }, html, setup, warnings: [...warnings] };
   };
 
-  return { exportDocx, importDocx, xml, MIME, LIMIT };
+  return { exportDocx, importDocx, xml, esc, MIME, LIMIT };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_DOCX; else GZ_WRITER_DOCX;

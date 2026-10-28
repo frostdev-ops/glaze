@@ -1,7 +1,7 @@
 // Glaze Writer's paper mode: an assignment attempt's paper as a word processor, the whole chrome around the editor that
 // writer.js makes (glaze-plans/writer/mockups C): the title bar and save state, the toolbar (format, block style, marks,
-// alignment, lists, Cite, Footnote, Page break, undo and redo, zoom, Focus, Submit…), real Letter pages with the running
-// header and footnotes (lib/writer-paginate.js), the side panel (Checks, Sources, Feedback, Outline) and the status bar.
+// alignment, lists, Cite, Footnote, Page break, undo and redo, zoom, Focus, Submit…), real pages of the paper's size with
+// the running header and footnotes (lib/writer-paginate.js), the side panel (Checks, Sources, Feedback, Outline) and the status bar.
 // The paper lives in Writer's storage (lib/writer-papers.js), autosaved with versions; it never goes into Ultra's editor:
 // the submit step attaches it as a .docx (lib/writer-docx.js). The same chrome edits a paper in papers.html.
 // Classic script after writer.js; the paper libraries load only when a paper opens.
@@ -575,10 +575,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
 
     // ---- saving
     const values = () => ({ name: ctx.user?.name || '', instructor: ctx.instructor || '', course: ctx.course?.name || '', date: ST.dateText(format), dueDate: Number.isFinite(Date.parse(ctx.assignment?.due || paper?.due)) ? ST.dateText(format, new Date(ctx.assignment?.due || paper.due)) : '', title: ctx.assignment?.title || '' });
-    let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false;
+    // failing: autosaves refused in a row (storage full or unavailable): each tries again later, longer each time.
+    let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false, failing = 0;
     const initialBody = view.state.doc.content.content.filter((n) => n.textContent.trim() || n.type.name !== 'paragraph').map((n) => n.toJSON());
-    const recoveryScope = host.key || ctx.recovery || 'paper';
-    const recoverySlot = `gz-paper-pending:${recoveryScope}`, keySlot = `gz-paper-key:${recoveryScope}`;
+    const recoveryScope = host.key || ctx.recovery || 'paper', keySlot = `gz-paper-key:${recoveryScope}`;
+    // The tab's copy of a paper's unsaved edits, by the paper's key: the next frame on any page of it finds them.
+    const slotOf = (k) => `gz-paper-pending:${k}`;
+    // → the copy's record, with base: the revision it was typed on (its save keeps a newer one as a version).
+    const pendingOf = (k) => { try { const p = JSON.parse(sessionStorage.getItem(slotOf(k))); return p?.key === k && p.record?.doc ? { ...p.record, base: p.base } : null; } catch { return null; } };
     let recoveryKey;
     try { recoveryKey = sessionStorage.getItem(keySlot); } catch { /* storage can be unavailable */ }
     recoveryKey ||= `recovery:${crypto.randomUUID()}`;
@@ -589,21 +593,57 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       title: ctx.assignment?.title || paper?.title || '', due: ctx.assignment?.due || paper?.due || null, url: ctx.paper?.url || paper?.url || '',
       courseName: ctx.course?.name || paper?.courseName || '', ...(ctx.paper ? { school: ctx.paper.school, user: ctx.paper.user, course: ctx.paper.course, content: ctx.paper.content } : {}),
     });
+    // The tab's copy of every edit (sessionStorage, read back by the next frame in this tab) holds each picture already
+    // saved as a reference (its length and last characters), so a keystroke never copies picture data; the next frame
+    // finds them in the saved paper or its versions, and sets aside a copy it can't complete.
+    const SAVED = 'gz-saved:';
+    let savedPictures = new Map();
+    const refOf = (src) => `${SAVED}${src.length}:${src.slice(-64)}`;
+    const pictures = (json, to) => {
+      if (json?.type === 'image') { const src = json.attrs?.src, next = typeof src === 'string' ? to(src) : src; return next === src ? json : { ...json, attrs: { ...json.attrs, src: next } }; }
+      if (!Array.isArray(json?.content)) return json;
+      let changed = false;
+      const content = json.content.map((c) => { const n = pictures(c, to); changed ||= n !== c; return n; });
+      return changed ? { ...json, content } : json;
+    };
+    const keepPictures = (json) => { const m = new Map(); pictures(json, (src) => { m.set(src, refOf(src)); return src; }); savedPictures = m; };
+    // The copy rec of paper k with its pictures back, from the paper as saved (from), else its versions; null if one is gone.
+    const complete = async (rec, k, from) => {
+      const found = new Map(), add = (doc) => pictures(doc, (src) => { found.set(refOf(src), src); return src; });
+      const fill = () => {
+        let missing = false;
+        const doc = pictures(rec.doc, (src) => (src.startsWith(SAVED) ? found.get(src) ?? ((missing = true), src) : src));
+        return missing ? null : { ...rec, doc };
+      };
+      add(from?.doc);
+      const done = fill();
+      if (done || !k) return done;
+      for (const v of await store.versions(k)) add((await store.version(k, v.id))?.doc);
+      return fill();
+    };
     const emergency = () => {
-      try { sessionStorage.setItem(recoverySlot, JSON.stringify({ key, record: record() })); sessionSafe = true; }
+      try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(slotOf(key), JSON.stringify({ key, record: r, base: paper?.revision ?? 0 })); sessionSafe = true; }
       catch { sessionSafe = false; }
     };
-    const save = async (reason = 'auto') => {
+    // base: the revision what's saved was typed on, when it isn't the one this editor last read (a recovered copy).
+    const save = async (reason = 'auto', base) => {
       clearTimeout(saveTimer);
       if (!key) { setState('Not saved'); return null; }
-      const at = edits;
+      const at = edits, k = key;
       emergency();
       setState('Saving…');
       try {
-        const r = await store.save(key, record(), { reason }); paper = r.paper;
-        if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(recoverySlot); } catch {} }
+        const rec = record(), r = await store.save(key, rec, Number.isSafeInteger(base) ? { reason, base } : { reason }); paper = r.paper;
+        keepPictures(rec.doc);
+        failing = 0;
+        if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(slotOf(k)); } catch {} }
         return r;
-      } catch (e) { dirty = true; console.error(e); setState('Not saved'); return null; }
+      } catch (e) {
+        dirty = true; console.error(e); setState('Not saved');
+        failing++;
+        if (reason === 'auto') saveTimer = setTimeout(save, Math.min(60e3, 1e3 * 2 ** failing));
+        return null;
+      }
     };
     const changed = () => {
       if (initializing) return;
@@ -617,7 +657,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       clearTimeout(outlineDraw.t);
       outlineDraw.t = setTimeout(outlineDraw, 400);
     };
-    addEventListener('beforeunload', (e) => { if (dirty && !sessionSafe) { e.preventDefault(); e.returnValue = ''; } });
+    // The tab's copy only outlives a reload: closing the tab after a refused save would lose the typing.
+    addEventListener('beforeunload', (e) => { if (dirty && (!sessionSafe || failing)) { e.preventDefault(); e.returnValue = ''; } });
     addEventListener('pagehide', () => { if (dirty) save(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) save(); });
 
@@ -1052,12 +1093,17 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       e.preventDefault(); all[e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowLeft' ? all.length - 1 : 1)) % all.length].focus();
     });
 
-    // Print a clipped copy of the measured flow on each physical Letter page, at full size.
-    let printCopy = null;
+    // Print a clipped copy of the measured flow on each physical page, at full size, on paper of the paper's own size (an
+    // @page rule added to writer-paper.css's sheet for the print: writer.html's CSP allows no <style> of its own).
+    let printCopy = null, pageRule = null;
+    const sheetCSS = () => [...document.styleSheets].find((x) => /\/writer-paper\.css$/.test(x.href || ''));
+    const unpage = () => { const css = sheetCSS(), i = pageRule ? [...(css?.cssRules || [])].indexOf(pageRule) : -1; if (i >= 0) css.deleteRule(i); pageRule = null; };
     addEventListener('beforeprint', () => {
       printCopy?.remove();
       printCopy = h('div', { class: 'gp-print' });
-      const geo = ST.geometry(look()), stride = geo.height + GAP;
+      const geo = ST.geometry(look()), stride = geo.height + GAP, css = sheetCSS();
+      unpage();
+      if (css) { try { pageRule = css.cssRules[css.insertRule(`@page { size: ${geo.width / 96}in ${geo.height / 96}in; margin: 0; }`, css.cssRules.length)]; } catch { /* the format's Letter rule stays */ } }
       [...sheets.children].forEach((sheet, i) => {
         const page = sheet.cloneNode(true), clip = h('div', { class: 'gp-print-body' }), copy = flow.cloneNode(true);
         clip.style.cssText = `position:absolute;top:${geo.top}px;left:0;width:${geo.width}px;height:${geo.body}px;overflow:hidden`;
@@ -1067,7 +1113,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       });
       document.body.append(printCopy);
     });
-    addEventListener('afterprint', () => { printCopy?.remove(); printCopy = null; });
+    addEventListener('afterprint', () => { printCopy?.remove(); printCopy = null; unpage(); });
 
     // A footnote's text, in a small editor by its mark. A new note left empty goes again.
     const editNote = (pos, fresh = false) => {
@@ -1113,8 +1159,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     });
     const restore = async (id) => {
       if (!await save()) return;
-      const r = await store.restore(key, id);
-      if (r) { paper = r.paper; keep = paper.keep === true; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored')); }
+      let r = null;
+      try { r = await store.restore(key, id); } catch (e) { console.error(e); }
+      if (!r) { toast(t('Not saved. Try again in a moment.')); return; }
+      paper = r.paper; keep = paper.keep === true; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored'));
     };
     const open2 = (page2) => { try { window.open(chrome.runtime.getURL(page2), '_blank', 'noopener'); } catch { /* no extension context */ } };
     const docx = async () => { await need(DOCX); return GZ_WRITER_DOCX.exportDocx(view.state.doc, { format, surname: surname(), title: ctx.assignment?.title || paper?.title || '' }); };
@@ -1203,22 +1251,23 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const load = () => (loading ||= (async () => {
       key = host.key || PA.keyOf(ctx.paper || {}) || recoveryKey;
       paper = await store.get(key);
+      keepPictures(paper?.doc);
       recovered = key === recoveryKey && !!paper?.doc;
-      let pending = null;
-      try { const p = JSON.parse(sessionStorage.getItem(recoverySlot)); if (p?.key === key && p.record?.doc) pending = p.record; } catch {}
-      if (pending) paper = { ...paper, ...pending };
+      const copy = pendingOf(key), pending = copy && await complete(copy, key, paper);
+      if (pending) { const { base: _, ...rec } = pending; paper = { ...paper, ...rec }; }
       keep = paper?.keep === true;
       if (paper?.doc) {
         format = ST.get(paper.format);
         setDoc(paper.doc, true);
       } else {
         format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
-        // A new paper: the format's opening and list page around what Ultra's box already held.
+        // A new paper: the format's opening and list page around what Ultra's box already held. Under a stand-in key it is
+        // saved once something is written in it.
         setDoc(F.template(format, values(), initialBody), true);
-        if (key) await save('auto');
+        if (key !== recoveryKey) await save('auto');
       }
       initializing = false;
-      if (pending) { dirty = true; await save(); }
+      if (pending) { dirty = true; await save('auto', pending.base); }
       const scope = PA.scopeOf(ctx.paper || paper || {});
       presets = scope ? await store.presets(scope) : [];
       restyleCSS();
@@ -1230,26 +1279,60 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       outlineDraw();
       if (!dirty) setState('Saved');
     })());
+    // The paper's key came after the frame opened (the student's id wasn't known then), so far kept under a stand-in key.
+    // Nothing written under it: the student's paper opens as it was saved, with this tab's unsaved copy of it. Written in:
+    // that paper takes the key, the one saved there (with this tab's unsaved copy) kept as a version first.
     host.onContext?.((c) => {
       ctx = c && typeof c === 'object' ? c : {};
       head();
       const target = host.key || PA.keyOf(ctx.paper || {});
       if (target && key === recoveryKey) (async () => {
         await loading;
-        if (key !== recoveryKey || !await save()) return;
-        const existing = await store.get(target);
-        key = target;
-        if (!edits && !recovered) {
-          paper = existing;
+        if (key !== recoveryKey) return;
+        const at = edits, written = at > 0 || recovered;
+        const existing = written ? null : await store.get(target);
+        const copy = !written && pendingOf(target), pending = copy && await complete(copy, target, existing);
+        if (key !== recoveryKey) return;
+        if (!written && edits === at) {
+          key = target;
+          keepPictures(existing?.doc);
+          if (pending) { const { base: _, ...rec } = pending; paper = { ...existing, ...rec }; } else paper = existing;
+          keep = paper?.keep === true;
           format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
           initializing = true;
           setDoc(paper?.doc || F.template(format, values(), initialBody), true);
           initializing = false;
-          restyleCSS(); counts(); PG.relayout(view); runChecks();
+          const scope = PA.scopeOf(ctx.paper || {});
+          presets = scope ? await store.presets(scope) : [];
+          restyleCSS(); counts(); PG.relayout(view); runChecks(); outlineDraw();
+          if (pending || !existing?.doc) { dirty = true; if (!await save('auto', pending?.base)) return; }
+          if (!dirty) setState('Saved');
+          return;
         }
-        if (await save('import')) await store.remove(recoveryKey);
+        if (!await save()) return;
+        const kept = pendingOf(target), filled = kept && await complete(kept, target, await store.get(target));
+        if (filled) { const { base, ...rec } = filled; await store.save(target, rec, Number.isSafeInteger(base) ? { base } : {}); }
+        key = target;
+        if (await save('import')) { await store.remove(recoveryKey); try { sessionStorage.removeItem(slotOf(recoveryKey)); } catch {} }
       })().catch((e) => { console.error(e); setState('Not saved'); });
     });
+    // Another editor (a second tab, the Papers page) saved this paper: while this one holds nothing unsaved, it shows that,
+    // read through the store so its next save builds on it. Unsaved typing stays; its save keeps the other text as a
+    // version.
+    const elsewhere = async (changes, area) => {
+      const next = area === 'local' && key ? changes[PA.KEYS.PAPER + key]?.newValue : null;
+      const newer = (p) => p?.doc && !dirty && !initializing && !importing && (p.revision || 0) > (paper?.revision || 0);
+      if (!newer(next)) return;
+      const k = key, fresh = await store.get(k);
+      if (k !== key || !newer(fresh)) return;
+      paper = fresh; keep = fresh.keep === true; format = ST.get(fresh.format);
+      keepPictures(fresh.doc);
+      initializing = true;
+      setDoc(fresh.doc, true);
+      initializing = false;
+      restyleCSS(); counts(); PG.relayout(view); runChecks(); outlineDraw(); setState('Saved');
+    };
+    try { chrome.storage.onChanged.addListener((c, area) => { elsewhere(c, area).catch((e) => console.error(e)); }); } catch { /* outside the extension */ }
     restyleCSS();
     counts();
     head();

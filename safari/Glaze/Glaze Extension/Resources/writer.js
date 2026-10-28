@@ -2,12 +2,17 @@
 // opens in the box's place. An extension page, so the editor has the workers and WebAssembly the LMS page's CSP keeps from
 // a content script (proofing needs both), its own fonts and styles. It opens only with a one-use pass from the worker
 // (lib/background.js 'glaze:writer') and then talks to the page over that job's MessageChannel only:
-//   page → frame: init { mode, kind, html, placeholder, look { tokens, dark, glass, motion }, context, locale }, look { look },
-//                 context { context }, focus, html { html } (Ultra changed its own editor: a post went, a draft came back);
-//   frame → page: ready, height { px }, change { html, text, words, delta } (delta: compose's Quill ops, what the page
-//                 writes into Ultra's editor), send (Mod-Enter), native (back to Blackboard's editor; with a reason, the
-//                 box holds what Writer can't keep and nothing was written).
-// It keeps nothing and asks the extension for nothing but that pass.
+//   page → frame: init { mode, kind, html, selection, placeholder, look { tokens, dark, glass, motion }, context, locale },
+//                 look { look }, context { context }, focus, html { html } (Ultra changed its own editor: a post went, a
+//                 draft came back); and for the frame's later parts (handle): quote (writer-compose.js), ai and
+//                 attachments (writer-ai.js), focus-mode (writer-paper.js), import:file (writer-import.js), submit:*
+//                 (writer-submit.js);
+//   frame → page: ready, height { px }, change { html, text, words, delta } (compose only; delta: its Quill ops, what the
+//                 page writes into Ultra's editor), send (Mod-Enter), native (back to Blackboard's editor; with a reason, the
+//                 box holds what Writer can't keep and nothing was written); and the later parts' attachments,
+//                 focus-mode and submit:*.
+// Besides that pass it asks the extension only for the student's Writer settings (lib/writer-settings.js); its later
+// parts keep the paper (lib/writer-papers.js) and ask for proofing and AI on their own channels.
 (() => {
   const root = document.documentElement;
   const $ = (id) => document.getElementById(id);
@@ -17,7 +22,6 @@
 
   // ---- the editor --------------------------------------------------------------------------------------------------
   // lib/writer-editor.js (GZ_WRITER_EDITOR) over lib/writer-schema.js: compose holds exactly what Ultra's Quill keeps.
-  const SAFE = /^(https?:|mailto:|tel:\+?\d)/i;
 
   // ---- look, words and size ----------------------------------------------------------------------------------------
   const TOKEN = /^--gz-[a-z0-9-]{1,40}$/;
@@ -88,16 +92,20 @@
     tb.classList.add('linking');
     href.hidden = false;
     href.value = '';
+    href.removeAttribute('aria-invalid');
     href.focus();
   });
   href.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== 'Escape') return;
     e.preventDefault();
+    // The link command takes what the schema's href() keeps; https:// goes only before an address with no scheme (a
+    // colon before a port is none). Anything else leaves the field open, marked.
     const v = href.value.trim();
-    if (e.key === 'Enter' && v) ed.run('link', SAFE.test(v) ? v : `https://${v.replace(/^\/+/, '')}`);
+    if (e.key === 'Enter' && v && !ed.run('link', v) && !(!/^[a-z][a-z\d+.-]*:(?!\d)/i.test(v) && ed.run('link', `https://${v.replace(/^\/+/, '')}`))) { href.setAttribute('aria-invalid', 'true'); return; }
     unlink();
     ed.focus();
   });
+  href.addEventListener('input', () => href.removeAttribute('aria-invalid'));
   href.addEventListener('blur', () => { unlink(); hide(tb); });
   const shut = (back) => { hide(menu); more.setAttribute('aria-expanded', 'false'); if (back) more.focus(); };
   const placeMenu = () => {
@@ -126,8 +134,8 @@
     words = c.words;
     count();
     if (quiet || c.docChanged === false) return;
-    const delta = root.dataset.mode === 'compose' && ed?.view ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null;
-    say({ type: 'change', html: c.html, text: c.text, words: c.words, delta });
+    // A paper stays in Writer's storage (writer-paper.js): the page hears compose's changes only.
+    if (root.dataset.mode === 'compose') say({ type: 'change', html: c.html, text: c.text, words: c.words, delta: ed?.view ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null });
     emit('change', c);
   };
   const ON = {

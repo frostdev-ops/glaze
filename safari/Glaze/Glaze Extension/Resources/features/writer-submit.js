@@ -3,13 +3,17 @@
 // React hears it; a disabled one too, since Ultra disables it while its own box is empty), and its Save and Close first
 // saves the paper. Save and Close attaches nothing: a draft file would sit in Ultra's attempt and a later Submit would add
 // a second copy; the paper is kept in Writer's storage, so Ultra's Save and Close goes on once that save is done.
-// On the sheet's Submit (the student's click; the frame has already saved a 'submit' version and built the .docx):
+// On the sheet's Submit (the student's click; the frame has already saved a 'sending' version and built the .docx):
 //   1. attach: a File on the file area's own input (DataTransfer, then bubbling input and change, which React hears at
 //      its root), or dropped on its drop zone when the input isn't drawn; never a click on a file input (the OS picker);
 //   2. wait, bounded, until Ultra lists the file in the panel;
-//   3. the note and/or the paper's text into Ultra's Quill through lib/writer-main.js (gz-writer:set), checked;
+//   3. Ultra's Quill through lib/writer-main.js (gz-writer:set), checked: what it held if the student kept it (the sheet
+//      showed it: submit:held), then the note and the paper's text; else just those, or emptied;
 //   4. once Ultra's Submit is enabled, one click on it. Ultra's confirmation is Ultra's.
 // Any failure stops before Submit and tells the sheet why; nothing is retried by itself. A test is never touched.
+// The worker's permit for the assignment (lib/background.js) is claimed before 1, released by a run that attached nothing,
+// and the dispatch recorded in the click's own turn, with the paper's version marked Submitted; the sheet's Blackboard
+// editor clears an uncertain upload's (review).
 // A file the student submits as is (writer-import.js) takes the same steps from 1, its own name, type and bytes unchanged.
 // Ultra's own file area (enhance.writerUploads, on by default): one file dropped on it or chosen through its input goes to
 // the paper's frame instead, before Ultra hears it (in the capture phase), which asks what to do with it; Ultra
@@ -22,7 +26,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const submitted = new WeakSet();
   const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
   const attached = new WeakMap(); // box → exact bytes and the row produced by this upload
-  const written = new WeakSet();
+  const written = new WeakSet(); // boxes a run has written into
   const imports = new WeakMap();
   let passing = null, running = false, active = null, down = null, giving = false, X = null;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -31,7 +35,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const say = (box, m) => { try { box.port?.postMessage(m); } catch { /* the frame went */ } };
   const assignment = (box) => box.kind === 'assignment' && box.mode === 'paper' && !document.querySelector('bb-attempt-canvas') &&
     globalThis.GZ_WRITER_ULTRA?.kindOf(box.editor, { path: location.pathname }) === 'assignment';
-  const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected || !box.ready || !box.frame?.isConnected || !box.port || !assignment(box)) armed.delete(box); return armed; };
+  // A box stays armed while its frame reopens (features/writer.js reopen: Ultra's Submit then waits; the new frame, once
+  // up, hears submit:open on its port), and goes when the frame does for good.
+  const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected || !(box.reopening || (box.frame?.isConnected && box.port)) || !assignment(box)) armed.delete(box); return armed; };
   const visible = (e) => e.getClientRects().length > 0;
 
   // ---- Ultra's footer buttons, caught before Ultra
@@ -40,8 +46,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     e.preventDefault();
     e.stopImmediatePropagation();
     if (L().actionOf(b) === 'submit') { if (!running) { box.frame?.focus(); say(box, { type: 'submit:open' }); } return; }
-    // Save and Close: one matching save acknowledgement, never a late reply or an earlier timer.
-    if (running || box.saved || submitted.has(box)) return;
+    // Save and Close: one matching save acknowledgement, never a late reply or an earlier timer. After Writer's Submit
+    // (Ultra's confirmation cancelled) it goes on the same way.
+    if (running || box.saved) return;
     const go = e.type === 'click', request = crypto.randomUUID();
     box.saveRequest = request;
     const saved = (ok) => {
@@ -141,6 +148,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const have = [...box.editor.children].map((p) => squash(p.textContent)).join('\n');
     return have === want;
   };
+  // What Ultra's own text box holds, line by line (a list's items each on its own), as the sheet shows it.
+  const heldOf = (box) => L().lines([...box.editor.children].flatMap((c) => (/^(OL|UL)$/.test(c.tagName) ? [...c.children] : [c]).map((x) => x.textContent)).join('\n')).join('\n');
+  const flat = (t) => L().lines(t).map(squash).join('\n');
   const write = (box, d) => {
     const said = main('set', { id: box.id, delta: d });
     return said.some((r) => r?.ok) && sameText(box, d) ? null : 'text';
@@ -151,21 +161,28 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     runs.set(box, m.run);
     const name = m.name, bytes = m.bytes, key = m.key, asis = m.asis === true;
     if (!key || key !== L().paperKey(box.context?.paper) || !(asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name)) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
-      (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
+      (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || (m.held != null && (typeof m.held !== 'string' || m.held.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
-    const user = box.context.paper.user;
+    const user = box.context.paper.user, end = Math.min(m.until, Date.now() + 80e3);
     const transaction = active = { box, run: m.run, cancelled: false, frame: box.frame, port: box.port };
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
-    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user }))?.ok === true;
+    const version = typeof m.version === 'string' && /^[a-z0-9-]{3,40}$/.test(m.version) ? m.version : null;
+    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user, ...(op === 'commit' && version && { version }) }))?.ok === true;
+    let claimed = false;
     try {
-      const d = L().delta({ note: m.note, text: m.text || '' });
-      if (!d && written.has(box)) return fail('review');
+      // Ultra's text box goes as the sheet says: kept as it showed it (Keep), the note and text after it; else replaced by
+      // them, or emptied. A run's own earlier write the sheet didn't show needs review.
+      const held = heldOf(box), shown = flat(m.held ?? '') === flat(held), keep = m.keep === true && !!held, extra = L().delta({ note: m.note, text: m.text || '' });
+      if (keep && !shown) return fail('page');
+      if (!extra && !keep && written.has(box) && !shown) return fail('review');
+      const d = keep && !extra ? null : L().delta({ kept: keep ? held : '', note: m.note, text: m.text || '' }) || (held ? [{ insert: '\n' }] : null);
       let s = L().start({ text: !!d, asis });
       if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'docx' });
-      const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
+      const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < end;
       if (!here()) return fail('page');
       if (!await permit('claim')) return fail('claimed');
+      claimed = true;
       if (!here()) return fail('page');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
       const file = new File([bytes], name, { type: asis ? m.mime : L().MIME, lastModified: Date.now() });
@@ -183,14 +200,28 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       say(box, { type: 'submit:step', run: m.run, step: 'submit' });
       const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000, 100, here);
       if (!b) return fail('submit');
-      if (!here() || !L().may(s, 'submit') || L().listed(L().areaOf(box.editor), name, visible) !== 1) return fail('page');
-      if (d && !sameText(box, d)) return fail('text');
-      if (!await permit('commit') || !here() || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected || L().listed(L().areaOf(box.editor), name, visible) !== 1 || (d && !sameText(box, d))) return fail('page');
+      if (!here() || !L().may(s, 'submit') || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected || L().listed(L().areaOf(box.editor), name, visible) !== 1) return fail('page');
+      if (d ? !sameText(box, d) : flat(heldOf(box)) !== flat(held)) return fail('text');
+      // The worker records the dispatch in the click's own turn: nothing can fail between them, and a page Ultra's
+      // navigation tears down after the click has already sent it.
+      claimed = false;
+      permit('commit').catch(() => {});
       submitted.add(box);
       pass(b);
       say(box, { type: 'submit:done', run: m.run, ok: true });
       return true;
-    } catch (e) { console.error(e); return fail('page'); } finally { running = false; if (active === transaction) active = null; }
+    } catch (e) { console.error(e); return fail('page'); } finally {
+      running = false; if (active === transaction) active = null;
+      // Nothing of this box ever reached Ultra's file area: a reload or a re-render may submit.
+      if (claimed && !attached.has(box)) permit('release').catch(() => {});
+    }
+  };
+  // The student has Blackboard's editor before them (the sheet's button): what a run left in the attempt is theirs to see.
+  const review = (box) => {
+    if (running) return;
+    const token = tokens.get(box) || crypto.randomUUID();
+    tokens.set(box, token);
+    Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op: 'review', token, user: box.context?.paper?.user })).catch(() => {});
   };
 
   // ---- Ultra's own file area, caught before Ultra
@@ -234,6 +265,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (m.type === 'submit:arm') armed.set(box, ok);
     else if (m.type === 'submit:saved') m.request === box.saveRequest && box.saved?.(m.ok === true);
     else if (m.type === 'submit:go' && armed.has(box)) go(box, m, ok);
+    else if (m.type === 'submit:held' && armed.has(box)) say(box, { type: 'submit:held', text: heldOf(box).slice(0, 1e6) });
+    else if (m.type === 'submit:review' && armed.has(box)) review(box);
   };
   return { hear };
 })();

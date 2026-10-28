@@ -2593,7 +2593,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const DROP = { script: '', style: '', template: '', noscript: '', title: '', head: '', textarea: '', select: '', button: '', xmp: '', noembed: '', noframes: '',
     iframe: 'media', object: 'media', embed: 'media', video: 'media', audio: 'media', canvas: 'media', picture: 'media', map: 'media', svg: 'media', math: 'math' };
   const CLASS = /^(ql-indent-[1-8]|ql-align-(left|center|right|justify)|ql-syntax|gz-page-break|gz-rule|gz-footnote)$/;
-  const KEEP = { a: ['href'], img: ['src', 'alt', 'width', 'data-display', 'data-align', 'data-caption'], ol: ['data-list', 'data-styles', 'data-continue'], ul: ['data-list', 'data-styles'], li: ['data-list', 'data-start', 'data-gz'], sup: ['data-footnote'],
+  const KEEP = { a: ['href'], img: ['src', 'alt', 'width', 'data-display', 'data-align', 'data-caption'], ol: ['data-list', 'data-styles', 'data-continue', 'start'], ul: ['data-list', 'data-styles'], li: ['data-list', 'data-start', 'data-gz'], sup: ['data-footnote'],
     td: ['colspan', 'rowspan', 'data-colwidth', 'data-valign'], th: ['colspan', 'rowspan', 'data-colwidth', 'data-valign'], p: ['align', 'data-gz'], div: ['align'], table: ['data-borders'],
     span: ['data-gz-color', 'data-gz-highlight', 'data-gz-caps'], ...Object.fromEntries(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((h) => [h, ['data-gz']])) };
 
@@ -2700,13 +2700,18 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   // Whitespace as Quill's clipboard reads it: a run inside one text node collapses to its no-break spaces (or one
   // space), and a text node that is the block's own first or last child loses its plain edge spaces. Then no-break
   // spaces become plain ones; serialize writes back as no-break the spaces Quill would collapse, so text holds only plain.
-  const keepNbsp = (collapse) => (run) => { const nb = run.replace(/[^\u00a0]/g, ''); return !nb && collapse ? ' ' : nb; };
-  const spaces = (items) => {
+  // A paper keeps as written a run that holds a tab and no line break: its own HTML writes its tabs as they are, and
+  // writer-paste.js makes a page's collapsible tabs spaces first.
+  const spaces = (items, paper) => {
     items.forEach((it, i) => {
       if (it.n.nodeType !== 3) return;
-      let v = it.n.nodeValue.replace(/\r?\n/g, ' ').replace(/\s\s+/g, keepNbsp(true));
-      if (!it.chain.length && i === 0) v = v.replace(/^\s+/, keepNbsp(false));
-      if (!it.chain.length && i === items.length - 1) v = v.replace(/\s+$/, keepNbsp(false));
+      const s = it.n.nodeValue, head = !it.chain.length && i === 0, tail = !it.chain.length && i === items.length - 1;
+      const v = s.replace(/\s+/g, (run, at) => {
+        if (paper && run.includes('\t') && !/[\n\r]/.test(run)) return run;
+        const nb = run.replace(/[^\u00a0]/g, '');
+        if ((head && at === 0) || (tail && at + run.length === s.length)) return nb;
+        return run.length > 1 ? nb || ' ' : run === '\n' ? ' ' : run;
+      });
       it.n = txt(v.replace(/\u00a0/g, ' '));
     });
     return items.filter((it) => it.n.nodeType !== 3 || it.n.nodeValue);
@@ -2719,7 +2724,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     if (o.pre) return [rebuild(shallow(e), items.map((it) => (it.n.nodeType === 3 ? { ...it, n: txt(it.n.nodeValue.replace(/\u00a0/g, ' ')) } : it)))];
     if (o.paper) {
       if (items.at(-1)?.n.nodeName === 'BR') items.pop();
-      return [rebuild(shallow(e), spaces(items))];
+      return [rebuild(shallow(e), spaces(items, true))];
     }
     const segs = [[]];
     for (const it of items) { if (it.n.nodeName === 'BR') segs.push([]); else segs.at(-1).push(it); }
@@ -2733,13 +2738,17 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     s = s.replace(/\r\n?/g, '\n').replace(/\n$/, '').replace(/\u00a0/g, ' ');
     return el('pre', {}, s ? [txt(s)] : []);
   };
-  // Lists flattened the way Quill reads nested ones: each item's level is its depth plus its own ql-indent.
+  // Lists flattened the way Quill reads nested ones: each item's level is its depth plus its own ql-indent. In a paper an
+  // <ol start> numbers its first item.
   const LIST_KIND = { bullet: false, checked: false, unchecked: false, ordered: true };
   const items = (list, o, depth, out) => {
     const ordered = list.nodeName === 'OL';
+    let first = o.paper && ordered ? startOf(list.getAttribute('start')) : null;
     for (const c of list.childNodes) {
       if (c.nodeName === 'UL' || c.nodeName === 'OL') { items(c, o, depth + 1, out); continue; }
       if (c.nodeName !== 'LI') { if (meaningful(c)) for (const b of blocks(el('div', {}, [c]), o)) take(b, ordered, depth, out, o); continue; }
+      if (first != null && c.getAttribute('data-start') == null) c.attrs = { ...c.attrs, 'data-start': String(first) };
+      first = null;
       const kind = LIST_KIND[c.getAttribute('data-list')] ?? ordered, level = clamp(depth + indentOf(c), 0, MAX_INDENT), align = alignOf(c);
       const start = out.length;
       let run = [];
@@ -2914,13 +2923,13 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     flush();
     return out;
   };
-  // Inline HTML (marks only), as a footnote keeps it.
+  // Inline HTML (marks only), as a footnote keeps it: whole, within the input limit every reader of a note's HTML has.
   let inlineDepth = 0;
   const inline = (html) => {
     if (inlineDepth >= 16) limit();
     inlineDepth++;
     try {
-      const doc = parse(paperSchema, `<p>${String(html ?? '').slice(0, 20000)}</p>`), parts = [];
+      const doc = parse(paperSchema, `<p>${String(html ?? '')}</p>`), parts = [];
       doc.descendants((n) => { if (!n.isTextblock) return true; parts.push(inlineHTML(n.type.create(null, n.content.content.filter((c) => c.isText)))); return false; });
       return parts.filter(Boolean).join(' ');
     } finally { inlineDepth--; }

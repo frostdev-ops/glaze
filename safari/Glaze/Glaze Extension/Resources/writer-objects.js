@@ -3,7 +3,8 @@
 // characters…) and list style menu (presets, each level's numbering or bullet, restart and continue); a picture drawn
 // with its caption, selected with an outline and corner handles that keep its shape, and its popover (in line or a
 // block left, centre or right, width in inches and percent of the text width, alt text, caption, delete); pictures from
-// a file, pasted, or dropped on the page, held in the paper within lib/writer-objects.js's bounds; the table toolbar
+// a file, pasted, or dropped on the page, held in the paper within lib/writer-objects.js's bounds and as Word takes them
+// (a WebP drawn again); the table toolbar
 // over a table the caret is in; the link card on a link (open, edit its text and address, remove) in both modes; and
 // links typed on space, --- lines and Tab between cells (lib/writer-objects.js plugins), as glaze-plans/writer/
 // mockups/objects draws these. Popovers are writer.css's .pop: they scale in and fade, and go at once.
@@ -109,6 +110,42 @@
     } finally { loading = false; }
   };
   const pickImage = () => { if (!paperMode) return false; fileInput().click(); return true; };
+  // A WebP that comes in another way (pasted or dropped HTML, a paper saved before) is drawn again as one from a file is,
+  // so every picture in the paper is one Word takes: in place, outside the undo history. The plugin counts the changes
+  // that bring one in, and its view looks only then.
+  const WEBP = /^data:image\/webp;base64,/i, webpKey = new GZ_PM.state.PluginKey('gzo-webp'), redrawing = new Set();
+  const hasWebp = (frag) => { let hit = false; frag.descendants((n) => { if (n.type.name === 'image' && WEBP.test(n.attrs.src)) hit = true; return !hit; }); return hit; };
+  const redraw = async (v, src, live) => {
+    redrawing.add(src);
+    let bmp = null;
+    try {
+      const bytes = Uint8Array.from(atob(src.slice(src.indexOf(',') + 1)), (c) => c.charCodeAt(0));
+      bmp = await createImageBitmap(new Blob([bytes], { type: 'image/webp' }));
+      const fit = L.fitImage({ width: bmp.width, height: bmp.height, bytes: bytes.length, type: 'image/webp' });
+      const blob = fit && await encode(bmp, fit, 'image/webp');
+      if (!blob || !live()) return;
+      const out = await dataURL(blob);
+      if (!live()) return;
+      const tr = v.state.tr;
+      v.state.doc.descendants((n, pos) => { if (n.type.name === 'image' && n.attrs.src === src) tr.setNodeMarkup(pos, null, { ...n.attrs, src: out }); });
+      if (tr.docChanged) v.dispatch(tr.setMeta('addToHistory', false));
+    } catch { /* not a picture the browser reads: it stays, and Word export says so */ } finally { bmp?.close?.(); redrawing.delete(src); }
+  };
+  const webp = () => new GZ_PM.state.Plugin({
+    key: webpKey,
+    state: { init: (_c, s) => (hasWebp(s.doc.content) ? 1 : 0), apply: (tr, n) => (tr.steps.some((st) => st.slice && hasWebp(st.slice.content)) ? n + 1 : n) },
+    view: (v) => {
+      let seen = 0, gone = false;
+      const look = (cur) => {
+        const n = webpKey.getState(cur.state);
+        if (n === seen) return;
+        seen = n;
+        cur.state.doc.descendants((x) => { if (x.type.name === 'image' && WEBP.test(x.attrs.src) && !redrawing.has(x.attrs.src)) redraw(cur, x.attrs.src, () => !gone); });
+      };
+      look(v);
+      return { update: look, destroy: () => { gone = true; } };
+    },
+  });
   // A picture dropped on the page goes in where it lands; any other file, or one dropped beside the page, stays the
   // paper's (writer-paper.js routes it).
   addEventListener('drop', (e) => {
@@ -508,7 +545,7 @@
   F.on('ready', (editor) => {
     ed = editor; view = editor.view; paperMode = F.mode() === 'paper';
     cmds = L.commands(view.state.schema, { content });
-    for (const p of [...L.plugins(view.state.schema, { onLink: openLinkEditor, onImage: pickImage }), ui()]) F.plugin(p);
+    for (const p of [...L.plugins(view.state.schema, { onLink: openLinkEditor, onImage: pickImage }), ui(), ...(paperMode ? [webp()] : [])]) F.plugin(p);
     if (paperMode && !mountToolbar()) {
       const mo = new MutationObserver(() => { if (mountToolbar()) mo.disconnect(); });
       mo.observe(document.body, { childList: true, subtree: true });

@@ -1,20 +1,23 @@
 // Glaze Writer's objects in a .docx, as two passes lib/writer-docx.js makes around its own work, so that file stays as it
 // is: exportParts(doc, parts, { format }) after it has written the parts and before it zips them, and
-// importHTML(html, { body, numbering, styles }) on the HTML it read, with the trees it parsed (its xml() shape:
-// { local, a, kids }). Both walk the document in the order writer-docx does, which is the document's own order:
+// importHTML(html, { numbering, styles }) on the HTML it read, with the trees it parsed (its xml() shape:
+// { local, a, kids }); writer-docx marks each list item it read with its w:numId (data-w-num). Both take the document
+// in the order writer-docx does, which is the document's own order:
 //   lists: each level's numbering format and bullet (w:numFmt, w:lvlText), a continued list sharing the list before it
 //     (one w:num), a restart as a new w:num on the same definition with w:startOverride;
 //   tables: borders off (w:tblBorders nil), header rows (w:tblHeader, repeated on each page as Word does), rows kept whole
-//     (w:cantSplit, as the pages draw them), a cell's vertical alignment (w:vAlign);
+//     (w:cantSplit, as the pages draw them), a cell's vertical alignment (w:vAlign); writer-docx reads them back;
 //   pictures: one set as a block aligns its paragraph (w:jc, no first-line indent), its caption follows in Word's Caption
-//     style, kept with it; a picture alone in its paragraph comes back as a block;
+//     style, kept with it; a picture alone in its paragraph comes back as a block, the Caption paragraph after it
+//     (writer-docx marks it data-w-style="caption") as its caption;
 //   horizontal lines are written and read by lib/writer-docx.js alongside its other blocks.
 // Classic script; module.exports for node.
 var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
   const S = () => (typeof GZ_WRITER_SCHEMA !== 'undefined' ? GZ_WRITER_SCHEMA : require('./writer-schema.js'));
   const ST = () => (typeof GZ_WRITER_STYLES !== 'undefined' ? GZ_WRITER_STYLES : require('./writer-styles.js'));
   const L = () => (typeof GZ_WRITER_OBJECTS_LIB !== 'undefined' ? GZ_WRITER_OBJECTS_LIB : require('./writer-objects.js'));
-  const esc = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
+  const D = () => (typeof GZ_WRITER_DOCX !== 'undefined' ? GZ_WRITER_DOCX : require('./writer-docx.js'));
+  const esc = (v) => D().esc(v);
   const FMT = { decimal: 'decimal', 'lower-alpha': 'lowerLetter', 'lower-roman': 'lowerRoman', 'upper-alpha': 'upperLetter', 'upper-roman': 'upperRoman' };
   const BULLET = { disc: '•', circle: '◦', square: '▪', dash: '–' };
   const DATA = /^data:image\/(png|jpeg|gif);base64,/i;
@@ -32,7 +35,7 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
     let inner = m[1] || '';
     const left = /<w:ind[^>]*\sw:left="(\d+)"/.exec(inner)?.[1];
     inner = inner.replace(/<w:jc [^>]*\/>/g, '').replace(/<w:ind [^>]*\/>/g, '');
-    if (keep) { const s = /^<w:pStyle [^>]*\/>/.exec(inner)?.[0] || ''; inner = `${s}<w:keepNext/>${inner.slice(s.length)}`; }
+    if (keep && !inner.includes('<w:keepNext/>')) { const s = /^<w:pStyle [^>]*\/>/.exec(inner)?.[0] || ''; inner = `${s}<w:keepNext/>${inner.slice(s.length)}`; }
     inner += `<w:ind${left ? ` w:left="${left}"` : ''} w:firstLine="0"/><w:jc w:val="${align}"/>`;
     return `<w:p><w:pPr>${inner}</w:pPr>${p.slice(m[0].length)}`;
   };
@@ -130,10 +133,8 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
   const BULLET_IN = { '•': 'disc', '': 'disc', '·': 'disc', o: 'circle', '◦': 'circle', '▪': 'square', '■': 'square', '': 'square', '–': 'dash', '-': 'dash', '—': 'dash' };
   const DEFAULTS = { ordered: ['decimal', 'lower-alpha', 'lower-roman'], bullet: ['disc', 'circle', 'square'] };
 
-  // html: writer-docx's; ctx: the trees it parsed (document.xml, numbering.xml, styles.xml; null when absent). → html.
+  // html: writer-docx's; ctx: the trees it parsed (numbering.xml, styles.xml; null when absent). → html.
   const importHTML = (html, ctx = {}) => {
-    const body = ctx.body && (function find(n) { if (n.local === 'body') return n; for (const k of els(n)) { const hit = find(k); if (hit) return hit; } return null; })(ctx.body);
-    if (!body) return html;
     const styleById = new Map();
     for (const s of (function all(n, out = []) { for (const k of els(n)) { if (k.local === 'style') out.push(k); all(k, out); } return out; })(ctx.styles || { kids: [] })) styleById.set(at(s, 'styleId'), s);
     const nums = new Map(), abstracts = new Map();
@@ -141,52 +142,20 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
       if (n.local === 'num') nums.set(at(n, 'numId'), n);
       if (n.local === 'abstractNum') abstracts.set(at(n, 'abstractNumId'), n);
     }
-    const absOf = (numId) => abstracts.get(val(nums.get(numId), 'abstractNumId'));
-    const lvlOf = (numId, level) => els(absOf(numId)).find((l) => l.local === 'lvl' && +at(l, 'ilvl') === level);
-    const numPr = (p) => {
-      let pr = kid(kid(p, 'pPr'), 'numPr');
-      for (let id = val(kid(p, 'pPr'), 'pStyle'), seen = 0; !pr && id && seen < 12; seen++) { const s = styleById.get(id); pr = kid(kid(s, 'pPr'), 'numPr'); id = val(s, 'basedOn'); }
-      const id = val(pr, 'numId');
-      if (!id || id === '0') return null;
-      const level = Math.max(0, Math.min(8, +val(pr, 'ilvl') || 0));
-      return { id, level, ordered: val(lvlOf(id, level), 'numFmt') !== 'bullet' };
-    };
+    // A level's definition: the instance's own override of it, else its abstract's (through a numbering style's link).
+    const absOf = (numId, n = 0) => { const a = abstracts.get(val(nums.get(numId), 'abstractNumId')), link = val(a, 'numStyleLink'); return link && n < 4 ? absOf(val(kid(kid(styleById.get(link), 'pPr'), 'numPr'), 'numId'), n + 1) || a : a; };
+    const lvlOf = (numId, level) => { const o = els(nums.get(numId)).find((x) => x.local === 'lvlOverride' && +at(x, 'ilvl') === level); return kid(o, 'lvl') || els(absOf(numId)).find((l) => l.local === 'lvl' && +at(l, 'ilvl') === level); };
 
-    // The lists, tables and cells as writer-docx reached them, in its order.
-    const runs = [], tables = [], cells = [];
-    const walk = (nodes) => {
-      let cur = null;
-      for (const node of nodes) {
-        if (node.local === 'p') {
-          if (kid(kid(node, 'pPr'), 'pageBreakBefore')) cur = null;
-          const li = numPr(node);
-          if (li) { if (!cur || cur.ordered !== li.ordered || absOf(cur.items[0].id) !== absOf(li.id)) { cur = { ordered: li.ordered, items: [] }; runs.push(cur); } cur.items.push(li); } else cur = null;
-        } else if (node.local === 'tbl') {
-          cur = null;
-          const rows = els(node).filter((k) => k.local === 'tr');
-          let head = 0;
-          while (head < rows.length && kid(kid(rows[head], 'trPr'), 'tblHeader')) head++;
-          const b = kid(kid(node, 'tblPr'), 'tblBorders'), sides = els(b);
-          tables.push({ head, borders: !(sides.length && sides.every((s) => ['nil', 'none'].includes(at(s, 'val')))) });
-          for (const row of rows) for (const tc of els(row).filter((k) => k.local === 'tc')) {
-            const pr = kid(tc, 'tcPr'), merge = kid(pr, 'vMerge');
-            if (merge && at(merge, 'val') !== 'restart') continue;
-            const v = val(pr, 'vAlign');
-            cells.push(v === 'center' ? 'middle' : v === 'bottom' ? 'bottom' : null);
-            walk(els(tc).filter((k) => k.local !== 'tcPr'));
-          }
-        } else if (node.local === 'sdt') { cur = null; walk(els(kid(node, 'sdtContent'))); }
-        else if (node.local === 'customXml') { cur = null; walk(els(node)); }
-        else if (node.local === 'ins' || node.local === 'moveTo') { cur = null; walk(els(node)); }
-        else if (!['sectPr', 'bookmarkStart', 'bookmarkEnd', 'proofErr'].includes(node.local)) cur = null;
-      }
-    };
-    walk(els(body));
-
+    // The lists as writer-docx wrote them: each <ol> / <ul> and its items' w:numId and level.
+    const runs = [];
+    for (const m of html.matchAll(/<(ol|ul)>|<li\b([^>]*?) data-w-num="([^"]*)"/g)) {
+      if (m[1]) runs.push({ ordered: m[1] === 'ol', items: [] });
+      else runs.at(-1)?.items.push({ id: m[3], level: +(/ql-indent-(\d)/.exec(m[2])?.[1] || 0) });
+    }
     const styleOf = (run) => {
-      const a = absOf(run.items[0].id), d = run.ordered ? DEFAULTS.ordered : DEFAULTS.bullet;
+      const d = run.ordered ? DEFAULTS.ordered : DEFAULTS.bullet;
       const all = Array.from({ length: 9 }, (_, l) => {
-        const v = els(a).find((x) => x.local === 'lvl' && +at(x, 'ilvl') === l);
+        const v = lvlOf(run.items[0].id, l);
         const s = run.ordered ? NUM_IN[val(v, 'numFmt')] : BULLET_IN[val(v, 'lvlText')];
         return s || d[l % d.length];
       });
@@ -201,43 +170,33 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
     };
 
     // ---- the HTML, tag by tag
-    const listTags = (html.match(/<(ol|ul)>/g) || []).length, tableTags = (html.match(/<table>/g) || []).length;
-    const doLists = listTags === runs.length && runs.length > 0, doTables = tableTags === tables.length && tables.length > 0;
-    let ri = -1, li = 0, prevOrdered = null, continued = false, ti = 0, ci = 0;
-    const tstack = [], cstack = [];
-    html = html.replace(/<(ol|ul)>|<li\b|<table>|<\/table>|<tr>|<td\b|<\/td>/g, (tag) => {
-      if ((tag === '<ol>' || tag === '<ul>') && doLists) {
+    let ri = -1, li = 0, prevOrdered = null, continued = false;
+    html = html.replace(/<(ol|ul)>|<li\b[^>]*? data-w-num="[^"]*"/g, (tag) => {
+      if (tag === '<ol>' || tag === '<ul>') {
         const run = runs[++ri];
         li = 0;
-        if (!run || run.ordered !== (tag === '<ol>')) return tag;
+        if (!run?.items.length) return tag;
         const styles = styleOf(run), cont = run.ordered && prevOrdered && prevOrdered.items.at(-1).id === run.items[0].id;
         continued = !!cont;
         if (run.ordered) prevOrdered = run;
         return `<${tag.slice(1, 3)}${styles ? ` data-styles="${styles}"` : ''}${cont ? ' data-continue="true"' : ''}>`;
       }
-      if (tag === '<li' && doLists) {
-        const run = runs[ri], item = run?.items[li], before = run?.items[li - 1];
+      if (tag.startsWith('<li')) {
+        const run = runs[ri], item = run?.items[li], before = run?.items[li - 1], open = tag.replace(/ data-w-num="[^"]*"$/, '');
         li++;
-        return run?.ordered && item && (before ? item.id !== before.id : !continued && startOf(item) !== 1) ? `<li data-start="${startOf(item)}"` : tag;
+        return run?.ordered && item && (before ? item.id !== before.id : !continued && startOf(item) !== 1) ? `<li data-start="${startOf(item)}"${open.slice(3)}` : open;
       }
-      if (!doTables) return tag;
-      if (tag === '<table>') { const t = tables[ti++]; tstack.push({ t, row: -1 }); return t && !t.borders ? '<table data-borders="none">' : tag; }
-      if (tag === '</table>') { tstack.pop(); return tag; }
-      if (tag === '<tr>') { const top = tstack.at(-1); if (top) top.row++; return tag; }
-      if (tag === '<td') {
-        const top = tstack.at(-1), v = cells[ci++], th = !!top?.t && top.row < top.t.head;
-        cstack.push(th);
-        return `<${th ? 'th' : 'td'}${v ? ` data-valign="${v}"` : ''}`;
-      }
-      if (tag === '</td>') return cstack.pop() ? '</th>' : tag;
       return tag;
     });
-    // A picture alone in its paragraph is a block, aligned as the paragraph was.
-    html = html.replace(/<p( style="[^"]*")?><img ([^>]*)><\/p>/g, (whole, style, attrs) => {
-      const align = /text-align:(center|right)/.exec(style || '')?.[1] || 'left';
-      return `<p${style || ''}><img ${attrs} data-display="block" data-align="${align}"></p>`;
+    // A picture alone in its paragraph is a block, aligned as the paragraph was; a Caption paragraph after it is its
+    // caption, and the keep with next export gave it for the caption goes with the caption.
+    const decode = (x) => x.replace(/<[^>]*>/g, '').replace(/&(lt|gt|quot|#39|amp);/g, (_, e) => ({ lt: '<', gt: '>', quot: '"', '#39': "'", amp: '&' })[e]);
+    html = html.replace(/<p( style="[^"]*")?(?: data-gz="([^"]*)")?><img ([^>]*)><\/p>(?:<p[^>]*? data-w-style="caption">([\s\S]*?)<\/p>)?/g, (whole, style, gz, attrs, caption) => {
+      const align = /text-align:(center|right)/.exec(style || '')?.[1] || 'left', text = caption != null ? decode(caption).replace(/\s+/g, ' ').trim() : '';
+      if (gz && caption != null) gz = gz.split(';').map((x) => (x.startsWith('keep:') ? `keep:${x.slice(5).split(' ').filter((w) => w !== 'next').join(' ')}` : x)).filter((x) => x !== 'keep:').join(';');
+      return `<p${style || ''}${gz ? ` data-gz="${gz}"` : ''}><img ${attrs.replace(/ data-caption="[^"]*"/, '')} data-display="block" data-align="${align}"${text ? ` data-caption="${esc(text)}"` : ''}></p>`;
     });
-    return html;
+    return html.replace(/ data-w-style="caption"/g, '');
   };
 
   return { exportParts, importHTML };

@@ -1,8 +1,9 @@
 // Settings → Writer: the choices its selects offer (a new paper's format, zoom, versions kept, the dialect), the papers saved
-// on this device by course with Clear… for a course and Clear all papers behind one question (lib/writer-papers.js: the list
-// from storage.local, each removal through the worker, which keeps every paper write in one queue), and the personal
-// dictionary (storage.local writerWords, the frames' and Harper's) with a remove for each word and Clear. The switches and
-// selects themselves save through options.js's data-key binding (storage.sync `writer`, defaults.js GZ_SPEC.writer).
+// on this device by course with Clear… for a course and Clear all papers (every paper, a course's or not) behind one
+// question (lib/writer-papers.js: the list from storage.local, each removal through the worker, which keeps every paper
+// write in one queue), and the personal dictionary (storage.local writerWords, the frames' and Harper's) with a remove for
+// each word and Clear. The switches and selects themselves save through options.js's data-key binding (storage.sync
+// `writer`, defaults.js GZ_SPEC.writer).
 // Opened as a page of a school's site, what deletes asks for Settings' own tab. Every word reaches the page as textContent.
 // Extension options page only (mount); the pure helpers are for node tests.
 var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
@@ -24,6 +25,8 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
     }
     return [...out.values()].map((c) => ({ ...c, name: c.name || c.id.split('|')[1] })).sort((a, b) => b.keys.length - a.keys.length || a.name.localeCompare(b.name));
   };
+  // Every paper's key, a course's or not: a paper whose key never came is kept under a stand-in (writer-paper.js).
+  const allKeys = (rows) => (Array.isArray(rows) ? rows : []).map((r) => r?.key).filter((k) => typeof k === 'string' && k);
   // The dictionary as kept: strings only, the newest last.
   const words = (v) => (Array.isArray(v) ? v.filter((w) => typeof w === 'string' && w.trim()) : []);
 
@@ -41,13 +44,14 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
     const away = (hash) => { if (!o.elsewhere) return false; o.elsewhere(hash); return true; };
 
     // ---- papers ---------------------------------------------------------------------------------------------------
-    let store = null, courses = [];
+    let store = null, courses = [], everything = [];
     const papers = () => (store ||= GZ_WRITER_PAPERS.open());
     const drawPapers = async () => {
       let rows = [];
       try { rows = await papers().list(); } catch (e) { console.error(e); }
       courses = byCourse(rows);
-      const n = courses.reduce((k, c) => k + c.keys.length, 0);
+      everything = [{ id: '', name: '', keys: allKeys(rows) }];
+      const n = everything[0].keys.length;
       $('writer-papers-count').textContent = n ? t('{n} papers', { n }) : '';
       $('writer-papers-empty').hidden = n > 0;
       $('writer-clear-all').disabled = !n;
@@ -66,7 +70,7 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
       if (away('#writer/papers')) return;
       asked = list;
       const n = list.reduce((k, c) => k + c.keys.length, 0);
-      $('writer-clear-title').textContent = list.length === 1 && list !== courses ? t('Clear {course}’s papers?', { course: list[0].name }) : t('Clear all papers?');
+      $('writer-clear-title').textContent = list === everything ? t('Clear all papers?') : t('Clear {course}’s papers?', { course: list[0].name });
       $('writer-clear-note').textContent = `${t('{n} papers', { n })}. ${t('They and their versions are deleted from this device. What you submitted stays in Blackboard.')}`;
       dialog.returnValue = '';
       dialog.showModal();
@@ -81,7 +85,7 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
       o.hint(failed ? t('Some papers could not be cleared. Try again.') : t('Papers cleared.'), !!failed);
       drawPapers();
     });
-    $('writer-clear-all').addEventListener('click', () => ask(courses));
+    $('writer-clear-all').addEventListener('click', () => ask(everything));
 
     // ---- the personal dictionary ------------------------------------------------------------------------------------
     const local = chrome.storage.local;
@@ -115,6 +119,6 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
     drawPapers();
   };
 
-  return { FORMATS, dialects, byCourse, words, mount };
+  return { FORMATS, dialects, byCourse, allKeys, words, mount };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITEREDIT;

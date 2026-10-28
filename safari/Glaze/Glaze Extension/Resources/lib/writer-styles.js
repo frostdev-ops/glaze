@@ -56,7 +56,7 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
     apa7: {
       ...BASE, id: 'apa7', label: 'APA 7', opening: 'title-page', date: 'mdy', cite: 'apa',
       title: { align: 'center', bold: true },
-      headings: [{ bold: true, align: 'center' }, { bold: true, align: 'left' }, { bold: true, italic: true, align: 'left' }, { bold: true, align: 'left', first: 0.5 }],
+      headings: [{ bold: true, align: 'center' }, { bold: true, align: 'left' }, { bold: true, italic: true, align: 'left' }, { bold: true, align: 'left', first: 0.5 }, { bold: true, italic: true, align: 'left', first: 0.5 }],
       quote: { ...BASE.quote, words: 40 },
       list: { title: 'References', align: 'center', bold: true, hanging: 0.5, line: 2, after: 0 },
     },

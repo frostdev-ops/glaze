@@ -23,11 +23,19 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   // Words as Word and Ultra's status bar count them: runs between spaces with a letter or digit in them.
   const words = (text) => String(text || '').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
 
+  // The selection's ranges as [from, to]: one, or each selected table cell's.
+  const spans = (state) => state.selection.ranges.map((r) => [r.$from.pos, r.$to.pos]);
   // The textblocks the selection touches, in document order.
   const lines = (state) => {
-    const out = [], { from, to } = state.selection;
-    state.doc.nodesBetween(from, to, (node, pos) => { if (!node.isTextblock) return true; out.push({ node, pos, parent: state.doc.resolve(pos).parent }); return false; });
-    return out;
+    const out = [], seen = new Set();
+    for (const [from, to] of spans(state)) {
+      state.doc.nodesBetween(from, to, (node, pos) => {
+        if (!node.isTextblock) return true;
+        if (!seen.has(pos)) { seen.add(pos); out.push({ node, pos, parent: state.doc.resolve(pos).parent }); }
+        return false;
+      });
+    }
+    return out.sort((a, b) => a.pos - b.pos);
   };
   // One textblock to another kind ({ list } or { type }, with attrs), as steps that keep positions mapping (so selection,
   // proofing underlines and ghost text follow). An item leaves its list by splitting the list around it first.
@@ -108,15 +116,15 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     };
     const FORMAT = ['bold', 'italic', 'underline', 'strike', 'sup', 'sub', 'text_style', 'color', 'highlight', 'small_caps', 'all_caps'].map((k) => m[k]).filter(Boolean);
     const clear = (state, dispatch) => {
-      const { from, to, empty, $from } = state.selection;
+      const { empty, $from } = state.selection;
       if (empty) {
         const marks = state.storedMarks || $from.marks();
         if (!marks.some((k) => FORMAT.includes(k.type))) return false;
         dispatch?.(state.tr.setStoredMarks(marks.filter((k) => !FORMAT.includes(k.type))));
         return true;
       }
-      if (!FORMAT.some((t) => state.doc.rangeHasMark(from, to, t))) return false;
-      if (dispatch) { const tr = state.tr; for (const t of FORMAT) tr.removeMark(from, to, t); dispatch(tr); }
+      if (!FORMAT.some((t) => spans(state).some(([from, to]) => state.doc.rangeHasMark(from, to, t)))) return false;
+      if (dispatch) { const tr = state.tr; for (const [from, to] of spans(state)) for (const t of FORMAT) tr.removeMark(from, to, t); dispatch(tr); }
       return true;
     };
     const link = (url) => (state, dispatch) => {
@@ -170,15 +178,15 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     };
     // ---- paper run formatting and paragraph settings
     const runStyle = (state) => {
-      const { from, to, empty, $from } = state.selection;
+      const { empty, $from } = state.selection;
       if (empty) return m.text_style?.isInSet(state.storedMarks || $from.marks()) || null;
       let hit;
-      state.doc.nodesBetween(from, to, (x) => { if (hit === undefined && x.isText) hit = m.text_style.isInSet(x.marks) || null; return hit === undefined; });
+      for (const [from, to] of spans(state)) state.doc.nodesBetween(from, to, (x) => { if (hit === undefined && x.isText) hit = m.text_style.isInSet(x.marks) || null; return hit === undefined; });
       return hit || null;
     };
     // text_style's font or size over the selection, each run keeping its other part; with no selection, what typing carries.
     const style = (key, value) => (state, dispatch) => {
-      const t = m.text_style, { from, to, empty, $from } = state.selection;
+      const t = m.text_style, { empty, $from } = state.selection;
       if ($from.parent.type.spec.code) return false;
       const next = (old) => { const a = { font: old?.attrs.font ?? null, size: old?.attrs.size ?? null, [key]: value }; return a.font || a.size ? t.create(a) : null; };
       if (empty) {
@@ -188,7 +196,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       }
       if (dispatch) {
         const tr = state.tr, runs = [];
-        state.doc.nodesBetween(from, to, (x, pos) => { if (x.isText) runs.push([Math.max(from, pos), Math.min(to, pos + x.nodeSize), next(t.isInSet(x.marks))]); return true; });
+        for (const [from, to] of spans(state)) state.doc.nodesBetween(from, to, (x, pos) => { if (x.isText) runs.push([Math.max(from, pos), Math.min(to, pos + x.nodeSize), next(t.isInSet(x.marks))]); return true; });
         for (const [a, b, made] of runs) { tr.removeMark(a, b, t); if (made) tr.addMark(a, b, made); }
         dispatch(tr.scrollIntoView());
       }
@@ -196,15 +204,15 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     };
     // A mark with attributes in place of whatever of its type is there (null: none).
     const swap = (type, attrs) => (state, dispatch) => {
-      const { from, to, empty, $from } = state.selection;
+      const { empty, $from } = state.selection;
       if ($from.parent.type.spec.code) return false;
       if (empty) {
         const rest = (state.storedMarks || $from.marks()).filter((x) => x.type !== type);
         dispatch?.(state.tr.setStoredMarks(attrs ? type.create(attrs).addToSet(rest) : rest));
         return true;
       }
-      if (!attrs && !state.doc.rangeHasMark(from, to, type)) return false;
-      if (dispatch) { const tr = state.tr.removeMark(from, to, type); if (attrs) tr.addMark(from, to, type.create(attrs)); dispatch(tr.scrollIntoView()); }
+      if (!attrs && !spans(state).some(([from, to]) => state.doc.rangeHasMark(from, to, type))) return false;
+      if (dispatch) { const tr = state.tr; for (const [from, to] of spans(state)) { tr.removeMark(from, to, type); if (attrs) tr.addMark(from, to, type.create(attrs)); } dispatch(tr.scrollIntoView()); }
       return true;
     };
     const clampN = (v, lo, hi) => (v == null || v === '' ? null : Number.isFinite(+v) ? Math.round(Math.min(hi, Math.max(lo, +v)) * 100) / 100 : undefined);
@@ -373,7 +381,8 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       Enter: chainCommands(newlineInCode, emptyItem, createParagraphNear, liftEmptyBlock, split),
       'Shift-Enter': n.hard_break ? chainCommands(newlineInCode, (state, dispatch) => { dispatch?.(state.tr.replaceSelectionWith(n.hard_break.create()).scrollIntoView()); return true; }) : chainCommands(newlineInCode, split),
       Backspace: chainCommands(undoInputRule, backAtStart),
-      Tab: (state, dispatch) => !away.now && (inList(run.indent())(state, dispatch) || (dispatch?.(state.tr.insertText('\t').scrollIntoView()), true)),
+      // With table cells selected, Tab goes on to the next cell, as in a table; it never types over them.
+      Tab: (state, dispatch) => !away.now && (inList(run.indent())(state, dispatch) || (state.selection instanceof GZ_PM.tables.CellSelection ? (GZ_PM.tables.goToNextCell(1)(state, dispatch), true) : (dispatch?.(state.tr.insertText('\t').scrollIntoView()), true))),
       'Shift-Tab': (state, dispatch) => !away.now && (inList(run.outdent())(state, dispatch) || true),
     };
     for (const [key, fn] of Object.entries(extra || {})) if (typeof fn === 'function') keys[key] = () => fn() !== false;

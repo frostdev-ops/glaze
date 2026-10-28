@@ -1,9 +1,10 @@
 // Glaze Writer's papers: one per assignment, on this device, keyed by school, student, course and assignment, with its
 // versions and the student's own format presets. In chrome.storage.local (the manifest's unlimitedStorage lifts its
 // quota), which the editor frame (an extension page inside the LMS) and papers.html (a tab of its own) both see as the
-// same store, where a framed page's IndexedDB can be partitioned by the site around it. A version is taken on submit,
-// before an import or a restore, before a big edit, and every 10 minutes of writing; versions are capped by count and
-// size, keeping the last submitted one.
+// same store, where a framed page's IndexedDB can be partitioned by the site around it. A version is taken on submit
+// ('sending', the paper as its .docx is built, marked 'submit' once Ultra's Submit is clicked: submitted()), before an
+// import or a restore, before a big edit, and every 10 minutes of writing; versions are capped by count and size,
+// keeping the last submitted one.
 // Classic script; module.exports for node.
 var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   const INDEX = 'writerPapers', PAPER = 'writerPaper:', VERSIONS = 'writerVersions:', PRESETS = 'writerPresets:';
@@ -13,10 +14,10 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   // assignment.
   const keyOf = (k = {}) => (HOST.test(k.school || '') && ID.test(k.user || '') && ID.test(k.course || '') && ID.test(k.content || '') ? `${k.school.toLowerCase()}|${k.user}|${k.course}|${k.content}` : null);
   const scopeOf = (k = {}) => (HOST.test(k.school || '') && ID.test(k.user || '') ? `${k.school.toLowerCase()}|${k.user}` : null);
-  // A document's text size from its JSON: characters and words.
+  // A document's text size from its JSON: characters and words, a hard break parting words as in the editor's count.
   const measure = (doc) => {
     let text = '';
-    const walk = (n) => { if (typeof n?.text === 'string') text += n.text; else if (Array.isArray(n?.content)) { for (const c of n.content) walk(c); text += ' '; } };
+    const walk = (n) => { if (typeof n?.text === 'string') text += n.text; else if (n?.type === 'hard_break') text += '\n'; else if (Array.isArray(n?.content)) { for (const c of n.content) walk(c); text += ' '; } };
     walk(doc);
     return { chars: text.replace(/\s+/g, ' ').trim().length, words: text.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length };
   };
@@ -36,7 +37,9 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   // (a function, tests pin it).
   const open = (store, now = () => Date.now(), o = {}) => {
     if (!store && globalThis.chrome?.runtime?.sendMessage) {
-      const local = open(chrome.storage.local, now), seen = new Map();
+      // One write at a time per paper from this editor, each carrying the revision the one before it saved.
+      const local = open(chrome.storage.local, now), seen = new Map(), turns = new Map();
+      const turn = (k, fn) => { const p = (turns.get(k) || Promise.resolve()).then(fn, fn); turns.set(k, p.catch(() => {})); return p; };
       const send = async (op, args) => {
         const r = await chrome.runtime.sendMessage({ type: 'glaze:writerPapers', op, args });
         if (!r?.ok) throw new Error(r?.error || 'paper storage unavailable');
@@ -44,8 +47,8 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
         return r.value;
       };
       return { ...local, get: async (k) => { const p = await local.get(k); seen.set(k, p?.revision || 0); return p; },
-        save: (k, patch, options = {}) => send('save', [k, patch, { ...options, base: seen.get(k) }]),
-        restore: (k, id) => send('restore', [k, id]), remove: (k) => send('remove', [k]),
+        save: (k, patch, options = {}) => turn(k, () => send('save', [k, patch, { ...options, base: options.base ?? seen.get(k) }])),
+        restore: (k, id) => turn(k, () => send('restore', [k, id])), remove: (k) => turn(k, () => send('remove', [k])),
         savePreset: (scope, p) => send('savePreset', [scope, p]), removePreset: (scope, id) => send('removePreset', [scope, id]) };
     }
     store ||= globalThis.chrome?.storage?.local;
@@ -79,8 +82,8 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       return [row, ...list.filter((r) => r.key !== paper.key)].slice(0, 2000);
     };
 
-    // Saves the paper under k, merging patch into what's stored. reason: 'auto' (the default: autosave), 'submit',
-    // 'import' or 'restore' (the doc before it is kept), 'format'. → { paper, version }.
+    // Saves the paper under k, merging patch into what's stored. reason: 'auto' (the default: autosave), 'sending' or
+    // 'submit' (the paper itself kept), 'import' or 'restore' (the doc before it is kept), 'format'. → { paper, version }.
     const save = (k, patch = {}, { reason = 'auto', base = seen.get(k) } = {}) => serial(k, async () => {
       if (typeof k !== 'string' || !k) throw new Error('no paper key');
       const prev = (await get(PAPER + k)) || null, t = now();
@@ -88,9 +91,9 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       if (patch.doc) paper.words = patch.words ?? measure(patch.doc).words;
       let version = null, history = null;
       const retain = async (v) => { history = await cap([v, ...(history || await versionsOf(k))]); return v; };
-      const last = paper.lastVersion || 0;
-      if (reason === 'submit' && prev?.doc && patch.doc && base != null && base !== (prev.revision || 0) && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) await retain(snapshot(prev, 'conflict', t));
-      if (reason === 'submit') { version = await retain(snapshot(paper, 'submit', t)); paper.submitted = t; }
+      const last = paper.lastVersion || 0, whole = reason === 'submit' || reason === 'sending';
+      if (whole && prev?.doc && patch.doc && base != null && base !== (prev.revision || 0) && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) await retain(snapshot(prev, 'conflict', t));
+      if (whole) { version = await retain(snapshot(paper, reason, t)); if (reason === 'submit') paper.submitted = t; }
       else if (prev?.doc && patch.doc && base != null && base !== (prev.revision || 0) && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) version = await retain(snapshot(prev, 'conflict', t));
       else if ((reason === 'import' || reason === 'restore' || reason === 'format') && prev?.doc) version = await retain(snapshot(prev, reason, t));
       else if (prev?.doc && patch.doc) {
@@ -106,6 +109,17 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       await store.set({ [PAPER + k]: paper, [INDEX]: await index(paper), ...(history ? { [VERSIONS + k]: history } : {}) });
       seen.set(k, paper.revision);
       return { paper, version };
+    });
+    // The 'sending' version a submit was built from, once Ultra's Submit is clicked (lib/background.js, at the dispatch):
+    // 'submit' from then, the paper submitted. The document is unchanged, so its revision is too.
+    const submitted = (k, id) => serial(k, async () => {
+      const list = await versionsOf(k), v = list.find((x) => x.id === id && x.reason === 'sending'), paper = await get(PAPER + k);
+      if (!v || !paper) return null;
+      v.reason = 'submit';
+      paper.submitted = now();
+      await store.set({ [PAPER + k]: paper, [VERSIONS + k]: list, [INDEX]: await index(paper) });
+      const { doc, ...meta } = v;
+      return meta;
     });
     const versions = async (k) => (await versionsOf(k)).map(({ doc, ...v }) => v);
     const version = async (k, id) => (await versionsOf(k)).find((v) => v.id === id) || null;
@@ -147,7 +161,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
         }
       }
     };
-    const api = { get: (k) => get(PAPER + k).then((p) => { seen.set(k, p?.revision || 0); return p || null; }), save, versions, version, restore, list, remove, presets, savePreset, removePreset, merge };
+    const api = { get: (k) => get(PAPER + k).then((p) => { seen.set(k, p?.revision || 0); return p || null; }), save, submitted, versions, version, restore, list, remove, presets, savePreset, removePreset, merge };
     if (!store) throw new Error('paper storage unavailable');
     return api;
   };

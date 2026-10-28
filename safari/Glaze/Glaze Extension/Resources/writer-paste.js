@@ -118,13 +118,15 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   // ---- the computed run style, as a browser would cascade it for the properties a paper keeps
-  const INHERIT = ['font-family', 'font-size', 'color', 'font-weight', 'font-style', 'font-variant', 'text-transform'];
+  const INHERIT = ['font-family', 'font-size', 'color', 'font-weight', 'font-style', 'font-variant', 'text-transform', 'white-space'];
   const UA = { b: { 'font-weight': '700' }, strong: { 'font-weight': '700' }, i: { 'font-style': 'italic' }, em: { 'font-style': 'italic' }, cite: { 'font-style': 'italic' }, var: { 'font-style': 'italic' }, dfn: { 'font-style': 'italic' },
     u: { 'text-decoration': 'underline' }, ins: { 'text-decoration': 'underline' }, s: { 'text-decoration': 'line-through' }, strike: { 'text-decoration': 'line-through' }, del: { 'text-decoration': 'line-through' },
     sup: { 'vertical-align': 'super' }, sub: { 'vertical-align': 'sub' }, mark: { 'background-color': 'yellow' } };
   const HEADING = /^h[1-6]$/;
+  // An element's own text direction (dir, or Word's direction:rtl).
+  const dirOf = (e, st) => { const d = String(e.a.dir || st.direction || '').trim().toLowerCase(); return d === 'ltr' || d === 'rtl' ? d : null; };
   const cascade = (e, up, ctx, block) => {
-    const st = own(e, ctx), out = { deco: new Set(up.deco), vert: up.vert, bg: block ? null : up.bg, mso: block ? null : up.mso, link: up.link };
+    const st = own(e, ctx), out = { deco: new Set(up.deco), vert: up.vert, bg: block ? null : up.bg, mso: block ? null : up.mso, link: up.link, dir: dirOf(e, st) || up.dir };
     for (const k of INHERIT) out[k] = up[k];
     const ua = UA[e.name] || (HEADING.test(e.name) ? { 'font-weight': 'bold' } : {});
     const decl = { ...ua, ...st };
@@ -143,8 +145,9 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   };
   const NEAR_BLACK = (h) => { const [r, g, b] = rgb(h); return Math.max(r, g, b) <= 0x50 && Math.max(r, g, b) - Math.min(r, g, b) <= 0x18; };
   // A text leaf's marks as Writer's HTML: tags for bold to subscript, one text_style span (font and size), colour,
-  // highlight and caps as data attributes.
+  // highlight and caps as data attributes. Its tabs are spaces, as the page shows them, unless its white-space keeps them.
   const wrap = (text, c, ctx) => {
+    if (!/^(pre|break-spaces)/.test(String(c['white-space'] || '').trim().toLowerCase())) text = text.replace(/\t/g, ' ');
     const w = String(c['font-weight'] || '').toLowerCase(), bold = /^(bold|bolder)$/.test(w) || +w >= 600;
     const italic = /italic|oblique/.test(String(c['font-style'] || ''));
     const marks = [bold && 'strong', italic && 'em', !c.link && c.deco.has('u') && 'u', c.deco.has('s') && 's', c.vert].filter(Boolean);
@@ -179,17 +182,19 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     const cc = cascade(e, c, ctx, false);
     // Word's empty-paragraph mark: <o:p>&nbsp;</o:p>.
     if (e.name === 'o:p') return e.kids.every((k) => k.text != null && /^[\s ]*$/.test(k.text)) ? '' : e.kids.map((k) => inline(k, cc, ctx)).join('');
-    const inner = e.kids.map((k) => inline(k, cc, ctx)).join('');
+    let inner = e.kids.map((k) => inline(k, cc, ctx)).join('');
+    if ((cc.dir || 'ltr') !== (c.dir || 'ltr') && inner) inner = `<span dir="${cc.dir}">${inner}</span>`; // a run in another direction than the text around it
     return e.name === 'a' && e.a.href ? `<a href="${esc(e.a.href)}">${inner}</a>` : inner;
   };
   // A paragraph's settings from its own CSS, by source: Word's and Docs' spacing, indents, line rules and pagination; a
-  // web page's alignment only.
+  // web page's alignment only. Right-to-left text keeps its direction, which isn't formatting Match the paper takes away.
   const paraOf = (e, ctx, list = false) => {
     const st = own(e, ctx), css = [], gz = {};
     // Heading emphasis is carried by its runs, including mixed emphasis. Suppress the format's heading defaults.
     if (HEADING.test(e.name) && !ctx.match) css.push('font-weight:normal', 'font-style:normal');
+    // Left is the default for a paragraph, not for a heading the format centres.
     const align = String(st['text-align'] || e.a.align || '').toLowerCase();
-    if (!ctx.match && ['center', 'right', 'justify'].includes(align)) css.push(`text-align:${align}`);
+    if (!ctx.match && (['center', 'right', 'justify'].includes(align) || (align === 'left' && HEADING.test(e.name)))) css.push(`text-align:${align}`);
     let brk = false;
     if (ctx.source !== 'web' && !ctx.match) {
       const m = margins(st), lh = String(st['line-height'] || '').trim().toLowerCase();
@@ -213,21 +218,41 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     }
     const data = S().dataGz({ before: gz.before, after: gz.after, exact: gz.exact, least: gz.least, left: gz.left, right: gz.right, keepNext: gz.keepNext, keepLines: gz.keepLines, widow: gz.widow });
     if (css.length || data) ctx.rich = true;
-    return { attrs: `${css.length ? ` style="${css.join(';')}"` : ''}${data ? ` data-gz="${esc(data)}"` : ''}`, brk };
+    return { attrs: `${dirOf(e, st) === 'rtl' ? ' dir="rtl"' : ''}${css.length ? ` style="${css.join(';')}"` : ''}${data ? ` data-gz="${esc(data)}"` : ''}`, brk };
   };
-  // Word's list paragraphs: ordered when the marker is a number or letter, the level from mso-list.
-  const wordList = (e) => {
-    const m = /level(\d)/i.exec(own(e, { rules: new Map() })['mso-list'] || e.style['mso-list'] || '');
+  // Word's list paragraphs: the list and level from mso-list; ordered when the marker is a number or letter, and then
+  // the marker's number and style (a level's first marker decides between roman and letters).
+  const ROMAN = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
+  const roman = (s) => [...s].reduce((sum, ch, i) => sum + (ROMAN[ch] < (ROMAN[s[i + 1]] || 0) ? -ROMAN[ch] : ROMAN[ch]), 0);
+  const counted = (v, known) => {
+    const low = v.toLowerCase(), up = v !== low;
+    if (/^\d+$/.test(v)) return { num: +v, style: 'decimal' };
+    if (/^[ivxlcdm]+$/.test(low) && (known ? /roman/.test(known) : low.length > 1 || low === 'i')) return { num: roman(low), style: up ? 'upper-roman' : 'lower-roman' };
+    return /^([a-z])\1*$/.test(low) ? { num: (low.length - 1) * 26 + low.charCodeAt(0) - 96, style: up ? 'upper-alpha' : 'lower-alpha' } : { num: null, style: null }; // a … z, aa … zz
+  };
+  const wordList = (e, ctx) => {
+    const spec = own(e, { rules: new Map() })['mso-list'] || e.style['mso-list'] || '', m = /level(\d)/i.exec(spec);
     if (!m) return null;
     let mark = '';
     const walk = (x) => { for (const k of x.kids || []) { if (k.name && isMarker(k)) { const grab = (y) => (y.text != null ? y.text : (y.kids || []).map(grab).join('')); mark = grab(k); return true; } if (k.name && walk(k)) return true; } return false; };
     walk(e);
-    return { level: Math.min(8, Math.max(0, +m[1] - 1)), ordered: /^\s*(\(?[0-9]+|[a-z]{1,3}|[ivxlc]+)[.)]/i.test(mark.replace(/ /g, ' ')) };
+    const level = Math.min(8, Math.max(0, +m[1] - 1)), n = /^\s*\(?([0-9]+|[a-z]{1,3}|[ivxlc]+)[.)]/i.exec(mark.replace(/ /g, ' '));
+    if (!n) return { level, ordered: false };
+    const key = `${(/\b(l\d+)\b/i.exec(spec) || [])[1]}|${level}`, c = counted(n[1], ctx.lists.get(key));
+    if (c.style) ctx.lists.set(key, ctx.lists.get(key) || c.style);
+    return { level, ordered: true, num: c.num >= 1 && c.num <= 32767 ? c.num : null, style: c.style };
   };
   const ITEM_TAG = (ordered) => (ordered ? 'ol' : 'ul');
+  // A numbered list's levels' styles as data-styles, the paper's defaults left out.
+  const LEVELS = ['decimal', 'lower-alpha', 'lower-roman'];
+  const stylesAttr = (styles) => {
+    const all = Array.from(styles, (s, i) => s || LEVELS[i % 3]);
+    while (all.length && all.at(-1) === LEVELS[(all.length - 1) % 3]) all.pop();
+    return all.length ? ` data-styles="${all.join(',')}"` : '';
+  };
   const blocks = (kids, c, ctx) => {
     let out = '', run = [], list = null;
-    const endList = () => { if (list !== null) { out += `</${ITEM_TAG(list)}>`; list = null; } };
+    const endList = () => { if (list) { const tag = ITEM_TAG(list.ordered); out += `<${tag}${list.ordered ? stylesAttr(list.styles) : ''}>${list.html}</${tag}>`; list = null; } };
     const flush = () => {
       if (!run.length) return;
       const html = run.map((k) => inline(k, c, ctx)).join('');
@@ -238,27 +263,41 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
       endList();
       out += `<p>${html}</p>`;
     };
-    const item = (ordered, level, attrs, html) => {
-      if (list !== ordered) { endList(); list = ordered; out += `<${ITEM_TAG(ordered)}>`; }
-      out += `<li${level ? ` class="ql-indent-${level}"` : ''}${attrs}>${html}</li>`;
+    // An item goes on in the open list when it is of its kind and, numbered, of its level's style. num, the number the
+    // source shows (an <ol>'s first item, Word's marker), goes on the item as data-start where the paper's count differs.
+    const item = (ordered, level, attrs, html, num = null, style = null) => {
+      if (list && (list.ordered !== ordered || (style && list.styles[level] && list.styles[level] !== style))) endList();
+      if (!list) list = { ordered, styles: [], count: [], html: '' };
+      let start = '';
+      if (ordered) {
+        if (style && !list.styles[level]) list.styles[level] = style;
+        const next = (list.count[level] || 0) + 1, n = num ?? next;
+        if (n !== next) start = ` data-start="${n}"`;
+        list.count[level] = n;
+        list.count.length = level + 1;
+      }
+      list.html += `<li${level ? ` class="ql-indent-${level}"` : ''}${start}${attrs}>${html}</li>`;
     };
-    // An HTML list's items, flat: each item's level its aria-level (Docs) or its depth.
+    // An HTML list's items, flat: each item's level its aria-level (Docs) or its depth; an <ol> numbered from its start.
     const htmlList = (e, depth, cc) => {
+      const ordered = e.name === 'ol';
+      let num = ordered ? (/^\d{1,5}$/.test(e.a?.start || '') && +e.a.start >= 1 && +e.a.start <= 32767 ? +e.a.start : 1) : null;
+      const put = (level, attrs, html) => { item(ordered, level, attrs, html, num); num = null; };
       for (const k of e.kids) {
         if (!k.name) continue;
         if (k.name === 'ul' || k.name === 'ol') { htmlList(k, depth + 1, cascade(k, cc, ctx, true)); continue; }
         if (k.name !== 'li') continue;
         const lc = cascade(k, cc, ctx, true), level = Math.min(8, /^\d+$/.test(k.a['aria-level'] || '') ? +k.a['aria-level'] - 1 : depth);
-        const ordered = e.name === 'ol', parts = [];
+        const parts = [];
         let runs = [];
         const push = () => { if (runs.length) { parts.push({ html: runs.map((x) => inline(x, lc, ctx)).join(''), e: k }); runs = []; } };
         for (const x of k.kids) {
-          if (x.name === 'ul' || x.name === 'ol') { push(); for (const p of parts.splice(0)) item(ordered, level, paraOf(p.e, ctx, true).attrs, p.html); htmlList(x, level + 1, lc); continue; }
+          if (x.name === 'ul' || x.name === 'ol') { push(); for (const p of parts.splice(0)) put(level, paraOf(p.e, ctx, true).attrs, p.html); htmlList(x, level + 1, lc); continue; }
           if (x.name && (BLOCK.has(x.name) || hasBlock(x))) { push(); parts.push({ html: x.kids ? x.kids.map((y) => inline(y, cascade(x, lc, ctx, true), ctx)).join('') : '', e: x }); continue; }
           runs.push(x);
         }
         push();
-        for (const p of parts) if (p.html.replace(/<[^>]*>/g, '').trim() || /<img|<br>/.test(p.html)) item(ordered, level, paraOf(p.e === k ? k : p.e, ctx, true).attrs, p.html);
+        for (const p of parts) if (p.html.replace(/<[^>]*>/g, '').trim() || /<img|<br>/.test(p.html)) put(level, paraOf(p.e === k ? k : p.e, ctx, true).attrs, p.html);
       }
     };
     for (const k of kids) {
@@ -267,9 +306,9 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
       const name = k.name;
       if (name === 'p' || HEADING.test(name) || name === 'figcaption' || name === 'dt' || name === 'caption') {
         if (hasBlock(k)) { endList(); out += blocks(k.kids, cascade(k, c, ctx, true), ctx); continue; }
-        const cc = cascade(k, c, ctx, true), wl = ctx.source === 'word' && name === 'p' ? wordList(k) : null;
+        const cc = cascade(k, c, ctx, true), wl = ctx.source === 'word' && name === 'p' ? wordList(k, ctx) : null;
         const html = k.kids.map((x) => inline(x, cc, ctx)).join('');
-        if (wl) { item(wl.ordered, wl.level, paraOf(k, ctx, true).attrs, html); continue; }
+        if (wl) { item(wl.ordered, wl.level, paraOf(k, ctx, true).attrs, html, wl.num, wl.style); continue; }
         endList();
         const tag = HEADING.test(name) ? name : 'p', { attrs, brk } = paraOf(k, ctx);
         if (brk) out += '<hr class="gz-page-break">';
@@ -310,7 +349,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     if (/data-pm-slice/.test(html)) return { html, source: 'writer', rich: false };
     const source = /docs-internal-guid-/.test(html) ? 'docs' : /urn:schemas-microsoft-com:office:word|content=Word\.Document|class="?Mso|mso-[a-z-]+\s*:/i.test(html) ? 'word' : 'web';
     const { root, css } = tree(html);
-    const ctx = { source, match: !!o.match, base: o.base || null, rules: source === 'word' ? rules(css) : new Map(), rich: false };
+    const ctx = { source, match: !!o.match, base: o.base || null, rules: source === 'word' ? rules(css) : new Map(), lists: new Map(), rich: false };
     const start = { deco: new Set(), vert: null, bg: null, mso: null, link: false };
     const out = blocks(root.kids, start, ctx);
     return { html: out, source, rich: ctx.rich && !ctx.match };

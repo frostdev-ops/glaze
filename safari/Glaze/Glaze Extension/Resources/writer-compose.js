@@ -5,7 +5,7 @@
 // the page's `quote { text, author }` (features/writer-quote.js) into the editor, and draws compose's quotes (indented
 // italic lines, then "— Name": Ultra's Quill has no blockquote) as the mockup's quote block. Nothing here animates.
 // Settings → Writer → Discussions (lib/writer-settings.js writer.compose): target off draws the plain count without the ring;
-// quote off takes no quote (features/writer-quote.js shows no pop then). Markdown shortcuts are writer-proof.js's gate.
+// quote off takes no quote (features/writer-quote.js shows no pop then). Markdown off is lib/writer-editor.js's ruleOff.
 // Pure helpers first (module.exports for node), then the frame.
 var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   const R = 15, CIRCLE = 2 * Math.PI * R;
@@ -35,8 +35,8 @@ var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   const WHERE = "(?:\\d{4}[a-z]?|n\\.d\\.|\\d{1,5}(?:[-–]\\d{1,5})?|[ivxlcdm]{1,8}|(?:pp?|para|ch)\\. ?\\d{1,5}(?:[-–]\\d{1,5})?)";
   const ONE = new RegExp(`^(?:(?:see|cf\\.|e\\.g\\.,?) )?(${WHO})(?:,? ${WHERE}(?:[,:] ?${WHERE})*)?$`, 'u');
   const LOCATED = new RegExp(`,? ${WHERE}`, 'u');
-  // Parentheses that point inside a text, not to a source: "(Figure 2)", "(Chapter 3)".
-  const INSIDE = /^(?:fig(?:ure)?s?|tables?|chapters?|ch|parts?|pages?|weeks?|sections?|appendix|appendices|steps?|units?|modules?|questions?|exhibits?|lessons?|days?|vol(?:ume)?s?|acts?|scenes?|lines?|notes?|book|verse|slides?|problems?|exercises?|items?|level|grade|room|period|session|episode|season)\.?$/i;
+  // Parentheses that point inside a text, not to a source ("(Figure 2)", "(May 1945)"): lib/writer-cite.js's list.
+  const INSIDE = (typeof GZ_WRITER_CITE !== 'undefined' ? GZ_WRITER_CITE : require('./lib/writer-cite.js')).INSIDE;
   const NARRATIVE = new RegExp(`(${NAME}(?: et al\\.)?) \\((?:\\d{4}[a-z]?|n\\.d\\.)(?:, (?:pp?\\. ?)?\\d{1,5}(?:[-–]\\d{1,5})?)?\\)`, 'gu');
   const citations = (text) => {
     const s = String(text || '').slice(0, 200000), seen = new Set();

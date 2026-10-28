@@ -43,7 +43,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   const plausible = (rule, was, now) => {
     const a = was.toLowerCase(), b = now.toLowerCase();
     if (rule === 'Capitalization') return a === b && was !== now;
-    if (rule === 'Repetition') return !TWICE.has(b.trim()) && a === `${b} ${b}`;
+    if (rule === 'Repetition') return !TWICE.has(b.trim()) && a === `${b} ${b}` && !/^\p{Lu}/u.test(was.split(' ')[1]);
     return rule === 'Typo' && was === a && Object.hasOwn(TYPOS, a) && TYPOS[a] === now;
   };
   // The autocorrect class each fix is (Settings → Writer → Typing, writer.autocorrect): this file's own rules and Harper's
@@ -140,13 +140,17 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     wouldnt: `wouldn${R}t`, shouldnt: `shouldn${R}t`, thats: `that${R}s`, whats: `what${R}s`, theyre: `they${R}re`,
     wouldve: `would${R}ve`, couldve: `could${R}ve`, shouldve: `should${R}ve`,
   });
-  // Doubled on purpose: "had had", "that that", "ha ha".
-  const TWICE = new Set(['had', 'that', 'ha', 'no', 'so', 'very', 'really', 'bye', 'blah', 'tsk', 'now', 'there', 'is', 'do', 'well', 'yes', 'knock', 'chop', 'tut']);
+  // Doubled on purpose ("had had", "that that", "ha ha", "long long ago") or a word that is the pair ("mahi mahi", "so so").
+  const TWICE = new Set(['had', 'that', 'ha', 'no', 'so', 'very', 'really', 'bye', 'blah', 'tsk', 'now', 'there', 'is', 'do', 'well', 'yes', 'knock', 'chop', 'tut',
+    'long', 'far', 'many', 'much', 'more', 'come', 'go', 'hear', 'please', 'night', 'mahi', 'ylang', 'beri', 'pom', 'tom', 'tuk', 'cha', 'choo', 'boo',
+    'aye', 'hip', 'la', 'ta', 'na', 'dum', 'oh', 'ah', 'uh', 'mm', 'hmm', 'ooh', 'wow', 'yeah', 'yay', 'hey', 'ho', 'hush', 'shh', 'tick', 'bang', 'boom', 'woof']);
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   const WORD = /([\p{L}\p{M}'’]+)$/u;
-  // before: the paragraph's text up to the caret, a boundary about to follow it. → { from, to, was, now, rule } (offsets
-  // into before) or null. kept: lower-cased words (and '  ') the student took back; they stay as typed.
-  const fix = (before, kept = new Set()) => {
+  // A lone i before '.', ',' or ')' may be i.e., a roman-numeral marker or a variable ("Let i, j"), not the pronoun.
+  const notI = (word, next) => word === 'i' && /^[.,)]/.test(next || '');
+  // before: the paragraph's text up to the caret, next the boundary about to follow it. → { from, to, was, now, rule }
+  // (offsets into before) or null. kept: lower-cased words (and '  ') the student took back; they stay as typed.
+  const fix = (before, kept = new Set(), next = ' ') => {
     const m = WORD.exec(before);
     if (!m) return null;
     const word = m[1].replace(/^['’]+/, ''), to = before.length, from = to - word.length, ahead = before.slice(0, from);
@@ -154,10 +158,11 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     if (!word || unsafe(token) || /[-'’“”]$/.test(ahead) || kept.has(word.toLowerCase())) return null;
     const lower = word.toLowerCase(), start = sentenceStart(ahead);
     // i, i'm, i'll, i'd, i've → I…
-    if (/^i(['’](m|ll|d|ve))?$/.test(word)) return { from, to, was: word, now: 'I' + word.slice(1), rule: 'i' };
-    // A doubled word, the second dropped: "the the" → "the".
-    const prev = /([\p{L}\p{M}'’]+) $/u.exec(ahead);
-    if (prev && prev[1].toLowerCase() === lower && !TWICE.has(lower) && !kept.has(`${lower} ${lower}`) && /\p{L}/u.test(lower) && (ahead.length === prev[0].length || /\s$/.test(ahead.slice(0, -prev[0].length)))) {
+    if (/^i(['’](m|ll|d|ve))?$/.test(word)) return notI(word, next) ? null : { from, to, was: word, now: 'I' + word.slice(1), rule: 'i' };
+    // A doubled word, the second dropped: "the the" → "the". A Capitalised pair is a name ("Bora Bora", "Walla Walla").
+    const prev = /([\p{L}\p{M}'’]+) $/u.exec(ahead), pre = prev ? ahead.slice(0, -prev[0].length) : '';
+    if (prev && prev[1].toLowerCase() === lower && !TWICE.has(lower) && !kept.has(`${lower} ${lower}`) && /\p{L}/u.test(lower) && (!pre || /\s$/.test(pre))
+      && !/^\p{Lu}/u.test(word) && (!/^\p{Lu}/u.test(prev[1]) || sentenceStart(pre))) {
       return { from: from - prev[0].length, to, was: `${prev[1]} ${word}`, now: prev[1], rule: 'twice' };
     }
     if (!Object.hasOwn(TYPOS, lower)) return null;
@@ -243,7 +248,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
       const st = key.getState(view.state), $pos = view.state.doc.resolve(pos);
       if (!$pos.parent.isTextblock || $pos.parent.type.spec.code) return false;
       const start = $pos.start(), before = blockText($pos.parent).slice(0, $pos.parentOffset);
-      const f = fix(before, st.kept);
+      const f = fix(before, st.kept, '\n');
       if (!f || !allowed(f.rule) || st.words.has(f.was.toLowerCase())) return false;
       const from = start + f.from, to = start + f.to;
       if (!within(st.typed, from, to) || guarded(view.state.doc, from, to)) return false;
@@ -303,7 +308,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
             view.dispatch(view.state.tr.insertText(text, from, to).setMeta(key, { typed: [from, from + 1] }).scrollIntoView());
             return commit(view, { from: from - 1, to: from + 1, was: '  ', now: ' ', rule: 'space' });
           }
-          const before = $from.parent.textBetween(0, $from.parentOffset, null, leaf), f = fix(before, st.kept);
+          const before = $from.parent.textBetween(0, $from.parentOffset, null, leaf), f = fix(before, st.kept, text);
           if (!f || !allowed(f.rule) || st.words.has(f.was.toLowerCase())) return false;
           const a = $from.start() + f.from, b = $from.start() + f.to;
           if (!within(st.typed, a, b) || guarded(view.state.doc, a, b)) return false;
@@ -357,6 +362,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     if (issue.rule !== 'Capitalization' && /^\p{Lu}/u.test(was) && !sentenceStart(before)) return null;
     if (issue.sure && issue.rule === 'Typo' && /^\p{Lu}/u.test(was)) return null;
     if (issue.sure && issue.rule === 'Capitalization' && !sentenceStart(before) && !/^i(['’](m|ll|d|ve))?$/.test(was)) return null;
+    if (issue.rule === 'Capitalization' && notI(was, $to.parent.textBetween($to.parentOffset, Math.min($to.parentOffset + 1, $to.parent.content.size)))) return null;
     return commitFix(view, { from, to, was, now, rule: issue.rule || 'harper' });
   };
   // Which fix was the last change, per view: revert takes it back with the editor's own undo.

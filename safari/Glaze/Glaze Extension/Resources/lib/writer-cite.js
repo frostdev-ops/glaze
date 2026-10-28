@@ -163,7 +163,10 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     let titleEl, rest = [];
     const link_ = s.retrieval && s.accessed && s.URL && !s.DOI ? `Retrieved ${D.long(s.accessed)}, from ${esc(s.URL)}` : link(s);
     if (s.type === 'book' || s.type === 'report') {
-      const bits = join([edition(esc(s.edition)), s.volume ? `Vol. ${esc(s.volume)}` : '', s.type === 'report' && s.number ? `${esc(s.genre || 'Report')} No. ${esc(s.number)}` : '']);
+      // Translators, and the editors of an authored book, before the edition: "(H. Weaver, Trans.; 2nd ed.)".
+      const eds = lead?.role !== 'editor' && s.editor?.length ? N.apaFwd(s.editor) : '', trans = s.translator?.length ? N.apaFwd(s.translator) : '';
+      const people = eds && eds === trans ? [`${eds}, ${s.editor.length > 1 ? 'Eds.' : 'Ed.'} & Trans.`] : [eds && `${eds}, ${s.editor.length > 1 ? 'Eds.' : 'Ed.'}`, trans && `${trans}, Trans.`];
+      const bits = join([...people.map(esc), join([edition(esc(s.edition)), s.volume ? `Vol. ${esc(s.volume)}` : '', s.type === 'report' && s.number ? `${esc(s.genre || 'Report')} No. ${esc(s.number)}` : ''])], '; ');
       titleEl = `${it(t)}${bits ? ` (${bits})` : ''}`;
       titleEl = bits ? `${titleEl}.` : endsQ(t) ? titleEl : `${titleEl}.`;
       rest = [pubOk(s.publisher) ? dot(esc(s.publisher)) : ''];
@@ -198,7 +201,8 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const apaNarr = (s, page) => `${apaName(s, 'and')} (${join([D.apa(s.issued), apaPage(page)])})`;
 
   // ==== Chicago 17, notes and bibliography ==========================================================================
-  const cmsPub = (s) => join([esc(s['publisher-place']) && s.publisher ? `${esc(s['publisher-place'])}: ${esc(s.publisher)}` : esc(s.publisher || s['publisher-place']), yearOf(s) ? String(yearOf(s)) : ''], ', ');
+  // A book's place, publisher and year; n.d. without one (14.145).
+  const cmsPub = (s) => join([esc(s['publisher-place']) && s.publisher ? `${esc(s['publisher-place'])}: ${esc(s.publisher)}` : esc(s.publisher || s['publisher-place']), yearOf(s) ? String(yearOf(s)) : 'n.d.'], ', ');
   const cmsDate = (s) => D.long(s.issued);
   const cmsLink = (s) => link(s) || esc(s.archive || '');
   const cms = (s, mode, page) => {
@@ -314,7 +318,10 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     if (!n) return [];
     return sources.filter((s) => keysOf(s).some((k) => n === k)).map((s) => s.id);
   };
-  const looksNamed = (t) => /^[“"‘]?[\p{Lu}]/u.test(t) && !/^(see|e\.g|i\.e|cf|qtd|figure|fig|table|chapter|ch|vol|para|line|lines|version|in|on|during|since|before|after|born)\b/i.test(t);
+  // Parentheses that point inside a text or give a date, not a source: "(Figure 2)", "(Act 3)", "(May 1945)". One list,
+  // writer-compose.js's count reads it too.
+  const INSIDE = /^(?:fig(?:ure)?s?|tables?|chapters?|ch|parts?|pages?|weeks?|sections?|appendix|appendices|steps?|units?|modules?|questions?|exhibits?|lessons?|days?|vol(?:ume)?s?|acts?|scenes?|lines?|notes?|book|verse|slides?|problems?|exercises?|items?|level|grade|room|period|session|episode|season|january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|spring|summer|autumn|fall|winter)\.?$/i;
+  const looksNamed = (t) => /^[“"‘]?[\p{Lu}]/u.test(t) && !/[\p{Sc}\p{Sm}@#%*\\/]/u.test(t) && !/^(see|e\.g|i\.e|cf|qtd|figure|fig|table|chapter|ch|vol|para|line|lines|version|in|on|during|since|before|after|born)\b/i.test(t);
   // → [{ from, to, text, name, sep, page, year, ids, kind: 'paren'|'narrative'|'note', fix? }] over a string's offsets.
   const findIn = (text, sources, k) => {
     const out = [];
@@ -327,10 +334,16 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
         const part = raw.replace(/^(see also|see|e\.g\.,?|cf\.|qtd\. in)\s+/i, '');
         let a;
         if (k === 'chicago17' && part.split(',').length >= 3) { const name = noteName(part); if (looksNamed(name)) { out.push({ from, to, text: m[0], name, page: '', kind: 'note', ids: matchIds(name, sources) }); continue; } }
-        if (k === 'apa7' && (a = PART.apa.exec(part)) && looksNamed(a[1])) { out.push({ from, to, text: m[0], name: a[1], year: a[2], page: a[3] || '', kind: 'paren', ids: matchIds(a[1], sources) }); continue; }
+        if (k === 'apa7' && (a = PART.apa.exec(part)) && looksNamed(a[1])) { if (INSIDE.test(a[1]) && !matchIds(a[1], sources).length) continue; out.push({ from, to, text: m[0], name: a[1], year: a[2], page: a[3] || '', kind: 'paren', ids: matchIds(a[1], sources) }); continue; }
         if ((a = PART.year.exec(part))) { if (k !== 'apa7') continue; out.push({ from, to, text: m[0], name: '', year: a[1], page: a[2] || '', kind: 'narrative', ids: [] }); continue; }
         if ((a = PART.page.exec(part))) { out.push({ from, to, text: m[0], name: '', page: a[1], kind: 'narrative', ids: [] }); continue; }
-        if ((a = PART.named.exec(part)) && looksNamed(a[1])) { out.push({ from, to, text: m[0], name: a[1], part, sep: a[2], page: a[3], kind: 'paren', ids: matchIds(a[1], sources) }); continue; }
+        if ((a = PART.named.exec(part)) && looksNamed(a[1])) {
+          const ids = matchIds(a[1], sources);
+          // Naming no source, a label, a date or a name the sentence runs on through ("The mission (Apollo 11) landed") isn't one.
+          if (!ids.length && (INSIDE.test(a[1]) || /^\s*[\p{L}\d]/u.test(text.slice(to)))) continue;
+          out.push({ from, to, text: m[0], name: a[1], part, sep: a[2], page: a[3], kind: 'paren', ids });
+          continue;
+        }
         if (looksNamed(part) && part.length <= 80) { const ids = matchIds(part.replace(/,.*$/, ''), sources); if (ids.length) out.push({ from, to, text: m[0], name: part.replace(/,.*$/, ''), page: '', kind: 'paren', ids, bare: true }); }
       }
     }
@@ -356,19 +369,34 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     doc.descendants((n, pos) => { if (n.type.name === 'footnote_ref') notes.push({ pos, text: plain(String(n.attrs.content || '').replace(/<[^>]*>/g, '')).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ') }); return true; });
     return { text: t.text, posAt: t.posAt, notes, end: doc.content.size };
   };
-  // A footnote's first name: "Zadie Smith, Swing Time …" → Smith; "Smith, Swing Time, 320." → Smith; "“Yale Facts.”" → title.
+  // A footnote's first name: "Zadie Smith, Swing Time …" → Smith; "Smith, Swing Time, 320." → Smith; "“Yale Facts.”" → title;
+  // "For a contrasting view, see Smith, …" → Smith. '' for a note that names no one (an explanatory note, "Translation mine.").
+  const SEE = String.raw`(?:see also|see|cf\.|compare)(?:,?\s+(?:e\.g\.|for example),?)?\s+`;
+  const named = (head) => { const ws = head.split(/\s+/); return ws.length <= 6 && ws.every((w) => /^(?:de|van|von|da|del|la|le|di|and|&)$/.test(w) || /^\p{Lu}[\p{L}\p{M}'’.-]*$/u.test(w)); };
   const noteName = (text) => {
-    const t = text.trim().replace(/^\d+\.\s*/, '').replace(/^(see also|see|cf\.)\s+/i, '');
-    if (/^[“"]/.test(t)) return t.replace(/^[“"]([^”"]+)[”"].*$/, '$1').replace(/[,.]$/, '');
-    const head = t.split(/,|\s\(/)[0].replace(/\s+et al\.?$/, '').trim();
-    const ws = head.split(/\s+(?:and)\s+/)[0].split(/\s+/);
-    return ws.length > 1 && !/[a-z]/.test(ws.at(-1)[0]) ? ws.at(-1) : head;
+    const lead = (t) => {
+      t = t.trim().replace(/^\d+\.\s*/, '').replace(new RegExp(`^${SEE}`, 'i'), '');
+      if (/^[“"]/.test(t)) return t.replace(/^[“"]([^”"]+)[”"].*$/, '$1').replace(/[,.]$/, '');
+      const head = t.split(/,|\s\(/)[0].replace(/\s+et al\.?$/, '').trim();
+      if (!named(head)) return '';
+      const ws = head.split(/\s+(?:and|&)\s+/)[0].split(/\s+/);
+      return ws.length > 1 && !/[a-z]/.test(ws.at(-1)[0]) ? ws.at(-1) : head;
+    };
+    const m = new RegExp(`(?:^|[\\s,;(])${SEE}`, 'i').exec(text);
+    return lead(text) || (m ? lead(text.slice(m.index + m[0].length)) : '');
   };
 
   const cites = (doc, sources, st) => {
     const k = style(st), all = S().dedupe(sources), T = textOf(doc);
     const found = findIn(T.text, all, k).map((c) => ({ ...c, at: [T.posAt(c.from), T.posAt(c.to)] }));
-    for (const n of T.notes) { const name = noteName(n.text); if (name) found.push({ from: -1, to: -1, at: [n.pos, n.pos + 1], text: n.text, name, kind: 'note', page: '', ids: matchIds(name, all) }); }
+    // Ibid. is the source of the note before it, when that one named a saved source.
+    let prev = null;
+    for (const n of T.notes) {
+      if (/^\s*ibid\b/i.test(n.text)) { if (prev?.ids.length) found.push({ ...prev, at: [n.pos, n.pos + 1], text: n.text }); continue; }
+      const name = noteName(n.text);
+      prev = name && looksNamed(name) ? { from: -1, to: -1, at: [n.pos, n.pos + 1], text: n.text, name, kind: 'note', page: '', ids: matchIds(name, all) } : null;
+      if (prev) found.push(prev);
+    }
     // An APA narrative citation outside parentheses: "Grady et al. (2019) found …".
     if (k === 'apa7') for (const m of T.text.matchAll(NARRATIVE_APA)) {
       if (found.some((c) => c.from <= m.index + m[0].length && c.to >= m.index && c.ids.length)) continue;
@@ -447,7 +475,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     return { cited: ids.size, total: all.length };
   };
 
-  return { STYLES, TITLES, format, list, check, cites, count, shortTitle, pages };
+  return { STYLES, TITLES, INSIDE, format, list, check, cites, count, shortTitle, pages };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CITE;
