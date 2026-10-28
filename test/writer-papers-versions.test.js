@@ -79,3 +79,17 @@ test('the Versions menu offers every retained version when more than forty are k
   await click();
   assert.equal(menu.kids.filter((n) => n?.props?.class === 'gp-mi').length, 100);
 });
+
+test('a restore the store refuses, or of a version gone meanwhile, says so and leaves the paper as it was', async () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-paper.js'), 'utf8');
+  const from = source.indexOf('    const restore = async '), to = source.indexOf('    const docx = ', from);
+  for (const restoreIt of [async () => { throw new Error('QUOTA_BYTES quota exceeded'); }, async () => null]) {
+    const toasts = [], applied = [];
+    const ctx = vm.createContext({ key: K, keep: false, paper: {}, save: async () => true, console: { error() {} },
+      store: { restore: restoreIt }, ST: { get: (f) => f }, setFormat: async () => {}, setDoc: (d) => applied.push(d), toast: (m) => toasts.push(m), t: (k) => k });
+    await vm.runInContext(`${source.slice(from, to)} restore('v')`, ctx);
+    assert.deepEqual(applied, []);
+    assert.deepEqual(toasts, ['Not saved. Try again in a moment.']);
+  }
+});
