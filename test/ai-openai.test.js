@@ -132,6 +132,20 @@ test('an effort a model refuses steps up a level at a time (none, minimal, low),
   assert.equal('reasoning_effort' in all.calls[4].body, false, 'remembered');
 });
 
+test('all parameter fallbacks and one rate-limit retry still leave an attempt for the answer', async () => {
+  const effort = () => json({ error: { message: 'reasoning effort is not available here' } }, 400);
+  const s = server(rejection('response_format'), rejection('response_format'), rejection('max_tokens'), rejection('temperature'),
+    effort, effort, effort, json({ error: { message: 'rate limited' } }, 429), done('{"answer":"ok"}'));
+  const out = await P.run('openai', ask({ schema: SCHEMA, maxTokens: 64, temperature: 0, effort: 'none' }), cfg(), { fetch: s.fetch });
+  assert.deepEqual(out.json, { answer: 'ok' });
+  assert.equal(s.calls.length, 9);
+  const last = s.calls.at(-1).body;
+  assert.equal(last.response_format, undefined);
+  assert.equal(last.max_completion_tokens, 64);
+  assert.equal(last.temperature, undefined);
+  assert.equal(last.reasoning_effort, undefined);
+});
+
 test('a server that does not know the effort parameter gets none at once; a 400 that names something else is not stepped', async () => {
   const typed = server(rejection('reasoning_effort', "Unsupported parameter: 'reasoning_effort' is not supported with this model."), done('ok'));
   assert.equal((await P.run('openai', ask({ effort: 'none' }), cfg(), { fetch: typed.fetch })).text, 'ok');

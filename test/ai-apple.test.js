@@ -313,6 +313,35 @@ test('a run on On this device that Apple Intelligence answers comes back, not as
   assert.equal(end.meta.provider, 'apple');
 });
 
+test('changing either kept connection immediately cancels an Apple run on On this device', async () => {
+  for (const id of ['apple', 'device']) for (const op of ['set', 'remove']) {
+    B._reset(); sent.length = 0;
+    const vault = new Map([['connections', { device: { provider: 'device', generation: 'dev-1' }, apple: { provider: 'apple', model: 'on-device', generation: 'mac-1' } }]]);
+    native = async (m) => m.type === 'ai.run' ? new Promise(() => {}) : { ok: true, state: 'ready' };
+    const task = T.define({ id: 'example.kept', version: 1, output: 'text', input: (raw) => raw, check: (o) => o,
+      build: (_input, { text }) => text.request({ system: 'Answer.', data: [{ label: 'text', text: 'hello' }] }) });
+    const env = { who: 'kept', allowed: true, enabled: async () => true, task: async () => task,
+      settings: async () => ({ on: true, use: 'device', features: { syllabus: true } }),
+      vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; } } };
+    let receive;
+    const posted = [], link = B.connect({ postMessage: (m) => posted.push(m), disconnect() {}, onMessage: { addListener: (f) => { receive = f; } }, onDisconnect: { addListener() {} } }, env);
+    try {
+      receive({ id: 1, op: 'run', feature: 'syllabus', task: task.id, input: {} });
+      for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+      const run = sent.find((s) => s.m.type === 'ai.run');
+      assert.ok(run, 'the native run is in flight');
+      const cfg = id === 'apple' ? { provider: 'apple', model: 'on-device' } : { provider: 'device' };
+      assert.equal((await B.config({ op, id, ...(op === 'set' && { cfg }) }, env)).ok, true);
+      for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+      assert.ok(sent.some((s) => s.m.type === 'ai.cancel' && s.m.id === run.m.id), `${op} ${id}: cancel before the native answer`);
+      assert.ok(posted.some((m) => m.type === 'error' && m.error === 'changed'), `${op} ${id}: the run ends as changed`);
+    } finally {
+      link.close();
+      for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+    }
+  }
+});
+
 test('On this device is the browser\'s model outside Safari, and Apple is never asked', () => {
   const out = execFileSync(process.execPath, ['-e', `
     globalThis.chrome = { runtime: { getURL: () => 'chrome-extension://abc/' } };

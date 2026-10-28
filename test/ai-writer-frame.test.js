@@ -270,6 +270,23 @@ test('a feature whose status ask got no status asks again in the same generation
   assert.ok(f.sent.some((m) => m.op === 'warm'), 'and warmed once it may run');
 });
 
+test('a recovered completion status stays ready when the initial writing status arrives later', async () => {
+  let lost = true;
+  const f = frame({ pace: 100, answer: (m) => {
+    if (m.feature === 'writing') return null;
+    if (lost) { lost = false; return { type: 'error', error: 'connection-lost' }; }
+    return { allowed: true, ready: true };
+  } });
+  await f.start();
+  assert.equal(await until(() => f.ai.allowed('completion')), true, 'completion recovers while writing is pending');
+  const writing = f.sent.find((m) => m.op === 'status' && m.feature === 'writing');
+  f.reply({ id: writing.id, type: 'status', allowed: true, ready: true });
+  await flush();
+  assert.equal(f.ai.allowed('writing'), true);
+  assert.equal(f.ai.allowed('completion'), true, 'the earlier failed status must not replace its recovered answer');
+  f.off();
+});
+
 test('a status ask the worker never answers ends after its bound, the next feature is asked, and it asks again', async () => {
   let silent = 1;
   const f = frame({ pace: 1000, answer: (m) => (m.feature === 'completion' && silent-- > 0 ? null : { allowed: true, ready: true }) });
