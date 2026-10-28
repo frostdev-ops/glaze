@@ -91,3 +91,40 @@ test('no exported part holds a character XML forbids, a picture\'s caption inclu
   for (const [name, text] of Object.entries(out.parts)) assert.doesNotMatch(text, /[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/, name);
   assert.match(out.parts['word/document.xml'], /Cap abcdeg</);
 });
+
+// ECMA-376 Part 1's sequences: CT_PPr (CT_PPrBase, then rPr, sectPr, pPrChange) and CT_RPr (EG_RPrBase).
+const PPR = ['pStyle', 'keepNext', 'keepLines', 'pageBreakBefore', 'framePr', 'widowControl', 'numPr', 'suppressLineNumbers', 'pBdr', 'shd', 'tabs', 'suppressAutoHyphens', 'kinsoku', 'wordWrap', 'overflowPunct', 'topLinePunct', 'autoSpaceDE', 'autoSpaceDN', 'bidi', 'adjustRightInd', 'snapToGrid', 'spacing', 'ind', 'contextualSpacing', 'mirrorIndents', 'suppressOverlap', 'jc', 'textDirection', 'textAlignment', 'textboxTightWrap', 'outlineLvl', 'divId', 'cnfStyle', 'rPr', 'sectPr', 'pPrChange'];
+const RPR = ['rStyle', 'rFonts', 'b', 'bCs', 'i', 'iCs', 'caps', 'smallCaps', 'strike', 'dstrike', 'outline', 'shadow', 'emboss', 'imprint', 'noProof', 'snapToGrid', 'vanish', 'webHidden', 'color', 'spacing', 'w', 'kern', 'position', 'sz', 'szCs', 'highlight', 'u', 'effect', 'bdr', 'shd', 'fitText', 'vertAlign', 'rtl', 'cs', 'em', 'lang', 'eastAsianLayout', 'specVanish', 'oMath'];
+const outOfOrder = (tree, seen) => {
+  const bad = [];
+  (function walk(n, parent) {
+    for (const k of (n.kids || []).filter((x) => x.name)) {
+      const seq = k.local === 'pPr' ? PPR : k.local === 'rPr' && parent !== 'rPr' ? RPR : null;
+      if (seq) {
+        const names = k.kids.filter((x) => x.name).map((x) => x.local);
+        names.forEach((x) => seen.add(`${k.local}/${x}`));
+        names.forEach((x, i) => { if (!seq.includes(x) || (i && seq.indexOf(x) <= seq.indexOf(names[i - 1]))) bad.push(`${k.local}: ${names.join(' ')}`); });
+      }
+      walk(k, k.local);
+    }
+  })(tree, '');
+  return [...new Set(bad)];
+};
+test('export writes every pPr and rPr child in the order Word\'s schema gives them', () => {
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const note = '<strong><em>Bold note</em></strong> <a href="https://e.test/n">link</a>';
+  const html = `<h2>Heading</h2><p dir="rtl" style="text-align:right;line-height:2;text-indent:0.5in" data-gz="before:6;after:3;right:0.5;tabs:1l 3c:dot;keep:next lines;widow:0">`
+    + `<span dir="rtl"><span data-gz-caps="small"><span data-gz-color="FF0000"><span data-gz-highlight="yellow"><span style="font-family:Arial;font-size:14pt"><strong><em><s><u><sup>all</sup></u></s></em></strong></span></span></span></span></span>`
+    + `<span data-gz-caps="all">caps</span><sub>sub</sub> <a href="https://e.test/">link</a><sup class="gz-footnote" data-footnote="${note.replace(/"/g, '&quot;')}"></sup></p>`
+    + `<hr class="gz-page-break"><p dir="ltr" style="margin-left:1in">After a break</p><blockquote><p>Quoted</p></blockquote><ol><li>One</li><li class="ql-indent-1">Two</li></ol><hr class="gz-rule">`
+    + `<p><img src="${png}" alt="Dot" data-display="block" data-align="right" data-caption="Figure 1"></p><table><tr><td><p>Cell</p></td></tr></table><pre>code</pre>`;
+  const header = [{ align: 'right', line: 1, after: 0, before: 2, left: 0.5, right: 0.25, first: -0.25, tabs: [[3, 'c'], [6.5, 'r']], runs: [{ text: 'Run ', b: true, i: true, u: true, s: true, sup: true, font: 'Arial', size: 10, color: 'FF0000' }, { field: 'PAGE', b: true }] }];
+  const doc = S.parse(S.paper, html);
+  const setup = { page: [8.5, 11], margins: [1, 1, 1, 1], headers: { default: header, first: header }, footers: { default: header, first: null }, title: true };
+  const out = X.exportDocx(S.paper.nodeFromJSON({ ...doc.toJSON(), attrs: { setup } }), { format: 'mla9' });
+  const seen = new Set(), checked = Object.keys(out.parts).filter((n) => /^word\/(document|footnotes|header\d+|footer\d+)\.xml$/.test(n));
+  assert.ok(checked.includes('word/footnotes.xml') && checked.some((n) => n.includes('header')) && checked.some((n) => n.includes('footer')), checked.join());
+  for (const name of checked) assert.deepEqual(outOfOrder(X.xml(out.parts[name]), seen), [], name);
+  for (const k of ['pPr/pStyle', 'pPr/keepNext', 'pPr/keepLines', 'pPr/pageBreakBefore', 'pPr/widowControl', 'pPr/numPr', 'pPr/pBdr', 'pPr/tabs', 'pPr/bidi', 'pPr/spacing', 'pPr/ind', 'pPr/jc',
+    'rPr/rStyle', 'rPr/rFonts', 'rPr/b', 'rPr/bCs', 'rPr/i', 'rPr/iCs', 'rPr/caps', 'rPr/smallCaps', 'rPr/strike', 'rPr/color', 'rPr/sz', 'rPr/szCs', 'rPr/highlight', 'rPr/u', 'rPr/vertAlign', 'rPr/rtl']) assert.ok(seen.has(k), `the check saw ${k}`);
+});
