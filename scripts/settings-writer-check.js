@@ -148,6 +148,23 @@ async function pass(scheme) {
       await until(async () => (await page.locator('#writer-paper-list li').count()) === 2, 'the list follows');
       assert.deepEqual(errors, []);
     });
+
+    // A paper whose key never came (writer-paper.js keeps it under a stand-in) is the student's too: Clear all takes it.
+    await check(`${scheme}-clear-all`, async () => {
+      await page.evaluate(async () => {
+        const k = 'recovery:0b6f6a2e-3c1d-4f6a-9d1e-2a7c5b9e8f10', { writerPapers: rows } = await chrome.storage.local.get('writerPapers');
+        await chrome.storage.local.set({ [`writerPaper:${k}`]: { key: k, doc: { type: 'doc', content: [{ type: 'paragraph' }] }, updated: 1 }, writerPapers: [{ key: k, title: '', course: '', url: '', words: 0, format: 'mla9', updated: 1, submitted: null }, ...rows] });
+      });
+      await open();
+      await until(async () => /^5\b/.test(await page.locator('#writer-papers-count').textContent()), 'every paper counted');
+      await page.locator('#writer-clear-all').click();
+      await page.locator('#writer-clear').waitFor({ state: 'visible' });
+      assert.equal(await page.locator('#writer-clear-title').textContent(), 'Clear all papers?');
+      await page.locator('#writer-clear-ok').click();
+      await until(async () => !Object.keys(await page.evaluate(() => chrome.storage.local.get(null))).some((k) => /^writer(Paper|Versions):/.test(k)), 'every paper and its versions gone');
+      assert.deepEqual((await page.evaluate(() => chrome.storage.local.get('writerPapers'))).writerPapers, []);
+      assert.deepEqual(errors, []);
+    });
   } finally {
     await context?.close().catch(() => {});
     context = null;
