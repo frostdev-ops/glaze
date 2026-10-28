@@ -53,3 +53,17 @@ test('dates, labels inside a text, named things and sums in brackets are not cit
   // The labels are one list, shared with the compose bar's count.
   for (const w of ['Figure', 'Act', 'Grade', 'Section', 'chapters']) assert.ok(C.INSIDE.test(w), w);
 });
+
+test('Chicago: an explanatory note is not a citation, Ibid. is the note before\'s source, and a name after "see" is one', () => {
+  const W = require('../lib/writer-schema.js');
+  const SMITH = { id: 'smith', type: 'book', author: [p('Smith', 'Zadie')], title: 'Swing Time', 'publisher-place': 'New York', publisher: 'Penguin Press', issued: d(2016) };
+  const paper = (...notes) => W.parse(W.paper, `<p>Time swings${notes.map((n, i) => `${i ? ' again' : ''}<sup class="gz-footnote" data-footnote="${n}"></sup>`).join('')}.</p>`);
+  const first = 'Zadie Smith, <em>Swing Time</em> (New York: Penguin Press, 2016), 3.';
+  for (const note of ['This point is developed further in the conclusion.', 'Ibid., 320.', 'Ibid.', 'Smith, Swing Time, 320.', 'Translation mine.', 'For a contrasting view, see Smith, Swing Time, 12.', 'Cf. Smith, Swing Time, 9.']) {
+    assert.deepEqual(noEntry(paper(first, note), [SMITH], 'chicago17'), [], note);
+  }
+  assert.deepEqual(C.cites(paper(first, 'Ibid., 320.'), [SMITH], 'chicago17').map((c) => c.ids), [['smith'], ['smith']]);
+  assert.deepEqual(noEntry(paper(first, 'For a contrasting view, see Baldwin, Price of the Ticket, 12.'), [SMITH], 'chicago17'), ['Baldwin']);
+  assert.deepEqual(noEntry(paper('Baldwin, Price of the Ticket, xix.', 'Ibid., 3.'), [], 'chicago17'), ['Baldwin'], 'Ibid. raises no second card');
+  assert.deepEqual(C.count(paper('This point is developed further in the conclusion.'), [SMITH], 'chicago17'), { cited: 0, total: 1 });
+});
