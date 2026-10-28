@@ -625,6 +625,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(slotOf(key), JSON.stringify({ key, record: r, base: paper?.revision ?? 0 })); sessionSafe = true; }
       catch { sessionSafe = false; }
     };
+    // writing: this editor's writes in flight (storage tells of each before or after it answers); missed: a change heard
+    // meanwhile, looked at again (adopt, below) once they're done.
+    let writing = 0, missed = false, adopt = async () => {};
+    const ours = async (p) => { writing++; try { return await p; } finally { if (!--writing && missed) { missed = false; adopt().catch((e) => console.error(e)); } } };
     // base: the revision what's saved was typed on, when it isn't the one this editor last read (a recovered copy).
     const save = async (reason = 'auto', base) => {
       clearTimeout(saveTimer);
@@ -633,7 +637,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       emergency();
       setState('Saving…');
       try {
-        const rec = record(), r = await store.save(key, rec, Number.isSafeInteger(base) ? { reason, base } : { reason }); paper = r.paper;
+        const rec = record(), r = await ours(store.save(key, rec, Number.isSafeInteger(base) ? { reason, base } : { reason })); paper = r.paper;
         keepPictures(rec.doc);
         failing = 0;
         if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(slotOf(k)); } catch {} }
@@ -1326,7 +1330,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         }
         if (!await save()) return;
         const kept = pendingOf(target), filled = kept && await complete(kept, target, await store.get(target));
-        if (filled) { const { base, ...rec } = filled; await store.save(target, rec, Number.isSafeInteger(base) ? { base } : {}); }
+        if (filled) { const { base, ...rec } = filled; await ours(store.save(target, rec, Number.isSafeInteger(base) ? { base } : {})); }
         key = target;
         if (await save('import')) { await store.remove(recoveryKey); try { sessionStorage.removeItem(slotOf(recoveryKey)); } catch {} }
       })().catch((e) => { console.error(e); setState('Not saved'); });
@@ -1334,10 +1338,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // Another editor (a second tab, the Papers page) saved this paper: while this one holds nothing unsaved, it shows that,
     // read through the store so its next save builds on it. Unsaved typing stays; its save keeps the other text as a
     // version.
+    const newer = (p) => p?.doc && !dirty && !initializing && !importing && (p.revision || 0) > (paper?.revision || 0);
     const elsewhere = async (changes, area) => {
       const next = area === 'local' && key ? changes[PA.KEYS.PAPER + key]?.newValue : null;
-      const newer = (p) => p?.doc && !dirty && !initializing && !importing && (p.revision || 0) > (paper?.revision || 0);
       if (!newer(next)) return;
+      // While this editor's own write is in flight, its word may be that write: look again once it has answered.
+      if (writing) { missed = true; return; }
+      await adopt();
+    };
+    adopt = async () => {
       const k = key, fresh = await store.get(k);
       if (k !== key || !newer(fresh)) return;
       paper = fresh; keep = fresh.keep === true; format = ST.get(fresh.format);
