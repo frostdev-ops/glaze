@@ -89,3 +89,9 @@ test('compose documents export too', () => {
   assert.equal(X.text(d), 'Reply\n\nOne two\n\n• three\n');
   assert.equal(X.text(S.parse(S.compose, '')), '');
 });
+
+test('multi-paragraph notes keep their paragraphs in text and Markdown exports', () => {
+  const d = doc(para('Body', { type: 'footnote_ref', attrs: { content: '<p>First paragraph.</p><p>Second paragraph.</p>' } }));
+  assert.ok(X.text(d).includes('[1] First paragraph.\n\nSecond paragraph.'));
+  assert.ok(X.markdown(d).includes('[^1]: First paragraph.\n\n    Second paragraph.'));
+});
