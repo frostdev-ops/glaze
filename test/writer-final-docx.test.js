@@ -141,3 +141,12 @@ test('export writes each page break, two in a row and one before a table among t
   const one = S.parse(S.paper, '<p>Title page</p><hr class="gz-page-break"><p>Body</p>');
   assert.match(X.exportDocx(one).parts['word/document.xml'], /<w:p><w:pPr><w:pageBreakBefore\/>[^]*?Body/, 'one break is still the next paragraph\'s page break before');
 });
+
+test('a section that starts on a new page (Word\'s default) starts one; a continuous one does not', async () => {
+  const sect = (type = '') => `<w:sectPr>${type ? `<w:type w:val="${type}"/>` : ''}<w:pgSz w:w="12240" w:h="15840"/></w:sectPr>`;
+  const sp = (s, type) => `<w:p><w:pPr>${sect(type)}</w:pPr>${r(s)}</w:p>`;
+  assert.equal(shape((await imp(pack(sp('Cover page') + p('Body starts on page 2')))).node), '"Cover page" BREAK "Body starts on page 2"');
+  // A section's w:type says how that section starts: the break after a section's last paragraph is the next section's.
+  assert.equal(shape((await imp(pack(sp('A') + sp('B', 'continuous') + sp('C', 'nextColumn') + sp('D', 'oddPage') + p('E')))).node), '"A" "B" "C" BREAK "D" BREAK "E"');
+  assert.equal(shape((await imp(pack(sp('Cover') + p('Next', '<w:pageBreakBefore/>')))).node), '"Cover" BREAK "Next"', 'a page break before at the new section\'s top is the same page');
+});
