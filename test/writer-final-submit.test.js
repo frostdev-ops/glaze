@@ -246,3 +246,79 @@ test('D7: the Submit is recorded in the very turn Ultra\'s Submit is clicked, ne
   assert.deepEqual(done(stuck), ['submit']);
   assert.equal(u.ops.filter((o) => o === 'commit').length, 1, 'a run that never clicks records nothing');
 });
+
+// lib/writer-papers.js over a plain object (the worker's storage.local in ultra()).
+const PA = require('../lib/writer-papers.js');
+const over = (data = {}) => ({ data, get: async (k) => ({ [k]: data[k] === undefined ? undefined : structuredClone(data[k]) }),
+  set: async (o) => { Object.assign(data, structuredClone(o)); }, remove: async (ks) => { for (const k of [].concat(ks)) delete data[k]; } });
+const paperDoc = (t) => ({ type: 'doc', content: [para(text(t))] });
+const KEY = PA.keyOf({ school: 'school.blackboard.com', user: '_900_1', course: '_101_1', content: '_7_1' });
+
+test('D5: a submit that fails or is cancelled records no submission and no Submitted version', async () => {
+  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const P = PA.open(over());
+  await P.save(KEY, { doc: paperDoc('A first draft.') });
+  for (const how of ['docx', 'attach', 'cancel']) {
+    const s = sheet();
+    s.api.version = (reason) => P.save(KEY, { doc: paperDoc('The paper.') }, { reason });
+    if (how === 'docx') s.api.docx = async () => { throw new Error('document build failed'); };
+    await s.open(); for (const b of s.builds) b.resolve(); await s.flush();
+    s.click('.gs-primary'); await s.flush();
+    const go = s.messages.find((m) => m.type === 'submit:go');
+    if (how === 'attach') s.handles['submit:done']({ run: go.run, ok: false, error: 'attach' });
+    if (how === 'cancel') s.click('.gs-foot .gs-btn');
+    await s.flush();
+  }
+  assert.equal((await P.list()).find((r) => r.key === KEY).submitted, null, 'the Papers page shows no Submitted badge');
+  assert.equal((await P.get(KEY)).submitted, undefined);
+  assert.equal((await P.versions(KEY)).some((v) => v.reason === 'submit'), false, 'no version says Submitted');
+});
+
+test('D5: the sheet hands the page the version its .docx was built from', async () => {
+  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const P = PA.open(over());
+  const s = sheet();
+  let saved = null;
+  s.api.version = async (reason) => (saved = await P.save(KEY, { doc: paperDoc('The paper.') }, { reason }));
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-primary'); await s.flush();
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  assert.ok(saved?.version?.id && go.version === saved.version.id, 'the page is told which version this is');
+});
+
+test('D5: Ultra\'s Submit click marks that version Submitted from the worker, with no frame left to do it', async () => {
+  const u = ultra(), P = PA.open(over(u.store.local));
+  await P.save(KEY, { doc: paperDoc('A first draft.') });
+  const { version } = await P.save(KEY, { doc: paperDoc('The paper as submitted.') }, { reason: 'sending' });
+  const p = await u.visit('doc-1');
+  await p.go({ version: version.id }); await u.w.settle();
+  assert.equal(p.clicks.length, 1);
+  assert.equal((await P.versions(KEY)).find((v) => v.id === version.id)?.reason, 'submit');
+  assert.ok((await P.get(KEY)).submitted, 'the paper is submitted');
+  assert.ok((await P.list()).find((r) => r.key === KEY).submitted, 'and the Papers page says so');
+});
+
+test('D5: a page run that stops before the click marks nothing', async () => {
+  const u = ultra(), P = PA.open(over(u.store.local));
+  await P.save(KEY, { doc: paperDoc('A first draft.') });
+  const { version } = await P.save(KEY, { doc: paperDoc('The paper.') }, { reason: 'sending' });
+  const p = await u.visit('doc-1', { enabled: false });
+  await p.go({ version: version.id }); await p.tick(16000); await u.w.settle();
+  assert.deepEqual(done(p), ['submit']);
+  assert.equal((await P.get(KEY)).submitted, undefined);
+});
+
+test('D5: the version actually submitted stays however many submits fail after it', async () => {
+  const clock = { t: 0 }, P = PA.open(over(), () => clock.t, { versions: () => 10 });
+  await P.save(KEY, { doc: paperDoc('A first draft.') });
+  clock.t += 1000;
+  const { version } = await P.save(KEY, { doc: paperDoc('The paper as submitted.') }, { reason: 'sending' });
+  await P.submitted(KEY, version.id);
+  for (let i = 0; i < 30; i++) {
+    clock.t += 11 * 60e3;
+    await P.save(KEY, { doc: paperDoc(`Revision ${i}.`) }, { reason: i % 3 ? 'auto' : 'sending' });
+  }
+  const list = await P.versions(KEY);
+  assert.equal(list.length, 10);
+  assert.ok(list.some((v) => v.id === version.id && v.reason === 'submit'), 'the submitted version is kept');
+});
