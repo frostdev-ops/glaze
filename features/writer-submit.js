@@ -40,8 +40,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     e.preventDefault();
     e.stopImmediatePropagation();
     if (L().actionOf(b) === 'submit') { if (!running) { box.frame?.focus(); say(box, { type: 'submit:open' }); } return; }
-    // Save and Close: one matching save acknowledgement, never a late reply or an earlier timer.
-    if (running || box.saved || submitted.has(box)) return;
+    // Save and Close: one matching save acknowledgement, never a late reply or an earlier timer. After Writer's Submit
+    // (Ultra's confirmation cancelled) it goes on the same way.
+    if (running || box.saved) return;
     const go = e.type === 'click', request = crypto.randomUUID();
     box.saveRequest = request;
     const saved = (ok) => {
