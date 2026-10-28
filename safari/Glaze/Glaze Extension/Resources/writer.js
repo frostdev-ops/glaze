@@ -191,6 +191,8 @@
     const ok = await Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'claim', pass: m.pass })).then((r) => r?.ok === true, () => false);
     if (!ok || taken) { p.close(); return; }
     taken = true;
+    // The page swaps in the editor as soon as it hears ready; typing must start with the student's saved preferences.
+    await globalThis.GZ_WRITER_SETTINGS?.load?.();
     port = p;
     port.onmessage = ({ data }) => { if (data && typeof data.type === 'string' && Object.hasOwn(ON, data.type)) ON[data.type](data); };
     say({ type: 'ready' });

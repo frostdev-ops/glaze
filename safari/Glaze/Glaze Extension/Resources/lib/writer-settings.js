@@ -13,8 +13,9 @@ var GZ_WRITER_SETTINGS = globalThis.GZ_WRITER_SETTINGS || (() => {
   const load = () => (read ||= (async () => {
     const area = sync();
     if (!area || !G) return now;
-    try { set(clean((await area.get('writer'))?.writer)); } catch { /* storage refused: the defaults stay */ }
-    try { chrome.storage.onChanged.addListener((c, where) => { if (where === 'sync' && c.writer) set(clean(c.writer.newValue)); }); } catch { /* outside the extension */ }
+    let changed = false;
+    try { chrome.storage.onChanged.addListener((c, where) => { if (where === 'sync' && c.writer) { changed = true; set(clean(c.writer.newValue)); } }); } catch { /* outside the extension */ }
+    try { const saved = await area.get('writer'); if (!changed) set(clean(saved?.writer)); } catch { /* storage refused: the last value stays */ }
     return now;
   })());
   const follow = (fn) => { if (typeof fn !== 'function') return; fns.push(fn); if (read) read.then(() => fn(now, null)); else load(); };
