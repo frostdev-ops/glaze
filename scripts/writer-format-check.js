@@ -123,7 +123,7 @@ const HARNESS = `(() => {
     const pick = (fr, word) => fr.evaluate((w) => {
       const v = GZ_WRITER_PAPER.current().editor.view; let at = -1;
       v.state.doc.descendants((n, pos) => { if (at < 0 && n.isText && n.text.includes(w)) at = pos + n.text.indexOf(w); return at < 0; });
-      v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at, at + w.length))); v.focus(); return at;
+      v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at, at + w.length)).scrollIntoView()); v.focus(); return at;
     }, word);
     const marksOf = (fr, word) => fr.evaluate((w) => {
       const v = GZ_WRITER_PAPER.current().editor.view; let hit = null;
@@ -362,6 +362,7 @@ const HARNESS = `(() => {
 
     // ---- the context menu
     await pick(fr, 'Critics');
+    await settle(fr);
     const crit = await fr.evaluate(() => { const r = [...document.querySelectorAll('.gp-flow p')].find((x) => x.textContent.includes('Critics')).getBoundingClientRect(); return { x: r.left + 40, y: r.top + 8 }; });
     await p.mouse.click(frameBox.x + crit.x, frameBox.y + crit.y, { button: 'right' });
     const ctxItems = await fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role^=menuitem]')].map((b) => b.firstChild.textContent).join('|'));
