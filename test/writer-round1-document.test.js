@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const S = require('../lib/writer-schema.js');
 const E = require('../lib/writer-editor.js');
+const ST = require('../lib/writer-styles.js');
+const X = require('../lib/writer-docx.js');
 
 test('whole-paper replacement restores every document attribute and undoes independently', () => {
   const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-paper.js'), 'utf8');
@@ -21,4 +23,23 @@ test('whole-paper replacement restores every document attribute and undoes indep
   assert.equal(view.state.doc.attrs.paste, 'keep');
   setDoc(S.paper.node('doc', null, [S.paper.node('paragraph')]).toJSON());
   assert.equal(view.state.doc.attrs.paste, null, 'an imported paper must not inherit the previous paper preference');
+});
+
+test('a heading can explicitly align left through commands, HTML and Word', async () => {
+  let st = E.state({ mode: 'paper', html: '<h1>Heading</h1>' });
+  E.commands(S.paper).align('left')(st, (tr) => { st = st.apply(tr); });
+  assert.equal(st.doc.firstChild.attrs.align, 'left');
+  assert.equal(S.parse(S.paper, S.serialize(S.paper, st.doc)).firstChild.attrs.align, 'left');
+  const out = X.exportDocx(st.doc, { format: 'apa7' });
+  assert.match(out.parts['word/document.xml'], /<w:jc w:val="left"/);
+  const back = await X.importDocx(out.bytes, { format: 'apa7' });
+  assert.equal(back.doc.content[0].attrs.align, 'left');
+});
+
+test('the Paragraph dialog retains left when a format centres a heading', () => {
+  const patch = ST.paraAttrs(ST.FORMATS.apa7, { heading: 1 }, { align: 'left' });
+  assert.equal(patch.align, 'left');
+  let st = E.state({ mode: 'paper', html: '<h1>Heading</h1>' });
+  E.commands(S.paper).paragraph(patch)(st, (tr) => { st = st.apply(tr); });
+  assert.equal(st.doc.firstChild.attrs.align, 'left');
 });
