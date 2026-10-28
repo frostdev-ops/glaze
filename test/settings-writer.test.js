@@ -200,11 +200,11 @@ test('docs/features.md lists each Writer setting in one line', () => {
 test('dialect: the worker builds Harper in the dialect asked for, and switches a running one', async () => {
   const vm = require('node:vm');
   const flush = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
-  const made = [], set = [];
+  const made = [], linted = [];
   class LocalLinter {
-    constructor(o) { made.push(o.dialect); }
-    async setup() {} async importWords() {} async lint() { return []; } async dispose() {}
-    async setDialect(d) { set.push(d); }
+    constructor(o) { this.dialect = o.dialect; made.push(o.dialect); }
+    async setup() {} async importWords() {} async lint() { linted.push(this.dialect); return []; } async dispose() {}
+    async setDialect(d) { this.dialect = d; }
   }
   const ctx = vm.createContext({ LocalLinter, Dialect: { American: 0, British: 1, Australian: 2, Canadian: 3 }, slimBinary: {}, crypto: { randomUUID: () => 'w' }, performance,
     onconnect: null, close() {}, setTimeout: () => 1, clearTimeout() {} });
@@ -217,7 +217,8 @@ test('dialect: the worker builds Harper in the dialect asked for, and switches a
   assert.deepEqual(made, [1], 'built British');
   send({ op: 'dialect', dialect: 'en-AU' }); await flush();
   send({ op: 'dialect', dialect: 'en-NZ' }); await flush();
-  assert.deepEqual(set, [2], 'switched to Australian; one it does not know is refused');
+  send({ op: 'lint', id: 3, text: 'colour' }); await flush();
+  assert.deepEqual(linted, [1, 2], 'the next lint is Australian; an unknown dialect is refused');
   send({ op: 'stats', id: 2 }); await flush();
   assert.equal(p.got.find((m) => m.op === 'stats').dialect, 'en-AU');
 });
