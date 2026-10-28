@@ -35,7 +35,7 @@ test('an MLA paper from Word: the defaults\' 1.16 lines and 8 pt after on the he
   assert.deepEqual(pick(tops[17], 'align', 'after', 'line'), { align: 'center', after: 8, line: null }, 'Works Cited');
   for (const n of tops.slice(18, 22)) {
     assert.deepEqual(pick(n, 'after', 'line', 'first', 'indent', 'left'), { after: null, line: null, first: null, indent: 0, left: null }, 'entries: MLA\'s own hanging indent and spacing');
-    assert.deepEqual(marks(n), ['color:{"color":"467886"}', 'italic', 'link', 'underline'], 'the title in italics, the link in the Hyperlink style\'s colour and underline');
+    assert.deepEqual(marks(n), ['italic', 'link'], 'the title in italics; the link draws the Hyperlink style\'s look, not marks of its own');
   }
   assert.ok(!tops.some((n) => marks(n).some((m) => m.startsWith('text_style'))), 'Times New Roman 12 throughout: the base font, no runs of their own');
 });
