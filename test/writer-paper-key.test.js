@@ -32,7 +32,7 @@ const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = []
   let onContext = null;
   const view = { state: E.state({ mode: 'paper' }), updateState(s) { this.state = s; }, dispatch(tr) { this.state = this.state.apply(tr); } };
   const sandbox = vm.createContext({
-    console, crypto, JSON, Date, Number, Object, Promise, Map, Set, Error, RangeError, structuredClone,
+    console, crypto, TextEncoder, Uint8Array, JSON, Date, Number, Object, Promise, Map, Set, Error, RangeError, structuredClone,
     setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
     addEventListener: (type, fn) => { windowEvents[type] = fn; }, document: { addEventListener: () => {}, documentElement: { lang: 'en' } },
     sessionStorage: ss, Intl, importing: false, chrome: { storage: { onChanged: { addListener: (fn) => changed.push(fn) } } },
