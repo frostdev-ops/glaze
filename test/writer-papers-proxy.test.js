@@ -28,3 +28,19 @@ test('one editor\'s saves sent back to back never file its own text as another e
   assert.ok(!reasons.includes('conflict'), `versions: ${reasons.join(', ')}`);
   assert.equal((await worker.get(KEY)).doc.content[0].content[0].text, 'First words. More, and the end.');
 });
+
+test('a save that says which revision it builds on keeps a newer one it would replace as a version', async (t) => {
+  const local = memory();
+  let clock = 1e12;
+  const worker = PA.open(local, () => (clock += 1000), { versions: async () => 40 });
+  const was = globalThis.chrome;
+  t.after(() => { globalThis.chrome = was; });
+  globalThis.chrome = { storage: { local }, runtime: { sendMessage: async (m) => ({ ok: true, value: await worker[m.op](...m.args) }) } };
+  const store = PA.open();
+  const first = (await store.save(KEY, { doc: doc('Mine.') })).paper.revision;
+  await worker.save(KEY, { doc: doc('Another tab’s.') });
+  await store.get(KEY);
+  await store.save(KEY, { doc: doc('Mine, brought back.') }, { base: first });
+  const kept = await Promise.all((await worker.versions(KEY)).map((v) => worker.version(KEY, v.id)));
+  assert.ok(kept.some((v) => v.reason === 'conflict' && v.doc.content[0].content[0].text === 'Another tab’s.'));
+});

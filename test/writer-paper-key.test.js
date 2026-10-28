@@ -211,3 +211,16 @@ test('the tab\'s unsaved copy follows the paper, not the page address it was typ
   const next = await frame({ local, ss, context: { recovery: RECOVERY.replace('/attempt/create', '/attempt/_31_1'), paper: PARTS } });
   assert.equal(next.shown(), 'Two thousand words of my essay. Typed before Ultra numbered the attempt.');
 });
+
+test('a tab\'s unsaved copy brought back over another tab\'s newer save keeps that save as a version', async () => {
+  const local = memory(), ss = session();
+  await seed(local);
+  const first = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  first.type(' Typed here, never saved.');
+  await seed(local, { doc: docOf('Saved meanwhile in another tab.') });
+  const next = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  assert.equal(next.shown(), 'Two thousand words of my essay. Typed here, never saved.');
+  const store = PA.open(local, () => (clock += 1000), { versions: async () => 40 });
+  const all = await Promise.all((await store.versions(KEY)).map((v) => store.version(KEY, v.id)));
+  assert.ok(all.some((v) => textOf(v.doc) === 'Saved meanwhile in another tab.'), `the other tab's save is kept (${all.map((v) => v.reason).join(', ')})`);
+});
