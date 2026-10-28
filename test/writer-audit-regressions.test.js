@@ -8,14 +8,14 @@ const read = (file) => fs.readFileSync(path.join(process.env.GZ_WRITER_AUDIT_SOU
 
 // Run the real import handler through its refusal path, without replacing any paper.
 const refusedImport = async (error, lang) => {
-  const source = read('writer-paper.js'), start = source.indexOf('    const importFile = '), end = source.indexOf("    file.addEventListener('change'", start);
+  const source = read('writer-paper.js'), start = source.indexOf('    // The paper becomes the Word file'), end = source.indexOf("    file.addEventListener('change'", start);
   const toasts = [];
   const importFile = vm.runInNewContext(`${source.slice(start, end)} importFile`, {
-    RangeError, Uint8Array, console: { error() {} }, view: { props: {} }, need: async () => {}, DOCX: [], format: 'mla9',
+    RangeError, ArrayBuffer, Uint8Array, console: { error() {} }, current: null, api: null, key: 'paper', root: { isConnected: true }, view: { state: { doc: {} }, props: {}, setProps() {}, focus() {} }, need: async () => {}, DOCX: [], format: 'mla9',
     GZ_WRITER_DOCX: { importDocx: async () => { throw error; } },
     t: (key) => I.t(key, {}, lang), toast: (text) => toasts.push(text),
   });
-  await importFile({ arrayBuffer: async () => new ArrayBuffer(0) });
+  await importFile({ size: 1, arrayBuffer: async () => new ArrayBuffer(1) });
   return toasts[0];
 };
 

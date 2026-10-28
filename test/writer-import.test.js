@@ -335,3 +335,13 @@ test('review: captured metadata and read results are bounded before posting to t
   u.drop([{ name: 'bad.pdf', size: 3, type: 'application/pdf', arrayBuffer: async () => new ArrayBuffer(4) }]);
   await u.flush(); assert.equal(u.sent.some((m) => m.type === 'import:file'), false);
 });
+
+for (const action of ['replace', 'close']) test(`review: a pending page handoff cannot reopen after ${action}`, async () => {
+  const f = frame(), pending = []; let calls = 0;
+  f.ctx.GZ_WRITER_PAPER.need = () => ++calls <= (action === 'replace' ? 2 : 1) ? new Promise((r) => pending.push(r)) : Promise.resolve();
+  const first = f.handles['import:file']({ name: 'first.pdf', mime: 'application/pdf', bytes: new ArrayBuffer(3) });
+  if (action === 'replace') { const second = f.I.bring(f.api, pdf('second.pdf')); pending[1](); await second; }
+  else f.I.close();
+  pending[0](); await first; await f.flush();
+  assert.deepEqual(f.opened.map((x) => x.name), action === 'replace' ? ['second.pdf'] : []);
+});
