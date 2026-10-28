@@ -457,9 +457,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     addEventListener('pagehide', () => { if (dirty) save(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) save(); });
 
-    // The document as a whole: on load a fresh state (no undo past it); otherwise one undoable step.
+    // The document as a whole: on load a fresh state (no undo past it); otherwise one undoable step. The old document's
+    // format issues go first: the Checks pane redraws during the dispatch, and their ranges can lie past the new end.
     const setDoc = (json, fresh = false) => {
       const doc = S.paper.nodeFromJSON(json);
+      formatIssues = []; picked = null;
       if (fresh) view.updateState(PM.state.EditorState.create({ doc, plugins: view.state.plugins }));
       else view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content).scrollIntoView());
     };
