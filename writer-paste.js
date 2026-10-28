@@ -176,7 +176,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     if (e.text != null) return e.text ? wrap(e.text, c, ctx) : '';
     if (isMarker(e)) return '';
     if (e.name === 'br') return '<br>';
-    if (e.name === 'img') { const src = String(e.a.src || ''); return /^data:image\//i.test(src) ? `<img src="${esc(src)}" alt="${esc(e.a.alt || '')}"${+e.a.width > 0 ? ` width="${Math.round(+e.a.width)}"` : ''}>` : ''; }
+    if (e.name === 'img') { const src = String(e.a.src || ''); return S().imageSrc(src) ? `<img src="${esc(src)}" alt="${esc(e.a.alt || '')}"${+e.a.width > 0 ? ` width="${Math.round(+e.a.width)}"` : ''}>` : wrap(e.a.alt || '', c, ctx); }
     const cc = cascade(e, c, ctx, false);
     // Word's empty-paragraph mark: <o:p>&nbsp;</o:p>.
     if (e.name === 'o:p') return e.kids.every((k) => k.text != null && /^[\s ]*$/.test(k.text)) ? '' : e.kids.map((k) => inline(k, cc, ctx)).join('');
