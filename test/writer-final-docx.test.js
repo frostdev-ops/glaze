@@ -167,3 +167,15 @@ test('a body-level marker, a deleted paragraph or a section break between list i
   const sectioned = await imp(pack(item('Roman one', 1, '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>') + item('Roman two', 1) + p('Gap') + item('Five', 2), { 'word/numbering.xml': numbering }));
   assert.deepEqual(lists(sectioned.node), ['ordered_list(upper-roman) Roman one', 'ordered_list(upper-roman,continued) Roman two', 'ordered_list(default) Five@5'], 'a list split by a section break continues');
 });
+
+test('a list through a numbering style (numStyleLink) and a level its instance overrides take their own formats', async () => {
+  const numbering = `<w:numbering ${NSW}><w:abstractNum w:abstractNumId="10"><w:numStyleLink w:val="BulletStyle"/></w:abstractNum><w:abstractNum w:abstractNumId="11"><w:styleLink w:val="BulletStyle"/>${lvlX(0, 'bullet', '▪')}${lvlX(1, 'bullet', 'o')}</w:abstractNum>`
+    + `<w:num w:numId="1"><w:abstractNumId w:val="10"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="11"/></w:num><w:abstractNum w:abstractNumId="20">${lvlX(0, 'decimal', '%1.')}</w:abstractNum><w:num w:numId="3"><w:abstractNumId w:val="20"/></w:num>`
+    + `<w:num w:numId="5"><w:abstractNumId w:val="20"/><w:lvlOverride w:ilvl="0">${lvlX(0, 'upperRoman', '%1.')}</w:lvlOverride></w:num><w:num w:numId="6"><w:abstractNumId w:val="20"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="4"/></w:lvlOverride></w:num></w:numbering>`;
+  const styles = X.exportDocx(S.parse(S.paper, '<p>x</p>')).parts['word/styles.xml'].replace('</w:styles>', '<w:style w:type="numbering" w:styleId="BulletStyle"><w:name w:val="Bullet Style"/><w:pPr><w:numPr><w:numId w:val="2"/></w:numPr></w:pPr></w:style></w:styles>');
+  const body = item('Bullet A', 1) + item('Bullet B', 1) + p('gap') + item('One', 3) + p('gap2') + item('Roman I', 5) + p('gap3') + item('Four', 6);
+  const got = await imp(pack(body, { 'word/numbering.xml': numbering, 'word/styles.xml': styles }));
+  const want = ['bullet_list(square) Bullet A,Bullet B', 'ordered_list(default) One', 'ordered_list(upper-roman) Roman I', 'ordered_list(default) Four@4'];
+  assert.deepEqual(lists(got.node), want);
+  assert.deepEqual(lists((await imp(X.exportDocx(got.node).bytes)).node), want, 'and back through export');
+});
