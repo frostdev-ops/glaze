@@ -78,6 +78,39 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     return { class: cls || null, style: style || null };
   };
 
+  // A paper list's numbering (or bullet) style for each level, as data-styles="upper-roman,lower-alpha"; a numbered list
+  // can continue the one before it (data-continue) and an item can restart its level at a number (data-start). The styles
+  // reach the page's markers as custom properties (writer-objects.css draws them).
+  const NUMBERS = ['decimal', 'lower-alpha', 'lower-roman', 'upper-alpha', 'upper-roman'], BULLETS = ['disc', 'circle', 'square', 'dash'];
+  const BULLET_MARK = { disc: '\u2022', circle: '\u25e6', square: '\u25aa', dash: '\u2013' };
+  const stylesOf = (v, allowed) => {
+    const out = [];
+    for (const s of String(v || '').split(',').slice(0, MAX_INDENT + 1)) { if (!allowed.includes(s.trim())) break; out.push(s.trim()); }
+    return out.length ? out.join(',') : null;
+  };
+  const startOf = (v) => (/^\d{1,5}$/.test(String(v ?? '')) && +v >= 1 && +v <= 32767 ? +v : null);
+  const listNode = (tag, allowed, ordered) => ({
+    group: 'block', content: 'list_item+',
+    attrs: ordered ? { styles: { default: null }, continue: { default: false } } : { styles: { default: null } },
+    parseDOM: [{ tag, getAttrs: (dom) => ({ styles: stylesOf(dom.getAttribute('data-styles'), allowed), ...(ordered ? { continue: dom.getAttribute('data-continue') === 'true' } : {}) }) }],
+    toDOM: (n) => {
+      const styles = n.attrs.styles ? n.attrs.styles.split(',') : [];
+      const vars = styles.map((s, i) => (ordered ? `--gzs${i}:${s}` : `--gzb${i}:"${BULLET_MARK[s]}"`)).join(';');
+      return [tag, { 'data-styles': n.attrs.styles, 'data-continue': n.attrs.continue ? 'true' : null, style: vars || null }, 0];
+    },
+  });
+  const itemDOM = (a) => {
+    const d = blockDOM(a);
+    if (a.start == null) return d;
+    const lv = a.indent || 0, deeper = Array.from({ length: MAX_INDENT - lv }, (_, i) => ` gzl${lv + 1 + i} 0`).join('');
+    return { ...d, 'data-start': String(a.start), style: [d.style, `counter-set:gzl${lv} ${a.start}${deeper}`].filter(Boolean).join(';') };
+  };
+  // prosemirror-tables' nodes, with a table's borders (on unless data-borders="none").
+  const tables = (spec) => ({
+    ...spec,
+    table: { ...spec.table, attrs: { borders: { default: true } }, parseDOM: [{ tag: 'table', getAttrs: (dom) => ({ borders: dom.getAttribute('data-borders') !== 'none' }) }],
+      toDOM: (n) => ['table', { 'data-borders': n.attrs.borders ? null : 'none' }, ['tbody', 0]] },
+  });
   const make = (paper) => {
     const levels = paper ? [1, 2, 3, 4] : [3, 4]; // Ultra starts headings at h3
     const attrs = blockAttrs(paper), read = readBlock(paper);
@@ -93,15 +126,18 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
         group: 'block', content: 'text*', marks: '', code: true, defining: true,
         parseDOM: [{ tag: 'pre', preserveWhitespace: 'full' }], toDOM: () => ['pre', { class: 'ql-syntax', spellcheck: 'false' }, 0],
       },
-      bullet_list: { group: 'block', content: 'list_item+', parseDOM: [{ tag: 'ul' }], toDOM: () => ['ul', 0] },
-      ordered_list: { group: 'block', content: 'list_item+', parseDOM: [{ tag: 'ol' }], toDOM: () => ['ol', 0] },
-      list_item: { content: 'inline*', defining: true, attrs, parseDOM: [{ tag: 'li', getAttrs: read }], toDOM: (n) => ['li', blockDOM(n.attrs), 0] },
+      bullet_list: paper ? listNode('ul', BULLETS, false) : { group: 'block', content: 'list_item+', parseDOM: [{ tag: 'ul' }], toDOM: () => ['ul', 0] },
+      ordered_list: paper ? listNode('ol', NUMBERS, true) : { group: 'block', content: 'list_item+', parseDOM: [{ tag: 'ol' }], toDOM: () => ['ol', 0] },
+      list_item: paper
+        ? { content: 'inline*', defining: true, attrs: { ...attrs, start: { default: null } }, parseDOM: [{ tag: 'li', getAttrs: (dom) => ({ ...read(dom), start: startOf(dom.getAttribute('data-start')) }) }], toDOM: (n) => ['li', itemDOM(n.attrs), 0] }
+        : { content: 'inline*', defining: true, attrs, parseDOM: [{ tag: 'li', getAttrs: read }], toDOM: (n) => ['li', blockDOM(n.attrs), 0] },
       text: { group: 'inline' },
     };
     if (paper) {
       Object.assign(nodes, {
         blockquote: { group: 'block', content: 'block+', defining: true, parseDOM: [{ tag: 'blockquote' }], toDOM: () => ['blockquote', 0] },
         page_break: { group: 'block', atom: true, parseDOM: [{ tag: 'hr.gz-page-break' }], toDOM: () => ['hr', { class: 'gz-page-break' }] },
+        horizontal_rule: { group: 'block', atom: true, parseDOM: [{ tag: 'hr.gz-rule' }], toDOM: () => ['hr', { class: 'gz-rule' }] },
         hard_break: { inline: true, group: 'inline', selectable: false, parseDOM: [{ tag: 'br' }], toDOM: () => ['br'] },
         // The note's text (inline HTML, marks only) lives on the node; the frame numbers the notes.
         footnote_ref: {
@@ -110,14 +146,20 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
           toDOM: (n) => ['sup', { class: 'gz-footnote', 'data-footnote': n.attrs.content }],
         },
         image: {
-          inline: true, group: 'inline', draggable: true, attrs: { src: {}, alt: { default: '' }, width: { default: null } },
+          inline: true, group: 'inline', draggable: true,
+          attrs: { src: {}, alt: { default: '' }, width: { default: null }, display: { default: 'inline' }, align: { default: null }, caption: { default: '' } },
           parseDOM: [{ tag: 'img[src]', getAttrs: (dom) => {
             const src = imageSrc(dom.getAttribute('src')), width = Math.round(+dom.getAttribute('width'));
-            return src ? { src, alt: String(dom.getAttribute('alt') || '').slice(0, 1000), width: width > 0 && width <= 2000 ? width : null } : false;
+            const display = dom.getAttribute('data-display') === 'block' ? 'block' : 'inline', align = dom.getAttribute('data-align');
+            return src ? { src, alt: String(dom.getAttribute('alt') || '').slice(0, 1000), width: width > 0 && width <= 2000 ? width : null,
+              display, align: ['left', 'center', 'right'].includes(align) ? align : null, caption: String(dom.getAttribute('data-caption') || '').replace(/\s+/g, ' ').trim().slice(0, 500) } : false;
           } }],
-          toDOM: (n) => ['img', { src: n.attrs.src, alt: n.attrs.alt, width: n.attrs.width }],
+          // A picture set as a block, its alignment and its caption go as data attributes; the frame draws them.
+          toDOM: (n) => ['img', { src: n.attrs.src, alt: n.attrs.alt, width: n.attrs.width, 'data-display': n.attrs.display === 'block' ? 'block' : null, 'data-align': n.attrs.align, 'data-caption': n.attrs.caption || null }],
         },
-        ...PM.tables.tableNodes({ tableGroup: 'block', cellContent: 'block+', cellAttributes: {} }),
+        ...tables(PM.tables.tableNodes({ tableGroup: 'block', cellContent: 'block+', cellAttributes: {
+          valign: { default: null, getFromDOM: (dom) => (['middle', 'bottom'].includes(dom.getAttribute('data-valign')) ? dom.getAttribute('data-valign') : null), setDOMAttr: (v, a) => { if (v) a['data-valign'] = v; } },
+        } })),
       });
     }
     // Outermost first, the order Quill nests them: link, script, bold, italic, strike, underline.
@@ -2484,9 +2526,9 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   // Dropped with everything inside them. What a post holds that compose can't keep is reported by loses().
   const DROP = { script: '', style: '', template: '', noscript: '', title: '', head: '', textarea: '', select: '', button: '', xmp: '', noembed: '', noframes: '',
     iframe: 'media', object: 'media', embed: 'media', video: 'media', audio: 'media', canvas: 'media', picture: 'media', map: 'media', svg: 'media', math: 'math' };
-  const CLASS = /^(ql-indent-[1-8]|ql-align-(center|right|justify)|ql-syntax|gz-page-break|gz-footnote)$/;
-  const KEEP = { a: ['href'], img: ['src', 'alt', 'width'], ol: ['data-list'], ul: ['data-list'], li: ['data-list'], sup: ['data-footnote'],
-    td: ['colspan', 'rowspan', 'data-colwidth'], th: ['colspan', 'rowspan', 'data-colwidth'], p: ['align'], div: ['align'] };
+  const CLASS = /^(ql-indent-[1-8]|ql-align-(center|right|justify)|ql-syntax|gz-page-break|gz-rule|gz-footnote)$/;
+  const KEEP = { a: ['href'], img: ['src', 'alt', 'width', 'data-display', 'data-align', 'data-caption'], ol: ['data-list', 'data-styles', 'data-continue'], ul: ['data-list', 'data-styles'], li: ['data-list', 'data-start'], sup: ['data-footnote'],
+    td: ['colspan', 'rowspan', 'data-colwidth', 'data-valign'], th: ['colspan', 'rowspan', 'data-colwidth', 'data-valign'], p: ['align'], div: ['align'], table: ['data-borders'] };
 
   const tree = (html, o) => {
     const root = el('body'), stack = [{ e: root, src: 'body' }];
@@ -2670,7 +2712,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       const inner = blocks(c, o);
       return el(c.nodeName.toLowerCase(), { ...c.attrs }, inner.length ? inner : [el('p')]);
     }))).filter((r) => r.childNodes.length);
-    return out.length ? [el('table', {}, out)] : [];
+    return out.length ? [el('table', t.getAttribute('data-borders') === 'none' ? { 'data-borders': 'none' } : {}, out)] : [];
   };
   // A container's children as the blocks a schema holds: textblocks of inline content, flat lists, pre, and in paper
   // blockquotes, tables and page breaks. Adjacent lists of one kind merge, as Quill merges them.
@@ -2690,7 +2732,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       } else if (name === 'UL' || name === 'OL' || name === 'LI') {
         for (const it of items(name === 'LI' ? el('ul', {}, [n]) : n, o, 0, [])) {
           const kind = it.ordered ? 'OL' : 'UL';
-          if (out.at(-1)?.nodeName !== kind) out.push(el(kind.toLowerCase()));
+          if (out.at(-1)?.nodeName !== kind) out.push(el(kind.toLowerCase(), o.paper && n.nodeName === kind ? listAttrs(n) : {}));
           out.at(-1).childNodes.push(it.li);
         }
       } else if (name === 'PRE') out.push(pre(n));
@@ -2704,7 +2746,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
           }
         }
       } else if (name === 'TABLE') out.push(...(o.paper ? table(n, o) : blocks(n, o)));
-      else if (name === 'HR') { if (o.paper && classes(n).includes('gz-page-break')) out.push(n); }
+      else if (name === 'HR') { if (o.paper && (classes(n).includes('gz-page-break') || classes(n).includes('gz-rule'))) out.push(n); }
     }
     flush();
     for (let i = out.length - 1; i > 0; i--) {
@@ -2712,6 +2754,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     }
     return out;
   };
+  const listAttrs = (n) => Object.fromEntries(['data-styles', 'data-continue'].filter((k) => n.getAttribute(k) != null).map((k) => [k, n.getAttribute(k)]));
   const link = (e) => { e.childNodes.forEach((c, i) => { c.parentNode = e; c.index = i; if (c.nodeType === 1) link(c); }); return e; };
   const prepare = (schema, html) => {
     html = String(html ?? '');
