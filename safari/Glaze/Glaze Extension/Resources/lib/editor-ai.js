@@ -495,7 +495,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const renderCalls = () => {
       const list = rows(calls);
       $('ai-calls').replaceChildren(...list.map((r) => {
-        const li = el('li'), what = el('span', '', [featureName(r.feature, t), providerName(r.provider === 'openai' ? '' : r.provider, t, conns), r.model].filter(Boolean).join(' · '));
+        const li = el('li'), what = el('span', '', [featureName(r.feature, t), providerName(r.provider === 'openai' && !r.model ? '' : r.provider, t, conns), r.model].filter(Boolean).join(' · '));
         const more = el('small', failed(r) ? 'bad' : '', [when(r.at), r.count > 1 ? `×${r.count}` : '', r.tokens ? t('{n} tokens', { n: r.tokens }) : '',
           `${outcome(r.category || r.state, t)}${r.status ? ` (HTTP ${r.status})` : ''}`].filter(Boolean).join(' · '));
         li.append(what, more);
