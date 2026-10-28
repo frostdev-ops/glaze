@@ -44,3 +44,20 @@ test('clicking the far half of a footnote opens the note at its node position', 
   assert.equal(plugin.props.handleClickOn({}, 6, node, 5, {}, true), true);
   assert.equal(opened, 5);
 });
+
+test('the page-foot highlight selects the same footnote letters that Find matched', () => {
+  const S = require('../lib/writer-schema.js'), FIND = require('../writer-find.js');
+  const content = '<p>First<br>line.</p><p>Second target.</p>';
+  const doc = S.paper.node('doc', null, S.paper.node('paragraph', null, [S.paper.text('Body'), S.paper.node('footnote_ref', { content })]));
+  const hit = FIND.search(doc, 'target')[0];
+  const text = ['1', ' ', 'First', 'line.', 'Second target.'].map((data) => ({ data }));
+  let at = 0, from, to;
+  const range = { setStart: (n, off) => { from = [text.indexOf(n), off]; }, setEnd: (n, off) => { to = [text.indexOf(n), off]; } };
+  const document = { querySelectorAll: () => [{ firstChild: { textContent: '1' } }], createTreeWalker: () => ({ nextNode: () => text[at++] }), createRange: () => range };
+  const findSource = fs.readFileSync(process.env.WRITER_FIND_SOURCE || require.resolve('../writer-find.js'), 'utf8');
+  const a = findSource.indexOf('  const noteMark = '), b = findSource.indexOf('  F.plugin(plugin());', a);
+  vm.runInNewContext(`${findSource.slice(a, b)} noteMark(v, s)`, { document, v: { state: { doc } }, s: { hits: [hit], current: 0 },
+    CSS: { highlights: new Map() }, Highlight: class {}, NodeFilter: { SHOW_TEXT: 4 }, requestAnimationFrame: (fn) => fn(), noteRange: FIND.noteRange });
+  assert.deepEqual(from, [4, 7]);
+  assert.deepEqual(to, [4, 13]);
+});
