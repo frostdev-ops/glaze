@@ -228,7 +228,9 @@ const SYLLABUS_DOCS = 48 + 61;
 // site. The adapter, the frame, its page-world helper and the editor load on demand. Measured against a1399a5d.
 // Submit-sheet English plurals add 134 bytes to lib/i18n.js, measured against ed70e640. The rest of the writer's counts
 // ("1 word", "Reply to 1 classmate", "AI found 1 issue.") add 728, measured against 97a4efc9.
-const WRITER = 24 + 409 + 134 + 728;
+// The Checks pane's one card per rule counts its paragraphs ("1 paragraph isn't double-spaced", "1 paragraph has other
+// line spacing"): 279 bytes of English plurals in lib/i18n.js, measured against 115bb240.
+const WRITER = 24 + 409 + 134 + 728 + 279;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;

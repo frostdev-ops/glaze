@@ -143,7 +143,7 @@ const writerPages = async (items) => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-import-'));
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
-    const ext = env.staged(root, [`${site}/*`], tmp);
+    const ext = require('./check-env.js').staged(root, [`${site}/*`], tmp);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 1400 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
@@ -251,13 +251,15 @@ const writerPages = async (items) => {
           v.state.doc.descendants((n, pos) => { if (n.type.name === 'paragraph' && n.textContent.length > 300) all.push(pos + n.nodeSize - 1); return !n.isTextblock; });
           const at = all[Math.floor(all.length / 2)] ?? v.state.doc.content.size - 1;
           v.focus(); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at)));
-          window.__keys = [];
-          v.dom.addEventListener('beforeinput', () => { const t0 = performance.now(); requestAnimationFrame(() => setTimeout(() => __keys.push(performance.now() - t0), 0)); });
+          window.__keys = []; window.__work = [];
+          if (!v.dom.gzTimed) v.dom.addEventListener('beforeinput', () => { const t0 = performance.now(); setTimeout(() => __work.push(performance.now() - t0), 0); requestAnimationFrame(() => setTimeout(() => __keys.push(performance.now() - t0), 0)); });
+          v.dom.gzTimed = true;
+          window.__sync = []; const d0 = v.dispatch.bind(v); if (!v.gzWrapped) { v.gzWrapped = true; v.dispatch = (tr) => { const t = performance.now(); d0(tr); if (tr.docChanged) __sync.push(performance.now() - t); }; }
         });
         await p.keyboard.type(' the quick brown fox jumps over the lazy dog while a student writes the essay'.repeat(2).slice(0, 150), { delay: 40 });
         await settle();
-        const ms = (await fr.evaluate(() => window.__keys)).sort((x, y) => x - y), q = (f) => ms[Math.min(ms.length - 1, Math.floor(ms.length * f))];
-        it.typing = { keys: ms.length, median: Math.round(q(0.5) * 10) / 10, p95: Math.round(q(0.95) * 10) / 10, max: Math.round(ms.at(-1) * 10) / 10 };
+        const stats = (ms) => { ms.sort((x, y) => x - y); const q = (f) => Math.round(ms[Math.min(ms.length - 1, Math.floor(ms.length * f))] * 10) / 10; return { keys: ms.length, median: q(0.5), p95: q(0.95), max: q(1) }; };
+        it.typing = { paint: stats(await fr.evaluate(() => window.__keys)), work: stats(await fr.evaluate(() => window.__work)), sync: stats(await fr.evaluate(() => window.__sync)) };
         console.log(`${it.id} typing: ${JSON.stringify(it.typing)} (pages ${await fr.evaluate(() => GZ_WRITER_PAPER.current().pages())})`);
       }
       await p.mouse.move(1, 1);
