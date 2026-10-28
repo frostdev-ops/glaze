@@ -4,8 +4,8 @@
 // (lib/background.js 'glaze:writer') and then talks to the page over that job's MessageChannel only:
 //   page → frame: init { mode, kind, html, placeholder, look { tokens, dark, glass, motion }, context, locale }, look { look },
 //                 context { context }, focus, html { html } (Ultra changed its own editor: a post went, a draft came back);
-//   frame → page: ready, height { px }, change { html, text, words, delta } (delta: compose's Quill ops, what the page
-//                 writes into Ultra's editor), send (Mod-Enter), native (back to Blackboard's editor; with a reason, the
+//   frame → page: ready, height { px }, change { html, text, words, delta } (compose only; delta: its Quill ops, what the
+//                 page writes into Ultra's editor), send (Mod-Enter), native (back to Blackboard's editor; with a reason, the
 //                 box holds what Writer can't keep and nothing was written).
 // It keeps nothing and asks the extension for nothing but that pass.
 (() => {
@@ -129,8 +129,8 @@
     words = c.words;
     count();
     if (quiet || c.docChanged === false) return;
-    const delta = root.dataset.mode === 'compose' && ed?.view ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null;
-    say({ type: 'change', html: c.html, text: c.text, words: c.words, delta });
+    // A paper stays in Writer's storage (writer-paper.js): the page hears compose's changes only.
+    if (root.dataset.mode === 'compose') say({ type: 'change', html: c.html, text: c.text, words: c.words, delta: ed?.view ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null });
     emit('change', c);
   };
   const ON = {
