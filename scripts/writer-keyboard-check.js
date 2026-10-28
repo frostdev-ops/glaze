@@ -19,6 +19,8 @@ module.exports = async ({ p, fr, check, until }) => {
     await until(async () => !await fr.locator(selector).isVisible(), `${label} dismissed`);
     check(true, `${label}: Tab, Shift+Tab and Escape work`);
   };
+  await menu('.gp-pill', 'APA 7');
+  check(await fr.evaluate(() => GZ_WRITER_CITE.style() === 'apa7'), 'citations follow the selected paper format');
   await menu('.gp-pill', 'New preset'); await dismiss('.gp-form[aria-label="New preset…"]', 'New preset');
   await menu('.gp-more', 'Page setup'); await dismiss('.gp-page', 'Page setup');
   if (await fr.locator('.gp-pilcrow').isVisible()) await activate(fr.locator('.gp-pilcrow'));
