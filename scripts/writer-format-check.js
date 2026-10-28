@@ -328,7 +328,10 @@ const HARNESS = `(() => {
 
     // ---- rich paste
     const paste = (html, shift = false) => fr.evaluate(({ html, shift }) => {
-      const v = GZ_WRITER_PAPER.current().editor.view, d = v.state.doc;
+      // Into a new empty paragraph at the end, so the paste's first block keeps its kind.
+      const v = GZ_WRITER_PAPER.current().editor.view;
+      v.dispatch(v.state.tr.insert(v.state.doc.content.size, v.state.schema.nodes.paragraph.create()));
+      const d = v.state.doc;
       v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(d, d.content.size - 1))); v.focus();
       if (shift) v.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', shiftKey: true, bubbles: true }));
       const dt = new DataTransfer(); dt.setData('text/html', html); dt.setData('text/plain', html.replace(/<[^>]*>/g, ''));
