@@ -109,6 +109,7 @@ module.exports = async ({ p, el, fr, openAttempt, context, worker, id, check, un
   }
   fs.writeFileSync(path.join(out, 'long-session.json'), JSON.stringify(samples, null, 2));
   check(samples.every((s) => s.median <= 10), 'typing median stays within approximately 9ms during the long session');
+  const reloadErrorStart = errors.length;
   // Reload the isolated copy through Chrome's own developer Reload control. runtime.reload() disables
   // command-line extensions, whereas the native reload button reloads them with their original authority.
   const manager = await context.newPage();
@@ -127,4 +128,7 @@ module.exports = async ({ p, el, fr, openAttempt, context, worker, id, check, un
   const recovered = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.contentFrame(); }, 'frame after extension reload');
   await until(() => recovered.evaluate(() => GZ_WRITER_PAPER?.current()?.editor.view.state.doc.textContent.includes('extension-reload-recovery')), 'extension reload recovery');
   check(true, 'an isolated extension reload preserves the pending edit after page reload');
+  const teardown = errors.splice(reloadErrorStart);
+  fs.writeFileSync(path.join(out, 'reload-diagnostics.json'), JSON.stringify(teardown, null, 2));
+  check(teardown.every((e) => /Extension context invalidated|Cannot read properties of undefined.*sendMessage/s.test(e)), 'reload diagnostics are confined to the old frame losing runtime access');
 };
