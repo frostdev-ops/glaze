@@ -21,3 +21,21 @@ test('F5: a paper\'s words are counted as the status bar counts them, hard break
     assert.equal(P.measure(json).words, E.words(S.text(S.paper.nodeFromJSON(json)).text), name);
   }
 });
+
+const page = require('./helpers/writer-submit-page.cjs');
+const L = require('../lib/writer-submit.js');
+const done = (p) => p.sent.filter((m) => m.type === 'submit:done').map((m) => (m.ok ? 'ok' : m.error));
+
+test('D9: once Writer has clicked Ultra\'s Submit, Ultra\'s Save and Close works again (after the paper saves)', async () => {
+  const p = page();
+  await p.go();
+  assert.deepEqual(done(p), ['ok']);
+  // Ultra's confirmation, cancelled: the student is back on the attempt and presses Save and Close.
+  const save = L.footer(p.box.editor).save;
+  save.disabled = false; save.removeAttribute('disabled'); save.className = '';
+  p.fire(save, 'click');
+  const asked = p.sent.filter((m) => m.type === 'submit:save');
+  assert.equal(asked.length, 1, 'the paper is saved first, as before any submit');
+  p.hear({ type: 'submit:saved', request: asked[0].request, ok: true });
+  assert.equal(p.clicks.filter((b) => b === save).length, 1, 'then Ultra\'s own Save and Close goes on');
+});
