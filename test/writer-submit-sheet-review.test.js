@@ -91,3 +91,14 @@ test('review: a malformed as-is read cannot cross the channel', async () => {
   s.click('.gs-primary'); await s.flush();
   assert.equal(s.messages.some((m) => m.type === 'submit:go'), false);
 });
+
+test('review: a failing document build leaves the sheet usable and sends nothing', async () => {
+  const s = sheet();
+  s.api.docx = async () => { throw new Error('document build failed'); };
+  await s.open(); await s.flush();
+  s.click('.gs-primary'); await s.flush();
+  assert.equal(s.messages.some((m) => m.type === 'submit:go'), false);
+  assert.match(s.doc.querySelector('.gs-err').textContent, /could not be made/);
+  assert.equal(s.doc.querySelector('.gs-primary').disabled, false);
+  assert.equal(s.ctx.GZ_WRITER_SUBMIT_SHEET.busy(), false);
+});
