@@ -5,8 +5,9 @@ const fs = require('node:fs'), path = require('node:path');
 const { fixtures } = require('../test/fixtures/writer-hostile.js');
 const { execFileSync } = require('node:child_process');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-module.exports = async ({ p, el, fr, openAttempt, context, worker, check, until, settle, out, errors }) => {
+module.exports = async ({ p, el, fr, openAttempt, context, worker, id, check, until, settle, out, tmp, errors }) => {
   for (const [name, make] of Object.entries(fixtures)) {
+    if (process.env.HOSTILE_FILTER && !name.includes(process.env.HOSTILE_FILTER)) continue;
     const fixture = make();
     await fr.evaluate(async ({ name, bytes }) => {
       await GZ_WRITER_PAPER.current().importFile(new File([new Uint8Array(bytes)], `${name}.docx`));
@@ -37,6 +38,7 @@ module.exports = async ({ p, el, fr, openAttempt, context, worker, check, until,
     for (const type of ['table', 'image', 'footnote_ref', 'list_item', 'page_break']) assert.equal(trip.counts[type], trip.prior[type], `${name}: ${type}`);
     if (name === 'forty-two-pages') check(trip.pages >= 42, '42-page fixture paginates without stalling');
   }
+  if (!process.env.WRITER_SKIP_KEYBOARD) await require('./writer-keyboard-check.js')({ p, fr, check, until });
   // Real tabs, one worker: overwrite conflicts must remain recoverable as versions.
   const other = await openAttempt();
   const edit = async (f, token) => f.evaluate(async (token) => { const api = GZ_WRITER_PAPER.current(), v = api.editor.view; v.dispatch(v.state.tr.insertText(token, v.state.doc.content.size - 1)); await api.save(); }, token);
@@ -87,7 +89,7 @@ module.exports = async ({ p, el, fr, openAttempt, context, worker, check, until,
   await until(() => fr.evaluate(() => GZ_WRITER_AI.allowed('completion')), 'completion admitted');
   await settle(fr);
   const samples = [];
-  for (let count = 500; count <= 2000; count += 500) {
+  for (let count = 500; count <= Number(process.env.WRITER_SESSION_KEYS || 2000); count += 500) {
     // Actual input events, pausing in each open sentence so completion and proofing run between samples.
     await p.keyboard.type((' the student considers how memory shapes the river').repeat(12).slice(0, 500), { delay: 2 });
     await pause(1400);
@@ -96,18 +98,31 @@ module.exports = async ({ p, el, fr, openAttempt, context, worker, check, until,
       const proof = await GZ_WRITER_PROOF.stats();
       return { keys, edits: values.length, median: values[Math.floor(values.length / 2)], p95: values[Math.floor(values.length * .95)], heap: performance.memory?.usedJSHeapSize, completionRuns: __completionRuns, proof };
     }, count);
-    const ps = execFileSync('ps', ['-axo', 'pid=,ppid=,rss=,command='], { encoding: 'utf8' });
-    sample.browserRSS = ps.split('\n').filter((s) => /chrome|chromium/i.test(s) && /glaze-paper|--type=renderer/.test(s)).reduce((n, s) => n + (+/^\s*\d+\s+\d+\s+(\d+)/.exec(s)?.[1] || 0), 0);
+    const rows = execFileSync('ps', ['-axo', 'pid=,ppid=,rss=,command='], { encoding: 'utf8' }).split('\n').map((s) => /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/.exec(s)).filter(Boolean);
+    const browser = rows.find((r) => r[4].includes(path.join(tmp, 'profile')) && !/--type=/.test(r[4]));
+    const owned = new Set(browser ? [+browser[1]] : []);
+    for (let grew = true; grew;) { grew = false; for (const r of rows) if (owned.has(+r[2]) && !owned.has(+r[1])) { owned.add(+r[1]); grew = true; } }
+    sample.browserMB = Math.round(rows.filter((r) => owned.has(+r[1])).reduce((n, r) => n + +r[3] / 1024, 0));
     samples.push(sample);
     console.log(`session sample: ${JSON.stringify(sample)}`);
     check(sample.edits >= 500 && sample.completionRuns > 0 && sample.proof?.lints > 0, `${count} keystrokes with real proofing and mock completion`);
   }
   fs.writeFileSync(path.join(out, 'long-session.json'), JSON.stringify(samples, null, 2));
   check(samples.every((s) => s.median <= 10), 'typing median stays within approximately 9ms during the long session');
-  // Reload the isolated extension, then the synthetic page, with an edit still pending.
+  // Reload the isolated copy through Chrome's own developer Reload control. runtime.reload() disables
+  // command-line extensions, whereas the native reload button reloads them with their original authority.
+  const manager = await context.newPage();
+  await manager.goto('chrome://extensions/');
+  await manager.locator('extensions-toolbar #devMode').click();
+  await p.bringToFront();
   await fr.evaluate(() => { const api = GZ_WRITER_PAPER.current(), v = api.editor.view; v.dispatch(v.state.tr.insertText(' extension-reload-recovery', v.state.doc.content.size - 1)); });
-  await worker.evaluate(() => chrome.runtime.reload()).catch(() => {});
+  await manager.locator(`extensions-item#${id} #dev-reload-button`).click();
+  await manager.close();
   await pause(700);
+  const wake = await context.newPage();
+  await wake.goto(`chrome-extension://${id}/popup.html`);
+  await require('./check-env.js').ultraReady(wake);
+  await wake.close();
   await p.reload();
   const recovered = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.contentFrame(); }, 'frame after extension reload');
   await until(() => recovered.evaluate(() => GZ_WRITER_PAPER?.current()?.editor.view.state.doc.textContent.includes('extension-reload-recovery')), 'extension reload recovery');
