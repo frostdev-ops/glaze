@@ -3,7 +3,7 @@
 // React hears it; a disabled one too, since Ultra disables it while its own box is empty), and its Save and Close first
 // saves the paper. Save and Close attaches nothing: a draft file would sit in Ultra's attempt and a later Submit would add
 // a second copy; the paper is kept in Writer's storage, so Ultra's Save and Close goes on once that save is done.
-// On the sheet's Submit (the student's click; the frame has already saved a 'submit' version and built the .docx):
+// On the sheet's Submit (the student's click; the frame has already saved a 'sending' version and built the .docx):
 //   1. attach: a File on the file area's own input (DataTransfer, then bubbling input and change, which React hears at
 //      its root), or dropped on its drop zone when the input isn't drawn; never a click on a file input (the OS picker);
 //   2. wait, bounded, until Ultra lists the file in the panel;
@@ -11,7 +11,8 @@
 //   4. once Ultra's Submit is enabled, one click on it. Ultra's confirmation is Ultra's.
 // Any failure stops before Submit and tells the sheet why; nothing is retried by itself. A test is never touched.
 // The worker's permit for the assignment (lib/background.js) is claimed before 1, released by a run that attached nothing,
-// and the dispatch recorded in the click's own turn; the sheet's Blackboard editor clears an uncertain upload's (review).
+// and the dispatch recorded in the click's own turn, with the paper's version marked Submitted; the sheet's Blackboard
+// editor clears an uncertain upload's (review).
 // A file the student submits as is (writer-import.js) takes the same steps from 1, its own name, type and bytes unchanged.
 // Ultra's own file area (enhance.writerUploads, on by default): one file dropped on it or chosen through its input goes to
 // the paper's frame instead, before Ultra hears it (in the capture phase), which asks what to do with it; Ultra
@@ -160,7 +161,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const transaction = active = { box, run: m.run, cancelled: false, frame: box.frame, port: box.port };
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
-    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user }))?.ok === true;
+    const version = typeof m.version === 'string' && /^[a-z0-9-]{3,40}$/.test(m.version) ? m.version : null;
+    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user, ...(op === 'commit' && version && { version }) }))?.ok === true;
     let claimed = false;
     try {
       const d = L().delta({ note: m.note, text: m.text || '' });

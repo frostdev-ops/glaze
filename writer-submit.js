@@ -2,11 +2,12 @@
 // they're laid out and the .docx it makes, a note to the instructor, "Also paste the text in the text box", the open
 // checks, Cancel and Submit. It opens from the paper's Submit… and from Ultra's own Submit (features/writer-submit.js
 // catches it). Its Submit, the student's click, runs the steps in order (lib/writer-submit.js): the paper saved as a
-// 'submit' version, the .docx built, then the page attaches it through Ultra's upload, writes the note and text into
-// Ultra's box and clicks Ultra's Submit once. Every failure stops before that click, says why here, and the paper stays.
+// 'sending' version, the .docx built, then the page attaches it through Ultra's upload, writes the note and text into
+// Ultra's box and clicks Ultra's Submit once, the worker marking that version Submitted as it does (lib/writer-papers.js
+// submitted). Every failure stops before that click, says why here, and the paper stays.
 // Submit as is (a file the student brought, writer-import.js): the file large in place of the pages, the note, Cancel and
 // Submit; the file's own bytes go to the page unchanged, and the paper is neither saved nor built.
-// frame → page: submit:arm (this paper owns the attempt), submit:go { run, name, bytes, note, text, until, asis, mime },
+// frame → page: submit:arm (this paper owns the attempt), submit:go { run, name, bytes, note, text, until, asis, mime, version },
 //   submit:saved { ok }; page → frame: submit:open, submit:save (Ultra's Save and Close), submit:step { run, step },
 //   submit:done { run, ok, error }. A test's box is compose, never a paper: it gets none of this.
 // "Also paste the text" starts as it was at the last Submit while Settings → Writer → Submitting's remember is on
@@ -215,14 +216,15 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           return;
         }
         if (mine.cancelled || sheet !== mine || !same()) throw 'page';
-        if (!await api.version('submit')) throw 'save';
+        const kept = await api.version('sending');
+        if (!kept) throw 'save';
         if (mine.cancelled || sheet !== mine || !same()) throw 'page';
         s = L().advance(s, { step: 'save' });
         let out;
         try { out = built && built.doc === snapshot.doc && built.format === snapshot.format && built.key === snapshot.key ? built.out : await build(); } catch (e) { console.error(e); throw 'docx'; }
         s = L().advance(s, { step: 'docx' });
         if (mine.cancelled || !same() || !L().may(s, 'attach') || sheet !== mine) throw 'page';
-        const r = await send(run, { key: snapshot.key, name, bytes: out.bytes.slice().buffer, note: note.value, text });
+        const r = await send(run, { key: snapshot.key, name, bytes: out.bytes.slice().buffer, note: note.value, text, version: kept.version?.id ?? null });
         if (mine.cancelled || sheet !== mine) return;
         if (!r.ok) throw r.error || 'page';
         mine.back = null;
