@@ -39,8 +39,8 @@ test('OpenRouter\'s public catalog: no key sent, capabilities and context from w
   const out = await M.list({ base: 'https://openrouter.ai/api/v1', key: 'sk-or-SECRET' }, { fetch });
   assert.equal(seen.url, M.OPENROUTER);
   assert.equal(seen.init.headers.authorization, undefined, 'the catalog is public: no key goes to it');
-  assert.deepEqual(out.models.find((m) => m.id === 'a/vision'), { id: 'a/vision', name: 'Vision', context: { window: 100000, inputLimit: 100000 - 4096 }, tools: true, json: true, vision: true });
-  assert.deepEqual(out.models.find((m) => m.id === 'b/text'), { id: 'b/text', name: 'Text', context: { window: 8000, inputLimit: 7200 }, tools: false, json: false, vision: false });
+  assert.deepEqual(out.models.find((m) => m.id === 'a/vision'), { id: 'a/vision', name: 'Vision', context: { window: 100000, inputLimit: 100000 - 4096 }, tools: true, json: true, efforts: [], vision: true });
+  assert.deepEqual(out.models.find((m) => m.id === 'b/text'), { id: 'b/text', name: 'Text', context: { window: 8000, inputLimit: 7200 }, tools: false, json: false, efforts: [], vision: false });
   assert.deepEqual(out.models.find((m) => m.id === 'c/bare'), { id: 'c/bare', name: 'c/bare' }, 'unknown capabilities are absent, never false');
 });
 
@@ -76,4 +76,60 @@ test('catalog cancellation settles even when fetch ignores abort and does not ca
   await pending;
   assert.equal(observed, 'AbortError');
   assert.equal(cache.m.size, 0, 'late answers cannot update the catalog after cancellation');
+});
+
+// OpenRouter's catalog as it answered on 2026-10-27 (test/fixtures/openrouter-models.json: a few models, descriptions,
+// prices and benchmarks left out).
+const routed = require('./fixtures/openrouter-models.json');
+
+test('a model\'s efforts as OpenRouter states them: its supported_efforts Glaze knows, no none where reasoning is mandatory, none when it states none', async () => {
+  const out = await M.list({ base: 'https://openrouter.ai/api/v1' }, { fetch: async () => json(routed) });
+  const efforts = Object.fromEntries(out.models.map((m) => [m.id, m.efforts]));
+  assert.deepEqual(efforts, {
+    'anthropic/claude-sonnet-4.5': [], 'deepseek/deepseek-v4.1-flash-1017': ['none', 'low', 'high'], 'google/gemini-2.5-flash': [],
+    'meta-llama/llama-3.3-70b-instruct': [], 'openai/gpt-5': ['minimal', 'low', 'medium', 'high'], 'openai/gpt-5.1': ['none', 'low', 'medium', 'high'], 'recursive/flint-v1.0:free': [],
+  });
+  M._reset();
+  const every = await M.list({ base: 'https://openrouter.ai/api/v1' }, { fetch: async () => json({ data: [{ id: 'x/any', supported_parameters: ['reasoning'], reasoning: { mandatory: true, supported_efforts: null } }] }), cache: store() });
+  assert.deepEqual(every.models[0].efforts, ['minimal', 'low', 'medium', 'high']);
+  for (const m of out.models) assert.equal(M.efforts('https://openrouter.ai/api/v1', m.id, m), m.efforts);
+});
+
+test('a provider\'s own list where it says more: DeepSeek\'s effort levels, xAI\'s, Anthropic\'s names and headers', async () => {
+  const seen = [];
+  const fetch = (body) => async (url, init) => { seen.push({ url, init }); return json(body); };
+  // DeepSeek's GET /models (api-docs.deepseek.com/api/list-models): effort.supported_levels, never 'none', which is thinking off.
+  const ds = await M.list({ base: 'https://api.deepseek.com', key: 'sk-ds', generation: 'd' }, { fetch: fetch({ object: 'list', data: [
+    { id: 'deepseek-flash', object: 'model', owned_by: 'deepseek', effort: { supported_levels: ['low', 'high', 'max'], default_level: 'high' } }, { id: 'deepseek-old', object: 'model', owned_by: 'deepseek' }] }) });
+  assert.deepEqual(ds.models, [{ id: 'deepseek-flash', name: 'deepseek-flash', efforts: ['none', 'low', 'high'] }, { id: 'deepseek-old', name: 'deepseek-old' }]);
+  assert.equal(seen[0].init.headers.authorization, 'Bearer sk-ds');
+  // xAI's GET /v1/models (docs.x.ai rest-api-reference): capabilities.reasoning_effort.
+  const x = await M.list({ base: 'https://api.x.ai/v1', key: 'xai-k', generation: 'x' }, { fetch: fetch({ data: [{ id: 'grok-4.7', capabilities: { reasoning_effort: ['low', 'medium', 'high', 'xhigh'], default_reasoning_effort: 'high' } }] }) });
+  assert.deepEqual(x.models[0].efforts, ['low', 'medium', 'high']);
+  // Anthropic's GET /v1/models: x-api-key and anthropic-version, every model on one page, its display name.
+  const a = await M.list({ base: 'https://api.anthropic.com/v1', key: 'sk-ant-k', generation: 'a' }, { fetch: fetch({ data: [{ id: 'claude-sonnet-4-5', display_name: 'Claude Sonnet 4.5', type: 'model' }], has_more: false }) });
+  assert.deepEqual(a.models, [{ id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }]);
+  const last = seen.at(-1);
+  assert.equal(last.url, 'https://api.anthropic.com/v1/models?limit=1000');
+  assert.deepEqual(last.init.headers, { accept: 'application/json', 'x-api-key': 'sk-ant-k', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' });
+});
+
+test('a model\'s efforts by name where its provider\'s list says nothing; none for any other', () => {
+  const e = (base, id) => M.efforts(base, id);
+  assert.deepEqual(e('https://api.openai.com/v1', 'gpt-5-mini'), ['minimal', 'low', 'medium', 'high']);
+  assert.deepEqual(e('https://api.openai.com/v1', 'gpt-5-2025-08-07'), ['minimal', 'low', 'medium', 'high']);
+  assert.deepEqual(e('https://api.openai.com/v1', 'gpt-5.1'), ['none', 'low', 'medium', 'high']);
+  assert.deepEqual(e('https://api.openai.com/v1', 'o4-mini'), ['low', 'medium', 'high']);
+  assert.deepEqual(e('https://api.openai.com/v1', 'gpt-5-chat-latest'), []);
+  assert.deepEqual(e('https://api.openai.com/v1', 'gpt-4.1'), []);
+  assert.deepEqual(e('https://generativelanguage.googleapis.com/v1beta/openai', 'models/gemini-2.5-flash'), ['none', 'minimal', 'low', 'medium', 'high']);
+  assert.deepEqual(e('https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-2.5-pro'), ['minimal', 'low', 'medium', 'high']);
+  assert.deepEqual(e('https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-2.0-flash'), []);
+  assert.deepEqual(e('https://api.groq.com/openai/v1', 'openai/gpt-oss-120b'), ['low', 'medium', 'high']);
+  assert.deepEqual(e('https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'), []);
+  assert.deepEqual(e('https://api.x.ai/v1', 'grok-4.6'), ['low', 'medium', 'high']);
+  assert.deepEqual(e('https://api.anthropic.com/v1', 'claude-sonnet-4-5'), []);
+  assert.deepEqual(e('https://api.mistral.ai/v1', 'mistral-medium-3-5'), []);
+  assert.deepEqual(e('http://localhost:11434/v1', 'gpt-5'), [], 'an endpoint of the student\'s own: unknown');
+  assert.deepEqual(M.efforts('https://api.openai.com/v1', 'gpt-5', { efforts: [] }), [], 'a list that says none wins');
 });

@@ -330,3 +330,40 @@ test('a schema tool-call round cannot emit a Unicode-escaped credential in its t
   }), { code: 'invalid-response' });
   assert.equal(deltas.length, 0);
 });
+
+test('a connection kept without a model cleans, and a request without one is refused before anything is sent', async () => {
+  assert.deepEqual(O.config({ base: 'https://api.groq.com/openai/v1', key: KEY }), { base: 'https://api.groq.com/openai/v1', key: KEY });
+  const s = server(done('{}'));
+  await assert.rejects(P.run('openai', ask(), { base: 'https://api.groq.com/openai/v1', key: KEY }, { fetch: s.fetch }), { code: 'setup' });
+  assert.equal(s.calls.length, 0);
+});
+
+test('Anthropic\'s compatible endpoint gets its browser header and a schema in words, since it ignores response_format', async () => {
+  const s = server(done('{"answer":"ok"}'));
+  const out = await P.run('openai', ask({ schema: SCHEMA }), cfg({ base: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5' }), { fetch: s.fetch });
+  assert.deepEqual(out.json, { answer: 'ok' });
+  const [call] = s.calls;
+  assert.equal(call.url, 'https://api.anthropic.com/v1/chat/completions');
+  assert.equal(call.init.headers['anthropic-dangerous-direct-browser-access'], 'true');
+  assert.equal(call.init.headers.authorization, `Bearer ${KEY}`);
+  assert.equal(call.body.response_format, undefined);
+  assert.match(call.body.messages[0].content, /JSON Schema/);
+  // Nowhere else: Gemini's server refuses a request carrying headers it doesn't know.
+  const g = server(done('fine'));
+  await P.run('openai', ask(), cfg({ base: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash' }), { fetch: g.fetch });
+  assert.deepEqual(Object.keys(g.calls[0].init.headers).sort(), ['accept', 'authorization', 'content-type']);
+});
+
+test('status of a connection with no model yet: ready once its catalog answers; OpenRouter\'s key asked of its own record first', async () => {
+  const list = (ids) => json({ object: 'list', data: ids.map((id) => ({ id })) });
+  assert.deepEqual(await O.status(O.config({ base: 'https://api.groq.com/openai/v1', key: KEY }), { fetch: server(list(['llama'])).fetch }), { state: 'ready', source: 'live' });
+  const or = server(json({ data: { label: 'sk-or-v1-abc...' } }), list(['a/b']));
+  assert.deepEqual(await O.status(O.config({ base: 'https://openrouter.ai/api/v1', key: KEY }), { fetch: or.fetch }), { state: 'ready', source: 'live' });
+  assert.equal(or.calls[0].url, 'https://openrouter.ai/api/v1/key');
+  assert.equal(or.calls[0].init.headers.authorization, `Bearer ${KEY}`);
+  assert.equal(or.calls[0].init.redirect, 'error');
+  const bad = server(json({ error: { message: 'User not found.', code: 401 } }, 401));
+  const refused = await O.status(O.config({ base: 'https://openrouter.ai/api/v1', key: 'sk-or-v1-wrong' }), { fetch: bad.fetch });
+  assert.deepEqual({ ...refused, reference: typeof refused.reference }, { state: 'unavailable', reason: 'request-rejected', status: 401, reference: 'string' });
+  assert.equal(bad.calls.length, 1, 'no catalog once the key is refused');
+});
