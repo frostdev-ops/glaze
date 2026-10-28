@@ -153,6 +153,19 @@ test('backups accept the maximum selectable version count', async () => {
   } finally { a.stop(); b.stop(); }
 });
 
+test('backups retain papers with several individually bounded pictures', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();
+  try {
+    const image = () => SC.paper.node('image', { src: `data:image/png;base64,${Buffer.alloc(900000).toString('base64')}`, width: 24 });
+    const doc = SC.paper.node('doc', null, [SC.paper.node('paragraph', null, [image(), image()])]).toJSON();
+    await PA.open(a.local).save(key, { doc });
+    const result = await restore(b, await backUp(a), ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    assert.deepEqual((await PA.open(b.local).get(key)).doc, JSON.parse(JSON.stringify(doc)));
+  } finally { a.stop(); b.stop(); }
+});
+
 test('the writer\'s dictionary and saved sources join what is here, and a damaged one refuses the file', async () => {
   const a = await seeded(), file = await backUp(a);
   const b = device({ writerWords: ['Local', 'glazeword'], [SOURCES]: { sources: [source('Local source', 's-local-1')], at: NOW + 5 } });

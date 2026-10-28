@@ -69,3 +69,14 @@ test('imported headings keep inherited and mixed run emphasis instead of taking 
   const xml = X.exportDocx(d).parts['word/document.xml'];
   assert.match(xml, /<w:b w:val="0"\/><w:bCs w:val="0"\/><w:i\/><w:iCs\/>/);
 });
+
+test('a valid paper with two bounded pictures imports beyond the clipboard HTML limit', async () => {
+  const png = Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'), Buffer.alloc(900000)]);
+  const image = () => S.paper.node('image', { src: `data:image/png;base64,${png.toString('base64')}`, width: 24 });
+  const doc = S.paper.node('doc', null, [S.paper.node('paragraph', null, [image(), image()])]);
+  assert.ok(S.serialize(S.paper, doc).length > S.MAX_INPUT);
+  const d = S.paper.nodeFromJSON((await X.importDocx(X.exportDocx(doc).bytes)).doc);
+  const images = [];
+  d.descendants((n) => { if (n.type.name === 'image') images.push(n.attrs.src); });
+  assert.deepEqual(images, [image().attrs.src, image().attrs.src]);
+});
