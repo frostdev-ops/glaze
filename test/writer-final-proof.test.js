@@ -38,3 +38,16 @@ test('capital I: i.e., roman-numeral markers and a maths variable before a comma
   assert.equal(P.autofix(e.view, { ...e.at('i,'), to: e.at('i,').to - 1, suggestions: ['I'], rule: 'Capitalization', sure: true }), null);
   assert.equal(e.text(), 'Let i, j be indices.');
 });
+
+test('doubled words: a capitalised pair is a name and real reduplications are words; typos still collapse', () => {
+  for (const s of ['We flew to Bora Bora', 'She studies at Walla Walla', 'They toured Pago Pago', 'The band Duran Duran', 'Bora Bora', 'I ate mahi mahi', 'It was so so', 'and then bye bye', 'a long long']) assert.equal(P.fix(s), null, s);
+  assert.equal(typed('We flew to Bora Bora today.'), 'We flew to Bora Bora today.');
+  assert.equal(typed('I ate mahi mahi today.'), 'I ate mahi mahi today.');
+  assert.equal(P.fix('He liked the the').now, 'the');
+  assert.equal(P.fix('The the').now, 'The', 'a sentence start capitalises the first only');
+  assert.equal(P.fix('cats and and').now, 'and');
+  // Harper's Repetition lint: sure only where this file's own fix would be.
+  for (const [was, now] of [['Bora Bora', 'Bora'], ['Walla Walla', 'Walla'], ['mahi mahi', 'mahi']]) assert.equal(P.plausible('Repetition', was, now), false, was);
+  assert.equal(P.plausible('Repetition', 'the the', 'the'), true);
+  assert.equal(P.toIssue({ start: 11, end: 20, kind: 'Repetition', message: '', problem: 'Bora Bora', suggestions: [{ k: 0, t: 'Bora' }] }).sure, false);
+});
