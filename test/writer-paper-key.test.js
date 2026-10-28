@@ -287,3 +287,17 @@ test('overlapping frame saves never mistake an earlier own save for another edit
   assert.ok(!(await stored(local)).versions.includes('conflict'));
   assert.ok(textOf((await stored(local)).paper.doc).endsWith(' First. Second.'));
 });
+
+test('recovery never swaps distinct pictures with the same length and trailing bytes', async () => {
+  const local = memory(), ss = session();
+  const a = `data:image/png;base64,AAAA${'A'.repeat(100)}AAAAAElFTkSuQmCC`;
+  const b = `data:image/png;base64,BBBB${'A'.repeat(100)}AAAAAElFTkSuQmCC`;
+  const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Two figures.' },
+    { type: 'image', attrs: { src: a, alt: 'A' } }, { type: 'image', attrs: { src: b, alt: 'B' } }] }] };
+  await seed(local, { doc });
+  const first = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  first.type(' Unsaved caption.');
+  const next = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  const sources = []; next.view.state.doc.descendants((n) => { if (n.type.name === 'image') sources.push(n.attrs.src); });
+  assert.deepEqual(sources, [a, b]);
+});
