@@ -630,14 +630,20 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     let writing = 0, missed = false, adopt = async () => {};
     const ours = async (p) => { writing++; try { return await p; } finally { if (!--writing && missed) { missed = false; adopt().catch((e) => console.error(e)); } } };
     // base: the revision what's saved was typed on, when it isn't the one this editor last read (a recovered copy).
-    const save = async (reason = 'auto', base) => {
+    let saves = Promise.resolve();
+    const save = (reason = 'auto', base) => {
+      const next = saves.then(() => saveNow(reason, base));
+      saves = next.catch(() => {});
+      return next;
+    };
+    const saveNow = async (reason = 'auto', base) => {
       clearTimeout(saveTimer);
       if (!key) { setState('Not saved'); return null; }
       const at = edits, k = key;
       emergency();
       setState('Saving…');
       try {
-        const rec = record(), r = await ours(store.save(key, rec, Number.isSafeInteger(base) ? { reason, base } : { reason })); paper = r.paper;
+        const rec = record(), r = await ours(store.save(key, rec, { reason, base: Number.isSafeInteger(base) ? base : paper?.revision ?? 0 })); paper = r.paper;
         keepPictures(rec.doc);
         failing = 0;
         if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(slotOf(k)); } catch {} }
