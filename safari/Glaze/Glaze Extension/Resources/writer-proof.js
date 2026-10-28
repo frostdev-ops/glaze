@@ -344,6 +344,7 @@
   // Alt+Enter: the card for the issue at the caret, else the next one (from the top after the last).
   const openNext = () => {
     if (!view) return false;
+    if (!fixPop.hidden && fixPop.fix) { clearTimeout(fixTimer); fixPop.querySelector('button')?.focus(); return true; }
     const list = I.list(), at = view.state.selection.head;
     const i = list.find((x) => x.from <= at && at <= x.to) || list.find((x) => x.from > at) || list[0];
     if (!i) return false;

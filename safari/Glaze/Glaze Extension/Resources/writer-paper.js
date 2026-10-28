@@ -6,7 +6,7 @@
 // the submit step attaches it as a .docx (lib/writer-docx.js). The same chrome edits a paper in papers.html.
 // Classic script after writer.js; the paper libraries load only when a paper opens.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
-  const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-papers.js'];
+  const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-papers.js', 'lib/writer-submit.js'];
   const DOCX = ['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js'];
   const GAP = 26.4; // between pages, in page px (22px at 100%)
   const PX100 = 80 / 96; // 100% shows an inch as 80px, as the mockup does
@@ -224,8 +224,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // ---- the editor's extra plugins: page styling and pagination, change watching, note clicks, fallback underlines
     const noteCache = new Map();
     const noteBody = (content, n) => {
-      const d = S.parse(S.paper, `<p>${content}</p>`), p = h('p', {}, h('sup', { text: String(n) }), ' ');
-      d.descendants((x) => { if (x.isTextblock) { p.append(PM.model.DOMSerializer.fromSchema(S.paper).serializeFragment(x.content)); return false; } return true; });
+      const d = S.parse(S.paper, `<div>${content}</div>`), p = h('p', {}, h('sup', { text: String(n) }), ' ');
+      let first = true;
+      d.descendants((x) => { if (x.isTextblock) { if (!first) p.append(h('br'), h('br')); first = false; p.append(PM.model.DOMSerializer.fromSchema(S.paper).serializeFragment(x.content)); return false; } return true; });
       return p;
     };
     const noteHeights = (contents) => contents.map((c, i) => {
@@ -291,9 +292,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         p.style.position = 'relative';
         p.style.textAlign = 'left';
         for (const seg of segs.slice(1)) {
-          const w = seg.getBoundingClientRect().width / scale, stop = p.gzTabs.map(([pos, kind]) => [pos * 96, kind]).find(([pos]) => pos > x + 0.5) || [Math.floor(x / tab + 1) * tab, 'l'];
+          const w = seg.getBoundingClientRect().width / scale, stop = p.gzTabs.map(([pos, kind, leader]) => [pos * 96, kind, leader]).find(([pos]) => pos > x + 0.5) || [Math.floor(x / tab + 1) * tab, 'l'];
           const left = Math.max(x, stop[1] === 'c' ? stop[0] - w / 2 : stop[1] === 'r' || stop[1] === 'd' ? stop[0] - w : stop[0]);
-          seg.style.cssText = `position:absolute;left:${Math.min(left, width - w)}px`;
+          const edge = Math.max(x, Math.min(left, width - w));
+          if (stop[2] && edge > x) {
+            const leader = h('span', { class: `gp-tabstop-${stop[2]}`, 'aria-hidden': 'true' });
+            leader.style.cssText = `position:absolute;left:${x}px;width:${edge - x}px;height:1em`;
+            p.append(leader);
+          }
+          seg.style.cssText = `position:absolute;left:${edge}px`;
           x = left + w;
         }
       }
@@ -594,11 +601,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       courseName: ctx.course?.name || paper?.courseName || '', ...(ctx.paper ? { school: ctx.paper.school, user: ctx.paper.user, course: ctx.paper.course, content: ctx.paper.content } : {}),
     });
     // The tab's copy of every edit (sessionStorage, read back by the next frame in this tab) holds each picture already
-    // saved as a reference (its length and last characters), so a keystroke never copies picture data; the next frame
-    // finds them in the saved paper or its versions, and sets aside a copy it can't complete.
+    // saved as a reference (its SHA-256 digest), so a keystroke never copies picture data; the next frame
+    // finds them in the saved paper or its versions, retaining unsaved text even when a picture was deleted.
     const SAVED = 'gz-saved:';
-    let savedPictures = new Map();
-    const refOf = (src) => `${SAVED}${src.length}:${src.slice(-64)}`;
+    let savedPictures = new Map(), pictureTurn = 0;
+    const legacyRef = (src) => `${SAVED}${src.length}:${src.slice(-64)}`;
+    const refOf = async (src) => `${SAVED}sha256:${[...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(src)))].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
     const pictures = (json, to) => {
       if (json?.type === 'image') { const src = json.attrs?.src, next = typeof src === 'string' ? to(src) : src; return next === src ? json : { ...json, attrs: { ...json.attrs, src: next } }; }
       if (!Array.isArray(json?.content)) return json;
@@ -606,20 +614,44 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const content = json.content.map((c) => { const n = pictures(c, to); changed ||= n !== c; return n; });
       return changed ? { ...json, content } : json;
     };
-    const keepPictures = (json) => { const m = new Map(); pictures(json, (src) => { m.set(src, refOf(src)); return src; }); savedPictures = m; };
-    // The copy rec of paper k with its pictures back, from the paper as saved (from), else its versions; null if one is gone.
+    const pictureRefs = async (json) => {
+      const sources = new Set(); pictures(json, (src) => { sources.add(src); return src; });
+      return new Map(await Promise.all([...sources].map(async (src) => [src, savedPictures.get(src) || await refOf(src)])));
+    };
+    const keepPictures = async (json) => { const turn = ++pictureTurn, m = await pictureRefs(json); if (turn === pictureTurn) savedPictures = m; };
+    // Complete the unsaved copy from the paper or its versions. A deleted picture becomes a named placeholder;
+    // its absence must never discard the student's unsaved text.
     const complete = async (rec, k, from) => {
-      const found = new Map(), add = (doc) => pictures(doc, (src) => { found.set(refOf(src), src); return src; });
+      const found = new Map(), add = async (doc) => {
+        for (const [src, ref] of await pictureRefs(doc)) {
+          if (!found.has(ref)) found.set(ref, src);
+          const old = legacyRef(src);
+          if (!found.has(old)) found.set(old, src);
+          else if (found.get(old) !== src) found.set(old, null);
+        }
+      };
       const fill = () => {
         let missing = false;
         const doc = pictures(rec.doc, (src) => (src.startsWith(SAVED) ? found.get(src) ?? ((missing = true), src) : src));
         return missing ? null : { ...rec, doc };
       };
-      add(from?.doc);
+      await add(from?.doc);
       const done = fill();
-      if (done || !k) return done;
-      for (const v of await store.versions(k)) add((await store.version(k, v.id))?.doc);
-      return fill();
+      let legacy = false;
+      pictures(rec.doc, (src) => { legacy ||= src.startsWith(SAVED) && !src.startsWith(`${SAVED}sha256:`); return src; });
+      if ((done && !legacy) || !k) return done;
+      for (const v of await store.versions(k)) await add((await store.version(k, v.id))?.doc);
+      const whole = fill();
+      if (whole) return whole;
+      const recover = (n) => {
+        if (n?.type === 'image' && n.attrs?.src?.startsWith(SAVED)) {
+          const src = found.get(n.attrs.src);
+          return src ? { ...n, attrs: { ...n.attrs, src } } : { type: 'text', text: `[${n.attrs.alt || t('Image')}]` };
+        }
+        return Array.isArray(n?.content) ? { ...n, content: n.content.map(recover) } : n;
+      };
+      toast(t('Some pictures, objects or equations were left out.'));
+      return { ...rec, doc: recover(rec.doc) };
     };
     const emergency = () => {
       try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(slotOf(key), JSON.stringify({ key, record: r, base: paper?.revision ?? 0 })); sessionSafe = true; }
@@ -630,15 +662,21 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     let writing = 0, missed = false, adopt = async () => {};
     const ours = async (p) => { writing++; try { return await p; } finally { if (!--writing && missed) { missed = false; adopt().catch((e) => console.error(e)); } } };
     // base: the revision what's saved was typed on, when it isn't the one this editor last read (a recovered copy).
-    const save = async (reason = 'auto', base) => {
+    let saves = Promise.resolve();
+    const save = (reason = 'auto', base) => {
+      const next = saves.then(() => saveNow(reason, base));
+      saves = next.catch(() => {});
+      return next;
+    };
+    const saveNow = async (reason = 'auto', base) => {
       clearTimeout(saveTimer);
       if (!key) { setState('Not saved'); return null; }
       const at = edits, k = key;
       emergency();
       setState('Saving…');
       try {
-        const rec = record(), r = await ours(store.save(key, rec, Number.isSafeInteger(base) ? { reason, base } : { reason })); paper = r.paper;
-        keepPictures(rec.doc);
+        const rec = record(), r = await ours(store.save(key, rec, { reason, base: Number.isSafeInteger(base) ? base : paper?.revision ?? 0 })); paper = r.paper;
+        await keepPictures(rec.doc);
         failing = 0;
         if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(slotOf(k)); } catch {} }
         return r;
@@ -1123,7 +1161,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const editNote = (pos, fresh = false) => {
       const node = view.state.doc.nodeAt(pos);
       if (node?.type.name !== 'footnote_ref') return;
-      const plain = S.parse(S.paper, `<p>${node.attrs.content}</p>`).textContent;
+      const noteDoc = S.parse(S.paper, `<div>${node.attrs.content}</div>`);
+      const plain = noteDoc.content.content.map((p) => p.textBetween(0, p.content.size, '', '\n')).join('\n\n');
       const area = h('textarea', { 'aria-label': t('Footnote'), maxlength: '4000' });
       area.value = plain;
       const el = h('div', { class: 'gp-menu gp-note', role: 'dialog', 'aria-label': t('Footnote') }, area);
@@ -1133,8 +1172,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         close();
         const now = view.state.doc.nodeAt(pos);
         if (now?.type.name !== 'footnote_ref') return;
-        const text = area.value.replace(/\s+/g, ' ').trim();
-        if (keep && text !== plain) view.dispatch(text ? view.state.tr.setNodeMarkup(pos, null, { content: S.inline(text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])) }) : view.state.tr.delete(pos, pos + 1));
+        const text = area.value.replace(/\r\n?/g, '\n').trim();
+        if (keep && text !== plain) view.dispatch(text ? view.state.tr.setNodeMarkup(pos, null, { content: S.inline(text.split(/\n\n/).map((p) => `<p>${p.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]).replace(/\n/g, '<br>')}</p>`).join('')) }) : view.state.tr.delete(pos, pos + 1));
         else if (!keep && fresh && !plain) view.dispatch(view.state.tr.delete(pos, pos + 1));
         if (returnFocus) view.focus();
       };
@@ -1170,10 +1209,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     const open2 = (page2) => { try { window.open(chrome.runtime.getURL(page2), '_blank', 'noopener'); } catch { /* no extension context */ } };
     const docx = async () => { await need(DOCX); return GZ_WRITER_DOCX.exportDocx(view.state.doc, { format, surname: surname(), title: ctx.assignment?.title || paper?.title || '' }); };
-    const fileName = () => {
-      const base = [surname(), (ctx.assignment?.title || paper?.title || t('Paper'))].filter(Boolean).join(' ').replace(/\s+/g, '_');
-      return (globalThis.GZ_ZIP?.safeName || ((x) => x))(`${base}.docx`);
-    };
+    const fileName = () => GZ_WRITER_SUBMIT_LIB.fileName({ surname: surname(), title: ctx.assignment?.title || paper?.title || '', fallback: t('Paper') });
     const exportFile = async () => {
       try {
         const out = await docx(), url = URL.createObjectURL(new Blob([out.bytes], { type: out.type }));
@@ -1256,7 +1292,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const load = () => (loading ||= (async () => {
       key = host.key || PA.keyOf(ctx.paper || {}) || recoveryKey;
       paper = await store.get(key);
-      keepPictures(paper?.doc);
+      await keepPictures(paper?.doc);
       recovered = key === recoveryKey && !!paper?.doc;
       const copy = pendingOf(key), pending = copy && await complete(copy, key, paper);
       if (pending) { const { base: _, ...rec } = pending; paper = { ...paper, ...rec }; }
@@ -1314,7 +1350,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (key !== recoveryKey) return;
         if (!written && edits === at) {
           key = target;
-          keepPictures(existing?.doc);
+          keepPictures(existing?.doc).catch((e) => console.error(e));
           if (pending) { const { base: _, ...rec } = pending; paper = { ...existing, ...rec }; } else paper = existing;
           keep = paper?.keep === true;
           format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
@@ -1350,7 +1386,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const k = key, fresh = await store.get(k);
       if (k !== key || !newer(fresh)) return;
       paper = fresh; keep = fresh.keep === true; format = ST.get(fresh.format);
-      keepPictures(fresh.doc);
+      keepPictures(fresh.doc).catch((e) => console.error(e));
       initializing = true;
       setDoc(fresh.doc, true);
       initializing = false;

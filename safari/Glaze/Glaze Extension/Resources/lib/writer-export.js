@@ -10,7 +10,7 @@ var GZ_WRITER_EXPORT = globalThis.GZ_WRITER_EXPORT || (() => {
   // A note's text (inline HTML on its mark) as the textblocks it parses to.
   const noteBlocks = (content) => {
     const S = schema(), out = [];
-    S.parse(S.paper, `<p>${content || ''}</p>`).descendants((n) => { if (n.isTextblock) { out.push(n); return false; } return true; });
+    S.parse(S.paper, `<div>${content || ''}</div>`).descendants((n) => { if (n.isTextblock) { out.push(n); return false; } return true; });
     return out;
   };
 
@@ -66,7 +66,7 @@ var GZ_WRITER_EXPORT = globalThis.GZ_WRITER_EXPORT || (() => {
     return s;
   };
   const note = (c, ctx) => {
-    const n = ctx.notes.push(noteBlocks(c.attrs.content).map((b) => inline(b, { ...ctx, notes: [], images: ctx.images })).join(' ').trim());
+    const n = ctx.notes.push(noteBlocks(c.attrs.content).map((b) => inline(b, { ...ctx, notes: [], images: ctx.images })).join(ctx.md ? '\n\n    ' : '\n\n').trim());
     return ctx.md ? `[^${n}]` : `[${n}]`;
   };
   const image = (c, ctx) => {

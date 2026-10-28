@@ -34,13 +34,13 @@
     $('list').hidden = false;
   };
   const exportPaper = async (store, key) => {
-    await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js']);
+    await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js', 'lib/writer-submit.js']);
     const p = await store.get(key);
     if (!p?.doc) return;
     const f = GZ_WRITER_STYLES.get(p.format), surname = GZ_WRITER_FORMAT.surname(p.doc, f);
     const out = GZ_WRITER_DOCX.exportDocx(p.doc, { format: f, surname, title: p.title });
     const url = URL.createObjectURL(new Blob([out.bytes], { type: out.type }));
-    const a = h('a', { href: url, download: GZ_ZIP.safeName(`${[surname, p.title || t('Paper')].filter(Boolean).join(' ').replace(/\s+/g, '_')}.docx`) });
+    const a = h('a', { href: url, download: GZ_WRITER_SUBMIT_LIB.fileName({ surname, title: p.title, fallback: t('Paper') }) });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   };

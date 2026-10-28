@@ -23,7 +23,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   // A note's plain text, by its content (inline HTML).
   const notes = new Map();
   const noteText = (content) => {
-    if (!notes.has(content)) { if (notes.size > 500) notes.clear(); notes.set(content, S().parse(S().paper, `<p>${content}</p>`).textContent); }
+    if (!notes.has(content)) { if (notes.size > 500) notes.clear(); notes.set(content, S().text(S().parse(S().paper, `<div>${content}</div>`)).text); }
     return notes.get(content);
   };
   // → [{ from, to, note? { start, end } }] in document order; a note's match spans its mark (to = from + 1), start and end
@@ -58,10 +58,10 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
     if (text) tr.replaceWith(from, to, tr.doc.type.schema.text(text, marks)); else tr.delete(from, to);
   };
   const rewrite = (content, parts, text) => {
-    const { paper, parse, serialize, inline } = S(), note = parse(paper, `<p>${content}</p>`), map = S().text(note);
+    const { paper, parse, serialize, inline } = S(), note = parse(paper, `<div>${content}</div>`), map = S().text(note);
     const tr = new (PM().transform.Transform)(note);
     for (const p of [...parts].sort((a, b) => b.start - a.start)) swap(tr, map.posAt(p.start), map.posAt(p.end), text);
-    const html = serialize(paper, tr.doc).replace(/^\s*<p[^>]*>([\s\S]*)<\/p>\s*$/, '$1');
+    const html = serialize(paper, tr.doc);
     return inline(html);
   };
   const replace = (state, hits, text = '') => {
@@ -118,7 +118,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
       },
     },
     props: { decorations(state) { return key.getState(state).decos; } },
-    view: () => ({ update: (v, before) => { api.onUpdate?.(v, key.getState(before)); } }),
+    view: () => ({ update: (v, before) => { api.onUpdate?.(v, before); } }),
   });
 
   const api = { pattern, search, near, replace, plugin, key, onUpdate: null };
@@ -292,7 +292,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   api.onUpdate = (v, before) => {
     const s = key.getState(v.state);
     if (bar.hidden) return;
-    if (v.state.doc !== before.doc || s !== before) { if (v.state.doc !== before.doc) { clearTimeout(timer); timer = setTimeout(again, 250); } drawCount(); noteMark(v, s); }
+    if (v.state.doc !== before.doc || s !== key.getState(before)) { if (v.state.doc !== before.doc) { clearTimeout(timer); timer = setTimeout(again, 250); } drawCount(); noteMark(v, s); }
   };
   const noteMark = (v, s) => {
     if (!globalThis.CSS?.highlights || typeof Highlight !== 'function') return;
