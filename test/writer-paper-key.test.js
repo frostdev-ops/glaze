@@ -202,3 +202,12 @@ test('a failed autosave tries again by itself, and leaving the page meanwhile as
   await retry.fn();
   assert.equal(textOf((await stored(local)).paper.doc), 'Two thousand words of my essay. Typed while storage refused.');
 });
+
+test('the tab\'s unsaved copy follows the paper, not the page address it was typed on', async () => {
+  const local = memory(), ss = session();
+  await seed(local);
+  const first = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  first.type(' Typed before Ultra numbered the attempt.');
+  const next = await frame({ local, ss, context: { recovery: RECOVERY.replace('/attempt/create', '/attempt/_31_1'), paper: PARTS } });
+  assert.equal(next.shown(), 'Two thousand words of my essay. Typed before Ultra numbered the attempt.');
+});
