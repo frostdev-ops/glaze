@@ -45,7 +45,7 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
     await check('paper heading alignment overrides its format on screen', async () => {
       const result = await page.evaluate(() => {
         ed.destroy();
-        document.getElementById('ed').className = 'gp-flow';
+        document.getElementById('ed').parentElement.className = 'gp-flow';
         window.ed = GZ_WRITER_EDITOR.create({ mount: document.getElementById('ed'), mode: 'paper', html: '<h1>Heading</h1>' });
         const sheet = new CSSStyleSheet();
         sheet.replaceSync(GZ_WRITER_STYLES.css(GZ_WRITER_STYLES.FORMATS.apa7));
