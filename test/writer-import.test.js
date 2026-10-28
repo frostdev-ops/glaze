@@ -248,3 +248,35 @@ test('Settings → Writer has the uploads switch, on by default, beside Glaze Wr
   assert.ok(at > 0 && up > at && up - at < 1500, 'right after Glaze Writer');
   for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) for (const k of ['Open uploads in Writer', 'Open in Writer', 'Submit as is', 'Saves current paper', 'Import…']) assert.notEqual(I.t(k, {}, lang), k, `${lang}: ${k}`);
 });
+
+// Keep each deferred read tied to the input, box and frame that caught it.
+const deferredFile = (name = 'first.pdf') => {
+  let resolve;
+  const bytes = new Uint8Array([1, 2, 3]).buffer;
+  const file = { name, type: 'application/pdf', size: bytes.byteLength, arrayBuffer: () => new Promise((r) => { resolve = r; }) };
+  return { file, finish: () => resolve(bytes) };
+};
+test('review: a later caught file wins even when the first read finishes last', async () => {
+  const u = ultra(), first = deferredFile(), second = deferredFile('second.pdf');
+  u.drop([first.file]); u.drop([second.file]);
+  second.finish(); await u.flush(); first.finish(); await u.flush();
+  assert.deepEqual(u.sent.filter((m) => m.type === 'import:file').map((m) => m.name), ['second.pdf']);
+});
+for (const change of ['frame', 'port', 'unmounted', 'setting']) test(`review: a caught read cannot cross a changed ${change}`, async () => {
+  const settings = { enhance: { writerUploads: true } }, u = ultra(settings), f = deferredFile();
+  u.drop([f.file]);
+  if (change === 'frame') { u.box.frame.remove(); u.box.frame = new El('iframe', u.doc); u.doc.body.append(u.box.frame); }
+  if (change === 'port') u.box.port = { postMessage: (m) => u.sent.push(m) };
+  if (change === 'unmounted') u.box.ready = false;
+  if (change === 'setting') settings.enhance.writerUploads = false;
+  f.finish(); await u.flush();
+  assert.equal(u.sent.some((m) => m.type === 'import:file'), false);
+});
+test('review: a paper without a mounted frame leaves the upload area to Ultra', () => {
+  const u = ultra(); u.box.frame.remove(); u.box.ready = false;
+  assert.equal(!!u.drop([pdf()]).stopped, false);
+});
+test('review: a different file input in the submission is outside the attempt upload area', () => {
+  const u = ultra(), other = new El('input', u.doc); other.setAttribute('type', 'file'); other.files = [pdf()]; u.area.append(other);
+  assert.equal(!!u.fire(other, 'change').stopped, false);
+});

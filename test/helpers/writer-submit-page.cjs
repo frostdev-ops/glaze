@@ -13,6 +13,7 @@ module.exports = ({ listed = true, enabled = true, worker, settings = null } = {
   const location = { origin: 'https://school.blackboard.com', pathname: '/ultra/courses/_101_1/assessment/_7_1/attempt/create' };
   let owned = true, clock = Date.now(), id = 0;
   const box = { id: 'gzw-test', editor, kind: 'assignment', mode: 'paper', path: location.pathname, context: { paper: { school: 'school.blackboard.com', user: '_900_1', course: '_101_1', content: '_7_1' } }, frame: { focus() {} }, port: { postMessage: (m) => sent.push(m) } };
+  box.frame = new El('iframe', doc); doc.body.append(box.frame); box.ready = true;
   for (const e of doc.root.all()) e.getClientRects = () => [e.getBoundingClientRect()];
   const fire = (target, type, more = {}) => {
     const ev = { type, target, button: 0, preventDefault() { this.defaultPrevented = true; }, stopImmediatePropagation() { this.stopped = true; }, ...more };
