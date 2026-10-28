@@ -224,8 +224,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // ---- the editor's extra plugins: page styling and pagination, change watching, note clicks, fallback underlines
     const noteCache = new Map();
     const noteBody = (content, n) => {
-      const d = S.parse(S.paper, `<p>${content}</p>`), p = h('p', {}, h('sup', { text: String(n) }), ' ');
-      d.descendants((x) => { if (x.isTextblock) { p.append(PM.model.DOMSerializer.fromSchema(S.paper).serializeFragment(x.content)); return false; } return true; });
+      const d = S.parse(S.paper, `<div>${content}</div>`), p = h('p', {}, h('sup', { text: String(n) }), ' ');
+      let first = true;
+      d.descendants((x) => { if (x.isTextblock) { if (!first) p.append(h('br'), h('br')); first = false; p.append(PM.model.DOMSerializer.fromSchema(S.paper).serializeFragment(x.content)); return false; } return true; });
       return p;
     };
     const noteHeights = (contents) => contents.map((c, i) => {
@@ -1129,7 +1130,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const editNote = (pos, fresh = false) => {
       const node = view.state.doc.nodeAt(pos);
       if (node?.type.name !== 'footnote_ref') return;
-      const plain = S.parse(S.paper, `<p>${node.attrs.content}</p>`).textContent;
+      const noteDoc = S.parse(S.paper, `<div>${node.attrs.content}</div>`);
+      const plain = noteDoc.content.content.map((p) => p.textBetween(0, p.content.size, '', '\n')).join('\n\n');
       const area = h('textarea', { 'aria-label': t('Footnote'), maxlength: '4000' });
       area.value = plain;
       const el = h('div', { class: 'gp-menu gp-note', role: 'dialog', 'aria-label': t('Footnote') }, area);
@@ -1139,8 +1141,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         close();
         const now = view.state.doc.nodeAt(pos);
         if (now?.type.name !== 'footnote_ref') return;
-        const text = area.value.replace(/\s+/g, ' ').trim();
-        if (keep && text !== plain) view.dispatch(text ? view.state.tr.setNodeMarkup(pos, null, { content: S.inline(text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])) }) : view.state.tr.delete(pos, pos + 1));
+        const text = area.value.replace(/\r\n?/g, '\n').trim();
+        if (keep && text !== plain) view.dispatch(text ? view.state.tr.setNodeMarkup(pos, null, { content: S.inline(text.split(/\n\n/).map((p) => `<p>${p.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]).replace(/\n/g, '<br>')}</p>`).join('')) }) : view.state.tr.delete(pos, pos + 1));
         else if (!keep && fresh && !plain) view.dispatch(view.state.tr.delete(pos, pos + 1));
         if (returnFocus) view.focus();
       };

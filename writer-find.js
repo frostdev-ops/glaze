@@ -23,7 +23,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   // A note's plain text, by its content (inline HTML).
   const notes = new Map();
   const noteText = (content) => {
-    if (!notes.has(content)) { if (notes.size > 500) notes.clear(); notes.set(content, S().parse(S().paper, `<p>${content}</p>`).textContent); }
+    if (!notes.has(content)) { if (notes.size > 500) notes.clear(); notes.set(content, S().parse(S().paper, `<div>${content}</div>`).textContent); }
     return notes.get(content);
   };
   // → [{ from, to, note? { start, end } }] in document order; a note's match spans its mark (to = from + 1), start and end
@@ -58,7 +58,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
     if (text) tr.replaceWith(from, to, tr.doc.type.schema.text(text, marks)); else tr.delete(from, to);
   };
   const rewrite = (content, parts, text) => {
-    const { paper, parse, serialize, inline } = S(), note = parse(paper, `<p>${content}</p>`), map = S().text(note);
+    const { paper, parse, serialize, inline } = S(), note = parse(paper, `<div>${content}</div>`), map = S().text(note);
     const tr = new (PM().transform.Transform)(note);
     for (const p of [...parts].sort((a, b) => b.start - a.start)) swap(tr, map.posAt(p.start), map.posAt(p.end), text);
     const html = serialize(paper, tr.doc).replace(/^\s*<p[^>]*>([\s\S]*)<\/p>\s*$/, '$1');
