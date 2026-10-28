@@ -184,7 +184,7 @@ test('the paper schema keeps quotes, h1 to h6, page breaks, notes, tables, image
   const note = doc.child(3).lastChild;
   assert.equal(note.type.name, 'footnote_ref');
   assert.equal(note.attrs.content, 'See <em>Ibid.</em>');
-  assert.equal(S.inline('<p>a <script>x</script><strong>b</strong></p><p>c<img src=x onerror=y></p>'), 'a <strong>b</strong> c', 'a note keeps marks only');
+  assert.equal(S.inline('<p>a <script>x</script><strong>b</strong></p><p>c<img src=x onerror=y></p>'), '<p>a <strong>b</strong></p><p>c</p>', 'a note keeps paragraphs and marks only');
   assert.equal(out('<p>a<br></p><p><br></p>', P), '<p>a</p><p><br></p>', 'a trailing break shows nothing');
 });
 
