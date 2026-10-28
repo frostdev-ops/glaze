@@ -4,9 +4,9 @@
 // autocorrect pop with its Undo, and the issue count in the bar's issues slot. Alt+Enter opens the card at the caret.
 // The student's dictionary is chrome.storage.local 'writerWords' (a list of words, the newest last), shared by every box;
 // each box adds its context's words (course, prompt, names in the thread) to its own.
-// Settings → Writer (lib/writer-settings.js): proofing on or off and the dialect Harper reads, the autocorrect classes
-// (writer.autocorrect), and the gate keeping the editor's smart quotes and dashes, or compose's Markdown shortcuts, out
-// while they're off. Each follows a change at once.
+// Settings → Writer (lib/writer-settings.js): proofing on or off, the dialect Harper reads and the autocorrect classes
+// (writer.autocorrect), each followed at once. Smart quotes and dashes and compose's Markdown shortcuts are
+// lib/writer-editor.js's input rules, which read their settings themselves (ruleOff).
 (() => {
   const F = globalThis.GZ_WRITER_FRAME, P = GZ_WRITER_PROOF, I = GZ_WRITER_ISSUES;
   if (!F) return;

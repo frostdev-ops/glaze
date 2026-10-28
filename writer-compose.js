@@ -5,7 +5,7 @@
 // the page's `quote { text, author }` (features/writer-quote.js) into the editor, and draws compose's quotes (indented
 // italic lines, then "— Name": Ultra's Quill has no blockquote) as the mockup's quote block. Nothing here animates.
 // Settings → Writer → Discussions (lib/writer-settings.js writer.compose): target off draws the plain count without the ring;
-// quote off takes no quote (features/writer-quote.js shows no pop then). Markdown shortcuts are writer-proof.js's gate.
+// quote off takes no quote (features/writer-quote.js shows no pop then). Markdown off is lib/writer-editor.js's ruleOff.
 // Pure helpers first (module.exports for node), then the frame.
 var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   const R = 15, CIRCLE = 2 * Math.PI * R;
