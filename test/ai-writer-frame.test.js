@@ -120,11 +120,12 @@ test('a frame refused before the worker knew the attempt was an assignment asks 
 });
 
 test('Feedback says why AI can\'t give it, with Settings → AI one click away where the student can change it', async () => {
-  const on = { on: true, use: 'main', features: { completion: true, writing: true } };
+  const on = { on: true, model: { use: 'main', model: 'gpt-x' }, features: { completion: true, writing: true } };
   const cases = [
     [{ ...on, on: false }, undefined, /^AI is off\. Turn it on in Settings → AI\./, true],
-    [{ ...on, features: { completion: true, writing: false } }, undefined, /^Writing feedback is off\. Turn it on in Settings → AI\./, true],
-    [{ ...on, use: null }, undefined, /^No AI model is chosen\. Choose one in Settings → AI\./, true],
+    [{ ...on, features: { completion: true, writing: false } }, undefined, /^Feedback is off\. Turn it on in Settings → AI\./, true],
+    // No model chosen for Feedback: the worker's status says so (lib/ai/settings.js resolve).
+    [{ ...on, model: { use: 'openrouter', model: '' } }, { allowed: true, ready: false, why: 'setup' }, /^No AI model is chosen\. Choose one in Settings → AI\./, true],
     [on, { allowed: true, ready: false, why: 'permission', to: 'openrouter.ai' }, /^Glaze needs permission to reach openrouter\.ai\. Allow it in Settings → AI\./, true],
     [on, { allowed: true, ready: false, why: 'download', provider: 'device' }, /^The on-device model isn’t downloaded\. Download it in Settings → AI\./, true],
     [on, { allowed: true, ready: false, why: 'downloading', provider: 'device' }, /^Downloading the model…/, false],
@@ -329,7 +330,7 @@ test('an unavailable on-device provider does not claim this computer can never r
 test('Feedback availability copy is translated in all five catalogues', () => {
   const I = require('../lib/i18n.js');
   const keys = ['Checking whether AI can run here…', 'AI is off. Turn it on in Settings → AI.',
-    'Writing feedback is off. Turn it on in Settings → AI.', 'No AI model is chosen. Choose one in Settings → AI.',
+    'Feedback is off. Turn it on in Settings → AI.', 'No AI model is chosen. Choose one in Settings → AI.',
     'Glaze needs permission to reach {host}. Allow it in Settings → AI.', 'The on-device model isn’t downloaded. Download it in Settings → AI.',
     'Downloading the model…', 'Downloading the model: {pct}', '{provider} is unavailable. Choose another model in Settings → AI.', 'Apple Intelligence is off. Turn it on in System Settings.',
     'Glaze couldn’t confirm this page may use AI. Reload the page to try again.',
@@ -342,4 +343,20 @@ test('Feedback availability copy is translated in all five catalogues', () => {
       assert.notEqual(I.t(key, { host: 'ai.example', pct: '42%' }, locale), key);
     }
   }
+});
+
+test('the frame asks the worker whatever model Settings names, an older store\'s too; the worker says whether one is chosen', async () => {
+  for (const settings of [{ on: true, use: 'endpoint', features: { completion: true, writing: true } }, { on: true, models: { writing: { use: 'groq', model: 'llama' } }, features: { writing: true } }]) {
+    const f = frame({ settings, answer: () => ({ on: true, allowed: true, ready: true }) }); await f.start();
+    assert.ok(f.sent.some((m) => m.op === 'status' && m.feature === 'writing'), JSON.stringify(settings));
+    assert.equal(f.ai.allowed('writing'), true);
+  }
+});
+
+test('the gray text waits Advanced\'s pause when the student set one, else its own', () => {
+  const W = require('../writer-ai.js');
+  assert.equal(W.wait({ mode: 'advanced', tune: { completion: { pause: 350 } } }, 0.5), 350);
+  assert.equal(W.wait({ mode: 'simple', tune: { completion: { pause: 350 } } }, 0.5), W.pause(0.5));
+  assert.equal(W.wait({ mode: 'advanced', tune: { completion: { pause: 99999 } } }, 0.5), W.pause(0.5), 'only within lib/ai/settings.js TUNE');
+  assert.equal(W.wait(null, 0.5), W.pause(0.5));
 });

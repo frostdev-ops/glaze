@@ -63,7 +63,10 @@ const SITES = {
   // AI: the connection's endpoint, whose host Settings asks for from a click. The broker refuses while the browser doesn't
   // hold it, and the provider and the catalog reach it only through the broker's fetch pinned to that host and generation.
   'lib/ai/broker.js': [{ at: 'env.fetch(url, init)', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'lib/ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
-  'lib/ai/providers/openai.js': [{ at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'lib/ai/broker.js', guard: /fetch: pinned\(env, use\)/ }],
+  'lib/ai/providers/openai.js': [
+    { at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'lib/ai/broker.js', guard: /fetch: pinned\(env, use\)/ },
+    { at: 'res = await fetch(`${cfg.base}/key`', kind: 'asked', flow: 'Settings\' check of an OpenRouter key (Connect, Test), through the broker\'s pinned fetch once the host is held', in: 'lib/ai/broker.js', guard: /if \(!await reaches\(env, use\)\) return \{ ok: true, state: 'unavailable', reason: 'permission' \};[\s\S]*use\.p\.status\(use\.cfg, \{ fetch: pinned\(env, use\)/ },
+  ],
   'lib/ai/models.js': [{ at: 'fetch(shared ? OPENROUTER', kind: 'asked', flow: 'the connection\'s catalog, through the broker\'s pinned fetch (OpenRouter\'s public catalog is on the connection\'s own host)', in: 'lib/ai/broker.js', guard: /use\.p\.catalog\(use\.cfg, \{ fetch: pinned\(env, use\)/ }],
   // Glaze Writer's citation lookups, on the student's click: a web page only once its https host is held (the Cite popover
   // asks for exactly it in the click); doi.org (and the agency it redirects to, api.crossref.org) and openlibrary.org answer
@@ -204,4 +207,26 @@ test('review: the font loader classification names every catalog file host', () 
   const named = new Set(entry.hosts || [entry.host]);
   const files = require('../lib/fonts.js').LIST.flatMap((f) => Object.values(f.files || {}));
   for (const url of files) assert.ok(named.has(new URL(url).origin), `${url}: the font host is named`);
+});
+
+// The AI providers Settings → AI names (lib/ai/settings.js PRESETS), each one's host: never one the manifest holds, so the
+// browser is asked for it, from Connect's click (lib/editor-ai.js), before the broker reaches it.
+const AI_HOSTS = { openai: 'api.openai.com', anthropic: 'api.anthropic.com', gemini: 'generativelanguage.googleapis.com', openrouter: 'openrouter.ai',
+  xai: 'api.x.ai', mistral: 'api.mistral.ai', groq: 'api.groq.com', deepseek: 'api.deepseek.com' };
+const PRIVACY_AI = Object.entries({ openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini', openrouter: 'OpenRouter', xai: 'xAI', mistral: 'Mistral', groq: 'Groq', deepseek: 'DeepSeek' })
+  .map(([id, name]) => `- \`https://${AI_HOSTS[id]}\` for ${name}`);
+test('each AI provider is an https host asked for from Connect\'s click, none the manifest holds', () => {
+  const { PRESETS } = require('../lib/ai/settings.js');
+  assert.deepEqual(Object.fromEntries(Object.entries(PRESETS).map(([id, p]) => [id, new URL(p.base).hostname])), AI_HOSTS, 'a new provider is listed here');
+  for (const [id, host] of Object.entries(AI_HOSTS)) {
+    assert.equal(new URL(PRESETS[id].base).protocol, 'https:', id);
+    assert.ok(!covered(`https://${host}`), `${host} is asked for, not held`);
+    assert.ok(manifest.optional_host_permissions.includes('https://*/*'), `${host} can be asked for`);
+  }
+  const edit = read('lib/editor-ai.js');
+  const connect = edit.slice(edit.indexOf('const connect = (e, id, input, from) => {'), edit.indexOf('const check = async'));
+  // The host first, from the click, before anything is awaited; the key after.
+  assert.match(connect, /if \(!e\?\.isTrusted \|\| busy\) return;[\s\S]*const asked = Promise\.resolve\(GZ_SITE\.reach\(S\.PRESETS\[id\]\.base, from\)\)/);
+  assert.ok(connect.indexOf('GZ_SITE.reach') < connect.indexOf('await'), 'asked before anything is awaited');
+  assert.ok(PRIVACY_AI.every((line) => read('PRIVACY.md').includes(line)), 'PRIVACY.md names each host');
 });
