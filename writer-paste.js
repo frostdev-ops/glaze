@@ -123,8 +123,10 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     u: { 'text-decoration': 'underline' }, ins: { 'text-decoration': 'underline' }, s: { 'text-decoration': 'line-through' }, strike: { 'text-decoration': 'line-through' }, del: { 'text-decoration': 'line-through' },
     sup: { 'vertical-align': 'super' }, sub: { 'vertical-align': 'sub' }, mark: { 'background-color': 'yellow' } };
   const HEADING = /^h[1-6]$/;
+  // An element's own text direction (dir, or Word's direction:rtl).
+  const dirOf = (e, st) => { const d = String(e.a.dir || st.direction || '').trim().toLowerCase(); return d === 'ltr' || d === 'rtl' ? d : null; };
   const cascade = (e, up, ctx, block) => {
-    const st = own(e, ctx), out = { deco: new Set(up.deco), vert: up.vert, bg: block ? null : up.bg, mso: block ? null : up.mso, link: up.link };
+    const st = own(e, ctx), out = { deco: new Set(up.deco), vert: up.vert, bg: block ? null : up.bg, mso: block ? null : up.mso, link: up.link, dir: dirOf(e, st) || up.dir };
     for (const k of INHERIT) out[k] = up[k];
     const ua = UA[e.name] || (HEADING.test(e.name) ? { 'font-weight': 'bold' } : {});
     const decl = { ...ua, ...st };
@@ -179,17 +181,19 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     const cc = cascade(e, c, ctx, false);
     // Word's empty-paragraph mark: <o:p>&nbsp;</o:p>.
     if (e.name === 'o:p') return e.kids.every((k) => k.text != null && /^[\s ]*$/.test(k.text)) ? '' : e.kids.map((k) => inline(k, cc, ctx)).join('');
-    const inner = e.kids.map((k) => inline(k, cc, ctx)).join('');
+    let inner = e.kids.map((k) => inline(k, cc, ctx)).join('');
+    if ((cc.dir || 'ltr') !== (c.dir || 'ltr') && inner) inner = `<span dir="${cc.dir}">${inner}</span>`; // a run in another direction than the text around it
     return e.name === 'a' && e.a.href ? `<a href="${esc(e.a.href)}">${inner}</a>` : inner;
   };
   // A paragraph's settings from its own CSS, by source: Word's and Docs' spacing, indents, line rules and pagination; a
-  // web page's alignment only.
+  // web page's alignment only. Right-to-left text keeps its direction, which isn't formatting Match the paper takes away.
   const paraOf = (e, ctx, list = false) => {
     const st = own(e, ctx), css = [], gz = {};
     // Heading emphasis is carried by its runs, including mixed emphasis. Suppress the format's heading defaults.
     if (HEADING.test(e.name) && !ctx.match) css.push('font-weight:normal', 'font-style:normal');
+    // Left is the default for a paragraph, not for a heading the format centres.
     const align = String(st['text-align'] || e.a.align || '').toLowerCase();
-    if (!ctx.match && ['center', 'right', 'justify'].includes(align)) css.push(`text-align:${align}`);
+    if (!ctx.match && (['center', 'right', 'justify'].includes(align) || (align === 'left' && HEADING.test(e.name)))) css.push(`text-align:${align}`);
     let brk = false;
     if (ctx.source !== 'web' && !ctx.match) {
       const m = margins(st), lh = String(st['line-height'] || '').trim().toLowerCase();
@@ -213,7 +217,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     }
     const data = S().dataGz({ before: gz.before, after: gz.after, exact: gz.exact, least: gz.least, left: gz.left, right: gz.right, keepNext: gz.keepNext, keepLines: gz.keepLines, widow: gz.widow });
     if (css.length || data) ctx.rich = true;
-    return { attrs: `${css.length ? ` style="${css.join(';')}"` : ''}${data ? ` data-gz="${esc(data)}"` : ''}`, brk };
+    return { attrs: `${dirOf(e, st) === 'rtl' ? ' dir="rtl"' : ''}${css.length ? ` style="${css.join(';')}"` : ''}${data ? ` data-gz="${esc(data)}"` : ''}`, brk };
   };
   // Word's list paragraphs: the list and level from mso-list; ordered when the marker is a number or letter, and then
   // the marker's number and style (a level's first marker decides between roman and letters).
