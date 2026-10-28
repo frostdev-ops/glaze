@@ -63,8 +63,15 @@
   const keep = (el) => el.addEventListener('mousedown', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
 
   // ---- pictures in
-  const file = h('input', { type: 'file', accept: L.IMAGE.types.join(','), hidden: true });
-  document.body.append(file);
+  // Made on first use, after the paper's own file input (which writer-paper.js and its checks find first).
+  let file = null;
+  const fileInput = () => {
+    if (file) return file;
+    file = h('input', { type: 'file', accept: L.IMAGE.types.join(','), hidden: true });
+    file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) loadImage(f); });
+    document.body.append(file);
+    return file;
+  };
   const dataURL = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(r.error); r.readAsDataURL(blob); });
   // Drawn again at its fitted size: PNG while it fits in the bound, then JPEG at falling quality, then smaller still.
   const encode = async (bmp, fit, type) => {
@@ -101,8 +108,7 @@
       view.focus();
     } finally { loading = false; }
   };
-  file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) loadImage(f); });
-  const pickImage = () => { if (!paperMode) return false; file.click(); return true; };
+  const pickImage = () => { if (!paperMode) return false; fileInput().click(); return true; };
   // A picture dropped on the page goes in where it lands; any other file, or one dropped beside the page, stays the
   // paper's (writer-paper.js routes it).
   addEventListener('drop', (e) => {
