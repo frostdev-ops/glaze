@@ -33,7 +33,7 @@
 /* The word count and its popover */
 .ge-count-btn { cursor: pointer; border-radius: 6px; padding: 2px 6px; margin: -2px -6px; }
 .ge-count-btn:hover, .ge-count-btn[aria-expanded="true"] { background: var(--gz-line); color: var(--gz-ink); }
-.ge-counts { position: fixed; z-index: 5; width: 300px; max-width: calc(100vw - 8px); padding: 12px 14px; transform-origin: bottom left; outline: none; }
+.ge-counts { position: fixed; z-index: 5; width: 320px; max-width: calc(100vw - 8px); padding: 12px 14px; transform-origin: bottom left; outline: none; }
 .ge-counts h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--gz-ink); }
 .ge-counts table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .ge-counts th { text-align: end; font-weight: 500; color: var(--gz-ink-faint); font-size: 12px; padding: 0 0 4px 12px; }
@@ -43,6 +43,10 @@
 
 .ge-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
+/* A printed paper (writer-paper.js's print copy) carries none of the editor's marks: matches, proofing and format
+   underlines, gray completion text. */
 @media print {
   .ge-hit, .ge-hit.ge-cur { background: none !important; box-shadow: none !important; }
+  .gp-print :is(.gz-iss, .gz-ac, .gp-u-format) { text-decoration: none !important; }
+  .gp-print .gz-ghost { display: none !important; }
 }

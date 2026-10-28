@@ -5,8 +5,8 @@
 // selected. It searches every paragraph, heading, list item and table cell, across page breaks and marks but never across
 // a paragraph or a note mark, and the notes' text too: a match in a note is shown on its mark (and in the note at the
 // page's foot where the browser has CSS highlights). Straight and curly quotes find each other, as the editor types the
-// curly ones. Matches follow edits at once and are found again after a pause in typing, so typing costs the same with the
-// bar open. A screen reader hears the count and each replace (a polite live region).
+// curly ones. While the bar is open, matches follow edits at once (mapped, not drawn again) and are found again after a
+// pause in typing. A screen reader hears the count and each replace (a polite live region).
 // The search and replace are plain functions over a document and an EditorState, for node tests; then the frame.
 var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   const S = () => globalThis.GZ_WRITER_SCHEMA || require('./lib/writer-schema.js');
@@ -113,7 +113,8 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
           hits.push({ ...h, from, to });
         });
         if (current < 0 && hits.length) current = Math.min(prev.current, hits.length - 1);
-        return { ...prev, hits, current, decos: hits.length ? decorate(tr.doc, hits, current) : PM().view.DecorationSet.empty };
+        // The marks mapped, not drawn again.
+        return { ...prev, hits, current, decos: hits.length ? prev.decos.map(tr.mapping, tr.doc) : PM().view.DecorationSet.empty };
       },
     },
     props: { decorations(state) { return key.getState(state).decos; } },
@@ -161,13 +162,14 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   const state = () => (view() ? key.getState(view().state) : null);
   const opts = () => ({ cs: caseB.getAttribute('aria-pressed') === 'true', word: wordB.getAttribute('aria-pressed') === 'true' });
   let anchor = 0, said = 0, timer = 0;
-  const say = (s) => { live.textContent = ''; requestAnimationFrame(() => { live.textContent = s; }); };
+  // A repeat (a second "1 replaced") still changes the region's text, so it is heard again.
+  const say = (s) => { live.textContent = live.textContent === s ? `${s}\u00a0` : s; };
   const status = () => {
     const s = state();
     if (!s || !find.value) return '';
     return s.hits.length ? t('{n} of {m}', { n: s.current + 1, m: s.hits.length }) : t('No results');
   };
-  const drawCount = () => { count.textContent = status(); };
+  const drawCount = () => { const s = status(); if (count.textContent !== s) count.textContent = s; };
   const announce = () => { clearTimeout(said); said = setTimeout(() => { const s = status(); if (s) say(s); }, 350); };
 
   // The current match: selected (a note's mark as a node) and scrolled into view, the bar keeping the focus.
@@ -294,9 +296,9 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   };
   const noteMark = (v, s) => {
     if (!globalThis.CSS?.highlights || typeof Highlight !== 'function') return;
-    CSS.highlights.delete('ge-note');
     const h = s.hits[s.current];
-    if (!h?.note) return;
+    if (!h?.note) { if (CSS.highlights.has('ge-note')) CSS.highlights.delete('ge-note'); return; }
+    CSS.highlights.delete('ge-note');
     let n = 0;
     v.state.doc.nodesBetween(0, h.from + 1, (x) => { if (x.type.name === 'footnote_ref') n++; });
     requestAnimationFrame(() => {
