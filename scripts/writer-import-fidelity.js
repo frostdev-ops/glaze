@@ -23,7 +23,9 @@ const out = path.resolve(option('--out') || path.join(os.homedir(), 'Projects/gl
 const root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
 const WORD = '/Applications/Microsoft Word.app';
 // Text as both sides read: quotes plain, spaces single, and tab leaders (a PDF's dots) gone.
-const words = (s) => String(s || '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/([.·_-])\1{2,}/g, ' ').replace(/[\u00a0\s]+/g, ' ').trim();
+// Word's PDF of an Aptos paper sets ligature glyphs (ﬁ for fi): letters again, so offsets line up.
+const LIGATURES = { 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st', 'ﬆ': 'st' };
+const words = (s) => String(s || '').replace(/[ﬀ-ﬆ]/g, (c) => LIGATURES[c] || c).replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/([.·_-])\1{2,}/g, ' ').replace(/[\u00a0\s]+/g, ' ').trim();
 const flat = (s) => words(s).replace(/ /g, '');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
