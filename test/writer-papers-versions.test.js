@@ -42,3 +42,25 @@ test('in the worker, storage.sync writer.versions is the cap; a value it does no
     assert.equal((await fill(PA.open(store(), () => clock.t), 50, clock)).length, 40);
   } finally { globalThis.chrome = prev.chrome; globalThis.GZ_SANITIZE = prev.S; }
 });
+
+test('restoring a version restores its imported-format choice, including older versions', async () => {
+  const P = PA.open(store());
+  const first = await P.save(K, { doc: doc('Imported.'), format: 'apa7', keep: true });
+  await P.save(K, { doc: doc('Reformatted.'), format: 'mla9', keep: false });
+  assert.equal((await P.restore(K, first.version.id)).paper.keep, true);
+  const legacy = await P.save('legacy', { doc: doc('Old paper.') });
+  await P.save('legacy', { doc: doc('New import.'), keep: true });
+  assert.equal((await P.restore('legacy', legacy.version.id)).paper.keep, false, 'old versions used the format');
+});
+
+test('the paper applies the restored version format choice before checking its document', async () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-paper.js'), 'utf8');
+  const from = source.indexOf('    const restore = async '), to = source.indexOf('    const docx = ', from);
+  let checked;
+  const ctx = vm.createContext({ key: K, keep: false, paper: {}, save: async () => true,
+    store: { restore: async () => ({ paper: { doc: doc('Imported.'), keep: true, format: 'mla9' } }) },
+    ST: { get: (f) => f }, setFormat: async () => {}, setDoc: () => { checked = ctx.keep; }, toast: () => {}, t: (k) => k });
+  await vm.runInContext(`${source.slice(from, to)} restore('v')`, ctx);
+  assert.equal(checked, true);
+});
