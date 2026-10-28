@@ -627,7 +627,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const doc = S.paper.nodeFromJSON(json);
       formatIssues = []; picked = null;
       if (fresh) view.updateState(PM.state.EditorState.create({ doc, plugins: view.state.plugins }));
-      else view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content).setDocAttribute('setup', doc.attrs.setup).scrollIntoView());
+      else {
+        const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content);
+        for (const [name, value] of Object.entries(doc.attrs)) tr.setDocAttribute(name, value);
+        view.dispatch(PM.history.closeHistory(tr).scrollIntoView());
+        view.dispatch(PM.history.closeHistory(view.state.tr));
+      }
     };
     const setFormat = async (f, { save: keep = true } = {}) => {
       if (!f) return;
