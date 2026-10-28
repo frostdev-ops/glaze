@@ -150,3 +150,20 @@ test('a section that starts on a new page (Word\'s default) starts one; a contin
   assert.equal(shape((await imp(pack(sp('A') + sp('B', 'continuous') + sp('C', 'nextColumn') + sp('D', 'oddPage') + p('E')))).node), '"A" "B" "C" BREAK "D" BREAK "E"');
   assert.equal(shape((await imp(pack(sp('Cover') + p('Next', '<w:pageBreakBefore/>')))).node), '"Cover" BREAK "Next"', 'a page break before at the new section\'s top is the same page');
 });
+
+// ---- lists
+const lists = (doc) => { const out = []; doc.descendants((n) => { if (/_list$/.test(n.type.name)) { out.push(`${n.type.name}(${n.attrs.styles || 'default'}${n.attrs.continue ? ',continued' : ''}) ${n.content.content.map((x) => x.textContent + (x.attrs.start ? `@${x.attrs.start}` : '')).join(',')}`); return false; } return true; }); return out; };
+const lvlX = (i, fmt, text, start = 1) => `<w:lvl w:ilvl="${i}"><w:start w:val="${start}"/><w:numFmt w:val="${fmt}"/><w:lvlText w:val="${text}"/></w:lvl>`;
+const item = (s, n, pr = '') => p(s, `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${n}"/></w:numPr>${pr}`);
+test('a body-level marker, a deleted paragraph or a section break between list items keeps every list\'s numbering', async () => {
+  const numbering = `<w:numbering ${NSW}><w:abstractNum w:abstractNumId="1">${lvlX(0, 'upperRoman', '%1.')}</w:abstractNum><w:abstractNum w:abstractNumId="2">${lvlX(0, 'decimal', '%1.', 5)}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="2"/></w:num></w:numbering>`;
+  const want = ['ordered_list(upper-roman) Roman one,Roman two', 'ordered_list(default) Five@5'];
+  for (const marker of ['', `<w:del w:id="9" w:author="R">${p('Deleted paragraph')}</w:del>`, '<w:moveFrom w:id="4" w:author="R"><w:p/></w:moveFrom>', '<w:commentRangeStart w:id="0"/>', '<w:permStart w:id="1" w:edGrp="everyone"/>', '<w:moveFromRangeStart w:id="3" w:name="m"/>', '<w:moveToRangeEnd w:id="3"/>', '<w:customXmlInsRangeStart w:id="5"/>']) {
+    const got = await imp(pack(item('Roman one', 1) + marker + item('Roman two', 1) + p('Gap') + item('Five', 2), { 'word/numbering.xml': numbering }));
+    assert.deepEqual(lists(got.node), want, marker || 'no marker');
+  }
+  const wrapped = await imp(pack(item('Roman one', 1) + `<w:customXml w:element="x">${item('Roman two', 1)}</w:customXml>` + p('Gap') + item('Five', 2), { 'word/numbering.xml': numbering }));
+  assert.deepEqual(lists(wrapped.node), want, 'an item in a custom XML wrapper stays in its list');
+  const sectioned = await imp(pack(item('Roman one', 1, '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>') + item('Roman two', 1) + p('Gap') + item('Five', 2), { 'word/numbering.xml': numbering }));
+  assert.deepEqual(lists(sectioned.node), ['ordered_list(upper-roman) Roman one', 'ordered_list(upper-roman,continued) Roman two', 'ordered_list(default) Five@5'], 'a list split by a section break continues');
+});
