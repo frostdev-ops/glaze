@@ -106,8 +106,9 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
   frame.handle('import:file', async (m) => {
     const api = P()?.current();
     if (!api || frame.mode() !== 'paper' || frame.kind() !== 'assignment' || !(m.bytes instanceof ArrayBuffer) || !m.bytes.byteLength || m.bytes.byteLength > 50e6) return;
+    const request = ++requests;
     await P().need(['lib/writer-submit.js']);
-    if (P()?.current() !== api || L().fileError({ name: m.name, size: m.bytes.byteLength, type: m.mime ?? '' })) return;
+    if (request !== requests || P()?.current() !== api || L().fileError({ name: m.name, size: m.bytes.byteLength, type: m.mime ?? '' })) return;
     bring(api, new File([m.bytes], m.name, { type: typeof m.mime === 'string' ? m.mime : '' }));
   });
   return { bring, about, close, opened: () => !!card };
