@@ -118,7 +118,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
       },
     },
     props: { decorations(state) { return key.getState(state).decos; } },
-    view: () => ({ update: (v, before) => { api.onUpdate?.(v, key.getState(before)); } }),
+    view: () => ({ update: (v, before) => { api.onUpdate?.(v, before); } }),
   });
 
   const api = { pattern, search, near, replace, plugin, key, onUpdate: null };
@@ -292,7 +292,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   api.onUpdate = (v, before) => {
     const s = key.getState(v.state);
     if (bar.hidden) return;
-    if (v.state.doc !== before.doc || s !== before) { if (v.state.doc !== before.doc) { clearTimeout(timer); timer = setTimeout(again, 250); } drawCount(); noteMark(v, s); }
+    if (v.state.doc !== before.doc || s !== key.getState(before)) { if (v.state.doc !== before.doc) { clearTimeout(timer); timer = setTimeout(again, 250); } drawCount(); noteMark(v, s); }
   };
   const noteMark = (v, s) => {
     if (!globalThis.CSS?.highlights || typeof Highlight !== 'function') return;
