@@ -64,11 +64,12 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     waits.clear();
     try { p?.disconnect(); } catch { /* gone */ }
   };
-  // → the answer that ends message m: a status, an end or an error; .id is its id.
-  const ask = (m) => {
+  // → the answer that ends message m: a status, an end or an error; .id is its id. ms: an error 'timeout' after that long.
+  const ask = (m, ms) => {
     const id = ++asked;
     return Object.assign(new Promise((resolve) => {
-      waits.set(id, (a) => { if (['status', 'end', 'error', 'warmed'].includes(a?.type)) { waits.delete(id); resolve(a); } });
+      const late = ms && setTimeout(() => waits.get(id)?.({ type: 'error', error: 'timeout' }), ms);
+      waits.set(id, (a) => { if (['status', 'end', 'error', 'warmed'].includes(a?.type)) { clearTimeout(late); waits.delete(id); resolve(a); } });
       try {
         if (!port) {
           const p = port = chrome.runtime.connect({ name: 'glaze:ai' });
@@ -125,6 +126,18 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     reviewing = false;
     render();
   };
+  // A status ask that got no status (the port closed, the worker's check timed out) or a refusal for the attempt's kind
+  // (the worker's word may still be on its way) asks again in this generation, after each of AGAIN's pauses: with none,
+  // the gray text stayed off while Feedback, asked a moment later, ran (Safari, 2026-10-27).
+  const ASK = { status: 30000 }, AGAIN = [500, 1000, 2000, 4000, 8000];
+  const settled = (st) => st?.type === 'status' && !(st.allowed === false && st.why === 'attempt');
+  const again = (f, gen, n = 0) => setTimeout(async () => {
+    if (gen !== generation || quiet()) return;
+    const st = await ask({ op: 'status', feature: f }, ASK.status);
+    if (gen !== generation || quiet()) return;
+    if (st?.type === 'status') { status[f] = st; warmUp(); render(); }
+    if (!settled(st) && n + 1 < AGAIN.length) again(f, gen, n + 1);
+  }, AGAIN[n]);
   const refresh = async () => {
     checking = true;
     invalidate(); // close admission before either asynchronous read can yield
@@ -136,9 +149,10 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const want = (f) => s?.on === true && typeof s.use === 'string' && !!s.use && s.features?.[f] === true;
     const next = { completion: null, writing: null };
     for (const f of ['completion', 'writing']) {
-      const st = want(f) ? await ask({ op: 'status', feature: f }) : null;
+      const st = want(f) ? await ask({ op: 'status', feature: f }, ASK.status) : null;
       if (gen !== generation || quiet()) return;
       next[f] = st?.type === 'status' ? st : null;
+      if (want(f) && !settled(st)) again(f, gen);
     }
     Object.assign(status, next);
     warmUp();

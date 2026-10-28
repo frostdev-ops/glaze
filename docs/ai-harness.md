@@ -103,7 +103,8 @@ task, at most 240 a minute in all tabs). `supersede`: a new run of the task in t
 flight (it ends `cancelled`) instead of being refused `busy`; other tasks keep one run at a time per tab and feature, so a
 supersede task and another feature's runs never wait on each other. A supersede task's runs share one call-record row a
 minute per tab and feature: `count`, total `ms`, summed `usage`, and the last `state` (named by the last failure's
-reference).
+reference). A run refused before it is admitted (`permission`, `setup`, `attempt`, …) leaves a row too when the connection
+it would use can be named from Settings alone; Settings → AI → Activity shows it as Not run.
 
 ### The fence and the cached prefix
 
@@ -151,7 +152,9 @@ Error codes: the model request's category (`cancelled`, `timeout`, `provider-una
 `invalid-response`, `connection-lost`), or `off`, `feature`, `task`, `setup`, `caps`, `permission`, `changed`, `busy`,
 `often`, `attempt`, `input`, `size`, `check`, `refusal`, `limit`, `steps`, `request`. `attempt` refuses one message and
 keeps the port: the writer's features on an Ultra attempt not known to be an assignment; a status then answers
-`{ type: 'status', on, allowed: false, why: 'attempt' }`.
+`{ type: 'status', on, allowed: false, why: 'attempt' }`. A sender check that takes over 5 seconds refuses its message
+the same way, as `timeout` (a status gets that error). The writer's frame asks a feature's status again, after 0.5, 1, 2, 4
+and 8 seconds, when it got no status (none comes within 30 seconds) or `attempt`.
 
 Settings' top frame (`options.html`) manages connections with `chrome.runtime.sendMessage({ type: 'glaze:ai-config', op })`:
 `get`, `set { id, cfg: { provider, base, model, key?, images?, context? } }`, `remove { id }`, `test { id }`,
