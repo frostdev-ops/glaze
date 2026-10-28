@@ -15,6 +15,7 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
     const page = await browser.newPage(), errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.setContent('<!doctype html><meta charset="utf-8"><div id="ed"></div>');
+    await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'writer-paper.css'), 'utf8').replace(/@font-face\s*\{[^}]*\}/g, '') });
     for (const file of ['lib/pm.js', 'lib/writer-schema.js', 'lib/writer-editor.js', 'lib/writer-styles.js', 'lib/writer-paginate.js']) {
       const content = process.env.WRITER_REVIEW_BASE && file !== 'lib/pm.js'
         ? execFileSync('git', ['show', `${process.env.WRITER_REVIEW_BASE}:${file}`], { cwd: root, encoding: 'utf8' })
