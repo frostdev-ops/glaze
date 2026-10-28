@@ -59,3 +59,13 @@ test('submit previews and picture widths use the paper page setup', () => {
   const a = objects.indexOf('  const content = '), b = objects.indexOf('\n', a);
   assert.equal(vm.runInNewContext(`${objects.slice(a, b)} content()`, { PAPER: () => api, GZ_WRITER_STYLES: ST }), ST.geometry(look).content);
 });
+
+test('paper images are held as data and remote images refuse takeover', () => {
+  const html = '<p>Before <img src="https://remote.example/track.png" alt="Diagram"> after</p>';
+  assert.deepEqual(S.loses(S.paper, html), ['media']);
+  const d = S.parse(S.paper, html);
+  let images = 0;
+  d.descendants((n) => { if (n.type.name === 'image') images++; });
+  assert.equal(images, 0, 'an image that cannot render or export never enters the paper');
+  assert.match(d.textContent, /Diagram/, 'keep the alternative text');
+});
