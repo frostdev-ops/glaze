@@ -7,7 +7,7 @@
 // Classic script after writer.js; the paper libraries load only when a paper opens.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-papers.js'];
-  const DOCX = ['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js'];
+  const DOCX = ['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects.js', 'lib/writer-objects-docx.js'];
   const GAP = 26.4; // between pages, in page px (22px at 100%)
   const PX100 = 80 / 96; // 100% shows an inch as 80px, as the mockup does
   const loaded = new Map();
@@ -15,7 +15,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     if (!loaded.has(src)) loaded.set(src, new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => { loaded.delete(src); no(new Error(`${src} did not load`)); }; document.head.append(s); }));
     return loaded.get(src);
   };
-  const need = (files) => files.reduce((p, f) => p.then(() => script(f)), Promise.resolve());
+  // Files another part of Writer adds (lib/writer-objects*.js): where one isn't there, the paper does without it.
+  const OPTIONAL = new Set(['lib/writer-objects.js', 'lib/writer-objects-docx.js']);
+  const need = (files) => files.reduce((p, f) => p.then(() => script(f).catch((e) => { if (!OPTIONAL.has(f)) throw e; })), Promise.resolve());
 
   // ---- small DOM helpers
   const SVG = 'http://www.w3.org/2000/svg';
@@ -73,7 +75,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const sheets = h('div'), flow = h('div', { class: 'gp-flow' }), measureBox = h('div', { class: 'gp-notes gp-measure', 'aria-hidden': 'true' });
     const zoomEl = h('div', { class: 'gp-zoom' }, sheets, flow, measureBox), size = h('div', { class: 'gp-size' }, zoomEl);
     const canvas = h('div', { class: 'gp-canvas' }, size);
-    const pageL = h('span'), wordsL = h('span'), fontL = h('span'), versionsB = btn({ 'aria-haspopup': 'menu' }, t('Versions'));
+    const pageL = h('span'), wordsL = btn({}), fontL = h('span'), versionsB = btn({ 'aria-haspopup': 'menu' }, t('Versions'));
+    const toolGrow = h('span', { class: 'grow' });
+    // The status bar's word count opens the counts (writer-counts.js, where loaded).
+    wordsL.addEventListener('click', () => globalThis.GZ_WRITER_COUNTS?.open(wordsL));
     const status = h('div', { class: 'gp-status' }, pageL, wordsL, h('span', { class: 'grow' }), fontL, versionsB);
     const tabs = {}, panes = {}, badges = {};
     for (const [id, label] of [['checks', 'Checks'], ['sources', 'Sources'], ['feedback', 'Feedback'], ['outline', 'Document outline']]) {
@@ -91,7 +96,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       h('header', { class: 'gp-top' }, host.standalone ? h('a', { href: 'papers.html', text: t('Papers') }) : null, title, due, h('span', { class: 'grow' }), state),
       h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('Formatting') }, pill, block,
         h('div', { class: 'gp-tb' }, marks, h('span', { class: 'gp-sepv' }), alignB, bullets, numbers, h('span', { class: 'gp-sepv' })),
-        cite, note, brk, h('span', { class: 'grow' }), h('div', { class: 'gp-tb' }, undo, redo), zoomB, host.standalone ? null : focusB, host.standalone ? null : submit),
+        cite, note, brk, toolGrow, h('div', { class: 'gp-tb' }, undo, redo), zoomB, host.standalone ? null : focusB, host.standalone ? null : submit),
       h('div', { class: 'gp-work' }, h('div', { class: 'gp-col' }, canvas, status), side), file);
     (host.root || document.body).append(root);
     flow.style.visibility = 'hidden';
@@ -574,6 +579,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     focusB.addEventListener('click', () => setFocus(!focus));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && focus && !open && !e.defaultPrevented) setFocus(false); });
     const hooks = () => {
+      globalThis.GZ_WRITER_OBJECTS?.toolbar?.({ editor: ed, paper: api, before: toolGrow, lists: numbers });
       const C = globalThis.GZ_WRITER_CITE;
       if (C?.button) { const b = C.button({ editor: ed, paper: api }); if (b) { b.classList.add('gp-tbtn'); cite.replaceWith(b); } }
       else if (C) cite.disabled = false;
@@ -652,6 +658,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           btn({ role: 'menuitem', onclick: () => { close(); restore(v.id); } }, t('Restore')))),
         list.length ? h('div', { class: 'gp-hr' }) : null,
         btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
+        ...(globalThis.GZ_WRITER_PRINT?.items() || []).map((it) => btn({ role: 'menuitem', onclick: () => { close(); it.run(); } }, it.label)),
         btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, host.standalone ? t('Import .docx…') : t('Import…')),
         host.standalone ? null : btn({ role: 'menuitem', onclick: () => { close(); open2('papers.html'); } }, t('All papers')));
       el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(true); } });
@@ -725,6 +732,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       canvas.classList.remove('gp-drop');
       if (!f) return;
       e.preventDefault(); e.stopPropagation();
+      if (globalThis.GZ_WRITER_OBJECTS?.drop?.(f, e)) return;
       bring(f);
     }, true);
 
