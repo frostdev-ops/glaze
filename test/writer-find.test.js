@@ -154,3 +154,11 @@ test('Find update receives the previous document state so decoration updates can
   plugin.spec.view().update({ state: next }, before);
   assert.ok(previous === before, 'the previous EditorState must reach the update hook');
 });
+
+test('footnote highlight offsets exclude line and paragraph separators absent from DOM text', () => {
+  const content = '<p>First<br>line.</p><p>Second target.</p>';
+  const st = stateOf(doc(para('Body', { type: 'footnote_ref', attrs: { content } })));
+  const hit = FIND.search(st.doc, 'target')[0];
+  assert.ok(hit?.note);
+  assert.deepEqual(FIND.noteRange(content, hit.note.start, hit.note.end), [17, 23]);
+});
