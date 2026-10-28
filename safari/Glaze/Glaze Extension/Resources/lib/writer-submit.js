@@ -1,6 +1,7 @@
 // Glaze Writer's submit step, the parts that decide: the paper's file name, where Ultra's upload control and footer
 // buttons are on an assignment attempt (glaze-plans/writer/probe/skeleton-assignment-attempt.html, probed 2026-10-27), when
-// the file shows as attached, the note and text as Quill ops, and the order the steps run in. Pure: elements in, values out.
+// the file shows as attached, the note and text as Quill ops, the order the steps run in, and where a file the student
+// brings goes (a .docx asks, anything else is submitted as is). Pure: elements in, values out.
 // The sheet (writer-submit.js) and the page's side (features/writer-submit.js) do the rest.
 // Classic script, loaded on demand in the frame and the page; module.exports for node.
 var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
@@ -19,6 +20,16 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const paperKey = (p = {}) => /^[a-z0-9.-]{1,253}(:\d{1,5})?$/i.test(p.school || '') && [p.user, p.course, p.content].every((id) => /^_\d+_\d+$/.test(id || '')) ?
     `${p.school.toLowerCase()}|${p.user}|${p.course}|${p.content}` : null;
   const kb = (bytes) => Math.max(1, Math.round((Number(bytes) || 0) / 1024));
+
+  // ---- a file the student brings (writer-import.js): a .docx asks Open in Writer or Submit as is; Writer opens nothing
+  // else, so any other file goes straight to the submit sheet as is.
+  const route = (name) => (/\.docx$/i.test(String(name || '')) ? 'choose' : 'submit');
+  // A file submitted as is keeps its own name: any name a file can have, never a path.
+  const asIsName = (n) => typeof n === 'string' && /^[^/\\\u0000-\u001f\u007f]{1,255}$/u.test(n) && !/^\.*$/.test(n.trim());
+  // The file's badge: its extension (DOCX, PDF), else FILE.
+  const tag = (name) => (String(name || '').match(/\.([a-z0-9]{1,5})$/i)?.[1] || 'file').toUpperCase();
+  // A Word file's page count as Word last saved it (docProps/app.xml), when it says.
+  const pagesOf = (xml) => { const n = Number(String(xml || '').match(/<(?:\w+:)?Pages>\s*(\d{1,5})\s*</)?.[1]); return n > 0 ? n : 0; };
 
   // ---- Ultra's attempt page
   const PANEL = 'bb-assignment-attempt-authoring-panel';
@@ -46,7 +57,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const TAGS = 'a, span, p, li, div, button, h3, h4, h5, td, label, strong';
   const listings = (area, name, visible = () => true) => {
     if (!area || !name) return [];
-    const stem = String(name).replace(/\.docx$/i, '');
+    const stem = String(name).replace(/\.[^.]+$/, '');
     const match = (s) => s === name || s === stem;
     return [...area.querySelectorAll(TAGS)].filter((e) => !e.firstElementChild && !e.closest('.ql-container') && !e.closest('[aria-live]') && !e.closest('[role="status"]') &&
       [e.textContent, e.getAttribute('title')].some((s) => match(String(s || '').trim())) && visible(e));
@@ -70,9 +81,10 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
     return [{ insert: `${parts.map((p) => p.join('\n')).join('\n\n')}\n` }];
   };
 
-  // ---- the order: nothing reaches Ultra's Submit unless every step before it went through, in turn
+  // ---- the order: nothing reaches Ultra's Submit unless every step before it went through, in turn. A file submitted as
+  // is skips the paper's: nothing is saved or built.
   const STEPS = ['save', 'docx', 'attach', 'text', 'submit'];
-  const start = ({ text = false } = {}) => ({ plan: STEPS.filter((s) => s !== 'text' || text), at: 0, done: false, error: null });
+  const start = ({ text = false, asis = false } = {}) => ({ plan: STEPS.filter((s) => (s !== 'text' || text) && !(asis && (s === 'save' || s === 'docx'))), at: 0, done: false, error: null });
   const step = (s) => (s.done || s.error ? null : s.plan[s.at]);
   const advance = (s, ev = {}) => {
     if (s.done || s.error) return s;
@@ -83,7 +95,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   };
   const may = (s, name) => step(s) === name;
 
-  return { MIME, shortTitle, fileName, safeName, paperKey, kb, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
+  return { MIME, shortTitle, fileName, safeName, paperKey, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SUBMIT_LIB;
 GZ_WRITER_SUBMIT_LIB;

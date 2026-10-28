@@ -3294,7 +3294,6 @@
   "Import .docx…": ".docx importeren…",
   "All papers": "Alle werkstukken",
   "The .docx could not be made.": "Het .docx-bestand kon niet worden gemaakt.",
-  "Imported. The last version is in Versions.": "Geïmporteerd. De vorige versie staat bij Versies.",
   "That file could not be read as a Word document.": "Dat bestand kon niet als Word-document worden gelezen.",
   "Add to dictionary": "Toevoegen aan woordenboek",
   "{n} issues": {"one": "{n} probleem", "other": "{n} problemen"},
@@ -3313,4 +3312,10 @@
   "{name} is never cited": "{name} wordt nergens geciteerd",
   "Personal dictionary": "Persoonlijk woordenboek",
   "Saved sources": "Opgeslagen bronnen",
+  "Import…": "Importeren…",
+  "Open in Writer": "Openen in Writer",
+  "Submit as is": "Inleveren zoals het is",
+  "Saves current paper": "Bewaart huidige werkstuk",
+  "Open uploads in Writer": "Uploads openen in Writer",
+  "A file you drop on or choose in an assignment's Blackboard upload area goes to Glaze Writer first: a Word file opens in Writer or is submitted as is, any other file is submitted as is. Off, the upload area is Blackboard's.": "Een bestand dat je in het Blackboard-uploadvak van een opdracht neerzet of kiest, gaat eerst naar Glaze Writer: een Word-bestand opent in Writer of wordt ingeleverd zoals het is, elk ander bestand wordt ingeleverd zoals het is. Uit: het uploadvak blijft van Blackboard.",
 };

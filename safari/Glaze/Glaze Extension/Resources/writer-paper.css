@@ -179,7 +179,9 @@
 .gp-form input:focus, .gp-form select:focus, .gp-note textarea:focus { border-color: var(--gz-accent); outline: none; }
 .gp-note { position: fixed; z-index: 5; width: min(360px, calc(100vw - 16px)); display: grid; gap: 8px; }
 .gp-note textarea { width: 100%; min-height: 72px; resize: vertical; }
-.gp-toast { position: fixed; left: 50%; bottom: 46px; z-index: 6; transform: translateX(-50%); max-width: min(520px, calc(100vw - 24px)); padding: 9px 14px; font-size: 13px; }
+.gp-toast { position: fixed; left: 50%; bottom: 46px; z-index: 6; transform: translateX(-50%); max-width: min(520px, calc(100vw - 24px)); padding: 9px 14px; font-size: 13px; display: flex; align-items: center; gap: 14px; }
+.gp-toast-do { margin: -3px -6px -3px 0; padding: 3px 8px; border-radius: 6px; color: var(--gz-accent-hi); font-weight: 700; }
+:root:not([data-dark]) .gp-toast-do { color: var(--gz-accent); }
 .gp-toast[data-open] { transform: translateX(-50%); }
 .gp-versions { min-width: 280px; }
 .gp-versions .gp-mi { color: var(--gz-ink-muted); }

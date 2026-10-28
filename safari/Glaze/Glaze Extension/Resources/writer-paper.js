@@ -83,7 +83,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     panes.checks.append(issuesEl, checklist);
     panes.outline.append(outline);
     const side = h('aside', { class: 'gp-side' }, h('div', { class: 'gp-tabs', role: 'tablist' }, Object.values(tabs)), Object.values(panes));
-    const file = h('input', { type: 'file', accept: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document', hidden: true });
+    // On an assignment any file can be brought (writer-import.js routes it); papers.html opens Word files only.
+    const file = h('input', { type: 'file', accept: host.standalone ? '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document' : null, hidden: true });
     const root = h('div', { class: `gp${host.standalone ? ' gp-standalone' : ''}` },
       h('header', { class: 'gp-top' }, host.standalone ? h('a', { href: 'papers.html', text: t('Papers') }) : null, title, due, h('span', { class: 'grow' }), state),
       h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('Formatting') }, pill, block,
@@ -166,14 +167,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     document.addEventListener('pointerdown', (e) => { if (open && !open.el.contains(e.target) && !open.opener?.contains(e.target)) close(); }, true);
     let toastTimer = 0;
-    const toast = (text) => {
+    // act: { label, run }, a button after the text (an import's Undo).
+    const toast = (text, act = null) => {
       document.querySelector('.gp-toast')?.remove();
-      const el = h('div', { class: 'pop gp-toast', role: 'status', text });
+      const el = h('div', { class: 'pop gp-toast', role: 'status' }, h('span', { text }), act ? btn({ class: 'gp-toast-do', onclick: () => { el.remove(); act.run(); } }, act.label) : null);
       document.body.append(el);
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => el.remove(), 6000);
+      toastTimer = setTimeout(() => el.remove(), act ? 10000 : 6000);
     };
 
     // ---- the editor's extra plugins: page styling and pagination, change watching, note clicks, fallback underlines
@@ -455,9 +457,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     addEventListener('pagehide', () => { if (dirty) save(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) save(); });
 
-    // The document as a whole: on load a fresh state (no undo past it); otherwise one undoable step.
+    // The document as a whole: on load a fresh state (no undo past it); otherwise one undoable step. The old document's
+    // format issues go first: the Checks pane redraws during the dispatch, and their ranges can lie past the new end.
     const setDoc = (json, fresh = false) => {
       const doc = S.paper.nodeFromJSON(json);
+      formatIssues = []; picked = null;
       if (fresh) view.updateState(PM.state.EditorState.create({ doc, plugins: view.state.plugins }));
       else view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content).scrollIntoView());
     };
@@ -600,14 +604,19 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
       const el = h('div', { class: 'gp-menu gp-versions', role: 'menu' },
         ...list.slice(0, 40).map((v) => h('div', { class: 'gp-mi' }, h('span', {}, when.format(v.at), ' ', h('small', { text: `${t(REASONS[v.reason] || 'Autosave')} · ${t('{n} words', { n: nf(v.words) })}` })),
-          btn({ role: 'menuitem', onclick: async () => { close(); if (!await save()) return; const r = await store.restore(key, v.id); if (r) { paper = r.paper; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored')); } } }, t('Restore')))),
+          btn({ role: 'menuitem', onclick: () => { close(); restore(v.id); } }, t('Restore')))),
         list.length ? h('div', { class: 'gp-hr' }) : null,
         btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
-        btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, t('Import .docx…')),
+        btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, host.standalone ? t('Import .docx…') : t('Import…')),
         host.standalone ? null : btn({ role: 'menuitem', onclick: () => { close(); open2('papers.html'); } }, t('All papers')));
       el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(true); } });
       popup(versionsB, el, { above: true });
     });
+    const restore = async (id) => {
+      if (!await save()) return;
+      const r = await store.restore(key, id);
+      if (r) { paper = r.paper; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored')); }
+    };
     const open2 = (page2) => { try { window.open(chrome.runtime.getURL(page2), '_blank', 'noopener'); } catch { /* no extension context */ } };
     const docx = async () => { await need(DOCX); return GZ_WRITER_DOCX.exportDocx(view.state.doc, { format, surname: surname(), title: ctx.assignment?.title || paper?.title || '' }); };
     const fileName = () => {
@@ -622,10 +631,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         setTimeout(() => URL.revokeObjectURL(url), 30000);
       } catch (e) { console.error(e); toast(t('The .docx could not be made.')); }
     };
+    // The paper becomes the Word file's text, what it held kept as a version first; the toast's Undo brings that back.
     const importFile = async (f) => {
       if (!f) return;
       const editable = view.props.editable;
-      let replacing = false;
+      let replacing = false, before = null;
       try {
         await need(DOCX);
         const r = await GZ_WRITER_DOCX.importDocx(new Uint8Array(await f.arrayBuffer()), { format });
@@ -635,25 +645,30 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           if (!await save()) throw new Error('paper could not be saved before import');
           const saved = await store.save(key, { ...record(), doc: doc.toJSON() }, { reason: 'import' });
           paper = saved.paper;
+          before = saved.version;
         }
         setDoc(doc.toJSON());
-        toast(r.warnings.length ? r.warnings.map((w) => t(w)).join(' ') : t('Imported. The last version is in Versions.'));
+        toast(r.warnings.length ? r.warnings.map((w) => t(w)).join(' ') : f.name, before ? { label: t('Undo'), run: () => restore(before.id) } : null);
       } catch (e) {
         console.error(e);
         const message = e instanceof RangeError && ['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.'].includes(e.message) ? e.message : 'That file could not be read as a Word document.';
         toast(t(message));
       }
       finally { if (replacing) { root.inert = false; view.setProps({ editable }); view.focus(); } }
+      return before;
     };
-    file.addEventListener('change', () => { importFile(file.files[0]); file.value = ''; });
+    file.addEventListener('change', () => { bring(file.files[0]); file.value = ''; });
+    // A file brought to the paper: on an assignment writer-import.js asks what to do with it; papers.html opens a Word file.
+    const routed = () => !host.standalone && !!globalThis.GZ_WRITER_IMPORT && typeof GZ_WRITER_PAPER.submit === 'function';
+    const bring = (f) => { if (!f) return; if (routed()) GZ_WRITER_IMPORT.bring(api, f); else if (/\.docx$/i.test(f.name)) importFile(f); };
     canvas.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) { e.preventDefault(); canvas.classList.add('gp-drop'); } });
     canvas.addEventListener('dragleave', () => canvas.classList.remove('gp-drop'));
     canvas.addEventListener('drop', (e) => {
-      const f = [...(e.dataTransfer?.files || [])].find((x) => /\.docx$/i.test(x.name));
+      const all = [...(e.dataTransfer?.files || [])], f = routed() ? all[0] : all.find((x) => /\.docx$/i.test(x.name));
       canvas.classList.remove('gp-drop');
       if (!f) return;
       e.preventDefault(); e.stopPropagation();
-      importFile(f);
+      bring(f);
     }, true);
 
     // ---- what the page says: Ultra's names and the paper's key
@@ -719,7 +734,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     setState('');
     const api = {
       editor: ed, key: () => key, format: () => format, paper: () => paper, context: () => ctx,
-      docx, save, version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom,
+      docx, save, version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom, importFile,
+      // Nothing written past the format's opening yet (an import then needs no word about the paper it replaces).
+      blank: () => view.state.doc.textContent.trim() === S.paper.nodeFromJSON(F.template(format, values())).textContent.trim(),
       // The page ended Focus (a click on its dim).
       focused: (on) => { focus = on; focusB.setAttribute('aria-pressed', String(on)); },
       pages: () => layout?.pages.length || 0,

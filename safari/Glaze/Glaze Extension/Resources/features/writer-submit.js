@@ -10,6 +10,11 @@
 //   3. the note and/or the paper's text into Ultra's Quill through lib/writer-main.js (gz-writer:set), checked;
 //   4. once Ultra's Submit is enabled, one click on it. Ultra's confirmation is Ultra's.
 // Any failure stops before Submit and tells the sheet why; nothing is retried by itself. A test is never touched.
+// A file the student submits as is (writer-import.js) takes the same steps from 1, its own name, type and bytes unchanged.
+// Ultra's own file area (enhance.writerUploads, on by default): one file dropped on it or chosen through its input goes to
+// the paper's frame instead, before Ultra hears it (in the capture phase), which asks what to do with it; Ultra
+// never starts that upload, so nothing of it needs undoing. More than one file, a file over 50 MB, Glaze's own attach and
+// the setting off leave the area to Ultra.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const L = () => globalThis.GZ_WRITER_SUBMIT_LIB;
@@ -18,7 +23,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
   const attached = new WeakMap(); // box → exact bytes and the row produced by this upload
   const written = new WeakSet();
-  let passing = null, running = false, active = null, down = null;
+  let passing = null, running = false, active = null, down = null, giving = false, X = null;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   const until = async (fn, ms, every = 100, valid = () => true) => { const end = Date.now() + ms; for (;;) { if (!valid()) return null; const v = fn(); if (v) return v; if (Date.now() >= end) return null; await pause(every); } };
   const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
@@ -91,14 +96,15 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     dt.items.add(file);
     input.files = dt.files;
     if (input.files?.length !== 1 || input.files[0].name !== file.name) return false;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
+    giving = true;
+    try { input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); } finally { giving = false; }
     return true;
   };
   const drop = (zone, file) => {
     const dt = new DataTransfer();
     dt.items.add(file);
-    for (const type of ['dragenter', 'dragover', 'drop']) zone.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+    giving = true;
+    try { for (const type of ['dragenter', 'dragover', 'drop']) zone.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt })); } finally { giving = false; }
     return true;
   };
   const attach = async (box, file, bytes, here) => {
@@ -142,8 +148,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error }); return false; };
     if (running || box.saved || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= Math.max(runs.get(box) || 0, cancelled.get(box) || 0)) return fail('busy');
     runs.set(box, m.run);
-    const name = m.name, bytes = m.bytes, key = m.key;
-    if (!key || key !== L().paperKey(box.context?.paper) || !L().safeName(name) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
+    const name = m.name, bytes = m.bytes, key = m.key, asis = m.asis === true;
+    if (!key || key !== L().paperKey(box.context?.paper) || !(asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name)) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
     const user = box.context.paper.user;
@@ -154,13 +160,14 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     try {
       const d = L().delta({ note: m.note, text: m.text || '' });
       if (!d && written.has(box)) return fail('review');
-      let s = L().advance(L().advance(L().start({ text: !!d }), { step: 'save' }), { step: 'docx' });
+      let s = L().start({ text: !!d, asis });
+      if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'docx' });
       const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
       if (!here()) return fail('page');
       if (!await permit('claim')) return fail('claimed');
       if (!here()) return fail('page');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
-      const file = new File([bytes], name, { type: L().MIME, lastModified: Date.now() });
+      const file = new File([bytes], name, { type: asis ? m.mime : L().MIME, lastModified: Date.now() });
       const a = await attach(box, file, bytes, here);
       if (a) return fail(a);
       s = L().advance(s, { step: 'attach' });
@@ -185,8 +192,33 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     } catch (e) { console.error(e); return fail('page'); } finally { running = false; if (active === transaction) active = null; }
   };
 
+  // ---- Ultra's own file area, caught before Ultra
+  const catcher = (e) => {
+    if (giving || !armed.size || !X?.settings?.().enhance?.writerUploads) return;
+    const drop = e.type === 'drop', t = e.target;
+    for (const box of live().keys()) {
+      const area = L().areaOf(box.editor);
+      const hit = drop ? (area?.querySelector('[class*="makeStylespreview-"]') || L().dropZone(area))?.contains(t) :
+        t?.tagName === 'INPUT' && t.getAttribute('type') === 'file' && area?.contains(t) && !t.closest('.ql-container') && t.id !== 'browseForFiles';
+      if (!hit) continue;
+      const files = drop ? e.dataTransfer?.files : t.files;
+      if (files?.length !== 1 || files[0].size > 50e6) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.type === 'input') return;
+      const f = files[0];
+      // Ultra's zone, which never hears the drop, lets go of its highlight.
+      if (drop) { giving = true; try { t.dispatchEvent(new DragEvent('dragleave', { bubbles: true })); } finally { giving = false; } }
+      else t.value = '';
+      f.arrayBuffer().then((bytes) => { if (!live().has(box)) return; box.frame?.focus(); say(box, { type: 'import:file', name: f.name, mime: f.type, bytes }); }, () => {});
+      return;
+    }
+  };
+  for (const type of ['drop', 'input', 'change']) document.addEventListener(type, catcher, true);
+
   // features/writer.js hands over each submit:* message from a box's frame.
-  const hear = (box, m, X, ok) => {
+  const hear = (box, m, ctx, ok) => {
+    X = ctx;
     if (m.type === 'submit:cancel' && Number.isSafeInteger(m.run) && m.run > 0) {
       cancelled.set(box, Math.max(cancelled.get(box) || 0, m.run));
       if (active?.box === box && active.run <= m.run) active.cancelled = true;
