@@ -154,7 +154,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
     const user = box.context.paper.user;
-    const transaction = active = { box, run: m.run, cancelled: false };
+    const transaction = active = { box, run: m.run, cancelled: false, frame: box.frame, port: box.port };
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
     const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user }))?.ok === true;
@@ -163,7 +163,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!d && written.has(box)) return fail('review');
       let s = L().start({ text: !!d, asis });
       if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'docx' });
-      const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
+      const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
       if (!here()) return fail('page');
       if (!await permit('claim')) return fail('claimed');
       if (!here()) return fail('page');
