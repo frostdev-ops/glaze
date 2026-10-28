@@ -71,10 +71,10 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
       assert.equal(result.html, '<p>&nbsp;&nbsp;😀&nbsp;&nbsp;x</p><p><br></p><p>שלום&nbsp;&nbsp;</p>');
     });
     await check('remeasurement places page gaps at natural line starts after a width change', async () => {
-      const result = await page.evaluate(async () => {
+      const result = await page.evaluate(async (words) => {
         ed.destroy();
         document.getElementById('ed').parentElement.className = 'gp-flow';
-        window.ed = GZ_WRITER_EDITOR.create({ mount: document.getElementById('ed'), mode: 'paper', html: '<p>' + 'The river carries words through the valley. '.repeat(180) + '</p>' });
+        window.ed = GZ_WRITER_EDITOR.create({ mount: document.getElementById('ed'), mode: 'paper', html: '<p>' + words + '</p>' });
         let format = GZ_WRITER_STYLES.FORMATS.mla9;
         const sheet = new CSSStyleSheet();
         const style = () => sheet.replaceSync(GZ_WRITER_STYLES.css(format));
@@ -96,7 +96,7 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
         const bad = gaps.filter((q) => !starts.has(q));
         ed.destroy(); document.adoptedStyleSheets = [];
         return { count: gaps.length, bad };
-      });
+      }, require('../test/fixtures/writer-docx-import.js').text(2500, 37));
       assert.ok(result.count > 1);
       assert.deepEqual(result.bad, []);
     });
