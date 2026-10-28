@@ -156,8 +156,8 @@ test('the card: a .docx shows its name, pages and size, and Open in Writer (the 
   assert.equal(f.doc.querySelector('.gi-file b').textContent, 'Rivera_Essay2.docx');
   assert.match(f.doc.querySelector('.gi-file small').textContent, /^4 pages · \d+ KB$/);
   const [open, asis] = f.tiles();
-  assert.equal(open.textContent, 'Open in Writer');
-  assert.equal(asis.textContent, 'Submit as is');
+  assert.equal(open.querySelector('span').textContent, 'Open in Writer');
+  assert.equal(asis.querySelector('span').textContent, 'Submit as is');
   assert.equal(f.doc.activeElement, open, 'Enter takes the default');
   assert.equal(f.doc.querySelector('.gi-kept'), null, 'an empty paper needs no word about saving it');
   f.doc.fire(open, 'click');
@@ -185,7 +185,7 @@ test('the card: Submit as is opens the submit sheet with the file; close, Escape
     assert.equal(f.card(), null, how);
   }
   assert.equal(f.opened.length + f.imported.length, 1, 'nothing more happened');
-  assert.equal(f.doc.querySelector('main').inert, false, 'the paper is live again');
+  assert.equal(!!f.doc.querySelector('main').inert, false, 'the paper is live again');
 });
 
 test('a file Writer can\'t open (a PDF, anything not .docx) goes straight to the submit sheet as is, with no card', async () => {
