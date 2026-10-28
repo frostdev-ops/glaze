@@ -28,12 +28,13 @@ const textOf = (json) => S.paper.nodeFromJSON(json).textContent;
 let clock = 1e12;
 
 // One frame: its blocks in a sandbox, a view over a real paper state, and the page's context handed over by context(c).
-const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = [] }) => {
+const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = [], timers = [], windowEvents = {} }) => {
   let onContext = null;
   const view = { state: E.state({ mode: 'paper' }), updateState(s) { this.state = s; }, dispatch(tr) { this.state = this.state.apply(tr); } };
   const sandbox = vm.createContext({
     console, crypto, JSON, Date, Number, Object, Promise, Map, Set, Error, RangeError, structuredClone,
-    setTimeout: () => 0, clearTimeout: () => {}, addEventListener: () => {}, document: { addEventListener: () => {}, documentElement: { lang: 'en' } },
+    setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
+    addEventListener: (type, fn) => { windowEvents[type] = fn; }, document: { addEventListener: () => {}, documentElement: { lang: 'en' } },
     sessionStorage: ss, Intl, importing: false, chrome: { storage: { onChanged: { addListener: (fn) => changed.push(fn) } } },
     S, ST, F, PA, PM: S.PM || globalThis.GZ_PM, view, ed: { words: () => E.words(S.text(view.state.doc).text) },
     store: PA.open(local, () => (clock += 1000), { versions: async () => 40 }),
@@ -183,4 +184,21 @@ test('a tab still holding unsaved typing keeps it when another tab saves', async
   await A.$.save();
   await tell();
   assert.equal(B.shown(), 'Two thousand words of my essay. Unsaved here.');
+});
+
+test('a failed autosave tries again by itself, and leaving the page meanwhile asks first', async () => {
+  const local = memory(), ss = session(), timers = [], windowEvents = {};
+  await seed(local);
+  const f = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS }, timers, windowEvents });
+  const set = local.set;
+  local.set = async () => { local.set = set; throw new Error('QUOTA_BYTES quota exceeded'); };
+  f.type(' Typed while storage refused.');
+  assert.equal(await f.$.save(), null);
+  let asked = false;
+  windowEvents.beforeunload({ preventDefault: () => { asked = true; } });
+  assert.ok(asked, 'leaving with unsaved typing that failed to save asks first');
+  const retry = timers.filter((x) => x.fn).at(-1);
+  assert.ok(retry && retry.ms >= 1000, 'a retry is scheduled');
+  await retry.fn();
+  assert.equal(textOf((await stored(local)).paper.doc), 'Two thousand words of my essay. Typed while storage refused.');
 });
