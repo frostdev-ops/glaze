@@ -113,6 +113,22 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
       });
       assert.doesNotMatch(result, /background/);
     });
+    await check('an aligned tab field may extend into the margin without wrapping', async () => {
+      const result = await page.evaluate(async () => {
+        ed.destroy();
+        document.getElementById('ed').parentElement.className = 'gp-flow';
+        window.ed = GZ_WRITER_EDITOR.create({ mount: document.getElementById('ed'), mode: 'paper', html: '<p data-gz="tabs:1l 3.25c 5.5r 6.25d">Item 6\tgate\tnight\t2,006\t19.125</p>' });
+        const format = { ...GZ_WRITER_STYLES.FORMATS.mla9, first: 0, line: 1 };
+        const sheet = new CSSStyleSheet(); sheet.replaceSync(GZ_WRITER_STYLES.css(format)); document.adoptedStyleSheets = [sheet];
+        ed.addPlugins([GZ_WRITER_PAGINATE.plugin({ format: () => format, notes: () => [], gap: 26.4 })]);
+        await new Promise((r) => setTimeout(r, 50));
+        const v = ed.view, last = v.state.doc.firstChild.textContent.indexOf('19.125') + 1;
+        const delta = v.coordsAtPos(last).top - v.coordsAtPos(1).top;
+        ed.destroy(); document.adoptedStyleSheets = [];
+        return delta;
+      });
+      assert.ok(Math.abs(result) < 1, `the decimal field wrapped by ${result}px`);
+    });
     await check('oversized or deeply nested paste is refused without a page error', async () => {
       const result = await page.evaluate(() => {
         ed.run('insertText', 'keep');
