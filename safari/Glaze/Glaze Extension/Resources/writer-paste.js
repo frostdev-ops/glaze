@@ -126,9 +126,8 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   const cascade = (e, up, ctx, block) => {
     const st = own(e, ctx), out = { deco: new Set(up.deco), vert: up.vert, bg: block ? null : up.bg, mso: block ? null : up.mso, link: up.link };
     for (const k of INHERIT) out[k] = up[k];
-    const ua = UA[e.name] || {};
-    // A heading's own weight and slant are the format's (as an imported file's are), not marks.
-    const decl = HEADING.test(e.name) ? Object.fromEntries(Object.entries(st).filter(([k]) => k !== 'font-weight' && k !== 'font-style')) : { ...ua, ...st };
+    const ua = UA[e.name] || (HEADING.test(e.name) ? { 'font-weight': 'bold' } : {});
+    const decl = { ...ua, ...st };
     if (e.name === 'font') { if (e.a.face) decl['font-family'] = e.a.face; if (e.a.color) decl.color = e.a.color; }
     for (const k of INHERIT) if (decl[k] != null && decl[k] !== 'inherit') out[k] = decl[k];
     if (decl.font) { const m = /(\d*\.?\d+(?:pt|px))\s*(?:\/\S+)?\s+(.+)$/.exec(decl.font); if (m) { out['font-size'] = m[1]; out['font-family'] = m[2]; } }
@@ -176,7 +175,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     if (e.text != null) return e.text ? wrap(e.text, c, ctx) : '';
     if (isMarker(e)) return '';
     if (e.name === 'br') return '<br>';
-    if (e.name === 'img') { const src = String(e.a.src || ''); return /^data:image\//i.test(src) ? `<img src="${esc(src)}" alt="${esc(e.a.alt || '')}"${+e.a.width > 0 ? ` width="${Math.round(+e.a.width)}"` : ''}>` : ''; }
+    if (e.name === 'img') { const src = String(e.a.src || ''); return S().imageSrc(src) ? `<img src="${esc(src)}" alt="${esc(e.a.alt || '')}"${+e.a.width > 0 ? ` width="${Math.round(+e.a.width)}"` : ''}>` : wrap(e.a.alt || '', c, ctx); }
     const cc = cascade(e, c, ctx, false);
     // Word's empty-paragraph mark: <o:p>&nbsp;</o:p>.
     if (e.name === 'o:p') return e.kids.every((k) => k.text != null && /^[\s ]*$/.test(k.text)) ? '' : e.kids.map((k) => inline(k, cc, ctx)).join('');
@@ -187,6 +186,8 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   // web page's alignment only.
   const paraOf = (e, ctx, list = false) => {
     const st = own(e, ctx), css = [], gz = {};
+    // Heading emphasis is carried by its runs, including mixed emphasis. Suppress the format's heading defaults.
+    if (HEADING.test(e.name) && !ctx.match) css.push('font-weight:normal', 'font-style:normal');
     const align = String(st['text-align'] || e.a.align || '').toLowerCase();
     if (!ctx.match && ['center', 'right', 'justify'].includes(align)) css.push(`text-align:${align}`);
     let brk = false;

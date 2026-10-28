@@ -84,8 +84,14 @@ const pump = async () => {
       order.push(port);
       const f = frames.get(port), job = f.queue.shift();
       try {
-        if (rebuild && linter) { rebuild = false; const old = linter; linter = null; loading = null; await old.dispose().catch(() => {}); }
-        const l = linter || await load();
+        let l;
+        // Changes can arrive while setup or a lint is yielding. Rebuild between jobs, before using any handles;
+        // load() imports the shared dictionary into the new dialect too.
+        for (;;) {
+          if (rebuild) { rebuild = false; const old = linter; linter = null; loading = null; await old?.dispose().catch(() => {}); }
+          l = linter || await load();
+          if (!rebuild) break;
+        }
         if (!frames.has(port)) continue;
         const t0 = performance.now();
         const raw = await l.lint(job.text, { language: 'plaintext' });
@@ -135,10 +141,10 @@ const ON = {
     for (const w of words(m.words).map(lower)) any = shared.delete(w) || any;
     if (any && linter) rebuild = true;
   },
-  dialect: async (_port, _f, m) => {
+  dialect: (_port, _f, m) => {
     if (!Object.hasOwn(DIALECTS, m.dialect) || DIALECTS[m.dialect] === dialect) return;
     dialect = DIALECTS[m.dialect];
-    if (linter) await linter.setDialect(dialect);
+    rebuild = true;
   },
   stats: (port, _f, m) => port.postMessage({ op: 'stats', id: m.id, worker: WORKER, ports: frames.size, loads, lints, loaded: !!linter, dialect: Object.keys(DIALECTS).find((k) => DIALECTS[k] === dialect) }),
   idle: (_port, _f, m) => { if (Number.isFinite(m.ms) && m.ms >= 1000) { IDLE = m.ms; idle(); } },
