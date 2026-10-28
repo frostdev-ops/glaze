@@ -405,3 +405,15 @@ test('D8: while a paper\'s frame reopens, Ultra\'s Submit still waits for Writer
   assert.ok(after.stopped);
   assert.deepEqual(p.sent.map((m) => m.type), ['submit:open'], 'the new frame opens the submit sheet once it is up');
 });
+
+test('D2: a page opened after a Writer submit went out is free, however late the worker gets to recording it', async () => {
+  const u = ultra(), m = { type: 'glaze:writerSubmit', token: 'a'.repeat(36), user: '_900_1' };
+  await u.visit('doc-1', {}, { tab: 1 });
+  assert.equal((await u.w.send({ ...m, op: 'claim' }, u.sender())).ok, true);
+  const committing = u.w.send({ ...m, op: 'commit' }, u.sender());
+  // A new tab opens the assignment while the commit still waits its turn in the worker.
+  Object.assign(u.at, { doc: 'doc-5', tab: 3 });
+  await u.w.send({ type: 'glaze:attempt-kind', kind: 'assignment', page: u.at.url }, u.sender());
+  assert.equal((await committing).ok, true);
+  assert.equal((await u.w.send({ ...m, token: 'e'.repeat(36), op: 'claim' }, u.sender())).ok, true, 'the new page is the next attempt');
+});
