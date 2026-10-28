@@ -186,6 +186,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const hear = (box, m) => {
     if (m.type === 'ready' && !box.ready) swap(box);
     else if (m.type.startsWith('submit:')) { if (box.mode === 'paper') X.need('lib/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT_LIB).then(() => X.need('features/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT)).then(() => boxes.get(box.editor) === box && GZ_WRITER_SUBMIT.hear(box, m, X, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
+    else if (m.type === 'attachments') { if (box.mode === 'paper') X.need('lib/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.attachments(X, box, m, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
     else if (box.mode === 'paper') { if (m.type === 'focus-mode') focusMode(box, m.on === true); else if (m.type === 'native') { drop(box); declined.add(box.editor); } }
     else if (m.type === 'height' && Number.isFinite(m.px)) box.frame.style.height = `${Math.max(40, Math.min(20000, Math.round(m.px)))}px`;
     else if (m.type === 'change' && typeof m.html === 'string' && typeof m.text === 'string') {
