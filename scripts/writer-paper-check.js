@@ -379,6 +379,17 @@ const HARNESS = `(() => {
     await until(() => papers.evaluate(() => document.querySelectorAll('.gp-versions .gp-mi').length > 0), 'versions');
     check(true, 'Versions lists saved versions');
     saved.versions = await shot(papers, 'paper-versions.png');
+    // A paper Word can't take (a picture kept in a form Word has no place for) says so on the list, and nothing breaks.
+    await papers.evaluate(async () => {
+      const k = 'bb.school.test|_900_1|_101_1|_8_1', { writerPapers: rows } = await chrome.storage.local.get('writerPapers');
+      const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A picture Word can’t take: ' }, { type: 'image', attrs: { src: 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA', alt: 'Chart' } }] }] };
+      await chrome.storage.local.set({ [`writerPaper:${k}`]: { key: k, doc, title: 'Lab report', format: 'mla9', updated: Date.now(), revision: 1 }, writerPapers: [{ key: k, title: 'Lab report', course: '', url: '', words: 5, format: 'mla9', updated: Date.now(), submitted: null }, ...rows] });
+    });
+    await papers.goto(`chrome-extension://${id}/papers.html`);
+    await until(() => papers.evaluate(() => document.querySelectorAll('.gp-paper').length === 2), 'papers list with the second paper');
+    await papers.evaluate(() => [...document.querySelectorAll('.gp-paper')].find((a) => a.querySelector('h2').textContent === 'Lab report').querySelector('button').click());
+    await until(() => papers.evaluate(() => [...document.querySelectorAll('.gp-paper')].find((a) => a.querySelector('h2').textContent === 'Lab report').querySelector('[role="status"]')?.textContent === 'The .docx could not be made.'), 'the list says the .docx could not be made');
+    check(true, 'papers.html says when a paper\'s .docx could not be made');
     await papers.close();
 
     check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);
