@@ -7,6 +7,7 @@ module.exports = () => {
   doc.body = new El('body', doc); doc.root.append(doc.body); doc.body.append(new El('main', doc));
   for (const n of ['querySelector', 'querySelectorAll', 'addEventListener', 'removeEventListener', 'dispatchEvent']) doc[n] = El.prototype[n].bind(doc.root);
   doc.createElement = (tag) => new El(tag, doc);
+  doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.fire = (el, type, more = {}) => { const e = { type, target: el, isTrusted: true, preventDefault() {}, stopPropagation() {}, ...more }; el.dispatchEvent(e); };
   let seq = 0, value = { label: 'first' }, current, format = { id: 'mla9' };
   const builds = [], saved = [];
