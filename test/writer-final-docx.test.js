@@ -300,3 +300,14 @@ test('a header\'s table keeps its text, cells in order and tab-separated, with a
   const wrapped = await withHeader(`<w:customXml w:element="h">${p('In custom XML')}</w:customXml><w:ins w:id="9" w:author="a">${p('Inserted')}</w:ins><w:moveTo w:id="8" w:author="a">${p('Moved here')}</w:moveTo><w:del w:id="7" w:author="a">${p('Deleted')}</w:del><w:moveFrom w:id="6" w:author="a">${p('Moved away')}</w:moveFrom>`);
   assert.deepEqual(runsOf(wrapped.setup.headers.default), ['In custom XML', 'Inserted', 'Moved here']);
 });
+
+// ---- symbols
+test('a w:sym character comes in as its Unicode equivalent (Symbol\'s and Wingdings\' private-use codes mapped)', async () => {
+  const sym = (font, ch) => `<w:r><w:sym w:font="${font}" w:char="${ch}"/></w:r>`;
+  const got = await imp(pack(`<w:p>${r('Angle ')}${sym('Symbol', 'F061')}${r(', ')}${sym('Symbol', 'F0B1')}${sym('Symbol', '44')}${sym('Symbol', 'F0E5')}${sym('Symbol', 'F0D6')}${r(' check ')}${sym('Wingdings', 'F0FC')}${sym('Wingdings', 'F0A7')}${r(' bullet ')}${sym('Arial', '2022')}</w:p>`));
+  assert.equal(got.node.textContent, 'Angle α, ±Δ∑√ check ✓▪ bullet •');
+  assert.deepEqual(got.warnings, []);
+  const odd = await imp(pack(`<w:p>${r('A')}${sym('Wingdings', 'F041')}${sym('Webdings', 'F06A')}${r('B')}</w:p>`));
+  assert.equal(odd.node.textContent, 'AB');
+  assert.deepEqual(odd.warnings, ['Some pictures, objects or equations were left out.']);
+});
