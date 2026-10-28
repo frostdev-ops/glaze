@@ -48,7 +48,7 @@ test('a picture keeps its layout, alignment, width and caption through JSON and 
   const img = P.nodes.image.create({ src: PNG, alt: 'A house', width: 300, display: 'block', align: 'right', caption: 'Fig. 1. The house.' });
   const doc = P.nodes.doc.create(null, P.nodes.paragraph.create(null, img));
   for (const back of [json(doc), roundHTML(doc)]) {
-    assert.deepEqual(back.firstChild.firstChild.attrs, { src: PNG, alt: 'A house', width: 300, display: 'block', align: 'right', caption: 'Fig. 1. The house.' });
+    assert.deepEqual({ ...back.firstChild.firstChild.attrs }, { src: PNG, alt: 'A house', width: 300, display: 'block', align: 'right', caption: 'Fig. 1. The house.' });
   }
   const plain = S.parse(P, `<p><img src="${PNG}" alt="x" width="120"></p>`).firstChild.firstChild.attrs;
   assert.deepEqual([plain.display, plain.align, plain.caption], ['inline', null, ''], 'an imported picture stays in line');
@@ -80,7 +80,7 @@ test('lists keep per-level styles, continued numbering and a restart through JSO
   const ul = P.nodes.bullet_list.create({ styles: 'square,dash' }, P.nodes.list_item.create(null, P.text('dot')));
   const doc = P.nodes.doc.create(null, [ol, P.nodes.paragraph.create(null, P.text('between')), ul]);
   for (const back of [json(doc), roundHTML(doc)]) {
-    assert.deepEqual(back.firstChild.attrs, { styles: 'upper-roman,upper-alpha,decimal', continue: true });
+    assert.deepEqual({ ...back.firstChild.attrs }, { styles: 'upper-roman,upper-alpha,decimal', continue: true });
     assert.equal(back.firstChild.child(1).attrs.start, 4);
     assert.equal(back.child(2).attrs.styles, 'square,dash');
   }
@@ -165,15 +165,15 @@ test('autolink() finds a typed address or email before the caret, without traili
 });
 
 test('a typed address becomes a link on space, and Backspace takes it back', () => {
-  const st = type(caret(make('<p>See </p>'), 'See '), 'www.example.com ');
+  const st = type(caret(make('<p>See&nbsp;</p>'), 'See '), 'www.example.com ');
   let linked = null;
   st.doc.descendants((n) => { if (n.isText && n.marks.length) linked = { text: n.text, href: n.marks[0].attrs.href }; });
   assert.deepEqual(linked, { text: 'www.example.com', href: 'https://www.example.com' });
-  assert.equal(html(st), '<p>See <a href="https://www.example.com" rel="noopener noreferrer" target="_blank">www.example.com</a> </p>');
+  assert.equal(html(st), '<p>See <a href="https://www.example.com" rel="noopener noreferrer" target="_blank">www.example.com</a>&nbsp;</p>');
   let back = st;
   GZ_PM.inputrules.undoInputRule(st, (tr) => { back = st.apply(tr); });
-  assert.equal(html(back), '<p>See www.example.com </p>');
-  assert.equal(html(type(caret(make('<p>x</p>'), 'x'), ' 3.5 ')), '<p>x 3.5 </p>');
+  assert.equal(html(back), '<p>See www.example.com&nbsp;</p>');
+  assert.equal(html(type(caret(make('<p>x</p>'), 'x'), ' 3.5 ')), '<p>x 3.5&nbsp;</p>');
 });
 
 test('link() sets a link\'s text and address, and refuses an unsafe one', () => {
@@ -181,7 +181,7 @@ test('link() sets a link\'s text and address, and refuses an unsafe one', () => 
   st = run(st, 'link', { text: 'the article', href: 'doi.org/10.1/x' }).st;
   assert.equal(html(st), '<p>Read <a href="https://doi.org/10.1/x" rel="noopener noreferrer" target="_blank">the article</a> now</p>');
   assert.equal(run(st, 'link', { text: 'x', href: 'javascript:alert(1)' }).ok, false);
-  const fresh = run(caret(make('<p>Read </p>'), 'Read '), 'link', { text: '', href: 'https://a.org' }).st;
+  const fresh = run(caret(make('<p>Read&nbsp;</p>'), 'Read '), 'link', { text: '', href: 'https://a.org' }).st;
   assert.equal(html(fresh), '<p>Read <a href="https://a.org" rel="noopener noreferrer" target="_blank">https://a.org</a></p>');
   assert.equal(html(run(caret(st, 'the', 'end'), 'unlink').st), '<p>Read the article now</p>');
 });
@@ -270,7 +270,7 @@ test('the header row, borders and cell alignment toggle; cell text aligns throug
 
 test('Tab and Shift-Tab move between cells, and Tab in the last cell adds a row', () => {
   let st = inTable(2, 2);
-  const cellIndex = (s) => { const $ = s.selection.$from; return [$.index(-2), $.index(-1)]; };
+  const cellIndex = (s) => { const $ = s.selection.$from; return [$.index($.depth - 3), $.index($.depth - 2)]; };
   st = key(st, ev('Tab')).st;
   assert.deepEqual(cellIndex(st), [0, 1]);
   st = key(st, ev('Tab', { shift: true })).st;
