@@ -9,7 +9,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     : require('vm').runInThisContext(require('fs').readFileSync(require('path').join(__dirname, 'pm.js'), 'utf8'), { filename: 'lib/pm.js' });
   const { Schema, DOMParser } = PM.model;
 
-  const MAX_INDENT = 8, ALIGNS = ['center', 'right', 'justify'];
+  const MAX_INDENT = 8, ALIGNS = ['left', 'center', 'right', 'justify'];
   const MAX_INPUT = 2000000, MAX_TOKENS = 50000, MAX_DEPTH = 64;
   const limit = () => { throw Object.assign(new RangeError('writer-schema: input exceeds safe limits'), { code: 'WRITER_INPUT_LIMIT' }); };
   const FONTS = ['Times New Roman', 'Arial', 'Calibri', 'Courier New'];
@@ -25,7 +25,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const classes = (dom) => String(dom.getAttribute('class') || '').split(/\s+/);
   const indentOf = (dom) => { for (const c of classes(dom)) { const m = /^ql-indent-([1-8])$/.exec(c); if (m) return +m[1]; } return 0; };
   const alignOf = (dom) => {
-    for (const c of classes(dom)) { const m = /^ql-align-(center|right|justify)$/.exec(c); if (m) return m[1]; }
+    for (const c of classes(dom)) { const m = /^ql-align-(left|center|right|justify)$/.exec(c); if (m) return m[1]; }
     const a = css(dom, 'text-align') || String(dom.getAttribute('align') || '').toLowerCase();
     return ALIGNS.includes(a) ? a : null;
   };
@@ -63,7 +63,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   };
   const imageSrc = (raw) => {
     const v = String(raw ?? '').trim();
-    return /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(v) || /^https:\/\/[^\s"<>]+$/i.test(v) ? v : null;
+    return /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(v) ? v : null;
   };
 
   // ---- schemas
@@ -105,7 +105,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   ].filter(Boolean).join(';');
   const readBlock = (paper) => (dom) => {
     const a = { align: alignOf(dom), indent: indentOf(dom) };
-    if (!paper) return a;
+    if (!paper) return { ...a, align: a.align === 'left' ? null : a.align };
     const left = inches(css(dom, 'margin-left'));
     return { ...a, indent: a.indent || (left > 0 ? clamp(Math.round(left / 0.5), 0, MAX_INDENT) : 0), line: lineOf(dom), first: firstOf(dom), ...readGz(dom.getAttribute('data-gz')) };
   };
@@ -114,7 +114,8 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     const cls = [a.indent ? `ql-indent-${a.indent}` : '', a.align ? `ql-align-${a.align}` : ''].filter(Boolean).join(' ');
     const style = [a.line != null ? `line-height:${a.line}` : '', a.first != null ? `text-indent:${a.first}in` : '',
       a.before != null ? `margin-top:${a.before}pt` : '', a.after != null ? `margin-bottom:${a.after}pt` : '',
-      a.left != null ? `padding-left:${a.left}in` : '', a.right != null ? `padding-right:${a.right}in` : ''].filter(Boolean).join(';');
+      a.left != null ? `padding-left:${a.left}in` : '', a.right != null ? `padding-right:${a.right}in` : '',
+      ['normal', 'bold'].includes(a.weight) ? `font-weight:${a.weight}` : '', ['normal', 'italic'].includes(a.slant) ? `font-style:${a.slant}` : ''].filter(Boolean).join(';');
     const gz = a.before !== undefined ? writeGz(a) : '';
     return { class: cls || null, style: style || null, ...(gz ? { 'data-gz': gz } : {}) };
   };
@@ -162,8 +163,8 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       doc: paper ? { content: 'block+', attrs: { setup: { default: null }, paste: { default: null } } } : { content: 'block+' },
       paragraph: { group: 'block', content: 'inline*', attrs, parseDOM: [{ tag: 'p', getAttrs: read }], toDOM: (n) => ['p', blockDOM(n.attrs), 0] },
       heading: {
-        group: 'block', content: 'inline*', defining: true, levels, attrs: { level: { default: levels[0] }, ...attrs },
-        parseDOM: [1, 2, 3, 4, 5, 6].map((n) => ({ tag: `h${n}`, getAttrs: (dom) => ({ level: clamp(n, levels[0], levels.at(-1)), ...read(dom) }) })),
+        group: 'block', content: 'inline*', defining: true, levels, attrs: { level: { default: levels[0] }, ...attrs, ...(paper ? { weight: { default: null }, slant: { default: null } } : {}) },
+        parseDOM: [1, 2, 3, 4, 5, 6].map((n) => ({ tag: `h${n}`, getAttrs: (dom) => ({ level: clamp(n, levels[0], levels.at(-1)), ...read(dom), ...(paper ? { weight: ['normal', '400'].includes(css(dom, 'font-weight')) ? 'normal' : ['bold', '700'].includes(css(dom, 'font-weight')) ? 'bold' : null, slant: ['normal', 'italic'].includes(css(dom, 'font-style')) ? css(dom, 'font-style') : null } : {}) }) })),
         toDOM: (n) => [`h${n.attrs.level}`, blockDOM(n.attrs), 0],
       },
       code_block: {
@@ -2584,7 +2585,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   // Dropped with everything inside them. What a post holds that compose can't keep is reported by loses().
   const DROP = { script: '', style: '', template: '', noscript: '', title: '', head: '', textarea: '', select: '', button: '', xmp: '', noembed: '', noframes: '',
     iframe: 'media', object: 'media', embed: 'media', video: 'media', audio: 'media', canvas: 'media', picture: 'media', map: 'media', svg: 'media', math: 'math' };
-  const CLASS = /^(ql-indent-[1-8]|ql-align-(center|right|justify)|ql-syntax|gz-page-break|gz-rule|gz-footnote)$/;
+  const CLASS = /^(ql-indent-[1-8]|ql-align-(left|center|right|justify)|ql-syntax|gz-page-break|gz-rule|gz-footnote)$/;
   const KEEP = { a: ['href'], img: ['src', 'alt', 'width', 'data-display', 'data-align', 'data-caption'], ol: ['data-list', 'data-styles', 'data-continue'], ul: ['data-list', 'data-styles'], li: ['data-list', 'data-start', 'data-gz'], sup: ['data-footnote'],
     td: ['colspan', 'rowspan', 'data-colwidth', 'data-valign'], th: ['colspan', 'rowspan', 'data-colwidth', 'data-valign'], p: ['align', 'data-gz'], div: ['align'], table: ['data-borders'],
     span: ['data-gz-color', 'data-gz-highlight', 'data-gz-caps'], ...Object.fromEntries(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((h) => [h, ['data-gz']])) };
@@ -2646,7 +2647,10 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       if (cls) keep.class = cls;
       if (a.style) keep.style = a.style;
       if (kind === 'a' && !href(keep.href)) delete keep.href;
-      if (kind === 'img' && !(o.paper && imageSrc(keep.src))) continue;
+      if (kind === 'img' && !(o.paper && imageSrc(keep.src))) {
+        if (o.paper) { o.lost.add('media'); if (keep.alt) add(txt(keep.alt)); }
+        continue;
+      }
       const e = el(kind, keep);
       add(e);
       if (!VOID.has(kind)) { if (stack.length >= MAX_DEPTH) limit(); stack.push({ e, src: name }); }
@@ -2793,7 +2797,8 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       } else if (name === 'UL' || name === 'OL' || name === 'LI') {
         for (const it of items(name === 'LI' ? el('ul', {}, [n]) : n, o, 0, [])) {
           const kind = it.ordered ? 'OL' : 'UL';
-          if (out.at(-1)?.nodeName !== kind) out.push(el(kind.toLowerCase(), o.paper && n.nodeName === kind ? listAttrs(n) : {}));
+          const attrs = o.paper && n.nodeName === kind ? listAttrs(n) : {};
+          if (out.at(-1)?.nodeName !== kind || o.paper && !['data-styles', 'data-continue'].every((k) => out.at(-1).attrs[k] === attrs[k])) out.push(el(kind.toLowerCase(), attrs));
           out.at(-1).childNodes.push(it.li);
         }
       } else if (name === 'PRE') out.push(pre(n));
@@ -2811,7 +2816,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     }
     flush();
     for (let i = out.length - 1; i > 0; i--) {
-      if ((out[i].nodeName === 'UL' || out[i].nodeName === 'OL') && out[i].nodeName === out[i - 1].nodeName) out[i - 1].childNodes.push(...out.splice(i, 1)[0].childNodes);
+      if ((out[i].nodeName === 'UL' || out[i].nodeName === 'OL') && out[i].nodeName === out[i - 1].nodeName && (!o.paper || ['data-styles', 'data-continue'].every((k) => out[i].attrs[k] === out[i - 1].attrs[k]))) out[i - 1].childNodes.push(...out.splice(i, 1)[0].childNodes);
     }
     return out;
   };
@@ -2980,7 +2985,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   };
 
   const compose = make(false), paperSchema = make(true);
-  return { compose, paper: paperSchema, parse, slice, serialize, delta, text, loses, href, inline, MAX_INDENT, MAX_INPUT, FONTS, HIGHLIGHT, dataGz: writeGz, readGz, html: { tags, attrs: attrsOf, decode, fontOf, sizeOf, inches } };
+  return { compose, paper: paperSchema, parse, slice, serialize, delta, text, loses, href, inline, MAX_INDENT, MAX_INPUT, MAX_TOKENS, MAX_DEPTH, FONTS, HIGHLIGHT, dataGz: writeGz, readGz, html: { tags, attrs: attrsOf, decode, fontOf, sizeOf, inches } };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SCHEMA; else GZ_WRITER_SCHEMA;

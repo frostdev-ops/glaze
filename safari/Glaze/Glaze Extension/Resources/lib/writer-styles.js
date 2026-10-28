@@ -208,7 +208,7 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
   const paraAttrs = (f, where = {}, v = {}) => {
     const b = paraBase(f, where, v.align), eq = (x, y) => Math.abs(x - y) < 0.005, num = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
     const out = {
-      align: !v.align || v.align === 'left' || v.align === b.align ? null : v.align,
+      align: !v.align || v.align === b.align ? null : v.align,
       left: num(v.left) == null || eq(v.left, b.left) ? null : v.left, right: num(v.right) ? v.right : null,
       first: num(v.first) == null || eq(v.first, b.first) ? null : v.first, before: num(v.before) ? v.before : null,
       after: num(v.after) == null || eq(v.after, b.after) ? null : v.after, line: null, exact: null, least: null,
@@ -281,6 +281,7 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
       `${s} p.gp-entry { padding-left: ${f.list.hanging}in; text-indent: -${f.list.hanging}in; line-height: ${lineHeight(f, { line: f.list.line })}px; margin-bottom: ${r3(pt2px(f.list.after))}px; }`,
     ];
     f.headings.forEach((h, i) => out.push(`${s} h${i + 1} { font-size: inherit; font-weight: ${h.bold ? 700 : 400}; font-style: ${h.italic ? 'italic' : 'normal'}; text-align: ${h.align}; text-indent: ${h.first || 0}in; }`));
+    for (const align of ['left', 'center', 'right', 'justify']) out.push(`${s} .ql-align-${align} { text-align: ${align}; }`);
     for (let n = 1; n <= 8; n++) out.push(`${s} .ql-indent-${n} { padding-left: ${n * 0.5}in; }`, `${s} li.ql-indent-${n} { padding-left: ${n * 0.5 + 0.5}in; }`);
     return out.join('\n');
   };

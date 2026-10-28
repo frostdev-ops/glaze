@@ -397,8 +397,7 @@
 
   // ---- wiring ---------------------------------------------------------------------------------------------------------
   F.plugin(P.plugin({ onFix: (_v, f) => showFix(f), onUpdate, allow }));
-  const gate = W?.gate((cls) => (cls === 'smart' ? !allow('smart') : F.mode() === 'compose' && pref()?.compose?.markdown === false));
-  if (gate) F.plugin(gate);
+
   // Proofing switched off: nothing more is asked and what was found goes; on again, the whole document is read.
   W?.follow((w, was) => {
     was ||= W.clean(undefined);

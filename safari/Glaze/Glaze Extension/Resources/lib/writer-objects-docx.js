@@ -8,7 +8,7 @@
 //     (w:cantSplit, as the pages draw them), a cell's vertical alignment (w:vAlign);
 //   pictures: one set as a block aligns its paragraph (w:jc, no first-line indent), its caption follows in Word's Caption
 //     style, kept with it; a picture alone in its paragraph comes back as a block;
-//   the horizontal line: an empty paragraph with a bottom border (export only; Word's comes back as an empty line).
+//   horizontal lines are written and read by lib/writer-docx.js alongside its other blocks.
 // Classic script; module.exports for node.
 var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
   const S = () => (typeof GZ_WRITER_SCHEMA !== 'undefined' ? GZ_WRITER_SCHEMA : require('./writer-schema.js'));
@@ -25,17 +25,6 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
   // ================================================================================================================
   const lvl = (style, l, ordered) => `<w:lvl w:ilvl="${l}"><w:start w:val="1"/><w:numFmt w:val="${ordered ? FMT[style] : 'bullet'}"/><w:lvlText w:val="${ordered ? `%${l + 1}.` : BULLET[style]}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${720 * (l + 1)}" w:hanging="360"/></w:pPr></w:lvl>`;
   const NIL = `<w:tblBorders>${['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((k) => `<w:${k} w:val="nil"/>`).join('')}</w:tblBorders>`;
-  const RULE = '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr><w:ind w:firstLine="0"/></w:pPr></w:p>';
-
-  // How many body-level elements writer-docx writes for a block (a list item, a code line and a paragraph are one each).
-  const count = (node) => {
-    const name = node.type.name;
-    if (name === 'paragraph' || name === 'heading' || name === 'table') return 1;
-    if (isList(node)) return node.childCount;
-    if (name === 'code_block') return (node.textContent || '').split('\n').length;
-    if (name === 'blockquote') { let k = 0; node.forEach((c) => { k += count(c); }); return k; }
-    return 0;
-  };
 
   // A picture's paragraph as a block: no first-line indent, the picture's alignment, kept with its caption.
   const blockPara = (p, align, keep) => {
@@ -53,7 +42,7 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
     if (typeof doc?.forEach !== 'function') doc = S().paper.nodeFromJSON(doc);
     let x = parts['word/document.xml'];
     if (!x) return parts;
-    const f = ST().get(o.format);
+    const f = ST().look(ST().get(o.format), doc.attrs.setup);
 
     // ---- lists
     const lists = [];
@@ -120,26 +109,6 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
       else pOpen = at;
     }
 
-    // ---- horizontal lines: before the body-level element that follows them
-    if (doc.type.schema.nodes.horizontal_rule) {
-      const body = x.indexOf('<w:body>') + 8, sect = x.lastIndexOf('<w:sectPr');
-      const tops = [];
-      let depth = 0;
-      const TOP = /<w:tbl>|<\/w:tbl>|<w:p>|<w:p\/>|<w:p\s[^>]*>/g;
-      TOP.lastIndex = body;
-      for (let m = TOP.exec(x); m && m.index < sect; m = TOP.exec(x)) {
-        if (m[0] === '<w:tbl>') { if (depth++ === 0) tops.push(m.index); } else if (m[0] === '</w:tbl>') depth--;
-        else if (depth === 0) tops.push(m.index);
-      }
-      let seen = 0;
-      const visit = (parent) => parent.forEach((node) => {
-        if (node.type.name === 'horizontal_rule') { const at = seen < tops.length ? tops[seen] : sect; ops.push({ at, end: at, text: RULE }); }
-        else if (node.type.name === 'blockquote') visit(node);
-        else seen += count(node);
-      });
-      visit(doc);
-    }
-
     ops.sort((a, b) => b.at - a.at || b.end - a.end);
     for (const op of ops) x = x.slice(0, op.at) + op.text + x.slice(op.end);
     parts['word/document.xml'] = x;
@@ -191,7 +160,7 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
         if (node.local === 'p') {
           if (kid(kid(node, 'pPr'), 'pageBreakBefore')) cur = null;
           const li = numPr(node);
-          if (li) { if (!cur || cur.ordered !== li.ordered) { cur = { ordered: li.ordered, items: [] }; runs.push(cur); } cur.items.push(li); } else cur = null;
+          if (li) { if (!cur || cur.ordered !== li.ordered || absOf(cur.items[0].id) !== absOf(li.id)) { cur = { ordered: li.ordered, items: [] }; runs.push(cur); } cur.items.push(li); } else cur = null;
         } else if (node.local === 'tbl') {
           cur = null;
           const rows = els(node).filter((k) => k.local === 'tr');
@@ -232,7 +201,7 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
     // ---- the HTML, tag by tag
     const listTags = (html.match(/<(ol|ul)>/g) || []).length, tableTags = (html.match(/<table>/g) || []).length;
     const doLists = listTags === runs.length && runs.length > 0, doTables = tableTags === tables.length && tables.length > 0;
-    let ri = -1, li = 0, prevOrdered = null, ti = 0, ci = 0;
+    let ri = -1, li = 0, prevOrdered = null, continued = false, ti = 0, ci = 0;
     const tstack = [], cstack = [];
     html = html.replace(/<(ol|ul)>|<li\b|<table>|<\/table>|<tr>|<td\b|<\/td>/g, (tag) => {
       if ((tag === '<ol>' || tag === '<ul>') && doLists) {
@@ -240,13 +209,14 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
         li = 0;
         if (!run || run.ordered !== (tag === '<ol>')) return tag;
         const styles = styleOf(run), cont = run.ordered && prevOrdered && prevOrdered.items.at(-1).id === run.items[0].id;
+        continued = !!cont;
         if (run.ordered) prevOrdered = run;
         return `<${tag.slice(1, 3)}${styles ? ` data-styles="${styles}"` : ''}${cont ? ' data-continue="true"' : ''}>`;
       }
       if (tag === '<li' && doLists) {
         const run = runs[ri], item = run?.items[li], before = run?.items[li - 1];
         li++;
-        return run?.ordered && item && before && item.id !== before.id ? `<li data-start="${startOf(item)}"` : tag;
+        return run?.ordered && item && (before ? item.id !== before.id : !continued && startOf(item) !== 1) ? `<li data-start="${startOf(item)}"` : tag;
       }
       if (!doTables) return tag;
       if (tag === '<table>') { const t = tables[ti++]; tstack.push({ t, row: -1 }); return t && !t.borders ? '<table data-borders="none">' : tag; }

@@ -45,10 +45,22 @@
   };
   const edit = async (key) => {
     document.documentElement.dataset.mode = 'paper';
+    await GZ_WRITER_PAPER.need(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'lib/writer-settings.js']);
+    await GZ_WRITER_SETTINGS.load();
+    const plugins = [], ready = [];
+    let editor = null;
+    // The same editor modules as an assignment frame, with a local host and no page messaging or submission.
+    globalThis.GZ_WRITER_FRAME = {
+      t, mode: () => 'paper', kind: () => 'paper', editor: () => editor, slot: () => null,
+      on: (event, fn) => { if (event === 'ready') ready.push(fn); },
+      plugin: (p) => { if (editor) editor.addPlugins([p]); else plugins.push(p); },
+    };
+    await GZ_WRITER_PAPER.need(['lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'writer-paste.js']);
     const mountEl = h('div');
     document.body.append(mountEl);
-    const editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '' });
+    editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins });
     await GZ_WRITER_PAPER.mount({ editor, t, standalone: true, key, context: () => ({}) });
+    for (const fn of ready) fn(editor);
   };
   catalogue().then(() => {
     const key = new URLSearchParams(location.search).get('paper');

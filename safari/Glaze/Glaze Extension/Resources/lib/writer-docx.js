@@ -50,7 +50,9 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       const style = m.text_style, mk = (k) => m[k];
       if (style?.font) s += `<w:rFonts w:ascii="${esc(style.font)}" w:hAnsi="${esc(style.font)}" w:eastAsia="${esc(style.font)}" w:cs="${esc(style.font)}"/>`;
       if (mk('bold')) s += '<w:b/><w:bCs/>';
+      else if (m.bold === false) s += '<w:b w:val="0"/><w:bCs w:val="0"/>';
       if (mk('italic')) s += '<w:i/><w:iCs/>';
+      else if (m.italic === false) s += '<w:i w:val="0"/><w:iCs w:val="0"/>';
       if (mk('all_caps')) s += '<w:caps/>';
       if (mk('small_caps')) s += '<w:smallCaps/>';
       if (mk('strike')) s += '<w:strike/>';
@@ -94,7 +96,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       let out = '', link = null, linked = '';
       const flush = () => { if (link) { out += `<w:hyperlink r:id="${rel(`${R}/hyperlink`, link, true, inNote ? noteRels : rels)}" w:history="1">${linked}</w:hyperlink>`; link = null; linked = ''; } };
       block.forEach((c) => {
-        const m = marksOf(c), href = m.link?.href || null;
+        const m = { ...(block.attrs.weight != null ? { bold: block.attrs.weight === 'bold' } : {}), ...(block.attrs.slant != null ? { italic: block.attrs.slant === 'italic' } : {}), ...marksOf(c) }, href = m.link?.href || null;
         let x = '';
         if (c.isText) x = textRun(c.text, m, href ? 'Hyperlink' : '');
         else if (c.type.name === 'hard_break') x = '<w:r><w:br/></w:r>';
@@ -183,6 +185,10 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         else if (name === 'blockquote') out += blocks(node, { ...o2, quote: true }, depth + 1);
         else if (name === 'code_block') {
           for (const line of (node.textContent || '').split('\n')) out += `<w:p>${pPr({ attrs: { first: 0 } }, o2)}${line ? textRun(line, { text_style: { font: 'Courier New' } }) : ''}</w:p>`;
+        } else if (name === 'horizontal_rule') {
+          const pr = pPr({ attrs: {} }, { style: o2.quote ? 'BlockQuote' : '' });
+          const border = '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr><w:ind w:firstLine="0"/>';
+          out += `<w:p>${pr ? pr.replace('</w:pPr>', `${border}</w:pPr>`) : `<w:pPr>${border}</w:pPr>`}</w:p>`;
         } else if (name === 'page_break') pendingBreak = true;
         else if (name === 'table') out += table(node, o2);
       });
@@ -254,7 +260,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     parts['_rels/.rels'] = `${DECL}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="${R}/extended-properties" Target="docProps/app.xml"/></Relationships>`;
     parts['[Content_Types].xml'] = `${DECL}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/>${overrides.map(([p, c]) => `<Override PartName="/${p}" ContentType="${c}"/>`).join('')}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
 
-    globalThis.GZ_WRITER_OBJECTS_DOCX?.exportParts(doc, parts, { format: f.id });
+    globalThis.GZ_WRITER_OBJECTS_DOCX?.exportParts(doc, parts, { format: ST().get(o.format) });
     const enc = new TextEncoder(), order = ['[Content_Types].xml', '_rels/.rels', 'docProps/core.xml', 'docProps/app.xml', 'word/document.xml', 'word/_rels/document.xml.rels'];
     const names = [...order, ...Object.keys(parts).filter((p) => !order.includes(p)).sort()];
     const files = [...names.map((name) => ({ name, data: enc.encode(parts[name]), date })), ...media.map((m) => ({ name: m.path, data: m.bytes, date }))];
@@ -370,14 +376,14 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       }
       return known.get(name);
     };
-    // A run's properties. A heading's bold and italic are the format's, not its style's.
-    const runProps = (lv, heading = false) => {
+    // A run's properties, including a heading's inherited emphasis.
+    const runProps = (lv) => {
       const r = { font: 'Times New Roman', size: 10, b: false, i: false, u: false, s: false, vert: '', color: '', highlight: '', hidden: false, caps: '' };
-      for (const { p, from } of lv) {
+      for (const { p } of lv) {
         const rf = kid(p, 'rFonts');
         if (rf) { const th = at(rf, 'asciiTheme') || at(rf, 'hAnsiTheme'), name = th ? theme[/^major/.test(th) ? 'major' : 'minor'] : at(rf, 'ascii') || at(rf, 'hAnsi'); if (name) r.font = name; }
         if (val(p, 'sz') !== '') r.size = fin(val(p, 'sz'), 20, 2, 3276) / 2;
-        if (!(heading && from !== 'own')) for (const k of ['b', 'i']) { const n = kid(p, k); if (n) r[k] = on(n); }
+        for (const k of ['b', 'i']) { const n = kid(p, k); if (n) r[k] = on(n); }
         const u = kid(p, 'u'); if (u) r.u = !['none', '0', 'false'].includes(at(u, 'val'));
         for (const k of ['strike', 'dstrike']) { const n = kid(p, k); if (n) r.s = on(n); }
         const v = val(p, 'vertAlign'); if (v) r.vert = ['superscript', 'subscript'].includes(v) ? v : '';
@@ -408,7 +414,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
           if (right !== '') r.right = fin(right, 0, -31680, 31680);
           if (at(ind, 'hanging') !== '') r.first = -fin(at(ind, 'hanging'), 0, 0, 31680); else if (at(ind, 'firstLine') !== '') r.first = fin(at(ind, 'firstLine'), 0, 0, 31680);
         }
-        const j = val(p, 'jc'); if (j) r.jc = { both: 'justify', distribute: 'justify', center: 'center', right: 'right', end: 'right' }[j] || '';
+        const j = val(p, 'jc'); if (j) r.jc = { both: 'justify', distribute: 'justify', center: 'center', right: 'right', end: 'right', left: 'left', start: 'left' }[j] || 'left';
         for (const t of els(kid(p, 'tabs')).filter((x) => x.local === 'tab')) {
           const pos = fin(at(t, 'pos'), 0, 0, 31680), v = at(t, 'val');
           if (v === 'clear') r.tabs.delete(pos); else if (KIND[v]) r.tabs.set(pos, [KIND[v], at(t, 'leader')]);
@@ -446,7 +452,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (!id || id === '0') return null;
       const level = fin(val(numPr, 'ilvl'), 0, 0, 8), abs = abstracts.get(val(nums.get(id), 'abstractNumId'));
       const lvl = abs && els(abs).find((l) => l.local === 'lvl' && fin(at(l, 'ilvl')) === level);
-      return { id, level, ordered: val(lvl, 'numFmt') !== 'bullet' };
+      return { id, definition: val(nums.get(id), 'abstractNumId'), level, ordered: val(lvl, 'numFmt') !== 'bullet' };
     };
 
     // Footnotes, as inline HTML for the paper schema's footnote_ref.
@@ -525,7 +531,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (name === 'r') {
         if (ctx.note && kid(kid(node, 'rPr'), 'rStyle') && /footnote ?reference/.test(styleName(val(kid(node, 'rPr'), 'rStyle')))) return html;
         if (all(node, 'footnoteReference').length) return html;
-        const rp = runProps(levels(node, 'rPr', ctx.paragraph), ctx.heading);
+        const rp = runProps(levels(node, 'rPr', ctx.paragraph));
         if (rp.hidden) return '';
         html = runHTML(rp, html, ctx.note ? runProps(levels({ kids: [] }, 'rPr', ctx.paragraph)) : base);
       }
@@ -550,7 +556,9 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     const attrsOf = (d, where = {}) => {
       const { r } = d, css = [], gz = {};
       const set = where.entry ? f.list : d.quote ? f.quote : f;
-      if (r.jc && !(d.heading && (f.headings[d.heading - 1]?.align || 'left') === r.jc)) css.push(`text-align:${r.jc}`);
+      // Imported headings carry their actual emphasis on their runs, with no format emphasis underneath.
+      if (d.heading) css.push('font-weight:normal', 'font-style:normal');
+      if ((r.jc || 'left') !== (d.heading ? f.headings[d.heading - 1]?.align || 'left' : 'left')) css.push(`text-align:${r.jc || 'left'}`);
       if (r.rule === 'exact') gz.exact = r2(r.line / 20);
       else if (r.rule === 'atLeast') gz.least = r2(r.line / 20);
       else { const line = r2(Math.min(4, Math.max(0.5, r.line / 240))); if (line !== set.line) css.push(`line-height:${line}`); }
@@ -606,6 +614,8 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         if (node.local === 'p') {
           const d = await paragraph(node, Object.assign(ctx, { prev: styleOf(nodes[i - 1]), next: styleOf(nodes[i + 1]) }));
           if (d.r.breakBefore) out.push({ kind: 'break' });
+          const border = kid(kid(kid(node, 'pPr'), 'pBdr'), 'bottom');
+          if (!d.html && border && !['nil', 'none', '0'].includes(at(border, 'val'))) d.kind = 'rule';
           out.push(d);
           size += d.html.length;
         } else if (node.local === 'tbl') { const html = await tableHTML(node, ctx, depth); size += html.length; out.push({ kind: 'html', html }); }
@@ -631,10 +641,15 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       items.forEach((d, i) => {
         if (d.kind === 'break') { close(); unquote(); out += HR; return; }
         if (d.kind === 'html') { close(); unquote(); out += d.html; return; }
+        if (d.kind === 'rule') {
+          close();
+          if (d.quote && !quote) { out += '<blockquote>'; quote = true; } else if (!d.quote) unquote();
+          out += '<hr class="gz-rule">'; return;
+        }
         const tag = d.heading ? `h${d.heading}` : 'p';
         if (d.list) {
           unquote();
-          if (!list || list.ordered !== d.list.ordered) { close(); list = { ordered: d.list.ordered }; out += d.list.ordered ? '<ol>' : '<ul>'; }
+          if (!list || list.ordered !== d.list.ordered || list.definition !== d.list.definition) { close(); list = { ordered: d.list.ordered, definition: d.list.definition }; out += d.list.ordered ? '<ol>' : '<ul>'; }
           const [style, gz] = attrsOf(d);
           out += `<li${d.list.level ? ` class="ql-indent-${d.list.level}"` : ''}${style ? ` style="${style}"` : ''}${gz ? ` data-gz="${escH(gz)}"` : ''}>${d.html.split(BREAK).join('<br>')}</li>`;
           return;

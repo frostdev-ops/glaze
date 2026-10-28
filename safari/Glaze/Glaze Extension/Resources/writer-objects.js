@@ -57,7 +57,7 @@
 
   let ed = null, view = null, cmds = null, paperMode = false;
   const PAPER = () => globalThis.GZ_WRITER_PAPER?.current?.() || null;
-  const content = () => { const p = PAPER(); return p && globalThis.GZ_WRITER_STYLES ? GZ_WRITER_STYLES.geometry(p.format()).content : 624; };
+  const content = () => { const p = PAPER(); return p && globalThis.GZ_WRITER_STYLES ? GZ_WRITER_STYLES.geometry(p.look()).content : 624; };
   const notify = (m) => { const p = PAPER(); if (p) p.notify(m); };
   const run = (name, ...args) => { const ok = cmds[name](...args)(view.state, view.dispatch); return ok; };
   const keep = (el) => el.addEventListener('mousedown', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); });

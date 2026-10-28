@@ -80,7 +80,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .ProseMirror .ql-indent-6 { padding-left: 18em; } .ProseMirror li.ql-indent-6 { padding-left: 19.5em; }
 .ProseMirror .ql-indent-7 { padding-left: 21em; } .ProseMirror li.ql-indent-7 { padding-left: 22.5em; }
 .ProseMirror .ql-indent-8 { padding-left: 24em; } .ProseMirror li.ql-indent-8 { padding-left: 25.5em; }
-.ProseMirror .ql-align-center { text-align: center; } .ProseMirror .ql-align-right { text-align: right; } .ProseMirror .ql-align-justify { text-align: justify; }
+.ProseMirror .ql-align-left { text-align: left; } .ProseMirror .ql-align-center { text-align: center; } .ProseMirror .ql-align-right { text-align: right; } .ProseMirror .ql-align-justify { text-align: justify; }
 ::selection { background: color-mix(in srgb, var(--gz-accent) 32%, transparent); }
 
 /* The bar under it */

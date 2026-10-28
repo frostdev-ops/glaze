@@ -627,7 +627,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const doc = S.paper.nodeFromJSON(json);
       formatIssues = []; picked = null;
       if (fresh) view.updateState(PM.state.EditorState.create({ doc, plugins: view.state.plugins }));
-      else view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content).setDocAttribute('setup', doc.attrs.setup).scrollIntoView());
+      else {
+        const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content);
+        for (const [name, value] of Object.entries(doc.attrs)) tr.setDocAttribute(name, value);
+        view.dispatch(PM.history.closeHistory(tr).scrollIntoView());
+        view.dispatch(PM.history.closeHistory(view.state.tr));
+      }
     };
     const setFormat = async (f, { save: keep = true } = {}) => {
       if (!f) return;
@@ -1086,7 +1091,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const list = key ? await store.versions(key) : [];
       const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
       const el = h('div', { class: 'gp-menu gp-versions', role: 'menu' },
-        ...list.slice(0, 40).map((v) => h('div', { class: 'gp-mi' }, h('span', {}, when.format(v.at), ' ', h('small', { text: `${t(REASONS[v.reason] || 'Autosave')} · ${t('{n} words', { n: nf(v.words) })}` })),
+        ...list.map((v) => h('div', { class: 'gp-mi' }, h('span', {}, when.format(v.at), ' ', h('small', { text: `${t(REASONS[v.reason] || 'Autosave')} · ${t('{n} words', { n: nf(v.words) })}` })),
           btn({ role: 'menuitem', onclick: () => { close(); restore(v.id); } }, t('Restore')))),
         list.length ? h('div', { class: 'gp-hr' }) : null,
         btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
@@ -1099,7 +1104,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const restore = async (id) => {
       if (!await save()) return;
       const r = await store.restore(key, id);
-      if (r) { paper = r.paper; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored')); }
+      if (r) { paper = r.paper; keep = paper.keep === true; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored')); }
     };
     const open2 = (page2) => { try { window.open(chrome.runtime.getURL(page2), '_blank', 'noopener'); } catch { /* no extension context */ } };
     const docx = async () => { await need(DOCX); return GZ_WRITER_DOCX.exportDocx(view.state.doc, { format, surname: surname(), title: ctx.assignment?.title || paper?.title || '' }); };

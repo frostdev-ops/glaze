@@ -58,11 +58,11 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     return true;
   };
   const setAttr = (key, value) => (state, dispatch) => {
-    const todo = lines(state).filter((l) => key in l.node.attrs && l.node.attrs[key] !== (typeof value === 'function' ? value(l.node.attrs[key]) : value));
+    const todo = lines(state).filter((l) => key in l.node.attrs && l.node.attrs[key] !== (typeof value === 'function' ? value(l.node.attrs[key], l.node) : value));
     if (!todo.length) return false;
     if (dispatch) {
       const tr = state.tr;
-      for (const l of todo) tr.setNodeMarkup(l.pos, null, { ...l.node.attrs, [key]: typeof value === 'function' ? value(l.node.attrs[key]) : value });
+      for (const l of todo) tr.setNodeMarkup(l.pos, null, { ...l.node.attrs, [key]: typeof value === 'function' ? value(l.node.attrs[key], l.node) : value });
       dispatch(tr);
     }
     return true;
@@ -213,7 +213,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       if (!p || typeof p !== 'object') return null;
       const out = {};
       for (const [k, [lo, hi]] of Object.entries(RANGE)) if (k in p) { const v = clampN(p[k], lo, hi); if (v === undefined) return null; out[k] = v; }
-      if ('align' in p) { if (p.align != null && !ALIGNS.includes(p.align)) return null; out.align = p.align === 'left' ? null : p.align ?? null; }
+      if ('align' in p) { if (p.align != null && !ALIGNS.includes(p.align)) return null; out.align = p.align ?? null; }
       if ('keepNext' in p) out.keepNext = p.keepNext ? true : null;
       if ('keepLines' in p) out.keepLines = p.keepLines ? true : null;
       if ('widow' in p) out.widow = p.widow === false ? false : null;
@@ -222,6 +222,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     const paraAttrs = (node, want) => {
       const a = { ...node.attrs }, own = Object.fromEntries(Object.entries(want).filter(([k]) => k in a));
       Object.assign(a, own);
+      if (a.align === 'left' && node.type !== n.heading) a.align = null;
       for (const k of ['line', 'exact', 'least']) if (want[k] != null) for (const other of ['line', 'exact', 'least']) if (other !== k) a[other] = null;
       if ('left' in want && node.type !== n.list_item) {
         const v = want.left, step = v != null && v > 0 && v <= S.MAX_INDENT / 2 && Math.abs(v / 0.5 - Math.round(v / 0.5)) < 1e-6;
@@ -235,7 +236,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       sup: () => toggleMark(m.sup), sub: () => toggleMark(m.sub), link,
       bulletList: () => toggleList('bullet_list'), orderedList: () => toggleList('ordered_list'),
       indent: () => indent(1), outdent: () => indent(-1), heading: (level) => heading(+level || 0),
-      align: (dir) => (ALIGNS.includes(dir || 'left') ? setAttr('align', dir === 'left' || !dir ? null : dir) : () => false),
+      align: (dir) => (ALIGNS.includes(dir || 'left') ? setAttr('align', (_v, node) => dir === 'left' || !dir ? (paper && node.type === n.heading ? 'left' : null) : dir) : () => false),
       clear: () => clear, undo: () => undo, redo: () => redo, quote, insertText,
     };
     if (paper) {
@@ -380,7 +381,11 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   };
 
   // Markdown shortcuts the schema can hold, then smart quotes and dashes. ProseMirror runs none of them in code.
-  const rules = (schema) => {
+  const ruleOff = (schema, cls) => {
+    const w = globalThis.GZ_WRITER_SETTINGS?.now?.();
+    return cls === 'smart' ? w?.autocorrect?.smart === false : !isPaper(schema) && w?.compose?.markdown === false;
+  };
+  const rules = (schema, off = (cls) => ruleOff(schema, cls)) => {
     const n = schema.nodes, m = schema.marks, paper = isPaper(schema), levels = n.heading.spec.levels;
     const atStart = (state, start) => state.doc.resolve(start).parentOffset === 0;
     const block = (re, want) => new InputRule(re, (state, match, start, end) => {
@@ -420,6 +425,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       }),
       ...smartQuotes, emDash,
     ].map((rule) => new InputRule(rule.match, (state, match, start, end) => {
+      if (off(smartQuotes.includes(rule) || rule === emDash ? 'smart' : 'markdown')) return null;
       if (m.link.isInSet(state.storedMarks || state.selection.$from.marks()) || state.doc.rangeHasMark(start, end, m.link)) return null;
       return rule.handler(state, match, start, end);
     }, rule));
@@ -430,7 +436,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     appendTransaction(trs, _old, state) {
       if (!trs.some((tr) => tr.docChanged)) return null;
       const joins = [];
-      const scan = (node, base) => { let prev = null; node.forEach((c, off) => { if (prev && LISTS[c.type.name] && c.type === prev.type) joins.push(base + off); prev = c; }); };
+      const scan = (node, base) => { let prev = null; node.forEach((c, off) => { if (prev && LISTS[c.type.name] && c.type === prev.type && (!isPaper(node.type.schema) || c.sameMarkup(prev))) joins.push(base + off); prev = c; }); };
       scan(state.doc, 0);
       state.doc.descendants((node, pos) => { if (node.isTextblock || LISTS[node.type.name]) return false; scan(node, pos + 1); return true; });
       if (!joins.length) return null;
@@ -466,7 +472,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     leave(away),
     keymap(bindings(schema, o.keys, away)),
     keymap(baseKeymap),
-    inputRules({ rules: rules(schema) }),
+    inputRules({ rules: rules(schema, o.rulesOff) }),
     history(),
     joinLists(),
     look(o.placeholder),

@@ -10,6 +10,7 @@
 // The normaliser, strip() and tidy() are plain functions for node tests; then the frame.
 var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   const S = () => globalThis.GZ_WRITER_SCHEMA || require('./lib/writer-schema.js');
+  const limit = () => { throw Object.assign(new RangeError('writer-paste: input exceeds safe limits'), { code: 'WRITER_INPUT_LIMIT' }); };
   const ST = () => globalThis.GZ_WRITER_STYLES || require('./lib/writer-styles.js');
 
   // ---- a small tree of the clipboard HTML (the schema's tokenizer; nothing reaches a live document)
@@ -32,7 +33,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     const closeTo = (i) => { stack.length = Math.max(1, i); };
     const find = (names, stops = []) => { for (let i = stack.length - 1; i > 0; i--) { if (names.includes(stack[i].name)) return i; if (stops.includes(stack[i].name)) return -1; } return -1; };
     for (const t of H.tags(html)) {
-      if (++count > 60000) break;
+      if (++count > S().MAX_TOKENS) limit();
       if (!skip && t.start > at) { const s = html.slice(at, t.start); if (s) top().kids.push({ text: H.decode(s) }); }
       at = t.end;
       const name = t.name;
@@ -50,7 +51,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
       if (name === 'tr') { const i = find(['tr'], ['table']); if (i > 0) closeTo(i); }
       const a = H.attrs(t.raw), e = { name, a, style: styleMap(a.style), kids: [] };
       top().kids.push(e);
-      if (!VOID.has(name) && !/\/\s*$/.test(t.raw) && stack.length < 120) stack.push(e);
+      if (!VOID.has(name) && !/\/\s*$/.test(t.raw)) { if (stack.length >= S().MAX_DEPTH) limit(); stack.push(e); }
     }
     if (!skip && at < html.length) top().kids.push({ text: H.decode(html.slice(at)) });
     return { root, css };
@@ -175,7 +176,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     if (e.text != null) return e.text ? wrap(e.text, c, ctx) : '';
     if (isMarker(e)) return '';
     if (e.name === 'br') return '<br>';
-    if (e.name === 'img') { const src = String(e.a.src || ''); return /^(data:image\/|https:)/i.test(src) ? `<img src="${esc(src)}" alt="${esc(e.a.alt || '')}"${+e.a.width > 0 ? ` width="${Math.round(+e.a.width)}"` : ''}>` : ''; }
+    if (e.name === 'img') { const src = String(e.a.src || ''); return /^data:image\//i.test(src) ? `<img src="${esc(src)}" alt="${esc(e.a.alt || '')}"${+e.a.width > 0 ? ` width="${Math.round(+e.a.width)}"` : ''}>` : ''; }
     const cc = cascade(e, c, ctx, false);
     // Word's empty-paragraph mark: <o:p>&nbsp;</o:p>.
     if (e.name === 'o:p') return e.kids.every((k) => k.text != null && /^[\s ]*$/.test(k.text)) ? '' : e.kids.map((k) => inline(k, cc, ctx)).join('');
@@ -304,6 +305,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   // base { font, size } (the paper's: runs in them are left unmarked) }.
   const normalize = (html, o = {}) => {
     html = String(html ?? '');
+    if (html.length > S().MAX_INPUT) limit();
     if (/data-pm-slice/.test(html)) return { html, source: 'writer', rich: false };
     const source = /docs-internal-guid-/.test(html) ? 'docs' : /urn:schemas-microsoft-com:office:word|content=Word\.Document|class="?Mso|mso-[a-z-]+\s*:/i.test(html) ? 'word' : 'web';
     const { root, css } = tree(html);
@@ -377,7 +379,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
       const r = normalize(html, { match: doc?.attrs.paste === 'match', base: L ? { font: L.font, size: L.size } : null });
       if (p && r.rich) pending = r;
       return r.html;
-    } catch (e) { console.error(e); return html; }
+    } catch (e) { if (e.code === 'WRITER_INPUT_LIMIT') throw e; console.error(e); return html; }
   };
   // The range a paste changed, mapped to the document after it.
   const changed = (tr) => {
