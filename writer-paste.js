@@ -367,11 +367,8 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   const PM = globalThis.GZ_PM;
   const paper = () => (F.mode() === 'paper' ? globalThis.GZ_WRITER_PAPER?.current?.() || null : null);
   let ask = true, pending = null;
-  const read = (w) => { ask = !(w && typeof w === 'object' && w.pasteAsk === false); };
-  try {
-    chrome.storage.sync.get('writer').then((r) => read(r?.writer), () => {});
-    chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && c.writer) read(c.writer.newValue); });
-  } catch { /* no extension storage */ }
+  // Settings → Writer (lib/writer-settings.js): writer.pasteAsk.
+  globalThis.GZ_WRITER_SETTINGS?.follow((w) => { ask = w?.pasteAsk !== false; });
   // lib/writer-editor.js's transformPastedHTML: the clipboard's HTML in Writer's vocabulary.
   api.before = (html, schema) => {
     pending = null;

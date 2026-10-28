@@ -59,7 +59,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     host.editor.view.setProps({ editable: () => false });
     await need(LIBS);
     // Settings → Writer (storage.sync writer): the format a new paper starts in and the zoom papers open at.
-    const prefs = await Promise.race([Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => (r?.writer && typeof r.writer === 'object' ? r.writer : {})), new Promise((ok) => setTimeout(() => ok({}), 400))]).catch(() => ({}));
+    // lib/writer-settings.js's reader where the page loads it (writer.html), else storage as it is (papers.html).
+    const SET = globalThis.GZ_WRITER_SETTINGS;
+    const prefs = await Promise.race([SET ? SET.load().then(() => SET.now() || {}) : Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => (r?.writer && typeof r.writer === 'object' ? r.writer : {})), new Promise((ok) => setTimeout(() => ok({}), 400))]).catch(() => ({}));
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PG = GZ_WRITER_PAGINATE, PA = GZ_WRITER_PAPERS, S = GZ_WRITER_SCHEMA, PM = GZ_PM;
     const ed = host.editor, view = ed.view, t = (k, v) => { const text = host.t(k, v); return k === 'Document outline' && text === k ? 'Outline' : text; }, store = PA.open();
     const ISSUES = () => globalThis.GZ_WRITER_ISSUES || null;

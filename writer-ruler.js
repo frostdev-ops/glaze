@@ -15,15 +15,13 @@ var GZ_WRITER_RULER = globalThis.GZ_WRITER_RULER || (() => {
   const h = (tag, cls, kids = []) => { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; };
   let on = true, paper = null, el = null, strip = null, ticks = null, marks = null, tickKey = '', frame = 0, drag = null;
 
-  const read = (w) => { on = !(w && typeof w === 'object' && w.ruler === false); draw(); };
-  try {
-    chrome.storage.sync.get('writer').then((r) => read(r?.writer), () => {});
-    chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && c.writer) read(c.writer.newValue); });
-  } catch { /* no extension storage: shown */ }
+  // Settings → Writer (lib/writer-settings.js): writer.ruler, which ⋯ → Show ruler sets.
+  const SET = globalThis.GZ_WRITER_SETTINGS;
+  SET?.follow((w) => { on = w?.ruler !== false; draw(); });
   const toggle = async () => {
     on = !on;
     draw();
-    try { const cur = (await chrome.storage.sync.get('writer'))?.writer; await chrome.storage.sync.set({ writer: { ...(cur && typeof cur === 'object' ? cur : {}), ruler: on } }); } catch { /* kept for this paper */ }
+    try { await SET?.patch((w) => ({ ...w, ruler: on })); } catch { /* kept for this paper */ }
   };
 
   const ST = () => globalThis.GZ_WRITER_STYLES;
