@@ -230,7 +230,9 @@ const SYLLABUS_DOCS = 48 + 61;
 // ("1 word", "Reply to 1 classmate", "AI found 1 issue.") add 728, measured against 97a4efc9. Settings → AI's "1 model"
 // adds 61, measured against 04ac67ec. The Checks pane's one card per rule counts its paragraphs ("1 paragraph isn't
 // double-spaced", "1 paragraph has other line spacing"): 279 bytes of English plurals in lib/i18n.js, measured against 115bb240.
-const WRITER = 24 + 409 + 134 + 728 + 61 + 279;
+// defaults.js's enhance.writerUploads (Open uploads in Writer, 31, cd1afbd3) and content.js's draft finder reading a
+// reply's Ultra message-id, so Writer's and the native editor's drafts find their post (27, b3eb58eb).
+const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27;
 // Settings → Writer (the brief's ask that every Writer part read one synced `writer` key from defaults.js; a named raise under
 // the owner's 2026-10-19 approval): defaults.js's writer group and its group rule, 1089 bytes on every site, where content.js
 // reads every GZ_DEFAULTS key (features/writer-quote.js reads writer.compose.quote); lib/i18n.js's English plural for its
