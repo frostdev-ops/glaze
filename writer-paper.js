@@ -1123,7 +1123,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // An imported file whose own formatting the format would flag: the paper keeps it (the default), so those checks go
     // quiet for this paper, unless the student applies the format, once, from the import's toast.
     let keep = false;
-    const ownFormatting = (doc) => (keep = F.check(doc, format, {}, {}).issues.some((i) => F.KEPT.has(i.rule) && i.fix?.op !== 'format'));
+    const ownFormatting = (doc) => F.check(doc, format, {}, {}).issues.some((i) => F.KEPT.has(i.rule) && i.fix?.op !== 'format');
     const formatChoices = () => ({
       ask: t('Its formatting differs from {format}', { format: format.label }),
       items: [{ label: t('Keep the document’s formatting'), run: () => {} }, { label: t('Apply {format}', { format: format.label }), run: () => { keep = false; setDoc(F.apply(view.state.doc)); runChecks(); } }],
@@ -1151,11 +1151,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (key) {
           if (!await save()) throw new Error('paper could not be saved before import');
           if (!here()) return;
-          const saved = await store.save(key, { ...record(), doc: doc.toJSON() }, { reason: 'import' });
+          const saved = await store.save(key, { ...record(), doc: doc.toJSON(), keep: own }, { reason: 'import' });
           if (!here()) return;
           paper = saved.paper;
           before = saved.version;
         }
+        keep = own;
         setDoc(doc.toJSON());
         toast(r.warnings.length ? r.warnings.map((w) => t(w)).join(' ') : f.name, before ? { label: t('Undo'), run: () => restore(before.id) } : null, own ? formatChoices() : null);
       } catch (e) {
