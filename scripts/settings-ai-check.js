@@ -56,7 +56,9 @@ async function pass(scheme) {
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 3000 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
-      args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking'],
+      // Routing supplies every response; a missed route (including a worker's) cannot reach a real provider.
+      args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking',
+        '--proxy-server=http://127.0.0.1:0', '--proxy-bypass-list=<-loopback>', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
     env.noFirstRun(context);
     const served = [];
