@@ -3294,7 +3294,6 @@
   "Import .docx…": "Importar .docx…",
   "All papers": "Todos os trabalhos",
   "The .docx could not be made.": "Não foi possível criar o .docx.",
-  "Imported. The last version is in Versions.": "Importado. A versão anterior está em Versões.",
   "That file could not be read as a Word document.": "Não foi possível ler esse arquivo como documento do Word.",
   "Add to dictionary": "Adicionar ao dicionário",
   "{n} issues": {"one": "{n} problema", "other": "{n} problemas"},
@@ -3313,4 +3312,10 @@
   "{name} is never cited": "{name} nunca é citado",
   "Personal dictionary": "Dicionário pessoal",
   "Saved sources": "Fontes salvas",
+  "Import…": "Importar…",
+  "Open in Writer": "Abrir no Writer",
+  "Submit as is": "Entregar como está",
+  "Saves current paper": "Salva o trabalho atual",
+  "Open uploads in Writer": "Abrir envios no Writer",
+  "A file you drop on or choose in an assignment's Blackboard upload area goes to Glaze Writer first: a Word file opens in Writer or is submitted as is, any other file is submitted as is. Off, the upload area is Blackboard's.": "Um arquivo que você solta ou escolhe na área de envio do Blackboard de uma tarefa vai primeiro para o Glaze Writer: um arquivo do Word abre no Writer ou é entregue como está; qualquer outro arquivo é entregue como está. Desativado, a área de envio fica com o Blackboard.",
 };

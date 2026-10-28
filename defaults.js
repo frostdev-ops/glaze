@@ -90,7 +90,7 @@ const GZ_SPEC = {
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], hideFolders: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
-    notes: [false, 'bool'], widgets: [true, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'], writer: [true, 'bool'],
+    notes: [false, 'bool'], widgets: [true, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'], writer: [true, 'bool'], writerUploads: [true, 'bool'],
     // sidebar: the page's sidebar, widgets docked under it (lib/sidebar.js).
     sidebar: [true, 'bool'],
     // place: remember Canvas Modules position. Ultra retains live course pages. coursemenu: each course card's button for its color,
