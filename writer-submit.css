@@ -51,3 +51,14 @@
   .gs-sheet { grid-template-columns: minmax(0, 1fr); }
   .gs-prev { border-right: 0; border-bottom: 1px solid var(--gz-line); padding: 18px; }
 }
+
+/* Submit as is (a file the student brought): the file large in place of the pages, on the Look's panel. */
+.gs-asis { background: var(--panel); backdrop-filter: blur(24px); border-color: var(--edge); }
+.gs-asis .gs-prev { align-content: center; gap: 16px; border-right-color: var(--edge); }
+.gs-doc[data-kind="pdf"] { background: #dc2626; }
+.gs-doc:not([data-kind="docx"]):not([data-kind="pdf"]) { background: #64748b; }
+.gs-big { width: 150px; height: 190px; position: relative; display: grid; place-items: center; border-radius: 6px; background: var(--card); border: 1px solid var(--edge); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+:root:not([data-dark]) .gs-big { box-shadow: 0 4px 18px rgba(15,23,42,.14); }
+.gs-big::before { content: ""; position: absolute; top: -1px; right: -1px; width: 34px; height: 34px; background: linear-gradient(225deg, var(--gz-surface-2) 50%, var(--edge) 50%); border-bottom-left-radius: 6px; }
+.gs-big .gs-doc { width: auto; height: auto; padding: 6px 12px; border-radius: 6px; font: 700 14px/1 var(--gz-font); letter-spacing: .04em; }
+.gs-clip { position: absolute; left: 16px; top: -12px; width: 22px; height: 40px; fill: none; stroke: var(--gz-ink-muted); stroke-width: 2; stroke-linecap: round; }
