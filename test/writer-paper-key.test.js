@@ -28,13 +28,13 @@ const textOf = (json) => S.paper.nodeFromJSON(json).textContent;
 let clock = 1e12;
 
 // One frame: its blocks in a sandbox, a view over a real paper state, and the page's context handed over by context(c).
-const frame = async ({ local, ss, context = { recovery: RECOVERY } }) => {
+const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = [] }) => {
   let onContext = null;
   const view = { state: E.state({ mode: 'paper' }), updateState(s) { this.state = s; }, dispatch(tr) { this.state = this.state.apply(tr); } };
   const sandbox = vm.createContext({
     console, crypto, JSON, Date, Number, Object, Promise, Map, Set, Error, RangeError, structuredClone,
     setTimeout: () => 0, clearTimeout: () => {}, addEventListener: () => {}, document: { addEventListener: () => {}, documentElement: { lang: 'en' } },
-    sessionStorage: ss, Intl,
+    sessionStorage: ss, Intl, importing: false, chrome: { storage: { onChanged: { addListener: (fn) => changed.push(fn) } } },
     S, ST, F, PA, PM: S.PM || globalThis.GZ_PM, view, ed: { words: () => E.words(S.text(view.state.doc).text) },
     store: PA.open(local, () => (clock += 1000), { versions: async () => 40 }),
     host: { context: () => context, onContext: (fn) => { onContext = fn; } }, ctx: context, prefs: {},
@@ -151,4 +151,36 @@ test('a copy whose saved pictures are nowhere on this device any more is set asi
   await seed(local, { doc: docOf('Another tab removed the chart.') });
   const next = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
   assert.equal(next.shown(), 'Another tab removed the chart.');
+});
+
+// Two tabs on one paper: storage.local tells each what the other saved.
+const tabs = async () => {
+  const local = memory(), heard = [], b = [];
+  await seed(local);
+  const A = await frame({ local, ss: session(), context: { recovery: RECOVERY, paper: PARTS } });
+  const B = await frame({ local, ss: session(), context: { recovery: RECOVERY, paper: PARTS }, changed: b });
+  const tell = async () => { for (const fn of b) fn({ [`writerPaper:${KEY}`]: { newValue: structuredClone(local.data[`writerPaper:${KEY}`]) } }, 'local'); for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
+  return { local, A, B, tell, heard };
+};
+
+test('a tab with nothing unsaved shows what another tab saved, and its next edit builds on it', async () => {
+  const { local, A, B, tell } = await tabs();
+  A.type(' Written in the other tab.');
+  await A.$.save();
+  await tell();
+  assert.equal(B.shown(), 'Two thousand words of my essay. Written in the other tab.');
+  B.type(' And here.');
+  await B.$.save();
+  const s = await stored(local);
+  assert.equal(textOf(s.paper.doc), 'Two thousand words of my essay. Written in the other tab. And here.');
+  assert.ok(!s.versions.includes('conflict'), `versions: ${s.versions.join(', ')}`);
+});
+
+test('a tab still holding unsaved typing keeps it when another tab saves', async () => {
+  const { A, B, tell } = await tabs();
+  B.type(' Unsaved here.');
+  A.type(' Written in the other tab.');
+  await A.$.save();
+  await tell();
+  assert.equal(B.shown(), 'Two thousand words of my essay. Unsaved here.');
 });
