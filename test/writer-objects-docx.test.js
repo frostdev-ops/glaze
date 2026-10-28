@@ -13,11 +13,13 @@ const date = new Date('2026-10-27T12:00:00Z');
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const doc = (html) => S.parse(P, html);
 // The export call site: after writer-docx builds its parts, before it zips them.
-const exported = (d) => { const o = X.exportDocx(d, { format: 'mla9', date }); OD.exportParts(d, o.parts, { format: 'mla9' }); return o.parts; };
+const exported = (d) => { const o = X.exportDocx(d, { format: 'mla9', date }); OD.exportParts(d, o.parts, { format: 'mla9' }); return Object.defineProperty(o.parts, 'zip', { value: o.bytes }); };
 // The import call site: writer-docx's HTML and the parts it parsed.
 const imported = async (parts) => {
   const Z = require('../lib/zip.js'), enc = new TextEncoder();
-  const chunks = Z.zip(Object.entries(parts).map(([name, text]) => ({ name, data: enc.encode(text), date })));
+  const z = require('../lib/doctext.js').unzip(parts.zip), media = z.names.filter((n) => n.startsWith('word/media/'));
+  const files = [...Object.entries(parts).map(([name, text]) => ({ name, data: enc.encode(text), date })), ...await Promise.all(media.map(async (name) => ({ name, data: await z.bytes(name), date })))];
+  const chunks = Z.zip(files);
   const r = await X.importDocx(Buffer.concat(chunks.map((c) => Buffer.from(c))), { format: 'mla9' });
   const ctx = { body: X.xml(parts['word/document.xml']), numbering: parts['word/numbering.xml'] ? X.xml(parts['word/numbering.xml']) : null, styles: X.xml(parts['word/styles.xml']) };
   return S.parse(P, OD.importHTML(r.html, ctx));
