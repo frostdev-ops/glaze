@@ -22,7 +22,8 @@ var GZ_WRITER_QUOTE = globalThis.GZ_WRITER_QUOTE || (() => {
   const X = globalThis.GZ_CTX;
   if (!X || typeof document === 'undefined') { if (typeof module !== 'undefined') module.exports = { clean, place }; return null; }
 
-  const on = () => X.on() && X.settings().enabled !== false && !!X.settings().enhance?.writer;
+  // Settings → Writer → Quote while replying (writer.compose.quote) off: no pop.
+  const on = () => X.on() && X.settings().enabled !== false && !!X.settings().enhance?.writer && X.settings().writer?.compose?.quote !== false;
   const boxes = []; // reply boxes, in the order they opened
   const live = (box) => (!box.path || box.path === location.pathname) && box.kind === 'reply' && box.ready && !!box.port && !!box.frame?.isConnected;
   const BODY = '.ql-editor[contenteditable="false"]';

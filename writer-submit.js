@@ -9,6 +9,8 @@
 // frame → page: submit:arm (this paper owns the attempt), submit:go { run, name, bytes, note, text, until, asis, mime },
 //   submit:saved { ok }; page → frame: submit:open, submit:save (Ultra's Save and Close), submit:step { run, step },
 //   submit:done { run, ok, error }. A test's box is compose, never a paper: it gets none of this.
+// "Also paste the text" starts where it was left while Settings → Writer → Submitting's remember is on (writer.submit:
+// rememberText, text; lib/writer-settings.js), else off.
 // Classic script after writer-paper.js.
 var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   const frame = globalThis.GZ_WRITER_FRAME;
@@ -103,7 +105,8 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const kind = L().tag(name).toLowerCase();
 
     const note = h('textarea', { id: 'gs-note', maxlength: '4000', rows: '4' });
-    const sw = h('button', { type: 'button', class: 'gs-sw', role: 'switch', 'aria-checked': 'false', id: 'gs-paste' });
+    const kept = globalThis.GZ_WRITER_SETTINGS?.now()?.submit, remember = kept?.rememberText !== false;
+    const sw = h('button', { type: 'button', class: 'gs-sw', role: 'switch', 'aria-checked': String(remember && kept?.text === true), id: 'gs-paste' });
     const size = h('small', { text: file ? t('{n} KB', { n: nf(L().kb(file.size)) }) : t('{n} pages', { n: pages }) });
     const err = h('div', { class: 'gs-err', role: 'alert' });
     const native = h('button', { type: 'button', class: 'gs-native gs-review', text: t('Blackboard editor'), hidden: true });
@@ -141,7 +144,12 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     if (file) globalThis.GZ_WRITER_IMPORT?.about(file).then((s) => { if (sheet === mine) size.textContent = s; }, () => {});
     else build().then((out) => { if (sheet === mine) size.textContent = `${t('{n} pages', { n: pages })} · ${t('{n} KB', { n: nf(L().kb(out.bytes.length)) })}`; }, () => {});
 
-    sw.addEventListener('click', () => { if (!mine.busy) sw.setAttribute('aria-checked', String(sw.getAttribute('aria-checked') !== 'true')); });
+    sw.addEventListener('click', () => {
+      if (mine.busy) return;
+      const on = sw.getAttribute('aria-checked') !== 'true';
+      sw.setAttribute('aria-checked', String(on));
+      if (remember) globalThis.GZ_WRITER_SETTINGS?.patch((w) => ({ ...w, submit: { ...w.submit, text: on } })).catch((e) => console.error(e));
+    });
     const cancelIt = () => {
       mine.cancelled = true;
       if (mine.busy) {

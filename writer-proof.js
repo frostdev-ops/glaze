@@ -4,12 +4,19 @@
 // autocorrect pop with its Undo, and the issue count in the bar's issues slot. Alt+Enter opens the card at the caret.
 // The student's dictionary is chrome.storage.local 'writerWords' (a list of words, the newest last), shared by every box;
 // each box adds its context's words (course, prompt, names in the thread) to its own.
+// Settings → Writer (lib/writer-settings.js): proofing on or off and the dialect Harper reads, the autocorrect classes
+// (writer.autocorrect), and the gate keeping the editor's smart quotes and dashes, or compose's Markdown shortcuts, out
+// while they're off. Each follows a change at once.
 (() => {
   const F = globalThis.GZ_WRITER_FRAME, P = GZ_WRITER_PROOF, I = GZ_WRITER_ISSUES;
   if (!F) return;
   const { TextSelection } = GZ_PM.state;
   const DICT = 'writerWords', MAX_DICT = 5000, BLOCK_MS = 150, DOC_MS = 1500, FIX_MS = 4000;
   const t = (k, v) => F.t(k, v);
+  const W = globalThis.GZ_WRITER_SETTINGS, pref = () => W?.now() || null;
+  const proofOn = () => pref()?.proofing !== false;
+  const allow = (cls) => pref()?.autocorrect?.[cls] !== false;
+  const allowRule = (rule) => !P.CLASS?.[rule] || allow(P.CLASS[rule]);
   let view = null, port = null, started = false, ids = 0, seen = 0, dirty = [], blockTimer = 0, docTimer = 0;
   let context = [], dict = new Set();
   const pending = new Map(), asked = new Set(), stats = new Map();
@@ -49,6 +56,7 @@
     } catch (e) { fail(e); return null; }
     port.onmessage = ({ data }) => onWorker(data);
     port.postMessage({ op: 'words', words: context });
+    port.postMessage({ op: 'dialect', dialect: pref()?.dialect || 'en-US' });
     if (dict.size) port.postMessage({ op: 'dict', words: [...dict] });
     return port;
   };
@@ -124,7 +132,7 @@
     if (v.state.doc === prev.doc) return;
     const maps = P.since(v.state, seen);
     seen = ver();
-    if (!started) return;
+    if (!started || !proofOn()) return;
     if (!maps) dirty = [[0, v.state.doc.content.size]];
     else dirty = [...dirty.map(([a, b]) => [P.mapPos(maps, a, -1), P.mapPos(maps, b, 1)]), ...changed(maps)];
     if (!blockTimer) blockTimer = setTimeout(lintBlocks, BLOCK_MS);
@@ -177,6 +185,7 @@
       const i = I.list().find((x) => x.source === 'harper' && x.sure && !tried.has(x.id) && x.from >= from && x.to <= to + 64);
       if (!i) break;
       tried.add(i.id);
+      if (!allowRule(i.rule)) continue;
       const made = P.autofix(view, i);
       if (made) showFix(made);
     }
@@ -198,7 +207,7 @@
     try { said = await P.decide({ text: P.blockText($from.parent), from: i.from - start, to: i.to - start, suggestions: i.suggestions.slice(), context: contextAtAsk }); } catch (e) { console.error(e); }
     const v = P.verdict(said, i.suggestions.length), now = view && I.list().find((x) => x.id === i.id);
     if (stopped || view.composing || ver() !== version || F.context() !== contextAtAsk || !v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
-    if (v.verdict === 'apply') { const made = P.autofix(view, now, now.suggestions[v.choice]); if (made) showFix(made); return; }
+    if (v.verdict === 'apply' && allowRule(now.rule)) { const made = P.autofix(view, now, now.suggestions[v.choice]); if (made) showFix(made); return; }
     // 'suggest': the choice first on the card.
     const list = now.suggestions.slice(), [pick] = list.splice(v.choice, 1), bare = (x) => ({ ...x, id: x.id.replace(/^harper:/, '') });
     const others = I.list().filter((x) => x.source === 'harper' && x.id !== now.id && x.from >= now.from && x.to <= now.to);
@@ -210,7 +219,7 @@
   // full lint that starts it.
   let starting = false;
   const start = async () => {
-    if (starting || stopped) return;
+    if (starting || stopped || !proofOn()) return;
     starting = true;
     const saved = await words();
     if (stopped) { starting = false; return; }
@@ -379,7 +388,18 @@
   I.on(count);
 
   // ---- wiring ---------------------------------------------------------------------------------------------------------
-  F.plugin(P.plugin({ onFix: (_v, f) => showFix(f), onUpdate }));
+  F.plugin(P.plugin({ onFix: (_v, f) => showFix(f), onUpdate, allow }));
+  const gate = W?.gate((cls) => (cls === 'smart' ? !allow('smart') : F.mode() === 'compose' && pref()?.compose?.markdown === false));
+  if (gate) F.plugin(gate);
+  // Proofing switched off: nothing more is asked and what was found goes; on again, the whole document is read.
+  W?.follow((w, was) => {
+    was ||= W.clean(undefined);
+    if (w.proofing !== was.proofing) {
+      if (!w.proofing) { clearTimeout(blockTimer); clearTimeout(docTimer); blockTimer = docTimer = 0; dirty = []; pending.clear(); I.clear('harper'); closeCard(); }
+      else if (started) { connect(); lintDoc(); } else if (view?.hasFocus()) start();
+    }
+    if (w.dialect !== was.dialect && port) { port.postMessage({ op: 'dialect', dialect: w.dialect }); if (started && w.proofing) lintDoc(); }
+  });
   F.plugin(GZ_PM.keymap.keymap({ 'Alt-Enter': () => openNext() }));
   F.on('ready', (editor) => {
     view = editor.view;

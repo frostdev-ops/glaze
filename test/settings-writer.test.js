@@ -173,3 +173,29 @@ test('docs/features.md lists each Writer setting in one line', () => {
     'Smart quotes and dashes', 'Ask how to paste formatting', 'Spelling and grammar', 'Dialect', 'Personal dictionary', 'Markdown shortcuts', 'Word target',
     'Quote while replying', 'Remember']) assert.ok(section.includes(label), label);
 });
+
+// ---- the dialect, in the one Harper worker ------------------------------------------------------------------------------
+test('dialect: the worker builds Harper in the dialect asked for, and switches a running one', async () => {
+  const vm = require('node:vm');
+  const flush = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
+  const made = [], set = [];
+  class LocalLinter {
+    constructor(o) { made.push(o.dialect); }
+    async setup() {} async importWords() {} async lint() { return []; } async dispose() {}
+    async setDialect(d) { set.push(d); }
+  }
+  const ctx = vm.createContext({ LocalLinter, Dialect: { American: 0, British: 1, Australian: 2, Canadian: 3 }, slimBinary: {}, crypto: { randomUUID: () => 'w' }, performance,
+    onconnect: null, close() {}, setTimeout: () => 1, clearTimeout() {} });
+  vm.runInContext(read('lib/harper/shared.js').replace(/^import .*;\n/gm, ''), ctx);
+  const p = { got: [], postMessage(m) { this.got.push(m); }, close() {} };
+  ctx.onconnect({ ports: [p] });
+  const send = (m) => p.onmessage({ data: m });
+  send({ op: 'dialect', dialect: 'en-GB' }); await flush();
+  send({ op: 'lint', id: 1, text: 'colour' }); await flush();
+  assert.deepEqual(made, [1], 'built British');
+  send({ op: 'dialect', dialect: 'en-AU' }); await flush();
+  send({ op: 'dialect', dialect: 'en-NZ' }); await flush();
+  assert.deepEqual(set, [2], 'switched to Australian; one it does not know is refused');
+  send({ op: 'stats', id: 2 }); await flush();
+  assert.equal(p.got.find((m) => m.op === 'stats').dialect, 'en-AU');
+});
