@@ -31,3 +31,25 @@ test('APA: a book\'s translators and the editors of an authored book sit in the 
   const edited = { type: 'book', editor: [p('Lee', 'Ann'), p('Kim', 'Bo')], title: 'Essays', issued: d(2010), publisher: 'Press' };
   assert.equal(C.format(edited, 'apa7').entry, 'Lee, A., &amp; Kim, B. (Eds.). (2010). <i>Essays</i>. Press.');
 });
+
+const MORRISON = { id: 'morrison', type: 'book', author: [p('Morrison', 'Toni')], title: 'Beloved', publisher: 'Knopf', issued: d(1987) };
+const noEntry = (text, sources, style) => C.check(text, sources, style).filter((i) => i.action === 'add-source').map((i) => i.name);
+
+test('dates, labels inside a text, named things and sums in brackets are not citations; an author with a page still is', () => {
+  const texts = [
+    'The war ended in spring (May 1945) and Morrison wrote later (Morrison 42).',
+    'Students in the study (Grade 10) improved (Morrison 42).',
+    'The mission (Apollo 11) landed (Morrison 42).',
+    'Hamlet hesitates (Act 3) as Morrison notes (Morrison 42).',
+    'It cost a lot (US$ 40) per Morrison (Morrison 42).',
+    'See the second part (Section 4) and Morrison (Morrison 42).',
+    'It rained (Spring 2020) and stopped (Morrison 42).',
+  ];
+  for (const style of ['mla9', 'apa7']) for (const t of texts) assert.deepEqual(noEntry(t, [MORRISON], style), [], `${style} ${t}`);
+  assert.deepEqual(noEntry('A claim (Morrison 42).', [], 'mla9'), ['Morrison']);
+  assert.deepEqual(noEntry('A claim (Baldwin xix), and more.', [], 'mla9'), ['Baldwin']);
+  const may = { ...MORRISON, id: 'may', author: [p('May', 'Rollo')], title: 'Love and Will' };
+  assert.deepEqual(C.count('Love is willed (May 42).', [may], 'mla9'), { cited: 1, total: 1 }, 'a saved source named May is still cited');
+  // The labels are one list, shared with the compose bar's count.
+  for (const w of ['Figure', 'Act', 'Grade', 'Section', 'chapters']) assert.ok(C.INSIDE.test(w), w);
+});
