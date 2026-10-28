@@ -23,7 +23,8 @@ for (const [name, make] of Object.entries(fixtures)) test(`hostile ${name}: impo
   first.check();
   let state = E.state({ mode: 'paper' });
   state = state.apply(state.tr.replaceWith(0, state.doc.content.size, first.content).setDocAttribute('setup', first.attrs.setup));
-  state = state.apply(state.tr.insertText('!', 1));
+  let at; state.doc.descendants((n, pos) => { if (at == null && n.isTextblock) at = pos + 1; });
+  state = state.apply(state.tr.insertText('!', at));
   const edited = state.doc;
   let time = 1;
   const papers = PA.open(storage(), () => ++time);
@@ -31,7 +32,7 @@ for (const [name, make] of Object.entries(fixtures)) test(`hostile ${name}: impo
   const version = (await papers.versions(name))[0];
   await papers.save(name, { doc: S.paper.node('doc', null, [S.paper.node('paragraph')]).toJSON(), keep: false });
   const restored = (await papers.restore(name, version.id)).paper;
-  assert.deepEqual(restored.doc, edited.toJSON());
+  assert.ok(S.paper.nodeFromJSON(restored.doc).eq(edited));
   assert.equal(restored.keep, true);
   const out = X.exportDocx(restored.doc), back = S.paper.nodeFromJSON((await X.importDocx(out.bytes)).doc);
   back.check();
