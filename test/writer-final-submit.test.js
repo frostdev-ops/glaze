@@ -221,3 +221,28 @@ test('D3: a claim at /attempt/create fences the same assignment at /attempt/_N_1
   await u.visit('doc-2', {}, { tab: 2, url: 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/_31_1' });
   assert.equal((await u.w.send({ ...m, token: 'b'.repeat(36), op: 'claim' }, u.sender())).ok, false);
 });
+
+test('D7: a Cancel heard while the worker records the Submit never leaves the attempt fenced with nothing sent', async () => {
+  const u = ultra();
+  const p = await u.visit('doc-1');
+  u.hooks.commit = () => p.hear({ type: 'submit:cancel', run: 1 });
+  await p.go(); await p.flush();
+  const sent = Object.values(u.store.local).filter((v) => v?.sent?.length).length;
+  assert.equal(sent, p.clicks.length, 'a recorded Submit is a clicked one');
+  const q = await u.visit('doc-2');
+  await q.go();
+  assert.equal(q.clicks.length, 1, 'and a reload submits if nothing was');
+});
+
+test('D7: the Submit is recorded in the very turn Ultra\'s Submit is clicked, never ahead of a check that can still fail', async () => {
+  const u = ultra();
+  const p = await u.visit('doc-1');
+  let at = null;
+  u.hooks.commit = () => { at = p.clicks.length; queueMicrotask(() => { at = at === 0 && p.clicks.length === 1 ? 'same turn' : at; }); };
+  await p.go(); await p.flush();
+  assert.equal(at, 'same turn');
+  const stuck = await u.visit('doc-2', { enabled: false });
+  await stuck.go(); await stuck.tick(16000);
+  assert.deepEqual(done(stuck), ['submit']);
+  assert.equal(u.ops.filter((o) => o === 'commit').length, 1, 'a run that never clicks records nothing');
+});
