@@ -61,9 +61,44 @@ test('a collapsed discussion composer stays native until Ultra activates its edi
   assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['reply'], 'focus can draw a toolbar before the click activates Ultra');
   controls.className = 'form-buttons panel-editor-controls';
   controls.removeAttribute('aria-hidden');
-  assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['reply'], 'an empty native post collapses again when focus leaves it');
-  post.editor.textContent = 'A';
-  assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['post', 'reply'], 'the activated editor can mount Writer');
+  // Live Ultra, 2026-10-28: an activated Post stays open while its blur is kept from Ultra (features/writer.js), so Writer
+  // takes it on the click rather than after the first keystroke.
+  assert.equal(post.editor.textContent, '');
+  assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['post', 'reply'], 'the activated editor mounts Writer while still empty');
+});
+
+const JOURNAL = '/ultra/courses/_101_1/journal/_12_1';
+test('a journal: the new entry is a journal in compose mode, sent by its Post, its prompt as the context', () => {
+  assert.match(raw('ultra-writer-journal.html'), /_note: shape from the owner's Ultra, 2026-10-28, synthetic values/);
+  const body = page('ultra-writer-journal.html');
+  const [box, ...rest] = U.boxes(body, { path: JOURNAL });
+  assert.equal(rest.length, 0, 'the read-only prompt is not a box');
+  assert.deepEqual([box.kind, box.mode, box.editor.getAttribute('data-placeholder')], ['journal', 'compose', 'Type an entry']);
+  assert.deepEqual([box.send.textContent, box.send.getAttribute('data-analytics-id')], ['Post', 'course.content.journal.newEntry.edit.save.button']);
+  assert.equal(U.enabled(box.send), false, 'Ultra disables Post while the entry is empty');
+  // Live, the new entry has no form and no bb-rich-text-editor: its editor root takes the toolbar, never the buttons.
+  assert.ok(box.root.className.includes('bb-editor-root') && box.root.querySelector('.bb-editor-toolbar') && !box.root.contains(box.send));
+  assert.deepEqual(box.context, { prompt: 'Reading Journal\nAfter each chapter, write a short entry on one image that stayed with you and why.' });
+  assert.equal(U.sendOf(box.editor, 'journal'), box.send);
+});
+
+test('a journal entry stays Ultra\'s until a click opens it, and off a journal page or outside the new entry', () => {
+  const body = page('ultra-writer-journal.html');
+  assert.deepEqual(U.boxes(body, { path: DISCUSSION }), [], 'a discussion route does not make it a post');
+  assert.deepEqual(U.boxes(body, { path: '/ultra/courses/_101_1/outline' }), []);
+  const [box] = U.boxes(body, { path: JOURNAL });
+  // Live, 2026-10-28: collapsed, the entry has neither its toolbar nor its controls; Cancel removes both again.
+  const toolbar = box.root.querySelector('.bb-editor-toolbar').parentElement, controls = box.send.parentElement;
+  controls.remove();
+  assert.equal(U.sendOf(box.editor, 'journal'), null);
+  assert.deepEqual(U.boxes(body, { path: JOURNAL }), [], 'no Post: not open');
+  box.editor.closest('.comment-avatar-wrapper').append(controls);
+  toolbar.remove();
+  assert.deepEqual(U.boxes(body, { path: JOURNAL }), [], 'no toolbar: not open');
+  box.root.prepend(toolbar);
+  assert.deepEqual(U.boxes(body, { path: JOURNAL }).map((b) => b.kind), ['journal']);
+  box.editor.closest('.new-comment').className = 'columns';
+  assert.equal(U.kindOf(box.editor, { path: JOURNAL }), 'unknown', 'an editor elsewhere in the panel (an entry being edited, a comment) was not seen');
 });
 
 test('messages compose is a message, sent by its Send', () => {

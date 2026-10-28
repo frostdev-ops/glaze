@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reading Journal</title>
+<!-- _note: shape from the owner's Ultra, 2026-10-28, synthetic values. A journal (…/journal/{content id}) with no entries yet:
+the read-only prompt Quill in form#prompt-editor, and the new entry once a click has opened it (collapsed, it has neither the
+toolbar nor .panel-editor-controls; Cancel removes both). The entry has no form and no bb-rich-text-editor; its Cancel and Post
+are keyed by data-analytics-id, Post disabled while empty. The form-buttons class is a stand-in for this page's styling. -->
+<style>
+body { margin:0; font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gz-surface-2, #060d18); color:var(--gz-ink, #e8f2fa); }
+.discussion-board { width:860px; margin:28px auto 40px; display:grid; gap:16px; }
+.entry { background:var(--gz-surface, #0d1b2e); border:1px solid var(--gz-line, #16283f); border-radius:12px; padding:18px 20px; }
+.ql-editor p { margin:0; }
+.bb-editor-root { border:1px solid var(--gz-line-strong, #24405f); border-radius:12px; background:var(--gz-surface, #0d1b2e); }
+.no-toolbar .bb-editor-root, form#prompt-editor .bb-editor-root { border:0; }
+.bb-editor-toolbar { display:flex; gap:4px; padding:6px; border-bottom:1px solid var(--gz-line, #16283f); } .bb-editor-toolbar button { width:28px; height:28px; }
+.ql-container:not(.ql-disabled) .ql-editor { min-height:120px; padding:12px 16px; outline:none; }
+.form-buttons { display:flex; justify-content:flex-end; gap:10px; margin-top:12px; }
+.form-buttons button { font:inherit; font-weight:600; padding:8px 18px; border-radius:999px; border:1px solid var(--gz-line-strong, #24405f); background:none; color:inherit; }
+.form-buttons button.js-text-editor-save { background:var(--gz-accent, #17c8f4); color:var(--gz-accent-ink, #04121f); border-color:transparent; } .form-buttons button:disabled { opacity:.45; }
+</style></head>
+<body><div class="layer-content"><div class="discussion-board">
+
+<div class="entry original edit-view"><div class="reply-form comments">
+  <form id="prompt-editor">
+    <bb-rich-text-editor class="rich-text-editor"><div class="bb-editor-root bb-editor-heading-h3"><div class="editor-content-container keyboard-tooltip-container no-toolbar"><div class="bb-editor-container ql-container ql-disabled">
+      <div class="ql-editor bb-editor" id="bb-editor-textbox" contenteditable="false"><p>Reading Journal</p><p>After each chapter, write a short entry on one image that stayed with you and why.</p></div>
+    </div></div></div></bb-rich-text-editor>
+  </form>
+</div></div>
+
+<div><journal-responses-panel analytics-id="course.content.journal"><div>
+  <div class="row spaced collapse"><div class="columns new-comment">
+    <div><div class="response-header"><h2>Entries</h2></div><div><div class="page-size-component"><button type="button" data-analytics-id="course.content.journal.components.pagination.pageSizeDropdown.button">10</button><label>Entries per page</label></div></div></div>
+    <div class="response"><div class="comment-avatar-wrapper">
+      <div class="reply-form comments"><div class="sr-only" aria-hidden="true">Entry text editor</div>
+        <div class="bb-editor-root bb-editor-heading-h3" role="presentation">
+          <div><div class="bb-editor-toolbar" role="toolbar"><button type="button" aria-label="Bold">B</button><button type="button" aria-label="Italic">I</button><button type="button" aria-label="Underline">U</button></div></div>
+          <div class="editor-content-container keyboard-tooltip-container"><div role="presentation" class="bb-editor-container ql-container is-active has-focus">
+            <div class="ql-editor ql-blank bb-editor" contenteditable="true" data-placeholder="Type an entry" id="bb-editor-textbox" role="textbox"><p><br></p></div>
+          </div><div class="status-bar"><span class="word-count">Word count: 0</span></div></div>
+        </div>
+      </div>
+      <div class="panel-editor-controls form-buttons"><button class="button button--secondary js-secondary-button js-text-editor-cancel" type="button" data-analytics-id="course.content.journal.newEntry.edit.cancel.button">Cancel</button><button class="button js-primary-button js-text-editor-save" type="button" disabled data-analytics-id="course.content.journal.newEntry.edit.save.button">Post</button></div>
+    </div></div>
+  </div></div>
+</div></journal-responses-panel></div>
+
+</div></div></body></html>

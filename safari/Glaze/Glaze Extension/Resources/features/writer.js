@@ -16,7 +16,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const boxes = new Map(); // Ultra's editor → its box
   const declined = new WeakSet(); // editors given back to Blackboard's editor: Ultra's from then on, on this page
   const failed = new WeakMap(); // editor → when its frame last failed to open; tried again a minute later
-  const SENDS = new Set(['post', 'reply', 'message']);
+  const SENDS = new Set(['post', 'reply', 'message', 'journal']);
   // A paper (an assignment's attempt) is a page of its own: as tall as the window allows, whatever its text; it stays in
   // Writer's storage and never goes into Ultra's editor (the submit step attaches it as a .docx).
   const PAPER_HEIGHT = 'max(640px, calc(100vh - 120px))';
@@ -263,6 +263,12 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       box.sending = true;
     }
   }, true);
+  // Ultra collapses an empty new Post when its editor loses focus, and the frame taking the typing is such a loss. While
+  // the frame stands in, the hidden editor's blur never reaches Ultra (live Ultra, 2026-10-28).
+  for (const type of ['blur', 'focusout']) addEventListener(type, (e) => {
+    if (!(e.target instanceof Node)) return;
+    for (const box of boxes.values()) if (box.kind === 'post' && box.ready && box.root.contains(e.target)) { e.stopImmediatePropagation(); return; }
+  }, true);
   // Focus: the paper's frame fills the window over a dimmed page, until the frame says otherwise or the dim is clicked.
   const focusMode = (box, on) => {
     const f = box.frame;
@@ -366,6 +372,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     for (const box of [...boxes.values()]) {
       if (!sameBox(box)) drop(box);
       else if (box.kind === 'post' && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
+      else if (box.kind === 'journal' && !U().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced) reopen(box); else drop(box); }
     }
     if (!U()) { X.need('lib/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }

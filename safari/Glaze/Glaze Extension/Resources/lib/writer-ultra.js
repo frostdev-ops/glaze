@@ -1,6 +1,7 @@
 // Glaze Writer's Ultra adapter: which of Ultra's Quill boxes Glaze's editor stands in for, as what, and what goes with
 // each one (its send button, what it answers). Pure: elements in, values out; features/writer.js does the rest. Shapes
-// from the owner's Ultra (4001.2.0, probed 2026-10-27, read-only); a box whose shape wasn't seen there stays Ultra's own.
+// from the owner's Ultra (4001.2.0, probed 2026-10-27 and 2026-10-28, read-only); a box whose shape wasn't seen there stays
+// Ultra's own.
 // Classic script, loaded on demand (features/writer.js); module.exports for node.
 var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const EDITOR = '.ql-editor[contenteditable="true"]';
@@ -25,12 +26,13 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     return doc?.querySelector?.(ASSIGNMENT)?.querySelector(`#${SUBMISSION}${EDITOR}`) ? 'assignment' : '';
   };
 
-  // Kinds: 'post' | 'reply' | 'message' | 'assignment' | 'test', else 'unknown' (left to Ultra). An attempt is an assignment
-  // where Ultra draws its React authoring panel (it renders only for assignments) and a test in its attempt canvas, where
-  // the AI stays off; attempt: the page's kind, including a test seen earlier while Ultra was rendering this assessment.
-  // Journals and submission comments ('journal', 'comment') weren't seen on the owner's Ultra, and editing a post is
-  // Ultra's: all 'unknown' for now.
+  // Kinds: 'post' | 'reply' | 'message' | 'journal' | 'assignment' | 'test', else 'unknown' (left to Ultra). An attempt is
+  // an assignment where Ultra draws its React authoring panel (it renders only for assignments) and a test in its attempt
+  // canvas, where the AI stays off; attempt: the page's kind, including a test seen earlier while Ultra was rendering this
+  // assessment. A journal is its new entry, which has no form. Submission comments ('comment') weren't seen, and editing a
+  // post or an entry is Ultra's: 'unknown' for now.
   const KINDS = ['post', 'reply', 'message', 'journal', 'assignment', 'test', 'comment', 'unknown'];
+  const JOURNAL = 'journal-responses-panel[analytics-id="course.content.journal"]';
   const kindOf = (ed, { path = '', attempt = '' } = {}) => {
     if (ed?.closest?.(EDITOR) !== ed) return 'unknown';
     if (attemptAt(path)) {
@@ -38,6 +40,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
       return ed.id === SUBMISSION && ed.closest(ASSIGNMENT) ? (attempt === 'test' || pageKind(top(ed)) === 'test' ? 'test' : 'assignment') : 'unknown';
     }
     if (ed.id === 'message-reply' && ed.closest('.message-reply-panel')) return 'message';
+    if (/\/journal\/_\d+_\d+(?:\/|$)/.test(path) && ed.closest(JOURNAL)) return ed.closest('.new-comment .response') && !ed.closest('form') ? 'journal' : 'unknown';
     if (!/\/discussion\//.test(path) || !ed.closest('form.text-editor-form')) return 'unknown';
     if (ed.closest('.reply-input-wrapper')) return ed.closest('.comment-and-reply') ? 'reply' : 'unknown';
     return !ed.closest('.comment-and-reply') && ed.closest('bb-rich-text-editor[analytics-id="components.directives.discussion.message.onEditorClick"]') ? 'post' : 'unknown';
@@ -62,6 +65,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const sendOf = (ed, kind) => {
     if (kind === 'post' || kind === 'reply') return ed.closest('form.text-editor-form')?.querySelector('button.js-text-editor-save') || null;
     if (kind === 'message') return ed.closest('.message-reply-container')?.querySelector('button[data-analytics-id="components.directives.messages.courseConversation.sendMessage.button"]') || null;
+    if (kind === 'journal') return ed.closest('.response')?.querySelector('.panel-editor-controls button[data-analytics-id="course.content.journal.newEntry.edit.save.button"]') || null;
     if (kind === 'assignment') return ed.closest('bb-assignment-attempt-authoring-panel')?.querySelector('button[data-analytics-id="assignment.attempt.authoring.footer.submit"]') || null;
     if (kind === 'test') return top(ed).querySelector('button[analytics-id="course.content.assessment.footer.buttons.submit"]');
     return null;
@@ -78,10 +82,12 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     return (blocks.length ? blocks.map((b) => squash(b.textContent)).filter(Boolean).join('\n') : squash(ed?.textContent)).slice(0, 20000);
   };
   // What the box answers, read off the page: for a reply, the post (its message id, author and text; the author from the
-  // post's Reply button, whose label names them: English only, '' elsewhere); for an assignment, its instructions.
+  // post's Reply button, whose label names them: English only, '' elsewhere); for an assignment, its instructions; for a
+  // journal, its prompt.
+  const PROMPTS = { assignment: '#bb-editorassignment-attempt-authoring-instructions', journal: 'form#prompt-editor .ql-editor[contenteditable="false"]' };
   const contextOf = (ed, kind) => {
-    if (kind === 'assignment') {
-      const text = textOf(top(ed).querySelector('#bb-editorassignment-attempt-authoring-instructions'));
+    if (PROMPTS[kind]) {
+      const text = textOf(top(ed).querySelector(PROMPTS[kind]));
       return text ? { prompt: text } : {};
     }
     if (kind !== 'reply') return {};
@@ -98,12 +104,15 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const boxes = (root, at = {}, skip = () => false) => [...root.querySelectorAll(EDITOR)].map((editor) => {
     if (skip(editor)) return null;
     const kind = kindOf(editor, at), container = editor.closest('.ql-container');
-    // An empty new Post collapses when native focus leaves. Let Ultra receive its first text before taking focus;
-    // replies arrive activated already. A toolbar alone can appear before the post's click has activated its controls.
+    // A new Post is Writer's once Ultra's click has activated it: its toolbar drawn and its controls shown (a toolbar
+    // alone can appear first). Empty, it would collapse when the frame takes focus; features/writer.js keeps that blur
+    // from Ultra. Replies arrive activated already.
     if (kind === 'post') {
       const controls = editor.closest('form').querySelector('.panel-editor-controls');
-      if (!rootOf(editor).querySelector('.bb-editor-toolbar') || (controls && (controls.getAttribute('aria-hidden') === 'true' || controls.className.split(/\s+/).includes('ng-hide') || !squash(editor.textContent)))) return null;
+      if (!rootOf(editor).querySelector('.bb-editor-toolbar') || (controls && (controls.getAttribute('aria-hidden') === 'true' || controls.className.split(/\s+/).includes('ng-hide')))) return null;
     }
+    // A journal's new entry opens on a click too, drawing its toolbar and its Cancel and Post; Cancel removes them again.
+    if (kind === 'journal' && (!rootOf(editor).querySelector('.bb-editor-toolbar') || !sendOf(editor, kind))) return null;
     return kind === 'unknown' || !container || !canEdit(editor) ? null : { editor, container, root: rootOf(editor), kind, mode: MODE[kind] || 'compose', send: sendOf(editor, kind), context: contextOf(editor, kind) };
   }).filter(Boolean);
 

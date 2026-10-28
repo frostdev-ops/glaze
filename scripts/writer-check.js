@@ -14,7 +14,7 @@ const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', 
 const ROUTES = {
   '/ultra/courses/_101_1/discussion/_9_1': 'ultra-writer-discussion.html', '/ultra/messages/create': 'ultra-writer-messages.html',
   '/ultra/courses/_101_1/assessment/_7_1/attempt/create': 'ultra-writer-attempt.html', '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1': 'ultra-writer-test.html',
-  '/ultra/courses/_101_1/discussion/_10_1': 'ultra-writer-discussion.html',
+  '/ultra/courses/_101_1/discussion/_10_1': 'ultra-writer-discussion.html', '/ultra/courses/_101_1/journal/_12_1': 'ultra-writer-journal.html',
 };
 // The same discussion with boxes Writer must leave alone: a checklist in the composer (the quick look passes it, the frame
 // refuses it) and right-to-left text in the reply (the quick look refuses it).
@@ -36,16 +36,16 @@ const check = (v, label) => { assert.ok(v, label); checks.push(label); console.l
 const HARNESS = `(() => {
   window.__clicks = []; window.__initial = [];
   document.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) __clicks.push(b.textContent.trim()); }, true);
-  for (const c of document.querySelectorAll('.ql-container:not(.is-read-only)')) {
+  for (const c of document.querySelectorAll('.ql-container:not(.is-read-only):not(.ql-disabled)')) {
     const old = c.querySelector('.ql-editor'), html = old.innerHTML, id = old.id, role = old.getAttribute('role'), placeholder = old.getAttribute('data-placeholder');
     c.innerHTML = '';
     const q = new Quill(c, { placeholder });
     if (id) q.root.id = id;
     if (role) q.root.setAttribute('role', role);
     if (/[^\\s]/.test(html.replace(/<[^>]*>/g, ''))) q.setContents(q.clipboard.convert(html), 'silent');
-    const form = c.closest('form'), panel = c.closest('.message-reply-container');
+    const form = c.closest('form'), panel = c.closest('.message-reply-container'), entry = c.closest('journal-responses-panel .response');
     const attempt = c.closest('bb-assignment-attempt-authoring-panel, bb-attempt-canvas');
-    const buttons = attempt ? [...document.querySelectorAll('[data-analytics-id*="footer"], [analytics-id*="footer"]')] : [...(form ? form.querySelectorAll('.js-text-editor-save, .draft-button') : []), ...(panel ? panel.querySelectorAll('.send') : [])];
+    const buttons = attempt ? [...document.querySelectorAll('[data-analytics-id*="footer"], [analytics-id*="footer"]')] : [...(form ? form.querySelectorAll('.js-text-editor-save, .draft-button') : []), ...(panel ? panel.querySelectorAll('.send') : []), ...(entry ? entry.querySelectorAll('.js-text-editor-save') : [])];
     const status = c.closest('.bb-editor-root')?.querySelector('.status-bar');
     const sync = () => { const t = q.getText().trim(); for (const b of buttons) b.disabled = !t; if (status) status.textContent = 'Word count: ' + (t ? t.split(/\\s+/).length : 0); };
     q.on('text-change', sync);
@@ -256,6 +256,21 @@ const HARNESS = `(() => {
     check(await p.evaluate(() => !document.querySelector('.send').disabled), 'message box mounts and Send enables with content');
     await p.keyboard.press(`${MOD}+Enter`); await pause(400);
     check((await clicks(p)).filter((c) => c === 'Send').length === 1, 'Ctrl/Cmd+Enter clicks Send once');
+    await p.close();
+
+    // ---- a journal's new entry: no form around it, its prompt read off the page ----
+    p = await open('/ultra/courses/_101_1/journal/_12_1');
+    const entry = await box(p, 'journal');
+    check(await entry.fr.evaluate(() => document.documentElement.dataset.mode === 'compose' && document.documentElement.dataset.kind === 'journal' && GZ_WRITER_FRAME.context()?.prompt?.startsWith('Reading Journal')), 'journal entry mounts in compose mode as a journal, its prompt as the context');
+    await entry.fr.click('.ProseMirror');
+    await p.keyboard.type('The orchard at dusk stayed with me.', { delay: 2 });
+    await until(async () => (await quillText(p, '.ql-editor[data-placeholder="Type an entry"]')) === 'The orchard at dusk stayed with me.', 'entry in Quill');
+    check(await p.evaluate(() => !document.querySelector('[data-analytics-id="course.content.journal.newEntry.edit.save.button"]').disabled), 'the entry\'s Post enables with content');
+    await p.keyboard.press(`${MOD}+Enter`); await pause(400);
+    check((await clicks(p)).filter((c) => c === 'Post').length === 1, 'Ctrl/Cmd+Enter clicks the entry\'s Post once');
+    await p.evaluate(() => document.querySelector('.panel-editor-controls').remove());
+    await until(() => p.evaluate(() => !document.querySelector('iframe[data-gz-writer-frame="journal"]') && getComputedStyle(document.querySelector('journal-responses-panel .bb-editor-root')).display !== 'none'), 'entry closed');
+    check(true, 'once Ultra closes the entry (Cancel, or the entry sent), its editor is Ultra\'s again');
     await p.close();
 
     // ---- attempts ----

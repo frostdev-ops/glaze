@@ -268,14 +268,16 @@ const run = async ({ context, mock, shots, errors, ai }) => {
   check(await until(() => p.evaluate((t) => !document.querySelector('.reply-input-wrapper') && [...document.querySelectorAll('.comment-level-1 .ql-editor')].some((e) => e.textContent.includes(t)), REPLY.slice(0, 30)), 'reply drawn in the thread'),
     'the reply shows under Jordan Lee\'s post and its box closes');
 
-  // ---- a new post: the student clicks it and types; Writer takes over after Ultra's first character
+  // ---- a new post: the student clicks it; Writer takes the empty composer and the caret, and Ultra's stays open
   await p.click('bb-rich-text-editor[editor-aria-label="Post text editor"] .ql-editor');
-  check(await p.evaluate(() => !document.querySelector('.panel-editor-controls').classList.contains('ng-hide') && !!document.querySelector('form[name="editorForm"] .bb-editor-toolbar')), 'a click activates Ultra\'s composer: toolbar and controls');
-  await p.keyboard.type(POST[0]);
   const po = await frame(p, 'post');
   // The frame's document.hasFocus() stays false in headless Chromium; the page's focus is on the frame and the frame's on its editor.
   await until(async () => await p.evaluate(() => document.activeElement?.matches('iframe.gz-writer[data-gz-writer-frame="post"]')) && po.fr.evaluate(() => !!document.activeElement?.closest('.ProseMirror')), 'Writer holds the caret');
-  await p.keyboard.type(POST.slice(1), { delay: 4 });
+  check(await p.evaluate(() => !document.querySelector('.panel-editor-controls').classList.contains('ng-hide') && !!document.querySelector('form[name="editorForm"] .bb-editor-toolbar'))
+    && await po.fr.evaluate(() => !document.querySelector('.ProseMirror').textContent), 'a click gives the empty post to Writer, and Ultra\'s composer stays active behind it');
+  await pause(400);
+  check(await p.$('iframe.gz-writer[data-gz-writer-frame="post"]') && await p.evaluate(() => !document.querySelector('.panel-editor-controls').classList.contains('ng-hide')), 'the empty post does not collapse while Writer has the caret');
+  await p.keyboard.type(POST, { delay: 4 });
   await p.keyboard.press('ControlOrMeta+A');
   await p.keyboard.press('ControlOrMeta+B');
   await until(() => p.evaluate(() => !document.querySelector('form[name="editorForm"] .js-text-editor-save').disabled), 'Ultra enables Post');
