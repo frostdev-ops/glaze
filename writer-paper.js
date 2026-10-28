@@ -1199,13 +1199,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const d = ctx.assignment?.due || paper?.due;
       due.textContent = d && Number.isFinite(Date.parse(d)) ? t('Due {when}', { when: new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(d)) }) : '';
     };
-    let loading = null, recovered = false;
+    // held: this tab's unsaved copy of the paper whose key isn't known yet.
+    let loading = null, recovered = false, held = null;
     const load = () => (loading ||= (async () => {
       key = host.key || PA.keyOf(ctx.paper || {}) || recoveryKey;
       paper = await store.get(key);
       recovered = key === recoveryKey && !!paper?.doc;
       let pending = null;
-      try { const p = JSON.parse(sessionStorage.getItem(recoverySlot)); if (p?.key === key && p.record?.doc) pending = p.record; } catch {}
+      try { const p = JSON.parse(sessionStorage.getItem(recoverySlot)); if (p?.record?.doc) { if (p.key === key) pending = p.record; else if (key === recoveryKey) held = p; } } catch {}
       if (pending) paper = { ...paper, ...pending };
       keep = paper?.keep === true;
       if (paper?.doc) {
@@ -1213,9 +1214,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         setDoc(paper.doc, true);
       } else {
         format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
-        // A new paper: the format's opening and list page around what Ultra's box already held.
+        // A new paper: the format's opening and list page around what Ultra's box already held. Under a stand-in key it is
+        // saved once something is written in it.
         setDoc(F.template(format, values(), initialBody), true);
-        if (key) await save('auto');
+        if (key !== recoveryKey) await save('auto');
       }
       initializing = false;
       if (pending) { dirty = true; await save(); }
@@ -1230,23 +1232,38 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       outlineDraw();
       if (!dirty) setState('Saved');
     })());
+    // The paper's key came after the frame opened (the student's id wasn't known then), so far kept under a stand-in key.
+    // Nothing written under it: the student's paper opens as it was saved, with this tab's unsaved copy of it. Written in:
+    // that paper takes the key, the one saved there (with this tab's unsaved copy) kept as a version first.
     host.onContext?.((c) => {
       ctx = c && typeof c === 'object' ? c : {};
       head();
       const target = host.key || PA.keyOf(ctx.paper || {});
       if (target && key === recoveryKey) (async () => {
         await loading;
-        if (key !== recoveryKey || !await save()) return;
-        const existing = await store.get(target);
-        key = target;
-        if (!edits && !recovered) {
-          paper = existing;
+        if (key !== recoveryKey) return;
+        const at = edits, written = at > 0 || recovered;
+        const existing = written ? null : await store.get(target);
+        if (key !== recoveryKey) return;
+        if (!written && edits === at) {
+          const pending = held?.key === target ? held.record : null;
+          key = target;
+          paper = pending ? { ...existing, ...pending } : existing;
+          keep = paper?.keep === true;
           format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
           initializing = true;
           setDoc(paper?.doc || F.template(format, values(), initialBody), true);
           initializing = false;
-          restyleCSS(); counts(); PG.relayout(view); runChecks();
+          const scope = PA.scopeOf(ctx.paper || {});
+          presets = scope ? await store.presets(scope) : [];
+          restyleCSS(); counts(); PG.relayout(view); runChecks(); outlineDraw();
+          if (pending || !existing?.doc) { dirty = true; if (!await save()) return; }
+          if (!dirty) setState('Saved');
+          return;
         }
+        if (!await save()) return;
+        if (held?.key === target) await store.save(target, held.record);
+        key = target;
         if (await save('import')) await store.remove(recoveryKey);
       })().catch((e) => { console.error(e); setState('Not saved'); });
     });
