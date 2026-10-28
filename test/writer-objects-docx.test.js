@@ -101,7 +101,7 @@ test('round trip: lists, tables and pictures come back from the .docx with their
   assert.deepEqual([img.attrs.display, img.attrs.align], ['block', 'center']);
 });
 
-test('import: a Word file\'s own numbering formats map to list styles; unknown ones fall back to the level's default', async () => {
+test('import: a Word file\'s own numbering formats map to list styles; unknown ones fall back to the level\'s default', async () => {
   const numbering = `<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="7"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="upperLetter"/></w:lvl><w:lvl w:ilvl="1"><w:numFmt w:val="chineseCounting"/></w:lvl></w:abstractNum><w:num w:numId="4"><w:abstractNumId w:val="7"/></w:num></w:numbering>`;
   const body = `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="4"/></w:numPr></w:pPr><w:r><w:t>a</w:t></w:r></w:p><w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="4"/></w:numPr></w:pPr><w:r><w:t>b</w:t></w:r></w:p></w:body></w:document>`;
   const html = OD.importHTML('<ol><li>a</li><li class="ql-indent-1">b</li></ol>', { body: X.xml(body), numbering: X.xml(numbering), styles: null });
