@@ -237,3 +237,21 @@ test('export pads table cells as the page does: 4 px (60 twips) left and right, 
   const css = require('fs').readFileSync(require('path').join(__dirname, '../writer-paper.css'), 'utf8');
   assert.match(css, /\.gp-flow \.ProseMirror td, \.gp-flow \.ProseMirror th \{[^}]*padding: 0 4px;/, 'the page\'s padding this matches');
 });
+
+test('page breaks import to Word\'s page count: a page break before at a page\'s top adds none', async () => {
+  // Word 16 on the Mac, 2026-10-28: 3, 2, 3 and 2 pages.
+  const brk = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+  const probes = {
+    'two breaks': [p('Page one text.') + brk + brk + p('After two page breaks.'), '"Page one text." BREAK BREAK "After two page breaks."'],
+    'break then page break before': [p('Page one text.') + brk + p('A paragraph set to page break before.', '<w:pageBreakBefore/>'), '"Page one text." BREAK "A paragraph set to page break before."'],
+    'two breaks in one paragraph': ['<w:p><w:r><w:t>Page one text.</w:t></w:r><w:r><w:br w:type="page"/></w:r><w:r><w:br w:type="page"/></w:r><w:r><w:t>After two breaks in one paragraph.</w:t></w:r></w:p>', '"Page one text." BREAK BREAK "After two breaks in one paragraph."'],
+    'section break': [p('Cover page') + '<w:p><w:pPr><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:pPr></w:p>' + p('Body starts on page 2'), '"Cover page" "" BREAK "Body starts on page 2"'],
+  };
+  for (const [name, [body, want]] of Object.entries(probes)) {
+    const got = await imp(pack(body));
+    assert.equal(shape(got.node), want, name);
+    assert.equal(nodes((await imp(X.exportDocx(got.node).bytes)).node, 'page_break').length, nodes(got.node, 'page_break').length, `${name}: through export and back`);
+  }
+  const after = await imp(pack(`<w:p>${r('Ends with a break')}<w:r><w:br w:type="page"/></w:r></w:p>` + p('Next', '<w:pageBreakBefore/>')));
+  assert.equal(shape(after.node), '"Ends with a break" BREAK "Next"');
+});
