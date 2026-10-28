@@ -71,8 +71,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     return s;
   };
 
-  let sheet = null, runs = 0, waiting = null;
+  let sheet = null, runs = 0, waiting = null, openings = 0;
   const close = () => {
+    openings++;
     if (!sheet) return;
     const s = sheet;
     sheet = null;
@@ -83,8 +84,10 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   const open = async (api = P()?.current(), file = null) => {
     if (!api || frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
     if (sheet) { sheet.first.focus(); return; }
+    const opening = ++openings;
     await P().need(['lib/writer-submit.js']);
-    if (sheet) return;
+    if (sheet || opening !== openings || P()?.current() !== api || frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
+    globalThis.GZ_WRITER_IMPORT?.close();
     const ctx = api.context() || {}, paper = api.paper() || {}, view = api.editor.view;
     const snapshot = { doc: view.state.doc, format: JSON.stringify(api.format()), key: api.key(), title: ctx.assignment?.title || paper.title || '' };
     const same = () => P()?.current() === api && view.state.doc === snapshot.doc && JSON.stringify(api.format()) === snapshot.format && api.key() === snapshot.key &&
@@ -197,6 +200,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           if (mine.cancelled || sheet !== mine || P()?.current() !== api || api.key() !== snapshot.key || !L().may(s, 'attach')) throw 'page';
           let bytes;
           try { bytes = await file.arrayBuffer(); } catch (e) { console.error(e); throw 'page'; }
+          if (mine.cancelled || sheet !== mine || P()?.current() !== api || api.key() !== snapshot.key) throw 'page';
           const r = await send(run, { key: snapshot.key, name, bytes, note: note.value, text: null, asis: true, mime: file.type || '' });
           if (mine.cancelled || sheet !== mine) return;
           if (!r.ok) throw r.error || 'page';
