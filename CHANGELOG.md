@@ -8,7 +8,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- Blackboard: **Glaze Writer**, Glaze's editor in discussion, message, assignment and test boxes, with Blackboard's own editor one click away in its ⋯ menu. Discussions and messages get a selection toolbar, word and source targets from the prompt, quotes and Ctrl/⌘+Enter to post; assignments become papers on real pages in MLA 9, APA 7, Chicago 17 or your own format, with format checks, footnotes, versions, .docx import and export, a Papers page, and a submit sheet that attaches the .docx through Blackboard's upload. Spelling, grammar and autocorrect run on your device; citations look up a DOI, ISBN or web address when you click; sentence completion and AI feedback run only when turned on in Settings → AI. Tests get proofing only. Papers, the dictionary and saved sources are in **Back up…**.
+- Blackboard: **Glaze Writer**, Glaze's editor in discussion, message, assignment and test boxes, with Blackboard's own editor one click away in its ⋯ menu. Discussions and messages get a selection toolbar, word and source targets from the prompt, quotes and Ctrl/⌘+Enter to post; assignments become papers on real pages in MLA 9, APA 7, Chicago 17 or your own format, with format checks, footnotes, versions, .docx import and export, a Papers page, and a submit sheet that attaches the .docx through Blackboard's upload. Spelling, grammar and autocorrect run on your device; citations look up a DOI, ISBN or web address when you click; tab completion and AI feedback run only when turned on in Settings → AI. Tests get proofing only. Papers, the dictionary and saved sources are in **Back up…**.
+
+### Changed
+
+- Settings → AI: providers by name (OpenAI, Anthropic, Google Gemini, OpenRouter, xAI, Mistral, Groq and DeepSeek), each connected with only its key, beside the model on this device; one model for every feature or a feature's own, each with the effort its model takes; and Simple or Advanced, where you add your own OpenAI-compatible endpoints (Ollama and LM Studio a click away) and tune each feature. An endpoint set up before moves over by itself, with its key and model.
 
 ### Fixed
 

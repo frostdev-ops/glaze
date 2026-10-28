@@ -1,7 +1,7 @@
 # AI harness
 
 Glaze's AI is off by default. The service worker caches its scripts at installation and loads them when AI is used; Firefox loads them with its event page. Nothing is sent
-until the student has turned AI on, chosen a connection and allowed that feature. Its conventions follow
+until the student has turned AI on, chosen a model for that feature and allowed it. Its conventions follow
 [Rimeward](https://github.com/frostdev-ops/rimeward)'s agent harness (MIT), and the files ported from it say so at the top.
 
 | File | Role |
@@ -22,8 +22,40 @@ until the student has turned AI on, chosen a connection and allowed that feature
 | `lib/ai/task.js` | Task definitions and `run`. Tasks live in `lib/ai/tasks/<id>.js`. |
 | `lib/ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `lib/syllabus-ai.js` reads them with `lib/syllabus.js` and merges them into the import dialog's review. |
 | `lib/ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
-| `lib/ai/settings.js` | storage.local `ai`: `{ on, use, features }`. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls). |
+| `lib/ai/settings.js` | storage.local `ai`: `{ on, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls). |
 | `lib/ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
+
+## Settings → AI
+
+storage.local `ai` (`lib/ai/settings.js`) is `{ on, mode, model, models, tune, features }`. `model` is the overall model,
+`{ use, model, effort? }`: `use` a connection's id (a provider's: `openai`, `anthropic`, `gemini`, `openrouter`, `xai`,
+`mistral`, `groq`, `deepseek`; `device`, the model on this device; or `custom-1` and on, an endpoint the student added),
+`model` its id at that provider (`''` on this device), `effort` the student's. `models` holds a feature's own model in that
+shape. A feature runs on its own model, else the overall one (`resolve`); with neither, or a connection with no model id,
+none is chosen (`chosen`), its status says `why: 'setup'` and Writer says "No AI model is chosen". `mode` is `simple` or
+`advanced`; `tune` holds a feature's `{ temperature?, maxTokens?, context?, timeoutMs?, pause? }` (`pause`, the gray text's
+wait in ms, for `completion` only), used in Advanced only (`tuning`) and kept while Simple is on.
+
+Each provider Settings names is an OpenAI-compatible Chat Completions server at its own fixed address (`PRESETS`), kept
+with only a key; Anthropic's is asked with its browser header (`anthropic-dangerous-direct-browser-access`), Google Gemini's
+at `/v1beta/openai`. Any other id but `device` is an endpoint of the student's own (Advanced), with its name, address and
+an optional key. Connect asks the browser for the provider's host from its click, keeps the key, then checks it (`test`)
+and reads the catalog (`models`).
+
+A model's efforts come from its catalog where the catalog says (OpenRouter's `reasoning.supported_efforts`, DeepSeek's
+`effort.supported_levels`, xAI's `capabilities.reasoning_effort`), else from what its provider's docs say of it by name
+(`lib/ai/models.js` `RULES`: OpenAI's GPT-5 and o-series, Gemini 2.5 and later, Grok 4.5 to 4.7, Groq's gpt-oss). None
+known is none offered, and Settings hides the slider; Anthropic's and Mistral's compatible endpoints offer none, and neither
+does a model on this device. A run takes the student's effort when its model lists it, else its task's own
+(`writer.complete` asks `none`). Reasoning counts against a request's output, so an effort above the task's own adds the
+room it thinks in (1,024 tokens for minimal to 8,192 for high, `lib/ai/task.js` `mine`) unless the student set Max output. In Advanced a feature's temperature, max output and timeout replace its tasks' own, and its
+context is the window Glaze plans for.
+
+An older Settings kept `{ on, use, features }` and one `endpoint` connection `{ provider: 'openai', base, model, key }`.
+`migrate` reads it as the provider its address is (`https://openrouter.ai/api/v1` becomes `openrouter`, its key with it),
+else as an endpoint of its own named by its host; the connection's model becomes the overall model, the features stay as
+they were, and `device` stays the model on this device. The broker runs on that reading at once, and writes it back,
+settings first, the first time Settings asks it anything (`upgrade`).
 
 ## Glaze Writer
 
@@ -87,7 +119,7 @@ in the system message, page and document text only inside the fence. `context` i
 the next (an assignment's prompt, a thread), `data` what changes (the text around the caret); leave out `fence` so the
 context keeps its tag (below). Beside them a request may carry `temperature`, `maxTokens`, `timeoutMs` and `effort`
 (`none`, `minimal`, `low`, `medium` or `high`: how long a reasoning model thinks before it answers; only an endpoint sends
-it, the models on this device ignore it). Ground every extracted value in `check` with
+it, the models on this device ignore it). The student's effort and Advanced tuning win over the task's (Settings → AI above). Ground every extracted value in `check` with
 `text.source(input.text).has(quote)`, and anchor an issue to the student's text with `text.anchor(text, quote, { before, after })` → `[start, end]` (UTF-16 offsets
 in the original, the same folding as `has`) or `null` when it isn't there or is there more than once and the words around
 it don't say which. Raise `version` when the output changes.
@@ -157,11 +189,13 @@ the same way, as `timeout` (a status gets that error). The writer's frame asks a
 and 8 seconds, when it got no status (none comes within 30 seconds) or `attempt`.
 
 Settings' top frame (`options.html`) manages connections with `chrome.runtime.sendMessage({ type: 'glaze:ai-config', op })`:
-`get`, `set { id, cfg: { provider, base, model, key?, images?, context? } }`, `remove { id }`, `test { id }`,
-`models { id }`. `get` also returns `providers`, the shipped providers registered in this browser. Request the host from a click first with `chrome.permissions.request({ origins: [origin] })`.
-Settings → AI (`lib/editor-ai.js`) keeps the connections `endpoint` and `device` (On this device, `test { id: 'device' }`
-→ `{ ok, state, reason?, provider }`, the resolved provider naming the status line: "Apple Intelligence · Ready", "Gemini
-Nano · Needs a download"), and asks for the host with `GZ_SITE.reach` from the Save or Test click.
+`get`, `set { id, cfg: { provider, name?, base?, key?, images?, context? } }` (a provider's id is always at its own
+address; `name` is an endpoint's; a model is the settings', never a connection's), `remove { id }`, `test { id }`, `models { id }`
+(each model with the `efforts` it takes). `get` also returns `providers`, the shipped providers registered in this browser.
+Request the host from a click first with `chrome.permissions.request({ origins: [origin] })`.
+Settings → AI (`lib/editor-ai.js`) keeps a connection per provider the student connects, `custom-1` and on for endpoints,
+and `device` (On this device, `test { id: 'device' }` → `{ ok, state, reason?, provider }`, the resolved provider naming
+its card: Apple Intelligence or Gemini Nano), and asks for the host with `GZ_SITE.reach` from the Connect, Save or Test click.
 The model on this computer: `test { provider: 'device' }` → `{ ok, state, reason? }`, and from a click `prepare { provider:
 'device' }`, which answers once the model is ready and meanwhile sends `{ type: 'glaze:ai-config', event: 'progress',
 provider, loaded }` (0 to 1) to Glaze's pages. A `download` reply with reason `activation` keeps Download available for another click.
@@ -203,8 +237,9 @@ For a connection that goes over the network it reports `to`, the host the text g
 - Provider replies and catalogs that echo a credential are refused before display or caching. Errors retain only safe diagnostics.
 - Everything from a page, a document or a model is data. Answers are checked against the schema and the task's `check`;
   inference that may have run is never replayed.
-- The call record (`storage.local aiCalls`) keeps ids, task, feature, provider, state, category, status, timing, usage and
-  a tallied row's count: no prompts, answers, addresses or keys.
+- The call record (`storage.local aiCalls`) keeps ids, task, feature, provider (the connection's id, or the model on this
+  device's provider), the model's id, state, category, status, timing, usage and a tallied row's count: no prompts,
+  answers, addresses or keys.
 
 ## Warm sessions
 
@@ -229,7 +264,7 @@ Settings offers one **On this device** choice (connection id `device`), and the 
 run (`lib/ai/broker.js` `onDevice`): Apple Intelligence where Safari registers `apple`, unless its status is `unavailable`
 for `off`, `os` or `device` and the browser's own model (`device`) can run; otherwise the browser's model. Status, test and
 the call record name the provider it resolved to, and a status for an unavailable provider carries its `reason` (Writer
-says "Apple Intelligence is off" for `off`). A saved `use: 'apple'` reads as `device` (`lib/ai/settings.js` `clean`).
+says "Apple Intelligence is off" for `off`). A saved `apple` (an older `use`, or a model's) reads as `device` (`lib/ai/settings.js` `clean`).
 
 `ai.run` is one native request and reply. Refusals stay `refusal`; a reply reaching `maximumResponseTokens` is marked
 `length`, and structured output is refused even if guided generation closed the JSON. Rate and quota limits carry 429.

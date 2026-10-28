@@ -26,8 +26,8 @@ and sends nothing to Blackboard itself: your words reach it only when you press 
 Submit (the submit sheet attaches your paper's .docx through Blackboard's upload and clicks its Submit). A citation
 lookup goes out only when you click Look up: a DOI to `doi.org` (or Crossref and DataCite), an ISBN to
 `openlibrary.org`, a web address to that page's own host once you allow it. AI runs only for what you turn on in
-Settings → AI, through the connection you chose: Sentence completion sends the text around the caret, the course, prompt
-or assignment, and in a discussion your classmates' posts with their names; Writing feedback sends your draft with the
+Settings → AI, to the model you chose for it: Tab completion sends the text around the caret, the course, prompt
+or assignment, and in a discussion your classmates' posts with their names; Feedback sends your draft with the
 assignment's instructions and rubric. Nothing goes to AI from a test.
 
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
