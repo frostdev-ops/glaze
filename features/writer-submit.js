@@ -154,19 +154,21 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (!key || key !== L().paperKey(box.context?.paper) || !(asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name)) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
-    const user = box.context.paper.user;
+    const user = box.context.paper.user, end = Math.min(m.until, Date.now() + 80e3);
     const transaction = active = { box, run: m.run, cancelled: false, frame: box.frame, port: box.port };
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
     const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user }))?.ok === true;
+    let claimed = false;
     try {
       const d = L().delta({ note: m.note, text: m.text || '' });
       if (!d && written.has(box)) return fail('review');
       let s = L().start({ text: !!d, asis });
       if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'docx' });
-      const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < m.until;
+      const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < end;
       if (!here()) return fail('page');
       if (!await permit('claim')) return fail('claimed');
+      claimed = true;
       if (!here()) return fail('page');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
       const file = new File([bytes], name, { type: asis ? m.mime : L().MIME, lastModified: Date.now() });
@@ -187,11 +189,23 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!here() || !L().may(s, 'submit') || L().listed(L().areaOf(box.editor), name, visible) !== 1) return fail('page');
       if (d && !sameText(box, d)) return fail('text');
       if (!await permit('commit') || !here() || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected || L().listed(L().areaOf(box.editor), name, visible) !== 1 || (d && !sameText(box, d))) return fail('page');
+      claimed = false;
       submitted.add(box);
       pass(b);
       say(box, { type: 'submit:done', run: m.run, ok: true });
       return true;
-    } catch (e) { console.error(e); return fail('page'); } finally { running = false; if (active === transaction) active = null; }
+    } catch (e) { console.error(e); return fail('page'); } finally {
+      running = false; if (active === transaction) active = null;
+      // Nothing of this box ever reached Ultra's file area: a reload or a re-render may submit.
+      if (claimed && !attached.has(box)) permit('release').catch(() => {});
+    }
+  };
+  // The student has Blackboard's editor before them (the sheet's button): what a run left in the attempt is theirs to see.
+  const review = (box) => {
+    if (running) return;
+    const token = tokens.get(box) || crypto.randomUUID();
+    tokens.set(box, token);
+    Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op: 'review', token, user: box.context?.paper?.user })).catch(() => {});
   };
 
   // ---- Ultra's own file area, caught before Ultra
@@ -235,6 +249,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (m.type === 'submit:arm') armed.set(box, ok);
     else if (m.type === 'submit:saved') m.request === box.saveRequest && box.saved?.(m.ok === true);
     else if (m.type === 'submit:go' && armed.has(box)) go(box, m, ok);
+    else if (m.type === 'submit:review' && armed.has(box)) review(box);
   };
   return { hear };
 })();

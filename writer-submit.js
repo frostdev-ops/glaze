@@ -158,7 +158,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     };
     native.addEventListener('click', async () => {
       if (mine.busy || !await api.save()) return;
-      mine.back = null; close(); frame.say({ type: 'native' });
+      mine.back = null; close(); frame.say({ type: 'submit:review' }); frame.say({ type: 'native' });
     });
     cancel.addEventListener('click', cancelIt);
     layer.querySelector('.gs-dim').addEventListener('click', cancelIt);
