@@ -60,7 +60,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (globalThis.GZ_DRAFT_UI?.keep) GZ_DRAFT_UI.keep(s, true);
     else drafts().then(() => GZ_DRAFT_UI.keep(s, true), () => {});
   };
-  const sameBox = (box) => box.path === location.pathname && box.editor.isConnected && box.root === U().rootOf(box.editor) &&
+  // An assignment's paper is the same when Ultra numbers its attempt in the address (/attempt/create → /attempt/_N_1).
+  const samePath = (box) => {
+    if (box.path === location.pathname) return true;
+    const was = box.mode === 'paper' && U().attemptAt(box.path), now = was && U().attemptAt(location.pathname);
+    return !!now && now.course === was.course && now.content === was.content;
+  };
+  const sameBox = (box) => samePath(box) && box.editor.isConnected && box.root === U().rootOf(box.editor) &&
     box.container === box.editor.closest('.ql-container') && box.editor.id === box.editorId &&
     U().kindOf(box.editor, { path: location.pathname, attempt: box.kind === 'test' ? 'test' : '' }) === box.kind &&
     (box.kind !== 'reply' || U().replyTo(box.editor) === (box.context.post?.id || ''));
