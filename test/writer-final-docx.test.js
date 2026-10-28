@@ -311,3 +311,19 @@ test('a w:sym character comes in as its Unicode equivalent (Symbol\'s and Wingdi
   assert.equal(odd.node.textContent, 'AB');
   assert.deepEqual(odd.warnings, ['Some pictures, objects or equations were left out.']);
 });
+
+// ---- alternate content
+test('mc:AlternateContent comes in once: its Choice when the importer reads what it requires, else its Fallback', async () => {
+  const mc = (req, choice, fallback) => `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="${req}">${choice}</mc:Choice><mc:Fallback>${fallback}</mc:Fallback></mc:AlternateContent>`;
+  assert.equal((await imp(pack(`<w:p>${r('A')}${mc('w14', r('choice'), r('fallback'))}${r('B')}</w:p>`))).node.textContent, 'AchoiceB');
+  assert.equal((await imp(pack(`<w:p>${r('A')}${mc('cx1', r('choice'), r('fallback'))}${r('B')}</w:p>`))).node.textContent, 'AfallbackB');
+  assert.equal((await imp(pack(mc('w14', p('Block choice'), p('Block fallback'))))).node.textContent, 'Block choice');
+  const base = X.exportDocx(S.parse(S.paper, `<p>x<img src="${PNG}" alt="Dot"></p>`));
+  const all = await entries(base.bytes), doc = all.find((e) => e.name === 'word/document.xml'), x = new TextDecoder().decode(doc.data), draw = /<w:drawing>[\s\S]*?<\/w:drawing>/.exec(x)[0];
+  const vml = '<w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml" style="width:10pt;height:10pt"><v:imagedata r:id="rId1"/></v:shape></w:pict>';
+  for (const [name, d] of [['drawing, VML fallback', mc('wps', draw, vml)], ['drawing, drawing fallback', mc('wps', draw, draw)], ['unknown choice, drawing fallback', mc('zz', vml, draw)]]) {
+    const got = await imp(Buffer.concat(Z.zip(all.map((e) => (e === doc ? { name: e.name, data: new TextEncoder().encode(x.replace(draw, d)) } : e)))));
+    assert.equal(nodes(got.node, 'image').length, 1, name);
+    assert.deepEqual(got.warnings, [], name);
+  }
+});
