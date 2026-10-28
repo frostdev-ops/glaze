@@ -46,6 +46,9 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     if (rule === 'Repetition') return !TWICE.has(b.trim()) && a === `${b} ${b}`;
     return rule === 'Typo' && was === a && Object.hasOwn(TYPOS, a) && TYPOS[a] === now;
   };
+  // The autocorrect class each fix is (Settings → Writer → Typing, writer.autocorrect): this file's own rules and Harper's
+  // sure kinds. A plugin's allow(class) false leaves that class as typed.
+  const CLASS = Object.freeze({ typo: 'typos', Typo: 'typos', i: 'capitalI', Capitalization: 'capitalI', twice: 'doubles', space: 'doubles', Repetition: 'doubles' });
   // Kinds a decision model may rule on when the lint isn't sure (their/there, a typo with two readings).
   const ASK = new Set(['Typo', 'Capitalization', 'Repetition', 'WordChoice', 'Eggcorn', 'Malapropism', 'Agreement', 'Grammar']);
   // A lint as the worker sends it, { start, end, kind, message, problem, suggestions: [{ k, t }] } (k: 0 replace, 1 remove,
@@ -233,6 +236,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   const marks = new WeakMap();
   const plugin = (o = {}) => {
     let expect = null;
+    const allowed = (rule) => !CLASS[rule] || o.allow?.(CLASS[rule]) !== false;
     const commit = (view, f) => { const made = commitFix(view, f); o.onFix?.(view, made); return true; };
     // The word before pos in its textblock, fixed if it is sure and was typed here.
     const tryFix = (view, pos) => {
@@ -240,7 +244,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
       if (!$pos.parent.isTextblock || $pos.parent.type.spec.code) return false;
       const start = $pos.start(), before = blockText($pos.parent).slice(0, $pos.parentOffset);
       const f = fix(before, st.kept);
-      if (!f || st.words.has(f.was.toLowerCase())) return false;
+      if (!f || !allowed(f.rule) || st.words.has(f.was.toLowerCase())) return false;
       const from = start + f.from, to = start + f.to;
       if (!within(st.typed, from, to) || guarded(view.state.doc, from, to)) return false;
       return commit(view, { ...f, from, to });
@@ -293,14 +297,14 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
           const st = key.getState(view.state), $from = view.state.doc.resolve(from);
           if (!$from.parent.isTextblock || $from.parent.type.spec.code) return false;
           // Two spaces → one.
-          if (text === ' ' && !st.kept.has('  ') && $from.parentOffset > 1 && $from.parent.textBetween($from.parentOffset - 1, $from.parentOffset) === ' '
+          if (text === ' ' && allowed('space') && !st.kept.has('  ') && $from.parentOffset > 1 && $from.parent.textBetween($from.parentOffset - 1, $from.parentOffset) === ' '
             && $from.parent.textBetween($from.parentOffset - 2, $from.parentOffset - 1) !== ' ' && within(st.typed, from - 1, from) && !guarded(view.state.doc, from - 1, from)) {
             expect = null;
             view.dispatch(view.state.tr.insertText(text, from, to).setMeta(key, { typed: [from, from + 1] }).scrollIntoView());
             return commit(view, { from: from - 1, to: from + 1, was: '  ', now: ' ', rule: 'space' });
           }
           const before = $from.parent.textBetween(0, $from.parentOffset, null, leaf), f = fix(before, st.kept);
-          if (!f || st.words.has(f.was.toLowerCase())) return false;
+          if (!f || !allowed(f.rule) || st.words.has(f.was.toLowerCase())) return false;
           const a = $from.start() + f.from, b = $from.start() + f.to;
           if (!within(st.typed, a, b) || guarded(view.state.doc, a, b)) return false;
           // The boundary goes in as typing (its own undo group with the word), the fix after it as its own step.
@@ -384,7 +388,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   };
 
   return {
-    decide: null, verdict, key, KIND, SURE, ASK, TYPOS, TWICE, toIssue, kindOf, plausible, distance, blockText, docText, unsafe, guarded, sentenceStart, fix,
+    decide: null, verdict, key, KIND, SURE, ASK, CLASS, TYPOS, TWICE, toIssue, kindOf, plausible, distance, blockText, docText, unsafe, guarded, sentenceStart, fix,
     contextWords, nameLike, plugin, since, mapPos, autofix, revert, within, finished,
   };
 })();
