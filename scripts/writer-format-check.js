@@ -373,6 +373,16 @@ const HARNESS = `(() => {
     check(await fr.evaluate(() => !!document.querySelector('.gp-para')), 'its Paragraph… opens the dialog');
     await p.keyboard.press('Escape');
 
+    // ---- an imported paper in Aptos, which this computer doesn't have: one card, quiet once dismissed
+    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.setDocAttribute('setup', { ...GZ_WRITER_STYLES.pageSetup(GZ_WRITER_STYLES.FORMATS.mla9), own: false, font: 'Aptos', size: 12 })); v.dispatch(v.state.tr.insertText(' ', v.state.doc.content.size - 1)); });
+    await until(() => fr.evaluate(() => !!document.querySelector('.gp-issue[data-rule="font-missing"]')), 'the missing-font card');
+    const card = await fr.evaluate(() => document.querySelector('.gp-issue[data-rule="font-missing"] .gp-fix').textContent);
+    check(card === 'Writer has no match for Aptos; pages may differ from Word' && await fr.evaluate(() => /"Aptos", "Calibri"/.test(getComputedStyle(document.querySelector('.gp-flow .ProseMirror')).fontFamily)), `an Aptos paper without Aptos says so once and draws in its twin (${card})`);
+    await fr.click('.gp-issue[data-rule="font-missing"] .gp-ghost');
+    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.insertText(' ', v.state.doc.content.size - 1)); });
+    await pause(600);
+    check(!(await cardRules(fr)).includes('font-missing'), 'dismissed, it stays quiet for this paper');
+
     // ---- typing with all of it on: the 6-page MLA paper, as writer-paper-check measures it
     await load(fr, FX.papers.mla9(), 'mla9');
     const cost = await fr.evaluate(async () => {
