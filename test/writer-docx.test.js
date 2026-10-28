@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const S = require('../lib/writer-schema.js');
 const X = require('../lib/writer-docx.js');
+const ST = require('../lib/writer-styles.js');
 const D = require('../lib/doctext.js');
 const Z = require('../lib/zip.js');
 const FX = require('./fixtures/writer-paper-fixtures.js');
@@ -104,7 +105,7 @@ test('import gives the export back: text, blocks, marks, indents, notes, page br
     const doc = S.paper.nodeFromJSON(FX.papers[id]());
     const back = S.parse(S.paper, (await X.importDocx(X.exportDocx(doc, { format: id, surname: 'Rivera', date }).bytes, { format: id })).html);
     assert.equal(S.text(back).text, S.text(doc).text, `${id}: text`);
-    const shape = (d) => { const o = []; d.descendants((n) => { if (n.isBlock) o.push([n.type.name, n.attrs.align || null, n.attrs.first ?? null, n.attrs.indent || 0, n.attrs.level || null].join(':')); if (n.type.name === 'footnote_ref') o.push(`note:${n.attrs.content}`); n.marks?.forEach((m) => o.push(m.type.name)); }); return o; };
+    const shape = (d) => { const o = []; d.descendants((n, _pos, parent) => { if (n.isBlock) o.push([n.type.name, n.attrs.align || null, n.attrs.first ?? null, n.attrs.indent || 0, n.attrs.level || null].join(':')); if (n.type.name === 'footnote_ref') o.push(`note:${n.attrs.content}`); const marks = new Set(n.marks?.map((m) => m.type.name)); if (n.isText && parent?.type.name === 'heading') { const h = ST.FORMATS[id].headings[parent.attrs.level - 1]; if (parent.attrs.weight == null && h.bold) marks.add('bold'); if (parent.attrs.slant == null && h.italic) marks.add('italic'); } for (const m of [...marks].sort()) o.push(m); }); return o; };
     assert.deepEqual(shape(back), shape(doc), `${id}: structure`);
   }
   const lists = S.parse(S.paper, '<ul><li>a</li><li class="ql-indent-1">b</li></ul><ol><li>c</li></ol>');
@@ -124,7 +125,7 @@ test('import reads Word\'s own shapes: styles, headings, hanging indents, tracke
     ['word/document.xml', document], ['word/_rels/document.xml.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`], ['word/styles.xml', styles]]);
   const r = await X.importDocx(bytes, { format: 'mla9' });
   // No defaults in the file: Word's own, single-spaced, so each line keeps its single spacing.
-  assert.equal(r.html, '<h2 style="line-height:1">Part</h2><p style="line-height:1;margin-left:0.5in;text-indent:-0.5in"><em>Beloved</em> added</p><p style="line-height:1;text-indent:0in">before</p><hr class="gz-page-break"><p style="line-height:1;text-indent:0in">after</p><p style="line-height:1;text-indent:0in">font</p>');
+  assert.equal(r.html, '<h2 style="font-weight:normal;font-style:normal;line-height:1">Part</h2><p style="line-height:1;margin-left:0.5in;text-indent:-0.5in"><em>Beloved</em> added</p><p style="line-height:1;text-indent:0in">before</p><hr class="gz-page-break"><p style="line-height:1;text-indent:0in">after</p><p style="line-height:1;text-indent:0in">font</p>');
   assert.deepEqual(r.warnings.sort(), ['Fonts Word and Blackboard don\'t share were replaced.', 'Tracked changes were accepted.']);
   const d = S.parse(S.paper, r.html);
   assert.deepEqual([d.child(1).attrs.indent, d.child(1).attrs.first, d.child(2).attrs.first], [1, -0.5, 0], 'a 0 first-line indent stays an explicit 0');

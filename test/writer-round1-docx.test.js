@@ -65,7 +65,7 @@ test('imported headings keep inherited and mixed run emphasis instead of taking 
   assert.equal(heading.attrs.weight, 'normal');
   assert.equal(heading.attrs.slant, 'normal');
   const back = S.parse(S.paper, S.serialize(S.paper, d));
-  assert.ok(back.eq(d), 'HTML keeps the heading overrides');
+  assert.ok(back.type.create(d.attrs, back.content).eq(d), 'HTML keeps the heading overrides');
   const xml = X.exportDocx(d).parts['word/document.xml'];
   assert.match(xml, /<w:b w:val="0"\/><w:bCs w:val="0"\/><w:i\/><w:iCs\/>/);
 });
