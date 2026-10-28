@@ -405,7 +405,11 @@
       if (!w.proofing) { clearTimeout(blockTimer); clearTimeout(docTimer); blockTimer = docTimer = 0; dirty = []; pending.clear(); I.clear('harper'); closeCard(); }
       else if (started) { connect(); lintDoc(); } else if (view?.hasFocus()) start();
     }
-    if (w.dialect !== was.dialect && port) { port.postMessage({ op: 'dialect', dialect: w.dialect }); if (started && w.proofing) lintDoc(); }
+    if (w.dialect !== was.dialect) {
+      pending.clear(); asked.clear(); I.clear('harper'); closeCard();
+      port?.postMessage({ op: 'dialect', dialect: w.dialect });
+      if (started && w.proofing) lintDoc();
+    }
   });
   F.plugin(GZ_PM.keymap.keymap({ 'Alt-Enter': () => openNext() }));
   F.on('ready', (editor) => {
