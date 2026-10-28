@@ -3279,7 +3279,7 @@
   "The document is too large.": "El documento es demasiado grande.",
   "Some pictures, objects or equations were left out.": "Se omitieron algunas imágenes, objetos o ecuaciones.",
   "Comments were left out.": "Se omitieron los comentarios.",
-  "Endnotes were left out.": "Se omitieron las notas finales.",
+  "Endnotes became footnotes.": "Las notas finales pasaron a ser notas al pie.",
   "A table is too wide.": "Una tabla es demasiado ancha.",
   "Export .docx": "Exportar .docx",
   "Paper": "Trabajo",

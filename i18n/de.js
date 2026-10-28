@@ -3279,7 +3279,7 @@
   "The document is too large.": "Das Dokument ist zu groß.",
   "Some pictures, objects or equations were left out.": "Einige Bilder, Objekte oder Formeln wurden weggelassen.",
   "Comments were left out.": "Kommentare wurden weggelassen.",
-  "Endnotes were left out.": "Endnoten wurden weggelassen.",
+  "Endnotes became footnotes.": "Endnoten wurden zu Fußnoten.",
   "A table is too wide.": "Eine Tabelle ist zu breit.",
   "Export .docx": ".docx exportieren",
   "Paper": "Arbeit",

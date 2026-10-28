@@ -3279,7 +3279,7 @@
   "The document is too large.": "Het document is te groot.",
   "Some pictures, objects or equations were left out.": "Sommige afbeeldingen, objecten of vergelijkingen zijn weggelaten.",
   "Comments were left out.": "Opmerkingen zijn weggelaten.",
-  "Endnotes were left out.": "Eindnoten zijn weggelaten.",
+  "Endnotes became footnotes.": "Eindnoten zijn voetnoten geworden.",
   "A table is too wide.": "Een tabel is te breed.",
   "Export .docx": ".docx exporteren",
   "Paper": "Werkstuk",
