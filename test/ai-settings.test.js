@@ -755,3 +755,16 @@ test('Same as default returns keyboard focus to the feature model button', async
   assert.deepEqual(p.data.ai.models, {});
   assert.equal(p.doc.activeElement, p.$('ai-pick-writing'));
 });
+
+
+test('device progress preserves a key being typed in another provider drawer', async () => {
+  const p = await open({ ai: { on: true } });
+  await p.click(p.card('Groq'));
+  const field = p.$('ai-key');
+  await p.type(field, 'gsk_partially-typed');
+  field.focus();
+  await p.progress({ loaded: 0.42 });
+  assert.equal(p.$('ai-key'), field, 'unrelated device progress must not replace the key field');
+  assert.equal(field.value, 'gsk_partially-typed');
+  assert.equal(p.doc.activeElement, field);
+});
