@@ -1299,6 +1299,23 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (await save('import')) await store.remove(recoveryKey);
       })().catch((e) => { console.error(e); setState('Not saved'); });
     });
+    // Another editor (a second tab, the Papers page) saved this paper: while this one holds nothing unsaved, it shows that,
+    // read through the store so its next save builds on it. Unsaved typing stays; its save keeps the other text as a
+    // version.
+    const elsewhere = async (changes, area) => {
+      const next = area === 'local' && key ? changes[PA.KEYS.PAPER + key]?.newValue : null;
+      const newer = (p) => p?.doc && !dirty && !initializing && !importing && (p.revision || 0) > (paper?.revision || 0);
+      if (!newer(next)) return;
+      const k = key, fresh = await store.get(k);
+      if (k !== key || !newer(fresh)) return;
+      paper = fresh; keep = fresh.keep === true; format = ST.get(fresh.format);
+      keepPictures(fresh.doc);
+      initializing = true;
+      setDoc(fresh.doc, true);
+      initializing = false;
+      restyleCSS(); counts(); PG.relayout(view); runChecks(); outlineDraw(); setState('Saved');
+    };
+    try { chrome.storage.onChanged.addListener((c, area) => { elsewhere(c, area).catch((e) => console.error(e)); }); } catch { /* outside the extension */ }
     restyleCSS();
     counts();
     head();
