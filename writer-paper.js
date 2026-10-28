@@ -248,7 +248,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         caretSoon();
       } }),
       props: {
-        handleClickOn: (_v, pos, node) => { if (node.type.name === 'footnote_ref') { editNote(pos); return true; } return false; },
+        handleClickOn: (_v, _pos, node, nodePos) => { if (node.type.name === 'footnote_ref') { editNote(nodePos); return true; } return false; },
         handleKeyDown: (_v, e) => {
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return true; }
           // Word's ⌘⇧> and ⌘⇧< step the size from the paper's own; ⌘Enter is a page break here (writer.js's send is compose's).
