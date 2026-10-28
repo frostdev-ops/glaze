@@ -7,13 +7,16 @@ const source = fs.readFileSync(require.resolve('../lib/harper/shared.js'), 'utf8
 const flush = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
 const world = (options = {}) => {
   let closed = 0, disposed = 0, tick;
+  const dialects = [], dictionaries = [], readings = [];
   class LocalLinter {
-    async setup() {}
-    async importWords() {}
-    async lint() { return options.lint ? options.lint() : []; }
+    constructor({ dialect }) { this.dialect = dialect; this.words = []; }
+    async setup() { await options.setup?.(); }
+    async importWords(words) { this.words.push(...words); dictionaries.push([...words]); }
+    async setDialect(dialect) { this.dialect = dialect; this.words = []; }
+    async lint() { dialects.push(this.dialect); readings.push([...this.words]); return options.lint ? options.lint() : []; }
     async dispose() { disposed++; await options.dispose?.(); }
   }
-  const ctx = vm.createContext({ LocalLinter, Dialect: { American: 0 }, slimBinary: {}, crypto: { randomUUID: () => 'worker' }, performance,
+  const ctx = vm.createContext({ LocalLinter, Dialect: { American: 0, British: 1 }, slimBinary: {}, crypto: { randomUUID: () => 'worker' }, performance,
     onconnect: null, close: () => closed++, setTimeout: (fn) => { tick = fn; return 1; }, clearTimeout() {} });
   vm.runInContext(source, ctx);
   const port = () => {
@@ -22,7 +25,7 @@ const world = (options = {}) => {
     p.send = (m) => p.onmessage?.({ data: m });
     return p;
   };
-  return { ctx, port, tick: () => tick(), closed: () => closed, disposed: () => disposed };
+  return { ctx, port, tick: () => tick(), closed: () => closed, disposed: () => disposed, dialects, dictionaries, readings };
 };
 
 test('last frame bye releases the worker after in-flight work without replying to the departed frame', async () => {
@@ -68,4 +71,32 @@ test('idle close awaits disposal and rejects a connection arriving during shutdo
   const b = w.port();
   assert.ok(b.got.some((m) => m.op === 'closing'), 'a racing connection must be told to reconnect');
   release(); await flush(); assert.equal(w.closed(), 1);
+});
+
+test('a dialect changed during initial load is used for the first lint', async () => {
+  let finish, setups = 0;
+  const w = world({ setup: () => ++setups === 1 ? new Promise((r) => { finish = r; }) : undefined });
+  const p = w.port();
+  p.send({ op: 'dict', words: ['Glazeville'] });
+  p.send({ op: 'lint', id: 1, text: 'colour' }); await flush();
+  p.send({ op: 'dialect', dialect: 'en-GB' }); finish(); await flush();
+  assert.deepEqual(w.dialects, [1]);
+  assert.deepEqual(w.dictionaries.at(-1), ['glazeville'], 'the replacement linter receives the dictionary');
+  assert.equal(w.disposed(), 1);
+});
+
+test('a live dialect switch rebuilds after active linting and keeps the dictionary', async () => {
+  let finish;
+  const w = world({ lint: () => new Promise((r) => { finish = r; }) });
+  const p = w.port();
+  p.send({ op: 'dict', words: ['Glazeville'] });
+  p.send({ op: 'lint', id: 1, text: 'color' }); await flush();
+  p.send({ op: 'dialect', dialect: 'en-GB' });
+  assert.equal(w.disposed(), 0, 'never dispose handles used by active linting');
+  p.send({ op: 'lint', id: 2, text: 'colour' });
+  finish([]); await flush();
+  assert.deepEqual(w.dialects, [0, 1]);
+  assert.deepEqual(w.readings.at(-1), ['glazeville']);
+  finish([]); await flush();
+  p.send({ op: 'bye' }); await flush();
 });
