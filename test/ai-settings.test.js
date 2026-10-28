@@ -792,3 +792,11 @@ test('Activity names a preset OpenAI call as OpenAI rather than a custom endpoin
   const p = await open({ calls: [{ id: 'preset', startedAt: 1, feature: 'writing', provider: 'openai', model: 'gpt-5', state: 'completed' }] });
   assert.equal(p.$('ai-calls').children[0].children[0].textContent, 'Feedback · OpenAI · gpt-5');
 });
+
+
+test('completion does not label its unsupported task effort as the provider default', async () => {
+  const p = await open({ ai: { on: true, models: { completion: { use: 'openrouter', model: 'openai/gpt-5' } } },
+    conns: { openrouter: kept('openrouter') }, server: async () => json(require('./fixtures/openrouter-models.json')) });
+  assert.deepEqual(p.stops('completion').filter((b) => b.attrs['aria-checked'] === 'true').map(text), ['Default'], 'the task asks none; the provider default Medium is not sent');
+  assert.equal(p.data.ai.models.completion.effort, undefined);
+});
