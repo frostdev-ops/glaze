@@ -730,3 +730,17 @@ test('two Settings tabs preserve simultaneous feature changes in the same extens
   assert.deepEqual(shared.data.ai.features, { syllabus: true, completion: false, writing: true });
   assert.equal(a.$('ai-feature-syllabus').checked, true); assert.equal(b.$('ai-feature-writing').checked, true);
 });
+
+
+test('saving a changed endpoint refreshes its picker catalog and drops its previous test result', async () => {
+  const p = await open({ ai: { on: true, mode: 'advanced', model: { use: 'custom-1', model: 'old-model' } },
+    conns: { 'custom-1': { provider: 'openai', name: 'Local', base: 'https://old.example/v1', generation: 'old' } },
+    server: async (url) => listing(url.startsWith('https://old.example/') ? ['old-model'] : ['new-model']) });
+  await p.click(p.card('Local'));
+  await p.type('ai-ep-base', 'https://new.example/v1');
+  await p.click(p.button('Save', p.$('ai-drawer')));
+  await p.click('ai-pick-model');
+  await p.click(p.side().find((b) => text(b) === 'Local'));
+  assert.deepEqual(p.options(), ['new-model'], 'the previous address must not supply the new address\'s models');
+  assert.ok(p.fetched.some(([url]) => url === 'https://new.example/v1/models'));
+});
