@@ -162,9 +162,9 @@ var GZ_WRITER_RULER = globalThis.GZ_WRITER_RULER || (() => {
   F.plugin(new GZ_PM.state.Plugin({ view: () => ({ update: soon }) }));
   F.on('ready', () => {
     if (F.mode() !== 'paper' || mount()) return;
-    // The paper mounts after the editor is ready (its libraries load first).
-    let tries = 0;
-    const again = setInterval(() => { if (mount() || ++tries > 200) clearInterval(again); }, 100);
+    // The paper mounts after the editor is ready (its libraries load first); its toolbar's buttons arrive after that.
+    const mo = new MutationObserver(() => { if (mount()) mo.disconnect(); });
+    mo.observe(document.body, { childList: true, subtree: true });
   });
   return Object.assign(api, { shown: () => on, toggle, draw: soon });
 })();
