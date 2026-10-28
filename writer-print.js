@@ -1,6 +1,6 @@
 // Glaze Writer's Print, Export PDF and text exports (writer.html, after writer.js). A paper prints exactly as its pages are
 // laid out: ⌘P (Ctrl+P) or Print… asks the browser to print this frame, and writer-paper.js puts a copy of each page in
-// its place for print (Letter, the format's margins, running header, footnotes; writer-paper.css @media print). Export
+// its place for print (its own page size and margins, running header, footnotes; writer-paper.css @media print). Export
 // PDF… is the same print, its file named as the .docx is (Lastname_Title), for the browser's Save as PDF. Export .txt and
 // Export .md (lib/writer-export.js) save the paper or the post as text. A compose box has the exports in ⋯ and leaves
 // ⌘P to the browser; a paper's are items(paper) for its own menu (Versions).
