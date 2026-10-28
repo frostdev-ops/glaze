@@ -223,6 +223,93 @@ const files = {};
   if (rid('footer2.xml', headers) !== 'rId13') throw Error('writer-docx-import: header ids moved');
 }
 
+// A paper as Google Docs exports it to .docx (File → Download → Microsoft Word), its parts, elements and attributes
+// copied from a real export of a student's paper (2026-10-27), the words generated. Seen in that export: no docProps, no
+// header or footer parts, an empty numbering.xml, Docs' fixed styles.xml (docDefaults Arial 11 with 1.15 lines and no
+// space after, Normal with no pPr, Heading 1-6, Title, Subtitle and table of figures, each with keep options, space before
+// and after and a lineRule with no line), theme fonts Calibri and Cambria that no style uses, fontTable listing only Arial,
+// settings with embedTrueTypeFonts and no characterSpacingControl, every paragraph with pageBreakBefore w:val="0" and its
+// mark's rPr, every run with rtl w:val="0" (and empty runs holding only that), the text in Arial 12 (sz 24 on the runs),
+// MLA's heading block, a centred title and body paragraphs double-spaced (line 480) opened with a tab or a firstLine of
+// 720, a bold paragraph mark, two empty paragraphs at the end, and a section of Letter with 1 in margins, header="0",
+// footer="720" and pgNumType. Modelled from Docs' own styles, as the export didn't use them: paragraphs in Title,
+// Subtitle and Heading 1-6, bold runs, and one paragraph with pageBreakBefore on (Docs' "add page break before").
+{
+  const DOCS = W.replace('xmlns:w14=', 'xmlns:w16="http://schemas.microsoft.com/office/word/2018/wordml" xmlns:w14=');
+  const SZ = '<w:sz w:val="24"/><w:szCs w:val="24"/>', D = '<w:spacing w:line="480" w:lineRule="auto"/>';
+  let n = 0;
+  const dp = (ppr, ...runs) => `<w:p w:rsidR="00000000" w:rsidDel="00000000" w:rsidP="00000000" w:rsidRDefault="00000000" w:rsidRPr="00000000" w14:paraId="${(++n).toString(16).toUpperCase().padStart(8, '0')}"><w:pPr>${ppr}</w:pPr>${runs.join('')}</w:p>`;
+  const dr = (rpr, ...content) => `<w:r w:rsidDel="00000000" w:rsidR="00000000" w:rsidRPr="00000000"><w:rPr>${rpr}<w:rtl w:val="0"/></w:rPr>${content.map((c) => (c === '\t' ? '<w:tab/>' : `<w:t xml:space="preserve">${esc(c)}</w:t>`)).join('')}</w:r>`;
+  const NO = '<w:pageBreakBefore w:val="0"/>', mark = (x = SZ) => `<w:rPr>${x}</w:rPr>`;
+  const line = (t, jc = '') => dp(`${NO}${D}${jc}${mark()}`, dr(SZ, t));
+  const tabbed = (words, seed) => dp(`${NO}${D}${mark()}`, dr(SZ, '\t', text(words, seed)));
+  const first = (words, seed, bold = '') => dp(`${NO}${D}<w:ind w:firstLine="720"/>${mark(bold ? `<w:b w:val="1"/><w:bCs w:val="1"/>${SZ}` : SZ)}`, dr(SZ, text(words, seed)), ...(bold ? [dr(`<w:b w:val="1"/><w:bCs w:val="1"/>${SZ}`, ` ${bold}`), dr(SZ, ` ${text(30, seed + 50)}`)] : []), dr(''));
+  const styled = (id, t) => dp(`<w:pStyle w:val="${id}"/>${NO}${mark('')}`, dr('', t));
+  const empty = () => dp(`${NO}${D}${mark()}`, dr(''));
+  const docStyle = (id, name, ppr, rpr) => `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext w:val="1"/><w:keepLines w:val="1"/><w:pageBreakBefore w:val="0"/>${ppr}</w:pPr><w:rPr>${rpr}</w:rPr></w:style>`;
+  const sz = (v) => `<w:sz w:val="${v}"/><w:szCs w:val="${v}"/>`, grey = (c) => `<w:color w:val="${c}"/>`;
+  const space = (after, before) => `<w:spacing w:after="${after}" w:before="${before}" w:lineRule="auto"/>`;
+  const st = `${DECL.trim()}<w:styles ${DOCS}><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:cs="Arial" w:eastAsia="Arial" w:hAnsi="Arial"/>${sz(22)}<w:lang w:val="en"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`
+    + '<w:style w:type="table" w:styleId="TableNormal" w:default="1"><w:name w:val="TableNormal"/><w:tblPr><w:tblCellMar><w:top w:w="100.0" w:type="dxa"/><w:left w:w="100.0" w:type="dxa"/><w:bottom w:w="100.0" w:type="dxa"/><w:right w:w="100.0" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>'
+    + '<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="normal"/></w:style>'
+    + docStyle('Heading1', 'heading 1', space(120, 400), sz(40))
+    + docStyle('Heading2', 'heading 2', space(120, 360), `<w:b w:val="0"/><w:bCs w:val="0"/>${sz(32)}`)
+    + docStyle('Heading3', 'heading 3', space(80, 320), `<w:b w:val="0"/><w:bCs w:val="0"/>${grey('434343')}${sz(28)}`)
+    + docStyle('Heading4', 'heading 4', space(80, 280), `${grey('666666')}${sz(24)}`)
+    + docStyle('Heading5', 'heading 5', space(80, 240), `${grey('666666')}${sz(22)}`)
+    + docStyle('Heading6', 'heading 6', space(80, 240), `<w:i w:val="1"/><w:iCs w:val="1"/>${grey('666666')}${sz(22)}`)
+    + docStyle('Title', 'Title', space(60, 0), sz(52))
+    + docStyle('Subtitle', 'Subtitle', space(320, 0), `<w:rFonts w:ascii="Arial" w:cs="Arial" w:eastAsia="Arial" w:hAnsi="Arial"/><w:i w:val="0"/><w:iCs w:val="0"/>${grey('666666')}${sz(30)}`)
+    + '<w:style w:type="paragraph" w:styleId="TableofFigures"><w:name w:val="table of figures"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/></w:style></w:styles>';
+  const document = `${DECL.trim()}<w:document ${DOCS}><w:body>${[
+    styled('Title', 'The Valley Ledger'), styled('Subtitle', 'Notes from a season of small changes'),
+    line('Alex Rivera'), line('Prof. Okafor'), line('HIST 2100'), line('19 October 2026'), line('What the River Keeps: A Market Town', '<w:jc w:val="center"/>'),
+    tabbed(88, 201), tabbed(92, 202), tabbed(84, 203),
+    styled('Heading1', 'The harbor and the market'),
+    first(80, 204), first(70, 205, 'the ledger of the market'),
+    styled('Heading2', 'Measures of water'), first(66, 206),
+    styled('Heading3', 'Seasons in the record'), first(62, 207),
+    dp(`<w:pageBreakBefore w:val="1"/>${D}<w:ind w:firstLine="720"/>${mark()}`, dr(SZ, text(78, 208))),
+    styled('Heading4', 'Village accounts'), first(44, 209),
+    styled('Heading5', 'A note on the orchard'), first(40, 210),
+    styled('Heading6', 'A note on the lanterns'), first(40, 211),
+    empty(), empty(),
+    '<w:sectPr><w:pgSz w:h="15840" w:w="12240" w:orient="portrait"/><w:pgMar w:bottom="1440" w:top="1440" w:left="1440" w:right="1440" w:header="0" w:footer="720"/><w:pgNumType w:start="1"/></w:sectPr>',
+  ].join('')}</w:body></w:document>`;
+  const R = (id, type, target) => `<Relationship Id="${id}" Type="${REL}/${type}" Target="${target}"/>`;
+  files.docs = {
+    '[Content_Types].xml': `${DECL.trim()}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default ContentType="application/xml" Extension="xml"/><Default ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont" Extension="odttf"/><Default ContentType="application/vnd.openxmlformats-package.relationships+xml" Extension="rels"/>${['settings', 'styles', 'fontTable', 'numbering'].map((k) => `<Override ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.${k}+xml" PartName="/word/${k}.xml"/>`).join('')}<Override ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml" PartName="/word/document.xml"/><Override ContentType="application/vnd.openxmlformats-officedocument.theme+xml" PartName="/word/theme/theme1.xml"/></Types>`,
+    '_rels/.rels': `${DECL.trim()}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="word/document.xml"/></Relationships>`,
+    'word/_rels/document.xml.rels': `${DECL.trim()}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${R('rId1', 'theme', 'theme/theme1.xml')}${R('rId2', 'settings', 'settings.xml')}${R('rId3', 'fontTable', 'fontTable.xml')}${R('rId4', 'numbering', 'numbering.xml')}${R('rId5', 'styles', 'styles.xml')}</Relationships>`,
+    'word/document.xml': document, 'word/styles.xml': st,
+    'word/numbering.xml': `${DECL.trim()}<w:numbering ${DOCS}/>`,
+    'word/settings.xml': `${DECL.trim()}<w:settings ${DOCS}><w:embedTrueTypeFonts w:val="1"/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:val="15" w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word"/></w:compat><w:clrSchemeMapping w:bg1="light1" w:t1="dark1" w:bg2="light2" w:t2="dark2" w:accent1="accent1" w:accent2="accent2" w:accent3="accent3" w:accent4="accent4" w:accent5="accent5" w:accent6="accent6" w:hyperlink="hyperlink" w:followedHyperlink="followedHyperlink"/></w:settings>`,
+    'word/fontTable.xml': `${DECL.trim()}<w:fonts ${DOCS}><w:font w:name="Arial"/></w:fonts>`,
+    'word/theme/theme1.xml': theme('Calibri', 'Cambria'),
+  };
+}
+
+// A paper as Word 365 (Mac, 2026) starts one from its own Normal.dotm: docDefaults, the theme (Aptos, Aptos Display) and
+// the section copied from that Normal.dotm, the Title and Heading 1 styles as Word wrote them into a real student paper
+// saved from it (0F4761, 18 pt before and 4 pt after), Normal with no pPr. Aptos 12 from the theme with 8 pt after and
+// 1.16 lines (line 278; the template has no 259); a Title, a Heading 1, about three pages of body, Letter, 1 in margins,
+// no header.
+{
+  const st = styles(24, '<w:spacing w:after="160" w:line="278" w:lineRule="auto"/>', ['Hyperlink'], undefined,
+    '').replace('<w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/>', '<w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/><w14:ligatures w14:val="standardContextual"/>').replace('</w:styles>',
+    '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:link w:val="Heading1Char"/><w:uiPriority w:val="9"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="360" w:after="80"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:eastAsiaTheme="majorEastAsia" w:hAnsiTheme="majorHAnsi" w:cstheme="majorBidi"/><w:color w:val="0F4761" w:themeColor="accent1" w:themeShade="BF"/><w:sz w:val="40"/><w:szCs w:val="40"/></w:rPr></w:style>'
+    + '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:link w:val="TitleChar"/><w:uiPriority w:val="10"/><w:qFormat/><w:pPr><w:spacing w:after="80" w:line="240" w:lineRule="auto"/><w:contextualSpacing/></w:pPr><w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:eastAsiaTheme="majorEastAsia" w:hAnsiTheme="majorHAnsi" w:cstheme="majorBidi"/><w:spacing w:val="-10"/><w:kern w:val="28"/><w:sz w:val="56"/><w:szCs w:val="56"/></w:rPr></w:style>'
+    + '<w:style w:type="character" w:customStyle="1" w:styleId="Heading1Char"><w:name w:val="Heading 1 Char"/><w:basedOn w:val="DefaultParagraphFont"/><w:link w:val="Heading1"/><w:uiPriority w:val="9"/><w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:eastAsiaTheme="majorEastAsia" w:hAnsiTheme="majorHAnsi" w:cstheme="majorBidi"/><w:color w:val="0F4761" w:themeColor="accent1" w:themeShade="BF"/><w:sz w:val="40"/><w:szCs w:val="40"/></w:rPr></w:style>'
+    + '<w:style w:type="character" w:customStyle="1" w:styleId="TitleChar"><w:name w:val="Title Char"/><w:basedOn w:val="DefaultParagraphFont"/><w:link w:val="Title"/><w:uiPriority w:val="10"/><w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:eastAsiaTheme="majorEastAsia" w:hAnsiTheme="majorHAnsi" w:cstheme="majorBidi"/><w:spacing w:val="-10"/><w:kern w:val="28"/><w:sz w:val="56"/><w:szCs w:val="56"/></w:rPr></w:style></w:styles>');
+  const body = [140, 175, 160, 190, 150, 170, 185, 165, 155].map((n, i) => p('', r('', text(n, 301 + i))));
+  const document = docXML([
+    p('<w:pStyle w:val="Title"/>', r('', 'A Year at the Orchard')),
+    ...body.slice(0, 3), p('<w:pStyle w:val="Heading1"/>', r('', 'What the harvest measured')), ...body.slice(3),
+    sect(''),
+  ].join(''));
+  files['aptos-word'] = pack({ document, styles: st });
+}
+
 const bytes = (id) => {
   const parts = files[id], date = new Date('2026-10-19T12:00:00Z');
   return Buffer.concat(Z.zip(Object.entries(parts).map(([name, s]) => ({ name, data: new TextEncoder().encode(s), date }))).map((c) => Buffer.from(c)));
