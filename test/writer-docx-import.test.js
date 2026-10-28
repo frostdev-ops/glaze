@@ -58,13 +58,13 @@ test('style inheritance: docDefaults â†’ the paragraph style\'s basedOn chain â†
   const { r, tops } = await open('spacing');
   const s = tops[0].type.schema && (await open('spacing')).doc.attrs.setup;
   assert.deepEqual([s.font, s.size], ['Calibri', 11], 'rPrDefault\'s minorHAnsi is the theme\'s Calibri');
-  assert.ok(r.warnings.includes('Fonts Word and Blackboard don\'t share were replaced.'), 'Calibri Light, the headings\' theme font, is not a paper font');
+  assert.ok(!r.warnings.includes('Fonts Word and Blackboard don\'t share were replaced.'), 'Calibri Light, the headings\' theme font, is one of Word\'s well-known fonts, kept by name');
   const [title, , h1, strong, l1, l2, l3, quote, spaced, exact, least, ns1, ns2, right, runs, brk] = tops;
   assert.deepEqual(pick(title, 'line', 'after', 'before'), { line: 1, after: null, before: null }, 'Title: its own single line and no space after (MLA\'s own) over the defaults\' 8 pt');
-  assert.deepEqual(marks(title), ['text_style:{"font":null,"size":28}']);
+  assert.deepEqual(marks(title), ['text_style:{"font":"Calibri Light","size":28}']);
   assert.equal(h1.type.name, 'heading');
   assert.deepEqual(pick(h1, 'level', 'before', 'after', 'line', 'keepNext', 'keepLines'), { level: 1, before: 12, after: null, line: 1.08, keepNext: true, keepLines: true }, 'Heading 1 over Normal over the defaults');
-  assert.deepEqual(marks(h1), ['color:{"color":"2F5496"}', 'text_style:{"font":null,"size":16}']);
+  assert.deepEqual(marks(h1), ['color:{"color":"2F5496"}', 'text_style:{"font":"Calibri Light","size":16}']);
   assert.deepEqual(marks(strong), ['bold', 'italic'], 'Strong and Emphasis, character styles');
   assert.deepEqual([l1, l2, l3].map((n) => pick(n, 'left', 'indent', 'before', 'after')), [{ left: null, indent: 1, before: null, after: null }, { left: null, indent: 1, before: null, after: null }, { left: null, indent: 1, before: null, after: 8 }],
     'List Paragraph: half an inch in; contextual spacing drops the space between two of the style, not before the Quote');
