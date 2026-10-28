@@ -92,6 +92,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     if (sheet) { sheet.first.focus(); return; }
     const opening = ++openings;
     await P().need(['lib/writer-submit.js']);
+    // The sheet names the assignment (its heading, the file's name, the .docx's title): it waits for the page to say
+    // which one this is (lib/writer-context-assignment.js), ten seconds at most.
+    for (let i = 0; i < 50 && !api.context?.()?.assignment && opening === openings && P()?.current() === api; i++) await new Promise((r) => setTimeout(r, 200));
     if (sheet || opening !== openings || P()?.current() !== api || api.importing?.() || frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
     if (file) { const error = L().fileError(file); if (error) { api.notify?.(error); return; } }
     globalThis.GZ_WRITER_IMPORT?.close();

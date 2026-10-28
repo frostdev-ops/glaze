@@ -78,7 +78,7 @@ test('D8: Ultra\'s Submit pressed before the paper has mounted opens the sheet o
   await f.flush(); await f.later();
   assert.equal(f.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), false);
   const view = { state: { doc: { label: 'x' } } };
-  f.mount({ context: () => ({}), paper: () => ({}), key: () => 'k', pages: () => 1, format: () => ({ id: 'mla9' }), editor: { view, text: () => '' },
+  f.mount({ context: () => ({ assignment: { title: 'Essay 2' } }), paper: () => ({}), key: () => 'k', pages: () => 1, format: () => ({ id: 'mla9' }), editor: { view, text: () => '' },
     docx: () => new Promise(() => {}), version: async () => true, save: async () => true });
   await f.later(); await f.later();
   assert.equal(f.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), true, 'the press was caught from Ultra: the sheet answers it');
