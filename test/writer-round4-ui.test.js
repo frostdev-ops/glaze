@@ -34,3 +34,13 @@ test('autocorrect Undo does not intercept an issue at a different caret position
   assert.equal(card, true);
   assert.equal(focused, false);
 });
+
+test('clicking the far half of a footnote opens the note at its node position', () => {
+  const S = require('../lib/writer-schema.js');
+  const a = source.indexOf('    const watch = new PM.state.Plugin('), b = source.indexOf('    ed.addPlugins(', a);
+  let opened;
+  const plugin = vm.runInNewContext(`${source.slice(a, b)} watch`, { PM: globalThis.GZ_PM, editNote: (pos) => { opened = pos; } });
+  const node = S.paper.nodes.footnote_ref.create({ content: 'A note.' });
+  assert.equal(plugin.props.handleClickOn({}, 6, node, 5, {}, true), true);
+  assert.equal(opened, 5);
+});
