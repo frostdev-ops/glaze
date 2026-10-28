@@ -99,7 +99,12 @@ const rss = (profile) => {
       return p;
     };
     const box = async (p, kind) => {
-      const el = await until(async () => { const h = await p.$(`iframe.gz-writer[data-gz-writer-frame="${kind}"]`); return h && await h.evaluate((f) => !f.style.opacity && f.offsetHeight > 100) && h; }, `${kind} frame shown`);
+      let el;
+      try { el = await until(async () => { const h = await p.$(`iframe.gz-writer[data-gz-writer-frame="${kind}"]`); return h && await h.evaluate((f) => !f.style.opacity && f.offsetHeight > 100) && h; }, `${kind} frame shown`); } catch (e) {
+        // What the page holds when a box never shows: its frames, their state, and the errors so far.
+        console.error('state', JSON.stringify(await p.evaluate(() => ({ url: location.href, frames: [...document.querySelectorAll('iframe.gz-writer')].map((f) => ({ kind: f.dataset.gzWriterFrame, opacity: f.style.opacity, h: f.offsetHeight, src: f.src.slice(0, 40) })), editors: document.querySelectorAll('.ql-editor').length, marked: document.querySelectorAll('[data-gz-writer]').length })).catch((x) => String(x))), errors.slice(-5));
+        throw e;
+      }
       const fr = await until(() => el.contentFrame(), `${kind} frame document`);
       await until(() => fr.evaluate(() => !!document.querySelector('.ProseMirror')), `${kind} editor in its frame`);
       fr.on?.('pageerror', (e) => errors.push(`frame: ${e.message}`));
@@ -165,17 +170,18 @@ const rss = (profile) => {
     // ---- Harper's own sure fix as you type, and a name added to the dictionary ----
     await reply.fr.click('.ProseMirror');
     await p.keyboard.press('End');
-    await p.keyboard.type(' this time Sethe remembers', { delay: 12 });
+    await p.keyboard.type(' this time Sethe keeps her rememory', { delay: 12 });
     await until(async () => (await text(reply.fr)).includes('forget. This time'), 'Harper capitalises the sentence start');
     check(await reply.fr.evaluate(() => [...document.querySelectorAll('.ProseMirror .gz-ac')].some((s) => s.textContent === 'This')), 'Harper\'s sure fix (Capitalization, one suggestion) went in as autocorrect, marked');
-    await settle(reply.fr, 'Sethe');
-    await reply.fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view, t = GZ_WRITER_FRAME.editor().text(), i = t.indexOf('Sethe'); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, 3 + i))); v.focus(); });
+    await settle(reply.fr, 'rememory');
+    check(await reply.fr.evaluate(() => ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'Sethe')), 'a Capitalised word mid-sentence reads as a name: never a misspelling');
+    await reply.fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view, t = GZ_WRITER_FRAME.editor().text(), i = t.indexOf('rememory'); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, 3 + i))); v.focus(); });
     await p.keyboard.press('Alt+Enter');
-    await until(() => reply.fr.evaluate(() => document.activeElement?.closest('.gp-card')), 'card for Sethe');
+    await until(() => reply.fr.evaluate(() => document.activeElement?.closest('.gp-card')), 'card for rememory');
     await until(async () => { await p.keyboard.press('ArrowRight'); return reply.fr.evaluate(() => document.activeElement.textContent === 'Add to dictionary'); }, 'to Add to dictionary', 3000);
     await p.keyboard.press('Enter');
-    await until(() => reply.fr.evaluate(() => ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'Sethe')), 'Sethe unflagged');
-    check(await until(async () => (await worker.evaluate(() => chrome.storage.local.get('writerWords'))).writerWords?.includes('Sethe'), 'dictionary persisted'), 'Add to dictionary keeps the word in chrome.storage.local writerWords');
+    await until(() => reply.fr.evaluate(() => ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'rememory')), 'rememory unflagged');
+    check(await until(async () => (await worker.evaluate(() => chrome.storage.local.get('writerWords'))).writerWords?.includes('rememory'), 'dictionary persisted'), 'Add to dictionary keeps the word in chrome.storage.local writerWords');
     memory.oneTab = rss(profile);
 
     // ---- more tabs on other schools: one worker ----
@@ -184,15 +190,15 @@ const rss = (profile) => {
       const b = await box(q, 'reply');
       await q.bringToFront();
       await until(async () => { await b.fr.click('.ProseMirror'); return b.fr.evaluate(() => !!document.activeElement?.closest('.ProseMirror')); }, 'focus in the new box');
-      await q.keyboard.type('Sethe and Paul D argue about the rivver.', { delay: 4 });
-      await until(async () => (await text(b.fr)) === 'Sethe and Paul D argue about the rivver.', 'typed in the new box');
+      await q.keyboard.type('Sethe and Paul D argue about the rivver and rememory.', { delay: 4 });
+      await until(async () => (await text(b.fr)) === 'Sethe and Paul D argue about the rivver and rememory.', 'typed in the new box');
       pages.push(q); frames.push(b);
     }
     try { for (const b of frames.slice(1)) await settle(b.fr, 'rivver', 'gz-iss', 30000); } catch (e) {
       for (const b of frames) console.error('state', JSON.stringify(await b.fr.evaluate(() => ({ t: GZ_WRITER_FRAME.editor().text(), mode: GZ_WRITER_PROOF.mode, ms: GZ_WRITER_PROOF.lastMs, issues: GZ_WRITER_ISSUES.list().map((i) => i.text), dom: [...document.querySelectorAll('.gz-iss')].map((x) => x.textContent), vis: document.visibilityState }))));
       throw e;
     }
-    check(await frames[1].fr.evaluate(() => ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'Sethe')), 'a word added at one school is known in a box at another');
+    check(await frames[1].fr.evaluate(() => ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'rememory')), 'a word added at one school is known in a box at another');
     const all = [];
     for (const b of frames) all.push(await stats(b.fr));
     check(new Set(all.map((s) => s.worker)).size === 1, `one Harper worker for ${frames.length} boxes in ${pages.length} tabs on ${SITES.length} schools (worker ${all[0].worker.slice(0, 8)}…)`);
@@ -222,7 +228,7 @@ const rss = (profile) => {
     check((await text(reply.fr)).endsWith('Beloved arives.'), 'a Typo whose one suggestion splits the word ("a rives") is only underlined, never applied');
     const back = await stats(reply.fr);
     check(back.worker !== all[0].worker && back.loads === 1, 'after idle the worker closed; the next lint started a new one and the underlines came back');
-    check(await reply.fr.evaluate(() => GZ_WRITER_FRAME.editor().text().includes('Sethe remembers Then Beloved') && ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'Sethe')), 'the new worker got the dictionary back: Sethe stays unflagged');
+    check(await reply.fr.evaluate(() => GZ_WRITER_FRAME.editor().text().includes('her rememory Then Beloved') && ![...document.querySelectorAll('.ProseMirror .gz-iss')].some((s) => s.textContent === 'rememory')), 'the new worker got the dictionary back: rememory stays unflagged');
     saved.compose = await shot(reply.el, 'proof-compose.png');
 
     // ---- a test's box is proofed too ----

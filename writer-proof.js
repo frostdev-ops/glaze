@@ -139,20 +139,23 @@
     const maps = P.since(view.state, p.ver);
     if (!maps) return;
     const doc = view.state.doc;
-    const place = (l, base) => {
+    // A spelling lint on a word that reads as a name (lib/writer-proof.js nameLike) is left out: the heading block's names
+    // and a paper's people aren't misspellings (owner, 2026-10-27: "we are flagging names all over the place").
+    const place = (l, base, text) => {
       const i = P.toIssue(l), from = P.mapPos(maps, base(l.start), 1), to = P.mapPos(maps, base(l.end), -1);
       if (to <= from || to > doc.content.size || doc.textBetween(from, to, '\n', ' ') !== l.problem) return null;
+      if (i.kind === 'spelling' && P.nameLike(text, l.start, l.end)) return null;
       return { ...i, from, to };
     };
     if (p.kind === 'block') {
       const from = P.mapPos(maps, p.pos, 1), to = P.mapPos(maps, p.pos + p.size, -1);
       const node = doc.nodeAt(from);
       if (to <= from || !node?.isTextblock || P.blockText(node) !== p.text) return;
-      I.set('harper', lints.map((l) => place(l, (o) => p.pos + 1 + o)).filter(Boolean), { from, to });
+      I.set('harper', lints.map((l) => place(l, (o) => p.pos + 1 + o, p.text)).filter(Boolean), { from, to });
       fixes(from, to);
       return;
     }
-    const all = lints.map((l) => place(l, p.d.posAt)).filter(Boolean);
+    const all = lints.map((l) => place(l, p.d.posAt, p.d.text)).filter(Boolean);
     if (!maps.length) I.set('harper', all);
     else {
       // Paragraphs changed since the ask keep what their own, newer lints found.

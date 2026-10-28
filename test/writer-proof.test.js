@@ -230,6 +230,18 @@ test('contextWords: course, prompt, assignment, people and thread authors', () =
   assert.deepEqual(P.contextWords({ thread: 'x', course: 5 }), []);
 });
 
+test('nameLike: a Capitalised word mid-sentence, in capitals, in a heading block or title, or Capitalised elsewhere, is a name; a sentence-starting unknown word is not', () => {
+  const at = (text, word) => [text, text.indexOf(word), text.indexOf(word) + word.split(' ')[0].length];
+  const paper = 'Nicole Greene\nProf. Harris\nENG1100-008\n19 October 2026\nThe Cheap Price of Influencers’ Morals\nMorrison treats memory as a debt. Greene argues the river keeps it. Teh town forgets. NASA agrees.\nWorks Cited\nDane, Alexandra, and Komal Bhatia. “The Social Media Diet.”';
+  for (const w of ['Nicole', 'Greene', 'Harris', 'Cheap', 'Morrison', 'NASA', 'Komal', 'Bhatia']) assert.equal(P.nameLike(...at(paper, w)), true, w);
+  assert.equal(P.nameLike(...at(paper, 'Greene argues')), true, 'a sentence start, but Capitalised in the heading block');
+  assert.equal(P.nameLike(...at(paper, 'Teh')), false, 'a sentence-starting unknown word is a misspelling');
+  assert.equal(P.nameLike(...at(paper, 'treats')), false, 'lower case is never a name');
+  assert.equal(P.nameLike(...at('I am here. Thier car.', 'Thier')), false, 'a Capitalised typo at a sentence start, in prose');
+  assert.equal(P.nameLike(...at('I am here. Thier car.', 'I')), false);
+  assert.equal(P.nameLike(...at('We met Anselm at noon.', 'Anselm')), true, 'mid-sentence');
+});
+
 // ---- issues -----------------------------------------------------------------------------------------------------------
 test('issues: set, list, ranges, and positions that follow edits', () => {
   const e = editor('<p>Morrison is definately less interested</p><p>the clearing seem to collect</p>');

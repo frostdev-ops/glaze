@@ -163,6 +163,21 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     return null;
   };
 
+  // A word Harper doesn't know that reads as a name, so its spelling lint is noise (Word and Docs know far more names, and
+  // Word skips words in capitals): Capitalised away from a sentence start, in capitals, or at a sentence start where the
+  // same word is Capitalised mid-sentence elsewhere or its line is a name line (a heading block's "Nicole Greene",
+  // "Prof. Harris", a title: at most eight words, each Capitalised but for short joining words, no sentence end).
+  const JOIN = new Set(['a', 'an', 'and', 'as', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'de', 'la', 'van', 'von', 'y', 'e']);
+  const nameLike = (text, start, end) => {
+    const word = text.slice(start, end);
+    if (!/^\p{Lu}[\p{L}\p{M}'’-]*$/u.test(word) || word === 'I') return false;
+    if (/^[\p{Lu}\p{M}'’-]{2,}$/u.test(word) || !sentenceStart(text.slice(0, start))) return true;
+    if (new RegExp(`[^.!?\\n]\\s+${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{M}])`, 'u').test(text)) return true;
+    const line = text.slice(text.lastIndexOf('\n', start - 1) + 1, text.indexOf('\n', end) === -1 ? text.length : text.indexOf('\n', end)).trim();
+    const words = line.split(/\s+/);
+    return words.length <= 8 && !/[!?]|\.\s|\.$/.test(line.replace(/\b\p{Lu}[\p{Ll}]{0,4}\./gu, '')) && words.every((w) => JOIN.has(w.toLowerCase()) || /^["“‘'(]?\p{Lu}/u.test(w) || /^\d/.test(w));
+  };
+
   // ---- the words a box's context knows ----------------------------------------------------------------------------
   // Course name, prompt and instructions, assignment title, the names in the thread and the box's own people: added to
   // this box's dictionary so names and terms aren't flagged.
@@ -370,7 +385,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
 
   return {
     decide: null, verdict, key, KIND, SURE, ASK, TYPOS, TWICE, toIssue, kindOf, plausible, distance, blockText, docText, unsafe, guarded, sentenceStart, fix,
-    contextWords, plugin, since, mapPos, autofix, revert, within, finished,
+    contextWords, nameLike, plugin, since, mapPos, autofix, revert, within, finished,
   };
 })();
 
