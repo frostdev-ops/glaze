@@ -46,7 +46,7 @@ A model's efforts come from its catalog where the catalog says (OpenRouter's `re
 `effort.supported_levels`, xAI's `capabilities.reasoning_effort`), else from what its provider's docs say of it by name
 (`lib/ai/models.js` `RULES`: OpenAI's GPT-5 and o-series, Gemini 2.5 and later, Grok 4.5 to 4.7, Groq's gpt-oss). None
 known is none offered, and Settings hides the slider; Anthropic's and Mistral's compatible endpoints offer none, and neither
-does a model on this device. A run takes the student's effort when its model lists it, else its task's own
+does a model on this device. The effort thumb shows the student's choice, else completion's `none` or the catalog's stated default; where no default is stated, it shows a separate Default stop without guessing a level. Opening Settings never saves an effort. A run takes the student's effort when its model lists it, else its task's own
 (`writer.complete` asks `none`). Reasoning counts against a request's output, so an effort above the task's own adds the
 room it thinks in (1,024 tokens for minimal to 8,192 for high, `lib/ai/task.js` `mine`) unless the student set Max output. In Advanced a feature's temperature, max output and timeout replace its tasks' own, and its
 context is the window Glaze plans for.
