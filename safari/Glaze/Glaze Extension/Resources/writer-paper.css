@@ -40,8 +40,11 @@
 
 /* Title bar */
 .gp-top { height: 60px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 1px solid var(--edge); min-width: 0; }
-.gp-top h1 { font-size: 17px; margin: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gp-top h1 { font-size: 17px; margin: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 100%; inline-size: fit-content; }
 .gp-top .gp-due, .gp-top .gp-state { color: var(--top-faint); font-size: 13px; white-space: nowrap; }
+/* The title, the due date and the paper's state are pills, as the page's section headings are (theme.css). */
+.gp-top h1, .gp-top .gp-due, .gp-top .gp-state { min-height: 36px; padding: 6px 14px; line-height: 22px; border-radius: 999px; background: var(--pill); border: 1px solid var(--edge); }
+.gp-top .gp-due:empty, .gp-top .gp-state:empty { display: none; }
 .gp-top a { color: var(--gz-ink-muted); text-decoration: none; font-size: 13px; }
 .grow { flex: 1; }
 

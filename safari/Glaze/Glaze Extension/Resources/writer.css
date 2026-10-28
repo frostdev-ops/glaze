@@ -19,6 +19,7 @@
   --panel: color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
   --fill: color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 100%), transparent);
   --card: color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) 40%, transparent);
+  --pill: color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-surface-opacity, 100%), transparent);
   --edge: var(--gz-border-line, var(--gz-line));
   --top-faint: var(--gz-ink-faint);
 }
