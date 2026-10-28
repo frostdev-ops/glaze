@@ -47,7 +47,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const sheets = [...document.querySelectorAll('.gp-zoom .gp-sheet')].slice(0, 2), flow = document.querySelector('.gp-zoom > .gp-flow');
     const ST = globalThis.GZ_WRITER_STYLES, api = P()?.current();
     if (!sheets.length || !flow || !ST || !api) return [];
-    const geo = ST.geometry(api.format()), scale = 130 / geo.width;
+    const geo = ST.geometry(api.look?.() || api.format()), scale = 130 / geo.width;
     return sheets.map((sheet) => {
       const page = sheet.cloneNode(true), clip = h('div', { class: 'gs-clip' }), copy = flow.cloneNode(true);
       page.style.top = '0px';
