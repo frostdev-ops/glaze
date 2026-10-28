@@ -78,3 +78,16 @@ test('a HYPERLINK field\'s result is a link; one to a bookmark is text', async (
   assert.deepEqual(links(got.node), [['linked text', 'https://example.org/x']]);
   assert.deepEqual(marksOf(got.node).map(([, m]) => m), ['', 'link', '']);
 });
+
+// ---- export validity
+test('no exported part holds a character XML forbids, a picture\'s caption included', () => {
+  const BAD = 'a\u0001b\u000bc\u001fd￾e￿g';
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const doc = S.paper.nodeFromJSON({ type: 'doc', content: [
+    { type: 'paragraph', content: [{ type: 'text', text: `Body ${BAD}` }] },
+    { type: 'paragraph', content: [{ type: 'image', attrs: { src: png, alt: `Alt ${BAD}`, display: 'block', caption: `Cap ${BAD}` } }] },
+  ] });
+  const out = X.exportDocx(doc, { title: `Title ${BAD}` });
+  for (const [name, text] of Object.entries(out.parts)) assert.doesNotMatch(text, /[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/, name);
+  assert.match(out.parts['word/document.xml'], /Cap abcdeg</);
+});
