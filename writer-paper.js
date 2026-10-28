@@ -312,8 +312,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         // The header: an imported file's or the student's own parts, else the format's running header; the footer: the
         // setup's parts, else none.
         const parts = ST.headerParts(L, i + 1, n), footer = L.setup ? ST.footerParts(L, i + 1, n) : [], k = JSON.stringify([parts, footer, L.font, L.size, scale]);
-        if (!parts) { const text = ST.headerText(L, i + 1, name); if (s.gzHeader !== text || s.gzParts) { hdr.replaceChildren(); hdr.textContent = text; s.gzHeader = text; } }
-        else s.gzHeader = null;
+        if (!parts) { const text = ST.headerText(L, i + 1, name); if (s.gzHeader !== text) { hdr.replaceChildren(); hdr.textContent = text; s.gzHeader = text; } }
+        else if (s.gzHeader != null) { s.gzHeader = null; s.gzParts = null; }
         if (s.gzParts !== k) { s.gzParts = k; if (parts) partEl(parts, hdr, L); partEl(footer, ftr, L); }
         const notesEl = s.lastChild;
         notesEl.style.bottom = `${geo.bottom}px`;
