@@ -64,12 +64,25 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.container === box.editor.closest('.ql-container') && box.editor.id === box.editorId &&
     U().kindOf(box.editor, { path: location.pathname, attempt: box.kind === 'test' ? 'test' : '' }) === box.kind &&
     (box.kind !== 'reply' || U().replyTo(box.editor) === (box.context.post?.id || ''));
+  // An assignment's paper key (lib/writer-papers.js keyOf: the school, the student, the course and the assignment), as
+  // lib/writer-context-assignment.js builds it, from the student's id alone, so the frame opens the student's paper rather
+  // than a stand-in while the rest of the context is read. null when the id isn't known within a few seconds.
+  const paperOf = async () => {
+    const a = U().attemptAt(location.pathname);
+    const uid = a ? await Promise.race([Promise.resolve().then(() => X.account()).then(String), new Promise((r) => setTimeout(r, 5000, ''))]).catch(() => '') : '';
+    return /^_\d+_\d+$/.test(uid) ? { school: location.host.toLowerCase(), user: uid, course: a.course, content: a.content, url: location.origin + location.pathname } : null;
+  };
   let seq = 0;
   const mount = async (b) => {
     const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, delta: null, path: location.pathname, editorId: b.editor.id, destination: X.draftAt(b.editor), display: null };
     boxes.set(b.editor, box);
     try { await drafts(); if (!await GZ_DRAFT_UI.ready(b.editor)) { declined.add(b.editor); drop(box); return; } } catch { drop(box); return; }
     if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
+    if (b.mode === 'paper') {
+      const paper = await paperOf();
+      if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
+      if (paper) box.context = { ...box.context, paper };
+    }
     b.root.setAttribute('data-gz-writer', b.kind);
     b.container.setAttribute('data-gz-writer-id', box.id);
     // A one-use pass for the frame, which also puts lib/writer-main.js in this page (lib/background.js 'glaze:writer').
