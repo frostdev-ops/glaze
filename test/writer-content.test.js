@@ -356,3 +356,25 @@ test('a paper frame still opens, under a stand-in key, when the student\'s id is
   assert.equal(init?.mode, 'paper');
   assert.equal(init.context.paper, undefined);
 });
+
+test('a paper whose frame can\'t come back gives Ultra its editor back as it was, never a text field of Ultra\'s own text', async () => {
+  const c = content({ fixture: 'attempt', pathname: '/ultra/courses/_101_1/assessment/_7_1/attempt/create' }); await c.start();
+  const b = c.native(), frame = c.doc.querySelector('iframe.gz-writer');
+  assert.equal(b.root.style.display, 'none');
+  c.ctx.chrome.runtime.sendMessage = async () => { throw new Error('Extension context invalidated.'); };
+  frame.dispatchEvent({ type: 'load' });
+  for (let i = 0; i < 10; i++) await new Promise(setImmediate);
+  assert.ok(!c.doc.querySelector('[data-gz-writer-recovery]'), 'the paper is in Writer\'s storage, not Ultra\'s box');
+  assert.ok(!c.doc.querySelector('iframe.gz-writer'));
+  assert.notEqual(b.root.style.display, 'none', 'Ultra\'s own editor is back');
+});
+
+test('an assignment\'s paper keeps its frame when Ultra numbers the attempt in its address', async () => {
+  const c = content({ fixture: 'attempt', pathname: '/ultra/courses/_101_1/assessment/_7_1/attempt/create' }); await c.start();
+  const frame = c.doc.querySelector('iframe.gz-writer');
+  c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/_31_1';
+  c.ctx.GZ_WRITER.pass();
+  for (let i = 0; i < 5; i++) await new Promise(setImmediate);
+  assert.ok(frame.isConnected, 'the same paper, the same frame');
+  assert.equal(c.doc.querySelectorAll('iframe.gz-writer').length, 1);
+});
