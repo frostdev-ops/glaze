@@ -2,7 +2,7 @@
 //   { messages: [{ role: 'system' | 'user' | 'assistant' | 'tool', content: [{ type: 'text', text } | { type: 'image', mime,
 //     data (base64) }], toolCalls?: [{ id, name, args }] (assistant), toolCallId? (tool) }],
 //     schema? (lib/ai/schema.js, an object at the root), tools?: [{ name, description, parameters }], temperature?,
-//     maxTokens?, timeoutMs? }
+//     maxTokens?, timeoutMs?, effort? (how much a reasoning model thinks first: EFFORTS) }
 // A message's content may be given as a string (one text part) and an image's data as bytes (Uint8Array or ArrayBuffer):
 // clean() turns them into the form above, which is plain JSON, so it crosses a runtime port and goes into an eval's log as
 // it is. A result: { text, json?, toolCalls?, usage?: { input, cached?, cacheWrite?, output? } (Rimeward's names), provider,
@@ -93,8 +93,9 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
     const parameters = S().clean(v.parameters);
     return parameters && parameters.type === 'object' ? { name: v.name, description: v.description, parameters } : null;
   };
+  const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high'];
   const OPTS = { temperature: (v) => (Number.isFinite(v) && v >= 0 && v <= 2 ? v : null), maxTokens: (v) => (Number.isSafeInteger(v) && v >= 1 && v <= LIMIT.maxTokens ? v : null),
-    timeoutMs: (v) => (Number.isSafeInteger(v) && v >= LIMIT.timeout[0] && v <= LIMIT.timeout[1] ? v : null) };
+    timeoutMs: (v) => (Number.isSafeInteger(v) && v >= LIMIT.timeout[0] && v <= LIMIT.timeout[1] ? v : null), effort: (v) => (EFFORTS.includes(v) ? v : null) };
   // → the request in its one form, or null.
   const clean = (raw) => {
     if (!isObj(raw) || Object.keys(raw).some((k) => !['messages', 'schema', 'tools', ...Object.keys(OPTS)].includes(k))) return null;
@@ -132,6 +133,6 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
     return out;
   };
 
-  return { LIMIT, ROLES, MIME, FINISH, CATEGORIES, CODES, NAME, error, code, clean, result, images, sniff, b64, isObj };
+  return { LIMIT, ROLES, MIME, FINISH, CATEGORIES, CODES, NAME, EFFORTS, error, code, clean, result, images, sniff, b64, isObj };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_REQUEST; else GZ_AI_REQUEST;

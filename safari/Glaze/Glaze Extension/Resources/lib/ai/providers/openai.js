@@ -6,10 +6,10 @@
 // generation? (lib/ai/endpoint.js) }. Glaze keeps its own neutral messages; toWire and fromWire are this provider's
 // converters. A request asks for json_schema output; a server that refuses that parameter by name gets json_object (the
 // schema then in the system message), and one that refuses that, the schema in words only, the answer read as askJson
-// reads one: remembered for that server and model for an hour. max_tokens and temperature step down the same way. One
-// quiet retry, after 1.2 s, only for a 429 (the server ran nothing); a dropped connection, a 5xx or a cut stream may have
-// run the request and are never replayed. Runs in the worker and in node (fetch passed in, or the global one) for the
-// eval. Classic script; module.exports for node.
+// reads one: remembered for that server and model for an hour. max_tokens, temperature and a reasoning effort step down
+// the same way. One quiet retry, after 1.2 s, only for a 429 (the server ran nothing); a dropped connection, a 5xx or a
+// cut stream may have run the request and are never replayed. Runs in the worker and in node (fetch passed in, or the
+// global one) for the eval. Classic script; module.exports for node.
 var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
   const P = typeof GZ_AI_PROVIDERS !== 'undefined' ? GZ_AI_PROVIDERS : require('../providers.js');
   const R = typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('../request.js');
@@ -139,8 +139,16 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
       ...(req.tools && { tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })), tool_choice: 'auto' }),
       ...(req.temperature !== undefined && mode.temperature && { temperature: req.temperature }),
       ...(req.maxTokens && { [mode.tokens]: req.maxTokens }),
+      ...(req.effort && !mode.noEffort && (openrouter(cfg) ? { reasoning: { effort: effort(req, mode) } } : { reasoning_effort: effort(req, mode) })),
     };
   };
+  // A reasoning model's effort: OpenRouter's reasoning object there, OpenAI's reasoning_effort elsewhere (Gemini, xAI and Groq
+  // take it too). A model that must reason refuses 'none' (OpenRouter: a 400, its catalog's reasoning.mandatory), and one may
+  // not list 'minimal' (supported_efforts), so a refusal steps up a level at a time, to 'low'; a server or model that refuses
+  // the parameter at all (its typed code, or words saying so) gets none. A level stepped up to only ever raises a request's own.
+  const openrouter = (cfg) => /(^|\.)openrouter\.ai$/i.test(new URL(cfg.base).hostname);
+  const UP = { none: 'minimal', minimal: 'low' };
+  const effort = (req, mode) => (R.EFFORTS.indexOf(mode.effort) > R.EFFORTS.indexOf(req.effort) ? mode.effort : req.effort);
   // A refusal of one parameter, by name: the server's typed error ({ error: { param } }), else (ponytail: servers without
   // typed errors) its message naming that parameter. Only these step down; any other 400 is the request's fault.
   const refused = (text, pattern) => {
@@ -149,11 +157,18 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
     if (typeof e?.param === 'string') return pattern.test(e.param);
     return pattern.test(typeof e?.message === 'string' ? e.message : text);
   };
+  const unknown = (text) => {
+    let e = null;
+    try { e = JSON.parse(text)?.error; } catch { /* not JSON */ }
+    return e?.code === 'unsupported_parameter' || /unrecogni[sz]ed|unknown (?:parameter|argument|field)|unsupported parameter|extra (?:inputs|fields)/i.test(typeof e?.message === 'string' ? e.message : text);
+  };
   const STEPS = [
     [(t, m, req) => req.schema && m.format === 'schema' && refused(t, /response_format|json_schema/i), (m) => ({ ...m, format: 'object' })],
     [(t, m, req) => req.schema && m.format === 'object' && refused(t, /response_format|json_object/i), (m) => ({ ...m, format: 'none' })],
     [(t, m, req) => req.maxTokens && m.tokens === 'max_tokens' && refused(t, /max_tokens/i), (m) => ({ ...m, tokens: 'max_completion_tokens' })],
     [(t, m, req) => req.temperature !== undefined && m.temperature && refused(t, /temperature/i), (m) => ({ ...m, temperature: false })],
+    [(t, m, req) => req.effort && !m.noEffort && UP[effort(req, m)] && refused(t, /reasoning|effort/i) && !unknown(t), (m, req) => ({ ...m, effort: UP[effort(req, m)] })],
+    [(t, m, req) => req.effort && !m.noEffort && refused(t, /reasoning|effort/i), (m) => ({ ...m, noEffort: true })],
   ];
   const FIRST = { format: 'schema', tokens: 'max_tokens', temperature: true };
   const modes = new Map(); // `${base}\n${model}` → { mode, until }
@@ -171,7 +186,7 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
   const request = async (req, cfg, { signal, onDelta, onThinking, fetch = globalThis.fetch } = {}) => {
     const k = `${cfg.base}\n${cfg.model}`, kept = modes.get(k), stream = typeof onDelta === 'function';
     let mode = kept && kept.until > Date.now() ? kept.mode : FIRST, retried = false;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < STEPS.length + 2; i++) {
       let res;
       try {
         res = await fetch(`${cfg.base}/chat/completions`, { method: 'POST', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', cache: 'no-store', signal,
@@ -185,7 +200,7 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
       if (res.status < 200 || res.status >= 300) {
         const text = await F.bounded(res, LIMIT.error).catch((e) => { if (signal?.aborted) throw e; return ''; });
         const step = (res.status === 400 || res.status === 422) && STEPS.find(([when]) => when(text, mode, req));
-        if (step) { mode = step[1](mode); continue; }
+        if (step) { mode = step[1](mode, req); continue; }
         if (!retried && F.transient(res.status)) { retried = true; await pause(LIMIT.retry, signal); continue; }
         if (res.status === 400 && R.images(req) && /image|vision|modalit|multimodal/i.test(text)) throw Object.assign(new Error(`"${cfg.model}" does not take pictures. Pick a vision model.`), { code: 'caps' });
         throw Object.assign(new Error(`compat: ${res.status} ${redact(text, cfg)}`), { status: res.status });

@@ -18,9 +18,10 @@
 // through a fetch pinned to the connection's host and to the generation it was admitted on: a connection changed mid-run
 // sends nothing more ('changed'). A closed port cancels its runs and drops what waits for a confirm (keep the port open while
 // a run is in flight: its state dies with the worker). A page is told codes, never a provider's words, an address or a key.
-// Each run leaves one row in storage.local aiCalls (lib/ai/failure.js record: the last 40, metadata only); a supersede
-// task's runs share one row a minute per tab and feature, with their count. The sender check (env.allowed) may refuse one
-// message with a code (the writer's 'attempt') instead of the whole port. A port's messages are taken in the order sent.
+// Each run leaves one row in storage.local aiCalls (lib/ai/failure.js record: the last 40, metadata only), one refused before
+// admission too when its provider can be named; a supersede task's runs share one row a minute per tab and feature, with
+// their count. The sender check (env.allowed) may refuse one message with a code (the writer's 'attempt', or 'timeout' past
+// LIMIT.sender) instead of the whole port. A port's messages are taken in the order sent.
 // A connection's catalog is kept for LIMIT.listed per generation, and a changed connection drops it and the providers'
 // warm sessions (release).
 // Settings (options.html, its top frame) keeps the connections with 'glaze:ai-config' (config below).
@@ -35,9 +36,9 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   const M = () => (typeof GZ_AI_MODELS !== 'undefined' ? GZ_AI_MODELS : require('./models.js'));
   const L = () => (typeof GZ_AI_LOOP !== 'undefined' ? GZ_AI_LOOP : require('./loop.js'));
   // message: a run's input as JSON (characters); perMinute: runs a tab's feature may start in a minute; all: every tab's;
-  // test, catalog: how long Settings' Test and a run's catalog lookup may take.
+  // test, catalog: how long Settings' Test and a run's catalog lookup may take; sender: a message's sender check.
   // rated: every tab's runs of tasks with their own rate; listed: how long a connection's catalog is kept for its runs.
-  const LIMIT = { message: 16 << 20, perMinute: 6, all: 30, rated: 240, test: 20000, catalog: 8000, listed: 3600000 };
+  const LIMIT = { message: 16 << 20, perMinute: 6, all: 30, rated: 240, test: 20000, catalog: 8000, sender: 5000, listed: 3600000 };
   const FEATURE = /^[a-z][a-z0-9-]{0,31}$/;
   const CALLS = 'aiCalls';
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -87,6 +88,11 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     const st = await mac.p.status(mac.cfg, {}).catch(() => ({ state: 'unavailable' }));
     if (st.state !== 'unavailable' || !['off', 'os', 'device'].includes(st.reason) || !dev) return apple;
     return (await dev.p.status(dev.cfg, {}).catch(() => ({ state: 'unavailable' }))).state === 'unavailable' ? apple : dev;
+  };
+  // The provider a run would go to, named from the stored connection alone (nothing asked of it); '' when there is none.
+  // On this device is Settings' one choice, whichever model it resolves to.
+  const named = async (env) => {
+    try { const s = A().clean(await env.settings()); return s.use === 'device' ? 'device' : usable(s.use, (await connections(env))[s.use])?.p.id || ''; } catch { return ''; }
   };
   // Whether the browser holds the connection's host (a provider that goes nowhere holds none).
   const reaches = async (env, { p, cfg }) => !p.origin || !!await env.reach(p.origin(cfg).replace(/\*$/, ''));
@@ -165,6 +171,9 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     const post = (m) => { if (closed) return; try { port.postMessage(m); } catch { close(); } };
     const allowed = (what = {}) => Promise.resolve().then(() => typeof env.allowed === 'function' ? env.allowed(what) : env.allowed)
       .then((ok) => (ok === true || (typeof ok === 'string' && R().CODES.includes(ok)) ? ok : false), () => false);
+    // The sender check within LIMIT.sender: one that never settles refuses its message as a timeout instead of holding
+    // every later message on the port.
+    const bounded = (what) => { let t; return Promise.race([allowed(what), new Promise((r) => { t = setTimeout(r, LIMIT.sender, 'timeout'); })]).finally(() => clearTimeout(t)); };
     const forget = (id) => {
       for (const [key, parked] of confirms) if (id === undefined || parked.runId === id) { confirms.delete(key); if (confirms.current === key) confirms.current = null; }
     };
@@ -175,18 +184,29 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     port.onMessage.addListener((m) => {
       const feature = isObj(m) ? (m.op === 'confirm' ? confirms.get(m.confirmId)?.feature : m.feature) : undefined;
       const what = { op: isObj(m) && typeof m.op === 'string' ? m.op : '', ...(typeof feature === 'string' && { feature }) };
-      order = order.then(() => allowed(what)).then(async (ok) => {
+      order = order.then(() => bounded(what)).then(async (ok) => {
         if (!ok) { close(); try { port.disconnect(); } catch { /* gone */ } return; }
         if (closed) return;
         const id = Number.isSafeInteger(m?.id) ? m.id : null;
         if (ok !== true && m?.op !== 'cancel') {
-          if (m?.op === 'status' && id !== null) return post({ id, type: 'status', on: (await status(m, env)).on, allowed: false, why: ok });
+          if (m?.op === 'status' && id !== null && ok !== 'timeout') return post({ id, type: 'status', on: (await status(m, env)).on, allowed: false, why: ok });
+          if (m?.op === 'run' && id !== null && typeof m.feature === 'string' && FEATURE.test(m.feature) && typeof m.task === 'string' && T().ID.test(m.task)) {
+            const def = await Promise.resolve().then(() => env.task(m.task)).catch(() => null);
+            unrun(m, def, { id: F().reference(), task: m.task, feature: m.feature, startedAt: (env.now || Date.now)(), state: ok, ms: 0 }).catch(() => {});
+          }
           return post({ id, type: 'error', error: ok });
         }
         const def = m?.op === 'run' && typeof m.task === 'string' ? await Promise.resolve().then(() => env.task(m.task)).catch(() => null) : undefined;
         if (!closed) handle(m, def).catch(() => post({ id, type: 'error', error: 'failed' }));
       }).catch(() => {});
     });
+    // A run refused before admission leaves a row too, when its provider can be named: without one, Activity showed
+    // nothing of a frame whose runs never started (Safari, 2026-10-27).
+    const unrun = async (m, def, row) => {
+      row.provider ||= await named(env);
+      if (!row.provider || !env.local) return;
+      await (def?.id === m.task && def.rate?.supersede ? tally(env, `${env.who}|${m.feature}`, row, false) : F().record(env.local, CALLS, row));
+    };
     const handle = async (m, def) => {
       if (!isObj(m) || !Number.isSafeInteger(m.id) || m.id < 0) return post({ id: null, type: 'error', error: 'request' });
       // A cancelled run gives up its place at once: a run sent right after the cancel is not refused busy.
@@ -269,6 +289,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         forget(m.id);
         Object.assign(row, { state: R().code(err), ...(err?.category && { category: err.category }), ...(err?.status && { status: err.status }), ...(err?.reference && { id: err.reference }) });
         fail(err);
+        if (!row.provider) row.provider = await named(env);
       } finally {
         if (inflight.get(key) === control) inflight.delete(key);
         mine.delete(m.id); admitted.delete(control);
