@@ -22,7 +22,10 @@ var GZ_WRITER_QUOTE = globalThis.GZ_WRITER_QUOTE || (() => {
   const X = globalThis.GZ_CTX;
   if (!X || typeof document === 'undefined') { if (typeof module !== 'undefined') module.exports = { clean, place }; return null; }
 
-  const on = () => X.on() && X.settings().enabled !== false && !!X.settings().enhance?.writer;
+  // Settings → Writer → Quote while replying (writer.compose.quote) off: no pop, though reply boxes are still kept track of,
+  // so switching it on works in the boxes already open.
+  const writerOn = () => X.on() && X.settings().enabled !== false && !!X.settings().enhance?.writer;
+  const on = () => writerOn() && X.settings().writer?.compose?.quote !== false;
   const boxes = []; // reply boxes, in the order they opened
   const live = (box) => (!box.path || box.path === location.pathname) && box.kind === 'reply' && box.ready && !!box.port && !!box.frame?.isConnected;
   const BODY = '.ql-editor[contenteditable="false"]';
@@ -159,7 +162,7 @@ svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width:
   };
   // features/writer.js, as a reply box's frame comes up (and again when it reopens).
   const arm = (box) => {
-    if (!on() || box?.kind !== 'reply' || !live(box)) return;
+    if (!writerOn() || box?.kind !== 'reply' || !live(box)) return;
     if (!boxes.includes(box)) boxes.push(box);
     for (let i = boxes.length - 1; i >= 0; i--) if (boxes[i].frame && !boxes[i].frame.isConnected) boxes.splice(i, 1);
     listen();

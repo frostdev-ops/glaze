@@ -18,7 +18,7 @@ const editor = (html = '', o = {}) => {
     composing: false, state: null,
     dispatch(tr) { this.state = this.state.apply(tr); },
   };
-  view.state = E.state({ html, mode: o.mode || 'compose', plugins: [P.plugin({ words: o.words, onFix: (_v, f) => fixes.push(f) }), I.plugin()] });
+  view.state = E.state({ html, mode: o.mode || 'compose', plugins: [P.plugin({ words: o.words, allow: o.allow, onFix: (_v, f) => fixes.push(f) }), I.plugin()] });
   const plugins = view.state.plugins;
   const proof = plugins.find((p) => p.spec.key === P.key), rules = plugins.find((p) => p.spec.isInputRules);
   const type = (text) => {
@@ -410,4 +410,22 @@ test('typing over the whole document retains provenance inside the new paragraph
   e.type('nfortunatly ');
   assert.equal(e.text(), 'unfortunately ');
   e.back(); assert.equal(e.text(), 'unfortunatly ');
+});
+
+// Settings → Writer → Typing (writer.autocorrect): each class switched off leaves what it fixes as typed, the others still fix.
+test('allow: each autocorrect class off leaves its fixes as typed, and the others still go in', () => {
+  const only = (off) => (cls) => cls !== off;
+  let e = editor('', { allow: only('typos') });
+  e.type('teh book, i think the the end  now');
+  assert.equal(e.text(), 'teh book, I think the end now', 'typos off');
+  e = editor('', { allow: only('capitalI') });
+  e.type('teh book, i think the the end  now');
+  assert.equal(e.text(), 'the book, i think the end now', 'capitalI off');
+  e = editor('', { allow: only('doubles') });
+  e.type('teh book, i think the the end  now');
+  assert.equal(e.text(), 'the book, I think the the end  now', 'doubles off: doubled words and double spaces stay');
+  e = editor('', { allow: () => true });
+  e.type('teh book, i think the the end  now');
+  assert.equal(e.text(), 'the book, I think the end now', 'all on');
+  assert.deepEqual(Object.entries(P.CLASS).sort(), [['Capitalization', 'capitalI'], ['Repetition', 'doubles'], ['Typo', 'typos'], ['i', 'capitalI'], ['space', 'doubles'], ['twice', 'doubles'], ['typo', 'typos']]);
 });

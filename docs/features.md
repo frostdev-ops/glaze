@@ -12,7 +12,7 @@ for Glaze's local stylesheets, with the existing one-second limit.
 If Glaze is reloaded while an LMS tab stays open, its old extension API work stops until that tab reloads too.
 Its animated scene also stops and releases its rendering resources.
 
-The settings editor has ten categories: **Look, Navigation, Courses, Study, Course pages, Sharing, Mods, AI, Privacy and data, and About**. **All settings** opens More options and reveals advanced sections; search covers every control. Search works across tabs; section links such as `#blackboard/nav` and older editor links reveal the right tab. Section resets change their own preferences; resetting preferences keeps your palettes, pictures, local notes/tasks, bookmarks and share keys. The live preview uses fictional local pages at real desktop or phone CSS widths, with site/page/appearance controls. Focusing a Blackboard course's editor controls previews that course's appearance; Blackboard nicknames can be edited here as well as on its course cards. Sharing includes the Relay origin under All settings and an explicit connection test; saving stays offline.
+The settings editor has eleven categories: **Look, Navigation, Courses, Study, Course pages, Writer, Sharing, Mods, AI, Privacy and data, and About**. **All settings** opens More options and reveals advanced sections; search covers every control. Search works across tabs; section links such as `#blackboard/nav` and older editor links reveal the right tab. Section resets change their own preferences; resetting preferences keeps your palettes, pictures, local notes/tasks, bookmarks and share keys. The live preview uses fictional local pages at real desktop or phone CSS widths, with site/page/appearance controls. Focusing a Blackboard course's editor controls previews that course's appearance; Blackboard nicknames can be edited here as well as on its course cards. Sharing includes the Relay origin under All settings and an explicit connection test; saving stays offline.
 
 ## Mods
 
@@ -117,7 +117,7 @@ Notes **Back up or restore** opens **Settings → Privacy and data → Backup an
 
 ## Glaze Writer
 
-On by default on Blackboard Ultra (Settings → Course pages → Course content → **Glaze Writer**): Glaze's editor takes the place of Ultra's in discussion posts and replies, messages, assignment attempts and test answers. Ultra's own editor stays in the page, kept in step as you type, so Ultra's Post, Reply, Send and Submit send what you wrote, and its word count and draft backup follow. **⋯ → Blackboard editor** gives a box back to Ultra for the rest of the page; a box already holding what Writer can't keep (attachments, tables, maths, media, right-to-left text) stays Blackboard's, untouched.
+On by default on Blackboard Ultra (Settings → Writer → Writer → **Glaze Writer**): Glaze's editor takes the place of Ultra's in discussion posts and replies, messages, assignment attempts and test answers. Ultra's own editor stays in the page, kept in step as you type, so Ultra's Post, Reply, Send and Submit send what you wrote, and its word count and draft backup follow. **⋯ → Blackboard editor** gives a box back to Ultra for the rest of the page; a box already holding what Writer can't keep (attachments, tables, maths, media, right-to-left text) stays Blackboard's, untouched.
 
 - **Compose mode** (discussions, replies, messages, test answers): a toolbar on selected text (bold, italic, underline, link, list, quote), the word count, and the prompt's targets: a ring toward its word range, a sources pill when it asks for sources, and the replies it asks for. A classmate's post can be quoted into a reply. Ctrl/⌘+Enter presses Post, Reply or Send when Ultra allows it, never an attempt's Submit.
 - **Paper mode** (assignment attempts): the paper as a word processor on real Letter pages, with MLA 9, APA 7 and Chicago 17 formats and presets of your own (font, size, spacing, margins, first-line indent, header); block styles, alignment, lists, footnotes, page breaks, zoom and Focus; a side panel of **Checks** (one card per format rule, counting what it found, with **Fix** or **Ignore** for all of it), **Sources**, **Feedback** and **Outline**. It autosaves to this device with versions (on submit, before an import, restore, format change or big edit, and every 10 minutes of writing; 40 kept, the last submitted always). **Import .docx…** and **Export .docx** in Versions: a Word file opens as Word lays it out (its page size, margins, header and footer, fonts, paragraph spacing, line spacing, indents and tab stops), and you choose once whether the paper keeps that formatting or takes the format's; its export lays out in Word the same again. The paper never goes into Ultra's text box.
@@ -136,6 +136,15 @@ On by default on Blackboard Ultra (Settings → Course pages → Course content 
 - **Tab** writes a tab, as Word and Blackboard's editor do (in a list it indents, and Shift+Tab outdents); press Esc, then Tab, to leave the editor.
 
 **Back up…** carries your papers, their versions and presets, your dictionary and saved sources.
+
+Settings → Writer, one line each (all on by default, MLA 9, Fit, 40 versions and American English to start):
+- **Glaze Writer** and **Open uploads in Writer**: Writer itself, and an assignment's upload area going to Writer first.
+- Papers: **Format for new papers** (MLA 9, APA 7, Chicago 17); **Zoom** a paper opens at (Fit, 75–150%); **Ruler** above the page; **Versions kept** per paper (10, 25, 40, 50, 100; the last submitted always stays).
+- Papers: **Clear papers** for one course (**Clear…**) or **Clear all papers**, after a question; what you submitted stays in Blackboard.
+- Typing: **Fix typos**; **Capital I and sentence starts**; **Doubled words and spaces**; **Smart quotes and dashes**; **Ask how to paste formatting** after a formatted paste.
+- Proofing: **Spelling and grammar** on or off; **Dialect** (American, British, Canadian or Australian English); **Personal dictionary**, each added word with its remove ✕, and **Clear**.
+- Discussions: **Markdown shortcuts** (- , 1. , # , \*\*bold\*\*, \*italic\*); **Word target** ring (off: the plain count); **Quote while replying**.
+- Submitting: **Remember** the submit sheet's **Also paste the text in the text box** as you last left it.
 
 ## Glaze navigation
 

@@ -261,6 +261,28 @@
   .ai-picker li .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ai-picker li small { color: var(--gz-ink-faint); }
   .ai-picker li.none { color: var(--gz-ink-faint); cursor: default; }
+  /* Settings → Writer (lib/editor-writer.js), drawn as Settings → AI: a row per setting, its name and "?" on the left and
+     its control on the right, then each section's list (saved papers by course, the personal dictionary's words as pills). */
+  .wr-rows { display: grid; }
+  .wr-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: center; padding-block: .65rem; min-block-size: 3rem; border-block-start: 1px solid var(--gz-border-line, var(--gz-line)); }
+  .wr-rows > .wr-row:first-child { border-block-start: 0; padding-block-start: .1rem; }
+  .wr-name { display: flex; align-items: center; gap: .5rem; min-width: 0; font-size: calc(14px * var(--gz-scale, 1)); }
+  .wr-row > select { min-inline-size: 11rem; }
+  .wr-sub { display: flex; align-items: center; gap: .6rem; padding-block-start: .9rem; border-block-start: 1px solid var(--gz-border-line, var(--gz-line)); }
+  .wr-sub h3 { margin: 0; font-size: calc(13px * var(--gz-scale, 1)); }
+  .wr-sub .desc { margin-inline-end: auto; }
+  .wr-courses, .wr-words { list-style: none; margin: 0; padding: 0; }
+  .wr-courses { display: grid; gap: .45rem; }
+  .wr-courses li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .8rem; align-items: center; padding: .55rem .7rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6); border: 1px solid var(--gz-border-line, var(--gz-line)); }
+  .wr-courses b { font-weight: 600; font-size: calc(13px * var(--gz-scale, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wr-courses small { color: var(--gz-ink-faint); font-size: calc(12px * var(--gz-scale, 1)); font-variant-numeric: tabular-nums; }
+  .wr-words { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .wr-words li { display: inline-flex; align-items: center; gap: .25rem; padding: .2rem .25rem .2rem .7rem; border-radius: 999px; font-size: calc(12.5px * var(--gz-scale, 1)); background: var(--gz-accent-soft); color: var(--gz-ink); }
+  .wr-words li button { inline-size: 18px; block-size: 18px; padding: 0; border: 0; background: none; color: var(--gz-ink-muted); display: grid; place-items: center; font-size: 11px; line-height: 1; }
+  .wr-words li button:hover { color: var(--gz-err); }
+  .wr-danger { color: var(--gz-err); border-color: color-mix(in srgb, var(--gz-err) 45%, var(--gz-border-strong, var(--gz-line-strong))); }
+  .wr-danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
+  #writer-clear .wr-go, #writer-clear .wr-go:hover { color: #fff; background: var(--gz-err); border-color: transparent; }
   .ai-effort { --n: 4; --i: 0; position: relative; display: grid; gap: .3rem; padding-inline: 9px; }
   .ai-effort .track { position: relative; block-size: 6px; border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-line-strong); }
   .ai-effort .fill { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: calc(var(--i) / (var(--steps)) * 100%); border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-accent); transition: inline-size .22s var(--gz-ease); }
@@ -534,13 +556,14 @@
   <span id="info-more" hidden>More about</span>
   <div class="layout">
     <div class="editor-nav">
-    <div class="editor-tabs" role="tablist" aria-label="Settings tabs" aria-orientation="vertical"><button type="button" role="tab" id="tab-look" data-editor-tab="look" aria-controls="panel-look" aria-selected="true" tabindex="0">Look</button><button type="button" role="tab" id="tab-navigation" data-editor-tab="navigation" aria-controls="panel-navigation" aria-selected="false" tabindex="-1">Navigation</button><button type="button" role="tab" id="tab-courses" data-editor-tab="courses" aria-controls="panel-courses" aria-selected="false" tabindex="-1">Courses</button><button type="button" role="tab" id="tab-study" data-editor-tab="study" aria-controls="panel-study" aria-selected="false" tabindex="-1">Study</button><button type="button" role="tab" id="tab-pages" data-editor-tab="pages" aria-controls="panel-pages" aria-selected="false" tabindex="-1">Course pages</button><button type="button" role="tab" id="tab-sharing" data-editor-tab="sharing" aria-controls="panel-sharing" aria-selected="false" tabindex="-1">Sharing</button><button type="button" role="tab" id="tab-mods" data-editor-tab="mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button><button type="button" role="tab" id="tab-ai" data-editor-tab="ai" aria-controls="panel-ai" aria-selected="false" tabindex="-1">AI</button><button type="button" role="tab" id="tab-backup" data-editor-tab="backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1">Privacy and data</button><button type="button" role="tab" id="tab-about" data-editor-tab="about" aria-controls="panel-about" aria-selected="false" tabindex="-1">About</button></div>
+    <div class="editor-tabs" role="tablist" aria-label="Settings tabs" aria-orientation="vertical"><button type="button" role="tab" id="tab-look" data-editor-tab="look" aria-controls="panel-look" aria-selected="true" tabindex="0">Look</button><button type="button" role="tab" id="tab-navigation" data-editor-tab="navigation" aria-controls="panel-navigation" aria-selected="false" tabindex="-1">Navigation</button><button type="button" role="tab" id="tab-courses" data-editor-tab="courses" aria-controls="panel-courses" aria-selected="false" tabindex="-1">Courses</button><button type="button" role="tab" id="tab-study" data-editor-tab="study" aria-controls="panel-study" aria-selected="false" tabindex="-1">Study</button><button type="button" role="tab" id="tab-pages" data-editor-tab="pages" aria-controls="panel-pages" aria-selected="false" tabindex="-1">Course pages</button><button type="button" role="tab" id="tab-writer" data-editor-tab="writer" aria-controls="panel-writer" aria-selected="false" tabindex="-1">Writer</button><button type="button" role="tab" id="tab-sharing" data-editor-tab="sharing" aria-controls="panel-sharing" aria-selected="false" tabindex="-1">Sharing</button><button type="button" role="tab" id="tab-mods" data-editor-tab="mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button><button type="button" role="tab" id="tab-ai" data-editor-tab="ai" aria-controls="panel-ai" aria-selected="false" tabindex="-1">AI</button><button type="button" role="tab" id="tab-backup" data-editor-tab="backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1">Privacy and data</button><button type="button" role="tab" id="tab-about" data-editor-tab="about" aria-controls="panel-about" aria-selected="false" tabindex="-1">About</button></div>
     <nav class="jumps" aria-label="Sections">
 <div data-editor-jumps="look"><a href="#look/palette" data-editor-jump>Looks and colors</a><a href="#look/type" data-editor-jump>Text</a><a href="#look/surfaces" data-editor-jump>Shape and surfaces</a><a href="#look/background" data-editor-jump>Background</a><a href="#look/motion" data-editor-jump>Motion</a><a href="#look/pointer" data-editor-jump>Pointer</a><a href="#look/extras" data-editor-jump>Stickers and rotation</a><a href="#look/nav-layout" data-editor-jump>This Look's navigation</a><a href="#look/rules" data-editor-jump>Page tweaks</a></div>
 <div data-editor-jumps="navigation" hidden><a href="#navigation/bar" data-editor-jump>Navigation</a><a href="#navigation/items" data-editor-jump>Navigation items</a><a href="#navigation/tabs" data-editor-jump>Course tabs</a><a href="#navigation/sidebar" data-editor-jump>Sidebar</a></div>
 <div data-editor-jumps="courses" hidden><a href="#courses/list" data-editor-jump>Your courses</a><a href="#courses/cards" data-editor-jump>Course cards</a></div>
 <div data-editor-jumps="study" hidden><a href="#study/todo" data-editor-jump>To Do</a><a href="#study/grades" data-editor-jump>Grades and GPA</a><a href="#study/reminders" data-editor-jump>Reminders and streak</a><a href="#study/widgets" data-editor-jump>Notes and widgets</a><a href="#study/pet" data-editor-jump>Pet habitat</a><a href="#study/imports" data-editor-jump>Syllabus and insights</a><a href="#study/schedule" data-editor-jump>Calendar export</a></div>
 <div data-editor-jumps="pages" hidden><a href="#pages/content" data-editor-jump>Course content</a><a href="#pages/announcements" data-editor-jump>Announcements</a><a href="#pages/documents" data-editor-jump>Documents and quizzes</a><a href="#pages/dashboard" data-editor-jump>Blackboard Dashboard</a><a href="#pages/declutter" data-editor-jump>Declutter</a><a href="#pages/shortcuts" data-editor-jump>Search and shortcuts</a><a href="#pages/popups" data-editor-jump>Pop-ups</a></div>
+<div data-editor-jumps="writer" hidden><a href="#writer/setup" data-editor-jump>Writer</a><a href="#writer/papers" data-editor-jump>Papers</a><a href="#writer/typing" data-editor-jump>Typing</a><a href="#writer/proofing" data-editor-jump>Proofing</a><a href="#writer/discussions" data-editor-jump>Discussions</a><a href="#writer/submitting" data-editor-jump>Submitting</a></div>
 <div data-editor-jumps="sharing" hidden><a href="#sharing/sessions" data-editor-jump>Share sessions</a><a href="#sharing/relay" data-editor-jump>Relay</a><a href="#sharing/calendar" data-editor-jump data-gcal-link hidden>Google Calendar sync</a></div>
 <div data-editor-jumps="mods" hidden><a href="#mods/installed" data-editor-jump>Installed mods</a><a href="#mods/add" data-editor-jump>Add a mod</a><a href="#mods/widget" data-editor-jump>Widget builder</a><a href="#mods/dev" data-editor-jump>Mod development</a></div>
 <div data-editor-jumps="ai" hidden><a href="#ai/setup" data-editor-jump>AI</a><a href="#ai/features" data-editor-jump>Features</a><a href="#ai/activity" data-editor-jump>Activity</a></div>
@@ -1325,10 +1348,6 @@
 <div class="info-pop" id="info-enhance-download" popover><span class="desc">A button on each folder, learning module or Canvas module that saves its files as one zip. Items you haven't opened are left out, so none is marked viewed.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.drafts" aria-describedby="info-enhance-drafts"><span id="info-enhance-drafts-name">Back up what you type</span></label><button type="button" class="info" popovertarget="info-enhance-drafts" aria-labelledby="info-more info-enhance-drafts-name" aria-describedby="info-enhance-drafts"></button>
 <div class="info-pop" id="info-enhance-drafts" popover><span class="desc">Keeps a copy of what you write in Blackboard's editors, or a new Canvas Inbox message, on this device until it's posted, and offers it back after a reload. Deleted after 14 days.</span></div></div>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.writer" aria-describedby="info-enhance-writer"><span id="info-enhance-writer-name">Glaze Writer</span></label><button type="button" class="info" popovertarget="info-enhance-writer" aria-labelledby="info-more info-enhance-writer-name" aria-describedby="info-enhance-writer"></button>
-<div class="info-pop" id="info-enhance-writer" popover><span class="desc">Glaze's editor in Blackboard Ultra's discussion, message and assignment boxes. Blackboard's own editor is one click away in its ⋯ menu, and a box holding attachments, tables or maths stays Blackboard's.</span></div></div>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.writerUploads" aria-describedby="info-enhance-writerUploads"><span id="info-enhance-writerUploads-name">Open uploads in Writer</span></label><button type="button" class="info" popovertarget="info-enhance-writerUploads" aria-labelledby="info-more info-enhance-writerUploads-name" aria-describedby="info-enhance-writerUploads"></button>
-<div class="info-pop" id="info-enhance-writerUploads" popover><span class="desc">A file you drop on or choose in an assignment's Blackboard upload area goes to Glaze Writer first: a Word file opens in Writer or is submitted as is, any other file is submitted as is. Off, the upload area is Blackboard's.</span></div></div>
 <details class="more"><summary>More options</summary>
 <label class="check"><input type="checkbox" data-key="enhance.urgency"><span>Mark due dates in course content</span>
           <span class="desc">Overdue, due today, or due within three days.</span></label>
@@ -1446,6 +1465,78 @@
 <div class="row">
             <label>Pop-up animation <select data-key="popup.anim"><option value="genie">Genie</option><option value="fade">Fade</option><option value="none">None</option></select></label>
           </div>
+</section>
+</div>
+<div id="panel-writer" role="tabpanel" aria-labelledby="tab-writer" data-editor-panel="writer" data-no-preview hidden>
+<section id="writer-setup" data-editor-section="writer/setup" data-sites="Blackboard Ultra" aria-labelledby="heading-writer-setup">
+<p class="section-path" data-editor-breadcrumb><a href="#writer/setup" data-editor-alias>Writer</a></p><div class="section-heading"><h2 id="heading-writer-setup">Writer</h2><span class="site-badge" translate="no">Blackboard</span><button type="button" class="section-reset" data-reset-section="writer/setup">Reset section</button></div>
+<div class="wr-rows">
+<div class="wr-row has-info"><span class="wr-name"><span id="info-enhance-writer-name">Glaze Writer</span><button type="button" class="info" popovertarget="info-enhance-writer" aria-labelledby="info-more info-enhance-writer-name" aria-describedby="info-enhance-writer"></button></span><input type="checkbox" data-key="enhance.writer" aria-labelledby="info-enhance-writer-name" aria-describedby="info-enhance-writer">
+<div class="info-pop" id="info-enhance-writer" popover><span class="desc">Glaze's editor in Blackboard Ultra's discussion, message and assignment boxes. Blackboard's own editor is one click away in its ⋯ menu, and a box holding attachments, tables or maths stays Blackboard's.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-enhance-writerUploads-name">Open uploads in Writer</span><button type="button" class="info" popovertarget="info-enhance-writerUploads" aria-labelledby="info-more info-enhance-writerUploads-name" aria-describedby="info-enhance-writerUploads"></button></span><input type="checkbox" data-key="enhance.writerUploads" aria-labelledby="info-enhance-writerUploads-name" aria-describedby="info-enhance-writerUploads">
+<div class="info-pop" id="info-enhance-writerUploads" popover><span class="desc">A file you drop on or choose in an assignment's Blackboard upload area goes to Glaze Writer first: a Word file opens in Writer or is submitted as is, any other file is submitted as is. Off, the upload area is Blackboard's.</span></div></div>
+</div>
+</section>
+<section id="writer-papers" data-editor-section="writer/papers" data-sites="Blackboard Ultra" aria-labelledby="heading-writer-papers">
+<p class="section-path" data-editor-breadcrumb><a href="#writer/papers" data-editor-alias>Papers</a></p><div class="section-heading"><h2 id="heading-writer-papers">Papers</h2><span class="site-badge" translate="no">Blackboard</span><button type="button" class="section-reset" data-reset-section="writer/papers">Reset section</button></div>
+<div class="wr-rows">
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-format-name">Format for new papers</span><button type="button" class="info" popovertarget="info-writer-format" aria-labelledby="info-more info-writer-format-name" aria-describedby="info-writer-format"></button></span><select data-key="writer.format" aria-labelledby="info-writer-format-name" aria-describedby="info-writer-format"></select>
+<div class="info-pop" id="info-writer-format" popover><span class="desc">The format a new paper starts in: its page, heading, spacing and checks. A paper keeps the format it has; change one from its own toolbar.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-zoom-name">Zoom</span><button type="button" class="info" popovertarget="info-writer-zoom" aria-labelledby="info-more info-writer-zoom-name" aria-describedby="info-writer-zoom"></button></span><select data-key="writer.zoom" data-number aria-labelledby="info-writer-zoom-name" aria-describedby="info-writer-zoom"></select>
+<div class="info-pop" id="info-writer-zoom" popover><span class="desc">How large a paper opens. Fit fills the width the box has; a percent keeps that size, and the paper’s own Zoom still changes it.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-ruler-name">Ruler</span><button type="button" class="info" popovertarget="info-writer-ruler" aria-labelledby="info-more info-writer-ruler-name" aria-describedby="info-writer-ruler"></button></span><input type="checkbox" data-key="writer.ruler" aria-labelledby="info-writer-ruler-name" aria-describedby="info-writer-ruler">
+<div class="info-pop" id="info-writer-ruler" popover><span class="desc">The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-versions-name">Versions kept</span><button type="button" class="info" popovertarget="info-writer-versions" aria-labelledby="info-more info-writer-versions-name" aria-describedby="info-writer-versions"></button></span><select data-key="writer.versions" data-number aria-labelledby="info-writer-versions-name" aria-describedby="info-writer-versions"></select>
+<div class="info-pop" id="info-writer-versions" popover><span class="desc">How many earlier versions each paper keeps on this device, the oldest going first. The last version you submitted always stays.</span></div></div>
+</div>
+<div class="wr-sub"><h3 id="writer-papers-head">Saved papers</h3><span class="desc" id="writer-papers-count"></span><button type="button" class="wr-danger" id="writer-clear-all" disabled>Clear all papers</button></div>
+<ul class="wr-courses" id="writer-paper-list" aria-labelledby="writer-papers-head"></ul>
+<p class="desc" id="writer-papers-empty">No papers on this device</p>
+</section>
+<section id="writer-typing" data-editor-section="writer/typing" data-sites="Blackboard Ultra" aria-labelledby="heading-writer-typing">
+<p class="section-path" data-editor-breadcrumb><a href="#writer/typing" data-editor-alias>Typing</a></p><div class="section-heading"><h2 id="heading-writer-typing">Typing</h2><span class="site-badge" translate="no">Blackboard</span><button type="button" class="section-reset" data-reset-section="writer/typing">Reset section</button></div>
+<div class="wr-rows">
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-autocorrect-typos-name">Fix typos</span><button type="button" class="info" popovertarget="info-writer-autocorrect-typos" aria-labelledby="info-more info-writer-autocorrect-typos-name" aria-describedby="info-writer-autocorrect-typos"></button></span><input type="checkbox" data-key="writer.autocorrect.typos" aria-labelledby="info-writer-autocorrect-typos-name" aria-describedby="info-writer-autocorrect-typos">
+<div class="info-pop" id="info-writer-autocorrect-typos" popover><span class="desc">Common slips that are no word, such as “teh” or “recieve”, become the word you meant as you finish typing them. Undo puts yours back.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-autocorrect-capitalI-name">Capital I and sentence starts</span><button type="button" class="info" popovertarget="info-writer-autocorrect-capitalI" aria-labelledby="info-more info-writer-autocorrect-capitalI-name" aria-describedby="info-writer-autocorrect-capitalI"></button></span><input type="checkbox" data-key="writer.autocorrect.capitalI" aria-labelledby="info-writer-autocorrect-capitalI-name" aria-describedby="info-writer-autocorrect-capitalI">
+<div class="info-pop" id="info-writer-autocorrect-capitalI" popover><span class="desc">A lone “i” becomes “I”, and a sentence’s first word gets its capital once you type past it. Names elsewhere are left as you wrote them.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-autocorrect-doubles-name">Doubled words and spaces</span><button type="button" class="info" popovertarget="info-writer-autocorrect-doubles" aria-labelledby="info-more info-writer-autocorrect-doubles-name" aria-describedby="info-writer-autocorrect-doubles"></button></span><input type="checkbox" data-key="writer.autocorrect.doubles" aria-labelledby="info-writer-autocorrect-doubles-name" aria-describedby="info-writer-autocorrect-doubles">
+<div class="info-pop" id="info-writer-autocorrect-doubles" popover><span class="desc">A word typed twice in a row, such as “the the”, loses the second, and two spaces become one. Doubles like “had had” are kept.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-autocorrect-smart-name">Smart quotes and dashes</span><button type="button" class="info" popovertarget="info-writer-autocorrect-smart" aria-labelledby="info-more info-writer-autocorrect-smart-name" aria-describedby="info-writer-autocorrect-smart"></button></span><input type="checkbox" data-key="writer.autocorrect.smart" aria-labelledby="info-writer-autocorrect-smart-name" aria-describedby="info-writer-autocorrect-smart">
+<div class="info-pop" id="info-writer-autocorrect-smart" popover><span class="desc">Straight quotes and apostrophes curl as you type, and two hyphens become a dash. Off, every character goes in exactly as typed.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-pasteAsk-name">Ask how to paste formatting</span><button type="button" class="info" popovertarget="info-writer-pasteAsk" aria-labelledby="info-more info-writer-pasteAsk-name" aria-describedby="info-writer-pasteAsk"></button></span><input type="checkbox" data-key="writer.pasteAsk" aria-labelledby="info-writer-pasteAsk-name" aria-describedby="info-writer-pasteAsk">
+<div class="info-pop" id="info-writer-pasteAsk" popover><span class="desc">After you paste text with its own formatting, a choice to keep that formatting or match the paper’s. Off, pasted text keeps its formatting.</span></div></div>
+</div>
+</section>
+<section id="writer-proofing" data-editor-section="writer/proofing" data-sites="Blackboard Ultra" aria-labelledby="heading-writer-proofing">
+<p class="section-path" data-editor-breadcrumb><a href="#writer/proofing" data-editor-alias>Proofing</a></p><div class="section-heading"><h2 id="heading-writer-proofing">Proofing</h2><span class="site-badge" translate="no">Blackboard</span><button type="button" class="section-reset" data-reset-section="writer/proofing">Reset section</button></div>
+<div class="wr-rows">
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-proofing-name">Spelling and grammar</span><button type="button" class="info" popovertarget="info-writer-proofing" aria-labelledby="info-more info-writer-proofing-name" aria-describedby="info-writer-proofing"></button></span><input type="checkbox" data-key="writer.proofing" aria-labelledby="info-writer-proofing-name" aria-describedby="info-writer-proofing">
+<div class="info-pop" id="info-writer-proofing" popover><span class="desc">Underlines spelling, grammar and style as you write, checked on this device with nothing sent anywhere. Off, nothing is underlined or fixed for you.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-dialect-name">Dialect</span><button type="button" class="info" popovertarget="info-writer-dialect" aria-labelledby="info-more info-writer-dialect-name" aria-describedby="info-writer-dialect"></button></span><select data-key="writer.dialect" aria-labelledby="info-writer-dialect-name" aria-describedby="info-writer-dialect"></select>
+<div class="info-pop" id="info-writer-dialect" popover><span class="desc">The English your spelling and grammar are checked against: American, British, Canadian or Australian spelling and usage, in every box.</span></div></div>
+</div>
+<div class="wr-sub"><h3 id="writer-words-head">Personal dictionary</h3><span class="desc" id="writer-words-count"></span><button type="button" id="writer-words-clear" disabled>Clear</button></div>
+<ul class="wr-words" id="writer-words" aria-labelledby="writer-words-head"></ul>
+<p class="desc" id="writer-words-empty">No words added yet</p>
+</section>
+<section id="writer-discussions" data-editor-section="writer/discussions" data-sites="Blackboard Ultra" aria-labelledby="heading-writer-discussions">
+<p class="section-path" data-editor-breadcrumb><a href="#writer/discussions" data-editor-alias>Discussions</a></p><div class="section-heading"><h2 id="heading-writer-discussions">Discussions</h2><span class="site-badge" translate="no">Blackboard</span><button type="button" class="section-reset" data-reset-section="writer/discussions">Reset section</button></div>
+<div class="wr-rows">
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-compose-markdown-name">Markdown shortcuts</span><button type="button" class="info" popovertarget="info-writer-compose-markdown" aria-labelledby="info-more info-writer-compose-markdown-name" aria-describedby="info-writer-compose-markdown"></button></span><input type="checkbox" data-key="writer.compose.markdown" aria-labelledby="info-writer-compose-markdown-name" aria-describedby="info-writer-compose-markdown">
+<div class="info-pop" id="info-writer-compose-markdown" popover><span class="desc">In a post, reply or message, typing - or 1. starts a list, # a heading, **bold** and *italic* format the words. Off, they stay as typed.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-compose-target-name">Word target</span><button type="button" class="info" popovertarget="info-writer-compose-target" aria-labelledby="info-more info-writer-compose-target-name" aria-describedby="info-writer-compose-target"></button></span><input type="checkbox" data-key="writer.compose.target" aria-labelledby="info-writer-compose-target-name" aria-describedby="info-writer-compose-target">
+<div class="info-pop" id="info-writer-compose-target" popover><span class="desc">A ring under the box filling toward the word count the prompt asks for, green once you reach it. Off, the bar shows the plain word count.</span></div></div>
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-compose-quote-name">Quote while replying</span><button type="button" class="info" popovertarget="info-writer-compose-quote" aria-labelledby="info-more info-writer-compose-quote-name" aria-describedby="info-writer-compose-quote"></button></span><input type="checkbox" data-key="writer.compose.quote" aria-labelledby="info-writer-compose-quote-name" aria-describedby="info-writer-compose-quote">
+<div class="info-pop" id="info-writer-compose-quote" popover><span class="desc">While you reply to a discussion, selecting text in a post offers Quote, which puts it in your reply with its author. Off, nothing appears.</span></div></div>
+</div>
+</section>
+<section id="writer-submitting" data-editor-section="writer/submitting" data-sites="Blackboard Ultra" aria-labelledby="heading-writer-submitting">
+<p class="section-path" data-editor-breadcrumb><a href="#writer/submitting" data-editor-alias>Submitting</a></p><div class="section-heading"><h2 id="heading-writer-submitting">Submitting</h2><span class="site-badge" translate="no">Blackboard</span><button type="button" class="section-reset" data-reset-section="writer/submitting">Reset section</button></div>
+<div class="wr-rows">
+<div class="wr-row has-info"><span class="wr-name"><span id="info-writer-submit-rememberText-name">Remember “Also paste the text in the text box”</span><button type="button" class="info" popovertarget="info-writer-submit-rememberText" aria-labelledby="info-more info-writer-submit-rememberText-name" aria-describedby="info-writer-submit-rememberText"></button></span><input type="checkbox" data-key="writer.submit.rememberText" aria-labelledby="info-writer-submit-rememberText-name" aria-describedby="info-writer-submit-rememberText">
+<div class="info-pop" id="info-writer-submit-rememberText" popover><span class="desc">The submit sheet’s “Also paste the text in the text box” starts the way you last left it. Off, it starts off each time you submit.</span></div></div>
+</div>
 </section>
 </div>
 <div id="panel-sharing" role="tabpanel" aria-labelledby="tab-sharing" data-editor-panel="sharing" data-no-preview hidden>
@@ -1672,6 +1763,14 @@
       <div class="row"><button value="cancel" id="gcal-bye-cancel">Cancel</button><button value="ok" class="primary">Disconnect</button></div>
     </form>
   </dialog>
+  <!-- Settings → Writer's Clear papers question (lib/editor-writer.js): only Clear papers deletes. -->
+  <dialog id="writer-clear" aria-labelledby="writer-clear-title" aria-describedby="writer-clear-note">
+    <form method="dialog">
+      <h3 id="writer-clear-title"></h3>
+      <p class="desc" id="writer-clear-note"></p>
+      <div class="row"><button value="cancel" id="writer-clear-cancel">Cancel</button><button value="ok" class="primary wr-go" id="writer-clear-ok">Clear papers</button></div>
+    </form>
+  </dialog>
   <!-- Restore…'s list (options.js): what the picked file holds, all ticked; Cancel changes nothing. -->
   <dialog id="restore-pick" aria-labelledby="restore-title">
     <form method="dialog">
@@ -1760,6 +1859,8 @@
   <script src="lib/ai/settings.js"></script>
   <script src="lib/ai/endpoint.js"></script>
   <script src="lib/editor-ai.js"></script>
+  <script src="lib/writer-papers.js"></script>
+  <script src="lib/editor-writer.js"></script>
   <script src="options.js"></script>
   <script src="lib/notes.js"></script>
   <script src="lib/sessions-ui.js"></script>

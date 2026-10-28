@@ -4,6 +4,8 @@
 // the ring's tooltip. Targets come in the page's context (lib/writer-context-discussion.js → requirements). It also takes
 // the page's `quote { text, author }` (features/writer-quote.js) into the editor, and draws compose's quotes (indented
 // italic lines, then "— Name": Ultra's Quill has no blockquote) as the mockup's quote block. Nothing here animates.
+// Settings → Writer → Discussions (lib/writer-settings.js writer.compose): target off draws the plain count without the ring;
+// quote off takes no quote (features/writer-quote.js shows no pop then). Markdown shortcuts are writer-proof.js's gate.
 // Pure helpers first (module.exports for node), then the frame.
 var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   const R = 15, CIRCLE = 2 * Math.PI * R;
@@ -100,12 +102,14 @@ var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
     return Math.max(saved, citations(text));
   };
   let queued = false;
+  const W = globalThis.GZ_WRITER_SETTINGS, pref = (k) => W?.now()?.compose?.[k] !== false;
   const later = () => { if (!queued) { queued = true; Promise.resolve().then(draw); } };
   const draw = () => {
     queued = false;
     const ed = F.editor();
     if (!ed) return;
-    const req = F.context()?.requirements || {}, text = ed.text(), n = GZ_WRITER_EDITOR.words(text), r = ring(n, req);
+    const all = F.context()?.requirements || {}, req = pref('target') ? all : { ...all, minWords: null, maxWords: null };
+    const text = ed.text(), n = GZ_WRITER_EDITOR.words(text), r = ring(n, req);
     if (!target.contains(num)) target.append(svg, num);
     svg.toggleAttribute('hidden', !r.target);
     arc.setAttribute('stroke-dashoffset', r.offset.toFixed(2));
@@ -123,12 +127,13 @@ var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   };
   api.refresh = later;
   for (const ev of ['ready', 'change', 'context', 'look', 'count']) F.on(ev, later);
+  W?.follow(later);
 
   // ---- quotes ---------------------------------------------------------------------------------------------------------
   // The page's Quote pop: what was selected in a post, and who wrote it (from the thread, '' when unknown).
   F.handle('quote', (m) => {
     const ed = F.editor(), text = typeof m.text === 'string' ? m.text.slice(0, 4000) : '';
-    if (!ed || !text.trim()) return;
+    if (!ed || !text.trim() || !pref('quote')) return;
     ed.run('quote', { text, author: typeof m.author === 'string' ? m.author.slice(0, 120) : '' });
   });
   // Compose's quotes drawn as the mockup's block (writer-compose.css .gz-quote).

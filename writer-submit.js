@@ -9,6 +9,8 @@
 // frame → page: submit:arm (this paper owns the attempt), submit:go { run, name, bytes, note, text, until, asis, mime },
 //   submit:saved { ok }; page → frame: submit:open, submit:save (Ultra's Save and Close), submit:step { run, step },
 //   submit:done { run, ok, error }. A test's box is compose, never a paper: it gets none of this.
+// "Also paste the text" starts as it was at the last Submit while Settings → Writer → Submitting's remember is on
+// (writer.submit: rememberText, text; lib/writer-settings.js), else off. Cancel and Escape keep nothing.
 // Classic script after writer-paper.js.
 var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   const frame = globalThis.GZ_WRITER_FRAME;
@@ -103,7 +105,8 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const kind = L().tag(name).toLowerCase();
 
     const note = h('textarea', { id: 'gs-note', maxlength: '4000', rows: '4' });
-    const sw = h('button', { type: 'button', class: 'gs-sw', role: 'switch', 'aria-checked': 'false', id: 'gs-paste' });
+    const kept = globalThis.GZ_WRITER_SETTINGS?.now()?.submit, remember = kept?.rememberText !== false;
+    const sw = h('button', { type: 'button', class: 'gs-sw', role: 'switch', 'aria-checked': String(remember && kept?.text === true), id: 'gs-paste' });
     const size = h('small', { text: file ? t('{n} KB', { n: nf(L().kb(file.size)) }) : t('{n} pages', { n: pages }) });
     const err = h('div', { class: 'gs-err', role: 'alert' });
     const native = h('button', { type: 'button', class: 'gs-native gs-review', text: t('Blackboard editor'), hidden: true });
@@ -194,6 +197,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       err.textContent = ''; native.hidden = true;
       const run = mine.run = ++runs, paste = !file && sw.getAttribute('aria-checked') === 'true';
       const text = paste ? api.editor.text() : null;
+      if (remember && !file) globalThis.GZ_WRITER_SETTINGS?.patch((w) => ({ ...w, submit: { ...w.submit, text: paste } })).catch((e) => console.error(e));
       let s = L().start({ text: !!L().delta({ note: note.value, text: text || '' }), asis: !!file });
       try {
         if (file) {

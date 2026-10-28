@@ -34,10 +34,13 @@ const GZ_SIDEBAR_KINDS = [['dashboard', 'Dashboard'], ['course', 'Course home'],
 // Each LMS's own hosts, Glaze's from the start: the manifest's matches, on https with no port.
 const GZ_BUILT_IN = (kind, u) => u.protocol === 'https:' && !u.port && !!{ canvas: /(^|\.)instructure\.com$/, moodle: /(^|\.)moodlecloud\.com$/, ultra: /\.blackboard\.com$/ }[kind]?.test(u.hostname);
 
+// A setting of settings (writer.autocorrect): its defaults, and its spec as the rule.
+const GZ_GROUP = (spec) => [Object.fromEntries(Object.entries(spec).map(([k, [d]]) => [k, d])), spec];
+
 // Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
 // 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
-// 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM"). GZ_SANITIZE walks this.
+// 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM") or a group's own spec (GZ_GROUP). GZ_SANITIZE walks this.
 const GZ_SPEC = {
   auto: { on: [false, 'bool'], mode: ['device', ['device', 'schedule']], from: ['20:00', 'time'], to: ['08:00', 'time'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
   look: {
@@ -120,6 +123,14 @@ const GZ_SPEC = {
   announce: { open: ['popup', ['popup', 'site']], ...Object.fromEntries(['glaze', 'ultra', 'canvas', 'moodle'].flatMap((k) => [[k, ['default', ['default', 'popup', 'site']]], [k + 'Preview', [true, 'bool']]])), preview: [true, 'bool'], delay: [600, [200, 2000]], lines: [3, [1, 8]] },
   popup: { anim: ['genie', ['genie', 'fade', 'none']] },
   rubric: { show: ['auto', ['auto', 'popup', 'site']], inline: [true, 'bool'] },
+  // Glaze Writer's (lib/writer-settings.js). zoom: 'fit' or a percent; submit.text: the submit sheet's paste switch as left.
+  writer: {
+    format: ['mla9', ['mla9', 'apa7', 'chicago17']], zoom: ['fit', ['fit', 75, 100, 125, 150]], ruler: [true, 'bool'], pasteAsk: [true, 'bool'],
+    versions: [40, [10, 25, 40, 50, 100]], proofing: [true, 'bool'], dialect: ['en-US', ['en-US', 'en-GB', 'en-CA', 'en-AU']],
+    autocorrect: GZ_GROUP({ typos: [true, 'bool'], capitalI: [true, 'bool'], doubles: [true, 'bool'], smart: [true, 'bool'] }),
+    compose: GZ_GROUP({ markdown: [true, 'bool'], target: [true, 'bool'], quote: [true, 'bool'] }),
+    submit: GZ_GROUP({ rememberText: [true, 'bool'], text: [false, 'bool'] }),
+  },
 };
 
 const GZ_DEFAULTS = {
@@ -249,6 +260,7 @@ const cleanNicks = (raw, room) => {
 };
 
 const cleanValue = (v, d, rule) => {
+  if (isObj(rule)) return Object.fromEntries(Object.entries(rule).map(([k, [dd, r]]) => [k, cleanValue(isObj(v) ? v[k] : undefined, dd, r)]));
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
   if (rule === 'hex') return typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : d;
   if (rule === 'picture') return typeof v === 'string' && /^[a-z0-9]{12}$/.test(v) ? v : d;

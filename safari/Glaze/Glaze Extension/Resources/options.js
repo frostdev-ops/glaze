@@ -50,6 +50,7 @@ GZ_INFO.mount();
 // mods, backups) asks for a tab of its own. The worker refuses those operations from a frame anyway; it trusts this frame, once
 // it has claimed its ticket, only for the writes that hold no keys or grants (nicknames, Look media, the pet library).
 const embedded = window.top !== window;
+let ownTabAt = null; // embedded: opens Settings' own tab at a section (Settings → Writer's deletes go there)
 if (embedded) {
   document.documentElement.setAttribute('data-embedded', '');
   // Shown only once the worker confirms this frame was opened by Glaze's navigation in this tab (a one-use ticket): a
@@ -66,6 +67,7 @@ if (embedded) {
       : chrome.runtime.sendMessage({ type: 'glaze:settings-tab', hash, ...(action && { action }) }).then((r) => { if (!r?.ok) throw Error('refused'); });
     opened.then(leave, () => {});
   };
+  ownTabAt = (hash) => ownTab(hash);
   // Nor any permissions API: a control that needs a grant (lib/site.js reach) opens Settings' own tab at its section.
   if (typeof chrome.permissions?.request !== 'function') {
     GZ_SITE.elsewhere = (from, action) => { const at = from?.closest?.('[data-editor-section]')?.dataset.editorSection; ownTab(at ? `#${at}` : location.hash, action); };
@@ -877,7 +879,8 @@ GZ_UI.load().then((s) => {
     } else el.addEventListener('change', () => {
       // A cleared time keeps the last one: the schedule never holds an empty end.
       if (el.type === 'time' && !el.value) { el.value = get(key); return; }
-      set(key, el.value); refresh(); save([group(key)]);
+      // data-number: its numbers are numbers (writer.zoom's percents beside 'fit', writer.versions).
+      set(key, el.hasAttribute?.('data-number') && /^\d+$/.test(el.value) ? +el.value : el.value); refresh(); save([group(key)]);
     });
   }
   for (const r of $$('.seg input[type="radio"]:not([data-local])')) {
@@ -1780,6 +1783,8 @@ GZ_UI.load().then((s) => {
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
   // AI (lib/editor-ai.js): its switch, the providers, the overall model and each feature's own, and the record of calls.
+  // Writer (lib/editor-writer.js): the selects' choices, the papers kept by course and the personal dictionary.
+  GZ_WRITEREDIT.mount({ t, hint, elsewhere: ownTabAt });
   GZ_AIEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
     pct: (x) => GZ_I18N.pct(Math.round(x * 100), GZ_I18N.ui()) });
   followSection(editor.route(), editor.part());
