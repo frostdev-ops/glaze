@@ -395,7 +395,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     // Where no catalog states a default, give Default its own stop rather than guessing a level.
     // Clicking an explicit choice again returns to that default.
     const slider = (row, sel, supported) => {
-      const def = row === 'completion' && supported.includes('none') ? 'none' : entry(sel)?.defaultEffort;
+      const def = row === 'completion' ? (supported.includes('none') ? 'none' : undefined) : entry(sel)?.defaultEffort;
       const known = supported.includes(def), levels = known ? supported : ['default', ...supported];
       const value = supported.includes(sel.effort) ? sel.effort : known ? def : 'default';
       const box = el('div', 'ai-effort'), track = el('div', 'track'), fill = el('span', 'fill'), stops = el('div', 'stops');
