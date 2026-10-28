@@ -2,8 +2,7 @@
 // Mac (through AppleScript, as scripts/writer-word-fidelity.js does) and saved as PDF, and imported into a paper in the
 // real unpacked extension on the synthetic assignment attempt (⋯ → Import… → Open in Writer). Both sides' pages are read
 // as lines (Word's from pdftotext's boxes, Writer's from the editor's carets), compared page by page, and drawn side by
-// side. A page passes when the counts agree and it starts within one line of where Word starts it (the owner's accepted
-// tolerance). --export also saves the .docx Writer makes of each import, opens that in Word and compares it with the
+// side. A page passes when the counts agree and it starts on the same Word line. --export also saves the .docx Writer makes of each import, opens that in Word and compares it with the
 // original's PDF: the round trip.
 // Word: only the copies this script opens are touched (found by their own unique names, closed unsaved); Word quits only
 // if this script started it. Files go in a temporary folder inside Word's container, so the sandboxed app needs no prompt.
@@ -356,9 +355,9 @@ const sideBySide = async (it) => {
     const body = (pages) => pages.map((pg) => regions(pg, m).body);
     const r = compare(body(it.word), it.writer.map((pg) => pg.lines));
     const headers = it.word.map((pg) => regions(pg, m).header.join(' '));
-    const bad = it.word.length !== it.writer.length || r.pages.some((pg) => pg.drift == null || Math.abs(pg.drift) > 1);
+    const bad = it.word.length !== it.writer.length || r.pages.some((pg) => pg.drift !== 0);
     let trip = null;
-    if (it.trip) { trip = compare(body(it.word), body(it.trip)); trip.count = it.trip.length; trip.bad = trip.count !== it.word.length || trip.pages.some((pg) => pg.drift == null || Math.abs(pg.drift) > 1); }
+    if (it.trip) { trip = compare(body(it.word), body(it.trip)); trip.count = it.trip.length; trip.bad = trip.count !== it.word.length || trip.pages.some((pg) => pg.drift !== 0); }
     if (bad || trip?.bad) ok = false;
     await sideBySide(it);
     rows.push({ id: it.id, private: !!it.private, wordPages: it.word.length, writerPages: it.writer.length, compat: it.compat, toast: it.toast, ...r, headers: { word: headers, writer: it.writer.map((pg) => pg.header.join(' ')) }, trip: trip && { pages: trip.count, drift: trip.pages.map((pg) => pg.drift), lines: trip.lines, bad: trip.bad }, shots: it.sideBySide, bad });
