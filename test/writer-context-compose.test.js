@@ -85,3 +85,8 @@ test('the Quote pop: the selection as quoted lines, and its place above the firs
   assert.equal(Q.place([{ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }], 80, 30, 1440, 900), null, 'nothing laid out');
   assert.equal(Q.place([], 80, 30, 1440, 900), null);
 });
+
+test('the sources pill reads parentheses as the paper\'s citation checks do: a date or a label inside a text is no source', () => {
+  assert.equal(C.citations('The war ended in Europe (May 1945) and in Asia (August 1945).'), 0);
+  assert.equal(C.citations('Memory is a debt (Morrison 42), not a record (Baldwin xix).'), 2);
+});
