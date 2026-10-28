@@ -430,7 +430,9 @@ const main = async (args = process.argv.slice(2)) => {
   if (help) { console.log(usage); return; }
   if (!fs.existsSync(path.join(root, 'manifest.json'))) throw Error(`No extension manifest in ${root}`);
   const practice = path.resolve(process.env.GLAZE_PRACTICE || path.join(os.homedir(), 'Projects/glaze-plans/writer/practice'));
-  if (practice === root || practice.startsWith(`${root}${path.sep}`)) throw Error('GLAZE_PRACTICE must be outside the extension checkout');
+  // A smoke run may keep its evidence in this hidden folder: staging skips hidden entries, so it cannot copy itself.
+  const internalSmoke = smoke && path.relative(root, practice).split(path.sep)[0] === '.glaze-practice';
+  if (practice === root || practice.startsWith(`${root}${path.sep}`) && !internalSmoke) throw Error('GLAZE_PRACTICE must be outside the extension checkout (smoke also permits .glaze-practice)');
   const lock = env.lockPath(), sessionLock = path.join(practice, 'running');
   let context, tmp, net, held = false, sessionHeld = false;
   const contexts = new Set(), errors = [], controller = new AbortController();
