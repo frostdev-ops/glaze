@@ -391,3 +391,17 @@ test('D4: an empty text box shows no Keep switch', async () => {
   s.handles['submit:held']({ text: '' }); await s.flush();
   assert.equal(s.doc.querySelector('#gs-keep'), null);
 });
+
+test('D8: while a paper\'s frame reopens, Ultra\'s Submit still waits for Writer, and the new frame opens the sheet', () => {
+  const p = page();
+  // features/writer.js reopen(): the old frame and port gone, a new pass asked for.
+  p.box.reopening = true; p.box.ready = false; p.box.frame.remove(); p.box.frame = null; const port = p.box.port; p.box.port = null;
+  const during = p.fire(p.button(), 'click');
+  assert.ok(during.stopped, 'Ultra never hears a Submit pressed while the frame reopens');
+  assert.ok(!p.clicks.includes(p.button()));
+  // open(): the new frame is in the page, its port made, not ready yet.
+  p.box.reopening = false; p.box.frame = new (require('./stand-in-dom.js').El)('iframe', p.doc); p.doc.body.append(p.box.frame); p.box.port = port; p.sent.length = 0;
+  const after = p.fire(p.button(), 'click');
+  assert.ok(after.stopped);
+  assert.deepEqual(p.sent.map((m) => m.type), ['submit:open'], 'the new frame opens the submit sheet once it is up');
+});
