@@ -49,7 +49,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const ed = host.editor, view = ed.view, t = (k, v) => { const text = host.t(k, v); return k === 'Document outline' && text === k ? 'Outline' : text; }, store = PA.open();
     const ISSUES = () => globalThis.GZ_WRITER_ISSUES || null;
     // What the pages are laid out by: the format, with an imported file's own page, base font and header over it.
-    const look = () => ST.look(format, view.state.doc.attrs.setup);
+    const look = (doc = view.state.doc) => ST.look(format, doc.attrs.setup);
     let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = 'fit', scale = PX100, layout = null, page = 1, focus = false;
     let laidOut = () => {}, rows = [], feedbackPanel = null; // the Outline's pages once it exists; its rows; Feedback's pages
     const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
@@ -797,6 +797,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // The page ended Focus (a click on its dim).
       focused: (on) => { focus = on; focusB.setAttribute('aria-pressed', String(on)); },
       pages: () => layout?.pages.length || 0,
+      // The last page plan's blocks and breaks (lib/writer-paginate.js), for checks.
+      layout: () => layout && { breaks: layout.breaks, blocks: layout.blocks.map((b) => ({ kind: b.kind, pos: b.pos, lines: (b.lines || []).map((l) => Math.round(l.h * 100) / 100), slack: b.lines?.[0]?.slack || 0, before: b.before || 0, after: b.after || 0 })) },
     };
     await load();
     view.setProps({ editable: editable || (() => true) });

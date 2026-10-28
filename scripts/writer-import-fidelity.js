@@ -9,15 +9,15 @@
 // if this script started it. Files go in a temporary folder inside Word's container, so the sandboxed app needs no prompt.
 // Browser: headless, GETs only, synthetic; no account or outside network from the browser.
 // NODE_PATH=<playwright> nice -n 10 lockf -k <lock> node scripts/writer-import-fidelity.js [--export] [--word-only]
-//   [--out <dir>] [file.docx …]   (default corpus: test/fixtures/writer-docx-import.js; default out:
-//   ~/Projects/glaze-plans/writer/parity)
+//   [--dump] [--out <dir>] [file.docx …]   (default corpus: test/fixtures/writer-docx-import.js; default out:
+//   ~/Projects/glaze-plans/writer/parity). --dump prints each block's box as the browser drew it (pt from its page's top).
 const { execFileSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 
 const args = process.argv.slice(2), flag = (k) => { const i = args.indexOf(k); if (i < 0) return false; args.splice(i, 1); return true; };
 const option = (k) => { const i = args.indexOf(k); if (i < 0) return null; const v = args[i + 1]; args.splice(i, 2); return v; };
-const roundTrip = flag('--export'), wordOnly = flag('--word-only');
+const roundTrip = flag('--export'), wordOnly = flag('--word-only'), dump = flag('--dump');
 const out = path.resolve(option('--out') || path.join(os.homedir(), 'Projects/glaze-plans/writer/parity'));
 const root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
 const WORD = '/Applications/Microsoft Word.app';
@@ -218,6 +218,19 @@ const writerPages = async (items) => {
         };
       }));
       for (const l of it.writer.flatMap((pg) => pg.lines)) l.text = words(l.text);
+      if (dump) console.log(`${it.id} blocks:\n${await fr.evaluate(() => {
+        const api = GZ_WRITER_PAPER.current(), v = api.editor.view, L = api.look(), g = GZ_WRITER_STYLES.geometry(L), top = v.dom.getBoundingClientRect().top, scale = v.dom.getBoundingClientRect().height / v.dom.offsetHeight, out = [];
+        v.state.doc.descendants((n, pos) => {
+          if (!n.isTextblock) return n.type.name !== 'table';
+          const d = v.nodeDOM(pos), r = d.getBoundingClientRect(), cs = getComputedStyle(d), y = (r.top - top) / scale, page = Math.floor(y / (g.height + 26.4));
+          const a = Object.entries(n.attrs).filter(([, x]) => x != null && x !== 0).map(([k, x]) => `${k}=${JSON.stringify(x)}`).join(' ');
+          const brs = [...d.querySelectorAll('br, img')].map((x) => { const q = x.getBoundingClientRect(); return `${x.nodeName}.${x.className}@${((q.top - r.top) / scale * 0.75).toFixed(1)}+${(q.height / scale * 0.75).toFixed(1)}`; }).join(' ');
+          out.push(`${String(out.length).padStart(3)} p${page + 1}${brs ? ` [${brs}]` : ''} y=${((y - page * (g.height + 26.4)) * 0.75).toFixed(1)} h=${(r.height / scale * 0.75).toFixed(1)} lh=${cs.lineHeight} mt=${cs.marginTop} mb=${cs.marginBottom} ${n.type.name} ${a} "${n.textContent.slice(0, 24)}"`);
+          return false;
+        });
+        const plan = api.layout();
+        return `${out.join('\n')}\nplan:\n${plan.blocks.map((b, i) => `${String(i).padStart(3)} ${b.kind} pos=${b.pos} before=${b.before} after=${b.after} slack=${b.slack} lines=${b.lines.join(',')}`).join('\n')}\nbreaks: ${JSON.stringify(plan.breaks)}`;
+      })}`);
       // Each page as a picture at 2x, the page alone: no toast, issue underlines or caret over it.
       await fr.evaluate(() => {
         document.querySelector('.gp-toast')?.remove();
