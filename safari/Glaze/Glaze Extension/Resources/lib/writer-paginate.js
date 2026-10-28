@@ -206,7 +206,9 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
     // Each later line's first position; note marks by the line they sit on, numbered in document order.
     const start = blk.pos + 1;
     for (let i = 1; i < groups.length; i++) {
-      const g = groups[i], hit = view.posAtCoords({ left: g.left + 1, top: (g.top + Math.min(g.bottom, g.top + 12 * scale)) / 2 + 1 });
+      // ProseMirror's coordinate lookup scans every character of a text node. Repeating it for
+      // each line of a huge paragraph becomes quadratic; binary caret search stays bounded.
+      const g = groups[i], hit = blk.node.content.size <= 2048 ? view.posAtCoords({ left: g.left + 1, top: (g.top + Math.min(g.bottom, g.top + 12 * scale)) / 2 + 1 }) : null;
       let pos = hit ? hit.pos : null;
       if (pos == null || pos <= start || pos >= blk.pos + blk.node.nodeSize - 1) {
         // posAtCoords missed: the first position whose caret sits at or below the line's top.

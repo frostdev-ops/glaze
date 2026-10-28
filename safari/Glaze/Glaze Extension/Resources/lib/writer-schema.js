@@ -71,7 +71,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   // after (pt), exactly or at-least line heights (pt), exact left and right indents (in, where the half-inch steps of
   // indent can't say it), its own tab stops ([position in, 'l' | 'c' | 'r' | 'd', leader]), keep with next, keep lines
   // together, and widow control off. They travel as one data-gz attribute, so only Writer's own HTML carries them.
-  const PAPER_ATTRS = ['before', 'after', 'exact', 'least', 'left', 'right', 'tabs', 'keepNext', 'keepLines', 'widow'];
+  const PAPER_ATTRS = ['dir', 'before', 'after', 'exact', 'least', 'left', 'right', 'tabs', 'keepNext', 'keepLines', 'widow'];
   const LEADERS = ['dot', 'hyphen', 'underscore', 'middleDot', 'heavy'];
   const blockAttrs = (paper) => paper
     ? { align: { default: null }, indent: { default: 0 }, line: { default: null }, first: { default: null }, ...Object.fromEntries(PAPER_ATTRS.map((k) => [k, { default: null }])) }
@@ -94,6 +94,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
         out.tabs = stops.length ? stops.sort((a, b) => a[0] - b[0]) : null;
       } else if (k === 'keep') { const w = v.split(/\s+/); if (w.includes('next')) out.keepNext = true; if (w.includes('lines')) out.keepLines = true; }
       else if (k === 'widow' && v === '0') out.widow = false;
+      else if (k === 'dir' && ['ltr', 'rtl'].includes(v)) out.dir = v;
     }
     return out;
   };
@@ -102,12 +103,13 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     a.tabs?.length ? `tabs:${a.tabs.map(([pos, kind, leader]) => `${pos}${kind}${leader ? `:${leader}` : ''}`).join(' ')}` : '',
     a.keepNext || a.keepLines ? `keep:${[a.keepNext ? 'next' : '', a.keepLines ? 'lines' : ''].filter(Boolean).join(' ')}` : '',
     a.widow === false ? 'widow:0' : '',
+    ['ltr', 'rtl'].includes(a.dir) ? `dir:${a.dir}` : '',
   ].filter(Boolean).join(';');
   const readBlock = (paper) => (dom) => {
     const a = { align: alignOf(dom), indent: indentOf(dom) };
     if (!paper) return { ...a, align: a.align === 'left' ? null : a.align };
     const left = inches(css(dom, 'margin-left'));
-    return { ...a, indent: a.indent || (left > 0 ? clamp(Math.round(left / 0.5), 0, MAX_INDENT) : 0), line: lineOf(dom), first: firstOf(dom), ...readGz(dom.getAttribute('data-gz')) };
+    return { ...a, dir: ['ltr', 'rtl'].includes(dom.getAttribute('dir')) ? dom.getAttribute('dir') : null, indent: a.indent || (left > 0 ? clamp(Math.round(left / 0.5), 0, MAX_INDENT) : 0), line: lineOf(dom), first: firstOf(dom), ...readGz(dom.getAttribute('data-gz')) };
   };
   // Indent and alignment as Quill's classes (so Quill's list counters and indents apply); paper's spacing inline.
   const blockDOM = (a) => {
@@ -117,7 +119,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       a.left != null ? `padding-left:${a.left}in` : '', a.right != null ? `padding-right:${a.right}in` : '',
       ['normal', 'bold'].includes(a.weight) ? `font-weight:${a.weight}` : '', ['normal', 'italic'].includes(a.slant) ? `font-style:${a.slant}` : ''].filter(Boolean).join(';');
     const gz = a.before !== undefined ? writeGz(a) : '';
-    return { class: cls || null, style: style || null, ...(gz ? { 'data-gz': gz } : {}) };
+    return { class: cls || null, style: style || null, ...(['ltr', 'rtl'].includes(a.dir) ? { dir: a.dir } : {}), ...(gz ? { 'data-gz': gz } : {}) };
   };
   // Word's highlighter colours.
   const HIGHLIGHT = { yellow: '#ffff00', green: '#00ff00', cyan: '#00ffff', magenta: '#ff00ff', blue: '#0000ff', red: '#ff0000', darkBlue: '#000080', darkCyan: '#008080', darkGreen: '#008000',
@@ -157,7 +159,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       toDOM: (n) => ['table', { 'data-borders': n.attrs.borders ? null : 'none' }, ['tbody', 0]] },
   });
   const make = (paper) => {
-    const levels = paper ? [1, 2, 3, 4] : [3, 4]; // Ultra starts headings at h3
+    const levels = paper ? [1, 2, 3, 4, 5, 6] : [3, 4]; // Ultra starts headings at h3
     const attrs = blockAttrs(paper), read = readBlock(paper);
     const nodes = {
       doc: paper ? { content: 'block+', attrs: { setup: { default: null }, paste: { default: null } } } : { content: 'block+' },
@@ -226,6 +228,11 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       underline: { parseDOM: [{ tag: 'u' }, { tag: 'ins' }, { style: 'text-decoration', getAttrs: (v) => /underline/.test(v) && null }], toDOM: () => ['u', 0] },
     };
     if (paper) {
+      marks.direction = {
+        attrs: { dir: {} },
+        parseDOM: [{ tag: 'span[dir]', getAttrs: (dom) => ['ltr', 'rtl'].includes(dom.getAttribute('dir')) ? { dir: dom.getAttribute('dir') } : false }],
+        toDOM: (m) => ['span', { dir: m.attrs.dir === 'rtl' ? 'rtl' : 'ltr' }, 0],
+      };
       marks.text_style = {
         attrs: { font: { default: null }, size: { default: null } },
         parseDOM: [{ tag: 'span', getAttrs: (dom) => { const font = fontOf(css(dom, 'font-family'), true), size = sizeOf(css(dom, 'font-size')); return font || size ? { font, size } : false; } }],
@@ -2645,6 +2652,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       for (const k of KEEP[kind] || []) if (a[k] != null) keep[k] = a[k];
       const cls = String(a.class || '').split(/\s+/).filter((c) => CLASS.test(c)).join(' ');
       if (cls) keep.class = cls;
+      if (o.paper && ['p', 'li', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(kind) && ['ltr', 'rtl'].includes(a.dir)) keep.dir = a.dir;
       if (a.style) keep.style = a.style;
       if (kind === 'a' && !href(keep.href)) delete keep.href;
       if (kind === 'img' && !(o.paper && imageSrc(keep.src))) {

@@ -683,7 +683,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     pill.addEventListener('click', () => (open?.opener === pill ? close() : menu(pill, presetMenu())));
     const STYLES = [['Body', () => { lift(); ed.run('heading', 0); ed.run('align', 'left'); }], ['Title', () => { lift(); ed.run('heading', 0); ed.run('align', 'center'); }],
-      ...[1, 2, 3, 4].map((n) => [t('Heading {n}', { n }), () => { lift(); ed.run('heading', n); }]), ['Block quote', () => { ed.run('heading', 0); PM.commands.wrapIn(view.state.schema.nodes.blockquote)(view.state, view.dispatch); }]];
+      ...[1, 2, 3, 4, 5, 6].map((n) => [t('Heading {n}', { n }), () => { lift(); ed.run('heading', n); }]), ['Block quote', () => { ed.run('heading', 0); PM.commands.wrapIn(view.state.schema.nodes.blockquote)(view.state, view.dispatch); }]];
     const lift = () => { while (ed.active().quote && PM.commands.lift(view.state, view.dispatch)); };
     block.addEventListener('click', () => (open?.opener === block ? close() : menu(block, STYLES.map(([label, run]) => ({ label: t(label), checked: blockName(ed.active()) === t(label), run: () => { run(); view.focus(); } })))));
     for (const b of [...marks, bullets, numbers]) b.addEventListener('click', () => { ed.run(b.dataset.run); view.focus(); });
@@ -948,7 +948,17 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       bar.setAttribute('data-open', '');
       const away = (e) => { if (!box.contains(e.target) && !bar.contains(e.target)) finishPart(true); };
       document.addEventListener('pointerdown', away, true);
-      box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finishPart(false); } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finishPart(true); } });
+      const partKeys = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finishPart(false); }
+        else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finishPart(true); }
+        else if (e.key === 'Tab') {
+          const all = [box, ...bar.querySelectorAll('button, input, select')].filter((x) => !x.disabled), at = all.indexOf(document.activeElement);
+          e.preventDefault();
+          all[(at + (e.shiftKey ? all.length - 1 : 1)) % all.length]?.focus();
+        }
+      };
+      box.addEventListener('keydown', partKeys);
+      bar.addEventListener('keydown', partKeys);
       editing = { kind, variant, sheet, box, bar, orig, away, title: () => titleBox.checked };
       box.focus();
       const sel = getSelection(), end = document.createRange();
@@ -1017,13 +1027,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const hooks = () => {
       globalThis.GZ_WRITER_OBJECTS?.toolbar?.({ editor: ed, paper: api, before: toolGrow, lists: numbers });
       const C = globalThis.GZ_WRITER_CITE;
-      if (C?.button) { const b = C.button({ editor: ed, paper: api }); if (b) { b.classList.add('gp-tbtn'); cite.replaceWith(b); } }
-      else if (C) cite.disabled = false;
+      cite.disabled = typeof C?.open !== 'function';
       if (C?.sourcesView) C.sourcesView(panes.sources, { editor: ed, paper: api, badge: (n) => { badges.sources.textContent = n ? nf(n) : ''; } });
       if (globalThis.GZ_WRITER_AI?.feedbackView) feedbackPanel = GZ_WRITER_AI.feedbackView(panes.feedback, { pageAt });
       submit.disabled = typeof GZ_WRITER_PAPER.submit !== 'function';
       fold();
     };
+    cite.addEventListener('click', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: cite }));
     submit.addEventListener('click', () => { if (typeof GZ_WRITER_PAPER.submit === 'function') GZ_WRITER_PAPER.submit(api); });
     for (const [id, tab] of Object.entries(tabs)) tab.addEventListener('click', () => {
       for (const [k, x] of Object.entries(tabs)) { x.setAttribute('aria-selected', String(k === id)); x.tabIndex = k === id ? 0 : -1; panes[k].hidden = k !== id; }

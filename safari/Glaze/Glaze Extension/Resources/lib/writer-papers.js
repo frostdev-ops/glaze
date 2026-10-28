@@ -76,7 +76,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     const index = async (paper) => {
       const list = (await get(INDEX)) || [];
       const row = { key: paper.key, title: paper.title || '', course: paper.courseName || '', url: paper.url || '', words: paper.words || 0, format: paper.format, updated: paper.updated, submitted: paper.submitted || null };
-      await store.set({ [INDEX]: [row, ...list.filter((r) => r.key !== paper.key)].slice(0, 2000) });
+      return [row, ...list.filter((r) => r.key !== paper.key)].slice(0, 2000);
     };
 
     // Saves the paper under k, merging patch into what's stored. reason: 'auto' (the default: autosave), 'submit',
@@ -86,22 +86,24 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       const prev = (await get(PAPER + k)) || null, t = now();
       const paper = { ...(prev || { key: k, created: t }), ...patch, key: k, updated: t, revision: (prev?.revision || 0) + 1 };
       if (patch.doc) paper.words = patch.words ?? measure(patch.doc).words;
-      let version = null;
+      let version = null, history = null;
+      const retain = async (v) => { history = await cap([v, ...(history || await versionsOf(k))]); return v; };
       const last = paper.lastVersion || 0;
-      if (reason === 'submit' && prev?.doc && patch.doc && base != null && base !== (prev.revision || 0) && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) await addVersion(k, snapshot(prev, 'conflict', t));
-      if (reason === 'submit') { version = await addVersion(k, snapshot(paper, 'submit', t)); paper.submitted = t; }
-      else if (prev?.doc && patch.doc && base != null && base !== (prev.revision || 0) && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) version = await addVersion(k, snapshot(prev, 'conflict', t));
-      else if ((reason === 'import' || reason === 'restore' || reason === 'format') && prev?.doc) version = await addVersion(k, snapshot(prev, reason, t));
+      if (reason === 'submit' && prev?.doc && patch.doc && base != null && base !== (prev.revision || 0) && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) await retain(snapshot(prev, 'conflict', t));
+      if (reason === 'submit') { version = await retain(snapshot(paper, 'submit', t)); paper.submitted = t; }
+      else if (prev?.doc && patch.doc && base != null && base !== (prev.revision || 0) && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) version = await retain(snapshot(prev, 'conflict', t));
+      else if ((reason === 'import' || reason === 'restore' || reason === 'format') && prev?.doc) version = await retain(snapshot(prev, reason, t));
       else if (prev?.doc && patch.doc) {
         const a = measure(prev.doc), b = measure(patch.doc);
         const big = Math.abs(a.words - b.words) >= CAP.words || Math.abs(a.chars - b.chars) >= CAP.share * Math.max(a.chars, b.chars, 500);
-        if (big) version = await addVersion(k, snapshot(prev, 'edit', t));
-        else if (t - last >= CAP.every && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) version = await addVersion(k, snapshot(paper, 'auto', t));
+        if (big) version = await retain(snapshot(prev, 'edit', t));
+        else if (t - last >= CAP.every && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) version = await retain(snapshot(paper, 'auto', t));
       }
-      if (!prev && patch.doc) version = await addVersion(k, snapshot(paper, 'start', t));
+      if (!prev && patch.doc) version = await retain(snapshot(paper, 'start', t));
       if (version) paper.lastVersion = t;
-      await store.set({ [PAPER + k]: paper });
-      await index(paper);
+      // One storage write publishes the document, history and index together. A quota refusal cannot evict
+      // a submitted version or expose a half-saved paper. The worker serializes this read/compute/write.
+      await store.set({ [PAPER + k]: paper, [INDEX]: await index(paper), ...(history ? { [VERSIONS + k]: history } : {}) });
       seen.set(k, paper.revision);
       return { paper, version };
     });

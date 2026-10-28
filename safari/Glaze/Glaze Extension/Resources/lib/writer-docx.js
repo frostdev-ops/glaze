@@ -53,6 +53,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       else if (m.bold === false) s += '<w:b w:val="0"/><w:bCs w:val="0"/>';
       if (mk('italic')) s += '<w:i/><w:iCs/>';
       else if (m.italic === false) s += '<w:i w:val="0"/><w:iCs w:val="0"/>';
+      if (m.direction) s += m.direction.dir === 'rtl' ? '<w:rtl/>' : '<w:rtl w:val="0"/>';
       if (mk('all_caps')) s += '<w:caps/>';
       if (mk('small_caps')) s += '<w:smallCaps/>';
       if (mk('strike')) s += '<w:strike/>';
@@ -68,7 +69,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     const textRun = (text, m, rStyle = '') => `<w:r>${runProps(m, rStyle ? `<w:rStyle w:val="${rStyle}"/>` : '')}${String(text).split(/(\t|\n)/).filter((x) => x !== '').map((x) => (x === '\t' ? '<w:tab/>' : x === '\n' ? '<w:br/>' : `<w:t xml:space="preserve">${esc(x)}</w:t>`)).join('')}</w:r>`;
     const image = (node) => {
       const m = /^data:image\/(png|jpeg|gif);base64,([a-z\d+/=]+)$/i.exec(node.attrs.src || '');
-      if (!m) return textRun(node.attrs.alt ? `[${node.attrs.alt}]` : '', {});
+      if (!m) throw new Error('This picture cannot be exported to Word.');
       const bytes = b64(m[2]);
       imageBytes += bytes.length;
       if (imageBytes > LIMIT.images) throw new RangeError('images too large');
@@ -138,6 +139,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         const attrs = [left !== base || (a.left != null && o2.style === 'Bibliography') ? ` w:left="${tw(left)}"` : '', a.right != null ? ` w:right="${tw(a.right)}"` : '', first != null ? (first < 0 ? ` w:hanging="${tw(-first)}"` : ` w:firstLine="${tw(first)}"`) : '', o2.cell && first == null ? ' w:firstLine="0"' : ''].join('');
         if (attrs) s += `<w:ind${attrs}/>`;
       }
+      if (a.dir) s += a.dir === 'rtl' ? '<w:bidi/>' : '<w:bidi w:val="0"/>';
       if (a.align) s += `<w:jc w:val="${JC[a.align] || 'left'}"/>`;
       return s ? `<w:pPr>${s}</w:pPr>` : '';
     };
@@ -180,7 +182,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       parent.forEach((node, _, index) => {
         const name = node.type.name, entry = parent === doc && list0 && index >= list0.from && index < list0.to;
         if (name === 'paragraph') out += para(node, { ...o2, style: o2.quote ? 'BlockQuote' : entry ? 'Bibliography' : '' });
-        else if (name === 'heading') out += para(node, { ...o2, heading: true, style: `Heading${Math.min(4, Math.max(1, node.attrs.level))}` });
+        else if (name === 'heading') out += para(node, { ...o2, heading: true, style: `Heading${Math.min(6, Math.max(1, node.attrs.level))}` });
         else if (name === 'bullet_list' || name === 'ordered_list') out += list(node, o2);
         else if (name === 'blockquote') out += blocks(node, { ...o2, quote: true }, depth + 1);
         else if (name === 'code_block') {
@@ -378,7 +380,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     };
     // A run's properties, including a heading's inherited emphasis.
     const runProps = (lv) => {
-      const r = { font: 'Times New Roman', size: 10, b: false, i: false, u: false, s: false, vert: '', color: '', highlight: '', hidden: false, caps: '' };
+      const r = { font: 'Times New Roman', size: 10, b: false, i: false, u: false, s: false, vert: '', color: '', highlight: '', hidden: false, caps: '', dir: null };
       for (const { p } of lv) {
         const rf = kid(p, 'rFonts');
         if (rf) { const th = at(rf, 'asciiTheme') || at(rf, 'hAnsiTheme'), name = th ? theme[/^major/.test(th) ? 'major' : 'minor'] : at(rf, 'ascii') || at(rf, 'hAnsi'); if (name) r.font = name; }
@@ -389,6 +391,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         const v = val(p, 'vertAlign'); if (v) r.vert = ['superscript', 'subscript'].includes(v) ? v : '';
         const c = kid(p, 'color'); if (c) r.color = /^[0-9a-f]{6}$/i.test(at(c, 'val')) && !/^0{6}$/.test(at(c, 'val')) ? at(c, 'val').toUpperCase() : '';
         const hl = kid(p, 'highlight'); if (hl) r.highlight = S().HIGHLIGHT[at(hl, 'val')] ? at(hl, 'val') : '';
+        const rtl = kid(p, 'rtl'); if (rtl) r.dir = on(rtl) ? 'rtl' : 'ltr';
         const hid = kid(p, 'vanish'); if (hid) r.hidden = on(hid);
         for (const [k, v] of [['caps', 'all'], ['smallCaps', 'small']]) { const n = kid(p, k); if (n) r.caps = on(n) ? v : r.caps === v ? '' : r.caps; }
       }
@@ -400,7 +403,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     // widow control (on unless turned off), contextual spacing and page break before.
     const KIND = { left: 'l', start: 'l', num: 'l', center: 'c', right: 'r', end: 'r', decimal: 'd' };
     const paraProps = (lv) => {
-      const r = { before: 0, after: 0, line: 240, rule: 'auto', left: 0, right: 0, first: 0, jc: '', tabs: new Map(), keepNext: false, keepLines: false, widow: true, contextual: false, breakBefore: false };
+      const r = { before: 0, after: 0, line: 240, rule: 'auto', left: 0, right: 0, first: 0, jc: '', tabs: new Map(), keepNext: false, keepLines: false, widow: true, contextual: false, breakBefore: false, dir: null };
       for (const { p } of lv) {
         const sp = kid(p, 'spacing');
         if (sp) {
@@ -414,6 +417,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
           if (right !== '') r.right = fin(right, 0, -31680, 31680);
           if (at(ind, 'hanging') !== '') r.first = -fin(at(ind, 'hanging'), 0, 0, 31680); else if (at(ind, 'firstLine') !== '') r.first = fin(at(ind, 'firstLine'), 0, 0, 31680);
         }
+        const bidi = kid(p, 'bidi'); if (bidi) r.dir = on(bidi) ? 'rtl' : 'ltr';
         const j = val(p, 'jc'); if (j) r.jc = { both: 'justify', distribute: 'justify', center: 'center', right: 'right', end: 'right', left: 'left', start: 'left' }[j] || 'left';
         for (const t of els(kid(p, 'tabs')).filter((x) => x.local === 'tab')) {
           const pos = fin(at(t, 'pos'), 0, 0, 31680), v = at(t, 'val');
@@ -479,6 +483,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       let h = inner;
       const font = r.font && r.font !== from.font ? r.font : null, size = r.size !== from.size ? r.size : null;
       if (font || size) h = `<span style="${[font ? `font-family:${font}` : '', size ? `font-size:${size}pt` : ''].filter(Boolean).join(';')}">${h}</span>`;
+      if (r.dir) h = `<span dir="${r.dir}">${h}</span>`;
       if (r.caps) h = `<span data-gz-caps="${r.caps}">${h}</span>`;
       if (r.highlight) h = `<span data-gz-highlight="${r.highlight}">${h}</span>`;
       if (r.color) h = `<span data-gz-color="${r.color}">${h}</span>`;
@@ -503,6 +508,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         return '';
       }
       if (name === 't') return ctx.skip ? '' : escH(node.kids.map((k) => k.text || '').join(''));
+      if (name === 'ins' || name === 'moveTo') warn('Tracked changes were accepted.');
       if (name === 'delText' || name === 'del' || name === 'moveFrom') { warn('Tracked changes were accepted.'); return ''; }
       if (name === 'tab' || name === 'ptab') return ctx.skip ? '' : '\t';
       if (name === 'br' || name === 'cr') return at(node, 'type') === 'page' ? BREAK : at(node, 'type') === 'column' ? '' : '<br>';
@@ -549,7 +555,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       const lv = levels(p, 'pPr'), r = paraProps(lv);
       if (r.contextual) { if (ctx.prev === style) r.before = 0; if (ctx.next === style) r.after = 0; }
       const html = (await Promise.all(els(p).filter((k) => k.local !== 'pPr').map((k) => inline(k, ctx)))).join('');
-      return { kind: 'p', r, style, heading: m ? Math.min(4, +m[1]) : 0, quote: /quote|block text/.test(name), list: listOf(lv.map((x) => x.p)), html, text: TEXT().decode(html.replace(/<[^>]*>/g, '')) };
+      return { kind: 'p', r, style, heading: m ? +m[1] : 0, quote: /quote|block text/.test(name), list: listOf(lv.map((x) => x.p)), html, text: TEXT().decode(html.replace(/<[^>]*>/g, '')) };
     };
     // A paragraph's attributes as the paper schema reads them: what Word gives it, less what the format gives a paragraph
     // there (a list entry, a quoted paragraph, a heading, body). → [style, data-gz].
@@ -562,6 +568,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (r.rule === 'exact') gz.exact = r2(r.line / 20);
       else if (r.rule === 'atLeast') gz.least = r2(r.line / 20);
       else { const line = r2(Math.min(4, Math.max(0.5, r.line / 240))); if (line !== set.line) css.push(`line-height:${line}`); }
+      if (r.dir) gz.dir = r.dir;
       if (r.before) gz.before = r2(r.before / 20);
       if (r2(r.after / 20) !== set.after) gz.after = r2(r.after / 20);
       if (!d.list) {
@@ -619,7 +626,10 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
           out.push(d);
           size += d.html.length;
         } else if (node.local === 'tbl') { const html = await tableHTML(node, ctx, depth); size += html.length; out.push({ kind: 'html', html }); }
+        else if (node.local === 'customXml') out.push(...await collect(els(node), ctx, depth + 1));
         else if (node.local === 'sdt') { const c = kid(node, 'sdtContent'); if (c) out.push(...await collect(els(c), ctx, depth + 1)); }
+        else if (node.local === 'ins' || node.local === 'moveTo') { warn('Tracked changes were accepted.'); out.push(...await collect(els(node), ctx, depth + 1)); }
+        else if (node.local === 'del' || node.local === 'moveFrom') warn('Tracked changes were accepted.');
         if (size > LIMIT.html) throw new RangeError('The document is too large.');
       }
       return out;
