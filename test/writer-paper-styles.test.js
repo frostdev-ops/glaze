@@ -14,7 +14,7 @@ test('MLA 9, APA 7 and Chicago 17 as their guides set them', () => {
   }
   assert.deepEqual([mla9.opening, mla9.header.text, mla9.list.title, mla9.title.bold], ['heading', 'name-page', 'Works Cited', false]);
   assert.deepEqual([apa7.opening, apa7.header.text, apa7.header.first, apa7.list.title, apa7.list.bold, apa7.title.bold], ['title-page', 'page', true, 'References', true, true]);
-  assert.deepEqual(apa7.headings.map((h) => [h.align, !!h.bold, !!h.italic]), [['center', true, false], ['left', true, false], ['left', true, true], ['left', true, false]]);
+  assert.deepEqual(apa7.headings.map((h) => [h.align, !!h.bold, !!h.italic]), [['center', true, false], ['left', true, false], ['left', true, true], ['left', true, false], ['left', true, true]]);
   assert.deepEqual([chicago17.header.first, chicago17.list.title, chicago17.notes.size, chicago17.list.line, chicago17.quote.line], [false, 'Bibliography', 10, 1, 1]);
 });
 
@@ -71,4 +71,13 @@ test('the list page: found by its title in any format, its entries up to the end
   assert.deepEqual(ST.listAt(FX.papers.apa7()), ST.listAt(S.paper.nodeFromJSON(FX.papers.apa7())), 'JSON and nodes alike');
   assert.equal(ST.listAt(S.parse(S.paper, '<p>Works Cited</p><p>x</p>')), null, 'only a centred title');
   assert.deepEqual(ST.blockBox(ST.FORMATS.chicago17, {}, { entry: true }), { line: 18.4, after: 16, before: 0 });
+});
+
+test('APA 7 has its fifth heading level: indented, bold italic, on screen and in Word', () => {
+  const ST = require('../lib/writer-styles.js'), f = ST.FORMATS.apa7;
+  assert.match(ST.css(f), / h5 \{[^}]*font-weight: 700; font-style: italic;[^}]*text-indent: 0\.5in/);
+  const h5 = /<w:style w:type="paragraph" w:styleId="Heading5">[\s\S]*?<\/w:style>/.exec(ST.stylesXML(f))?.[0] || '';
+  assert.match(h5, /<w:b( w:val="1")?\/>/);
+  assert.match(h5, /<w:i( w:val="1")?\/>/);
+  assert.match(h5, /w:firstLine="720"/);
 });
