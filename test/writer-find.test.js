@@ -144,3 +144,13 @@ test('replacing in later footnote paragraphs keeps its boundaries and correct te
   st = st.apply(FIND.replace(st, hits, 'result'));
   assert.equal(st.doc.firstChild.lastChild.attrs.content, '<p>First line<br>next.</p><p><em>Second result.</em></p>');
 });
+
+test('Find update receives the previous document state so decoration updates cannot restart search', (t) => {
+  const plugin = FIND.plugin(), before = stateOf(doc(para('target')), [plugin]);
+  const next = before.apply(before.tr.setMeta(FIND.key, { query: 'target', at: 0 }));
+  let previous;
+  const was = FIND.onUpdate; t.after(() => { FIND.onUpdate = was; });
+  FIND.onUpdate = (_view, old) => { previous = old; };
+  plugin.spec.view().update({ state: next }, before);
+  assert.ok(previous === before, 'the previous EditorState must reach the update hook');
+});
