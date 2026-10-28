@@ -55,6 +55,10 @@ const HARNESS = `(() => {
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
 
     ext = require('./check-env.js').staged(root, [`${site}/*`]);
+    if (process.env.WRITER_PAPER_SOURCE) {
+      const file = path.join(ext, 'writer-paper.js');
+      fs.rmSync(file); fs.writeFileSync(file, fs.readFileSync(process.env.WRITER_PAPER_SOURCE));
+    }
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: process.env.PAPER_DEBUG ? 2600 : 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);

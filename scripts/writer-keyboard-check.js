@@ -20,6 +20,7 @@ module.exports = async ({ p, fr, check, until }) => {
     check(true, `${label}: Tab, Shift+Tab and Escape work`);
   };
   await menu('.gp-pill', 'APA 7');
+  await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().format().id === 'apa7'), 'APA format saved');
   check(await fr.evaluate(() => GZ_WRITER_CITE.style() === 'apa7'), 'citations follow the selected paper format');
   await menu('.gp-pill', 'New preset'); await dismiss('.gp-form[aria-label="New preset…"]', 'New preset');
   await menu('.gp-more', 'Page setup'); await dismiss('.gp-page', 'Page setup');
