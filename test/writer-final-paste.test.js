@@ -80,3 +80,44 @@ test('A4: pasted text keeps its direction: a block\'s and a run\'s, from a page,
   assert.equal(docs.rich, false);
   assert.equal(paste('<html><body><p dir="rtl">مطابق</p></body></html>', { match: true }).firstChild.attrs.dir, 'rtl', 'direction is the text\'s, not formatting Match the paper takes away');
 });
+
+// ---- B20: several table cells selected
+const E = require('../lib/writer-editor.js');
+const cellsState = () => {
+  const base = E.state({ mode: 'paper', html: '<p>Before</p><table><tr><td><p>A1</p></td><td><p>B1</p></td></tr><tr><td><p>A2</p></td><td><p>B2</p></td></tr></table><p>After</p>' });
+  const cells = [];
+  base.doc.descendants((n, pos) => { if (n.type.name === 'table_cell') cells.push(pos); });
+  return base.apply(base.tr.setSelection(GZ_PM.tables.CellSelection.create(base.doc, cells[0], cells[3])));
+};
+const cellBlocks = (doc) => { const out = []; doc.descendants((n) => { if (n.type.name !== 'table_cell') return true; n.descendants((x) => { if (x.isTextblock) out.push(x); return !x.isTextblock; }); return false; }); return out; };
+const runCmd = (st, name, arg) => { let out = null; E.commands(S.paper)[name](arg)(st, (tr) => { out = st.apply(tr); }); return out; };
+
+test('B20: paragraph and run commands reach every selected cell', () => {
+  const st = cellsState();
+  assert.deepEqual(cellBlocks(runCmd(st, 'align', 'center').doc).map((n) => n.attrs.align), ['center', 'center', 'center', 'center']);
+  assert.deepEqual(cellBlocks(runCmd(st, 'paragraph', { before: 12 }).doc).map((n) => n.attrs.before), [12, 12, 12, 12]);
+  assert.deepEqual(cellBlocks(runCmd(st, 'lineSpacing', 2).doc).map((n) => n.attrs.line), [2, 2, 2, 2]);
+  assert.deepEqual(cellBlocks(runCmd(st, 'bulletList').doc).map((n) => n.type.name), ['list_item', 'list_item', 'list_item', 'list_item']);
+  assert.deepEqual(cellBlocks(runCmd(st, 'heading', 2).doc).map((n) => n.type.name), ['heading', 'heading', 'heading', 'heading']);
+  const red = runCmd(st, 'color', 'C00000');
+  assert.deepEqual(cellBlocks(red.doc).map((n) => n.firstChild.marks.map((m) => m.attrs.color)), [['C00000'], ['C00000'], ['C00000'], ['C00000']]);
+  assert.deepEqual(cellBlocks(runCmd(st, 'font', 'Arial').doc).map((n) => n.firstChild.marks.map((m) => m.attrs.font)), [['Arial'], ['Arial'], ['Arial'], ['Arial']]);
+  const cleared = runCmd(red.apply(red.tr.setSelection(GZ_PM.tables.CellSelection.create(red.doc, st.selection.$anchorCell.pos, st.selection.$headCell.pos))), 'clear');
+  assert.deepEqual(cellBlocks(cleared.doc).map((n) => n.firstChild.marks.length), [0, 0, 0, 0]);
+  // Outside the table nothing moves.
+  assert.equal(runCmd(st, 'align', 'center').doc.firstChild.attrs.align, null);
+});
+
+test('B20: Tab with several cells selected never replaces them', () => {
+  const st = cellsState();
+  let out = st;
+  E.bindings(S.paper).Tab(st, (tr) => { out = st.apply(tr); });
+  assert.deepEqual(cellBlocks(out.doc).map((n) => n.textContent), ['A1', 'B1', 'A2', 'B2']);
+  E.bindings(S.paper)['Shift-Tab'](st, (tr) => { out = st.apply(tr); });
+  assert.deepEqual(cellBlocks(out.doc).map((n) => n.textContent), ['A1', 'B1', 'A2', 'B2']);
+  // In a paragraph Tab still types a tab.
+  let one = E.state({ mode: 'paper', html: '<p>x</p>' });
+  one = one.apply(one.tr.setSelection(GZ_PM.state.TextSelection.create(one.doc, 1)));
+  E.bindings(S.paper).Tab(one, (tr) => { one = one.apply(tr); });
+  assert.equal(one.doc.textContent, '\tx');
+});
