@@ -5,10 +5,11 @@ const root = path.resolve(__dirname, '..'), D = require(path.join(root, 'default
 for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(path.join(root, `lib/${file}.js`));
 const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
-const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'sharing', 'mods', 'ai', 'backup', 'about'];
+const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'writer', 'sharing', 'mods', 'ai', 'backup', 'about'];
 const GROUP = { stream: 'pages/dashboard', docreview: 'pages/documents', auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'navigation/bar', navbar: 'navigation/bar', sidebar: 'navigation/sidebar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'pages/declutter', card: 'courses/cards', courses: 'courses/list', mods: 'backup/privacy', announce: 'pages/popups', popup: 'pages/popups', rubric: 'pages/popups' };
 const ENHANCE = {
-  'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'fold', 'previews', 'progress', 'newcontent', 'drafts', 'writer', 'writerUploads', 'download', 'place'],
+  'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'fold', 'previews', 'progress', 'newcontent', 'drafts', 'download', 'place'],
+  'writer/setup': ['writer', 'writerUploads'],
   'pages/shortcuts': ['palette', 'search', 'keys'],
   'pages/documents': ['docPages', 'toggles', 'docTheme', 'docInk', 'quizLight', 'titleScroll'],
   'courses/list': ['coursemenu'],
@@ -30,6 +31,10 @@ const OVERRIDE = {
   'extras.pointer': 'look/pointer', 'extras.pointerOn': 'look/pointer', 'extras.pointerAnim': 'look/pointer',
   ...Object.fromEntries(['radius', 'glass', 'depth', ...Object.keys(D.GZ_SPEC.look).filter((k) => /^(surface|shadow)/.test(k))].map((k) => [`look.${k}`, 'look/surfaces'])),
   ...Object.fromEntries(Object.entries(ENHANCE).flatMap(([section, keys]) => keys.map((key) => [`enhance.${key}`, section]))),
+  // Settings → Writer: its sections by what each changes.
+  ...Object.fromEntries([['papers', ['format', 'zoom', 'ruler', 'versions']], ['typing', ['autocorrect.typos', 'autocorrect.capitalI', 'autocorrect.doubles', 'autocorrect.smart', 'pasteAsk']],
+    ['proofing', ['proofing', 'dialect']], ['discussions', ['compose.markdown', 'compose.target', 'compose.quote']], ['submitting', ['submit.rememberText']]]
+    .flatMap(([section, keys]) => keys.map((key) => [`writer.${key}`, `writer/${section}`]))),
   ...Object.fromEntries(['icsDue', 'icsTasks', 'icsPlan', 'icsGs', 'icsClasses', 'icsRange'].map((key) => [`todo.${key}`, 'study/schedule'])),
 };
 // These are real existing picker/group carriers, not invented inputs for internal bookkeeping or storage IDs.
@@ -51,6 +56,7 @@ const ACTIONS = {
   'courses/cards': ['card-set', 'card-set-clear'], 'courses/list': ['course-list', 'org-list'], 'study/pet': ['pet-library'],
   'sharing/sessions': ['ss-status', 'ss-resume', 'ss-pause', 'ss-refresh', 'ss-sessions', 'ss-name', 'ss-title', 'ss-kind', 'ss-sources', 'ss-expire', 'ss-create', 'ss-invite', 'ss-join'],
   'sharing/calendar': ['gcal', 'gcal-connect', 'gcal-code', 'gcal-link', 'gcal-reconnect', 'gcal-share', 'gcal-disconnect', 'gcal-pair', 'gcal-id', 'gcal-copy'],
+  'writer/papers': ['writer-paper-list', 'writer-clear-all'], 'writer/proofing': ['writer-words', 'writer-words-clear'],
   'backup/privacy': ['export', 'import-btn', 'import', 'reset-all'], 'about/glaze': ['report-link', 'news', 'news-close'],
 };
 // Each section's everyday controls stay in view; the rest sit in its "More options" (details.more). Keys and action IDs listed
@@ -104,8 +110,11 @@ const byId = (id) => nodes.filter((n) => n.attrs.id === id);
 const owner = (node) => [node, ...node.parents.toReversed()].find((n) => n.attrs['data-editor-section'])?.attrs['data-editor-section'] || (node.parents.some((n) => n.tag === 'header') ? 'header' : undefined);
 const preview = (node) => [node, ...node.parents].some((n) => n.attrs.id === 'preview' || (n.attrs.class || '').split(/\s+/).includes('preview'));
 const schema = { ...D.GZ_SPEC, card: cards.SPEC };
+// A group's settings (defaults.js GZ_GROUP) each have their own control; writer.submit.text is the submit sheet's own.
+const FRAME_ONLY = ['writer.submit.text'];
 const expected = [
-  ...Object.entries(schema).flatMap(([group, keys]) => Object.keys(keys).map((key) => `${group}.${key}`)),
+  ...Object.entries(schema).flatMap(([group, keys]) => Object.entries(keys).flatMap(([key, [, rule]]) => (rule && typeof rule === 'object' && !Array.isArray(rule)
+    ? Object.keys(rule).map((k) => `${group}.${key}.${k}`) : [`${group}.${key}`]))).filter((key) => !FRAME_ONLY.includes(key)),
   ...Object.keys(D.GZ_DEFAULTS.courses).map((key) => `courses.${key}`), ...D.GZ_COLORS.map(([key]) => `colors.${key}`),
   'enabled', 'footer', 'preset', 'presets',
 ];
@@ -376,7 +385,7 @@ test('IA: power-user sections are marked, and All settings is a local switch in 
   const all = byId('editor-all');
   assert.equal(all.length, 1); assert.equal(all[0].attrs.type, 'checkbox'); assert.ok(Object.hasOwn(all[0].attrs, 'data-local'));
   assert.ok(all[0].parents.some((n) => n.tag === 'header'));
-  assert.deepEqual(nodes.filter((n) => Object.hasOwn(n.attrs, 'data-no-preview')).map((n) => n.attrs['data-editor-panel']), ['sharing', 'mods', 'ai', 'backup', 'about']);
+  assert.deepEqual(nodes.filter((n) => Object.hasOwn(n.attrs, 'data-no-preview')).map((n) => n.attrs['data-editor-panel']), ['writer', 'sharing', 'mods', 'ai', 'backup', 'about']);
 });
 
 test('IA: one navigation section swaps its body on Glaze navigation, with one logo picker after both', () => {

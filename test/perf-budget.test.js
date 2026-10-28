@@ -233,8 +233,9 @@ const SYLLABUS_DOCS = 48 + 61;
 const WRITER = 24 + 409 + 134 + 728 + 61 + 279;
 // Settings → Writer (the brief's ask that every Writer part read one synced `writer` key from defaults.js; a named raise under
 // the owner's 2026-10-19 approval): defaults.js's writer group and its group rule, 1089 bytes on every site, where content.js
-// reads every GZ_DEFAULTS key (features/writer-quote.js reads writer.compose.quote). Measured against 66c7f370.
-const WRITER_SETTINGS = 1089;
+// reads every GZ_DEFAULTS key (features/writer-quote.js reads writer.compose.quote); lib/i18n.js's English plural for its
+// "1 paper", 62. Measured against 66c7f370.
+const WRITER_SETTINGS = 1089 + 62;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;

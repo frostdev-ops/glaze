@@ -150,7 +150,7 @@ test('Settings → Writer: its own tab and six sections, the two switches first,
   for (const k of leaves(D.GZ_DEFAULTS.writer, 'writer').filter((k) => k !== 'writer.submit.text')) assert.ok(keys.includes(k), k);
   // Every switch explains itself in its info popover, as the existing two do; nothing else under it.
   for (const k of keys) assert.match(panel, new RegExp(`data-key="${k.replace(/\./g, '\\.')}"[^>]*aria-describedby="info-${k.replace(/\./g, '-')}"`), `${k} has its info popover`);
-  for (const id of ['writer-papers', 'writer-clear-all', 'writer-words', 'writer-words-clear']) assert.match(panel, new RegExp(`id="${id}"`), id);
+  for (const id of ['writer-paper-list', 'writer-clear-all', 'writer-words', 'writer-words-clear']) assert.match(panel, new RegExp(`id="${id}"`), id);
   assert.match(html, /<dialog id="writer-clear"/);
   assert.match(html, /<script src="lib\/editor-writer\.js"><\/script>/);
 });
@@ -198,4 +198,16 @@ test('dialect: the worker builds Harper in the dialect asked for, and switches a
   assert.deepEqual(set, [2], 'switched to Australian; one it does not know is refused');
   send({ op: 'stats', id: 2 }); await flush();
   assert.equal(p.got.find((m) => m.op === 'stats').dialect, 'en-AU');
+});
+
+test('papers by course, from the paper index; the dictionary as kept', () => {
+  const WE = require('../lib/editor-writer.js');
+  const rows = [
+    { key: 'bb.school.test|_9_1|_101_1|_7_1', course: 'ENG 101' }, { key: 'bb.school.test|_9_1|_101_1|_8_1', course: '' },
+    { key: 'bb.school.test|_9_1|_202_1|_7_1', course: 'HIS 210' }, { key: 'broken' }, null,
+  ];
+  assert.deepEqual(WE.byCourse(rows).map((c) => [c.name, c.keys.length]), [['ENG 101', 2], ['HIS 210', 1]]);
+  assert.deepEqual(WE.byCourse([{ key: 'bb.school.test|_9_1|_303_1|_1_1' }])[0].name, '_303_1', 'a course with no name shows its id');
+  assert.deepEqual(WE.words(['a', 3, '', ' ', 'B']), ['a', 'B']);
+  assert.deepEqual(WE.FORMATS, require('../lib/writer-styles.js').IDS.map((id) => [id, require('../lib/writer-styles.js').FORMATS[id].label]));
 });
