@@ -179,3 +179,15 @@ test('a list through a numbering style (numStyleLink) and a level its instance o
   assert.deepEqual(lists(got.node), want);
   assert.deepEqual(lists((await imp(X.exportDocx(got.node).bytes)).node), want, 'and back through export');
 });
+
+test('a page break inside a list item is a page break; the list goes on numbering after it', async () => {
+  const numbering = `<w:numbering ${NSW}><w:abstractNum w:abstractNumId="1">${lvlX(0, 'upperRoman', '%1.')}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num></w:numbering>`;
+  const li = (inner) => `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>${inner}</w:p>`, br = '<w:r><w:br w:type="page"/></w:r>';
+  const end = await imp(pack(li(r('One') + br) + li(r('Two')), { 'word/numbering.xml': numbering }));
+  assert.equal(shape(end.node), '"One" BREAK "Two"');
+  assert.deepEqual(lists(end.node), ['ordered_list(upper-roman) One', 'ordered_list(upper-roman,continued) Two']);
+  const mid = await imp(pack(li(r('One') + br + r('and more')) + li(r('Two')), { 'word/numbering.xml': numbering }));
+  assert.equal(shape(mid.node), '"One" BREAK "and more" "Two"');
+  assert.deepEqual(lists(mid.node), ['ordered_list(upper-roman) One', 'ordered_list(upper-roman,continued) Two'], 'the text after the break is the item\'s, unnumbered');
+  assert.equal(nodes(mid.node, 'hard_break').length, 0);
+});
