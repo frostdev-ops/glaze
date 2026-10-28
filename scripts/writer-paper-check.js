@@ -360,6 +360,9 @@ const HARNESS = `(() => {
     await papers.click('.gp-paper a');
     await until(() => papers.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0), 'paper opened in papers.html');
     check(await papers.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('A sentence typed before the reload.') && !document.querySelector('.gp-submit')), 'papers.html opens the paper in the same chrome (no Submit)');
+    check(await papers.evaluate(() => !!document.querySelector('.gr-ruler') && !!document.querySelector('.gzo-insert') && !!GZ_WRITER_PASTE?.before && !!GZ_WRITER_FIND && !!GZ_WRITER_COUNTS && !!GZ_WRITER_PRINT), 'papers.html loads the ruler, object tools, rich paste, Find, counts and print');
+    await papers.evaluate(() => GZ_WRITER_PAPER.current().editor.view.pasteHTML('<p><span style="color:#c00000">Standalone rich paste</span></p>'));
+    check(await papers.evaluate(() => { let kept = false; GZ_WRITER_PAPER.current().editor.view.state.doc.descendants((n) => { if (n.isText && n.text.includes('Standalone rich paste')) kept = n.marks.some((m) => m.type.name === 'color' && m.attrs.color === 'C00000'); }); return kept; }), 'papers.html keeps formatting through the same rich paste path');
     await papers.click('.gp-status button:last-child');
     await until(() => papers.evaluate(() => document.querySelectorAll('.gp-versions .gp-mi').length > 0), 'versions');
     check(true, 'Versions lists saved versions');
