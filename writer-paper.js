@@ -619,7 +619,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       return new Map(await Promise.all([...sources].map(async (src) => [src, savedPictures.get(src) || await refOf(src)])));
     };
     const keepPictures = async (json) => { const turn = ++pictureTurn, m = await pictureRefs(json); if (turn === pictureTurn) savedPictures = m; };
-    // The copy rec of paper k with its pictures back, from the paper as saved (from), else its versions; null if one is gone.
+    // Complete the unsaved copy from the paper or its versions. A deleted picture becomes a named placeholder;
+    // its absence must never discard the student's unsaved text.
     const complete = async (rec, k, from) => {
       const found = new Map(), add = async (doc) => {
         for (const [src, ref] of await pictureRefs(doc)) {
@@ -638,7 +639,17 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const done = fill();
       if (done || !k) return done;
       for (const v of await store.versions(k)) await add((await store.version(k, v.id))?.doc);
-      return fill();
+      const whole = fill();
+      if (whole) return whole;
+      const recover = (n) => {
+        if (n?.type === 'image' && n.attrs?.src?.startsWith(SAVED)) {
+          const src = found.get(n.attrs.src);
+          return src ? { ...n, attrs: { ...n.attrs, src } } : { type: 'text', text: `[${n.attrs.alt || t('Image')}]` };
+        }
+        return Array.isArray(n?.content) ? { ...n, content: n.content.map(recover) } : n;
+      };
+      toast(t('Some pictures, objects or equations were left out.'));
+      return { ...rec, doc: recover(rec.doc) };
     };
     const emergency = () => {
       try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(slotOf(key), JSON.stringify({ key, record: r, base: paper?.revision ?? 0 })); sessionSafe = true; }
