@@ -3,7 +3,8 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 const L = require('../../lib/writer-submit.js');
-module.exports = ({ listed = true, enabled = true, worker } = {}) => {
+// settings: what the module reads through GZ_CTX (enhance.writerUploads catches Ultra's own file area).
+module.exports = ({ listed = true, enabled = true, worker, settings = null } = {}) => {
   const doc = { activeElement: null }, sent = [], uploads = [], clicks = [], timers = new Map();
   doc.root = new El('html', doc); doc.documentElement = doc.root;
   doc.body = parse(fs.readFileSync(path.join(__dirname, '../fixtures/ultra-writer-attempt.html'), 'utf8'), doc);
@@ -29,6 +30,7 @@ module.exports = ({ listed = true, enabled = true, worker } = {}) => {
     Date: class extends Date { static now() { return clock; } },
     setTimeout: (fn, ms) => { timers.set(++id, { fn, ms }); return id; }, clearTimeout: (n) => timers.delete(n),
     DataTransfer: class { constructor() { this.files = []; this.items = { add: (f) => this.files.push(f) }; } },
+    DragEvent: class { constructor(type, o = {}) { Object.assign(this, o, { type }); } },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_ULTRA: { kindOf: () => 'assignment' },
     chrome: { runtime: { sendMessage: worker || (async () => ({ ok: true })) } },
   });
@@ -39,7 +41,7 @@ module.exports = ({ listed = true, enabled = true, worker } = {}) => {
   input.dispatchEvent = (e) => { for (const l of input.listeners.filter((x) => x.type === e.type)) l.f({ type: e.type, target: input }); return true; };
   vm.runInContext(fs.readFileSync(process.env.WRITER_SUBMIT_SOURCE || path.join(__dirname, '../../features/writer-submit.js'), 'utf8'), ctx);
   const ok = () => owned;
-  const hear = (m) => ctx.GZ_WRITER_SUBMIT.hear(box, m, {}, ok);
+  const hear = (m) => ctx.GZ_WRITER_SUBMIT.hear(box, m, settings ? { settings: () => settings } : {}, ok);
   hear({ type: 'submit:arm' });
   const flush = async () => { for (let i = 0; i < 15; i++) await new Promise(setImmediate); };
   const tick = async (ms = 1000) => { clock += ms; for (const [n, t] of [...timers]) { timers.delete(n); t.fn(); } await flush(); };
