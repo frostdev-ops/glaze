@@ -350,6 +350,7 @@ const STYLE_READS = [
   ['lib/writer-ultra.js', "querySelectorAll('*')", 1], // Only the recognized Quill body at takeover or after a foreign edit; mounted boxes are skipped on observer passes.
   ['features/rubric.js', 'getComputedStyle(a.box)', 1], // One recognized rubric section's padding and font per layout pass; no descendant sweep.
   ['features/writer.js', 'getComputedStyle(html)', 1], // The root's Look tokens, when a Writer box opens or <html>'s Look attributes change.
+  ['lib/writer-paginate.js', 'getComputedStyle(view.dom)', 1], // One editor root per batched layout pass: its fractional width gives the exact zoom without a descendant sweep.
   ['lib/editor.js', 'getComputedStyle(doc.documentElement)', 1], // One root direction read per category keypress, never on scroll or an LMS page.
   ['lib/scene-host.js', 'getComputedStyle(c)', 1], // only direct siblings of the course/routed shell, when deciding whether it covers visible content
   ['features/coursemenu.js', 'getComputedStyle(g)', 1], // WP-N2: only the focused roving group, once per horizontal arrow key
