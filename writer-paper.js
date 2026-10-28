@@ -1247,7 +1247,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const d = ctx.assignment?.due || paper?.due;
       due.textContent = d && Number.isFinite(Date.parse(d)) ? t('Due {when}', { when: new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(d)) }) : '';
     };
-    let loading = null, recovered = false;
+    // made: this frame made the paper from the format's opening and nothing is written in it yet.
+    let loading = null, recovered = false, made = false;
     const load = () => (loading ||= (async () => {
       key = host.key || PA.keyOf(ctx.paper || {}) || recoveryKey;
       paper = await store.get(key);
@@ -1264,6 +1265,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         // A new paper: the format's opening and list page around what Ultra's box already held. Under a stand-in key it is
         // saved once something is written in it.
         setDoc(F.template(format, values(), initialBody), true);
+        made = true;
         if (key !== recoveryKey) await save('auto');
       }
       initializing = false;
@@ -1286,6 +1288,19 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       ctx = c && typeof c === 'object' ? c : {};
       head();
       const target = host.key || PA.keyOf(ctx.paper || {});
+      // A paper made before the page named its student, course and assignment takes them into its opening.
+      if (target && key === target) (async () => {
+        await loading;
+        if (!made || edits || key !== target) return;
+        const next = F.template(format, values(), initialBody);
+        if (S.paper.nodeFromJSON(next).eq(view.state.doc)) return;
+        initializing = true;
+        setDoc(next, true);
+        initializing = false;
+        counts(); runChecks(); outlineDraw();
+        dirty = true;
+        await save();
+      })().catch((e) => { console.error(e); setState('Not saved'); });
       if (target && key === recoveryKey) (async () => {
         await loading;
         if (key !== recoveryKey) return;
