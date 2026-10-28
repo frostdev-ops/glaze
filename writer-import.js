@@ -92,10 +92,10 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
   };
   // Where a brought file goes. A sheet already submitting keeps going; one only open gives way to the new file.
   const bring = async (api, file) => {
-    if (!api || !file || SHEET()?.busy()) return;
+    if (!api || !file || api.importing?.() || SHEET()?.busy()) return;
     const request = ++requests;
     await P().need(['lib/writer-submit.js']);
-    if (request !== requests || P()?.current() !== api || SHEET()?.busy()) return;
+    if (request !== requests || P()?.current() !== api || api.importing?.() || SHEET()?.busy()) return;
     const error = L().fileError(file);
     if (error) { api.notify?.(error); return; }
     SHEET()?.close();

@@ -82,11 +82,11 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     if (s.back?.isConnected) s.back.focus();
   };
   const open = async (api = P()?.current(), file = null) => {
-    if (!api || frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
+    if (!api || api.importing?.() || frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
     if (sheet) { sheet.first.focus(); return; }
     const opening = ++openings;
     await P().need(['lib/writer-submit.js']);
-    if (sheet || opening !== openings || P()?.current() !== api || frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
+    if (sheet || opening !== openings || P()?.current() !== api || api.importing?.() || frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
     if (file) { const error = L().fileError(file); if (error) { api.notify?.(error); return; } }
     globalThis.GZ_WRITER_IMPORT?.close();
     const ctx = api.context() || {}, paper = api.paper() || {}, view = api.editor.view;

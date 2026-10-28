@@ -632,18 +632,30 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       } catch (e) { console.error(e); toast(t('The .docx could not be made.')); }
     };
     // The paper becomes the Word file's text, what it held kept as a version first; the toast's Undo brings that back.
+    let importing = false;
     const importFile = async (f) => {
-      if (!f) return;
-      const editable = view.props.editable;
-      let replacing = false, before = null;
+      if (!f || importing) return;
+      importing = true;
+      const editable = view.props.editable, inert = root.inert;
+      const snapshot = { key, doc: view.state.doc, format };
+      const here = () => root.isConnected && current === api && key === snapshot.key && view.state.doc === snapshot.doc && format === snapshot.format;
+      root.inert = true; view.setProps({ editable: () => false });
+      let before = null;
       try {
+        if (!Number.isSafeInteger(f.size) || f.size <= 0 || f.size > 15e6) throw new RangeError('Choose a Word file smaller than 15 MB.');
         await need(DOCX);
-        const r = await GZ_WRITER_DOCX.importDocx(new Uint8Array(await f.arrayBuffer()), { format });
+        if (!here()) return;
+        const bytes = await f.arrayBuffer();
+        if (!here()) return;
+        if (!(bytes instanceof ArrayBuffer) || bytes.byteLength !== f.size) throw new Error('invalid file read');
+        const r = await GZ_WRITER_DOCX.importDocx(new Uint8Array(bytes), { format });
+        if (!here()) return;
         const doc = S.parse(S.paper, r.html);
-        replacing = true; root.inert = true; view.setProps({ editable: () => false });
         if (key) {
           if (!await save()) throw new Error('paper could not be saved before import');
+          if (!here()) return;
           const saved = await store.save(key, { ...record(), doc: doc.toJSON() }, { reason: 'import' });
+          if (!here()) return;
           paper = saved.paper;
           before = saved.version;
         }
@@ -654,7 +666,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         const message = e instanceof RangeError && ['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.'].includes(e.message) ? e.message : 'That file could not be read as a Word document.';
         toast(t(message));
       }
-      finally { if (replacing) { root.inert = false; view.setProps({ editable }); view.focus(); } }
+      finally { importing = false; root.inert = inert; view.setProps({ editable }); if (root.isConnected && current === api) view.focus(); }
       return before;
     };
     file.addEventListener('change', () => { bring(file.files[0]); file.value = ''; });
@@ -734,7 +746,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     setState('');
     const api = {
       editor: ed, key: () => key, format: () => format, paper: () => paper, context: () => ctx,
-      docx, save, notify: (message) => toast(t(message)), version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom, importFile,
+      docx, save, notify: (message) => toast(t(message)), version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom, importFile, importing: () => importing,
       // Nothing written past the format's opening yet (an import then needs no word about the paper it replaces).
       blank: () => view.state.doc.textContent.trim() === S.paper.nodeFromJSON(F.template(format, values())).textContent.trim(),
       // The page ended Focus (a click on its dim).
