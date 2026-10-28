@@ -1,0 +1,48 @@
+/* Glaze Writer's editing tools (writer-find.js, writer-counts.js, writer-print.js) as glaze-plans/writer/mockups/edit draws
+   them, in the Look's tokens, on writer.css's popovers (.pop: they scale in and fade, they go at once). Matches are marked
+   amber: on a paper's white page in paper colours, in a compose box in the Look's warning colour. */
+
+/* The find bar: inside the compose box's top right; over a paper's pages, under its toolbar. */
+.ge-find { top: 8px; right: 8px; z-index: 3; width: min(440px, calc(100vw - 16px)); padding: 6px; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 6px; transform-origin: top right; }
+.ge-find.ge-fixed { position: fixed; z-index: 5; }
+.ge-tg { grid-row: 1 / span 2; align-self: start; width: 28px; height: 30px; border-radius: 7px; display: grid; place-items: center; color: var(--gz-ink-muted); }
+.ge-tg svg { transition: transform var(--t) ease-out; }
+.ge-tg[aria-expanded="true"] svg { transform: rotate(90deg); }
+.ge-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ge-field { flex: 1; min-width: 0; display: flex; align-items: center; height: 30px; padding: 0 8px; border: 1px solid var(--gz-line-strong); border-radius: 7px; background: var(--card); cursor: text; }
+.ge-field:focus-within { border-color: var(--gz-accent); }
+.ge-in { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--gz-ink); font: inherit; font-size: 13px; outline: none; }
+.ge-in::placeholder { color: var(--gz-ink-faint); }
+.ge-count { color: var(--gz-ink-muted); font-size: 12px; white-space: nowrap; padding-inline-start: 8px; font-variant-numeric: tabular-nums; }
+.ge-ib { width: 30px; height: 30px; flex: none; border-radius: 7px; display: grid; place-items: center; color: var(--gz-ink-muted); font-size: 12px; font-weight: 700; }
+.ge-ib:hover, .ge-tg:hover { background: var(--gz-line); color: var(--gz-ink); }
+.ge-ib[aria-pressed="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
+.ge-ww { text-decoration: underline; text-underline-offset: 3px; }
+.ge-sepv { width: 1px; height: 18px; flex: none; background: var(--gz-line-strong); margin: 0 2px; }
+.ge-sb { height: 30px; flex: none; padding: 0 10px; border-radius: 7px; font-size: 12px; font-weight: 600; border: 1px solid var(--gz-line-strong); color: var(--gz-ink); white-space: nowrap; }
+.ge-sb:hover { background: var(--gz-line); }
+.ge-find button:focus-visible, .ge-count-btn:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+
+/* Matches */
+.ge-hit { background: color-mix(in srgb, var(--gz-warn) 30%, transparent); border-radius: 2px; }
+.ge-hit.ge-cur { background: color-mix(in srgb, var(--gz-warn) 62%, transparent); box-shadow: 0 0 0 1.5px var(--gz-warn); }
+.gp-flow .ge-hit { background: #fde68a; }
+.gp-flow .ge-hit.ge-cur { background: #fbbf24; box-shadow: 0 0 0 1.5px #b45309; }
+::highlight(ge-note) { background-color: #fbbf24; color: #111; }
+
+/* The word count and its popover */
+.ge-count-btn { cursor: pointer; border-radius: 6px; padding: 2px 6px; margin: -2px -6px; }
+.ge-count-btn:hover, .ge-count-btn[aria-expanded="true"] { background: var(--gz-line); color: var(--gz-ink); }
+.ge-counts { position: fixed; z-index: 5; width: 300px; max-width: calc(100vw - 8px); padding: 12px 14px; transform-origin: bottom left; outline: none; }
+.ge-counts h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--gz-ink); }
+.ge-counts table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.ge-counts th { text-align: end; font-weight: 500; color: var(--gz-ink-faint); font-size: 12px; padding: 0 0 4px 12px; }
+.ge-counts td { padding: 4px 0; color: var(--gz-ink-muted); border-top: 1px solid var(--gz-line); }
+.ge-counts td + td { text-align: end; color: var(--gz-ink); padding-inline-start: 12px; white-space: nowrap; }
+.ge-counts td.ge-sel { color: var(--gz-accent-hi); }
+
+.ge-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+@media print {
+  .ge-hit, .ge-hit.ge-cur { background: none !important; box-shadow: none !important; }
+}

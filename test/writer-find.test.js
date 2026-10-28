@@ -62,11 +62,13 @@ test('never across a paragraph, a hard break or a note mark', () => {
 
 test('inside tables and footnotes, a note\'s match at its mark', () => {
   const st = stateOf(FX.papers.chicago17());
+  // In the first note and in the bibliography.
   const hits = FIND.search(st.doc, 'Knopf', {});
-  assert.equal(hits.length, 1);
-  assert.ok(hits[0].note, 'the match is in a note');
+  assert.equal(hits.length, 2);
+  assert.ok(hits[0].note && !hits[1].note, 'the first match is in a note');
   assert.equal(st.doc.nodeAt(hits[0].from).type.name, 'footnote_ref');
   assert.equal(hits[0].to, hits[0].from + 1);
+  assert.equal(st.doc.textBetween(hits[1].from, hits[1].to), 'Knopf');
   // Body and note matches in one order: "Beloved" in the text, then in the note after it.
   const all = FIND.search(st.doc, 'Beloved', { cs: true });
   for (let i = 1; i < all.length; i++) assert.ok(all[i].from >= all[i - 1].from);
