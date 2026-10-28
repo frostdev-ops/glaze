@@ -88,10 +88,11 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
         const back = await GZ_WRITER_DOCX.importDocx(out.bytes);
         let note;
         GZ_WRITER_SCHEMA.paper.nodeFromJSON(back.doc).descendants((n) => { if (n.type.name === 'footnote_ref') note = n.attrs.content; });
-        return { note, breaks: document.querySelectorAll('.gp-sheet .gp-notes br').length };
+        const body = document.querySelector('.gp-sheet .gp-notes p');
+        return { note, lines: body.getBoundingClientRect().height / api.view.scale() / parseFloat(getComputedStyle(body).lineHeight) };
       });
       assert.equal(result.note, '<p>Edited first.</p><p>Second line<br>Still second.</p>');
-      assert.ok(result.breaks >= 3, 'paragraph and line breaks are drawn at the page foot');
+      assert.ok(Math.abs(result.lines - 3) < .1, `notes use three lines, as Word does, with no extra blank line (${result.lines})`);
       await p.close();
     });
     await run('round4-header-export', async () => {
