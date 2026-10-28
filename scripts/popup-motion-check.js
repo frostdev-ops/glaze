@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
 const env = require('./check-env.js');
 const out = path.resolve(process.argv[2] || '/tmp/glaze-genie');
-const lock = env.lockPath();
+const lock = require('./check-env.js').lockPath();
 let browser, held = false, checks = 0;
 const ok = (value, label) => { assert.ok(value, label); checks++; console.log(`ok ${label}`); };
 

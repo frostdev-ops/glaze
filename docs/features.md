@@ -59,7 +59,7 @@ Notes **Back up or restore** opens **Settings → Privacy and data → Backup an
   A temporary animation startup failure gets two automatic retries. Failed module loads use fresh
   addresses so the browser can recover from a cached failure. Changing the background or turning
   Glaze off and on permits another attempt; refused shaders and missing media keep their fallback.
-- **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
+- **Motion** — Expressive by default, with Subtle and Off available. Existing profiles move to Expressive once on update, preserving Off and any choices made afterward. Reduced-motion users get Off automatically.
 - **Course colors** — every course its own color, from Ultra's stripes blended into your palette or set one by one, on course pages, Messages, Grades and the calendar.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
 - **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade and new-content badges, a what-if grade calculator that keeps your scores, a Ctrl+K command palette for courses, items, pages, settings and what's due this week (also in the popup) that also searches your courses on Canvas and Ultra, remembering your position in Canvas Modules, a backup of what you type in Blackboard's editors, Download all, which saves a folder's files as one zip, and focus mode for course documents (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts, dark documents (dimmed or inverted) and hiding page parts you don't use (off by default).

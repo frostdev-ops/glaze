@@ -82,7 +82,7 @@ const GZ_SPEC = {
   navbar: { on: [true, 'bool'], place: ['rail', ['rail', 'top']], style: ['float', ['float', 'embed']], rail: ['auto', ['auto', 'open', 'icons']],
     course: ['same', ['same', 'icons', 'top', 'hide']], cmenu: [true, 'bool'], tabs: [true, 'bool'], peek: [true, 'bool'], badges: [true, 'bool'], brand: ['glaze', ['glaze', 'school', 'custom', 'none']] },
   motion: {
-    level: ['subtle', ['off', 'subtle', 'expressive']],
+    level: ['expressive', ['off', 'subtle', 'expressive']],
     followSystem: [true, 'bool'],
     enter: [true, 'bool'],
     hover: [true, 'bool'],
@@ -371,9 +371,8 @@ const GZ_SANITIZE = (raw, fresh = false) => {
   // 3.4's System pointer, also from an older device.
   if (raw.extras?.pointer === 'off') out.extras.pointerOn = false;
   // 1.0 had only the three motion switches: all off meant "no motion".
-  if (!raw.version && isObj(raw.motion) && raw.motion.level === undefined) {
-    out.motion.level = out.motion.enter || out.motion.hover || out.motion.transitions ? 'subtle' : 'off';
-  }
+  if (!raw.version && isObj(raw.motion) && raw.motion.level === undefined
+    && ['enter', 'hover', 'transitions'].every((k) => raw.motion[k] === false)) out.motion.level = 'off';
   const rc = isObj(raw.courses) ? raw.courses : {};
   const cc = isObj(rc.colors) ? Object.entries(rc.colors).filter(([k, c]) => (COURSE_SLOT.test(k) || COURSE_ID.test(k)) && HEX.test(c)).slice(0, 200) : [];
   out.courses = {

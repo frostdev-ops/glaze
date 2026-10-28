@@ -62,7 +62,7 @@ test('the editor and popup keep a solid readable ground and apply global depth',
   assert.equal(style['--gz-surface-opacity'], '100%');
   assert.equal(style['--gz-glass'], '3px');
   assert.equal(attrs['data-gz-depth'], '0');
-  assert.equal(attrs['data-gz-motion'], 'subtle');
+  assert.equal(attrs['data-gz-motion'], 'expressive');
 });
 
 test('the Notes share panel reads the Look palette, rejects stale answers, and keeps the last successful paint', async () => {

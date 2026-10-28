@@ -104,6 +104,19 @@ h2:focus-visible { outline-offset: 4px; }`;
   // The genie needs a source smaller than the pop-up, on screen (not the page itself, say): otherwise it scales in.
   const from = (s, d) => L.onScreen(s, innerWidth, innerHeight) && s.width * s.height < d.width * d.height;
   const play = (el, frames, timing) => { try { return el.animate?.(frames, { ...timing, fill: 'both' }) || null; } catch { return null; } };
+  // Count only this dialog, stopping as soon as even eight copies would exceed the mesh budget.
+  const complexity = (root) => {
+    let n = 1, node = root.firstElementChild;
+    while (node && n <= 1000) {
+      n++;
+      if (node.firstElementChild) node = node.firstElementChild;
+      else {
+        while (node !== root && !node.nextElementSibling) node = node.parentElement;
+        node = node === root ? null : node.nextElementSibling;
+      }
+    }
+    return n;
+  };
 
   let cur = null;
   const retiring = new Set();
@@ -139,12 +152,12 @@ h2:focus-visible { outline-offset: 4px; }`;
     const backwards = (frames) => frames.map((f) => ({ ...f, ...(typeof f.offset === 'number' && { offset: 1 - f.offset }) })).reverse();
     const bend = (source, r) => {
       // Keep large rubrics bounded. Even the cheap silhouette follows the same curve and source geometry.
-      const n = Math.max(1, box.querySelectorAll('*').length);
+      const n = complexity(box);
       return L.genie(source, r, Math.max(8, Math.min(20, Math.floor(8000 / n))));
     };
     const mesh = (g, r, timing, out) => {
       const copy = box.cloneNode(true);
-      if (!copy.querySelector('.body') || box.querySelectorAll('*').length * g.bands.length > 8000) return false;
+      if (!copy.querySelector('.body') || complexity(box) * g.bands.length > 8000) return false;
       const stage = make('div', { className: 'genie-stage', inert: true });
       stage.setAttribute('aria-hidden', 'true');
       Object.assign(stage.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
