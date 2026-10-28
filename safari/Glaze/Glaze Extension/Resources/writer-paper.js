@@ -24,6 +24,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     bullets: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01', numbers: 'M10 6h10M10 12h10M10 18h10M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1',
     cite: 'M7 7h4v4c0 3-2 5-4 6M15 7h4v4c0 3-2 5-4 6', note: 'M4 18h10M4 14h16M4 10h16M4 6h16M18 18v-4', brk: 'M3 12h4M10 12h4M17 12h4M6 4v5h12V4M6 20v-5h12v5',
     undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3', redo: 'm15 14 5-5-5-5M20 9H9a5 5 0 0 0 0 10h3', focus: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', back: 'M15 18l-6-6 6-6',
+    marker: 'm9 11-6 6v3h9l3-3M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4', dots: 'M5 12h.01M12 12h.01M19 12h.01',
+    pagenum: 'M6 3h9l4 4v14H6zM10 13h1v5M10 18h2', pages: 'M8 3h8l4 4v12H8zM4 7v14h12', left: 'M4 6h16M4 12h10M4 18h16', portrait: 'M7 3h10v18H7z', landscape: 'M3 7h18v10H3z',
   };
   const icon = (name, cls = 'gp-ico') => { const s = document.createElementNS(SVG, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS(SVG, 'path'); p.setAttribute('d', PATHS[name]); s.append(p); return s; };
   const h = (tag, props = {}, ...kids) => {
@@ -36,6 +38,17 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     return e;
   };
   const btn = (props, ...kids) => h('button', { type: 'button', ...props }, ...kids);
+  const MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || globalThis.navigator?.userAgent || '');
+  const keyHint = (k) => (MAC ? k : k.replace('⌘', 'Ctrl+').replace('⌥', 'Alt+').replace('⇧', 'Shift+'));
+  // Word's palettes: the theme colours with their tints and shades, the standard colours, and the highlighter.
+  const THEME = ['FFFFFF', '000000', 'E7E6E6', '44546A', '4472C4', 'ED7D31', 'A5A5A5', 'FFC000', '5B9BD5', '70AD47'];
+  const STANDARD = ['C00000', 'FF0000', 'FFC000', 'FFFF00', '92D050', '00B050', '00B0F0', '0070C0', '002060', '7030A0'];
+  const TINTS = [[-0.05, -0.15, -0.25, -0.35, -0.5], [0.5, 0.35, 0.25, 0.15, 0.05], [-0.1, -0.25, -0.5, -0.75, -0.9]];
+  const shade = (hex, p) => hex.match(/../g).map((x) => { const c = parseInt(x, 16); return Math.round(p > 0 ? c + (255 - c) * p : c * (1 + p)).toString(16).padStart(2, '0'); }).join('').toUpperCase();
+  const GRID = [THEME, ...[0, 1, 2, 3, 4].map((r) => THEME.map((c, i) => shade(c, (TINTS[i] || [0.8, 0.6, 0.4, -0.25, -0.5])[r])))];
+  const HIGHLIGHTS = [['yellow', 'Yellow'], ['green', 'Bright green'], ['cyan', 'Turquoise'], ['magenta', 'Pink'], ['blue', 'Blue'], ['red', 'Red'], ['darkBlue', 'Dark blue'], ['darkCyan', 'Teal'],
+    ['darkGreen', 'Green'], ['darkMagenta', 'Violet'], ['darkRed', 'Dark red'], ['darkYellow', 'Dark yellow'], ['darkGray', 'Gray 50%'], ['lightGray', 'Gray 25%'], ['black', 'Black']];
+  const SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
 
   // A paper's mount. host: { editor (GZ_WRITER_EDITOR in paper mode), t(key, vars), say(msg) (to the page), context() and
   // onContext(fn) (Ultra's names, the paper's key), standalone (papers.html: no Submit or Focus), key (papers.html's
@@ -45,12 +58,16 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const editable = host.editor.view.props.editable;
     host.editor.view.setProps({ editable: () => false });
     await need(LIBS);
+    // Settings → Writer (storage.sync writer): the format a new paper starts in and the zoom papers open at.
+    // lib/writer-settings.js's reader where the page loads it (writer.html), else storage as it is (papers.html).
+    const SET = globalThis.GZ_WRITER_SETTINGS;
+    const prefs = await Promise.race([SET ? SET.load().then(() => SET.now() || {}) : Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => (r?.writer && typeof r.writer === 'object' ? r.writer : {})), new Promise((ok) => setTimeout(() => ok({}), 400))]).catch(() => ({}));
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PG = GZ_WRITER_PAGINATE, PA = GZ_WRITER_PAPERS, S = GZ_WRITER_SCHEMA, PM = GZ_PM;
     const ed = host.editor, view = ed.view, t = (k, v) => { const text = host.t(k, v); return k === 'Document outline' && text === k ? 'Outline' : text; }, store = PA.open();
     const ISSUES = () => globalThis.GZ_WRITER_ISSUES || null;
     // What the pages are laid out by: the format, with an imported file's own page, base font and header over it.
     const look = (doc = view.state.doc) => ST.look(format, doc.attrs.setup);
-    let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = 'fit', scale = PX100, layout = null, page = 1, focus = false;
+    let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = [75, 100, 125, 150].includes(prefs.zoom) ? prefs.zoom / 100 : 'fit', scale = PX100, layout = null, page = 1, focus = false;
     let laidOut = () => {}, rows = [], feedbackPanel = null; // the Outline's pages once it exists; its rows; Feedback's pages
     const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
 
@@ -59,12 +76,26 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const pill = btn({ class: 'gp-pill', 'aria-haspopup': 'menu' }), block = btn({ class: 'gp-box', 'aria-haspopup': 'menu' });
     const mark = (run, label, kid) => btn({ 'data-run': run, title: t(label), 'aria-label': t(label), 'aria-pressed': 'false' }, kid);
     const marks = [mark('bold', 'Bold', 'B'), mark('italic', 'Italic', h('i', { text: 'I' })), mark('underline', 'Underline', h('u', { text: 'U' }))];
+    // Font, size, more formatting, text colour and highlight (Word's), the Paragraph dialog and ⋯ (page setup, header and
+    // footer, the ruler).
+    const caretIco = () => icon('caret', 'gp-ico gp-caret');
+    const fontB = btn({ class: 'gp-box gp-font', 'aria-haspopup': 'menu', title: t('Font'), 'aria-label': t('Font') });
+    const sizeIn = h('input', { class: 'gp-size-in', type: 'text', inputmode: 'decimal', maxlength: '4', spellcheck: 'false', autocomplete: 'off', title: t('Font size'), 'aria-label': t('Font size') });
+    const sizeB = btn({ class: 'gp-size-b', 'aria-haspopup': 'menu', title: t('Font size'), 'aria-label': t('Font size') }, caretIco());
+    const sizeBox = h('span', { class: 'gp-box gp-sizebox' }, sizeIn, sizeB);
+    const moreFmt = btn({ class: 'gp-wide', 'aria-haspopup': 'menu', title: t('More formatting'), 'aria-label': t('More formatting') }, h('span', { class: 'gp-aa', text: 'Aa' }), caretIco());
+    const colorBar = h('i', { class: 'gp-bar' }), hlBar = h('i', { class: 'gp-bar' });
+    const colorB = btn({ class: 'gp-wide', 'aria-haspopup': 'menu', title: t('Text colour'), 'aria-label': t('Text colour') }, h('span', { class: 'gp-swatch' }, h('span', { class: 'gp-a', text: 'A' }), colorBar), caretIco());
+    const hlB = btn({ class: 'gp-wide', 'aria-haspopup': 'menu', title: t('Highlight'), 'aria-label': t('Highlight') }, h('span', { class: 'gp-swatch' }, icon('marker'), hlBar), caretIco());
+    const paraB = btn({ class: 'gp-pilcrow', 'aria-haspopup': 'dialog', title: t('Paragraph…'), 'aria-label': t('Paragraph…') }, '¶');
+    const moreB = btn({ class: 'gp-tbtn gp-more', 'aria-haspopup': 'menu', title: t('More'), 'aria-label': t('More') }, icon('dots'));
     const alignB = btn({ title: t('Alignment'), 'aria-label': t('Alignment'), 'aria-haspopup': 'menu' }, icon('align'));
     const bullets = btn({ 'data-run': 'bulletList', title: t('Bulleted list'), 'aria-label': t('Bulleted list'), 'aria-pressed': 'false' }, icon('bullets'));
     const numbers = btn({ 'data-run': 'orderedList', title: t('Numbered list'), 'aria-label': t('Numbered list'), 'aria-pressed': 'false' }, icon('numbers'));
     const cite = btn({ class: 'gp-tbtn', disabled: true }, icon('cite'), t('Cite'));
-    const note = btn({ class: 'gp-tbtn' }, icon('note'), t('Footnote'));
-    const brk = btn({ class: 'gp-tbtn' }, icon('brk'), t('Page break'));
+    // Labels the toolbar hides when it's narrow (writer-paper.css container query); their names stay for screen readers.
+    const note = btn({ class: 'gp-tbtn', title: t('Footnote'), 'aria-label': t('Footnote') }, icon('note'), h('span', { class: 'gp-lbl', text: t('Footnote') }));
+    const brk = btn({ class: 'gp-tbtn', title: t('Page break'), 'aria-label': t('Page break') }, icon('brk'), h('span', { class: 'gp-lbl', text: t('Page break') }));
     const undo = btn({ title: t('Undo'), 'aria-label': t('Undo') }, icon('undo')), redo = btn({ title: t('Redo'), 'aria-label': t('Redo') }, icon('redo'));
     const zoomB = btn({ class: 'gp-box', 'aria-haspopup': 'menu', title: t('Zoom') });
     const focusB = btn({ class: 'gp-tbtn', title: t('Focus'), 'aria-label': t('Focus'), 'aria-pressed': 'false' }, icon('focus'));
@@ -92,9 +123,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const file = h('input', { type: 'file', accept: host.standalone ? '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document' : null, hidden: true });
     const root = h('div', { class: `gp${host.standalone ? ' gp-standalone' : ''}` },
       h('header', { class: 'gp-top' }, host.standalone ? h('a', { href: 'papers.html', text: t('Papers') }) : null, title, due, h('span', { class: 'grow' }), state),
-      h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('Formatting') }, pill, block,
-        h('div', { class: 'gp-tb' }, marks, h('span', { class: 'gp-sepv' }), alignB, bullets, numbers, h('span', { class: 'gp-sepv' })),
-        cite, note, brk, toolGrow, h('div', { class: 'gp-tb' }, undo, redo), zoomB, host.standalone ? null : focusB, host.standalone ? null : submit),
+      h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('Formatting') }, pill, block, fontB, sizeBox,
+        h('div', { class: 'gp-tb' }, marks, moreFmt, colorB, hlB, h('span', { class: 'gp-sepv' }), alignB, paraB, bullets, numbers, h('span', { class: 'gp-sepv' })),
+        cite, note, brk, toolGrow, h('div', { class: 'gp-tb' }, undo, redo), zoomB, moreB, host.standalone ? null : focusB, host.standalone ? null : submit),
       h('div', { class: 'gp-work' }, h('div', { class: 'gp-col' }, canvas, status), side), file);
     (host.root || document.body).append(root);
     flow.style.visibility = 'hidden';
@@ -147,7 +178,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       close();
       el.classList.add('pop');
       document.body.append(el);
-      const r = opener.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
+      // A control folded into ⋯ (the toolbar is narrow) opens its popover from ⋯.
+      const r = (opener.getClientRects().length ? opener : moreB).getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
       el.style.left = `${Math.max(4, Math.min(r.left, innerWidth - w - 4))}px`;
       el.style.top = `${above ? Math.max(4, r.top - hh - 6) : Math.min(r.bottom + 6, innerHeight - hh - 4)}px`;
       el.style.transformOrigin = above ? 'bottom left' : 'top left';
@@ -180,7 +212,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       let answered = false;
       const answer = (run) => () => { answered = true; el.remove(); run(); };
       const el = h('div', { class: `pop gp-toast${choices ? ' gp-toast-ask' : ''}`, role: 'status' }, h('span', { text }), act ? btn({ class: 'gp-toast-do', onclick: () => { el.remove(); act.run(); } }, act.label) : null,
-        choices ? h('div', { class: 'gp-toast-choices' }, h('b', { text: choices.ask }), ...choices.items.map((c, i) => btn({ class: `gp-toast-choice${i ? '' : ' gp-default'}`, onclick: answer(c.run) }, c.label))) : null);
+        choices ? h('div', { class: 'gp-toast-choices' }, choices.ask ? h('b', { text: choices.ask }) : null, ...choices.items.map((c, i) => btn({ class: `gp-toast-choice${i ? '' : ' gp-default'}`, onclick: answer(c.run) }, c.label))) : null);
       if (choices) setTimeout(() => { if (!answered) choices.gone?.(); }, 15000);
       document.body.append(el);
       el.getBoundingClientRect();
@@ -218,6 +250,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         handleClickOn: (_v, pos, node) => { if (node.type.name === 'footnote_ref') { editNote(pos); return true; } return false; },
         handleKeyDown: (_v, e) => {
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return true; }
+          // Word's ⌘⇧> and ⌘⇧< step the size from the paper's own; ⌘Enter is a page break here (writer.js's send is compose's).
+          if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && ['>', '<', '.', ','].includes(e.key)) { ed.run('sizeStep', { dir: e.key === '>' || e.key === '.' ? 1 : -1, base: look().size }); return true; }
+          if ((MAC ? e.metaKey : e.ctrlKey) && e.key === 'Enter' && !e.shiftKey && !e.altKey) { ed.run('pageBreak'); return true; }
           // Ahead of ProseMirror's own Escape (select the parent node).
           if (e.key === 'Escape' && focus) { if (!globalThis.GZ_WRITER_AI?.dismissCompletion?.()) setFocus(false); return true; }
           return false;
@@ -241,7 +276,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
             if (i) { seg = h('span'); segs.push(seg); }
             if (!piece) continue;
             const run = h('span', { text: piece });
-            run.style.cssText = [r.b ? 'font-weight:700' : '', r.i ? 'font-style:italic' : '', r.u || r.s ? `text-decoration:${[r.u ? 'underline' : '', r.s ? 'line-through' : ''].join(' ')}` : '', r.sup ? 'vertical-align:super;font-size:.66em' : r.sub ? 'vertical-align:sub;font-size:.66em' : '', r.font ? `font-family:"${r.font}"` : '', r.size ? `font-size:${r.size}pt` : '', r.color ? `color:#${r.color}` : ''].filter(Boolean).join(';');
+            run.style.cssText = [r.b ? 'font-weight:700' : '', r.i ? 'font-style:italic' : '', r.u || r.s ? `text-decoration:${[r.u ? 'underline' : '', r.s ? 'line-through' : ''].join(' ')}` : '', r.sup ? 'vertical-align:super;font-size:.66em' : r.sub ? 'vertical-align:sub;font-size:.66em' : '', r.font ? `font-family:${ST.stack(r.font)}` : '', r.size ? `font-size:${r.size}pt` : '', r.color ? `color:#${r.color}` : ''].filter(Boolean).join(';');
             seg.append(run);
           }
         }
@@ -277,9 +312,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       layout.pages.forEach((pg, i) => {
         const s = sheets.children[i], [hdr, ftr] = s.children;
         s.style.top = `${i * stride}px`;
-        const parts = ST.headerParts(L, i + 1, n), footer = parts && ST.footerParts(L, i + 1, n), k = parts && JSON.stringify([parts, footer, L.font, L.size, scale]);
-        if (!parts) { hdr.textContent = ST.headerText(format, i + 1, name); ftr.replaceChildren(); s.gzParts = null; }
-        else if (s.gzParts !== k) { s.gzParts = k; partEl(parts, hdr, L); partEl(footer, ftr, L); }
+        // The header: an imported file's or the student's own parts, else the format's running header; the footer: the
+        // setup's parts, else none.
+        const parts = ST.headerParts(L, i + 1, n), footer = L.setup ? ST.footerParts(L, i + 1, n) : [], k = JSON.stringify([parts, footer, L.font, L.size, scale]);
+        if (!parts) { const text = ST.headerText(L, i + 1, name); if (s.gzHeader !== text) { hdr.replaceChildren(); hdr.textContent = text; s.gzHeader = text; } }
+        else if (s.gzHeader != null) { s.gzHeader = null; s.gzParts = null; }
+        if (s.gzParts !== k) { s.gzParts = k; if (parts) partEl(parts, hdr, L); partEl(footer, ftr, L); }
         const notesEl = s.lastChild;
         notesEl.style.bottom = `${geo.bottom}px`;
         const rule = h('div', { class: 'gp-sep' }, h('div', { class: 'gp-rule' }));
@@ -294,7 +332,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       flow.style.visibility = '';
       selected();
       caretSoon();
+      for (const fn of drawn) try { fn(); } catch (e) { console.error(e); }
     };
+    const drawn = [];
     const fit = () => {
       const w = canvas.clientWidth - 48;
       return Math.max(0.3, Math.min(PX100, w / ST.geometry(look()).width));
@@ -327,6 +367,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       bullets.setAttribute('aria-pressed', String(a.list === 'bullet'));
       numbers.setAttribute('aria-pressed', String(a.list === 'ordered'));
       block.replaceChildren(blockName(a), icon('caret', 'gp-ico gp-caret'));
+      const L = look(), fname = a.font || L.font, fsize = nf(a.size || L.size);
+      if (fontB.textContent !== fname) { fontB.replaceChildren(h('span', { class: 'gp-font-name', text: fname }), caretIco()); fontB.style.fontFamily = `"${fname}"`; }
+      if (document.activeElement !== sizeIn && sizeIn.value !== fsize) sizeIn.value = fsize;
+      moreFmt.setAttribute('aria-pressed', String(!!(a.strike || a.sup || a.sub || a.smallCaps || a.allCaps)));
     };
     const blockName = (a) => (a.heading ? t('Heading {n}', { n: a.heading }) : a.quote ? t('Block quote') : a.align === 'center' ? t('Title') : t('Body'));
     const counts = () => {
@@ -387,6 +431,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const runChecks = () => {
       const r = F.check(view.state.doc, format, { name: ctx.user?.name || '', course: ctx.course?.name || '' }, { lines, keep });
       formatIssues = r.issues.filter((i) => !ignored.has(ignoreKey(i)));
+      const lost = missingFont();
+      if (lost) formatIssues.push({ id: 'format:font-missing:0:0', row: null, rule: 'font-missing', from: 0, to: 0, source: 'format', kind: 'format', key: 'Writer has no match for {font}; pages may differ from Word', message: `Writer has no match for ${lost}; pages may differ from Word`, vars: { font: lost }, suggestions: [], sure: false });
       groups = [];
       for (const i of formatIssues) { const g = groupOf(i.rule); if (g) g.issues.push(i); else groups.push({ rule: i.rule, issues: [i] }); }
       if (picked && !groupOf(picked)) picked = null;
@@ -442,7 +488,26 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       ignored.add(ignoreKey(i));
       runChecks();
     };
-    const ignoreGroup = (g) => { for (const i of g.issues) ignored.add(ignoreKey(i)); if (picked === g.rule) picked = null; if (hovered === g.rule) hovered = null; runChecks(); };
+    // An imported paper's well-known font (Aptos, say) that this computer doesn't have: its lines keep Word's spacing but
+    // the bundled twin's widths, so one card says so, until it's dismissed for this paper.
+    const fontHere = (name) => {
+      try {
+        const c = (fontHere.c ||= document.createElement('canvas').getContext('2d'));
+        const w = (f) => { c.font = `40px ${f}`; return c.measureText('mmmmmmmmmmlli WQ@#').width; };
+        return ['monospace', 'serif', 'sans-serif'].some((g) => w(`"${name}", ${g}`) !== w(g));
+      } catch { return true; }
+    };
+    const fontNote = (name) => `gz-font-note:${key || 'paper'}:${name}`;
+    const missingFont = () => {
+      const doc = view.state.doc, own = ST.setup(doc.attrs.setup);
+      let name = own?.font && ST.LOCAL[own.font] ? own.font : null;
+      if (!name && own) doc.descendants((n) => { const st = !name && n.isText && n.marks.find((m) => m.type.name === 'text_style' && ST.LOCAL[m.attrs.font]); if (st) name = st.attrs.font; return !name; });
+      if (!name || fontHere(name)) return null;
+      try { if (localStorage.getItem(fontNote(name))) return null; } catch { /* no storage: shown */ }
+      return name;
+    };
+    const ignoreGroup = (g) => {
+      if (g.rule === 'font-missing') try { localStorage.setItem(fontNote(g.issues[0].vars.font), '1'); } catch { /* this session only */ } for (const i of g.issues) ignored.add(ignoreKey(i)); if (picked === g.rule) picked = null; if (hovered === g.rule) hovered = null; runChecks(); };
     // A group's fixes in one transaction (undone at once): from the last to the first, so each position still holds.
     // Rules whose fix rebuilds the paper (an opening, the format) have one finding, so their own fix runs.
     const SIMPLE = new Set(['attr', 'clear', 'mark', 'unmark']);
@@ -624,6 +689,323 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     brk.addEventListener('click', () => { ed.run('pageBreak'); view.focus(); });
     note.addEventListener('click', () => { const at = view.state.selection.to; if (ed.run('footnote', '')) editNote(at, true); });
     zoomB.addEventListener('click', () => (open?.opener === zoomB ? close() : menu(zoomB, [{ label: t('Fit'), checked: zoom === 'fit', run: () => setZoom('fit') }, '-', ...[0.75, 1, 1.25, 1.5].map((z) => ({ label: `${z * 100}%`, checked: zoom === z, run: () => setZoom(z) }))])));
+
+    // ---- font, size, colour, more formatting
+    let lastColor = 'C00000', lastHl = 'yellow';
+    const bars = () => { colorBar.style.background = `#${lastColor}`; hlBar.style.background = S.HIGHLIGHT[lastHl]; };
+    bars();
+    const fontMenu = () => {
+      const a = ed.active(), L = look();
+      menu(fontB, ST.FONTS.map((f) => ({ label: f, checked: (a.font || L.font) === f, run: () => { ed.run('font', f === L.font ? null : f); view.focus(); } })));
+      for (const b of open?.el.querySelectorAll('[role^=menuitem]') || []) b.style.fontFamily = `"${b.firstChild.textContent}"`;
+    };
+    fontB.addEventListener('click', () => (open?.opener === fontB ? close() : fontMenu()));
+    const applySize = (raw) => {
+      const v = parseFloat(String(raw).replace(',', '.'));
+      if (v >= 8 && v <= 72) ed.run('size', Math.round(v * 2) / 2 === look().size ? null : v);
+      sizeIn.value = '';
+      selected();
+    };
+    sizeIn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); applySize(sizeIn.value); view.focus(); }
+      else if (e.key === 'Escape') { e.preventDefault(); sizeIn.value = ''; selected(); view.focus(); }
+    });
+    sizeIn.addEventListener('focus', () => sizeIn.select());
+    sizeIn.addEventListener('blur', () => { sizeIn.value = ''; selected(); });
+    sizeB.addEventListener('click', () => {
+      if (open?.opener === sizeB) { close(); return; }
+      const cur = ed.active().size || look().size;
+      menu(sizeB, SIZES.map((v) => ({ label: nf(v), checked: v === cur, run: () => { ed.run('size', v === look().size ? null : v); view.focus(); } })));
+    });
+    moreFmt.addEventListener('click', () => {
+      if (open?.opener === moreFmt) { close(); return; }
+      const a = ed.active(), go = (name) => () => { ed.run(name); view.focus(); };
+      menu(moreFmt, [
+        { label: t('Strikethrough'), hint: keyHint('⌘⇧X'), checked: a.strike, run: go('strike') },
+        { label: t('Superscript'), hint: keyHint('⌘⇧='), checked: a.sup, run: go('sup') },
+        { label: t('Subscript'), hint: keyHint('⌘='), checked: a.sub, run: go('sub') },
+        { label: t('Small caps'), checked: a.smallCaps, run: go('smallCaps') },
+        { label: t('All caps'), checked: a.allCaps, run: go('allCaps') },
+        '-', { label: t('Clear formatting'), hint: keyHint('⌘\\'), run: go('clear') },
+      ]);
+    });
+    // A palette: Automatic (or no highlight), then swatches; the chosen one goes on the selection and on the button.
+    const palette = (opener, kind) => {
+      if (open?.opener === opener) { close(); return; }
+      const cur = ed.active()[kind];
+      const pick = (v) => { close(); ed.run(kind, v); if (v) { if (kind === 'color') lastColor = v; else lastHl = v; } bars(); view.focus(); };
+      const sw = (v, label, css) => { const b = btn({ class: 'gp-sw', role: 'menuitemradio', 'aria-checked': String(v === cur), title: label, 'aria-label': label, onclick: () => pick(v) }); b.style.background = css; return b; };
+      const none = btn({ class: 'gp-sw-auto', role: 'menuitemradio', 'aria-checked': String(!cur), onclick: () => pick(null) }, h('i', { class: kind === 'color' ? 'gp-sw-ink' : 'gp-sw-none' }), kind === 'color' ? t('Automatic') : t('No highlight'));
+      const el = h('div', { class: `gp-menu gp-palette gp-palette-${kind}`, role: 'menu', 'aria-label': opener.getAttribute('aria-label') }, none,
+        kind === 'color'
+          ? [h('div', { class: 'gp-sw-grid' }, GRID.flat().map((c) => sw(c, `#${c}`, `#${c}`))), h('div', { class: 'gp-hr', role: 'separator' }), h('div', { class: 'gp-sw-grid' }, STANDARD.map((c) => sw(c, `#${c}`, `#${c}`)))]
+          : h('div', { class: 'gp-sw-grid gp-sw-hl' }, HIGHLIGHTS.map(([k, label]) => sw(k, t(label), S.HIGHLIGHT[k]))));
+      popup(opener, el);
+    };
+    colorB.addEventListener('click', () => palette(colorB, 'color'));
+    hlB.addEventListener('click', () => palette(hlB, 'highlight'));
+
+    // ---- the Paragraph dialog: the caret's paragraph as the format and its own settings lay it out
+    const num = (raw) => { const v = parseFloat(String(raw).replace(',', '.').replace(/[^\d.-]/g, '')); return Number.isFinite(v) ? v : NaN; };
+    const field = (value, unit, label) => h('input', { class: 'gp-num', type: 'text', inputmode: 'decimal', value: `${nf(Math.round(value * 100) / 100)}${unit}`, 'aria-label': t(label), spellcheck: 'false', autocomplete: 'off' });
+    const select = (label, options, value) => h('select', { 'aria-label': t(label) }, options.map(([v, l]) => h('option', { value: String(v), selected: String(v) === String(value) || null }, l)));
+    const check = (label, on) => { const box = h('input', { type: 'checkbox' }); box.checked = !!on; return [box, h('label', { class: 'gp-check' }, box, h('span', { text: t(label) }))]; };
+    const whereAt = () => {
+      const $ = view.state.selection.$from, list = ST.listAt(view.state.doc), node = $.parent;
+      let quote = false;
+      for (let d = $.depth; d > 0; d--) if ($.node(d).type.name === 'blockquote') quote = true;
+      const i = $.depth ? $.index(0) : -1;
+      return { quote, entry: !!list && $.depth === 1 && node.type.name === 'paragraph' && i >= list.from && i < list.to, heading: node.type.name === 'heading' ? node.attrs.level : 0, node };
+    };
+    const dialog = (opener, label, cls, rows, ok, extra = null) => {
+      const okB = btn({ class: 'gp-sbtn' }, t('Apply')), cancel = btn({ class: 'gp-sbtn gp-ghost', onclick: () => close(true) }, t('Cancel'));
+      const el = h('div', { class: `gp-menu gp-form gp-sheet-form ${cls}`, role: 'dialog', 'aria-label': t(label) }, rows, h('div', { class: 'gp-row gp-actions' }, extra, h('span', { class: 'grow' }), cancel, okB));
+      const submit = () => { for (const x of el.querySelectorAll('[aria-invalid]')) x.removeAttribute('aria-invalid'); if (ok(el) !== false) { close(); view.focus(); } };
+      okB.addEventListener('click', submit);
+      el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(true); } else if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); submit(); } });
+      popup(opener, el);
+      return el;
+    };
+    const bad = (input) => { input.setAttribute('aria-invalid', 'true'); input.focus(); return false; };
+    const paraDialog = (opener = paraB) => {
+      if (open?.opener === opener && opener === paraB) { close(); return; }
+      const w = whereAt(), a = w.node.attrs, L = look(), b = ST.paraBase(L, w, a.align || undefined), item = w.node.type.name === 'list_item';
+      const first = a.first ?? b.first, lineNow = a.exact != null ? 'exact' : a.least != null ? 'least' : [1, 1.15, 1.5, 2].includes(a.line ?? b.line) ? (a.line ?? b.line) : 'multiple';
+      let align = a.align || b.align;
+      const seg = h('div', { class: 'gp-seg', role: 'radiogroup', 'aria-label': t('Alignment') }, [['left', 'Left', 'align'], ['center', 'Center', 'center'], ['right', 'Right', 'right'], ['justify', 'Justify', 'justify']].map(([v, l, ico]) => {
+        const x = btn({ role: 'radio', 'aria-checked': String(align === v), title: t(l), 'aria-label': t(l) }, icon(ico));
+        x.addEventListener('click', () => { align = v; for (const y of seg.children) y.setAttribute('aria-checked', String(y === x)); });
+        return x;
+      }));
+      const left = field(a.left ?? (item ? 0 : a.indent ? a.indent * 0.5 : b.left), '″', 'Left'), right = field(a.right ?? 0, '″', 'Right');
+      const special = select('Special', [['none', t('None')], ['first', t('First line')], ['hanging', t('Hanging')]], first > 0.004 ? 'first' : first < -0.004 ? 'hanging' : 'none');
+      const by = field(Math.abs(first) || 0.5, '″', 'By');
+      const before = field(a.before ?? 0, ' pt', 'Before'), after = field(a.after ?? b.after, ' pt', 'After');
+      const line = select('Line spacing', [[1, t('Single')], [1.15, '1.15'], [1.5, '1.5'], [2, t('Double')], ['least', t('At least')], ['exact', t('Exactly')], ['multiple', t('Multiple')]], lineNow);
+      const at = field(a.exact ?? a.least ?? (lineNow === 'multiple' ? a.line ?? b.line : 12), lineNow === 'multiple' ? '' : ' pt', 'At');
+      const sync = () => { by.disabled = special.value === 'none'; at.disabled = !['least', 'exact', 'multiple'].includes(line.value); };
+      special.addEventListener('change', sync);
+      line.addEventListener('change', () => { if (line.value === 'multiple') at.value = '3'; else if (line.value === 'least' || line.value === 'exact') at.value = `${nf(12)} pt`; sync(); });
+      sync();
+      const [keepNext, kn] = check('Keep with next', a.keepNext), [keepLines, kl] = check('Keep lines together', a.keepLines), [widow, wo] = check('Widow and orphan control', a.widow !== false), [brkBefore, bb] = check('Page break before', ed.active().breakBefore);
+      if (item) left.disabled = true;
+      const row = (label, ...kids) => h('div', { class: 'gp-frow' }, h('span', { class: 'gp-flabel', text: t(label) }), ...kids);
+      dialog(opener, 'Paragraph…', 'gp-para', [
+        row('Alignment', seg),
+        h('h5', { text: t('Indentation') }),
+        h('div', { class: 'gp-fgrid' }, h('label', {}, t('Left'), left), h('label', {}, t('Right'), right), h('label', {}, t('Special'), special), h('label', {}, t('By'), by)),
+        h('h5', { text: t('Spacing') }),
+        h('div', { class: 'gp-fgrid' }, h('label', {}, t('Before'), before), h('label', {}, t('After'), after), h('label', {}, t('Line spacing'), line), h('label', {}, t('At'), at)),
+        h('div', { class: 'gp-checks' }, kn, kl, wo, bb),
+      ], () => {
+        const v = { align, keepNext: keepNext.checked, keepLines: keepLines.checked, widow: widow.checked };
+        for (const [k, input, lo, hi] of [['left', left, -10, 10], ['right', right, -10, 10], ['before', before, 0, 1584], ['after', after, 0, 1584]]) { if (input.disabled) continue; const x = num(input.value); if (!(x >= lo && x <= hi)) return bad(input); v[k] = x; }
+        const d = special.value === 'none' ? 0 : num(by.value);
+        if (!(d >= 0 && d <= 10)) return bad(by);
+        v.first = special.value === 'hanging' ? -d : d;
+        if (at.disabled) v.line = +line.value;
+        else { const x = num(at.value); if (!(line.value === 'multiple' ? x >= 0.5 && x <= 4 : x >= 0.5 && x <= 1584)) return bad(at); v.line = line.value; v.at = x; }
+        const patch = ST.paraAttrs(L, w, v);
+        if (item) delete patch.left;
+        ed.run('paragraph', patch);
+        ed.run('breakBefore', brkBefore.checked);
+        return true;
+      });
+    };
+    paraB.addEventListener('click', () => paraDialog(paraB));
+
+    // ---- page setup: the paper's own page (doc attr setup, as an import stores it); a paper Writer made gets one only
+    // when the student changes something, and Reset to format takes it away.
+    const setSetup = (s, history = true) => { const tr = view.state.tr.setDocAttribute('setup', s); if (!history) tr.setMeta('addToHistory', false); view.dispatch(tr); };
+    const pageDialog = () => {
+      const cur = ST.setup(view.state.doc.attrs.setup), base = cur || ST.pageSetup(format);
+      const tall = base.page[0] <= base.page[1], dims = tall ? base.page : [base.page[1], base.page[0]];
+      const named = Object.entries(ST.PAGES).find(([, d]) => Math.abs(d[0] - dims[0]) < 0.02 && Math.abs(d[1] - dims[1]) < 0.02)?.[0] || 'custom';
+      const size = select('Paper size', [['letter', t('Letter')], ['a4', 'A4'], ['legal', t('Legal')], ...(named === 'custom' ? [['custom', `${nf(dims[0])} × ${nf(dims[1])}″`]] : [])], named);
+      let portrait = tall;
+      const orient = h('div', { class: 'gp-seg', role: 'radiogroup', 'aria-label': t('Orientation') }, [[true, 'Portrait', 'portrait'], [false, 'Landscape', 'landscape']].map(([v, l, ico]) => {
+        const x = btn({ role: 'radio', 'aria-checked': String(portrait === v) }, icon(ico), t(l));
+        x.addEventListener('click', () => { portrait = v; for (const y of orient.children) y.setAttribute('aria-checked', String(y === x)); });
+        return x;
+      }));
+      const [top, rgt, bottom, lft] = base.margins.map((m, i) => field(m, '″', ['Top', 'Right', 'Bottom', 'Left'][i]));
+      const hdr = field(base.header, '″', 'Header'), ftr = field(base.footer, '″', 'Footer');
+      const [title, ti] = check('Different first page', base.title);
+      const reset = btn({ class: 'gp-sbtn gp-ghost', disabled: !cur || null, onclick: () => { close(); setSetup(null); view.focus(); } }, t('Reset to format'));
+      const row = (label, ...kids) => h('div', { class: 'gp-frow' }, h('span', { class: 'gp-flabel', text: t(label) }), ...kids);
+      dialog(moreB, 'Page setup…', 'gp-page', [
+        row('Paper size', size), row('Orientation', orient),
+        h('h5', { text: t('Margins') }),
+        h('div', { class: 'gp-fgrid' }, h('label', {}, t('Top'), top), h('label', {}, t('Bottom'), bottom), h('label', {}, t('Left'), lft), h('label', {}, t('Right'), rgt)),
+        h('h5', { text: t('From edge') }),
+        h('div', { class: 'gp-fgrid' }, h('label', {}, t('Header'), hdr), h('label', {}, t('Footer'), ftr)),
+        h('div', { class: 'gp-checks' }, ti),
+      ], () => {
+        const vals = [];
+        for (const input of [top, rgt, bottom, lft, hdr, ftr]) { const x = num(input.value); if (!(x >= 0 && x <= 10)) return bad(input); vals.push(x); }
+        const d = size.value === 'custom' ? dims : ST.PAGES[size.value], page = portrait ? [d[0], d[1]] : [d[1], d[0]];
+        const next = ST.setup({ ...base, page, margins: vals.slice(0, 4), header: vals[4], footer: vals[5], title: title.checked });
+        if (!next) return bad(top);
+        setSetup(next);
+        return true;
+      }, reset);
+    };
+
+    // ---- the header and footer, edited on the page (double-click either, or ⋯ → Header and footer): their lines with
+    // PAGE and NUMPAGES fields; the first page's own when the setup has a different first page. A paper's format header
+    // ("Surname N") becomes the setup's own once edited.
+    let editing = null;
+    const PART_MARKS = ['b', 'i', 'u', 's', 'sup', 'sub', 'font', 'size', 'color'];
+    const partDOM = (parts, n, total) => parts.map((x) => {
+      const line = h('div', { class: 'gp-hf-line' });
+      line.style.textAlign = x.align || 'left';
+      for (const r of x.runs) {
+        const marks = Object.fromEntries(PART_MARKS.filter((k) => r[k] != null).map((k) => [k, r[k]]));
+        const el = r.field ? h('span', { class: 'gp-field', contenteditable: 'false', 'data-field': r.field, text: String(r.field === 'PAGE' ? n : total) }) : h('span', { text: r.text });
+        el.dataset.marks = JSON.stringify(marks);
+        el.style.cssText = [marks.b ? 'font-weight:700' : '', marks.i ? 'font-style:italic' : '', marks.u ? 'text-decoration:underline' : '', marks.font ? `font-family:${ST.stack(marks.font)}` : '', marks.size ? `font-size:${marks.size}pt` : '', marks.color ? `color:#${marks.color}` : ''].filter(Boolean).join(';');
+        line.append(el);
+      }
+      if (!line.childNodes.length) line.append(h('br'));
+      return line;
+    });
+    const partsOf = (box, orig) => {
+      const lines = [];
+      let cur = null;
+      const start = () => { cur = { runs: [] }; lines.push(cur); };
+      const walk = (node, marks) => {
+        for (const c of node.childNodes) {
+          if (c.nodeType === 3) { if (!cur) start(); if (c.data) cur.runs.push({ text: c.data.replace(/ /g, ' '), ...marks }); continue; }
+          if (c.nodeType !== 1) continue;
+          if (c.dataset.field) { if (!cur) start(); cur.runs.push({ field: c.dataset.field, ...marks, ...JSON.parse(c.dataset.marks || '{}') }); continue; }
+          if (c.nodeName === 'BR') { if (!cur) start(); cur = null; continue; }
+          if (c.nodeName === 'DIV' || c.nodeName === 'P') { start(); cur.align = c.style.textAlign || null; walk(c, marks); cur = null; continue; }
+          walk(c, c.dataset.marks ? { ...marks, ...JSON.parse(c.dataset.marks) } : marks);
+        }
+      };
+      walk(box, {});
+      return lines.map((l, i) => ({ ...(orig[i] || { line: 1, after: 0 }), align: l.align && l.align !== 'left' && l.align !== 'start' ? l.align : null, runs: l.runs.filter((r) => r.field || r.text) }))
+        .filter((l, i, all) => l.runs.length || i < all.length - 1 || all.length === 1);
+    };
+    const finishPart = (keep = true) => {
+      if (!editing) return;
+      const ed2 = editing;
+      editing = null;
+      ed2.box.remove(); ed2.bar.remove(); ed2.sheet.classList.remove(`gp-editing-${ed2.kind}`); root.classList.remove('gp-hf-on');
+      document.removeEventListener('pointerdown', ed2.away, true);
+      if (!keep) { view.focus(); return; }
+      const parts = partsOf(ed2.box, ed2.orig), cur = ST.setup(view.state.doc.attrs.setup), base = cur || ST.pageSetup(format), group = `${ed2.kind}s`;
+      const next = { ...base, title: ed2.title(), [group]: { ...base[group], [ed2.variant]: parts } };
+      if (ed2.kind === 'header' && base.own && base.headers.default == null && ed2.variant === 'first') next.headers = { ...next.headers, default: ST.formatHeader(format, surname()) };
+      if (JSON.stringify(parts) !== JSON.stringify(ed2.orig) || next.title !== base.title) setSetup(ST.setup(next));
+      view.focus();
+    };
+    const editPart = (kind = 'header', n = page) => {
+      if (!layout || editing) return;
+      close();
+      n = Math.min(Math.max(1, n), layout.pages.length);
+      const sheet = sheets.children[n - 1], L = look(), geo = ST.geometry(L), cur = ST.setup(view.state.doc.attrs.setup), base = cur || ST.pageSetup(format), total = layout.pages.length;
+      if (!sheet) return;
+      const variant = n === 1 && base.title ? 'first' : 'default', group = base[`${kind}s`];
+      const orig = group[variant] ?? (kind === 'header' && variant === 'default' && (!cur || cur.own) ? ST.formatHeader(format, surname()) : [{ align: null, line: 1, after: 0, runs: [] }]);
+      const box = h('div', { class: `gp-hf gp-hf-${kind}`, contenteditable: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': t(kind === 'header' ? 'Header' : 'Footer'), spellcheck: 'false' }, partDOM(orig, n, total));
+      box.style.cssText = `left:${geo.left}px;right:${geo.right}px;${kind === 'header' ? `top:${geo.header}px` : `bottom:${geo.footer ?? geo.header}px`};font:${L.size}pt/${ST.lineHeight(L, { line: 1 })}px ${ST.stack(L.font)}`;
+      sheet.append(box);
+      sheet.classList.add(`gp-editing-${kind}`);
+      root.classList.add('gp-hf-on');
+      const insert = (field2) => {
+        const sel = getSelection(), chip = h('span', { class: 'gp-field', contenteditable: 'false', 'data-field': field2, text: String(field2 === 'PAGE' ? n : total) });
+        chip.dataset.marks = '{}';
+        let r = sel.rangeCount && box.contains(sel.anchorNode) ? sel.getRangeAt(0) : null;
+        if (!r) { r = document.createRange(); r.selectNodeContents(box.lastElementChild || box); r.collapse(false); }
+        r.deleteContents(); r.insertNode(chip); r.setStartAfter(chip); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+        box.focus();
+      };
+      const alignTo = (v) => {
+        const sel = getSelection(), at = sel.anchorNode && box.contains(sel.anchorNode) ? sel.anchorNode : box.firstChild;
+        const line = (at?.nodeType === 1 ? at : at?.parentElement)?.closest?.('.gp-hf-line') || box.querySelector('.gp-hf-line');
+        if (line) line.style.textAlign = v;
+        box.focus();
+      };
+      const [titleBox, ti] = check('Different first page', base.title);
+      const bar = h('div', { class: 'pop gp-hfbar', role: 'toolbar', 'aria-label': t(kind === 'header' ? 'Header' : 'Footer') },
+        btn({ class: 'gp-tbtn', onclick: () => insert('PAGE') }, icon('pagenum'), t('Page number')),
+        btn({ class: 'gp-tbtn', onclick: () => insert('NUMPAGES') }, icon('pages'), t('Page count')), h('span', { class: 'gp-sepv' }),
+        ...[['left', 'Left', 'align'], ['center', 'Center', 'center'], ['right', 'Right', 'right']].map(([v, l, ico]) => btn({ class: 'gp-ibtn', title: t(l), 'aria-label': t(l), onclick: () => alignTo(v) }, icon(ico))),
+        h('span', { class: 'gp-sepv' }), ti, h('span', { class: 'gp-sepv' }),
+        btn({ class: 'gp-sbtn', onclick: () => finishPart(true) }, t('Done')));
+      for (const b of bar.querySelectorAll('button')) b.addEventListener('mousedown', (e) => e.preventDefault());
+      document.body.append(bar);
+      const r = box.getBoundingClientRect();
+      bar.style.left = `${Math.max(8, Math.min(r.left, innerWidth - bar.offsetWidth - 8))}px`;
+      bar.style.top = `${kind === 'header' ? Math.min(r.bottom + 8, innerHeight - bar.offsetHeight - 8) : Math.max(8, r.top - bar.offsetHeight - 8)}px`;
+      bar.getBoundingClientRect();
+      bar.setAttribute('data-open', '');
+      const away = (e) => { if (!box.contains(e.target) && !bar.contains(e.target)) finishPart(true); };
+      document.addEventListener('pointerdown', away, true);
+      box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finishPart(false); } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finishPart(true); } });
+      editing = { kind, variant, sheet, box, bar, orig, away, title: () => titleBox.checked };
+      box.focus();
+      const sel = getSelection(), end = document.createRange();
+      end.selectNodeContents(box.lastElementChild || box); end.collapse(false); sel.removeAllRanges(); sel.addRange(end);
+    };
+    // A double-click in a page's top or bottom margin edits that page's header or footer.
+    canvas.addEventListener('dblclick', (e) => {
+      if (!layout || editing || e.target.closest?.('.gp-hf')) return;
+      const L = look(), geo = ST.geometry(L), box = zoomEl.getBoundingClientRect(), x = (e.clientX - box.left) / scale, y = (e.clientY - box.top) / scale, stride = geo.height + GAP;
+      const i = Math.floor(y / stride), inY = y - i * stride;
+      if (x < 0 || x > geo.width || i < 0 || i >= layout.pages.length || inY > geo.height) return;
+      const kind = inY < geo.top ? 'header' : inY > geo.height - geo.bottom ? 'footer' : null;
+      if (!kind) return;
+      e.preventDefault(); e.stopPropagation();
+      editPart(kind, i + 1);
+    }, true);
+
+    // ---- ⋯: page setup, the header and footer, the ruler (writer-ruler.js, where loaded)
+    // A narrow toolbar folds its controls into ⋯, in this order, until the rest fits.
+    const tool = root.querySelector('.gp-tool'), history2 = undo.parentElement;
+    const FOLDS = [[history2, null], [zoomB, 'Zoom'], [hlB], [colorB], [moreFmt], [paraB], [alignB]];
+    const fold = () => {
+      for (const [el] of FOLDS) el.hidden = false;
+      for (let i = 0; i < FOLDS.length && tool.scrollWidth > tool.clientWidth + 1; i++) FOLDS[i][0].hidden = true;
+    };
+    new ResizeObserver(fold).observe(tool);
+    const folded = () => FOLDS.filter(([el]) => el.hidden).flatMap(([el, label]) => (el === history2
+      ? [{ label: t('Undo'), hint: keyHint('⌘Z'), run: () => { ed.run('undo'); view.focus(); } }, { label: t('Redo'), hint: keyHint('⌘⇧Z'), run: () => { ed.run('redo'); view.focus(); } }]
+      : [{ label: label ? `${t(label)} ${el.textContent}` : el.getAttribute('aria-label'), run: () => el.click() }]));
+    moreB.addEventListener('click', () => {
+      if (open?.opener === moreB) { close(); return; }
+      const R = globalThis.GZ_WRITER_RULER, extra = folded();
+      menu(moreB, [...extra, ...(extra.length ? ['-'] : []),{ label: t('Page setup…'), run: pageDialog }, { label: t('Header and footer'), run: () => editPart('header', page) },
+        ...(R ? ['-', { label: t('Show ruler'), checked: R.shown(), run: () => R.toggle() }] : [])]);
+    });
+
+    // ---- the page's context menu: cut, copy, paste (the clipboard's, or plain), Paragraph…, Clear formatting. Shift and
+    // a right-click give the browser's own.
+    const pasteFrom = async (plain) => {
+      view.focus();
+      try {
+        if (!plain && navigator.clipboard?.read) {
+          for (const item of await navigator.clipboard.read()) if (item.types.includes('text/html')) { view.pasteHTML(await (await item.getType('text/html')).text()); return; }
+        }
+        const text = await navigator.clipboard.readText();
+        if (text) view.pasteText(text);
+      } catch { toast(t('Press {key} to paste', { key: keyHint(plain ? '⌘⇧V' : '⌘V') })); }
+    };
+    view.dom.addEventListener('contextmenu', (e) => {
+      if (e.shiftKey || !layout || editing) return;
+      e.preventDefault();
+      const anchor = h('span', { class: 'gp-anchor', 'aria-hidden': 'true' });
+      anchor.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;width:0;height:0`;
+      document.body.append(anchor);
+      const exec = (cmd) => () => { view.focus(); document.execCommand(cmd); };
+      const empty = view.state.selection.empty;
+      menu(anchor, [
+        ...(empty ? [] : [{ label: t('Cut'), hint: keyHint('⌘X'), run: exec('cut') }, { label: t('Copy'), hint: keyHint('⌘C'), run: exec('copy') }]),
+        { label: t('Paste'), hint: keyHint('⌘V'), run: () => pasteFrom(false) }, { label: t('Paste without formatting'), hint: keyHint('⌘⇧V'), run: () => pasteFrom(true) },
+        '-', { label: t('Paragraph…'), run: () => paraDialog(paraB) }, { label: t('Clear formatting'), hint: keyHint('⌘\\'), run: () => { ed.run('clear'); view.focus(); } },
+      ], { onClose: () => anchor.remove() });
+    });
     const setFocus = (on) => { focus = on; focusB.setAttribute('aria-pressed', String(on)); host.say?.({ type: 'focus-mode', on }); };
     focusB.addEventListener('click', () => setFocus(!focus));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && focus && !open && !e.defaultPrevented) setFocus(false); });
@@ -635,6 +1017,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (C?.sourcesView) C.sourcesView(panes.sources, { editor: ed, paper: api, badge: (n) => { badges.sources.textContent = n ? nf(n) : ''; } });
       if (globalThis.GZ_WRITER_AI?.feedbackView) feedbackPanel = GZ_WRITER_AI.feedbackView(panes.feedback, { pageAt });
       submit.disabled = typeof GZ_WRITER_PAPER.submit !== 'function';
+      fold();
     };
     submit.addEventListener('click', () => { if (typeof GZ_WRITER_PAPER.submit === 'function') GZ_WRITER_PAPER.submit(api); });
     for (const [id, tab] of Object.entries(tabs)) tab.addEventListener('click', () => {
@@ -813,7 +1196,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         format = ST.get(paper.format);
         setDoc(paper.doc, true);
       } else {
-        format = ST.get(paper?.format || 'mla9');
+        format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
         // A new paper: the format's opening and list page around what Ultra's box already held.
         setDoc(F.template(format, values(), initialBody), true);
         if (key) await save('auto');
@@ -842,7 +1225,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         key = target;
         if (!edits && !recovered) {
           paper = existing;
-          format = ST.get(paper?.format || 'mla9');
+          format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
           initializing = true;
           setDoc(paper?.doc || F.template(format, values(), initialBody), true);
           initializing = false;
@@ -863,6 +1246,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // The page ended Focus (a click on its dim).
       focused: (on) => { focus = on; focusB.setAttribute('aria-pressed', String(on)); },
       pages: () => layout?.pages.length || 0,
+      // A question in the paper's toast: items [{ label, run }], the first the default; gone() when it goes unanswered.
+      ask: (text, items, gone) => toast(text, null, { ask: '', items, gone }),
+      paragraph: (opener) => paraDialog(opener || paraB), pageSetup: pageDialog,
+      // A change to the paper's page (its setup, made from the format if it has none), as one undoable step.
+      setup: (change) => { const s2 = ST.setup({ ...(ST.setup(view.state.doc.attrs.setup) || ST.pageSetup(format)), ...change }); if (s2) setSetup(s2); return !!s2; }, editPart, editingPart: () => editing?.kind || null,
+      // What writer-ruler.js draws from: the work column and canvas, the zoom, the page's geometry, redraws.
+      view: { col: canvas.parentElement, canvas, size, scale: () => scale, geometry: () => ST.geometry(look()), page: () => page, onDraw: (fn) => drawn.push(fn) },
       // The last page plan's blocks and breaks (lib/writer-paginate.js), for checks.
       layout: () => layout && { breaks: layout.breaks, blocks: layout.blocks.map((b) => ({ kind: b.kind, pos: b.pos, lines: (b.lines || []).map((l) => Math.round(l.h * 100) / 100), slack: b.lines?.[0]?.slack || 0, before: b.before || 0, after: b.after || 0 })) },
     };

@@ -247,3 +247,71 @@
 
 .gp-flow .ProseMirror .gp-gap-row { display: table-row; }
 .gp-flow .ProseMirror .gp-gap-row > td { border: 0; padding: 0; }
+
+/* Font, size, colour and highlight, more formatting, the Paragraph dialog and ⋯ (stream F). The labelled buttons drop
+   their labels when the toolbar is narrow; their names stay as aria-labels. */
+.gp-tool { container-type: inline-size; container-name: gp-tool; }
+@container gp-tool (max-width: 1560px) { .gp-tbtn .gp-lbl { display: none; } .gp-tbtn:has(.gp-lbl) { padding-inline: 7px; } }
+@container gp-tool (max-width: 1240px) { .gp-font { width: 112px; } }
+.gp-font { width: 136px; justify-content: space-between; padding-inline: 10px 8px; flex: none; }
+.gp-font .gp-font-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-sizebox { padding: 0 2px 0 0; gap: 0; flex: none; }
+.gp-size-in { width: 34px; height: 28px; border: 0; background: transparent; color: var(--gz-ink); font: inherit; font-size: 13px; text-align: center; outline: none; padding: 0; }
+.gp-size-in:focus { box-shadow: inset 0 -2px 0 var(--gz-accent); }
+.gp-size-b { width: 18px; height: 28px; display: grid; place-items: center; color: var(--gz-ink-muted); border-radius: 6px; }
+.gp-tb button.gp-wide { width: auto; padding: 0 3px 0 5px; display: inline-flex; gap: 1px; }
+.gp-tb button.gp-wide .gp-caret { width: 12px; height: 12px; color: var(--gz-ink-muted); }
+.gp-aa { font-weight: 600; font-size: 13px; letter-spacing: -.02em; }
+.gp-swatch { display: grid; justify-items: center; gap: 1px; line-height: 1; }
+.gp-swatch .gp-a { font-weight: 700; font-size: 14px; }
+.gp-swatch .gp-ico { width: 14px; height: 14px; }
+.gp-bar { display: block; width: 16px; height: 3px; border-radius: 1px; }
+.gp-tb button.gp-pilcrow { font-size: 16px; font-weight: 600; }
+.gp-tb button[aria-expanded="true"], .gp-box[aria-expanded="true"], .gp-tbtn[aria-expanded="true"] { background: var(--gz-line); }
+.gp-palette { padding: 8px; min-width: 0; }
+.gp-palette > .gp-sw-auto { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 6px; border-radius: 7px; font-size: 13px; color: var(--gz-ink); margin-bottom: 6px; }
+.gp-palette > .gp-sw-auto:hover, .gp-palette > .gp-sw-auto:focus { background: var(--gz-accent-soft); outline: none; }
+.gp-sw-ink, .gp-sw-none { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--gz-line-strong); }
+.gp-sw-ink { background: #000; }
+.gp-sw-none { background: linear-gradient(to top right, transparent calc(50% - 1px), var(--gz-err) 50%, transparent calc(50% + 1px)); }
+.gp-sw-grid { display: grid; grid-template-columns: repeat(10, 18px); gap: 4px; }
+.gp-sw-grid.gp-sw-hl { grid-template-columns: repeat(5, 22px); gap: 6px; }
+.gp-sw-hl .gp-sw { width: 22px; height: 22px; }
+.gp-sw { width: 18px; height: 18px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.gp-sw:hover, .gp-sw:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+.gp-sw[aria-checked="true"] { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+.gp-palette .gp-hr { margin: 8px 0; }
+/* The Paragraph and Page setup sheets */
+.gp-sheet-form { width: min(380px, calc(100vw - 16px)); gap: 10px; padding: 12px; }
+.gp-sheet-form h5 { margin: 4px 0 -2px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--gz-ink-faint); }
+.gp-frow { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--gz-ink-muted); }
+.gp-fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+.gp-fgrid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--gz-ink-muted); }
+.gp-form .gp-num { width: 74px; text-align: end; }
+.gp-form select { max-width: 132px; }
+.gp-form input:disabled, .gp-form select:disabled { opacity: .45; }
+.gp-form [aria-invalid="true"] { border-color: var(--gz-err); }
+.gp-seg { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--gz-line-strong); border-radius: 8px; }
+.gp-seg button { display: inline-flex; align-items: center; gap: 6px; min-width: 30px; height: 26px; padding: 0 7px; justify-content: center; border-radius: 6px; font-size: 12px; color: var(--gz-ink-muted); }
+.gp-seg button[aria-checked="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
+:root:not([data-dark]) .gp-seg button[aria-checked="true"] { color: var(--gz-accent); }
+.gp-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.gp-check { display: flex !important; justify-content: flex-start !important; gap: 8px !important; font-size: 13px; color: var(--gz-ink); cursor: pointer; }
+.gp-check input { accent-color: var(--gz-accent); margin: 0; }
+.gp-actions { align-items: center; margin-top: 2px; }
+.gp-actions .gp-sbtn:disabled { opacity: .45; }
+/* The header and footer, edited on the page */
+.gp-hf { position: absolute; z-index: 2; color: #111; white-space: pre-wrap; outline: 1.5px dashed var(--gz-accent); outline-offset: 4px; border-radius: 1px; caret-color: #111; min-height: 1em; }
+.gp-hf:focus { outline-style: dashed; }
+.gp-hf .gp-field { background: color-mix(in srgb, var(--gz-accent) 18%, transparent); border-radius: 2px; }
+.gp-sheet.gp-editing-header .gp-hdr, .gp-sheet.gp-editing-footer .gp-ftr { visibility: hidden; }
+.gp.gp-hf-on .gp-flow { opacity: .45; }
+.gp-hfbar { position: fixed; z-index: 6; display: flex; align-items: center; gap: 4px; padding: 5px; }
+.gp-hfbar .gp-tbtn { padding: 5px 8px; }
+.gp-hfbar .gp-ibtn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--gz-ink); }
+.gp-hfbar .gp-tbtn:hover, .gp-hfbar .gp-ibtn:hover { background: var(--gz-line); }
+.gp-hfbar .gp-check { padding: 0 6px; white-space: nowrap; }
+.gp-menu small { margin-inline-start: 18px; }
+@media print { .gp-hf, .gp-hfbar { display: none !important; } }
+.gp-more .gp-ico { stroke-width: 3.2; }
+.gp-fgrid label { white-space: nowrap; }

@@ -51,6 +51,8 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       if (style?.font) s += `<w:rFonts w:ascii="${esc(style.font)}" w:hAnsi="${esc(style.font)}" w:eastAsia="${esc(style.font)}" w:cs="${esc(style.font)}"/>`;
       if (mk('bold')) s += '<w:b/><w:bCs/>';
       if (mk('italic')) s += '<w:i/><w:iCs/>';
+      if (mk('all_caps')) s += '<w:caps/>';
+      if (mk('small_caps')) s += '<w:smallCaps/>';
       if (mk('strike')) s += '<w:strike/>';
       if (m.color?.color) s += `<w:color w:val="${esc(m.color.color)}"/>`;
       if (style?.size) s += `<w:sz w:val="${Math.round(style.size * 2)}"/><w:szCs w:val="${Math.round(style.size * 2)}"/>`;
@@ -201,9 +203,11 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       return r.field ? fieldXML(r.field, runProps(m)) : textRun(r.text, m);
     };
     const partXML = (kind, paras) => `<w:${kind} ${NS}>${(paras?.length ? paras : [{ runs: [] }]).map((x) => `<w:p><w:pPr><w:pStyle w:val="Header"/>${tabsXML(x.tabs)}${spacingXML({ before: x.before, after: x.after ?? 0, line: x.exact == null && x.least == null ? x.line ?? 1 : null, exact: x.exact, least: x.least })}<w:ind${x.left ? ` w:left="${tw(x.left)}"` : ''}${x.right ? ` w:right="${tw(x.right)}"` : ''}${x.first < 0 ? ` w:hanging="${tw(-x.first)}"` : ` w:firstLine="${tw(x.first || 0)}"`}/>${x.align ? `<w:jc w:val="${JC[x.align]}"/>` : ''}</w:pPr>${x.runs.map(partRun).join('')}</w:p>`).join('')}</w:${kind}>`;
-    if (f.setup) {
-      const s2 = f.setup, n = { header: 0, footer: 0 };
-      const add = (kind, paras, key) => { const name = `${kind}${++n[kind]}.xml`; part(`word/${name}`, kind, partXML(kind === 'header' ? 'hdr' : 'ftr', paras)); header[key] = rel(`${R}/${kind}`, name); };
+    // The setup's own header (an imported file's, or one the student edited); a paper's own setup keeps the format's
+    // header until then, its footer the setup's.
+    const s2 = f.setup, n = { header: 0, footer: 0 }, ownHeader = s2 && !(s2.own && s2.headers.default == null);
+    const add = (kind, paras, key) => { const name = `${kind}${++n[kind]}.xml`; part(`word/${name}`, kind, partXML(kind === 'header' ? 'hdr' : 'ftr', paras)); header[key] = rel(`${R}/${kind}`, name); };
+    if (ownHeader) {
       if (s2.headers.default) add('header', s2.headers.default, 'header');
       if (s2.footers.default) add('footer', s2.footers.default, 'footer');
       if (s2.title && (s2.headers.first || s2.headers.default)) add('header', s2.headers.first, 'first');
@@ -218,12 +222,18 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         header.first = rel(`${R}/header`, 'header2.xml');
       }
     }
+    if (s2 && !ownHeader) {
+      if (s2.footers.default) add('footer', s2.footers.default, 'footer');
+      if (s2.title && (s2.footers.first || s2.footers.default)) add('footer', s2.footers.first, 'footerFirst');
+    }
     part('word/document.xml', 'document.main', `<w:document ${NS}><w:body>${body}${ST().sectPr(f, header)}</w:body></w:document>`);
     part('word/styles.xml', 'styles', ST().stylesXML(f));
     rel(`${R}/styles`, 'styles.xml');
     part('word/settings.xml', 'settings', ST().settingsXML(notes.length > 0, f.tab || 0.5));
     rel(`${R}/settings`, 'settings.xml');
-    part('word/fontTable.xml', 'fontTable', ST().fontTableXML());
+    const used = [f.font];
+    doc.descendants((x) => { const st = x.isText && x.marks.find((m) => m.type.name === 'text_style' && m.attrs.font); if (st) used.push(st.attrs.font); return true; });
+    part('word/fontTable.xml', 'fontTable', ST().fontTableXML(used));
     rel(`${R}/fontTable`, 'fontTable.xml');
     if (lists.length) {
       const lvls = (ordered) => Array.from({ length: 9 }, (_, l) => `<w:lvl w:ilvl="${l}"><w:start w:val="1"/><w:numFmt w:val="${ordered ? ['decimal', 'lowerLetter', 'lowerRoman'][l % 3] : 'bullet'}"/><w:lvlText w:val="${ordered ? `%${l + 1}.` : ['•', '◦', '▪'][l % 3]}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${720 * (l + 1)}" w:hanging="360"/></w:pPr></w:lvl>`).join('');
@@ -353,7 +363,8 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     const known = new Map();
     const paperFont = (name) => {
       if (!known.has(name)) {
-        const lower = String(name).toLowerCase(), hit = ST().FONTS.find((x) => x.toLowerCase() === lower) || NEAR[lower];
+        // Word's well-known fonts (Aptos and Office's others) keep their names: the page uses them where installed.
+        const lower = String(name).toLowerCase(), hit = ST().KNOWN.find((x) => x.toLowerCase() === lower) || NEAR[lower];
         if (!hit) warn('Fonts Word and Blackboard don\'t share were replaced.');
         known.set(name, hit || FAMILY[families.get(lower)] || null);
       }
@@ -361,7 +372,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     };
     // A run's properties. A heading's bold and italic are the format's, not its style's.
     const runProps = (lv, heading = false) => {
-      const r = { font: 'Times New Roman', size: 10, b: false, i: false, u: false, s: false, vert: '', color: '', highlight: '', hidden: false };
+      const r = { font: 'Times New Roman', size: 10, b: false, i: false, u: false, s: false, vert: '', color: '', highlight: '', hidden: false, caps: '' };
       for (const { p, from } of lv) {
         const rf = kid(p, 'rFonts');
         if (rf) { const th = at(rf, 'asciiTheme') || at(rf, 'hAnsiTheme'), name = th ? theme[/^major/.test(th) ? 'major' : 'minor'] : at(rf, 'ascii') || at(rf, 'hAnsi'); if (name) r.font = name; }
@@ -373,6 +384,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         const c = kid(p, 'color'); if (c) r.color = /^[0-9a-f]{6}$/i.test(at(c, 'val')) && !/^0{6}$/.test(at(c, 'val')) ? at(c, 'val').toUpperCase() : '';
         const hl = kid(p, 'highlight'); if (hl) r.highlight = S().HIGHLIGHT[at(hl, 'val')] ? at(hl, 'val') : '';
         const hid = kid(p, 'vanish'); if (hid) r.hidden = on(hid);
+        for (const [k, v] of [['caps', 'all'], ['smallCaps', 'small']]) { const n = kid(p, k); if (n) r.caps = on(n) ? v : r.caps === v ? '' : r.caps; }
       }
       r.font = paperFont(r.font);
       return r;
@@ -461,6 +473,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
       let h = inner;
       const font = r.font && r.font !== from.font ? r.font : null, size = r.size !== from.size ? r.size : null;
       if (font || size) h = `<span style="${[font ? `font-family:${font}` : '', size ? `font-size:${size}pt` : ''].filter(Boolean).join(';')}">${h}</span>`;
+      if (r.caps) h = `<span data-gz-caps="${r.caps}">${h}</span>`;
       if (r.highlight) h = `<span data-gz-highlight="${r.highlight}">${h}</span>`;
       if (r.color) h = `<span data-gz-color="${r.color}">${h}</span>`;
       if (r.vert === 'superscript') h = `<sup>${h}</sup>`; else if (r.vert === 'subscript') h = `<sub>${h}</sub>`;

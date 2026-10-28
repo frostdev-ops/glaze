@@ -14,6 +14,10 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const limit = () => { throw Object.assign(new RangeError('writer-schema: input exceeds safe limits'), { code: 'WRITER_INPUT_LIMIT' }); };
   const FONTS = ['Times New Roman', 'Arial', 'Calibri', 'Courier New'];
   const SAME_METRICS = { tinos: 'Times New Roman', arimo: 'Arial', carlito: 'Calibri', cousine: 'Courier New' };
+  // An imported file's well-known fonts (lib/writer-styles.js LOCAL), kept by name with their bundled twin behind them.
+  const LOCAL = { aptos: ['Aptos', 'Calibri'], 'aptos display': ['Aptos Display', 'Calibri'], 'calibri light': ['Calibri Light', 'Calibri'], cambria: ['Cambria', 'Times New Roman'],
+    georgia: ['Georgia', 'Times New Roman'], 'century gothic': ['Century Gothic', 'Arial'], 'book antiqua': ['Book Antiqua', 'Times New Roman'] };
+  const familyCSS = (font) => { const l = LOCAL[font.toLowerCase()]; return l ? `"${l[0]}", "${l[1]}"` : font; };
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 
   // ---- reading attributes, from a live element (the view) or this file's own tree (parse)
@@ -36,10 +40,11 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     return n >= 0.5 && n <= 4 ? Math.round(n * 100) / 100 : null;
   };
   const firstOf = (dom) => { const n = inches(css(dom, 'text-indent')); return n != null ? Math.round(clamp(n, -2, 2) * 100) / 100 : null; };
-  const fontOf = (v) => {
+  // loose: the well-known fonts too (a paper's own HTML); without, the four and their twins (what a paste may set).
+  const fontOf = (v, loose = false) => {
     for (const f of String(v || '').split(',')) {
       const name = f.replace(/["']/g, '').trim().toLowerCase();
-      const hit = FONTS.find((x) => x.toLowerCase() === name) || SAME_METRICS[name];
+      const hit = FONTS.find((x) => x.toLowerCase() === name) || SAME_METRICS[name] || (loose && LOCAL[name]?.[0]);
       if (hit) return hit;
     }
     return null;
@@ -154,7 +159,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     const levels = paper ? [1, 2, 3, 4] : [3, 4]; // Ultra starts headings at h3
     const attrs = blockAttrs(paper), read = readBlock(paper);
     const nodes = {
-      doc: paper ? { content: 'block+', attrs: { setup: { default: null } } } : { content: 'block+' },
+      doc: paper ? { content: 'block+', attrs: { setup: { default: null }, paste: { default: null } } } : { content: 'block+' },
       paragraph: { group: 'block', content: 'inline*', attrs, parseDOM: [{ tag: 'p', getAttrs: read }], toDOM: (n) => ['p', blockDOM(n.attrs), 0] },
       heading: {
         group: 'block', content: 'inline*', defining: true, levels, attrs: { level: { default: levels[0] }, ...attrs },
@@ -222,8 +227,8 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     if (paper) {
       marks.text_style = {
         attrs: { font: { default: null }, size: { default: null } },
-        parseDOM: [{ tag: 'span', getAttrs: (dom) => { const font = fontOf(css(dom, 'font-family')), size = sizeOf(css(dom, 'font-size')); return font || size ? { font, size } : false; } }],
-        toDOM: (m) => ['span', { style: [m.attrs.font ? `font-family:${m.attrs.font}` : '', m.attrs.size ? `font-size:${m.attrs.size}pt` : ''].filter(Boolean).join(';') }, 0],
+        parseDOM: [{ tag: 'span', getAttrs: (dom) => { const font = fontOf(css(dom, 'font-family'), true), size = sizeOf(css(dom, 'font-size')); return font || size ? { font, size } : false; } }],
+        toDOM: (m) => ['span', { style: [m.attrs.font ? `font-family:${familyCSS(m.attrs.font)}` : '', m.attrs.size ? `font-size:${m.attrs.size}pt` : ''].filter(Boolean).join(';') }, 0],
       };
       // A run's colour (hex, no #) and Word's highlighter, from an imported file (data attributes: pasted pages keep none).
       marks.color = {
@@ -236,6 +241,9 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
         parseDOM: [{ tag: 'span[data-gz-highlight]', getAttrs: (dom) => { const c = String(dom.getAttribute('data-gz-highlight')); return HIGHLIGHT[c] ? { color: c } : false; } }],
         toDOM: (m) => ['span', { 'data-gz-highlight': m.attrs.color, style: `background-color:${HIGHLIGHT[m.attrs.color] || 'transparent'}` }, 0],
       };
+      // Small caps and all caps (Word's w:smallCaps and w:caps): the letters as typed, drawn in capitals.
+      marks.small_caps = { excludes: 'small_caps all_caps', parseDOM: [{ tag: 'span[data-gz-caps]', getAttrs: (dom) => dom.getAttribute('data-gz-caps') === 'small' && null }], toDOM: () => ['span', { 'data-gz-caps': 'small', style: 'font-variant:small-caps' }, 0] };
+      marks.all_caps = { excludes: 'small_caps all_caps', parseDOM: [{ tag: 'span[data-gz-caps]', getAttrs: (dom) => dom.getAttribute('data-gz-caps') === 'all' && null }], toDOM: () => ['span', { 'data-gz-caps': 'all', style: 'text-transform:uppercase' }, 0] };
     }
     return new Schema({ nodes, marks });
   };
@@ -2579,7 +2587,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const CLASS = /^(ql-indent-[1-8]|ql-align-(center|right|justify)|ql-syntax|gz-page-break|gz-rule|gz-footnote)$/;
   const KEEP = { a: ['href'], img: ['src', 'alt', 'width', 'data-display', 'data-align', 'data-caption'], ol: ['data-list', 'data-styles', 'data-continue'], ul: ['data-list', 'data-styles'], li: ['data-list', 'data-start', 'data-gz'], sup: ['data-footnote'],
     td: ['colspan', 'rowspan', 'data-colwidth', 'data-valign'], th: ['colspan', 'rowspan', 'data-colwidth', 'data-valign'], p: ['align', 'data-gz'], div: ['align'], table: ['data-borders'],
-    span: ['data-gz-color', 'data-gz-highlight'], ...Object.fromEntries(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((h) => [h, ['data-gz']])) };
+    span: ['data-gz-color', 'data-gz-highlight', 'data-gz-caps'], ...Object.fromEntries(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((h) => [h, ['data-gz']])) };
 
   const tree = (html, o) => {
     const root = el('body'), stack = [{ e: root, src: 'body' }];
@@ -2972,7 +2980,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   };
 
   const compose = make(false), paperSchema = make(true);
-  return { compose, paper: paperSchema, parse, slice, serialize, delta, text, loses, href, inline, MAX_INDENT, MAX_INPUT, FONTS, HIGHLIGHT, dataGz: writeGz };
+  return { compose, paper: paperSchema, parse, slice, serialize, delta, text, loses, href, inline, MAX_INDENT, MAX_INPUT, FONTS, HIGHLIGHT, dataGz: writeGz, readGz, html: { tags, attrs: attrsOf, decode, fontOf, sizeOf, inches } };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SCHEMA; else GZ_WRITER_SCHEMA;

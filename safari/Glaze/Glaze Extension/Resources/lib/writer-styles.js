@@ -8,9 +8,22 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
   // Word has (Tinos, Arimo, Carlito and Cousine copy them; lib/fonts). Word's "double" is twice this, not twice the size.
   const LINE = { 'Times New Roman': 2355 / 2048, Arial: 2355 / 2048, Calibri: 2500 / 2048, 'Courier New': 2320 / 2048 };
   const FONTS = Object.keys(LINE);
+  // An imported file's fonts Writer doesn't bundle but Word's are well known (Word 365's Aptos, Office's others): kept by
+  // name, so the page uses the font where this computer has it and the .docx names it; their single line from the fonts'
+  // own metrics (winAscent + winDescent + lineGap, read from Office's files), so lines are spaced as Word spaces them even
+  // where the face falls back to its bundled twin. Aptos Display's file isn't on this Mac: Aptos's metrics, a guess.
+  const LOCAL = {
+    Aptos: [2631 / 2048, 'Calibri'], 'Aptos Display': [2631 / 2048, 'Calibri'], 'Calibri Light': [2500 / 2048, 'Calibri'], Cambria: [2401 / 2048, 'Times New Roman'],
+    Georgia: [2327 / 2048, 'Times New Roman'], 'Century Gothic': [2440 / 2048, 'Arial'], 'Book Antiqua': [2545 / 2048, 'Times New Roman'],
+  };
+  for (const [name, [line]] of Object.entries(LOCAL)) LINE[name] = line;
+  const KNOWN = [...FONTS, ...Object.keys(LOCAL)];
+  // A font's CSS stack: itself, then its bundled twin where it is one of the well-known ones, then the generic family.
+  const stack = (font) => (LOCAL[font] ? `"${font}", "${LOCAL[font][1]}", ${GENERIC_OF(LOCAL[font][1])}` : `"${font}", ${GENERIC_OF(font)}`);
   // The bundled face for each (lib/fonts/<face>-<weight>-<style>.woff2).
   const FACES = { 'Times New Roman': 'tinos', Arial: 'arimo', Calibri: 'carlito', 'Courier New': 'cousine' };
   const GENERIC = { 'Times New Roman': 'serif', Arial: 'sans-serif', Calibri: 'sans-serif', 'Courier New': 'monospace' };
+  const GENERIC_OF = (font) => GENERIC[font] || 'serif';
   // fontTable.xml: panose, family and pitch as Word writes them.
   const TABLE = {
     'Times New Roman': ['02020603050405020304', 'roman', 'variable'], Arial: ['020B0604020202020204', 'swiss', 'variable'],
@@ -98,7 +111,7 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
     else if (typeof r.text === 'string' && r.text) out.text = r.text.replace(/[\u0000-\u0008\u000b-\u001f]/g, '').slice(0, 2000);
     else return null;
     for (const k of MARKS) if (r[k] === true) out[k] = true;
-    if (FONTS.includes(r.font)) out.font = r.font;
+    if (KNOWN.includes(r.font)) out.font = r.font;
     if (two(r.size, 1, 200) != null) out.size = two(r.size, 1, 200);
     if (/^[0-9A-F]{6}$/.test(r.color || '')) out.color = r.color;
     return out;
@@ -123,10 +136,20 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
     if (page[1] - margins[0] - margins[2] < 1 || page[0] - margins[1] - margins[3] < 1) return null;
     return {
       page, margins, header: len(raw.header, 0, 10) ?? 0.5, footer: len(raw.footer, 0, 10) ?? 0.5,
-      font: FONTS.includes(raw.font) ? raw.font : null, size: two(raw.size, 4, 96), tab: len(raw.tab, 0.05, 22) ?? 0.5, kern: raw.kern === true, title: raw.title === true,
+      font: KNOWN.includes(raw.font) ? raw.font : null, size: two(raw.size, 4, 96), tab: len(raw.tab, 0.05, 22) ?? 0.5, kern: raw.kern === true, title: raw.title === true,
       headers: { default: partOf(raw.headers?.default), first: partOf(raw.headers?.first) }, footers: { default: partOf(raw.footers?.default), first: partOf(raw.footers?.first) },
+      own: raw.own === true,
     };
   };
+  // Page setup on a paper Writer made (own: the student's, from Page setup…): the format's page, margins and header
+  // distance with the change over them; its running header stays the format's ("Surname N") until the student edits it.
+  const PAGES = { letter: [8.5, 11], a4: [8.27, 11.69], legal: [8.5, 14] };
+  const pageSetup = (f, change = {}) => setup({
+    page: [PAGE.width, PAGE.height], margins: f.margins, header: f.header.distance, footer: 0.5, tab: 0.5, title: f.header.text !== 'none' && !f.header.first,
+    headers: { default: null, first: null }, footers: { default: null, first: null }, ...change, own: true,
+  });
+  // The format's running header as a setup's parts (what editing it starts from).
+  const formatHeader = (f, surname = '') => [{ align: 'right', line: 1, after: 0, runs: f.header.text === 'none' ? [] : [...(f.header.text === 'name-page' && surname ? [{ text: `${surname} ` }] : []), { field: 'PAGE' }] }];
   // What the paper is laid out by: its format, with an imported file's own page, margins, base font, tab stop and header
   // and footer over it (the format still says what the checks want). One object per setup, so callers can compare.
   const looks = new WeakMap();
@@ -135,14 +158,15 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
     if (!s) return f;
     const hit = looks.get(raw);
     if (hit && hit.f === f) return hit.look;
-    const out = { ...f, setup: s, page: { width: s.page[0], height: s.page[1] }, margins: s.margins, font: s.font || f.font, size: s.size || f.size, tab: s.tab, kern: s.kern, header: { ...f.header, distance: s.header }, footer: s.footer };
+    const out = { ...f, setup: s, page: { width: s.page[0], height: s.page[1] }, margins: s.margins, font: s.font || f.font, size: s.size || f.size, tab: s.tab, kern: s.kern, header: { ...f.header, distance: s.header, ...(s.own ? { first: !s.title } : {}) }, footer: s.footer };
     looks.set(raw, { f, s, look: out });
     return out;
   };
   // An imported header's or footer's paragraphs on page n of total, its fields filled in; null when the paper has no
   // setup (the format's header then: headerText).
   const fill = (parts, n, total) => (parts || []).map((x) => ({ ...x, runs: x.runs.map((r) => (r.field ? (({ field, ...rest }) => ({ text: String(field === 'PAGE' ? n : total), ...rest }))(r) : r)) }));
-  const headerParts = (f, n, total = '') => (f.setup ? fill(n === 1 && f.setup.title ? f.setup.headers.first : f.setup.headers.default, n, total) : null);
+  // The student's own setup keeps the format's header (null here) until its header has parts of its own.
+  const headerParts = (f, n, total = '') => (f.setup && !(f.setup.own && f.setup.headers.default == null) ? fill(n === 1 && f.setup.title ? f.setup.headers.first : f.setup.headers.default, n, total) : null);
   const footerParts = (f, n, total = '') => (f.setup ? fill(n === 1 && f.setup.title ? f.setup.footers.first : f.setup.footers.default, n, total) : null);
   // A paper's format, from what it stores (an id of the three, or a preset) or a format already made. Unknown → MLA.
   const get = (f) => {
@@ -173,6 +197,28 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
   };
   // A paragraph's first-line indent in inches: its own, else none for a centred or right-aligned line, else the format's.
   const firstOf = (f, attrs = {}) => (attrs.first != null ? attrs.first : attrs.align === 'center' || attrs.align === 'right' ? 0 : f.first);
+  // The Paragraph dialog's starting values: what the format gives a paragraph there (where: { entry, quote, heading }),
+  // and what it stores of the values chosen: only those that differ, each null otherwise. v.line: a multiple, or 'exact' /
+  // 'least' / 'multiple' with v.at (pt, or the multiple).
+  const paraBase = (f, where = {}, align) => {
+    const set = where.entry ? f.list : where.quote ? f.quote : f, h = where.heading ? f.headings[where.heading - 1] || {} : null;
+    const a = h ? h.align || 'left' : 'left';
+    return { align: a, left: where.entry ? f.list.hanging : 0, right: 0, first: h ? h.first || 0 : where.quote ? 0 : where.entry ? -f.list.hanging : firstOf(f, { align: align || a }), before: 0, after: set.after, line: set.line, exact: null, least: null };
+  };
+  const paraAttrs = (f, where = {}, v = {}) => {
+    const b = paraBase(f, where, v.align), eq = (x, y) => Math.abs(x - y) < 0.005, num = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+    const out = {
+      align: !v.align || v.align === 'left' || v.align === b.align ? null : v.align,
+      left: num(v.left) == null || eq(v.left, b.left) ? null : v.left, right: num(v.right) ? v.right : null,
+      first: num(v.first) == null || eq(v.first, b.first) ? null : v.first, before: num(v.before) ? v.before : null,
+      after: num(v.after) == null || eq(v.after, b.after) ? null : v.after, line: null, exact: null, least: null,
+      keepNext: v.keepNext ? true : null, keepLines: v.keepLines ? true : null, widow: v.widow === false ? false : null,
+    };
+    if (v.line === 'exact' && num(v.at)) out.exact = v.at;
+    else if (v.line === 'least' && num(v.at)) out.least = v.at;
+    else { const m = v.line === 'multiple' ? num(v.at) : num(v.line); if (m != null && !eq(m, b.line)) out.line = m; }
+    return out;
+  };
   // The running header's text on page n (1-based), or '' where there is none. surname: MLA's "Lastname".
   const headerText = (f, n, surname = '') => {
     if (f.header.text === 'none' || (n === 1 && !f.header.first)) return '';
@@ -219,11 +265,11 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
     const out = [
       `.gp-sheet { width: ${g.width}px; height: ${g.height}px; }`,
       `.gp-flow { width: ${g.content}px; left: ${g.left}px; top: ${g.top}px; }`,
-      `.gp-hdr { top: ${g.header}px; right: ${g.right}px; left: ${g.left}px; font: ${f.size}pt/${lineHeight(f, { line: 1 })}px "${f.font}"; }`,
-      `.gp-notes { left: ${g.left}px; width: ${g.content}px; font: ${f.notes.size}pt/${lineHeight(f, { size: f.notes.size, line: f.notes.line })}px "${f.font}"; }`,
+      `.gp-hdr { top: ${g.header}px; right: ${g.right}px; left: ${g.left}px; font: ${f.size}pt/${lineHeight(f, { line: 1 })}px ${stack(f.font)}; }`,
+      `.gp-notes { left: ${g.left}px; width: ${g.content}px; font: ${f.notes.size}pt/${lineHeight(f, { size: f.notes.size, line: f.notes.line })}px ${stack(f.font)}; }`,
       `.gp-notes p { padding-bottom: ${r3(pt2px(f.notes.after))}px; text-indent: ${f.notes.first}in; }`,
-      `${s} { font-family: "${f.font}", ${GENERIC[f.font]}; font-size: ${f.size}pt; line-height: ${lh}px; tab-size: ${r3((f.tab || 0.5) * PX)}px;${f.kern != null ? ` font-kerning: ${f.kern ? 'normal' : 'none'};` : ''} }`,
-      `.gp-ftr { bottom: ${g.footer ?? g.header}px; right: ${g.right}px; left: ${g.left}px; font: ${f.size}pt/${lineHeight(f, { line: 1 })}px "${f.font}"; }`,
+      `${s} { font-family: ${stack(f.font)}; font-size: ${f.size}pt; line-height: ${lh}px; tab-size: ${r3((f.tab || 0.5) * PX)}px;${f.kern != null ? ` font-kerning: ${f.kern ? 'normal' : 'none'};` : ''} }`,
+      `.gp-ftr { bottom: ${g.footer ?? g.header}px; right: ${g.right}px; left: ${g.left}px; font: ${f.size}pt/${lineHeight(f, { line: 1 })}px ${stack(f.font)}; }`,
       // Space after (and an imported paragraph's before) as margins: between two paragraphs the larger counts, as in Word.
       `${s} p, ${s} li, ${s} h1, ${s} h2, ${s} h3, ${s} h4, ${s} pre { margin: 0 0 ${r3(pt2px(f.after))}px; padding: 0; text-indent: ${f.first}in; line-height: ${lh}px; }`,
       `${s} .ql-align-center, ${s} .ql-align-right { text-indent: 0; }`,
@@ -282,9 +328,10 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
     + `${notes ? '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>' : ''}`
     + `<w:compat>${COMPAT.map(([k, v]) => `<w:compatSetting w:name="${k}" w:uri="http://schemas.microsoft.com/office/word" w:val="${v}"/>`).join('')}</w:compat>`
     + '<w:themeFontLang w:val="en-US"/></w:settings>';
-  const fontTableXML = () => `<w:fonts ${W}>${FONTS.map((n) => `<w:font w:name="${n}"><w:panose1 w:val="${TABLE[n][0]}"/><w:charset w:val="00"/><w:family w:val="${TABLE[n][1]}"/><w:pitch w:val="${TABLE[n][2]}"/></w:font>`).join('')}</w:fonts>`;
+  // fonts: the paper's own besides the four (an imported file's well-known ones), named so Word lays it out in them.
+  const fontTableXML = (fonts = []) => `<w:fonts ${W}>${FONTS.map((n) => `<w:font w:name="${n}"><w:panose1 w:val="${TABLE[n][0]}"/><w:charset w:val="00"/><w:family w:val="${TABLE[n][1]}"/><w:pitch w:val="${TABLE[n][2]}"/></w:font>`).join('')}${[...new Set(fonts)].filter((n) => LOCAL[n]).map((n) => `<w:font w:name="${esc(n)}"><w:charset w:val="00"/><w:family w:val="${TABLE[LOCAL[n][1]][1]}"/><w:pitch w:val="variable"/></w:font>`).join('')}</w:fonts>`;
 
-  return { FORMATS, IDS, FONTS, FACES, LINE, PAGE, get, custom, preset, setup, look, headerParts, footerParts, lineHeight, geometry, firstOf, headerText, dateText, listAt, blockBox, css, stylesXML, sectPr, settingsXML, fontTableXML, twips: tw, tabsOf };
+  return { FORMATS, IDS, FONTS, LOCAL, KNOWN, stack, FACES, LINE, PAGE, PAGES, pageSetup, formatHeader, paraBase, paraAttrs, get, custom, preset, setup, look, headerParts, footerParts, lineHeight, geometry, firstOf, headerText, dateText, listAt, blockBox, css, stylesXML, sectPr, settingsXML, fontTableXML, twips: tw, tabsOf };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_STYLES; else GZ_WRITER_STYLES;
