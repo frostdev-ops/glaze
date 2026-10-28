@@ -76,3 +76,18 @@ test('review: closing a sheet awaiting libraries prevents it from opening late',
   const opening = s.open(); s.ctx.GZ_WRITER_SUBMIT_SHEET.close(); finish(); await opening;
   assert.equal(s.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), false);
 });
+
+test('review: an oversized as-is file is rejected before any arrayBuffer read', async () => {
+  const s = sheet(); let reads = 0;
+  const file = { name: 'huge.pdf', size: 50e6 + 1, type: 'application/pdf', arrayBuffer: async () => { reads++; return new ArrayBuffer(3); } };
+  await s.ctx.GZ_WRITER_SUBMIT_SHEET.open(s.api, file);
+  if (s.ctx.GZ_WRITER_SUBMIT_SHEET.opened()) { s.click('.gs-primary'); await s.flush(); }
+  assert.equal(reads, 0);
+  assert.equal(s.messages.some((m) => m.type === 'submit:go'), false);
+});
+test('review: a malformed as-is read cannot cross the channel', async () => {
+  const s = sheet();
+  await s.ctx.GZ_WRITER_SUBMIT_SHEET.open(s.api, { name: 'a.pdf', size: 3, type: 'application/pdf', arrayBuffer: async () => new Uint8Array([1, 2, 3]) });
+  s.click('.gs-primary'); await s.flush();
+  assert.equal(s.messages.some((m) => m.type === 'submit:go'), false);
+});
