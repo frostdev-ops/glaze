@@ -38,9 +38,10 @@ const answer = (body) => {
   const system = body.messages?.find((m) => m.role === 'system')?.content || '';
   const user = body.messages?.filter((m) => m.role === 'user').map((m) => (typeof m.content === 'string' ? m.content : (m.content || []).map((c) => c.text || '').join('\n'))).join('\n') || '';
   const data = blocks(user), schema = body.response_format?.json_schema?.schema;
-  if (/^You finish the sentence/.test(system)) {
-    const word = words(data['text before the caret'] || '').pop() || '';
-    return `${word.replace(/[^\p{L}\p{N}'’-]/gu, '')} and what the town remembers.`;
+  if (/^You predict how the sentence/.test(system)) {
+    // Mid-word the caret's word in full first (writer.complete's SYSTEM_WORD); after a space only the next words.
+    const word = data['its last word maybe cut off'];
+    return `${word ? `${word} ` : ''}and what the town remembers.`;
   }
   if (/^You tell a student how their draft stands/.test(system)) {
     // Per rubric row by its id; without rows, per requirement, its words copied from the instructions.
