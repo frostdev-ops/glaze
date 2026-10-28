@@ -1,0 +1,48 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. Shape from the owner's Ultra, 2026-10-27: courses/{id}/contents/{id} for an assignment (test/fixtures/ultra-writer-content.json's), its instructions holding attachment links. The explore3.png link is the live shape exactly (an image, render inline, isDecorative true). The .docx link copies that shape with render link and a Word mimeType: a document attachment was NOT seen live. The reading-guide link is an ordinary link, not an attachment.",
+ "id": "_7_1",
+ "courseId": "_101_1",
+ "parentId": "_700_1",
+ "title": "Essay 2: Memory in Beloved",
+ "description": "A 1,200-word close reading.",
+ "contentHandler": "resource/x-bb-asmt-test-link",
+ "body": {
+  "rawText": "",
+  "displayText": ""
+ },
+ "contentDetail": {
+  "resource/x-bb-asmt-test-link": {
+   "test": {
+    "deployedAssessmentType": "test",
+    "assessment": {
+     "id": "_4000_1",
+     "gradableItemId": "_810_1",
+     "type": "Test",
+     "subtype": "Assignment",
+     "title": "Essay 2: Memory in Beloved",
+     "description": {
+      "rawText": "<p>Cite at least two critics&nbsp;in MLA style.</p>",
+      "displayText": "<div class=\"vtbegenerated\"><p>Cite at least two critics&nbsp;in MLA style.</p></div>"
+     },
+     "instructions": {
+      "rawText": "<h5>Essay 2</h5> \n<br> \n<p>Write 1,200 words on memory in <em>Beloved</em>.&nbsp;The full prompt is attached.</p>\n<p><a href=\"https://bb.school.test/bbcswebdav/pid-4968850-dt-asiobject-rid-14533105_1/xid-14533105_1\" data-bbtype=\"attachment\" data-bbfile=\"{&quot;alternativeText&quot;:&quot;Essay 2 prompt.docx&quot;,&quot;displayName&quot;:&quot;Essay 2 prompt.docx&quot;,&quot;fileName&quot;:&quot;Essay 2 prompt.docx&quot;,&quot;isDecorative&quot;:false,&quot;mimeType&quot;:&quot;application/vnd.openxmlformats-officedocument.wordprocessingml.document&quot;,&quot;render&quot;:&quot;link&quot;,&quot;resourceUrl&quot;:&quot;https://bb.school.test/sessions/19/19992D5D/d557094b/Essay%202%20prompt.docx&quot;,&quot;linkName&quot;:&quot;Essay 2 prompt.docx&quot;}\">Essay 2 prompt.docx</a></p>\n<p><a href=\"https://bb.school.test/bbcswebdav/pid-4968850-dt-asiobject-rid-14533104_1/xid-14533104_1\" data-bbtype=\"attachment\" data-bbfile=\"{&quot;alternativeText&quot;:&quot;explore3.png&quot;,&quot;displayName&quot;:&quot;explore3.png&quot;,&quot;fileName&quot;:&quot;explore3.png&quot;,&quot;isDecorative&quot;:true,&quot;mimeType&quot;:&quot;image/png&quot;,&quot;render&quot;:&quot;inline&quot;,&quot;resourceUrl&quot;:&quot;https://bb.school.test/sessions/19/19992D5D/d557094a/explore3.png&quot;,&quot;linkName&quot;:&quot;explore3.png&quot;}\">explore3.png</a></p>\n<p><a href=\"https://www.example.org/beloved\">A reading guide</a></p>",
+      "displayText": "<div class=\"vtbegenerated\"><h5>Essay 2</h5> \n<br> \n<p>Write 1,200 words on memory in <em>Beloved</em>.&nbsp;The full prompt is attached.</p>\n<p><a href=\"https://bb.school.test/bbcswebdav/pid-4968850-dt-asiobject-rid-14533105_1/xid-14533105_1\" data-bbtype=\"attachment\" data-bbfile=\"{&quot;alternativeText&quot;:&quot;Essay 2 prompt.docx&quot;,&quot;displayName&quot;:&quot;Essay 2 prompt.docx&quot;,&quot;fileName&quot;:&quot;Essay 2 prompt.docx&quot;,&quot;isDecorative&quot;:false,&quot;mimeType&quot;:&quot;application/vnd.openxmlformats-officedocument.wordprocessingml.document&quot;,&quot;render&quot;:&quot;link&quot;,&quot;resourceUrl&quot;:&quot;https://bb.school.test/sessions/19/19992D5D/d557094b/Essay%202%20prompt.docx&quot;,&quot;linkName&quot;:&quot;Essay 2 prompt.docx&quot;}\">Essay 2 prompt.docx</a></p>\n<p><a href=\"https://bb.school.test/bbcswebdav/pid-4968850-dt-asiobject-rid-14533104_1/xid-14533104_1\" data-bbtype=\"attachment\" data-bbfile=\"{&quot;alternativeText&quot;:&quot;explore3.png&quot;,&quot;displayName&quot;:&quot;explore3.png&quot;,&quot;fileName&quot;:&quot;explore3.png&quot;,&quot;isDecorative&quot;:true,&quot;mimeType&quot;:&quot;image/png&quot;,&quot;render&quot;:&quot;inline&quot;,&quot;resourceUrl&quot;:&quot;https://bb.school.test/sessions/19/19992D5D/d557094a/explore3.png&quot;,&quot;linkName&quot;:&quot;explore3.png&quot;}\">explore3.png</a></p>\n<p><a href=\"https://www.example.org/beloved\">A reading guide</a></p></div>"
+     },
+     "totalPoints": 0,
+     "questionCount": 0
+    },
+    "deploymentSettings": {
+     "allowFileSubmission": true,
+     "allowTextSubmission": true,
+     "isDescriptionShown": false,
+     "isInstructionShown": false
+    }
+   }
+  }
+ },
+ "genericReadOnlyData": {
+  "hasGradeColumn": true,
+  "dueDate": null
+ },
+ "visibility": "VISIBLE"
+}

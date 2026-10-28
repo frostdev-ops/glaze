@@ -18,7 +18,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
     addEventListener(type, f) { this.listeners[type] = f; } remove() {} contains() { return false; } focus() {}
     querySelector() { return null; }
   }
-  const hooks = {}, sent = [], receives = [], pendingStatus = [], pendingRun = [];
+  const hooks = {}, sent = [], receives = [], pendingStatus = [], pendingRun = [], said = [];
   let ctx = { kind: 'reply' }, settings = start || { on: true, use: 'main', features: { completion: true, writing: true } }, holdStatus = false;
   const opened = [];
   const doc = { content: { size: 10 }, textBetween: () => 'draft words' };
@@ -29,7 +29,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
     GZ_WRITER_SCHEMA: { text: () => ({ text: 'draft words', posAt: (v) => v }) }, GZ_WRITER_PROOF: {},
     GZ_WRITER_PAPER: format ? { current: () => ({ format: () => format }) } : undefined,
     GZ_WRITER_FRAME: { t: (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? v[k] : m)), kind: () => 'reply', context: () => ctx, editor: () => ed, mode: () => mode,
-      on: (ev, f) => { hooks[ev] = f; }, handle: (type, f) => { hooks[`page:${type}`] = f; }, plugin() {}, slot: () => new Element(), item: () => new Element() },
+      on: (ev, f) => { hooks[ev] = f; }, handle: (type, f) => { hooks[`page:${type}`] = f; }, say: (m) => said.push(m), plugin() {}, slot: () => new Element(), item: () => new Element() },
     chrome: { storage: { local: { get: async () => ({ ai: structuredClone(settings) }) }, onChanged: { addListener(f) { hooks.storage = f; } } }, runtime: { connect() {
       return { onMessage: { addListener: (f) => receives.push(f) }, onDisconnect: { addListener() {} }, disconnect() {}, postMessage(m) {
         sent.push(m);
@@ -44,7 +44,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
   const ai = sandbox.GZ_WRITER_AI;
   const panel = (opts) => { const host = new Element(); return sandbox.GZ_WRITER_AI.feedbackView(host, opts); };
   const pane = (opts) => panel(opts).el;
-  return { ai, sent, pendingStatus, pendingRun, reply, hooks, opened, pane, panel, proof: sandbox.GZ_WRITER_PROOF,
+  return { ai, sent, said, pendingStatus, pendingRun, reply, hooks, opened, pane, panel, proof: sandbox.GZ_WRITER_PROOF,
     start: async () => { hooks.ready(); await flush(); },
     off: () => { settings.on = false; hooks.storage({ ai: { newValue: structuredClone(settings) } }, 'local'); },
     context: (c) => { ctx = c; hooks.context(c); }, hold: () => { holdStatus = true; } };
@@ -190,6 +190,22 @@ test('a paper\'s Feedback run carries the paper\'s layout, which the .docx has; 
   c.context({ kind: 'reply', assignment: { instructions: 'Discuss memory.' } }); await flush();
   c.ai.feedback(); await flush();
   assert.equal('paper' in c.pendingRun.at(-1).input, false);
+});
+
+test('Feedback asks the page for the assignment\'s attached files first and sends what it read; without files it asks nothing', async () => {
+  const f = frame({ mode: 'paper', answer: () => ({ allowed: true, ready: true, caps: { images: false } }) }); await f.start();
+  f.context({ kind: 'assignment', assignment: { instructions: 'The prompt is attached.', files: [{ name: 'prompt.docx', image: false }, { name: 'explore3.png', image: true }] } }); await flush();
+  const runs = f.pendingRun.length;
+  f.ai.feedback(); await flush();
+  assert.deepEqual(plain(f.said), [{ type: 'attachments', id: 1, images: false }], 'pictures aren\'t asked for a model known to take none');
+  assert.equal(f.pendingRun.length, runs, 'no run before the page answers');
+  const read = [{ name: 'prompt.docx', text: 'Quote each scene at least once.' }];
+  f.hooks['page:attachments']({ type: 'attachments', id: 1, files: read }); await flush();
+  assert.deepEqual(plain(f.pendingRun.at(-1).input.context.assignment.files), read);
+  const c = frame(); await c.start();
+  c.context({ kind: 'assignment', assignment: { instructions: 'Discuss memory.', files: [] } }); await flush();
+  c.ai.feedback(); await flush();
+  assert.deepEqual([c.said.length, c.pendingRun.at(-1).task], [0, 'writer.feedback']);
 });
 
 test('Feedback updates passage pages after layout without replacing its focused controls', async () => {

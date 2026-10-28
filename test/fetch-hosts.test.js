@@ -103,7 +103,8 @@ const SITES = {
   'features/popup.js': [{ at: 'GZ_LMSQ.fetch(src,', kind: 'page' }],
   // Rubric definitions and the current student's evaluation, read-only through the page's own LMS queue.
   'features/rubric.js': [{ at: 'const res = await GZ_LMSQ.fetch(url,', kind: 'page' }, { at: 'f: (...args) => GZ_LMSQ.fetch(...args, 0, live)', kind: 'page' }],
-  'lib/writer-context-assignment.js': [{ at: 'f: (...a) => GZ_LMSQ.fetch(...a, 0, live)', kind: 'page' }],
+  // An assignment's context, and the files it attaches (/bbcswebdav/ on the page's site), read when Feedback asks.
+  'lib/writer-context-assignment.js': [{ at: 'f: (...a) => GZ_LMSQ.fetch(...a, 0, live)', kind: 'page' }, { at: "await fetch(url, { credentials: 'same-origin' })", kind: 'page' }],
   'features/calexport.js': [{ at: 'await fetch(url,', kind: 'page' }],
   // Glaze Writer's discussion context: the prompt, thread and replies, read-only behind visible work in the site's queue.
   'lib/writer-context-discussion.js': [{ at: 'GZ_LMSQ.fetch(u, o, 1, live)', kind: 'page' }],
