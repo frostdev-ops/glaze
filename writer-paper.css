@@ -313,3 +313,5 @@
 .gp-hfbar .gp-check { padding: 0 6px; white-space: nowrap; }
 .gp-menu small { margin-inline-start: 18px; }
 @media print { .gp-hf, .gp-hfbar { display: none !important; } }
+.gp-more .gp-ico { stroke-width: 3.2; }
+.gp-fgrid label { white-space: nowrap; }
