@@ -1,0 +1,26 @@
+/* Glaze Writer's ruler (writer-ruler.js): a strip the page's width above the pages, in the Look's tokens; the margins
+   shaded, eighth-inch ticks, numbers at each inch from the margin, Word's indent markers and tab stops. */
+.gr-ruler { position: relative; height: 24px; flex: none; overflow: hidden; background: var(--panel); border-bottom: 1px solid var(--edge); user-select: none; }
+.gr-strip { position: absolute; top: 4px; height: 16px; border-radius: 2px; cursor: copy;
+  background: linear-gradient(to right, var(--gz-surface-2) var(--ml), var(--gz-surface) var(--ml), var(--gz-surface) calc(100% - var(--mr)), var(--gz-surface-2) calc(100% - var(--mr)));
+  box-shadow: inset 0 0 0 1px var(--gz-line-strong); }
+:root:not([data-dark]) .gr-strip { background: linear-gradient(to right, var(--gz-line) var(--ml), #fff var(--ml), #fff calc(100% - var(--mr)), var(--gz-line) calc(100% - var(--mr))); }
+.gr-ticks i { position: absolute; bottom: 3px; width: 1px; background: var(--gz-ink-faint); font: 600 9px/1 var(--gz-font); font-style: normal; color: var(--gz-ink-muted); pointer-events: none; }
+.gr-ticks .gr-eighth { height: 2px; } .gr-ticks .gr-quarter { height: 4px; } .gr-ticks .gr-half { height: 6px; }
+.gr-ticks .gr-inch { height: 0; width: 0; bottom: 4px; transform: translateX(-50%); text-indent: 0; }
+.gr-ticks .gr-inch:not(:empty) { width: auto; height: auto; background: none; }
+.gr-m { position: absolute; display: block; cursor: ew-resize; }
+.gr-first, .gr-hang, .gr-right { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; margin-left: -5px; }
+.gr-first { top: 0; border-top: 6px solid var(--gz-ink-muted); }
+.gr-hang, .gr-right { top: 5px; border-bottom: 6px solid var(--gz-ink-muted); }
+.gr-left { top: 11px; width: 9px; height: 4px; margin-left: -4.5px; background: var(--gz-ink-muted); border-radius: 1px; }
+.gr-m:hover { filter: brightness(1.4); }
+.gr-first:hover { border-top-color: var(--gz-accent); } .gr-hang:hover, .gr-right:hover { border-bottom-color: var(--gz-accent); } .gr-left:hover { background: var(--gz-accent); }
+.gr-edge { top: 0; width: 7px; height: 16px; margin-left: -3.5px; cursor: col-resize; z-index: 0; }
+.gr-tab { top: 8px; width: 7px; height: 7px; margin-left: -1px; cursor: pointer; border-color: var(--gz-ink); border-style: solid; border-width: 0; }
+.gr-tab-l { border-left-width: 2px; border-bottom-width: 2px; }
+.gr-tab-r { border-right-width: 2px; border-bottom-width: 2px; margin-left: -6px; }
+.gr-tab-c { border-bottom-width: 2px; margin-left: -3.5px; background: linear-gradient(var(--gz-ink), var(--gz-ink)) center / 2px 100% no-repeat; }
+.gr-tab-d { border-bottom-width: 2px; margin-left: -3.5px; background: linear-gradient(var(--gz-ink), var(--gz-ink)) center / 2px 100% no-repeat, radial-gradient(circle, var(--gz-ink) 1px, transparent 1.5px) 100% 30% / 3px 3px no-repeat; }
+.gr-tab.gr-off { opacity: .3; }
+@media print { .gr-ruler { display: none !important; } }
