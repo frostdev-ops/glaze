@@ -152,6 +152,18 @@ const HARNESS = `(() => {
     check(tool.font === 'Times New Roman' && tool.size === '12' && tool.labels, `toolbar: font "${tool.font}", size ${tool.size}, more formatting, colour, highlight, ¶, ⋯`);
     check(tool.fits, `the toolbar fits its ${tool.width}px without scrolling (${tool.scroll}px of controls)`);
     check(tool.tbtn === 'Cite|Footnote|Page break', 'Cite, Footnote and Page break keep their names');
+    saved.toolbarNarrow = await shot(p, 'format-toolbar-narrow.png');
+    const folded = await fr.evaluate(() => [...document.querySelectorAll('.gp-tool [hidden]')].length);
+    if (folded) {
+      await fr.click('.gp-more');
+      const items = await fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role^=menuitem]')].map((b) => b.firstChild.textContent));
+      check(items.includes('Undo') && items.includes('Page setup…'), `a narrow toolbar folds ${folded} controls into ⋯ (${items.join(', ')})`);
+      await fr.click('.gp-more');
+    }
+    // The rest at a wide window, every control on the toolbar.
+    await p.setViewportSize({ width: 1920, height: 1000 });
+    await settle(fr);
+    check(await fr.evaluate(() => { const t = document.querySelector('.gp-tool'); return !t.querySelector('[hidden]') && t.scrollWidth <= t.clientWidth + 1; }), 'at 1920px every control is on the toolbar');
     saved.toolbar = await shot(p, 'format-toolbar.png');
 
     // ---- font, size, colour, highlight, more formatting

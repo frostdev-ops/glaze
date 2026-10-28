@@ -176,7 +176,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       close();
       el.classList.add('pop');
       document.body.append(el);
-      const r = opener.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
+      // A control folded into ⋯ (the toolbar is narrow) opens its popover from ⋯.
+      const r = (opener.getClientRects().length ? opener : moreB).getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
       el.style.left = `${Math.max(4, Math.min(r.left, innerWidth - w - 4))}px`;
       el.style.top = `${above ? Math.max(4, r.top - hh - 6) : Math.min(r.bottom + 6, innerHeight - hh - 4)}px`;
       el.style.transformOrigin = above ? 'bottom left' : 'top left';
@@ -959,10 +960,21 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     }, true);
 
     // ---- ⋯: page setup, the header and footer, the ruler (writer-ruler.js, where loaded)
+    // A narrow toolbar folds its controls into ⋯, in this order, until the rest fits.
+    const tool = root.querySelector('.gp-tool'), history2 = undo.parentElement;
+    const FOLDS = [[history2, null], [zoomB, 'Zoom'], [hlB], [colorB], [moreFmt], [paraB], [alignB]];
+    const fold = () => {
+      for (const [el] of FOLDS) el.hidden = false;
+      for (let i = 0; i < FOLDS.length && tool.scrollWidth > tool.clientWidth + 1; i++) FOLDS[i][0].hidden = true;
+    };
+    new ResizeObserver(fold).observe(tool);
+    const folded = () => FOLDS.filter(([el]) => el.hidden).flatMap(([el, label]) => (el === history2
+      ? [{ label: t('Undo'), hint: keyHint('⌘Z'), run: () => { ed.run('undo'); view.focus(); } }, { label: t('Redo'), hint: keyHint('⌘⇧Z'), run: () => { ed.run('redo'); view.focus(); } }]
+      : [{ label: label ? `${t(label)} ${el.textContent}` : el.getAttribute('aria-label'), run: () => el.click() }]));
     moreB.addEventListener('click', () => {
       if (open?.opener === moreB) { close(); return; }
-      const R = globalThis.GZ_WRITER_RULER;
-      menu(moreB, [{ label: t('Page setup…'), run: pageDialog }, { label: t('Header and footer'), run: () => editPart('header', page) },
+      const R = globalThis.GZ_WRITER_RULER, extra = folded();
+      menu(moreB, [...extra, ...(extra.length ? ['-'] : []),{ label: t('Page setup…'), run: pageDialog }, { label: t('Header and footer'), run: () => editPart('header', page) },
         ...(R ? ['-', { label: t('Show ruler'), checked: R.shown(), run: () => R.toggle() }] : [])]);
     });
 
@@ -1003,6 +1015,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (C?.sourcesView) C.sourcesView(panes.sources, { editor: ed, paper: api, badge: (n) => { badges.sources.textContent = n ? nf(n) : ''; } });
       if (globalThis.GZ_WRITER_AI?.feedbackView) feedbackPanel = GZ_WRITER_AI.feedbackView(panes.feedback, { pageAt });
       submit.disabled = typeof GZ_WRITER_PAPER.submit !== 'function';
+      fold();
     };
     submit.addEventListener('click', () => { if (typeof GZ_WRITER_PAPER.submit === 'function') GZ_WRITER_PAPER.submit(api); });
     for (const [id, tab] of Object.entries(tabs)) tab.addEventListener('click', () => {

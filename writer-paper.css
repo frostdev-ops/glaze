@@ -252,6 +252,7 @@
    their labels when the toolbar is narrow; their names stay as aria-labels. */
 .gp-tool { container-type: inline-size; container-name: gp-tool; }
 @container gp-tool (max-width: 1560px) { .gp-tbtn .gp-lbl { display: none; } .gp-tbtn:has(.gp-lbl) { padding-inline: 7px; } }
+@container gp-tool (max-width: 1240px) { .gp-font { width: 112px; } }
 .gp-font { width: 136px; justify-content: space-between; padding-inline: 10px 8px; flex: none; }
 .gp-font .gp-font-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gp-sizebox { padding: 0 2px 0 0; gap: 0; flex: none; }
