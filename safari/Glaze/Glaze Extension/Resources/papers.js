@@ -33,7 +33,7 @@
     $('list').hidden = false;
   };
   const exportPaper = async (store, key) => {
-    await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js']);
+    await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js']);
     const p = await store.get(key);
     if (!p?.doc) return;
     const f = GZ_WRITER_STYLES.get(p.format), surname = GZ_WRITER_FORMAT.surname(p.doc, f);

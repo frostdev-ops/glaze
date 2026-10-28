@@ -128,7 +128,8 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
     return e;
   };
 
-  // The blocks pagination walks, with where each sits: textblocks, page breaks, and tables (one unbreakable block).
+  // The blocks pagination walks, with where each sits: textblocks, page breaks, horizontal lines, and tables (one
+  // unbreakable block).
   const walk = (doc, f) => {
     const out = [], list = ST().listAt(doc);
     let note = 0;
@@ -136,6 +137,7 @@ var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
       const entry = list && index >= list.from && index < list.to;
       const visit = (node, pos, where) => {
         if (node.type.name === 'page_break') { out.push({ kind: 'break', node, pos }); return; }
+        if (node.type.name === 'horizontal_rule') { out.push({ kind: 'atom', node, pos, where, note }); return; }
         if (node.type.name === 'table') { out.push({ kind: 'table', node, pos, where, note }); node.descendants((n) => { if (n.type.name === 'footnote_ref') note++; }); return; }
         if (node.isTextblock) {
           const first = note;

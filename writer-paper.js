@@ -7,7 +7,7 @@
 // Classic script after writer.js; the paper libraries load only when a paper opens.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-papers.js'];
-  const DOCX = ['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js'];
+  const DOCX = ['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js'];
   const GAP = 26.4; // between pages, in page px (22px at 100%)
   const PX100 = 80 / 96; // 100% shows an inch as 80px, as the mockup does
   const loaded = new Map();
