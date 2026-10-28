@@ -7,9 +7,14 @@
 // Checked: the sheet's look (screenshots beside the mockup), focus trap, Escape and Cancel changing nothing, Ultra's
 // Submit (disabled or not) and Save and Close caught, the .docx landing in the input with its name, type and bytes (read
 // back with lib/doctext.js), the note and text in Quill, Submit clicked exactly once and only after the file is listed,
-// each failure stopping before Submit, a test untouched, and the keyboard flow. GETs only, synthetic.
+// each failure stopping before Submit, a test untouched, and the keyboard flow. Bringing a file (writer-import.js): a .docx
+// dropped on the paper asks, Open in Writer replaces the paper (a version first, Undo in the toast); one chosen in Ultra's
+// own file area reaches the frame before Ultra and Submit as is attaches its very bytes (hashes compared) with the note; a PDF
+// goes straight to the sheet; ⋯ → Import…; with Open uploads in Writer off, Ultra's area takes the file itself. GETs only,
+// synthetic.
 // NODE_PATH=<playwright> nice -n 10 node scripts/writer-submit-check.js [evidence directory]
-// SUBMIT_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-submit).
+// SUBMIT_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-submit); IMPORT_SHOTS, the
+// import's (default ~/Projects/glaze-plans/writer/mockups/settings-ai/build-import).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -135,7 +140,7 @@ const HARNESS = `(() => {
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
-    const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
+    const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, writerUploads: true, drafts: true } });
     await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
     const watch = (p, tag) => {
@@ -351,6 +356,152 @@ const HARNESS = `(() => {
     await until(() => f.fr.evaluate(() => !document.querySelector('.gs-primary').disabled && document.querySelector('.gs-err').textContent), 'second try ends', 30000);
     check(await f.p.evaluate(() => __uploads.length === 1 && !__clicks.some((c) => /submit/.test(c))), 'a second, explicit try doesn\'t attach a second copy, and still never submits');
     await f.p.close();
+
+    // ---- bringing a file: on the paper, in Ultra's own file area, a PDF, ⋯ → Import…, and the switch off
+    const ishots = process.env.IMPORT_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/settings-ai/build-import');
+    const ishot = async (target, name) => { fs.mkdirSync(ishots, { recursive: true }); await pause(350); const f = path.join(ishots, name); await target.screenshot({ path: f }); return f; };
+    const sha = (b) => crypto.createHash('sha256').update(Buffer.from(b)).digest('hex');
+    const blankPaper = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => /^writer(Paper|Versions):/.test(k))); });
+    const paperText = (fr) => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent);
+    const cardOf = (fr) => fr.evaluate(() => {
+      const c = document.querySelector('.gi-layer[data-open] .gi-card');
+      return c && { name: c.querySelector('.gi-file b').textContent, meta: c.querySelector('.gi-file small').textContent, tiles: [...c.querySelectorAll('.gi-choice > span:first-of-type')].map((x) => x.textContent),
+        kept: c.querySelector('.gi-kept')?.textContent || '', focus: !!document.activeElement?.classList.contains('gi-default') };
+    });
+    const asisOf = (fr) => fr.evaluate(() => {
+      const L = document.querySelector('.gs-layer[data-open]'), q = (x) => L?.querySelector(x);
+      return L && { asis: !!q('.gs-asis'), big: q('.gs-big .gs-doc')?.textContent || '', name: q('.gs-name').textContent, size: q('.gs-file small').textContent, toggle: !!q('.gs-toggle'), open: !!q('.gs-open'), thumbs: L.querySelectorAll('.gs-thumb').length, title: q('h2').textContent };
+    });
+    // In the frame, a .docx of the APA fixture as Writer writes one: what a student brings.
+    ({ p, el, fr } = await openAttempt('empty'));
+    const essay = Buffer.from(await fr.evaluate(async (json) => {
+      await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js']);
+      return Array.from((await GZ_WRITER_DOCX.exportDocx(GZ_WRITER_SCHEMA.paper.nodeFromJSON(json), { format: GZ_WRITER_STYLES.get('apa7'), surname: 'Rivera', title: 'Essay 2' })).bytes);
+    }, FX.papers.apa7()));
+    const pdf = Buffer.concat([Buffer.from('%PDF-1.4\n%synthetic\n'), crypto.randomBytes(4096), Buffer.from('\n%%EOF\n')]);
+    const files = path.join(out, 'import');
+    fs.mkdirSync(files, { recursive: true });
+    fs.writeFileSync(path.join(files, 'Rivera_Essay2.docx'), essay);
+    fs.writeFileSync(path.join(files, 'Rivera_Essay2.pdf'), pdf);
+    const marker = (() => { let x = ''; JSON.stringify(FX.papers.apa7(), (k, v) => { if (k === 'text' && !x && v.length > 60) x = v; return v; }); return x.slice(0, 50); })();
+    await p.close();
+    await blankPaper();
+    ({ p, el, fr } = await openAttempt('empty'));
+    const give = (target, sel, name, type, bytes, drop = true) => target.evaluate(({ sel, name, type, bytes, drop }) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([new Uint8Array(bytes)], name, { type }));
+      const at = document.querySelector(sel);
+      for (const t of ['dragenter', 'dragover', ...(drop ? ['drop'] : [])]) at.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }, { sel, name, type, bytes: Array.from(bytes), drop });
+    // A .docx over the paper, then dropped on it: the card, over an empty paper with no word about saving it.
+    await give(fr, '.gp-canvas', 'Rivera_Essay2.docx', MIME, essay, false);
+    check(await fr.evaluate(() => document.querySelector('.gp-canvas').classList.contains('gp-drop')), 'a file over the paper marks it as a drop target');
+    saved.dragPaper = await ishot(p, 'import-drag-paper-dark.png');
+    await give(fr, '.gp-canvas', 'Rivera_Essay2.docx', MIME, essay);
+    await until(() => cardOf(fr), 'the card');
+    let card = await cardOf(fr);
+    console.log(JSON.stringify(card));
+    check(card.name === 'Rivera_Essay2.docx' && /^\d+ KB$/.test(card.meta) && card.tiles.join('|') === 'Open in Writer|Submit as is' && !card.kept && card.focus, `a .docx dropped on the paper: the card (${card.meta}), Open in Writer focused for Enter, no "Saves current paper" over an empty paper`);
+    check(await fr.evaluate(() => document.querySelector('.gp').inert), 'the paper behind is inert while the card is open');
+    check(await fr.evaluate(() => { const c = getComputedStyle(document.querySelector('.gi-card')); return c.transitionDuration.split(',').every((d) => d.trim() === '0.16s') && /transform/.test(c.transitionProperty); }), 'the card rises and fades in over 160 ms');
+    saved.choiceDocx = await ishot(p, 'import-choice-docx-dark.png');
+    const plain = await paperText(fr), countBefore = (await versions()).length;
+    await p.keyboard.press('Escape');
+    check(await fr.evaluate(() => !document.querySelector('.gi-layer') && !document.querySelector('.gp').inert) && await paperText(fr) === plain && (await versions()).length === countBefore, 'Escape closes the card and changes nothing');
+    await give(fr, '.gp-canvas', 'Rivera_Essay2.docx', MIME, essay);
+    await until(() => cardOf(fr), 'the card again');
+    await fr.click('.gi-x');
+    check(await fr.evaluate(() => !document.querySelector('.gi-layer')) && await paperText(fr) === plain && (await versions()).length === countBefore && await p.evaluate(() => !__uploads.length), 'its close button changes nothing either');
+    // A paper with text (in its last empty paragraph, the body's, not a heading line): Open in Writer says it saves it, Enter opens the file, Undo brings the paper back.
+    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let at = null; v.state.doc.forEach((n, off) => { if (n.type.name === 'paragraph' && !n.content.size) at = off + 1; }); v.dispatch(v.state.tr.insertText('A draft that the import replaces.', at ?? v.state.doc.content.size - 1)); });
+    await until(() => fr.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'draft saved');
+    const checksPane = () => fr.evaluate(() => [...document.querySelectorAll('#gp-checks .gp-issue, #gp-checks .gp-list > div')].map((x) => x.textContent).join('|'));
+    const draft = await paperText(fr), issuesBefore = await checksPane();
+    await give(fr, '.gp-canvas', 'Rivera_Essay2.docx', MIME, essay);
+    await until(() => cardOf(fr), 'the card over the draft');
+    card = await cardOf(fr);
+    check(card.kept === 'Saves current paper', 'over a paper with text, Open in Writer carries "Saves current paper"');
+    saved.choiceReplace = await ishot(p, 'import-choice-replace-dark.png');
+    const beforeCount = (await versions()).length;
+    await p.keyboard.press('Enter');
+    await until(async () => (await paperText(fr)).includes(marker), 'the file opened in Writer');
+    await settle(fr);
+    const kept = await versions();
+    check(kept.length === beforeCount + 1 && kept[0] === 'import' && !(await paperText(fr)).includes('A draft that the import replaces.'), 'Enter (Open in Writer): the paper is the file\'s text, the draft kept as a version first');
+    const toast = await fr.evaluate(() => ({ text: document.querySelector('.gp-toast span')?.textContent, undo: document.querySelector('.gp-toast .gp-toast-do')?.textContent }));
+    check(toast.text === 'Rivera_Essay2.docx' && toast.undo === 'Undo', 'a toast with the file\'s name and Undo');
+    await until(async () => (await checksPane()) !== issuesBefore, 'Checks redrawn for the file');
+    check(true, `Checks refresh for the opened file (${await fr.evaluate(() => document.querySelectorAll('#gp-checks .gp-issue').length)} open)`);
+    saved.opened = await ishot(p, 'import-opened-dark.png');
+    await fr.click('.gp-toast-do');
+    await until(async () => (await paperText(fr)) === draft, 'undone');
+    check((await versions())[0] === 'restore' && await p.evaluate(() => !__uploads.length && !__clicks.length), 'Undo restores the paper as it was; nothing went to Ultra');
+    // ⋯ → Import…: the same card for a .docx chosen there.
+    await fr.click('.gp-status button:last-child');
+    await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].some((b) => b.textContent === 'Import…')), 'Import… in the menu');
+    saved.menu = await ishot(p, 'import-menu-dark.png');
+    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].find((b) => b.textContent === 'Import…').click())]);
+    await chooser.setFiles(path.join(files, 'Rivera_Essay2.docx'));
+    await until(() => cardOf(fr), 'the card from Import…');
+    check(true, '⋯ → Import… brings a chosen .docx to the same card');
+    await p.keyboard.press('Escape');
+    // Ultra's own input: the card in the frame, and Ultra hears nothing until Submit as is attaches the file's very bytes.
+    const paperBefore = await paperText(fr), countAsis = (await versions()).length;
+    await p.setInputFiles('[class*="makeStylessubmission-"] input[type=file]', path.join(files, 'Rivera_Essay2.docx'));
+    await until(() => cardOf(fr), 'the card from Ultra\'s input');
+    check(await p.evaluate(() => !__uploads.length && !__log.length), 'a .docx chosen through Ultra\'s "Upload files" reaches the card before Ultra hears it');
+    await fr.click('.gi-choice:not(.gi-default)');
+    await sheetOpen(fr);
+    let asis = await asisOf(fr);
+    console.log(JSON.stringify(asis));
+    check(asis.asis && asis.big === 'DOCX' && asis.name === 'Rivera_Essay2.docx' && / KB$/.test(asis.size) && !asis.toggle && !asis.open && !asis.thumbs && asis.title === 'Submit Essay 2', 'Submit as is: the sheet shows the file large, the note, no paste switch, no checks');
+    await p.keyboard.type('My file is attached as is.', { delay: 2 });
+    saved.submitAsis = await ishot(p, 'import-submit-asis-dark.png');
+    await fr.click('.gs-primary');
+    await until(() => p.evaluate(() => __clicks.length > 0), 'submitted as is', 30000);
+    await pause(600);
+    let got = await p.evaluate(() => ({ uploads: __uploads, clicks: __clicks, text: __text(), log: __log }));
+    check(got.uploads.length === 1 && got.uploads[0].name === 'Rivera_Essay2.docx' && got.uploads[0].type === MIME && got.uploads[0].via === 'input' && sha(got.uploads[0].bytes) === sha(essay), `Ultra got the original file, byte for byte (sha256 ${sha(essay).slice(0, 12)}…)`);
+    check(got.text === 'My file is attached as is.\n' && got.clicks.join() === 'assignment.attempt.authoring.footer.submit' && got.log.indexOf('click:assignment.attempt.authoring.footer.submit') > got.log.indexOf('row'), 'the note in Ultra\'s box, Ultra\'s Submit clicked once after the file was listed');
+    check((await versions()).length === countAsis && await paperText(fr) === paperBefore, 'the paper untouched: no version saved, its text as it was');
+    await p.close();
+    // A PDF on Ultra's drop zone: straight to the sheet as is.
+    ({ p, el, fr } = await openAttempt('empty'));
+    await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.pdf', 'application/pdf', pdf);
+    await sheetOpen(fr);
+    asis = await asisOf(fr);
+    check(asis.asis && asis.big === 'PDF' && asis.name === 'Rivera_Essay2.pdf' && await fr.evaluate(() => !document.querySelector('.gi-layer') && getComputedStyle(document.querySelector('.gs-big .gs-doc')).backgroundColor === 'rgb(220, 38, 38)') && await p.evaluate(() => !__uploads.length), 'a PDF dropped on Ultra\'s area: no card, straight to the sheet as is, Ultra none the wiser');
+    saved.submitPdf = await ishot(p, 'import-submit-pdf-dark.png');
+    await fr.click('.gs-primary');
+    await until(() => p.evaluate(() => __clicks.length > 0), 'PDF submitted', 30000);
+    got = await p.evaluate(() => ({ uploads: __uploads, clicks: __clicks, text: __text() }));
+    check(got.uploads.length === 1 && got.uploads[0].name === 'Rivera_Essay2.pdf' && got.uploads[0].type === 'application/pdf' && sha(got.uploads[0].bytes) === sha(pdf) && got.clicks.length === 1 && got.text === '\n', 'the PDF submitted unchanged (hashes match), once, with no note');
+    await p.close();
+    // Open uploads in Writer off: Ultra's area takes files itself, the frame never sees them.
+    const sync = await worker.evaluate(() => chrome.storage.sync.get(null));
+    await worker.evaluate((s) => chrome.storage.sync.set({ enhance: { ...s.enhance, writerUploads: false } }), sync);
+    ({ p, el, fr } = await openAttempt('empty'));
+    await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.docx', MIME, essay);
+    await until(() => p.evaluate(() => __uploads.length === 1), 'Ultra took the drop');
+    await p.setInputFiles('[class*="makeStylessubmission-"] input[type=file]', path.join(files, 'Rivera_Essay2.pdf'));
+    await until(() => p.evaluate(() => __uploads.length === 2), 'Ultra took the choice');
+    await pause(400);
+    check(await p.evaluate(() => __uploads.map((u) => u.via).join() === 'drop,input') && await fr.evaluate(() => !document.querySelector('.gi-layer') && !document.querySelector('.gs-layer')), 'Open uploads in Writer off: Ultra\'s area takes the drop and the choice itself, Writer shows nothing');
+    await p.close();
+    // The light Look (Paper), for the mockup's light shots.
+    await worker.evaluate((s) => chrome.storage.sync.set({ ...s, preset: 'Paper', colors: s.paper }), { ...sync, paper: G.GZ_PRESETS.find(([n]) => n === 'Paper')[1] });
+    await blankPaper();
+    ({ p, el, fr } = await openAttempt('empty'));
+    await until(() => fr.evaluate(() => !document.documentElement.hasAttribute('data-dark')), 'light Look');
+    await give(fr, '.gp-canvas', 'Rivera_Essay2.docx', MIME, essay);
+    await until(() => cardOf(fr), 'the light card');
+    saved.choiceLight = await ishot(p, 'import-choice-docx-light.png');
+    await fr.click('.gi-choice:not(.gi-default)');
+    await sheetOpen(fr);
+    saved.submitLight = await ishot(p, 'import-submit-asis-light.png');
+    await p.keyboard.press('Escape');
+    await p.close();
+    await worker.evaluate((s) => chrome.storage.sync.set(s), sync);
 
     // ---- a test: no sheet, nothing caught
     p = await context.newPage();

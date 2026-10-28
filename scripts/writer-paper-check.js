@@ -303,6 +303,8 @@ const HARNESS = `(() => {
     await settle(fr);
     const input = await fr.$('input[type="file"]');
     await input.setInputFiles(path.join(out, 'paper-apa7.docx'));
+    await until(() => fr.evaluate(() => !!document.querySelector('.gi-layer[data-open] .gi-default')), 'the import card');
+    await fr.click('.gi-default');
     await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('The Clearing as Ledger')), 'imported');
     const reasons = await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); const k = Object.keys(all).find((x) => x.startsWith('writerVersions:')); return all[k].map((v) => v.reason); });
     check(reasons[0] === 'import', `importing a .docx keeps the paper before it as a version (${reasons.join(', ')})`);
