@@ -135,3 +135,12 @@ test('first match at or after a position, wrapping', () => {
   assert.equal(FIND.near(hits, hits[2].to), 0);
   assert.equal(FIND.near([], 3), -1);
 });
+
+test('replacing in later footnote paragraphs keeps its boundaries and correct text offsets', () => {
+  const content = '<p>First line<br>next.</p><p><em>Second target.</em></p>';
+  let st = stateOf(doc(para('Body', { type: 'footnote_ref', attrs: { content } })));
+  const hits = FIND.search(st.doc, 'target');
+  assert.equal(hits.length, 1);
+  st = st.apply(FIND.replace(st, hits, 'result'));
+  assert.equal(st.doc.firstChild.lastChild.attrs.content, '<p>First line<br>next.</p><p><em>Second result.</em></p>');
+});
