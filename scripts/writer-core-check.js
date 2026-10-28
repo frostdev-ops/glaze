@@ -15,7 +15,7 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
     const page = await browser.newPage(), errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.setContent('<!doctype html><meta charset="utf-8"><div id="ed"></div>');
-    for (const file of ['lib/pm.js', 'lib/writer-schema.js', 'lib/writer-editor.js']) {
+    for (const file of ['lib/pm.js', 'lib/writer-schema.js', 'lib/writer-editor.js', 'lib/writer-styles.js']) {
       const content = process.env.WRITER_REVIEW_BASE && file !== 'lib/pm.js'
         ? execFileSync('git', ['show', `${process.env.WRITER_REVIEW_BASE}:${file}`], { cwd: root, encoding: 'utf8' })
         : fs.readFileSync(path.join(root, file), 'utf8');
@@ -41,6 +41,24 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
         return { fresh, prior, redo };
       });
       assert.deepEqual(result, { fresh: '<p>fresh</p>', prior: '<p>a</p>', redo: '<p>fresh</p>' });
+    });
+    await check('paper heading alignment overrides its format on screen', async () => {
+      const result = await page.evaluate(() => {
+        ed.destroy();
+        document.getElementById('ed').className = 'gp-flow';
+        window.ed = GZ_WRITER_EDITOR.create({ mount: document.getElementById('ed'), mode: 'paper', html: '<h1>Heading</h1>' });
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(GZ_WRITER_STYLES.css(GZ_WRITER_STYLES.FORMATS.apa7));
+        document.adoptedStyleSheets = [sheet];
+        const out = [];
+        for (const dir of ['left', 'right', 'justify', 'center']) {
+          ed.run('align', dir);
+          out.push(getComputedStyle(ed.view.dom.querySelector('h1')).textAlign);
+        }
+        document.adoptedStyleSheets = [];
+        return out;
+      });
+      assert.deepEqual(result, ['left', 'right', 'justify', 'center']);
     });
     await check('plain paste preserves spaces, blank lines and UTF-16 text', async () => {
       const input = '  😀  x\n\nשלום  ';
