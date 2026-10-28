@@ -1089,12 +1089,17 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       e.preventDefault(); all[e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowLeft' ? all.length - 1 : 1)) % all.length].focus();
     });
 
-    // Print a clipped copy of the measured flow on each physical Letter page, at full size.
-    let printCopy = null;
+    // Print a clipped copy of the measured flow on each physical page, at full size, on paper of the paper's own size (an
+    // @page rule added to writer-paper.css's sheet for the print: writer.html's CSP allows no <style> of its own).
+    let printCopy = null, pageRule = null;
+    const sheetCSS = () => [...document.styleSheets].find((x) => /\/writer-paper\.css$/.test(x.href || ''));
+    const unpage = () => { const css = sheetCSS(), i = pageRule ? [...(css?.cssRules || [])].indexOf(pageRule) : -1; if (i >= 0) css.deleteRule(i); pageRule = null; };
     addEventListener('beforeprint', () => {
       printCopy?.remove();
       printCopy = h('div', { class: 'gp-print' });
-      const geo = ST.geometry(look()), stride = geo.height + GAP;
+      const geo = ST.geometry(look()), stride = geo.height + GAP, css = sheetCSS();
+      unpage();
+      if (css) { try { pageRule = css.cssRules[css.insertRule(`@page { size: ${geo.width / 96}in ${geo.height / 96}in; margin: 0; }`, css.cssRules.length)]; } catch { /* the format's Letter rule stays */ } }
       [...sheets.children].forEach((sheet, i) => {
         const page = sheet.cloneNode(true), clip = h('div', { class: 'gp-print-body' }), copy = flow.cloneNode(true);
         clip.style.cssText = `position:absolute;top:${geo.top}px;left:0;width:${geo.width}px;height:${geo.body}px;overflow:hidden`;
@@ -1104,7 +1109,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       });
       document.body.append(printCopy);
     });
-    addEventListener('afterprint', () => { printCopy?.remove(); printCopy = null; });
+    addEventListener('afterprint', () => { printCopy?.remove(); printCopy = null; unpage(); });
 
     // A footnote's text, in a small editor by its mark. A new note left empty goes again.
     const editNote = (pos, fresh = false) => {
