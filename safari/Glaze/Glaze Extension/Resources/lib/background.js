@@ -1966,6 +1966,9 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const SUBMIT_RUN = 90e3;
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:writerSubmit') return;
+  // The pages on the assignment as a commit arrives, before it waits its turn: one opened after the submit went out is
+  // the next attempt's. (A worker just woken reads them back from the session first.)
+  const present = m.op === 'commit' && aiKeptRead ? new Set(aiAttempts.keys()) : null;
   const task = (brokerTurn ||= GZ_CARDS.queue())(async () => {
     const no = { ok: false };
     if (s.id !== chrome.runtime.id || !s.tab || s.frameId !== 0 || !['claim', 'commit', 'release', 'review'].includes(m.op) ||
@@ -1994,7 +1997,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     else {
       await aiKept();
       const here = `${u.origin}/ultra/courses/${course}/assessment/${content}/attempt/`;
-      const owners = [owner, ...[...aiAttempts].filter(([k, v]) => k !== owner && v.page?.startsWith(here)).map(([k]) => k)].slice(0, 32);
+      const owners = [owner, ...[...aiAttempts].filter(([k, v]) => k !== owner && (!present || present.has(k)) && v.page?.startsWith(here)).map(([k]) => k)].slice(0, 32);
       await keep({ run: null, sent: [{ owners, attempts: [...new Set([run.attempt, attempt])].filter((x) => x !== 'create') }, ...sent].slice(0, 20) });
       if (typeof m.version === 'string' && /^[a-z0-9]{1,12}-[a-z0-9]{1,8}$/.test(m.version)) {
         try {
