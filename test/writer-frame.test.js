@@ -205,6 +205,19 @@ test('frame: nothing without the pass; with it, ready and its height on the job\
   assert.equal(f.asked.length, 1, 'a second job isn\'t even claimed');
 });
 
+test('frame: saved typing preferences load before the editor channel is ready', async () => {
+  const f = frame();
+  let release;
+  const loaded = new Promise((resolve) => { release = resolve; });
+  f.ctx.GZ_WRITER_SETTINGS = { load: () => loaded };
+  const p = { sent: [], postMessage(m) { this.sent.push(m); }, close() {} };
+  const pending = f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) }, p);
+  await new Promise(setImmediate);
+  try { assert.deepEqual(p.sent, [], 'the page cannot initialize an editor with default preferences'); }
+  finally { release(); await pending; }
+  assert.deepEqual(p.sent.map((m) => m.type), ['ready', 'height']);
+});
+
 test('frame: init builds the editor in the Look\'s tokens; changes, Mod-Enter and the menu go to the page', async () => {
   const f = frame();
   const p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
