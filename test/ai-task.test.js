@@ -134,6 +134,26 @@ test('what the student set goes on every request over the task\'s own, and a lon
   assert.equal(T.prepare(T.define(dates), { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [] }, over: { temperature: 1 } }).temperature, 1, 'a warm-up readies the session the run will use');
 });
 
+test('an effort the student sets above its task\'s own gets room to think beside the answer\'s own output, unless the student set the output', async () => {
+  // writer.complete's way: no reasoning, 64 tokens for the rest of a sentence. Reasoning counts against max_tokens, so a
+  // student's Low would spend all 64 thinking (OpenRouter, 2026-10-27: 23 thinking events, then no text).
+  const quick = T.define({ ...dates, build: (input, { text }) => text.request({ system: 'x', data: [{ label: 'd', text: input.text }], maxTokens: 64, effort: 'none' }) });
+  const sent = async (task, over) => { const cfg = { replies: [answer([])], seen: [] }; await T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg, over }); return [cfg.seen[0].effort, cfg.seen[0].maxTokens]; };
+  assert.deepEqual(await sent(quick, { effort: 'low' }), ['low', 64 + 2048]);
+  assert.deepEqual(await sent(quick, { effort: 'high' }), ['high', 64 + 8192]);
+  assert.deepEqual(await sent(quick, { effort: 'low', maxTokens: 100 }), ['low', 100], 'the output the student set');
+  assert.deepEqual(await sent(quick, { effort: 'none' }), ['none', 64]);
+  assert.deepEqual(await sent(quick, {}), ['none', 64]);
+  // A task that already thinks keeps its room, and gets more only for a higher effort.
+  const deep = T.define({ ...dates, build: (input, { text }) => text.request({ system: 'x', data: [{ label: 'd', text: input.text }], maxTokens: 5000, effort: 'medium' }) });
+  assert.deepEqual(await sent(deep, { effort: 'high' }), ['high', 5000 + 8192 - 4096]);
+  assert.deepEqual(await sent(deep, { effort: 'low' }), ['low', 5000]);
+  // Never past what a request may ask (lib/ai/request.js LIMIT.maxTokens).
+  const big = T.define({ ...dates, build: (input, { text }) => text.request({ system: 'x', data: [{ label: 'd', text: input.text }], maxTokens: 30000, effort: 'none' }) });
+  assert.deepEqual(await sent(big, { effort: 'high' }), ['high', 32768]);
+  assert.equal(T.prepare(quick, { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [] }, over: { effort: 'low' } }).maxTokens, 64 + 2048, 'a warm-up asks as the run will');
+});
+
 // example.finish: plain text, streamed, the rest of the sentence at the caret.
 const finish = {
   id: 'example.finish', version: 1, output: 'text', stream: true, rate: { perMinute: 60, supersede: true }, limits: { maxTokens: 40 },
