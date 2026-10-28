@@ -233,6 +233,15 @@ const rss = (profile) => {
 
     // ---- Settings → Writer: proofing, dialect and each autocorrect class, off and on ----
     // Set before the frame loads (all off), then each switched live through storage.onChanged.
+    // A slow storage read must not expose an editor still using default typing preferences.
+    await context.addInitScript(() => {
+      if (location.protocol !== 'chrome-extension:' || location.pathname !== '/writer.html') return;
+      const get = chrome.storage.sync.get.bind(chrome.storage.sync);
+      chrome.storage.sync.get = (...args) => {
+        const result = get(...args);
+        return args[0] === 'writer' ? result.then((value) => new Promise((resolve) => setTimeout(() => resolve(value), 2000))) : result;
+      };
+    });
     const W0 = G.GZ_SANITIZE({}).writer, setW = (w) => worker.evaluate((w) => chrome.storage.sync.set({ writer: w }), G.GZ_SANITIZE({ writer: w }).writer);
     const OFF = { ...W0, proofing: false, autocorrect: { typos: false, capitalI: false, doubles: false, smart: false } };
     // A reply typed above is backed up (enhance.drafts); its offer would hold the box: those copies go first.
