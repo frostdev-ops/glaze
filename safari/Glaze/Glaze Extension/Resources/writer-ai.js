@@ -147,23 +147,21 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     try { s = (await chrome.storage.local.get('ai'))?.ai; } catch { /* no storage */ }
     if (gen !== generation || quiet()) return;
     const want = (f) => s?.on === true && typeof s.use === 'string' && !!s.use && s.features?.[f] === true;
-    const next = { completion: null, writing: null };
     for (const f of ['completion', 'writing']) {
       const st = want(f) ? await ask({ op: 'status', feature: f }, ASK.status) : null;
       if (gen !== generation || quiet()) return;
-      next[f] = st?.type === 'status' ? st : null;
+      status[f] = st?.type === 'status' ? st : null;
       if (want(f) && !settled(st)) again(f, gen);
     }
-    Object.assign(status, next);
     warmUp();
     said = s && typeof s === 'object' ? s : {};
     checking = false;
     clearTimeout(attemptTimer);
-    if (next.writing?.why === 'attempt') {
+    if (status.writing?.why === 'attempt') {
       attemptSince ||= Date.now();
       attemptTimer = setTimeout(paint, Math.max(0, attemptSince + 10000 - Date.now()) + 50);
     } else attemptSince = 0;
-    if (next.writing?.why !== 'downloading') loaded = null;
+    if (status.writing?.why !== 'downloading') loaded = null;
     render();
   };
   try { chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.ai) refresh(); }); } catch { /* no storage */ }
