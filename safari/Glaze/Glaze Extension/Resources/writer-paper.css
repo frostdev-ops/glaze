@@ -27,10 +27,16 @@
 /* Focus covers the page: the mockup's ground and opaque panels, whatever is behind. */
 :root:has(.gp-tbtn[aria-pressed="true"]) { --ground: var(--gz-surface-2); --panel: var(--gz-surface-paint, var(--gz-surface)); --top-faint: var(--gz-ink-faint); }
 .gp, .gp-hidden { display: none; }
-:root[data-mode="paper"] body { padding: 0; overflow: hidden; background: var(--ground); }
+:root[data-mode="paper"] body { padding: 0; overflow: hidden; background: transparent; }
 :root[data-mode="paper"] #gw, :root[data-mode="paper"] #tb { display: none !important; }
 :root[data-mode="paper"] .gp, .gp.gp-standalone { display: flex; }
 .gp { flex-direction: column; height: 100vh; background: var(--ground); color: var(--gz-ink); font: 14px/1.5 var(--gz-font); }
+/* In Ultra the paper is a card: the Look's corners and edge (drawn over the bars, which fill to them). Focus fills the window,
+   square, as does papers.html. */
+.gp:not(.gp-standalone) { position: relative; overflow: hidden; border-radius: var(--gz-radius, 12px); }
+.gp:not(.gp-standalone)::after { content: ""; position: absolute; inset: 0; z-index: 3; border: 1px solid var(--edge); border-radius: inherit; pointer-events: none; }
+:root:has(.gp-tbtn[aria-pressed="true"]) .gp { border-radius: 0; }
+:root:has(.gp-tbtn[aria-pressed="true"]) .gp::after { display: none; }
 
 /* Title bar */
 .gp-top { height: 60px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 1px solid var(--edge); min-width: 0; }

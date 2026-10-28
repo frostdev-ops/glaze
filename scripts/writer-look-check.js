@@ -77,7 +77,10 @@ const LOOKS = [
       const fills = await fr.evaluate(() => Object.fromEntries(['body', '.gp', '.gp-top', '.gp-tool', '.gp-canvas', '.gp-side', '.gp-status'].map((s) => [s, getComputedStyle(document.querySelector(s)).backgroundColor])));
       const a = Object.fromEntries(Object.entries(fills).map(([k, v]) => [k, alpha(v)]));
       const painted = await p.evaluate(() => { const k = document.documentElement.getAttribute('data-gz-bg'); return !!k && k !== 'solid'; });
-      const host = await el.evaluate((f) => { const cs = getComputedStyle(f); return { radius: parseFloat(cs.borderTopLeftRadius), blur: cs.backdropFilter }; });
+      // The frame element itself is never clipped or outlined (theme.css: Chrome sent clicks past such a frame); its corners
+      // and edge are the paper's own.
+      const host = await el.evaluate((f) => { const cs = getComputedStyle(f); return { radius: parseFloat(cs.borderTopLeftRadius), outline: cs.outlineStyle, clip: cs.clipPath, blur: cs.backdropFilter }; });
+      const card = await fr.evaluate(() => { const g = document.querySelector('.gp'), a = getComputedStyle(g, '::after'); return { radius: parseFloat(getComputedStyle(g).borderTopLeftRadius), edge: a.borderTopStyle, body: getComputedStyle(document.body).backgroundColor }; });
       const pill = await p.evaluate(() => { const h = document.querySelector('[class*="makeStylessubmission-"] > h2'), r = h.getBoundingClientRect(), t = document.createRange(); t.selectNodeContents(h); return { w: r.width, text: t.getBoundingClientRect().width }; });
       console.log(L.name, JSON.stringify({ fills, painted, host, pill }));
       if (!painted) {
@@ -89,7 +92,8 @@ const LOOKS = [
         check(['.gp-tool', '.gp-side', '.gp-status'].every((k) => a[k] > 0 && a[k] < 1), `${L.name}: the bars and side panel are the Look's glass`);
         check(/blur/.test(host.blur), `${L.name}: the frame blurs what is behind it`);
       }
-      check(host.radius > 0, `${L.name}: the frame has the Look's corners`);
+      check(host.radius === 0 && host.outline === 'none' && host.clip === 'none', `${L.name}: the frame element is neither clipped nor outlined`);
+      check(card.radius > 0 && card.edge === 'solid' && alpha(card.body) === 0, `${L.name}: the paper has the Look's corners and edge, transparent past them`);
       // The title bar's quiet text: the mockup's faint ink on a ground, muted over a picture.
       const quiet = await fr.evaluate(() => { const c = (v) => { const x = document.createElement('i'); x.style.color = `var(${v})`; document.body.append(x); const r = getComputedStyle(x).color; x.remove(); return r; }; return { state: getComputedStyle(document.querySelector('.gp-top .gp-state')).color, faint: c('--gz-ink-faint'), muted: c('--gz-ink-muted') }; });
       check(quiet.state === (painted ? quiet.muted : quiet.faint), `${L.name}: the title bar's status is ${painted ? 'muted over the picture' : 'faint, as the mockup'}`);
@@ -103,8 +107,8 @@ const LOOKS = [
       await until(() => el.evaluate((f) => getComputedStyle(f).position === 'fixed'), `${L.name}: Focus fills the window`);
       await pause(300);
       const focus = await fr.evaluate(() => ['.gp', '.gp-tool', '.gp-side'].map((s) => getComputedStyle(document.querySelector(s)).backgroundColor));
-      const focusHost = await el.evaluate((f) => parseFloat(getComputedStyle(f).borderTopLeftRadius));
-      check(focus.every((c) => alpha(c) === 1) && focusHost === 0, `${L.name}: Focus is opaque and square (${focus.join(', ')})`);
+      const focusCard = await fr.evaluate(() => ({ radius: parseFloat(getComputedStyle(document.querySelector('.gp')).borderTopLeftRadius), edge: getComputedStyle(document.querySelector('.gp'), '::after').display }));
+      check(focus.every((c) => alpha(c) === 1) && focusCard.radius === 0 && focusCard.edge === 'none', `${L.name}: Focus is opaque and square (${focus.join(', ')})`);
       check(await fr.evaluate(() => getComputedStyle(document.querySelector('.gp-top .gp-state')).color) === quiet.faint, `${L.name}: Focus keeps the mockup's faint status`);
       await p.screenshot({ path: path.join(shots, `look-${L.name}-focus.png`) });
       await fr.click('.gp-tbtn[aria-pressed]');
@@ -158,9 +162,9 @@ const LOOKS = [
       // As Ultra's own editor boxes on the page (theme.css): the surface at the Look's surface opacity, unblurred.
       const gw = rgba(await bf.evaluate(() => getComputedStyle(document.querySelector('.gw')).backgroundColor));
       const native = rgba(await d.evaluate(() => { const x = document.createElement('div'); x.style.background = 'var(--gz-surface-fill)'; document.querySelector('#site-wrap').append(x); const c = getComputedStyle(x).backgroundColor; x.remove(); return c; }));
-      const cHost = await box.evaluate((f) => { const cs = getComputedStyle(f); return { radius: parseFloat(cs.borderTopLeftRadius), blur: cs.backdropFilter }; });
+      const cHost = await box.evaluate((f) => { const cs = getComputedStyle(f); return { radius: parseFloat(cs.borderTopLeftRadius), outline: cs.outlineStyle, blur: cs.backdropFilter }; });
       check(String(gw) === String(native) && cHost.blur === 'none', `${L.name}: the compose box is the surface of Ultra's editor boxes (${gw})`);
-      check(cHost.radius > 0, `${L.name}: the compose frame has the Look's corners`);
+      check(cHost.radius === 0 && cHost.outline === 'none' && await bf.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.gw')).borderTopLeftRadius) > 0), `${L.name}: the compose box has the Look's corners, the frame element none`);
       await box.scrollIntoViewIfNeeded();
       await d.screenshot({ path: path.join(shots, `look-${L.name}-compose.png`) });
       await d.close();
