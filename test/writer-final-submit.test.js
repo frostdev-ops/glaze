@@ -83,3 +83,96 @@ test('D8: Ultra\'s Submit pressed before the paper has mounted opens the sheet o
   await f.later(); await f.later();
   assert.equal(f.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), true, 'the press was caught from Ultra: the sheet answers it');
 });
+
+// The worker's permits under the submit page: one assignment, pages opened in turn (a reload is a new document, a re-render
+// a new box in the same one). The worker's clock is the test's.
+const ultra = () => {
+  const make = require('./helpers/worker-env.cjs');
+  const store = { sync: { enabled: true, enhance: { writer: true } }, local: { ultra: [] }, session: {} };
+  let clock = Date.now();
+  class Clock extends Date { static now() { return clock; } }
+  const w = make({ store, globals: { Date: Clock } });
+  const at = { url: 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/create', doc: 'doc-1', tab: 1 };
+  const sender = () => ({ id: 'glaze', url: at.url, frameId: 0, documentId: at.doc, tab: { id: at.tab, url: at.url } });
+  w.context.chrome.tabs.get = async () => sender().tab;
+  w.context.chrome.scripting.executeScript = async () => [{ frameId: 0, documentId: at.doc, result: { href: at.url, origin: 'https://school.blackboard.com', ancestors: [] } }];
+  const ops = [], hooks = {};
+  const worker = async (m) => { ops.push(m.op); hooks[m.op]?.(m); return w.send(m, sender()); };
+  const visit = async (doc, opts = {}, { url = at.url, tab = at.tab } = {}) => {
+    Object.assign(at, { doc, url, tab });
+    await w.send({ type: 'glaze:attempt-kind', kind: 'assignment', page: url }, sender());
+    return page({ ...opts, worker });
+  };
+  return { w, store, at, ops, hooks, visit, sender, later: (ms) => { clock += ms; } };
+};
+
+for (const why of ['a same-named file already listed', 'a Cancel heard while the permit was claimed']) {
+  for (const next of ['a reload', 'a re-render']) {
+    test(`D1: a run stopped by ${why}, having attached nothing, frees the attempt for ${next}`, async () => {
+      const u = ultra();
+      const p = await u.visit('doc-1');
+      if (why.startsWith('a same')) p.addRow('Rivera_Essay2.docx');
+      else u.hooks.claim = () => p.hear({ type: 'submit:cancel', run: 1 });
+      await p.go(); await p.flush();
+      assert.equal(p.uploads.length + p.clicks.length, 0);
+      delete u.hooks.claim;
+      const q = await u.visit(next === 'a reload' ? 'doc-2' : 'doc-1');
+      await q.go();
+      assert.deepEqual(done(q), ['ok'], `the student's next Submit after ${next} goes through`);
+      assert.equal(q.clicks.length, 1);
+    });
+  }
+}
+
+test('D1: a run that may have uploaded keeps the attempt fenced until the student reviews it in Blackboard\'s editor', async () => {
+  const u = ultra();
+  const p = await u.visit('doc-1', { listed: false });
+  await p.go(); await p.tick(31000);
+  assert.deepEqual(done(p), ['attach']);
+  assert.equal(p.uploads.length, 1, 'Ultra may still finish this upload');
+  const q = await u.visit('doc-2');
+  await q.go();
+  assert.deepEqual(done(q), ['claimed'], 'after a reload the upload is unknown: no second copy');
+  assert.equal(q.uploads.length, 0);
+  q.hear({ type: 'submit:review' }); await q.flush();
+  const r = await u.visit('doc-3');
+  await r.go();
+  assert.deepEqual(done(r), ['claimed'], 'a review while the earlier run could still be running clears nothing');
+  u.later(91000);
+  r.hear({ type: 'submit:review' }); await r.flush();
+  const s = await u.visit('doc-4');
+  await s.go();
+  assert.deepEqual(done(s), ['ok'], 'once the student has opened Blackboard\'s editor on it, the attempt is theirs to submit again');
+});
+
+test('D1: the page that ran the upload clears its own fence when the student opens Blackboard\'s editor from the sheet', async () => {
+  const u = ultra();
+  const p = await u.visit('doc-1', { listed: false });
+  await p.go(); await p.tick(31000);
+  p.hear({ type: 'submit:review' }); await p.flush();
+  const q = await u.visit('doc-2');
+  await q.go();
+  assert.deepEqual(done(q), ['ok']);
+});
+
+test('D1: a review never takes the permit from another tab\'s run under way', async () => {
+  const u = ultra();
+  const p = await u.visit('doc-1', { listed: false });
+  await p.go();
+  const q = await u.visit('doc-2', {}, { tab: 2 });
+  q.hear({ type: 'submit:review' }); await q.flush();
+  await q.go();
+  assert.deepEqual(done(q), ['claimed']);
+  assert.equal(q.uploads.length, 0);
+});
+
+test('D1: the sheet\'s Blackboard editor says the student is reviewing before it hands the box back', async () => {
+  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const s = sheet(); await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-primary'); await s.flush();
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  s.handles['submit:done']({ run: go.run, ok: false, error: 'attach' }); await s.flush();
+  s.click('.gs-native'); await s.flush();
+  const said = s.messages.map((m) => m.type);
+  assert.ok(said.includes('submit:review') && said.indexOf('submit:review') < said.indexOf('native'), said.join());
+});
