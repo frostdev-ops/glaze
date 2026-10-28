@@ -352,6 +352,26 @@ test('writer.feedback: without a rubric, a requirement must be in the instructio
   assert.equal(FB.task.input({ text: 'x', context: { ...ASSIGN, kind: 'test' } }), null);
 });
 
+test('writer.feedback: a paper is judged as the .docx Writer hands in, and the description states requirements too', async () => {
+  const ctx = { kind: 'assignment', assignment: { title: 'Explore an Assignment', description: 'List three things you learned.',
+    instructions: 'Please submit a Word document listing three things that you have learned in this course.' } };
+  const paper = { format: 'MLA 9', font: 'Times New Roman', size: 12, line: 2, margin: 1, header: 'name-page' };
+  const { output, req } = await go(FB.task, { text: 'I learned to cite sources.', mode: 'paper', kind: 'assignment', context: ctx, paper }, { json: { criteria: [
+    { criterion: 'submit a Word document', status: 'met', comment: 'Your paper goes in as a Word document.', quotes: [], level: null },
+    { criterion: 'List three things you learned', status: 'partly', comment: 'Your draft names one thing so far.', quotes: [], level: null },
+  ] } });
+  assert.deepEqual(output.criteria.map((c) => [c.id, c.status]), [['submit a Word document', 'met'], ['List three things you learned', 'partly']]);
+  const { system, data } = parts(req);
+  assert.match(system, /judged by how the paper is handed in, when that is given, never by the plain text/);
+  assert.ok(fenced(data, 'Glaze Writer submits this paper as a Word document (.docx) attached to the assignment, laid out in MLA 9: Times New Roman 12 pt, double-spaced, 1-inch margins, a running header with the student\'s last name and the page number.'));
+  assert.ok(fenced(data, 'List three things you learned.'), 'the description, fenced');
+  for (const [mode, layout] of [['compose', paper], ['paper', { ...paper, size: 400 }], ['paper', null]]) {
+    const { req: r } = await go(FB.task, { text: 'I learned to cite sources.', mode, context: ctx, ...(layout ? { paper: layout } : {}) }, { json: { criteria: [] } });
+    assert.doesNotMatch(parts(r).data, /Word document \(\.docx\)/, `${mode} ${JSON.stringify(layout)}: nothing is claimed about the file`);
+  }
+  assert.ok(FB.task.input({ text: 'x', context: { kind: 'assignment', assignment: { description: 'List three things.' } } }), 'a description alone is enough to check against');
+});
+
 test('writer.feedback: a comment says what the draft does, specifically; one offering wording for the paper is dropped', async () => {
   const draft = 'Morrison treats memory as a debt every character inherits. The river is where it comes due. The plot follows Sethe.';
   const comments = [

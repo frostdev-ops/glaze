@@ -1,0 +1,31 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. Shape from the owner's Ultra, 2026-10-27: courses/{id}/contents/{id} for an assignment, trimmed to the keys Writer reads and their neighbours. The item's description is a string; the assessment's description and instructions are { rawText, displayText } HTML.",
+ "id": "_7_1",
+ "courseId": "_101_1",
+ "parentId": "_700_1",
+ "title": "Essay 2: Memory in Beloved",
+ "description": "A 1,200-word close reading.",
+ "contentHandler": "resource/x-bb-asmt-test-link",
+ "body": { "rawText": "", "displayText": "" },
+ "contentDetail": {
+  "resource/x-bb-asmt-test-link": {
+   "test": {
+    "deployedAssessmentType": "test",
+    "assessment": {
+     "id": "_4000_1",
+     "gradableItemId": "_810_1",
+     "type": "Test",
+     "subtype": "Assignment",
+     "title": "Essay 2: Memory in Beloved",
+     "description": { "rawText": "<p>Cite at least two critics&nbsp;in MLA style.</p>", "displayText": "<div class=\"vtbegenerated\"><p>Cite at least two critics&nbsp;in MLA style.</p></div>" },
+     "instructions": { "rawText": "<h5>Essay 2</h5> \n<br> \n<p>Write 1,200 words on memory in <em>Beloved</em>.&nbsp;Submit a Word document.</p>", "displayText": "<div class=\"vtbegenerated\"><h5>Essay 2</h5> \n<br> \n<p>Write 1,200 words on memory in <em>Beloved</em>.&nbsp;Submit a Word document.</p></div>" },
+     "totalPoints": 0,
+     "questionCount": 0
+    },
+    "deploymentSettings": { "allowFileSubmission": true, "allowTextSubmission": true, "isDescriptionShown": false, "isInstructionShown": false }
+   }
+  }
+ },
+ "genericReadOnlyData": { "hasGradeColumn": true, "dueDate": null },
+ "visibility": "VISIBLE"
+}

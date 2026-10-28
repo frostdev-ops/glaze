@@ -1,12 +1,12 @@
 // What Glaze Writer's tasks (lib/ai/tasks/writer-*.js) read about the box a student writes in: the page's context
-// (interfaces: { kind, course, prompt, thread, replyTo, assignment, style }) cleaned and bounded, and written as the
-// request's reusable context blocks (lib/ai/text.js request: fenced as data, the tag kept while they stay the same). The
-// student turned the feature on in Settings → AI; any connected model gets the whole thread (owner, 2026-10-26). A test is
-// never read: clean() refuses kind 'test', so a task's input() refuses it too. Classic script for the worker (lib/background.js
-// aiFiles); module.exports for node.
+// (interfaces: { kind, course, prompt, thread, replyTo, assignment: { title, description, instructions, rubric }, style })
+// cleaned and bounded, and written as the request's reusable context blocks (lib/ai/text.js request: fenced as data, the
+// tag kept while they stay the same). The student turned the feature on in Settings → AI; any connected model gets the
+// whole thread (owner, 2026-10-26). A test is never read: clean() refuses kind 'test', so a task's input() refuses it too.
+// Classic script for the worker (lib/background.js aiFiles); module.exports for node.
 var GZ_AI_WRITER = globalThis.GZ_AI_WRITER || (() => {
   // Characters: the prompt, one post, the whole thread, the instructions, the rubric as text; posts and criteria kept.
-  const LIMIT = { prompt: 8000, post: 4000, thread: 24000, posts: 80, title: 300, name: 120, instructions: 12000, rubric: 12000, criteria: 50, levels: 12 };
+  const LIMIT = { prompt: 8000, post: 4000, thread: 24000, posts: 80, title: 300, name: 120, instructions: 12000, description: 6000, rubric: 12000, criteria: 50, levels: 12 };
   const STYLES = { mla9: 'MLA 9', apa7: 'APA 7', chicago17: 'Chicago 17 (notes and bibliography)' };
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
@@ -59,8 +59,8 @@ var GZ_AI_WRITER = globalThis.GZ_AI_WRITER || (() => {
     }
     const a = obj(raw.assignment) ? raw.assignment : null;
     const r = rubric(a?.rubric);
-    const assignment = a && (str(a.title, LIMIT.title) || str(a.instructions, LIMIT.instructions) || r.text)
-      ? { title: line(a.title, LIMIT.title), instructions: str(a.instructions, LIMIT.instructions), rubric: r.text, criteria: r.ids } : null;
+    const assignment = a && (str(a.title, LIMIT.title) || str(a.instructions, LIMIT.instructions) || str(a.description, LIMIT.description) || r.text)
+      ? { title: line(a.title, LIMIT.title), description: str(a.description, LIMIT.description), instructions: str(a.instructions, LIMIT.instructions), rubric: r.text, criteria: r.ids } : null;
     return {
       kind: typeof raw.kind === 'string' ? raw.kind.slice(0, 20) : '',
       course: line(raw.course?.name, 200),
@@ -81,6 +81,7 @@ var GZ_AI_WRITER = globalThis.GZ_AI_WRITER || (() => {
     add('discussion prompt', ctx.prompt);
     if (ctx.assignment) {
       add('assignment title', ctx.assignment.title);
+      add('assignment description', ctx.assignment.description);
       add('assignment instructions', ctx.assignment.instructions);
       add('rubric', ctx.assignment.rubric);
     }

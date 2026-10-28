@@ -347,7 +347,12 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // One result for the frame, shown by every mounted view.
   const fb = { state: 'idle', criteria: [], place: null, done: null };
   const views = new Set();
-  const assignment = () => { const a = F.context()?.assignment; return !!a && !!(a.instructions || a.rubric); };
+  const assignment = () => { const a = F.context()?.assignment; return !!a && !!(a.instructions || a.description || a.rubric); };
+  // The paper's layout, as writer.feedback tells the model the .docx is laid out.
+  const layout = () => {
+    const f = globalThis.GZ_WRITER_PAPER?.current()?.format();
+    return f ? { format: f.label, font: f.font, size: f.size, line: f.line, margin: f.margins.every((m) => m === f.margins[0]) ? f.margins[0] : null, header: f.header.text } : null;
+  };
   const feedback = async () => {
     const v = view();
     if (!v || !ok('writing') || fb.state === 'running' || !assignment()) return;
@@ -357,7 +362,8 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const tr = track(), gen = generation;
     Object.assign(fb, { state: 'running', criteria: [], place: null, done: tr.done });
     paint();
-    const end = await run('writing', 'writer.feedback', { text, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context() });
+    const paper = F.mode() === 'paper';
+    const end = await run('writing', 'writer.feedback', { text, mode: paper ? 'paper' : 'compose', kind: F.kind(), context: F.context(), ...(paper ? { paper: layout() } : {}) });
     if (gen !== generation) { tr.done(); return; }
     if (end.type !== 'end' || !Array.isArray(end.output?.criteria)) { tr.done(); Object.assign(fb, { state: 'error', done: null }); paint(); return; }
     Object.assign(fb, { state: 'done', criteria: end.output.criteria, place: placer(doc, tr.m) });

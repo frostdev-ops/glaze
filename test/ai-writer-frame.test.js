@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const source = fs.readFileSync(require.resolve('../writer-ai.js'), 'utf8');
 const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 const plain = (v) => JSON.parse(JSON.stringify(v));
-function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, clock } = {}) {
+function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, clock, mode = 'compose', format } = {}) {
   class Element {
     constructor() { this.style = {}; this.attrs = {}; this.children = []; this.hidden = false; this.listeners = {}; }
     get textContent() { return (this.text || '') + this.children.map((c) => (c && typeof c === 'object' ? c.textContent : String(c))).join(' '); }
@@ -27,7 +27,8 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
     addEventListener() {}, requestAnimationFrame: (f) => f(), setTimeout, clearTimeout,
     GZ_PM: { state: { Plugin: class { constructor(spec) { this.spec = spec; } }, PluginKey: class { getState() { return null; } } }, view: {}, transform: { Mapping: class { appendMapping() {} map(v) { return v; } } } },
     GZ_WRITER_SCHEMA: { text: () => ({ text: 'draft words', posAt: (v) => v }) }, GZ_WRITER_PROOF: {},
-    GZ_WRITER_FRAME: { t: (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? v[k] : m)), kind: () => 'reply', context: () => ctx, editor: () => ed, mode: () => 'compose',
+    GZ_WRITER_PAPER: format ? { current: () => ({ format: () => format }) } : undefined,
+    GZ_WRITER_FRAME: { t: (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? v[k] : m)), kind: () => 'reply', context: () => ctx, editor: () => ed, mode: () => mode,
       on: (ev, f) => { hooks[ev] = f; }, handle: (type, f) => { hooks[`page:${type}`] = f; }, plugin() {}, slot: () => new Element(), item: () => new Element() },
     chrome: { storage: { local: { get: async () => ({ ai: structuredClone(settings) }) }, onChanged: { addListener(f) { hooks.storage = f; } } }, runtime: { connect() {
       return { onMessage: { addListener: (f) => receives.push(f) }, onDisconnect: { addListener() {} }, disconnect() {}, postMessage(m) {
@@ -177,6 +178,18 @@ test('Feedback as the mockup draws it: a head row with the run button in every s
   p = f.pane();
   const err = one(p, 'gz-fb-error');
   assert.ok(err && /AI couldn't give feedback\./.test(err.textContent) && one(err, 'gz-fb-run').textContent === 'Try again', 'an error is a card with Try again');
+});
+
+test('a paper\'s Feedback run carries the paper\'s layout, which the .docx has; compose sends none', async () => {
+  const ST = require('../lib/writer-styles.js');
+  const f = frame({ mode: 'paper', format: ST.get('mla9') }); await f.start();
+  f.context({ kind: 'assignment', assignment: { description: 'Three things you learned.' } }); await flush();
+  f.ai.feedback(); await flush();
+  assert.deepEqual(plain(f.pendingRun.at(-1).input.paper), { format: 'MLA 9', font: 'Times New Roman', size: 12, line: 2, margin: 1, header: 'name-page' });
+  const c = frame(); await c.start();
+  c.context({ kind: 'reply', assignment: { instructions: 'Discuss memory.' } }); await flush();
+  c.ai.feedback(); await flush();
+  assert.equal('paper' in c.pendingRun.at(-1).input, false);
 });
 
 test('Feedback updates passage pages after layout without replacing its focused controls', async () => {
