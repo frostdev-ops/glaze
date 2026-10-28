@@ -213,10 +213,10 @@ test('the page\'s import:file becomes the routed file', async () => {
 
 // writer-paper.js importFile itself, with the paper's store and editor stood in.
 const importer = ({ key = 'k' } = {}) => {
-  const source = read('writer-paper.js'), start = source.indexOf('    const importFile = '), end = source.indexOf("    file.addEventListener('change'", start);
+  const source = process.env.WRITER_PAPER_SOURCE ? fs.readFileSync(process.env.WRITER_PAPER_SOURCE, 'utf8') : read('writer-paper.js'), start = source.indexOf('    // The paper becomes the Word file'), end = source.indexOf("    file.addEventListener('change'", start);
   const toasts = [], restored = [], saved = [];
   const fn = vm.runInNewContext(`${source.slice(start, end)} importFile`, {
-    RangeError, Uint8Array, console, view: { props: {}, setProps() {}, focus() {} }, need: async () => {}, DOCX: [], format: {}, key, root: {},
+    RangeError, ArrayBuffer, Uint8Array, console, current: null, api: null, view: { state: { doc: {} }, props: {}, setProps() {}, focus() {} }, need: async () => {}, DOCX: [], format: {}, key, root: { isConnected: true },
     GZ_WRITER_DOCX: { importDocx: async () => ({ html: '<p>Essay</p>', warnings: [] }) }, S: { parse: () => ({ toJSON: () => ({ type: 'doc' }) }), paper: {} },
     save: async () => true, record: () => ({}), setDoc: () => {}, paper: null,
     store: { save: async (k, p, o) => { saved.push(o.reason); return { paper: {}, version: { id: 'before-import' } }; } },
@@ -227,7 +227,7 @@ const importer = ({ key = 'k' } = {}) => {
 
 test('Open in Writer: the paper before is kept as a version, the toast names the file, and its Undo restores that version', async () => {
   const x = importer();
-  const v = await x.fn({ name: 'Rivera_Essay2.docx', arrayBuffer: async () => new ArrayBuffer(4) });
+  const v = await x.fn({ name: 'Rivera_Essay2.docx', size: 4, arrayBuffer: async () => new ArrayBuffer(4) });
   assert.deepEqual(x.saved, ['import']);
   assert.equal(v.id, 'before-import');
   assert.equal(x.toasts.length, 1);
@@ -236,7 +236,7 @@ test('Open in Writer: the paper before is kept as a version, the toast names the
   x.toasts[0].act.run();
   assert.deepEqual(x.restored, ['before-import']);
   const none = importer({ key: null });
-  await none.fn({ name: 'a.docx', arrayBuffer: async () => new ArrayBuffer(4) });
+  await none.fn({ name: 'a.docx', size: 4, arrayBuffer: async () => new ArrayBuffer(4) });
   assert.equal(none.toasts[0].act, null, 'no saved version, no Undo');
 });
 
