@@ -17,7 +17,6 @@
 
   // ---- the editor --------------------------------------------------------------------------------------------------
   // lib/writer-editor.js (GZ_WRITER_EDITOR) over lib/writer-schema.js: compose holds exactly what Ultra's Quill keeps.
-  const SAFE = /^(https?:|mailto:|tel:\+?\d)/i;
 
   // ---- look, words and size ----------------------------------------------------------------------------------------
   const TOKEN = /^--gz-[a-z0-9-]{1,40}$/;
@@ -88,16 +87,20 @@
     tb.classList.add('linking');
     href.hidden = false;
     href.value = '';
+    href.removeAttribute('aria-invalid');
     href.focus();
   });
   href.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== 'Escape') return;
     e.preventDefault();
+    // The link command takes what the schema's href() keeps; https:// goes only before an address with no scheme (a
+    // colon before a port is none). Anything else leaves the field open, marked.
     const v = href.value.trim();
-    if (e.key === 'Enter' && v) ed.run('link', SAFE.test(v) ? v : `https://${v.replace(/^\/+/, '')}`);
+    if (e.key === 'Enter' && v && !ed.run('link', v) && !(!/^[a-z][a-z\d+.-]*:(?!\d)/i.test(v) && ed.run('link', `https://${v.replace(/^\/+/, '')}`))) { href.setAttribute('aria-invalid', 'true'); return; }
     unlink();
     ed.focus();
   });
+  href.addEventListener('input', () => href.removeAttribute('aria-invalid'));
   href.addEventListener('blur', () => { unlink(); hide(tb); });
   const shut = (back) => { hide(menu); more.setAttribute('aria-expanded', 'false'); if (back) more.focus(); };
   const placeMenu = () => {
