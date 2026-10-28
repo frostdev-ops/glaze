@@ -70,7 +70,7 @@
   addEventListener('pageshow', (e) => {
     if (!e.persisted) return;
     stopped = false;
-    if (started) { connect(); lintDoc(); } else { starting = false; if (view?.hasFocus()) start(); }
+    if (started && proofOn()) { connect(); lintDoc(); } else { starting = false; if (view?.hasFocus()) start(); }
   });
   const onWorker = (m) => {
     if (!m) return;
@@ -100,7 +100,7 @@
   const ver = () => P.key.getState(view.state).ver;
   const lintBlocks = () => {
     blockTimer = 0;
-    if (!view) return;
+    if (!view || stopped || !proofOn()) return;
     const doc = view.state.doc, done = new Set(), v = ver();
     for (const [a, b] of dirty) {
       doc.nodesBetween(Math.max(0, a - 1), Math.min(doc.content.size, b + 1), (n, pos) => {
@@ -117,7 +117,7 @@
   };
   const lintDoc = () => {
     docTimer = 0;
-    if (!view) return;
+    if (!view || stopped || !proofOn()) return;
     const d = P.docText(view.state.doc);
     if (!d.text.trim()) { I.clear('harper'); return; }
     ask({ kind: 'doc', key: 'doc', ver: ver(), d }, d.text);
@@ -222,7 +222,7 @@
     if (starting || stopped || !proofOn()) return;
     starting = true;
     const saved = await words();
-    if (stopped) { starting = false; return; }
+    if (stopped || !proofOn()) { starting = false; return; }
     dict = new Set([...dict, ...saved]);
     drop([...dict]);
     started = true;
@@ -276,7 +276,7 @@
     context = P.contextWords(c);
     if (port) port.postMessage({ op: 'words', words: context });
     drop(context);
-    if (started) { clearTimeout(docTimer); docTimer = setTimeout(lintDoc, 50); }
+    if (started && proofOn()) { clearTimeout(docTimer); docTimer = setTimeout(lintDoc, 50); }
   };
 
   // ---- the card -------------------------------------------------------------------------------------------------------
