@@ -224,3 +224,20 @@ test('a tab\'s unsaved copy brought back over another tab\'s newer save keeps th
   const all = await Promise.all((await store.versions(KEY)).map((v) => store.version(KEY, v.id)));
   assert.ok(all.some((v) => textOf(v.doc) === 'Saved meanwhile in another tab.'), `the other tab's save is kept (${all.map((v) => v.reason).join(', ')})`);
 });
+
+test('a new paper opened before the page named its student and assignment fills its heading when it does', async () => {
+  const local = memory(), ss = session();
+  const f = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  await f.context({ paper: PARTS, user: { name: 'Alex Rivera' }, course: { name: 'ENGL 2110' }, assignment: { title: 'Essay 2' } });
+  assert.ok(f.shown().startsWith('Alex Rivera'), f.shown());
+  assert.ok(f.shown().includes('ENGL 2110') && f.shown().includes('Essay 2'));
+  assert.ok(textOf((await stored(local)).paper.doc).startsWith('Alex Rivera'), 'and saves it');
+});
+
+test('a new paper the student already wrote in keeps what they wrote when the page names them', async () => {
+  const local = memory(), ss = session();
+  const f = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
+  f.type('My first sentence.');
+  await f.context({ paper: PARTS, user: { name: 'Alex Rivera' }, assignment: { title: 'Essay 2' } });
+  assert.ok(f.shown().includes('My first sentence.'));
+});
