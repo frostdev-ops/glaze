@@ -106,7 +106,7 @@ const reachable = (context, id) => {
 // so one the owner made stays). Without it, a stand-in left from an earlier run is unchosen.
 const MOCK = 'practice-mock';
 const setUpAI = async (context, id, port) => {
-  const on = await inExtension(context, id, async (mock) => (await chrome.storage.local.get('ai')).ai?.use === mock, MOCK);
+  const on = await inExtension(context, id, async (mock) => (await chrome.storage.local.get('ai')).ai?.model?.use === mock, MOCK);
   if (!port && !on) return;
   const p = await context.newPage();
   try {
@@ -115,12 +115,12 @@ const setUpAI = async (context, id, port) => {
       const ai = (await chrome.storage.local.get('ai')).ai || {};
       if (!port) {
         await chrome.runtime.sendMessage({ type: 'glaze:ai-config', op: 'remove', id });
-        await chrome.storage.local.set({ ai: { ...ai, use: null } });
+        await chrome.storage.local.set({ ai: { ...ai, model: null } });
         return;
       }
-      const r = await chrome.runtime.sendMessage({ type: 'glaze:ai-config', op: 'set', id, cfg: { provider: 'openai', base: `http://127.0.0.1:${port}/v1`, model: 'practice-mock' } });
+      const r = await chrome.runtime.sendMessage({ type: 'glaze:ai-config', op: 'set', id, cfg: { provider: 'openai', name: 'Practice', base: `http://127.0.0.1:${port}/v1` } });
       if (!r?.ok) throw Error(`the stand-in model wasn't kept: ${r?.error}`);
-      await chrome.storage.local.set({ ai: { on: true, use: id, features: { syllabus: true, completion: true, writing: true } } });
+      await chrome.storage.local.set({ ai: { on: true, model: { use: id, model: 'practice-mock' }, features: { syllabus: true, completion: true, writing: true } } });
     }, { id: MOCK, port });
   } finally { await p.close(); }
 };

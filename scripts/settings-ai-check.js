@@ -7,7 +7,8 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const env = require('./check-env.js'), lock = env.lockPath();
+const env = require('./check-env.js');
+const lock = require('./check-env.js').lockPath();
 const shots = process.argv[2] ? path.resolve(process.argv[2]) : '';
 const routed = fs.readFileSync(path.join(root, 'test/fixtures/openrouter-models.json'), 'utf8');
 const KEY = 'sk-or-v1-0000synthetic0000000000000000000000000000000000000000000000';
@@ -54,7 +55,7 @@ async function pass(scheme) {
     const ext = env.staged(root, HOSTS, scratch);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 3000 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
+      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 3000 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking'],
     });
     env.noFirstRun(context);
