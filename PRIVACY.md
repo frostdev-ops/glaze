@@ -429,8 +429,8 @@ not those unknown legacy copies or unrelated stickers.
   discussion (up to 300 each), keyed the same way. A paper's edits not yet saved wait in the writer frame's own
   `sessionStorage` until they are. What you type in a discussion, reply, message or test box goes to Back up what you
   type (when it is on), as Blackboard's own editor's does; Writer keeps no copy of its own. **Back up…** includes papers, versions, presets, the
-  dictionary and saved sources; uninstalling removes them. The thread, prompt, rubric and names Writer reads from
-  Blackboard for a box are held in that page's memory only.
+  dictionary and saved sources; uninstalling removes them. The thread, prompt, rubric, attached files and names Writer reads
+  from Blackboard for a box are held in that page's memory only.
 - **Course tabs** (Canvas and Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
   signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
   pinned, when it was last used, its own-course URL including query parameters, and scroll position. Any previously
@@ -701,7 +701,8 @@ you import) are bundled. It makes requests in these cases:
   suggestions in the review, marked Check this; nothing is kept until you save.
 - **Glaze Writer** (Blackboard Ultra, on by default). For a box's prompt, targets, thread and rubric it asks your own
   Blackboard site, read-only, signed in as you, for your profile (`users/me`) and course list, the course's discussion
-  and its posts, and an assignment's gradebook column with its rubric. Proofing runs on this device (Harper, from the extension's own files)
+  and its posts, and an assignment's gradebook column with its rubric; when you ask for Feedback, the files the assignment's
+  instructions and description attach (at most 6, 40 MB in all), read on this device as the syllabus import reads them. Proofing runs on this device (Harper, from the extension's own files)
   and sends nothing. It sends nothing to Blackboard itself: what you write reaches Blackboard only through Blackboard's
   own buttons, when you post, reply, send or submit (Ctrl/⌘+Enter presses Post, Reply or Send; the submit sheet's
   Submit attaches the paper's .docx through Ultra's own upload, writes your note and clicks Ultra's Submit once).
@@ -717,7 +718,8 @@ you import) are bundled. It makes requests in these cases:
     assignment's title, instructions and rubric, and, in a discussion, the thread: your classmates' posts with their
     names (24,000 characters at most) and the post you are answering. **Writing feedback** sends your draft with the
     course name, style, prompt and assignment (no thread) for Check with AI; the draft with the assignment's
-    instructions and rubric for Feedback; the prompt, to read its word, source and reply targets; the sentence around a
+    instructions and rubric for Feedback, with the text of the documents the assignment attaches (24,000 characters
+    at most) and its pictures (4 at most, only to a model that takes pictures); the prompt, to read its word, source and reply targets; the sentence around a
     flagged word with its candidate fixes; and, when a web page you look up in Cite says too little about itself, the
     first 30,000 characters of that page and its address. Nothing is sent from a test's box, or from an attempt not known to be an assignment.
 - **PDFs and photos you import** (class schedule, syllabus, transcript): none. A PDF or picture you pick or paste is read
