@@ -121,3 +121,34 @@ test('B20: Tab with several cells selected never replaces them', () => {
   E.bindings(S.paper).Tab(one, (tr) => { one = one.apply(tr); });
   assert.equal(one.doc.textContent, '\tx');
 });
+
+// ---- B21: tabs through HTML
+// What a paste in a paper does: writer-paste.js's normalize (api.before), then the editor's transformPastedHTML
+// (S.slice, serialize) and clipboardParser (S.slice of that HTML).
+const pasteInPaper = (html) => {
+  const once = S.serialize(S.paper, S.paper.topNodeType.create(null, S.slice(S.paper, P.normalize(html).html).content));
+  const c = S.slice(S.paper, once).content;
+  return c.textBetween(0, c.size, '\n');
+};
+const tabbed = ['\tIndented with a tab, as students indent by hand', 'Name\t\tDate', 'Total:\t42', 'Ends\t', 'Gap \t here', '\t\t'];
+
+test('B21: a paper\'s tabs survive its own clipboard and its own HTML', () => {
+  for (const text of tabbed) {
+    // ProseMirror's clipboard HTML: the paper schema's toDOM, text as it is, data-pm-slice on the first element.
+    assert.equal(pasteInPaper(`<p data-pm-slice="1 1 []">${text}</p>`), text, JSON.stringify(text));
+    const doc = S.paper.node('doc', null, [S.paper.node('paragraph', null, [S.paper.text(text)])]);
+    assert.ok(S.parse(S.paper, S.serialize(S.paper, doc), { document: true }).eq(doc), `serialize → parse: ${JSON.stringify(text)}`);
+  }
+  const note = S.paper.node('footnote_ref', { content: S.inline('Ibid.\t12') });
+  assert.equal(note.attrs.content, 'Ibid.\t12');
+});
+
+test('B21: a page\'s tabs are spaces as the page shows them, unless its white-space keeps them', () => {
+  assert.equal(pasteInPaper('<html><body><p>\n\t\tHello\n\t</p></body></html>'), 'Hello');
+  assert.equal(pasteInPaper('<html><body><table><tr><td>\t\tvalue\t</td></tr></table></body></html>'), 'value');
+  assert.equal(pasteInPaper('<html><body><p>Name\t\tDate</p></body></html>'), 'Name Date');
+  assert.equal(pasteInPaper('<html><body><p>Name<span style="white-space:pre">\t</span>Date</p></body></html>'), 'Name\tDate');
+  // Compose holds what Ultra's Quill 1.3.7 keeps: one tab between words, no runs, none at an edge.
+  assert.equal(S.parse(S.compose, '<p>tab\there</p>').textContent, 'tab\there');
+  assert.equal(S.parse(S.compose, '<p>\tTabbed\t\tcolumns</p>').textContent, 'Tabbed columns');
+});
