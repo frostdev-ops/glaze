@@ -259,16 +259,13 @@
   .ai-picker li.none { color: var(--gz-ink-faint); cursor: default; }
   .ai-effort { --n: 4; --i: 0; position: relative; display: grid; gap: .3rem; padding-inline: 9px; }
   .ai-effort .track { position: relative; block-size: 6px; border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-line-strong); }
-  .ai-effort .fill { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: calc(var(--i) / (var(--n) - 1) * 100%); border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-accent); transition: inline-size .22s var(--gz-ease); }
+  .ai-effort .fill { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: calc(var(--i) / (var(--steps)) * 100%); border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-accent); transition: inline-size .22s var(--gz-ease); }
   .ai-effort .tick { position: absolute; inset-block-start: 50%; inline-size: 4px; block-size: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: var(--gz-surface-fill, var(--gz-surface)); opacity: .7; }
-  .ai-effort .tick:nth-child(2) { inset-inline-start: 0; } .ai-effort .tick:nth-child(3) { inset-inline-start: calc(1 / (var(--n) - 1) * 100%); }
-  .ai-effort .tick:nth-child(4) { inset-inline-start: calc(2 / (var(--n) - 1) * 100%); } .ai-effort .tick:nth-child(5) { inset-inline-start: calc(3 / (var(--n) - 1) * 100%); }
-  .ai-effort .tick:nth-child(6) { inset-inline-start: calc(4 / (var(--n) - 1) * 100%); }
-  .ai-effort .thumb { position: absolute; inset-block-start: 50%; inset-inline-start: calc(var(--i) / (var(--n) - 1) * 100%); inline-size: 18px; block-size: 18px; margin-block-start: -9px; margin-inline-start: -9px; border-radius: 50%;
+  .ai-effort .tick { inset-inline-start: calc(var(--k) / var(--steps) * 100%); }
+  .ai-effort .thumb { position: absolute; inset-block-start: 50%; inset-inline-start: calc(var(--i) / (var(--steps)) * 100%); inline-size: 18px; block-size: 18px; margin-block-start: -9px; margin-inline-start: -9px; border-radius: 50%;
     background: var(--gz-surface-fill, var(--gz-surface)); border: 2px solid var(--gz-accent); box-shadow: 0 1px 4px rgb(0 0 0 / .25); transition: inset-inline-start .22s var(--gz-ease); }
-  .ai-effort.unset :is(.fill, .thumb) { display: none; }
   .ai-effort .stops { position: relative; block-size: 16px; }
-  .ai-effort .stops button { position: absolute; inset-inline-start: calc(var(--k) / (var(--n) - 1) * 100%); transform: translateX(-50%); border: 0; background: none; padding: 0; font-size: calc(11.5px * var(--gz-scale, 1)); color: var(--gz-ink-faint); white-space: nowrap; }
+  .ai-effort .stops button { position: absolute; inset-inline-start: calc(var(--k) / (var(--steps)) * 100%); transform: translateX(-50%); border: 0; background: none; padding: 0; font-size: calc(11.5px * var(--gz-scale, 1)); color: var(--gz-ink-faint); white-space: nowrap; }
   .ai-effort .stops button.on { color: var(--gz-ink); font-weight: 600; }
   .ai-effort .stops button:first-child { transform: translateX(-9px); }
   .ai-effort .stops button:last-child { transform: translateX(calc(-100% + 9px)); }

@@ -285,6 +285,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         const r = await send({ op: 'set', id: target, cfg: { provider: 'openai', name: name.slice(0, 40), base, ...(key !== undefined && { key }) } });
         if (!r.ok) return say(r.error === 'write' ? t('Could not save. Try again.') : t('Use an https address, or http on localhost or 127.0.0.1.'), true);
         delete drafts[id];
+        delete catalogs[target]; delete tested[target];
         open = target;
         await load();
         if (!await asked) { tested[target] = { state: 'unavailable', reason: 'permission' }; return say(t('Glaze isn’t allowed to reach {host}.', { host: iso(hostOf(base)) }), true); }
@@ -309,7 +310,10 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       if (id === DEVICE) { catalogs[id] = { models: [{ id: '', name: deviceName(), efforts: [] }] }; return catalogs[id]; }
       if (catalogs[id]?.models || catalogs[id]?.loading) return catalogs[id]?.loading || catalogs[id];
       const loading = send({ op: 'models', id }).then((r) => {
-        catalogs[id] = r.ok && Array.isArray(r.models) ? { models: r.models.filter((m) => typeof m?.id === 'string').map((m) => ({ id: m.id, name: typeof m.name === 'string' ? m.name : m.id, efforts: Array.isArray(m.efforts) ? m.efforts.filter((x) => S.EFFORTS.includes(x)) : [] })) } : { models: [], error: r.error };
+        // Save or Remove may have replaced this connection while its old catalog was still arriving.
+        if (catalogs[id]?.loading !== loading) return catalogs[id];
+        catalogs[id] = r.ok && Array.isArray(r.models) ? { models: r.models.filter((m) => typeof m?.id === 'string').map((m) => ({ id: m.id, name: typeof m.name === 'string' ? m.name : m.id, efforts: Array.isArray(m.efforts) ? m.efforts.filter((x) => S.EFFORTS.includes(x)) : [],
+          ...(S.EFFORTS.includes(m.defaultEffort) && { defaultEffort: m.defaultEffort }) })) } : { models: [], error: r.error };
         render();
         return catalogs[id];
       });
@@ -330,7 +334,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       const ids = [...(offered() ? [DEVICE] : []), ...Object.keys(CARDS).filter(connected), ...Object.keys(conns).filter((id) => kind(id) === 'custom')];
       if (!on || !ids.includes(on)) on = ids.includes(selOf(row)?.use) ? selOf(row).use : ids[0] || null;
       if (row !== 'model') {
-        const same = button(`same${!selOf(row) ? ' on' : ''}`, t('Same as default'), () => { picking = null; choose(row, null); });
+        const same = button(`same${!selOf(row) ? ' on' : ''}`, t('Same as default'), () => { close(true); choose(row, null); });
         side.append(same);
       }
       for (const id of ids) {
@@ -387,26 +391,30 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       choose(row, sel);
     };
     const close = (back) => { const row = picking; picking = null; active = null; query = ''; render(); if (back && row) $(`ai-pick-${row}`)?.focus?.(); };
-    // The effort a model takes, as stops on a track: one at a time, arrow keys between them; the stop already chosen,
-    // chosen again, gives the task its own again.
-    const slider = (row, sel, levels) => {
+    // Draw the value in effect without saving it: completion's task asks none, otherwise the catalog's default.
+    // Where no catalog states a default, give Default its own stop rather than guessing a level.
+    // Clicking an explicit choice again returns to that default.
+    const slider = (row, sel, supported) => {
+      const def = row === 'completion' && supported.includes('none') ? 'none' : entry(sel)?.defaultEffort;
+      const known = supported.includes(def), levels = known ? supported : ['default', ...supported];
+      const value = supported.includes(sel.effort) ? sel.effort : known ? def : 'default';
       const box = el('div', 'ai-effort'), track = el('div', 'track'), fill = el('span', 'fill'), stops = el('div', 'stops');
       box.setAttribute('role', 'radiogroup');
       box.setAttribute('aria-label', `${t('Effort')}: ${row === 'model' ? t('Default') : featureName(row, t)}`);
-      const i = levels.indexOf(sel.effort), n = levels.length;
+      const i = levels.indexOf(value), n = levels.length;
       box.style?.setProperty?.('--n', String(n));
-      box.style?.setProperty?.('--i', String(Math.max(0, i)));
-      box.classList.toggle('unset', i < 0);
-      track.append(fill, ...levels.map(() => el('span', 'tick')), el('span', 'thumb'));
+      box.style?.setProperty?.('--steps', String(Math.max(1, n - 1)));
+      box.style?.setProperty?.('--i', String(i));
+      track.append(fill, ...levels.map((_, k) => { const tick = el('span', 'tick'); tick.style?.setProperty?.('--k', String(k)); return tick; }), el('span', 'thumb'));
       track.setAttribute('aria-hidden', 'true');
       const set = (effort) => write((cur) => {
         const now = row === 'model' ? cur.model : cur.models[row];
         if (!now || now.use !== sel.use || now.model !== sel.model) return {};
         const { effort: _, ...rest } = now, next = effort ? { ...rest, effort } : rest;
         return row === 'model' ? { model: next } : { models: { ...cur.models, [row]: next } };
-      }).then(() => $(`ai-effort-${row}-${effort || levels[0]}`)?.focus?.());
+      }).then(() => $(`ai-effort-${row}-${effort || (known ? def : 'default')}`)?.focus?.());
       levels.forEach((lv, k) => {
-        const b = button(k === i ? 'on' : '', effortName(lv, t), () => set(k === i ? null : lv));
+        const b = button(k === i ? 'on' : '', lv === 'default' ? t('Default') : effortName(lv, t), () => set(lv === 'default' || lv === sel.effort ? null : lv));
         b.id = `ai-effort-${row}-${lv}`;
         b.setAttribute('role', 'radio');
         b.setAttribute('aria-checked', String(k === i));
@@ -416,7 +424,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
           const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
           if (!step) return;
           e.preventDefault();
-          set(levels[Math.min(n - 1, Math.max(0, (i < 0 ? k : i) + step))]);
+          const next = levels[Math.min(n - 1, Math.max(0, i + step))];
+          set(next === 'default' ? null : next);
         });
         stops.append(b);
       });
@@ -510,7 +519,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       const marks = [DEVICE, ...Object.keys(CARDS), ...Object.keys(conns)].map((id) => [id, connected(id), bad(id), tested[id]?.state]);
       const lists = Object.fromEntries(Object.entries(catalogs).map(([id, x]) => [id, x.models ? x.models.length : 'loading']));
       once('providers', [s.mode, open, providers, conns, device, marks], renderProviders);
-      once('drawer', [s.mode, open, said, conns[open], device, lists[open], marks], renderDrawer);
+      once('drawer', [s.mode, open, said, conns[open], open === DEVICE ? device : null, lists[open], marks.find(([id]) => id === open)], renderDrawer);
       once('features', [s, conns, providers, device, picking, on, query, active, marks, lists], renderFeatures);
       renderCalls();
     };
