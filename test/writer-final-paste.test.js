@@ -53,3 +53,30 @@ test('A2: adjacent pasted lists stay two lists, each numbered as it was', () => 
   assert.deepEqual(numbers(nested), ['1 top', 'a sub', 'b sub two', '2 top two']);
   assert.deepEqual(numbers(paste(word(wordItem('l0', 'I.', 'one') + wordItem('l0', 'II.', 'two')))), ['I one', 'II two']);
 });
+
+test('A3: a pasted heading keeps an explicit left alignment the format would centre; a paragraph\'s left stays the default', () => {
+  assert.equal(paste('<html><body><h1 style="text-align:left">Left title</h1></body></html>').firstChild.attrs.align, 'left');
+  assert.equal(paste('<html><body><h2 align="left">Left two</h2></body></html>').firstChild.attrs.align, 'left');
+  assert.equal(paste(word("<h1 style='text-align:left'>Word left<o:p></o:p></h1>")).firstChild.attrs.align, 'left');
+  assert.equal(paste('<html><body><h1 style="text-align:right">Right</h1></body></html>').firstChild.attrs.align, 'right');
+  assert.equal(paste('<html><body><h1>Plain</h1></body></html>').firstChild.attrs.align, null);
+  assert.equal(paste('<html><body><p style="text-align:left">Body</p></body></html>').firstChild.attrs.align, null);
+  assert.equal(paste('<html><body><h1 style="text-align:left">Matched</h1></body></html>', { match: true }).firstChild.attrs.align, null, 'Match the paper takes it away');
+});
+
+test('A4: pasted text keeps its direction: a block\'s and a run\'s, from a page, Word and Docs', () => {
+  const runDirs = (doc) => { const out = []; doc.descendants((n) => { if (n.isText) out.push([n.text, n.marks.find((m) => m.type.name === 'direction')?.attrs.dir ?? null]); }); return out; };
+  assert.equal(paste('<html><body><p dir="rtl">مرحبا بالعالم</p></body></html>').firstChild.attrs.dir, 'rtl');
+  assert.deepEqual(runDirs(paste('<html><body><p>English <span dir="rtl">مرحبا</span> end</p></body></html>')), [['English ', null], ['مرحبا', 'rtl'], [' end', null]]);
+  const w = paste(word("<p class=MsoNormal dir=RTL style='text-align:right;direction:rtl;unicode-bidi:embed'><span lang=AR-SA dir=RTL>مرحبا</span></p>"));
+  assert.equal(w.firstChild.attrs.dir, 'rtl');
+  assert.deepEqual(runDirs(w), [['مرحبا', null]], 'a run in its paragraph\'s own direction needs no mark');
+  assert.equal(paste('<meta charset="utf-8"><b id="docs-internal-guid-1"><p dir="rtl" style="text-align:right"><span>مرحبا</span></p></b>').firstChild.attrs.dir, 'rtl');
+  assert.equal(paste('<html><body><ul><li dir="rtl">بند</li></ul></body></html>').firstChild.firstChild.attrs.dir, 'rtl');
+  assert.deepEqual(runDirs(paste('<html><body><p dir="rtl">عربي <span dir="ltr">English</span></p></body></html>')), [['عربي ', null], ['English', 'ltr']]);
+  // Docs marks every block ltr: that is the paper's own direction, so nothing is set and nothing counts as formatting.
+  const docs = P.normalize('<meta charset="utf-8"><b id="docs-internal-guid-1"><p dir="ltr"><span>Plain</span></p></b>');
+  assert.equal(read(docs.html).firstChild.attrs.dir, null);
+  assert.equal(docs.rich, false);
+  assert.equal(paste('<html><body><p dir="rtl">مطابق</p></body></html>', { match: true }).firstChild.attrs.dir, 'rtl', 'direction is the text\'s, not formatting Match the paper takes away');
+});
