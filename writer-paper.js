@@ -1027,13 +1027,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const hooks = () => {
       globalThis.GZ_WRITER_OBJECTS?.toolbar?.({ editor: ed, paper: api, before: toolGrow, lists: numbers });
       const C = globalThis.GZ_WRITER_CITE;
-      if (C?.button) { const b = C.button({ editor: ed, paper: api }); if (b) { b.classList.add('gp-tbtn'); cite.replaceWith(b); } }
-      else if (C) cite.disabled = false;
+      cite.disabled = typeof C?.open !== 'function';
       if (C?.sourcesView) C.sourcesView(panes.sources, { editor: ed, paper: api, badge: (n) => { badges.sources.textContent = n ? nf(n) : ''; } });
       if (globalThis.GZ_WRITER_AI?.feedbackView) feedbackPanel = GZ_WRITER_AI.feedbackView(panes.feedback, { pageAt });
       submit.disabled = typeof GZ_WRITER_PAPER.submit !== 'function';
       fold();
     };
+    cite.addEventListener('click', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: cite }));
     submit.addEventListener('click', () => { if (typeof GZ_WRITER_PAPER.submit === 'function') GZ_WRITER_PAPER.submit(api); });
     for (const [id, tab] of Object.entries(tabs)) tab.addEventListener('click', () => {
       for (const [k, x] of Object.entries(tabs)) { x.setAttribute('aria-selected', String(k === id)); x.tabIndex = k === id ? 0 : -1; panes[k].hidden = k !== id; }
