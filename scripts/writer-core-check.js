@@ -81,10 +81,13 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
         document.adoptedStyleSheets = [sheet]; style();
         ed.addPlugins([GZ_WRITER_PAGINATE.plugin({ format: () => format, notes: () => [], gap: 26.4 })]);
         await new Promise((r) => setTimeout(r, 30));
+        const key = GZ_WRITER_PAGINATE.key(), v = ed.view;
+        v.dispatch(v.state.tr.insertText('Changed ', 1));
+        const staleAfterEdit = key.getState(v.state).find().filter((d) => d.spec.key?.startsWith('gp:l:')).length;
+        await new Promise((r) => setTimeout(r, 30));
         format = { ...format, margins: [1, 1.5, 1, 1.5] }; style();
         GZ_WRITER_PAGINATE.relayout(ed.view);
         await new Promise((r) => setTimeout(r, 30));
-        const key = GZ_WRITER_PAGINATE.key(), v = ed.view;
         const gaps = key.getState(v.state).find().filter((d) => d.spec.key?.startsWith('gp:l:')).map((d) => d.from);
         // Remove decorations synchronously to read the browser's natural wraps before the queued next plan.
         v.dispatch(v.state.tr.setMeta(key, GZ_PM.view.DecorationSet.empty));
@@ -95,9 +98,10 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
         }
         const bad = gaps.filter((q) => !starts.has(q));
         ed.destroy(); document.adoptedStyleSheets = [];
-        return { count: gaps.length, bad };
+        return { count: gaps.length, bad, staleAfterEdit };
       }, require('../test/fixtures/writer-docx-import.js').text(2500, 37));
       assert.ok(result.count > 1);
+      assert.equal(result.staleAfterEdit, 0, 'editing drops stale inline gaps before remeasurement');
       assert.deepEqual(result.bad, []);
     });
     await check('clipboard metadata cannot restore attributes outside the allowlist', async () => {
