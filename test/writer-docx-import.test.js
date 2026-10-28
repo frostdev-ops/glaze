@@ -15,7 +15,7 @@ const FX = require('./fixtures/writer-docx-import.js');
 
 const open = async (id, format = 'mla9') => {
   const r = await X.importDocx(FX.bytes(id), { format });
-  const doc = S.paper.nodeFromJSON({ ...S.parse(S.paper, r.html).toJSON(), attrs: { setup: r.setup } });
+  const doc = S.paper.nodeFromJSON(r.doc);
   return { r, doc, tops: doc.content.content };
 };
 const pick = (n, ...keys) => Object.fromEntries(keys.map((k) => [k, n.attrs[k]]));
@@ -68,7 +68,8 @@ test('style inheritance: docDefaults â†’ the paragraph style\'s basedOn chain â†
   assert.deepEqual(marks(strong), ['bold', 'italic'], 'Strong and Emphasis, character styles');
   assert.deepEqual([l1, l2, l3].map((n) => pick(n, 'left', 'indent', 'before', 'after')), [{ left: null, indent: 1, before: null, after: null }, { left: null, indent: 1, before: null, after: null }, { left: null, indent: 1, before: null, after: 8 }],
     'List Paragraph: half an inch in; contextual spacing drops the space between two of the style, not before the Quote');
-  assert.deepEqual(pick(quote, 'before', 'after', 'left', 'right', 'align', 'first'), { before: 10, after: 8, left: 0.6, right: 0.6, align: 'center', first: null });
+  assert.equal(quote.type.name, 'blockquote', 'Word\'s Quote style is a block quote');
+  assert.deepEqual(pick(quote.firstChild, 'before', 'after', 'left', 'right', 'align', 'first'), { before: 10, after: 8, left: 0.1, right: 0.6, align: 'center', first: null }, 'its 0.6 in: the format\'s half inch for the quote and 0.1 of its own');
   assert.deepEqual(marks(quote), ['color:{"color":"404040"}', 'italic']);
   assert.deepEqual(pick(spaced, 'before', 'after'), { before: 18, after: 18 });
   assert.deepEqual(pick(exact, 'exact', 'least', 'line'), { exact: 18, least: null, line: null }, 'exactly 18 pt');
@@ -128,7 +129,7 @@ test('a minimal file with no defaults is Word\'s bare default: Times New Roman 1
   const bytes = Buffer.concat(Z.zip(files.map(([name, t]) => ({ name, data: new TextEncoder().encode(t), date: new Date('2026-10-27T12:00:00Z') }))).map((c) => Buffer.from(c)));
   const r = await X.importDocx(bytes, { format: 'mla9' });
   assert.deepEqual([r.setup.font, r.setup.size, r.setup.page, r.setup.margins], ['Times New Roman', 10, [8.5, 11], [1, 1.25, 1, 1.25]], 'Word\'s defaults for a section without pgSz and pgMar');
-  const d = S.parse(S.paper, r.html);
+  const d = S.paper.nodeFromJSON(r.doc);
   assert.deepEqual(pick(d.firstChild, 'line', 'after', 'first'), { line: 1, after: null, first: 0 });
 });
 
@@ -142,10 +143,10 @@ test('export of an imported paper writes its own page, header, footer, defaults,
   assert.deepEqual(parts, ['word/footer1.xml', 'word/footer2.xml', 'word/header1.xml', 'word/header2.xml']);
   const footer = parts.map((p) => o.parts[p]).find((x) => x.includes('NUMPAGES'));
   assert.match(footer, /<w:jc w:val="center"\/>.*Page .*<w:instrText xml:space="preserve"> PAGE <\/w:instrText>.* of .*<w:instrText xml:space="preserve"> NUMPAGES <\/w:instrText>/);
-  assert.match(o.parts['word/styles.xml'], /<w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"\/><w:sz w:val="22"\/>/);
+  assert.match(o.parts['word/styles.xml'], /<w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"\/><w:kern w:val="2"\/><w:sz w:val="22"\/>/, 'the base font and size, kerning as the file had it');
   assert.match(d, /<w:spacing w:after="200" w:line="276" w:lineRule="auto"\/>/);
   const sp = (await open('spacing')).doc, d2 = X.exportDocx(sp, { format: 'mla9', date: new Date('2026-10-27T12:00:00Z') }).parts['word/document.xml'];
-  for (const re of [/<w:keepNext\/><w:keepLines\/>/, /<w:widowControl w:val="0"\/>/, /<w:spacing w:before="200" w:after="160"[^>]*\/><w:ind w:left="864" w:right="864" w:firstLine="0"\/><w:jc w:val="center"\/>/, /w:line="360" w:lineRule="exact"/, /w:line="400" w:lineRule="atLeast"/, /<w:color w:val="C00000"\/>/, /<w:highlight w:val="yellow"\/>/]) assert.match(d2, re);
+  for (const re of [/<w:keepNext\/><w:keepLines\/>/, /<w:widowControl w:val="0"\/>/, /<w:pStyle w:val="BlockQuote"\/><w:spacing w:before="200" w:after="160"[^>]*\/><w:ind w:left="864" w:right="864"\/><w:jc w:val="center"\/>/, /w:line="360" w:lineRule="exact"/, /w:line="400" w:lineRule="atLeast"/, /<w:color w:val="C00000"\/>/, /<w:highlight w:val="yellow"\/>/]) assert.match(d2, re);
   const tb = (await open('tabs')).doc, d3 = X.exportDocx(tb, { format: 'mla9', date: new Date('2026-10-27T12:00:00Z') });
   assert.match(d3.parts['word/document.xml'], /<w:tabs><w:tab w:val="left" w:pos="1440"\/><w:tab w:val="center" w:pos="4680"\/><w:tab w:val="right" w:pos="7920"\/><w:tab w:val="decimal" w:pos="9000"\/><\/w:tabs>/);
   assert.match(d3.parts['word/document.xml'], /<w:tab w:val="right" w:leader="dot" w:pos="9346"\/>/);
@@ -156,7 +157,7 @@ test('round trip: Writer\'s .docx of an imported paper imports to the same paper
     const { doc } = await open(id);
     const bytes = X.exportDocx(doc, { format: 'mla9', surname: 'Rivera', date: new Date('2026-10-27T12:00:00Z') }).bytes;
     const r = await X.importDocx(bytes, { format: 'mla9' });
-    const back = S.paper.nodeFromJSON({ ...S.parse(S.paper, r.html).toJSON(), attrs: { setup: r.setup } });
+    const back = S.paper.nodeFromJSON(r.doc);
     assert.deepEqual(back.attrs.setup, doc.attrs.setup, `${id}: the page, header and footer`);
     const blocks = (x) => { const out = []; x.descendants((n) => { if (n.isBlock) out.push({ type: n.type.name, ...n.attrs, text: n.textContent, marks: marks(n) }); return !n.isTextblock; }); return out; };
     assert.deepEqual(blocks(back), blocks(doc), `${id}: every block's text, attributes and marks`);
@@ -169,10 +170,22 @@ test('the page plan: space before (none at a page\'s top after a natural break),
   const at = (blocks) => P.plan(blocks, geo).breaks.map(({ b, l, gap }) => [b, l, Math.round(gap * 10) / 10]);
   assert.deepEqual(at([text(20), text(3, { before: 48 })]), [[1, 0, Math.round((1082.4 - 20 * LH - 48) * 10) / 10]], 'space before counts: 48px pushes three lines that fit to the next page, which starts at their first line');
   assert.deepEqual(at([text(23), text(2, { before: 48 })]), [[1, 0, Math.round((1082.4 - 23 * LH - 48) * 10) / 10]], 'at a page\'s top its space before goes: the gap takes it back');
-  assert.deepEqual(at([text(23), { kind: 'break', lines: [], after: 0 }, text(2, { before: 48 })]), [[2, 0, Math.round((1082.4 - 23 * LH) * 10) / 10]], 'after a page break it stays');
+  assert.deepEqual(at([text(23), { kind: 'break', lines: [], after: 0 }, text(2, { before: 48 })]), [[2, 0, Math.round((1082.4 - 23 * LH - 48) * 10) / 10]], 'after a page break too, as Word does');
+  assert.deepEqual(at([text(1, { after: 16 }), text(22, { before: 16 }), text(1)]).map(([b, l]) => [b, l]), [[2, 0]], 'between two paragraphs the larger of after and before (16), not both (32): all 22 lines fit under the first');
   assert.deepEqual(at([text(18), text(8, { keepLines: true })]), [[1, 0, Math.round((1082.4 - 18 * LH) * 10) / 10]], 'kept together: all of it moves');
   assert.deepEqual(at([text(20), text(4, { widow: false })]).map(([b, l]) => [b, l]), [[1, 3]], 'widow control off: three lines stay and one goes alone');
   assert.deepEqual(at([text(21), text(1, { keepNext: true }), text(4)]).map(([b, l]) => [b, l]), [[1, 0]], 'keep with next on a paragraph');
+});
+
+test('a line fits while its text does: multiple spacing\'s extra space may hang into the bottom margin, as in Word', () => {
+  const geo = { body: 864, stride: 1082.4, notes: [], sep: 18.4 }, line = (slack) => ({ h: 36.8, notes: [], slack });
+  const block = (n, slack, before = 0) => ({ kind: 'text', lines: Array.from({ length: n }, () => line(slack)), after: 0, before, widow: false });
+  // Word measured: a first paragraph's 27 pt before keeps 23 double-spaced lines on page 1 (the last one's box 13.8 pt
+  // past the margin), 28 pt does not; single-spaced lines must fit whole.
+  const pt = (n) => (n * 96) / 72;
+  assert.deepEqual(P.plan([block(1, 18.4, pt(27)), block(29, 18.4)], geo).breaks.map(({ b, l }) => [b, l]), [[1, 22]], 'double, 27 pt before: 23 lines on page 1');
+  assert.deepEqual(P.plan([block(1, 18.4, pt(28)), block(29, 18.4)], geo).breaks.map(({ b, l }) => [b, l]), [[1, 21]], 'double, 28 pt before: 22');
+  assert.deepEqual(P.plan([block(1, 0, pt(27)), block(29, 0)], geo).breaks.map(({ b, l }) => [b, l]), [[1, 21]], 'no slack: the whole box must fit');
 });
 
 test('format checks flag what an imported paper does differently and fix it to the format\'s value', async () => {

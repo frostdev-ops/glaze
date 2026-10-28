@@ -177,8 +177,11 @@ const writerPages = async (items) => {
     for (const it of items) {
       // ⋯ → Import…, the file, and Open in Writer when the assignment's card asks.
       const before = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc);
-      await fr.click('.gp-status button:last-child');
-      await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].some((b) => /^Import/.test(b.textContent))), 'Import… in the menu');
+      // The menu: clicked until it opens (a click while the paper is still settling can be lost).
+      await until(async () => {
+        if (!await fr.evaluate(() => !!document.querySelector('.gp-menu.gp-versions'))) await fr.click('.gp-status button:last-child');
+        return fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].some((b) => /^Import/.test(b.textContent)));
+      }, 'Import… in the menu');
       const [chooser] = await Promise.all([p.waitForEvent('filechooser'), fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].find((b) => /^Import/.test(b.textContent)).click())]);
       await chooser.setFiles(it.file);
       const card = await until(() => fr.evaluate(() => (document.querySelector('.gi-layer[data-open] .gi-default') ? 'card' : document.querySelector('.gp-toast') ? 'direct' : '')), 'the import card or toast');
@@ -239,6 +242,8 @@ const writerPages = async (items) => {
       }
     }
     await p.close();
+  } catch (e) {
+    throw Error(`${e.message}${errors.length ? ` (page errors: ${errors.slice(0, 5).join(' | ')})` : ''}`);
   } finally {
     await context?.close().catch(() => {});
     if (tmp) fs.rmSync(tmp, { recursive: true, force: true });

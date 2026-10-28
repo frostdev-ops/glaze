@@ -73,6 +73,8 @@
 .gp-sheet { position: absolute; left: 0; background: #fff; color: #111; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 :root:not([data-dark]) .gp-sheet { box-shadow: 0 6px 24px rgba(15,23,42,.18), 0 1px 3px rgba(15,23,42,.12); }
 .gp-hdr { position: absolute; text-align: right; color: #111; white-space: pre; pointer-events: none; }
+.gp-ftr { position: absolute; color: #111; white-space: pre; pointer-events: none; }
+.gp-hdr .gp-part, .gp-ftr .gp-part { white-space: pre; }
 .gp-notes { position: absolute; color: #111; pointer-events: none; }
 .gp-notes .gp-sep { position: relative; }
 .gp-notes .gp-rule { position: absolute; top: 50%; left: 0; width: 2in; height: 0; border-top: 0.75px solid #111; }
