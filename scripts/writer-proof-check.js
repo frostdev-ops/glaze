@@ -131,6 +131,10 @@ const rss = (profile) => {
     check(await reply.fr.evaluate(() => { const f = document.querySelector('.gp-fix'); return !f.hidden && f.querySelector('s').textContent === 'teh' && /→ the/.test(f.textContent) && /Undo/.test(f.textContent); }), 'the autocorrect pop shows "teh → the" with Undo');
     check(await reply.fr.evaluate(() => [...document.querySelectorAll('.ProseMirror .gz-ac')].some((s) => s.textContent === 'the')), 'the fix carries the green dotted mark');
     saved.autocorrect = await shot(reply.el, 'proof-autocorrect.png');
+    await p.keyboard.press('Alt+Enter');
+    check(await reply.fr.evaluate(() => document.activeElement?.matches('.gp-fix .gp-undo')), 'Alt+Enter focuses the latest correction’s Undo at the caret');
+    await p.keyboard.press('Escape');
+    check(await reply.fr.evaluate(() => document.querySelector('.gp-fix').hidden && document.activeElement?.closest('.ProseMirror')), 'Escape from correction Undo returns to the editor');
     await p.keyboard.press(`${MOD}+z`);
     const undone = await text(reply.fr);
     check(undone === 'Morrison is less interested in nostalgea than in what teh ', `${MOD === 'Meta' ? '⌘' : 'Ctrl+'}Z right after undoes the fix only, in one step (${JSON.stringify(undone)})`);

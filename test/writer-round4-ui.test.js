@@ -22,3 +22,15 @@ test('header tab leaders fill the gap before the tabbed text', () => {
   assert.match(leader.style.cssText, /width:380px/);
   assert.equal(leader.getAttribute('aria-hidden'), 'true');
 });
+
+test('autocorrect Undo does not intercept an issue at a different caret position', () => {
+  const proof = fs.readFileSync(require.resolve('../writer-proof.js'), 'utf8');
+  const a = proof.indexOf('  const openNext = '), b = proof.indexOf('  // ---- the autocorrect pop', a);
+  let card = false, focused = false;
+  const view = { state: { selection: { head: 30 } } };
+  vm.runInNewContext(`${proof.slice(a, b)} openNext()`, { view, I: { list: () => [{ from: 28, to: 35 }] },
+    fixPop: { hidden: false, fix: { from: 1, to: 4 }, querySelector: () => ({ focus: () => { focused = true; } }) },
+    clearTimeout() {}, fixTimer: 1, openCard: () => { card = true; } });
+  assert.equal(card, true);
+  assert.equal(focused, false);
+});
