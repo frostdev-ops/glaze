@@ -158,6 +158,14 @@ const HARNESS = `(() => {
 
     // ---- a new paper on the attempt
     let { p, el, fr } = await openAttempt();
+    if (process.argv.includes('--adversarial')) {
+      await require('./writer-adversarial-check.js')({ p, el, fr, openAttempt, context, worker, id, check, until, settle, out, tmp, errors });
+      check(errors.length === 0, `no unexpected browser errors (${errors.join('; ')})`);
+      check(requests.every((r) => r.method === 'GET' && r.origin === site), 'every LMS request is a synthetic GET');
+      passed = true;
+      console.log(JSON.stringify({ checks: checks.length }));
+      return;
+    }
     check(await fr.evaluate(() => document.documentElement.dataset.mode === 'paper' && document.documentElement.dataset.kind === 'assignment'), 'the assignment attempt mounts in paper mode');
     check(await fr.evaluate(() => ['.gp-top h1', '.gp-pill', '.gp-box', '[data-run="bold"]', '[data-run="italic"]', '[data-run="underline"]', '[data-run="bulletList"]', '[data-run="orderedList"]', '.gp-submit', '.gp-tabs', '.gp-status'].every((s) => document.querySelector(s))
       && [...document.querySelectorAll('.gp-tbtn')].map((b) => b.textContent.trim()).filter(Boolean).join('|') === 'Cite|Footnote|Page break'
