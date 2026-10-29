@@ -443,3 +443,14 @@ test('allow: each autocorrect class off leaves its fixes as typed, and the other
   assert.equal(e.text(), 'the book, I think the end now', 'all on');
   assert.deepEqual(Object.entries(P.CLASS).sort(), [['Capitalization', 'capitalI'], ['Repetition', 'doubles'], ['Typo', 'typos'], ['i', 'capitalI'], ['space', 'doubles'], ['twice', 'doubles'], ['typo', 'typos']]);
 });
+
+test('address proofing stays responsive on a long dotted token with no valid host ending', () => {
+  const { spawnSync } = require('node:child_process');
+  const run = spawnSync(process.execPath, ['-e', `
+    const P = require('./lib/writer-proof.js');
+    const token = 'a.'.repeat(35000);
+    console.log(JSON.stringify([P.literalLike(token, 0, 1), P.literalLike(token + 'example.test', 0, 1)]));
+  `], { cwd: require('node:path').join(__dirname, '..'), encoding: 'utf8', timeout: 2000 });
+  assert.equal(run.status, 0, run.error?.message || run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), [false, true]);
+});
