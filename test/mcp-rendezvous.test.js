@@ -319,6 +319,18 @@ test('sweep cannot delete a live record published during its stale check', (t) =
   else { assert.equal(writer.stderr.toString(), 'EBUSY'); assert.equal(fs.existsSync(file), false); }
 });
 
+test('claim clears a dead record before a new socket can be swept during startup', { skip: !POSIX }, async (t) => {
+  const d = runDir(t), rec = record(d, { pid: deadPid() });
+  R.write(d, rec);
+  R.claim(rec.path);
+  const server = net.createServer();
+  await R.listen(server, rec.path);
+  t.after(() => server.close());
+  // The new listener has not published its run file yet.
+  R.sweep(d);
+  assert.ok(fs.existsSync(rec.path), 'stale metadata cannot delete the new live socket');
+});
+
 test('the longest permitted socket basename is never truncated, including on Node 18', { skip: !POSIX }, async (t) => {
   const d = path.join(scratch(t), 'é'.repeat(40));
   fs.mkdirSync(d, { mode: 0o700 });
