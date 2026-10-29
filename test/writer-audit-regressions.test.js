@@ -87,6 +87,21 @@ test("Moodle's command palette offers Documents too, and its row opens the page 
   }
 });
 
+for (const failure of ['loader', 'commands']) test(`Moodle retains Documents and Glaze commands after a ${failure} failure`, async () => {
+  const source = read('features/palette.js');
+  const start = source.indexOf('  const commands = async () => {'), end = source.indexOf('  // Ultra\'s GPA', start);
+  const commands = vm.runInNewContext(`${source.slice(start, end)} commands`, {
+    need: async () => {}, moodle: true, go() {},
+    moodleIn: async () => {
+      if (failure === 'loader') throw Error('loader failed');
+      return { commands: async () => { throw Error('commands failed'); } };
+    },
+    dueWeek: async () => [{ title: 'Due item' }], dueCmds: (due) => due.map((d) => ({ label: d.title })),
+    documents: () => [{ label: 'Documents' }], glazeCmds: () => [{ label: 'Glaze settings' }],
+  });
+  assert.deepEqual(Array.from(await commands(), (row) => row.label), ['Due item', 'Documents', 'Glaze settings']);
+});
+
 test('the paper Outline uses document translations while appearance Outline keeps its meaning', () => {
   const source = read('writer-paper.js');
   const key = source.match(/\['outline', '([^']+)'\]/)?.[1];
