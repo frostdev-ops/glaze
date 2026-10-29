@@ -3445,6 +3445,7 @@
   "How large a paper opens. Fit fills the width the box has; a percent keeps that size, and the paper’s own Zoom still changes it.": "Hoe groot een werkstuk opent. Passend vult de breedte van het vak; een percentage houdt die grootte, en de Zoom van het werkstuk verandert die nog steeds.",
   "Ruler": "Liniaal",
   "Light page": "Lichte pagina",
+  "Full writer": "Volledige Writer",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "De liniaal boven de pagina, met de inspringingen en tabstops van de alinea, die je kunt verslepen. Uit begint de pagina direct onder de werkbalk.",
   "Versions kept": "Bewaarde versies",
   "How many earlier versions each paper keeps on this device, the oldest going first. The last version you submitted always stays.": "Hoeveel eerdere versies elk werkstuk op dit apparaat bewaart; de oudste gaat eerst. De laatst ingeleverde versie blijft altijd.",

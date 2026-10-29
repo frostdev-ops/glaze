@@ -81,7 +81,8 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
 
     x.addEventListener('click', close);
     layer.querySelector('.gi-dim').addEventListener('click', close);
-    open.addEventListener('click', () => { if (card !== mine) return; mine.back = null; close(); api.importFile(file); });
+    // From the compact box, Open in Writer opens the pages too (Full writer on): the file is a paper now.
+    open.addEventListener('click', () => { if (card !== mine) return; mine.back = null; close(); api.importFile(file, { full: true }); });
     asis.addEventListener('click', () => { if (card !== mine) return; mine.back = null; close(); SHEET()?.open(api, file); });
     layer.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }

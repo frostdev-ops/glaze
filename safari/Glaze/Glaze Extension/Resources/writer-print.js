@@ -20,8 +20,10 @@ var GZ_WRITER_PRINT = globalThis.GZ_WRITER_PRINT || (() => {
     try { surname = globalThis.GZ_WRITER_FORMAT?.surname(ed.view.state.doc, p.format()) || ''; } catch { /* no heading yet */ }
     return safe([surname, p.context()?.assignment?.title || p.paper()?.title || t('Paper')].filter(Boolean).join(' ').replace(/\s+/g, '_'));
   };
+  // A paper prints its pages; a paper in its compact box has none drawn, so ⌘P is the browser's there, as in compose.
+  const paged = () => !!paper() && document.documentElement.dataset.view !== 'compact';
   const print = () => {
-    if (!paper()) return false;
+    if (!paged()) return false;
     const before = document.title;
     document.title = base();
     addEventListener('afterprint', () => { document.title = before; }, { once: true });
@@ -52,7 +54,7 @@ var GZ_WRITER_PRINT = globalThis.GZ_WRITER_PRINT || (() => {
   });
   // ⌘P / Ctrl+P on a paper: this frame's pages, not the page around it.
   document.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() !== 'p' || e.altKey || e.shiftKey || (mac ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey) || !paper()) return;
+    if (e.key.toLowerCase() !== 'p' || e.altKey || e.shiftKey || (mac ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey) || !paged()) return;
     e.preventDefault();
     e.stopPropagation();
     print();

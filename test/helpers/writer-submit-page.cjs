@@ -3,8 +3,9 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 const L = require('../../lib/writer-submit.js');
-// settings: what the module reads through GZ_CTX (enhance.writerUploads catches Ultra's own file area).
-module.exports = ({ listed = true, enabled = true, worker, settings = null } = {}) => {
+// settings: what the module reads through GZ_CTX (enhance.writerUploads catches Ultra's own file area). full: the paper's
+// view (features/writer.js box.full); false, its compact box.
+module.exports = ({ listed = true, enabled = true, worker, settings = null, full = true } = {}) => {
   const doc = { activeElement: null }, sent = [], uploads = [], clicks = [], timers = new Map();
   doc.root = new El('html', doc); doc.documentElement = doc.root;
   doc.body = parse(fs.readFileSync(path.join(__dirname, '../fixtures/ultra-writer-attempt.html'), 'utf8'), doc);
@@ -12,7 +13,7 @@ module.exports = ({ listed = true, enabled = true, worker, settings = null } = {
   const editor = doc.querySelector('#bb-editorassignment-attempt-authoring-submission');
   const location = { origin: 'https://school.blackboard.com', pathname: '/ultra/courses/_101_1/assessment/_7_1/attempt/create' };
   let owned = true, clock = Date.now(), id = 0;
-  const box = { id: 'gzw-test', editor, kind: 'assignment', mode: 'paper', path: location.pathname, context: { paper: { school: 'school.blackboard.com', user: '_900_1', course: '_101_1', content: '_7_1' } }, frame: { focus() {} }, port: { postMessage: (m) => sent.push(m) } };
+  const box = { id: 'gzw-test', editor, kind: 'assignment', mode: 'paper', full, path: location.pathname, context: { paper: { school: 'school.blackboard.com', user: '_900_1', course: '_101_1', content: '_7_1' } }, frame: { focus() {} }, port: { postMessage: (m) => sent.push(m) } };
   box.frame = new El('iframe', doc); doc.body.append(box.frame); box.ready = true;
   for (const e of doc.root.all()) e.getClientRects = () => [e.getBoundingClientRect()];
   const fire = (target, type, more = {}) => {

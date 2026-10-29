@@ -6,7 +6,7 @@
 // text…) stays Blackboard's, untouched: the frame checks before anything is written. Ctrl/Cmd+Enter
 // in the frame clicks Post, Reply or Send when Ultra allows it (never an attempt's Submit). ⋯ → Blackboard editor gives
 // the box back, to Ultra and to draft backup (features/drafts.js skips boxes marked data-gz-writer). Whatever fails leaves
-// Ultra's editor, or keeps the draft in Writer until a native write succeeds.
+// Ultra's editor, or keeps the draft in Writer until a native write succeeds. An assignment's paper is the exception, below.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const X = globalThis.GZ_CTX;
@@ -17,9 +17,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const declined = new WeakSet(); // editors given back to Blackboard's editor: Ultra's from then on, on this page
   const failed = new WeakMap(); // editor → when its frame last failed to open; tried again a minute later
   const SENDS = new Set(['post', 'reply', 'message', 'journal']);
-  // A paper (an assignment's attempt) is a page of its own: as tall as the window allows, whatever its text; it stays in
-  // Writer's storage and never goes into Ultra's editor (the submit step attaches it as a .docx).
+  // A paper (an assignment's attempt) in its full view (Settings → Writer → Full writer) is a page of its own: as tall as the
+  // window allows, whatever its text; it stays in Writer's storage and never goes into Ultra's editor (the submit step
+  // attaches it as a .docx). In its compact view (the default) the frame is a box as compose's, growing with its text, and
+  // the paper's compose projection goes into Ultra's editor as a post's does, for Ultra's own Submit (writer-paper.js).
+  // The frame says which (view) and asks for the full height while a sheet is open over the box (room).
   const PAPER_HEIGHT = 'max(640px, calc(100vh - 120px))';
+  const paged = (box) => box.mode === 'paper' && (box.full || box.room);
   const FRAME_RETRIES = 2;
   const on = () => X.on() && X.site === 'ultra' && X.settings().enabled !== false && !!X.settings().enhance?.writer;
 
@@ -81,7 +85,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   };
   let seq = 0;
   const mount = async (b) => {
-    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, delta: null, path: location.pathname, editorId: b.editor.id, destination: X.draftAt(b.editor), display: null };
+    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, delta: null, path: location.pathname, editorId: b.editor.id, destination: X.draftAt(b.editor), display: null,
+      full: b.mode === 'paper' && X.settings().writer?.full === true, room: false, px: 0 };
     boxes.set(b.editor, box);
     try { await drafts(); if (!await GZ_DRAFT_UI.ready(b.editor)) { declined.add(b.editor); drop(box); return; } } catch { drop(box); return; }
     if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
@@ -102,7 +107,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     f.setAttribute('data-gz-writer-frame', box.kind);
     // Out of sight until it says it's ready, then in the box's place at the box's height: the frame's 3px each side
     // holds its focus ring.
-    f.style.cssText = `display:block;border:0;width:calc(100% + 6px);margin:-3px;height:${box.mode === 'paper' ? PAPER_HEIGHT : `${Math.max(120, Math.round(box.root.getBoundingClientRect().height)) + 6}px`};background:transparent;color-scheme:${html.hasAttribute('data-gz-dark-theme') ? 'dark' : 'light'};position:absolute;opacity:0;pointer-events:none`;
+    box.room = false;
+    f.style.cssText = `display:block;border:0;width:calc(100% + 6px);margin:-3px;height:${paged(box) ? PAPER_HEIGHT : `${Math.max(120, Math.round(box.root.getBoundingClientRect().height)) + 6}px`};background:transparent;color-scheme:${html.hasAttribute('data-gz-dark-theme') ? 'dark' : 'light'};position:absolute;opacity:0;pointer-events:none`;
     const ch = new MessageChannel();
     box.frame = f;
     box.ready = false;
@@ -235,17 +241,39 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (m.type === 'ready' && !box.ready) swap(box);
     else if (m.type.startsWith('submit:')) { if (box.mode === 'paper') X.need('lib/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT_LIB).then(() => X.need('features/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT)).then(() => boxes.get(box.editor) === box && GZ_WRITER_SUBMIT.hear(box, m, X, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
     else if (m.type === 'attachments') { if (box.mode === 'paper') X.need('lib/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.attachments(X, box, m, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
-    else if (box.mode === 'paper') { if (m.type === 'focus-mode') focusMode(box, m.on === true); else if (m.type === 'native') { drop(box); declined.add(box.editor); } }
-    else if (m.type === 'height' && Number.isFinite(m.px)) box.frame.style.height = `${Math.max(40, Math.min(20000, Math.round(m.px)))}px`;
+    else if (m.type === 'view' || m.type === 'room') { if (box.mode === 'paper') view(box, m); }
+    else if (box.mode === 'paper' && box.full) { if (m.type === 'focus-mode') focusMode(box, m.on === true); else if (m.type === 'native') { drop(box); declined.add(box.editor); } }
+    else if (m.type === 'height' && Number.isFinite(m.px)) { box.px = Math.max(40, Math.min(20000, Math.round(m.px))); if (!paged(box) && !box.focused) box.frame.style.height = `${box.px}px`; }
     else if (m.type === 'change' && typeof m.html === 'string' && typeof m.text === 'string') {
-      box.snapshot = { ...box.destination, html: m.html, text: m.text, at: Date.now() };
-      clearTimeout(box.backup);
-      box.backup = setTimeout(() => remember(box), 1000);
+      // A compact paper is in Writer's storage already: Ultra's editor takes its text, the draft backup nothing.
+      if (box.mode === 'compose') {
+        box.snapshot = { ...box.destination, html: m.html, text: m.text, at: Date.now() };
+        clearTimeout(box.backup);
+        box.backup = setTimeout(() => remember(box), 1000);
+      }
       sync(box, m.html, Array.isArray(m.delta) ? m.delta : null);
     }
     else if (m.type === 'send') send(box);
     else if (m.type === 'native' && typeof m.reason === 'string' && m.reason) refuse(box);
     else if (m.type === 'native') giveBack(box, true);
+  };
+  // A paper's view (full or compact) or a sheet's room over its compact box: the frame's height; on a switch, the page
+  // scrolled by what it moved the caret (from, to: its top in the frame before and after), so its line stays where it was
+  // on screen; a full frame or a sheet's room brought into sight.
+  const view = (box, m) => {
+    const was = box.full, switched = m.type === 'view' && Number.isFinite(m.from) && Number.isFinite(m.to);
+    if (m.type === 'room') box.room = m.on === true;
+    else { box.full = m.full === true; if (Number.isFinite(m.px)) box.px = Math.max(40, Math.min(20000, Math.round(m.px))); }
+    const f = box.frame;
+    if (!f || box.focused) return;
+    const top = f.getBoundingClientRect().top;
+    if (paged(box) || box.px) f.style.height = paged(box) ? PAPER_HEIGHT : `${box.px}px`;
+    if (switched && was && !box.full) scroller(f)?.scrollBy?.(0, m.to - m.from + f.getBoundingClientRect().top - top);
+    else if (paged(box) && (m.type === 'room' ? box.room : switched && !was)) f.scrollIntoView?.({ block: 'nearest' });
+  };
+  const scroller = (el) => {
+    for (let e = el.parentElement; e; e = e.parentElement) { const o = getComputedStyle(e).overflowY; if ((o === 'auto' || o === 'scroll') && e.scrollHeight > e.clientHeight) return e; }
+    return document.scrollingElement;
   };
   // A page-world reply is untrusted. Check the native DOM too, and keep Writer's copy on every failure.
   // An explicit body keeps fragment-leading whitespace and head-like elements in the text being verified.
@@ -285,6 +313,11 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       remember(box);
       globalThis.GZ_DRAFT_UI?.sent?.(box.editor);
       box.sending = true;
+    }
+    // An attempt's Submit and Save and Close send its box: a compact paper's last edit goes in first.
+    for (const box of boxes.values()) {
+      if (box.mode !== 'paper' || box.full || !box.ready || !/\.footer\./.test(b.getAttribute('data-analytics-id') || '') || !box.editor.closest('bb-assignment-attempt-authoring-panel')?.contains(b) || !sameBox(box)) continue;
+      if (!sync(box, box.latest)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
     }
   }, true);
   // Ultra collapses an empty new Post when its editor loses focus, and the frame taking the typing is such a loss. While
