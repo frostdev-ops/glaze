@@ -48,7 +48,7 @@ const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = []
     restyleCSS() {}, counts() {}, setZoom() {}, PG: { relayout() {} }, runChecks() {}, runChecksSoon() {}, outlineDraw() {}, outlineAI: { stop() {} }, sourcesPanel: null,
     own: false, titleIn: null, URLSearchParams, location: { search: '' }, ...extra,
   });
-  vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, key: () => key, keep: () => keep, edits: () => edits, format: () => format, dirty: () => dirty, fromDocs: typeof fromDocs === 'function' ? fromDocs : null };`, sandbox);
+  vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, restore, key: () => key, keep: () => keep, edits: () => edits, format: () => format, dirty: () => dirty, fromDocs: typeof fromDocs === 'function' ? fromDocs : null };`, sandbox);
   const $ = sandbox.__;
   await $.load();
   const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
@@ -441,4 +441,103 @@ test('a recovered typed title remains visible when its first save is refused', a
   const f = await frame({ local, ss, context: {}, extra: { ...extra, console: { error() {} } } });
   assert.equal(f.$.dirty(), true);
   assert.equal(titleIn.value, 'Recovered title');
+});
+
+const picking = async (patch = {}, original = {}) => {
+  const local = memory(), app = {}, toasts = [], ss = session();
+  await seed(local, original);
+  const home = PA.open(local, () => (clock += 1000), { versions: async () => 40 });
+  await home.save(DOC, { doc: docOf('New document.'), format: 'plain', keep: true, ...patch });
+  const f = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS, assignment: { title: 'Essay 2' } },
+    extra: { root: { isConnected: true, inert: false }, current: app, api: app, noteCache: new Map(), console: { error() {} }, toast: (text, act) => toasts.push({ text, act }) } });
+  return { local, home, f, ss, toasts };
+};
+
+test('a pick and its restore each replace the editor document in one history step', async () => {
+  const { f, toasts } = await picking();
+  const history = (S.PM || globalThis.GZ_PM).history;
+  assert.equal(history.undoDepth(f.view.state), 0);
+  await f.$.fromDocs(DOC, 'New document');
+  assert.equal(history.undoDepth(f.view.state), 1, 'no intermediate restyling of the old document');
+  await toasts[0].act.run();
+  assert.equal(history.undoDepth(f.view.state), 2, 'restore also replaces the document just once');
+});
+
+test('a pick flushes unsaved typing and pending autosave before taking its version', async () => {
+  const { local, home, f } = await picking();
+  f.type(' Unsaved typing.');
+  const pending = f.$.save();
+  const before = await f.$.fromDocs(DOC, 'New document');
+  await pending;
+  assert.ok(textOf((await home.version(KEY, before.id)).doc).endsWith(' Unsaved typing.'));
+  assert.equal(textOf((await stored(local)).paper.doc), 'New document.');
+});
+
+test('an autosave queued during the import write cannot write the outgoing document over the pick', async () => {
+  const { local, f } = await picking();
+  const put = local.set;
+  let release, started, held = false;
+  const gate = new Promise((r) => { started = r; });
+  local.set = async (o) => {
+    if (!held && textOf(o[PA.KEYS.PAPER + KEY]?.doc || docOf('Other')) === 'New document.') {
+      held = true;
+      started(); await new Promise((r) => { release = r; });
+    }
+    return put(o);
+  };
+  const pick = f.$.fromDocs(DOC, 'New document');
+  await gate;
+  const auto = f.$.save();
+  await new Promise(setImmediate);
+  release();
+  await pick; await auto;
+  assert.equal(textOf((await stored(local)).paper.doc), f.shown());
+  assert.equal(f.shown(), 'New document.');
+});
+
+test('a pick during an active submit does not read or write any paper', async () => {
+  const { local, f } = await picking();
+  const before = structuredClone(local.data);
+  let reads = 0;
+  f.sandbox.GZ_WRITER_SUBMIT_SHEET = { busy: () => true };
+  f.sandbox.store.get = async () => { reads++; return null; };
+  assert.equal(await f.$.fromDocs(DOC, 'New document'), null);
+  assert.equal(reads, 0);
+  assert.deepEqual(local.data, before);
+});
+
+test('deleted or invalid sources leave the assignment untouched and report failure', async () => {
+  for (const invalid of [false, true]) {
+    const { local, home, f, toasts } = await picking();
+    if (invalid) await home.save(DOC, { doc: { type: 'unknown' } }); else await home.remove(DOC);
+    const before = structuredClone(local.data[PA.KEYS.PAPER + KEY]);
+    await f.$.fromDocs(DOC, 'Gone');
+    assert.equal(f.shown(), 'Two thousand words of my essay.');
+    assert.deepEqual(local.data[PA.KEYS.PAPER + KEY], before);
+    assert.equal(toasts.at(-1).text, 'Not saved. Try again in a moment.');
+    assert.equal(f.view.props.editable(), true);
+  }
+});
+
+test('a pick replaces the old outline, binds the source outline, and Undo restores the old one', async () => {
+  const outline = { schema: 1, scope: KEY, entries: [{ heading: 'Old outline' }] };
+  for (const imported of [null, { schema: 1, scope: '', entries: [{ heading: 'New outline' }] }]) {
+    const { local, f, toasts } = await picking({ outline: imported }, { outline });
+    await f.$.fromDocs(DOC, 'New document');
+    assert.deepEqual((await stored(local)).paper.outline, imported && { ...imported, scope: KEY });
+    await toasts[0].act.run();
+    assert.deepEqual((await stored(local)).paper.outline, outline);
+    await f.$.save();
+    assert.deepEqual((await stored(local)).paper.outline, outline, 'the next autosave keeps the restored outline');
+  }
+});
+
+test('a document with a large picture stays intact in the pick and its session recovery', async () => {
+  const picture = { type: 'image', attrs: { src: `data:image/png;base64,${'A'.repeat(2_100_000)}`, alt: 'Photo' } };
+  const { local, f, ss } = await picking({ doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Photo notes.' }, picture] }] } });
+  await f.$.fromDocs(DOC, 'Photo notes');
+  assert.equal(f.view.state.doc.firstChild.lastChild.attrs.src, picture.attrs.src);
+  f.type(' More notes.');
+  assert.ok(ss.getItem(`gz-paper-pending:${KEY}`).length < 5000, 'the saved picture is a digest in sessionStorage');
+  assert.equal((await stored(local)).paper.doc.content[0].content[1].attrs.src, picture.attrs.src);
 });

@@ -28,8 +28,9 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   // A standalone document brought into an assignment's paper (Writer's Open from Documents): what that paper's 'import'
   // save takes from it, its document, format and import choice, never its title (the assignment's stays Ultra's), and an
   // AI outline it holds, bound to the paper. target: the paper's key. → null without a document.
-  const fromDocument = (target, source) => (source?.doc ? { doc: structuredClone(source.doc), words: Number.isFinite(source.words) ? source.words : measure(source.doc).words,
-    ...(source.format !== undefined && { format: source.format }), keep: source.keep === true, ...(source.outline && typeof source.outline === 'object' && { outline: { ...structuredClone(source.outline), scope: target } }) } : null);
+  const fromDocument = (target, source) => (source?.doc ? { doc: structuredClone(source.doc), words: measure(source.doc).words,
+    ...(source.format !== undefined && { format: structuredClone(source.format) }), keep: source.keep === true,
+    outline: source.outline && typeof source.outline === 'object' ? { ...structuredClone(source.outline), scope: target } : null } : null);
   // A rename made elsewhere (the Documents home, another tab), for an open editor: the stored record, newer than the one
   // the editor last read or wrote, names it differently. → { title, named, revision } (revision only where the document
   // is the one the editor knows, so its next save builds on the rename instead of keeping a conflict version), or null.
@@ -104,7 +105,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     };
     const snapshot = (paper, reason, at) => {
       const doc = paper.doc, m = measure(doc);
-      return { format: paper.format, keep: paper.keep === true, id: `${at.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at, reason, words: m.words, bytes: bytes(doc), doc };
+      return { format: paper.format, keep: paper.keep === true, outline: paper.outline || null, id: `${at.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at, reason, words: m.words, bytes: bytes(doc), doc };
     };
     const addVersion = async (k, v) => { const list = await cap([v, ...(await versionsOf(k))]); await store.set({ [VERSIONS + k]: list }); return v; };
     const index = async (paper) => {
@@ -172,7 +173,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     const restore = async (k, id) => {
       const v = await version(k, id);
       if (!v) return null;
-      return save(k, { doc: v.doc, words: v.words, keep: v.keep === true, ...(v.format != null ? { format: v.format } : {}) }, { reason: 'restore' });
+      return save(k, { doc: v.doc, words: v.words, keep: v.keep === true, outline: v.outline || null, ...(v.format != null ? { format: v.format } : {}) }, { reason: 'restore' });
     };
     const list = async () => ((await get(INDEX)) || []).filter((r) => r && typeof r.key === 'string').map((r) => ({ ...r, kind: r.kind || 'paper', named: r.named === true }));
     const remove = (k) => serial(k, async () => {

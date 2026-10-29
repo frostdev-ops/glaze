@@ -10,9 +10,9 @@ const paper = () => {
   const view = { props: { editable: () => true }, state: { doc: { label: 'draft' } }, setProps(p) { Object.assign(this.props, p); }, focus() {} };
   const ctx = vm.createContext({ console: { error() {} }, RangeError, ArrayBuffer, Uint8Array, DOCX: [], format: {}, key: 'original', paper: {}, root, view, current: api, api,
     need: async () => {}, GZ_WRITER_DOCX: { importDocx: async () => ({ doc: { type: 'doc', text: 'imported' }, html: '<p>Imported</p>', warnings: [] }) },
-    S: { paper: { nodeFromJSON: (json) => ({ toJSON: () => json }) } }, keep: false,
+    S: { paper: { nodeFromJSON: (json) => ({ toJSON: () => json }) } }, PA: require('../lib/writer-papers.js'), keep: false,
     F: { check: () => ({ issues: [{ rule: 'spacing' }] }), KEPT: new Set(['spacing']) },
-    save: async () => { snapshots.push(ctx.keep); return true; }, record: () => ({ keep: ctx.keep }), t: (k) => k, restore: () => {}, toast: (text, act) => notices.push({ text, act }),
+    save: async () => { snapshots.push(ctx.keep); return true; }, keepPictures: async () => {}, record: () => ({ keep: ctx.keep }), t: (k) => k, restore: () => {}, toast: (text, act) => notices.push({ text, act }),
     store: { save: async (k, patch) => { saved.push(k); return { paper: patch, version: { id: 'before' } }; } },
     setDoc: (json) => { applied.push(json); view.state.doc = json; },
   });
@@ -66,4 +66,20 @@ test('a failed import save leaves the current formatting choice intact', async (
   await p.importFile(p.file());
   assert.equal(p.ctx.keep, false);
   assert.equal(p.applied.length, 0);
+});
+
+test('a Word import saves the new word count before its editor autosave', async () => {
+  const p = paper();
+  p.ctx.record = () => ({ words: 100 });
+  p.ctx.GZ_WRITER_DOCX.importDocx = async () => ({ doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Three new words.' }] }] }, warnings: [] });
+  await p.importFile(p.file());
+  assert.equal(p.ctx.paper.words, 3);
+});
+
+test('a Word import cannot start during an active submit', async () => {
+  const p = paper();
+  let reads = 0;
+  p.ctx.GZ_WRITER_SUBMIT_SHEET = { busy: () => true };
+  await p.importFile({ ...p.file(), arrayBuffer: async () => { reads++; return new ArrayBuffer(3); } });
+  assert.equal(reads + p.saved.length + p.applied.length, 0);
 });

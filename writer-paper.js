@@ -737,13 +737,16 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     let writing = 0, missed = false, adopt = async () => {};
     const ours = async (p) => { writing++; try { return await p; } finally { if (!--writing && missed) { missed = false; adopt().catch((e) => console.error(e)); } } };
     // base: the revision what's saved was typed on, when it isn't the one this editor last read (a recovered copy).
-    let saves = Promise.resolve();
+    let saves = Promise.resolve(), replacing = null;
     const save = (reason = 'auto', base) => {
       const next = saves.then(() => saveNow(reason, base));
       saves = next.catch(() => {});
       return next;
     };
     const saveNow = async (reason = 'auto', base) => {
+      // Imports write the replacement before showing it: a visibility/pagehide autosave must read the new editor,
+      // never queue the outgoing document behind that write. The import's own pre-save runs before this barrier.
+      if (replacing) await replacing;
       clearTimeout(saveTimer);
       if (!key) { setState('Not saved'); return null; }
       const at = edits, nameAt = nameEdits, k = key;
@@ -797,14 +800,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         view.dispatch(PM.history.closeHistory(view.state.tr));
       }
     };
-    const setFormat = async (f, { save: keep = true } = {}) => {
+    const setFormat = async (f, { save: keep = true, restyle = true } = {}) => {
       if (!f) return;
       if (keep && dirty && !await save()) return;
       const before = format;
       format = f;
       noteCache.clear();
       restyleCSS();
-      const rebuilt = before.opening !== f.opening || before.cite !== f.cite || before.list.title !== f.list.title;
+      const rebuilt = restyle && (before.opening !== f.opening || before.cite !== f.cite || before.list.title !== f.list.title);
       if (rebuilt) setDoc(F.restyle(view.state.doc, before, f, values()));
       PG.relayout(view);
       counts();
@@ -1294,7 +1297,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       let r = null;
       try { r = await store.restore(key, id); } catch (e) { console.error(e); }
       if (!r) { toast(t('Not saved. Try again in a moment.')); return; }
-      paper = r.paper; keep = paper.keep === true; await setFormat(ST.get(paper.format), { save: false }); setDoc(paper.doc); toast(t('Version restored'));
+      paper = r.paper; keep = paper.keep === true; outlineSaved = paper.outline || null;
+      await setFormat(ST.get(paper.format), { save: false, restyle: false }); setDoc(paper.doc); toast(t('Version restored'));
     };
     const open2 = (page2) => { try { window.open(chrome.runtime.getURL(page2), '_blank', 'noopener'); } catch { /* no extension context */ } };
     const docx = async () => { await need(DOCX); return GZ_WRITER_DOCX.exportDocx(view.state.doc, { format, surname: surname(), title: ctx.assignment?.title || paper?.title || '' }); };
@@ -1318,13 +1322,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // The paper becomes the Word file's text, what it held kept as a version first; the toast's Undo brings that back.
     let importing = false;
     const importFile = async (f) => {
-      if (!f || importing) return;
+      if (!f || importing || globalThis.GZ_WRITER_SUBMIT_SHEET?.busy()) return;
       importing = true;
       const editable = view.props.editable, inert = root.inert;
       const snapshot = { key, doc: view.state.doc, format };
       const here = () => root.isConnected && current === api && key === snapshot.key && view.state.doc === snapshot.doc && format === snapshot.format;
       root.inert = true; view.setProps({ editable: () => false });
-      let before = null;
+      let before = null, release;
       try {
         if (!Number.isSafeInteger(f.size) || f.size <= 0 || f.size > 15e6) throw new RangeError('Choose a Word file smaller than 15 MB.');
         await need(DOCX);
@@ -1338,10 +1342,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (key) {
           if (!await save()) throw new Error('paper could not be saved before import');
           if (!here()) return;
-          const saved = await store.save(key, { ...record(), doc: doc.toJSON(), keep: own }, { reason: 'import' });
+          replacing = new Promise((r) => { release = r; });
+          const json = doc.toJSON();
+          const saved = await store.save(key, { ...record(), doc: json, words: PA.measure(json).words, keep: own }, { reason: 'import' });
           if (!here()) return;
           paper = saved.paper;
           before = saved.version;
+          await keepPictures(json);
+          if (!here()) return;
         }
         keep = own;
         setDoc(doc.toJSON());
@@ -1351,7 +1359,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         const message = e instanceof RangeError && ['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.'].includes(e.message) ? e.message : 'That file could not be read as a Word document.';
         toast(t(message));
       }
-      finally { importing = false; root.inert = inert; view.setProps({ editable }); if (root.isConnected && current === api) view.focus(); }
+      finally { replacing = null; release?.(); importing = false; root.inert = inert; view.setProps({ editable }); if (root.isConnected && current === api) view.focus(); }
       return before;
     };
     file.addEventListener('change', () => { bring(file.files[0]); file.value = ''; });
@@ -1373,28 +1381,32 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // as the import card is (writer-import.js). The one picked becomes the paper as a Word file does (importFile): what the
     // paper held kept as a version first, the toast's Undo bringing it back; the document stays on the Documents home.
     const fromDocs = async (k, name) => {
-      if (!key || PA.local(key) || !PA.local(k) || importing) return null;
+      if (!key || PA.local(key) || !PA.local(k) || importing || globalThis.GZ_WRITER_SUBMIT_SHEET?.busy()) return null;
       importing = true;
       const editable = view.props.editable, inert = root.inert;
       const snapshot = { key, doc: view.state.doc, format };
       const here = () => root.isConnected && current === api && key === snapshot.key && view.state.doc === snapshot.doc && format === snapshot.format;
       root.inert = true; view.setProps({ editable: () => false });
-      let before = null;
+      let before = null, release;
       try {
         const fields = PA.fromDocument(key, await store.get(k));
         if (!here()) return null;
         if (!fields) throw new Error('no document');
+        fields.doc = S.paper.nodeFromJSON(fields.doc).toJSON();
         if (!await save()) throw new Error('paper could not be saved before import');
         if (!here()) return null;
+        replacing = new Promise((r) => { release = r; });
         const saved = await store.save(key, { ...record(), ...fields }, { reason: 'import' });
         if (!here()) return null;
         paper = saved.paper; before = saved.version;
         keep = paper.keep === true; outlineSaved = paper.outline || null;
-        await setFormat(ST.get(paper.format), { save: false });
+        await keepPictures(paper.doc);
+        if (!here()) return null;
+        await setFormat(ST.get(paper.format), { save: false, restyle: false });
         setDoc(paper.doc);
         toast(name, before ? { label: t('Undo'), run: () => restore(before.id) } : null);
       } catch (e) { console.error(e); toast(t('Not saved. Try again in a moment.')); }
-      finally { importing = false; root.inert = inert; view.setProps({ editable }); if (root.isConnected && current === api) view.focus(); }
+      finally { replacing = null; release?.(); importing = false; root.inert = inert; view.setProps({ editable }); if (root.isConnected && current === api) view.focus(); }
       return before;
     };
     let docsSheet = null, docsTurn = 0;
@@ -1411,14 +1423,16 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const fromDocsSheet = async () => {
       closeDocs(false);
       const turn = docsTurn;
-      const docs = (await store.list()).filter((r) => PA.local(r.key) && r.kind === 'paper').sort((a, b) => (b.updated || 0) - (a.updated || 0));
-      if (turn !== docsTurn || !root.isConnected || current !== api || importing) return;
+      let docs;
+      try { docs = (await store.list()).filter((r) => PA.local(r.key) && r.kind === 'paper').sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
+      catch (e) { console.error(e); if (turn === docsTurn && root.isConnected && current === api) { toast(t('Not saved. Try again in a moment.')); versionsB.focus(); } return; }
+      if (turn !== docsTurn || !root.isConnected || current !== api || importing || globalThis.GZ_WRITER_SUBMIT_SHEET?.opened()) return;
       const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'medium' });
       const x = btn({ class: 'gp-fromdocs-x', title: t('Close'), 'aria-label': t('Close'), onclick: () => closeDocs() }, icon('close'));
       const picks = docs.map((r) => {
         const name = r.title || t('Untitled document');
-        return btn({ class: 'gp-fromdocs-row', onclick: () => { closeDocs(false); fromDocs(r.key, name); } }, h('b', { text: name }),
-          h('small', { text: [labelOf(ST.get(r.format)), t('{n} words', { n: nf(r.words || 0) }), Number.isFinite(r.updated) ? when.format(r.updated) : ''].filter(Boolean).join(' · ') }));
+        const meta = [labelOf(ST.get(r.format)), t('{n} words', { n: nf(r.words || 0) }), Number.isFinite(r.updated) ? when.format(r.updated) : ''].filter(Boolean).join(' · ');
+        return btn({ class: 'gp-fromdocs-row', 'aria-label': `${name} · ${meta}`, onclick: () => { closeDocs(false); fromDocs(r.key, name); } }, h('b', { text: name }), h('small', { text: meta }));
       });
       const layer = h('div', { class: 'gp-fromdocs-layer' }, h('div', { class: 'gp-fromdocs-dim', onclick: () => closeDocs() }),
         h('div', { class: 'gp-fromdocs', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'gp-fromdocs-h' },
@@ -1429,6 +1443,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       docsSheet = { layer, inert };
       layer.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDocs(); return; }
+        if (picks.length && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+          const i = picks.indexOf(document.activeElement);
+          e.preventDefault(); e.stopPropagation();
+          picks[e.key === 'Home' ? 0 : e.key === 'End' ? picks.length - 1 : (i + (e.key === 'ArrowUp' ? picks.length - 1 : 1)) % picks.length].focus();
+          return;
+        }
         if (e.key !== 'Tab') return;
         const all = [...picks, x], i = all.indexOf(document.activeElement);
         e.preventDefault();
@@ -1437,6 +1457,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       layer.getBoundingClientRect();
       layer.setAttribute('data-open', '');
       (picks[0] || x).focus();
+      // A fixed sheet is centred in the frame; Ultra may show only part of that frame. Bring the whole dialog into
+      // the outer window too, including a keyboard opening while the status bar is below it.
+      layer.querySelector('.gp-fromdocs').scrollIntoView({ block: 'center', inline: 'nearest' });
     };
 
     // ---- what the page says: Ultra's names and the paper's key

@@ -462,7 +462,7 @@ const HARNESS = `(() => {
     await d.close();
 
     // ---- Open from Documents: the assignment's paper takes a standalone document, a version first, Undo in the toast
-    const docShots = path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-documents');
+    const docShots = path.join(shots, 'documents');
     const KEY = 'bb.school.test|_900_1|_101_1|_7_1', k3 = `doc:${crypto.randomUUID()}`;
     const seeder = await context.newPage();
     watch(seeder, 'seeder');
@@ -474,7 +474,7 @@ const HARNESS = `(() => {
     const assignmentText = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent);
     check(assignmentText.includes('A sentence typed before the reload.'), 'the assignment paper holds its own text before');
     const openSheet = async () => {
-      await fr.click('.gp-status button:last-child');
+      await fr.evaluate(() => document.querySelector('.gp-status button:last-child').click());
       await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].some((b) => b.textContent === 'Open from Documents')), 'Open from Documents in the status menu');
       await fr.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].find((b) => b.textContent === 'Open from Documents').click());
       await until(() => fr.evaluate(() => !!document.querySelector('.gp-fromdocs-layer[data-open]') && document.activeElement?.classList.contains('gp-fromdocs-row')), 'the sheet open, its first row focused');
@@ -488,6 +488,11 @@ const HARNESS = `(() => {
     });
     check(sheet.modal === 'true' && sheet.label === 'Open from Documents' && sheet.inert, `the sheet is a labelled modal dialog over an inert paper (${JSON.stringify(sheet)})`);
     check(sheet.rows.map((r) => r[0]).join('|') === 'Reading notes on Beloved|My own title' && /^APA 7 · 4 words · /.test(sheet.rows[0][1]) && /^Blank · 6 words · /.test(sheet.rows[1][1]), `the student's standalone documents, newest first: title, format, words, date (${JSON.stringify(sheet.rows)})`);
+    check(await fr.evaluate(() => [...document.querySelectorAll('.gp-fromdocs-row')].every((r) => r.getAttribute('aria-label') === `${r.querySelector('b').textContent} · ${r.querySelector('small').textContent}`)), 'each row has its full title, format, words and date as its accessible name');
+    await p.keyboard.press('ArrowDown');
+    check(await fr.evaluate(() => document.activeElement === document.querySelectorAll('.gp-fromdocs-row')[1]), 'ArrowDown moves to the next document');
+    await p.keyboard.press('ArrowDown');
+    check(await fr.evaluate(() => document.activeElement === document.querySelector('.gp-fromdocs-row')), 'ArrowDown wraps to the first document');
     await p.keyboard.press('Tab'); await p.keyboard.press('Tab'); await p.keyboard.press('Tab');
     check(await fr.evaluate(() => document.activeElement === document.querySelector('.gp-fromdocs-row')), 'Tab stays inside the sheet');
     await p.keyboard.press('Escape');
@@ -496,13 +501,12 @@ const HARNESS = `(() => {
     for (const width of [1280, 640]) {
       await p.setViewportSize({ width, height: 800 });
       await settle(fr);
-      // As a student opens it: the page scrolled down until the paper's status bar is in the window.
-      await el.evaluate((f) => scrollBy(0, f.getBoundingClientRect().bottom - innerHeight));
+      // No preparatory scroll: a keyboard/programmatic menu opening may start with the status bar below the window.
+      await p.evaluate(() => scrollTo(0, 0));
       await settle(fr);
       await openSheet();
       const box = await fr.evaluate(() => { const r = document.querySelector('.gp-fromdocs').getBoundingClientRect(), s = document.querySelector('.gp-status').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, w: innerWidth, h: innerHeight, status: s.bottom }; });
       const frame = await el.evaluate((f) => { const r = f.getBoundingClientRect(); return { top: r.top, left: r.left, scrollY }; });
-      check(frame.top + box.status <= 801, `${width}px: the status bar it opens from is in the window (${JSON.stringify({ frame, status: box.status })})`);
       check(box.left >= 0 && box.right <= box.w && frame.top + box.top >= 0 && frame.top + box.bottom <= 800, `${width}px: the sheet fits the frame and the window (${JSON.stringify({ box, frame })})`);
       saved[`fromDocs${width}`] = await shot(p, `open-from-documents-${width}.png`, docShots);
       await p.keyboard.press('Escape');
@@ -526,6 +530,16 @@ const HARNESS = `(() => {
     kept = await versionsOf(KEY);
     check(await fr.evaluate(() => !GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('Field notes from Tuesday')) && JSON.stringify((await stored(KEY)).doc).includes('A sentence typed before the reload.') && kept[0]?.reason === 'restore', `Undo restores the paper as it was (${kept.map((v) => v.reason).join(', ')})`);
     check(JSON.stringify(await stored(k2)) === sourceBefore, 'and the document is still there, unchanged');
+    const indexBefore = await worker.evaluate(async () => (await chrome.storage.local.get('writerPapers')).writerPapers);
+    await worker.evaluate(() => chrome.storage.local.set({ writerPapers: [] }));
+    await fr.evaluate(() => document.querySelector('.gp-status button:last-child').click());
+    await until(() => fr.evaluate(() => !!document.querySelector('.gp-versions')), 'empty list status menu');
+    await fr.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].find((b) => b.textContent === 'Open from Documents').click());
+    await until(() => fr.evaluate(() => document.activeElement?.classList.contains('gp-fromdocs-x')), 'empty sheet focuses Close');
+    await p.keyboard.press('Shift+Tab');
+    check(await fr.evaluate(() => document.activeElement?.classList.contains('gp-fromdocs-x') && !document.querySelector('.gp-fromdocs-row')), 'an empty list traps focus on Close');
+    await p.keyboard.press('Escape');
+    await worker.evaluate((writerPapers) => chrome.storage.local.set({ writerPapers }), indexBefore);
     const inPapers = await context.newPage();
     watch(inPapers, 'papers assignment');
     await inPapers.goto(`chrome-extension://${id}/papers.html?paper=${encodeURIComponent(KEY)}`);
@@ -533,6 +547,12 @@ const HARNESS = `(() => {
     await inPapers.click('.gp-status button:last-child');
     await until(() => inPapers.evaluate(() => !!document.querySelector('.gp-versions')), 'status menu in papers.html');
     check(await inPapers.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].some((b) => b.textContent === 'Open from Documents')), 'papers.html offers Open from Documents on an assignment\'s paper');
+    await inPapers.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].find((b) => b.textContent === 'Open from Documents').click());
+    await until(() => inPapers.evaluate(() => !!document.querySelector('.gp-fromdocs-row')), 'sheet in papers.html');
+    check(await inPapers.evaluate(() => { const r = document.querySelector('.gp-fromdocs').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && document.activeElement?.classList.contains('gp-fromdocs-row'); }), 'papers.html shows the sheet inside its window with a row focused');
+    await inPapers.evaluate(() => [...document.querySelectorAll('.gp-fromdocs-row')].find((r) => r.querySelector('b').textContent === 'My own title').click());
+    await until(() => inPapers.evaluate(() => GZ_WRITER_PAPER.current().format().id === 'plain' && GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('Field notes from Tuesday and more')), 'pick in papers.html');
+    check(JSON.stringify(await stored(k2)) === sourceBefore, 'a pick in papers.html also leaves the source unchanged');
     await inPapers.close();
 
     check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);
