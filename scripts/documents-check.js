@@ -449,9 +449,9 @@ const PROBE = ({ lang }) => {
     await home.setViewportSize({ width: 640, height: 900 });
     await shot(home, 'trash-640.png');
     await home.setViewportSize({ width: 1280, height: 900 });
-    await home.click(`${card(FIELD)} .gd-more`);
+    await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Shift+F10');
     const binMenu = await home.evaluate(() => [...document.querySelectorAll('.gd-menu [role="menuitem"], .gd-menu [role="separator"]')].map((b) => b.textContent || '—'));
-    check(binMenu.join('|') === 'Restore|Delete forever', `a card in Trash offers Restore and Delete forever only (${binMenu.join('|')})`);
+    check(binMenu.join('|') === 'Restore|Delete forever', `Shift+F10 in Trash offers Restore and Delete forever only (${binMenu.join('|')})`);
     await home.keyboard.press('Escape');
     await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Delete'); await home.keyboard.press('F2'); await pause(200);
     check((await binned()).includes(FIELD) && !(await home.evaluate(() => document.querySelector('.gd-rename, .gd-toast'))) && !!(await local(`writerPaper:${FIELD}`)), 'in Trash the Delete key and F2 do nothing');
@@ -476,6 +476,7 @@ const PROBE = ({ lang }) => {
     await home.click(`${card(D5)} .gd-more`); await home.click('.gd-menu [data-act="forever"]');
     check(!(await binned()).includes(D5), 'Delete forever takes the card away at once');
     await until(async () => !(await local(`writerPaper:${D5}`)) && !(await local(`writerVersions:${D5}`)) && !(await local('writerPapers')).some((r) => r.key === D5), 'gone for good');
+    check(await home.evaluate(() => document.activeElement?.id === 'gd-q'), 'Delete forever of the last card focuses search');
     check(!(await home.evaluate(() => !!document.querySelector('.gd-toast'))), 'Delete forever removes the paper, its versions and its row, with no Undo');
     const empty = await home.evaluate(() => ({ cards: document.getElementById('gd-docs').children.length, said: document.getElementById('gd-said').textContent, shown: !document.getElementById('gd-trash').closest('.gd-bin').hidden }));
     check(await binOn() && empty.cards === 0 && empty.said === '' && empty.shown && await said(home) === '0 documents', `an empty Trash shows nothing but its pressed control (${JSON.stringify(empty)})`);
@@ -851,6 +852,13 @@ const PROBE = ({ lang }) => {
     await until(() => purged.evaluate((k) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).join() === k, KEPT), 'Trash after purge');
     check(true, 'the Trash holds the 29-day document only');
     await purged.close();
+    const apiOpen = await openHome('en', 'api-trash-open');
+    await apiOpen.evaluate((k) => { GZ_DOCUMENTS.open(k); }, KEPT);
+    await until(() => apiOpen.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key()), 'documents.open from Trash');
+    check(await apiOpen.evaluate((k) => GZ_WRITER_PAPER.current().key() === k, KEPT) && !('trashed' in (await local(`writerPaper:${KEPT}`))), 'documents.open restores a trashed key before opening it');
+    await apiOpen.close();
+    // Keep a trashed record for the mod list's exclusion check below.
+    await home.evaluate((k) => GZ_WRITER_PAPERS.open().trash(k), KEPT);
 
     // ---- a mod on the Documents page: its items, its calls and their limits (lib/modbroker.js, features/mods.js)
     const MOD = 'docsmodaaaaaaaaa';
@@ -906,6 +914,16 @@ const PROBE = ({ lang }) => {
     await mp.keyboard.press('ControlOrMeta+z');
     await until(async () => { const c = (await modData())?.change; return c?.n > changeMid && c.keys.includes(ESSAY3); }, 'mod told of the undo');
     check(!('trashed' in (await local(`writerPaper:${ESSAY3}`))), 'mod: documents.change fires as a document goes to Trash and comes back, documents.list() following');
+    const changeBeforeSeed = (await modData()).change.n;
+    await mp.evaluate(async (k) => {
+      const P = GZ_WRITER_PAPERS.open(), old = Date.now() - 31 * 864e5;
+      await P.save(k, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph' }] }, format: 'plain', trashed: old });
+    }, OLD);
+    await until(async () => (await modData())?.change?.n > changeBeforeSeed, 'mod told of the seeded Trash record');
+    const changeBeforePurge = (await modData()).change.n;
+    await mp.evaluate(() => GZ_WRITER_PAPERS.open().purge());
+    await until(async () => (await modData())?.change?.n > changeBeforePurge && !(await local(`writerPaper:${OLD}`)), 'mod told of the purge');
+    check(true, 'mod: documents.change fires on purge');
     check(md.early.ok === false && md.early.error === 'permission', `mod: documents.open without a click on its own item is refused (${md.early.error})`);
     check(md.todo.ok === false && md.todo.error === 'call', `mod: a school page's call is refused on the Documents page (${md.todo.error})`);
     check(md.style.ok && await mp.evaluate(() => getComputedStyle(document.querySelector('.gd-card')).borderTopLeftRadius === '24px' && getComputedStyle(document.documentElement).getPropertyValue('--gd-column').trim() === '300px'), 'mod: documents.style sets the page\'s --gd-* hooks (24px corners, 300px columns)');

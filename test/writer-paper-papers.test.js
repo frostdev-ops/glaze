@@ -493,3 +493,29 @@ test('opening a trashed paper can restore with a checkpoint without changing Las
   await P.untrash(k, { version: true });
   assert.deepEqual(await P.versions(k), history, 'opening again adds no checkpoint');
 });
+
+
+test('a refused restore-on-open cannot separate the checkpoint from the paper or its row', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.newKey();
+  await P.save(k, { doc: doc('Keep the original.'), format: 'plain' });
+  await P.trash(k); t += DAY;
+  const before = structuredClone(s.data), set = s.set;
+  s.set = async (o) => { if (`writerVersions:${k}` in o) throw Error('QUOTA_BYTES'); await set(o); };
+  await assert.rejects(P.untrash(k, { version: true }), /QUOTA_BYTES/);
+  assert.deepEqual(s.data, before, 'a refused checkpoint leaves the paper in Trash with its history');
+});
+
+test('native submit dispatch restores a paper trashed after its sending version was saved', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.keyOf(K);
+  const sending = await P.save(k, { doc: doc('Submitted words.'), format: 'plain' }, { reason: 'sending' });
+  await P.trash(k); t += 1000;
+  const before = await P.get(k);
+  await P.submitted(k, sending.version.id);
+  const paper = await P.get(k);
+  assert.equal(PA.trashed(paper), false, 'dispatch takes the submitted paper out of Trash');
+  assert.equal('trashed' in (await P.list())[0], false);
+  assert.deepEqual([paper.updated, paper.revision, paper.doc], [before.updated, before.revision, before.doc]);
+  assert.equal((await P.version(k, sending.version.id)).reason, 'submit');
+});
