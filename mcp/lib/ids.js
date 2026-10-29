@@ -37,6 +37,11 @@ const fromArgs = (args, { platform = process.platform, realpath = fs.realpathSyn
       if (platform === 'win32') throw usage('--dev works on macOS and Linux; on Windows use --extension-id with the id chrome://extensions shows');
       let real;
       try { real = realpath(path.resolve(v)); } catch { throw usage(`no such folder: ${v}`); }
+      if (!fs.statSync(real).isDirectory()) throw usage(`not a folder: ${v}`);
+      let manifest;
+      try { manifest = JSON.parse(fs.readFileSync(path.join(real, 'manifest.json'), 'utf8')); }
+      catch (e) { if (e.code !== 'ENOENT') throw usage(`cannot read manifest.json in ${v}`); }
+      if (manifest && Object.hasOwn(manifest, 'key')) throw usage('this manifest has a key; use --extension-id with the id chrome://extensions shows');
       ids.push(devId(real));
     }
   }

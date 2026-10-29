@@ -15,15 +15,18 @@ const sh = ({ node, script, browser }) => `#!/bin/sh\nexec ${q(abs(node))} ${q(a
 // cmd expands % even inside quotes, so it is doubled. cmd reads a .bat a line at a time from where it left off, so the
 // command ends the file's reading itself (`& exit /b`): a launcher rewritten while its host runs is never read further.
 const bat = ({ node, script, browser }) => {
-  const w = (p) => `"${abs(p).replace(/%/g, '%%')}"`;
-  return `@echo off\r\n${w(node)} ${w(script)} host --browser=${id(browser)} %* & exit /b\r\n`;
+  const w = (p) => {
+    if (/["\x00-\x1f]/.test(abs(p))) throw new Error(`invalid character in launcher path: ${p}`);
+    return `"${p.replace(/%/g, '%%')}"`;
+  };
+  return `@echo off\r\n@setlocal DisableDelayedExpansion\r\n${w(node)} ${w(script)} host --browser=${id(browser)} %* & exit /b\r\n`;
 };
 const text = (platform, o) => (platform === 'win32' ? bat(o) : sh(o));
 const file = (platform, hosts, browser) => path.join(hosts, platform === 'win32' ? `${id(browser)}.bat` : id(browser));
 
 // What a launcher of ours runs, or null for anything else.
 const SH = /^#!\/bin\/sh\nexec '((?:[^']|'\\'')*)' '((?:[^']|'\\'')*)' host --browser=([a-z][a-z-]*) "\$@"\n$/;
-const BAT = /^@echo off\r\n"([^"]*)" "([^"]*)" host --browser=([a-z][a-z-]*) %\* & exit \/b\r\n$/;
+const BAT = /^@echo off\r\n(?:@setlocal DisableDelayedExpansion\r\n)?"([^"\x00-\x1f]*)" "([^"\x00-\x1f]*)" host --browser=([a-z][a-z-]*) %\* & exit \/b\r\n$/;
 const parse = (t) => {
   let m = typeof t === 'string' && SH.exec(t);
   if (m) return { node: m[1].replace(/'\\''/g, "'"), script: m[2].replace(/'\\''/g, "'"), browser: m[3] };

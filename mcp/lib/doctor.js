@@ -33,10 +33,12 @@ const run = async (o = {}) => {
   };
   for (const [what, dir] of [['Folder', ctx.root], ['Launchers', ctx.hosts]]) {
     let st;
+    try { I.safePath(dir); } catch (e) { add('fail', what, e.message); return done(); }
     try { st = fs.lstatSync(dir); } catch { add('fail', what, `${dir} is missing. ${FIX}`); return done(); }
-    if (st.isSymbolicLink() || !st.isDirectory()) { add('fail', what, `${dir} is not a folder`); continue; }
+    if (st.isSymbolicLink() || !st.isDirectory()) { add('fail', what, `${dir} is not a folder`); return done(); }
     const bad = loose(dir, st);
     add(bad ? 'fail' : 'ok', what, bad || dir);
+    if (bad) return done();
   }
 
   const nodes = new Map();
@@ -49,13 +51,14 @@ const run = async (o = {}) => {
 
   // What is wrong with one browser's manifest, launcher and node, or [] when nothing is.
   const check = async (b, file) => {
+    try { I.safePath(file); } catch (e) { return [e.message]; }
     const m = (() => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return undefined; } })();
     if (m === undefined) return [`${file} is missing or not JSON. ${FIX}`];
     const out = [];
     if (!m || m.name !== B.HOST) return [`${file} is not named ${B.HOST}. ${FIX}`];
     if (m.type !== 'stdio') out.push(`${file} has type ${m.type}, not stdio`);
     if (b.family === 'firefox') {
-      if (!Array.isArray(m.allowed_extensions) || !m.allowed_extensions.includes(IDS.FIREFOX)) out.push(`${file} doesn't let in ${IDS.FIREFOX}. ${FIX}`);
+      if (!Array.isArray(m.allowed_extensions) || m.allowed_extensions.length !== 1 || m.allowed_extensions[0] !== IDS.FIREFOX) out.push(`${file} must let in only ${IDS.FIREFOX}. ${FIX}`);
     } else {
       const ids = IDS.fromManifest(m);
       if (!ids.includes(IDS.STORE)) out.push(`${file} doesn't let in the store copy of Glaze (${IDS.STORE}). ${FIX}`);
@@ -67,17 +70,22 @@ const run = async (o = {}) => {
     if (typeof m.path !== 'string') return [...out, `${file} names no launcher`];
     const launcher = path.resolve(path.dirname(file), m.path);
     if (!I.inside(ctx, ctx.root, launcher)) return [...out, `${file} runs ${launcher}, outside ${ctx.root}`];
+    try { I.safePath(launcher); } catch (e) { return [...out, e.message]; }
     let text, lst;
     try { text = fs.readFileSync(launcher, 'utf8'); lst = fs.statSync(launcher); } catch { return [...out, `launcher ${launcher} is missing. ${FIX}`]; }
     const l = L.parse(text);
     if (!l) return [...out, `${launcher} is not a glaze-mcp launcher. ${FIX}`];
+    const vdir = path.dirname(path.dirname(l.script));
+    const version = I.versionOf(vdir);
+    if (!version || path.dirname(vdir) !== ctx.root || path.basename(vdir) !== version || l.script !== path.join(vdir, 'bin', 'glaze-mcp.js')) return [...out, `${launcher} names no installed glaze-mcp copy. ${FIX}`];
+    try { I.safePath(l.script); } catch (e) { return [...out, e.message]; }
     const lLoose = loose(launcher, lst);
     if (lLoose) out.push(lLoose);
     if (modes && !(lst.mode & 0o100)) out.push(`${launcher} is not executable. ${FIX}`);
     let nst;
     try { nst = fs.statSync(l.node); } catch { return [...out, `node at ${l.node} is gone. ${FIX}`]; }
     if (modes && !(nst.mode & 0o111)) out.push(`${l.node} is not executable`);
-    const v = await nodeVersion(l.node);
+    const v = lLoose ? null : await nodeVersion(l.node);
     const major = /^v(\d+)\./.exec(v || '');
     if (!major) out.push(`${l.node} didn't say its version`);
     else if (+major[1] < MIN_NODE) out.push(`${l.node} is Node ${v}; glaze-mcp needs ${MIN_NODE} or later. Run setup with a newer Node`);
