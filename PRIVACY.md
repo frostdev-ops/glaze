@@ -35,7 +35,8 @@ With **documents**, a mod's Worker runs on Writer's Documents page and can read 
 and last-edited times of the documents listed there, add up to four items of its own to the toolbar and to each card's
 menu, and open or start a document right after a click on one of them. **documents.read** (which needs documents) adds
 a document's text and its exported .docx. Glaze treats both as personal data, as above: Worker only, no frame UI, and a
-separately granted network host can receive it.
+separately granted network host can receive it. Document handles are random and scoped to this mod on this page; they do
+not expose the school host or user identifiers stored in an assignment's internal key.
 
 ## Expanded habitats and local pet learning
 

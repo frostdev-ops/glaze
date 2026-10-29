@@ -659,31 +659,33 @@
       if (!chrome.runtime.getManifest().sandbox) return; // code mods run only where the manifest has their sandbox (content.js too)
       const a = await chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'list' }).catch(() => null);
       if (!Array.isArray(a?.mods) || !a.mods.length || !active) return;
+      await GZ_WRITER_PAPER.need(['defaults.js', 'lib/modapi.js']);
+      const keys = GZ_MODAPI.docKeys();
       const own = new Map(), styles = new Map(), clicked = new Map(); // `${mod}|${slot}|${id}` → item; mod → its hooks; mod → when its item was clicked
       const restyle = () => { const won = {}; for (const id of GZ_MODS.order()) for (const [k, v] of Object.entries(styles.get(id) || {})) won[k] ??= v; D.style(won); };
       const done = (value) => (value == null ? { error: 'args' } : { ok: true, value });
       const call = async (id, name, v, by) => {
-        if (name === 'documents.list') return done(D.list());
-        if (name === 'documents.read') return done(await D.read(v.key));
-        if (name === 'documents.export') return done(await D.export(v.key));
+        if (name === 'documents.list') return done(D.list().map((doc) => keys.summary(id, doc)));
+        if (name === 'documents.read') { const r = await D.read(keys.resolve(id, v.key)); return done(r && { ...r, key: v.key }); }
+        if (name === 'documents.export') return done(await D.export(keys.resolve(id, v.key)));
         if (name === 'documents.open' || name === 'documents.create') {
           const at = clicked.get(id);
           if (at === undefined || performance.now() - at > 1000) return { error: 'permission' };
           clicked.delete(id);
-          return (name === 'documents.open' ? D.open(v.key) : D.create(v.format)) ? null : { error: 'args' };
+          return (name === 'documents.open' ? D.open(keys.resolve(id, v.key)) : D.create(v.format)) ? null : { error: 'args' };
         }
         if (name === 'documents.add') {
           const k = `${id}|${v.slot}|${v.id}`;
           if (!own.has(k) && [...own.keys()].filter((x) => x.startsWith(`${id}|${v.slot}|`)).length >= 4) return { error: 'args' };
           own.get(k)?.remove();
-          own.set(k, D.item(v.slot.slice(10), v.label, (doc, e) => { if (e?.isTrusted) clicked.set(id, performance.now()); GZ_MODS.documents.action(id, { slot: v.slot, id: v.id, ...(doc && { doc }) }); }, { by }));
+          own.set(k, D.item(v.slot.slice(10), v.label, (doc, e) => { if (e?.isTrusted) clicked.set(id, performance.now()); GZ_MODS.documents.action(id, { slot: v.slot, id: v.id, ...(doc && { doc: keys.summary(id, doc) }) }); }, { by }));
           return null;
         }
         if (name === 'documents.remove') { const k = `${id}|${v.slot}|${v.id}`; if (!own.has(k)) return { error: 'args' }; own.get(k).remove(); own.delete(k); return null; }
         if (name === 'documents.style') { if (v) styles.set(id, v); else styles.delete(id); restyle(); return null; }
         return { error: 'call' };
       };
-      const forget = (id) => { for (const [k, x] of own) if (k.startsWith(`${id}|`)) { x.remove(); own.delete(k); } clicked.delete(id); if (styles.delete(id)) restyle(); };
+      const forget = (id) => { for (const [k, x] of own) if (k.startsWith(`${id}|`)) { x.remove(); own.delete(k); } clicked.delete(id); keys.forget(id); if (styles.delete(id)) restyle(); };
       globalThis.GZ_CTX = Object.freeze({ site: 'documents', need: (f, ready) => (ready() ? Promise.resolve() : GZ_WRITER_PAPER.need([f])), documents: Object.freeze({ call, forget }) });
       await GZ_WRITER_PAPER.need(['features/mods.js']);
       GZ_MODS.start(a.mods);

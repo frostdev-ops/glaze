@@ -548,6 +548,7 @@ type GlazeDocumentSlot = 'documents.toolbar' | 'documents.card';
 
 /** A document's public summary (`documents`): never its text. */
 interface GlazeDocument {
+  /** Opaque handle for this mod on this page; expires on page load or mod restart. Never an internal storage key. */
   key: string;
   /** Its kind of document: `paper`. */
   kind: string;
