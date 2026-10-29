@@ -31,12 +31,37 @@ const run = async (o = {}) => {
     if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return `${f} belongs to another user`;
     return null;
   };
+  // Check every ancestor of an execution path, including both sides of symlinks (e.g. a stable Node launcher).
+  // Root-owned sticky temp directories protect each checked child's name; an ordinary writable ancestor does not.
+  const trustedPath = (file, links = 0) => {
+    if (!modes) return null;
+    if (!path.isAbsolute(file)) return `${file} must be absolute`;
+    if (links > 40) return `${file} has too many symlinks`;
+    const root = path.parse(file).root, names = file.slice(root.length).split(path.sep).filter(Boolean);
+    let part = root;
+    for (let i = -1; i < names.length; i++) {
+      if (i >= 0) part = path.join(part, names[i]);
+      let st;
+      try { st = fs.lstatSync(part); } catch { return `${part} is missing. ${FIX}`; }
+      if (st.uid !== 0 && st.uid !== process.getuid()) return `${part} belongs to another user`;
+      if (st.isSymbolicLink()) {
+        const link = fs.readlinkSync(part), target = path.isAbsolute(link) ? link : `${path.dirname(part)}${path.sep}${link}`;
+        // Resolve links before '..', as the OS does; lexical normalization could check a different executable.
+        return trustedPath([target, ...names.slice(i + 1)].join(path.sep), links + 1);
+      }
+      if ((st.mode & 0o022) && !(i < names.length - 1 && st.isDirectory() && st.uid === 0 && (st.mode & 0o1000))) {
+        return `${part} can be changed by other users (mode ${(st.mode & 0o777).toString(8)}); chmod go-w it`;
+      }
+      if (i < names.length - 1 && !st.isDirectory()) return `${part} is not a folder`;
+    }
+    return null;
+  };
   for (const [what, dir] of [['Folder', ctx.root], ['Launchers', ctx.hosts]]) {
     let st;
     try { I.safePath(dir); } catch (e) { add('fail', what, e.message); return done(); }
     try { st = fs.lstatSync(dir); } catch { add('fail', what, `${dir} is missing. ${FIX}`); return done(); }
     if (st.isSymbolicLink() || !st.isDirectory()) { add('fail', what, `${dir} is not a folder`); return done(); }
-    const bad = loose(dir, st);
+    const bad = trustedPath(dir) || loose(dir, st);
     add(bad ? 'fail' : 'ok', what, bad || dir);
     if (bad) return done();
   }
@@ -54,6 +79,8 @@ const run = async (o = {}) => {
   // What is wrong with one browser's manifest, launcher and node, or [] when nothing is.
   const check = async (b, file) => {
     try { I.safePath(file); } catch (e) { return [e.message]; }
+    const fBad = trustedPath(file);
+    if (fBad) return [fBad];
     const m = (() => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return undefined; } })();
     if (m === undefined) return [`${file} is missing or not JSON. ${FIX}`];
     const out = [];
@@ -77,6 +104,8 @@ const run = async (o = {}) => {
     const launcher = path.resolve(path.dirname(file), m.path);
     if (!I.inside(ctx, ctx.root, launcher)) return [...out, `${file} runs ${launcher}, outside ${ctx.root}`];
     try { I.safePath(launcher); } catch (e) { return [...out, e.message]; }
+    const launcherBad = trustedPath(launcher);
+    if (launcherBad) return [...out, `launcher ${launcherBad}${notFound}`];
     let text, lst;
     try { text = fs.readFileSync(launcher, 'utf8'); lst = fs.statSync(launcher); } catch { return [...out, `launcher ${launcher} is missing${notFound}. ${FIX}`]; }
     const l = L.parse(text);
@@ -85,13 +114,19 @@ const run = async (o = {}) => {
     const version = I.versionOf(vdir);
     if (!version || path.dirname(vdir) !== ctx.root || path.basename(vdir) !== version || l.script !== path.join(vdir, 'bin', 'glaze-mcp.js')) return [...out, `${launcher} names no installed glaze-mcp copy. ${FIX}`];
     try { I.safePath(l.script); } catch (e) { return [...out, e.message]; }
+    const scriptBad = trustedPath(l.script);
+    if (scriptBad) return [...out, scriptBad];
     const lLoose = loose(launcher, lst);
     if (lLoose) out.push(lLoose);
     if (modes && !(lst.mode & 0o100)) out.push(`${launcher} is not executable. ${FIX}`);
+    const nodeBad = trustedPath(l.node);
+    if (nodeBad) return [...out, nodeBad];
     let nst;
     try { nst = fs.statSync(l.node); } catch { return [...out, `node at ${l.node} is gone. ${FIX}`]; }
+    if (!nst.isFile()) out.push(`${l.node} is not a regular file`);
     if (modes && !(nst.mode & 0o111)) out.push(`${l.node} is not executable`);
-    const v = lLoose ? null : await nodeVersion(l.node);
+    if (out.length) return out;
+    const v = await nodeVersion(l.node);
     const major = /^v(\d+)\./.exec(v || '');
     if (!major) out.push(`${l.node} didn't say its version`);
     else if (+major[1] < MIN_NODE) out.push(`${l.node} is Node ${v}; glaze-mcp needs ${MIN_NODE} or later. Run setup with a newer Node`);

@@ -78,7 +78,7 @@ const main = async ({ args = [], browser = null, caller = null, io = {} } = {}) 
     const dir = R.ready(R.dir({ platform, env }));
     R.sweep(dir);
     const token = R.token(), p = R.socketPath(dir, id, instance);
-    R.claim(p);
+    R.claim(p, { dir, browser: id, instance });
     const server = net.createServer({ pauseOnConnect: true }, admit);
     const ino = await R.listen(server, p);
     own = { dir, browser: id, instance, token, ino };

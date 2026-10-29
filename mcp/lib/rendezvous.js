@@ -147,6 +147,8 @@ const read = (file, { platform = process.platform } = {}) => within(path.dirname
 const write = (d, rec, ino) => {
   const file = runFile(d, rec.browser, rec.instance), name = path.basename(file);
   return within(d, () => locked(() => {
+    const old = json(name, false);
+    if (old && old.pid !== process.pid && Number.isSafeInteger(old.pid) && old.pid > 0 && alive(old.pid)) throw unsafe('another live host owns this run file');
     if (MODES && ino) {
       const st = fs.lstatSync(`${base(rec.browser, rec.instance)}.sock`);
       if (!st.isSocket() || st.ino !== ino) throw unsafe('the bound socket was replaced before publication');
@@ -172,17 +174,18 @@ const write = (d, rec, ino) => {
     }
   }));
 };
-const claim = (p) => {
-  if (!MODES) return;
-  return within(path.dirname(p), () => locked(() => {
+const claim = (p, { dir = MODES ? path.dirname(p) : null, browser, instance } = {}) => {
+  if (!dir) return;
+  return within(dir, () => locked(() => {
+    const sock = MODES ? path.basename(p) : null;
     let st;
-    try { st = fs.lstatSync(path.basename(p)); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-    const name = `${path.basename(p, '.sock')}.json`, r = json(name, false);
-    const known = record(path.join(path.dirname(p), name), r);
+    if (sock) try { st = fs.lstatSync(sock); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    const name = `${MODES ? path.basename(p, '.sock') : base(browser, instance)}.json`, r = json(name, false);
+    const known = record(path.join(dir, name), r);
     // Only an exact recorded host can be superseded. Unrecorded listeners and unrelated paths stay untouched.
     if (st && (!st.isSocket() || !known)) throw unsafe(`${p} is already claimed`);
     if (!known && r && Number.isSafeInteger(r.pid) && r.pid > 0 && alive(r.pid)) throw unsafe(`${p} belongs to a live host`);
-    if (st) fs.unlinkSync(path.basename(p));
+    if (st) fs.unlinkSync(sock);
     // Otherwise a sweeper could use the previous host's metadata to unlink our socket before write publishes it.
     fs.rmSync(name, { force: true });
   }));
