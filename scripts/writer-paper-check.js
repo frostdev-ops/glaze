@@ -357,6 +357,7 @@ const HARNESS = `(() => {
     check(key === 'bb.school.test|_900_1|_101_1|_7_1', 'paper keyed by school, student, course and assignment');
     // IndexedDB written in the frame, read from papers.html below: is it one store across the two?
     await fr.evaluate(() => new Promise((ok) => { const r = indexedDB.open('gz-paper-probe', 1); r.onupgradeneeded = () => r.result.createObjectStore('p'); r.onsuccess = () => { const tx = r.result.transaction('p', 'readwrite'); tx.objectStore('p').put('frame', 'k'); tx.oncomplete = () => { r.result.close(); ok(); }; }; }));
+    const trashedBeforeOpen = await fr.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(), k = GZ_WRITER_PAPER.current().key(); await P.trash(k); return P.get(k); });
     await p.reload();
     ({ el, fr } = await (async () => {
       const x = await until(async () => { const y = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return y && await y.evaluate((f) => !f.style.opacity && f.offsetHeight > 500) && y; }, 'paper frame after reload');
@@ -365,6 +366,10 @@ const HARNESS = `(() => {
       return { el: x, fr: d };
     })());
     check(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('A sentence typed before the reload.')), 'the paper survives a reload');
+    const restoredOnOpen = await fr.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(), k = GZ_WRITER_PAPER.current().key(); return { paper: await P.get(k), versions: await P.versions(k) }; });
+    check(!('trashed' in restoredOnOpen.paper) && restoredOnOpen.paper.updated === trashedBeforeOpen.updated && restoredOnOpen.paper.revision === trashedBeforeOpen.revision,
+      "Ultra restores a trashed assignment on open without changing Last edited or revision");
+    check(restoredOnOpen.versions[0]?.reason === 'restore', 'opening a trashed assignment keeps a checkpoint version');
     const papers = await context.newPage();
     watch(papers, 'papers');
     await papers.goto(`chrome-extension://${id}/papers.html`);
