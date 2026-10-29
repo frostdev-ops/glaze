@@ -9,7 +9,7 @@ test('full → compact refuses to project when the paper or its view version can
     let calls = 0, projected = false;
     const view = { props: { editable: () => true }, hasFocus: () => true, setProps(o) { Object.assign(this.props, o); }, focus() {} };
     const ctx = vm.createContext({ boxEl: {}, compact: false, key: 'paper', loaded: true, switching: null, flushing: null, holding: false, dirty: true,
-      view, root: { inert: false }, document: { activeElement: null }, caretY: () => 20, SET: { patch() { throw Error('preference changed before the save'); }, now: () => ({ full: true }) },
+      view, mine: [], root: { inert: false }, document: { activeElement: null }, caretY: () => 20, SET: { patch() { throw Error('preference changed before the save'); }, now: () => ({ full: true }) },
       save: async () => { calls++; return calls === fail ? null : {}; }, projectSoon: () => { projected = true; } });
     vm.runInContext(code + '\nglobalThis.run = () => setView(false, { save: true });', ctx);
     await ctx.run();
