@@ -47,3 +47,15 @@ test('compact flush saves before acknowledging and holds editing through the nat
     assert.equal(ctx.boxEl.inert, false);
   }
 });
+
+test('a view preference already stored by another frame does not leave an unmatched own-change marker', async () => {
+  let patches = 0;
+  const ctx = vm.createContext({ boxEl: {}, compact: true, key: 'paper', loaded: true, switching: null, flushing: null,
+    view: { hasFocus: () => false }, document: { activeElement: null }, caretY: () => null, mine: [],
+    SET: { now: () => ({ full: true }), patch: () => { patches++; return Promise.resolve(); } } });
+  const prefix = source.slice(start, source.indexOf('      if (focus) setFocus(false);', start));
+  vm.runInContext(prefix + '\n}; globalThis.run = () => setView(true, { save: true });', ctx);
+  await ctx.run();
+  assert.equal(patches, 0);
+  assert.equal(ctx.mine.length, 0);
+});
