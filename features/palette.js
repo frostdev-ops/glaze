@@ -108,7 +108,11 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds), the pointer picture's
     // once lookx knows there is one.
     await need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => globalThis.GZ_LOOKX?.ready(), () => {});
-    if (moodle) { const [m, due] = await Promise.all([moodleIn(), dueWeek()]); return [...await m.commands(go), ...dueCmds(due), ...documents(), ...glazeCmds()]; }
+    if (moodle) {
+      // A failed Moodle loader or course list leaves Glaze's own commands available, as well as the cached due items.
+      const [rows, due] = await Promise.all([moodleIn().then((m) => m.commands(go)).catch(() => []), dueWeek()]);
+      return [...rows, ...dueCmds(due), ...documents(), ...glazeCmds()];
+    }
     if (!ultra) return canvasCommands();
     const cid = courseId();
     // A tab's name without its count badge ("Announcements 12").
