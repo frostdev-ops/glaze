@@ -1204,8 +1204,9 @@ const PROBE = ({ lang }) => {
       t = await clock(mo);
       await drop(mo, [{ name: 'notes.txt', type: 'text/plain', bytes: [104, 105] }]);
       await until(() => mo.evaluate(() => document.getElementById('gd-said').textContent !== ''), 'motion: refusal');
-      await pause(400);
-      const after = await mo.evaluate(() => { const s = getComputedStyle(document.getElementById('list'), '::after'); return { o: s.opacity, v: s.visibility }; });
+      // Polled: a loaded machine can draw no frame for a while, and the fade runs on frames.
+      let after = null;
+      await until(async () => { after = await mo.evaluate(() => { const s = getComputedStyle(document.getElementById('list'), '::after'); return { o: s.opacity, v: s.visibility }; }); return after.o === '0' && after.v === 'hidden'; }, 'motion: the drop target gone', 3000).catch(() => {});
       check(over.o === '1' && over.v === 'visible' && /^0\.25s/.test(over.d) && after.o === '0' && after.v === 'hidden', `motion: the drop target fades in and out at the transitions' pace (${JSON.stringify([over, after])})`);
       const popped = (await since(mo, t, (x) => x.cls.includes('gd-said')))[0];
       check(popped && popped.n === 3 && popped.first.scale === 1, 'motion: the status line pops with its words');
