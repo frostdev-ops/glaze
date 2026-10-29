@@ -241,6 +241,15 @@ const PROBE = ({ lang }) => {
     await until(async () => (await shown()).length === total, 'Esc clears');
     check(await home.evaluate(() => document.getElementById('gd-q').value === ''), 'Esc in the search field clears it');
 
+    // Once every body is cached, changing or clearing a query must still render even with no reads left to await.
+    await home.fill('#gd-q', 'never-present'); await pause(300);
+    await home.fill('#gd-q', 'HÉLIOTROPE');
+    await until(async () => (await shown()).join() === FIELD, 'warm-cache query');
+    check(true, 'a query change after the body cache is warm paints the new result');
+    await home.fill('#gd-q', '');
+    await until(async () => (await shown()).length === total, 'warm-cache clear');
+    check(true, 'clearing a warm-cache query paints all documents');
+
     // A body read held across an edit must not overwrite the new search result; a superseded query must stop too.
     const searchPage = await openHome('en', 'search races'), target = seeds.at(-1).key;
     const holdSearch = async () => {
