@@ -11,6 +11,8 @@ const FX = require('./fixtures/writer-paper-fixtures.js');
 const node = (j) => S.paper.nodeFromJSON(j);
 const ctx = { name: FX.context.name, course: FX.context.course };
 const v = { name: 'Alex Rivera', instructor: '', course: 'ENGL 2110: American Literature II', date: '27 October 2026', title: 'Essay 2' };
+// The formats that have rules to check (Blank has none).
+const STYLED = ST.IDS.filter((id) => ST.FORMATS[id].opening !== 'none');
 
 test('a new MLA paper: the heading block filled from Ultra (instructor left to type), the title, the body, Works Cited on its own page', () => {
   const d = node(F.template(ST.FORMATS.mla9, v, [{ type: 'paragraph', attrs: { align: null, indent: 0, line: null, first: null }, content: [{ type: 'text', text: 'From Ultra.' }] }]));
@@ -36,7 +38,7 @@ test('an imported MLA heading accepts explicit left alignment and blank paragrap
 });
 
 test('the reference list recognizes manual breaks before blank spacing and rendered page boundaries', () => {
-  for (const id of ST.IDS) {
+  for (const id of STYLED) {
     const json = FX.papers[id](), list = ST.listAt(json);
     json.content.splice(list.title, 0, { type: 'paragraph' }, { type: 'paragraph', content: [{ type: 'hard_break' }] });
     assert.ok(!F.check(node(json), ST.FORMATS[id]).issues.some((i) => i.rule === 'list-page'), `${id}: manual break before blank spacing`);
@@ -89,7 +91,7 @@ test('switching formats carries the opening\'s lines over and renames the list; 
   assert.deepEqual(F.restyle(loose, ST.FORMATS.mla9, ST.FORMATS.apa7).content.map((n) => n.content?.[0]?.text), ['Just a title']);
 });
 
-for (const id of ST.IDS) {
+for (const id of STYLED) {
   test(`${id}: a clean paper has no format issues, and the checklist is all ticks`, () => {
     const r = F.check(node(FX.papers[id]()), ST.FORMATS[id], ctx);
     assert.deepEqual(r.issues.map((i) => i.rule), []);
@@ -189,7 +191,7 @@ test('an unheaded essay has an inferred introduction, body paragraphs and conclu
     'Taken together, these benefits make a school garden a lasting investment in the community.',
   ];
   const p = (text) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
-  for (const id of ST.IDS) {
+  for (const id of STYLED) {
     const json = F.template(ST.FORMATS[id], { ...v, instructor: 'Prof. Okafor' }, paragraphs.map(p));
     const doc = node(json), before = JSON.stringify(doc.toJSON()), items = F.outline(doc, ST.FORMATS[id], { paragraphs: true });
     const sections = items.filter((x) => x.kind === 'section');
@@ -221,4 +223,67 @@ test('inferred sections skip quotes, blank spacers and uncentered references; sh
   assert.deepEqual(items.map((x) => x.text), ['A standalone title', 'Introduction', 'Body {n}', 'Conclusion', 'Works Cited']);
   assert.deepEqual(F.outline(node({ type: 'doc', content: [p('A short draft.'), p('Still developing.')] }), ST.FORMATS.mla9, { paragraphs: true }).map((x) => [x.text, x.number]), [['Paragraph {n}', 1], ['Paragraph {n}', 2]]);
   assert.deepEqual(F.outline(node({ type: 'doc', content: [p('')] }), ST.FORMATS.mla9, { paragraphs: true }), []);
+});
+
+// ---- Blank (plain): a document with none of the three formats' rules
+const para = (text, attrs = {}) => ({ type: 'paragraph', attrs: { align: null, indent: 0, line: null, first: null, ...attrs }, ...(text ? { content: [{ type: 'text', text }] } : {}) });
+
+test('Blank has no opening, header, list page or checks', () => {
+  const f = ST.FORMATS.plain;
+  assert.deepEqual([f.id, f.label, f.opening, f.cite, f.header.text, f.font, f.size, f.line], ['plain', 'Blank', 'none', 'mla', 'none', 'Times New Roman', 12, 2]);
+  assert.ok(ST.IDS.includes('plain') && ST.IDS.indexOf('plain') === ST.IDS.indexOf('chicago17') + 1, 'listed after Chicago');
+  assert.deepEqual([F.opening(f, v), F.closing(f)], [[], []]);
+  const d = node(F.template(f, v));
+  assert.deepEqual(d.content.content.map((n) => [n.type.name, n.textContent]), [['paragraph', '']], 'a new Blank document is one empty paragraph');
+  assert.deepEqual(F.read(d, f), { end: 0, lines: {}, at: {} });
+  assert.deepEqual([1, 2, 3].map((n) => ST.headerText(f, n, 'Rivera')), ['', '', '']);
+  assert.equal(ST.headerParts(ST.look(f, ST.pageSetup(f)), 1), null, 'its own page setup keeps the format\'s (no) header');
+  assert.deepEqual(ST.formatHeader(f, 'Rivera')[0].runs, []);
+  // A paper that would be flagged everywhere in MLA (no heading, a bold quoted title, a long quote, no Works Cited).
+  const messy = node({ type: 'doc', content: [para('"A Title"', { align: 'center' }), para(`She says "${'word '.repeat(120)}" (Morrison, 42).`, { line: 1 })] });
+  assert.ok(F.check(messy, ST.FORMATS.mla9, ctx).issues.length > 3);
+  assert.deepEqual(F.check(messy, f, ctx), { issues: [], rows: [] });
+  const X = require('../lib/writer-docx.js'), o = X.exportDocx(messy.toJSON(), { format: 'plain', surname: 'Rivera' });
+  assert.ok(!Object.keys(o.parts).some((k) => /header\d\.xml$/.test(k)), 'the .docx has no header');
+  assert.doesNotMatch(o.parts['word/document.xml'], /headerReference|titlePg/);
+});
+
+test('switching to Blank keeps the paragraphs; back to MLA rebuilds the heading', () => {
+  const mla = FX.papers.mla9(), texts = (d) => d.content.map((n) => JSON.stringify(n));
+  const plain = F.restyle(mla, ST.FORMATS.mla9, ST.FORMATS.plain, v);
+  assert.deepEqual(texts(plain), texts(mla), 'every paragraph as it was, the heading and Works Cited too');
+  const apa = F.restyle(FX.papers.apa7(), ST.FORMATS.apa7, ST.FORMATS.plain, v);
+  assert.deepEqual(texts(apa), texts(FX.papers.apa7()), 'References is not renamed');
+  const back = node(F.restyle(plain, ST.FORMATS.plain, ST.FORMATS.mla9, v));
+  assert.deepEqual(texts(back.toJSON()), texts(node(mla).toJSON()), 'the heading still there is the heading again, once');
+  const blank = { type: 'doc', content: [para('Notes on Beloved', { align: 'center' }), para('Memory is a debt.')] };
+  const made = node(F.restyle(blank, ST.FORMATS.plain, ST.FORMATS.mla9, v));
+  assert.deepEqual(F.read(made, ST.FORMATS.mla9).lines, { name: 'Alex Rivera', instructor: '', course: v.course, date: v.date, title: 'Essay 2' }, 'the heading from Ultra\'s values');
+  assert.deepEqual(made.content.content.slice(5).map((n) => n.textContent), ['Notes on Beloved', 'Memory is a debt.']);
+  const apaMade = node(F.restyle(blank, ST.FORMATS.plain, ST.FORMATS.apa7, v));
+  assert.equal(F.read(apaMade, ST.FORMATS.apa7).lines.title, 'Essay 2');
+});
+
+test('a custom preset on Blank keeps its tweaks', () => {
+  const p = { id: 'custom:b1', label: 'Notes', base: 'plain', font: 'Arial', size: 11, line: 1.15, first: 0, margin: 0.75, header: 'none' };
+  const f = ST.custom(p);
+  assert.deepEqual([f.base, f.opening, f.font, f.size, f.line, f.first, f.margins, f.header.text], ['plain', 'none', 'Arial', 11, 1.15, 0, [0.75, 0.75, 0.75, 0.75], 'none']);
+  assert.deepEqual(ST.preset(f), p, 'what it stores round-trips');
+  assert.equal(ST.get(p).font, 'Arial');
+  assert.ok(ST.css(f).includes('font-size: 11pt') && ST.css(f).includes('.gp-flow { width: 672px; left: 72px; top: 72px; }'));
+  assert.deepEqual(F.check(node({ type: 'doc', content: [para('Anything at all.')] }), f, ctx).issues, [], 'no format checks on its variants either');
+  const numbered = ST.custom({ ...p, header: 'page' });
+  assert.deepEqual([ST.headerText(numbered, 1), ST.headerText(numbered, 2)], ['1', '2'], 'a page number the student turned on');
+});
+
+test('name(): the MLA heading\'s title, APA\'s title page, Blank\'s first line, nothing for an empty paper', () => {
+  assert.equal(F.name(node(F.template(ST.FORMATS.mla9, v)), ST.FORMATS.mla9), 'Essay 2');
+  assert.equal(F.name(F.template(ST.FORMATS.apa7, { ...v, title: 'What the River Keeps' }), ST.FORMATS.apa7), 'What the River Keeps', 'JSON too');
+  assert.equal(F.name(node(F.template(ST.FORMATS.mla9, { ...v, title: '' }, [para('  The   first line.  ')])), ST.FORMATS.mla9), 'The first line.', 'no title: the body\'s first line, not the heading');
+  assert.equal(F.name(node(F.template(ST.FORMATS.mla9, { ...v, title: '' })), ST.FORMATS.mla9), '', 'never the list page\'s title');
+  const blank = { type: 'doc', content: [para(''), para('x'.repeat(200)), para('Second.')] };
+  assert.equal(F.name(node(blank), ST.FORMATS.plain), 'x'.repeat(120));
+  assert.equal(F.name(node({ type: 'doc', content: [para('Shopping list'), para('Eggs')] }), ST.FORMATS.plain), 'Shopping list');
+  assert.equal(F.name(node(F.template(ST.FORMATS.plain, {})), ST.FORMATS.plain), '');
+  assert.equal(F.name(node({ type: 'doc', content: [para('Not a heading', { align: 'center' }), para('Body.')] }), ST.FORMATS.mla9), 'Not a heading', 'out of shape: its first line');
 });

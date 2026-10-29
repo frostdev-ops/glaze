@@ -25,6 +25,17 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   // caller's, in the student's language.
   const copyOf = (rec, title, t = Date.now()) => ({ key: newKey(), kind: rec.kind || 'paper', ...(rec.doc !== undefined && { doc: structuredClone(rec.doc) }),
     ...(rec.format !== undefined && { format: rec.format }), keep: rec.keep === true, title, named: true, created: t, updated: t, revision: 0 });
+  // A rename made elsewhere (the Documents home, another tab), for an open editor: the stored record, newer than the one
+  // the editor last read or wrote, names it differently. → { title, named, revision } (revision only where the document
+  // is the one the editor knows, so its next save builds on the rename instead of keeping a conflict version), or null.
+  // Unnamed on both sides is no rename: each editor derives its own title.
+  const renamed = (known, stored) => {
+    if (!stored || (stored.revision || 0) <= (known?.revision || 0)) return null;
+    const named = stored.named === true, title = named ? String(stored.title || '') : '';
+    if (named === (known?.named === true) && (!named || title === String(known?.title || ''))) return null;
+    const same = known?.doc !== undefined && JSON.stringify(stored.doc) === JSON.stringify(known.doc);
+    return { title, named, ...(same ? { revision: stored.revision } : {}) };
+  };
   const scopeOf = (k = {}) => (HOST.test(k.school || '') && ID.test(k.user || '') ? `${k.school.toLowerCase()}|${k.user}` : null);
   // A document's text size from its JSON: characters and words, a hard break parting words as in the editor's count.
   const measure = (doc) => {
@@ -105,10 +116,13 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       paper.kind ||= 'paper';
       paper.named = paper.named === true;
       if (patch.doc) paper.words = patch.words ?? measure(patch.doc).words;
+      // edited: the revision that last changed the document, its format or import choice. A save typed on an older
+      // revision is a conflict only when one of those changed since: a rename (the Documents home's) in between is none.
+      if (patch.doc !== undefined || patch.format !== undefined || patch.keep !== undefined) paper.edited = paper.revision;
       let version = null, history = null;
       const retain = async (v) => { history = await cap([v, ...(history || await versionsOf(k))]); return v; };
       const last = paper.lastVersion || 0, whole = reason === 'submit' || reason === 'sending';
-      const conflict = prev?.doc && patch.doc && base != null && base !== (prev.revision || 0) &&
+      const conflict = prev?.doc && patch.doc && base != null && base !== (prev.revision || 0) && base < (prev.edited ?? (prev.revision || 0)) &&
         (JSON.stringify(prev.doc) !== JSON.stringify(patch.doc) || JSON.stringify(prev.format) !== JSON.stringify(paper.format) || (prev.keep === true) !== (paper.keep === true));
       if (whole && conflict) await retain(snapshot(prev, 'conflict', t));
       if (whole) { version = await retain(snapshot(paper, reason, t)); if (reason === 'submit') paper.submitted = t; }
@@ -194,7 +208,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     return ok ? k : null;
   };
 
-  return { open, keyOf, scopeOf, measure, LOCAL, local, newKey, valid, copyOf, one, CAP, KEYS: { INDEX, PAPER, VERSIONS, PRESETS } };
+  return { open, keyOf, scopeOf, measure, LOCAL, local, newKey, valid, copyOf, renamed, one, CAP, KEYS: { INDEX, PAPER, VERSIONS, PRESETS } };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_PAPERS; else GZ_WRITER_PAPERS;
