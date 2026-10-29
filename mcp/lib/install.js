@@ -3,7 +3,8 @@
 // present. On Windows the manifests sit beside the launchers and a key under HKCU points at each; keys go through
 // run('…\System32\reg.exe', argv), never a shell. ensure({ ifNeeded: true }) is the same code, writing only what
 // differs: a moved node or a new version rewrites the launchers, and nothing else is touched. Uninstall removes only
-// manifests and keys with our host name whose path points into our folder, our launchers and our copies.
+// manifests and keys with our host name whose path points into our folder (of a key that holds more, only our value),
+// our launchers and our copies.
 'use strict';
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -211,35 +212,38 @@ const prune = (ctx, version, before) => {
 };
 
 // The registry, through reg.exe. `reg export` writes UTF-16, so a path with any letters in it reads back exactly
-// (`reg query` prints in the console's code page).
+// (`reg query` prints in the console's code page). It also writes the key's other values and its subkeys: `alone` says
+// the default value is all the key holds.
 const regExe = (ctx) => {
   const root = ctx.env.SystemRoot || ctx.env.SYSTEMROOT || 'C:\\Windows';
   if (!/^[a-z]:[\\/]/i.test(root) || /["\x00-\x1f]/.test(root)) throw new Error('SystemRoot must be an absolute drive path without invalid characters');
   return path.win32.join(root, 'System32', 'reg.exe');
 };
-const regDefault = (buf, key) => {
+const regEntry = (buf, key) => {
   const text = buf[0] === 0xff && buf[1] === 0xfe ? buf.subarray(2).toString('utf16le') : buf.toString('utf8');
   const section = text.split(/^\[([^\]\r\n]+)\]\r?$/m);
   const wanted = key.replace(/^HKCU\\/i, 'HKEY_CURRENT_USER\\').toLowerCase();
   let body = '';
   for (let i = 1; i < section.length; i += 2) if (section[i].toLowerCase() === wanted) body = section[i + 1];
   const m = body.match(/^@="((?:[^"\\]|\\.)*)"\r?$/m);
-  return m ? m[1].replace(/\\(.)/g, '$1') : null;
+  const lines = body.split(/\r?\n/).filter((l) => l.trim());
+  return { value: m ? m[1].replace(/\\(.)/g, '$1') : null, alone: !!m && section.length === 3 && lines.length === 1 };
 };
-const readKey = async (o, key) => {
+const exportKey = async (o, key) => {
   const ctx = context(o);
   const exe = regExe(ctx);
   const dir = fs.mkdtempSync(path.join(ctx.tmp, 'glaze-mcp-reg-'));
   const file = path.join(dir, 'key.reg');
   try {
     await ctx.run(exe, ['export', key, file, '/y']);
-    return regDefault(fs.readFileSync(file), key);
+    return regEntry(fs.readFileSync(file), key);
   } catch {
-    return null;
+    return { value: null, alone: false };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 };
+const readKey = async (o, key) => (await exportKey(o, key)).value;
 
 const ensure = async (o = {}) => {
   const ctx = context(o);
@@ -308,11 +312,12 @@ const uninstall = async (o = {}) => {
   const removed = [], kept = [];
   if (ctx.platform === 'win32') {
     for (const k of [...new Set(all.flatMap((b) => b.keys))]) {
-      const v = await readKey(ctx, k);
+      const { value: v, alone } = await exportKey(ctx, k);
       if (v === null) continue;
       const b = all.find((b) => b.keys.includes(k) && equalPath(ctx, manifestPath(ctx, b), v) && ours(ctx, b, v, readJson(v)));
       if (!b) { kept.push(k); continue; }
-      await ctx.run(regExe(ctx), ['delete', k, '/ve', '/f']);
+      // Deleting only the default value leaves an empty key, so a key holding nothing else goes whole.
+      await ctx.run(regExe(ctx), alone ? ['delete', k, '/f'] : ['delete', k, '/ve', '/f']);
       removed.push(k);
     }
   }
