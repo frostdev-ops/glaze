@@ -229,7 +229,7 @@ test('Connect asks for exactly the provider\'s host from the click, then keeps t
   assert.ok(p.sent.findIndex((m) => m.type === 'glaze:allow') < p.sent.indexOf(set), 'the worker hears it is a feature\'s host first');
   assert.deepEqual(p.ops(), ['get', 'set', 'get', 'test', 'models']);
   assert.deepEqual((({ generation: _, ...c }) => c)(p.vault.get('connections').openai), { provider: 'openai', base: 'https://api.openai.com/v1', key: KEY }, 'at the provider\'s own address, the key in the worker');
-  assert.equal(AS.clean(p.data.ai).model.use, null, 'connecting chooses no model');
+  assert.deepEqual([AS.clean(p.data.ai).model, AS.clean(p.data.ai).models], [{ use: 'openai', model: 'gpt-5' }, { completion: { use: 'openai', model: 'gpt-5-mini' } }], 'a first key fills in its provider\'s models');
   assert.ok(!p.all().some((x) => String(x).includes(KEY)), 'the key is nowhere on the page');
   assert.ok(p.walk(p.$('ai-drawer')).some((x) => x.textContent === MASKED));
   assert.deepEqual([p.card('OpenAI').children[2].className, p.card('OpenAI').children[2].textContent], ['st ok', 'Connected']);
@@ -240,6 +240,7 @@ test('Connect asks for exactly the provider\'s host from the click, then keeps t
   await p.click(p.button('Connect', p.$('ai-drawer')));
   assert.deepEqual(p.asked.at(-1), [['https://api.groq.com/*'], true]);
   assert.equal(p.vault.get('connections').groq.base, 'https://api.groq.com/openai/v1');
+  assert.deepEqual(AS.clean(p.data.ai).model, { use: 'openai', model: 'gpt-5' }, 'a second key changes no model chosen');
 });
 
 test('Enter in the key field connects from its own key press, and an empty key asks for one before any prompt', async () => {
@@ -624,6 +625,39 @@ test('On this device is one card: Apple Intelligence on a Mac that has it, Chrom
   assert.equal(E.appleText({ state: 'unavailable', reason: 'native' }, t), 'Not available: Glaze could not reach the Apple Intelligence native handler.');
   assert.equal(E.providerName('apple', t), 'Apple Intelligence');
   assert.equal(AS.clean({ on: true, use: 'apple' }).model.use, 'device', 'a saved Apple Intelligence choice is On this device now');
+});
+
+test('a first key suggests its provider\'s newest main and fast models; nothing chosen elsewhere changes, no feature turns on', () => {
+  const pick = (id, ids, s = AS.clean({})) => AS.suggest(s, id, ids);
+  // The newest of a family, its alias before a dated snapshot, never a Pro or a Grok 4.20.
+  assert.deepEqual(pick('openai', ['gpt-5.6-terra', 'gpt-6.1-terra', 'gpt-6.1-terra-pro', 'gpt-5.6-luna', 'gpt-6-luna']), { model: { use: 'openai', model: 'gpt-6.1-terra' }, models: { completion: { use: 'openai', model: 'gpt-6-luna' } } });
+  assert.deepEqual(pick('anthropic', ['claude-sonnet-4-5-20250929', 'claude-sonnet-5-5', 'claude-sonnet-5-5-20260928', 'claude-haiku-4-5', 'claude-haiku-5-5', 'claude-opus-5-5']).models.completion.model, 'claude-haiku-5-5');
+  assert.equal(pick('anthropic', ['claude-sonnet-4-5-20250929', 'claude-sonnet-5-5', 'claude-sonnet-5-5-20260928']).model.model, 'claude-sonnet-5-5');
+  assert.deepEqual(pick('gemini', ['models/gemini-3.8-flash', 'models/gemini-flash-latest', 'models/gemini-3.5-flash-lite']), { model: { use: 'gemini', model: 'models/gemini-flash-latest' }, models: { completion: { use: 'gemini', model: 'models/gemini-3.5-flash-lite' } } });
+  assert.deepEqual(pick('xai', ['grok-4.20', 'grok-4.7', 'grok-4.6', 'grok-build-0.1']), { model: { use: 'xai', model: 'grok-4.7' }, models: {} });
+  assert.deepEqual(pick('openrouter', ['~openai/gpt-terra-latest', '~deepseek/deepseek-flash-latest', 'openai/gpt-6.1-terra']).models.completion.model, '~deepseek/deepseek-flash-latest');
+  assert.equal(pick('deepseek', ['deepseek-flash', 'deepseek-pro']).model.model, 'deepseek-flash');
+  assert.equal(pick('openai', ['gpt-4o-audio-preview', 'dall-e-3']), null, 'nothing it knows: nothing chosen');
+  assert.equal(pick('custom-1', ['llama3']), null, 'an endpoint of the student\'s own: their choice');
+  // On this device stays the overall model; only Feedback, which its model can't do, moves.
+  const device = AS.clean({ on: true, model: { use: 'device' } });
+  assert.deepEqual(pick('openai', ['gpt-6.1-terra', 'gpt-6-luna'], device), { model: device.model, models: { writing: { use: 'openai', model: 'gpt-6.1-terra' } } });
+  const own = AS.clean({ on: true, model: { use: 'groq', model: 'openai/gpt-oss-120b' }, models: { writing: { use: 'device' } } });
+  assert.deepEqual(pick('openai', ['gpt-6.1-terra', 'gpt-6-luna'], own).models, { writing: { use: 'openai', model: 'gpt-6.1-terra' } });
+  assert.equal(pick('openai', ['gpt-6.1-terra', 'gpt-6-luna'], AS.clean({ model: { use: 'groq', model: 'openai/gpt-oss-120b' } })), null, 'another provider\'s model stays');
+  assert.equal(pick('openai', ['gpt-6.1-terra'], AS.clean({ model: { use: 'openai', model: 'gpt-4.1' } })), null, 'the student\'s own pick stays');
+  for (const s of [AS.clean({}), device]) assert.deepEqual(AS.clean({ ...s, ...pick('openai', ['gpt-6.1-terra', 'gpt-6-luna'], s) }).features, s.features);
+});
+
+test('a first key on a Mac moves Feedback off Apple Intelligence: the warning goes, and the overall model stays on this device', async () => {
+  const p = await open({ ai: { on: true, model: { use: 'device' } }, providers: ['openai', 'device', 'apple'], device: async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'ready', provider: 'apple' }) });
+  assert.ok(p.$('ai-warn-writing').textContent);
+  await p.click(p.card('OpenAI'));
+  p.$('ai-key').value = KEY;
+  await p.click(p.button('Connect', p.$('ai-drawer')));
+  assert.deepEqual([AS.clean(p.data.ai).model, AS.clean(p.data.ai).models], [{ use: 'device', model: '' }, { writing: { use: 'openai', model: 'gpt-5' } }]);
+  assert.equal(text(p.$('ai-pick-writing')), 'gpt-5 · OpenAI');
+  assert.equal(p.walk({ children: p.$('ai-feature-list').children }).find((x) => x.className === 'ai-warn'), undefined);
 });
 
 test('Feedback on Apple Intelligence says it will likely fail; on another model or Chrome\'s, nothing', async () => {

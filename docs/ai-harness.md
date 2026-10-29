@@ -48,7 +48,9 @@ Each provider Settings names is an OpenAI-compatible Chat Completions server at 
 with only a key; Anthropic's is asked with its browser header (`anthropic-dangerous-direct-browser-access`), Google Gemini's
 at `/v1beta/openai`. Any other id but `device` is an endpoint of the student's own (Advanced), with its name, address and
 an optional key. Connect asks the browser for the provider's host from its click, keeps the key, then checks it (`test`)
-and reads the catalog (`models`).
+and reads the catalog (`models`). A key that works fills in what the student hasn't chosen (`lib/ai/settings.js` `suggest`,
+`SUGGEST`): the provider's newest main model as the overall one when none is chosen, and as Feedback's own when Feedback
+would run on this device; its fast model for Tab completion when the overall model is now its main. No feature turns on.
 
 A model's efforts come from its catalog where the catalog says (OpenRouter's `reasoning.supported_efforts`, DeepSeek's
 `effort.supported_levels`, xAI's `capabilities.reasoning_effort`), else from what its provider's docs say of it by name
