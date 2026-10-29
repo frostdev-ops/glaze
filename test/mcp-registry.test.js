@@ -23,7 +23,7 @@ const rec = (id, over = {}) => ({ id, enabled: true, dev: false, hash: `hash-${i
 const glaze = () => {
   const r = TL.registry();
   r.add({ name: 'courses_list', kind: 'read', title: 'Courses', group: 'courses', scope: 'account', description: "The student's courses.",
-    parameters: S.obj({}), output: S.obj({ items: { type: 'array' } }), run: async () => ({ items: [] }) });
+    parameters: S.obj({}), run: async () => ({ items: [] }) });
   r.add({ name: 'todo_mark_done', kind: 'write', title: 'Mark a to-do done', group: 'courses', scope: 'account', description: 'Marks a to-do done.',
     parameters: S.obj({ id: S.str('The to-do.') }, ['id']), hints: { idempotent: true }, run: async () => ({ ok: true }), summarize: () => 'Mark it done.' });
   r.add({ name: 'citation_insert', kind: 'confirm', group: 'writer', scope: 'document', needs: 'writer', description: 'Inserts a citation.',
@@ -40,9 +40,9 @@ const MODS = [`mod_${ID}_ask`, `mod_${ID}_due_soon`, `mod_${OTHER}_ask`, `mod_${
 test('describe: the MCP Tool, with its title, schemas and Glaze _meta, and nothing of the tool\'s code', () => {
   const s = state();
   const t = of(s, 'courses_list');
-  assert.deepEqual(Object.keys(t), ['name', 'title', 'description', 'inputSchema', 'outputSchema', 'annotations', '_meta']);
+  assert.deepEqual(Object.keys(t), ['name', 'title', 'description', 'inputSchema', 'annotations', '_meta']);
   assert.deepEqual([t.name, t.title, t.description], ['courses_list', 'Courses', "The student's courses."]);
-  assert.deepEqual(t.outputSchema, S.obj({ items: { type: 'array' } }));
+  assert.equal(t.outputSchema, undefined);
   assert.deepEqual(t._meta, { [`${NS}group`]: 'courses' });
   // No title, no outputSchema: neither key is written.
   assert.deepEqual(Object.keys(of(s, 'citation_insert')), ['name', 'description', 'inputSchema', 'annotations', '_meta']);
@@ -256,30 +256,19 @@ test("a declarative mod tool answers from the data path through GZ_MODTOOLS.appl
   await assert.rejects(Promise.resolve().then(() => V.get(`mod_${ID}_ask`, state()).run({ q: 'x' }, ctx)), /code/);
 });
 
-test('the legacy era drops an outputSchema whose root is not an object, and only that', () => {
+test('MCP refuses raw output schemas in both eras because the call core adds an envelope and may omit large results', () => {
   const base = { name: 'x_tool', kind: 'read', group: 'grades', description: 'X.', run };
-  for (const output of [{ type: 'array', items: { type: 'string' } }, { type: 'string' }, { type: ['object', 'null'] }, { anyOf: [S.obj({}), { type: 'null' }] }, {}]) {
+  for (const output of [S.obj({ items: { type: 'array' } }), { type: 'array' }, { type: 'string' }, {}, { anyOf: [S.obj({}), { type: 'null' }] }]) {
     const t = TL.define({ ...base, output });
-    for (const era of [undefined, 'modern', '2026-07-28']) assert.deepEqual(V.describe(t, era).outputSchema, output, `${era} ${JSON.stringify(output)}`);
-    for (const era of ['legacy', '2025-11-25', '2025-06-18']) {
-      const old = V.describe(t, era), now = V.describe(t);
-      assert.equal(Object.hasOwn(old, 'outputSchema'), false, `${era} ${JSON.stringify(output)}`);
-      delete now.outputSchema;
-      assert.deepEqual(old, now);
+    const tools = TL.registry(); tools.add(t);
+    for (const era of [undefined, '2026-07-28', 'legacy', '2025-11-25']) {
+      assert.throws(() => V.describe(t, era), /output/);
+      assert.deepEqual(V.list({ tools }, era), []);
+      assert.equal(V.get('x_tool', { tools }), null);
     }
   }
-  const obj = TL.define({ ...base, output: S.obj({ n: S.num('N.') }) });
-  assert.deepEqual(V.describe(obj, 'legacy').outputSchema, S.obj({ n: S.num('N.') }));
-  // list takes the era too, and agrees with what the protocol engine sends a legacy client.
-  const s = state({ tools: (() => { const r = glaze(); r.add({ ...base, output: { type: 'array' } }); return r; })() });
-  assert.equal(of(s, 'x_tool', 'legacy').outputSchema, undefined);
-  assert.deepEqual(of(s, 'x_tool').outputSchema, { type: 'array' });
-  const sent = [];
-  const c = W.create({ serverInfo: { name: 'glaze', version: '4.0.0' }, list: () => V.list(s), listHash: () => V.hash(V.list(s)), call: async () => ({ content: [] }) })
-    .conn('c1', {}, (line) => sent.push(JSON.parse(line)));
-  c.line(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'Code', version: '1' } } }));
-  c.line(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }));
-  assert.deepEqual(sent[1].result.tools, V.list(s, 'legacy'));
+  const tools = glaze();
+  for (const era of [undefined, '2025-11-25']) assert.ok(V.list({ tools }, era).every((t) => !Object.hasOwn(t, 'outputSchema')));
 });
 
 test("a mod's tool never takes a Glaze tool's name, owner or voice", () => {
