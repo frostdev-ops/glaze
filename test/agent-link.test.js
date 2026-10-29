@@ -469,6 +469,7 @@ test('a late message, answer or close from an earlier session changes nothing', 
   for (let n = 0; n < 2; n++) {
     await s.link.ensure();
     await s.link.stop();
+    await s.advance(1000); // the deliberately unanswered teardown reaches its deadline
   }
   await s.link.ensure();
   const hellos = s.batches.filter((x) => x.msg.frames[0]?.t === 'hello');
