@@ -416,6 +416,28 @@ test('a pending replacement Documents claim revokes the previous AI seat before 
   assert.equal(await ask(w, next), 'allowed');
 });
 
+test('Documents admission rechecks its claim after awaiting the live host document', async () => {
+  const w = writerOn(); w.page = COURSE;
+  const docs = { ...frame(COURSE, { documentId: 'old-doc' }), url: `${EXT}/papers.html` };
+  const claim = async (s) => {
+    const pass = crypto.randomUUID();
+    await w.send({ type: 'glaze:papers', op: 'job', pass }, top(COURSE));
+    return w.send({ type: 'glaze:papers', op: 'claim', pass }, s);
+  };
+  await claim(docs);
+  const script = w.context.chrome.scripting.executeScript;
+  let release;
+  w.context.chrome.scripting.executeScript = async (args) => { await new Promise((r) => { release = r; }); return script(args); };
+  const admitted = vm.runInContext('aiSender', w.context)(docs, { op: 'run', feature: 'completion' });
+  try {
+    await w.settle();
+    assert.equal(typeof release, 'function');
+    assert.deepEqual(await claim({ ...docs, documentId: 'next-doc' }), { ok: true });
+    release();
+    assert.equal(await admitted, false, 'the live check cannot finish an earlier document\'s admission');
+  } finally { release?.(); }
+});
+
 test('on an assignment attempt the writer frame runs a completion; a cancel passes on any attempt', async () => {
   const sent = [];
   const w = writerOn(async (url) => {
