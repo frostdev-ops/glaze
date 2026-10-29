@@ -1724,7 +1724,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         finally { switching = null; holding = false; root.inert = inert; view.setProps({ editable }); done(); }
         if (!saved) { if (typing) view.focus(); return; } // keep the full paper until its version is safely stored
       }
-      if (persist && SET) { mine.push(!next); SET.patch((w) => ({ ...w, full: !next })).catch((e) => console.error(e)); }
+      if (persist && SET && (SET.now()?.full === true) === next) { mine.push(!next); SET.patch((w) => ({ ...w, full: !next })).catch((e) => console.error(e)); }
       if (focus) setFocus(false);
       close();
       compact = next;
