@@ -3585,5 +3585,19 @@
   "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Ferramenta “{title}” — dá aos apps de agentes seus cursos, como o Glaze os leu por último.",
   "Tool “{title}” — gives agent apps your grades, as Glaze last read them.": "Ferramenta “{title}” — dá aos apps de agentes suas notas, como o Glaze as leu por último.",
   "Tool “{title}” — its author’s code answers, with what this mod may use.": "Ferramenta “{title}” — o código do autor responde, com o que este mod pode usar.",
-  "Its tools run its own code and can send what an app asks for to {hosts}.": "As ferramentas dele executam o próprio código e podem enviar o que um app pedir para {hosts}."
+  "Its tools run its own code and can send what an app asks for to {hosts}.": "As ferramentas dele executam o próprio código e podem enviar o que um app pedir para {hosts}.",
+  "{app} wants to use Glaze": "{app} quer usar o Glaze",
+  "{app} wants to see your courses, to-dos and schedule": "{app} quer ver seus cursos, pendências e agenda",
+  "{app} wants to see your grades": "{app} quer ver suas notas",
+  "{app} wants to see your Writer documents": "{app} quer ver seus documentos do Writer",
+  "{app} wants to see your assignments and rubrics": "{app} quer ver suas tarefas e rubricas",
+  "{app} wants to use the mod {mod}": "{app} quer usar o mod {mod}",
+  "Courses, to-dos and schedule": "Cursos, pendências e agenda",
+  "Writer documents": "Documentos do Writer",
+  "Assignments and rubrics": "Tarefas e rubricas",
+  "The mod {mod}": "O mod {mod}",
+  "as the app reports itself": "segundo o próprio app",
+  "Don't allow": "Não permitir",
+  "Unnamed app": "App sem nome",
+  "Glaze restarted before you answered.": "O Glaze reiniciou antes da sua resposta."
 };

@@ -3585,5 +3585,19 @@
   "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je cursussen, zoals Glaze ze het laatst las.",
   "Tool “{title}” — gives agent apps your grades, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je cijfers, zoals Glaze ze het laatst las.",
   "Tool “{title}” — its author’s code answers, with what this mod may use.": "Tool “{title}” — de code van de maker antwoordt, met wat deze mod mag gebruiken.",
-  "Its tools run its own code and can send what an app asks for to {hosts}.": "De tools ervan voeren eigen code uit en kunnen wat een app vraagt naar {hosts} sturen."
+  "Its tools run its own code and can send what an app asks for to {hosts}.": "De tools ervan voeren eigen code uit en kunnen wat een app vraagt naar {hosts} sturen.",
+  "{app} wants to use Glaze": "{app} wil Glaze gebruiken",
+  "{app} wants to see your courses, to-dos and schedule": "{app} wil je cursussen, taken en rooster zien",
+  "{app} wants to see your grades": "{app} wil je cijfers zien",
+  "{app} wants to see your Writer documents": "{app} wil je Writer-documenten zien",
+  "{app} wants to see your assignments and rubrics": "{app} wil je opdrachten en beoordelingsschema’s zien",
+  "{app} wants to use the mod {mod}": "{app} wil de mod {mod} gebruiken",
+  "Courses, to-dos and schedule": "Cursussen, taken en rooster",
+  "Writer documents": "Writer-documenten",
+  "Assignments and rubrics": "Opdrachten en beoordelingsschema’s",
+  "The mod {mod}": "De mod {mod}",
+  "as the app reports itself": "zoals de app zichzelf noemt",
+  "Don't allow": "Niet toestaan",
+  "Unnamed app": "Naamloze app",
+  "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde."
 };
