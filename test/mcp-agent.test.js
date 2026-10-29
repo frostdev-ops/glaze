@@ -37,7 +37,7 @@ const app = (t, home, args = [], env = {}) => {
 test('the agent waits for a host, holding what the app sends, then passes it on in order', async (t) => {
   const home = scratch(t);
   const a = app(t, home);
-  const big = `{"big":"${'é'.repeat(MiB)}"}`;
+  const big = `{"big":"${'é'.repeat(100000)}"}`;
   a.write('{"id":1}\n');
   a.write(`${big}\n`);
   a.write('{"id":2}\n');
@@ -59,27 +59,78 @@ test('the agent waits for a host, holding what the app sends, then passes it on 
   assert.equal((await a.exited).code, 0);
 });
 
-test('the agent holds at most 1 MiB of stdin until it has a host, and loses none of it', async (t) => {
+test('the agent holds exactly 1 MiB of stdin until it has a host, and loses none of it', async (t) => {
   const home = scratch(t);
   // A plain Readable: what the agent hasn't taken is exactly its readableLength.
   const stdin = new Readable({ read() {} }), stdout = new PassThrough(), err = [];
   t.after(() => stdin.destroy());
   let code = null;
   const run = A.main({ args: [], io: { stdin, stdout, stderr: { write: (s) => err.push(s) }, env: envFor(home), exit: (c) => { code = c; } } });
-  const chunk = Buffer.alloc(64 * 1024, 'a');
-  for (let i = 0; i < 48; i++) stdin.push(chunk);
-  stdin.push('\n');
+  const chunk = Buffer.alloc(MiB, 'a');
+  chunk[chunk.length - 1] = 10;
+  stdin.push(chunk);
   await new Promise((r) => setTimeout(r, 300));
-  const taken = 3 * MiB + 1 - stdin.readableLength;
-  assert.ok(taken >= MiB && taken <= MiB + chunk.length, `took ${taken} bytes`);
+  assert.equal(stdin.readableLength, 0);
   const b = browser(t, home);
   await b.start();
   await opened(b);
-  assert.equal(await lineFrom(b, 1), 'a'.repeat(3 * MiB));
+  assert.equal(await lineFrom(b, 1), 'a'.repeat(MiB - 1));
   stdin.push(null);
   assert.equal(await run, 0);
   assert.equal(code, 0);
   assert.match(err.join(''), /waiting/i);
+});
+
+test('stdin EOF at the 1 MiB waiting limit still exits 0 promptly', async (t) => {
+  const a = app(t, scratch(t));
+  a.write(Buffer.alloc(MiB, 'a'));
+  a.end();
+  await until('exit after a full waiting buffer and EOF', () => a.p.exitCode !== null, 1000);
+  assert.equal((await a.exited).code, 0);
+  assert.equal(a.out().length, 0);
+});
+
+test('waiting input over 1 MiB is refused promptly without forwarding a partial request', async (t) => {
+  // Test both many ordinary pipe reads and a single oversized Readable chunk.
+  const a = app(t, scratch(t));
+  a.write(Buffer.alloc(MiB + 1, 'a'));
+  await until('exit after overflowing the waiting buffer', () => a.p.exitCode !== null, 1000);
+  assert.equal((await a.exited).code, 1);
+  assert.match(a.err(), /1 MiB.*before.*host/i);
+  assert.equal(a.out().length, 0);
+
+  const stdin = new Readable({ read() {} }), stdout = new PassThrough(), err = [];
+  t.after(() => stdin.destroy());
+  const run = A.main({ io: { stdin, stdout, stderr: { write: (s) => err.push(s) }, env: envFor(scratch(t)), exit() {} } });
+  stdin.push(Buffer.alloc(2 * MiB, 'a'));
+  let code;
+  run.then((c) => { code = c; });
+  await until('oversized chunk refused', () => code !== undefined, 1000);
+  assert.equal(code, 1);
+  assert.match(err.join(''), /1 MiB.*before.*host/i);
+  assert.equal(stdout.readableLength, 0);
+});
+
+test('stdin EOF cancels an in-flight handshake and closes its socket', async (t) => {
+  const home = scratch(t), dir = R.ready(runDir(home)), sockets = new Set();
+  let hello = false;
+  const server = net.createServer((s) => {
+    sockets.add(s);
+    s.on('error', () => {});
+    s.on('data', () => { hello = true; });
+    s.on('close', () => sockets.delete(s));
+  });
+  const sock = R.socketPath(dir, 'chrome', 'pending');
+  await R.listen(server, sock);
+  t.after(() => { for (const s of sockets) s.destroy(); server.close(); });
+  R.write(dir, { v: 1, pid: process.pid, path: sock, token: R.token(), browser: 'chrome', instance: 'pending', at: Date.now() });
+  const stdin = new PassThrough();
+  t.after(() => stdin.destroy());
+  const run = A.main({ io: { stdin, stdout: new PassThrough(), stderr: { write() {} }, env: envFor(home), exit() {} } });
+  await until('handshake sent', () => hello);
+  stdin.end();
+  assert.equal(await run, 0);
+  await until('pending handshake socket closed after EOF', () => sockets.size === 0, 500);
 });
 
 test('lines go through untouched both ways, and stdout carries only the worker\'s lines', async (t) => {
@@ -167,6 +218,27 @@ test('the agent takes the newest host unless told which, and names the others', 
   none.end();
   assert.equal((await none.exited).code, 0);
   assert.deepEqual(opens(), []);
+});
+
+test('a stale socket with a live recorded pid keeps waiting until a host replaces it', { skip: !POSIX }, async (t) => {
+  const home = scratch(t), dir = R.ready(runDir(home));
+  const sock = R.socketPath(dir, 'chrome', 'inst1');
+  // Exiting without server.close leaves a socket inode, with no listener.
+  const stale = spawnSync(process.execPath, ['-e', "require('node:net').createServer().listen(process.argv[1], () => process.exit(0))", `./${path.basename(sock)}`], { cwd: dir });
+  assert.equal(stale.status, 0, stale.stderr.toString());
+  assert.ok(fs.lstatSync(sock).isSocket());
+  R.write(dir, { v: 1, pid: process.pid, path: sock, token: R.token(), browser: 'chrome', instance: 'inst1', at: Date.now() });
+  const a = app(t, home);
+  a.write('{"id":"held"}\n');
+  await until('waiting after a refused socket connect', () => /waiting/i.test(a.err()));
+  assert.equal(a.p.exitCode, null);
+  assert.equal(a.out().length, 0);
+  const b = browser(t, home);
+  await b.start();
+  await opened(b);
+  assert.equal(await lineFrom(b, 1), '{"id":"held"}');
+  a.end();
+  assert.equal((await a.exited).code, 0);
 });
 
 test('the agent refuses a socket that can\'t prove the token, and the host refuses an agent with the wrong one', async (t) => {
