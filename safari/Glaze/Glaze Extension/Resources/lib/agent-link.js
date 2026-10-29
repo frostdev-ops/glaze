@@ -24,12 +24,16 @@
 //   connecting        waiting up to 30 s for the helper's hello; a retry keeps showing the last answer instead
 //   connected
 //
-// Safari (the DMG app's agent bridge): frames go to the app in batches, runtime.sendNativeMessage(SAFARI, { type:
-// 'agent.frames', i: instance, seq, frames }), one in flight, seq from 1 at each hello. The app answers { ok: true } once it
-// has them; anything else ends the session ({ ok: false, error: 'not-installed' }, or an echo from a build without the
-// bridge, is not-installed). The app's frames come by dispatchMessage on a connectNative port, as { name: 'agent.frames',
-// userInfo: { i, frames } }, and count only when i is this instance. While the link is live, a 20 s keep-alive sends an
-// empty batch when nothing is in flight, which also tells the app the worker is still there.
+// Safari Swift contract (DMG bridge, T12/T13): batches {type:'agent.frames', i, s, seq, frames}, sent through
+// runtime.sendNativeMessage(SAFARI, batch), one in flight. i is the stable profile instance; s is a fresh 128-bit hex
+// nonce at each connection, and seq starts at 1. The app must scope its queue and replies to both i and s, and dispatch
+// with dispatchMessage("agent.frames", {i, s, frames}). On the connectNative event port this becomes
+// {name:'agent.frames', userInfo:{i, s, frames}}; both ids must match before any frame is accepted.
+// The app answers {ok:true} once it has the batch; anything else ends the session. Only {ok:false,error:'not-installed'}
+// or the echo from a build without the bridge means not-installed. A 20 s keep-alive sends an empty batch when idle.
+// Empty batches also run before hello and during exited backoff, keeping native API traffic under the worker's idle
+// limit so the retry timer can run. In backoff they carry the retired s: Swift must never open a session without hello,
+// and their answers/dispatches cannot restore it. Only the scheduled retry sends hello with a fresh s.
 //
 // Classic script; module.exports for node. In the worker it's loaded after lib/agent-frames.js.
 var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
@@ -39,7 +43,7 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
   const STATES = ['off', 'needs-permission', 'restart', 'not-installed', 'forbidden', 'exited', 'connecting', 'connected', 'old-helper'];
   // Tries from these keep showing them until they have an answer; the live ones keep Safari's worker up.
   const RETRYING = new Set(['not-installed', 'forbidden', 'old-helper', 'exited']), LIVE = new Set(['connecting', 'connected', 'exited']);
-  const FIRST = 1e3, LAST = 60e3, SETTLED = 5 * 60e3, HELLO = 30e3, ERROR_MAX = 200;
+  const FIRST = 1e3, LAST = 60e3, SETTLED = 5 * 60e3, HELLO = 30e3, DRAIN = 1e3, ERROR_MAX = 200;
   // The browsers' own words as a native port closes: Chromium's, as the spike recorded them (progress.md, 2026-10-29), and
   // Firefox's, which says the same for a missing manifest and for one that doesn't list Glaze (NativeMessaging.sys.mjs).
   // Any other, or none (Firefox's clean exit), is exited.
@@ -66,8 +70,8 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
     let writes = Promise.resolve();
     // The session: its port, the helper's hello, open connections and their pieces, and Safari's outbox. gen moves on at
     // every end (and every stop), so a late reply, event or pass from before changes nothing.
-    let port = null, hello = null, hostError = '', conns = new Set(), join = F.joiner(), gen = 0, instance = '';
-    let out = [], flying = false, seq = 0;
+    let port = null, hello = null, hostError = '', conns = new Set(), join = F.joiner(), gen = 0, instance = '', session = '';
+    let out = [], flying = false, flight = null, draining = null, seq = 0;
     let retry = null, wait = 0, since = 0, greet = null, keep = null;
 
     const call = (name, ...args) => { try { h[name]?.(...args); } catch (e) { console.warn(e); } };
@@ -87,9 +91,26 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
     const about = () => (hello ? { host: cut(hello.host), browser: cut(hello.browser) } : {});
 
     // Safari: the outbox goes in batches of at most a frame's bytes, one in flight; a beat is an empty one.
-    const batch = (frames) => {
-      const msg = { type: 'agent.frames', i: instance, seq: ++seq, frames };
+    const batch = (frames, token = { i: instance, s: session, seq: ++seq }) => {
+      const msg = { type: 'agent.frames', ...token, frames };
       try { return Promise.resolve(runtime.sendNativeMessage(SAFARI, msg)); } catch (e) { return Promise.reject(e); }
+    };
+    // Disconnect/fence immediately, but let the outstanding native call finish before bye. A stalled native call cannot
+    // block shutdown or a replacement forever; after the deadline no continuation may send for this session.
+    const drain = (pending, token) => {
+      let release, live = true;
+      const done = new Promise((r) => { release = r; });
+      draining = done;
+      const finish = () => {
+        if (!live) return;
+        live = false;
+        timers.clearTimeout(deadline);
+        if (draining === done) draining = null;
+        release();
+      };
+      const deadline = timers.setTimeout(finish, DRAIN);
+      const bye = () => { if (live) batch([{ t: 'bye' }], token).then(finish, finish); };
+      if (pending) pending.then(bye, bye); else bye();
     };
     const flush = (empty = false) => {
       if (flying || !port || (!out.length && !empty)) return;
@@ -102,15 +123,31 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
       }
       const g = gen;
       flying = true;
-      batch(frames).then((r) => {
+      const sent = { i: instance, s: session, seq: seq + 1 };
+      flight = batch(frames);
+      flight.then((r) => {
         if (g !== gen) return;
-        flying = false;
+        flying = false; flight = null;
         if (r?.ok === true) flush();
         else if (isObj(r) && r.ok === false) ended(typeof r.error === 'string' && r.error ? r.error : 'refused', r.error === 'not-installed' ? 'not-installed' : 'exited');
-        else ended('no agent bridge', 'not-installed');
+        else if (isObj(r?.echo) && r.echo.type === 'agent.frames'
+          && ['i', 's', 'seq'].every((k) => r.echo[k] === sent[k])) ended('no agent bridge', 'not-installed');
+        else ended('unexpected agent bridge reply', 'exited');
       }, (e) => { if (g === gen) ended(e?.message || 'sendNativeMessage failed'); });
     };
-    const beat = () => { if (hello && !flying && !out.length) flush(true); };
+    const beat = () => {
+      if (port) return flush(true); // hello need not have completed to keep the worker alive
+      if (!retry || flying || draining) return;
+      const g = gen;
+      flying = true;
+      flight = batch([]); // keep the native API active while preserving the retry's deadline
+      const done = () => {
+        if (g !== gen) return;
+        flying = false; flight = null;
+        flush(); // a retry may have queued its hello behind this keep-alive
+      };
+      flight.then(done, done); // a retired session's answer cannot change the replacement's state
+    };
 
     const post = (f) => {
       if (!port) return false;
@@ -118,19 +155,18 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
       try { port.postMessage(f); return true; } catch { return false; }
     };
 
-    // Ends the session: bye first when the worker is the one leaving, then the port, then every connection.
+    // End the session before any late event can reach it. Safari's bye drains separately on its captured session.
     const teardown = (why, bye = false) => {
-      const p = port, open = [...conns];
-      if (p && bye) {
-        if (safari) batch([{ t: 'bye' }]).catch(() => {});
-        else try { p.postMessage({ t: 'bye' }); } catch { /* already gone */ }
-      }
+      const p = port, open = [...conns], pending = flight;
+      const token = { i: instance, s: session, seq: seq + 1 };
+      if (p && bye && !safari) try { p.postMessage({ t: 'bye' }); } catch { /* already gone */ }
       gen++;
       port = null; hello = null; hostError = '';
       timers.clearTimeout(greet); greet = null;
-      out = []; flying = false; seq = 0;
+      out = []; flying = false; flight = null;
       conns = new Set(); join = F.joiner();
       if (p) try { p.disconnect(); } catch { /* already gone */ }
+      if (p && bye && safari) drain(pending, token);
       for (const c of open) call('close', c, why);
     };
     // The far side ended it (or never answered): the state from what was said, and for exited a retry after the backoff.
@@ -169,11 +205,13 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
     };
     const fromApp = (m, g) => {
       const u = isObj(m) && m.name === 'agent.frames' ? m.userInfo : null;
-      if (!isObj(u) || u.i !== instance || !Array.isArray(u.frames)) return;
+      if (!isObj(u) || u.i !== instance || u.s !== session || !Array.isArray(u.frames)) return;
       for (const f of u.frames) { if (g !== gen) break; take(f); }
     };
 
     const connect = () => {
+      session = hex(random(16));
+      seq = 0;
       let p;
       try { p = runtime.connectNative(safari ? SAFARI : HOST); } catch (e) { return ended(e?.message); }
       port = p;
@@ -188,6 +226,8 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
 
     const pass = async () => {
       const g = gen;
+      if (draining) await draining;
+      if (g !== gen) return;
       const got = await storage.local.get([SETTING, INSTANCE]);
       if (g !== gen) return;
       if (!on(got[SETTING])) return void stop();
@@ -228,6 +268,7 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
     };
 
     const stop = () => {
+      again = false; // discard triggers queued before this stop; a later ensure may queue a fresh pass
       timers.clearTimeout(retry); retry = null; wait = 0;
       teardown('stopped', true);
       set('off');
