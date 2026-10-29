@@ -116,6 +116,7 @@ test('a socket path past 103 bytes is bound and reached from inside its folder',
   t.after(() => server.close());
   assert.equal(process.cwd(), cwd, 'the working folder is put back');
   assert.ok(fs.lstatSync(p).isSocket());
+  assert.equal(mode(p), 0o600, 'the socket is private from creation');
   const c = R.connect(p);
   assert.equal(process.cwd(), cwd);
   const got = bytesFrom(c);
