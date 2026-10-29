@@ -1,5 +1,5 @@
 // glaze-mcp agent: what an agent app starts, speaking MCP lines on stdio. It waits for a host's run file (rendezvous.js),
-// holding up to 1 MiB of stdin meanwhile, takes the host --browser, --instance or GLAZE_MCP_BROWSER names (else the
+// holding up to 1 MiB of stdin meanwhile (refusing more), takes the host --browser, --instance or GLAZE_MCP_BROWSER names (else the
 // newest), proves the token (handshake.js) and then passes bytes both ways untouched: only the worker's lines reach
 // stdout, and everything it says goes to stderr. It exits 1 when the host's socket closes (the app starts it again)
 // and 0 when stdin ends. doctor() is glaze-mcp doctor's live check.
@@ -42,12 +42,15 @@ const main = async ({ args = [], io = {} } = {}) => {
   try { dir = R.dir({ platform, env }); } catch (e) { log(e.message); return 1; }
 
   return new Promise((resolve) => {
-    let held = [], size = 0, sock = null, ended = false, finished = false, timer = null, waiting = false;
+    let held = [], size = 0, sock = null, pending = null, ended = false, finished = false, timer = null, waiting = false;
     const finish = (code) => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      if (pending) pending.destroy();
       if (sock) sock.destroy();
+      held = [];
+      size = 0;
       stdin.pause();
       let gone = false;
       const go = () => { if (!gone) { gone = true; resolve(code); exit(code); } };
@@ -57,13 +60,18 @@ const main = async ({ args = [], io = {} } = {}) => {
     };
 
     stdin.on('data', (chunk) => {
+      if (finished) return;
       if (sock) { if (!sock.write(chunk)) stdin.pause(); return; }
+      // Keep reading so EOF remains observable. Refuse overflow rather than dropping part of an MCP request.
+      if (size + chunk.length > HOLD) {
+        log('more than 1 MiB of stdin before a host connected; refusing input');
+        return finish(1);
+      }
       held.push(chunk);
       size += chunk.length;
-      if (size >= HOLD) stdin.pause();
     });
     const eof = () => {
-      if (ended) return;
+      if (ended || finished) return;
       ended = true;
       if (!sock) return finish(0);
       // What the app sent last still goes before the exit.
@@ -82,6 +90,7 @@ const main = async ({ args = [], io = {} } = {}) => {
       if (rest.length) stdout.write(rest);
       for (const c of held) s.write(c);
       held = [];
+      size = 0;
       s.on('data', (c) => { if (!stdout.write(c)) s.pause(); });
       stdout.on('drain', () => s.resume());
       s.on('drain', () => { if (!ended) stdin.resume(); });
@@ -96,18 +105,23 @@ const main = async ({ args = [], io = {} } = {}) => {
 
     // One try at a host: connected, gone (a socket no one listens on; try another or wait), or refused (exit).
     const attempt = async (e) => {
-      const s = R.connect(e.rec.path);
-      s.on('error', () => {});
+      let s;
       try {
+        s = R.connect(e.rec.path);
+        pending = s;
+        s.on('error', () => {});
         const { rest } = await HS.offer(s, e.rec.token, P.self({ platform, env }));
         return { s, rest };
       } catch (err) {
+        if (finished) return {};
         if (err.code === 'refused') return { refused: `the socket for ${named(e)} didn't prove its token` };
         // A host replaced, or going, since its run file was read.
         const now = R.read(e.file, { platform });
         if (err.code === 'closed' && now && now.token === e.rec.token) return { refused: `the host for ${named(e)} refused this agent; its run file doesn't match it` };
         if (err.code === 'timeout') return { refused: `the host for ${named(e)} didn't answer` };
         return {};
+      } finally {
+        if (pending === s) pending = null;
       }
     };
 
