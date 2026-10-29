@@ -280,3 +280,29 @@ test("a pass the worker refuses opens nothing in the page, so the bar and Ctrl+K
   assert.equal(body.querySelector('#gz-settings-page'), null);
   assert.equal(await page.open('', 'nowhere'), false);
 });
+
+test('Documents closes each retired private channel and ignores its late messages', async () => {
+  const { El } = require('./stand-in-dom.js');
+  const doc = { activeElement: null }, html = new El('html', doc), body = new El('body', doc);
+  doc.root = html; html.append(body);
+  Object.assign(doc, { documentElement: html, body, createElement: (tag) => new El(tag, doc), getElementById: () => null });
+  const on = {}, channels = [];
+  class Channel {
+    constructor() { this.port1 = { close() { this.closed = true; }, postMessage() {} }; this.port2 = {}; channels.push(this); }
+  }
+  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel: Channel,
+    history: tabHistory(on), addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: async () => ({ ok: true }) } } }));
+  await page.open('', 'papers');
+  const frame = body.querySelector('#gz-settings-page').shadowForTest.children[0];
+  frame.contentWindow = { postMessage() {} };
+  const hello = () => on.message({ source: frame.contentWindow, origin: 'chrome-extension://glaze', data: { type: 'glaze:papers:hello' } });
+  hello(); await tick();
+  const old = channels[0].port1;
+  hello(); await tick();
+  assert.equal(old.closed, true, 'the previous document has no live channel');
+  old.onmessage({ data: { type: 'leave' } });
+  assert.equal(page.showing(), 'papers', 'a late message cannot close the current document');
+  page.close();
+  assert.equal(channels.at(-1).port1.closed, true, 'leaving closes the host port');
+});

@@ -232,6 +232,8 @@ const check = async (name, test) => {
     });
     await check('ultra: Settings in the bar takes its place, Back is Documents again; Search leaves it', async () => {
       f = await openFromBar(page);
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+      f = await shown(page);
       await item(page, 'glaze:settings').click();
       await until(() => framed(page, `${base}/options.html`), 'Settings in its place');
       assert.equal(framed(page), undefined, 'Documents gone');
@@ -245,6 +247,7 @@ const check = async (name, test) => {
       assert.equal(await settingsFrame.evaluate(() => location.hash), '#study/grades');
       await back(page);
       f = await shown(page);
+      assert.equal(new URL(f.url()).searchParams.get('paper'), KEY, 'Back restores the document through the private channel');
       await until(async () => (await item(page, 'glaze:documents').getAttribute('aria-current')) === 'page', 'Documents marked again');
       await item(page, 'glaze:search').click();
       await closed(page);
